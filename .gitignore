@@ -1,0 +1,36 @@
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+.venv/
+venv/
+ENV/
+env/
+
+.env
+.env.*
+!.env.example
+
+# Artifacts / data must stay out of repo
+data_raw/
+data_processed/
+data_artifacts/
+artifacts/
+
+*.pdf
+*.dwg
+*.dxf
+*.zip
+*.7z
+*.rar
+
+# OS
+Thumbs.db
+Desktop.ini

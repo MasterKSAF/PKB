@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PKB Neuroassistant (MVP)</title>
+    <style>
+      body {
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
+          Arial;
+        margin: 24px;
+        color: #111827;
+      }
+      .row {
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+      .card {
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 16px;
+        min-width: 320px;
+        flex: 1;
+      }
+      canvas {
+        width: 100%;
+        height: 180px;
+      }
+      code {
+        background: #f3f4f6;
+        padding: 2px 6px;
+        border-radius: 6px;
+      }
+      .muted {
+        color: #6b7280;
+      }
+      button {
+        border: 1px solid #e5e7eb;
+        background: white;
+        border-radius: 8px;
+        padding: 8px 12px;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>PKB Neuroassistant ingestion (MVP)</h2>
+    <p class="muted">Quick links:</p>
+    <ul>
+      <li><a href="/api/reports">/api/reports</a> (reports index)</li>
+      <li>
+        <a href="/api/reports/load">/api/reports/load</a>
+        (load report, detail JSON)
+      </li>
+      <li>
+        <a href="/api/reports/load/summary">/api/reports/load/summary</a>
+        (load report, summary JSON)
+      </li>
+      <li>
+        <a href="/api/reports/load/errors">/api/reports/load/errors</a>
+        (load report, errors JSON)
+      </li>
+      <li>
+        <a href="/api/reports/usage.html">/api/reports/usage.html</a>
+        (usage report, HTML)
+      </li>
+      <li>
+        <a href="/api/reports/usage">/api/reports/usage</a>
+        (usage report, JSON)
+      </li>
+      <li>
+        <a href="/api/data/drive.html">/api/data/drive.html</a>
+        (Drive dataset browser)
+      </li>
+      <li><a href="/docs">/docs</a> (OpenAPI)</li>
+    </ul>
+
+    <div class="row">
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; gap: 12px;">
+          <h3 style="margin: 0;">Documents by status</h3>
+          <button id="refresh">Refresh</button>
+        </div>
+        <canvas id="docsChart"></canvas>
+      </div>
+      <div class="card">
+        <h3 style="margin-top: 0;">Runs by status</h3>
+        <canvas id="runsChart"></canvas>
+      </div>
+    </div>
+
+    <script>
+      function drawBarChart(canvas, data) {
+        const ctx = canvas.getContext("2d");
+        const dpr = window.devicePixelRatio || 1;
+        const w = canvas.clientWidth * dpr;
+        const h = canvas.clientHeight * dpr;
+        canvas.width = w;
+        canvas.height = h;
+        ctx.clearRect(0, 0, w, h);
+
+        const keys = Object.keys(data);
+        const values = keys.map((k) => data[k]);
+        const max = Math.max(1, ...values);
+
+        const padding = 28 * dpr;
+        const chartW = w - padding * 2;
+        const chartH = h - padding * 2;
+        const barW = chartW / Math.max(1, keys.length);
+
+        ctx.fillStyle = "#111827";
+        ctx.font = `${12 * dpr}px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+
+        keys.forEach((k, i) => {
+          const v = data[k];
+          const bh = (v / max) * (chartH - 24 * dpr);
+          const x = padding + i * barW + 6 * dpr;
+          const y = padding + chartH - bh;
+
+          ctx.fillStyle = "#2563eb";
+          ctx.fillRect(x, y, barW - 12 * dpr, bh);
+
+          ctx.fillStyle = "#111827";
+          ctx.fillText(String(v), x, y - 6 * dpr);
+          ctx.fillStyle = "#6b7280";
+          ctx.fillText(k, x, padding + chartH + 14 * dpr);
+        });
+      }
+
+      async function load() {
+        const res = await fetch("/api/reports/usage");
+        const report = await res.json();
+        drawBarChart(document.getElementById("docsChart"), report.documents_by_status);
+        drawBarChart(document.getElementById("runsChart"), report.runs_by_status);
+      }
+
+      document.getElementById("refresh").addEventListener("click", load);
+      load();
+    </script>
+  </body>
+</html>
+
