@@ -21,8 +21,10 @@ import { MOCK_DOCUMENTS } from '../utils/mockData';
 const TABLE_SX = {
   borderRadius: 3,
   bgcolor: 'rgba(7, 14, 22, 0.94)',
-  borderColor: 'rgba(124, 165, 214, 0.12)',
-  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.02)',
+  borderWidth: 1.5,
+  borderColor: 'rgba(198, 216, 240, 0.52)',
+  boxShadow:
+    '0 0 0 1px rgba(198, 216, 240, 0.32), 0 0 0 3px rgba(102, 142, 198, 0.14), inset 0 1px 0 rgba(255,255,255,0.03)',
 } as const;
 
 export const DocumentRegistry: React.FC = () => {
@@ -77,12 +79,22 @@ export const DocumentRegistry: React.FC = () => {
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Stack spacing={3}>
-        <Stack
-          direction={{ xs: 'column', md: 'row' }}
-          spacing={2}
-          sx={{ justifyContent: 'flex-end', alignItems: { xs: 'flex-start', md: 'center' } }}
+        <Paper
+          variant="outlined"
+          sx={{
+            p: 1.4,
+            borderRadius: 2.6,
+            bgcolor: 'rgba(10, 15, 22, 0.84)',
+            borderColor: 'rgba(154, 188, 232, 0.18)',
+            boxShadow: '0 0 0 1px rgba(124, 165, 214, 0.08), inset 0 1px 0 rgba(255,255,255,0.03)',
+          }}
         >
-          <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+          <Stack
+            direction={{ xs: 'column', md: 'row' }}
+            spacing={2}
+            sx={{ justifyContent: 'flex-end', alignItems: { xs: 'flex-start', md: 'center' } }}
+          >
+            <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
             <Button variant="contained" startIcon={<Upload size={16} />}>
               Загрузить документ
             </Button>
@@ -93,7 +105,8 @@ export const DocumentRegistry: React.FC = () => {
               Переобработать OCR
             </Button>
           </Stack>
-        </Stack>
+          </Stack>
+        </Paper>
 
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
           {stats.map((stat) => (
@@ -107,8 +120,9 @@ export const DocumentRegistry: React.FC = () => {
                   gap: 1.8,
                   borderRadius: 2.4,
                   bgcolor: 'rgba(12, 18, 26, 0.9)',
-                  borderColor: 'rgba(255,255,255,0.08)',
-                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.02)',
+                  borderColor: 'rgba(154, 188, 232, 0.18)',
+                  boxShadow:
+                    '0 0 0 1px rgba(124, 165, 214, 0.08), inset 0 1px 0 rgba(255,255,255,0.03)',
                 }}
               >
                 <Box
@@ -117,7 +131,7 @@ export const DocumentRegistry: React.FC = () => {
                     borderRadius: 1.7,
                     bgcolor: 'rgba(255,255,255,0.03)',
                     color: stat.color,
-                    border: '1px solid rgba(255,255,255,0.06)',
+                    border: '1px solid rgba(154, 188, 232, 0.16)',
                   }}
                 >
                   {stat.icon}
@@ -141,22 +155,43 @@ export const DocumentRegistry: React.FC = () => {
         <TableContainer component={Paper} variant="outlined" sx={TABLE_SX}>
           <Table
             size="small"
-            sx={{
-              '& .MuiTableCell-root': {
-                borderBottomColor: 'rgba(255,255,255,0.06)',
-              },
-              '& .MuiTableHead-root .MuiTableCell-root': {
-                color: 'rgba(230, 236, 244, 0.90)',
-                borderBottom: '1px solid rgba(181, 198, 220, 0.30)',
-                boxShadow: 'inset 0 -1px 0 rgba(181, 198, 220, 0.12), inset 0 1px 0 rgba(255,255,255,0.03)',
+              sx={{
+                '& .MuiTableCell-root': {
+                  borderBottomColor: 'rgba(198, 214, 236, 0.24)',
+                  borderBottomWidth: '1px',
+                  borderBottomStyle: 'solid',
+                  verticalAlign: 'top',
+                  py: 1.3,
+                  px: 1.6,
+                },
+                '& .MuiTableHead-root .MuiTableCell-root': {
+                  color: 'rgba(230, 236, 244, 0.90)',
+                  borderBottom: '1px solid rgba(181, 198, 220, 0.36)',
+                  boxShadow: 'inset 0 -1px 0 rgba(181, 198, 220, 0.16), inset 0 1px 0 rgba(255,255,255,0.04)',
                 fontWeight: 600,
                 letterSpacing: '0.01em',
+                textAlign: 'center',
               },
-              '& .MuiTableHead-root .MuiTableCell-root:not(:last-child)': {
-                borderRight: '1px solid rgba(255,255,255,0.04)',
-              },
-            }}
-          >
+                '& .MuiTableHead-root .MuiTableCell-root:not(:last-child)': {
+                  borderRight: '1px solid rgba(188, 207, 232, 0.26)',
+                },
+                '& .MuiTableBody-root .MuiTableRow-root:nth-of-type(odd)': {
+                  bgcolor: 'rgba(255,255,255,0.016)',
+                },
+                '& .MuiTableBody-root .MuiTableRow-root': {
+                  boxShadow: 'inset 0 -1px 0 rgba(198, 214, 236, 0.12)',
+                },
+                '& .MuiTableBody-root .MuiTableRow-root:hover': {
+                  bgcolor: 'rgba(123, 166, 227, 0.05)',
+                  boxShadow: 'inset 0 -1px 0 rgba(198, 214, 236, 0.24), inset 0 1px 0 rgba(198, 214, 236, 0.10)',
+                },
+                '& .MuiTableBody-root .MuiTableCell-root': {
+                  fontSize: '0.83rem',
+                  lineHeight: 1.55,
+                  color: 'rgba(222, 230, 241, 0.84)',
+                },
+              }}
+            >
             <TableHead>
               <TableRow sx={{ bgcolor: 'rgba(156, 176, 204, 0.075)' }}>
                 <TableCell>Документ</TableCell>
@@ -166,7 +201,7 @@ export const DocumentRegistry: React.FC = () => {
                 <TableCell>OCR статус</TableCell>
                 <TableCell>Индекс статус</TableCell>
                 <TableCell>Обновлен</TableCell>
-                <TableCell align="right"></TableCell>
+                <TableCell align="center"></TableCell>
               </TableRow>
             </TableHead>
             <TableBody>

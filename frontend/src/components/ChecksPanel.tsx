@@ -42,33 +42,39 @@ type UploadedDocument = {
 const TABLE_SX = {
   borderRadius: 3,
   bgcolor: 'rgba(7, 14, 22, 0.96)',
-  borderColor: 'rgba(142, 179, 228, 0.16)',
-  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.02)',
+  borderWidth: 1.5,
+  borderColor: 'rgba(194, 213, 238, 0.5)',
+  boxShadow:
+    '0 0 0 1px rgba(194, 213, 238, 0.28), 0 0 0 3px rgba(102, 142, 198, 0.12), inset 0 1px 0 rgba(255,255,255,0.02)',
 } as const;
 
 const linkButtonSx = {
+  px: 0.9,
+  py: 0.28,
+  minWidth: 0,
+  height: 'auto',
+  fontSize: '0.74rem',
+  color: '#b8c4d8',
+  border: '1px solid rgba(184,196,216,0.20)',
+  borderRadius: 999,
+  bgcolor: 'rgba(184,196,216,0.06)',
+  textTransform: 'none',
+  justifyContent: 'flex-start',
+  '&:hover': {
+    bgcolor: 'rgba(184,196,216,0.10)',
+    borderColor: 'rgba(184,196,216,0.28)',
+  },
+} as const;
+
+const subtleActionButtonSx = {
   px: 0,
   minWidth: 0,
   justifyContent: 'flex-start',
   textTransform: 'none',
-  color: '#9ec7ff',
-  textDecoration: 'underline',
-  textUnderlineOffset: '3px',
-  fontWeight: 500,
-  '&:hover': {
-    bgcolor: 'transparent',
-    color: '#c5dcff',
-    textDecorationThickness: '2px',
-  },
-} as const;
-
-const secondaryLinkButtonSx = {
-  ...linkButtonSx,
   color: 'rgba(210, 220, 232, 0.82)',
   '&:hover': {
     bgcolor: 'transparent',
     color: '#eef4ff',
-    textDecorationThickness: '2px',
   },
 } as const;
 
@@ -322,8 +328,22 @@ export const ChecksPanel: React.FC = () => {
                       <TextField
                         {...params}
                         label="Документы для проверки"
-                        placeholder="Выберите один или несколько документов"
+                        placeholder={draftSelectedDocuments.length > 0 ? '' : 'Выберите один или несколько документов'}
                       />
+                    )}
+                    renderValue={(value) => (
+                      <Typography
+                        sx={{
+                          minWidth: 0,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          color: 'rgba(228, 235, 247, 0.92)',
+                          fontSize: '0.88rem',
+                        }}
+                      >
+                        {value.map((item) => item.name).join(', ')}
+                      </Typography>
                     )}
                     slotProps={{
                       paper: {
@@ -334,17 +354,32 @@ export const ChecksPanel: React.FC = () => {
                         },
                       },
                     }}
-                    sx={{ minWidth: 320, flex: 1 }}
+                    sx={{
+                      minWidth: 320,
+                      flex: 1,
+                      '& .MuiInputBase-root': {
+                        minHeight: 40,
+                        flexWrap: 'nowrap',
+                        alignItems: 'center',
+                      },
+                      '& .MuiAutocomplete-inputRoot': {
+                        pr: '40px !important',
+                      },
+                      '& .MuiAutocomplete-tag': {
+                        maxWidth: '100%',
+                      },
+                    }}
                   />
 
                   <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.2}>
                     <Button
-                      variant="outlined"
+                      variant="contained"
                       startIcon={<Upload size={16} />}
                       onClick={handleUploadClick}
                       sx={{
-                        borderColor: 'rgba(154, 175, 214, 0.24)',
-                        color: 'rgba(228, 235, 247, 0.9)',
+                        bgcolor: 'rgba(207, 153, 88, 0.88)',
+                        color: '#16110b',
+                        '&:hover': { bgcolor: 'rgba(219, 166, 100, 0.96)' },
                       }}
                     >
                       Загрузить документ
@@ -362,13 +397,18 @@ export const ChecksPanel: React.FC = () => {
                       Проверить выбранные
                     </Button>
                     <Button
-                      variant="outlined"
+                      variant="contained"
                       startIcon={<Download size={16} />}
                       onClick={() => exportChecksToExcel(filteredChecks)}
                       disabled={filteredChecks.length === 0}
                       sx={{
-                        borderColor: 'rgba(154, 175, 214, 0.24)',
-                        color: 'rgba(228, 235, 247, 0.9)',
+                        bgcolor: 'rgba(207, 153, 88, 0.88)',
+                        color: '#16110b',
+                        '&:hover': { bgcolor: 'rgba(219, 166, 100, 0.96)' },
+                        '&.Mui-disabled': {
+                          bgcolor: 'rgba(207, 153, 88, 0.28)',
+                          color: 'rgba(22, 17, 11, 0.45)',
+                        },
                       }}
                     >
                       Выгрузить в Excel
@@ -385,7 +425,7 @@ export const ChecksPanel: React.FC = () => {
                   {uploadedSelectedCount > 0 && (
                     <Chip size="small" color="warning" variant="outlined" label={`загружено вручную: ${uploadedSelectedCount}`} />
                   )}
-                  <Button size="small" variant="text" onClick={handleResetSelection} sx={secondaryLinkButtonSx}>
+                  <Button size="small" variant="text" onClick={handleResetSelection} sx={subtleActionButtonSx}>
                     Сбросить выбор
                   </Button>
                 </Stack>
@@ -397,7 +437,7 @@ export const ChecksPanel: React.FC = () => {
                 size="small"
                 sx={{
                   '& .MuiTableCell-root': {
-                    borderBottomColor: 'rgba(193, 211, 236, 0.14)',
+                    borderBottomColor: 'rgba(198, 214, 236, 0.24)',
                     borderBottomWidth: '1px',
                     borderBottomStyle: 'solid',
                     verticalAlign: 'top',
@@ -411,15 +451,20 @@ export const ChecksPanel: React.FC = () => {
                     fontWeight: 600,
                     letterSpacing: '0.01em',
                     fontSize: '0.79rem',
+                    textAlign: 'center',
                   },
                   '& .MuiTableHead-root .MuiTableCell-root:not(:last-child)': {
-                    borderRight: '1px solid rgba(255,255,255,0.05)',
+                    borderRight: '1px solid rgba(188, 207, 232, 0.28)',
                   },
                   '& .MuiTableBody-root .MuiTableRow-root:nth-of-type(odd)': {
                     bgcolor: 'rgba(255,255,255,0.016)',
                   },
+                  '& .MuiTableBody-root .MuiTableRow-root': {
+                    boxShadow: 'inset 0 -1px 0 rgba(198, 214, 236, 0.12)',
+                  },
                   '& .MuiTableBody-root .MuiTableRow-root:hover': {
                     bgcolor: 'rgba(123, 166, 227, 0.05)',
+                    boxShadow: 'inset 0 -1px 0 rgba(198, 214, 236, 0.24), inset 0 1px 0 rgba(198, 214, 236, 0.10)',
                   },
                   '& .MuiTableBody-root .MuiTableCell-root': {
                     fontSize: '0.83rem',
@@ -463,7 +508,7 @@ export const ChecksPanel: React.FC = () => {
                               variant="text"
                               startIcon={<FileText size={14} />}
                               onClick={() => openPreview(buildDocumentPreview(check, 'project'))}
-                              sx={secondaryLinkButtonSx}
+                              sx={linkButtonSx}
                             >
                               Документ
                             </Button>
@@ -528,7 +573,7 @@ export const ChecksPanel: React.FC = () => {
                               variant="text"
                               startIcon={<FileText size={14} />}
                               onClick={() => openPreview(buildDocumentPreview(check, 'nsi'))}
-                              sx={secondaryLinkButtonSx}
+                              sx={linkButtonSx}
                             >
                               Документ
                             </Button>

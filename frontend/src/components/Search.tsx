@@ -29,6 +29,23 @@ type DocumentPreview = {
   fragment: string;
 };
 
+const previewLinkButtonSx = {
+  px: 0.9,
+  py: 0.28,
+  minWidth: 0,
+  height: 'auto',
+  fontSize: '0.74rem',
+  color: '#b8c4d8',
+  border: '1px solid rgba(184,196,216,0.20)',
+  borderRadius: 999,
+  bgcolor: 'rgba(184,196,216,0.06)',
+  textTransform: 'none',
+  '&:hover': {
+    bgcolor: 'rgba(184,196,216,0.10)',
+    borderColor: 'rgba(184,196,216,0.28)',
+  },
+} as const;
+
 export const Search: React.FC = () => {
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState({ type: 'all', version: 'all' });
@@ -211,7 +228,12 @@ export const Search: React.FC = () => {
                     </Box>
                   </Box>
                   <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: { md: 'flex-end' } }}>
-                    <Button variant="text" endIcon={<ExternalLink size={16} />} onClick={() => openDocument(item, idx)}>
+                    <Button
+                      variant="text"
+                      startIcon={<FileText size={14} />}
+                      onClick={() => openDocument(item, idx)}
+                      sx={previewLinkButtonSx}
+                    >
                       Открыть документ
                     </Button>
                   </Box>

@@ -150,31 +150,54 @@ export const History: React.FC = () => {
         <TableContainer
           component={Paper}
           variant="outlined"
-          sx={{
-            borderRadius: 3,
-            bgcolor: 'rgba(7, 14, 22, 0.94)',
-            borderColor: 'rgba(124, 165, 214, 0.12)',
-            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.02)',
-          }}
-        >
-          <Table
-            size="small"
             sx={{
-              '& .MuiTableCell-root': {
-                borderBottomColor: 'rgba(255,255,255,0.06)',
-              },
-              '& .MuiTableHead-root .MuiTableCell-root': {
-                color: 'rgba(230, 236, 244, 0.90)',
-                borderBottom: '1px solid rgba(181, 198, 220, 0.30)',
-                boxShadow: 'inset 0 -1px 0 rgba(181, 198, 220, 0.12), inset 0 1px 0 rgba(255,255,255,0.03)',
-                fontWeight: 600,
-                letterSpacing: '0.01em',
-              },
-              '& .MuiTableHead-root .MuiTableCell-root:not(:last-child)': {
-                borderRight: '1px solid rgba(255,255,255,0.04)',
-              },
+              borderRadius: 3,
+              bgcolor: 'rgba(7, 14, 22, 0.94)',
+              borderWidth: 1.5,
+              borderColor: 'rgba(194, 213, 238, 0.48)',
+              boxShadow:
+                '0 0 0 1px rgba(194, 213, 238, 0.28), 0 0 0 3px rgba(102, 142, 198, 0.12), inset 0 1px 0 rgba(255,255,255,0.02)',
             }}
           >
+          <Table
+            size="small"
+              sx={{
+                '& .MuiTableCell-root': {
+                  borderBottomColor: 'rgba(198, 214, 236, 0.24)',
+                  borderBottomWidth: '1px',
+                  borderBottomStyle: 'solid',
+                  verticalAlign: 'top',
+                  py: 1.3,
+                  px: 1.6,
+                },
+                '& .MuiTableHead-root .MuiTableCell-root': {
+                  color: 'rgba(230, 236, 244, 0.90)',
+                  borderBottom: '1px solid rgba(181, 198, 220, 0.30)',
+                  boxShadow: 'inset 0 -1px 0 rgba(181, 198, 220, 0.12), inset 0 1px 0 rgba(255,255,255,0.03)',
+                fontWeight: 600,
+                letterSpacing: '0.01em',
+                textAlign: 'center',
+              },
+                '& .MuiTableHead-root .MuiTableCell-root:not(:last-child)': {
+                  borderRight: '1px solid rgba(188, 207, 232, 0.26)',
+                },
+                '& .MuiTableBody-root .MuiTableRow-root:nth-of-type(odd)': {
+                  bgcolor: 'rgba(255,255,255,0.016)',
+                },
+                '& .MuiTableBody-root .MuiTableRow-root': {
+                  boxShadow: 'inset 0 -1px 0 rgba(198, 214, 236, 0.12)',
+                },
+                '& .MuiTableBody-root .MuiTableRow-root:hover': {
+                  bgcolor: 'rgba(123, 166, 227, 0.05)',
+                  boxShadow: 'inset 0 -1px 0 rgba(198, 214, 236, 0.24), inset 0 1px 0 rgba(198, 214, 236, 0.10)',
+                },
+                '& .MuiTableBody-root .MuiTableCell-root': {
+                  fontSize: '0.83rem',
+                  lineHeight: 1.55,
+                  color: 'rgba(222, 230, 241, 0.84)',
+                },
+              }}
+            >
             <TableHead>
               <TableRow sx={{ bgcolor: 'rgba(156, 176, 204, 0.075)' }}>
                 <TableCell>Дата</TableCell>

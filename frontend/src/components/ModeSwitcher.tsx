@@ -10,6 +10,7 @@ import {
   BarChart3,
   Video,
   History,
+  Focus,
 } from 'lucide-react';
 import { useUIStore, AppTab } from '../store/uiStore';
 
@@ -23,7 +24,7 @@ const NAV_ITEMS: Array<{ value: AppTab; label: string; icon: React.ReactNode }> 
 ];
 
 export const ModeSwitcher: React.FC = () => {
-  const { activeTab, setActiveTab, setVideoGuideOpen } = useUIStore();
+  const { activeTab, setActiveTab, setVideoGuideOpen, setFocusMode } = useUIStore();
 
   return (
     <Box
@@ -42,6 +43,7 @@ export const ModeSwitcher: React.FC = () => {
       <Box
         sx={{
           p: 2.2,
+          pb: 1.45,
           borderRadius: 3.2,
           border: '1px solid rgba(92, 168, 178, 0.26)',
           background:
@@ -64,7 +66,7 @@ export const ModeSwitcher: React.FC = () => {
             right: 16,
             bottom: 14,
             height: 1,
-            background: 'linear-gradient(90deg, transparent, rgba(208, 171, 112, 0.42), transparent)',
+            background: 'transparent',
             pointerEvents: 'none',
           },
         }}
@@ -90,18 +92,33 @@ export const ModeSwitcher: React.FC = () => {
             <Anchor size={26} style={{ position: 'relative', zIndex: 1, color: '#98d9d8' }} />
           </Box>
 
-          <Box sx={{ minWidth: 0 }}>
-            <Typography
+          <Box sx={{ minWidth: 0, pt: 0.45 }}>
+            <Box
               sx={{
-                fontSize: '1.32rem',
-                lineHeight: 1.08,
-                fontWeight: 800,
-                letterSpacing: '0.01em',
-                color: '#98d9d8',
+                display: 'inline-flex',
+                alignItems: 'center',
+                px: 1.15,
+                py: 0.55,
+                borderRadius: 1.7,
+                background:
+                  'linear-gradient(145deg, rgba(7, 20, 24, 0.82), rgba(18, 32, 38, 0.72) 62%, rgba(35, 49, 56, 0.56) 100%)',
+                border: '1px solid rgba(157, 219, 217, 0.18)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08), 0 10px 18px rgba(0,0,0,0.18)',
               }}
             >
-              AI ассистент
-            </Typography>
+              <Typography
+                sx={{
+                  fontSize: '1.24rem',
+                  lineHeight: 1.04,
+                  fontWeight: 700,
+                  letterSpacing: '0.015em',
+                  color: '#98d9d8',
+                  fontFamily: '"Trebuchet MS", "Segoe UI", sans-serif',
+                }}
+              >
+                AI ассистент
+              </Typography>
+            </Box>
 
             <Typography
               variant="caption"
@@ -109,9 +126,10 @@ export const ModeSwitcher: React.FC = () => {
                 display: 'block',
                 mt: 0.8,
                 color: 'rgba(209, 225, 225, 0.72)',
+                textAlign: 'center',
               }}
             >
-              инженерные документы и нормативная база
+              сверка с НСИ
             </Typography>
           </Box>
         </Stack>
@@ -166,6 +184,15 @@ export const ModeSwitcher: React.FC = () => {
       </Stack>
 
       <Box sx={{ mt: 'auto', pt: 2, borderTop: '1px solid rgba(157, 205, 225, 0.12)' }}>
+        <Button
+          variant="outlined"
+          fullWidth
+          startIcon={<Focus size={16} />}
+          onClick={() => setFocusMode(true)}
+          sx={{ mb: 1.2, borderColor: 'rgba(124, 165, 214, 0.30)', color: 'rgba(224, 234, 245, 0.88)' }}
+        >
+          Фокус-режим
+        </Button>
         <Button
           variant="outlined"
           fullWidth

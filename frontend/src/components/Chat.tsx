@@ -17,7 +17,7 @@ import {
 import {
   Send,
   User,
-  Bot,
+  Anchor,
   ChevronDown,
   ChevronUp,
   ExternalLink,
@@ -190,8 +190,8 @@ export const Chat: React.FC = () => {
                     }}
                   >
                     {isAssistant && (
-                      <Avatar sx={{ bgcolor: 'rgba(152, 217, 216, 0.16)', color: '#98d9d8', width: 34, height: 34 }}>
-                        <Bot size={20} />
+                      <Avatar sx={{ bgcolor: 'rgba(152, 217, 216, 0.16)', color: '#98d9d8', width: 34, height: 34, mt: 0.55 }}>
+                        <Anchor size={18} />
                       </Avatar>
                     )}
 
@@ -415,7 +415,7 @@ export const Chat: React.FC = () => {
                     </Box>
 
                     {!isAssistant && (
-                      <Avatar sx={{ bgcolor: 'rgba(216,176,122,0.16)', color: '#d8b07a', width: 34, height: 34 }}>
+                      <Avatar sx={{ bgcolor: 'rgba(216,176,122,0.16)', color: '#d8b07a', width: 34, height: 34, mt: 0.55 }}>
                         <User size={20} />
                       </Avatar>
                     )}
@@ -426,7 +426,7 @@ export const Chat: React.FC = () => {
               {chatMutation.isPending && (
                 <Box sx={{ display: 'flex', gap: 1.5 }}>
                   <Avatar sx={{ bgcolor: 'rgba(152, 217, 216, 0.16)', color: '#98d9d8', width: 34, height: 34 }}>
-                    <Bot size={20} />
+                    <Anchor size={18} />
                   </Avatar>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <CircularProgress size={16} thickness={5} />
