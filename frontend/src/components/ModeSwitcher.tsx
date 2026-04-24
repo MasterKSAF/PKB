@@ -17,7 +17,7 @@ const NAV_ITEMS: Array<{ value: AppTab; label: string; icon: React.ReactNode }> 
   { value: 'chat', label: 'Чат', icon: <MessageSquare size={18} /> },
   { value: 'search', label: 'Поиск', icon: <Search size={18} /> },
   { value: 'documents', label: 'Реестр', icon: <FileText size={18} /> },
-  { value: 'checks', label: 'Сверка', icon: <CheckCircle2 size={18} /> },
+  { value: 'checks', label: 'Проверка', icon: <CheckCircle2 size={18} /> },
   { value: 'history', label: 'История', icon: <History size={18} /> },
   { value: 'qa', label: 'QA', icon: <BarChart3 size={18} /> },
 ];
@@ -44,7 +44,8 @@ export const ModeSwitcher: React.FC = () => {
           p: 2.2,
           borderRadius: 3.2,
           border: '1px solid rgba(92, 168, 178, 0.26)',
-          background: 'linear-gradient(160deg, rgba(9, 28, 33, 0.98), rgba(13, 52, 59, 0.96) 52%, rgba(9, 22, 28, 0.98) 100%)',
+          background:
+            'linear-gradient(160deg, rgba(9, 28, 33, 0.98), rgba(13, 52, 59, 0.96) 52%, rgba(9, 22, 28, 0.98) 100%)',
           boxShadow: '0 20px 42px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.10)',
           position: 'relative',
           overflow: 'hidden',

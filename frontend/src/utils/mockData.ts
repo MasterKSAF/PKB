@@ -34,12 +34,20 @@ export interface Document {
 export interface ParameterCheck {
   id: string;
   parameter: string;
-  document: string;
-  sourceA: string;
-  sourceB: string;
-  valueA: string;
-  valueB: string;
-  status: 'совпадает' | 'внимание' | 'расхождение' | 'на проверку';
+  projectDocument: string;
+  projectValue: string;
+  projectPage: number;
+  projectSection: string;
+  projectText: string;
+  projectVersion: string;
+  nsiDocument: string;
+  nsiRequirement: string;
+  nsiPage: number;
+  nsiSection: string;
+  nsiText: string;
+  nsiVersion: string;
+  comment: string;
+  status: 'OK' | 'WARNING' | 'ERROR';
 }
 
 export interface SystemMetrics {
@@ -159,33 +167,57 @@ export const MOCK_DOCUMENTS: Document[] = [
 export const MOCK_CHECKS: ParameterCheck[] = [
   {
     id: 'ch1',
-    parameter: 'Макс. скорость',
-    document: 'ТЗ-2024',
-    sourceA: 'ТЗ',
-    sourceB: 'Проект',
-    valueA: '32 узла',
-    valueB: '32 узла',
-    status: 'совпадает',
+    parameter: 'Максимальная скорость судна',
+    projectDocument: 'Проект 223-М. Основные характеристики',
+    projectValue: '32 узла',
+    projectPage: 18,
+    projectSection: 'Раздел 5. Основные характеристики',
+    projectText: 'В проектной документации для судна зафиксирована максимальная скорость 32 узла в штатном режиме эксплуатации.',
+    projectVersion: 'Проект v2.4',
+    nsiDocument: 'ТЗ-2024. Эксплуатационные требования',
+    nsiRequirement: 'Не менее 32 узлов',
+    nsiPage: 12,
+    nsiSection: 'Раздел 3. Эксплуатационные требования',
+    nsiText: 'Максимальная скорость судна должна составлять не менее 32 узлов при штатном режиме эксплуатации.',
+    nsiVersion: 'Изд. 2',
+    comment: 'Параметр проекта соответствует требованию НСИ.',
+    status: 'OK',
   },
   {
     id: 'ch2',
     parameter: 'Масса двигателя',
-    document: 'Спецификация-1',
-    sourceA: 'Каталог',
-    sourceB: 'Чертеж',
-    valueA: '4500 кг',
-    valueB: '4750 кг',
-    status: 'расхождение',
+    projectDocument: 'Чертеж силовой установки. Лист сборки',
+    projectValue: '4750 кг',
+    projectPage: 22,
+    projectSection: 'Примечания по агрегату',
+    projectText: 'На чертеже сборки для узла указана масса двигателя 4750 кг.',
+    projectVersion: 'Проект v1.9',
+    nsiDocument: 'Каталог двигателя. Базовая комплектация',
+    nsiRequirement: '4500 кг',
+    nsiPage: 7,
+    nsiSection: 'Таблица масс',
+    nsiText: 'Масса двигателя в базовой комплектации составляет 4500 кг.',
+    nsiVersion: 'Изд. 4',
+    comment: 'Значение в проекте выше нормативно-справочного значения. Требуется проверка версии агрегата или состава комплектации.',
+    status: 'ERROR',
   },
   {
     id: 'ch3',
-    parameter: 'Тип стали',
-    document: 'ГОСТ-123',
-    sourceA: 'Стандарт',
-    sourceB: 'Заявка',
-    valueA: '10ХСНД',
-    valueB: '10ХСНД-2',
-    status: 'внимание',
+    parameter: 'Марка стали для конструктивного элемента',
+    projectDocument: 'Заявка на материал для корпуса',
+    projectValue: '10ХСНД-2',
+    projectPage: 4,
+    projectSection: 'Примечание к заявке',
+    projectText: 'В заявке на закупку материала указано обозначение 10ХСНД-2.',
+    projectVersion: 'Заявка 04-2026',
+    nsiDocument: 'ГОСТ-123. Допустимые марки стали',
+    nsiRequirement: '10ХСНД',
+    nsiPage: 33,
+    nsiSection: 'Таблица 7. Марки стали',
+    nsiText: 'Для данной группы конструкций указана сталь 10ХСНД.',
+    nsiVersion: '2024.3',
+    comment: 'Обозначение в проекте похоже на модификацию марки. Нужна инженерная проверка эквивалентности.',
+    status: 'WARNING',
   },
 ];
 

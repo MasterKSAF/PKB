@@ -24,7 +24,7 @@ const TAB_TITLES = {
   chat: 'Чат инженера',
   search: 'Поиск',
   documents: 'Реестр',
-  checks: 'Сверка',
+  checks: 'Проверка на соответствие требований НСИ',
   history: 'История',
   qa: 'QA',
 } as const;
