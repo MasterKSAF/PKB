@@ -21,6 +21,26 @@ UI может работать без backend в mock/demo-режиме. Это 
 
 При подключении backend интерфейс использует те же экраны и ту же структуру пользовательского сценария, но уже с реальными данными.
 
+## Docker-запуск
+
+Из папки `frontend`:
+
+```bash
+docker compose up --build
+```
+
+После запуска открыть:
+
+```text
+http://localhost:3000
+```
+
+Остановить контейнер:
+
+```bash
+docker compose down
+```
+
 ## Что нужно от backend
 
 Backend должен работать локально или в контуре заказчика. Базовая ожидаемая схема: API для чата, поиска, реестра документов, проверки, истории и метрик.
@@ -135,6 +155,7 @@ Backend должен работать локально или в контуре 
 | **[frontend/vite.config.ts](frontend/vite.config.ts)** | Настройки Vite, React, Tailwind и alias. |
 | **[frontend/index.html](frontend/index.html)** | HTML-шаблон приложения. |
 | **[frontend/Dockerfile](frontend/Dockerfile)** | Docker-сборка: Node собирает проект, nginx раздает готовый UI. |
+| **[frontend/docker-compose.yml](frontend/docker-compose.yml)** | Docker Compose-конфигурация для запуска командой `docker compose up --build`. |
 | **[frontend/nginx.conf](frontend/nginx.conf)** | Настройка nginx для SPA. |
 
 ### Конфигурация
