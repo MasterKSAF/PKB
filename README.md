@@ -1,4 +1,4 @@
-# OKB RAG Frontend
+# PKB RAG Frontend
 
 Frontend для локальной RAG-системы по инженерным документам и нормативно-справочной информации. Интерфейс собран как демонстрационный рабочий контур под ТЗ: чат с источниками, поиск, реестр документов, проверка на соответствие требованиям НСИ, история запросов и QA-блок.
 
@@ -24,11 +24,49 @@ UI может работать без backend в mock/demo-режиме. Это 
 
 При подключении backend интерфейс должен использовать те же экраны и ту же структуру пользовательского сценария, но уже с реальными данными.
 
-## Локальный запуск
+## Как забрать проект через GitHub Fork
+
+Ссылка на проект:
+
+```text
+https://github.com/MasterKSAF/PKB
+```
+
+Самый простой способ забрать проект себе:
+
+1. Открыть ссылку на GitHub.
+2. Нажать кнопку `Fork` в правом верхнем углу.
+3. Нажать `Create fork`.
+4. Открыть уже свою копию репозитория.
+5. Нажать зеленую кнопку `Code`.
+6. Скопировать ссылку из вкладки `HTTPS`.
+
+После этого скачать свою копию на компьютер:
 
 ```bash
-cd frontend
+git clone https://github.com/ВАШ_ЛОГИН/PKB.git
+cd PKB/frontend
 npm install
+npm run dev
+```
+
+Открыть в браузере:
+
+```text
+http://localhost:3000
+```
+
+Если нужен backend, создать файл `frontend/.env.local` по примеру `frontend/.env.example`. Если backend не запущен, интерфейс все равно откроется в demo-режиме с тестовыми данными.
+
+## Локальный запуск
+
+Короткий вариант для тех, кто клонирует исходный репозиторий без fork:
+
+```bash
+git clone https://github.com/MasterKSAF/PKB.git
+cd PKB/frontend
+npm install
+cp .env.example .env.local
 npm run dev
 ```
 
@@ -41,7 +79,6 @@ http://localhost:3000
 Проверка сборки и типов:
 
 ```bash
-cd frontend
 npm run build
 npm run lint
 ```
@@ -62,20 +99,45 @@ VITE_API_BASE_URL=http://localhost:8000
 
 ```bash
 cd frontend
-docker build -t okb-rag-frontend .
+docker build -t pkb-rag-frontend .
 ```
 
 Запуск:
 
 ```bash
-docker run --rm -p 3000:80 okb-rag-frontend
+docker run --rm -p 3000:80 pkb-rag-frontend
 ```
 
 Если порт `3000` занят:
 
 ```bash
-docker run --rm -p 3001:80 okb-rag-frontend
+docker run --rm -p 3001:80 pkb-rag-frontend
 ```
+
+## Что должно быть в репозитории
+
+Нужные файлы фронтенда:
+
+- `frontend/package.json`
+- `frontend/package-lock.json`
+- `frontend/index.html`
+- `frontend/src/`
+- `frontend/public/`
+- `frontend/vite.config.ts`
+- `frontend/tsconfig*.json`
+- `frontend/.env.example`
+- `frontend/.gitignore`
+- `frontend/Dockerfile`
+- `frontend/nginx.conf`
+
+Не нужно загружать в GitHub:
+
+- `frontend/node_modules/`
+- `frontend/dist/`
+- `frontend/build/`
+- `frontend/.env`
+- `frontend/.env.local`
+- временные скриншоты и файлы проверки
 
 ## Что нужно от backend
 

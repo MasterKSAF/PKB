@@ -134,8 +134,20 @@ const logRows = [
   },
 ];
 
+const controlMetricsHelper = controlMetrics
+  .map((metric, index) => `${index + 1}. ${metric.label}: ${metric.helper}`)
+  .join('\n\n');
+
+const answerMetricsHelper = answerMetrics
+  .map((metric, index) => `${index + 1}. ${metric.label}: ${metric.helper}`)
+  .join('\n\n');
+
 const Helper: React.FC<{ title: string }> = ({ title }) => (
-  <Tooltip title={title} arrow placement="top">
+  <Tooltip
+    title={<Box sx={{ whiteSpace: 'pre-line', maxWidth: 360 }}>{title}</Box>}
+    arrow
+    placement="top"
+  >
     <IconButton size="small" sx={{ color: 'rgba(171, 159, 255, 0.82)', p: 0.2 }}>
       <Info size={15} />
     </IconButton>
@@ -149,9 +161,90 @@ const metricTileBase = {
   bgcolor: 'rgba(255,255,255,0.035)',
   border: '1px solid rgba(255,255,255,0.08)',
   display: 'flex',
-  flexDirection: 'column',
-  justifyContent: 'space-between',
+  flexDirection: 'column' as const,
+  justifyContent: 'space-between' as const,
 };
+
+type MetricTileProps = {
+  icon: React.ReactNode;
+  accent: string;
+  value: string;
+  label: string;
+  subline: string;
+  chipLabel: string;
+  chipTone?: 'ok' | 'warn' | 'neutral';
+};
+
+const MetricTile: React.FC<MetricTileProps> = ({
+  icon,
+  accent,
+  value,
+  label,
+  subline,
+  chipLabel,
+  chipTone = 'neutral',
+}) => (
+  <Box sx={metricTileBase}>
+    <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.2 }}>
+      <Box
+        sx={{
+          width: 34,
+          height: 34,
+          borderRadius: 2,
+          display: 'grid',
+          placeItems: 'center',
+          bgcolor: `${accent}16`,
+          color: accent,
+          border: `1px solid ${accent}33`,
+          flexShrink: 0,
+        }}
+      >
+        {icon}
+      </Box>
+    </Box>
+
+    <Typography
+      sx={{
+        mt: 1.9,
+        fontSize: '1.72rem',
+        lineHeight: 1,
+        fontWeight: 520,
+        color: 'rgba(242, 245, 249, 0.95)',
+        letterSpacing: '-0.03em',
+      }}
+    >
+      {value}
+    </Typography>
+
+    <Typography sx={{ mt: 0.85, fontSize: '0.8rem', color: 'rgba(233, 237, 243, 0.9)' }}>{label}</Typography>
+    <Typography sx={{ mt: 0.3, fontSize: '0.72rem', color: 'rgba(171, 183, 201, 0.72)' }}>{subline}</Typography>
+
+    <Box sx={{ pt: 1.25, display: 'flex', justifyContent: 'flex-start', mt: 'auto' }}>
+      <Chip
+        size="small"
+        label={chipLabel}
+        sx={{
+          height: 24,
+          color:
+            chipTone === 'ok' ? '#a8efc0' : chipTone === 'warn' ? '#ffd1a4' : 'rgba(226, 231, 239, 0.9)',
+          bgcolor:
+            chipTone === 'ok'
+              ? 'rgba(106, 196, 136, 0.12)'
+              : chipTone === 'warn'
+                ? 'rgba(240, 168, 87, 0.12)'
+                : 'rgba(255,255,255,0.06)',
+          border:
+            chipTone === 'ok'
+              ? '1px solid rgba(106, 196, 136, 0.24)'
+              : chipTone === 'warn'
+                ? '1px solid rgba(240, 168, 87, 0.24)'
+                : '1px solid rgba(255,255,255,0.10)',
+          '& .MuiChip-label': { px: 1, fontSize: '0.69rem' },
+        }}
+      />
+    </Box>
+  </Box>
+);
 
 export const Monitor: React.FC = () => {
   return (
@@ -162,66 +255,21 @@ export const Monitor: React.FC = () => {
             <Typography sx={{ fontSize: '0.98rem', fontWeight: 500, color: 'rgba(233, 237, 243, 0.94)' }}>
               Контрольные метрики
             </Typography>
-            <Helper title="Ключевые показатели, на которые можно опираться при разговоре о соответствии ТЗ и критериях приёмки." />
+            <Helper title={controlMetricsHelper} />
           </Box>
 
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' }, gap: 1.15 }}>
             {controlMetrics.map((metric) => (
-              <Box key={metric.label} sx={metricTileBase}>
-                <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.2 }}>
-                  <Box
-                    sx={{
-                      width: 34,
-                      height: 34,
-                      borderRadius: 2,
-                      display: 'grid',
-                      placeItems: 'center',
-                      bgcolor: `${metric.accent}16`,
-                      color: metric.accent,
-                      border: `1px solid ${metric.accent}33`,
-                      flexShrink: 0,
-                    }}
-                  >
-                    {metric.icon}
-                  </Box>
-                  <Helper title={metric.helper} />
-                </Box>
-
-                <Typography
-                  sx={{
-                    mt: 1.9,
-                    fontSize: '1.5rem',
-                    lineHeight: 1,
-                    fontWeight: 520,
-                    color: 'rgba(242, 245, 249, 0.95)',
-                    letterSpacing: '-0.03em',
-                  }}
-                >
-                  {metric.value}
-                </Typography>
-                <Typography sx={{ mt: 0.85, fontSize: '0.8rem', color: 'rgba(233, 237, 243, 0.9)' }}>
-                  {metric.label}
-                </Typography>
-                <Typography sx={{ mt: 0.3, fontSize: '0.72rem', color: 'rgba(171, 183, 201, 0.72)' }}>
-                  {metric.target}
-                </Typography>
-
-                <Box sx={{ pt: 1.25, display: 'flex', justifyContent: 'flex-start' }}>
-                  <Chip
-                    size="small"
-                    label={metric.state}
-                    sx={{
-                      height: 24,
-                      color: metric.ok ? '#a8efc0' : '#ffd1a4',
-                      bgcolor: metric.ok ? 'rgba(106, 196, 136, 0.12)' : 'rgba(240, 168, 87, 0.12)',
-                      border: metric.ok
-                        ? '1px solid rgba(106, 196, 136, 0.24)'
-                        : '1px solid rgba(240, 168, 87, 0.24)',
-                      '& .MuiChip-label': { px: 1, fontSize: '0.69rem' },
-                    }}
-                  />
-                </Box>
-              </Box>
+              <MetricTile
+                key={metric.label}
+                icon={metric.icon}
+                accent={metric.accent}
+                value={metric.value}
+                label={metric.label}
+                subline={metric.target}
+                chipLabel={metric.state}
+                chipTone={metric.ok ? 'ok' : 'warn'}
+              />
             ))}
           </Box>
         </Paper>
@@ -237,63 +285,23 @@ export const Monitor: React.FC = () => {
           <Box>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, mb: 1.6 }}>
               <Typography sx={{ fontSize: '0.98rem', fontWeight: 500, color: 'rgba(233, 237, 243, 0.94)' }}>
-                Оценка ответов
+                Оценка ответов ассистента
               </Typography>
-              <Helper title="Инженерская оценка полезна для целевых прогонов, тестовых наборов и отбора спорных кейсов на разбор." />
+              <Helper title={answerMetricsHelper} />
             </Box>
 
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' }, gap: 1.15 }}>
               {answerMetrics.map((metric) => (
-                <Box key={metric.label} sx={metricTileBase}>
-                  <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.2 }}>
-                    <Box
-                      sx={{
-                        width: 34,
-                        height: 34,
-                        borderRadius: 2,
-                        display: 'grid',
-                        placeItems: 'center',
-                        bgcolor: `${metric.accent}16`,
-                        color: metric.accent,
-                        border: `1px solid ${metric.accent}33`,
-                        flexShrink: 0,
-                      }}
-                    >
-                      <BadgeCheck size={18} />
-                    </Box>
-                    <Helper title={metric.helper} />
-                  </Box>
-
-                  <Typography
-                    sx={{
-                      mt: 1.9,
-                      fontSize: '1.5rem',
-                      lineHeight: 1,
-                      fontWeight: 520,
-                      color: 'rgba(242, 245, 249, 0.95)',
-                      letterSpacing: '-0.03em',
-                    }}
-                  >
-                    {metric.value}
-                  </Typography>
-                  <Typography sx={{ mt: 0.85, fontSize: '0.72rem', color: 'rgba(171, 183, 201, 0.72)' }}>
-                    {metric.note}
-                  </Typography>
-
-                  <Box sx={{ pt: 1.25, display: 'flex', justifyContent: 'flex-start', mt: 'auto' }}>
-                    <Chip
-                      size="small"
-                      label={metric.state}
-                      sx={{
-                        height: 24,
-                        color: 'rgba(226, 231, 239, 0.9)',
-                        bgcolor: 'rgba(255,255,255,0.06)',
-                        border: '1px solid rgba(255,255,255,0.10)',
-                        '& .MuiChip-label': { px: 1, fontSize: '0.69rem' },
-                      }}
-                    />
-                  </Box>
-                </Box>
+                <MetricTile
+                  key={metric.label}
+                  icon={<BadgeCheck size={18} />}
+                  accent={metric.accent}
+                  value={metric.value}
+                  label={metric.label}
+                  subline={metric.note}
+                  chipLabel={metric.state}
+                  chipTone="neutral"
+                />
               ))}
             </Box>
           </Box>

@@ -85,7 +85,7 @@ export const History: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'okb_history_filtered.csv';
+    link.download = 'pkb_history_filtered.csv';
     link.click();
     URL.revokeObjectURL(url);
   };

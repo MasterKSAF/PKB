@@ -56,7 +56,11 @@ export const VideoGuideDialog: React.FC = () => {
       onClose={() => setVideoGuideOpen(false)}
       slotProps={{
         paper: {
-          sx: { bgcolor: 'background.default', backgroundImage: 'none' }
+          sx: {
+            bgcolor: 'background.default',
+            background:
+              'radial-gradient(circle at 22% 0%, rgba(112,161,255,0.12), transparent 30%), linear-gradient(135deg, #0b0c0e 0%, #11131a 48%, #0b0c0e 100%)',
+          }
         }
       }}
     >
@@ -66,8 +70,29 @@ export const VideoGuideDialog: React.FC = () => {
         </IconButton>
       </Box>
 
-      <DialogContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', p: 4 }}>
-        <Box sx={{ maxWidth: 800, width: '100%' }}>
+      <DialogContent
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          p: 4,
+          pt: 2,
+        }}
+      >
+        <Box
+          sx={{
+            maxWidth: 920,
+            width: '100%',
+            px: { xs: 2.5, md: 4.5 },
+            py: { xs: 3, md: 4 },
+            borderRadius: 4,
+            border: '1px solid rgba(255,255,255,0.10)',
+            bgcolor: 'rgba(22, 23, 27, 0.82)',
+            boxShadow: '0 24px 60px rgba(0,0,0,0.32)',
+            backdropFilter: 'blur(16px)',
+          }}
+        >
           <AnimatePresence mode="wait">
             <motion.div
               key={activeStep}
