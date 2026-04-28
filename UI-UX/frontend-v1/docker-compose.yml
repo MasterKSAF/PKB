@@ -1,0 +1,8 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: pkb-ui-frontend-v1:latest
+    ports:
+      - "3000:80"
