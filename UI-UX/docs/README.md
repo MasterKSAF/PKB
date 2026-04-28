@@ -7,6 +7,7 @@
 - `workflow.md` — как работать с ветками, PR и обновлениями
 - `roles.md` — кто за что отвечает в UI-команде
 - `qa-checklist.md` — что проверять перед merge и перед демонстрацией
+- `frontend-overview.md` — большой README по фронтенду: экраны, API, backend-контракт, Docker, структура файлов
 - `first-run-ui-v1.md` — инструкция первого запуска UI v1
 - `first-run-ui-v1.docx` — Word-версия инструкции запуска
 - `ui-v1-review-2026-04-28.xlsx` — простая форма review по первой версии интерфейса
