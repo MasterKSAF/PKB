@@ -40,34 +40,33 @@
 
 | Задача | Решение | Комментарии |
 |---|---|---|
-| RAG | sentence-transformers | Локальная библиотека и модели embedding.
+| RAG | sentence-transformers | Локальная библиотека и модели embedding. |
 
-Пример:
+|---|---|Пример: |
 
-from sentence_transformers import SentenceTransformer
-model = SentenceTransformer('mmBERT')
-chunks = [...]
-chunk_embeddings = model.encode(chunks)
+|---|---|from sentence_transformers import SentenceTransformer |
+|---|---|model = SentenceTransformer('mmBERT') |
+|---|---|chunks = [...] |
+|---|---|chunk_embeddings = model.encode(chunks) |
 
-Примеры моделей для инженерных баз знаний:
-MIKA_Custom_IR (NASA) - высокая точность на инженерных данных;
-OGAI-Embedder - специализирована на технических документах;
-all-mpnet-base-v2 - проверенное и мощное решение;
-mmBERT - длинный контекст. |
-| LLM | GigaChat / Qwen | Судя по всему, тоже локальные (?)
+|---|---|Примеры моделей для инженерных баз знаний: |
+|---|---|MIKA_Custom_IR (NASA) - высокая точность на инженерных данных; |
+|---|---|OGAI-Embedder - специализирована на технических документах; |
+|---|---|all-mpnet-base-v2 - проверенное и мощное решение; |
+|---|---|mmBERT - длинный контекст. |
+| LLM | GigaChat / Qwen | Судя по всему, тоже локальные (?) |
 
-Примеры моделей для инженерных задач:
+|---|---|Примеры моделей для инженерных задач: |
 
-GigaChat:
-GigaChat 3 Ultra Preview (702B-A36B) - сложные технические задачи;
-GigaChat 3 Lightning (10B-A1.8B) - быстрый RAG.
+|---|---|GigaChat: |
+|---|---|- GigaChat 3 Ultra Preview (702B-A36B) - сложные технические задачи; |
+|---|---|- GigaChat 3 Lightning (10B-A1.8B) - быстрый RAG. |
 
-Qwen:
-Qwen2.5-14B-Instruct-1M - RAG с длинным контекстом;
-Qwen2.5-Coder-32B-Instruct;
-Qwen3.6-27B;
-Qwen3.6-32B-Coder.
- |
+|---|---|Qwen: |
+|---|---|- Qwen2.5-14B-Instruct-1M - RAG с длинным контекстом; |
+|---|---|- Qwen2.5-Coder-32B-Instruct; |
+|---|---|- Qwen3.6-27B; |
+|---|---|- Qwen3.6-32B-Coder. |
 | OCR | Datalab / Tesseract | Локальные OCR модели от Datalab (Datalab AI Models - точность 98%, структура и формулы TeX):
 datalab-to/chandra (Chandra OCR)
 datalab-to/marker |
