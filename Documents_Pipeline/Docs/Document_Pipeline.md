@@ -68,8 +68,8 @@
 |---|---|- Qwen3.6-27B; |
 |---|---|- Qwen3.6-32B-Coder. |
 | OCR | Datalab / Tesseract | Локальные OCR модели от Datalab (Datalab AI Models - точность 98%, структура и формулы TeX): |
-|---|---|datalab-to/chandra (Chandra OCR) |
-|---|---|datalab-to/marker |
+|---|---|- datalab-to/chandra (Chandra OCR) |
+|---|---|- datalab-to/marker |
 | Fuzzy | rapidfuzz | Библиотека для быстрого поиска похожих текстов и исправления опечаток. Понимает опечатки и разночтения. |---|---|«Нечеткое» сравнения строк и вычисление расстояний между ними. |
 |---|---|---|
 |---|---|Основные задачи: |
