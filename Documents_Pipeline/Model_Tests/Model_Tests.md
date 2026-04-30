@@ -1,4 +1,4 @@
-DataLab Chandra OCR:
+DataLab Chandra OCR (Новожилов В.):
 https://github.com/NeuronsUII/PKB_neuroassistant/blob/main/Vitalyy_Novozhilov/Chandra_ocr_2_test/ocr_test.md
 
 Резюме Степанова П.:
