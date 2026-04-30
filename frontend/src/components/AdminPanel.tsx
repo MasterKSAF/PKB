@@ -1,9 +1,17 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Box,
+  Button,
+  Checkbox,
   Chip,
   Container,
+  Divider,
+  FormControl,
+  FormControlLabel,
+  InputLabel,
+  MenuItem,
   Paper,
+  Select,
   Stack,
   Table,
   TableBody,
@@ -11,12 +19,45 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TextField,
   Typography,
 } from '@mui/material';
-import { ClipboardList, ShieldCheck, UserCog, Users } from 'lucide-react';
+import { ClipboardList, Save, Search, ShieldCheck, SlidersHorizontal, UserCog, Users } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
 import { ADMIN_SECTIONS_ACCESS, ROLE_LABELS } from '../utils/access';
-import { MOCK_ADMIN_USERS, MOCK_PROCESSING_LOGS } from '../utils/mockData';
+import { MOCK_PROCESSING_LOGS, type AdminUser } from '../utils/mockData';
+
+type RoleLabel = AdminUser['role'];
+type AccessKey =
+  | 'chat'
+  | 'search'
+  | 'documents'
+  | 'checks'
+  | 'history'
+  | 'qa'
+  | 'admin'
+  | 'ocrArtifacts'
+  | 'processingLogs';
+
+const ROLE_OPTIONS: RoleLabel[] = ['Инженер', 'Администратор знаний', 'Администратор системы'];
+
+const ACCESS_OPTIONS: Array<{ key: AccessKey; label: string; description: string }> = [
+  { key: 'chat', label: 'Чат', description: 'вопросы к ассистенту и просмотр ответов' },
+  { key: 'search', label: 'Поиск', description: 'поиск документов и фрагментов по базе знаний' },
+  { key: 'documents', label: 'Реестр', description: 'просмотр и обслуживание базы документов' },
+  { key: 'checks', label: 'Проверка', description: 'сверка проектных решений с требованиями НСИ' },
+  { key: 'history', label: 'История', description: 'журнал запросов и ответов' },
+  { key: 'qa', label: 'QA', description: 'метрики качества и инженерские оценки' },
+  { key: 'admin', label: 'Администрирование', description: 'пользователи, роли и права доступа' },
+  { key: 'ocrArtifacts', label: 'OCR-артефакты', description: 'исходные тексты OCR и промежуточные результаты' },
+  { key: 'processingLogs', label: 'Журналы', description: 'журналы обработки документов и действий' },
+];
+
+const DEFAULT_ACCESS_BY_ROLE: Record<RoleLabel, AccessKey[]> = {
+  Инженер: ['chat', 'search', 'checks', 'history'],
+  'Администратор знаний': ['chat', 'search', 'documents', 'checks', 'history', 'qa', 'admin', 'ocrArtifacts', 'processingLogs'],
+  'Администратор системы': ACCESS_OPTIONS.map((item) => item.key),
+};
 
 const TABLE_SX = {
   borderRadius: 3,
@@ -64,6 +105,30 @@ function statusColor(status: string) {
   if (status === 'Активен' || status === 'Выполнена' || status === 'Не требуется') return 'success';
   if (status === 'Ожидает настройки' || status === 'Запланирована') return 'warning';
   return 'error';
+}
+
+function makeAccessText(keys: AccessKey[]) {
+  if (keys.length === ACCESS_OPTIONS.length) return 'Все вкладки, роли, права, полный журнал';
+
+  return ACCESS_OPTIONS.filter((item) => keys.includes(item.key))
+    .map((item) => item.label)
+    .join(', ');
+}
+
+function inferAccessKeys(user: AdminUser) {
+  if (user.access.includes('Все вкладки')) return ACCESS_OPTIONS.map((item) => item.key);
+
+  const matched = ACCESS_OPTIONS.filter((item) => user.access.includes(item.label)).map((item) => item.key);
+  if (user.access.includes('OCR')) matched.push('ocrArtifacts');
+  if (user.access.includes('журнал') || user.access.includes('Журналы')) matched.push('processingLogs');
+
+  return Array.from(new Set(matched.length > 0 ? matched : DEFAULT_ACCESS_BY_ROLE[user.role]));
+}
+
+function sameAccess(left: AccessKey[], right: AccessKey[]) {
+  const a = [...left].sort().join('|');
+  const b = [...right].sort().join('|');
+  return a === b;
 }
 
 const SummaryCard: React.FC<{
@@ -125,8 +190,15 @@ const SummaryCard: React.FC<{
 );
 
 export const AdminPanel: React.FC = () => {
-  const { currentRole, currentUserId } = useUIStore();
-  const currentUser = MOCK_ADMIN_USERS.find((user) => user.id === currentUserId) ?? MOCK_ADMIN_USERS[0];
+  const {
+    adminAuditLog,
+    adminUsers,
+    addAdminAuditLogItem,
+    currentRole,
+    currentUserId,
+    updateAdminUser,
+  } = useUIStore();
+  const currentUser = adminUsers.find((user) => user.id === currentUserId) ?? adminUsers[0];
   const availableSections = ADMIN_SECTIONS_ACCESS[currentRole];
   const canManageUsers = availableSections.includes('users');
   const canManagePermissions = availableSections.includes('permissions');
@@ -134,6 +206,80 @@ export const AdminPanel: React.FC = () => {
   const logs = canSeeFullLogs
     ? MOCK_PROCESSING_LOGS
     : MOCK_PROCESSING_LOGS.filter((log) => log.visibility !== 'Администратор');
+
+  const [selectedUserId, setSelectedUserId] = useState(currentUser?.id ?? adminUsers[0]?.id ?? '');
+  const selectedUser = adminUsers.find((user) => user.id === selectedUserId) ?? adminUsers[0];
+  const [searchQuery, setSearchQuery] = useState('');
+  const [draftRole, setDraftRole] = useState<RoleLabel>(selectedUser?.role ?? 'Инженер');
+  const [draftAccess, setDraftAccess] = useState<AccessKey[]>(selectedUser ? inferAccessKeys(selectedUser) : []);
+
+  useEffect(() => {
+    if (!adminUsers.some((user) => user.id === selectedUserId) && adminUsers[0]) {
+      setSelectedUserId(adminUsers[0].id);
+    }
+  }, [adminUsers, selectedUserId]);
+
+  useEffect(() => {
+    if (!selectedUser) return;
+    setDraftRole(selectedUser.role);
+    setDraftAccess(inferAccessKeys(selectedUser));
+  }, [selectedUser]);
+
+  const filteredUsers = useMemo(() => {
+    const normalized = searchQuery.trim().toLowerCase();
+    if (!normalized) return adminUsers;
+
+    return adminUsers.filter((user) =>
+      [user.name, user.position, user.login, user.role].some((value) => value.toLowerCase().includes(normalized)),
+    );
+  }, [adminUsers, searchQuery]);
+
+  const savedAccess = selectedUser ? inferAccessKeys(selectedUser) : [];
+  const hasChanges = Boolean(selectedUser) && (draftRole !== selectedUser.role || !sameAccess(draftAccess, savedAccess));
+  const enabledUsersCount = adminUsers.filter((user) => user.status === 'Активен').length;
+
+  const handleRoleChange = (role: RoleLabel) => {
+    setDraftRole(role);
+    setDraftAccess(DEFAULT_ACCESS_BY_ROLE[role]);
+  };
+
+  const handleAccessToggle = (key: AccessKey) => {
+    setDraftAccess((current) =>
+      current.includes(key) ? current.filter((item) => item !== key) : [...current, key],
+    );
+  };
+
+  const handleReset = () => {
+    if (!selectedUser) return;
+    setDraftRole(selectedUser.role);
+    setDraftAccess(inferAccessKeys(selectedUser));
+  };
+
+  const handleSave = () => {
+    if (!selectedUser || !canManagePermissions) return;
+
+    const nextAccess = makeAccessText(draftAccess);
+    updateAdminUser(selectedUser.id, {
+      role: draftRole,
+      access: nextAccess,
+      status: selectedUser.status === 'Ожидает настройки' ? 'Активен' : selectedUser.status,
+    });
+
+    addAdminAuditLogItem({
+      id: `audit-${Date.now()}`,
+      time: new Date().toLocaleString('ru-RU', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+      actor: currentUser.name,
+      target: selectedUser.name,
+      action: 'Изменены роль и права',
+      details: `Роль: ${draftRole}. Доступ: ${nextAccess}.`,
+    });
+  };
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -151,18 +297,18 @@ export const AdminPanel: React.FC = () => {
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.6} sx={{ alignItems: { md: 'center' } }}>
             <Box sx={{ flex: 1 }}>
               <Typography variant="overline" sx={{ color: 'rgba(198, 208, 222, 0.78)', letterSpacing: '0.14em' }}>
-                Доступ по роли
+                Управление доступом
               </Typography>
               <Typography sx={{ mt: 0.3, color: 'rgba(233, 237, 243, 0.92)', fontSize: '1.05rem', fontWeight: 520 }}>
                 {currentUser.name} · {currentUser.position}
               </Typography>
               <Typography variant="body2" sx={{ mt: 0.6, color: 'rgba(171, 183, 201, 0.78)' }}>
-                Роль доступа: {ROLE_LABELS[currentRole]}. В реальном контуре эти данные приходят от backend после
-                авторизации, а backend дополнительно проверяет права на каждый запрос.
+                Текущая роль: {ROLE_LABELS[currentRole]}. В демо-режиме изменения сохраняются в состоянии интерфейса и
+                попадают в административный журнал. При подключении backend здесь будет сохранение в контур заказчика.
               </Typography>
             </Box>
             <Chip
-              label={canSeeFullLogs ? 'Полный административный доступ' : 'Доступ к базе НСИ и журналу обработки'}
+              label={canManagePermissions ? 'Доступно редактирование' : 'Только просмотр'}
               variant="outlined"
               sx={{ borderColor: 'rgba(152, 217, 216, 0.32)', color: '#98d9d8', bgcolor: 'rgba(152,217,216,0.05)' }}
             />
@@ -174,8 +320,8 @@ export const AdminPanel: React.FC = () => {
             <SummaryCard
               icon={<Users size={19} />}
               label="Пользователи"
-              value={`${MOCK_ADMIN_USERS.length}`}
-              note={canManageUsers ? 'доступно управление' : 'просмотр ограничен'}
+              value={`${adminUsers.length}`}
+              note={`активных: ${enabledUsersCount}`}
               accent="#9fb6d8"
             />
           </Box>
@@ -183,8 +329,8 @@ export const AdminPanel: React.FC = () => {
             <SummaryCard
               icon={<ShieldCheck size={19} />}
               label="Права доступа"
-              value={canManagePermissions ? 'настройка' : 'ограничено'}
-              note="роли, разделы, журналы"
+              value={canManagePermissions ? 'настройка' : 'просмотр'}
+              note="роли, вкладки, журналы"
               accent="#98d9d8"
             />
           </Box>
@@ -192,61 +338,23 @@ export const AdminPanel: React.FC = () => {
             <SummaryCard
               icon={<ClipboardList size={19} />}
               label="Административный журнал"
-              value={`${logs.length}`}
-              note={canSeeFullLogs ? 'полный доступ' : 'ограниченный доступ'}
+              value={`${adminAuditLog.length}`}
+              note="изменения ролей и прав"
               accent="#d9b783"
             />
           </Box>
           <Box sx={{ flex: '1 1 210px', minWidth: 210 }}>
             <SummaryCard
               icon={<UserCog size={19} />}
-              label="Текущая роль"
-              value={ROLE_LABELS[currentRole]}
-              note="по выбранному пользователю"
+              label="Выбран пользователь"
+              value={selectedUser?.name ?? 'Не выбран'}
+              note={selectedUser?.role ?? 'роль не задана'}
               accent="#c5afff"
             />
           </Box>
         </Box>
 
-        {canManageUsers && (
-          <TableContainer component={Paper} variant="outlined" sx={TABLE_SX}>
-            <Table size="small" sx={tableCellSx}>
-              <TableHead>
-                <TableRow sx={{ bgcolor: 'rgba(156, 176, 204, 0.075)' }}>
-                  <TableCell>Пользователь</TableCell>
-                  <TableCell>Должность</TableCell>
-                  <TableCell>Логин</TableCell>
-                  <TableCell>Роль</TableCell>
-                  <TableCell>Доступ</TableCell>
-                  <TableCell>Статус</TableCell>
-                  <TableCell>Последний вход</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {MOCK_ADMIN_USERS.map((user) => (
-                  <TableRow key={user.id} hover>
-                    <TableCell sx={{ fontWeight: 520 }}>{user.name}</TableCell>
-                    <TableCell>{user.position}</TableCell>
-                    <TableCell>{user.login}</TableCell>
-                    <TableCell>{user.role}</TableCell>
-                    <TableCell sx={{ color: 'rgba(171, 183, 201, 0.86)' }}>{user.access}</TableCell>
-                    <TableCell>
-                      <Chip
-                        label={user.status}
-                        size="small"
-                        color={statusColor(user.status) as 'success' | 'warning' | 'error'}
-                        variant="outlined"
-                      />
-                    </TableCell>
-                    <TableCell sx={{ whiteSpace: 'nowrap' }}>{user.lastSeen}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        )}
-
-        {canManagePermissions && (
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 1.35fr) minmax(360px, 0.9fr)' }, gap: 2.4 }}>
           <Paper
             variant="outlined"
             sx={{
@@ -256,41 +364,192 @@ export const AdminPanel: React.FC = () => {
               borderColor: 'rgba(154, 188, 232, 0.16)',
             }}
           >
-            <Typography sx={{ mb: 1.4, fontWeight: 540, color: 'rgba(233, 237, 243, 0.92)' }}>
-              Настройка прав доступа
-            </Typography>
-            <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.4} sx={{ alignItems: 'stretch' }}>
-              {[
-                ['Документы', 'доступ по проекту, типу документа и роли'],
-                ['OCR-артефакты', 'видимость исходного текста и промежуточных результатов'],
-                ['Журналы', 'инженер видит ограниченный журнал, администратор полный'],
-              ].map(([title, text]) => (
-                <Paper
-                  variant="outlined"
-                  key={title}
-                  sx={{
-                    flex: 1,
-                    minHeight: 128,
-                    height: '100%',
-                    p: 2.2,
-                    borderRadius: 2.5,
-                    bgcolor: 'rgba(12, 18, 26, 0.9)',
-                    borderColor: 'rgba(154, 188, 232, 0.18)',
-                    boxShadow: '0 0 0 1px rgba(124, 165, 214, 0.08), inset 0 1px 0 rgba(255,255,255,0.03)',
+            <Stack spacing={1.6}>
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.2} sx={{ alignItems: { md: 'center' } }}>
+                <Typography sx={{ flex: 1, fontWeight: 540, color: 'rgba(233, 237, 243, 0.92)' }}>
+                  Пользователи и роли
+                </Typography>
+                <TextField
+                  size="small"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Найти пользователя"
+                  slotProps={{
+                    input: {
+                      startAdornment: <Search size={16} style={{ marginRight: 8, opacity: 0.7 }} />,
+                    },
                   }}
-                >
-                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 0.5 }}>
-                    <UserCog size={16} color="#98d9d8" />
-                    <Typography sx={{ fontWeight: 520 }}>{title}</Typography>
-                  </Stack>
-                  <Typography variant="body2" sx={{ color: 'rgba(171, 183, 201, 0.76)' }}>
-                    {text}
-                  </Typography>
-                </Paper>
-              ))}
+                  sx={{ width: { xs: '100%', md: 260 } }}
+                />
+              </Stack>
+
+              <TableContainer component={Paper} variant="outlined" sx={TABLE_SX}>
+                <Table size="small" sx={tableCellSx}>
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: 'rgba(156, 176, 204, 0.075)' }}>
+                      <TableCell>Пользователь</TableCell>
+                      <TableCell>Логин</TableCell>
+                      <TableCell>Роль</TableCell>
+                      <TableCell>Статус</TableCell>
+                      <TableCell>Последний вход</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {filteredUsers.map((user) => {
+                      const selected = user.id === selectedUser?.id;
+
+                      return (
+                        <TableRow
+                          key={user.id}
+                          hover
+                          onClick={() => setSelectedUserId(user.id)}
+                          sx={{
+                            cursor: 'pointer',
+                            bgcolor: selected ? 'rgba(152, 217, 216, 0.08) !important' : undefined,
+                            outline: selected ? '1px solid rgba(152, 217, 216, 0.22)' : 'none',
+                          }}
+                        >
+                          <TableCell>
+                            <Typography sx={{ fontWeight: 520, fontSize: '0.84rem' }}>{user.name}</Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {user.position}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>{user.login}</TableCell>
+                          <TableCell>{user.role}</TableCell>
+                          <TableCell>
+                            <Chip
+                              label={user.status}
+                              size="small"
+                              color={statusColor(user.status) as 'success' | 'warning' | 'error'}
+                              variant="outlined"
+                            />
+                          </TableCell>
+                          <TableCell sx={{ whiteSpace: 'nowrap' }}>{user.lastSeen}</TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
             </Stack>
           </Paper>
-        )}
+
+          <Paper
+            variant="outlined"
+            sx={{
+              p: 2.1,
+              borderRadius: 3,
+              bgcolor: 'rgba(16, 18, 24, 0.86)',
+              borderColor: 'rgba(154, 188, 232, 0.16)',
+            }}
+          >
+            <Stack spacing={1.8}>
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                <SlidersHorizontal size={18} color="#98d9d8" />
+                <Box sx={{ flex: 1 }}>
+                  <Typography sx={{ fontWeight: 540, color: 'rgba(233, 237, 243, 0.92)' }}>
+                    Настройка прав доступа
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {selectedUser ? `${selectedUser.name} · ${selectedUser.login}` : 'Пользователь не выбран'}
+                  </Typography>
+                </Box>
+                {hasChanges && <Chip size="small" label="есть изменения" color="warning" variant="outlined" />}
+              </Stack>
+
+              <FormControl size="small" fullWidth disabled={!canManagePermissions}>
+                <InputLabel>Роль</InputLabel>
+                <Select
+                  value={draftRole}
+                  label="Роль"
+                  onChange={(event) => handleRoleChange(event.target.value as RoleLabel)}
+                >
+                  {ROLE_OPTIONS.map((role) => (
+                    <MenuItem key={role} value={role}>
+                      {role}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              <Divider sx={{ borderColor: 'rgba(255,255,255,0.08)' }} />
+
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr', gap: 0.75 }}>
+                {ACCESS_OPTIONS.map((option) => (
+                  <FormControlLabel
+                    key={option.key}
+                    control={
+                      <Checkbox
+                        checked={draftAccess.includes(option.key)}
+                        onChange={() => handleAccessToggle(option.key)}
+                        disabled={!canManagePermissions}
+                        sx={{ color: 'rgba(152,217,216,0.66)' }}
+                      />
+                    }
+                    label={
+                      <Box>
+                        <Typography sx={{ fontSize: '0.84rem', lineHeight: 1.2 }}>{option.label}</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {option.description}
+                        </Typography>
+                      </Box>
+                    }
+                    sx={{
+                      m: 0,
+                      px: 1,
+                      py: 0.7,
+                      borderRadius: 1.6,
+                      border: '1px solid rgba(154,188,232,0.10)',
+                      bgcolor: draftAccess.includes(option.key) ? 'rgba(152,217,216,0.055)' : 'rgba(255,255,255,0.015)',
+                    }}
+                  />
+                ))}
+              </Box>
+
+              <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                <Button variant="outlined" className="app-action-button" onClick={handleReset} disabled={!hasChanges}>
+                  Сбросить
+                </Button>
+                <Button
+                  variant="contained"
+                  className="app-action-button"
+                  startIcon={<Save size={16} />}
+                  onClick={handleSave}
+                  disabled={!canManagePermissions || !hasChanges}
+                  disableElevation
+                >
+                  Сохранить изменения
+                </Button>
+              </Stack>
+            </Stack>
+          </Paper>
+        </Box>
+
+        <TableContainer component={Paper} variant="outlined" sx={TABLE_SX}>
+          <Table size="small" sx={tableCellSx}>
+            <TableHead>
+              <TableRow sx={{ bgcolor: 'rgba(156, 176, 204, 0.075)' }}>
+                <TableCell>Время</TableCell>
+                <TableCell>Кто изменил</TableCell>
+                <TableCell>Объект</TableCell>
+                <TableCell>Действие</TableCell>
+                <TableCell>Детали</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {adminAuditLog.map((entry) => (
+                <TableRow key={entry.id} hover>
+                  <TableCell sx={{ whiteSpace: 'nowrap', color: '#9fd3ff' }}>{entry.time}</TableCell>
+                  <TableCell sx={{ fontWeight: 520 }}>{entry.actor}</TableCell>
+                  <TableCell>{entry.target}</TableCell>
+                  <TableCell>{entry.action}</TableCell>
+                  <TableCell sx={{ color: 'rgba(171, 183, 201, 0.86)' }}>{entry.details}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
 
         <TableContainer component={Paper} variant="outlined" sx={TABLE_SX}>
           <Table size="small" sx={tableCellSx}>

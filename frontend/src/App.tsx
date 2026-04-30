@@ -26,7 +26,6 @@ import { History } from './components/History';
 import { AdminPanel } from './components/AdminPanel';
 import { VideoGuideDialog } from './components/VideoGuideDialog';
 import { canAccessTab, getFallbackTab, TAB_DESCRIPTIONS, TAB_TITLES, USER_ROLE_BY_LABEL } from './utils/access';
-import { MOCK_ADMIN_USERS } from './utils/mockData';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -41,6 +40,7 @@ export default function App() {
   const {
     activeTab,
     apiStatus,
+    adminUsers,
     currentRole,
     currentUserId,
     focusMode,
@@ -52,7 +52,7 @@ export default function App() {
     setThemeMode,
   } = useUIStore();
   const appTheme = useMemo(() => getAppTheme(themeMode), [themeMode]);
-  const currentUser = MOCK_ADMIN_USERS.find((user) => user.id === currentUserId) ?? MOCK_ADMIN_USERS[0];
+  const currentUser = adminUsers.find((user) => user.id === currentUserId) ?? adminUsers[0];
 
   useEffect(() => {
     document.body.dataset.pkbTheme = themeMode;
@@ -72,7 +72,7 @@ export default function App() {
   }, [activeTab, currentRole, setActiveTab]);
 
   const handleUserChange = (userId: string) => {
-    const selectedUser = MOCK_ADMIN_USERS.find((user) => user.id === userId);
+    const selectedUser = adminUsers.find((user) => user.id === userId);
     if (!selectedUser) return;
 
     setCurrentUserId(userId);
@@ -253,8 +253,7 @@ export default function App() {
                         onChange={(event) => handleUserChange(event.target.value as string)}
                         displayEmpty
                         renderValue={(selected) => {
-                          const selectedUser =
-                            MOCK_ADMIN_USERS.find((user) => user.id === selected) ?? MOCK_ADMIN_USERS[0];
+                          const selectedUser = adminUsers.find((user) => user.id === selected) ?? adminUsers[0];
 
                           return (
                             <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
@@ -314,7 +313,7 @@ export default function App() {
                           },
                         }}
                       >
-                        {MOCK_ADMIN_USERS.map((user) => (
+                        {adminUsers.map((user) => (
                           <MenuItem key={user.id} value={user.id}>
                             <Box>
                               <Typography sx={{ fontSize: '0.86rem', lineHeight: 1.15 }}>{user.name}</Typography>

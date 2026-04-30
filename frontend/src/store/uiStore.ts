@@ -1,7 +1,18 @@
 import { create } from 'zustand';
 import type { AppTab, UserRole } from '../utils/access';
+import { MOCK_ADMIN_USERS } from '../utils/mockData';
+import type { AdminUser } from '../utils/mockData';
 
 export type { AppTab, UserRole };
+
+export interface AdminAuditLogItem {
+  id: string;
+  time: string;
+  actor: string;
+  target: string;
+  action: string;
+  details: string;
+}
 
 interface UIState {
   activeTab: AppTab;
@@ -19,6 +30,10 @@ interface UIState {
   setVideoGuideOpen: (open: boolean) => void;
   apiStatus: 'online' | 'offline' | 'demo';
   setApiStatus: (status: 'online' | 'offline' | 'demo') => void;
+  adminUsers: AdminUser[];
+  updateAdminUser: (userId: string, patch: Partial<AdminUser>) => void;
+  adminAuditLog: AdminAuditLogItem[];
+  addAdminAuditLogItem: (item: AdminAuditLogItem) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -37,4 +52,23 @@ export const useUIStore = create<UIState>((set) => ({
   setVideoGuideOpen: (videoGuideOpen) => set({ videoGuideOpen }),
   apiStatus: 'demo',
   setApiStatus: (apiStatus) => set({ apiStatus }),
+  adminUsers: MOCK_ADMIN_USERS,
+  updateAdminUser: (userId, patch) =>
+    set((state) => ({
+      adminUsers: state.adminUsers.map((user) => (user.id === userId ? { ...user, ...patch } : user)),
+    })),
+  adminAuditLog: [
+    {
+      id: 'audit-1',
+      time: '2026-04-30 12:40',
+      actor: 'Система',
+      target: 'Права доступа',
+      action: 'Инициализация',
+      details: 'Загружена демонстрационная матрица ролей и прав доступа.',
+    },
+  ],
+  addAdminAuditLogItem: (item) =>
+    set((state) => ({
+      adminAuditLog: [item, ...state.adminAuditLog].slice(0, 20),
+    })),
 }));
