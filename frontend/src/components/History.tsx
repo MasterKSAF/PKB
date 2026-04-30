@@ -137,9 +137,11 @@ export const History: React.FC = () => {
             </FormControl>
 
             <Button
+              className="app-action-button"
               variant="contained"
               startIcon={<Download size={16} />}
               onClick={handleExport}
+              disableElevation
               sx={{ ml: { md: 'auto' }, whiteSpace: 'nowrap', minWidth: 128 }}
             >
               Экспорт

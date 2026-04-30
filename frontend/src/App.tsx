@@ -1,7 +1,20 @@
-import { ThemeProvider, CssBaseline, Box, Typography, Chip, Stack, Button, Paper } from '@mui/material';
+import { useEffect, useMemo } from 'react';
+import {
+  ThemeProvider,
+  CssBaseline,
+  Box,
+  Typography,
+  Chip,
+  Stack,
+  Button,
+  Paper,
+  FormControl,
+  MenuItem,
+  Select,
+} from '@mui/material';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Focus, Minimize2 } from 'lucide-react';
-import { theme } from './theme';
+import { Focus, Minimize2, Moon, Sun, UserRound } from 'lucide-react';
+import { getAppTheme } from './theme';
 import { useUIStore } from './store/uiStore';
 import { ModeSwitcher } from './components/ModeSwitcher';
 import { Chat } from './components/Chat';
@@ -10,7 +23,10 @@ import { DocumentRegistry } from './components/DocumentRegistry';
 import { ChecksPanel } from './components/ChecksPanel';
 import { Monitor } from './components/Monitor';
 import { History } from './components/History';
+import { AdminPanel } from './components/AdminPanel';
 import { VideoGuideDialog } from './components/VideoGuideDialog';
+import { canAccessTab, getFallbackTab, TAB_DESCRIPTIONS, TAB_TITLES, USER_ROLE_BY_LABEL } from './utils/access';
+import { MOCK_ADMIN_USERS } from './utils/mockData';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -21,28 +37,53 @@ const queryClient = new QueryClient({
   },
 });
 
-const TAB_TITLES = {
-  chat: 'Чат инженера',
-  search: 'Поиск',
-  documents: 'Реестр',
-  checks: 'Проверка на соответствие требований НСИ',
-  history: 'История',
-  qa: 'QA',
-} as const;
-
-const TAB_DESCRIPTIONS = {
-  chat: '',
-  search: '',
-  documents: '',
-  checks: '',
-  history: '',
-  qa: '',
-} as const;
-
 export default function App() {
-  const { activeTab, apiStatus, focusMode, setFocusMode } = useUIStore();
+  const {
+    activeTab,
+    apiStatus,
+    currentRole,
+    currentUserId,
+    focusMode,
+    themeMode,
+    setActiveTab,
+    setCurrentRole,
+    setCurrentUserId,
+    setFocusMode,
+    setThemeMode,
+  } = useUIStore();
+  const appTheme = useMemo(() => getAppTheme(themeMode), [themeMode]);
+  const currentUser = MOCK_ADMIN_USERS.find((user) => user.id === currentUserId) ?? MOCK_ADMIN_USERS[0];
+
+  useEffect(() => {
+    document.body.dataset.pkbTheme = themeMode;
+  }, [themeMode]);
+
+  useEffect(() => {
+    const userRole = USER_ROLE_BY_LABEL[currentUser.role] ?? 'engineer';
+    if (userRole !== currentRole) {
+      setCurrentRole(userRole);
+    }
+  }, [currentRole, currentUser.role, setCurrentRole]);
+
+  useEffect(() => {
+    if (!canAccessTab(currentRole, activeTab)) {
+      setActiveTab(getFallbackTab(currentRole));
+    }
+  }, [activeTab, currentRole, setActiveTab]);
+
+  const handleUserChange = (userId: string) => {
+    const selectedUser = MOCK_ADMIN_USERS.find((user) => user.id === userId);
+    if (!selectedUser) return;
+
+    setCurrentUserId(userId);
+    setCurrentRole(USER_ROLE_BY_LABEL[selectedUser.role] ?? 'engineer');
+  };
 
   const renderContent = () => {
+    if (!canAccessTab(currentRole, activeTab)) {
+      return <Chat />;
+    }
+
     switch (activeTab) {
       case 'chat':
         return <Chat />;
@@ -56,6 +97,8 @@ export default function App() {
         return <History />;
       case 'qa':
         return <Monitor />;
+      case 'admin':
+        return <AdminPanel />;
       default:
         return <Chat />;
     }
@@ -63,16 +106,19 @@ export default function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider theme={theme}>
+      <ThemeProvider theme={appTheme}>
         <CssBaseline />
         <Box
+          data-pkb-theme={themeMode}
           sx={{
             display: 'flex',
             height: '100vh',
             overflow: 'hidden',
             bgcolor: 'background.default',
             background:
-              'radial-gradient(circle at 25% 0%, rgba(112,161,255,0.12), transparent 32%), linear-gradient(135deg, #0b0c0e 0%, #11131a 48%, #0b0c0e 100%)',
+              themeMode === 'dark'
+                ? 'radial-gradient(circle at 25% 0%, rgba(112,161,255,0.12), transparent 32%), linear-gradient(135deg, #0b0c0e 0%, #11131a 48%, #0b0c0e 100%)'
+                : 'radial-gradient(circle at 24% 0%, rgba(14, 116, 144, 0.10), transparent 34%), radial-gradient(circle at 92% 18%, rgba(202, 138, 4, 0.08), transparent 28%), linear-gradient(135deg, #f3f6f8 0%, #eef3f7 48%, #e7edf2 100%)',
           }}
         >
           {!focusMode && <ModeSwitcher />}
@@ -87,7 +133,10 @@ export default function App() {
               p: focusMode ? 0 : 2,
               pt: focusMode ? 0 : 1.8,
               pl: focusMode ? 0 : 2.6,
-              boxShadow: focusMode ? 'none' : 'inset 1px 0 0 rgba(121, 191, 193, 0.08)',
+              boxShadow:
+                focusMode || themeMode === 'light'
+                  ? 'none'
+                  : 'inset 1px 0 0 rgba(121, 191, 193, 0.08)',
             }}
           >
             {focusMode && (
@@ -98,14 +147,20 @@ export default function App() {
                     px: 1.4,
                     py: 1,
                     borderRadius: 2.4,
-                    bgcolor: 'rgba(22, 23, 27, 0.82)',
-                    borderColor: 'rgba(255,255,255,0.10)',
+                    bgcolor: themeMode === 'dark' ? 'rgba(22, 23, 27, 0.82)' : '#ffffff',
+                    borderColor: themeMode === 'dark' ? 'rgba(255,255,255,0.10)' : 'rgba(15,23,42,0.14)',
                   }}
                 >
                   <Stack direction="row" spacing={1.2} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
                     <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                      <Focus size={16} color="#98d9d8" />
-                      <Typography sx={{ color: 'rgba(228, 235, 247, 0.9)', fontSize: '0.88rem', fontWeight: 500 }}>
+                      <Focus size={16} color={themeMode === 'dark' ? '#98d9d8' : '#2f7476'} />
+                      <Typography
+                        sx={{
+                          color: themeMode === 'dark' ? 'rgba(228, 235, 247, 0.9)' : '#111827',
+                          fontSize: '0.88rem',
+                          fontWeight: 500,
+                        }}
+                      >
                         Фокус-режим: {TAB_TITLES[activeTab]}
                       </Typography>
                     </Stack>
@@ -115,8 +170,8 @@ export default function App() {
                       startIcon={<Minimize2 size={14} />}
                       onClick={() => setFocusMode(false)}
                       sx={{
-                        borderColor: 'rgba(184,196,216,0.20)',
-                        color: 'rgba(228, 235, 247, 0.88)',
+                        borderColor: themeMode === 'dark' ? 'rgba(184,196,216,0.20)' : 'rgba(15,23,42,0.18)',
+                        color: themeMode === 'dark' ? 'rgba(228, 235, 247, 0.88)' : '#0f5f6f',
                         textTransform: 'none',
                       }}
                     >
@@ -136,10 +191,13 @@ export default function App() {
                 mb: 1.5,
                 mt: 0.05,
                 border: '1px solid',
-                borderColor: 'rgba(255,255,255,0.10)',
+                borderColor: themeMode === 'dark' ? 'rgba(255,255,255,0.10)' : 'rgba(15,23,42,0.14)',
                   borderRadius: 3,
-                  bgcolor: 'rgba(22, 23, 27, 0.88)',
-                  boxShadow: '0 18px 55px rgba(0,0,0,0.20)',
+                  bgcolor: themeMode === 'dark' ? 'rgba(22, 23, 27, 0.88)' : '#ffffff',
+                  boxShadow:
+                    themeMode === 'dark'
+                      ? '0 18px 55px rgba(0,0,0,0.20)'
+                      : '0 16px 38px rgba(15, 23, 42, 0.10)',
                 }}
               >
                 <Stack
@@ -147,13 +205,13 @@ export default function App() {
                   spacing={1.5}
                   sx={{ justifyContent: 'space-between', alignItems: { xs: 'flex-start', md: 'center' } }}
                 >
-                  <Box>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography
                       variant="overline"
                       sx={{
                         display: 'block',
                         mb: 0.1,
-                        color: 'rgba(198, 208, 222, 0.84)',
+                        color: themeMode === 'dark' ? 'rgba(198, 208, 222, 0.84)' : '#475569',
                         letterSpacing: '0.16em',
                         fontSize: '0.68rem',
                         fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
@@ -167,7 +225,7 @@ export default function App() {
                         lineHeight: 1.1,
                         fontSize: { xs: '1.12rem', md: '1.28rem' },
                         fontWeight: 500,
-                        color: 'rgba(230, 236, 244, 0.86)',
+                        color: themeMode === 'dark' ? 'rgba(230, 236, 244, 0.86)' : '#111827',
                         fontFamily: '"Segoe UI Variable Display", "Segoe UI", "Inter", sans-serif',
                       }}
                     >
@@ -180,20 +238,126 @@ export default function App() {
                     )}
                   </Box>
 
-                  <Chip
-                    label={
-                      apiStatus === 'online'
-                        ? 'Система онлайн'
-                        : apiStatus === 'offline'
-                          ? 'Система офлайн'
-                          : 'Демо-режим'
-                    }
-                    color={apiStatus === 'online' ? 'success' : apiStatus === 'offline' ? 'error' : 'warning'}
-                    variant="outlined"
+                  <Stack
+                    direction="row"
+                    spacing={1}
                     sx={{
-                      bgcolor: 'rgba(255,255,255,0.03)',
+                      alignItems: 'center',
+                      justifyContent: { xs: 'flex-start', md: 'flex-end' },
+                      flexWrap: 'wrap',
                     }}
-                  />
+                  >
+                    <FormControl size="small" sx={{ width: { xs: 260, md: 330 } }}>
+                      <Select
+                        value={currentUser.id}
+                        onChange={(event) => handleUserChange(event.target.value as string)}
+                        displayEmpty
+                        renderValue={(selected) => {
+                          const selectedUser =
+                            MOCK_ADMIN_USERS.find((user) => user.id === selected) ?? MOCK_ADMIN_USERS[0];
+
+                          return (
+                            <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
+                              <UserRound size={16} color={themeMode === 'dark' ? '#98d9d8' : '#0f5f6f'} />
+                              <Box sx={{ minWidth: 0 }}>
+                                <Typography
+                                  component="span"
+                                  sx={{
+                                    display: 'block',
+                                    color: themeMode === 'dark' ? 'rgba(235, 241, 247, 0.92)' : '#111827',
+                                    fontSize: '0.82rem',
+                                    lineHeight: 1.05,
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap',
+                                  }}
+                                >
+                                  {selectedUser.name}
+                                </Typography>
+                                <Typography
+                                  component="span"
+                                  sx={{
+                                    display: 'block',
+                                    color: themeMode === 'dark' ? 'rgba(171, 183, 201, 0.76)' : '#475569',
+                                    fontSize: '0.68rem',
+                                    lineHeight: 1.1,
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap',
+                                  }}
+                                >
+                                  {selectedUser.position}
+                                </Typography>
+                              </Box>
+                            </Stack>
+                          );
+                        }}
+                        sx={{
+                          height: 44,
+                          color: themeMode === 'dark' ? 'rgba(235, 241, 247, 0.90)' : '#111827',
+                          bgcolor: themeMode === 'dark' ? 'rgba(8, 12, 18, 0.42)' : '#f8fafc',
+                          borderRadius: 2,
+                          fontSize: '0.82rem',
+                          '& .MuiSelect-select': {
+                            py: 0.65,
+                          },
+                          '& .MuiOutlinedInput-notchedOutline': {
+                            borderColor:
+                              themeMode === 'dark' ? 'rgba(152, 217, 216, 0.22)' : 'rgba(15, 23, 42, 0.18)',
+                          },
+                          '&:hover .MuiOutlinedInput-notchedOutline': {
+                            borderColor:
+                              themeMode === 'dark' ? 'rgba(152, 217, 216, 0.42)' : 'rgba(14, 116, 144, 0.38)',
+                          },
+                          '& .MuiSvgIcon-root': {
+                            color: themeMode === 'dark' ? 'rgba(235, 241, 247, 0.72)' : '#475569',
+                          },
+                        }}
+                      >
+                        {MOCK_ADMIN_USERS.map((user) => (
+                          <MenuItem key={user.id} value={user.id}>
+                            <Box>
+                              <Typography sx={{ fontSize: '0.86rem', lineHeight: 1.15 }}>{user.name}</Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {user.position} · {user.role}
+                              </Typography>
+                            </Box>
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={themeMode === 'dark' ? <Moon size={15} /> : <Sun size={15} />}
+                      onClick={() => setThemeMode(themeMode === 'dark' ? 'light' : 'dark')}
+                      sx={{
+                        height: 34,
+                        px: 1.2,
+                        borderColor:
+                          themeMode === 'dark' ? 'rgba(124, 165, 214, 0.30)' : 'rgba(15, 23, 42, 0.18)',
+                        color: themeMode === 'dark' ? 'rgba(224, 234, 245, 0.88)' : '#0f5f6f',
+                      }}
+                    >
+                      {themeMode === 'dark' ? 'Тёмная' : 'Светлая'}
+                    </Button>
+
+                    <Chip
+                      label={
+                        apiStatus === 'online'
+                          ? 'Система онлайн'
+                          : apiStatus === 'offline'
+                            ? 'Система офлайн'
+                            : 'Демо-режим'
+                      }
+                      color={apiStatus === 'online' ? 'success' : apiStatus === 'offline' ? 'error' : 'warning'}
+                      variant="outlined"
+                      sx={{
+                        bgcolor: 'rgba(255,255,255,0.03)',
+                      }}
+                    />
+                  </Stack>
                 </Stack>
               </Box>
             )}
@@ -204,10 +368,20 @@ export default function App() {
                 overflowY: 'auto',
                 position: 'relative',
                 border: activeTab === 'chat' || focusMode ? 'none' : '1px solid',
-                borderColor: 'rgba(255,255,255,0.10)',
+                borderColor: themeMode === 'dark' ? 'rgba(255,255,255,0.10)' : 'rgba(15,23,42,0.14)',
                 borderRadius: activeTab === 'chat' || focusMode ? 0 : 3,
-                bgcolor: activeTab === 'chat' || focusMode ? 'transparent' : 'rgba(12, 13, 17, 0.62)',
-                boxShadow: activeTab === 'chat' || focusMode ? 'none' : 'inset 0 1px 0 rgba(255,255,255,0.03)',
+                bgcolor:
+                  activeTab === 'chat' || focusMode
+                    ? 'transparent'
+                    : themeMode === 'dark'
+                      ? 'rgba(12, 13, 17, 0.62)'
+                      : '#f8fafc',
+                boxShadow:
+                  activeTab === 'chat' || focusMode
+                    ? 'none'
+                    : themeMode === 'dark'
+                      ? 'inset 0 1px 0 rgba(255,255,255,0.03)'
+                      : 'inset 0 1px 0 rgba(255,255,255,0.80), 0 10px 28px rgba(15, 23, 42, 0.08)',
               }}
             >
               {renderContent()}

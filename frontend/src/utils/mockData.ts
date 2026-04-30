@@ -79,6 +79,27 @@ export interface QueryHistoryItem {
   createdAt: string;
 }
 
+export interface AdminUser {
+  id: string;
+  name: string;
+  position: string;
+  login: string;
+  role: 'Инженер' | 'Администратор знаний' | 'Администратор системы';
+  access: string;
+  status: 'Активен' | 'Ожидает настройки' | 'Отключен';
+  lastSeen: string;
+}
+
+export interface ProcessingLogItem {
+  id: string;
+  time: string;
+  document: string;
+  stage: 'Загрузка' | 'OCR' | 'Parsing' | 'Indexing' | 'Answer generation';
+  event: string;
+  retryStatus: 'Не требуется' | 'Запланирована' | 'Выполнена' | 'Ошибка';
+  visibility: 'Инженер' | 'Администратор';
+}
+
 export const MOCK_CITATIONS: Citation[] = [
   {
     id: 'c1',
@@ -270,3 +291,85 @@ export const MOCK_ENGINEER_RATINGS: EngineerRatingMetrics = {
     { label: 'ответ слишком общий', count: 4 },
   ],
 };
+
+export const MOCK_ADMIN_USERS: AdminUser[] = [
+  {
+    id: 'u1',
+    name: 'Сергей Орлов',
+    position: 'Инженер-конструктор',
+    login: 's.orlov',
+    role: 'Инженер',
+    access: 'Чат, поиск, проверка, своя история',
+    status: 'Активен',
+    lastSeen: '2026-04-29 10:12',
+  },
+  {
+    id: 'u2',
+    name: 'Елена Климова',
+    position: 'Инженер-проектировщик',
+    login: 'e.klimova',
+    role: 'Инженер',
+    access: 'Чат, поиск, проверка, своя история',
+    status: 'Активен',
+    lastSeen: '2026-04-29 09:44',
+  },
+  {
+    id: 'u3',
+    name: 'Анна Волкова',
+    position: 'Администратор базы НСИ',
+    login: 'a.volkova',
+    role: 'Администратор знаний',
+    access: 'Реестр, OCR, индекс, журнал обработки',
+    status: 'Активен',
+    lastSeen: '2026-04-29 09:20',
+  },
+  {
+    id: 'u4',
+    name: 'Игорь Смирнов',
+    position: 'Системный администратор',
+    login: 'i.smirnov',
+    role: 'Администратор системы',
+    access: 'Все вкладки, роли, права, полный журнал',
+    status: 'Ожидает настройки',
+    lastSeen: '2026-04-28 18:05',
+  },
+];
+
+export const MOCK_PROCESSING_LOGS: ProcessingLogItem[] = [
+  {
+    id: 'log1',
+    time: '12:34:02',
+    document: 'Правила РС. Часть I',
+    stage: 'OCR',
+    event: 'Страница 45 распознана с пониженной уверенностью, требуется повторная обработка.',
+    retryStatus: 'Запланирована',
+    visibility: 'Администратор',
+  },
+  {
+    id: 'log2',
+    time: '12:35:11',
+    document: 'Спецификация 21900M2.362135.0903',
+    stage: 'Parsing',
+    event: 'Таблица параметров извлечена, структура сохранена в карточке документа.',
+    retryStatus: 'Не требуется',
+    visibility: 'Инженер',
+  },
+  {
+    id: 'log3',
+    time: '12:36:20',
+    document: 'ГОСТ 2.103-2013',
+    stage: 'Indexing',
+    event: 'Индекс обновлен после повторной обработки документа.',
+    retryStatus: 'Выполнена',
+    visibility: 'Инженер',
+  },
+  {
+    id: 'log4',
+    time: '12:38:47',
+    document: 'Архивный скан РКО',
+    stage: 'OCR',
+    event: 'Не удалось прочитать 3 страницы из-за качества скана.',
+    retryStatus: 'Ошибка',
+    visibility: 'Администратор',
+  },
+];

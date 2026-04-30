@@ -130,8 +130,9 @@ export const Search: React.FC = () => {
             }}
           >
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-              <Box sx={{ display: 'flex', gap: 2 }}>
+              <Box sx={{ display: 'flex', gap: 1.2, alignItems: 'stretch' }}>
                 <TextField
+                  size="small"
                   fullWidth
                   placeholder="Введите запрос для поиска по документам..."
                   value={query}
@@ -142,11 +143,16 @@ export const Search: React.FC = () => {
                       startAdornment: <SearchIcon size={20} style={{ marginRight: 12, opacity: 0.65 }} />,
                     },
                   }}
+                  sx={{
+                    '& .MuiInputBase-root': {
+                      minHeight: 40,
+                    },
+                  }}
                 />
-                <Button variant="contained" size="large" onClick={handleSearch} disableElevation>
+                <Button className="app-action-button" variant="contained" onClick={handleSearch} disableElevation sx={{ minWidth: 108 }}>
                   Найти
                 </Button>
-                <Button variant="outlined" size="large" onClick={() => { setQuery(''); }}>
+                <Button className="app-action-button" variant="outlined" onClick={() => { setQuery(''); }} sx={{ minWidth: 108 }}>
                   Сбросить
                 </Button>
               </Box>
@@ -169,7 +175,7 @@ export const Search: React.FC = () => {
                     <MenuItem value="archive">Архив</MenuItem>
                   </Select>
                 </FormControl>
-                <Button startIcon={<Filter size={16} />} size="small" sx={{ ml: 'auto' }}>
+                <Button className="app-action-button" startIcon={<Filter size={16} />} size="small" sx={{ ml: 'auto' }}>
                   Расширенные фильтры
                 </Button>
               </Box>
@@ -230,6 +236,7 @@ export const Search: React.FC = () => {
                   <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: { md: 'flex-end' } }}>
                     <Button
                       variant="text"
+                      className="source-link-button"
                       startIcon={<FileText size={14} />}
                       onClick={() => openDocument(item, idx)}
                       sx={previewLinkButtonSx}

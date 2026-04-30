@@ -95,13 +95,13 @@ export const DocumentRegistry: React.FC = () => {
             sx={{ justifyContent: 'flex-end', alignItems: { xs: 'flex-start', md: 'center' } }}
           >
             <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-            <Button variant="contained" startIcon={<Upload size={16} />}>
+            <Button className="app-action-button" variant="contained" startIcon={<Upload size={16} />}>
               Загрузить документ
             </Button>
-            <Button variant="outlined" startIcon={<RefreshCw size={16} />}>
+            <Button className="app-action-button" variant="outlined" startIcon={<RefreshCw size={16} />}>
               Обновить индекс
             </Button>
-            <Button variant="outlined" startIcon={<RefreshCw size={16} />}>
+            <Button className="app-action-button" variant="outlined" startIcon={<RefreshCw size={16} />}>
               Переобработать OCR
             </Button>
           </Stack>

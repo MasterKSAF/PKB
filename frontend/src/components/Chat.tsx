@@ -31,6 +31,7 @@ import { useMutation } from '@tanstack/react-query';
 import { chatApi } from '../utils/http';
 import { ChatMessage, MOCK_CHATS, Citation } from '../utils/mockData';
 import { Feedback } from './Feedback';
+import { useUIStore } from '../store/uiStore';
 
 const statusLabel = {
   answered: 'ответ найден',
@@ -78,6 +79,8 @@ function buildAnsweredView(content: string, citations: Citation[] = []) {
 }
 
 export const Chat: React.FC = () => {
+  const { themeMode } = useUIStore();
+  const isLight = themeMode === 'light';
   const [messages, setMessages] = useState<ChatMessage[]>(MOCK_CHATS);
   const [input, setInput] = useState('');
   const [expandedCitations, setExpandedCitations] = useState<Record<string, boolean>>({});
@@ -190,7 +193,20 @@ export const Chat: React.FC = () => {
                     }}
                   >
                     {isAssistant && (
-                      <Avatar sx={{ bgcolor: 'rgba(152, 217, 216, 0.16)', color: '#98d9d8', width: 34, height: 34, mt: 0.55 }}>
+                      <Avatar
+                        sx={{
+                          bgcolor: isLight ? '#eef7f8' : 'rgba(152, 217, 216, 0.16)',
+                          color: isLight ? '#0f5f6f' : '#98d9d8',
+                          width: 34,
+                          height: 34,
+                          mt: 0.55,
+                          border: '1px solid',
+                          borderColor: isLight ? 'rgba(15, 95, 111, 0.34)' : 'rgba(152, 217, 216, 0.26)',
+                          boxShadow: isLight
+                            ? 'inset 0 1px 0 rgba(255,255,255,0.70), 0 1px 2px rgba(15,23,42,0.08)'
+                            : 'inset 0 1px 0 rgba(255,255,255,0.08), 0 6px 14px rgba(0,0,0,0.16)',
+                        }}
+                      >
                         <Anchor size={18} />
                       </Avatar>
                     )}
@@ -201,9 +217,21 @@ export const Chat: React.FC = () => {
                         sx={{
                           p: 2,
                           borderRadius: isAssistant ? '18px 18px 18px 6px' : '18px 18px 6px 18px',
-                          bgcolor: isAssistant ? 'rgba(255,255,255,0.045)' : 'rgba(255,255,255,0.075)',
+                          bgcolor: isLight
+                            ? isAssistant
+                              ? '#ffffff'
+                              : '#f3f7f8'
+                            : isAssistant
+                              ? 'rgba(255,255,255,0.045)'
+                              : 'rgba(255,255,255,0.075)',
                           border: '1px solid',
-                          borderColor: isAssistant ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.12)',
+                          borderColor: isLight
+                            ? isAssistant
+                              ? 'rgba(15,23,42,0.14)'
+                              : 'rgba(15,95,111,0.20)'
+                            : isAssistant
+                              ? 'rgba(255,255,255,0.08)'
+                              : 'rgba(255,255,255,0.12)',
                         }}
                       >
                         <Box
@@ -213,15 +241,38 @@ export const Chat: React.FC = () => {
                             gap: 1,
                             mb: 1.15,
                             pb: 1.15,
-                            borderBottom: '1px solid rgba(255,255,255,0.14)',
+                            borderBottom: isLight ? '1px solid rgba(15,23,42,0.14)' : '1px solid rgba(255,255,255,0.14)',
                           }}
                         >
                           <Typography
                             variant="caption"
                             sx={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              px: 0.8,
+                              py: 0.22,
+                              borderRadius: 999,
+                              border: '1px solid',
+                              borderColor: isAssistant
+                                ? isLight
+                                  ? 'rgba(15, 95, 111, 0.34)'
+                                  : 'rgba(152, 217, 216, 0.24)'
+                                : isLight
+                                  ? 'rgba(159, 116, 64, 0.34)'
+                                  : 'rgba(216, 176, 122, 0.24)',
+                              bgcolor: isAssistant
+                                ? isLight
+                                  ? '#eef7f8'
+                                  : 'rgba(152, 217, 216, 0.07)'
+                                : isLight
+                                  ? '#fff6e8'
+                                  : 'rgba(216,176,122,0.07)',
+                              boxShadow: isLight
+                                ? 'inset 0 1px 0 rgba(255,255,255,0.70), 0 1px 2px rgba(15,23,42,0.06)'
+                                : 'inset 0 1px 0 rgba(255,255,255,0.06)',
                               fontWeight: 600,
                               letterSpacing: '0.04em',
-                              color: isAssistant ? '#98d9d8' : '#d8b07a',
+                              color: isAssistant ? (isLight ? '#0f5f6f' : '#98d9d8') : isLight ? '#8a5f2b' : '#d8b07a',
                               fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
                               fontSize: '0.79rem',
                             }}
@@ -282,6 +333,7 @@ export const Chat: React.FC = () => {
                                       size="small"
                                       variant="text"
                                       startIcon={<ExternalLink size={14} />}
+                                      className="source-link-button"
                                       sx={{ px: 0.9, py: 0.28, minWidth: 0, height: 'auto', fontSize: '0.74rem', color: '#b8c4d8', border: '1px solid rgba(184,196,216,0.20)', borderRadius: 999, bgcolor: 'rgba(184,196,216,0.06)' }}
                                       onClick={() => openPreview(item.citation, 'source')}
                                     >
@@ -291,6 +343,7 @@ export const Chat: React.FC = () => {
                                       size="small"
                                       variant="text"
                                       startIcon={<FileText size={14} />}
+                                      className="source-link-button"
                                       sx={{ px: 0.9, py: 0.28, minWidth: 0, height: 'auto', fontSize: '0.74rem', color: '#b8c4d8', border: '1px solid rgba(184,196,216,0.20)', borderRadius: 999, bgcolor: 'rgba(184,196,216,0.06)' }}
                                       onClick={() => openPreview(item.citation, 'document')}
                                     >
@@ -308,7 +361,7 @@ export const Chat: React.FC = () => {
                               lineHeight: 1.75,
                               whiteSpace: 'pre-wrap',
                               fontWeight: 400,
-                              color: isAssistant ? 'text.primary' : '#f4fbff',
+                              color: isAssistant ? 'text.primary' : isLight ? '#111827' : '#f4fbff',
                               fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
                               fontSize: '0.95rem',
                               mt: 0.85,
@@ -361,6 +414,7 @@ export const Chat: React.FC = () => {
                                         size="small"
                                         variant="text"
                                         startIcon={<ExternalLink size={14} />}
+                                        className="source-link-button"
                                         sx={{ px: 0.9, py: 0.28, minWidth: 0, height: 'auto', fontSize: '0.76rem', color: '#b8c4d8', border: '1px solid rgba(184,196,216,0.20)', borderRadius: 999, bgcolor: 'rgba(184,196,216,0.06)' }}
                                         onClick={() => openPreview(cite, 'source')}
                                       >
@@ -370,6 +424,7 @@ export const Chat: React.FC = () => {
                                         size="small"
                                         variant="text"
                                         startIcon={<FileText size={14} />}
+                                        className="source-link-button"
                                         sx={{ px: 0.9, py: 0.28, minWidth: 0, height: 'auto', fontSize: '0.76rem', color: '#b8c4d8', border: '1px solid rgba(184,196,216,0.20)', borderRadius: 999, bgcolor: 'rgba(184,196,216,0.06)' }}
                                         onClick={() => openPreview(cite, 'document')}
                                       >
@@ -415,7 +470,20 @@ export const Chat: React.FC = () => {
                     </Box>
 
                     {!isAssistant && (
-                      <Avatar sx={{ bgcolor: 'rgba(216,176,122,0.16)', color: '#d8b07a', width: 34, height: 34, mt: 0.55 }}>
+                      <Avatar
+                        sx={{
+                          bgcolor: isLight ? '#fff6e8' : 'rgba(216,176,122,0.16)',
+                          color: isLight ? '#8a5f2b' : '#d8b07a',
+                          width: 34,
+                          height: 34,
+                          mt: 0.55,
+                          border: '1px solid',
+                          borderColor: isLight ? 'rgba(159, 116, 64, 0.34)' : 'rgba(216, 176, 122, 0.26)',
+                          boxShadow: isLight
+                            ? 'inset 0 1px 0 rgba(255,255,255,0.70), 0 1px 2px rgba(15,23,42,0.08)'
+                            : 'inset 0 1px 0 rgba(255,255,255,0.08), 0 6px 14px rgba(0,0,0,0.16)',
+                        }}
+                      >
                         <User size={20} />
                       </Avatar>
                     )}
