@@ -11,11 +11,10 @@
 - найти релевантные документы под этот текст
 - получить ответ с трассировкой, как если бы он задал вопрос вручную
 
-| Метод | Путь           | Параметры                                        | Описание                                                                                | Возвращает                                     |
+| Метод | Путь           | Параметры                                       | Описание                                                                                | Возвращает                                     |
 | ----- | -------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------- | ---------------------------------------------- |
-|       |                |                                                  |                                                                                         |                                                |
 | POST  | `/text/search` | Body:`text`, `document_ids`, `top_k`, `filters`  | Поиск документов, релевантных произвольному тексту (без ручной формулировки запроса)    | Результаты поиска + автосгенерированный запрос |
-| POST  | `/text/ask`    | Body:`text`, `document_ids`, `stream`, `options` | Задать вопрос на основе произвольного текста — система сама выделит суть и найдёт ответ | Ответ с источниками + нормализованный вопрос   |
+| POST  | `/text/ask`    | Body:`text`, `document_ids`, `options`           | Задать вопрос на основе произвольного текста — система сама выделит суть и найдёт ответ | Ответ с источниками + нормализованный вопрос   |
 
 #### POST /text/search
 
@@ -105,7 +104,6 @@
 {
   "text": "Заказчик в письме №456 спрашивает: почему в спецификации 21900M2 для кницы указана сталь 09Г2С, хотя по ГОСТ 11265-73 вроде бы требуется сталь 10ХСНД? Проверьте, пожалуйста.",
   "document_ids": null,
-  "stream": false,
   "options": {
     "temperature": 0.1,
     "auto_decompose": true
@@ -113,9 +111,9 @@
 }
 ```
 
-*Параметры*: `text` (обязательно), `document_ids` (опционально), `stream` (bool), `options` (temperature, auto_decompose).
+**Параметры**: `text` (обязательно), `document_ids` (опционально), `options` (temperature, auto_decompose).
 
-**Ответ `200`** (`stream: false`):
+**Ответ `200`**:
 
 ```json
 {
@@ -159,8 +157,6 @@
 }
 ```
 
-*Потоковый режим* (`stream: true`) — SSE аналогично `/ask`.
-
 ---
 
 ### Обслуживание чата (диалоговые сессии)
@@ -174,7 +170,7 @@
 | GET    | `/chat/sessions/{session_id}`          | Path:`session_id`, Query: `limit`, `before`                            | История сообщений в сессии                            | `session_id`, `messages[]`, `has_more` |
 | PUT    | `/chat/sessions/{session_id}`          | Path:`session_id`, Body: `title`, `document_ids`                       | Обновить параметры сессии                             | Обновлённый объект сессии              |
 | DELETE | `/chat/sessions/{session_id}`          | Path:`session_id`                                                      | Удалить сессию и историю                              | `session_id`, `deleted_at`             |
-| POST   | `/chat/sessions/{session_id}/messages` | Path:`session_id`, Body: `content`, `attachments`, `stream`, `options` | Отправить сообщение в сессию (основной метод общения) | Ответ ассистента с источниками         |
+| POST   | `/chat/sessions/{session_id}/messages` | Path:`session_id`, Body: `content`, `attachments`, `options`          | Отправить сообщение в сессию (основной метод общения) | Ответ ассистента с источниками         |
 | POST   | `/chat/sessions/{session_id}/context`  | Path:`session_id`, Body: `action`, `params`                            | Управление контекстом сессии                          | Результат операции                     |
 | POST   | `/chat/sessions/{session_id}/export`   | Path:`session_id`, Body: `format`                                      | Экспорт диалога                                       | `export_id`, `url`                     |
 | POST   | `/chat/feedback`                       | Body:`session_id`, `message_id`, `rating`, `comment`                   | Обратная связь по ответу                              | `feedback_id`, `created_at`            |
@@ -331,7 +327,7 @@
 
 ---
 
-#### POST /chat/sessions/\{session_id}/messages
+#### POST /chat/sessions/{session_id}/messages
 
 Отправка нового сообщения в сессию. **Основной метод общения** в чате — заменяет прямые вызовы `/ask` при работе в диалоговом режиме.
 
@@ -348,7 +344,6 @@
       "source_page_number": 1
     }
   ],
-  "stream": false,
   "options": {
     "search_in_session_docs": true,
     "use_full_context": true
@@ -364,11 +359,10 @@
 | `attachments[].text`               | string | —              | Текст фрагмента (для`text_fragment`).                                    |
 | `attachments[].source_document_id` | string | —              | ID документа-источника.                                                  |
 | `attachments[].source_page_number` | int    | —              | Номер страницы.                                                          |
-| `stream`                           | bool   | Нет            | Потоковая генерация ответа.                                              |
 | `options.search_in_session_docs`   | bool   | Нет            | Искать только в документах, привязанных к сессии.                        |
 | `options.use_full_context`         | bool   | Нет            | Использовать полную историю диалога как контекст.                        |
 
-**Ответ `200`** (`stream: false`):
+**Ответ `200`**:
 
 ```json
 {
@@ -399,8 +393,6 @@
   "timestamp": "2026-04-27T14:03:05Z"
 }
 ```
-
-*Потоковый режим* — SSE, аналогично `/ask`.
 
 ---
 

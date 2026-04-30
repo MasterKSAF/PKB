@@ -1,337 +1,316 @@
-**
+## API Auth Service
 
-#### 1.1 Аутентификация и управление пользователями
+Сервис аутентификации и управления пользователями.
 
-##### POST /auth/token
+### Аутентификация
+
+#### POST /auth/token
 
 Получение пары JWT‑токенов (access + refresh).
 
-Запрос (application/json):
+**Запрос**:
 
-json
-
+```json
 {
-
-  "username": "ivanov",
-
-  "password": "secret123"
-
+  "username": "ivanov",
+  "password": "secret123"
 }
+```
 
-Ответ 200:
+| Поле | Тип | Обязательность | Описание |
+|------|-----|----------------|----------|
+| `username` | string | Да | Имя пользователя |
+| `password` | string | Да | Пароль |
 
-json
+**Ответ `200`**:
 
+```json
 {
-
-  "access_token": "eyJhbGciOi...",
-
-  "refresh_token": "dGhpcyBpcyB...",
-
-  "token_type": "bearer",
-
-  "expires_in": 3600
-
+  "access_token": "eyJhbGciOi...",
+  "refresh_token": "dGhpcyBpcyB...",
+  "token_type": "bearer",
+  "expires_in": 3600
 }
+```
 
-Возможные ошибки: 401 – неверные учётные данные, 400 – отсутствует тело.
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `access_token` | string | JWT access токен |
+| `refresh_token` | string | JWT refresh токен |
+| `token_type` | string | Тип токена (bearer) |
+| `expires_in` | int | Время жизни токена в секундах |
 
-##### POST /auth/refresh
+**Ошибки**: `401` — неверные учётные данные, `400` — отсутствует тело.
+
+#### POST /auth/refresh
 
 Обновление access-токена по действующему refresh-токену.
 
-Запрос:
+**Запрос**:
 
-json
-
+```json
 {
-
-  "refresh_token": "dGhpcyBpcyB..."
-
+  "refresh_token": "dGhpcyBpcyB..."
 }
+```
 
-Ответ 200 – аналогичен /auth/token.  
-Ошибки: 401 – токен истёк / отозван.
+| Поле | Тип | Обязательность | Описание |
+|------|-----|----------------|----------|
+| `refresh_token` | string | Да | Действующий refresh токен |
 
-##### POST /auth/revoke
+**Ответ `200`** — аналогичен `/auth/token`.
+
+**Ошибки**: `401` — токен истёк / отозван.
+
+#### POST /auth/revoke
 
 Отзыв refresh-токена (выход).
 
-Запрос:
+**Запрос**:
 
-json
-
+```json
 {
-
-  "refresh_token": "..."
-
+  "refresh_token": "..."
 }
+```
 
-Ответ 200:
+| Поле | Тип | Обязательность | Описание |
+|------|-----|----------------|----------|
+| `refresh_token` | string | Да | Refresh токен для отзыва |
 
-json
+**Ответ `200`**:
 
+```json
 {
-
-  "message": "Токен отозван",
-
-  "revoked_at": "2026-04-27T10:15:30Z"
-
+  "message": "Токен отозван",
+  "revoked_at": "2026-04-27T10:15:30Z"
 }
+```
 
-##### GET /users/me
+### Пользователи
+
+#### GET /users/me
 
 Профиль текущего пользователя.
 
-Ответ 200:
+**Ответ `200`**:
 
-json
-
+```json
 {
-
-  "user_id": "u-001",
-
-  "email": "ivanov@example.com",
-
-  "full_name": "Иванов И.И.",
-
-  "roles": ["engineer"],
-
-  "permissions": ["documents:read", "search"],
-
-  "created_at": "2025-12-01T08:00:00Z"
-
+  "user_id": "u-001",
+  "email": "ivanov@example.com",
+  "full_name": "Иванов И.И.",
+  "roles": ["engineer"],
+  "permissions": ["documents:read", "search"],
+  "created_at": "2025-12-01T08:00:00Z"
 }
+```
 
-##### GET /users
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `user_id` | string | ID пользователя |
+| `email` | string | Email |
+| `full_name` | string | Полное имя |
+| `roles` | string[] | Роли |
+| `permissions` | string[] | Права доступа |
+| `created_at` | string | Дата создания (ISO 8601) |
 
-Список пользователей (только администратор).  
-Параметры query: role (фильтр), search (по имени/email), limit, offset.
+#### GET /users
 
-Ответ 200:
+Список пользователей (только администратор).
 
-json
+**Параметры query**: `role`, `search` (по имени/email), `limit`, `offset`.
 
+**Ответ `200`**:
+
+```json
 {
-
-  "users": [
-
-    {
-
-      "user_id": "u-001",
-
-      "email": "ivanov@...",
-
-      "full_name": "Иванов И.И.",
-
-      "roles": ["engineer"],
-
-      "is_active": true,
-
-      "created_at": "2025-12-01T08:00:00Z"
-
-    }
-
-  ],
-
-  "total": 42,
-
-  "limit": 20,
-
-  "offset": 0
-
+  "users": [
+    {
+      "user_id": "u-001",
+      "email": "ivanov@example.com",
+      "full_name": "Иванов И.И.",
+      "roles": ["engineer"],
+      "is_active": true,
+      "created_at": "2025-12-01T08:00:00Z"
+    }
+  ],
+  "total": 42,
+  "limit": 20,
+  "offset": 0
 }
+```
 
-##### POST /users
+#### POST /users
 
-Создание пользователя (админ).  
-Запрос:
+Создание пользователя (админ).
 
-json
+**Запрос**:
 
+```json
 {
-
-  "email": "petrov@example.com",
-
-  "full_name": "Петров П.П.",
-
-  "password": "Temp1234!",
-
-  "roles": ["engineer"]
-
+  "email": "petrov@example.com",
+  "full_name": "Петров П.П.",
+  "password": "Temp1234!",
+  "roles": ["engineer"]
 }
+```
 
-Ответ 201 – тело как в GET /users/{user_id}.
+| Поле | Тип | Обязательность | Описание |
+|------|-----|----------------|----------|
+| `email` | string | Да | Email пользователя |
+| `full_name` | string | Да | Полное имя |
+| `password` | string | Да | Пароль |
+| `roles` | string[] | Да | Роли пользователя |
 
-##### GET /users/{user_id}
+**Ответ `201`** — объект пользователя (см. `GET /users/{user_id}`).
 
-Детали пользователя.  
-Ответ 200:
+#### GET /users/{user_id}
 
-json
+Детали пользователя.
 
+**Ответ `200`**:
+
+```json
 {
-
-  "user_id": "u-001",
-
-  "email": "ivanov@...",
-
-  "full_name": "Иванов И.И.",
-
-  "roles": ["engineer"],
-
-  "permissions": ["documents:read", "search"],
-
-  "is_active": true,
-
-  "created_at": "...",
-
-  "updated_at": "..."
-
+  "user_id": "u-001",
+  "email": "ivanov@example.com",
+  "full_name": "Иванов И.И.",
+  "roles": ["engineer"],
+  "permissions": ["documents:read", "search"],
+  "is_active": true,
+  "created_at": "2025-12-01T08:00:00Z",
+  "updated_at": "2026-04-27T10:00:00Z"
 }
+```
 
-##### PUT /users/{user_id}
+#### PUT /users/{user_id}
 
-Обновление данных пользователя (админ). Поля в теле опциональны (email, full_name, roles, is_active).  
-Ответ 200 – обновлённый объект пользователя.
+Обновление данных пользователя (админ). Поля в теле опциональны.
 
-##### DELETE /users/{user_id}
+**Запрос**:
 
-Деактивация пользователя (админ).  
-Ответ 200:
-
-json
-
+```json
 {
-
-  "user_id": "u-001",
-
-  "is_active": false,
-
-  "deactivated_at": "2026-04-27T11:00:00Z"
-
+  "email": "newemail@example.com",
+  "full_name": "Иванов И.П.",
+  "roles": ["engineer", "admin"],
+  "is_active": true
 }
+```
 
-##### GET /roles
+**Ответ `200`** — обновлённый объект пользователя.
 
-Список ролей.  
-Ответ 200:
+#### DELETE /users/{user_id}
 
-json
+Деактивация пользователя (админ).
 
+**Ответ `200`**:
+
+```json
 {
-
-  "roles": [
-
-    {
-
-      "role_id": "r-admin",
-
-      "name": "Администратор",
-
-      "permissions": ["users:manage", "audit:read"],
-
-      "created_at": "..."
-
-    }
-
-  ]
-
+  "user_id": "u-001",
+  "is_active": false,
+  "deactivated_at": "2026-04-27T11:00:00Z"
 }
+```
 
-##### POST /roles
+### Роли
 
-Создание роли (админ).  
-Запрос:
+#### GET /roles
 
-json
+Список ролей.
 
+**Ответ `200`**:
+
+```json
 {
-
-  "name": "Инженер",
-
-  "permissions": ["documents:read", "search"]
-
+  "roles": [
+    {
+      "role_id": "r-admin",
+      "name": "Администратор",
+      "permissions": ["users:manage", "audit:read"],
+      "created_at": "2025-12-01T08:00:00Z"
+    }
+  ]
 }
+```
 
-Ответ 201 – объект роли.
+#### POST /roles
 
-##### GET /audit
+Создание роли (админ).
 
-Журнал аудита (администратор/аудитор).  
-Параметры query: user_id, action (например, document.upload), date_from, date_to, limit, offset.  
-Ответ 200:
+**Запрос**:
 
-json
-
+```json
 {
-
-  "events": [
-
-    {
-
-      "event_id": "evt-123",
-
-      "user_id": "u-001",
-
-      "action": "document.upload",
-
-      "resource_type": "document",
-
-      "resource_id": "doc-456",
-
-      "details": {"filename": "spec.pdf"},
-
-      "ip_address": "192.168.1.25",
-
-      "timestamp": "2026-04-27T09:30:00Z"
-
-    }
-
-  ],
-
-  "total": 150
-
+  "name": "Инженер",
+  "permissions": ["documents:read", "search"]
 }
+```
 
----
+| Поле | Тип | Обязательность | Описание |
+|------|-----|----------------|----------|
+| `name` | string | Да | Название роли |
+| `permissions` | string[] | Да | Список разрешений |
 
-#### Internal Auth Service (auth-service:8080)
+**Ответ `201`** — объект роли.
 
-##### POST /internal/auth/validate
+### Аудит
 
-Проверка access‑токена.
+#### GET /audit
 
-Запрос:
+Журнал аудита (администратор/аудитор).
 
-json
+**Параметры query**: `user_id`, `action` (например, `document.upload`), `date_from`, `date_to`, `limit`, `offset`.
 
+**Ответ `200`**:
+
+```json
 {
-
-  "access_token": "eyJhbGciOi..."
-
+  "events": [
+    {
+      "event_id": "evt-123",
+      "user_id": "u-001",
+      "action": "document.upload",
+      "resource_type": "document",
+      "resource_id": "doc-456",
+      "details": {"filename": "spec.pdf"},
+      "ip_address": "192.168.1.25",
+      "timestamp": "2026-04-27T09:30:00Z"
+    }
+  ],
+  "total": 150
 }
+```
 
-Ответ 200:
+--- 
 
-json
+## Internal Auth Service (auth-service:8080)
 
+### POST /internal/auth/validate
+
+Проверка access‑токена (внутренний).
+
+**Запрос**:
+
+```json
 {
-
-  "valid": true,
-
-  "user_id": "u-001",
-
-  "email": "ivanov@...",
-
-  "roles": ["engineer"],
-
-  "permissions": ["documents:read", "search"],
-
-  "exp": 1714234567
-
+  "access_token": "eyJhbGciOi..."
 }
+```
 
-Ошибки: 401 – токен недействителен.
+**Ответ `200`**:
 
-**
+```json
+{
+  "valid": true,
+  "user_id": "u-001",
+  "email": "ivanov@example.com",
+  "roles": ["engineer"],
+  "permissions": ["documents:read", "search"],
+  "exp": 1714234567
+}
+```
+
+**Ошибки**: `401` — токен недействителен.
