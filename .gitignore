@@ -34,3 +34,7 @@ artifacts/
 # OS
 Thumbs.db
 Desktop.ini
+
+# IDE
+.vscode/
+.idea/
