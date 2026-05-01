@@ -53,6 +53,8 @@ export default function App() {
   } = useUIStore();
   const appTheme = useMemo(() => getAppTheme(themeMode), [themeMode]);
   const currentUser = adminUsers.find((user) => user.id === currentUserId) ?? adminUsers[0];
+  const activeNavHeaderBackground = themeMode === 'dark' ? '#242829' : '#d3e4eb';
+  const activeNavHeaderBorder = themeMode === 'dark' ? 'rgba(198, 216, 240, 0.38)' : 'rgba(14, 116, 144, 0.24)';
 
   useEffect(() => {
     document.body.dataset.pkbTheme = themeMode;
@@ -184,20 +186,19 @@ export default function App() {
 
             {!focusMode && (
               <Box
-              sx={{
-                px: { xs: 1.8, md: 2.3 },
-                pt: 0.92,
-                pb: 4.1,
-                mb: 1.5,
-                mt: 0.05,
-                border: '1px solid',
-                borderColor: themeMode === 'dark' ? 'rgba(255,255,255,0.10)' : 'rgba(15,23,42,0.14)',
+                className="workspace-header-panel"
+                sx={{
+                  px: { xs: 1.8, md: 2.3 },
+                  pt: 0.92,
+                  pb: 4.1,
+                  mb: 1.5,
+                  mt: 0.05,
+                  border: themeMode === 'dark' ? '1.5px solid' : '1px solid',
+                  borderColor: activeNavHeaderBorder,
                   borderRadius: 3,
-                  bgcolor: themeMode === 'dark' ? 'rgba(22, 23, 27, 0.88)' : '#ffffff',
-                  boxShadow:
-                    themeMode === 'dark'
-                      ? '0 18px 55px rgba(0,0,0,0.20)'
-                      : '0 16px 38px rgba(15, 23, 42, 0.10)',
+                  backgroundColor: activeNavHeaderBackground,
+                  backgroundImage: 'none',
+                  boxShadow: themeMode === 'dark' ? 'inset 0 1px 0 rgba(255,255,255,0.045)' : 'none',
                 }}
               >
                 <Stack
@@ -366,8 +367,8 @@ export default function App() {
                 flexGrow: 1,
                 overflowY: 'auto',
                 position: 'relative',
-                border: activeTab === 'chat' || focusMode ? 'none' : '1px solid',
-                borderColor: themeMode === 'dark' ? 'rgba(255,255,255,0.10)' : 'rgba(15,23,42,0.14)',
+                border: activeTab === 'chat' || focusMode ? 'none' : themeMode === 'dark' ? '1.5px solid' : '1px solid',
+                borderColor: themeMode === 'dark' ? 'rgba(198, 216, 240, 0.34)' : 'rgba(15,23,42,0.14)',
                 borderRadius: activeTab === 'chat' || focusMode ? 0 : 3,
                 bgcolor:
                   activeTab === 'chat' || focusMode
@@ -379,7 +380,7 @@ export default function App() {
                   activeTab === 'chat' || focusMode
                     ? 'none'
                     : themeMode === 'dark'
-                      ? 'inset 0 1px 0 rgba(255,255,255,0.03)'
+                      ? 'inset 0 1px 0 rgba(255,255,255,0.045)'
                       : 'inset 0 1px 0 rgba(255,255,255,0.80), 0 10px 28px rgba(15, 23, 42, 0.08)',
               }}
             >

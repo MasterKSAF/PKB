@@ -126,7 +126,8 @@ export const Search: React.FC = () => {
               mb: 3,
               borderRadius: 3,
               bgcolor: 'rgba(22, 23, 27, 0.72)',
-              border: '1px solid rgba(255,255,255,0.10)',
+              border: '1.5px solid rgba(198, 216, 240, 0.34)',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045)',
             }}
           >
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -203,8 +204,10 @@ export const Search: React.FC = () => {
                   p: 2.5,
                   borderRadius: 3,
                   bgcolor: 'rgba(22, 23, 27, 0.64)',
-                  borderColor: 'rgba(255,255,255,0.10)',
-                  '&:hover': { borderColor: 'primary.main', bgcolor: 'rgba(22, 23, 27, 0.84)' },
+                  borderColor: 'rgba(198, 216, 240, 0.32)',
+                  borderWidth: 1.5,
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.035)',
+                  '&:hover': { borderColor: 'rgba(152, 217, 216, 0.54)', bgcolor: 'rgba(22, 23, 27, 0.84)' },
                   transition: 'border-color 0.2s, background-color 0.2s',
                 }}
               >

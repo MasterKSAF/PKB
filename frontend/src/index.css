@@ -148,6 +148,62 @@ body[data-pkb-theme='light'] .MuiPaper-root .MuiChip-root {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
+.MuiChip-root.MuiChip-colorSuccess,
+.MuiChip-root.MuiChip-outlinedSuccess {
+  color: #8fd4aa !important;
+  background-color: rgba(143, 212, 170, 0.12) !important;
+  border-color: rgba(143, 212, 170, 0.46) !important;
+}
+
+.MuiChip-root.MuiChip-colorWarning,
+.MuiChip-root.MuiChip-outlinedWarning {
+  color: #f0c36d !important;
+  background-color: rgba(240, 195, 109, 0.12) !important;
+  border-color: rgba(240, 195, 109, 0.48) !important;
+}
+
+.MuiChip-root.MuiChip-colorError,
+.MuiChip-root.MuiChip-outlinedError {
+  color: #ee8f80 !important;
+  background-color: rgba(238, 143, 128, 0.12) !important;
+  border-color: rgba(238, 143, 128, 0.48) !important;
+}
+
+.MuiChip-root.MuiChip-colorInfo,
+.MuiChip-root.MuiChip-outlinedInfo {
+  color: #9fd3ff !important;
+  background-color: rgba(159, 211, 255, 0.12) !important;
+  border-color: rgba(159, 211, 255, 0.46) !important;
+}
+
+body[data-pkb-theme='light'] .MuiChip-root.MuiChip-colorSuccess,
+body[data-pkb-theme='light'] .MuiChip-root.MuiChip-outlinedSuccess {
+  color: #166534 !important;
+  background-color: #dcfce7 !important;
+  border-color: rgba(22, 101, 52, 0.38) !important;
+}
+
+body[data-pkb-theme='light'] .MuiChip-root.MuiChip-colorWarning,
+body[data-pkb-theme='light'] .MuiChip-root.MuiChip-outlinedWarning {
+  color: #92400e !important;
+  background-color: #ffedd5 !important;
+  border-color: rgba(146, 64, 14, 0.38) !important;
+}
+
+body[data-pkb-theme='light'] .MuiChip-root.MuiChip-colorError,
+body[data-pkb-theme='light'] .MuiChip-root.MuiChip-outlinedError {
+  color: #991b1b !important;
+  background-color: #fee2e2 !important;
+  border-color: rgba(153, 27, 27, 0.38) !important;
+}
+
+body[data-pkb-theme='light'] .MuiChip-root.MuiChip-colorInfo,
+body[data-pkb-theme='light'] .MuiChip-root.MuiChip-outlinedInfo {
+  color: #075985 !important;
+  background-color: #e0f2fe !important;
+  border-color: rgba(7, 89, 133, 0.38) !important;
+}
+
 .menu-accent-button,
 .app-action-button {
   background-color: rgba(152, 217, 216, 0.16) !important;
@@ -221,4 +277,20 @@ body[data-pkb-theme='light'] .metric-state-chip-neutral {
 
 body[data-pkb-theme='light'] .MuiPaper-root .MuiBox-root {
   border-color: rgba(15, 23, 42, 0.12);
+}
+
+.workspace-header-panel {
+  background: #242829 !important;
+  background-color: #242829 !important;
+  border-width: 1.5px !important;
+  border-color: rgba(198, 216, 240, 0.38) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.045) !important;
+}
+
+body[data-pkb-theme='light'] .workspace-header-panel {
+  background: #d3e4eb !important;
+  background-color: #d3e4eb !important;
+  border-width: 1px !important;
+  border-color: rgba(14, 116, 144, 0.24) !important;
+  box-shadow: none !important;
 }

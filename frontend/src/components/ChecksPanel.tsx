@@ -280,13 +280,15 @@ export const ChecksPanel: React.FC = () => {
           <Stack spacing={3}>
             <Paper
               variant="outlined"
-              sx={{
-                p: 2,
-                borderRadius: 3,
-                bgcolor: 'rgba(10, 14, 22, 0.88)',
-                borderColor: 'rgba(134, 166, 214, 0.16)',
-              }}
-            >
+            sx={{
+              p: 2,
+              borderRadius: 3,
+              bgcolor: 'rgba(22, 23, 27, 0.72)',
+              borderColor: 'rgba(198, 216, 240, 0.34)',
+              borderWidth: 1.5,
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045)',
+            }}
+          >
               <Stack spacing={2}>
                 <Stack
                   direction={{ xs: 'column', xl: 'row' }}
@@ -592,8 +594,10 @@ export const ChecksPanel: React.FC = () => {
                 sx={{
                   p: 2.4,
                   borderRadius: 3,
-                  bgcolor: 'rgba(11, 15, 22, 0.82)',
-                  borderColor: 'rgba(150, 172, 204, 0.14)',
+                  bgcolor: 'rgba(22, 23, 27, 0.72)',
+                  borderColor: 'rgba(198, 216, 240, 0.34)',
+                  borderWidth: 1.5,
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045)',
                 }}
               >
                 <Typography sx={{ color: 'rgba(230, 236, 244, 0.92)', fontWeight: 600 }}>

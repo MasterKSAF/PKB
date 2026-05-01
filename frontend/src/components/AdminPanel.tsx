@@ -145,9 +145,10 @@ const SummaryCard: React.FC<{
       minHeight: 128,
       height: '100%',
       borderRadius: 2.5,
-      bgcolor: 'rgba(12, 18, 26, 0.9)',
-      borderColor: 'rgba(154, 188, 232, 0.18)',
-      boxShadow: '0 0 0 1px rgba(124, 165, 214, 0.08), inset 0 1px 0 rgba(255,255,255,0.03)',
+      bgcolor: 'rgba(22, 23, 27, 0.72)',
+      borderColor: 'rgba(198, 216, 240, 0.34)',
+      borderWidth: 1.5,
+      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045)',
     }}
   >
     <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', height: '100%' }}>
@@ -158,7 +159,7 @@ const SummaryCard: React.FC<{
           borderRadius: 1.7,
           bgcolor: 'rgba(255,255,255,0.03)',
           color: accent,
-          border: '1px solid rgba(154, 188, 232, 0.16)',
+          border: '1.5px solid rgba(198, 216, 240, 0.24)',
         }}
       >
         {icon}
@@ -287,11 +288,12 @@ export const AdminPanel: React.FC = () => {
         <Paper
           variant="outlined"
           sx={{
-            p: 2.1,
+          p: 2.1,
             borderRadius: 3,
-            bgcolor: 'rgba(16, 18, 24, 0.88)',
-            borderColor: 'rgba(154, 188, 232, 0.16)',
-            boxShadow: '0 0 0 1px rgba(124, 165, 214, 0.08), inset 0 1px 0 rgba(255,255,255,0.03)',
+            bgcolor: 'rgba(22, 23, 27, 0.72)',
+            borderColor: 'rgba(198, 216, 240, 0.34)',
+            borderWidth: 1.5,
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045)',
           }}
         >
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.6} sx={{ alignItems: { md: 'center' } }}>
@@ -360,8 +362,10 @@ export const AdminPanel: React.FC = () => {
             sx={{
               p: 2.1,
               borderRadius: 3,
-              bgcolor: 'rgba(16, 18, 24, 0.86)',
-              borderColor: 'rgba(154, 188, 232, 0.16)',
+              bgcolor: 'rgba(22, 23, 27, 0.72)',
+              borderColor: 'rgba(198, 216, 240, 0.34)',
+              borderWidth: 1.5,
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045)',
             }}
           >
             <Stack spacing={1.6}>
@@ -440,8 +444,10 @@ export const AdminPanel: React.FC = () => {
             sx={{
               p: 2.1,
               borderRadius: 3,
-              bgcolor: 'rgba(16, 18, 24, 0.86)',
-              borderColor: 'rgba(154, 188, 232, 0.16)',
+              bgcolor: 'rgba(22, 23, 27, 0.72)',
+              borderColor: 'rgba(198, 216, 240, 0.34)',
+              borderWidth: 1.5,
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045)',
             }}
           >
             <Stack spacing={1.8}>
@@ -500,7 +506,7 @@ export const AdminPanel: React.FC = () => {
                       px: 1,
                       py: 0.7,
                       borderRadius: 1.6,
-                      border: '1px solid rgba(154,188,232,0.10)',
+                      border: '1.5px solid rgba(198, 216, 240, 0.24)',
                       bgcolor: draftAccess.includes(option.key) ? 'rgba(152,217,216,0.055)' : 'rgba(255,255,255,0.015)',
                     }}
                   />

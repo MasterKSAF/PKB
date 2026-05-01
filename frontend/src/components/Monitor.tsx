@@ -6,9 +6,9 @@ import { useUIStore } from '../store/uiStore';
 
 const cardSurface = {
   borderRadius: 3,
-  bgcolor: 'rgba(16, 18, 24, 0.92)',
-  border: '1px solid rgba(255,255,255,0.10)',
-  boxShadow: '0 18px 40px rgba(0, 0, 0, 0.24)',
+  bgcolor: 'rgba(22, 23, 27, 0.72)',
+  border: '1.5px solid rgba(198, 216, 240, 0.34)',
+  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045)',
 };
 
 const controlMetrics = [
@@ -177,8 +177,9 @@ const metricTileBase = {
   height: 172,
   p: 1.55,
   borderRadius: 2.2,
-  bgcolor: 'rgba(255,255,255,0.035)',
-  border: '1px solid rgba(255,255,255,0.08)',
+  bgcolor: 'rgba(255,255,255,0.04)',
+  border: '1.5px solid rgba(198, 216, 240, 0.24)',
+  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.035)',
   display: 'flex',
   flexDirection: 'column' as const,
   justifyContent: 'space-between' as const,
@@ -330,24 +331,40 @@ export const Monitor: React.FC = () => {
             <Helper title="Последние события по поиску, переобработке, пометкам на проверку и инженерским оценкам." />
           </Box>
 
-          <Divider sx={{ mb: 1.5, borderColor: 'rgba(255,255,255,0.08)' }} />
+          <Divider sx={{ mb: 1.5, borderColor: 'rgba(198, 216, 240, 0.26)' }} />
 
           <Box
             sx={{
               display: 'flex',
               flexDirection: 'column',
-              gap: 1.05,
+              gap: 0,
               fontFamily: 'JetBrains Mono, Consolas, monospace',
               fontSize: '0.78rem',
+              border: '1.5px solid rgba(198, 216, 240, 0.34)',
+              borderRadius: 2.2,
+              overflow: 'hidden',
+              bgcolor: isLight ? '#ffffff' : 'rgba(22, 23, 27, 0.72)',
+              boxShadow: isLight
+                ? '0 0 0 1px rgba(15, 23, 42, 0.08)'
+                : 'inset 0 1px 0 rgba(255,255,255,0.035)',
             }}
           >
-            {logRows.map((row) => (
+            {logRows.map((row, index) => (
               <Box
                 key={`${row.time}-${row.text}`}
                 sx={{
                   color: isLight ? '#1f2937' : 'rgba(207, 216, 229, 0.88)',
                   minHeight: 20,
                   fontWeight: isLight ? 500 : 400,
+                  px: 1.35,
+                  py: 0.95,
+                  bgcolor: index % 2 === 0 ? (isLight ? 'rgba(15, 23, 42, 0.025)' : 'rgba(255,255,255,0.016)') : 'transparent',
+                  borderBottom:
+                    index === logRows.length - 1
+                      ? 'none'
+                      : isLight
+                        ? '1px solid rgba(15, 23, 42, 0.10)'
+                        : '1px solid rgba(198, 216, 240, 0.20)',
                 }}
               >
                 <Box

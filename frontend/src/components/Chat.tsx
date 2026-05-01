@@ -216,7 +216,7 @@ export const Chat: React.FC = () => {
                         elevation={0}
                         sx={{
                           p: 2,
-                          borderRadius: isAssistant ? '18px 18px 18px 6px' : '18px 18px 6px 18px',
+                          borderRadius: '18px',
                           bgcolor: isLight
                             ? isAssistant
                               ? '#ffffff'
@@ -224,14 +224,15 @@ export const Chat: React.FC = () => {
                             : isAssistant
                               ? 'rgba(255,255,255,0.045)'
                               : 'rgba(255,255,255,0.075)',
-                          border: '1px solid',
+                          border: isLight ? '1px solid' : '1.5px solid',
                           borderColor: isLight
                             ? isAssistant
                               ? 'rgba(15,23,42,0.14)'
                               : 'rgba(15,95,111,0.20)'
                             : isAssistant
-                              ? 'rgba(255,255,255,0.08)'
-                              : 'rgba(255,255,255,0.12)',
+                              ? 'rgba(198, 216, 240, 0.30)'
+                              : 'rgba(198, 216, 240, 0.30)',
+                          boxShadow: isLight ? 'none' : 'inset 0 1px 0 rgba(255,255,255,0.035)',
                         }}
                       >
                         <Box
@@ -241,7 +242,7 @@ export const Chat: React.FC = () => {
                             gap: 1,
                             mb: 1.15,
                             pb: 1.15,
-                            borderBottom: isLight ? '1px solid rgba(15,23,42,0.14)' : '1px solid rgba(255,255,255,0.14)',
+                            borderBottom: isLight ? '1px solid rgba(15,23,42,0.14)' : '1.5px solid rgba(198, 216, 240, 0.26)',
                           }}
                         >
                           <Typography
@@ -385,7 +386,7 @@ export const Chat: React.FC = () => {
                               color="inherit"
                               onClick={() => toggleCitations(msg.id)}
                               endIcon={expandedCitations[msg.id] ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                              sx={{ borderColor: 'rgba(255,255,255,0.14)' }}
+                              sx={{ borderColor: 'rgba(198, 216, 240, 0.30)', borderWidth: 1.5 }}
                             >
                               Страницы ({msg.citations.length})
                             </Button>
@@ -399,7 +400,8 @@ export const Chat: React.FC = () => {
                                     sx={{
                                       p: 1.5,
                                       bgcolor: 'rgba(0,0,0,0.16)',
-                                      borderColor: 'rgba(255,255,255,0.10)',
+                                      borderColor: 'rgba(198, 216, 240, 0.28)',
+                                      borderWidth: 1.5,
                                     }}
                                   >
                                     <Typography variant="caption" sx={{ fontWeight: 700, color: 'primary.light', display: 'block' }}>
@@ -511,7 +513,7 @@ export const Chat: React.FC = () => {
 
         <Box
           sx={{
-            borderTop: '1px solid rgba(255,255,255,0.08)',
+            borderTop: '1.5px solid rgba(198, 216, 240, 0.22)',
             pb: 2.5,
             pt: 2,
             bgcolor: 'transparent',
@@ -525,9 +527,9 @@ export const Chat: React.FC = () => {
                 display: 'flex',
                 alignItems: 'center',
                 borderRadius: 3,
-                border: '1px solid rgba(255,255,255,0.22)',
-                bgcolor: '#101116',
-                boxShadow: '0 14px 40px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.04)',
+                border: '1.5px solid rgba(198, 216, 240, 0.34)',
+                bgcolor: 'rgba(22, 23, 27, 0.72)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045)',
               }}
             >
               <TextField

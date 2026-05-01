@@ -37,7 +37,7 @@ export const ModeSwitcher: React.FC = () => {
       sx={{
         width: 292,
         flexShrink: 0,
-        borderRight: isLight ? '1px solid rgba(15, 23, 42, 0.14)' : '1px solid rgba(121, 191, 193, 0.28)',
+        borderRight: isLight ? '2px solid rgba(14, 116, 144, 0.26)' : '2px solid rgba(198, 216, 240, 0.40)',
         bgcolor: isLight ? '#eef3f7' : 'rgba(16, 17, 21, 0.96)',
         display: 'flex',
         flexDirection: 'column',
@@ -45,15 +45,16 @@ export const ModeSwitcher: React.FC = () => {
         gap: 2.5,
         boxShadow: isLight
           ? '14px 0 36px rgba(15, 23, 42, 0.08), inset -1px 0 0 rgba(255,255,255,0.72)'
-          : '14px 0 40px rgba(0,0,0,0.20), inset -1px 0 0 rgba(178, 209, 238, 0.10)',
+          : '16px 0 42px rgba(0,0,0,0.24), inset -1px 0 0 rgba(198, 216, 240, 0.18)',
       }}
     >
       <Box
+        className="workspace-header-panel"
         sx={{
           p: 2.2,
           pb: 1.45,
           borderRadius: 3.2,
-          border: isLight ? '1px solid rgba(14, 116, 144, 0.24)' : '1px solid rgba(152, 217, 216, 0.28)',
+          border: isLight ? '1px solid rgba(14, 116, 144, 0.24)' : '1.5px solid rgba(198, 216, 240, 0.38)',
           background: isLight ? 'rgba(14, 116, 144, 0.12)' : 'rgba(152, 217, 216, 0.16)',
           boxShadow: isLight
             ? '0 16px 34px rgba(15, 23, 42, 0.08), inset 0 1px 0 rgba(255,255,255,0.58)'
