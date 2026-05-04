@@ -30,8 +30,13 @@ artifacts/
 *.zip
 *.7z
 *.rar
+*.mp4
+*.mkv
+*.mov
+*.avi
 
 # OS
 Thumbs.db
 Desktop.ini
 ~$*.xlsx
+~$*.docx
