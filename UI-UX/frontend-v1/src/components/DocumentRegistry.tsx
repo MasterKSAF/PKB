@@ -27,6 +27,13 @@ const TABLE_SX = {
     '0 0 0 1px rgba(198, 216, 240, 0.32), 0 0 0 3px rgba(102, 142, 198, 0.14), inset 0 1px 0 rgba(255,255,255,0.03)',
 } as const;
 
+const PANEL_SX = {
+  bgcolor: 'rgba(22, 23, 27, 0.72)',
+  borderColor: 'rgba(198, 216, 240, 0.34)',
+  borderWidth: 1.5,
+  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045)',
+} as const;
+
 export const DocumentRegistry: React.FC = () => {
   const completedOcrCount = MOCK_DOCUMENTS.filter((doc) => doc.ocrStatus === 'Завершено').length;
   const indexedCount = MOCK_DOCUMENTS.filter((doc) => doc.indexStatus === 'Индексировано').length;
@@ -44,6 +51,8 @@ export const DocumentRegistry: React.FC = () => {
         return 'default';
     }
   };
+
+  const getIndexStatusColor = (status: string) => (status === 'Индексировано' ? 'success' : 'warning');
 
   const stats = [
     {
@@ -84,9 +93,7 @@ export const DocumentRegistry: React.FC = () => {
           sx={{
             p: 1.4,
             borderRadius: 2.6,
-            bgcolor: 'rgba(10, 15, 22, 0.84)',
-            borderColor: 'rgba(154, 188, 232, 0.18)',
-            boxShadow: '0 0 0 1px rgba(124, 165, 214, 0.08), inset 0 1px 0 rgba(255,255,255,0.03)',
+            ...PANEL_SX,
           }}
         >
           <Stack
@@ -95,13 +102,13 @@ export const DocumentRegistry: React.FC = () => {
             sx={{ justifyContent: 'flex-end', alignItems: { xs: 'flex-start', md: 'center' } }}
           >
             <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-            <Button variant="contained" startIcon={<Upload size={16} />}>
+            <Button className="app-action-button" variant="contained" startIcon={<Upload size={16} />}>
               Загрузить документ
             </Button>
-            <Button variant="outlined" startIcon={<RefreshCw size={16} />}>
+            <Button className="app-action-button" variant="outlined" startIcon={<RefreshCw size={16} />}>
               Обновить индекс
             </Button>
-            <Button variant="outlined" startIcon={<RefreshCw size={16} />}>
+            <Button className="app-action-button" variant="outlined" startIcon={<RefreshCw size={16} />}>
               Переобработать OCR
             </Button>
           </Stack>
@@ -119,10 +126,7 @@ export const DocumentRegistry: React.FC = () => {
                   alignItems: 'center',
                   gap: 1.8,
                   borderRadius: 2.4,
-                  bgcolor: 'rgba(12, 18, 26, 0.9)',
-                  borderColor: 'rgba(154, 188, 232, 0.18)',
-                  boxShadow:
-                    '0 0 0 1px rgba(124, 165, 214, 0.08), inset 0 1px 0 rgba(255,255,255,0.03)',
+                  ...PANEL_SX,
                 }}
               >
                 <Box
@@ -131,7 +135,7 @@ export const DocumentRegistry: React.FC = () => {
                     borderRadius: 1.7,
                     bgcolor: 'rgba(255,255,255,0.03)',
                     color: stat.color,
-                    border: '1px solid rgba(154, 188, 232, 0.16)',
+                    border: '1.5px solid rgba(198, 216, 240, 0.24)',
                   }}
                 >
                   {stat.icon}
@@ -223,17 +227,13 @@ export const DocumentRegistry: React.FC = () => {
                     />
                   </TableCell>
                   <TableCell>
-                    <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
-                      <Box
-                        sx={{
-                          width: 6,
-                          height: 6,
-                          borderRadius: '50%',
-                          bgcolor: doc.indexStatus === 'Индексировано' ? 'success.main' : 'warning.main',
-                        }}
-                      />
-                      <Typography variant="caption">{doc.indexStatus}</Typography>
-                    </Box>
+                    <Chip
+                      label={doc.indexStatus}
+                      size="small"
+                      color={getIndexStatusColor(doc.indexStatus) as 'success' | 'warning'}
+                      variant="outlined"
+                      sx={{ height: 20, fontSize: '0.7rem' }}
+                    />
                   </TableCell>
                   <TableCell>{doc.updatedAt}</TableCell>
                   <TableCell align="right">

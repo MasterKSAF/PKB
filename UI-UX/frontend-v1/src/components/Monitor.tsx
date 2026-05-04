@@ -2,12 +2,13 @@ import React from 'react';
 import { Box, Chip, Container, Divider, IconButton, Paper, Tooltip, Typography } from '@mui/material';
 import { BadgeCheck, Clock3, Database, Info, ScanSearch, ShieldCheck, Terminal } from 'lucide-react';
 import { MOCK_ENGINEER_RATINGS, MOCK_METRICS } from '../utils/mockData';
+import { useUIStore } from '../store/uiStore';
 
 const cardSurface = {
   borderRadius: 3,
-  bgcolor: 'rgba(16, 18, 24, 0.92)',
-  border: '1px solid rgba(255,255,255,0.10)',
-  boxShadow: '0 18px 40px rgba(0, 0, 0, 0.24)',
+  bgcolor: 'rgba(22, 23, 27, 0.72)',
+  border: '1.5px solid rgba(198, 216, 240, 0.34)',
+  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045)',
 };
 
 const controlMetrics = [
@@ -142,24 +143,43 @@ const answerMetricsHelper = answerMetrics
   .map((metric, index) => `${index + 1}. ${metric.label}: ${metric.helper}`)
   .join('\n\n');
 
-const Helper: React.FC<{ title: string }> = ({ title }) => (
-  <Tooltip
-    title={<Box sx={{ whiteSpace: 'pre-line', maxWidth: 360 }}>{title}</Box>}
-    arrow
-    placement="top"
-  >
-    <IconButton size="small" sx={{ color: 'rgba(171, 159, 255, 0.82)', p: 0.2 }}>
-      <Info size={15} />
-    </IconButton>
-  </Tooltip>
-);
+const Helper: React.FC<{ title: string }> = ({ title }) => {
+  const { themeMode } = useUIStore();
+  const isLight = themeMode === 'light';
+
+  return (
+    <Tooltip
+      title={<Box sx={{ whiteSpace: 'pre-line', maxWidth: 360 }}>{title}</Box>}
+      arrow
+      placement="top"
+    >
+      <IconButton
+        size="small"
+        sx={{
+          width: 24,
+          height: 24,
+          color: isLight ? '#475569' : 'rgba(226, 231, 239, 0.76)',
+          border: isLight ? '1px solid rgba(71, 85, 105, 0.24)' : '1px solid rgba(226, 231, 239, 0.18)',
+          bgcolor: isLight ? 'rgba(248, 250, 252, 0.72)' : 'rgba(255,255,255,0.035)',
+          p: 0,
+          '&:hover': {
+            bgcolor: isLight ? 'rgba(226, 232, 240, 0.78)' : 'rgba(255,255,255,0.07)',
+          },
+        }}
+      >
+        <Info size={14} />
+      </IconButton>
+    </Tooltip>
+  );
+};
 
 const metricTileBase = {
   height: 172,
   p: 1.55,
   borderRadius: 2.2,
-  bgcolor: 'rgba(255,255,255,0.035)',
-  border: '1px solid rgba(255,255,255,0.08)',
+  bgcolor: 'rgba(255,255,255,0.04)',
+  border: '1.5px solid rgba(198, 216, 240, 0.24)',
+  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.035)',
   display: 'flex',
   flexDirection: 'column' as const,
   justifyContent: 'space-between' as const,
@@ -219,26 +239,16 @@ const MetricTile: React.FC<MetricTileProps> = ({
     <Typography sx={{ mt: 0.85, fontSize: '0.8rem', color: 'rgba(233, 237, 243, 0.9)' }}>{label}</Typography>
     <Typography sx={{ mt: 0.3, fontSize: '0.72rem', color: 'rgba(171, 183, 201, 0.72)' }}>{subline}</Typography>
 
-    <Box sx={{ pt: 1.25, display: 'flex', justifyContent: 'flex-start', mt: 'auto' }}>
+    <Box sx={{ pt: 1.25, display: 'flex', justifyContent: 'flex-end', mt: 'auto' }}>
       <Chip
+        className={`metric-state-chip metric-state-chip-${chipTone}`}
         size="small"
         label={chipLabel}
         sx={{
           height: 24,
-          color:
-            chipTone === 'ok' ? '#a8efc0' : chipTone === 'warn' ? '#ffd1a4' : 'rgba(226, 231, 239, 0.9)',
-          bgcolor:
-            chipTone === 'ok'
-              ? 'rgba(106, 196, 136, 0.12)'
-              : chipTone === 'warn'
-                ? 'rgba(240, 168, 87, 0.12)'
-                : 'rgba(255,255,255,0.06)',
-          border:
-            chipTone === 'ok'
-              ? '1px solid rgba(106, 196, 136, 0.24)'
-              : chipTone === 'warn'
-                ? '1px solid rgba(240, 168, 87, 0.24)'
-                : '1px solid rgba(255,255,255,0.10)',
+          color: 'rgba(226, 231, 239, 0.88)',
+          bgcolor: 'rgba(255,255,255,0.055)',
+          border: '1px solid rgba(226, 231, 239, 0.13)',
           '& .MuiChip-label': { px: 1, fontSize: '0.69rem' },
         }}
       />
@@ -247,6 +257,9 @@ const MetricTile: React.FC<MetricTileProps> = ({
 );
 
 export const Monitor: React.FC = () => {
+  const { themeMode } = useUIStore();
+  const isLight = themeMode === 'light';
+
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' }, gap: 3 }}>
@@ -310,7 +323,7 @@ export const Monitor: React.FC = () => {
         <Paper sx={{ ...cardSurface, p: 2.4, gridColumn: { xs: 'auto', md: '1 / -1' } }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, mb: 1.4 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.1 }}>
-              <Terminal size={18} color="#a58cff" />
+              <Terminal size={18} color={isLight ? '#475569' : 'rgba(226, 231, 239, 0.78)'} />
               <Typography sx={{ fontSize: '0.98rem', fontWeight: 500, color: 'rgba(233, 237, 243, 0.94)' }}>
                 Журнал проверки
               </Typography>
@@ -318,20 +331,50 @@ export const Monitor: React.FC = () => {
             <Helper title="Последние события по поиску, переобработке, пометкам на проверку и инженерским оценкам." />
           </Box>
 
-          <Divider sx={{ mb: 1.5, borderColor: 'rgba(255,255,255,0.08)' }} />
+          <Divider sx={{ mb: 1.5, borderColor: 'rgba(198, 216, 240, 0.26)' }} />
 
           <Box
             sx={{
               display: 'flex',
               flexDirection: 'column',
-              gap: 1.05,
+              gap: 0,
               fontFamily: 'JetBrains Mono, Consolas, monospace',
               fontSize: '0.78rem',
+              border: '1.5px solid rgba(198, 216, 240, 0.34)',
+              borderRadius: 2.2,
+              overflow: 'hidden',
+              bgcolor: isLight ? '#ffffff' : 'rgba(22, 23, 27, 0.72)',
+              boxShadow: isLight
+                ? '0 0 0 1px rgba(15, 23, 42, 0.08)'
+                : 'inset 0 1px 0 rgba(255,255,255,0.035)',
             }}
           >
-            {logRows.map((row) => (
-              <Box key={`${row.time}-${row.text}`} sx={{ color: row.color, minHeight: 20 }}>
-                <Box component="span" sx={{ color: 'rgba(160, 169, 184, 0.78)', mr: 1.1 }}>
+            {logRows.map((row, index) => (
+              <Box
+                key={`${row.time}-${row.text}`}
+                sx={{
+                  color: isLight ? '#1f2937' : 'rgba(207, 216, 229, 0.88)',
+                  minHeight: 20,
+                  fontWeight: isLight ? 500 : 400,
+                  px: 1.35,
+                  py: 0.95,
+                  bgcolor: index % 2 === 0 ? (isLight ? 'rgba(15, 23, 42, 0.025)' : 'rgba(255,255,255,0.016)') : 'transparent',
+                  borderBottom:
+                    index === logRows.length - 1
+                      ? 'none'
+                      : isLight
+                        ? '1px solid rgba(15, 23, 42, 0.10)'
+                        : '1px solid rgba(198, 216, 240, 0.20)',
+                }}
+              >
+                <Box
+                  component="span"
+                  sx={{
+                    color: isLight ? '#0f5f6f' : 'rgba(160, 169, 184, 0.78)',
+                    mr: 1.1,
+                    fontWeight: isLight ? 700 : 400,
+                  }}
+                >
                   {row.time}
                 </Box>
                 <Box component="span">{row.text}</Box>

@@ -66,18 +66,6 @@ const linkButtonSx = {
   },
 } as const;
 
-const subtleActionButtonSx = {
-  px: 0,
-  minWidth: 0,
-  justifyContent: 'flex-start',
-  textTransform: 'none',
-  color: 'rgba(210, 220, 232, 0.82)',
-  '&:hover': {
-    bgcolor: 'transparent',
-    color: '#eef4ff',
-  },
-} as const;
-
 function buildPagePreview(check: ParameterCheck, scope: 'project' | 'nsi'): CheckPreview {
   const isProject = scope === 'project';
 
@@ -292,13 +280,15 @@ export const ChecksPanel: React.FC = () => {
           <Stack spacing={3}>
             <Paper
               variant="outlined"
-              sx={{
-                p: 2,
-                borderRadius: 3,
-                bgcolor: 'rgba(10, 14, 22, 0.88)',
-                borderColor: 'rgba(134, 166, 214, 0.16)',
-              }}
-            >
+            sx={{
+              p: 2,
+              borderRadius: 3,
+              bgcolor: 'rgba(22, 23, 27, 0.72)',
+              borderColor: 'rgba(198, 216, 240, 0.34)',
+              borderWidth: 1.5,
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045)',
+            }}
+          >
               <Stack spacing={2}>
                 <Stack
                   direction={{ xs: 'column', xl: 'row' }}
@@ -373,43 +363,30 @@ export const ChecksPanel: React.FC = () => {
 
                   <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.2}>
                     <Button
+                      className="app-action-button"
                       variant="contained"
                       startIcon={<Upload size={16} />}
                       onClick={handleUploadClick}
-                      sx={{
-                        bgcolor: 'rgba(207, 153, 88, 0.88)',
-                        color: '#16110b',
-                        '&:hover': { bgcolor: 'rgba(219, 166, 100, 0.96)' },
-                      }}
+                      disableElevation
                     >
                       Загрузить документ
                     </Button>
                     <Button
+                      className="app-action-button"
                       variant="contained"
                       startIcon={<Play size={16} />}
                       onClick={handleApplySelection}
-                      sx={{
-                        bgcolor: 'rgba(207, 153, 88, 0.88)',
-                        color: '#16110b',
-                        '&:hover': { bgcolor: 'rgba(219, 166, 100, 0.96)' },
-                      }}
+                      disableElevation
                     >
                       Проверить выбранные
                     </Button>
                     <Button
+                      className="app-action-button"
                       variant="contained"
                       startIcon={<Download size={16} />}
                       onClick={() => exportChecksToExcel(filteredChecks)}
                       disabled={filteredChecks.length === 0}
-                      sx={{
-                        bgcolor: 'rgba(207, 153, 88, 0.88)',
-                        color: '#16110b',
-                        '&:hover': { bgcolor: 'rgba(219, 166, 100, 0.96)' },
-                        '&.Mui-disabled': {
-                          bgcolor: 'rgba(207, 153, 88, 0.28)',
-                          color: 'rgba(22, 17, 11, 0.45)',
-                        },
-                      }}
+                      disableElevation
                     >
                       Выгрузить в Excel
                     </Button>
@@ -425,7 +402,7 @@ export const ChecksPanel: React.FC = () => {
                   {uploadedSelectedCount > 0 && (
                     <Chip size="small" color="warning" variant="outlined" label={`загружено вручную: ${uploadedSelectedCount}`} />
                   )}
-                  <Button size="small" variant="text" onClick={handleResetSelection} sx={subtleActionButtonSx}>
+                  <Button className="app-action-button" size="small" variant="outlined" onClick={handleResetSelection}>
                     Сбросить выбор
                   </Button>
                 </Stack>
@@ -497,6 +474,7 @@ export const ChecksPanel: React.FC = () => {
                             <Button
                               size="small"
                               variant="text"
+                              className="source-link-button"
                               startIcon={<ExternalLink size={14} />}
                               onClick={() => openPreview(buildPagePreview(check, 'project'))}
                               sx={linkButtonSx}
@@ -506,6 +484,7 @@ export const ChecksPanel: React.FC = () => {
                             <Button
                               size="small"
                               variant="text"
+                              className="source-link-button"
                               startIcon={<FileText size={14} />}
                               onClick={() => openPreview(buildDocumentPreview(check, 'project'))}
                               sx={linkButtonSx}
@@ -562,6 +541,7 @@ export const ChecksPanel: React.FC = () => {
                             <Button
                               size="small"
                               variant="text"
+                              className="source-link-button"
                               startIcon={<ExternalLink size={14} />}
                               onClick={() => openPreview(buildPagePreview(check, 'nsi'))}
                               sx={linkButtonSx}
@@ -571,6 +551,7 @@ export const ChecksPanel: React.FC = () => {
                             <Button
                               size="small"
                               variant="text"
+                              className="source-link-button"
                               startIcon={<FileText size={14} />}
                               onClick={() => openPreview(buildDocumentPreview(check, 'nsi'))}
                               sx={linkButtonSx}
@@ -613,8 +594,10 @@ export const ChecksPanel: React.FC = () => {
                 sx={{
                   p: 2.4,
                   borderRadius: 3,
-                  bgcolor: 'rgba(11, 15, 22, 0.82)',
-                  borderColor: 'rgba(150, 172, 204, 0.14)',
+                  bgcolor: 'rgba(22, 23, 27, 0.72)',
+                  borderColor: 'rgba(198, 216, 240, 0.34)',
+                  borderWidth: 1.5,
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045)',
                 }}
               >
                 <Typography sx={{ color: 'rgba(230, 236, 244, 0.92)', fontWeight: 600 }}>

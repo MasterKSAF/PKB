@@ -1,1 +1,296 @@
 @import "tailwindcss";
+
+body[data-pkb-theme='light'] {
+  background: #f3f6f8;
+}
+
+body[data-pkb-theme='light'] .MuiPaper-root {
+  background-color: #ffffff !important;
+  border-color: rgba(15, 23, 42, 0.14) !important;
+  color: #111827 !important;
+}
+
+body[data-pkb-theme='light'] .MuiTableContainer-root {
+  background-color: #ffffff !important;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.14), 0 16px 38px rgba(15, 23, 42, 0.08) !important;
+}
+
+body[data-pkb-theme='light'] .MuiTableHead-root .MuiTableCell-root {
+  background-color: #e8eef4 !important;
+  color: #111827 !important;
+  border-color: rgba(15, 23, 42, 0.18) !important;
+}
+
+body[data-pkb-theme='light'] .MuiTableBody-root .MuiTableCell-root {
+  color: #1f2937 !important;
+  border-color: rgba(15, 23, 42, 0.12) !important;
+}
+
+body[data-pkb-theme='light'] .MuiTableCell-root .MuiTypography-root {
+  color: #1f2937 !important;
+}
+
+body[data-pkb-theme='light'] .MuiTableCell-root .MuiTypography-caption {
+  color: #475569 !important;
+}
+
+body[data-pkb-theme='light'] .MuiTableBody-root .MuiTableRow-root:nth-of-type(odd) {
+  background-color: rgba(15, 23, 42, 0.028) !important;
+}
+
+body[data-pkb-theme='light'] .MuiTypography-colorTextSecondary {
+  color: #475569 !important;
+}
+
+body[data-pkb-theme='light'] .MuiOutlinedInput-root {
+  background-color: #f8fafc;
+}
+
+body[data-pkb-theme='light'] .MuiOutlinedInput-notchedOutline {
+  border-color: rgba(15, 23, 42, 0.18) !important;
+}
+
+body[data-pkb-theme='light'] .MuiInputBase-input,
+body[data-pkb-theme='light'] .MuiSelect-select {
+  color: #111827 !important;
+}
+
+body[data-pkb-theme='light'] .MuiChip-outlined {
+  border-color: rgba(15, 23, 42, 0.16) !important;
+  background-color: #f8fafc !important;
+}
+
+body[data-pkb-theme='light'] .MuiButton-outlined {
+  border-color: rgba(15, 23, 42, 0.18) !important;
+  color: #0f5f6f !important;
+}
+
+body[data-pkb-theme='light'] .MuiButton-text {
+  color: #111827 !important;
+}
+
+body[data-pkb-theme='light'] .source-link-button {
+  color: #0f5f6f !important;
+  background-color: #eef7f8 !important;
+  border: 1px solid rgba(15, 95, 111, 0.34) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 1px 2px rgba(15, 23, 42, 0.06) !important;
+}
+
+body[data-pkb-theme='light'] .source-link-button:hover {
+  color: #0b4e5c !important;
+  background-color: #dff0f2 !important;
+  border-color: rgba(15, 95, 111, 0.52) !important;
+}
+
+body[data-pkb-theme='light'] .MuiAutocomplete-listbox .MuiTypography-root {
+  color: #111827 !important;
+}
+
+body[data-pkb-theme='light'] .MuiAutocomplete-listbox .MuiTypography-caption {
+  color: #475569 !important;
+}
+
+body[data-pkb-theme='light'] .MuiAlert-root {
+  color: #1f2937 !important;
+  background-color: #fff7ed !important;
+  border-color: rgba(202, 138, 4, 0.28) !important;
+}
+
+body[data-pkb-theme='light'] .MuiChip-root {
+  color: #111827 !important;
+  font-weight: 600;
+}
+
+body[data-pkb-theme='light'] .MuiChip-outlinedSuccess {
+  color: #166534 !important;
+  background-color: #dcfce7 !important;
+  border-color: rgba(22, 101, 52, 0.34) !important;
+}
+
+body[data-pkb-theme='light'] .MuiChip-outlinedWarning {
+  color: #92400e !important;
+  background-color: #ffedd5 !important;
+  border-color: rgba(146, 64, 14, 0.34) !important;
+}
+
+body[data-pkb-theme='light'] .MuiChip-outlinedError {
+  color: #991b1b !important;
+  background-color: #fee2e2 !important;
+  border-color: rgba(153, 27, 27, 0.34) !important;
+}
+
+body[data-pkb-theme='light'] .MuiChip-filled {
+  color: #111827 !important;
+}
+
+body[data-pkb-theme='light'] .MuiPaper-root [style*='JetBrains Mono'],
+body[data-pkb-theme='light'] .MuiPaper-root [style*='Consolas'] {
+  color: #1f2937 !important;
+}
+
+body[data-pkb-theme='light'] .MuiPaper-root .MuiTypography-root {
+  color: #111827;
+}
+
+body[data-pkb-theme='light'] .MuiPaper-root .MuiTypography-caption {
+  color: #475569;
+}
+
+body[data-pkb-theme='light'] .MuiPaper-root .MuiTypography-body2 {
+  color: #334155;
+}
+
+body[data-pkb-theme='light'] .MuiPaper-root .MuiChip-root .MuiChip-label {
+  color: inherit !important;
+}
+
+body[data-pkb-theme='light'] .MuiPaper-root .MuiChip-root {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.MuiChip-root.MuiChip-colorSuccess,
+.MuiChip-root.MuiChip-outlinedSuccess {
+  color: #8fd4aa !important;
+  background-color: rgba(143, 212, 170, 0.12) !important;
+  border-color: rgba(143, 212, 170, 0.46) !important;
+}
+
+.MuiChip-root.MuiChip-colorWarning,
+.MuiChip-root.MuiChip-outlinedWarning {
+  color: #f0c36d !important;
+  background-color: rgba(240, 195, 109, 0.12) !important;
+  border-color: rgba(240, 195, 109, 0.48) !important;
+}
+
+.MuiChip-root.MuiChip-colorError,
+.MuiChip-root.MuiChip-outlinedError {
+  color: #ee8f80 !important;
+  background-color: rgba(238, 143, 128, 0.12) !important;
+  border-color: rgba(238, 143, 128, 0.48) !important;
+}
+
+.MuiChip-root.MuiChip-colorInfo,
+.MuiChip-root.MuiChip-outlinedInfo {
+  color: #9fd3ff !important;
+  background-color: rgba(159, 211, 255, 0.12) !important;
+  border-color: rgba(159, 211, 255, 0.46) !important;
+}
+
+body[data-pkb-theme='light'] .MuiChip-root.MuiChip-colorSuccess,
+body[data-pkb-theme='light'] .MuiChip-root.MuiChip-outlinedSuccess {
+  color: #166534 !important;
+  background-color: #dcfce7 !important;
+  border-color: rgba(22, 101, 52, 0.38) !important;
+}
+
+body[data-pkb-theme='light'] .MuiChip-root.MuiChip-colorWarning,
+body[data-pkb-theme='light'] .MuiChip-root.MuiChip-outlinedWarning {
+  color: #92400e !important;
+  background-color: #ffedd5 !important;
+  border-color: rgba(146, 64, 14, 0.38) !important;
+}
+
+body[data-pkb-theme='light'] .MuiChip-root.MuiChip-colorError,
+body[data-pkb-theme='light'] .MuiChip-root.MuiChip-outlinedError {
+  color: #991b1b !important;
+  background-color: #fee2e2 !important;
+  border-color: rgba(153, 27, 27, 0.38) !important;
+}
+
+body[data-pkb-theme='light'] .MuiChip-root.MuiChip-colorInfo,
+body[data-pkb-theme='light'] .MuiChip-root.MuiChip-outlinedInfo {
+  color: #075985 !important;
+  background-color: #e0f2fe !important;
+  border-color: rgba(7, 89, 133, 0.38) !important;
+}
+
+.menu-accent-button,
+.app-action-button {
+  background-color: rgba(152, 217, 216, 0.16) !important;
+  color: #98d9d8 !important;
+  border: 1px solid rgba(152, 217, 216, 0.28) !important;
+  box-shadow: none !important;
+}
+
+.menu-accent-button:hover,
+.app-action-button:hover {
+  background-color: rgba(152, 217, 216, 0.22) !important;
+  border-color: rgba(152, 217, 216, 0.42) !important;
+}
+
+body[data-pkb-theme='light'] .menu-accent-button,
+body[data-pkb-theme='light'] .app-action-button {
+  background-color: rgba(14, 116, 144, 0.12) !important;
+  color: #0f5f6f !important;
+  border-color: rgba(14, 116, 144, 0.24) !important;
+}
+
+body[data-pkb-theme='light'] .menu-accent-button:hover,
+body[data-pkb-theme='light'] .app-action-button:hover {
+  background-color: rgba(14, 116, 144, 0.16) !important;
+  border-color: rgba(14, 116, 144, 0.38) !important;
+}
+
+.menu-accent-button.Mui-disabled,
+.app-action-button.Mui-disabled {
+  background-color: rgba(152, 217, 216, 0.06) !important;
+  color: rgba(152, 217, 216, 0.36) !important;
+  border-color: rgba(152, 217, 216, 0.12) !important;
+}
+
+body[data-pkb-theme='light'] .menu-accent-button.Mui-disabled,
+body[data-pkb-theme='light'] .app-action-button.Mui-disabled {
+  background-color: rgba(14, 116, 144, 0.05) !important;
+  color: rgba(15, 95, 111, 0.38) !important;
+  border-color: rgba(14, 116, 144, 0.12) !important;
+}
+
+.app-action-button {
+  min-height: 40px !important;
+  border-radius: 8px !important;
+}
+
+body[data-pkb-theme='light'] .metric-state-chip {
+  color: #334155 !important;
+  background-color: #f8fafc !important;
+  border: 1px solid rgba(15, 23, 42, 0.18) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+body[data-pkb-theme='light'] .metric-state-chip-ok {
+  color: #166534 !important;
+  background-color: #dcfce7 !important;
+  border-color: rgba(22, 101, 52, 0.34) !important;
+}
+
+body[data-pkb-theme='light'] .metric-state-chip-warn {
+  color: #92400e !important;
+  background-color: #ffedd5 !important;
+  border-color: rgba(146, 64, 14, 0.34) !important;
+}
+
+body[data-pkb-theme='light'] .metric-state-chip-neutral {
+  color: #334155 !important;
+  background-color: #f8fafc !important;
+  border-color: rgba(15, 23, 42, 0.18) !important;
+}
+
+body[data-pkb-theme='light'] .MuiPaper-root .MuiBox-root {
+  border-color: rgba(15, 23, 42, 0.12);
+}
+
+.workspace-header-panel {
+  background: #242829 !important;
+  background-color: #242829 !important;
+  border-width: 1.5px !important;
+  border-color: rgba(198, 216, 240, 0.38) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.045) !important;
+}
+
+body[data-pkb-theme='light'] .workspace-header-panel {
+  background: #d3e4eb !important;
+  background-color: #d3e4eb !important;
+  border-width: 1px !important;
+  border-color: rgba(14, 116, 144, 0.24) !important;
+  box-shadow: none !important;
+}

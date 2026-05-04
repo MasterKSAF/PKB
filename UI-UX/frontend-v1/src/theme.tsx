@@ -1,8 +1,11 @@
 import { createTheme } from '@mui/material/styles';
 
-export const theme = createTheme({
+export type AppThemeMode = 'dark' | 'light';
+
+export const getAppTheme = (mode: AppThemeMode) =>
+  createTheme({
   palette: {
-    mode: 'dark',
+    mode,
     primary: {
       main: '#c79b63',
       light: '#d9b783',
@@ -10,14 +13,14 @@ export const theme = createTheme({
       contrastText: '#0f1115',
     },
     background: {
-      default: '#0b0c0e',
-      paper: '#16171b',
+      default: mode === 'dark' ? '#0b0c0e' : '#f3f6f8',
+      paper: mode === 'dark' ? '#16171b' : '#ffffff',
     },
     text: {
-      primary: '#e1e1e1',
-      secondary: '#9ba1a6',
+      primary: mode === 'dark' ? '#e1e1e1' : '#111827',
+      secondary: mode === 'dark' ? '#9ba1a6' : '#475569',
     },
-    divider: 'rgba(255, 255, 255, 0.08)',
+    divider: mode === 'dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(15, 23, 42, 0.14)',
   },
   typography: {
     fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
@@ -71,9 +74,9 @@ export const theme = createTheme({
       styleOverrides: {
         tooltip: {
           maxWidth: 260,
-          backgroundColor: '#1f2026',
-          border: '1px solid rgba(255,255,255,0.12)',
-          color: '#e1e1e1',
+          backgroundColor: mode === 'dark' ? '#1f2026' : '#ffffff',
+          border: mode === 'dark' ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(15,23,42,0.16)',
+          color: mode === 'dark' ? '#e1e1e1' : '#111827',
           fontSize: 12,
           lineHeight: 1.45,
         },
@@ -81,3 +84,5 @@ export const theme = createTheme({
     },
   },
 });
+
+export const theme = getAppTheme('dark');

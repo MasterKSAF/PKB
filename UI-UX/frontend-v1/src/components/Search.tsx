@@ -126,12 +126,14 @@ export const Search: React.FC = () => {
               mb: 3,
               borderRadius: 3,
               bgcolor: 'rgba(22, 23, 27, 0.72)',
-              border: '1px solid rgba(255,255,255,0.10)',
+              border: '1.5px solid rgba(198, 216, 240, 0.34)',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045)',
             }}
           >
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-              <Box sx={{ display: 'flex', gap: 2 }}>
+              <Box sx={{ display: 'flex', gap: 1.2, alignItems: 'stretch' }}>
                 <TextField
+                  size="small"
                   fullWidth
                   placeholder="Введите запрос для поиска по документам..."
                   value={query}
@@ -142,11 +144,16 @@ export const Search: React.FC = () => {
                       startAdornment: <SearchIcon size={20} style={{ marginRight: 12, opacity: 0.65 }} />,
                     },
                   }}
+                  sx={{
+                    '& .MuiInputBase-root': {
+                      minHeight: 40,
+                    },
+                  }}
                 />
-                <Button variant="contained" size="large" onClick={handleSearch} disableElevation>
+                <Button className="app-action-button" variant="contained" onClick={handleSearch} disableElevation sx={{ minWidth: 108 }}>
                   Найти
                 </Button>
-                <Button variant="outlined" size="large" onClick={() => { setQuery(''); }}>
+                <Button className="app-action-button" variant="outlined" onClick={() => { setQuery(''); }} sx={{ minWidth: 108 }}>
                   Сбросить
                 </Button>
               </Box>
@@ -169,7 +176,7 @@ export const Search: React.FC = () => {
                     <MenuItem value="archive">Архив</MenuItem>
                   </Select>
                 </FormControl>
-                <Button startIcon={<Filter size={16} />} size="small" sx={{ ml: 'auto' }}>
+                <Button className="app-action-button" startIcon={<Filter size={16} />} size="small" sx={{ ml: 'auto' }}>
                   Расширенные фильтры
                 </Button>
               </Box>
@@ -197,8 +204,10 @@ export const Search: React.FC = () => {
                   p: 2.5,
                   borderRadius: 3,
                   bgcolor: 'rgba(22, 23, 27, 0.64)',
-                  borderColor: 'rgba(255,255,255,0.10)',
-                  '&:hover': { borderColor: 'primary.main', bgcolor: 'rgba(22, 23, 27, 0.84)' },
+                  borderColor: 'rgba(198, 216, 240, 0.32)',
+                  borderWidth: 1.5,
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.035)',
+                  '&:hover': { borderColor: 'rgba(152, 217, 216, 0.54)', bgcolor: 'rgba(22, 23, 27, 0.84)' },
                   transition: 'border-color 0.2s, background-color 0.2s',
                 }}
               >
@@ -230,6 +239,7 @@ export const Search: React.FC = () => {
                   <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: { md: 'flex-end' } }}>
                     <Button
                       variant="text"
+                      className="source-link-button"
                       startIcon={<FileText size={14} />}
                       onClick={() => openDocument(item, idx)}
                       sx={previewLinkButtonSx}

@@ -11,8 +11,10 @@ import {
   Video,
   History,
   Focus,
+  Settings,
 } from 'lucide-react';
 import { useUIStore, AppTab } from '../store/uiStore';
+import { ROLE_TAB_ACCESS } from '../utils/access';
 
 const NAV_ITEMS: Array<{ value: AppTab; label: string; icon: React.ReactNode }> = [
   { value: 'chat', label: 'Чат', icon: <MessageSquare size={18} /> },
@@ -21,42 +23,49 @@ const NAV_ITEMS: Array<{ value: AppTab; label: string; icon: React.ReactNode }> 
   { value: 'checks', label: 'Проверка', icon: <CheckCircle2 size={18} /> },
   { value: 'history', label: 'История', icon: <History size={18} /> },
   { value: 'qa', label: 'QA', icon: <BarChart3 size={18} /> },
+  { value: 'admin', label: 'Администрирование', icon: <Settings size={18} /> },
 ];
 
 export const ModeSwitcher: React.FC = () => {
-  const { activeTab, setActiveTab, setVideoGuideOpen, setFocusMode } = useUIStore();
+  const { activeTab, currentRole, themeMode, setActiveTab, setVideoGuideOpen, setFocusMode } = useUIStore();
+  const isLight = themeMode === 'light';
+  const availableTabs = ROLE_TAB_ACCESS[currentRole];
+  const visibleNavItems = NAV_ITEMS.filter((item) => availableTabs.includes(item.value));
 
   return (
     <Box
       sx={{
         width: 292,
         flexShrink: 0,
-        borderRight: '1px solid rgba(121, 191, 193, 0.28)',
-        bgcolor: 'rgba(16, 17, 21, 0.96)',
+        borderRight: isLight ? '2px solid rgba(14, 116, 144, 0.26)' : '2px solid rgba(198, 216, 240, 0.40)',
+        bgcolor: isLight ? '#eef3f7' : 'rgba(16, 17, 21, 0.96)',
         display: 'flex',
         flexDirection: 'column',
         p: 2,
         gap: 2.5,
-        boxShadow: '14px 0 40px rgba(0,0,0,0.20), inset -1px 0 0 rgba(178, 209, 238, 0.10)',
+        boxShadow: isLight
+          ? '14px 0 36px rgba(15, 23, 42, 0.08), inset -1px 0 0 rgba(255,255,255,0.72)'
+          : '16px 0 42px rgba(0,0,0,0.24), inset -1px 0 0 rgba(198, 216, 240, 0.18)',
       }}
     >
       <Box
+        className="workspace-header-panel"
         sx={{
           p: 2.2,
           pb: 1.45,
           borderRadius: 3.2,
-          border: '1px solid rgba(92, 168, 178, 0.26)',
-          background:
-            'linear-gradient(160deg, rgba(9, 28, 33, 0.98), rgba(13, 52, 59, 0.96) 52%, rgba(9, 22, 28, 0.98) 100%)',
-          boxShadow: '0 20px 42px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.10)',
+          border: isLight ? '1px solid rgba(14, 116, 144, 0.24)' : '1.5px solid rgba(198, 216, 240, 0.38)',
+          background: isLight ? 'rgba(14, 116, 144, 0.12)' : 'rgba(152, 217, 216, 0.16)',
+          boxShadow: isLight
+            ? '0 16px 34px rgba(15, 23, 42, 0.08), inset 0 1px 0 rgba(255,255,255,0.58)'
+            : '0 20px 42px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.08)',
           position: 'relative',
           overflow: 'hidden',
           '&::before': {
             content: '""',
             position: 'absolute',
             inset: 0,
-            background:
-              'radial-gradient(circle at 92% 10%, rgba(121, 203, 198, 0.22), transparent 24%), radial-gradient(circle at 10% 100%, rgba(165, 140, 255, 0.18), transparent 28%)',
+            background: 'transparent',
             pointerEvents: 'none',
           },
           '&::after': {
@@ -125,7 +134,8 @@ export const ModeSwitcher: React.FC = () => {
               sx={{
                 display: 'block',
                 mt: 0.8,
-                color: 'rgba(209, 225, 225, 0.72)',
+                color: isLight ? '#0f4f5c' : 'rgba(209, 225, 225, 0.72)',
+                fontWeight: isLight ? 650 : 400,
                 textAlign: 'center',
               }}
             >
@@ -141,7 +151,7 @@ export const ModeSwitcher: React.FC = () => {
           sx={{
             display: 'block',
             mb: 0.1,
-            color: 'rgba(198, 208, 222, 0.84)',
+            color: isLight ? '#475569' : 'rgba(198, 208, 222, 0.84)',
             letterSpacing: '0.16em',
             fontSize: '0.68rem',
             fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
@@ -153,7 +163,7 @@ export const ModeSwitcher: React.FC = () => {
       </Stack>
 
       <Stack spacing={1}>
-        {NAV_ITEMS.map((item) => {
+        {visibleNavItems.map((item) => {
           const isActive = activeTab === item.value;
 
           return (
@@ -168,12 +178,26 @@ export const ModeSwitcher: React.FC = () => {
                 px: 1.6,
                 py: 1.18,
                 borderRadius: 2.4,
-                color: isActive ? '#edf2ea' : 'text.primary',
-                bgcolor: isActive ? 'rgba(108, 124, 108, 0.22)' : 'transparent',
+                color: isActive ? (isLight ? '#0f172a' : '#edf2ea') : 'text.primary',
+                bgcolor: isActive
+                  ? isLight
+                    ? 'rgba(14, 116, 144, 0.12)'
+                    : 'rgba(108, 124, 108, 0.22)'
+                  : 'transparent',
                 border: '1px solid',
-                borderColor: isActive ? 'rgba(155, 169, 147, 0.34)' : 'transparent',
+                borderColor: isActive
+                  ? isLight
+                    ? 'rgba(14, 116, 144, 0.24)'
+                    : 'rgba(155, 169, 147, 0.34)'
+                  : 'transparent',
                 '&:hover': {
-                  bgcolor: isActive ? 'rgba(108, 124, 108, 0.28)' : 'rgba(255,255,255,0.05)',
+                  bgcolor: isActive
+                    ? isLight
+                      ? 'rgba(14, 116, 144, 0.16)'
+                      : 'rgba(108, 124, 108, 0.28)'
+                    : isLight
+                      ? 'rgba(15, 23, 42, 0.05)'
+                      : 'rgba(255,255,255,0.05)',
                 },
               }}
             >
@@ -183,13 +207,23 @@ export const ModeSwitcher: React.FC = () => {
         })}
       </Stack>
 
-      <Box sx={{ mt: 'auto', pt: 2, borderTop: '1px solid rgba(157, 205, 225, 0.12)' }}>
+      <Box
+        sx={{
+          mt: 'auto',
+          pt: 2,
+          borderTop: isLight ? '1px solid rgba(15, 23, 42, 0.12)' : '1px solid rgba(157, 205, 225, 0.12)',
+        }}
+      >
         <Button
           variant="outlined"
           fullWidth
           startIcon={<Focus size={16} />}
           onClick={() => setFocusMode(true)}
-          sx={{ mb: 1.2, borderColor: 'rgba(124, 165, 214, 0.30)', color: 'rgba(224, 234, 245, 0.88)' }}
+          sx={{
+            mb: 1.2,
+            borderColor: isLight ? 'rgba(15, 23, 42, 0.18)' : 'rgba(124, 165, 214, 0.30)',
+            color: isLight ? '#0f5f6f' : 'rgba(224, 234, 245, 0.88)',
+          }}
         >
           Фокус-режим
         </Button>
@@ -198,7 +232,10 @@ export const ModeSwitcher: React.FC = () => {
           fullWidth
           startIcon={<Video size={16} />}
           onClick={() => setVideoGuideOpen(true)}
-          sx={{ borderColor: 'rgba(124, 165, 214, 0.30)', color: '#d9b173' }}
+          sx={{
+            borderColor: isLight ? 'rgba(15, 23, 42, 0.18)' : 'rgba(124, 165, 214, 0.30)',
+            color: isLight ? '#9f7440' : '#d9b173',
+          }}
         >
           Видеоинструкция
         </Button>
