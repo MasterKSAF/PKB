@@ -99,7 +99,9 @@ export const History: React.FC = () => {
             p: 2,
             borderRadius: 3,
             bgcolor: 'rgba(22, 23, 27, 0.72)',
-            borderColor: 'rgba(255,255,255,0.10)',
+            borderColor: 'rgba(198, 216, 240, 0.34)',
+            borderWidth: 1.5,
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045)',
           }}
         >
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.4} sx={{ alignItems: { md: 'center' } }}>
@@ -137,9 +139,11 @@ export const History: React.FC = () => {
             </FormControl>
 
             <Button
+              className="app-action-button"
               variant="contained"
               startIcon={<Download size={16} />}
               onClick={handleExport}
+              disableElevation
               sx={{ ml: { md: 'auto' }, whiteSpace: 'nowrap', minWidth: 128 }}
             >
               Экспорт
