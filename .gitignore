@@ -40,3 +40,7 @@ Thumbs.db
 Desktop.ini
 ~$*.xlsx
 ~$*.docx
+
+# IDE
+.vscode/
+.idea/
