@@ -1,23 +1,20 @@
 export type AppTab = 'chat' | 'search' | 'documents' | 'checks' | 'history' | 'qa' | 'admin';
 
-export type UserRole = 'engineer' | 'knowledge_admin' | 'system_admin';
+export type UserRole = 'user' | 'admin';
 
 export const ROLE_LABELS: Record<UserRole, string> = {
-  engineer: 'Инженер',
-  knowledge_admin: 'Администратор знаний',
-  system_admin: 'Администратор системы',
+  user: 'Пользователь',
+  admin: 'Администратор',
 };
 
 export const USER_ROLE_BY_LABEL: Record<string, UserRole> = {
-  Инженер: 'engineer',
-  'Администратор знаний': 'knowledge_admin',
-  'Администратор системы': 'system_admin',
+  Пользователь: 'user',
+  Администратор: 'admin',
 };
 
 export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
-  engineer: 'работа с вопросами, поиском, проверкой и своей историей',
-  knowledge_admin: 'управление базой НСИ, обработкой документов и качеством данных',
-  system_admin: 'пользователи, роли, права доступа, настройки и полный журнал',
+  user: 'работа с чатами, поиском, проверкой и своей историей диалогов',
+  admin: 'доступ ко всем рабочим разделам, пользователям, ролям, реестру, QA и журналам',
 };
 
 export const TAB_TITLES: Record<AppTab, string> = {
@@ -41,15 +38,13 @@ export const TAB_DESCRIPTIONS: Record<AppTab, string> = {
 };
 
 export const ROLE_TAB_ACCESS: Record<UserRole, AppTab[]> = {
-  engineer: ['chat', 'search', 'checks', 'history'],
-  knowledge_admin: ['chat', 'search', 'documents', 'checks', 'history', 'qa', 'admin'],
-  system_admin: ['chat', 'search', 'documents', 'checks', 'history', 'qa', 'admin'],
+  user: ['chat', 'search', 'checks', 'history'],
+  admin: ['chat', 'search', 'documents', 'checks', 'history', 'qa', 'admin'],
 };
 
 export const ADMIN_SECTIONS_ACCESS: Record<UserRole, string[]> = {
-  engineer: [],
-  knowledge_admin: ['documents', 'processingLogs'],
-  system_admin: ['users', 'documents', 'processingLogs', 'permissions', 'systemSettings'],
+  user: [],
+  admin: ['users', 'documents', 'processingLogs', 'permissions', 'systemSettings'],
 };
 
 export function canAccessTab(role: UserRole, tab: AppTab) {

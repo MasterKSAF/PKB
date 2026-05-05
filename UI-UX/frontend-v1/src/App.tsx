@@ -8,12 +8,9 @@ import {
   Stack,
   Button,
   Paper,
-  FormControl,
-  MenuItem,
-  Select,
 } from '@mui/material';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Focus, Minimize2, Moon, Sun, UserRound } from 'lucide-react';
+import { Focus, LogOut, Minimize2, Moon, Sun, UserRound } from 'lucide-react';
 import { getAppTheme } from './theme';
 import { useUIStore } from './store/uiStore';
 import { ModeSwitcher } from './components/ModeSwitcher';
@@ -25,6 +22,7 @@ import { Monitor } from './components/Monitor';
 import { History } from './components/History';
 import { AdminPanel } from './components/AdminPanel';
 import { VideoGuideDialog } from './components/VideoGuideDialog';
+import { LoginScreen } from './components/LoginScreen';
 import { canAccessTab, getFallbackTab, TAB_DESCRIPTIONS, TAB_TITLES, USER_ROLE_BY_LABEL } from './utils/access';
 
 const queryClient = new QueryClient({
@@ -44,10 +42,11 @@ export default function App() {
     currentRole,
     currentUserId,
     focusMode,
+    isAuthenticated,
+    logout,
     themeMode,
     setActiveTab,
     setCurrentRole,
-    setCurrentUserId,
     setFocusMode,
     setThemeMode,
   } = useUIStore();
@@ -61,7 +60,7 @@ export default function App() {
   }, [themeMode]);
 
   useEffect(() => {
-    const userRole = USER_ROLE_BY_LABEL[currentUser.role] ?? 'engineer';
+    const userRole = USER_ROLE_BY_LABEL[currentUser.role] ?? 'user';
     if (userRole !== currentRole) {
       setCurrentRole(userRole);
     }
@@ -72,14 +71,6 @@ export default function App() {
       setActiveTab(getFallbackTab(currentRole));
     }
   }, [activeTab, currentRole, setActiveTab]);
-
-  const handleUserChange = (userId: string) => {
-    const selectedUser = adminUsers.find((user) => user.id === userId);
-    if (!selectedUser) return;
-
-    setCurrentUserId(userId);
-    setCurrentRole(USER_ROLE_BY_LABEL[selectedUser.role] ?? 'engineer');
-  };
 
   const renderContent = () => {
     if (!canAccessTab(currentRole, activeTab)) {
@@ -110,6 +101,9 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider theme={appTheme}>
         <CssBaseline />
+        {!isAuthenticated ? (
+          <LoginScreen />
+        ) : (
         <Box
           data-pkb-theme={themeMode}
           sx={{
@@ -248,84 +242,52 @@ export default function App() {
                       flexWrap: 'wrap',
                     }}
                   >
-                    <FormControl size="small" sx={{ width: { xs: 260, md: 330 } }}>
-                      <Select
-                        value={currentUser.id}
-                        onChange={(event) => handleUserChange(event.target.value as string)}
-                        displayEmpty
-                        renderValue={(selected) => {
-                          const selectedUser = adminUsers.find((user) => user.id === selected) ?? adminUsers[0];
-
-                          return (
-                            <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
-                              <UserRound size={16} color={themeMode === 'dark' ? '#98d9d8' : '#0f5f6f'} />
-                              <Box sx={{ minWidth: 0 }}>
-                                <Typography
-                                  component="span"
-                                  sx={{
-                                    display: 'block',
-                                    color: themeMode === 'dark' ? 'rgba(235, 241, 247, 0.92)' : '#111827',
-                                    fontSize: '0.82rem',
-                                    lineHeight: 1.05,
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                    whiteSpace: 'nowrap',
-                                  }}
-                                >
-                                  {selectedUser.name}
-                                </Typography>
-                                <Typography
-                                  component="span"
-                                  sx={{
-                                    display: 'block',
-                                    color: themeMode === 'dark' ? 'rgba(171, 183, 201, 0.76)' : '#475569',
-                                    fontSize: '0.68rem',
-                                    lineHeight: 1.1,
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                    whiteSpace: 'nowrap',
-                                  }}
-                                >
-                                  {selectedUser.position}
-                                </Typography>
-                              </Box>
-                            </Stack>
-                          );
-                        }}
-                        sx={{
-                          height: 44,
-                          color: themeMode === 'dark' ? 'rgba(235, 241, 247, 0.90)' : '#111827',
-                          bgcolor: themeMode === 'dark' ? 'rgba(8, 12, 18, 0.42)' : '#f8fafc',
-                          borderRadius: 2,
-                          fontSize: '0.82rem',
-                          '& .MuiSelect-select': {
-                            py: 0.65,
-                          },
-                          '& .MuiOutlinedInput-notchedOutline': {
-                            borderColor:
-                              themeMode === 'dark' ? 'rgba(152, 217, 216, 0.22)' : 'rgba(15, 23, 42, 0.18)',
-                          },
-                          '&:hover .MuiOutlinedInput-notchedOutline': {
-                            borderColor:
-                              themeMode === 'dark' ? 'rgba(152, 217, 216, 0.42)' : 'rgba(14, 116, 144, 0.38)',
-                          },
-                          '& .MuiSvgIcon-root': {
-                            color: themeMode === 'dark' ? 'rgba(235, 241, 247, 0.72)' : '#475569',
-                          },
-                        }}
-                      >
-                        {adminUsers.map((user) => (
-                          <MenuItem key={user.id} value={user.id}>
-                            <Box>
-                              <Typography sx={{ fontSize: '0.86rem', lineHeight: 1.15 }}>{user.name}</Typography>
-                              <Typography variant="caption" color="text.secondary">
-                                {user.position} · {user.role}
-                              </Typography>
-                            </Box>
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
+                    <Paper
+                      variant="outlined"
+                      sx={{
+                        px: 1.2,
+                        py: 0.7,
+                        minWidth: { xs: 260, md: 330 },
+                        borderRadius: 2,
+                        bgcolor: themeMode === 'dark' ? 'rgba(8, 12, 18, 0.42)' : '#f8fafc',
+                        borderColor:
+                          themeMode === 'dark' ? 'rgba(152, 217, 216, 0.22)' : 'rgba(15, 23, 42, 0.18)',
+                      }}
+                    >
+                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
+                        <UserRound size={16} color={themeMode === 'dark' ? '#98d9d8' : '#0f5f6f'} />
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography
+                            component="span"
+                            sx={{
+                              display: 'block',
+                              color: themeMode === 'dark' ? 'rgba(235, 241, 247, 0.92)' : '#111827',
+                              fontSize: '0.82rem',
+                              lineHeight: 1.05,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {currentUser.name}
+                          </Typography>
+                          <Typography
+                            component="span"
+                            sx={{
+                              display: 'block',
+                              color: themeMode === 'dark' ? 'rgba(171, 183, 201, 0.76)' : '#475569',
+                              fontSize: '0.68rem',
+                              lineHeight: 1.1,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {currentUser.position} · {currentUser.role}
+                          </Typography>
+                        </Box>
+                      </Stack>
+                    </Paper>
 
                     <Button
                       size="small"
@@ -341,6 +303,23 @@ export default function App() {
                       }}
                     >
                       {themeMode === 'dark' ? 'Тёмная' : 'Светлая'}
+                    </Button>
+
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<LogOut size={15} />}
+                      onClick={logout}
+                      sx={{
+                        height: 34,
+                        px: 1.15,
+                        borderColor:
+                          themeMode === 'dark' ? 'rgba(124, 165, 214, 0.26)' : 'rgba(15, 23, 42, 0.16)',
+                        color: themeMode === 'dark' ? 'rgba(224, 234, 245, 0.82)' : '#475569',
+                        textTransform: 'none',
+                      }}
+                    >
+                      Выйти
                     </Button>
 
                     <Chip
@@ -377,6 +356,7 @@ export default function App() {
             </Box>
           </Box>
         </Box>
+        )}
         <VideoGuideDialog />
       </ThemeProvider>
     </QueryClientProvider>

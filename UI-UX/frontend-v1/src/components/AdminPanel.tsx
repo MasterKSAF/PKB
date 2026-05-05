@@ -39,7 +39,7 @@ type AccessKey =
   | 'ocrArtifacts'
   | 'processingLogs';
 
-const ROLE_OPTIONS: RoleLabel[] = ['Инженер', 'Администратор знаний', 'Администратор системы'];
+const ROLE_OPTIONS: RoleLabel[] = ['Пользователь', 'Администратор'];
 
 const ACCESS_OPTIONS: Array<{ key: AccessKey; label: string; description: string }> = [
   { key: 'chat', label: 'Чат', description: 'вопросы к ассистенту и просмотр ответов' },
@@ -54,9 +54,8 @@ const ACCESS_OPTIONS: Array<{ key: AccessKey; label: string; description: string
 ];
 
 const DEFAULT_ACCESS_BY_ROLE: Record<RoleLabel, AccessKey[]> = {
-  Инженер: ['chat', 'search', 'checks', 'history'],
-  'Администратор знаний': ['chat', 'search', 'documents', 'checks', 'history', 'qa', 'admin', 'ocrArtifacts', 'processingLogs'],
-  'Администратор системы': ACCESS_OPTIONS.map((item) => item.key),
+  Пользователь: ['chat', 'search', 'checks', 'history'],
+  Администратор: ACCESS_OPTIONS.map((item) => item.key),
 };
 
 const TABLE_SX = {
@@ -203,7 +202,7 @@ export const AdminPanel: React.FC = () => {
   const availableSections = ADMIN_SECTIONS_ACCESS[currentRole];
   const canManageUsers = availableSections.includes('users');
   const canManagePermissions = availableSections.includes('permissions');
-  const canSeeFullLogs = currentRole === 'system_admin';
+  const canSeeFullLogs = currentRole === 'admin';
   const logs = canSeeFullLogs
     ? MOCK_PROCESSING_LOGS
     : MOCK_PROCESSING_LOGS.filter((log) => log.visibility !== 'Администратор');
@@ -211,7 +210,7 @@ export const AdminPanel: React.FC = () => {
   const [selectedUserId, setSelectedUserId] = useState(currentUser?.id ?? adminUsers[0]?.id ?? '');
   const selectedUser = adminUsers.find((user) => user.id === selectedUserId) ?? adminUsers[0];
   const [searchQuery, setSearchQuery] = useState('');
-  const [draftRole, setDraftRole] = useState<RoleLabel>(selectedUser?.role ?? 'Инженер');
+  const [draftRole, setDraftRole] = useState<RoleLabel>(selectedUser?.role ?? 'Пользователь');
   const [draftAccess, setDraftAccess] = useState<AccessKey[]>(selectedUser ? inferAccessKeys(selectedUser) : []);
 
   useEffect(() => {
@@ -532,62 +531,74 @@ export const AdminPanel: React.FC = () => {
           </Paper>
         </Box>
 
-        <TableContainer component={Paper} variant="outlined" sx={TABLE_SX}>
-          <Table size="small" sx={tableCellSx}>
-            <TableHead>
-              <TableRow sx={{ bgcolor: 'rgba(156, 176, 204, 0.075)' }}>
-                <TableCell>Время</TableCell>
-                <TableCell>Кто изменил</TableCell>
-                <TableCell>Объект</TableCell>
-                <TableCell>Действие</TableCell>
-                <TableCell>Детали</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {adminAuditLog.map((entry) => (
-                <TableRow key={entry.id} hover>
-                  <TableCell sx={{ whiteSpace: 'nowrap', color: '#9fd3ff' }}>{entry.time}</TableCell>
-                  <TableCell sx={{ fontWeight: 520 }}>{entry.actor}</TableCell>
-                  <TableCell>{entry.target}</TableCell>
-                  <TableCell>{entry.action}</TableCell>
-                  <TableCell sx={{ color: 'rgba(171, 183, 201, 0.86)' }}>{entry.details}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+        <Stack spacing={1.25}>
+          <Box>
+            <Typography sx={{ mb: 0.85, fontWeight: 540, color: 'rgba(233, 237, 243, 0.92)' }}>
+              Административный журнал изменений
+            </Typography>
+            <TableContainer component={Paper} variant="outlined" sx={TABLE_SX}>
+              <Table size="small" sx={tableCellSx}>
+                <TableHead>
+                  <TableRow sx={{ bgcolor: 'rgba(156, 176, 204, 0.075)' }}>
+                    <TableCell>Время</TableCell>
+                    <TableCell>Кто изменил</TableCell>
+                    <TableCell>Объект</TableCell>
+                    <TableCell>Действие</TableCell>
+                    <TableCell>Детали</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {adminAuditLog.map((entry) => (
+                    <TableRow key={entry.id} hover>
+                      <TableCell sx={{ whiteSpace: 'nowrap', color: '#9fd3ff' }}>{entry.time}</TableCell>
+                      <TableCell sx={{ fontWeight: 520 }}>{entry.actor}</TableCell>
+                      <TableCell>{entry.target}</TableCell>
+                      <TableCell>{entry.action}</TableCell>
+                      <TableCell sx={{ color: 'rgba(171, 183, 201, 0.86)' }}>{entry.details}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
 
-        <TableContainer component={Paper} variant="outlined" sx={TABLE_SX}>
-          <Table size="small" sx={tableCellSx}>
-            <TableHead>
-              <TableRow sx={{ bgcolor: 'rgba(156, 176, 204, 0.075)' }}>
-                <TableCell>Время</TableCell>
-                <TableCell>Документ</TableCell>
-                <TableCell>Этап</TableCell>
-                <TableCell>Событие</TableCell>
-                <TableCell>Повторная попытка</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {logs.map((log) => (
-                <TableRow key={log.id} hover>
-                  <TableCell sx={{ whiteSpace: 'nowrap', color: '#9fd3ff' }}>{log.time}</TableCell>
-                  <TableCell sx={{ fontWeight: 520 }}>{log.document}</TableCell>
-                  <TableCell>{log.stage}</TableCell>
-                  <TableCell sx={{ color: 'rgba(171, 183, 201, 0.86)' }}>{log.event}</TableCell>
-                  <TableCell>
-                    <Chip
-                      label={log.retryStatus}
-                      size="small"
-                      color={statusColor(log.retryStatus) as 'success' | 'warning' | 'error'}
-                      variant="outlined"
-                    />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+          <Box sx={{ mt: 0.7 }}>
+            <Typography sx={{ mb: 0.85, fontWeight: 540, color: 'rgba(233, 237, 243, 0.92)' }}>
+              Журнал обработки документов
+            </Typography>
+            <TableContainer component={Paper} variant="outlined" sx={TABLE_SX}>
+              <Table size="small" sx={tableCellSx}>
+                <TableHead>
+                  <TableRow sx={{ bgcolor: 'rgba(156, 176, 204, 0.075)' }}>
+                    <TableCell>Время</TableCell>
+                    <TableCell>Документ</TableCell>
+                    <TableCell>Этап</TableCell>
+                    <TableCell>Событие</TableCell>
+                    <TableCell>Повторная попытка</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {logs.map((log) => (
+                    <TableRow key={log.id} hover>
+                      <TableCell sx={{ whiteSpace: 'nowrap', color: '#9fd3ff' }}>{log.time}</TableCell>
+                      <TableCell sx={{ fontWeight: 520 }}>{log.document}</TableCell>
+                      <TableCell>{log.stage}</TableCell>
+                      <TableCell sx={{ color: 'rgba(171, 183, 201, 0.86)' }}>{log.event}</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={log.retryStatus}
+                          size="small"
+                          color={statusColor(log.retryStatus) as 'success' | 'warning' | 'error'}
+                          variant="outlined"
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
+        </Stack>
       </Stack>
     </Container>
   );

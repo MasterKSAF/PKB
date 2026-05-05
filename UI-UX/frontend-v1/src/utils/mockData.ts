@@ -72,11 +72,15 @@ export interface EngineerRatingMetrics {
 export interface QueryHistoryItem {
   id: string;
   user: string;
+  project: string;
+  topic: string;
+  session: string;
   query: string;
   answer: string;
   sources: number;
   status: AnswerStatus;
   createdAt: string;
+  messages: ChatMessage[];
 }
 
 export interface AdminUser {
@@ -84,7 +88,7 @@ export interface AdminUser {
   name: string;
   position: string;
   login: string;
-  role: 'Инженер' | 'Администратор знаний' | 'Администратор системы';
+  role: 'Пользователь' | 'Администратор';
   access: string;
   status: 'Активен' | 'Ожидает настройки' | 'Отключен';
   lastSeen: string;
@@ -245,30 +249,88 @@ export const MOCK_CHECKS: ParameterCheck[] = [
 export const MOCK_HISTORY: QueryHistoryItem[] = [
   {
     id: 'h1',
-    user: 'Инженер-конструктор',
+    user: 'Сергей Орлов',
+    project: 'Проект 223-М',
+    topic: 'Корпус',
+    session: 'Толщина листа корпуса',
     query: 'Какая минимальная толщина листа для корпуса?',
     answer: 'Требуется уточнить проект, тип конструкции и актуальную редакцию нормы.',
     sources: 1,
     status: 'needs_clarification',
     createdAt: '2026-04-23 10:14',
+    messages: [
+      {
+        id: 'h1-u1',
+        role: 'user',
+        content: 'Какая минимальная толщина листа для корпуса?',
+        timestamp: '10:14',
+      },
+      {
+        id: 'h1-a1',
+        role: 'assistant',
+        content: 'Уточните проект, район корпуса и тип конструкции. Без этих данных нельзя корректно выбрать требование НСИ.',
+        timestamp: '10:15',
+        status: 'needs_clarification',
+        citations: [MOCK_CITATIONS[0]],
+      },
+    ],
   },
   {
     id: 'h2',
-    user: 'Инженер-конструктор',
+    user: 'Сергей Орлов',
+    project: 'Проект 223-М',
+    topic: 'Сварка',
+    session: 'Регламент сварки',
     query: 'Найди регламент сварки Т-образных швов',
     answer: 'Найдены разделы регламента и проектной спецификации, требуется проверка версии.',
     sources: 2,
     status: 'answered',
     createdAt: '2026-04-23 10:21',
+    messages: [
+      {
+        id: 'h2-u1',
+        role: 'user',
+        content: 'Найди регламент сварки Т-образных швов',
+        timestamp: '10:21',
+      },
+      {
+        id: 'h2-a1',
+        role: 'assistant',
+        content:
+          '1. Для Т-образных швов нужно проверить актуальную редакцию регламента сварки.\n' +
+          '2. Проектная спецификация должна совпадать с версией регламента, указанной в НСИ.',
+        timestamp: '10:22',
+        status: 'answered',
+        citations: [MOCK_CITATIONS[0], MOCK_CITATIONS[1]],
+      },
+    ],
   },
   {
     id: 'h3',
-    user: 'Администратор знаний',
+    user: 'Анна Волкова',
+    project: 'База НСИ',
+    topic: 'OCR',
+    session: 'Контроль обработки документов',
     query: 'Какие документы не прошли OCR?',
     answer: 'Найден один документ в обработке и один ожидающий индексации.',
     sources: 0,
     status: 'answered',
     createdAt: '2026-04-23 10:38',
+    messages: [
+      {
+        id: 'h3-u1',
+        role: 'user',
+        content: 'Какие документы не прошли OCR?',
+        timestamp: '10:38',
+      },
+      {
+        id: 'h3-a1',
+        role: 'assistant',
+        content: 'Найден один документ в обработке и один документ, который ожидает индексации после повторного OCR.',
+        timestamp: '10:39',
+        status: 'answered',
+      },
+    ],
   },
 ];
 
@@ -298,7 +360,7 @@ export const MOCK_ADMIN_USERS: AdminUser[] = [
     name: 'Сергей Орлов',
     position: 'Инженер-конструктор',
     login: 's.orlov',
-    role: 'Инженер',
+    role: 'Пользователь',
     access: 'Чат, поиск, проверка, своя история',
     status: 'Активен',
     lastSeen: '2026-04-29 10:12',
@@ -308,7 +370,7 @@ export const MOCK_ADMIN_USERS: AdminUser[] = [
     name: 'Елена Климова',
     position: 'Инженер-проектировщик',
     login: 'e.klimova',
-    role: 'Инженер',
+    role: 'Пользователь',
     access: 'Чат, поиск, проверка, своя история',
     status: 'Активен',
     lastSeen: '2026-04-29 09:44',
@@ -318,8 +380,8 @@ export const MOCK_ADMIN_USERS: AdminUser[] = [
     name: 'Анна Волкова',
     position: 'Администратор базы НСИ',
     login: 'a.volkova',
-    role: 'Администратор знаний',
-    access: 'Реестр, OCR, индекс, журнал обработки',
+    role: 'Администратор',
+    access: 'Все вкладки, роли, права, полный журнал',
     status: 'Активен',
     lastSeen: '2026-04-29 09:20',
   },
@@ -328,7 +390,7 @@ export const MOCK_ADMIN_USERS: AdminUser[] = [
     name: 'Игорь Смирнов',
     position: 'Системный администратор',
     login: 'i.smirnov',
-    role: 'Администратор системы',
+    role: 'Администратор',
     access: 'Все вкладки, роли, права, полный журнал',
     status: 'Ожидает настройки',
     lastSeen: '2026-04-28 18:05',

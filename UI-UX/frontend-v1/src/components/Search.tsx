@@ -410,7 +410,7 @@ export const Search: React.FC = () => {
                     }}
                   >
                     <Typography variant="caption" sx={{ color: '#666', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                      PDF / оригинал страницы
+                      Оригинал страницы
                     </Typography>
                     <Typography variant="h6" sx={{ mt: 2, mb: 1, color: '#1f1f1f', fontFamily: 'Georgia, serif' }}>
                       {activeDocument.section}
@@ -447,7 +447,7 @@ export const Search: React.FC = () => {
                           Раздел {part + 1}. Материалы документа
                         </Typography>
                         <Typography variant="body2" sx={{ lineHeight: 1.85 }}>
-                          Это отдельная страница исходного PDF. При реальном подключении backend отдаст оригинальный
+                          Это отдельная страница исходного документа. При реальном подключении backend отдаст оригинальный
                           файл или изображение страницы, а панель сохранит прокрутку, масштабирование по ширине,
                           нумерацию страниц и переход между открытыми документами.
                         </Typography>

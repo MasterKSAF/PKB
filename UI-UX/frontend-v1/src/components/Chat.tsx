@@ -26,10 +26,11 @@ import {
   ShieldCheck,
   X,
   FileText,
+  Search,
 } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
 import { chatApi } from '../utils/http';
-import { ChatMessage, MOCK_CHATS, Citation } from '../utils/mockData';
+import { ChatMessage, Citation } from '../utils/mockData';
 import { Feedback } from './Feedback';
 import { useUIStore } from '../store/uiStore';
 
@@ -79,10 +80,12 @@ function buildAnsweredView(content: string, citations: Citation[] = []) {
 }
 
 export const Chat: React.FC = () => {
-  const { themeMode } = useUIStore();
+  const { appendChatMessages, chatMessages, themeMode } = useUIStore();
   const isLight = themeMode === 'light';
-  const [messages, setMessages] = useState<ChatMessage[]>(MOCK_CHATS);
+  const assistantAccent = isLight ? '#0f5f6f' : '#98d9d8';
+  const messages = chatMessages;
   const [input, setInput] = useState('');
+  const [chatSearch, setChatSearch] = useState('');
   const [expandedCitations, setExpandedCitations] = useState<Record<string, boolean>>({});
   const [openedCitations, setOpenedCitations] = useState<ChatPreview[]>([]);
   const [activeCitationId, setActiveCitationId] = useState<string | null>(null);
@@ -91,6 +94,14 @@ export const Chat: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const activeCitation = openedCitations.find((citation) => citation.previewId === activeCitationId) ?? openedCitations[0];
+  const normalizedChatSearch = chatSearch.trim().toLowerCase();
+  const matchedMessageIds = normalizedChatSearch
+    ? new Set(
+        messages
+          .filter((message) => message.content.toLowerCase().includes(normalizedChatSearch))
+          .map((message) => message.id),
+      )
+    : new Set<string>();
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -118,7 +129,7 @@ export const Chat: React.FC = () => {
   const chatMutation = useMutation({
     mutationFn: (q: string) => chatApi.send(q),
     onSuccess: (data) => {
-      setMessages((prev) => [...prev, data]);
+      appendChatMessages([data]);
       setExpandedCitations((prev) => ({ ...prev, [data.id]: false }));
     },
   });
@@ -133,7 +144,7 @@ export const Chat: React.FC = () => {
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    appendChatMessages([userMessage]);
     chatMutation.mutate(input);
     setInput('');
   };
@@ -190,6 +201,13 @@ export const Chat: React.FC = () => {
                       gap: 1.5,
                       alignItems: 'flex-start',
                       justifyContent: isAssistant ? 'flex-start' : 'flex-end',
+                      outline: matchedMessageIds.has(msg.id)
+                        ? isLight
+                          ? '2px solid rgba(14, 116, 144, 0.36)'
+                          : '2px solid rgba(152, 217, 216, 0.42)'
+                        : 'none',
+                      outlineOffset: 6,
+                      borderRadius: 3,
                     }}
                   >
                     {isAssistant && (
@@ -514,57 +532,125 @@ export const Chat: React.FC = () => {
         <Box
           sx={{
             borderTop: '1.5px solid rgba(198, 216, 240, 0.22)',
-            pb: 2.5,
-            pt: 2,
+            pb: 2.4,
+            pt: 1.8,
             bgcolor: 'transparent',
           }}
         >
-          <Container maxWidth="md">
-            <Paper
-              elevation={0}
-              sx={{
-                p: '8px 10px',
-                display: 'flex',
-                alignItems: 'center',
-                borderRadius: 3,
-                border: '1.5px solid rgba(198, 216, 240, 0.34)',
-                bgcolor: 'rgba(22, 23, 27, 0.72)',
-                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045)',
-              }}
-            >
-              <TextField
-                fullWidth
-                multiline
-                maxRows={4}
-                placeholder="Задайте вопрос ассистенту"
-                variant="standard"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSend();
-                  }
-                }}
-                sx={{ ml: 1, flex: 1 }}
-                slotProps={{
-                  input: { disableUnderline: true },
-                }}
-              />
-
-              <IconButton
-                color="primary"
-                onClick={handleSend}
-                disabled={!input.trim() || chatMutation.isPending}
+          <Container maxWidth="lg">
+            <Stack direction={{ xs: 'column', lg: 'row' }} spacing={1.1} sx={{ alignItems: 'stretch' }}>
+              <Paper
+                elevation={0}
                 sx={{
-                  bgcolor: input.trim() ? 'primary.main' : 'rgba(255,255,255,0.04)',
-                  color: input.trim() ? '#0b0c0e' : 'grey.600',
-                  '&:hover': { bgcolor: 'primary.light' },
+                  p: '10px 12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  minHeight: 58,
+                  flex: { lg: 1.65 },
+                  borderRadius: 3,
+                  border: isLight ? '1px solid rgba(15,23,42,0.18)' : '1.5px solid rgba(198, 216, 240, 0.34)',
+                  bgcolor: isLight ? 'rgba(255,255,255,0.78)' : 'rgba(22, 23, 27, 0.72)',
+                  boxShadow: isLight ? '0 6px 18px rgba(15,23,42,0.05)' : 'inset 0 1px 0 rgba(255,255,255,0.045)',
                 }}
               >
-                <Send size={20} />
-              </IconButton>
-            </Paper>
+                <TextField
+                  fullWidth
+                  multiline
+                  minRows={1}
+                  maxRows={4}
+                  placeholder="Задайте вопрос ассистенту"
+                  variant="standard"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSend();
+                    }
+                  }}
+                  sx={{ ml: 0.6, flex: 1 }}
+                  slotProps={{
+                    input: {
+                      disableUnderline: true,
+                      sx: {
+                        alignItems: 'center',
+                        fontSize: '0.96rem',
+                        lineHeight: 1.55,
+                      },
+                    },
+                  }}
+                />
+
+                <IconButton
+                  color="primary"
+                  onClick={handleSend}
+                  disabled={chatMutation.isPending}
+                  sx={{
+                    ml: 0.8,
+                    border: '1.5px solid',
+                    borderColor: assistantAccent,
+                    bgcolor: input.trim()
+                      ? isLight
+                        ? 'rgba(15, 95, 111, 0.13)'
+                        : 'rgba(152, 217, 216, 0.16)'
+                      : isLight
+                        ? 'rgba(15, 95, 111, 0.05)'
+                        : 'rgba(152, 217, 216, 0.06)',
+                    color: assistantAccent,
+                    '&:hover': {
+                      bgcolor: isLight ? 'rgba(15, 95, 111, 0.18)' : 'rgba(152, 217, 216, 0.22)',
+                    },
+                    '&.Mui-disabled': {
+                      color: assistantAccent,
+                      borderColor: assistantAccent,
+                      opacity: 0.55,
+                    },
+                  }}
+                >
+                  <Send size={20} />
+                </IconButton>
+              </Paper>
+
+              <Paper
+                elevation={0}
+                sx={{
+                  p: '10px 12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  minHeight: 58,
+                  flex: { lg: 0.78 },
+                  maxWidth: { lg: 360 },
+                  borderRadius: 3,
+                  border: isLight ? '1px solid rgba(15,23,42,0.18)' : '1.5px solid rgba(198, 216, 240, 0.34)',
+                  bgcolor: isLight ? 'rgba(255,255,255,0.62)' : 'rgba(22, 23, 27, 0.54)',
+                  boxShadow: isLight ? '0 6px 18px rgba(15,23,42,0.035)' : 'inset 0 1px 0 rgba(255,255,255,0.035)',
+                }}
+              >
+                <TextField
+                  fullWidth
+                  size="small"
+                  value={chatSearch}
+                  onChange={(event) => setChatSearch(event.target.value)}
+                  placeholder="Поиск по чату"
+                  variant="standard"
+                  slotProps={{
+                    input: {
+                      disableUnderline: true,
+                      startAdornment: <Search size={16} style={{ marginRight: 10, opacity: 0.65 }} />,
+                      endAdornment: normalizedChatSearch ? (
+                        <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap', ml: 1 }}>
+                          {matchedMessageIds.size}
+                        </Typography>
+                      ) : null,
+                      sx: {
+                        fontSize: '0.9rem',
+                        lineHeight: 1.45,
+                      },
+                    },
+                  }}
+                />
+              </Paper>
+            </Stack>
           </Container>
         </Box>
       </Box>
@@ -628,7 +714,7 @@ export const Chat: React.FC = () => {
                 <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                   <FileText size={18} />
                   <Typography variant="subtitle2">
-                    {activeCitation.previewKind === 'source' ? 'Страница документа' : 'Документ PDF'}
+                    {activeCitation.previewKind === 'source' ? 'Страница документа' : 'Документ'}
                   </Typography>
                 </Stack>
 
@@ -659,7 +745,7 @@ export const Chat: React.FC = () => {
                   }}
                 >
                   <Typography variant="caption" sx={{ color: '#666', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                    {activeCitation.previewKind === 'source' ? 'Страница / один лист' : 'PDF / полный документ'}
+                    {activeCitation.previewKind === 'source' ? 'Страница / один лист' : 'Полный документ'}
                   </Typography>
                   <Typography variant="caption" sx={{ color: '#777' }}>
                     Страница {activeCitation.page}
@@ -706,7 +792,7 @@ export const Chat: React.FC = () => {
                         <Typography variant="body2" sx={{ lineHeight: 1.85 }}>
                           На этой странице показана другая часть исходного документа: таблицы, пояснения,
                           ссылки на связанные разделы и порядок применения требований. При реальном подключении
-                          здесь будет отображаться оригинальная страница PDF с сохранением нумерации, масштаба
+                          здесь будет отображаться оригинальная страница документа с сохранением нумерации, масштаба
                           и вертикальной прокрутки всего документа.
                         </Typography>
                       </Box>
