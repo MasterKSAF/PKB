@@ -10,6 +10,7 @@
 - `qa-checklist.md` — что проверять перед merge и перед демонстрацией
 - `first-run-ui-v1.md` — инструкция первого запуска UI v1
 - `customer-decisions.md` — ответы заказчика по открытым вопросам UI/UX и выводы для интерфейса
+- `ui-v1-backend-adaptation-plan-2026-05-06.md` — план адаптации UI v1 под свежие API backend: что менять, что оставить mock-режимом и что уточнить
 - `ui-v1-tz-compliance-checklist-2026-05-06.xlsx` — чек-лист соответствия UI v1 требованиям ТЗ
 
 ## Встречи
