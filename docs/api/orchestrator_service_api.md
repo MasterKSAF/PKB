@@ -31,17 +31,6 @@
 
 > Ниже в примерах ответов показано содержимое поля `data` (без внешней обёртки `ok`/`error`).
 
----
-
-## 0. Аутентификация
-
-### GET /auth/me
-
-Прокси к Auth Service (`GET /auth/me`). Полная спецификация — в `auth_service_api.md`.
-
-**Заголовки**: `Authorization: Bearer <access_token>`
-
-**Ответ `200`**: профиль пользователя в UI-формате (camelCase, `available_tabs`, `permissions` как boolean-объект).
 
 ---
 
@@ -49,7 +38,7 @@
 
 ### POST /documents
 
-Загрузка документа в очередь обработки.
+Асинхронная загрузка документа в очередь обработки. После загрузки документ проходит OCR-распознавание, парсинг структуры и индексацию — это может длиться от секунд до минут в зависимости от объёма. UI отслеживает прогресс через `GET /documents/{doc_id}/status`.
 
 **Запрос**: `multipart/form-data`
 
@@ -59,7 +48,7 @@
 | `document_type` | string | Да | Тип документа: `normative`, `archival_scan`, `drawing`, `specification` |
 | `metadata` | string | Нет | JSON-строка с метаданными |
 
-**Ответ `201`**:
+**Ответ `202`** (принят в обработку):
 
 ```json
 {
@@ -76,7 +65,7 @@
 
 | Поле | Тип | Описание |
 |------|-----|----------|
-| `document_id` | string | ID документа |
+| `document_id` | string | ID документа — использовать для опроса статуса |
 | `upload_status` | string | Статус загрузки: `uploaded`, `failed` |
 | `job_id` | string | ID задачи загрузки |
 | `ocr_status` | string | Статус OCR: `not_started`, `queued`, `processing`, `completed`, `error` |
@@ -84,6 +73,25 @@
 | `status` | string | Общий статус: `queued`, `processing`, `processed`, `error` |
 | `task_id` | string | ID задачи обработки |
 | `created_at` | string | Дата создания |
+
+**Асинхронный флоу:**
+
+```mermaid
+sequenceDiagram
+    participant UI
+    participant Orchestrator
+    participant OCR
+    participant RAG
+    UI->>Orchestrator: POST /documents (file)
+    Orchestrator-->>UI: 202 { document_id, status: "queued" }
+    loop Polling
+        UI->>Orchestrator: GET /documents/{doc_id}/status
+        Orchestrator-->>UI: { status: "processing", progress_percent, steps }
+    end
+    Note over OCR,RAG: OCR completed → parsing → indexing
+    UI->>Orchestrator: GET /documents/{doc_id}/status
+    Orchestrator-->>UI: { status: "processed", ocr_status: "completed", index_status: "ready" }
+```
 
 **Ошибки**: `400` — неподдерживаемый формат/размер, `422` — повреждённый файл.
 
@@ -175,9 +183,9 @@
 
 ### GET /documents/{doc_id}/status
 
-Прогресс обработки документа.
+Прогресс обработки документа. UI вызывает этот endpoint для отслеживания асинхронного флоу после `POST /documents`.
 
-**Ответ `200`**:
+**Ответ `200`** (в процессе):
 
 ```json
 {
@@ -194,11 +202,71 @@
 }
 ```
 
+**Ответ `200`** (завершён):
+
+```json
+{
+  "document_id": "doc-8a3f2b",
+  "status": "processed",
+  "progress_percent": 100,
+  "steps": {
+    "ocr": "completed",
+    "layout_parsing": "completed",
+    "indexing": "completed"
+  },
+  "ocr_result": {
+    "pages_total": 12,
+    "pages_processed": 12,
+    "pages_failed": 0,
+    "low_confidence_pages": 1,
+    "avg_confidence": 0.94
+  },
+  "index_result": {
+    "chunks_indexed": 128,
+    "status": "ready"
+  },
+  "started_at": "2026-04-27T10:00:30Z",
+  "completed_at": "2026-04-27T10:05:00Z"
+}
+```
+
+**Ответ `200`** (ошибка):
+
+```json
+{
+  "document_id": "doc-8a3f2b",
+  "status": "error",
+  "progress_percent": 50,
+  "steps": {
+    "ocr": "error",
+    "layout_parsing": "pending",
+    "indexing": "pending"
+  },
+  "error": {
+    "code": "OCR_FAILED",
+    "message": "Не удалось распознать документ: повреждённый PDF",
+    "details": {}
+  },
+  "started_at": "2026-04-27T10:00:30Z",
+  "failed_at": "2026-04-27T10:02:00Z"
+}
+```
+
 | Поле | Тип | Описание |
 |------|-----|----------|
-| `status` | string | Текущий статус |
-| `progress_percent` | float | Процент выполнения |
+| `status` | string | `queued`, `processing`, `processed`, `error` |
+| `progress_percent` | float | Процент выполнения (0–100) |
 | `steps` | object | Статус этапов: `pending`, `in_progress`, `completed`, `error` |
+| `ocr_result` | object\|null | Результаты OCR (только при `processed`) |
+| `ocr_result.pages_total` | int | Всего страниц |
+| `ocr_result.pages_processed` | int | Успешно обработано |
+| `ocr_result.pages_failed` | int | Ошибок |
+| `ocr_result.low_confidence_pages` | int | Страниц с низким качеством |
+| `ocr_result.avg_confidence` | float | Средняя уверенность распознавания (0–1) |
+| `index_result` | object\|null | Результаты индексации (только при `processed`) |
+| `index_result.chunks_indexed` | int | Количество проиндексированных чанков |
+| `index_result.status` | string | `ready`, `error` |
+| `error` | object\|null | Детали ошибки (только при `error`) |
 
 ### GET /documents/{doc_id}/file
 
@@ -266,7 +334,7 @@
 
 ### POST /documents/{doc_id}/reprocess
 
-Повторная обработка документа.
+Асинхронная повторная обработка документа (перезапуск OCR и индексации). Прогресс отслеживается через `GET /documents/{doc_id}/status`.
 
 **Запрос**:
 
@@ -280,13 +348,13 @@
 |------|-----|----------------|----------|
 | `mode` | string | Да | `standard`, `enhanced_preprocess`, `fallback_ocr` |
 
-**Ответ `200`**:
+**Ответ `202`**:
 
 ```json
 {
   "document_id": "doc-8a3f2b",
   "task_id": "task-ocr-002",
-  "status": "reprocessing_queued",
+  "status": "queued",
   "mode": "enhanced_preprocess",
   "created_at": "2026-04-27T11:00:00Z"
 }
