@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Box,
   Container,
@@ -19,6 +19,8 @@ import {
   User,
   Anchor,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ChevronUp,
   ExternalLink,
   Bookmark,
@@ -79,6 +81,65 @@ function buildAnsweredView(content: string, citations: Citation[] = []) {
   };
 }
 
+function countMatches(text: string, query: string) {
+  if (!query) return 0;
+
+  let count = 0;
+  let position = text.toLowerCase().indexOf(query);
+
+  while (position !== -1) {
+    count += 1;
+    position = text.toLowerCase().indexOf(query, position + query.length);
+  }
+
+  return count;
+}
+
+function highlightText(text: string, query: string, isLight: boolean) {
+  if (!query) return text;
+
+  const lowerText = text.toLowerCase();
+  const parts: React.ReactNode[] = [];
+  let cursor = 0;
+  let position = lowerText.indexOf(query);
+  let index = 0;
+
+  while (position !== -1) {
+    if (position > cursor) {
+      parts.push(text.slice(cursor, position));
+    }
+
+    parts.push(
+      <Box
+        component="mark"
+        key={`${position}-${index}`}
+        sx={{
+          px: 0.35,
+          py: 0.05,
+          borderRadius: 0.7,
+          color: isLight ? '#111827' : '#f8fbff',
+          bgcolor: isLight ? 'rgba(202, 138, 4, 0.28)' : 'rgba(216, 176, 122, 0.36)',
+          boxShadow: isLight
+            ? '0 0 0 1px rgba(146, 64, 14, 0.16)'
+            : '0 0 0 1px rgba(216, 176, 122, 0.22)',
+        }}
+      >
+        {text.slice(position, position + query.length)}
+      </Box>,
+    );
+
+    cursor = position + query.length;
+    position = lowerText.indexOf(query, cursor);
+    index += 1;
+  }
+
+  if (cursor < text.length) {
+    parts.push(text.slice(cursor));
+  }
+
+  return parts;
+}
+
 export const Chat: React.FC = () => {
   const { appendChatMessages, chatMessages, themeMode } = useUIStore();
   const isLight = themeMode === 'light';
@@ -91,21 +152,46 @@ export const Chat: React.FC = () => {
   const [activeCitationId, setActiveCitationId] = useState<string | null>(null);
   const [previewWidth, setPreviewWidth] = useState(420);
   const [isResizing, setIsResizing] = useState(false);
+  const [activeSearchMatch, setActiveSearchMatch] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const activeCitation = openedCitations.find((citation) => citation.previewId === activeCitationId) ?? openedCitations[0];
   const normalizedChatSearch = chatSearch.trim().toLowerCase();
-  const matchedMessageIds = normalizedChatSearch
-    ? new Set(
-        messages
-          .filter((message) => message.content.toLowerCase().includes(normalizedChatSearch))
-          .map((message) => message.id),
-      )
-    : new Set<string>();
+  const searchMatches = useMemo(
+    () =>
+      normalizedChatSearch
+        ? messages.flatMap((message) =>
+            Array.from({ length: countMatches(message.content, normalizedChatSearch) }, (_, occurrence) => ({
+              messageId: message.id,
+              occurrence,
+            })),
+          )
+        : [],
+    [messages, normalizedChatSearch],
+  );
+  const matchedMessageIds = useMemo(
+    () => new Set(searchMatches.map((match) => match.messageId)),
+    [searchMatches],
+  );
+  const activeSearchMessageId = searchMatches[activeSearchMatch]?.messageId;
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    setActiveSearchMatch(0);
+  }, [normalizedChatSearch]);
+
+  useEffect(() => {
+    if (!normalizedChatSearch || searchMatches.length === 0) return;
+
+    const targetMessageId = searchMatches[activeSearchMatch]?.messageId;
+    const target = targetMessageId ? messageRefs.current[targetMessageId] : null;
+
+    target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [activeSearchMatch, normalizedChatSearch, searchMatches]);
 
   useEffect(() => {
     if (!isResizing) return;
@@ -147,6 +233,16 @@ export const Chat: React.FC = () => {
     appendChatMessages([userMessage]);
     chatMutation.mutate(input);
     setInput('');
+  };
+
+  const goToSearchMatch = (direction: 'prev' | 'next') => {
+    if (searchMatches.length === 0) return;
+
+    setActiveSearchMatch((current) =>
+      direction === 'next'
+        ? (current + 1) % searchMatches.length
+        : (current - 1 + searchMatches.length) % searchMatches.length,
+    );
   };
 
   const toggleCitations = (msgId: string) => {
@@ -196,12 +292,19 @@ export const Chat: React.FC = () => {
                 return (
                   <Box
                     key={msg.id}
+                    ref={(node: HTMLDivElement | null) => {
+                      messageRefs.current[msg.id] = node;
+                    }}
                     sx={{
                       display: 'flex',
                       gap: 1.5,
                       alignItems: 'flex-start',
                       justifyContent: isAssistant ? 'flex-start' : 'flex-end',
-                      outline: matchedMessageIds.has(msg.id)
+                      outline: activeSearchMessageId === msg.id
+                        ? isLight
+                          ? '2px solid rgba(202, 138, 4, 0.62)'
+                          : '2px solid rgba(216, 176, 122, 0.68)'
+                        : matchedMessageIds.has(msg.id)
                         ? isLight
                           ? '2px solid rgba(14, 116, 144, 0.36)'
                           : '2px solid rgba(152, 217, 216, 0.42)'
@@ -345,7 +448,7 @@ export const Chat: React.FC = () => {
                                       fontSize: '0.95rem',
                                     }}
                                   >
-                                    {item.text}
+                                    {highlightText(item.text, normalizedChatSearch, isLight)}
                                   </Typography>
                                   <Stack direction="row" spacing={1.4} useFlexGap sx={{ flexWrap: 'wrap', mt: 0.6 }}>
                                     <Button
@@ -386,7 +489,7 @@ export const Chat: React.FC = () => {
                               mt: 0.85,
                             }}
                           >
-                            {msg.content}
+                            {highlightText(msg.content, normalizedChatSearch, isLight)}
                           </Typography>
                         )}
 
@@ -582,6 +685,7 @@ export const Chat: React.FC = () => {
                 />
 
                 <IconButton
+                  aria-label="Отправить вопрос"
                   color="primary"
                   onClick={handleSend}
                   disabled={chatMutation.isPending}
@@ -618,8 +722,8 @@ export const Chat: React.FC = () => {
                   display: 'flex',
                   alignItems: 'center',
                   minHeight: 58,
-                  flex: { lg: 0.78 },
-                  maxWidth: { lg: 360 },
+                  flex: { lg: 0.95 },
+                  maxWidth: { lg: 430 },
                   borderRadius: 3,
                   border: isLight ? '1px solid rgba(15,23,42,0.18)' : '1.5px solid rgba(198, 216, 240, 0.34)',
                   bgcolor: isLight ? 'rgba(255,255,255,0.62)' : 'rgba(22, 23, 27, 0.54)',
@@ -638,9 +742,46 @@ export const Chat: React.FC = () => {
                       disableUnderline: true,
                       startAdornment: <Search size={16} style={{ marginRight: 10, opacity: 0.65 }} />,
                       endAdornment: normalizedChatSearch ? (
-                        <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap', ml: 1 }}>
-                          {matchedMessageIds.size}
-                        </Typography>
+                        <Stack
+                          direction="row"
+                          spacing={0.25}
+                          sx={{ alignItems: 'center', ml: 0.8 }}
+                          onMouseDown={(event) => event.preventDefault()}
+                        >
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{ whiteSpace: 'nowrap', minWidth: 44, textAlign: 'right' }}
+                          >
+                            {searchMatches.length > 0 ? `${activeSearchMatch + 1}/${searchMatches.length}` : '0/0'}
+                          </Typography>
+                          <IconButton
+                            aria-label="Предыдущее совпадение"
+                            size="small"
+                            disabled={searchMatches.length === 0}
+                            onClick={() => goToSearchMatch('prev')}
+                            sx={{ width: 24, height: 24 }}
+                          >
+                            <ChevronLeft size={14} />
+                          </IconButton>
+                          <IconButton
+                            aria-label="Следующее совпадение"
+                            size="small"
+                            disabled={searchMatches.length === 0}
+                            onClick={() => goToSearchMatch('next')}
+                            sx={{ width: 24, height: 24 }}
+                          >
+                            <ChevronRight size={14} />
+                          </IconButton>
+                          <IconButton
+                            aria-label="Очистить поиск по чату"
+                            size="small"
+                            onClick={() => setChatSearch('')}
+                            sx={{ width: 24, height: 24 }}
+                          >
+                            <X size={14} />
+                          </IconButton>
+                        </Stack>
                       ) : null,
                       sx: {
                         fontSize: '0.9rem',
