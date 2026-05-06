@@ -11,11 +11,13 @@
 | POST | `/auth/token` | username, password — получить JWT-токены доступа |
 | POST | `/auth/refresh` | refresh_token — обновить access-токен |
 | POST | `/auth/revoke` | refresh_token — отозвать refresh-токен |
+| GET | `/auth/me` | Профиль текущего пользователя (UI-формат: camelCase, с `availableTabs`, `permissions` как объект boolean) |
 | GET | `/users/me` | Профиль текущего пользователя |
 | GET | `/users` | ?role, search, limit, offset — список пользователей (админ) |
 | POST | `/users` | email, full_name, password, roles — создать пользователя (админ) |
 | GET | `/users/{user_id}` | Информация о пользователе |
 | PUT | `/users/{user_id}` | обновляемые поля — обновить пользователя |
+| PATCH | `/users/{user_id}` | обновляемые поля — частичное обновление (например, только role) |
 | DELETE | `/users/{user_id}` | Деактивировать пользователя |
 | GET | `/roles` | Список ролей |
 | POST | `/roles` | name, permissions — создать роль |
@@ -108,6 +110,46 @@
 }
 ```
 
+### Аутентификация (UI-формат)
+
+#### GET /auth/me
+
+Профиль текущего пользователя в формате, ожидаемом frontend. CamelCase-поля, `availableTabs` и `permissions` как объект boolean.
+
+**Ответ `200`**:
+
+```json
+{
+  "user_id": "u-001",
+  "full_name": "Иванов Сергей Петрович",
+  "position": "Инженер-конструктор",
+  "role": "engineer",
+  "role_title": "Инженер",
+  "available_tabs": ["chat", "search", "checks", "history"],
+  "permissions": {
+    "can_upload_documents": false,
+    "can_run_ocr": false,
+    "can_manage_users": false
+  },
+  "last_login_at": "2026-05-01T08:20:00Z",
+  "created_at": "2025-12-01T08:00:00Z"
+}
+```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `user_id` | string | ID пользователя |
+| `full_name` | string | Полное имя |
+| `position` | string | Должность |
+| `role` | string | Роль: `engineer`, `knowledge_admin`, `system_admin` |
+| `role_title` | string | Отображаемое название роли |
+| `available_tabs` | string[] | Доступные вкладки UI |
+| `permissions` | object | Права доступа (boolean) |
+| `last_login_at` | string | Дата последнего входа (ISO 8601) |
+| `created_at` | string | Дата создания (ISO 8601) |
+
+---
+
 ### Пользователи
 
 #### GET /users/me
@@ -121,8 +163,10 @@
   "user_id": "u-001",
   "email": "ivanov@example.com",
   "full_name": "Иванов И.И.",
+  "position": "Инженер-конструктор",
   "roles": ["engineer"],
   "permissions": ["documents:read", "search"],
+  "last_login_at": "2026-05-01T08:20:00Z",
   "created_at": "2025-12-01T08:00:00Z"
 }
 ```
@@ -132,8 +176,10 @@
 | `user_id` | string | ID пользователя |
 | `email` | string | Email |
 | `full_name` | string | Полное имя |
+| `position` | string | Должность |
 | `roles` | string[] | Роли |
 | `permissions` | string[] | Права доступа |
+| `last_login_at` | string | Дата последнего входа (ISO 8601) |
 | `created_at` | string | Дата создания (ISO 8601) |
 
 #### GET /users
@@ -151,8 +197,10 @@
       "user_id": "u-001",
       "email": "ivanov@example.com",
       "full_name": "Иванов И.И.",
+      "position": "Инженер-конструктор",
       "roles": ["engineer"],
       "is_active": true,
+      "last_login_at": "2026-05-01T08:20:00Z",
       "created_at": "2025-12-01T08:00:00Z"
     }
   ],
@@ -197,9 +245,11 @@
   "user_id": "u-001",
   "email": "ivanov@example.com",
   "full_name": "Иванов И.И.",
+  "position": "Инженер-конструктор",
   "roles": ["engineer"],
   "permissions": ["documents:read", "search"],
   "is_active": true,
+  "last_login_at": "2026-05-01T08:20:00Z",
   "created_at": "2025-12-01T08:00:00Z",
   "updated_at": "2026-04-27T10:00:00Z"
 }
@@ -215,12 +265,38 @@
 {
   "email": "newemail@example.com",
   "full_name": "Иванов И.П.",
+  "position": "Ведущий инженер",
   "roles": ["engineer", "admin"],
   "is_active": true
 }
 ```
 
 **Ответ `200`** — обновлённый объект пользователя.
+
+#### PATCH /users/{user_id}
+
+Частичное обновление пользователя (админ). Отличается от PUT тем, что обновляются только переданные поля.
+
+**Запрос** (изменение только роли):
+
+```json
+{
+  "role": "knowledge_admin"
+}
+```
+
+`role` — единственное поле, строка (упрощённый формат для UI).
+
+**Ответ `200`**:
+
+```json
+{
+  "user_id": "u-001",
+  "role": "knowledge_admin",
+  "audit_log_id": "audit-001",
+  "updated_at": "2026-04-27T11:00:00Z"
+}
+```
 
 #### DELETE /users/{user_id}
 

@@ -276,6 +276,7 @@
     {
       "message_id": "msg-002",
       "role": "assistant",
+      "status": "answered",
       "content": "Согласно Правилам РС (Часть I, стр. 42), толщина обшивки ледового пояса для класса Arc4 должна быть не менее 12 мм.",
       "sources": [
         {
@@ -301,6 +302,7 @@
     {
       "message_id": "msg-004",
       "role": "assistant",
+      "status": "answered",
       "content": "Для обшивки ледового пояса класса Arc4 допускаются стали категории D и E с гарантией хладостойкости (Правила РС, Часть I, стр. 44).",
       "sources": [
         {
@@ -362,13 +364,14 @@
 | `options.search_in_session_docs`   | bool   | Нет            | Искать только в документах, привязанных к сессии.                        |
 | `options.use_full_context`         | bool   | Нет            | Использовать полную историю диалога как контекст.                        |
 
-**Ответ `200`**:
+**Ответ `200`** (успешный ответ):
 
 ```json
 {
   "message_id": "msg-005",
   "session_id": "sess-a1b2c3",
   "role": "assistant",
+  "status": "answered",
   "content": "Да, толщина обшивки 14 мм в чертеже 21900M2.362135.0903СБ соответствует требованию Правил РС для ледового класса Arc4 (не менее 12 мм). Превышение составляет 2 мм, что допустимо.",
   "sources": [
     {
@@ -393,6 +396,74 @@
   "timestamp": "2026-04-27T14:03:05Z"
 }
 ```
+
+**Ответ `200`** (недостаточно данных — `needs_clarification`):
+
+```json
+{
+  "message_id": "msg-006",
+  "session_id": "sess-a1b2c3",
+  "role": "assistant",
+  "status": "needs_clarification",
+  "content": null,
+  "message": "Уточните проект, район корпуса и тип судна.",
+  "missing_fields": ["projectId", "hullArea", "vesselType"],
+  "sources": [],
+  "model_used": null,
+  "processing_time_ms": 1200,
+  "timestamp": "2026-04-27T14:05:00Z"
+}
+```
+
+**Ответ `200`** (конфликт источников — `source_conflict`):
+
+```json
+{
+  "message_id": "msg-007",
+  "session_id": "sess-a1b2c3",
+  "role": "assistant",
+  "status": "source_conflict",
+  "content": null,
+  "message": "Найдены разные требования в двух редакциях документа.",
+  "conflicts": [
+    {
+      "document_id": "doc-norm-001",
+      "document_title": "НСИ, редакция 2024",
+      "page_number": 45,
+      "value": "8 мм"
+    },
+    {
+      "document_id": "doc-norm-002",
+      "document_title": "НСИ, редакция 2026",
+      "page_number": 47,
+      "value": "10 мм"
+    }
+  ],
+  "sources": [],
+  "model_used": null,
+  "processing_time_ms": 1500,
+  "timestamp": "2026-04-27T14:06:00Z"
+}
+```
+
+**Поле `status`** (добавлено в ответ ассистента):
+
+| Статус | Описание |
+|--------|----------|
+| `answered` | Успешный ответ с источниками |
+| `needs_clarification` | Не хватает данных для ответа (см. `missing_fields`) |
+| `source_conflict` | Найдены противоречащие источники (см. `conflicts[]`) |
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `status` | string | Статус ответа: `answered`, `needs_clarification`, `source_conflict` |
+| `message` | string|null | Сообщение для пользователя (при `needs_clarification` или `source_conflict`) |
+| `missing_fields` | string[]|null | Поля, которые нужно уточнить (только при `needs_clarification`) |
+| `conflicts` | object[]|null | Список конфликтующих источников (только при `source_conflict`) |
+| `conflicts[].document_id` | string | ID документа |
+| `conflicts[].document_title` | string | Название документа |
+| `conflicts[].page_number` | int | Номер страницы |
+| `conflicts[].value` | string | Значение из источника |
 
 ---
 

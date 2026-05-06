@@ -12,7 +12,30 @@ API Нейроассистента ПКБ (v1.0)
 - Аутентификация: все запросы, кроме `/auth/*` и `/health`, требуют заголовок  
   `Authorization: Bearer <access_token>`. Токен получается через `/auth/token`.
 
-- Формат ошибок (унифицирован):
+- **Формат ответа Orchestrator Service** (публичное API для UI): все ответы Orchestrator оборачиваются в единую структуру:
+
+```json
+{
+  "ok": true,
+  "data": { ... },
+  "error": null
+}
+```
+
+При ошибке:
+
+```json
+{
+  "ok": false,
+  "data": null,
+  "error": {
+    "code": "DOCUMENT_NOT_FOUND",
+    "message": "Документ не найден"
+  }
+}
+```
+
+- **Формат ошибок** (внутренние сервисы, без обёртки):
 
 ```json
 {
