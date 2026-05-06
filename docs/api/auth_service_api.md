@@ -22,6 +22,9 @@
 | GET | `/roles` | Список ролей |
 | POST | `/roles` | name, permissions — создать роль |
 | GET | `/audit` | ?user_id, action, date_from, date_to, limit, offset — журнал действий (аудит) |
+| GET | `/admin/users` | Алиас для `GET /users` |
+| PATCH | `/admin/users/{user_id}` | Алиас для `PATCH /users/{user_id}` (изменение роли) |
+| GET | `/admin/audit-log` | Алиас для `GET /audit` |
 
 ---
 
@@ -381,7 +384,43 @@
 }
 ```
 
---- 
+---
+
+## Администрирование (UI-алиасы)
+
+Алиасы для доступа из frontend. Внутренняя реализация — вызовы `GET /users`, `PATCH /users/{user_id}`, `GET /audit`.
+
+### GET /admin/users
+
+Псевдоним для `GET /users`. Список пользователей в формате UI.
+
+**Параметры query**: `role`, `search`, `limit`, `offset`.
+
+**Ответ `200`**: Аналогичен `GET /users`.
+
+### PATCH /admin/users/{user_id}
+
+Псевдоним для `PATCH /users/{user_id}`. Изменение роли пользователя.
+
+**Запрос**:
+
+```json
+{
+  "role": "knowledge_admin"
+}
+```
+
+**Ответ `200`**: Аналогичен `PATCH /users/{user_id}`.
+
+### GET /admin/audit-log
+
+Псевдоним для `GET /audit`. Административный журнал.
+
+**Параметры query**: `user_id`, `action`, `date_from`, `date_to`, `limit`, `offset`.
+
+**Ответ `200`**: Аналогичен `GET /audit`.
+
+---
 
 ## Internal Auth Service (auth-service:8080)
 

@@ -174,6 +174,9 @@
 | POST   | `/chat/sessions/{session_id}/context`  | Path:`session_id`, Body: `action`, `params`                            | Управление контекстом сессии                          | Результат операции                     |
 | POST   | `/chat/sessions/{session_id}/export`   | Path:`session_id`, Body: `format`                                      | Экспорт диалога                                       | `export_id`, `url`                     |
 | POST   | `/chat/feedback`                       | Body:`session_id`, `message_id`, `rating`, `comment`                   | Обратная связь по ответу                              | `feedback_id`, `created_at`            |
+| POST   | `/feedback`                            | Body:`answer_id`, `user_id`, `useful`, `comment`                       | Обратная связь (UI-формат)                              | `feedback_id`, `metrics_changed`       |
+| GET    | `/history`                             | Query:`user_id`, `status`, `date_from`, `date_to`                      | Журнал запросов (плоский список)                       | `items[]`, `total`                     |
+| GET    | `/history/export`                      | Query:`user_id`, `status`, `date_from`, `date_to`                      | Экспорт истории                                        | `export_id`, `url`                     |
 
 #### POST /chat/sessions
 
@@ -611,3 +614,117 @@
   "created_at": "2026-04-27T14:10:00Z"
 }
 ```
+
+#### POST /feedback (UI-формат)
+
+Альтернативный endpoint обратной связи в формате frontend. Принимает `answer_id` и `useful` (boolean), внутри маппит в `session_id`/`message_id` и `rating`/`negative`.
+
+**Запрос**:
+
+```json
+{
+  "answer_id": "ans-001",
+  "user_id": "u-001",
+  "useful": true,
+  "comment": "Ответ точный, источник подходит",
+  "opened_citation_ids": ["cit-001"]
+}
+```
+
+| Поле | Тип | Обязательность | Описание |
+|------|-----|----------------|----------|
+| `answer_id` | string | Да | ID ответа (`answer_id` из `POST /chat/sessions/{id}/messages`) |
+| `user_id` | string | Да | ID пользователя |
+| `useful` | bool | Да | Полезен ли ответ |
+| `comment` | string | Нет | Комментарий (до 1000 символов) |
+| `opened_citation_ids` | string[] | Нет | Какие источники открывал пользователь |
+
+**Ответ `200`**:
+
+```json
+{
+  "feedback_id": "fb-001",
+  "saved": true,
+  "metrics_changed": {
+    "rated_answers": 43,
+    "useful_rate": 0.84,
+    "flagged_for_review": 5
+  }
+}
+```
+
+---
+
+### История запросов (плоский список)
+
+Сценарий: UI показывает единый журнал запросов и ответов по всем сессиям пользователя с фильтрацией и экспортом. В отличие от `GET /chat/sessions` (группировка по сессиям), этот endpoint возвращает плоский список отдельных сообщений.
+
+#### GET /history
+
+Журнал запросов и ответов с фильтрацией.
+
+**Параметры query**:
+
+| Параметр | Тип | Описание |
+|----------|-----|----------|
+| `user_id` | string | Фильтр по пользователю |
+| `status` | string | `answered`, `needs_clarification`, `source_conflict` |
+| `date_from` | string | Дата начала (ISO 8601) |
+| `date_to` | string | Дата окончания |
+| `limit` | int | Лимит результатов |
+| `offset` | int | Смещение |
+
+**Ответ `200`**:
+
+```json
+{
+  "items": [
+    {
+      "history_id": "hist-001",
+      "session_id": "sess-a1b2c3",
+      "created_at": "2026-04-27T14:01:04Z",
+      "user_id": "u-001",
+      "user_name": "Иванов Сергей Петрович",
+      "question": "Какая минимальная толщина листа корпуса?",
+      "answer_preview": "Минимальная толщина зависит от...",
+      "status": "answered",
+      "source_count": 2,
+      "answer_id": "ans-001"
+    }
+  ],
+  "total": 42,
+  "limit": 20,
+  "offset": 0
+}
+```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `items[].history_id` | string | ID записи истории |
+| `items[].session_id` | string | ID сессии |
+| `items[].created_at` | string | Дата запроса |
+| `items[].user_id` | string | ID пользователя |
+| `items[].user_name` | string | ФИО пользователя |
+| `items[].question` | string | Текст вопроса |
+| `items[].answer_preview` | string | Превью ответа (первые ~200 символов) |
+| `items[].status` | string | Статус ответа |
+| `items[].source_count` | int | Количество источников |
+| `items[].answer_id` | string | ID ответа |
+
+#### GET /history/export
+
+Экспорт истории запросов с учётом текущих фильтров.
+
+**Параметры query**: Аналогично `GET /history`.
+
+**Ответ `200`**: Backend возвращает XLSX/CSV или JSON со ссылкой на скачивание:
+
+```json
+{
+  "export_id": "exp-hist-001",
+  "format": "xlsx",
+  "url": "/files/exports/exp-hist-001/download",
+  "created_at": "2026-04-27T14:35:00Z"
+}
+```
+
