@@ -33,43 +33,15 @@
 
 ---
 
-## 0. Пользователь и аутентификация
+## 0. Аутентификация
 
 ### GET /auth/me
 
-Профиль текущего пользователя в формате UI (camelCase, с доступными вкладками и правами).
+Прокси к Auth Service (`GET /auth/me`). Полная спецификация — в `auth_service_api.md`.
 
 **Заголовки**: `Authorization: Bearer <access_token>`
 
-**Ответ `200`**:
-
-```json
-{
-  "user_id": "u-001",
-  "full_name": "Иванов Сергей Петрович",
-  "position": "Инженер-конструктор",
-  "role": "engineer",
-  "role_title": "Инженер",
-  "available_tabs": ["chat", "search", "checks", "history"],
-  "permissions": {
-    "can_upload_documents": false,
-    "can_run_ocr": false,
-    "can_manage_users": false
-  }
-}
-```
-
-| Поле | Тип | Описание |
-|------|-----|----------|
-| `user_id` | string | ID пользователя |
-| `full_name` | string | Полное имя |
-| `position` | string | Должность |
-| `role` | string | Роль: `engineer`, `knowledge_admin`, `system_admin` |
-| `role_title` | string | Название роли для отображения |
-| `available_tabs` | string[] | Доступные вкладки |
-| `permissions` | object | Права как boolean-поля |
-
-> Внутренняя реализация: проксирует `GET /users/me` из Auth Service, маппит поля в camelCase. `available_tabs` и `permissions` вычисляются из роли.
+**Ответ `200`**: профиль пользователя в UI-формате (camelCase, `available_tabs`, `permissions` как boolean-объект).
 
 ---
 
