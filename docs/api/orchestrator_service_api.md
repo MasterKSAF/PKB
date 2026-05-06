@@ -40,6 +40,8 @@
 
 Асинхронная загрузка документа в очередь обработки. После загрузки документ проходит OCR-распознавание, парсинг структуры и индексацию — это может длиться от секунд до минут в зависимости от объёма. UI отслеживает прогресс через `GET /documents/{doc_id}/status`.
 
+`user_id` определяется из контекста аутентификации (`Authorization: Bearer`), не передаётся в теле запроса.
+
 **Запрос**: `multipart/form-data`
 
 | Поле | Тип | Обязательность | Описание |
@@ -54,6 +56,7 @@
 {
   "document_id": "doc-8a3f2b",
   "upload_status": "uploaded",
+  "user_id": "u-001",
   "job_id": "job-ocr-554",
   "ocr_status": "queued",
   "index_status": "not_started",
@@ -67,6 +70,7 @@
 |------|-----|----------|
 | `document_id` | string | ID документа — использовать для опроса статуса |
 | `upload_status` | string | Статус загрузки: `uploaded`, `failed` |
+| `user_id` | string | ID пользователя, загрузившего документ |
 | `job_id` | string | ID задачи загрузки |
 | `ocr_status` | string | Статус OCR: `not_started`, `queued`, `processing`, `completed`, `error` |
 | `index_status` | string | Статус индексации: `not_started`, `queued`, `completed`, `error` |
@@ -103,6 +107,7 @@ sequenceDiagram
 
 | Параметр | Тип | Описание |
 |----------|-----|----------|
+| `user_id` | string | Фильтр по пользователю, загрузившему документ |
 | `status` | string | Фильтр по статусу: `queued`, `processing`, `processed`, `error` |
 | `type` | string | Фильтр по типу документа |
 | `date_from` | string | Дата начала (ISO 8601) |
@@ -131,6 +136,8 @@ sequenceDiagram
       "pages": 12,
       "ocr_status": "completed",
       "index_status": "ready",
+      "user_id": "u-001",
+      "uploaded_by": "Иванов И.И.",
       "created_at": "2026-04-27T10:00:00Z",
       "updated_at": "2026-04-27T10:02:00Z"
     }
@@ -155,6 +162,8 @@ sequenceDiagram
 | `items[].pages` | int | Количество страниц |
 | `items[].ocr_status` | string | Статус OCR: `not_started`, `queued`, `processing`, `completed`, `error` |
 | `items[].index_status` | string | Статус индексации: `not_started`, `ready`, `error` |
+| `items[].user_id` | string | ID пользователя, загрузившего документ |
+| `items[].uploaded_by` | string | ФИО пользователя, загрузившего документ |
 
 ### GET /documents/{doc_id}
 
@@ -172,6 +181,8 @@ sequenceDiagram
   "pages_total": 12,
   "pages_processed": 12,
   "pages_failed": 0,
+  "user_id": "u-001",
+  "uploaded_by": "Иванов И.И.",
   "created_at": "2026-04-27T10:00:00Z",
   "updated_at": "2026-04-27T10:05:00Z",
   "metadata": {
@@ -190,6 +201,7 @@ sequenceDiagram
 ```json
 {
   "document_id": "doc-8a3f2b",
+  "user_id": "u-001",
   "status": "processing",
   "progress_percent": 41.7,
   "steps": {
@@ -207,6 +219,7 @@ sequenceDiagram
 ```json
 {
   "document_id": "doc-8a3f2b",
+  "user_id": "u-001",
   "status": "processed",
   "progress_percent": 100,
   "steps": {
@@ -235,6 +248,7 @@ sequenceDiagram
 ```json
 {
   "document_id": "doc-8a3f2b",
+  "user_id": "u-001",
   "status": "error",
   "progress_percent": 50,
   "steps": {
@@ -334,7 +348,7 @@ sequenceDiagram
 
 ### POST /documents/{doc_id}/reprocess
 
-Асинхронная повторная обработка документа (перезапуск OCR и индексации). Прогресс отслеживается через `GET /documents/{doc_id}/status`.
+Асинхронная повторная обработка документа (перезапуск OCR и индексации). Прогресс отслеживается через `GET /documents/{doc_id}/status`. `user_id` определяется из контекста аутентификации.
 
 **Запрос**:
 
@@ -353,6 +367,7 @@ sequenceDiagram
 ```json
 {
   "document_id": "doc-8a3f2b",
+  "user_id": "u-001",
   "task_id": "task-ocr-002",
   "status": "queued",
   "mode": "enhanced_preprocess",
@@ -393,6 +408,61 @@ sequenceDiagram
   "total": 1
 }
 ```
+
+### GET /documents/queue
+
+Очередь обработки документов для текущего пользователя. Возвращает документы со статусами `queued`, `processing` — те, что ещё не завершили обработку.
+
+`user_id` определяется из контекста аутентификации. Для администратора возвращаются все документы в обработке.
+
+**Параметры query**:
+
+| Параметр | Тип | Описание |
+|----------|-----|----------|
+| `user_id` | string | Фильтр по пользователю (админ может смотреть чужие очереди) |
+| `limit` | int | Лимит результатов |
+| `offset` | int | Смещение |
+
+**Ответ `200`**:
+
+```json
+{
+  "queue": [
+    {
+      "document_id": "doc-8a3f2b",
+      "title": "21900M2_spec.pdf",
+      "type": "specification",
+      "status": "processing",
+      "progress_percent": 41.7,
+      "steps": {
+        "ocr": "in_progress",
+        "layout_parsing": "pending",
+        "indexing": "pending"
+      },
+      "user_id": "u-001",
+      "uploaded_by": "Иванов И.И.",
+      "created_at": "2026-04-27T10:00:00Z",
+      "started_at": "2026-04-27T10:00:30Z",
+      "estimated_completion": "2026-04-27T10:06:00Z"
+    }
+  ],
+  "total_in_queue": 3,
+  "limit": 20,
+  "offset": 0
+}
+```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `queue[].document_id` | string | ID документа |
+| `queue[].title` | string | Название документа |
+| `queue[].type` | string | Тип документа |
+| `queue[].status` | string | `queued`, `processing` |
+| `queue[].progress_percent` | float | Прогресс обработки (0–100) |
+| `queue[].steps` | object | Статусы этапов |
+| `queue[].user_id` | string | ID пользователя |
+| `queue[].uploaded_by` | string | ФИО пользователя |
+| `total_in_queue` | int | Общее количество в очереди |
 
 ---
 
