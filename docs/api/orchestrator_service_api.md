@@ -31,6 +31,15 @@
 
 > Ниже в примерах ответов показано содержимое поля `data` (без внешней обёртки `ok`/`error`).
 
+### Группы
+
+| Группа | Описание |
+|--------|----------|
+| `system` | Служебные методы: health |
+| `monitor` | Мониторинг и метрики |
+| `documents` | Документы: CRUD, поиск, очередь, просмотр, параметры |
+| `chat` | Чат: единый endpoint для UI (`/chat`), упрощённый Q&A (`/chat/ask`) |
+| `validate` | Валидация: сопоставление норм и проекта, проверки НСИ |
 
 ---
 
@@ -468,9 +477,9 @@ sequenceDiagram
 
 ## 2. Поиск и вопросно-ответная система
 
-### POST /search
+### POST /documents/search
 
-Семантический поиск фрагментов.
+Семантический поиск фрагментов по документам.
 
 **Запрос**:
 
@@ -531,21 +540,21 @@ sequenceDiagram
 | `items[].page_preview_url` | string | URL preview страницы |
 | `items[].document_url` | string | URL полного документа |
 
-> `GET /search` возвращает аналогичный ответ. Параметры query: `q`, `document_id`, `page`, `limit`, `document_type`.
+> `GET /documents/search` возвращает аналогичный ответ. Параметры query: `q`, `document_id`, `page`, `limit`, `document_type`.
 
 **Ошибки**: `400` — пустой запрос.
 
-### GET /search
+### GET /documents/search
 
 Быстрый GET-вариант поиска.
 
 **Параметры query**: `q`, `document_id`, `page`, `limit`, `document_type`
 
-**Ответ**: Аналогичен `POST /search`.
+**Ответ**: Аналогичен `POST /documents/search`.
 
-### POST /ask
+### POST /chat/ask
 
-Генерация ответа с источниками.
+Генерация ответа с источниками (упрощённый Q&A без управления сессиями).
 
 **Запрос**:
 
@@ -789,7 +798,7 @@ sequenceDiagram
 
 ## 5. Служебные методы
 
-### GET /health
+### GET /system/health
 
 Проверка состояния системы.
 
@@ -933,7 +942,7 @@ sequenceDiagram
 
 ## 7. Проверка на соответствие требованиям НСИ
 
-### POST /checks
+### POST /validate/checks
 
 Запуск проверки проектного решения на соответствие требованиям НСИ (синхронный вариант для UI).
 
@@ -1007,7 +1016,7 @@ sequenceDiagram
 
 > Внутренняя реализация: разлагает запрос на пары нормативных и проектных фрагментов через Validation Service (`POST /compare/batch`), агрегирует результаты, маппит `match_status` → `OK`/`WARNING`/`ERROR`.
 
-### GET /checks/{check_run_id}/export
+### GET /validate/checks/{check_run_id}/export
 
 Выгрузка результатов проверки в XLSX.
 
@@ -1026,7 +1035,7 @@ sequenceDiagram
 
 ## 8. QA Метрики
 
-### GET /metrics
+### GET /monitor/metrics
 
 Метрики контроля качества системы.
 

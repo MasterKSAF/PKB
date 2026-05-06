@@ -9,7 +9,7 @@ API Нейроассистента ПКБ (v1.0)
 
 - Формат данных: `application/json`, для загрузки файлов – `multipart/form-data`
 
-- Аутентификация: все запросы, кроме `/auth/*` и `/health`, требуют заголовок  
+- Аутентификация: все запросы, кроме `/auth/*` и `/system/health`, требуют заголовок  
   `Authorization: Bearer <access_token>`. Токен получается через `/auth/token`.
 
 - **Формат ответа Orchestrator Service** (публичное API для UI): все ответы Orchestrator оборачиваются в единую структуру:

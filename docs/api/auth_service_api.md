@@ -4,6 +4,13 @@
 
 Базовый путь: `/api/v1`
 
+### Группы
+
+| Группа | Описание |
+|--------|----------|
+| `auth` | Аутентификация и профиль текущего пользователя |
+| `admin` | Управление пользователями, ролями и аудит |
+
 ### Содержание
 
 | Метод | Путь | Описание |
@@ -11,26 +18,22 @@
 | POST | `/auth/token` | username, password — получить JWT-токены доступа |
 | POST | `/auth/refresh` | refresh_token — обновить access-токен |
 | POST | `/auth/revoke` | refresh_token — отозвать refresh-токен |
-| GET | `/auth/me` | Профиль текущего пользователя (UI-формат: camelCase, с `availableTabs`, `permissions` как объект boolean) |
-| GET | `/users/me` | Профиль текущего пользователя |
-| GET | `/users` | ?role, search, limit, offset — список пользователей (админ) |
-| POST | `/users` | email, full_name, password, roles — создать пользователя (админ) |
-| GET | `/users/{user_id}` | Информация о пользователе |
-| PUT | `/users/{user_id}` | обновляемые поля — обновить пользователя |
-| PATCH | `/users/{user_id}` | обновляемые поля — частичное обновление (например, только role) |
-| DELETE | `/users/{user_id}` | Деактивировать пользователя |
-| GET | `/roles` | Список ролей |
-| POST | `/roles` | name, permissions — создать роль |
-| GET | `/audit` | ?user_id, action, date_from, date_to, limit, offset — журнал действий (аудит) |
-| GET | `/admin/users` | Алиас для `GET /users` |
-| PATCH | `/admin/users/{user_id}` | Алиас для `PATCH /users/{user_id}` (изменение роли) |
-| GET | `/admin/audit-log` | Алиас для `GET /audit` |
+| GET | `/auth/me` | Профиль текущего пользователя (UI-формат: camelCase) |
+| GET | `/admin/users` | ?role, search, limit, offset — список пользователей |
+| POST | `/admin/users` | email, full_name, password, roles — создать пользователя |
+| GET | `/admin/users/{user_id}` | Информация о пользователе |
+| PUT | `/admin/users/{user_id}` | обновляемые поля — обновить пользователя |
+| PATCH | `/admin/users/{user_id}` | обновляемые поля — частичное обновление (например, только role) |
+| DELETE | `/admin/users/{user_id}` | Деактивировать пользователя |
+| GET | `/admin/roles` | Список ролей |
+| POST | `/admin/roles` | name, permissions — создать роль |
+| GET | `/admin/audit` | ?user_id, action, date_from, date_to, limit, offset — журнал действий (аудит) |
 
 ---
 
-### Аутентификация
+## Группа auth
 
-#### POST /auth/token
+### POST /auth/token
 
 Получение пары JWT‑токенов (access + refresh).
 
@@ -113,8 +116,6 @@
 }
 ```
 
-### Аутентификация (UI-формат)
-
 #### GET /auth/me
 
 Профиль текущего пользователя в формате, ожидаемом frontend. CamelCase-поля, `availableTabs` и `permissions` как объект boolean.
@@ -153,39 +154,9 @@
 
 ---
 
-### Пользователи
+## Группа admin
 
-#### GET /users/me
-
-Профиль текущего пользователя.
-
-**Ответ `200`**:
-
-```json
-{
-  "user_id": "u-001",
-  "email": "ivanov@example.com",
-  "full_name": "Иванов И.И.",
-  "position": "Инженер-конструктор",
-  "roles": ["engineer"],
-  "permissions": ["documents:read", "search"],
-  "last_login_at": "2026-05-01T08:20:00Z",
-  "created_at": "2025-12-01T08:00:00Z"
-}
-```
-
-| Поле | Тип | Описание |
-|------|-----|----------|
-| `user_id` | string | ID пользователя |
-| `email` | string | Email |
-| `full_name` | string | Полное имя |
-| `position` | string | Должность |
-| `roles` | string[] | Роли |
-| `permissions` | string[] | Права доступа |
-| `last_login_at` | string | Дата последнего входа (ISO 8601) |
-| `created_at` | string | Дата создания (ISO 8601) |
-
-#### GET /users
+### GET /admin/users
 
 Список пользователей (только администратор).
 
@@ -213,7 +184,7 @@
 }
 ```
 
-#### POST /users
+### POST /admin/users
 
 Создание пользователя (админ).
 
@@ -235,9 +206,9 @@
 | `password` | string | Да | Пароль |
 | `roles` | string[] | Да | Роли пользователя |
 
-**Ответ `201`** — объект пользователя (см. `GET /users/{user_id}`).
+**Ответ `201`** — объект пользователя.
 
-#### GET /users/{user_id}
+### GET /admin/users/{user_id}
 
 Детали пользователя.
 
@@ -258,7 +229,7 @@
 }
 ```
 
-#### PUT /users/{user_id}
+### PUT /admin/users/{user_id}
 
 Обновление данных пользователя (админ). Поля в теле опциональны.
 
@@ -276,7 +247,7 @@
 
 **Ответ `200`** — обновлённый объект пользователя.
 
-#### PATCH /users/{user_id}
+### PATCH /admin/users/{user_id}
 
 Частичное обновление пользователя (админ). Отличается от PUT тем, что обновляются только переданные поля.
 
@@ -301,7 +272,7 @@
 }
 ```
 
-#### DELETE /users/{user_id}
+### DELETE /admin/users/{user_id}
 
 Деактивация пользователя (админ).
 
@@ -315,9 +286,7 @@
 }
 ```
 
-### Роли
-
-#### GET /roles
+### GET /admin/roles
 
 Список ролей.
 
@@ -336,7 +305,7 @@
 }
 ```
 
-#### POST /roles
+### POST /admin/roles
 
 Создание роли (админ).
 
@@ -356,13 +325,11 @@
 
 **Ответ `201`** — объект роли.
 
-### Аудит
-
-#### GET /audit
+### GET /admin/audit
 
 Журнал аудита (администратор/аудитор).
 
-**Параметры query**: `user_id`, `action` (например, `document.upload`), `date_from`, `date_to`, `limit`, `offset`.
+**Параметры query**: `user_id`, `action` (например, `document.upload`, `role.change`), `date_from`, `date_to`, `limit`, `offset`.
 
 **Ответ `200`**:
 
@@ -383,42 +350,6 @@
   "total": 150
 }
 ```
-
----
-
-## Администрирование (UI-алиасы)
-
-Алиасы для доступа из frontend. Внутренняя реализация — вызовы `GET /users`, `PATCH /users/{user_id}`, `GET /audit`.
-
-### GET /admin/users
-
-Псевдоним для `GET /users`. Список пользователей в формате UI.
-
-**Параметры query**: `role`, `search`, `limit`, `offset`.
-
-**Ответ `200`**: Аналогичен `GET /users`.
-
-### PATCH /admin/users/{user_id}
-
-Псевдоним для `PATCH /users/{user_id}`. Изменение роли пользователя.
-
-**Запрос**:
-
-```json
-{
-  "role": "knowledge_admin"
-}
-```
-
-**Ответ `200`**: Аналогичен `PATCH /users/{user_id}`.
-
-### GET /admin/audit-log
-
-Псевдоним для `GET /audit`. Административный журнал.
-
-**Параметры query**: `user_id`, `action`, `date_from`, `date_to`, `limit`, `offset`.
-
-**Ответ `200`**: Аналогичен `GET /audit`.
 
 ---
 
