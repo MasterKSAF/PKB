@@ -354,10 +354,10 @@ Frontend показывает список найденных фрагменто
 
 ### Реестр документов
 
-Запрос списка:
+Запрос списка (с фильтрацией по статусу, типу, пользователю):
 
 ```http
-GET /documents
+GET /documents?userId=u-001&status=processed&type=nsi
 ```
 
 Ответ:
@@ -382,6 +382,8 @@ GET /documents
         "pages": 320,
         "ocrStatus": "completed",
         "indexStatus": "ready",
+        "userId": "u-001",
+        "uploadedBy": "Иванов И.И.",
         "updatedAt": "2026-05-01T10:30:00Z"
       }
     ]
@@ -390,12 +392,14 @@ GET /documents
 }
 ```
 
-Загрузка документа:
+Загрузка документа (асинхронно, HTTP 202 — принят в обработку):
 
 ```http
 POST /documents
 Content-Type: multipart/form-data
 ```
+
+`userId` определяется из токена аутентификации, не передаётся в теле.
 
 Ответ:
 
@@ -405,9 +409,48 @@ Content-Type: multipart/form-data
   "data": {
     "documentId": "doc-129",
     "uploadStatus": "uploaded",
+    "userId": "u-001",
     "jobId": "job-ocr-554",
     "ocrStatus": "queued",
     "indexStatus": "not_started"
+  },
+  "error": null
+}
+```
+
+Очередь обработки текущего пользователя:
+
+```http
+GET /documents/queue
+```
+
+Возвращает документы пользователя со статусами `queued` и `processing`. Позволяет UI показать индикаторы загрузки для документов, которые ещё обрабатываются.
+
+Ответ:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "queue": [
+      {
+        "documentId": "doc-129",
+        "title": "21900M2_spec.pdf",
+        "type": "specification",
+        "status": "processing",
+        "progressPercent": 41.7,
+        "steps": {
+          "ocr": "in_progress",
+          "layoutParsing": "pending",
+          "indexing": "pending"
+        },
+        "userId": "u-001",
+        "uploadedBy": "Иванов И.И.",
+        "startedAt": "2026-04-27T10:00:30Z",
+        "estimatedCompletion": "2026-04-27T10:06:00Z"
+      }
+    ],
+    "totalInQueue": 3
   },
   "error": null
 }
