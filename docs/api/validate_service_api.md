@@ -10,13 +10,9 @@
 
 | Группа | Описание |
 |--------|----------|
-| `extract` | Извлечение параметров из документов |
-| `check` | Проверка текста по правилам |
-| `compare` | Сопоставление нормы и проектных данных |
-| `calculate` | Арифметический движок |
-| `recommend` | Рекомендации по исправлению |
+| `validate` | Все endpoint'ы сервиса валидации |
 
-### POST /extract/parameters
+### POST /validate/extract/parameters
 
 Извлечение структурированных параметров из документов.
 
@@ -38,7 +34,7 @@
 
 **Ответ `200`**: Структура параметров (см. `GET /documents/{doc_id}/parameters`) + `processing_time_ms`.
 
-### POST /check
+### POST /validate/check
 
 Выполнение заданного набора проверок над текстом.
 
@@ -75,7 +71,7 @@
 }
 ```
 
-### POST /calculate
+### POST /validate/calculate
 
 Арифметический движок для вычислений.
 
@@ -104,7 +100,7 @@
 }
 ```
 
-### POST /recommend
+### POST /validate/recommend
 
 Рекомендации по исправлению ошибок проверки.
 
@@ -139,7 +135,7 @@
 }
 ```
 
-### POST /compare
+### POST /validate/compare
 
 Сопоставление нормы и проектных данных (одиночное).
 
@@ -161,13 +157,13 @@
 
 **Ответ `200`**: Объект сопоставления + `comparison_id`.
 
-### GET /compare/{comparison_id}
+### GET /validate/compare/{comparison_id}
 
 Получение ранее созданного сопоставления.
 
 **Ответ `200`**: Объект сопоставления.
 
-### POST /compare/batch
+### POST /validate/compare/batch
 
 Массовое сопоставление пар фрагментов.
 
