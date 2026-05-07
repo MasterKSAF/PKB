@@ -31,7 +31,6 @@
 | `documents` | Документы: CRUD, поиск, очередь, просмотр, параметры |
 | `pages` | Просмотр страниц и текстового слоя |
 | `search` | Поиск фрагментов и вопросно-ответная система |
-| `chat` | Чат: единый endpoint для UI (`/chat`), упрощённый Q&A (`/chat/ask`) |
 | `validate` | Валидация: сопоставление норм и проекта (`/validate/compare`, `/validate/checks`) |
 
 ---
@@ -532,7 +531,7 @@ sequenceDiagram
 
 ### POST /chat/ask
 
-Упрощённый Q&A без управления сессиями — для разовых вопросов, когда не нужно сохранять историю диалога. Если требуется контекстная беседа с историей, используйте `POST /chat` (требует `session_id`).
+Упрощённый Q&A без управления сессиями — для разовых вопросов, когда не нужно сохранять историю диалога.
 
 **Запрос**:
 
@@ -856,115 +855,7 @@ sequenceDiagram
 | `ocr_queue` | string | Статус очереди OCR: `idle`, `processing`, `paused` |
 | `storage` | string | Статус хранилища: `online`, `offline` |
 
----
 
-## Группа chat
-
-### POST /chat
-
-Диалоговый Q&A с управлением сессиями. Для разовых вопросов без сохранения истории используйте `POST /chat/ask` (без `session_id`).
-
-**Запрос**:
-
-```json
-{
-  "question": "Какая минимальная толщина листа корпуса?",
-  "session_id": "chat-001",
-  "context": {
-    "project_id": "project-17",
-    "document_ids": ["doc-001", "doc-002"],
-    "nsi_version": "2026"
-  }
-}
-```
-
-`user_id` определяется из контекста аутентификации (`Authorization: Bearer`), не передаётся в теле запроса.
-
-| Поле | Тип | Обязательность | Описание |
-|------|-----|----------------|----------|
-| `question` | string | Да | Текст вопроса |
-| `session_id` | string | Да | ID сессии чата |
-| `context` | object | Нет | Контекст запроса |
-
-**Ответ `200`** (успешный ответ):
-
-```json
-{
-  "answer_id": "ans-001",
-  "status": "answered",
-  "message": null,
-  "answer_items": [
-    {
-      "number": 1,
-      "text": "Минимальная толщина листа не должна определяться отдельно от проекта. Ее нужно проверять по району корпуса, материалу и расчетной нагрузке.",
-      "citations": [
-        {
-          "citation_id": "cit-001",
-          "document_id": "doc-001",
-          "document_title": "Правила классификации и постройки морских судов",
-          "section": "Корпус",
-          "page": 45,
-          "fragment": "Фрагмент текста, на котором основан ответ.",
-          "page_preview_url": "/documents/doc-001/pages/45/preview",
-          "document_url": "/documents/doc-001/file"
-        }
-      ]
-    }
-  ],
-  "latency_ms": 1420
-}
-```
-
-**Ответ `200`** (недостаточно данных):
-
-```json
-{
-  "answer_id": "ans-002",
-  "status": "needs_clarification",
-  "message": "Уточните проект, район корпуса и тип судна.",
-  "missing_fields": ["project_id", "hull_area", "vessel_type"],
-  "answer_items": []
-}
-```
-
-**Ответ `200`** (конфликт источников):
-
-```json
-{
-  "answer_id": "ans-003",
-  "status": "source_conflict",
-  "message": "Найдены разные требования в двух редакциях документа.",
-  "conflicts": [
-    {
-      "document_id": "doc-001",
-      "document_title": "НСИ, редакция 2024",
-      "page": 45,
-      "value": "8 мм"
-    },
-    {
-      "document_id": "doc-002",
-      "document_title": "НСИ, редакция 2026",
-      "page": 47,
-      "value": "10 мм"
-    }
-  ],
-  "answer_items": []
-}
-```
-
-| Поле | Тип | Описание |
-|------|-----|----------|
-| `answer_id` | string | ID ответа |
-| `status` | string | `answered`, `needs_clarification`, `source_conflict` |
-| `message` | string|null | Сообщение пользователю |
-| `answer_items` | array | Список пунктов ответа (с citations) |
-| `missing_fields` | string[]|null | Поля для уточнения |
-| `conflicts` | object[]|null | Конфликтующие источники |
-| `latency_ms` | int | Время обработки |
-
-> Внутренняя реализация: создаёт сессию через Query Service (`POST /chat/sessions`) при первом запросе, отправляет сообщение (`POST /chat/sessions/{session_id}/messages`) и маппит ответ в UI-формат. Статусы `needs_clarification` и `source_conflict` проксируются из Query Service.
-
----
 
 ## Группа validate
 

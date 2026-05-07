@@ -42,6 +42,7 @@
 | POST | `/chat/sessions/{session_id}/context` | Управление контекстом |
 | POST | `/chat/sessions/{session_id}/export` | Экспорт диалога |
 | POST | `/chat/feedback` | Обратная связь по ответу |
+| POST | `/chat` | Отправить вопрос (UI-формат, единый endpoint для диалогового Q&A с автосозданием сессии) |
 | GET | `/chat/history` | Журнал запросов (плоский список) |
 | GET | `/chat/history/export` | Экспорт истории |
 | POST | `/text/search` | Поиск по произвольному тексту |
@@ -499,6 +500,112 @@
   "created_at": "2026-04-27T14:35:00Z"
 }
 ```
+
+### POST /chat
+
+Единый endpoint для диалогового Q&A с управлением сессиями. При первом запросе автоматически создаёт сессию, при последующих — использует переданный `session_id`.
+
+**Запрос**:
+
+```json
+{
+  "question": "Какая минимальная толщина листа корпуса?",
+  "session_id": "sess-a1b2c3",
+  "context": {
+    "project_id": "project-17",
+    "document_ids": ["doc-norm-001", "doc-draw-001"],
+    "nsi_version": "2026"
+  }
+}
+```
+
+`user_id` определяется из контекста аутентификации (`Authorization: Bearer`), не передаётся в теле запроса.
+
+| Поле | Тип | Обязательность | Описание |
+|------|-----|----------------|----------|
+| `question` | string | Да | Текст вопроса |
+| `session_id` | string | Нет | ID сессии чата. Если не указан или `null` — создаётся новая сессия |
+| `context` | object | Нет | Контекст запроса |
+
+**Ответ `200`** (успешный ответ):
+
+```json
+{
+  "answer_id": "ans-001",
+  "session_id": "sess-a1b2c3",
+  "status": "answered",
+  "message": null,
+  "answer_items": [
+    {
+      "number": 1,
+      "text": "Минимальная толщина листа не должна определяться отдельно от проекта. Ее нужно проверять по району корпуса, материалу и расчетной нагрузке.",
+      "citations": [
+        {
+          "citation_id": "cit-001",
+          "document_id": "doc-norm-001",
+          "document_title": "Правила классификации и постройки морских судов",
+          "section": "Корпус",
+          "page": 45,
+          "fragment": "Фрагмент текста, на котором основан ответ.",
+          "page_preview_url": "/documents/doc-norm-001/pages/45/preview",
+          "document_url": "/documents/doc-norm-001/file"
+        }
+      ]
+    }
+  ],
+  "latency_ms": 1420
+}
+```
+
+**Ответ `200`** (недостаточно данных):
+
+```json
+{
+  "answer_id": "ans-002",
+  "session_id": "sess-a1b2c3",
+  "status": "needs_clarification",
+  "message": "Уточните проект, район корпуса и тип судна.",
+  "missing_fields": ["project_id", "hull_area", "vessel_type"],
+  "answer_items": []
+}
+```
+
+**Ответ `200`** (конфликт источников):
+
+```json
+{
+  "answer_id": "ans-003",
+  "session_id": "sess-a1b2c3",
+  "status": "source_conflict",
+  "message": "Найдены разные требования в двух редакциях документа.",
+  "conflicts": [
+    {
+      "document_id": "doc-norm-001",
+      "document_title": "НСИ, редакция 2024",
+      "page": 45,
+      "value": "8 мм"
+    },
+    {
+      "document_id": "doc-norm-002",
+      "document_title": "НСИ, редакция 2026",
+      "page": 47,
+      "value": "10 мм"
+    }
+  ],
+  "answer_items": []
+}
+```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `answer_id` | string | ID ответа |
+| `session_id` | string | ID сессии (новая, если не была указана) |
+| `status` | string | `answered`, `needs_clarification`, `source_conflict` |
+| `message` | string|null | Сообщение пользователю |
+| `answer_items` | array | Список пунктов ответа (с citations) |
+| `missing_fields` | string[]|null | Поля для уточнения |
+| `conflicts` | object[]|null | Конфликтующие источники |
+| `latency_ms` | int | Время обработки |
 
 ---
 
