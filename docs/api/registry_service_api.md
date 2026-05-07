@@ -2,29 +2,22 @@
 
 Сервис управления справочными данными НСИ: классификаторы, терминология, реестр документов.
 
-Базовый путь: `/api/v1/registry`
+*Внутренний сервис. Не предназначен для прямого вызова из frontend.*
+
+Базовый путь: `/api/v1`
 
 ### Формат ответа
 
-Успех:
-
-```json
-{
-  "success": true,
-  "data": { ... },
-  "error": null
-}
-```
+Успех — данные возвращаются напрямую (поле `data` опционально, используется для группировки с `meta`).
 
 Ошибка:
 
 ```json
 {
-  "success": false,
-  "data": null,
   "error": {
     "code": "CLASSIFIER_NOT_FOUND",
-    "message": "Классификатор с кодом 'OKS_99_999' не найден"
+    "message": "Классификатор с кодом 'OKS_99_999' не найден",
+    "details": {}
   }
 }
 ```
@@ -41,17 +34,10 @@
 }
 ```
 
-Параметры пагинации для всех list-эндпоинтов:
-
-| Параметр | Тип | По умолчанию | Описание |
-|----------|-----|-------------|----------|
-| `page` | int | 1 | Номер страницы |
-| `page_size` | int | 50 | Записей на странице (max 200) |
-
 ### Коды ошибок
 
-| HTTP-код | Код ошибки | Описание |
-|----------|-----------|----------|
+| HTTP-код | Код ошибки (`error.code`) | Описание |
+|----------|--------------------------|----------|
 | 400 | `VALIDATION_ERROR` | Некорректные входные данные |
 | 404 | `CLASSIFIER_NOT_FOUND` | Узел классификатора не найден |
 | 404 | `TERM_NOT_FOUND` | Термин не найден |
@@ -72,7 +58,7 @@
 
 ---
 
-## 1. Классификаторы
+## Группа classifiers
 
 ### 1.1. Список (плоский)
 
@@ -96,7 +82,6 @@ GET /registry/classifiers
 
 ```json
 {
-  "success": true,
   "data": [
     {
       "code": "OKS_47_020",
@@ -111,7 +96,6 @@ GET /registry/classifiers
       "updated_at": "2026-04-01T14:22:00Z"
     }
   ],
-  "error": null,
   "meta": { "total": 43, "page": 1, "page_size": 50 }
 }
 ```
@@ -134,7 +118,6 @@ GET /registry/classifiers/tree
 
 ```json
 {
-  "success": true,
   "data": [
     {
       "code": "OKS_47",
@@ -154,7 +137,6 @@ GET /registry/classifiers/tree
       ]
     }
   ],
-  "error": null,
   "meta": { "total": 2, "max_depth_reached": false }
 }
 ```
@@ -228,8 +210,6 @@ DELETE /registry/classifiers/{code}
 
 ```json
 {
-  "success": false,
-  "data": null,
   "error": {
     "code": "HAS_CHILDREN",
     "message": "Нельзя удалить: узел имеет 3 дочерних. Используйте force=true"
@@ -268,21 +248,19 @@ POST /registry/classifiers/import
 
 ```json
 {
-  "success": true,
   "data": {
     "inserted": 152,
     "updated": 10,
     "errors": [
       { "row": 5, "code": "OKS_XX", "message": "Код уже существует" }
     ]
-  },
-  "error": null
+  }
 }
 ```
 
 ---
 
-## 2. Термины
+## Группа terminology
 
 ### 2.1. Список
 
@@ -303,7 +281,6 @@ GET /registry/terminology
 
 ```json
 {
-  "success": true,
   "data": [
     {
       "term_id": 1,
@@ -314,7 +291,6 @@ GET /registry/terminology
       "created_at": "2026-02-10T09:00:00Z"
     }
   ],
-  "error": null,
   "meta": { "total": 1, "page": 1, "page_size": 50 }
 }
 ```
@@ -386,7 +362,7 @@ POST /registry/terminology/import
 
 ---
 
-## 3. Реестр документов НСИ
+## Группа documents
 
 ### 3.1. Список
 
@@ -410,7 +386,6 @@ GET /registry/documents
 
 ```json
 {
-  "success": true,
   "data": [
     {
       "doc_id": 1,
@@ -425,7 +400,6 @@ GET /registry/documents
       "updated_at": "2026-03-15T16:30:00Z"
     }
   ],
-  "error": null,
   "meta": { "total": 1, "page": 1, "page_size": 50 }
 }
 ```
@@ -507,7 +481,7 @@ POST /registry/documents/import
 
 ---
 
-## 4. Общие
+## Группа common
 
 ### 4.1. Статистика
 
@@ -519,20 +493,18 @@ GET /registry/stats
 
 ```json
 {
-  "success": true,
   "data": {
-    "classifiers_total": 287,
-    "terminology_total": 1204,
-    "documents_total": 56,
-    "documents_by_status": {
-      "draft": 10,
-      "active": 30,
-      "obsolete": 5,
-      "need_to_buy": 8,
-      "searching": 3
-    }
-  },
-  "error": null
+  "classifiers_total": 287,
+  "terminology_total": 1204,
+  "documents_total": 56,
+  "documents_by_status": {
+    "draft": 10,
+    "active": 30,
+    "obsolete": 5,
+    "need_to_buy": 8,
+    "searching": 3
+  }
+  }
 }
 ```
 
@@ -548,27 +520,25 @@ GET /registry/enums
 
 ```json
 {
-  "success": true,
   "data": {
-    "doc_type": ["OKS", "GOST", "GOST_R", "OST", "TU", "ISO", "FSN"],
-    "jurisdiction": ["RF", "EAES", "INTL", "US", "EU", "DE"],
-    "language": ["ru", "en", "de"],
-    "document_status": ["draft", "active", "obsolete", "need_to_buy", "searching"],
-    "context": ["Общий", "Судостроение", "Электроника", "Металлургия", "Строительство"],
-    "file_document_type": ["normative", "archival_scan", "drawing", "specification"],
-    "file_document_status": ["queued", "processing", "processed", "error"],
-    "check_result_status": ["OK", "WARNING", "ERROR"],
-    "match_status": ["match", "possible_discrepancy", "not_found_in_project", "not_found_in_norm", "insufficient_data"],
-    "ocr_engine": ["paddleocr", "tesseract"],
-    "chat_status": ["answered", "needs_clarification", "source_conflict"]
-  },
-  "error": null
+  "doc_type": ["OKS", "GOST", "GOST_R", "OST", "TU", "ISO", "FSN"],
+  "jurisdiction": ["RF", "EAES", "INTL", "US", "EU", "DE"],
+  "language": ["ru", "en", "de"],
+  "document_status": ["draft", "active", "obsolete", "need_to_buy", "searching"],
+  "context": ["Общий", "Судостроение", "Электроника", "Металлургия", "Строительство"],
+  "file_document_type": ["normative", "archival_scan", "drawing", "specification"],
+  "file_document_status": ["queued", "processing", "processed", "error"],
+  "check_result_status": ["OK", "WARNING", "ERROR"],
+  "match_status": ["match", "possible_discrepancy", "not_found_in_project", "not_found_in_norm", "insufficient_data"],
+  "ocr_engine": ["paddleocr", "tesseract"],
+  "chat_status": ["answered", "needs_clarification", "source_conflict"]
+  }
 }
 ```
 
 ---
 
-## 5. Модели данных
+## Модели данных
 
 Таблицы находятся в общей БД, доступны напрямую всем сервисам.
 
@@ -615,7 +585,7 @@ GET /registry/enums
 
 ---
 
-## 6. Примечания
+## Примечания
 
 1. **DB shared:** Все таблицы registry находятся в общей БД. Другие сервисы читают их напрямую без вызова Registry Service.
 2. **Импорт:** Все форматы файлов — `.xlsx` и `.csv`. Параметр `mapping` определяет соответствие колонок файла полям модели.

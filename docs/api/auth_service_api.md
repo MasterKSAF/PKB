@@ -11,6 +11,24 @@
 | `auth` | Аутентификация и профиль текущего пользователя |
 | `admin` | Управление пользователями, ролями и аудит |
 
+### Формат ответа
+
+Успех — данные возвращаются напрямую (поле `data` опционально).
+
+При ошибке:
+
+```json
+{
+  "error": {
+    "code": "USER_NOT_FOUND",
+    "message": "Пользователь не найден",
+    "details": {}
+  }
+}
+```
+
+Для списковых ответов `meta` содержит пагинацию на верхнем уровне.
+
 ### Содержание
 
 | Метод | Путь | Описание |
@@ -19,7 +37,7 @@
 | POST | `/auth/refresh` | refresh_token — обновить access-токен |
 | POST | `/auth/revoke` | refresh_token — отозвать refresh-токен |
 | GET | `/auth/me` | Профиль текущего пользователя (UI-формат: camelCase) |
-| GET | `/admin/users` | ?role, search, limit, offset — список пользователей |
+| GET | `/admin/users` | ?role, search, page, page_size — список пользователей |
 | POST | `/admin/users` | email, full_name, password, roles — создать пользователя |
 | GET | `/admin/users/{user_id}` | Информация о пользователе |
 | PUT | `/admin/users/{user_id}` | обновляемые поля — обновить пользователя |
@@ -27,7 +45,7 @@
 | DELETE | `/admin/users/{user_id}` | Деактивировать пользователя |
 | GET | `/admin/roles` | Список ролей |
 | POST | `/admin/roles` | name, permissions — создать роль |
-| GET | `/admin/audit` | ?user_id, action, date_from, date_to, limit, offset — журнал действий (аудит) |
+| GET | `/admin/audit` | ?user_id, action, date_from, date_to, page, page_size — журнал действий (аудит) |
 
 ---
 
@@ -118,7 +136,7 @@
 
 #### GET /auth/me
 
-Профиль текущего пользователя в формате, ожидаемом frontend. CamelCase-поля, `availableTabs` и `permissions` как объект boolean.
+Профиль текущего пользователя в формате frontend. Поля `available_tabs` и `permissions` как объект boolean.
 
 **Ответ `200`**:
 
@@ -163,7 +181,7 @@
 
 Список пользователей (только администратор).
 
-**Параметры query**: `role`, `search` (по имени/email), `limit`, `offset`.
+**Параметры query**: `role`, `search` (по имени/email), `page`, `page_size`.
 
 **Ответ `200`**:
 
@@ -181,9 +199,7 @@
       "created_at": "2025-12-01T08:00:00Z"
     }
   ],
-  "total": 42,
-  "limit": 20,
-  "offset": 0
+  "meta": { "total": 42, "page": 1, "page_size": 20 }
 }
 ```
 
@@ -332,7 +348,7 @@
 
 Журнал аудита (администратор/аудитор).
 
-**Параметры query**: `user_id`, `action` (например, `document.upload`, `role.change`), `date_from`, `date_to`, `limit`, `offset`.
+**Параметры query**: `user_id`, `action` (например, `document.upload`, `role.change`), `date_from`, `date_to`, `page`, `page_size`.
 
 **Ответ `200`**:
 
@@ -350,7 +366,7 @@
       "timestamp": "2026-04-27T09:30:00Z"
     }
   ],
-  "total": 150
+  "meta": { "total": 150, "page": 1, "page_size": 50 }
 }
 ```
 
@@ -370,7 +386,7 @@
 }
 ```
 
-**Ответ `200`**:
+**Ответ `200`** (токен действителен):
 
 ```json
 {
@@ -383,4 +399,14 @@
 }
 ```
 
-**Ошибки**: `401` — токен недействителен.
+**Ответ `401`** (токен недействителен):
+
+```json
+{
+  "error": {
+    "code": "INVALID_TOKEN",
+    "message": "Токен недействителен или истёк",
+    "details": {}
+  }
+}
+```

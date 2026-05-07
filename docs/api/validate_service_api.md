@@ -2,7 +2,33 @@
 
 Сервис валидации, извлечения параметров и сопоставления.
 
-### POST /extract/parameters
+*Внутренний сервис. Не предназначен для прямого вызова из frontend. Публичный API — в Orchestrator Service.*
+
+Базовый путь: `/api/v1`
+
+### Формат ответа
+
+Успех — данные возвращаются напрямую.
+
+При ошибке:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_FAILED",
+    "message": "Описание ошибки",
+    "details": {}
+  }
+}
+```
+
+### Группы
+
+| Группа | Описание |
+|--------|----------|
+| `validate` | Все endpoint'ы сервиса валидации |
+
+### POST /validate/extract/parameters
 
 Извлечение структурированных параметров из документов.
 
@@ -24,7 +50,7 @@
 
 **Ответ `200`**: Структура параметров (см. `GET /documents/{doc_id}/parameters`) + `processing_time_ms`.
 
-### POST /check
+### POST /validate/check
 
 Выполнение заданного набора проверок над текстом.
 
@@ -52,7 +78,7 @@
   "checks": [
     {
       "rule": "min_thickness_12mm",
-      "status": "fail",
+      "status": "ERROR",
       "message": "Толщина 10 мм меньше требования 12 мм",
       "details": "..."
     }
@@ -61,7 +87,7 @@
 }
 ```
 
-### POST /calculate
+### POST /validate/calculate
 
 Арифметический движок для вычислений.
 
@@ -90,7 +116,14 @@
 }
 ```
 
-### POST /recommend
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `expression` | string | Исходное выражение |
+| `result` | float | Результат вычисления |
+| `unit` | string | Единица измерения (определяется парсингом исходных операндов) |
+| `steps` | string[] | Пошаговое решение |
+
+### POST /validate/recommend
 
 Рекомендации по исправлению ошибок проверки.
 
@@ -125,7 +158,7 @@
 }
 ```
 
-### POST /compare
+### POST /validate/compare
 
 Сопоставление нормы и проектных данных (одиночное).
 
@@ -147,13 +180,13 @@
 
 **Ответ `200`**: Объект сопоставления + `comparison_id`.
 
-### GET /compare/{comparison_id}
+### GET /validate/compare/{comparison_id}
 
 Получение ранее созданного сопоставления.
 
 **Ответ `200`**: Объект сопоставления.
 
-### POST /compare/batch
+### POST /validate/compare/batch
 
 Массовое сопоставление пар фрагментов.
 
