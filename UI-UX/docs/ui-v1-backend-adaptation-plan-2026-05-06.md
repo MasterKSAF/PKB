@@ -13,6 +13,7 @@ Frontend должен ходить во внешние для UI слои:
 - `Auth Service` - вход, профиль, роли, права.
 - `Orchestrator Service` - документы, поиск, чат, проверка НСИ, preview, QA.
 - `Query Service` - чат-сессии, история, feedback.
+- `Registry Service` - классификаторы НСИ, терминология, реестр НСИ-документов.
 
 Напрямую в `rag`, `ocr`, `validate` UI не ходит, если backend не попросит отдельно.
 
@@ -36,6 +37,9 @@ Frontend должен ходить во внешние для UI слои:
 - добавить `Authorization: Bearer <token>`
 - добавить режимы `mock` и `real`
 - сделать адаптеры ответа backend в UI-формат
+- поддержать общий wrapper публичного API: `{ success, data, error, meta }`
+- все списковые ответы читать через `data`, пагинацию через `meta`
+- ошибки показывать из `error.code` и `error.message`
 
 Пока оставить:
 
@@ -82,6 +86,7 @@ API:
 - вкладки показывать по `available_tabs`
 - действия включать/выключать по `permissions`
 - не хранить финальные права только во frontend
+- учесть новые права: `can_manage_classifiers`, `can_manage_terminology`, `can_manage_registry`
 
 Пока оставить:
 
@@ -332,6 +337,13 @@ API:
 Спросить:
 
 - главный endpoint загрузки: `/documents` или `/files/upload`
+- как связать загруженный файл из `/documents` с карточкой НСИ-документа из `/registry/documents`
+
+Важно:
+
+- `/documents` - это фактические загруженные файлы, OCR, индексация, очередь обработки.
+- `/registry/documents` - это справочник НСИ-документов: название, номер, классификатор, статус, источник, примечания.
+- Эти две сущности нельзя смешивать в UI без явной связи от backend.
 
 ## 13. Проверка НСИ
 
@@ -398,6 +410,12 @@ API:
 - `PATCH /admin/users/{user_id}`
 - `GET /admin/roles`
 - `GET /admin/audit`
+- `GET /registry/classifiers`
+- `GET /registry/classifiers/tree`
+- `GET /registry/terminology`
+- `GET /registry/documents`
+- `GET /registry/stats`
+- `GET /registry/enums`
 
 Сделать:
 
@@ -406,12 +424,69 @@ API:
 - смену роли отправлять через `PATCH`
 - журнал брать из `/admin/audit`
 - после сохранения обновлять таблицу
+- если права позволяют, добавить управление НСИ-справочниками:
+- классификаторы НСИ
+- терминология
+- реестр документов НСИ
+- импорт/экспорт CSV/XLSX
 
 Пока оставить:
 
 - demo-сохранение в UI
 
-## 16. Файлы и загрузка
+Спросить:
+
+- Registry Service показываем отдельной вкладкой, внутри `Реестр` или внутри `Администрирование`
+- кто имеет права на классификаторы, терминологию и реестр НСИ
+- нужен ли пользователю только просмотр Registry или еще редактирование
+
+## 16. Registry Service / НСИ-справочники
+
+Где:
+
+- вероятно новый блок в `AdminPanel.tsx`
+- возможно отдельный будущий компонент `RegistryAdmin.tsx`
+- `http.ts`
+
+API:
+
+- `GET /registry/classifiers`
+- `GET /registry/classifiers/tree`
+- `POST /registry/classifiers`
+- `PATCH /registry/classifiers/{code}`
+- `DELETE /registry/classifiers/{code}`
+- `POST /registry/classifiers/import`
+- `GET /registry/terminology`
+- `GET /registry/terminology/normalize`
+- `POST /registry/terminology`
+- `POST /registry/terminology/import`
+- `GET /registry/documents`
+- `POST /registry/documents`
+- `PATCH /registry/documents/{doc_id}/status`
+- `GET /registry/documents/export`
+- `GET /registry/stats`
+- `GET /registry/enums`
+
+Сделать:
+
+- сначала добавить только просмотр: статистика, классификаторы, термины, НСИ-документы
+- редактирование и импорт включать только при правах `can_manage_registry`, `can_manage_classifiers`, `can_manage_terminology`
+- enum-значения брать из `/registry/enums`, не зашивать их во frontend
+- статусы НСИ-документов брать из Registry: `draft`, `active`, `obsolete`, `need_to_buy`, `searching`
+
+Пока оставить:
+
+- не внедрять в основной UI, пока не решим место этого блока
+- текущую вкладку `Реестр` оставить под `/documents`, OCR и индекс
+
+Спросить:
+
+- нужен ли Registry Service в MVP UI
+- нужен ли полноценный CRUD или только просмотр
+- кто отвечает за наполнение классификаторов и терминологии
+- должна ли проверка НСИ использовать `/registry/documents` как источник выбора НСИ
+
+## 17. Файлы и загрузка
 
 Где:
 
@@ -436,7 +511,7 @@ API:
 
 - загрузку в demo-режиме
 
-## 17. Что пока не трогать
+## 18. Что пока не трогать
 
 Не менять без необходимости:
 
@@ -449,7 +524,7 @@ API:
 - focus mode
 - светлую/темную тему
 
-## 18. Приоритеты
+## 19. Приоритеты
 
 ### Сначала
 
@@ -464,6 +539,7 @@ API:
 2. `feedbackApi`: `/chat/feedback`.
 3. `metricsApi`: `/monitor/metrics`.
 4. `adminApi`: users, roles, audit.
+5. `registryApi`: stats, enums, classifiers, terminology, registry documents.
 
 ### После этого
 
@@ -471,7 +547,7 @@ API:
 2. upload/reprocess документов.
 3. экспорт истории и проверки.
 
-## 19. Главные вопросы backend-команде
+## 20. Главные вопросы backend-команде
 
 1. UI ходит только в Orchestrator или в несколько сервисов?
 2. Какой финальный `BASE_URL` для frontend?
@@ -483,7 +559,12 @@ API:
 8. Какой endpoint загрузки документов главный?
 9. Как отдавать DOCX/XLSX/PPTX для preview?
 10. Какие поля обязательны для запуска проверки НСИ?
+11. Где в UI должен жить Registry Service: отдельная вкладка, `Реестр` или `Администрирование`?
+12. Как связываются `/documents` и `/registry/documents`?
+13. Какие операции Registry входят в MVP: просмотр, CRUD, импорт, экспорт?
 
-## 20. Короткий вывод
+## 21. Короткий вывод
 
 UI V1 оставляем базовой версией. Основная работа дальше - не перерисовка, а подключение реальных API через адаптеры. Самые заметные изменения для пользователя: нормальный вход, реальные роли, чат-сессии, продолжение истории и реальные документы в preview.
+
+Свежий Registry Service добавляет отдельный фронт работ по НСИ-справочникам. Его лучше не смешивать с текущим реестром OCR-документов, пока backend не объяснит связь между загруженными файлами и карточками НСИ-документов.
