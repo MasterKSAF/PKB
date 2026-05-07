@@ -12,12 +12,12 @@
 
 | Аспект | UI ожидает | API возвращает |
 |--------|-----------|----------------|
-| Обёртка успеха | `{"ok": true, "data": {…}, "error": null}` | Объект с данными напрямую (без `ok`/`data`/`error`) |
-| Обёртка ошибки | `{"ok": false, "data": null, "error": {"code": "DOCUMENT_NOT_FOUND", "message": "…"}}` | `{"error": {"code": 422, "code_name": "INVALID_FORMAT", "message": "…", "details": {}}}` |
+| Обёртка успеха | `{"success": true, "data": {…}, "error": null}` | Объект с данными напрямую (без `success`/`data`/`error`) |
+| Обёртка ошибки | `{"success": false, "data": null, "error": {"code": "DOCUMENT_NOT_FOUND", "message": "…"}}` | `{"error": {"code": 422, "code_name": "INVALID_FORMAT", "message": "…", "details": {}}}` |
 | HTTP-статус ошибки | Не оговорён | Числовой код дублируется в теле: `code: 422` |
 | Поле `code` | Строковый код (`"DOCUMENT_NOT_FOUND"`) | Числовой код (`422`) + строковый `code_name` |
 
-**Решение:** обернуть все ответы Orchestrator Service в единую структуру `{"ok": bool, "data": any, "error": {…}}`. Orchestrator — единственная точка входа для UI, поэтому обёртка добавляется именно в нём, а не во внутренних сервисах.
+**Решение:** обернуть все ответы в единую структуру `{"success": bool, "data": any, "error": {…}, "meta": {…}}`. Формат применяется во всех публичных API (Orchestrator + Registry Service).
 
 ---
 
@@ -50,7 +50,7 @@
 UI ожидает:
 ```json
 {
-  "ok": true,
+  "success": true,
   "data": {
     "answerId": "ans-001",
     "status": "answered|needs_clarification|source_conflict",
@@ -324,7 +324,7 @@ API принимает:
 
 Добавить следующие endpoints:
 
-1. **Обёртка ответов** — все ответы Orchestrator в формате `{"ok": bool, "data": …, "error": {…}}`
+1. **Обёртка ответов** — все ответы в формате `{"success": bool, "data": …, "error": {…}, "meta": {…}}`
 2. `GET /auth/me` — профиль текущего пользователя в UI-формате (camelCase, с `availableTabs`, `permissions` как объект boolean)
 3. `POST /chat` — единый endpoint для чата с поддержкой статусов `needs_clarification` и `source_conflict`
 4. `GET /search` — расширить существующий: добавить `pagePreviewUrl`, `documentUrl`, `relevance` вместо `score`
@@ -368,7 +368,7 @@ API принимает:
 **Вариант A (рекомендуется):** Создать в Orchestrator Service единые endpoint'ы для UI, которые:
 - Принимают формат, ожидаемый UI
 - Внутри маршрутизируют запросы к соответствующим сервисам (Auth, Query, RAG, Validation, OCR, Integration)
-- Возвращают ответы в формате UI с обёрткой `{"ok": …, "data": …, "error": …}`
+- Возвращают ответы в едином формате `{"success": …, "data": …, "error": …, "meta": …}`
 
 **Вариант B:** Адаптировать UI к существующему API (значительные изменения frontend, отказ от единого формата ответа).
 
@@ -399,7 +399,7 @@ API принимает:
 
 | # | Что сделать | Почему |
 |---|------------|--------|
-| 1 | Добавить обёртку `{"ok": bool, "data": …, "error": {…}}` на все ответы | Фундаментальное расхождение формата |
+| 1 | Добавить обёртку `{"success": bool, "data": …, "error": {…}, "meta": {…}}` на все ответы | Фундаментальное расхождение формата |
 | 2 | `GET /auth/me` — прокси `GET /users/me` из Auth Service, маппить поля (snake → camel), добавить `position`, `roleTitle`, `availableTabs`, `permissions` как boolean-object на основе роли | Аутентификация и роли в UI-формате |
 | 3 | `GET /health` — добавить вычисляемые поля `database`, `searchIndex`, `ocrQueue`, `storage` на основе `services.*` | UI ожидает конкретные ключи |
 | 4 | `POST /chat` — новый эндпоинт: принять UI-формат, внутри вызвать Query Service (создать сессию → отправить сообщение), смаппить ответ в `answerItems` с `citations` и `citationId`, сгенерировать `pagePreviewUrl` и `documentUrl` | Основной сценарий чата |

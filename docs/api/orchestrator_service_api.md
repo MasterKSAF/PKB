@@ -10,7 +10,7 @@
 
 ```json
 {
-  "ok": true,
+  "success": true,
   "data": { ... },
   "error": null
 }
@@ -20,7 +20,7 @@
 
 ```json
 {
-  "ok": false,
+  "success": false,
   "data": null,
   "error": {
     "code": "DOCUMENT_NOT_FOUND",
@@ -29,7 +29,19 @@
 }
 ```
 
-> Ниже в примерах ответов показано содержимое поля `data` (без внешней обёртки `ok`/`error`).
+Для списковых ответов `meta` содержит пагинацию:
+
+```json
+{
+  "meta": {
+    "total": 150,
+    "page": 1,
+    "page_size": 50
+  }
+}
+```
+
+> Ниже в примерах ответов показано содержимое поля `data` (без внешней обёртки `success`/`error`/`meta`).
 
 ### Группы
 

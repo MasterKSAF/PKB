@@ -133,7 +133,10 @@
   "permissions": {
     "can_upload_documents": false,
     "can_run_ocr": false,
-    "can_manage_users": false
+    "can_manage_users": false,
+    "can_manage_classifiers": false,
+    "can_manage_terminology": false,
+    "can_manage_registry": false
   },
   "last_login_at": "2026-05-01T08:20:00Z",
   "created_at": "2025-12-01T08:00:00Z"
