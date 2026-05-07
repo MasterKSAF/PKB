@@ -2,6 +2,8 @@
 
 Сервис управления справочными данными НСИ: классификаторы, терминология, реестр документов.
 
+*Внутренний сервис. Не предназначен для прямого вызова из frontend.*
+
 Базовый путь: `/api/v1`
 
 ### Формат ответа
@@ -10,7 +12,7 @@
 
 ```json
 {
-  "success": true,
+  "ok": true,
   "data": { ... },
   "error": null
 }
@@ -20,7 +22,7 @@
 
 ```json
 {
-  "success": false,
+  "ok": false,
   "data": null,
   "error": {
     "code": "CLASSIFIER_NOT_FOUND",
@@ -72,7 +74,7 @@
 
 ---
 
-## 1. Классификаторы
+## Группа classifiers
 
 ### 1.1. Список (плоский)
 
@@ -96,7 +98,7 @@ GET /registry/classifiers
 
 ```json
 {
-  "success": true,
+  "ok": true,
   "data": [
     {
       "code": "OKS_47_020",
@@ -134,7 +136,7 @@ GET /registry/classifiers/tree
 
 ```json
 {
-  "success": true,
+  "ok": true,
   "data": [
     {
       "code": "OKS_47",
@@ -228,7 +230,7 @@ DELETE /registry/classifiers/{code}
 
 ```json
 {
-  "success": false,
+  "ok": false,
   "data": null,
   "error": {
     "code": "HAS_CHILDREN",
@@ -268,7 +270,7 @@ POST /registry/classifiers/import
 
 ```json
 {
-  "success": true,
+  "ok": true,
   "data": {
     "inserted": 152,
     "updated": 10,
@@ -282,7 +284,7 @@ POST /registry/classifiers/import
 
 ---
 
-## 2. Термины
+## Группа terminology
 
 ### 2.1. Список
 
@@ -303,7 +305,7 @@ GET /registry/terminology
 
 ```json
 {
-  "success": true,
+  "ok": true,
   "data": [
     {
       "term_id": 1,
@@ -386,7 +388,7 @@ POST /registry/terminology/import
 
 ---
 
-## 3. Реестр документов НСИ
+## Группа documents
 
 ### 3.1. Список
 
@@ -410,7 +412,7 @@ GET /registry/documents
 
 ```json
 {
-  "success": true,
+  "ok": true,
   "data": [
     {
       "doc_id": 1,
@@ -507,7 +509,7 @@ POST /registry/documents/import
 
 ---
 
-## 4. Общие
+## Группа common
 
 ### 4.1. Статистика
 
@@ -519,7 +521,7 @@ GET /registry/stats
 
 ```json
 {
-  "success": true,
+  "ok": true,
   "data": {
     "classifiers_total": 287,
     "terminology_total": 1204,
@@ -548,7 +550,7 @@ GET /registry/enums
 
 ```json
 {
-  "success": true,
+  "ok": true,
   "data": {
     "doc_type": ["OKS", "GOST", "GOST_R", "OST", "TU", "ISO", "FSN"],
     "jurisdiction": ["RF", "EAES", "INTL", "US", "EU", "DE"],
@@ -568,7 +570,7 @@ GET /registry/enums
 
 ---
 
-## 5. Модели данных
+## Модели данных
 
 Таблицы находятся в общей БД, доступны напрямую всем сервисам.
 
@@ -615,7 +617,7 @@ GET /registry/enums
 
 ---
 
-## 6. Примечания
+## Примечания
 
 1. **DB shared:** Все таблицы registry находятся в общей БД. Другие сервисы читают их напрямую без вызова Registry Service.
 2. **Импорт:** Все форматы файлов — `.xlsx` и `.csv`. Параметр `mapping` определяет соответствие колонок файла полям модели.

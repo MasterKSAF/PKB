@@ -50,12 +50,14 @@
 | `system` | Служебные методы: health |
 | `monitor` | Мониторинг и метрики |
 | `documents` | Документы: CRUD, поиск, очередь, просмотр, параметры |
+| `pages` | Просмотр страниц и текстового слоя |
+| `search` | Поиск фрагментов и вопросно-ответная система |
 | `chat` | Чат: единый endpoint для UI (`/chat`), упрощённый Q&A (`/chat/ask`) |
-| `validate` | Валидация: сопоставление норм и проекта, проверки НСИ |
+| `validate` | Валидация: сопоставление норм и проекта (`/validate/compare`, `/validate/checks`) |
 
 ---
 
-## 1. Документы
+## Группа documents
 
 ### POST /documents
 
@@ -487,7 +489,7 @@ sequenceDiagram
 
 ---
 
-## 2. Поиск и вопросно-ответная система
+## Группа search
 
 ### POST /documents/search
 
@@ -612,7 +614,7 @@ sequenceDiagram
 
 ---
 
-## 3. Просмотр документа и фрагментов
+## Группа pages
 
 ### GET /documents/{doc_id}/pages/{page_num}
 
@@ -684,11 +686,11 @@ sequenceDiagram
 }
 ```
 
----
 
-## 4. Извлечение параметров и сопоставление
 
 ### GET /documents/{doc_id}/parameters
+
+Извлечённые структурированные параметры документа. Относится к группе `documents`.
 
 Извлечённые структурированные параметры документа.
 
@@ -726,7 +728,7 @@ sequenceDiagram
 
 Запуск сопоставления нормы и проектного документа (низкоуровневый, асинхронный).
 
-> Для UI используется синхронный endpoint `POST /checks` (см. раздел 7), который внутри вызывает `POST /validate/compare` / `POST /compare/batch` и агрегирует результат.
+> Для UI используется синхронный endpoint `POST /validate/checks` (см. группу `validate`), который внутри вызывает `POST /validate/compare` / `POST /compare/batch` и агрегирует результат.
 
 **Запрос** (вариант 1 — по запросу):
 
@@ -808,7 +810,7 @@ sequenceDiagram
 
 ---
 
-## 5. Служебные методы
+## Группа system
 
 ### GET /system/health
 
@@ -844,7 +846,7 @@ sequenceDiagram
 
 ---
 
-## 6. Чат
+## Группа chat
 
 ### POST /chat
 
@@ -952,7 +954,7 @@ sequenceDiagram
 
 ---
 
-## 7. Проверка на соответствие требованиям НСИ
+## Группа validate
 
 ### POST /validate/checks
 
@@ -1045,11 +1047,11 @@ sequenceDiagram
 
 ---
 
-## 8. QA Метрики
+## Группа monitor
 
 ### GET /monitor/metrics
 
-Метрики контроля качества системы.
+Метрики контроля качества системы. Относится к группе `monitor`.
 
 **Ответ `200`**:
 
