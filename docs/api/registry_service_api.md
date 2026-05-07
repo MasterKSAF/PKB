@@ -84,6 +84,8 @@ GET /registry/classifiers
 | `language` | string | Нет | Фильтр по языку |
 | `is_thematic` | bool | Нет | true/false — только тематические |
 | `parent_code` | string | Нет | Дочерние узлы указанного узла |
+| `page` | int | Нет | Номер страницы |
+| `page_size` | int | Нет | Записей на странице (max 200) |
 
 **Ответ (200):**
 
@@ -283,6 +285,8 @@ GET /registry/terminology
 | `normalized_term` | string | Нет | Поиск по normalized_term |
 | `context` | string | Нет | Точное совпадение контекста |
 | `source` | string | Нет | Поиск по источнику |
+| `page` | int | Нет | Номер страницы |
+| `page_size` | int | Нет | Записей на странице (max 200) |
 
 **Ответ (200):**
 
@@ -388,6 +392,8 @@ GET /registry/documents
 | `source` | string | Нет | Поиск по источнику |
 | `date_from` | date | Нет | Созданы после (YYYY-MM-DD) |
 | `date_to` | date | Нет | Созданы до |
+| `page` | int | Нет | Номер страницы |
+| `page_size` | int | Нет | Записей на странице (max 200) |
 
 **Ответ (200):**
 
