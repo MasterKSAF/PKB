@@ -24,7 +24,7 @@ uvicorn main:app --reload --port 8100
 ## 1. Классификаторы
 | METHOD | EndPoint                      | Описание                | Статус | Коментарии    |
 |--------|-------------------------------|-------------------------|--------|---------------|
-| GET    | /registry/classifiers         | Список (плоский)        | New    |  |
+| GET    | /registry/classifiers         | Список (плоский)        | New    | Если нет параметров, выдаёт всю базу данных. Надо добавить параметр лимит. |
 | GET    | /registry/classifiers/tree    | Дерево (иерархическое)  | New    |  |
 | GET    | /registry/classifiers/{code}  | Один узел               | New    |  |
 | POST   | /registry/classifiers         | Создать                 | New    |  |
