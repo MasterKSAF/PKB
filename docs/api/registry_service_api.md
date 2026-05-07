@@ -221,7 +221,8 @@ DELETE /registry/classifiers/{code}
 {
   "error": {
     "code": "HAS_CHILDREN",
-    "message": "Нельзя удалить: узел имеет 3 дочерних. Используйте force=true"
+    "message": "Нельзя удалить: узел имеет 3 дочерних. Используйте force=true",
+    "details": {}
   }
 }
 ```
