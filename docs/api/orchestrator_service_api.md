@@ -6,42 +6,21 @@
 
 ### Формат ответа
 
-Все ответы Orchestrator Service оборачиваются в единую структуру:
-
-```json
-{
-  "success": true,
-  "data": { ... },
-  "error": null
-}
-```
+Успех — данные возвращаются напрямую.
 
 При ошибке:
 
 ```json
 {
-  "success": false,
-  "data": null,
   "error": {
     "code": "DOCUMENT_NOT_FOUND",
-    "message": "Документ не найден"
+    "message": "Документ не найден",
+    "details": {}
   }
 }
 ```
 
-Для списковых ответов `meta` содержит пагинацию:
-
-```json
-{
-  "meta": {
-    "total": 150,
-    "page": 1,
-    "page_size": 50
-  }
-}
-```
-
-> Ниже в примерах ответов показано содержимое поля `data` (без внешней обёртки `success`/`error`/`meta`).
+Для списковых ответов `meta` содержит пагинацию на верхнем уровне.
 
 ### Группы
 
@@ -78,13 +57,9 @@
 ```json
 {
   "document_id": "doc-8a3f2b",
-  "upload_status": "uploaded",
-  "user_id": "u-001",
-  "job_id": "job-ocr-554",
-  "ocr_status": "queued",
-  "index_status": "not_started",
   "status": "queued",
-  "task_id": "task-ocr-001",
+  "user_id": "u-001",
+  "task_id": "task-001",
   "created_at": "2026-04-27T10:00:00Z"
 }
 ```
@@ -92,13 +67,9 @@
 | Поле | Тип | Описание |
 |------|-----|----------|
 | `document_id` | string | ID документа — использовать для опроса статуса |
-| `upload_status` | string | Статус загрузки: `uploaded`, `failed` |
+| `status` | string | Статус: `queued`, `processing`, `processed`, `error` |
 | `user_id` | string | ID пользователя, загрузившего документ |
-| `job_id` | string | ID задачи загрузки |
-| `ocr_status` | string | Статус OCR: `not_started`, `queued`, `processing`, `completed`, `error` |
-| `index_status` | string | Статус индексации: `not_started`, `queued`, `completed`, `error` |
-| `status` | string | Общий статус: `queued`, `processing`, `processed`, `error` |
-| `task_id` | string | ID задачи обработки |
+| `task_id` | string | ID задачи обработки (для опроса статуса) |
 | `created_at` | string | Дата создания |
 
 **Асинхронный флоу:**
@@ -117,7 +88,7 @@ sequenceDiagram
     end
     Note over OCR,RAG: OCR completed → parsing → indexing
     UI->>Orchestrator: GET /documents/{doc_id}/status
-    Orchestrator-->>UI: { status: "processed", ocr_status: "completed", index_status: "ready" }
+    Orchestrator-->>UI: { status: "processed", steps: { ocr: "completed", indexing: "ready" } }
 ```
 
 **Ошибки**: `400` — неподдерживаемый формат/размер, `422` — повреждённый файл.
@@ -132,12 +103,12 @@ sequenceDiagram
 |----------|-----|----------|
 | `user_id` | string | Фильтр по пользователю, загрузившему документ |
 | `status` | string | Фильтр по статусу: `queued`, `processing`, `processed`, `error` |
-| `type` | string | Фильтр по типу документа |
+| `document_type` | string | Фильтр по типу документа |
 | `date_from` | string | Дата начала (ISO 8601) |
 | `date_to` | string | Дата окончания |
 | `search` | string | Поиск по имени файла |
-| `limit` | int | Лимит результатов |
-| `offset` | int | Смещение |
+| `page` | int | Номер страницы |
+| `page_size` | int | Записей на странице |
 
 **Ответ `200`**:
 
@@ -153,7 +124,7 @@ sequenceDiagram
     {
       "document_id": "doc-8a3f2b",
       "title": "21900M2_spec.pdf",
-      "type": "specification",
+      "document_type": "specification",
       "source": "РС",
       "version": "2026",
       "pages": 12,
@@ -165,9 +136,7 @@ sequenceDiagram
       "updated_at": "2026-04-27T10:02:00Z"
     }
   ],
-  "total": 18,
-  "limit": 20,
-  "offset": 0
+  "meta": { "total": 18, "page": 1, "page_size": 20 }
 }
 ```
 
@@ -179,7 +148,7 @@ sequenceDiagram
 | `summary.need_attention` | int | Количество требующих внимания |
 | `items[].document_id` | string | ID документа |
 | `items[].title` | string | Название документа (отображаемое имя) |
-| `items[].type` | string | Тип документа |
+| `items[].document_type` | string | Тип документа |
 | `items[].source` | string | Источник |
 | `items[].version` | string | Версия |
 | `items[].pages` | int | Количество страниц |
@@ -383,7 +352,7 @@ sequenceDiagram
 
 | Поле | Тип | Обязательность | Описание |
 |------|-----|----------------|----------|
-| `mode` | string | Да | `standard`, `enhanced_preprocess`, `fallback_ocr` |
+| `mode` | string | Нет | Режим обработки: `standard` (по умолчанию), `enhanced_preprocess` (улучшенная предобработка), `fallback_ocr` (альтернативный OCR-движок) |
 
 **Ответ `202`**:
 
@@ -393,7 +362,6 @@ sequenceDiagram
   "user_id": "u-001",
   "task_id": "task-ocr-002",
   "status": "queued",
-  "mode": "enhanced_preprocess",
   "created_at": "2026-04-27T11:00:00Z"
 }
 ```
@@ -408,8 +376,8 @@ sequenceDiagram
 |----------|-----|----------|
 | `stage` | string | Этап: `upload`, `ocr`, `parsing`, `indexing`, `generation` |
 | `severity` | string | Уровень: `warning`, `error` |
-| `limit` | int | Лимит |
-| `offset` | int | Смещение |
+| `page` | int | Номер страницы |
+| `page_size` | int | Записей на странице |
 
 **Ответ `200`**:
 
@@ -428,7 +396,7 @@ sequenceDiagram
       "timestamp": "2026-04-27T10:01:00Z"
     }
   ],
-  "total": 1
+  "meta": { "total": 1, "page": 1, "page_size": 20 }
 }
 ```
 
@@ -443,8 +411,8 @@ sequenceDiagram
 | Параметр | Тип | Описание |
 |----------|-----|----------|
 | `user_id` | string | Фильтр по пользователю (админ может смотреть чужие очереди) |
-| `limit` | int | Лимит результатов |
-| `offset` | int | Смещение |
+| `page` | int | Номер страницы |
+| `page_size` | int | Записей на странице |
 
 **Ответ `200`**:
 
@@ -454,7 +422,7 @@ sequenceDiagram
     {
       "document_id": "doc-8a3f2b",
       "title": "21900M2_spec.pdf",
-      "type": "specification",
+      "document_type": "specification",
       "status": "processing",
       "progress_percent": 41.7,
       "steps": {
@@ -469,9 +437,7 @@ sequenceDiagram
       "estimated_completion": "2026-04-27T10:06:00Z"
     }
   ],
-  "total_in_queue": 3,
-  "limit": 20,
-  "offset": 0
+  "meta": { "total_in_queue": 3, "page": 1, "page_size": 20 }
 }
 ```
 
@@ -479,7 +445,7 @@ sequenceDiagram
 |------|-----|----------|
 | `queue[].document_id` | string | ID документа |
 | `queue[].title` | string | Название документа |
-| `queue[].type` | string | Тип документа |
+| `queue[].document_type` | string | Тип документа |
 | `queue[].status` | string | `queued`, `processing` |
 | `queue[].progress_percent` | float | Прогресс обработки (0–100) |
 | `queue[].steps` | object | Статусы этапов |
@@ -554,21 +520,19 @@ sequenceDiagram
 | `items[].page_preview_url` | string | URL preview страницы |
 | `items[].document_url` | string | URL полного документа |
 
-> `GET /documents/search` возвращает аналогичный ответ. Параметры query: `q`, `document_id`, `page`, `limit`, `document_type`.
-
 **Ошибки**: `400` — пустой запрос.
 
 ### GET /documents/search
 
-Быстрый GET-вариант поиска.
+Быстрый GET-вариант семантического поиска. Предназначен для простых/тестовых запросов. Для полнофункционального поиска с фильтрацией используйте `POST /documents/search`.
 
-**Параметры query**: `q`, `document_id`, `page`, `limit`, `document_type`
+**Параметры query**: `q`, `document_id`, `page`, `page_size`, `document_type`
 
-**Ответ**: Аналогичен `POST /documents/search`.
+**Ответ**: Аналогичен `POST /documents/search` (поле `query` в ответе соответствует `q`).
 
 ### POST /chat/ask
 
-Генерация ответа с источниками (упрощённый Q&A без управления сессиями).
+Упрощённый Q&A без управления сессиями — для разовых вопросов, когда не нужно сохранять историю диалога. Если требуется контекстная беседа с историей, используйте `POST /chat` (требует `session_id`).
 
 **Запрос**:
 
@@ -615,6 +579,47 @@ sequenceDiagram
 ---
 
 ## Группа pages
+
+### GET /documents/{doc_id}/pages
+
+Список страниц документа с базовой информацией о каждой.
+
+**Ответ `200`**:
+
+```json
+{
+  "document_id": "doc-8a3f2b",
+  "pages_total": 12,
+  "pages": [
+    {
+      "page_number": 1,
+      "width": 2480,
+      "height": 3508,
+      "ocr_status": "completed",
+      "confidence": 0.95,
+      "has_text_layer": true
+    },
+    {
+      "page_number": 2,
+      "width": 2480,
+      "height": 3508,
+      "ocr_status": "completed",
+      "confidence": 0.92,
+      "has_text_layer": true
+    }
+  ],
+  "meta": { "total": 12, "page": 1, "page_size": 50 }
+}
+```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `pages[].page_number` | int | Номер страницы |
+| `pages[].width` | int | Ширина изображения в пикселях |
+| `pages[].height` | int | Высота изображения в пикселях |
+| `pages[].ocr_status` | string | Статус OCR: `not_started`, `processing`, `completed`, `error` |
+| `pages[].confidence` | float|null | Уверенность распознавания (0–1) |
+| `pages[].has_text_layer` | bool | Доступен ли текстовый слой |
 
 ### GET /documents/{doc_id}/pages/{page_num}
 
@@ -850,7 +855,7 @@ sequenceDiagram
 
 ### POST /chat
 
-Единый endpoint для отправки вопроса и получения ответа в формате UI.
+Диалоговый Q&A с управлением сессиями. Для разовых вопросов без сохранения истории используйте `POST /chat/ask` (без `session_id`).
 
 **Запрос**:
 
@@ -858,7 +863,6 @@ sequenceDiagram
 {
   "question": "Какая минимальная толщина листа корпуса?",
   "session_id": "chat-001",
-  "user_id": "u-001",
   "context": {
     "project_id": "project-17",
     "document_ids": ["doc-001", "doc-002"],
@@ -867,11 +871,12 @@ sequenceDiagram
 }
 ```
 
+`user_id` определяется из контекста аутентификации (`Authorization: Bearer`), не передаётся в теле запроса.
+
 | Поле | Тип | Обязательность | Описание |
 |------|-----|----------------|----------|
 | `question` | string | Да | Текст вопроса |
 | `session_id` | string | Да | ID сессии чата |
-| `user_id` | string | Да | ID пользователя |
 | `context` | object | Нет | Контекст запроса |
 
 **Ответ `200`** (успешный ответ):
@@ -966,17 +971,17 @@ sequenceDiagram
 {
   "project_document_ids": ["doc-project-001"],
   "nsi_document_ids": ["doc-nsi-001", "doc-nsi-002"],
-  "parameters": ["толщина листа", "марка стали"],
-  "user_id": "u-001"
+  "parameters": ["толщина листа", "марка стали"]
 }
 ```
+
+`user_id` определяется из контекста аутентификации (`Authorization: Bearer`), не передаётся в теле запроса.
 
 | Поле | Тип | Обязательность | Описание |
 |------|-----|----------------|----------|
 | `project_document_ids` | string[] | Да | ID проектных документов |
 | `nsi_document_ids` | string[] | Да | ID нормативных документов |
 | `parameters` | string[] | Нет | Параметры для проверки |
-| `user_id` | string | Да | ID пользователя |
 
 **Ответ `200`**:
 
