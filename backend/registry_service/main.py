@@ -3,22 +3,23 @@
 #
 import os
 
+import sys
+from pathlib import Path
+PROJECT_DIR = Path(__file__).parent
+if str(PROJECT_DIR) not in sys.path:
+    sys.path.insert(0, str(PROJECT_DIR))
+
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.requests import Request
-from pathlib import Path
 import builtins
 
 from services.response import DomainException, success_response
-
 # Inject into builtins BEFORE importing any routers so it's available globally during module evaluation
 builtins.success_response = success_response
+builtins.DomainException = DomainException
 
 from api.v1 import routes as v1_routes
-
-PROJECT_DIR = Path(__file__)
-
-os.environ.setdefault("PYTHONPATH", str(PROJECT_DIR))
 
 app = FastAPI()
 
