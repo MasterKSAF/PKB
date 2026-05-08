@@ -34,7 +34,7 @@ os.environ.setdefault("DB_PORT", "<port>")
 ## 1. Классификаторы
 | METHOD | EndPoint                      | Описание                | Статус | Коментарии    |
 |--------|-------------------------------|-------------------------|--------|---------------|
-| GET    | /registry/classifiers         | Список (плоский)        | New    | Если нет параметров, выдаёт всю базу данных. Надо добавить параметр лимит. |
+| GET    | /registry/classifiers         | Список (плоский)        | New    |  |
 | GET    | /registry/classifiers/tree    | Дерево (иерархическое)  | New    |  |
 | GET    | /registry/classifiers/{code}  | Один узел               | New    |  |
 | POST   | /registry/classifiers         | Создать                 | New    |  |
@@ -46,7 +46,7 @@ os.environ.setdefault("DB_PORT", "<port>")
 ## 2. Термины
 | METHOD | EndPoint              | Описание                | Статус | Коментарии                                                |
 |--------|-----------------------|-------------------------|--------|-----------------------------------------------------------|
-| GET    | /registry/terminology | Список      | New    | Если нет параметров, выдаёт всю базу данных. Надо добавить параметр лимит. |
+| GET    | /registry/terminology | Список      | New    |  |
 | GET    | /registry/terminology/{term_id} | Один термин  | New    |  |
 | POST   | /registry/terminology | Создать      | New    |  |
 | PUT    | /registry/terminology/{term_id} | Обновить      | New    |  |
@@ -57,7 +57,7 @@ os.environ.setdefault("DB_PORT", "<port>")
 ## 3. Реестр документов НСИ
 | METHOD | EndPoint            | Описание                | Статус | Коментарии                                                |
 |--------|---------------------|-------------------------|--------|-----------------------------------------------------------|
-| GET    | /registry/documents | Список      | New    | Если нет параметров, выдаёт всю базу данных. Надо добавить параметр лимит. |
+| GET    | /registry/documents | Список      | New    |  |
 | GET    | /registry/documents/{doc_id} | Один документ      | New    |  |
 | POST   | /registry/documents | Создать      | New    |  |
 | PUT    | /registry/documents/{doc_id | Обновить      | New    |  |
