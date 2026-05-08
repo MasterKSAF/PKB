@@ -2,11 +2,24 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 import os
 
-# Note: Ideally this URL should be retrieved from environment variables.
-# Using a placeholder since the description states data will be in PostgreSQL
-SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost/dbname")
+# For Development only
+# For production use environment variables only!
 
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
+
+try:
+    import env
+except ImportError:
+    pass
+
+PASSWORD = os.getenv("DB_PASSWORD", "")
+DATABASE = os.getenv("DB_DATABASE", "")
+USERNAME = os.getenv("DB_USERNAME", "")
+HOST = os.getenv("DB_HOST","")
+PORT = int(os.getenv("DB_PORT", "5432"))
+
+DATABASE_URL = f"postgresql://{USERNAME}:{PASSWORD}@{HOST}:{PORT}/{DATABASE}"
+
+engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def get_db():

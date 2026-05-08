@@ -1,14 +1,19 @@
 #
 #   ПКБ "Петробалт" backend API
 #
+import os
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.requests import Request
-from api.v1.v1_routes import routes as v1_routes
+from api.v1 import routes as v1_routes
+from pathlib import Path
 
 from services.response import APIException
 
+PROJECT_DIR = Path(__file__)
+
+os.environ.setdefault("PYTHONPATH", str(PROJECT_DIR))
 
 app = FastAPI()
 
@@ -19,7 +24,7 @@ async def api_exception_handler(request: Request, exc: APIException):
         content=exc.detail
     )
 
-app.include_router(v1_routes, prefix="/api/v1", tags=["/api/v1"])
+app.include_router(v1_routes.routes, prefix="/api/v1", tags=["/api/v1"])
 
 
 @app.get("/")

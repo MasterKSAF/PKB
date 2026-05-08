@@ -18,6 +18,16 @@ uvicorn main:app --reload --port 8100
 
 - На производстве порт будет 80 и запуск из докера.
 
+- в среде разработки можно сделать локальный файл ```..\registry_service\env.py``` который не загружаеться на GitHub,
+с записями указанными ниже
+
+```
+os.environ.setdefault("DB_DATABASE","<database>")
+os.environ.setdefault("DB_PASSWORD", "<user_password>")
+os.environ.setdefault("DB_USERNAME", "<username>")
+os.environ.setdefault("DB_HOST", "<host>")
+os.environ.setdefault("DB_PORT", "<port>")
+```
 
 # Статусы разработки API
 
