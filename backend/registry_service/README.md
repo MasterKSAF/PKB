@@ -49,9 +49,9 @@ os.environ.setdefault("DB_PORT", "<port>")
 | GET    | /registry/terminology | Список      | GENERATED |  |
 | GET    | /registry/terminology/{term_id} | Один термин  | GENERATED |  |
 | POST   | /registry/terminology | Создать      | GENERATED |  |
-| PUT    | /registry/terminology/{term_id} | GENERATED | New    |  |
-| DELETE | /registry/terminology/{term_id} | GENERATED | New    |  |
-| GET  | /registry/terminology/normalize | GENERATED | New    |  |
+| PUT    | /registry/terminology/{term_id} | Обновить | GENERATED |  |
+| DELETE | /registry/terminology/{term_id} | Удалить | GENERATED |  |
+| GET  | /registry/terminology/normalize | Поиск нормализованной формы | GENERATED |  |
 | POST  | /registry/terminology/import  | Импорт | GENERATED |  |
 
 ## 3. Реестр документов НСИ
