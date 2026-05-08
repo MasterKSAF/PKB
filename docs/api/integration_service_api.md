@@ -1,10 +1,11 @@
-## API Integration Service (integration-service:8084)
+## API Integration Service (integration-service:8085)
 
 Сервис интеграции с внешними системами и управления файлами.
 
 *Внутренний сервис. Не предназначен для прямого вызова из frontend. Публичный API — в Orchestrator Service.*
 
-Базовый путь: `/api/v1`
+**Базовый URL (внутренний)**: `http://127.0.0.1:8085/api/v1`  
+**Базовый URL (публичный через Orchestrator)**: `https://{host}/api/v1`
 
 ### Формат ответа
 
@@ -97,14 +98,27 @@
 ```json
 {
   "document_id": "doc-8a3f2b",
-  "data": {}
+  "data": {
+    "designation": "21900M2.362135.0903СБ",
+    "title": "Сборочный чертёж корпуса",
+    "materials": ["Сталь 09Г2С"],
+    "dimensions": "1200x800x600",
+    "specification_items": [
+      {"position": 1, "name": "Кница", "quantity": 4}
+    ]
+  }
 }
 ```
 
 | Поле | Тип | Обязательность | Описание |
 |------|-----|----------------|----------|
 | `document_id` | string | Да | ID документа |
-| `data` | object | Да | Данные для экспорта |
+| `data` | object | Да | Данные для экспорта. Структура определяется внешней системой «Меридиан». |
+| `data.designation` | string | Нет | Обозначение документа |
+| `data.title` | string | Нет | Наименование |
+| `data.materials` | string[] | Нет | Материалы |
+| `data.dimensions` | string | Нет | Габариты |
+| `data.specification_items` | array | Нет | Позиции спецификации |
 
 **Ответ `200`**:
 

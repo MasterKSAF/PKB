@@ -1,10 +1,11 @@
-## API Validation Service (validation-service:8082)
+## API Validation Service (validation-service:8086)
 
 Сервис валидации, извлечения параметров и сопоставления.
 
 *Внутренний сервис. Не предназначен для прямого вызова из frontend. Публичный API — в Orchestrator Service.*
 
-Базовый путь: `/api/v1`
+**Базовый URL (внутренний)**: `http://127.0.0.1:8086/api/v1`  
+**Базовый URL (публичный через Orchestrator)**: `https://{host}/api/v1`
 
 ### Формат ответа
 
@@ -160,7 +161,7 @@
 
 ### POST /validate/compare
 
-Сопоставление нормы и проектных данных (одиночное).
+Сопоставление нормы и проектных данных (асинхронное).
 
 **Запрос**:
 
@@ -178,13 +179,36 @@
 | `project_text` | string | Да | Текст проектного параметра |
 | `document_type` | string | Да | Тип документов |
 
-**Ответ `200`**: Объект сопоставления + `comparison_id`.
+**Ответ `202`** (запрос принят, результат будет доступен позже):
+
+```json
+{
+  "comparison_id": "cmp-007",
+  "status": "processing",
+  "created_at": "2026-04-27T12:00:00Z"
+}
+```
+
+> Статус обновляется: `processing` → `completed` / `failed`.  
+> Для опроса используйте `GET /validate/compare/{comparison_id}`.
 
 ### GET /validate/compare/{comparison_id}
 
 Получение ранее созданного сопоставления.
 
-**Ответ `200`**: Объект сопоставления.
+**Ответ `200`** (результат готов):
+
+Если статус `processing` — повторите запрос позже.
+
+```json
+{
+  "comparison_id": "cmp-007",
+  "status": "completed",
+  "match_status": "match",
+  "summary": "Толщина 14 мм соответствует требованию ≥12 мм",
+  "processing_time_ms": 3200
+}
+```
 
 ### POST /validate/compare/batch
 

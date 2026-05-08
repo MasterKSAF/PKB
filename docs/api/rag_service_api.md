@@ -1,10 +1,11 @@
-## API RAG Service (rag-service:8081)
+## API RAG Service (rag-service:8087)
 
 Сервис векторного поиска и работы с индексом.
 
 *Внутренний сервис. Не предназначен для прямого вызова из frontend.*
 
-Базовый путь: `/api/v1`
+**Базовый URL (внутренний)**: `http://127.0.0.1:8087/api/v1`
+**Базовый URL (публичный через Orchestrator)**: `https://{host}/api/v1`
 
 ### Формат ответа
 
@@ -30,6 +31,8 @@
 
 ### POST /rag/index
 
+> **Повторная индексация:** если `document_id` уже существует в индексе, чанки заменяются (старые удаляются, новые добавляются). Для полной переиндексации используйте `DELETE /rag/index/{document_id}` перед повторным вызовом.
+
 Добавление чанков документа в векторный индекс.
 
 **Запрос**:
@@ -41,7 +44,7 @@
     {
       "chunk_id": "chk-001",
       "text": "Для ледового класса Arc4...",
-      "page_number": 42,
+      "page": 42,
       "coordinates": {"x": 120, "y": 350, "width": 400, "height": 60},
       "metadata": {"document_type": "normative", "title": "Правила РС"}
     }
@@ -55,7 +58,7 @@
 | `chunks` | array | Да | Список чанков |
 | `chunks[].chunk_id` | string | Да | ID чанка |
 | `chunks[].text` | string | Да | Текст чанка |
-| `chunks[].page_number` | int | Да | Номер страницы |
+| `chunks[].page` | int | Да | Номер страницы |
 | `chunks[].coordinates` | object | Нет | Координаты на странице |
 | `chunks[].metadata` | object | Нет | Метаданные |
 
@@ -93,7 +96,7 @@
 {
   "query": "ледовый класс Arc4",
   "top_k": 10,
-  "filters": {"document_type": "normative"},
+  "filters": {"document_type": ["normative", "drawing"]},
   "search_type": "hybrid"
 }
 ```
@@ -102,7 +105,7 @@
 |------|-----|----------------|----------|
 | `query` | string | Да | Поисковый запрос |
 | `top_k` | int | Нет | Число результатов |
-| `filters` | object | Нет | Фильтры |
+| `filters` | object | Нет | Фильтры. Поля-массивы: `document_type` (string[]), `date_from`/`date_to` (string) |
 | `search_type` | string | Нет | `hybrid`, `sparse`, `dense` |
 
 **Ответ `200`**:
@@ -113,7 +116,7 @@
     {
       "chunk_id": "chk-001",
       "document_id": "doc-norm-001",
-      "page_number": 42,
+      "page": 42,
       "text": "Для ледового класса Arc4 толщина обшивки...",
       "coordinates": {"x": 120, "y": 350, "width": 400, "height": 60},
       "score": 0.92,
@@ -142,7 +145,7 @@
       "chunk_id": "chk-001",
       "text": "Для ледового класса Arc4 толщина обшивки должна быть не менее 12 мм.",
       "document_id": "doc-norm-001",
-      "page_number": 42
+      "page": 42
     }
   ],
   "model": "llama-3-70b",

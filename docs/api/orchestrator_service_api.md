@@ -1,8 +1,9 @@
-## API Orchestrator Service
+## API Orchestrator Service (orchestrator-service:8081)
 
 Единая точка входа для публичного API Нейроассистента ПКБ.
 
-**Базовый URL**: `https://{host}/api/v1`
+**Базовый URL (публичный)**: `https://{host}/api/v1`  
+**Базовый URL (внутренний)**: `http://127.0.0.1:8081/api/v1`
 
 ### Формат ответа
 
@@ -30,7 +31,7 @@
 | `monitor` | Мониторинг и метрики |
 | `documents` | Документы: CRUD, поиск, очередь, просмотр, параметры |
 | `pages` | Просмотр страниц и текстового слоя |
-| `search` | Поиск фрагментов и вопросно-ответная система |
+| `search` | Поиск фрагментов |
 | `validate` | Валидация: сопоставление норм и проекта (`/validate/compare`, `/validate/checks`) |
 
 ---
@@ -147,7 +148,7 @@ sequenceDiagram
 | `summary.need_attention` | int | Количество требующих внимания |
 | `items[].document_id` | string | ID документа |
 | `items[].title` | string | Название документа (отображаемое имя) |
-| `items[].document_type` | string | Тип документа |
+| `items[].document_type` | string | Тип документа: `normative`, `archival_scan`, `drawing`, `specification` |
 | `items[].source` | string | Источник |
 | `items[].version` | string | Версия |
 | `items[].pages` | int | Количество страниц |
@@ -304,7 +305,7 @@ sequenceDiagram
 {
   "document_id": "doc-8a3f2b",
   "document_title": "21900M2_spec.pdf",
-  "page": 5,
+  "page": 42,
   "content_type": "application/pdf",
   "preview_url": "/files/doc-8a3f2b/page-5.png",
   "text": "Спецификация...\nПоз. 1 Кница...",
@@ -386,7 +387,7 @@ sequenceDiagram
     {
       "error_id": "err-001",
       "document_id": "doc-8a3f2b",
-      "page_number": 5,
+      "page": 5,
       "stage": "ocr",
       "error_code": "LOW_CONFIDENCE",
       "error_message": "Качество распознавания страницы ниже порога (confidence=0.62)",
@@ -489,14 +490,14 @@ sequenceDiagram
   "query": "требования к ледовому классу Arc4",
   "items": [
     {
-      "result_id": "sr-001",
+      "fragment_id": "sr-001",
       "document_id": "doc-norm-001",
       "document_title": "Правила классификации и постройки морских судов. Часть I",
-      "document_type": "НСИ",
+      "document_type": "normative",
       "section": "Корпус",
       "page": 42,
       "fragment": "Для ледового класса Arc4 толщина обшивки должна быть не менее 12 мм...",
-      "relevance": 0.92,
+      "score": 0.92,
       "page_preview_url": "/documents/doc-norm-001/pages/42/preview",
       "document_url": "/documents/doc-norm-001/file"
     }
@@ -508,14 +509,14 @@ sequenceDiagram
 
 | Поле | Тип | Описание |
 |------|-----|----------|
-| `items[].result_id` | string | ID результата |
+| `items[].fragment_id` | string | ID фрагмента |
 | `items[].document_id` | string | ID документа |
 | `items[].document_title` | string | Название документа |
-| `items[].document_type` | string | Тип документа |
+| `items[].document_type` | string | Тип документа: `normative`, `archival_scan`, `drawing`, `specification` |
 | `items[].section` | string | Раздел |
 | `items[].page` | int | Номер страницы |
 | `items[].fragment` | string | Текст фрагмента |
-| `items[].relevance` | float | Релевантность (0–1) |
+| `items[].score` | float | Оценка релевантности (0–1) |
 | `items[].page_preview_url` | string | URL preview страницы |
 | `items[].document_url` | string | URL полного документа |
 
@@ -529,51 +530,7 @@ sequenceDiagram
 
 **Ответ**: Аналогичен `POST /documents/search` (поле `query` в ответе соответствует `q`).
 
-### POST /chat/ask
 
-Упрощённый Q&A без управления сессиями — для разовых вопросов, когда не нужно сохранять историю диалога.
-
-**Запрос**:
-
-```json
-{
-  "question": "Какая должна быть толщина обшивки для ледового класса Arc4?",
-  "document_ids": null,
-  "options": {
-    "temperature": 0.2
-  }
-}
-```
-
-| Поле | Тип | Обязательность | Описание |
-|------|-----|----------------|----------|
-| `question` | string | Да | Вопрос |
-| `document_ids` | string[] | Нет | Ограничение корпуса |
-| `options` | object | Нет | Параметры генерации |
-| `options.temperature` | float | Нет | Температура (0-1) |
-
-**Ответ `200`**:
-
-```json
-{
-  "question": "Какая должна быть толщина обшивки для ледового класса Arc4?",
-  "answer": "Согласно Правилам классификации и постройки морских судов (Часть I, стр. 42), толщина обшивки для ледового класса Arc4 должна быть не менее 12 мм.",
-  "sources": [
-    {
-      "document_id": "doc-norm-001",
-      "document_title": "Правила классификации и постройки морских судов. Часть I",
-      "page_number": 42,
-      "fragment_id": "frg-123abc",
-      "text": "Для ледового класса Arc4 толщина обшивки должна быть не менее 12 мм...",
-      "score": 0.92,
-      "page_preview_url": "/documents/doc-norm-001/pages/42/preview",
-      "document_url": "/documents/doc-norm-001/file"
-    }
-  ],
-  "processing_time_ms": 3200,
-  "model_used": "llama-3-70b"
-}
-```
 
 ---
 
@@ -598,7 +555,7 @@ sequenceDiagram
   "pages_total": 12,
   "pages": [
     {
-      "page_number": 1,
+      "page": 1,
       "width": 2480,
       "height": 3508,
       "ocr_status": "completed",
@@ -606,7 +563,7 @@ sequenceDiagram
       "has_text_layer": true
     },
     {
-      "page_number": 2,
+      "page": 2,
       "width": 2480,
       "height": 3508,
       "ocr_status": "completed",
@@ -620,7 +577,7 @@ sequenceDiagram
 
 | Поле | Тип | Описание |
 |------|-----|----------|
-| `pages[].page_number` | int | Номер страницы |
+| `pages[].page` | int | Номер страницы |
 | `pages[].width` | int | Ширина изображения в пикселях |
 | `pages[].height` | int | Высота изображения в пикселях |
 | `pages[].ocr_status` | string | Статус OCR: `not_started`, `processing`, `completed`, `error` |
@@ -642,7 +599,7 @@ sequenceDiagram
 ```json
 {
   "image_url": "/files/page-img/doc-8a3f2b_5.png",
-  "page_number": 5,
+  "page": 5,
   "width": 2480,
   "height": 3508,
   "blocks": [
@@ -672,7 +629,7 @@ sequenceDiagram
 
 ```json
 {
-  "page_number": 5,
+  "page": 5,
   "full_text": "Спецификация...\nПоз. 1 Кница...",
   "blocks": [
     {
@@ -739,7 +696,9 @@ sequenceDiagram
 
 Запуск сопоставления нормы и проектного документа (низкоуровневый, асинхронный).
 
-> Для UI используется синхронный endpoint `POST /validate/checks` (см. группу `validate`), который внутри вызывает `POST /validate/compare` / `POST /compare/batch` и агрегирует результат.
+> Для UI используется синхронный endpoint `POST /validate/checks` (см. группу `validate`), который внутри вызывает `POST /validate/compare` / `POST /validate/compare/batch` и агрегирует результат.
+
+> **Важно:** при `status: "processing"` периодически опрашивайте `GET /validate/compare/{comparison_id}` до получения `status: "completed"` или `status: "failed"`.
 
 **Запрос** (вариант 1 — по запросу):
 
@@ -766,7 +725,7 @@ sequenceDiagram
 | `normative_fragment_id` | string | Нет | ID фрагмента нормы |
 | `project_fragment_id` | string | Нет | ID фрагмента проекта |
 
-**Ответ `200`**:
+**Ответ `202`** (запрос принят, результат будет доступен позже):
 
 ```json
 {
@@ -780,7 +739,9 @@ sequenceDiagram
 
 Результат сопоставления.
 
-**Ответ `200`**:
+**Ответ `200`** (результат готов):
+
+Если статус `processing` — повторите запрос позже. Статус обновляется: `processing` → `completed` / `failed`.
 
 ```json
 {
@@ -789,13 +750,13 @@ sequenceDiagram
   "normative_block": {
     "document_id": "doc-norm-001",
     "document_title": "Правила РС часть I",
-    "page_number": 42,
+    "page": 42,
     "requirement_text": "Толщина обшивки в районе ледового пояса для класса Arc4 ≥ 12 мм"
   },
   "project_block": {
     "document_id": "doc-draw-001",
     "document_title": "21900M2.362135.0903СБ",
-    "page_number": 1,
+    "page": 1,
     "parameter_text": "Обшивка ледового пояса t=14 мм"
   },
   "match_status": "match",
@@ -931,7 +892,25 @@ sequenceDiagram
 | `items[].project_source` | object | Ссылка на источник проекта |
 | `items[].nsi_source` | object | Ссылка на нормативный источник |
 
-> Внутренняя реализация: разлагает запрос на пары нормативных и проектных фрагментов через Validation Service (`POST /compare/batch`), агрегирует результаты, маппит `match_status` → `OK`/`WARNING`/`ERROR`.
+> Внутренняя реализация: разделяет запрос на пары нормативных и проектных фрагментов через Validation Service (`POST /validate/compare/batch`), агрегирует результаты, маппит `match_status` → `OK`/`WARNING`/`ERROR`.
+
+### GET /validate/checks/{check_run_id}
+
+Получение статуса и результатов проверки (для асинхронного сценария, когда `POST /validate/checks` вернул `status: "processing"`).
+
+**Ответ `200`** (завершено) — структура, аналогичная ответу `POST /validate/checks`.
+
+**Ответ `200`** (ещё выполняется):
+
+```json
+{
+  "check_run_id": "check-001",
+  "status": "processing",
+  "progress_percent": 60,
+  "created_at": "2026-04-27T12:00:00Z",
+  "updated_at": "2026-04-27T12:01:30Z"
+}
+```
 
 ### GET /validate/checks/{check_run_id}/export
 
