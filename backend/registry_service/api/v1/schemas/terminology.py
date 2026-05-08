@@ -1,38 +1,29 @@
-from pydantic import BaseModel, ConfigDict
-from typing import Optional, Dict, List, Any
+from pydantic import BaseModel, ConfigDict, Field
+from typing import Optional, Any
 from datetime import datetime
 from uuid import UUID
 
 class TerminologyRegistryBase(BaseModel):
-    raw_term: str
-    standard_term: str
-    normalized_value: str
-    term_type: Optional[str] = "term"
-    is_case_sensitive: Optional[bool] = False
-    definition: Optional[str] = None
-    synonyms: Optional[Any] = []
-    related_docs: Optional[Any] = []
-    scope: Optional[Any] = []
-    is_blocked: Optional[bool] = False
+    term: str = Field(alias="raw_term")
+    normalized_term: str = Field(alias="normalized_value")
+    context: str = "Общий"
+    source: Optional[str] = None
 
 class TerminologyRegistryCreate(TerminologyRegistryBase):
     pass
 
 class TerminologyRegistryUpdate(BaseModel):
-    raw_term: Optional[str] = None
-    standard_term: Optional[str] = None
-    normalized_value: Optional[str] = None
-    term_type: Optional[str] = None
-    is_case_sensitive: Optional[bool] = None
-    definition: Optional[str] = None
-    synonyms: Optional[Any] = None
-    related_docs: Optional[Any] = None
-    scope: Optional[Any] = None
-    is_blocked: Optional[bool] = None
+    term: Optional[str] = None
+    normalized_term: Optional[str] = None
+    context: Optional[str] = None
+    source: Optional[str] = None
 
 class TerminologyRegistryResponse(TerminologyRegistryBase):
-    id: UUID
+    term_id: UUID = Field(alias="id")
     created_at: Optional[datetime]
-    updated_at: Optional[datetime]
+    
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
-    model_config = ConfigDict(from_attributes=True)
+class TerminologyNormalizeResponse(BaseModel):
+    term: str
+    normalized_term: str

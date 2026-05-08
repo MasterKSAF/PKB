@@ -6,33 +6,30 @@ from api.v1.models.document import DocStatus
 
 class DocumentsBase(BaseModel):
     title: str
+    doc_number: Optional[str] = Field(None, alias="doc_code")
     classifier_code: Optional[str] = None
-    doc_code: Optional[str] = None
-    title_hash_sha256: Optional[str] = None
     status: Optional[DocStatus] = DocStatus.DRAFT
-    metadata_: Optional[Any] = Field(default_factory=dict, alias="metadata")
-    chunk_container_id: Optional[UUID] = None
+    source: Optional[str] = None
+    notes: Optional[str] = None
 
 class DocumentsCreate(DocumentsBase):
     pass
 
 class DocumentsUpdate(BaseModel):
     title: Optional[str] = None
+    doc_number: Optional[str] = None
     classifier_code: Optional[str] = None
-    doc_code: Optional[str] = None
-    title_hash_sha256: Optional[str] = None
     status: Optional[DocStatus] = None
-    metadata_: Optional[Any] = Field(None, alias="metadata")
-    chunk_container_id: Optional[UUID] = None
+    source: Optional[str] = None
+    notes: Optional[str] = None
+
+class DocumentsStatusUpdate(BaseModel):
+    status: DocStatus
 
 class DocumentsResponse(DocumentsBase):
-    id: UUID
+    doc_id: UUID = Field(alias="id")
+    classifier_name: Optional[str] = None
     created_at: Optional[datetime]
-    created_by: Optional[str]
     updated_at: Optional[datetime]
-    updated_by: Optional[str]
 
-    model_config = ConfigDict(
-        from_attributes=True,
-        populate_by_name=True
-    )
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)

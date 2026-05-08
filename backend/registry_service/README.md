@@ -32,45 +32,45 @@ os.environ.setdefault("DB_PORT", "<port>")
 # Статусы разработки API
 
 ## 1. Классификаторы
-| METHOD | EndPoint                      | Описание                | Статус | Коментарии    |
-|--------|-------------------------------|-------------------------|--------|---------------|
-| GET    | /registry/classifiers         | Список (плоский)        | New    |  |
-| GET    | /registry/classifiers/tree    | Дерево (иерархическое)  | New    |  |
-| GET    | /registry/classifiers/{code}  | Один узел               | New    |  |
-| POST   | /registry/classifiers         | Создать                 | New    |  |
-| PUT    | /registry/classifiers/{code}  | Обновить полностю       | New    |  |
-| PATCH  |  /registry/classifiers/{code} | Обновить отдельные поля | New    |  |
-| DELETE | /registry/classifiers/{code}  | Удалить | New    |  |
-| POST  | /registry/classifiers/import  | Импорт | New    |  |
+| METHOD | EndPoint                      | Описание                | Статус     | Коментарии    |
+|--------|-------------------------------|-------------------------|------------|---------------|
+| GET    | /registry/classifiers         | Список (плоский)        | GENERATED  |  |
+| GET    | /registry/classifiers/tree    | Дерево (иерархическое)  | GENERATED  |  |
+| GET    | /registry/classifiers/{code}  | Один узел               | GENERATED  |  |
+| POST   | /registry/classifiers         | Создать                 | GENERATED  |  |
+| PUT    | /registry/classifiers/{code}  | Обновить полностю       | GENERATED  |  |
+| PATCH  |  /registry/classifiers/{code} | Обновить отдельные поля | GENERATED  |  |
+| DELETE | /registry/classifiers/{code}  | Удалить | GENERATED  |  |
+| POST  | /registry/classifiers/import  | Импорт | GENERATED |  |
 
 ## 2. Термины
 | METHOD | EndPoint              | Описание                | Статус | Коментарии                                                |
 |--------|-----------------------|-------------------------|--------|-----------------------------------------------------------|
-| GET    | /registry/terminology | Список      | New    |  |
-| GET    | /registry/terminology/{term_id} | Один термин  | New    |  |
-| POST   | /registry/terminology | Создать      | New    |  |
-| PUT    | /registry/terminology/{term_id} | Обновить      | New    |  |
-| DELETE | /registry/terminology/{term_id} | Удалить      | New    |  |
-| GET  | /registry/terminology/normalize | Поиск нормализованной формы      | New    |  |
-| POST  | /registry/terminology/import  | Импорт | New    |  |
+| GET    | /registry/terminology | Список      | GENERATED |  |
+| GET    | /registry/terminology/{term_id} | Один термин  | GENERATED |  |
+| POST   | /registry/terminology | Создать      | GENERATED |  |
+| PUT    | /registry/terminology/{term_id} | GENERATED | New    |  |
+| DELETE | /registry/terminology/{term_id} | GENERATED | New    |  |
+| GET  | /registry/terminology/normalize | GENERATED | New    |  |
+| POST  | /registry/terminology/import  | Импорт | GENERATED |  |
 
 ## 3. Реестр документов НСИ
 | METHOD | EndPoint            | Описание                | Статус | Коментарии                                                |
 |--------|---------------------|-------------------------|--------|-----------------------------------------------------------|
-| GET    | /registry/documents | Список      | New    |  |
-| GET    | /registry/documents/{doc_id} | Один документ      | New    |  |
-| POST   | /registry/documents | Создать      | New    |  |
-| PUT    | /registry/documents/{doc_id | Обновить      | New    |  |
-| PATCH  | /registry/documents/{doc_id}/status | Обновить статус      | New    |  |
-| DELETE | /registry/documents/{doc_id} | Удалить      | New    |  |
-| GET   | /registry/documents/export | Экспорт      | New    |  |
-| POST   | /registry/documents/import | Массовый импорт      | New    |  |
+| GET    | /registry/documents | Список      | GENERATED |  |
+| GET    | /registry/documents/{doc_id} | Один документ      | GENERATED |  |
+| POST   | /registry/documents | Создать      | GENERATED |  |
+| PUT    | /registry/documents/{doc_id | Обновить      | GENERATED |  |
+| PATCH  | /registry/documents/{doc_id}/status | Обновить статус      | GENERATED |  |
+| DELETE | /registry/documents/{doc_id} | Удалить      | GENERATED |  |
+| GET   | /registry/documents/export | Экспорт      | GENERATED |  |
+| POST   | /registry/documents/import | Массовый импорт      | GENERATED |  |
 
 ## 4. Общие
 | METHOD | EndPoint            | Описание                | Статус | Коментарии                                                |
 |--------|---------------------|-------------------------|--------|-----------------------------------------------------------|
-| GET    | /registry/stats | Статистика      | New    |  |
-| GET    | /registry/enums | Допустимые значения      | New    |  |
+| GET    | /registry/stats | Статистика      | GENERATED |  |
+| GET    | /registry/enums | Допустимые значения      | GENERATED |  |
 
 ## 5. Модели данных
 
