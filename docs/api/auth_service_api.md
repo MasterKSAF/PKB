@@ -1,8 +1,9 @@
-## API Auth Service
+## API Auth Service (auth-service:8082)
 
 Сервис аутентификации и управления пользователями.
 
-Базовый путь: `/api/v1`
+**Базовый URL (внутренний)**: `http://127.0.0.1:8082/api/v1`
+**Базовый URL (публичный через Orchestrator)**: `https://{host}/api/v1`
 
 ### Группы
 
@@ -29,6 +30,18 @@
 
 Для списковых ответов `meta` содержит пагинацию на верхнем уровне.
 
+### Коды ошибок
+
+| HTTP-код | Код ошибки (`error.code`) | Описание |
+|----------|--------------------------|----------|
+| 400 | `VALIDATION_ERROR` | Некорректные входные данные |
+| 401 | `UNAUTHORIZED` | Неверные учётные данные |
+| 401 | `INVALID_TOKEN` | Токен недействителен или истёк |
+| 403 | `FORBIDDEN` | Нет доступа |
+| 404 | `USER_NOT_FOUND` | Пользователь не найден |
+| 409 | `DUPLICATE_EMAIL` | Email уже используется |
+| 500 | `INTERNAL_ERROR` | Внутренняя ошибка сервера |
+
 ### Содержание
 
 | Метод | Путь | Описание |
@@ -36,7 +49,7 @@
 | POST | `/auth/token` | username, password — получить JWT-токены доступа |
 | POST | `/auth/refresh` | refresh_token — обновить access-токен |
 | POST | `/auth/revoke` | refresh_token — отозвать refresh-токен |
-| GET | `/auth/me` | Профиль текущего пользователя (UI-формат: camelCase) |
+| GET | `/auth/me` | Профиль текущего пользователя (формат: snake_case) |
 | GET | `/admin/users` | ?role, search, page, page_size — список пользователей |
 | POST | `/admin/users` | email, full_name, password, roles — создать пользователя |
 | GET | `/admin/users/{user_id}` | Информация о пользователе |
@@ -133,6 +146,14 @@
   "revoked_at": "2026-04-27T10:15:30Z"
 }
 ```
+
+#### Жизненный цикл токенов
+
+- **Access token**: живёт 1 час (значение `expires_in` в ответе `/auth/token`).
+- **Refresh token**: живёт 30 дней, можно отозвать через `POST /auth/revoke`.
+- При смене пароля все refresh-токены пользователя отзываются.
+- Rate limit: не более 5 запросов в минуту на `/auth/token` с одного IP.
+- Blacklist: отозванные refresh-токены хранятся в blacklist до истечения их исходного срока жизни.
 
 #### GET /auth/me
 
@@ -278,7 +299,8 @@
 }
 ```
 
-`role` — единственное поле, строка (упрощённый формат для UI).
+`role` — строка (упрощённый формат для UI). Принимается как shorthand для `["role"]`.
+Рекомендуется использовать массив `roles` для согласованности с `POST /admin/users` и `PUT /admin/users/{user_id}`.
 
 **Ответ `200`**:
 
@@ -372,8 +394,7 @@
 
 ---
 
-## Internal Auth Service (auth-service:8080)
-
+## Internal Auth Service 
 ### POST /internal/auth/validate
 
 Проверка access‑токена (внутренний).
