@@ -1,3 +1,3 @@
-from .classifier import ClassifierNodeBase, ClassifierNodeCreate, ClassifierNodeUpdate, ClassifierNodeResponse
-from .terminology import TerminologyEntryBase, TerminologyEntryCreate, TerminologyEntryUpdate, TerminologyEntryResponse
-from .document import RegistryDocumentBase, RegistryDocumentCreate, RegistryDocumentUpdate, RegistryDocumentResponse
+from .classifier import ClassifierRegistryBase, ClassifierRegistryCreate, ClassifierRegistryUpdate, ClassifierRegistryResponse
+from .terminology import TerminologyRegistryBase, TerminologyRegistryCreate, TerminologyRegistryUpdate, TerminologyRegistryResponse
+from .document import DocumentsBase, DocumentsCreate, DocumentsUpdate, DocumentsResponse

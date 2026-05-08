@@ -1,4 +1,18 @@
 from .base import Base
-from .classifier import ClassifierNode
-from .terminology import TerminologyEntry
-from .document import RegistryDocument
+
+# Classifier Models
+from .classifier import ClassifierRegistry
+
+# Terminology Models
+from .terminology import TerminologyRegistry
+
+# Document Models
+from .document import (
+    Documents,
+    FormatRegistry,
+    ChunkContainers,
+    DocumentVersions,
+    StatusHistory,
+    DocStatus,
+    ValidationStatus
+)

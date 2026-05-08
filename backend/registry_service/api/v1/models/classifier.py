@@ -1,21 +1,37 @@
-from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey
-from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
+from typing import Optional
+import datetime
+
+from sqlalchemy import Boolean, Date, DateTime, ForeignKeyConstraint, Index, PrimaryKeyConstraint, Text, text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .base import Base
 
-class ClassifierNode(Base):
-    __tablename__ = "classifier_registry"
+class ClassifierRegistry(Base):
+    __tablename__ = 'classifier_registry'
+    __table_args__ = (
+        ForeignKeyConstraint(['parent_code'], ['purgatory.classifier_registry.code'], name='classifier_registry_parent_code_fkey'),
+        PrimaryKeyConstraint('code', name='classifier_registry_pkey'),
+        Index('idx_classifier_jurisdiction', 'jurisdiction', 'doc_type'),
+        Index('idx_classifier_oks', 'oks_code'),
+        Index('idx_classifier_parent', 'parent_code'),
+        {'comment': 'Hierarchical document classification (GOST/OST/ISO/DIN) with OKS mapping',
+         'schema': 'purgatory'}
+    )
 
-    code = Column(String(50), primary_key=True, index=True)
-    parent_code = Column(String(50), ForeignKey("classifier_registry.code"), nullable=True)
-    full_name = Column(String(500), nullable=False)
-    doc_type = Column(String(20), nullable=False, server_default="OKS")
-    jurisdiction = Column(String(10), nullable=False, server_default="RF")
-    language = Column(String(5), nullable=False, server_default="ru")
-    oks_code = Column(String(20), nullable=True)
-    is_thematic = Column(Boolean, nullable=False, server_default="true")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    code: Mapped[str] = mapped_column(Text, primary_key=True)
+    full_name: Mapped[str] = mapped_column(Text, nullable=False)
+    parent_code: Mapped[Optional[str]] = mapped_column(Text)
+    status: Mapped[Optional[str]] = mapped_column(Text, server_default=text("'active'::text"))
+    effective_date: Mapped[Optional[datetime.date]] = mapped_column(Date)
+    replaced_by: Mapped[Optional[str]] = mapped_column(Text)
+    jurisdiction: Mapped[Optional[str]] = mapped_column(Text)
+    issuing_body: Mapped[Optional[str]] = mapped_column(Text)
+    language: Mapped[Optional[str]] = mapped_column(Text, server_default=text("'ru'::text"))
+    oks_code: Mapped[Optional[str]] = mapped_column(Text)
+    doc_type: Mapped[Optional[str]] = mapped_column(Text)
+    is_thematic: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text('true'))
+    external_id: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('now()'))
 
-    parent = relationship("ClassifierNode", remote_side=[code], backref="children")
-    documents = relationship("RegistryDocument", back_populates="classifier")
+    classifier_registry: Mapped[Optional['ClassifierRegistry']] = relationship('ClassifierRegistry', remote_side=[code], back_populates='classifier_registry_reverse')
+    classifier_registry_reverse: Mapped[list['ClassifierRegistry']] = relationship('ClassifierRegistry', remote_side=[parent_code], back_populates='classifier_registry')
+    documents: Mapped[list['Documents']] = relationship('Documents', back_populates='classifier_registry')

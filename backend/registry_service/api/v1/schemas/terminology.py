@@ -1,24 +1,38 @@
 from pydantic import BaseModel, ConfigDict
-from typing import Optional
+from typing import Optional, Dict, List, Any
 from datetime import datetime
+from uuid import UUID
 
-class TerminologyEntryBase(BaseModel):
-    term: str
-    normalized_term: str
-    context: str = "Общий"
-    source: Optional[str] = None
+class TerminologyRegistryBase(BaseModel):
+    raw_term: str
+    standard_term: str
+    normalized_value: str
+    term_type: Optional[str] = "term"
+    is_case_sensitive: Optional[bool] = False
+    definition: Optional[str] = None
+    synonyms: Optional[Any] = []
+    related_docs: Optional[Any] = []
+    scope: Optional[Any] = []
+    is_blocked: Optional[bool] = False
 
-class TerminologyEntryCreate(TerminologyEntryBase):
+class TerminologyRegistryCreate(TerminologyRegistryBase):
     pass
 
-class TerminologyEntryUpdate(BaseModel):
-    term: Optional[str] = None
-    normalized_term: Optional[str] = None
-    context: Optional[str] = None
-    source: Optional[str] = None
+class TerminologyRegistryUpdate(BaseModel):
+    raw_term: Optional[str] = None
+    standard_term: Optional[str] = None
+    normalized_value: Optional[str] = None
+    term_type: Optional[str] = None
+    is_case_sensitive: Optional[bool] = None
+    definition: Optional[str] = None
+    synonyms: Optional[Any] = None
+    related_docs: Optional[Any] = None
+    scope: Optional[Any] = None
+    is_blocked: Optional[bool] = None
 
-class TerminologyEntryResponse(TerminologyEntryBase):
-    term_id: int
-    created_at: datetime
+class TerminologyRegistryResponse(TerminologyRegistryBase):
+    id: UUID
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]
 
     model_config = ConfigDict(from_attributes=True)
