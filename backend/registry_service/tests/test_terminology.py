@@ -53,3 +53,15 @@ def test_delete_terminology(client):
     
     get_res = client.get(f"/api/v1/registry/terminology/{term_id}")
     assert get_res.status_code == 404
+
+def test_normalize_terminology(client):
+    response = client.get("/api/v1/registry/terminology/normalize", params={"term": "Some Term"})
+    assert response.status_code == 200
+    data = response.json()
+    # It might return a normalized term or just success
+    assert "data" in data
+
+def test_import_terminology(client):
+    # Dummy file upload test
+    response = client.post("/api/v1/registry/terminology/import", params={"mapping": "some_mapping"}, files={"file": ("test.csv", b"dummy content", "text/csv")})
+    assert response.status_code in [200, 201]

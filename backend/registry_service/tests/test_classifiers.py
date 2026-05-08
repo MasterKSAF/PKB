@@ -50,3 +50,25 @@ def test_delete_classifier(client):
     # Verify it's gone
     get_response = client.get("/api/v1/registry/classifiers/TEST_05")
     assert get_response.status_code == 404
+
+def test_get_classifier_tree(client):
+    client.post("/api/v1/registry/classifiers/", json={"code": "ROOT_1", "full_name": "Root Classifier"})
+    client.post("/api/v1/registry/classifiers/", json={"code": "CHILD_1", "full_name": "Child Classifier", "parent_code": "ROOT_1"})
+    
+    response = client.get("/api/v1/registry/classifiers/tree")
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data.get("data"), list)
+
+def test_patch_classifier(client):
+    client.post("/api/v1/registry/classifiers/", json={"code": "TEST_PATCH", "full_name": "Original Name"})
+    
+    response = client.patch("/api/v1/registry/classifiers/TEST_PATCH", json={"full_name": "Patched Name"})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["data"]["full_name"] == "Patched Name"
+
+def test_import_classifiers(client):
+    # Dummy file upload test
+    response = client.post("/api/v1/registry/classifiers/import", params={"mapping": "some_mapping"}, files={"file": ("test.csv", b"dummy content", "text/csv")})
+    assert response.status_code in [200, 201]

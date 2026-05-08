@@ -48,3 +48,19 @@ def test_delete_document(client):
     
     get_res = client.get(f"/api/v1/registry/documents/{doc_id}")
     assert get_res.status_code == 404
+
+def test_patch_document_status(client):
+    create_res = client.post("/api/v1/registry/documents/", json={"title": "Doc Patch Status"})
+    doc_id = create_res.json()["data"]["id"]
+    
+    response = client.patch(f"/api/v1/registry/documents/{doc_id}/status", json={"status": "approved"})
+    assert response.status_code == 200
+    assert response.json()["data"]["status"] == "approved"
+
+def test_export_documents(client):
+    response = client.get("/api/v1/registry/documents/export")
+    assert response.status_code == 200
+
+def test_import_documents(client):
+    response = client.post("/api/v1/registry/documents/import", params={"mapping": "some_mapping"}, files={"file": ("test.csv", b"dummy content", "text/csv")})
+    assert response.status_code in [200, 201]
