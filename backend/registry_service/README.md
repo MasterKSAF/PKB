@@ -28,6 +28,8 @@ os.environ.setdefault("DB_USERNAME", "<username>")
 os.environ.setdefault("DB_HOST", "<host>")
 os.environ.setdefault("DB_PORT", "<port>")
 ```
+- Тест скрипты сапускаются с директории ```registry_service``` командой ```pytest```.
+
 
 # Статусы разработки API
 
