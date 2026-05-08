@@ -1,25 +1,42 @@
 #
 #   ПКБ "Петробалт" backend API
 #
+import os
+
+import sys
+from pathlib import Path
+PROJECT_DIR = Path(__file__).parent
+if str(PROJECT_DIR) not in sys.path:
+    sys.path.insert(0, str(PROJECT_DIR))
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.requests import Request
-from api.v1.v1_routes import routes as v1_routes
+import builtins
 
-from services.response import APIException
+from services.response import DomainException, success_response
+# Inject into builtins BEFORE importing any routers so it's available globally during module evaluation
+builtins.success_response = success_response
+builtins.DomainException = DomainException
 
+from api.v1 import routes as v1_routes
 
 app = FastAPI()
 
-@app.exception_handler(APIException)
-async def api_exception_handler(request: Request, exc: APIException):
+@app.exception_handler(DomainException)
+async def domain_exception_handler(request: Request, exc: DomainException):
     return JSONResponse(
         status_code=exc.status_code,
-        content=exc.detail
+        content={
+            "error": {
+                "code": exc.error_code,
+                "message": exc.message,
+                "details": exc.details
+            }
+        }
     )
 
-app.include_router(v1_routes, prefix="/api/v1", tags=["/api/v1"])
+app.include_router(v1_routes.routes, prefix="/api/v1", tags=["/api/v1"])
 
 
 @app.get("/")

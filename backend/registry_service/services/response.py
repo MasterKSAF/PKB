@@ -1,93 +1,44 @@
 #
 #  Forming unified API responses
 #
-from fastapi import HTTPException
 
+from fastapi.responses import JSONResponse
+from typing import Any
 
-def get_status(code: int) -> dict | None:
+class DomainException(Exception):
     """
-    Возвращает описание кодов запросов
-    """
-
-
-    status_codes = {
-        200: {
-            "code_name": "OK",
-            "message": "Успех",
-            # "comment": None
-        },
-        201: {
-            "code_name": "CREATED",
-            "message": "Создан ресурс",
-            # "comment": None
-        },
-        202: {
-            "code_name": "ACCEPTED",
-            "message": "Запрос принят",
-            # "comment": "Когда нет немедленного ответа, например, поставить документ на обработку."
-        },
-        400: {
-            "code_name": "BAD_REQUEST",
-            "message": "Неверные параметры",
-            # "comment": None
-        },
-        401: {
-            "code_name": "UNAUTHORIZED",
-            "message": "Нет доступа - клиент не известен",
-            # "comment": None
-        },
-        403: {
-            "code_name": "FORBIDDEN",
-            "message": "Нет доступа - нет прав на ресурс, клиент известен",
-            # "comment": None
-        },
-        404: {
-                "code_name": "NOT_FOUND",
-                "message": "Не найдено, нет такого адреса/ресурса",
-                # "comment": None
-            },
-        422: {
-            "code_name": "UNPROCESSABLE_FORMAT",
-            "message": "Ошибка валидации/ семантическая ошибка",
-            # "comment": None
-        },
-        500: {
-            "code_name": "INTERNAL_SERVER_ERROR",
-            "message": "Внутренняя ошибка сервера",
-            # "comment": None
-        },
-        501: {
-            "code_name": "NOT_IMPLEMENTED",
-            "message": "Метод не внедрён",
-            # "comment": "GET and HEAD не должны возвращать этот код"
-        }
+    Defines a custom domain exception to format errors like:
+    {
+      "error": {
+        "code": "ERROR_CODE",
+        "message": "Error message",
+        "details": {}
+      }
     }
-    if status_codes.get(code) is not None:
-        return status_codes.get(code)
-    else:
-        return None
-
-
-class APIException(HTTPException):
-    """"
-    Defines a custom API exception
     """
-
     def __init__(
             self,
-            code: int,
-            message: str | None = None,
-            details: dict | str | None = None,
+            status_code: int,
+            error_code: str,
+            message: str,
+            details: dict | None = None
     ):
-        stat = get_status(code)
-        message = message or stat["message"]
+        self.status_code = status_code
+        self.error_code = error_code
+        self.message = message
+        self.details = details or {}
 
-        super().__init__(
-            status_code=code,
-            detail={
-                "code": code,
-                "code_name": stat["code_name"],
-                "message": message,
-                "details": details
-            }
-        )
+def success_response(data: Any, meta: dict | None = None, status_code: int = 200) -> JSONResponse:
+    """
+    Generates a standardized positive response with a custom status code.
+    Format:
+    {
+        "data": <data>,
+        "meta": <meta>
+    }
+    """
+    content = {
+        "data": data,
+        "meta": meta or {}
+    }
+    return JSONResponse(status_code=status_code, content=content)
