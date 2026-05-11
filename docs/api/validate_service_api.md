@@ -1,8 +1,35 @@
-## API Validation Service (validation-service:8082)
+## API Validation Service (validation-service:8086)
 
 Сервис валидации, извлечения параметров и сопоставления.
 
-### POST /extract/parameters
+*Внутренний сервис. Не предназначен для прямого вызова из frontend. Публичный API — в Orchestrator Service.*
+
+**Базовый URL (внутренний)**: `http://127.0.0.1:8086/api/v1`  
+**Базовый URL (публичный через Orchestrator)**: `https://{host}/api/v1`
+
+### Формат ответа
+
+Успех — данные возвращаются напрямую.
+
+При ошибке:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_FAILED",
+    "message": "Описание ошибки",
+    "details": {}
+  }
+}
+```
+
+### Группы
+
+| Группа | Описание |
+|--------|----------|
+| `validate` | Все endpoint'ы сервиса валидации |
+
+### POST /validate/extract/parameters
 
 Извлечение структурированных параметров из документов.
 
@@ -24,7 +51,7 @@
 
 **Ответ `200`**: Структура параметров (см. `GET /documents/{doc_id}/parameters`) + `processing_time_ms`.
 
-### POST /check
+### POST /validate/check
 
 Выполнение заданного набора проверок над текстом.
 
@@ -52,7 +79,7 @@
   "checks": [
     {
       "rule": "min_thickness_12mm",
-      "status": "fail",
+      "status": "ERROR",
       "message": "Толщина 10 мм меньше требования 12 мм",
       "details": "..."
     }
@@ -61,7 +88,7 @@
 }
 ```
 
-### POST /calculate
+### POST /validate/calculate
 
 Арифметический движок для вычислений.
 
@@ -90,7 +117,14 @@
 }
 ```
 
-### POST /recommend
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `expression` | string | Исходное выражение |
+| `result` | float | Результат вычисления |
+| `unit` | string | Единица измерения (определяется парсингом исходных операндов) |
+| `steps` | string[] | Пошаговое решение |
+
+### POST /validate/recommend
 
 Рекомендации по исправлению ошибок проверки.
 
@@ -125,9 +159,9 @@
 }
 ```
 
-### POST /compare
+### POST /validate/compare
 
-Сопоставление нормы и проектных данных (одиночное).
+Сопоставление нормы и проектных данных (асинхронное).
 
 **Запрос**:
 
@@ -145,15 +179,38 @@
 | `project_text` | string | Да | Текст проектного параметра |
 | `document_type` | string | Да | Тип документов |
 
-**Ответ `200`**: Объект сопоставления + `comparison_id`.
+**Ответ `202`** (запрос принят, результат будет доступен позже):
 
-### GET /compare/{comparison_id}
+```json
+{
+  "comparison_id": "cmp-007",
+  "status": "processing",
+  "created_at": "2026-04-27T12:00:00Z"
+}
+```
+
+> Статус обновляется: `processing` → `completed` / `failed`.  
+> Для опроса используйте `GET /validate/compare/{comparison_id}`.
+
+### GET /validate/compare/{comparison_id}
 
 Получение ранее созданного сопоставления.
 
-**Ответ `200`**: Объект сопоставления.
+**Ответ `200`** (результат готов):
 
-### POST /compare/batch
+Если статус `processing` — повторите запрос позже.
+
+```json
+{
+  "comparison_id": "cmp-007",
+  "status": "completed",
+  "match_status": "match",
+  "summary": "Толщина 14 мм соответствует требованию ≥12 мм",
+  "processing_time_ms": 3200
+}
+```
+
+### POST /validate/compare/batch
 
 Массовое сопоставление пар фрагментов.
 

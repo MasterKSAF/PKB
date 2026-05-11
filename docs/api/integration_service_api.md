@@ -1,10 +1,37 @@
-## API Integration Service (integration-service:8084)
+## API Integration Service (integration-service:8085)
 
 Сервис интеграции с внешними системами и управления файлами.
 
-### Файлы
+*Внутренний сервис. Не предназначен для прямого вызова из frontend. Публичный API — в Orchestrator Service.*
 
-#### POST /files/upload
+**Базовый URL (внутренний)**: `http://127.0.0.1:8085/api/v1`  
+**Базовый URL (публичный через Orchestrator)**: `https://{host}/api/v1`
+
+### Формат ответа
+
+Успех — данные возвращаются напрямую.
+
+При ошибке:
+
+```json
+{
+  "error": {
+    "code": "FILE_NOT_FOUND",
+    "message": "Описание ошибки",
+    "details": {}
+  }
+}
+```
+
+### Группы
+
+| Группа | Описание |
+|--------|----------|
+| `files` | Загрузка, получение и удаление файлов |
+| `meridian` | Экспорт в ИС «Меридиан» |
+| `external` | Статус внешних систем |
+
+### POST /files/upload
 
 Загрузка файла в общее хранилище.
 
@@ -37,13 +64,13 @@
 | `url` | string | URL для доступа |
 | `uploaded_at` | string | Дата загрузки |
 
-#### GET /files/{file_id}
+### GET /files/{file_id}
 
 Получение бинарного потока файла.
 
 **Ответ `200`**: Бинарные данные файла с корректными заголовками `Content-Type` и `Content-Length`.
 
-#### DELETE /files/{file_id}
+### DELETE /files/{file_id}
 
 Удаление файла.
 
@@ -56,15 +83,13 @@
 }
 ```
 
-#### GET /files/{file_id}/info
+### GET /files/{file_id}/info
 
 Метаданные файла без скачивания.
 
 **Ответ `200`**: Объект метаданных (аналогичен ответу загрузки).
 
-### Интеграция с внешними системами
-
-#### POST /meridian/export
+### POST /meridian/export
 
 Отправка структурированных данных в систему «Меридиан».
 
@@ -73,14 +98,27 @@
 ```json
 {
   "document_id": "doc-8a3f2b",
-  "data": {}
+  "data": {
+    "designation": "21900M2.362135.0903СБ",
+    "title": "Сборочный чертёж корпуса",
+    "materials": ["Сталь 09Г2С"],
+    "dimensions": "1200x800x600",
+    "specification_items": [
+      {"position": 1, "name": "Кница", "quantity": 4}
+    ]
+  }
 }
 ```
 
 | Поле | Тип | Обязательность | Описание |
 |------|-----|----------------|----------|
 | `document_id` | string | Да | ID документа |
-| `data` | object | Да | Данные для экспорта |
+| `data` | object | Да | Данные для экспорта. Структура определяется внешней системой «Меридиан». |
+| `data.designation` | string | Нет | Обозначение документа |
+| `data.title` | string | Нет | Наименование |
+| `data.materials` | string[] | Нет | Материалы |
+| `data.dimensions` | string | Нет | Габариты |
+| `data.specification_items` | array | Нет | Позиции спецификации |
 
 **Ответ `200`**:
 
@@ -94,7 +132,7 @@
 }
 ```
 
-#### GET /external/status
+### GET /external/status
 
 Проверка доступности внешних систем.
 

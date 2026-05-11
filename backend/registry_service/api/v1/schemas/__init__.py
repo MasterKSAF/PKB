@@ -1,0 +1,3 @@
+from .classifier import ClassifierRegistryBase, ClassifierRegistryCreate, ClassifierRegistryUpdate, ClassifierRegistryResponse
+from .terminology import TerminologyRegistryBase, TerminologyRegistryCreate, TerminologyRegistryUpdate, TerminologyRegistryResponse
+from .document import DocumentsBase, DocumentsCreate, DocumentsUpdate, DocumentsResponse
