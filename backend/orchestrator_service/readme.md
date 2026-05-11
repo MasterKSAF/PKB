@@ -1,59 +1,161 @@
-Backend/ Orchestrator API
-==========================
+# Orchestrator Service
 
-В этой директории хроняться/разрабатываются коды для бакенд API 
-(входящие запросы к системе).
+Единая точка входа для публичного API Нейроассистента ПКБ.
 
+## Описание
 
-[Общие постановления](../../../docs/api/common.md)
+Orchestrator Service реализует API, описанный в `docs/api/orchestrator_service_api.md`, и координирует взаимодействие с внешними микросервисами:
 
-- Базовый URL (оркестратор): `https://{host}/api/v1`
-- Базовые документы находятся в ```docs/api```
+- **auth-service** — аутентификация и авторизация
+- **query-service** — обработка произвольного текста и чаты
+- **rag-service** — векторный поиск
+- **ocr-service** — OCR распознавание
+- **validation-service** — валидация и сопоставление
+- **integration-service** — интеграция с внешними системами
 
-- Запуск сервера в среде разработчика производится из директории ```orchestrator_service``` командой (порт по усмотрению):
-```commandline
-uvicorn main:app --reload --port 8100
+## Режимы работы с внешними сервисами
+
+Для каждого внешнего сервиса поддерживаются 2 режима:
+
+### 1. Mock/Stub режим (по умолчанию)
+- Сервис возвращает сгенерированные тестовые данные
+- Не требует подключения к реальным сервисам
+- Используется для разработки и тестирования
+
+### 2. Режим реальных API вызовов
+- Сервис выполняет HTTP-запросы к внешним сервисам
+- Требует указания URL сервиса в конфигурации
+- Активируется при установке `*_MOCK=false` и указании `*_SERVICE_URL`
+
+## Установка
+
+```bash
+cd backend/orchestrator_service
+pip install -r requirements.txt
 ```
-Потом смотреть по адресу: ```http://27.0.0.1:8100/api/v1``` и дальше добавить по описанию.
 
-- На производстве порт будет 80 и запуск из докера.
+## Конфигурация
 
-# Статусы разработки API
+Скопируйте `.env.example` в `.env` и настройте параметры:
 
-## 1. Документы
-| METHOD | EndPoint                                      | Описание                          | Статус | Коментарии                                                                          |
-|--------|-----------------------------------------------|-----------------------------------|--------|-------------------------------------------------------------------------------------|
-| GET    | /documents?param1=<value1>&param2=<value2>... | Список документов с фильтрацией.  | New    | Need to add "filters" block into response |
-| POST   | /documents                                    | Загрузка документа в очередь обработки.                 | New    |                                                                                     |
-| GET    | /documents/{doc_id}                           | Детальная информация о документе. | New    |                                                                                     |
-| GET    | /documents/{doc_id}/status                    | Прогресс обработки документа.     | New    |                                                                                     |
-| DELETE | /documents/{doc_id}                           | Удаление документа и всех связанных данных. | New    |                                                                                     |
-| POST   | /documents/{doc_id}/reprocess                 | Повторная обработка документа. | New    |                                                                                     |
-| GET    | /documents/{doc_id}/errors                    | Журнал ошибок обработки. | New    |                                                                                     |
+```bash
+cp .env.example .env
+```
 
-## 2. Поиск и вопросно-ответная система
-| METHOD | EndPoint                                   | Описание                          | Статус | Коментарии                                |
-|--------|--------------------------------------------|-----------------------------------|--------|-------------------------------------------|
-| POST   | /search                                    | Семантический поиск фрагментов. | New    | Need to add "filters" block into response |
-| GET    | /search?param1=<value1>&param2=<value2>... | Быстрый GET-вариант поиска. | New    | Need to add "filters" block into response |
-| POST   | /ask                                       | Генерация ответа с источниками. | New    |                                           |
+Пример конфигурации для работы с реальными сервисами:
 
+```env
+AUTH_SERVICE_URL=http://auth-service:8080
+AUTH_SERVICE_MOCK=false
 
-## 3. Просмотр документа и фрагментов
-| METHOD | EndPoint                                   | Описание                          | Статус | Коментарии                                                                                           |
-|--------|--------------------------------------------|-----------------------------------|--------|------------------------------------------------------------------------------------------------------|
-| GET    | /documents/{doc_id}/pages/{page_num}       | Изображение страницы с подсветкой блоков. | New    | Needs review. GET ignores data block. Need parameters description. Path can omit ```/pages/``` part. |
-| GET    | /documents/{doc_id}/pages/{page_num}/text  | Текстовый слой и структура страницы. | New    | Needs review. GET path can omit ```/pages/``` part.                                                  |
+RAG_SERVICE_URL=http://rag-service:8081
+RAG_SERVICE_MOCK=false
+```
 
+Для работы в mock-режиме:
 
-## 4. Извлечение параметров и сопоставление
-| METHOD | EndPoint | Описание | Статус | Коментарии  |
-|--------|-------------------|---------|--------|-------------|
-| GET    | /documents/{doc_id}/parameters  | Извлечённые структурированные параметры документа. | New    |             |
-| POST   | /validate/compare  | Запуск сопоставления нормы и проектного документа. | New    |             |
-| GET    | /validate/compare/{comparison_id}  | Результат сопоставления. | New    |             |
+```env
+AUTH_SERVICE_MOCK=true
+RAG_SERVICE_MOCK=true
+```
 
-## 5. Служебные методы
-| METHOD | EndPoint | Описание | Статус | Коментарии  |
-|--------|----------|---------|--------|-------------|
-| GET    | /health  | Проверка состояния системы. | New    | |
+## Запуск
+
+```bash
+# Development mode
+uvicorn app.main:app --reload
+
+# Production mode
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# Or using the main script
+python -m app.main
+```
+
+## API Endpoints
+
+### Документы
+- `POST /api/v1/documents` — загрузка документа
+- `GET /api/v1/documents` — список документов
+- `GET /api/v1/documents/{doc_id}` — информация о документе
+- `GET /api/v1/documents/{doc_id}/status` — статус обработки
+- `DELETE /api/v1/documents/{doc_id}` — удаление документа
+- `POST /api/v1/documents/{doc_id}/reprocess` — повторная обработка
+- `GET /api/v1/documents/{doc_id}/errors` — журнал ошибок
+- `GET /api/v1/documents/{doc_id}/pages/{page_num}` — просмотр страницы
+- `GET /api/v1/documents/{doc_id}/pages/{page_num}/text` — текст страницы
+- `GET /api/v1/documents/{doc_id}/parameters` — извлечённые параметры
+
+### Поиск и RAG
+- `POST /api/v1/search` — семантический поиск
+- `GET /api/v1/search?q=...` — быстрый поиск
+- `POST /api/v1/ask` — генерация ответа с источниками
+
+### Валидация
+- `POST /api/v1/validate/compare` — запуск сопоставления
+- `GET /api/v1/validate/compare/{comparison_id}` — результат сопоставления
+- `POST /api/v1/validate/compare/batch` — массовое сопоставление
+
+### Служебные
+- `GET /api/v1/health` — проверка состояния системы
+
+## Структура проекта
+
+```
+orchestrator_service/
+├── app/
+│   ├── api/
+│   │   └── v1/
+│   │       ├── endpoints/      # API endpoints
+│   │       │   ├── documents.py
+│   │       │   ├── search.py
+│   │       │   ├── validate.py
+│   │       │   └── health.py
+│   │       └── api.py          # Router configuration
+│   ├── core/
+│   │   └── config.py           # Configuration settings
+│   ├── schemas/               # Pydantic models
+│   │   ├── documents.py
+│   │   ├── search.py
+│   │   ├── validation.py
+│   │   └── common.py
+│   ├── services/              # External service clients
+│   │   ├── base_client.py     # Base client with dual mode
+│   │   ├── auth_client.py
+│   │   ├── rag_client.py
+│   │   ├── ocr_client.py
+│   │   ├── query_client.py
+│   │   ├── validate_client.py
+│   │   └── integration_client.py
+│   └── main.py                # FastAPI application
+├── requirements.txt
+├── .env.example
+└── README.md
+```
+
+## Добавление нового сервиса
+
+1. Создайте клиент в `app/services/{service}_client.py`, наследуясь от `ServiceClient`
+2. Реализуйте метод `_generate_mock` для mock-ответов
+3. Добавьте настройки в `app/core/config.py`
+4. Используйте клиент в endpoint'ах
+
+Пример клиента:
+
+```python
+from app.services.base_client import ServiceClient
+from app.core.config import settings
+
+class MyServiceClient(ServiceClient):
+    def __init__(self):
+        super().__init__(
+            service_name="my_service",
+            service_url=settings.services.MY_SERVICE_URL,
+            mock_mode=settings.services.MY_SERVICE_MOCK
+        )
+    
+    async def _generate_mock(self, method, endpoint, default_mock, **kwargs):
+        if endpoint == "/api/endpoint":
+            return {"mock": "data"}
+        return default_mock
+```
