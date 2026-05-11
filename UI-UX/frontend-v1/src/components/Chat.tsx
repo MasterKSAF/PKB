@@ -170,12 +170,6 @@ export const Chat: React.FC = () => {
         : [],
     [messages, normalizedChatSearch],
   );
-  const matchedMessageIds = useMemo(
-    () => new Set(searchMatches.map((match) => match.messageId)),
-    [searchMatches],
-  );
-  const activeSearchMessageId = searchMatches[activeSearchMatch]?.messageId;
-
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -300,16 +294,6 @@ export const Chat: React.FC = () => {
                       gap: 1.5,
                       alignItems: 'flex-start',
                       justifyContent: isAssistant ? 'flex-start' : 'flex-end',
-                      outline: activeSearchMessageId === msg.id
-                        ? isLight
-                          ? '2px solid rgba(202, 138, 4, 0.62)'
-                          : '2px solid rgba(216, 176, 122, 0.68)'
-                        : matchedMessageIds.has(msg.id)
-                        ? isLight
-                          ? '2px solid rgba(14, 116, 144, 0.36)'
-                          : '2px solid rgba(152, 217, 216, 0.42)'
-                        : 'none',
-                      outlineOffset: 6,
                       borderRadius: 3,
                     }}
                   >

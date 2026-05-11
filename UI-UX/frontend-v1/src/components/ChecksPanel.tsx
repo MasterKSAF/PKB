@@ -44,8 +44,22 @@ const TABLE_SX = {
   bgcolor: 'rgba(7, 14, 22, 0.96)',
   borderWidth: 1.5,
   borderColor: 'rgba(194, 213, 238, 0.5)',
+  maxHeight: 'calc(100vh - 360px)',
+  overflow: 'auto',
   boxShadow:
     '0 0 0 1px rgba(194, 213, 238, 0.28), 0 0 0 3px rgba(102, 142, 198, 0.12), inset 0 1px 0 rgba(255,255,255,0.02)',
+  '&::-webkit-scrollbar': {
+    width: 10,
+    height: 10,
+  },
+  '&::-webkit-scrollbar-track': {
+    bgcolor: 'rgba(255,255,255,0.04)',
+  },
+  '&::-webkit-scrollbar-thumb': {
+    bgcolor: 'rgba(184,196,216,0.30)',
+    borderRadius: 999,
+    border: '2px solid rgba(7, 14, 22, 0.96)',
+  },
 } as const;
 
 const linkButtonSx = {
@@ -413,6 +427,7 @@ export const ChecksPanel: React.FC = () => {
               <Table
                 size="small"
                 sx={{
+                  minWidth: 1650,
                   '& .MuiTableCell-root': {
                     borderBottomColor: 'rgba(198, 214, 236, 0.24)',
                     borderBottomWidth: '1px',

@@ -88,7 +88,7 @@ export interface AdminUser {
   name: string;
   position: string;
   login: string;
-  role: 'Пользователь' | 'Администратор';
+  role: 'Пользователь' | 'Администратор знаний' | 'Системный администратор';
   access: string;
   status: 'Активен' | 'Ожидает настройки' | 'Отключен';
   lastSeen: string;
@@ -380,8 +380,8 @@ export const MOCK_ADMIN_USERS: AdminUser[] = [
     name: 'Анна Волкова',
     position: 'Администратор базы НСИ',
     login: 'a.volkova',
-    role: 'Администратор',
-    access: 'Все вкладки, роли, права, полный журнал',
+    role: 'Администратор знаний',
+    access: 'Реестр, поиск, проверка, история, QA, OCR-артефакты, журналы обработки',
     status: 'Активен',
     lastSeen: '2026-04-29 09:20',
   },
@@ -390,7 +390,7 @@ export const MOCK_ADMIN_USERS: AdminUser[] = [
     name: 'Игорь Смирнов',
     position: 'Системный администратор',
     login: 'i.smirnov',
-    role: 'Администратор',
+    role: 'Системный администратор',
     access: 'Все вкладки, роли, права, полный журнал',
     status: 'Ожидает настройки',
     lastSeen: '2026-04-28 18:05',

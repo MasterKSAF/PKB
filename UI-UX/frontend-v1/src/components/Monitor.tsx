@@ -239,7 +239,7 @@ const MetricTile: React.FC<MetricTileProps> = ({
     <Typography sx={{ mt: 0.85, fontSize: '0.8rem', color: 'rgba(233, 237, 243, 0.9)' }}>{label}</Typography>
     <Typography sx={{ mt: 0.3, fontSize: '0.72rem', color: 'rgba(171, 183, 201, 0.72)' }}>{subline}</Typography>
 
-    <Box sx={{ pt: 1.25, display: 'flex', justifyContent: 'flex-end', mt: 'auto' }}>
+    <Box sx={{ pt: 1, pb: 0.35, display: 'flex', justifyContent: 'flex-end', mt: 'auto' }}>
       <Chip
         className={`metric-state-chip metric-state-chip-${chipTone}`}
         size="small"

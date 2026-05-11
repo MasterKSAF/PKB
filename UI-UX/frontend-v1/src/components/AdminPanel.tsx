@@ -39,7 +39,7 @@ type AccessKey =
   | 'ocrArtifacts'
   | 'processingLogs';
 
-const ROLE_OPTIONS: RoleLabel[] = ['Пользователь', 'Администратор'];
+const ROLE_OPTIONS: RoleLabel[] = ['Пользователь', 'Администратор знаний', 'Системный администратор'];
 
 const ACCESS_OPTIONS: Array<{ key: AccessKey; label: string; description: string }> = [
   { key: 'chat', label: 'Чат', description: 'вопросы к ассистенту и просмотр ответов' },
@@ -55,7 +55,8 @@ const ACCESS_OPTIONS: Array<{ key: AccessKey; label: string; description: string
 
 const DEFAULT_ACCESS_BY_ROLE: Record<RoleLabel, AccessKey[]> = {
   Пользователь: ['chat', 'search', 'checks', 'history'],
-  Администратор: ACCESS_OPTIONS.map((item) => item.key),
+  'Администратор знаний': ['chat', 'search', 'documents', 'checks', 'history', 'qa', 'ocrArtifacts', 'processingLogs'],
+  'Системный администратор': ACCESS_OPTIONS.map((item) => item.key),
 };
 
 const TABLE_SX = {
@@ -202,7 +203,7 @@ export const AdminPanel: React.FC = () => {
   const availableSections = ADMIN_SECTIONS_ACCESS[currentRole];
   const canManageUsers = availableSections.includes('users');
   const canManagePermissions = availableSections.includes('permissions');
-  const canSeeFullLogs = currentRole === 'admin';
+  const canSeeFullLogs = currentRole === 'systemAdmin';
   const logs = canSeeFullLogs
     ? MOCK_PROCESSING_LOGS
     : MOCK_PROCESSING_LOGS.filter((log) => log.visibility !== 'Администратор');
