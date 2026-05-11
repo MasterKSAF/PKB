@@ -1,94 +1,68 @@
-#
-#  Forming unified API responses
-#
+"""
+Forming unified API responses
+"""
+
 from fastapi import HTTPException
 
 
 def get_status(code: int) -> dict | None:
     """
-    Возвращает описание кодов запросов
+    Returns error code information.
     """
-
-
     status_codes = {
-        200: {
-            "code_name": "OK",
-            "message": "Успех",
-            # "comment": None
-        },
-        201: {
-            "code_name": "CREATED",
-            "message": "Создан ресурс",
-            # "comment": None
-        },
-        202: {
-            "code_name": "ACCEPTED",
-            "message": "Запрос принят",
-            # "comment": "Когда нет немедленного ответа, например, поставить документ на обработку."
-        },
-        400: {
-            "code_name": "BAD_REQUEST",
-            "message": "Неверные параметры",
-            # "comment": None
-        },
+        200: {"code_name": "OK", "message": "Успех"},
+        201: {"code_name": "CREATED", "message": "Создан ресурс"},
+        202: {"code_name": "ACCEPTED", "message": "Запрос принят"},
+        400: {"code_name": "BAD_REQUEST", "message": "Неверные параметры запроса"},
         401: {
             "code_name": "UNAUTHORIZED",
-            "message": "Нет доступа - клиент не известен",
-            # "comment": None
+            "message": "Нет доступа — клиент не известен",
         },
-        403: {
-            "code_name": "FORBIDDEN",
-            "message": "Нет доступа - нет прав на ресурс, клиент известен",
-            # "comment": None
-        },
-        404: {
-                "code_name": "NOT_FOUND",
-                "message": "Не найдено, нет такого адреса/ресурса",
-                # "comment": None
-            },
+        403: {"code_name": "FORBIDDEN", "message": "Нет доступа — нет прав на ресурс"},
+        404: {"code_name": "NOT_FOUND", "message": "Ресурс не найден"},
+        409: {"code_name": "CONFLICT", "message": "Конфликт"},
+        413: {"code_name": "PAYLOAD_TOO_LARGE", "message": "Превышен размер файла"},
         422: {
-            "code_name": "UNPROCESSABLE_FORMAT",
-            "message": "Ошибка валидации/ семантическая ошибка",
-            # "comment": None
+            "code_name": "VALIDATION_FAILED",
+            "message": "Ошибка семантической валидации",
         },
-        500: {
-            "code_name": "INTERNAL_SERVER_ERROR",
-            "message": "Внутренняя ошибка сервера",
-            # "comment": None
+        500: {"code_name": "INTERNAL_ERROR", "message": "Внутренняя ошибка сервера"},
+        501: {"code_name": "NOT_IMPLEMENTED", "message": "Метод не реализован"},
+        503: {
+            "code_name": "SERVICE_UNAVAILABLE",
+            "message": "Сервис временно недоступен",
         },
-        501: {
-            "code_name": "NOT_IMPLEMENTED",
-            "message": "Метод не внедрён",
-            # "comment": "GET and HEAD не должны возвращать этот код"
-        }
+        504: {
+            "code_name": "GATEWAY_TIMEOUT",
+            "message": "Таймаут при вызове внутреннего сервиса",
+        },
     }
-    if status_codes.get(code) is not None:
-        return status_codes.get(code)
-    else:
-        return None
+    return status_codes.get(code)
 
 
 class APIException(HTTPException):
-    """"
-    Defines a custom API exception
+    """
+    Defines a custom API exception with proper error format per API spec.
     """
 
     def __init__(
-            self,
-            code: int,
-            message: str | None = None,
-            details: dict | str | None = None,
+        self,
+        code: int,
+        message: str | None = None,
+        details: dict | str | None = None,
     ):
         stat = get_status(code)
-        message = message or stat["message"]
+        message = message or stat["message"] if stat else "Unknown error"
+
+        error_code = stat["code_name"] if stat else "INTERNAL_ERROR"
 
         super().__init__(
             status_code=code,
             detail={
-                "code": code,
-                "code_name": stat["code_name"],
-                "message": message,
-                "details": details
-            }
+                "error": {
+                    "code": error_code,
+                    "message": message,
+                    "details": details or {},
+                }
+            },
         )
-
