@@ -44,6 +44,7 @@ export const Feedback: React.FC = () => {
           <Box sx={{ display: 'flex', gap: 1 }}>
             <Tooltip title="Полезно">
               <IconButton
+                aria-label="Оценить ответ положительно"
                 size="small"
                 onClick={() => toggleUseful(true)}
                 sx={{
@@ -56,6 +57,7 @@ export const Feedback: React.FC = () => {
             </Tooltip>
             <Tooltip title="Не полезно">
               <IconButton
+                aria-label="Оценить ответ отрицательно"
                 size="small"
                 onClick={() => toggleUseful(false)}
                 sx={{

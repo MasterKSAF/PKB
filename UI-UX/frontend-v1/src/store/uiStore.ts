@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import type { AppTab, UserRole } from '../utils/access';
-import { MOCK_ADMIN_USERS } from '../utils/mockData';
+import { MOCK_ADMIN_USERS, MOCK_CHATS } from '../utils/mockData';
 import type { AdminUser } from '../utils/mockData';
+import type { ChatMessage } from '../utils/mockData';
 
 export type { AppTab, UserRole };
 
@@ -15,6 +16,9 @@ export interface AdminAuditLogItem {
 }
 
 interface UIState {
+  isAuthenticated: boolean;
+  login: (userId: string) => void;
+  logout: () => void;
   activeTab: AppTab;
   setActiveTab: (tab: AppTab) => void;
   currentUserId: string;
@@ -34,14 +38,27 @@ interface UIState {
   updateAdminUser: (userId: string, patch: Partial<AdminUser>) => void;
   adminAuditLog: AdminAuditLogItem[];
   addAdminAuditLogItem: (item: AdminAuditLogItem) => void;
+  chatMessages: ChatMessage[];
+  setChatMessages: (messages: ChatMessage[]) => void;
+  appendChatMessages: (messages: ChatMessage[]) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
+  isAuthenticated: false,
+  login: (currentUserId) =>
+    set((state) => {
+      const user = state.adminUsers.find((item) => item.id === currentUserId) ?? state.adminUsers[0];
+      return {
+        isAuthenticated: true,
+        currentUserId: user.id,
+      };
+    }),
+  logout: () => set({ isAuthenticated: false, activeTab: 'chat', focusMode: false }),
   activeTab: 'chat',
   setActiveTab: (activeTab) => set({ activeTab }),
   currentUserId: 'u1',
   setCurrentUserId: (currentUserId) => set({ currentUserId }),
-  currentRole: 'engineer',
+  currentRole: 'user',
   setCurrentRole: (currentRole) => set({ currentRole }),
   themeMode: 'dark',
   setThemeMode: (themeMode) => set({ themeMode }),
@@ -70,5 +87,11 @@ export const useUIStore = create<UIState>((set) => ({
   addAdminAuditLogItem: (item) =>
     set((state) => ({
       adminAuditLog: [item, ...state.adminAuditLog].slice(0, 20),
+    })),
+  chatMessages: MOCK_CHATS,
+  setChatMessages: (chatMessages) => set({ chatMessages }),
+  appendChatMessages: (messages) =>
+    set((state) => ({
+      chatMessages: [...state.chatMessages, ...messages],
     })),
 }));
