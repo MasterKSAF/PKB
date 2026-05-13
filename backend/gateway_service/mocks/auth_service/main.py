@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from ..common import (
     SEED_AUDIT,
@@ -104,8 +104,17 @@ def _add_audit(
 
 
 class LoginRequest(BaseModel):
-    username: str
+    username: Optional[str] = None
+    email: Optional[str] = None
     password: str
+
+    @model_validator(mode="before")
+    @classmethod
+    def check_login_field(cls, data):
+        if isinstance(data, dict):
+            if not data.get("username") and not data.get("email"):
+                raise ValueError("Необходимо указать username или email")
+        return data
 
 
 class RefreshRequest(BaseModel):
@@ -150,6 +159,120 @@ class ValidateTokenRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Response-модели для OpenAPI
+# ---------------------------------------------------------------------------
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str
+    expires_in: int
+
+
+class UserProfileResponse(BaseModel):
+    user_id: str
+    full_name: str
+    position: str
+    role: str
+    role_title: str
+    available_tabs: List[str]
+    permissions: Dict[str, Any]
+    last_login_at: str
+    created_at: str
+
+
+class UserListItem(BaseModel):
+    user_id: str
+    email: str
+    full_name: str
+    position: str
+    roles: List[str]
+    is_active: bool
+    last_login_at: str
+    created_at: str
+
+
+class UserListResponse(BaseModel):
+    users: List[UserListItem]
+    meta: Dict[str, Any]
+
+
+class UserDetailResponse(BaseModel):
+    user_id: str
+    email: str
+    full_name: str
+    position: str
+    roles: List[str]
+    permissions: List[str]
+    is_active: bool
+    last_login_at: str
+    created_at: str
+    updated_at: str
+
+
+class UserCreateResponse(BaseModel):
+    user_id: str
+    email: str
+    full_name: str
+    position: str
+    roles: List[str]
+    role: str
+    role_title: str
+    is_active: bool
+    available_tabs: List[str]
+    permissions: Dict[str, Any]
+    last_login_at: str
+    created_at: str
+    updated_at: str
+
+
+class RoleResponse(BaseModel):
+    role_id: str
+    name: str
+    permissions: List[str]
+    created_at: str
+
+
+class RolesListResponse(BaseModel):
+    roles: List[RoleResponse]
+
+
+class AuditEvent(BaseModel):
+    event_id: str
+    user_id: str
+    action: str
+    resource_type: str
+    resource_id: str
+    details: Dict[str, Any]
+    ip_address: str
+    timestamp: str
+
+
+class AuditListResponse(BaseModel):
+    events: List[AuditEvent]
+    meta: Dict[str, Any]
+
+
+class MessageResponse(BaseModel):
+    message: str
+    revoked_at: str
+
+
+class DeactivateResponse(BaseModel):
+    user_id: str
+    is_active: bool
+    deactivated_at: str
+
+
+class PatchUserResponse(BaseModel):
+    user_id: str
+    role: str
+    audit_log_id: str
+    updated_at: str
+
+
+# ---------------------------------------------------------------------------
 # Инициализация
 # ---------------------------------------------------------------------------
 
@@ -161,15 +284,22 @@ _init_data()
 # ===========================================================================
 
 
-@router.post("/auth/token")
+@router.post("/auth/token", response_model=TokenResponse)
 async def login(req: LoginRequest, request: Request):
     """Получение JWT-токенов."""
     user = None
+    # Поиск по username (может быть email или логин) или по полю email
+    login_value = (req.username or "").strip().lower()
+    email_value = (req.email or "").strip().lower()
     for u in _users.values():
-        if (
-            u["email"] == req.username
-            or u.get("email", "").split("@")[0] == req.username
-        ):
+        user_email = u.get("email", "").lower()
+        user_login = user_email.split("@")[0]
+        if user_email == login_value or user_login == login_value:
+            stored_hash = _password_hashes.get(u["user_id"], "")
+            if _hash_password(req.password) == stored_hash:
+                user = u
+                break
+        if email_value and user_email == email_value:
             stored_hash = _password_hashes.get(u["user_id"], "")
             if _hash_password(req.password) == stored_hash:
                 user = u
@@ -199,7 +329,7 @@ async def login(req: LoginRequest, request: Request):
     return _make_token(user["user_id"])
 
 
-@router.post("/auth/refresh")
+@router.post("/auth/refresh", response_model=TokenResponse)
 async def refresh(req: RefreshRequest):
     """Обновление access-токена."""
     if req.refresh_token in _blacklist:
@@ -218,7 +348,7 @@ async def refresh(req: RefreshRequest):
     return _make_token(user_id)
 
 
-@router.post("/auth/revoke")
+@router.post("/auth/revoke", response_model=MessageResponse)
 async def revoke(req: RevokeRequest):
     """Отзыв refresh-токена."""
     if req.refresh_token in _tokens:
@@ -232,17 +362,23 @@ async def revoke(req: RevokeRequest):
     }
 
 
-@router.get("/auth/me")
-async def get_me():
-    """Профиль текущего пользователя (первый активный для мока)."""
-    user = next(
-        (u for u in _users.values() if u.get("is_active", True)),
-        None,
-    )
-    if not user:
+@router.get("/auth/me", response_model=UserProfileResponse)
+async def get_me(request: Request):
+    """Профиль текущего пользователя из JWT-токена."""
+    user_state = request.state.user
+
+    if not user_state["is_authenticated"]:
         raise HTTPException(
             status_code=401,
             detail=error_response("UNAUTHORIZED", "Не авторизован"),
+        )
+
+    user_id = user_state["user_id"]
+    user = _users.get(user_id)
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail=error_response("UNAUTHORIZED", "Пользователь не найден"),
         )
 
     return {
@@ -265,7 +401,7 @@ async def get_me():
 # ===========================================================================
 
 
-@router.get("/admin/users")
+@router.get("/admin/users", response_model=UserListResponse)
 async def list_users(
     role: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
@@ -309,7 +445,7 @@ async def list_users(
     }
 
 
-@router.post("/admin/users", status_code=201)
+@router.post("/admin/users", status_code=201, response_model=UserCreateResponse)
 async def create_user(req: CreateUserRequest):
     """Создание пользователя."""
     # Проверка дубликата email
@@ -352,7 +488,7 @@ async def create_user(req: CreateUserRequest):
     return new_user
 
 
-@router.get("/admin/users/{user_id}")
+@router.get("/admin/users/{user_id}", response_model=UserDetailResponse)
 async def get_user(user_id: str):
     """Детали пользователя."""
     user = _users.get(user_id)
@@ -378,7 +514,7 @@ async def get_user(user_id: str):
     }
 
 
-@router.put("/admin/users/{user_id}")
+@router.put("/admin/users/{user_id}", response_model=UserCreateResponse)
 async def update_user(user_id: str, req: UpdateUserRequest):
     """Обновление пользователя."""
     user = _users.get(user_id)
@@ -406,7 +542,7 @@ async def update_user(user_id: str, req: UpdateUserRequest):
     return user
 
 
-@router.patch("/admin/users/{user_id}")
+@router.patch("/admin/users/{user_id}", response_model=PatchUserResponse)
 async def patch_user(user_id: str, req: PatchUserRequest):
     """Частичное обновление пользователя."""
     user = _users.get(user_id)
@@ -444,7 +580,7 @@ async def patch_user(user_id: str, req: PatchUserRequest):
     }
 
 
-@router.delete("/admin/users/{user_id}")
+@router.delete("/admin/users/{user_id}", response_model=DeactivateResponse)
 async def deactivate_user(user_id: str):
     """Деактивация пользователя."""
     user = _users.get(user_id)
@@ -465,7 +601,7 @@ async def deactivate_user(user_id: str):
     }
 
 
-@router.get("/admin/roles")
+@router.get("/admin/roles", response_model=RolesListResponse)
 async def list_roles():
     """Список ролей."""
     return {"roles": list(_roles.values())}

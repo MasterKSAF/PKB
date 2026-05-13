@@ -6,6 +6,7 @@ Combines all 5 routers on a single port 8081 with:
 - Idempotency-Key support for POST /documents and POST /chat
 - X-Process-Time header
 - Lifespan context manager
+- Unified error format (Registry spec)
 """
 
 import asyncio
@@ -19,9 +20,11 @@ from typing import Any, Dict
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
+from pydantic import ValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
 
 # ---------------------------------------------------------------------------
@@ -29,7 +32,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 # ---------------------------------------------------------------------------
 import mocks.auth_service.main as auth_mod
 from mocks.auth_service.main import router as auth_router
-from mocks.common import SEED_USERS, utcnow
+from mocks.common import SEED_USERS, error_response, utcnow
 from mocks.orchestrator_service.main import router as orch_router
 from mocks.query_service.main import router as query_router
 from mocks.registry_service.main import main_router as registry_router
@@ -58,12 +61,14 @@ auth_mod._make_token = _patched_make_token
 class RBACMiddleware(BaseHTTPMiddleware):
     """Validates JWT Bearer token (mock) and attaches user context.
 
-    - Missing/invalid token → allowed as anonymous (backward compat)
+    - Missing/invalid token → 401 for /admin/*, anonymous for others
     - Valid token → user info from seed data attached to request.state.user
+    - Blocks /admin/* paths for non-system_admin users
     """
 
     async def dispatch(self, request: Request, call_next):
         auth = request.headers.get("Authorization", "")
+        path = request.url.path
 
         user_context: Dict[str, Any] = {
             "user_id": None,
@@ -89,6 +94,24 @@ class RBACMiddleware(BaseHTTPMiddleware):
                 )
 
         request.state.user = user_context
+
+        # RBAC enforcement for /admin/* paths
+        if path.startswith("/api/v1/admin"):
+            if not user_context["is_authenticated"]:
+                return JSONResponse(
+                    status_code=401,
+                    content=error_response("UNAUTHORIZED", "Требуется аутентификация"),
+                )
+            role = user_context.get("role")
+            if role != "system_admin":
+                return JSONResponse(
+                    status_code=403,
+                    content=error_response(
+                        "FORBIDDEN",
+                        "Недостаточно прав для доступа к административным функциям",
+                    ),
+                )
+
         return await call_next(request)
 
 
@@ -179,6 +202,97 @@ app = FastAPI(
     description="Mock gateway combining all services on a single port",
     lifespan=lifespan,
 )
+
+
+# ---------------------------------------------------------------------------
+# Exception handlers — unified error format (Registry spec)
+# ---------------------------------------------------------------------------
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=error_response(
+            code=_error_code_from_status(exc.status_code, exc.detail),
+            message=_extract_message(exc.detail),
+        ),
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    details = {}
+    errors = exc.errors()
+    if errors:
+        details = {
+            "fields": [e["loc"] for e in errors],
+            "messages": [e["msg"] for e in errors],
+        }
+    return JSONResponse(
+        status_code=422,
+        content=error_response(
+            code="VALIDATION_ERROR",
+            message="Ошибка валидации запроса",
+            details=details,
+        ),
+    )
+
+
+@app.exception_handler(ValidationError)
+async def pydantic_validation_handler(request: Request, exc: ValidationError):
+    return JSONResponse(
+        status_code=422,
+        content=error_response(
+            code="VALIDATION_ERROR",
+            message="Ошибка валидации запроса",
+            details={"errors": exc.errors()},
+        ),
+    )
+
+
+def _error_code_from_status(status_code: int, detail: any) -> str:
+    """Map HTTP status to error code.
+
+    Supports custom error codes from error_response() format:
+    detail = {"error": {"code": "DOCUMENT_NOT_FOUND", "message": "..."}}
+    """
+    # Try to extract custom code from error_response format
+    if isinstance(detail, dict):
+        err = detail.get("error", {})
+        if isinstance(err, dict) and "code" in err:
+            return err["code"]
+        if "code" in detail:
+            return detail["code"]
+
+    # Fallback: map from HTTP status
+    mapping = {
+        400: "BAD_REQUEST",
+        401: "UNAUTHORIZED",
+        403: "FORBIDDEN",
+        404: "NOT_FOUND",
+        405: "METHOD_NOT_ALLOWED",
+        409: "CONFLICT",
+        422: "VALIDATION_ERROR",
+        429: "TOO_MANY_REQUESTS",
+        500: "INTERNAL_ERROR",
+    }
+    return mapping.get(status_code, f"HTTP_{status_code}")
+
+
+def _extract_message(detail: any) -> str:
+    """Extract message from detail which may be a string, dict, or list."""
+    if isinstance(detail, str):
+        return detail
+    if isinstance(detail, dict):
+        return detail.get(
+            "message", detail.get("error", {}).get("message", str(detail))
+        )
+    if isinstance(detail, list):
+        parts = [str(d) for d in detail]
+        return "; ".join(parts)
+    return str(detail)
+
 
 # ---------------------------------------------------------------------------
 # Middleware stack

@@ -530,7 +530,11 @@ SEED_DOCUMENTS: List[Dict[str, Any]] = [
         "index_status": "completed",
         "user_id": "u-001",
         "uploaded_by": "Иванов С.П.",
-        "metadata": {"project": "ПКБ-101", "author": "Иванов С.П."},
+        "metadata": {
+            "project": "ПКБ-101",
+            "author": "Иванов С.П.",
+            "registry_doc_id": "rd-001",
+        },
         "pages": [
             {
                 "page": 1,
@@ -614,7 +618,11 @@ SEED_DOCUMENTS: List[Dict[str, Any]] = [
         "index_status": "completed",
         "user_id": "u-001",
         "uploaded_by": "Иванов С.П.",
-        "metadata": {"project": "ПКБ-101", "author": "Иванов С.П."},
+        "metadata": {
+            "project": "ПКБ-101",
+            "author": "Иванов С.П.",
+            "registry_doc_id": "rd-002",
+        },
         "pages": [
             {
                 "page": 1,
@@ -654,7 +662,11 @@ SEED_DOCUMENTS: List[Dict[str, Any]] = [
         "index_status": "pending",
         "user_id": "u-002",
         "uploaded_by": "Петрова А.В.",
-        "metadata": {"project": "Архив-2025", "author": "Архив ПКБ"},
+        "metadata": {
+            "project": "Архив-2025",
+            "author": "Архив ПКБ",
+            "registry_doc_id": "rd-003",
+        },
         "pages": [
             {
                 "page": 1,
@@ -695,7 +707,11 @@ SEED_DOCUMENTS: List[Dict[str, Any]] = [
         "index_status": "completed",
         "user_id": "u-003",
         "uploaded_by": "Сидоров П.А.",
-        "metadata": {"project": "НСИ", "author": "Госстандарт"},
+        "metadata": {
+            "project": "НСИ",
+            "author": "Госстандарт",
+            "registry_doc_id": "rd-004",
+        },
         "pages": [
             {
                 "page": 1,
@@ -728,7 +744,11 @@ SEED_DOCUMENTS: List[Dict[str, Any]] = [
         "index_status": "failed",
         "user_id": "u-001",
         "uploaded_by": "Иванов С.П.",
-        "metadata": {"project": "ПКБ-102", "author": "Иванов С.П."},
+        "metadata": {
+            "project": "ПКБ-102",
+            "author": "Иванов С.П.",
+            "registry_doc_id": None,
+        },
         "pages": [],
         "parameters": {},
         "extraction_confidence": 0.0,
@@ -809,18 +829,19 @@ SEED_VALIDATION_CHECKS: List[Dict[str, Any]] = [
                 "nsi_requirement": "≥ 4 мм",
                 "nsi_document": "ГОСТ 2.109-73",
                 "status": "ok",
+                "match_status": "match",
                 "comment": "",
                 "project_source": {
                     "document_id": "doc-001",
                     "page": 3,
-                    "page_preview_url": "/mock/documents/doc-001/pages/3/preview",
-                    "document_url": "/mock/documents/doc-001",
+                    "page_preview_url": "/api/v1/documents/doc-001/pages/3/preview",
+                    "document_url": "/api/v1/documents/doc-001",
                 },
                 "nsi_source": {
                     "document_id": "rd-001",
                     "page": 5,
-                    "page_preview_url": "/mock/documents/rd-001/pages/5/preview",
-                    "document_url": "/mock/documents/rd-001",
+                    "page_preview_url": "/api/v1/documents/rd-001/pages/5/preview",
+                    "document_url": "/api/v1/documents/rd-001",
                 },
             },
             {
@@ -832,18 +853,19 @@ SEED_VALIDATION_CHECKS: List[Dict[str, Any]] = [
                 "nsi_requirement": "H11",
                 "nsi_document": "ГОСТ 2.307-2011",
                 "status": "warning",
+                "match_status": "partial_match",
                 "comment": "Рекомендуется уточнить допуск",
                 "project_source": {
                     "document_id": "doc-001",
                     "page": 5,
-                    "page_preview_url": "/mock/documents/doc-001/pages/5/preview",
-                    "document_url": "/mock/documents/doc-001",
+                    "page_preview_url": "/api/v1/documents/doc-001/pages/5/preview",
+                    "document_url": "/api/v1/documents/doc-001",
                 },
                 "nsi_source": {
                     "document_id": "rd-002",
                     "page": 3,
-                    "page_preview_url": "/mock/documents/rd-002/pages/3/preview",
-                    "document_url": "/mock/documents/rd-002",
+                    "page_preview_url": "/api/v1/documents/rd-002/pages/3/preview",
+                    "document_url": "/api/v1/documents/rd-002",
                 },
             },
             {
@@ -855,18 +877,19 @@ SEED_VALIDATION_CHECKS: List[Dict[str, Any]] = [
                 "nsi_requirement": "Сталь 45",
                 "nsi_document": "ГОСТ 2.109-73",
                 "status": "error",
+                "match_status": "mismatch",
                 "comment": "Несоответствие марки материала",
                 "project_source": {
                     "document_id": "doc-001",
                     "page": 7,
-                    "page_preview_url": "/mock/documents/doc-001/pages/7/preview",
-                    "document_url": "/mock/documents/doc-001",
+                    "page_preview_url": "/api/v1/documents/doc-001/pages/7/preview",
+                    "document_url": "/api/v1/documents/doc-001",
                 },
                 "nsi_source": {
                     "document_id": "rd-001",
                     "page": 8,
-                    "page_preview_url": "/mock/documents/rd-001/pages/8/preview",
-                    "document_url": "/mock/documents/rd-001",
+                    "page_preview_url": "/api/v1/documents/rd-001/pages/8/preview",
+                    "document_url": "/api/v1/documents/rd-001",
                 },
             },
         ],

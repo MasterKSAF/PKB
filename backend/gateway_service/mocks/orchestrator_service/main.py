@@ -115,7 +115,7 @@ def _get_page_block(doc_id: str, page_num: int) -> dict:
         },
     ]
     return {
-        "image_url": f"/mock/documents/{doc_id}/pages/{page_num}/image",
+        "image_url": f"/api/v1/documents/{doc_id}/pages/{page_num}/image",
         "page": page_num,
         "width": 2480,
         "height": 3508,
@@ -150,6 +150,101 @@ class ValidateChecksRequest(BaseModel):
 
 class ReprocessRequest(BaseModel):
     mode: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
+# Response-модели для OpenAPI
+# ---------------------------------------------------------------------------
+
+
+class DocumentListItem(BaseModel):
+    document_id: str
+    title: str
+    document_type: str
+    source: str
+    version: int
+    pages: int
+    ocr_status: str
+    index_status: str
+    user_id: str
+    uploaded_by: str
+    created_at: str
+    updated_at: str
+    registry_doc_id: Optional[str] = None
+
+
+class DocumentListResponse(BaseModel):
+    summary: Dict[str, Any]
+    items: List[DocumentListItem]
+    meta: Dict[str, Any]
+
+
+class DocumentDetailResponse(BaseModel):
+    document_id: str
+    filename: str
+    document_type: str
+    status: str
+    file_size: int
+    pages_total: int
+    pages_processed: int
+    pages_failed: int
+    user_id: str
+    uploaded_by: str
+    created_at: str
+    updated_at: str
+    metadata: Dict[str, Any]
+    registry_doc_id: Optional[str] = None
+
+
+class CheckItemSource(BaseModel):
+    document_id: str
+    page: int
+    page_preview_url: str
+    document_url: str
+
+
+class CheckItem(BaseModel):
+    check_item_id: str
+    project: str
+    section: str
+    parameter: str
+    project_value: str
+    nsi_requirement: str
+    nsi_document: str
+    status: str
+    match_status: str
+    comment: str
+    project_source: CheckItemSource
+    nsi_source: CheckItemSource
+
+
+class CheckResultResponse(BaseModel):
+    check_run_id: str
+    status: str
+    summary: Dict[str, int]
+    items: List[CheckItem]
+    created_at: str
+    updated_at: str
+
+
+class SearchResultItem(BaseModel):
+    fragment_id: str
+    document_id: str
+    document_title: str
+    document_type: str
+    section: str
+    page: int
+    fragment: str
+    score: float
+    page_preview_url: str
+    document_url: str
+
+
+class SearchResponse(BaseModel):
+    query: str
+    items: List[SearchResultItem]
+    total_found: int
+    processing_time_ms: int
 
 
 # ---------------------------------------------------------------------------
@@ -234,7 +329,7 @@ async def upload_document(
     }
 
 
-@router.get("/documents")
+@router.get("/documents", response_model=DocumentListResponse)
 async def list_documents(
     status: Optional[str] = Query(None),
     document_type: Optional[str] = Query(None),
@@ -289,6 +384,7 @@ async def list_documents(
                 "uploaded_by": d.get("uploaded_by", ""),
                 "created_at": d.get("created_at", ""),
                 "updated_at": d.get("updated_at", ""),
+                "registry_doc_id": d.get("metadata", {}).get("registry_doc_id"),
             }
         )
 
@@ -327,7 +423,7 @@ async def get_document_queue(
 # ===========================================================================
 
 
-@router.post("/documents/search")
+@router.post("/documents/search", response_model=SearchResponse)
 async def search_documents(req: SearchRequest):
     """Поиск по документам."""
     query_lower = req.query.lower()
@@ -343,8 +439,8 @@ async def search_documents(req: SearchRequest):
             "page": 3,
             "fragment": "Толщина стенки корпуса: 5 мм, материал: Сталь 45",
             "score": 0.95,
-            "page_preview_url": "/mock/documents/doc-001/pages/3/preview",
-            "document_url": "/mock/documents/doc-001",
+            "page_preview_url": "/api/v1/documents/doc-001/pages/3/preview",
+            "document_url": "/api/v1/documents/doc-001",
         },
         {
             "fragment_id": f"frag-{new_id()}",
@@ -355,8 +451,8 @@ async def search_documents(req: SearchRequest):
             "page": 5,
             "fragment": "Толщина стенки не менее 4 мм для изделий данного типа",
             "score": 0.92,
-            "page_preview_url": "/mock/documents/rd-001/pages/5/preview",
-            "document_url": "/mock/documents/rd-001",
+            "page_preview_url": "/api/v1/documents/rd-001/pages/5/preview",
+            "document_url": "/api/v1/documents/rd-001",
         },
         {
             "fragment_id": f"frag-{new_id()}",
@@ -367,8 +463,8 @@ async def search_documents(req: SearchRequest):
             "page": 1,
             "fragment": "150x80x25 мм, Сталь 45",
             "score": 0.88,
-            "page_preview_url": "/mock/documents/doc-002/pages/1/preview",
-            "document_url": "/mock/documents/doc-002",
+            "page_preview_url": "/api/v1/documents/doc-002/pages/1/preview",
+            "document_url": "/api/v1/documents/doc-002",
         },
         {
             "fragment_id": f"frag-{new_id()}",
@@ -379,8 +475,8 @@ async def search_documents(req: SearchRequest):
             "page": 3,
             "fragment": "Предельные отклонения размеров: H11, h11",
             "score": 0.85,
-            "page_preview_url": "/mock/documents/rd-002/pages/3/preview",
-            "document_url": "/mock/documents/rd-002",
+            "page_preview_url": "/api/v1/documents/rd-002/pages/3/preview",
+            "document_url": "/api/v1/documents/rd-002",
         },
     ]
 
@@ -432,7 +528,7 @@ async def search_documents_get(
     )
 
 
-@router.get("/documents/{doc_id}")
+@router.get("/documents/{doc_id}", response_model=DocumentDetailResponse)
 async def get_document(doc_id: str):
     """Детали документа."""
     doc = _get_document(doc_id)
@@ -450,6 +546,7 @@ async def get_document(doc_id: str):
         "created_at": doc.get("created_at", ""),
         "updated_at": doc.get("updated_at", ""),
         "metadata": doc.get("metadata", {}),
+        "registry_doc_id": doc.get("metadata", {}).get("registry_doc_id"),
     }
 
 
@@ -517,7 +614,7 @@ async def get_document_status(doc_id: str):
         )
         return base
 
-    # queued / pending
+    # queued
     return base
 
 
@@ -529,7 +626,7 @@ async def get_document_file(doc_id: str):
         "document_id": doc_id,
         "document_title": doc.get("title", ""),
         "content_type": "application/pdf",
-        "file_url": f"/mock/files/{doc_id}/{doc.get('filename', 'document.pdf')}",
+        "file_url": f"/api/v1/files/{doc_id}/{doc.get('filename', 'document.pdf')}",
     }
 
 
@@ -542,7 +639,7 @@ async def get_page_preview(doc_id: str, page_num: int):
         "document_title": doc.get("title", ""),
         "page": page_num,
         "content_type": "image/png",
-        "preview_url": f"/mock/previews/{doc_id}/page_{page_num}.png",
+        "preview_url": f"/api/v1/previews/{doc_id}/page_{page_num}.png",
         "text": f"Mock OCR текст для страницы {page_num} документа {doc_id}. Здесь содержится распознанный текст.",
         "highlight": [],
     }
@@ -774,15 +871,16 @@ async def get_comparison(comparison_id: str):
     return comparison
 
 
-@router.post("/validate/checks", status_code=202)
+@router.post("/validate/checks", status_code=200, response_model=CheckResultResponse)
 async def validate_checks(req: ValidateChecksRequest):
-    """Массовая проверка по НСИ."""
+    """Массовая проверка по НСИ (синхронно)."""
     check_run_id = f"check-{new_id()}"
     now = utcnow()
 
     # Генерируем mock-результаты
     mock_items = []
     statuses = ["ok", "warning", "error"]
+    match_statuses = ["match", "mismatch", "partial_match"]
     ok_count = 0
     warn_count = 0
     err_count = 0
@@ -806,22 +904,23 @@ async def validate_checks(req: ValidateChecksRequest):
                 "nsi_requirement": f"Требование {i + 1}",
                 "nsi_document": f"ГОСТ 2.{100 + i * 10}-73",
                 "status": s,
+                "match_status": random.choice(match_statuses),
                 "comment": "" if s == "ok" else "Требуется проверка",
                 "project_source": {
                     "document_id": req.project_document_ids[0]
                     if req.project_document_ids
                     else "doc-001",
                     "page": i + 1,
-                    "page_preview_url": f"/mock/documents/{req.project_document_ids[0] if req.project_document_ids else 'doc-001'}/pages/{i + 1}/preview",
-                    "document_url": f"/mock/documents/{req.project_document_ids[0] if req.project_document_ids else 'doc-001'}",
+                    "page_preview_url": f"/api/v1/documents/{req.project_document_ids[0] if req.project_document_ids else 'doc-001'}/pages/{i + 1}/preview",
+                    "document_url": f"/api/v1/documents/{req.project_document_ids[0] if req.project_document_ids else 'doc-001'}",
                 },
                 "nsi_source": {
                     "document_id": req.nsi_document_ids[0]
                     if req.nsi_document_ids
                     else "rd-001",
                     "page": i + 1,
-                    "page_preview_url": f"/mock/documents/{req.nsi_document_ids[0] if req.nsi_document_ids else 'rd-001'}/pages/{i + 1}/preview",
-                    "document_url": f"/mock/documents/{req.nsi_document_ids[0] if req.nsi_document_ids else 'rd-001'}",
+                    "page_preview_url": f"/api/v1/documents/{req.nsi_document_ids[0] if req.nsi_document_ids else 'rd-001'}/pages/{i + 1}/preview",
+                    "document_url": f"/api/v1/documents/{req.nsi_document_ids[0] if req.nsi_document_ids else 'rd-001'}",
                 },
             }
         )
@@ -873,7 +972,7 @@ async def export_check_result(
 
     return {
         "check_run_id": check_run_id,
-        "export_url": f"/mock/exports/check_{check_run_id}.{format}",
+        "export_url": f"/api/v1/exports/check_{check_run_id}.{format}",
         "format": format,
         "created_at": utcnow(),
     }

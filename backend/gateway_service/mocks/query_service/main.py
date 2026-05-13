@@ -173,6 +173,75 @@ class TextAskRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Response-модели для OpenAPI
+# ---------------------------------------------------------------------------
+
+
+class CitationModel(BaseModel):
+    citation_id: str
+    document_id: str
+    document_title: str
+    section: str
+    page: int
+    fragment: str
+    page_preview_url: str
+    document_url: str
+
+
+class AnswerItem(BaseModel):
+    number: int
+    text: str
+    citations: List[CitationModel]
+
+
+class ChatResponse(BaseModel):
+    answer_id: str
+    session_id: str
+    status: str
+    message: str
+    answer_items: List[AnswerItem]
+    latency_ms: int
+
+
+class TextSearchResultItem(BaseModel):
+    fragment_id: str
+    document_id: str
+    document_title: str
+    page_number: int
+    text: str
+    score: float
+    document_type: str
+    matched_subquery: str
+
+
+class TextSearchResponse(BaseModel):
+    original_text: str
+    analysis: Dict[str, Any]
+    results: List[TextSearchResultItem]
+    total_found: int
+    processing_time_ms: int
+
+
+class TextAskSource(BaseModel):
+    document_id: str
+    document_title: str
+    page_number: int
+    fragment_id: str
+    text: str
+    score: float
+
+
+class TextAskResponse(BaseModel):
+    original_text: str
+    normalized_question: str
+    answer: str
+    sources: List[TextAskSource]
+    disclaimer: str
+    processing_time_ms: int
+    model_used: str
+
+
+# ---------------------------------------------------------------------------
 # Инициализация
 # ---------------------------------------------------------------------------
 
@@ -391,7 +460,7 @@ async def export_session(session_id: str, req: ExportSessionRequest):
         "session_id": session_id,
         "format": req.format,
         "status": "completed",
-        "url": f"/mock/exports/{export_id}.{req.format}",
+        "url": f"/api/v1/exports/{export_id}.{req.format}",
         "expires_at": utcnow(),
         "created_at": utcnow(),
     }
@@ -456,14 +525,14 @@ async def export_history(
     export_data = {
         "export_id": export_id,
         "format": format,
-        "url": f"/mock/exports/history_{export_id}.{format}",
+        "url": f"/api/v1/exports/history_{export_id}.{format}",
         "created_at": utcnow(),
     }
     _export_store[export_id] = export_data
     return export_data
 
 
-@router.post("/chat")
+@router.post("/chat", response_model=ChatResponse)
 async def chat_ask(req: ChatRequest):
     """Задать вопрос (вне сессии)."""
     answer = _generate_answer(req.question)
@@ -486,8 +555,8 @@ async def chat_ask(req: ChatRequest):
                         "section": "Основные требования",
                         "page": s["page_number"],
                         "fragment": s["text"][:100],
-                        "page_preview_url": f"/mock/documents/{s['document_id']}/pages/{s['page_number']}/preview",
-                        "document_url": f"/mock/documents/{s['document_id']}",
+                        "page_preview_url": f"/api/v1/documents/{s['document_id']}/pages/{s['page_number']}/preview",
+                        "document_url": f"/api/v1/documents/{s['document_id']}",
                     }
                     for s in answer["sources"]
                 ],
@@ -502,7 +571,7 @@ async def chat_ask(req: ChatRequest):
 # ===========================================================================
 
 
-@router.post("/text/search")
+@router.post("/text/search", response_model=TextSearchResponse)
 async def text_search(req: TextSearchRequest):
     """Поиск по тексту."""
     # Эмулируем семантический поиск
@@ -599,7 +668,7 @@ async def text_search(req: TextSearchRequest):
     }
 
 
-@router.post("/text/ask")
+@router.post("/text/ask", response_model=TextAskResponse)
 async def text_ask(req: TextAskRequest):
     """Задать вопрос к тексту."""
     answer = _generate_answer(req.text)
