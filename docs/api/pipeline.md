@@ -2,141 +2,135 @@
 
 Orchestrator координирует сквозной конвейер: от загрузки файла до атомарной записи в Registry (nsi). Каждый этап — вызов внутреннего сервиса (OCR, RAG, Validation).
 
-```
-                         Orchestrator Pipeline
-                         ====================
-  POST /documents
-       │
-       ▼
-  ┌─────────────────────────────────────┐
-  │ Orchestrator: Этап 0                │
-  │ ────────────────────────             │
-  │ 1. SHA-256, дубликаты               │
-  │ 2. ✦ Запись в БД (status=uploaded)  │  ◄── фиксация состояния
-  │ 3. Файл → MinIO                     │
-  │ 4. Задача в очередь                 │
-  └──────────────────┬──────────────────┘
-                     │  после коммита транзакции
-                     ▼
-  ┌──────────────────────────────────────┐
-  │ 1. OCR Service                       │
-  │    /ocr/process → container_id       │
-  └──────────────────┬───────────────────┘
-                     │
-                     ▼
-  ┌──────────────────────────────────────┐
-  │ 2. RAG Service                       │
-  │    2a. /rag/embed — embeddings       │
-  │    2b. /rag/validate-chunks          │
-  │    2c. /rag/validate-classify        │
-  └──────────────────┬───────────────────┘
-                     │  если valid
-                     ▼
-  ┌──────────────────────────────────────┐
-  │ Orchestrator                         │
-  │    POST /documents/{id}/approve      │
-  │    POST /documents/{id}/promote      │
-  └──────────────────┬───────────────────┘
-                     │
-                     ▼
-  ┌──────────────────────────────────────┐
-  │ Registry (nsi)                       │
-  │    documents, chunks, images, tables │
-  └──────────────────────────────────────┘
+```mermaid
+graph TD
+    A["Orchestrator: Этап 0<br/>&#9670; Запись в БД (status=uploaded)<br/>1. SHA-256, дубликаты<br/>2. Файл → MinIO<br/>3. Задача в очередь"]
+    A -->|"после коммита<br/>транзакции"| B["1. OCR Service<br/>/ocr/process → container_id"]
+    B --> C["2. RAG Service<br/>2a. /rag/embed — embeddings<br/>2b. /rag/validate-chunks<br/>2c. /rag/validate-classify"]
+    C -->|"если valid"| D["Orchestrator<br/>POST /documents/{id}/approve<br/>POST /documents/{id}/promote"]
+    D --> E["Registry (nsi)<br/>documents, chunks, images, tables"]
 
-Validation Service — отдельно, для бизнес-сценариев:
-  POST /validate/compare     — норма vs проект
-  POST /validate/check       — проверка правил
-  POST /validate/calculate   — арифметика
+    style A fill:#e6f3ff,stroke:#333
+    style D fill:#fff3e6,stroke:#333
+    style E fill:#e6ffe6,stroke:#333
 ```
+
+**Validation Service** — отдельно, для бизнес-сценариев:
+  `POST /validate/compare` — норма vs проект
+  `POST /validate/check` — проверка правил
+  `POST /validate/calculate` — арифметика
 
 ---
 
 ### 1. Общая схема
 
-```
-                         Orchestrator Pipeline
-                         ====================
+```mermaid
+sequenceDiagram
+    participant UI as UI / API
+    participant Orch as Orchestrator
+    participant Svc as Внутренние сервисы
+    participant Reg as Registry
 
-  UI / API                     Orchestrator                    Внутренние сервисы           Registry
-     │                              │                              │                        │
-     │  POST /documents             │                              │                        │
-     ├─────────────────────────────▶│                              │                        │
-     │                              │  ┌───────────────────────┐   │                        │
-     │                              │  │ Этап 0: Загрузка      │   │                        │
-     │                              │  │ ───────────────────── │   │                        │
-     │                              │  │ 1. SHA-256, дубликаты │   │                        │
-     │                              │  │ 2. ✦ Запись в БД     │   │  ◄── фиксация состояния
-     │                              │  │    status=uploaded    │   │                        │
-     │                              │  │ 3. Файл → MinIO       │   │                        │
-     │                              │  │ 4. Задача в очередь   │   │                        │
-     │                              │  └─────────┬─────────────┘   │                        │
-     │  202 {status: uploaded}      │            │                 │                        │
-     │◀─────────────────────────────│            │ после коммита   │                        │
-     │                              │            ▼                 │                        │
-     │  GET /documents/{id}/status   │                              │                        │
-     ├─────────────────────────────▶│                              │                        │
-     │                              │──── 1. OCR ─────────────────▶│ OCR Service             │
-     │                              │◀──── {container_id} ────────│                        │
-     │                              │                              │                        │
-     │◀── "processing" ─────────────│                              │                        │
-     │                              │──── 2a. Embed ──────────────▶│ RAG Service             │
-     │                              │◀──── {embedded} ─────────────│                        │
-     │                              │                              │                        │
-     │                              │──── 2b. Validate Chunks ────▶│ RAG Service             │
-     │                              │◀──── {valid / invalid} ──────│                        │
-     │                              │                              │                        │
-     │                              │──── 2c. Validate Classify ──▶│ RAG Service             │
-     │                              │◀──── {confirmed / pending} ──│──── classifier_pending ─▶│
-     │                              │                              │                        │
-     │◀── "ready_for_promotion" ────│                              │                        │
-     │                              │  или "review_required"       │                        │
-     │                              │                              │                        │
-     │  POST /documents/{id}/approve │                              │                        │
-     ├─────────────────────────────▶│                              │                        │
-     │                              │──── 4. Promote ──────────────────────────────────────▶│
-     │                              │◀──── {registry_doc_id} ───────────────────────────────│
-     │◀── "approved" ───────────────│                              │                        │
-     │                              │                              │                        │
+    UI->>Orch: POST /documents
+    activate Orch
+    Orch->>Orch: Этап 0: Загрузка<br/>(SHA-256, дубликаты, ✦ запись в БД, MinIO)
+    Orch-->>UI: 202 {status: uploaded}
+    deactivate Orch
+
+    UI->>Orch: GET /documents/{id}/status
+    activate Orch
+    Orch->>Svc: 1. OCR
+    activate Svc
+    Svc-->>Orch: {container_id}
+    deactivate Svc
+
+    Orch->>Svc: 2a. Embed
+    activate Svc
+    Svc-->>Orch: {embedded}
+    deactivate Svc
+
+    Orch->>Svc: 2b. Validate Chunks
+    activate Svc
+    Svc-->>Orch: {valid / invalid}
+    deactivate Svc
+
+    Orch->>Svc: 2c. Validate Classify
+    activate Svc
+    Svc-->>Orch: {confirmed / pending}
+    Svc-->>Reg: classifier_pending
+    deactivate Svc
+
+    Orch-->>UI: ready_for_promotion / review_required
+    deactivate Orch
+
+    UI->>Orch: POST /documents/{id}/approve
+    activate Orch
+    Orch->>Reg: 4. Promote
+    activate Reg
+    Reg-->>Orch: {registry_doc_id}
+    deactivate Reg
+    Orch-->>UI: approved
+    deactivate Orch
 ```
 
 ---
 
 ### 1.1 Полный цикл (sequence)
 
-```
-UI                Orchestrator            OCR Service         RAG Service         Validation Service      Registry
-│                      │                      │                     │                      │                  │
-│ POST /documents      │                      │                     │                      │                  │
-│────────────────────▶││                      │                     │                      │                  │
-│◀── 202 {uploaded} ──│                      │                     │                      │                  │
-│                      │                      │                     │                      │                  │
-│ GET /status          │ POST /ocr/process    │                     │                      │                  │
-│────────────────────▶│────────────────────▶││                     │                      │                  │
-│◀── "processing" ────│◀── {container_id} ───│                      │                      │                  │
-│                      │                      │                     │                      │                  │
-│                      │ POST /rag/embed      │                     │                      │                  │
-│                      │─────────────────────────────────────────▶││                      │                  │
-│                      │◀── {embedded} ───────────────────────────│                      │                  │
-│                      │                      │                     │                      │                  │
-│                      │ POST /rag/validate-chunks                  │                      │                  │
-│                      │─────────────────────────────────────────▶│                      │                  │
-│                      │◀── {valid} ───────────────────────────────│                      │                  │
-│                      │                      │                     │                      │                  │
-│                      │ POST /rag/validate-classify                │                      │                  │
-│                      │─────────────────────────────────────────▶│                      │                  │
-│                      │◀── {confirmed} ───────────────────────────│                      │                  │
-│                      │                      │                     │                      │                  │
-│◀── "ready_for_promotion"                    │                     │                      │                  │
-│                      │                      │                     │                      │                  │
-│ POST /approve        │                      │                     │                      │                  │
-│────────────────────▶│ POST /promote          │                     │                      │                  │
-│                      │───────────────────────────────────────────────────────────────────────────────▶│
-│◀── "approved" ──────│◀─── {registry_doc_id} ─────────────────────────────────────────────────────────│
-│                      │                      │                     │                      │                  │
-│ POST /validate/compare                       │                     │                      │                  │
-│─────────────────────────────────────────────────────────────────────────────────────▶││                  │
-│◀── {match_status} ─────────────────────────────────────────────────────────────────────│                  │
+```mermaid
+sequenceDiagram
+    participant UI as UI
+    participant Orch as Orchestrator
+    participant OCR as OCR Service
+    participant RAG as RAG Service
+    participant Val as Validation Service
+    participant Reg as Registry
+
+    UI->>Orch: POST /documents
+    activate Orch
+    Orch-->>UI: 202 {uploaded}
+    deactivate Orch
+
+    UI->>Orch: GET /status
+    activate Orch
+    Orch->>OCR: POST /ocr/process
+    activate OCR
+    OCR-->>Orch: {container_id}
+    deactivate OCR
+    Orch-->>UI: processing
+    deactivate Orch
+
+    activate Orch
+    Orch->>RAG: POST /rag/embed
+    activate RAG
+    RAG-->>Orch: {embedded}
+    deactivate RAG
+
+    Orch->>RAG: POST /rag/validate-chunks
+    activate RAG
+    RAG-->>Orch: {valid}
+    deactivate RAG
+
+    Orch->>RAG: POST /rag/validate-classify
+    activate RAG
+    RAG-->>Orch: {confirmed}
+    deactivate RAG
+    Orch-->>UI: ready_for_promotion
+    deactivate Orch
+
+    UI->>Orch: POST /approve
+    activate Orch
+    Orch->>Reg: POST /promote
+    activate Reg
+    Reg-->>Orch: {registry_doc_id}
+    deactivate Reg
+    Orch-->>UI: approved
+    deactivate Orch
+
+    UI->>Val: POST /validate/compare
+    activate Val
+    Val-->>UI: {match_status}
+    deactivate Val
 ```
 
 ---
@@ -437,47 +431,30 @@ Orchestrator:
 
 ### 3. Статусная модель (FSM)
 
-```
-                  ┌──────────┐
-                  │  draft   │
-                  └────┬─────┘
-                       │
-              ╔════════╧════════╗
-              ║  Транзакция БД  ║  ◄── запись documents + document_versions + status_history
-              ╚════════╤════════╝
-                       │
-                  ┌────▼─────┐
-                  │ uploaded │ ◄── POST /documents
-                  └────┬─────┘
-                       │
-                  ┌────▼──────┐
-                  │ validating│ ◄── (OCR принял задачу)
-                  └────┬──────┘
-                       │
-                  ┌────▼──────┐
-                  │ processing│ ◄── embeddings, validate
-                  └────┬──────┘
-                       │
-          ┌────────────┼────────────┐
-          │            │            │
-     ┌────▼──────┐  ┌─▼────────┐   │
-     │  review_  │  │ready_for │   │
-     │ required  │  │promotion │   │
-     └────┬──────┘  └────┬─────┘   │
-          │              │         │
-          └──────┬───────┘         │
-                 │                 │
-            ┌────▼──────┐         │
-            │  approved │ ◄───────┘
-            └────┬──────┘
-                 │
-            ┌────▼──────┐
-            │  archived │ ◄── promote завершён
-            └────┬──────┘
-                 │
-            ┌────▼──────┐
-            │  failed   │ ◄── ошибка на любом этапе
-            └───────────┘
+```mermaid
+stateDiagram-v2
+    [*] --> draft
+    draft --> uploaded : POST /documents
+    note right of draft
+        Транзакция БД — запись
+        documents + document_versions
+        + status_history
+    end note
+    uploaded --> validating : OCR принял задачу
+    validating --> processing : embeddings, validate
+    processing --> review_required
+    processing --> ready_for_promotion
+    review_required --> approved
+    ready_for_promotion --> approved
+    approved --> archived : promote завершён
+    
+    draft --> failed
+    uploaded --> failed
+    validating --> failed
+    processing --> failed
+    review_required --> failed
+    ready_for_promotion --> failed
+    approved --> failed
 ```
 
 **Журнал переходов:** все изменения логируются в `status_history` автоматически.
@@ -546,19 +523,17 @@ Orchestrator:
 
 ### 6. Поток данных (Data Flow)
 
-```
-MinIO ──┐
-         ▼
-┌─────────────────┐     ┌──────────────────┐     ┌──────────────────┐     ┌───────────────┐
-│   OCR Service   │────▶│   RAG Service    │────▶│  Orchestrator    │────▶│   Registry    │
-│                 │     │                  │     │                  │     │   (nsi)       │
-│ file.pdf        │     │ chunks + vec     │     │ chunk_container  │     │               │
-│   ↓             │     │   ↓              │     │   ↓              │     │ documents     │
-│ pages + blocks  │     │ embed → validate │     │ approve → promote│     │ chunks        │
-│   ↓             │     │ + classify       │     │                  │     │ images        │
-│ chunk container │     │                  │     │                  │     │ tables        │
-│ classification  │     │ classifier_pending│    │                  │     │ sections      │
-└─────────────────┘     └──────────────────┘     └──────────────────┘     └───────────────┘
+```mermaid
+graph LR
+    MinIO[(MinIO)] -->|file.pdf| OCR[OCR Service]
+    OCR -->|chunk container<br/>classification| RAG[RAG Service]
+    RAG -->|chunk container<br/>+ embeddings| O[Orchestrator]
+    O -->|approve → promote| Reg[(Registry nsi)]
+
+    OCR -.->|file.pdf → pages+blocks → chunk container| OCR_out[" "]
+    RAG -.->|chunks+vec → embed → validate+classify| RAG_out[" "]
+    O -.->|chunk_container → approve → promote| O_out[" "]
+    Reg -.->|documents, chunks, images, tables, sections| Reg_out[" "]
 ```
 
 **Форматы передачи между сервисами:**
