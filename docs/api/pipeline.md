@@ -1,6 +1,3 @@
-H:\Projects\PKB_neuroassistant\docs\api\pipeline.md
-```
-
 ## Конвейер обработки документов Purgatory (v2.3)
 
 Orchestrator координирует сквозной конвейер: от загрузки файла до атомарной записи в Registry (nsi). Каждый этап — вызов внутреннего сервиса (OCR, RAG, Validation).
@@ -8,7 +5,6 @@ Orchestrator координирует сквозной конвейер: от з
 ```
                          Orchestrator Pipeline
                          ====================
-
   POST /documents
        │
        ▼
@@ -515,35 +511,36 @@ Orchestrator:
 
 #### OCR Service
 
-| Метод | Путь | Изменение |
+| Метод | Путь | Описание |
 |---|---|---|
 | `POST` | `/ocr/process` | Расширен: `version_id` + `file_id`. Асинхронный (`202`). Возвращает `container_id` + `classification` |
 | `GET` | `/ocr/process/{task_id}/status` | 🆕 Статус асинхронной обработки |
 | `GET` | `/ocr/container/{container_id}` | 🆕 Получение готового chunk container |
-| `GET` | `/ocr/engines` | Без изменений |
+| `GET` | `/ocr/engines` | Получение списка доступных OCR-движков |
+| `GET` | `/ocr/processes` | 🆕 Получение списка текущих процессов обработки |
 
 #### RAG Service
 
-| Метод | Путь | Изменение |
+| Метод | Путь | Описание |
 |---|---|---|
 | `POST` | `/rag/embed` | 🆕 Вычисление embeddings для чанков контейнера |
 | `POST` | `/rag/validate-chunks` | 🆕 Валидация chunk container (JSON Schema, ltree, полнота) |
 | `POST` | `/rag/validate-classify` | 🆕 Проверка классификационных кодов по справочнику |
 | `GET` | `/rag/embed/{task_id}/status` | 🆕 Статус вычисления embeddings |
-| `POST` | `/rag/index` | Без изменений (production RAG) |
-| `POST` | `/rag/search` | Без изменений |
-| `POST` | `/rag/generate` | Без изменений |
+| `POST` | `/rag/index` | Индексация документов в production RAG |
+| `POST` | `/rag/search` | Поиск по проиндексированным документам |
+| `POST` | `/rag/generate` | Генерация ответа на основе найденных документов |
 
 #### Validation Service
 
-| Метод | Путь | Изменение |
+| Метод | Путь | Описание |
 |---|---|---|
-| `POST` | `/validate/extract/parameters` | Без изменений |
-| `POST` | `/validate/check` | Без изменений |
-| `POST` | `/validate/calculate` | Без изменений |
-| `POST` | `/validate/compare` | Без изменений |
-| `POST` | `/validate/compare/batch` | Без изменений |
-| `POST` | `/validate/recommend` | Без изменений |
+| `POST` | `/validate/extract/parameters` | Извлечение параметров из документа |
+| `POST` | `/validate/check` | Проверка корректности документа |
+| `POST` | `/validate/calculate` | Вычисление метаданных документа |
+| `POST` | `/validate/compare` | Сравнение двух документов |
+| `POST` | `/validate/compare/batch` | Пакетное сравнение документов |
+| `POST` | `/validate/recommend` | Формирование рекомендаций на основе валидации |
 
 ---
 

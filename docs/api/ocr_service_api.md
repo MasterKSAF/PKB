@@ -182,3 +182,37 @@
 | `supported_languages` | string[] | Поддерживаемые языки |
 | `average_processing_time_ms` | int | Среднее время обработки |
 | `default_for_types` | string[] | Типы документов по умолчанию |
+
+### GET /ocr/processes
+
+Список текущих (активных) процессов обработки документов.
+
+**Ответ `200`**:
+
+```json
+{
+  "processes": [
+    {
+      "task_id": "ocr-task-001",
+      "version_id": "c4b9f2d3-...",
+      "status": "processing",
+      "progress_percent": 45,
+      "pages_processed": 5,
+      "pages_total": 12,
+      "engine": "paddleocr",
+      "started_at": "2026-05-15T10:00:05Z"
+    }
+  ]
+}
+```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `task_id` | string | ID задачи |
+| `version_id` | string | ID версии документа |
+| `status` | string | Статус: `accepted`, `processing` |
+| `progress_percent` | int | Процент выполнения |
+| `pages_processed` | int | Обработано страниц |
+| `pages_total` | int | Всего страниц |
+| `engine` | string | Используемый OCR-движок |
+| `started_at` | string | Время начала обработки |
