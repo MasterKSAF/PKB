@@ -25,31 +25,39 @@
 - сверять с актуальными API из `docs/api`;
 - если архитектура и API расходятся, фиксировать вопрос, а не молча выбирать одну сторону.
 
-### API backend
+### Gateway и API backend
 
 Ссылки:
 
+- [backend/gateway_service](https://github.com/NeuronsUII/PKB_neuroassistant/tree/develop_gateway/backend/gateway_service)
 - [docs/api/common.md](https://github.com/NeuronsUII/PKB_neuroassistant/blob/develop/docs/api/common.md)
+- [docs/api/pipeline.md](https://github.com/NeuronsUII/PKB_neuroassistant/blob/develop/docs/api/pipeline.md)
 - [docs/api/orchestrator_service_api.md](https://github.com/NeuronsUII/PKB_neuroassistant/blob/develop/docs/api/orchestrator_service_api.md)
 - [docs/api/query_service_api.md](https://github.com/NeuronsUII/PKB_neuroassistant/blob/develop/docs/api/query_service_api.md)
 - [docs/api/auth_service_api.md](https://github.com/NeuronsUII/PKB_neuroassistant/blob/develop/docs/api/auth_service_api.md)
 - [docs/api/registry_service_api.md](https://github.com/NeuronsUII/PKB_neuroassistant/blob/develop/docs/api/registry_service_api.md)
 - [docs/api/integration_service_api.md](https://github.com/NeuronsUII/PKB_neuroassistant/blob/develop/docs/api/integration_service_api.md)
 - [docs/api/validate_service_api.md](https://github.com/NeuronsUII/PKB_neuroassistant/blob/develop/docs/api/validate_service_api.md)
+- [docs/api/ocr_service_api.md](https://github.com/NeuronsUII/PKB_neuroassistant/blob/develop/docs/api/ocr_service_api.md)
 
 Зачем UI-команде:
 
-- понять реальные endpoint'ы;
-- понять формат ответа `{ success, data, error, meta }`;
+- понимать, что UI должен стыковаться с единым Gateway, а не напрямую с отдельными сервисами;
+- считать базовым публичным префиксом `http://localhost:8081/api/v1`;
+- сверять реальные endpoint'ы с актуальными документами `docs/api`;
 - не придумывать поля, которые backend уже описал;
-- заранее видеть расхождения с нашим UI.
+- заранее видеть расхождения с нашим UI и фиксировать их в плане адаптации.
 
 Что использовать в UI:
 
-- вход и профиль: `Auth Service`;
-- чат, документы, поиск, preview, проверка, QA: `Orchestrator Service`;
-- чат-сессии, история, feedback: `Query Service`;
-- классификаторы, термины, реестр НСИ: `Registry Service`.
+- публичная точка входа для frontend: `Gateway`;
+- вход, профиль, роли и права: через Gateway к `Auth Service`;
+- чат, документы, поиск, preview, проверка, QA: через Gateway к `Orchestrator Service`;
+- чат-сессии, история, feedback: через Gateway к `Query Service`;
+- классификаторы, термины, реестр НСИ: через Gateway к `Registry Service`;
+- OCR-процессы и статусы обработки: через Gateway к OCR/API pipeline.
+
+Практическое правило: в UI V1 не зашивать прямые вызовы внутренних сервисов. Все новые реальные запросы оформлять как `VITE_API_BASE_URL + /...`, где `VITE_API_BASE_URL` указывает на Gateway.
 
 ### Сравнение UI и API
 
