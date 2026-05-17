@@ -66,11 +66,11 @@ def _find_file(record: FileRecord) -> str:
 def get_file(file_id: str, db: Session = Depends(get_db)):
     record = db.query(FileRecord).filter(FileRecord.file_id == file_id).first()
     if not record:
-        return HTTPException(status_code=404, detail={"error": {"code": "FILE_NOT_FOUND", "message": "Файл не найден", "details": {}}})
+        raise HTTPException(status_code=404, detail={"error": {"code": "FILE_NOT_FOUND", "message": "Файл не найден", "details": {}}})
         
     actual_path = _find_file(record)
     if not actual_path:
-        return HTTPException(status_code=404, detail={"error": {"code": "FILE_NOT_FOUND", "message": "Физический файл не найден", "details": {}}})
+        raise HTTPException(status_code=404, detail={"error": {"code": "FILE_NOT_FOUND", "message": "Физический файл не найден", "details": {}}})
          
     return FastAPIFileResponse(actual_path, media_type=record.mime_type, filename=record.filename)
 
