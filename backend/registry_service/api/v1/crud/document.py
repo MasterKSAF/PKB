@@ -3,17 +3,22 @@ from uuid import UUID
 from typing import Optional
 from datetime import date
 from ..models.document import DocumentsPurgatory, DocStatus
-from ..schemas.document import DocumentsCreate, DocumentsUpdate
+from ..schemas.document import DocumentsPurgatoryCreate, DocumentsPurgatoryUpdate
 
 def get_document(db: Session, doc_id: UUID):
     return db.query(DocumentsPurgatory).filter(DocumentsPurgatory.id == doc_id).first()
 
 def get_documents(db: Session, 
                   title: Optional[str] = None,
-                  doc_number: Optional[str] = None,
-                  classifier_code: Optional[str] = None,
+                  doc_code: Optional[str] = None,
+                  source_type: Optional[str] = None,
+                  mks_oks_code: Optional[str] = None,
+                  okstu_code: Optional[str] = None,
                   status: Optional[str] = None,
-                  source: Optional[str] = None,
+                  era: Optional[str] = None,
+                  validity_status: Optional[str] = None,
+                  jurisdiction: Optional[str] = None,
+                  issuing_body: Optional[str] = None,
                   date_from: Optional[date] = None,
                   date_to: Optional[date] = None,
                   skip: int = 0, limit: int = 100):
@@ -21,14 +26,24 @@ def get_documents(db: Session,
     
     if title:
         query = query.filter(DocumentsPurgatory.title.ilike(f"%{title}%"))
-    if doc_number:
-        query = query.filter(DocumentsPurgatory.doc_code == doc_number)
-    if classifier_code:
-        query = query.filter(DocumentsPurgatory.classifier_code == classifier_code)
+    if doc_code:
+        query = query.filter(DocumentsPurgatory.doc_code == doc_code)
+    if source_type:
+        query = query.filter(DocumentsPurgatory.source_type == source_type)
+    if mks_oks_code:
+        query = query.filter(DocumentsPurgatory.mks_oks_code == mks_oks_code)
+    if okstu_code:
+        query = query.filter(DocumentsPurgatory.okstu_code == okstu_code)
     if status:
         query = query.filter(DocumentsPurgatory.status == status)
-    if source:
-        query = query.filter(DocumentsPurgatory.metadata_['source'].astext == source)
+    if era:
+        query = query.filter(DocumentsPurgatory.era == era)
+    if validity_status:
+        query = query.filter(DocumentsPurgatory.validity_status == validity_status)
+    if jurisdiction:
+        query = query.filter(DocumentsPurgatory.jurisdiction == jurisdiction)
+    if issuing_body:
+        query = query.filter(DocumentsPurgatory.issuing_body == issuing_body)
     if date_from:
         query = query.filter(DocumentsPurgatory.created_at >= date_from)
     if date_to:
@@ -36,37 +51,33 @@ def get_documents(db: Session,
         
     return query.offset(skip).limit(limit).all(), query.count()
 
-def create_document(db: Session, document: DocumentsCreate):
-    meta = {"source": document.source, "notes": document.notes}
+def create_document(db: Session, document: DocumentsPurgatoryCreate):
     db_document = DocumentsPurgatory(
         title=document.title,
-        doc_code=document.doc_number,
-        classifier_code=document.classifier_code,
-        status=document.status or DocStatus.DRAFT,
-        metadata_=meta
+        doc_code=document.doc_code,
+        source_type=document.source_type,
+        era=document.era,
+        validity_status=document.validity_status,
+        jurisdiction=document.jurisdiction,
+        issuing_body=document.issuing_body,
+        classifier_system=document.classifier_system,
+        mks_oks_code=document.mks_oks_code,
+        okstu_code=document.okstu_code,
+        classification_status=document.classification_status,
+        successor_doc_id=document.successor_doc_id,
+        predecessor_doc_id=document.predecessor_doc_id,
+        metadata_=document.metadata,
+        status=document.status if document.status is not None else DocStatus.DRAFT
     )
     db.add(db_document)
     db.commit()
     db.refresh(db_document)
     return db_document
 
-def update_document(db: Session, db_document: DocumentsPurgatory, document_update: DocumentsUpdate):
-    if document_update.title is not None:
-        db_document.title = document_update.title
-    if document_update.doc_number is not None:
-        db_document.doc_code = document_update.doc_number
-    if document_update.classifier_code is not None:
-        db_document.classifier_code = document_update.classifier_code
-    if document_update.status is not None:
-        db_document.status = document_update.status
-        
-    meta = dict(db_document.metadata_ or {})
-    if document_update.source is not None:
-        meta["source"] = document_update.source
-    if document_update.notes is not None:
-        meta["notes"] = document_update.notes
-    db_document.metadata_ = meta
-    
+def update_document(db: Session, db_document: DocumentsPurgatory, document_update: DocumentsPurgatoryUpdate):
+    update_data = document_update.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_document, key, value)
     db.commit()
     db.refresh(db_document)
     return db_document

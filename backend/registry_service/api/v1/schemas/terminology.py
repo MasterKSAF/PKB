@@ -1,29 +1,45 @@
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Optional, Any
+from typing import Optional, Any, List
 from datetime import datetime
 from uuid import UUID
 
-class TerminologyRegistryBase(BaseModel):
-    term: str = Field(alias="raw_term")
-    normalized_term: str = Field(alias="normalized_value")
-    context: str = "Общий"
-    source: Optional[str] = None
+class TerminologyRegistryPurgatoryBase(BaseModel):
+    raw_term: str
+    standard_term: str
+    normalized_value: str
+    term_type: Optional[str] = "term"
+    is_case_sensitive: Optional[bool] = False
+    definition: Optional[str] = None
+    synonyms: Optional[List[str]] = []
+    related_docs: Optional[List[str]] = []
+    scope: Optional[List[str]] = []
+    is_blocked: Optional[bool] = False
 
-class TerminologyRegistryCreate(TerminologyRegistryBase):
+class TerminologyRegistryPurgatoryCreate(TerminologyRegistryPurgatoryBase):
     pass
 
-class TerminologyRegistryUpdate(BaseModel):
-    term: Optional[str] = None
-    normalized_term: Optional[str] = None
-    context: Optional[str] = None
-    source: Optional[str] = None
+class TerminologyRegistryPurgatoryUpdate(BaseModel):
+    raw_term: Optional[str] = None
+    standard_term: Optional[str] = None
+    normalized_value: Optional[str] = None
+    term_type: Optional[str] = None
+    is_case_sensitive: Optional[bool] = None
+    definition: Optional[str] = None
+    synonyms: Optional[List[str]] = None
+    related_docs: Optional[List[str]] = None
+    scope: Optional[List[str]] = None
+    is_blocked: Optional[bool] = None
 
-class TerminologyRegistryResponse(TerminologyRegistryBase):
-    term_id: UUID = Field(alias="id")
+class TerminologyRegistryPurgatoryResponse(TerminologyRegistryPurgatoryBase):
+    id: UUID
     created_at: Optional[datetime]
+    updated_at: Optional[datetime]
     
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
-class TerminologyNormalizeResponse(BaseModel):
-    term: str
-    normalized_term: str
+class TerminologyRegistryPurgatoryNormalizeResponse(BaseModel):
+    raw_term: str
+    standard_term: str
+    normalized_value: str
+    term_type: Optional[str] = None
+    is_blocked: Optional[bool] = False

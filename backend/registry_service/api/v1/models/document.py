@@ -47,30 +47,72 @@ class FormatRegistryPurgatory(Base):
 class DocumentsPurgatory(Base):
     __tablename__ = 'documents'
     __table_args__ = (
-        ForeignKeyConstraint(['classifier_code'], ['purgatory.classifier_registry.code'], name='documents_classifier_code_fkey'),
+        ForeignKeyConstraint(['classifier_system', 'mks_oks_code'], ['purgatory.classifier_registry.classifier_system', 'purgatory.classifier_registry.code'], name='documents_mks_oks_code_fkey'),
+        ForeignKeyConstraint(['classifier_system', 'okstu_code'], ['purgatory.classifier_registry.classifier_system', 'purgatory.classifier_registry.code'], name='documents_okstu_code_fkey'),
+        ForeignKeyConstraint(['successor_doc_id'], ['purgatory.documents.id'], name='documents_successor_doc_id_fkey'),
+        ForeignKeyConstraint(['predecessor_doc_id'], ['purgatory.documents.id'], name='documents_predecessor_doc_id_fkey'),
         PrimaryKeyConstraint('id', name='documents_pkey'),
         UniqueConstraint('title_hash_sha256', name='documents_title_hash_sha256_key'),
-        Index('idx_docs_classifier', 'classifier_code'),
+        Index('idx_docs_classifier', 'classifier_system', 'mks_oks_code'),
         Index('idx_docs_status', 'status'),
         Index('idx_docs_title_hash', 'title_hash_sha256'),
+        Index('idx_docs_source_type', 'source_type'),
+        Index('idx_docs_era', 'era'),
         {'comment': 'Logical document registry. Uniqueness guaranteed by title_hash_sha256',
          'schema': 'purgatory'}
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, server_default=text('gen_random_uuid()'))
     title: Mapped[str] = mapped_column(Text, nullable=False)
-    classifier_code: Mapped[Optional[str]] = mapped_column(Text)
     doc_code: Mapped[Optional[str]] = mapped_column(Text)
-    title_hash_sha256: Mapped[Optional[str]] = mapped_column(Text, comment='SHA-256 of (classifier_code + doc_code + normalized_title). Deduplication key.')
+    source_type: Mapped[Optional[str]] = mapped_column(Text)
+    era: Mapped[Optional[str]] = mapped_column(Text)
+    validity_status: Mapped[Optional[str]] = mapped_column(Text)
+    jurisdiction: Mapped[Optional[str]] = mapped_column(Text)
+    issuing_body: Mapped[Optional[str]] = mapped_column(Text)
+    classifier_system: Mapped[Optional[str]] = mapped_column(Text, server_default=text("'MKS'::text"))
+    mks_oks_code: Mapped[Optional[str]] = mapped_column(Text)
+    mks_name: Mapped[Optional[str]] = mapped_column(Text)
+    okstu_code: Mapped[Optional[str]] = mapped_column(Text)
+    okstu_name: Mapped[Optional[str]] = mapped_column(Text)
+    classification_status: Mapped[Optional[dict]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+    successor_doc_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid)
+    predecessor_doc_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid)
+    title_hash_sha256: Mapped[Optional[str]] = mapped_column(Text, comment='SHA-256 of (era|source_type|mks|okstu|doc_code|normalized_title). Deduplication key.')
     status: Mapped[Optional[DocStatus]] = mapped_column(Enum(DocStatus, values_callable=lambda cls: [member.value for member in cls], name='doc_status', schema='purgatory'), server_default=text("'draft'::purgatory.doc_status"))
-    metadata_: Mapped[Optional[dict]] = mapped_column('metadata', JSONB, server_default=text("'{}'::jsonb"))
+    total_versions: Mapped[Optional[int]] = mapped_column(BigInteger, server_default=text('0'))
+    chunk_count: Mapped[Optional[int]] = mapped_column(BigInteger, server_default=text('0'))
     chunk_container_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid)
+    metadata_: Mapped[Optional[dict]] = mapped_column('metadata', JSONB, server_default=text("'{}'::jsonb"))
     created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('now()'))
     created_by: Mapped[Optional[str]] = mapped_column(Text)
     updated_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('now()'))
     updated_by: Mapped[Optional[str]] = mapped_column(Text)
 
-    classifier_registry_purgatory: Mapped[Optional['ClassifierRegistryPurgatory']] = relationship('ClassifierRegistryPurgatory', back_populates='documents_purgatory')
+    mks_classifier_purgatory: Mapped[Optional['ClassifierRegistryPurgatory']] = relationship(
+        'ClassifierRegistryPurgatory',
+        foreign_keys='[DocumentsPurgatory.classifier_system, DocumentsPurgatory.mks_oks_code]',
+        back_populates='documents_mks_purgatory',
+        overlaps='documents_okstu_purgatory'
+    )
+    okstu_classifier_purgatory: Mapped[Optional['ClassifierRegistryPurgatory']] = relationship(
+        'ClassifierRegistryPurgatory',
+        foreign_keys='[DocumentsPurgatory.classifier_system, DocumentsPurgatory.okstu_code]',
+        back_populates='documents_okstu_purgatory',
+        overlaps='documents_mks_purgatory,mks_classifier_purgatory'
+    )
+    successor_document_purgatory: Mapped[Optional['DocumentsPurgatory']] = relationship(
+        'DocumentsPurgatory',
+        remote_side=[id],
+        foreign_keys='[DocumentsPurgatory.successor_doc_id]',
+        backref='predecessor_documents_purgatory'
+    )
+    predecessor_document_purgatory: Mapped[Optional['DocumentsPurgatory']] = relationship(
+        'DocumentsPurgatory',
+        remote_side=[id],
+        foreign_keys='[DocumentsPurgatory.predecessor_doc_id]',
+        backref='successor_documents_purgatory'
+    )
     chunk_containers_purgatory: Mapped['ChunkContainersPurgatory'] = relationship('ChunkContainersPurgatory', uselist=False, back_populates='document_purgatory')
     document_versions_purgatory: Mapped[list['DocumentVersionsPurgatory']] = relationship('DocumentVersionsPurgatory', back_populates='document_purgatory')
     status_history_purgatory: Mapped[list['StatusHistoryPurgatory']] = relationship('StatusHistoryPurgatory', back_populates='document_purgatory')
