@@ -14,6 +14,7 @@ class TerminologyRegistryPurgatory(Base):
         UniqueConstraint('raw_term', name='terminology_registry_raw_term_key'),
         Index('idx_terminology_raw', 'raw_term'),
         Index('idx_terminology_standard', 'standard_term'),
+        Index('idx_terminology_type', 'term_type'),
         {'comment': 'Controlled vocabulary for title normalization and RAG glossary',
          'schema': 'purgatory'}
     )

@@ -3,24 +3,27 @@ import pytest
 def test_create_terminology(client):
     payload = {
         "raw_term": "Machine Learning",
+        "standard_term": "Machine Learning",
         "normalized_value": "machine learning",
-        "context": "IT"
+        "term_type": "term"
     }
     response = client.post("/api/v1/registry/terminology/", json=payload)
     assert response.status_code == 201
     data = response.json()
     assert data["data"]["raw_term"] == "Machine Learning"
+    assert data["data"]["standard_term"] == "Machine Learning"
     assert "id" in data["data"]
 
 def test_create_terminology_duplicate(client):
     payload = {
         "raw_term": "Duplicate Term",
+        "standard_term": "Duplicate Term",
         "normalized_value": "duplicate term",
-        "context": "IT"
+        "term_type": "term"
     }
     client.post("/api/v1/registry/terminology/", json=payload)
     
-    # Try to create with same raw_term and context
+    # Try to create with same raw_term
     response = client.post("/api/v1/registry/terminology/", json=payload)
     assert response.status_code == 409
 
@@ -28,18 +31,19 @@ def test_create_terminology_validation_error(client):
     # Missing required field
     payload = {
         # Missing raw_term
+        "standard_term": "Test Term",
         "normalized_value": "test term",
-        "context": "IT"
+        "term_type": "term"
     }
     response = client.post("/api/v1/registry/terminology/", json=payload)
     assert response.status_code == 422
 
 def test_get_terminology(client):
     client.post("/api/v1/registry/terminology/", json={
-        "raw_term": "Test Term", "normalized_value": "test term", "context": "Общий"
+        "raw_term": "Test Term", "standard_term": "Test Term", "normalized_value": "test term", "term_type": "term"
     })
     client.post("/api/v1/registry/terminology/", json={
-        "raw_term": "Another Term", "normalized_value": "another term", "context": "Общий"
+        "raw_term": "Another Term", "standard_term": "Another Term", "normalized_value": "another term", "term_type": "term"
     })
     
     response = client.get("/api/v1/registry/terminology/")
@@ -50,46 +54,33 @@ def test_get_terminology(client):
 
 def test_get_terminology_with_filters(client):
     client.post("/api/v1/registry/terminology/", json={
-        "raw_term": "IT Term 1",
-        "normalized_value": "it term 1",
-        "context": "IT"
+        "raw_term": "IT Term 1", "standard_term": "IT Term 1", "normalized_value": "it term 1", "term_type": "acronym"
     })
     client.post("/api/v1/registry/terminology/", json={
-        "raw_term": "Building Term",
-        "normalized_value": "building term",
-        "context": "Строительство"
+        "raw_term": "Building Term", "standard_term": "Building Term", "normalized_value": "building term", "term_type": "term"
     })
     client.post("/api/v1/registry/terminology/", json={
-        "raw_term": "IT Term 2",
-        "normalized_value": "it term 2",
-        "context": "IT"
+        "raw_term": "IT Term 2", "standard_term": "IT Term 2", "normalized_value": "it term 2", "term_type": "acronym"
     })
     
-    # Filter by context
-    response = client.get("/api/v1/registry/terminology/?context=IT")
+    # Filter by term_type
+    response = client.get("/api/v1/registry/terminology/?term_type=acronym")
     assert response.status_code == 200
     data = response.json()
-    # Note: context filtering works on backend, but response may not include context field directly
     assert len(data["data"]) >= 2
 
 def test_get_terminology_with_search(client):
     client.post("/api/v1/registry/terminology/", json={
-        "raw_term": "Machine Learning",
-        "normalized_value": "machine learning",
-        "context": "IT"
+        "raw_term": "Machine Learning", "standard_term": "Machine Learning", "normalized_value": "machine learning", "term_type": "term"
     })
     client.post("/api/v1/registry/terminology/", json={
-        "raw_term": "Deep Learning",
-        "normalized_value": "deep learning",
-        "context": "IT"
+        "raw_term": "Deep Learning", "standard_term": "Deep Learning", "normalized_value": "deep learning", "term_type": "term"
     })
     client.post("/api/v1/registry/terminology/", json={
-        "raw_term": "Other Concept",
-        "normalized_value": "other concept",
-        "context": "IT"
+        "raw_term": "Other Concept", "standard_term": "Other Concept", "normalized_value": "other concept", "term_type": "term"
     })
     
-    response = client.get("/api/v1/registry/terminology/?term=Machine")
+    response = client.get("/api/v1/registry/terminology/?raw_term=Machine")
     assert response.status_code == 200
     data = response.json()
     assert len(data["data"]) >= 1
@@ -97,30 +88,39 @@ def test_get_terminology_with_search(client):
 
 def test_get_terminology_with_normalized_filter(client):
     client.post("/api/v1/registry/terminology/", json={
-        "raw_term": "ML",
-        "normalized_value": "machine learning",
-        "context": "IT"
+        "raw_term": "ML", "standard_term": "ML", "normalized_value": "ml", "term_type": "acronym"
     })
     client.post("/api/v1/registry/terminology/", json={
-        "raw_term": "AI",
-        "normalized_value": "artificial intelligence",
-        "context": "IT"
+        "raw_term": "AI", "standard_term": "AI", "normalized_value": "ai", "term_type": "acronym"
     })
     
-    response = client.get("/api/v1/registry/terminology/?normalized_term=machine learning")
+    response = client.get("/api/v1/registry/terminology/?normalized_term=ml")
     assert response.status_code == 200
     data = response.json()
     assert len(data["data"]) >= 1
+    assert data["data"][0]["normalized_value"] == "ml"
+
+def test_get_terminology_with_is_blocked_filter(client):
+    client.post("/api/v1/registry/terminology/", json={
+        "raw_term": "Active Term", "standard_term": "Active Term", "normalized_value": "active term", "term_type": "term", "is_blocked": False
+    })
+    client.post("/api/v1/registry/terminology/", json={
+        "raw_term": "Blocked Term", "standard_term": "Blocked Term", "normalized_value": "blocked term", "term_type": "term", "is_blocked": True
+    })
+    
+    response = client.get("/api/v1/registry/terminology/?is_blocked=false")
+    assert response.status_code == 200
+    data = response.json()
+    assert all(item["is_blocked"] == False for item in data["data"])
 
 def test_get_terminology_pagination(client):
     # Create multiple terms
     for i in range(15):
         client.post("/api/v1/registry/terminology/", json={
-            "raw_term": f"Term {i}",
-            "normalized_value": f"term {i}",
-            "context": "Общий"
+            "raw_term": f"Term {i}", "standard_term": f"Term {i}", "normalized_value": f"term {i}", "term_type": "term"
         })
     
+    # Test pagination
     response = client.get("/api/v1/registry/terminology/?page=1&page_size=10")
     assert response.status_code == 200
     data = response.json()
@@ -129,139 +129,85 @@ def test_get_terminology_pagination(client):
     assert data["meta"]["page_size"] == 10
 
 def test_get_terminology_by_id(client):
-    create_res = client.post("/api/v1/registry/terminology/", json={
-        "raw_term": "Term 2", "normalized_value": "term 2", "context": "Общий"
+    create_response = client.post("/api/v1/registry/terminology/", json={
+        "raw_term": "Specific Term", "standard_term": "Specific Term", "normalized_value": "specific term", "term_type": "term"
     })
-    term_id = create_res.json()["data"]["id"]
+    term_id = create_response.json()["data"]["id"]
     
     response = client.get(f"/api/v1/registry/terminology/{term_id}")
     assert response.status_code == 200
-    assert response.json()["data"]["id"] == term_id
+    data = response.json()
+    assert data["data"]["raw_term"] == "Specific Term"
 
 def test_get_terminology_not_found(client):
     response = client.get("/api/v1/registry/terminology/00000000-0000-0000-0000-000000000000")
     assert response.status_code == 404
 
 def test_update_terminology(client):
-    create_res = client.post("/api/v1/registry/terminology/", json={
-        "raw_term": "Term 3", "normalized_value": "term 3", "context": "Общий"
+    create_response = client.post("/api/v1/registry/terminology/", json={
+        "raw_term": "Original Term", "standard_term": "Original Term", "normalized_value": "original term", "term_type": "term"
     })
-    term_id = create_res.json()["data"]["id"]
+    term_id = create_response.json()["data"]["id"]
     
-    response = client.put(f"/api/v1/registry/terminology/{term_id}", json={"term": "Updated Term 3"})
-    assert response.status_code == 200
-    assert response.json()["data"]["raw_term"] == "Updated Term 3"
-
-def test_update_terminology_not_found(client):
-    response = client.put("/api/v1/registry/terminology/00000000-0000-0000-0000-000000000000", json={"term": "Updated"})
-    assert response.status_code == 404
-
-def test_update_terminology_multiple_fields(client):
-    create_res = client.post("/api/v1/registry/terminology/", json={
-        "raw_term": "Original Term",
-        "normalized_value": "original term",
-        "context": "IT"
-    })
-    term_id = create_res.json()["data"]["id"]
-    
-    update_payload = {
-        "term": "Updated Term",
-        "normalized_term": "updated term",
-        "context": "Строительство",
-        "source": "manual"
-    }
+    update_payload = {"standard_term": "Updated Term"}
     response = client.put(f"/api/v1/registry/terminology/{term_id}", json=update_payload)
     assert response.status_code == 200
     data = response.json()
-    assert data["data"]["raw_term"] == "Updated Term"
+    assert data["data"]["standard_term"] == "Updated Term"
+
+def test_update_terminology_not_found(client):
+    update_payload = {"standard_term": "Updated Term"}
+    response = client.put("/api/v1/registry/terminology/00000000-0000-0000-0000-000000000000", json=update_payload)
+    assert response.status_code == 404
 
 def test_delete_terminology(client):
-    create_res = client.post("/api/v1/registry/terminology/", json={
-        "raw_term": "Term 4", "normalized_value": "term 4", "context": "Общий"
+    create_response = client.post("/api/v1/registry/terminology/", json={
+        "raw_term": "To Delete", "standard_term": "To Delete", "normalized_value": "to delete", "term_type": "term"
     })
-    term_id = create_res.json()["data"]["id"]
+    term_id = create_response.json()["data"]["id"]
     
     response = client.delete(f"/api/v1/registry/terminology/{term_id}")
     assert response.status_code == 200
     
-    get_res = client.get(f"/api/v1/registry/terminology/{term_id}")
-    assert get_res.status_code == 404
+    # Verify it's gone
+    get_response = client.get(f"/api/v1/registry/terminology/{term_id}")
+    assert get_response.status_code == 404
 
 def test_delete_terminology_not_found(client):
     response = client.delete("/api/v1/registry/terminology/00000000-0000-0000-0000-000000000000")
     assert response.status_code == 404
 
 def test_normalize_terminology(client):
-    # First create a term
     client.post("/api/v1/registry/terminology/", json={
-        "raw_term": "ML",
-        "normalized_value": "machine learning",
-        "context": "IT"
+        "raw_term": "CPU", "standard_term": "CPU", "normalized_value": "cpu", "term_type": "acronym"
     })
     
-    response = client.get("/api/v1/registry/terminology/normalize", params={"term": "ML", "context": "IT"})
+    response = client.get("/api/v1/registry/terminology/normalize?term=CPU")
     assert response.status_code == 200
     data = response.json()
-    assert "data" in data
-    assert data["data"]["normalized_term"] == "machine learning"
+    assert data["data"]["raw_term"] == "CPU"
+    assert data["data"]["normalized_value"] == "cpu"
+    assert data["data"]["term_type"] == "acronym"
 
 def test_normalize_terminology_not_found(client):
-    response = client.get("/api/v1/registry/terminology/normalize", params={"term": "Nonexistent Term"})
+    response = client.get("/api/v1/registry/terminology/normalize?term=NonExistent")
     assert response.status_code == 200
     data = response.json()
-    # Should return the original term if not found
-    assert "data" in data
+    assert data["data"]["raw_term"] == "NonExistent"
+    assert data["data"]["term_type"] == "unknown"
 
-def test_normalize_terminology_with_context(client):
-    # Create term with specific context
-    client.post("/api/v1/registry/terminology/", json={
-        "raw_term": "CPU_IT",
-        "normalized_value": "central processing unit",
-        "context": "IT"
+def test_patch_terminology(client):
+    create_response = client.post("/api/v1/registry/terminology/", json={
+        "raw_term": "Patch Term", "standard_term": "Patch Term", "normalized_value": "patch term", "term_type": "term"
     })
-    client.post("/api/v1/registry/terminology/", json={
-        "raw_term": "CPU_CHEM",
-        "normalized_value": "chemical processing unit",
-        "context": "Химия"
-    })
+    term_id = create_response.json()["data"]["id"]
     
-    # Test with IT context
-    response = client.get("/api/v1/registry/terminology/normalize", params={"term": "CPU_IT", "context": "IT"})
+    response = client.patch(f"/api/v1/registry/terminology/{term_id}", json={"definition": "This is a patch test"})
     assert response.status_code == 200
     data = response.json()
-    assert data["data"]["normalized_term"] == "central processing unit"
+    assert data["data"]["definition"] == "This is a patch test"
 
 def test_import_terminology(client):
-    response = client.post("/api/v1/registry/terminology/import", params={"mapping": "some_mapping"}, files={"file": ("test.csv", b"dummy content", "text/csv")})
+    # Dummy file upload test
+    response = client.post("/api/v1/registry/terminology/import?mapping=some_mapping", files={"file": ("test.csv", b"dummy content", "text/csv")})
     assert response.status_code in [200, 201]
-
-def test_get_terminology_with_source_filter(client):
-    client.post("/api/v1/registry/terminology/", json={
-        "raw_term": "Source Term 1",
-        "normalized_value": "source term 1",
-        "context": "IT",
-        "source": "internal"
-    })
-    client.post("/api/v1/registry/terminology/", json={
-        "raw_term": "Source Term 2",
-        "normalized_value": "source term 2",
-        "context": "IT",
-        "source": "external"
-    })
-    
-    response = client.get("/api/v1/registry/terminology/?source=internal")
-    assert response.status_code == 200
-    # The test is to ensure the endpoint accepts the parameter
-
-def test_create_terminology_with_all_fields(client):
-    payload = {
-        "raw_term": "Comprehensive Term",
-        "normalized_value": "comprehensive term",
-        "context": "IT",
-        "source": "manual"
-    }
-    response = client.post("/api/v1/registry/terminology/", json=payload)
-    assert response.status_code == 201
-    data = response.json()
-    assert data["data"]["raw_term"] == "Comprehensive Term"
-    # Note: context is stored in scope field, not directly in response

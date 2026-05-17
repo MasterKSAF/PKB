@@ -14,16 +14,39 @@ async def get_stats(db: Session = Depends(get_db)):
     terminology_total = db.query(TerminologyRegistryPurgatory).count()
     documents_total = db.query(DocumentsPurgatory).count()
     
-    # Group by status
+    # Group by classifier system
+    classifier_system_counts = db.query(
+        ClassifierRegistryPurgatory.classifier_system, 
+        func.count(ClassifierRegistryPurgatory.code)
+    ).group_by(ClassifierRegistryPurgatory.classifier_system).all()
+    classifiers_by_system = {system: count for system, count in classifier_system_counts}
+    
+    # Group by document status
     status_counts = db.query(DocumentsPurgatory.status, func.count(DocumentsPurgatory.id)).group_by(DocumentsPurgatory.status).all()
     documents_by_status = {status.value if status else "unknown": count for status, count in status_counts}
+    
+    # Group by source_type
+    source_type_counts = db.query(DocumentsPurgatory.source_type, func.count(DocumentsPurgatory.id)).group_by(DocumentsPurgatory.source_type).all()
+    documents_by_source_type = {source_type or "unknown": count for source_type, count in source_type_counts}
+    
+    # Group by era
+    era_counts = db.query(DocumentsPurgatory.era, func.count(DocumentsPurgatory.id)).group_by(DocumentsPurgatory.era).all()
+    documents_by_era = {era or "unknown": count for era, count in era_counts}
+    
+    # Group by term type
+    term_type_counts = db.query(TerminologyRegistryPurgatory.term_type, func.count(TerminologyRegistryPurgatory.id)).group_by(TerminologyRegistryPurgatory.term_type).all()
+    terminology_by_type = {term_type or "unknown": count for term_type, count in term_type_counts}
     
     return success_response(
         data={
             "classifiers_total": classifiers_total,
+            "classifiers_by_system": classifiers_by_system,
             "terminology_total": terminology_total,
+            "terminology_by_type": terminology_by_type,
             "documents_total": documents_total,
-            "documents_by_status": documents_by_status
+            "documents_by_status": documents_by_status,
+            "documents_by_source_type": documents_by_source_type,
+            "documents_by_era": documents_by_era
         }
     )
 
