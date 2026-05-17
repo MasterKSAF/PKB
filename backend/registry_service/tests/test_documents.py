@@ -242,7 +242,7 @@ def test_update_document_multiple_fields(client):
     
     update_payload = {
         "title": "Updated Title",
-        "doc_code": "UPD-001",
+        "doc_number": "UPD-001",
         "source": "updated_source"
     }
     response = client.put(f"/api/v1/registry/documents/{doc_id}", json=update_payload)

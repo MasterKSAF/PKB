@@ -63,7 +63,7 @@ os.environ.setdefault("DB_PORT", "<port>")
 | GET    | /registry/documents | Список      | GENERATED |  |
 | GET    | /registry/documents/{doc_id} | Один документ      | GENERATED |  |
 | POST   | /registry/documents | Создать      | GENERATED |  |
-| PUT    | /registry/documents/{doc_id | Обновить      | GENERATED |  |
+| PUT    | /registry/documents/{doc_id} | Обновить      | GENERATED |  |
 | PATCH  | /registry/documents/{doc_id}/status | Обновить статус      | GENERATED |  |
 | DELETE | /registry/documents/{doc_id} | Удалить      | GENERATED |  |
 | GET   | /registry/documents/export | Экспорт      | GENERATED |  |
@@ -79,48 +79,7 @@ os.environ.setdefault("DB_PORT", "<port>")
 
 Таблицы находятся в общей БД, доступны напрямую всем сервисам.
 
-### 5.1. ClassifierNode
-
-| Поле | Тип | Ограничения |
-|------|-----|-------------|
-| `code` | varchar(50) | PK |
-| `parent_code` | varchar(50) | FK → classifier_registry.code, nullable |
-| `full_name` | varchar(500) | NOT NULL |
-| `doc_type` | varchar(20) | NOT NULL, DEFAULT 'OKS' |
-| `jurisdiction` | varchar(10) | NOT NULL, DEFAULT 'RF' |
-| `language` | varchar(5) | NOT NULL, DEFAULT 'ru' |
-| `oks_code` | varchar(20) | nullable |
-| `is_thematic` | boolean | NOT NULL, DEFAULT true |
-| `created_at` | timestamptz | NOT NULL |
-| `updated_at` | timestamptz | NOT NULL |
-
-### 5.2. TerminologyEntry
-
-| Поле | Тип | Ограничения |
-|------|-----|-------------|
-| `term_id` | serial | PK |
-| `term` | varchar(500) | NOT NULL |
-| `normalized_term` | varchar(500) | NOT NULL |
-| `context` | varchar(100) | NOT NULL, DEFAULT 'Общий' |
-| `source` | varchar(500) | nullable |
-| `created_at` | timestamptz | NOT NULL |
-| UNIQUE | | (`term`, `context`) |
-
-### 5.3. RegistryDocument
-
-| Поле | Тип | Ограничения |
-|------|-----|-------------|
-| `doc_id` | serial | PK |
-| `title` | varchar(500) | NOT NULL |
-| `doc_number` | varchar(100) | nullable |
-| `classifier_code` | varchar(50) | FK → classifier_registry.code, nullable |
-| `status` | varchar(20) | NOT NULL, DEFAULT 'draft' |
-| `source` | varchar(500) | nullable |
-| `notes` | text | nullable |
-| `created_at` | timestamptz | NOT NULL |
-| `updated_at` | timestamptz | NOT NULL |
-
----
+Модели данных могут меняться.
 
 ## 6. Примечания
 
