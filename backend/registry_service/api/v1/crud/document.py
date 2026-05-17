@@ -2,11 +2,11 @@ from sqlalchemy.orm import Session
 from uuid import UUID
 from typing import Optional
 from datetime import date
-from ..models.document import Documents, DocStatus
+from ..models.document import DocumentsPurgatory, DocStatus
 from ..schemas.document import DocumentsCreate, DocumentsUpdate
 
 def get_document(db: Session, doc_id: UUID):
-    return db.query(Documents).filter(Documents.id == doc_id).first()
+    return db.query(DocumentsPurgatory).filter(DocumentsPurgatory.id == doc_id).first()
 
 def get_documents(db: Session, 
                   title: Optional[str] = None,
@@ -17,28 +17,28 @@ def get_documents(db: Session,
                   date_from: Optional[date] = None,
                   date_to: Optional[date] = None,
                   skip: int = 0, limit: int = 100):
-    query = db.query(Documents)
+    query = db.query(DocumentsPurgatory)
     
     if title:
-        query = query.filter(Documents.title.ilike(f"%{title}%"))
+        query = query.filter(DocumentsPurgatory.title.ilike(f"%{title}%"))
     if doc_number:
-        query = query.filter(Documents.doc_code == doc_number)
+        query = query.filter(DocumentsPurgatory.doc_code == doc_number)
     if classifier_code:
-        query = query.filter(Documents.classifier_code == classifier_code)
+        query = query.filter(DocumentsPurgatory.classifier_code == classifier_code)
     if status:
-        query = query.filter(Documents.status == status)
+        query = query.filter(DocumentsPurgatory.status == status)
     if source:
-        query = query.filter(Documents.metadata_['source'].astext == source)
+        query = query.filter(DocumentsPurgatory.metadata_['source'].astext == source)
     if date_from:
-        query = query.filter(Documents.created_at >= date_from)
+        query = query.filter(DocumentsPurgatory.created_at >= date_from)
     if date_to:
-        query = query.filter(Documents.created_at <= date_to)
+        query = query.filter(DocumentsPurgatory.created_at <= date_to)
         
     return query.offset(skip).limit(limit).all(), query.count()
 
 def create_document(db: Session, document: DocumentsCreate):
     meta = {"source": document.source, "notes": document.notes}
-    db_document = Documents(
+    db_document = DocumentsPurgatory(
         title=document.title,
         doc_code=document.doc_number,
         classifier_code=document.classifier_code,
@@ -50,7 +50,7 @@ def create_document(db: Session, document: DocumentsCreate):
     db.refresh(db_document)
     return db_document
 
-def update_document(db: Session, db_document: Documents, document_update: DocumentsUpdate):
+def update_document(db: Session, db_document: DocumentsPurgatory, document_update: DocumentsUpdate):
     if document_update.title is not None:
         db_document.title = document_update.title
     if document_update.doc_number is not None:

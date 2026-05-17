@@ -27,7 +27,7 @@ class ValidationStatus(str, enum.Enum):
     INVALID = 'invalid'
 
 
-class FormatRegistry(Base):
+class FormatRegistryPurgatory(Base):
     __tablename__ = 'format_registry'
     __table_args__ = (
         PrimaryKeyConstraint('code', name='format_registry_pkey'),
@@ -41,10 +41,10 @@ class FormatRegistry(Base):
     is_active: Mapped[Optional[bool]] = mapped_column(Boolean, server_default=text('true'))
     created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('now()'))
 
-    document_versions: Mapped[list['DocumentVersions']] = relationship('DocumentVersions', back_populates='format_registry')
+    document_versions_purgatory: Mapped[list['DocumentVersionsPurgatory']] = relationship('DocumentVersionsPurgatory', back_populates='format_registry_purgatory')
 
 
-class Documents(Base):
+class DocumentsPurgatory(Base):
     __tablename__ = 'documents'
     __table_args__ = (
         ForeignKeyConstraint(['classifier_code'], ['purgatory.classifier_registry.code'], name='documents_classifier_code_fkey'),
@@ -70,13 +70,13 @@ class Documents(Base):
     updated_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('now()'))
     updated_by: Mapped[Optional[str]] = mapped_column(Text)
 
-    classifier_registry: Mapped[Optional['ClassifierRegistry']] = relationship('ClassifierRegistry', back_populates='documents')
-    chunk_containers: Mapped['ChunkContainers'] = relationship('ChunkContainers', uselist=False, back_populates='document')
-    document_versions: Mapped[list['DocumentVersions']] = relationship('DocumentVersions', back_populates='document')
-    status_history: Mapped[list['StatusHistory']] = relationship('StatusHistory', back_populates='document')
+    classifier_registry_purgatory: Mapped[Optional['ClassifierRegistryPurgatory']] = relationship('ClassifierRegistryPurgatory', back_populates='documents_purgatory')
+    chunk_containers_purgatory: Mapped['ChunkContainersPurgatory'] = relationship('ChunkContainersPurgatory', uselist=False, back_populates='document_purgatory')
+    document_versions_purgatory: Mapped[list['DocumentVersionsPurgatory']] = relationship('DocumentVersionsPurgatory', back_populates='document_purgatory')
+    status_history_purgatory: Mapped[list['StatusHistoryPurgatory']] = relationship('StatusHistoryPurgatory', back_populates='document_purgatory')
 
 
-class ChunkContainers(Base):
+class ChunkContainersPurgatory(Base):
     __tablename__ = 'chunk_containers'
     __table_args__ = (
         ForeignKeyConstraint(['document_id'], ['purgatory.documents.id'], ondelete='CASCADE', name='chunk_containers_document_id_fkey'),
@@ -96,10 +96,10 @@ class ChunkContainers(Base):
     validation_errors: Mapped[Optional[dict]] = mapped_column(JSONB)
     created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('now()'))
 
-    document: Mapped['Documents'] = relationship('Documents', back_populates='chunk_containers')
+    document_purgatory: Mapped['DocumentsPurgatory'] = relationship('DocumentsPurgatory', back_populates='chunk_containers_purgatory')
 
 
-class DocumentVersions(Base):
+class DocumentVersionsPurgatory(Base):
     __tablename__ = 'document_versions'
     __table_args__ = (
         ForeignKeyConstraint(['document_id'], ['purgatory.documents.id'], ondelete='CASCADE', name='document_versions_document_id_fkey'),
@@ -122,11 +122,11 @@ class DocumentVersions(Base):
     uploaded_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('now()'))
     uploaded_by: Mapped[Optional[str]] = mapped_column(Text)
 
-    document: Mapped['Documents'] = relationship('Documents', back_populates='document_versions')
-    format_registry: Mapped['FormatRegistry'] = relationship('FormatRegistry', back_populates='document_versions')
+    document_purgatory: Mapped['DocumentsPurgatory'] = relationship('DocumentsPurgatory', back_populates='document_versions_purgatory')
+    format_registry_purgatory: Mapped['FormatRegistryPurgatory'] = relationship('FormatRegistryPurgatory', back_populates='document_versions_purgatory')
 
 
-class StatusHistory(Base):
+class StatusHistoryPurgatory(Base):
     __tablename__ = 'status_history'
     __table_args__ = (
         ForeignKeyConstraint(['document_id'], ['purgatory.documents.id'], ondelete='CASCADE', name='status_history_document_id_fkey'),
@@ -144,4 +144,4 @@ class StatusHistory(Base):
     changed_by: Mapped[Optional[str]] = mapped_column(Text)
     changed_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('now()'))
 
-    document: Mapped['Documents'] = relationship('Documents', back_populates='status_history')
+    document_purgatory: Mapped['DocumentsPurgatory'] = relationship('DocumentsPurgatory', back_populates='status_history_purgatory')

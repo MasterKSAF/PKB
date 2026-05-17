@@ -64,8 +64,8 @@ async def get_document(doc_id: UUID, db: Session = Depends(get_db)):
     if not db_doc:
         raise DomainException(404, "DOCUMENT_NOT_FOUND", "Документ реестра не найден")
     resp = DocumentsResponse.model_validate(db_doc)
-    if db_doc.classifier_registry:
-        resp.classifier_name = db_doc.classifier_registry.full_name
+    if db_doc.classifier_registry_purgatory:
+        resp.classifier_name = db_doc.classifier_registry_purgatory.full_name
     return success_response(data=jsonable_encoder(resp))
 
 @router.post("/")

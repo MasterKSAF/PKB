@@ -7,7 +7,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from .base import Base
 
-class TerminologyRegistry(Base):
+class TerminologyRegistryPurgatory(Base):
     __tablename__ = 'terminology_registry'
     __table_args__ = (
         PrimaryKeyConstraint('id', name='terminology_registry_pkey'),

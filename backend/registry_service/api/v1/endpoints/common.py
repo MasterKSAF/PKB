@@ -2,20 +2,20 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from ..dependencies.database import get_db
-from ..models.classifier import ClassifierRegistry
-from ..models.terminology import TerminologyRegistry
-from ..models.document import Documents
+from ..models.classifier import ClassifierRegistryPurgatory
+from ..models.terminology import TerminologyRegistryPurgatory
+from ..models.document import DocumentsPurgatory
 
 router = APIRouter()
 
 @router.get("/stats")
 async def get_stats(db: Session = Depends(get_db)):
-    classifiers_total = db.query(ClassifierRegistry).count()
-    terminology_total = db.query(TerminologyRegistry).count()
-    documents_total = db.query(Documents).count()
+    classifiers_total = db.query(ClassifierRegistryPurgatory).count()
+    terminology_total = db.query(TerminologyRegistryPurgatory).count()
+    documents_total = db.query(DocumentsPurgatory).count()
     
     # Group by status
-    status_counts = db.query(Documents.status, func.count(Documents.id)).group_by(Documents.status).all()
+    status_counts = db.query(DocumentsPurgatory.status, func.count(DocumentsPurgatory.id)).group_by(DocumentsPurgatory.status).all()
     documents_by_status = {status.value if status else "unknown": count for status, count in status_counts}
     
     return success_response(

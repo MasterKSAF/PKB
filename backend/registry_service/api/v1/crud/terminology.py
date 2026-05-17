@@ -1,11 +1,11 @@
 from sqlalchemy.orm import Session
 from uuid import UUID
 from typing import Optional
-from ..models.terminology import TerminologyRegistry
+from ..models.terminology import TerminologyRegistryPurgatory
 from ..schemas.terminology import TerminologyRegistryCreate, TerminologyRegistryUpdate
 
 def get_term(db: Session, term_id: UUID):
-    return db.query(TerminologyRegistry).filter(TerminologyRegistry.id == term_id).first()
+    return db.query(TerminologyRegistryPurgatory).filter(TerminologyRegistryPurgatory.id == term_id).first()
 
 def get_terms(db: Session, 
               term: Optional[str] = None,
@@ -13,34 +13,34 @@ def get_terms(db: Session,
               context: Optional[str] = None,
               source: Optional[str] = None,
               skip: int = 0, limit: int = 100):
-    query = db.query(TerminologyRegistry)
+    query = db.query(TerminologyRegistryPurgatory)
     
     if term:
-        query = query.filter(TerminologyRegistry.raw_term.ilike(f"%{term}%"))
+        query = query.filter(TerminologyRegistryPurgatory.raw_term.ilike(f"%{term}%"))
     if normalized_term:
-        query = query.filter(TerminologyRegistry.normalized_value == normalized_term)
+        query = query.filter(TerminologyRegistryPurgatory.normalized_value == normalized_term)
     if context:
-        query = query.filter(TerminologyRegistry.scope['context'].astext == context)
+        query = query.filter(TerminologyRegistryPurgatory.scope['context'].astext == context)
     if source:
-        query = query.filter(TerminologyRegistry.scope['source'].astext == source)
+        query = query.filter(TerminologyRegistryPurgatory.scope['source'].astext == source)
         
     return query.offset(skip).limit(limit).all(), query.count()
 
 def get_term_by_raw_and_context(db: Session, raw_term: str, context: str):
-    return db.query(TerminologyRegistry).filter(
-        TerminologyRegistry.raw_term == raw_term,
-        TerminologyRegistry.scope['context'].astext == context
+    return db.query(TerminologyRegistryPurgatory).filter(
+        TerminologyRegistryPurgatory.raw_term == raw_term,
+        TerminologyRegistryPurgatory.scope['context'].astext == context
     ).first()
 
 def normalize_term(db: Session, term: str, context: Optional[str] = None):
-    query = db.query(TerminologyRegistry).filter(TerminologyRegistry.raw_term == term)
+    query = db.query(TerminologyRegistryPurgatory).filter(TerminologyRegistryPurgatory.raw_term == term)
     if context:
-        query = query.filter(TerminologyRegistry.scope['context'].astext == context)
+        query = query.filter(TerminologyRegistryPurgatory.scope['context'].astext == context)
     return query.first()
 
 def create_term(db: Session, term: TerminologyRegistryCreate):
     scope_data = {"context": term.context, "source": term.source}
-    db_term = TerminologyRegistry(
+    db_term = TerminologyRegistryPurgatory(
         raw_term=term.term,
         standard_term=term.normalized_term,
         normalized_value=term.normalized_term,
@@ -51,7 +51,7 @@ def create_term(db: Session, term: TerminologyRegistryCreate):
     db.refresh(db_term)
     return db_term
 
-def update_term(db: Session, db_term: TerminologyRegistry, term_update: TerminologyRegistryUpdate):
+def update_term(db: Session, db_term: TerminologyRegistryPurgatory, term_update: TerminologyRegistryUpdate):
     if term_update.term is not None:
         db_term.raw_term = term_update.term
     if term_update.normalized_term is not None:

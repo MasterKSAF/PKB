@@ -1,18 +1,18 @@
 from .base import Base
 
 # Classifier Models
-from .classifier import ClassifierRegistry
+from .classifier import ClassifierRegistryPurgatory
 
 # Terminology Models
-from .terminology import TerminologyRegistry
+from .terminology import TerminologyRegistryPurgatory
 
 # Document Models
 from .document import (
-    Documents,
-    FormatRegistry,
-    ChunkContainers,
-    DocumentVersions,
-    StatusHistory,
+    DocumentsPurgatory,
+    FormatRegistryPurgatory,
+    ChunkContainersPurgatory,
+    DocumentVersionsPurgatory,
+    StatusHistoryPurgatory,
     DocStatus,
     ValidationStatus
 )

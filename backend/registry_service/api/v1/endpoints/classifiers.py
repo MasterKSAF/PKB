@@ -84,8 +84,8 @@ async def delete_classifier(code: str, force: bool = False, db: Session = Depend
     if not db_classifier:
         raise DomainException(404, "CLASSIFIER_NOT_FOUND", "Узел классификатора не найден")
     
-    if not force and db_classifier.classifier_registry_reverse:
-        raise DomainException(409, "HAS_CHILDREN", f"Нельзя удалить: узел имеет {len(db_classifier.classifier_registry_reverse)} дочерних. Используйте force=true")
+    if not force and db_classifier.classifier_registry_reverse_purgatory:
+        raise DomainException(409, "HAS_CHILDREN", f"Нельзя удалить: узел имеет {len(db_classifier.classifier_registry_reverse_purgatory)} дочерних. Используйте force=true")
         
     crud.delete_classifier(db, code)
     return success_response(data={"deleted_code": code})

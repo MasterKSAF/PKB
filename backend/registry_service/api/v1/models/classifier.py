@@ -5,7 +5,7 @@ from sqlalchemy import Boolean, Date, DateTime, ForeignKeyConstraint, Index, Pri
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .base import Base
 
-class ClassifierRegistry(Base):
+class ClassifierRegistryPurgatory(Base):
     __tablename__ = 'classifier_registry'
     __table_args__ = (
         ForeignKeyConstraint(['parent_code'], ['purgatory.classifier_registry.code'], name='classifier_registry_parent_code_fkey'),
@@ -32,6 +32,6 @@ class ClassifierRegistry(Base):
     external_id: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, server_default=text('now()'))
 
-    classifier_registry: Mapped[Optional['ClassifierRegistry']] = relationship('ClassifierRegistry', remote_side=[code], back_populates='classifier_registry_reverse')
-    classifier_registry_reverse: Mapped[list['ClassifierRegistry']] = relationship('ClassifierRegistry', remote_side=[parent_code], back_populates='classifier_registry')
-    documents: Mapped[list['Documents']] = relationship('Documents', back_populates='classifier_registry')
+    classifier_registry_purgatory: Mapped[Optional['ClassifierRegistryPurgatory']] = relationship('ClassifierRegistryPurgatory', remote_side=[code], back_populates='classifier_registry_reverse_purgatory')
+    classifier_registry_reverse_purgatory: Mapped[list['ClassifierRegistryPurgatory']] = relationship('ClassifierRegistryPurgatory', remote_side=[parent_code], back_populates='classifier_registry_purgatory')
+    documents_purgatory: Mapped[list['DocumentsPurgatory']] = relationship('DocumentsPurgatory', back_populates='classifier_registry_purgatory')
