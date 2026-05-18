@@ -23,6 +23,7 @@
 - Google AI Studio: https://ai.studio/apps/559e9949-e0db-4ac9-9acf-bbe456345c77
 - GitHub: https://github.com/g-abdrakhmanova94/PKB-Petrobalt
 - Инструкция: https://docs.google.com/document/d/1N-Y8-wst3LiY21SCoxdUOEKpp1ds7hwn/edit?usp=sharing&ouid=106146823526731310543&rtpof=true&sd=true
+- Видеодемонстрация: https://drive.google.com/file/d/1dtcpcbvNNkVH5vtEn-sOqXgERkkEGAfR/view?usp=sharing
 
 ## Что просим проверить
 
