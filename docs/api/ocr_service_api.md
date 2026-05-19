@@ -141,28 +141,41 @@
     "title": "ГОСТ Р 12345-77",
     "sections": [
       {
-        "heading": "1. Общие положения",
-        "content": "Настоящий стандарт...",
+        "clause": "1",
+        "title": "Общие положения",
+        "level": 1,
+        "type": "section",
+        "content": {
+          "text": "Настоящий стандарт..."
+        },
         "page": 1,
+        "bbox": "72,100,522,324",
         "subsections": []
-      }
-    ],
-    "tables": [
+      },
       {
+        "title": "Таблица 1 — Параметры",
+        "level": 2,
+        "type": "table",
+        "content": {
+          "headers": ["Параметр", "Значение"],
+          "rows": [["Толщина", "12 мм"], ["Длина", "6000 мм"]]
+        },
         "page": 5,
-        "caption": "Таблица 1 — Параметры",
-        "headers": ["Параметр", "Значение"],
-        "rows": [["Толщина", "12 мм"], ["Длина", "6000 мм"]]
-      }
-    ],
-    "images": [
+        "bbox": "72,280,552,400",
+        "subsections": []
+      },
       {
-        "image_id": "img-001",
+        "title": "Рисунок 1 — Стойка установочная",
+        "type": "image",
+        "content": {
+          "image_id": "img-001",
+          "file_path": "b3a8f1c2/v1/img/fig1.png",
+          "width": 800,
+          "height": 600
+        },
         "page": 8,
-        "file_path": "b3a8f1c2/v1/img/fig1.png",
-        "caption": "Рисунок 1 — Стойка установочная",
-        "width": 800,
-        "height": 600
+        "bbox": "100,90,500,390",
+        "subsections": []
       }
     ]
   },
@@ -172,6 +185,14 @@
     "udk_code": "629.5.021",
     "year": "1981"
   },
+  "document_reference": [
+    {
+      "target_doc_code": "ГОСТ Р 54321-80",
+      "reference_type": "normative",
+      "context": "Раздел 3, пункт 3.2",
+      "current_status": "действующий"
+    }
+  ],
   "quality": {
     "confidence": 0.94,
     "pages_processed": 12,
@@ -195,17 +216,32 @@
 }
 ```
 
-| Поле                        | Тип    | Описание                                                             |
-| --------------------------- | ------ | -------------------------------------------------------------------- |
-| `document_id`               | string | UUID документа                                                       |
-| `version_id`                | string | UUID версии                                                          |
-| `structure`                 | object | Распознанная структура: тип, заголовок, секции, таблицы, изображения |
-| `classification`            | object | Извлечённые коды классификации                                       |
-| `quality`                   | object | Общая оценка качества + `per_page` — детализация по страницам        |
-| `quality.per_page[].status` | string | `ok`, `low_confidence`, `failed`                                     |
-| `quality.per_page[].error`  | string | Код ошибки страницы (только при `status: failed`)                    |
-| `errors`                    | array  | Массив некритичных ошибок и предупреждений                           |
-| `status`                    | string | `completed`, `failed`                                                |
+| Поле                                   | Тип    | Описание                                                             |
+| -------------------------------------- | ------ | -------------------------------------------------------------------- |
+| `document_id`                          | string | UUID документа                                                       |
+| `version_id`                           | string | UUID версии                                                          |
+| `structure`                            | object | Распознанная структура: тип, заголовок, секции                       |
+| `structure.type`                       | string | Тип документа: `normative`, `technical` и др.                        |
+| `structure.title`                      | string | Заголовок документа                                                  |
+| `structure.sections[]`                 | array  | Массив секций (заголовки, таблицы, изображения, формулы)             |
+| `structure.sections[].clause`          | string | Номер пункта/раздела (напр. `"1"`, `"3.2"`)                         |
+| `structure.sections[].title`           | string | Заголовок секции                                                     |
+| `structure.sections[].level`           | int    | Уровень вложенности (1 — верхний)                                    |
+| `structure.sections[].type`            | string | Тип элемента: `section`, `table`, `image`, `formula`                 |
+| `structure.sections[].content`         | JSONB  | Содержимое (зависит от `type`: текст, строки таблицы, ссылка и т.д.) |
+| `structure.sections[].page`            | int    | Номер страницы                                                       |
+| `structure.sections[].bbox`            | object | Координаты блока: `x`, `y`, `width`, `height`                        |
+| `classification`                       | object | Извлечённые коды классификации                                       |
+| `document_reference[]`                 | array  | Ссылки на другие нормативные/технические документы                   |
+| `document_reference[].target_doc_code` | string | Код документа, на который ссылаются                                  |
+| `document_reference[].reference_type`  | string | Тип ссылки: `normative`, `informative`, `replaces`                   |
+| `document_reference[].context`         | string | Контекст ссылки (раздел/пункт)                                       |
+| `document_reference[].current_status`  | string | Статус целевого документа (действующий, заменён и т.д.)              |
+| `quality`                              | object | Общая оценка качества + `per_page` — детализация по страницам        |
+| `quality.per_page[].status`            | string | `ok`, `low_confidence`, `failed`                                     |
+| `quality.per_page[].error`             | string | Код ошибки страницы (только при `status: failed`)                    |
+| `errors`                               | array  | Массив некритичных ошибок и предупреждений                           |
+| `status`                               | string | `completed`, `failed`                                                |
 
 ---
 

@@ -716,32 +716,19 @@ POST /registry/documents
 {
   "document_id": "b3a8f1c2-...",
   "version_id": "c4b9f2d3-...",
+  "document_reference": [],
   "structure": {
     "type": "normative",
     "sections": [
       {
-        "heading": "1. Общие положения",
-        "content": "Настоящий стандарт...",
+        "clause": "1. Общие положения",
+        "title": "Общие положения",
+        "level": 1,
+        "type": "section",
+        "content": { "text": "Настоящий стандарт..." },
         "page": 1,
+        "bbox": "x1,y1,x2,y2",
         "subsections": []
-      }
-    ],
-    "tables": [
-      {
-        "page": 5,
-        "caption": "Таблица 1 — Параметры",
-        "headers": ["Параметр", "Значение"],
-        "rows": [["Толщина", "12 мм"], ["Длина", "6000 мм"]]
-      }
-    ],
-    "images": [
-      {
-        "image_id": "img-001",
-        "page": 8,
-        "file_path": "b3a8f1c2/v1/img/fig1.png",
-        "caption": "Рисунок 1 — Стойка установочная",
-        "width": 800,
-        "height": 600
       }
     ]
   },
@@ -819,6 +806,7 @@ POST /registry/documents
     "jurisdiction": "RU",
     "issuing_body": "Госстандарт СССР",
     "title_hash_sha256": "a1b2c3d4...",
+    "order": 0,
     "links": {
       "document": "/api/v1/registry/documents/42",
       "versions": "/api/v1/registry/documents/42/versions"
@@ -839,40 +827,36 @@ POST /registry/documents
     "sections": [
       {
         "id": "sec-001",
-        "heading": "1. Общие положения",
-        "content": "Настоящий стандарт распространяется...",
+        "clause": "1. Общие положения",
+        "title": "Общие положения",
+        "level": 1,
+        "type": "section",
+        "content": { "text": "Настоящий стандарт распространяется..." },
         "page": 1,
+        "bbox": "x1,y1,x2,y2",
         "subsections": [
           {
             "id": "sec-001-1",
-            "heading": "1.1 Область применения",
-            "content": "...",
-            "page": 1
+            "clause": "1.1 Область применения",
+            "title": "Область применения",
+            "level": 2,
+            "type": "subsection",
+            "content": { "text": "..." },
+            "page": 1,
+            "bbox": "x1,y1,x2,y2"
           }
         ]
       }
-    ],
-    "tables": [
-      {
-        "id": "tbl-001",
-        "page": 5,
-        "caption": "Таблица 1 — Параметры",
-        "headers": ["Параметр", "Значение"],
-        "rows": [["Толщина", "12 мм"], ["Длина", "6000 мм"]]
-      }
-    ],
-    "images": [
-      {
-        "image_id": "img-001",
-        "page": 8,
-        "file_path": "b3a8f1c2/v1/img/fig1.png",
-        "file_url": "/api/v1/files/img-001",
-        "caption": "Рисунок 1 — Стойка установочная",
-        "width": 800,
-        "height": 600
-      }
     ]
   },
+  "document_reference": [
+    {
+      "id": "ref-001",
+      "target_doc_code": "ГОСТ 12345-88",
+      "reference_type": "normative",
+      "is_resolved": false
+    }
+  ],
   "files": {
     "original": "/api/v1/files/file-xyz",
     "preview": "/api/v1/documents/b3a8f1c2.../pages/1/preview"
@@ -893,10 +877,22 @@ POST /registry/documents
 | `registry` | object | Карточка документа в реестре (nsi) с метаданными и ссылками |
 | `registry.doc_id` | int | ID документа в реестре (nsi) |
 | `registry.links` | object | Ссылки на ресурсы документа в API реестра |
+| `registry.order` | int | Порядковый номер документа (используется при построении текста страницы) |
 | `classification` | object | Коды классификации со статусами верификации |
-| `structure` | object | Полная структура документа: секции, таблицы, изображения (с ID сущностей в БД) |
+| `structure` | object | Полная структура документа: секции (с ID сущностей в БД) |
 | `structure.sections[].id` | string | ID секции в `nsi.document_sections` |
-| `structure.tables[].id` | string | ID таблицы в `nsi.extracted_tables` |
+| `structure.sections[].clause` | string | Номер пункта/заголовка (напр. «1.», «1.1») |
+| `structure.sections[].title` | string | Название секции без номера |
+| `structure.sections[].level` | int | Уровень вложенности (1 — верхний) |
+| `structure.sections[].type` | string | Тип элемента (`section`, `subsection`, `paragraph`) |
+| `structure.sections[].content` | JSONB | Содержимое секции (`{"text": "..."}`) |
+| `structure.sections[].page` | int | Номер страницы |
+| `structure.sections[].bbox` | string | Координаты bounding box (`x1,y1,x2,y2`) |
+| `document_reference[]` | array | Ссылки на другие документы |
+| `document_reference[].id` | string | ID ссылки |
+| `document_reference[].target_doc_code` | string | Код целевого документа |
+| `document_reference[].reference_type` | string | Тип ссылки (`normative`, `informative`, `replacement`) |
+| `document_reference[].is_resolved` | bool | Разрешена ли ссылка (документ найден в реестре) |
 | `files` | object | Ссылки на оригинальный файл и превью страниц |
 | `quality` | object | Оценка качества распознавания |
 | `status` | string | Статус (`archived` — документ готов к индексации) |

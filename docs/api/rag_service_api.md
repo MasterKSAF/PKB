@@ -31,7 +31,7 @@
 | Шаг | Действие | Результат |
 |---|---|---|
 | 1 | Загрузка документа из БД по переданным ссылкам | Полный текст и структура документа |
-| 2 | Построение чанков и иерархии | Разбиение на семантические фрагменты (не более 512 токенов), построение ltree-иерархии |
+| 2 | Построение чанков и иерархии | Разбиение на семантические фрагменты (не более 512 токенов), построение иерархии секций (path) |
 | 3 | Вычисление Embeddings | Векторные представления для каждого текстового чанка |
 | 4 | Построение векторного индекса | Сохранение чанков, эмбеддингов и индексов в БД |
 
@@ -45,8 +45,7 @@
     "versions": "/api/v1/registry/documents/42/versions"
   },
   "options": {
-    "chunk_size": 512,
-    "chunk_overlap": 50
+    "strategy": "semantic_512"
   }
 }
 ```
@@ -56,8 +55,7 @@
 | `document_id` | string | Да | ID документа (UUID) |
 | `registry_doc_id` | int | Да | ID документа в реестре |
 | `links` | object | Да | Ссылки для загрузки данных из БД |
-| `options.chunk_size` | int | Нет | Максимальный размер чанка в токенах (по умолчанию 512) |
-| `options.chunk_overlap` | int | Нет | Перекрытие чанков в токенах (по умолчанию 50) |
+| `options.strategy` | string | Нет | Стратегия разбиения → `rag_document_chunks.strategy` (`semantic_512`, `fixed_256`) |
 
 **Ответ `201`:**
 ```json
@@ -67,10 +65,9 @@
   "indexed_at": "2026-05-15T12:00:18Z",
   "chunks_count": 34,
   "index_stats": {
-    "text_chunks": 28,
-    "table_chunks": 3,
-    "image_chunks": 3,
-    "total_embeddings": 31
+    "sections": 12,
+    "chunks": 34,
+    "embeddings": 31
   }
 }
 ```
@@ -81,7 +78,9 @@
 | `status` | string | Статус: `completed`, `failed` |
 | `indexed_at` | string | Время завершения индексации |
 | `chunks_count` | int | Общее количество созданных чанков |
-| `index_stats` | object | Статистика индексации |
+| `index_stats.sections` | int | Количество секций (структурных единиц) |
+| `index_stats.chunks` | int | Количество чанков |
+| `index_stats.embeddings` | int | Количество вычисленных эмбеддингов |
 
 ---
 
@@ -148,6 +147,8 @@
 | `search_type` | string | Нет | `hybrid`, `sparse`, `dense` (по умолчанию `hybrid`) |
 | `rerank` | bool | Нет | Применять реранжирование (по умолчанию true) |
 
+**Гибридное ранжирование (RRF):** результаты векторного поиска (`cosine_similarity` по `rag_document_chunks.embedding`) и полнотекстового (`ts_rank` по `rag_document_chunks.tsv`) объединяются алгоритмом Reciprocal Rank Fusion: `score(d) = Σ 1 / (k + rank_i(d))`, k = 60.
+
 **Ответ `200`:**
 ```json
 {
@@ -158,12 +159,11 @@
       "document_id": "doc-norm-001",
       "document_title": "Правила РС",
       "page": 42,
-      "text": "Для ледового класса Arc4 толщина обшивки должна быть не менее 12 мм.",
+      "content": "Для ледового класса Arc4 толщина обшивки должна быть не менее 12 мм.",
       "score": 0.92,
-      "metadata": {
-        "heading": "4.2 Требования к обшивке",
-        "section": "Ледовые усиления"
-      }
+      "clause": "4.2 Требования к обшивке",
+      "section_title": "Ледовые усиления",
+      "confidence": 0.85
     }
   ],
   "search_type_used": "hybrid",
@@ -171,6 +171,18 @@
   "total_found": 15
 }
 ```
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `chunk_id` | string | ID чанка |
+| `document_id` | string | ID документа |
+| `document_title` | string | Название документа |
+| `page` | int | Номер страницы |
+| `content` | string | Текстовое содержимое чанка |
+| `score` | float | Оценка релевантности |
+| `clause` | string | Пункт/раздел документа |
+| `section_title` | string | Название раздела |
+| `confidence` | float | Уверенность в релевантности |
 
 ---
 
@@ -188,11 +200,11 @@
   "context_chunks": [
     {
       "chunk_id": "chk-001",
-      "text": "Для ледового класса Arc4 толщина обшивки должна быть не менее 12 мм.",
+      "content": "Для ледового класса Arc4 толщина обшивки должна быть не менее 12 мм.",
       "document_id": "doc-norm-001",
       "document_title": "Правила РС",
       "page": 42,
-      "heading": "4.2 Требования к обшивке"
+      "clause": "4.2 Требования к обшивке"
     }
   ]
 }
@@ -212,8 +224,8 @@
       "document_id": "doc-norm-001",
       "document_title": "Правила РС",
       "page": 42,
-      "fragment_id": "chk-001",
-      "heading": "4.2 Требования к обшивке"
+      "chunk_id": "chk-001",
+      "clause": "4.2 Требования к обшивке"
     }
   ]
 }

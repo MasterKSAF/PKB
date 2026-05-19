@@ -153,7 +153,7 @@ graph LR
         MinIO[(MinIO)] -->|file_ref| P[Парсинг]
         P -->|JSON (opaque)| V[Валидация]
         V -->|JSON (opaque)| R[Реестр]
-        R -->|JSON со ссылками| DB[(PostgreSQL\nRegistry nsi)]
+        R -->|JSON со ссылками| DB[(PostgreSQL\nRegistry)]
     end
 
     subgraph "Пайплайн 2: Индексация документа"

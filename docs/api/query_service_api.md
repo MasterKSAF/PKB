@@ -66,8 +66,10 @@
 | Концепция            | Единое имя поля    |
 | -------------------- | ------------------ |
 | ID документа         | `document_id`      |
-| Номер страницы       | `page_number`      |
-| ID фрагмента         | `fragment_id`      |
+| Номер страницы       | `page`             |
+| ID раздела           | `section_id`       |
+| Текст содержимого    | `content`          |
+| Раздел документа     | `clause`           |
 | URL превью страницы  | `page_preview_url` |
 | URL документа        | `document_url`     |
 | Оценка релевантности | `score`            |
@@ -165,9 +167,9 @@
         {
           "document_id": "doc-norm-001",
           "document_title": "Правила РС, часть I",
-          "page_number": 42,
-          "fragment_id": "frg-042",
-          "text": "Для ледового класса Arc4 толщина обшивки...",
+          "page": 42,
+          "section_id": "frg-042",
+          "content": "Для ледового класса Arc4 толщина обшивки...",
           "score": 0.94
         }
       ],
@@ -254,9 +256,9 @@
     {
       "document_id": "doc-norm-001",
       "document_title": "Правила РС, часть I",
-      "page_number": 42,
-      "fragment_id": "frg-042",
-      "text": "Для ледового класса Arc4 толщина обшивки должна быть не менее 12 мм.",
+      "page": 42,
+      "section_id": "frg-042",
+      "content": "Для ледового класса Arc4 толщина обшивки должна быть не менее 12 мм.",
       "score": 0.94
     }
   ],
@@ -553,12 +555,12 @@
       "text": "Минимальная толщина листа не должна определяться отдельно от проекта. Ее нужно проверять по району корпуса, материалу и расчетной нагрузке.",
       "sources": [
         {
-          "fragment_id": "cit-001",
+          "section_id": "cit-001",
           "document_id": "doc-norm-001",
           "document_title": "Правила классификации и постройки морских судов",
-          "section": "Корпус",
+          "clause": "Корпус",
           "page": 45,
-          "fragment": "Фрагмент текста, на котором основан ответ.",
+          "content": "Фрагмент текста, на котором основан ответ.",
           "page_preview_url": "/documents/doc-norm-001/pages/45/preview",
           "document_url": "/documents/doc-norm-001/file"
         }
@@ -668,11 +670,11 @@
   },
   "results": [
     {
-      "fragment_id": "frg-042",
+      "section_id": "frg-042",
       "document_id": "doc-norm-001",
       "document_title": "Правила РС, часть I",
-      "page_number": 42,
-      "text": "Для ледового класса Arc4 толщина обшивки...",
+      "page": 42,
+      "content": "Для ледового класса Arc4 толщина обшивки...",
       "score": 0.94,
       "document_type": "normative",
       "matched_subquery": "толщина обшивки ледового пояса Arc4"
@@ -710,9 +712,9 @@
     {
       "document_id": "doc-gost-001",
       "document_title": "ГОСТ 11265-73",
-      "page_number": 3,
-      "fragment_id": "frg-201",
-      "text": "Для изготовления кнехтов применяется сталь марки 10ХСНД...",
+      "page": 3,
+      "section_id": "frg-201",
+      "content": "Для изготовления кнехтов применяется сталь марки 10ХСНД...",
       "score": 0.91
     }
   ],
