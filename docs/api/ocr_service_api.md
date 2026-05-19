@@ -1,12 +1,18 @@
-## API OCR Service (ocr-service:8088)
+## API OCR Service / Парсинг (ocr-service:8088)
 
-Сервис OCR и распознавания структуры документов.
+Сервис распознавания и парсинга документов. Соответствует этапу **«Парсинг» Пайплайна 1 (Формирование документа)**.
 
 *Внутренний сервис. Не предназначен для прямого вызова из frontend.*
 
+**Особенность:** полная изоляция от базы данных — сервис не имеет доступа к БД.
+
 **Базовый URL (внутренний)**: `http://127.0.0.1:8088/api/v1`
 
-### Формат ответа
+---
+
+### Контракт API (финальный)
+
+#### Формат ответа
 
 Успех — данные возвращаются напрямую.
 
@@ -22,27 +28,23 @@
 }
 ```
 
-### Группы
+---
 
-| Группа | Описание |
-|--------|----------|
-| `ocr` | Обработка и распознавание документов |
+### POST /ocr/process — запуск обработки
 
-### POST /ocr/process
+Асинхронная обработка PDF/изображений: распознавание текста (OCR), очистка, нормализация, выделение структуры, извлечение таблиц/изображений и классификация.
 
-Асинхронная обработка PDF/DOCX: распознавание текста (OCR), выделение структуры, извлечение таблиц/изображений, чанкинг и классификация.
+**Важно:** длительные операции (более 50 страниц) обрабатываются асинхронно (`202` + `task_id`). Оркестратор опрашивает статус и забирает JSON-контейнер с результатом.
 
-**Важно:** длительные операции (более 50 страниц) обрабатываются асинхронно (`202` + `task_id`). Оркестратор опрашивает статус и забирает готовый контейнер.
+**Вход:** ссылка на файл в MinIO.
 
-**Запрос**:
+**Запрос** (без изменений относительно предыдущей версии):
 
 ```json
 {
   "version_id": "c4b9f2d3-...",
   "file_id": "file-abc123",
   "options": {
-    "engine": "auto",
-    "language": "ru",
     "extract_tables": true,
     "extract_images": true,
     "extract_classification": true
@@ -55,8 +57,6 @@
 | `version_id` | string | Да | ID версии документа (ссылка на `document_versions`) |
 | `file_id` | string | Да | ID файла в MinIO |
 | `options` | object | Нет | Параметры обработки |
-| `options.engine` | string | Нет | OCR-движок (`auto`, `paddleocr`, `tesseract`, `docling`) |
-| `options.language` | string | Нет | Язык (`ru`, `en`, `auto`) |
 | `options.extract_tables` | bool | Нет | Извлекать таблицы в структурированном виде |
 | `options.extract_images` | bool | Нет | Извлекать изображения в MinIO |
 | `options.extract_classification` | bool | Нет | Извлекать коды классификации (МКС, ОКСТУ, УДК) |
@@ -72,116 +72,140 @@
 }
 ```
 
-### GET /ocr/process/{task_id}/status
+---
 
-Статус асинхронной обработки. Оркестратор опрашивает до статуса `completed`.
+### GET /ocr/process/{task_id}/status — опрос статуса
 
-**Ответ `200`**:
+Оркестратор опрашивает до статуса `completed`.
+
+**Ответ `200`** (без изменений в основных полях):
 
 ```json
 {
   "task_id": "ocr-task-001",
-  "status": "completed",
-  "progress_percent": 100,
-  "pages_processed": 12,
+  "status": "processing",
+  "progress_percent": 45,
+  "pages_processed": 5,
   "pages_total": 12,
   "avg_confidence": 0.94,
+  "step": "ocr_pages",
+  "step_detail": "8 / 12 pages done",
   "started_at": "2026-05-15T10:00:05Z",
-  "completed_at": "2026-05-15T10:01:30Z"
-}
-```
-
-**Статусы `status`**: `accepted`, `processing`, `completed`, `failed`.
-
-### GET /ocr/process/{task_id}/container
-
-Получение готового chunk container. Вызывается Оркестратором после `status: completed`. Контейнер содержит все чанки, изображения, классификацию. **OCR НЕ пишет контейнер в БД** — отдаёт JSON тому, кто вызвал.
-
-**Ответ `200`**:
-
-```json
-{
-  "container": {
-    "container_id": "cnt-001",
-    "document_id": "b3a8f1c2-...",
-    "version_id": "c4b9f2d3-...",
-    "version_hash": "sha256-of-payload",
-    "chunks": [
-      {
-        "chunk_id": "chk-001",
-        "sequence": 1,
-        "ltree_path": "root.section1.subsection1_1",
-        "heading": "1. Общие положения",
-        "text": "Настоящий стандарт распространяется...",
-        "page": 1,
-        "chunk_type": "text",
-        "token_count": 256,
-        "has_embedding": false,
-        "bbox": { "x": 120, "y": 350, "width": 400, "height": 60 },
-        "references": ["ГОСТ 12345-77"]
-      }
-    ],
-    "images": [
-      {
-        "image_id": "img-001",
-        "chunk_id": "chk-020",
-        "page": 8,
-        "file_path": "b3a8f1c2/v1/img/fig1.png",
-        "caption": "Рисунок 1 — Стойка установочная",
-        "width": 800, "height": 600
-      }
-    ],
-    "classification": {
-      "mks_oks_code": "47.020",
-      "mks_display_name": "Конструкция корпуса",
-      "mks_status": "CONFIRMED",
-      "okstu_code": null,
-      "okstu_status": "NOT_USED",
-      "udk_code": "629.5.021",
-      "year": "1981",
-      "confidence": 0.89
-    }
-  }
-}
-```
-
-### GET /ocr/engines
-
-Список доступных OCR‑движков.
-
-**Ответ `200`**:
-
-```json
-{
-  "engines": [
-    {
-      "engine_id": "paddleocr",
-      "name": "PaddleOCR",
-      "status": "available",
-      "supported_languages": ["ru", "en"],
-      "average_processing_time_ms": 1500,
-      "default_for_types": ["normative", "specification"]
-    },
-    {
-      "engine_id": "tesseract",
-      "name": "Tesseract 5",
-      "status": "available",
-      "supported_languages": ["ru", "en"],
-      "average_processing_time_ms": 2500,
-      "default_for_types": ["archival_scan"]
-    }
-  ]
+  "completed_at": null
 }
 ```
 
 | Поле | Тип | Описание |
 |------|-----|----------|
-| `engine_id` | string | ID движка |
-| `name` | string | Название |
-| `status` | string | Статус: `available`, `unavailable` |
-| `supported_languages` | string[] | Поддерживаемые языки |
-| `average_processing_time_ms` | int | Среднее время обработки |
-| `default_for_types` | string[] | Типы документов по умолчанию |
+| `task_id` | string | ID задачи |
+| `status` | string | Статус: `accepted`, `processing`, `completed`, `failed` |
+| `progress_percent` | int | Процент выполнения (0–100) |
+| `pages_processed` | int | Обработано страниц |
+| `pages_total` | int | Всего страниц |
+| `avg_confidence` | float | Средняя уверенность распознавания |
+| `step` | string | **Текущий шаг** обработки (см. таблицу ниже) |
+| `step_detail` | string | Детализация шага (человекочитаемая) |
+| `started_at` | string | Время начала обработки |
+| `completed_at` | string | Время завершения (null, если не завершён) |
+
+**Значения `step`:**
+
+| `step` | Описание |
+|---|---|
+| `downloading` | Скачивание PDF из MinIO |
+| `splitting` | Разбивка на страницы |
+| `ocr_pages` | Распознавание страниц |
+| `extracting_tables` | Извлечение таблиц |
+| `extracting_images` | Извлечение и загрузка изображений |
+| `classifying` | Классификация (МКС, ОКСТУ, УДК) |
+| `aggregating` | Сборка итогового JSON |
+
+---
+
+### GET /ocr/process/{task_id}/result — итоговый JSON
+
+Получение JSON-контейнера с результатом парсинга. Вызывается Оркестратором после `status: completed`.
+
+> **Важно:** сервис **не пишет в БД** — отдаёт JSON тому, кто вызвал. JSON-формат известен только сервису Парсинга и downstream-сервисам (Валидация, Реестр). Изображения — только ссылки (сами файлы загружены в MinIO сервисом).
+
+**Ответ `200`**:
+
+```json
+{
+  "document_id": "b3a8f1c2-...",
+  "version_id": "c4b9f2d3-...",
+  "structure": {
+    "type": "normative",
+    "title": "ГОСТ Р 12345-77",
+    "sections": [
+      {
+        "heading": "1. Общие положения",
+        "content": "Настоящий стандарт...",
+        "page": 1,
+        "subsections": []
+      }
+    ],
+    "tables": [
+      {
+        "page": 5,
+        "caption": "Таблица 1 — Параметры",
+        "headers": ["Параметр", "Значение"],
+        "rows": [["Толщина", "12 мм"], ["Длина", "6000 мм"]]
+      }
+    ],
+    "images": [
+      {
+        "image_id": "img-001",
+        "page": 8,
+        "file_path": "b3a8f1c2/v1/img/fig1.png",
+        "caption": "Рисунок 1 — Стойка установочная",
+        "width": 800,
+        "height": 600
+      }
+    ]
+  },
+  "classification": {
+    "mks_oks_code": "47.020",
+    "okstu_code": null,
+    "udk_code": "629.5.021",
+    "year": "1981"
+  },
+  "quality": {
+    "confidence": 0.94,
+    "pages_processed": 12,
+    "pages_failed": 0,
+    "per_page": [
+      { "page": 1, "confidence": 0.97, "status": "ok" },
+      { "page": 2, "confidence": 0.88, "status": "low_confidence" },
+      { "page": 7, "confidence": 0.0,  "status": "failed", "error": "empty_page" }
+    ]
+  },
+  "errors": [
+    {
+      "stage": "ocr",
+      "page": 7,
+      "code": "EMPTY_PAGE",
+      "message": "Страница не содержит текста",
+      "severity": "warning"
+    }
+  ],
+  "status": "completed"
+}
+```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `document_id` | string | UUID документа |
+| `version_id` | string | UUID версии |
+| `structure` | object | Распознанная структура: тип, заголовок, секции, таблицы, изображения |
+| `classification` | object | Извлечённые коды классификации |
+| `quality` | object | Общая оценка качества + `per_page` — детализация по страницам |
+| `quality.per_page[].status` | string | `ok`, `low_confidence`, `failed` |
+| `quality.per_page[].error` | string | Код ошибки страницы (только при `status: failed`) |
+| `errors` | array | Массив некритичных ошибок и предупреждений |
+| `status` | string | `completed`, `failed` |
+
+---
 
 ### GET /ocr/processes
 
@@ -199,7 +223,6 @@
       "progress_percent": 45,
       "pages_processed": 5,
       "pages_total": 12,
-      "engine": "paddleocr",
       "started_at": "2026-05-15T10:00:05Z"
     }
   ]
@@ -214,5 +237,44 @@
 | `progress_percent` | int | Процент выполнения |
 | `pages_processed` | int | Обработано страниц |
 | `pages_total` | int | Всего страниц |
-| `engine` | string | Используемый OCR-движок |
 | `started_at` | string | Время начала обработки |
+
+---
+
+### Коды ошибок OCR-сервиса
+
+| `error.code` | HTTP | Описание |
+|---|---|---|
+| `FILE_NOT_FOUND` | 404 | Файл не найден в MinIO |
+| `FILE_TOO_LARGE` | 413 | PDF > 500 MB / > 2000 страниц |
+| `UNSUPPORTED_FORMAT` | 415 | Не PDF / не изображение |
+| `OCR_FAILED` | 500 | Критическая ошибка распознавания |
+| `STORAGE_ERROR` | 502 | Ошибка доступа к MinIO |
+| `TASK_NOT_FOUND` | 404 | task_id не существует или протух |
+| `TASK_EXPIRED` | 410 | Результат удалён (старше N дней) |
+
+---
+
+### Сводная информация о доступе к данным
+
+| Аспект | Значение |
+|---|---|
+| Доступ к БД | **Нет** (полная изоляция) |
+| Пайплайн | 1 (Формирование документа), Этап 1 |
+| Вход | Ссылка на файл в MinIO |
+| Выход | JSON-контейнер со структурой документа |
+
+---
+
+### Резюме: что даёт такая архитектура
+
+| Свойство | Как достигнуто |
+|---|---|
+| **Автономность OCR-сервиса** | Сам ходит в MinIO, сам складывает изображения, сам управляет своим стейтом |
+| **Тестируемость без инфраструктуры** | Storage, OCR, State — адаптеры. Тесты на фейках, без Redis/MinIO |
+| **Управляемость Оркестратором** | 3 эндпоинта (`process`, `status`, `result`) + `engines`; JSON-контейнер как чёрный ящик |
+| **Большие документы** | Celery-воркер вне API-процесса, параллелизм страниц, потоковая загрузка из MinIO |
+| **Готовые ссылки на изображения** | OCR сам выгружает в MinIO, отдаёт `file_path` в ответе |
+| **Независимая разработка** | Другая группа может писать и тестировать OCR-сервис, имея только контракт API |
+
+

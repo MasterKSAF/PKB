@@ -564,9 +564,9 @@
     {
       "number": 1,
       "text": "Минимальная толщина листа не должна определяться отдельно от проекта. Ее нужно проверять по району корпуса, материалу и расчетной нагрузке.",
-      "citations": [
+      "sources": [
         {
-          "citation_id": "cit-001",
+          "fragment_id": "cit-001",
           "document_id": "doc-norm-001",
           "document_title": "Правила классификации и постройки морских судов",
           "section": "Корпус",
@@ -627,7 +627,7 @@
 | `session_id` | string | ID сессии (новая, если не была указана) |
 | `status` | string | `answered`, `needs_clarification`, `source_conflict` |
 | `message` | string|null | Сообщение пользователю |
-| `answer_items` | array | Список пунктов ответа (с citations) |
+| `answer_items` | array | Список пунктов ответа (с `sources`) |
 | `missing_fields` | string[]|null | Поля для уточнения |
 | `conflicts` | object[]|null | Конфликтующие источники |
 | `latency_ms` | int | Время обработки |

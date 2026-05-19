@@ -26,14 +26,14 @@
 
 ### Группы
 
-| Группа | Описание |
-|--------|----------|
-| `system` | Служебные методы: health |
-| `monitor` | Мониторинг и метрики |
+| Группа      | Описание                                                            |
+| ----------- | ------------------------------------------------------------------- |
+| `system`    | Служебные методы: health                                            |
+| `monitor`   | Мониторинг и метрики                                                |
 | `documents` | Документы: загрузка, список, статус, версии, аппрув, промотирование |
-| `pages` | Просмотр страниц и текстового слоя |
-| `search` | Поиск фрагментов |
-| `validate` | Валидация: сопоставление норм и проекта |
+| `pages`     | Просмотр страниц и текстового слоя                                  |
+| `search`    | Поиск фрагментов                                                    |
+| `validate`  | Валидация: сопоставление норм и проекта                             |
 
 ---
 
@@ -47,18 +47,18 @@
 
 **Запрос**: `multipart/form-data`
 
-| Поле | Тип | Обязательность | Описание |
-|---|---|---|---|
-| `file` | File | Да | Бинарный файл (PDF, PNG, JPG, TIFF) |
-| `source_type` | string | Да | `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `OTHER` |
-| `title` | string | Нет | Название документа |
-| `doc_code` | string | Нет | Регистрационный номер (напр. `20868-81`) |
-| `mks_oks_code` | string | Нет | Код МКС/ОКС |
-| `okstu_code` | string | Нет | Код ОКСТУ |
-| `era` | string | Нет | `USSR`, `CIS`, `RF`, `CURRENT` |
-| `jurisdiction` | string | Нет | `RU`, `EU`, `US`, `NO`, `INTL` |
-| `issuing_body` | string | Нет | Организация-издатель |
-| `metadata` | string | Нет | JSON-строка с доп. данными |
+| Поле           | Тип    | Обязательность | Описание                                                           |
+| -------------- | ------ | -------------- | ------------------------------------------------------------------ |
+| `file`         | File   | Да             | Бинарный файл (PDF, PNG, JPG, TIFF)                                |
+| `source_type`  | string | Да             | `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `OTHER` |
+| `title`        | string | Нет            | Название документа                                                 |
+| `doc_code`     | string | Нет            | Регистрационный номер (напр. `20868-81`)                           |
+| `mks_oks_code` | string | Нет            | Код МКС/ОКС                                                        |
+| `okstu_code`   | string | Нет            | Код ОКСТУ                                                          |
+| `era`          | string | Нет            | `USSR`, `CIS`, `RF`, `CURRENT`                                     |
+| `jurisdiction` | string | Нет            | `RU`, `EU`, `US`, `NO`, `INTL`                                     |
+| `issuing_body` | string | Нет            | Организация-издатель                                               |
+| `metadata`     | string | Нет            | JSON-строка с доп. данными                                         |
 
 **Ответ `202`**:
 
@@ -77,30 +77,7 @@
 }
 ```
 
-**Асинхронный флоу:**
 
-```mermaid
-sequenceDiagram
-    participant UI
-    participant Orchestrator
-    participant OCR
-    participant Validation
-    participant Registry
-    UI->>Orchestrator: POST /documents (file)
-    Orchestrator-->>UI: 202 { document_id, status: "uploaded" }
-    loop Polling
-        UI->>Orchestrator: GET /documents/{doc_id}/status
-        Orchestrator-->>UI: { status, steps: {ocr, chunking, validation, promotion} }
-    end
-    Note over OCR,Validation: OCR → chunking → validation → ready
-    UI->>Orchestrator: POST /documents/{doc_id}/approve
-    Orchestrator-->>UI: 202 { status: "approved" }
-    Note over Orchestrator,Registry: Promotion → Registry
-```
-
-**Ошибки**: `400` — неподдерживаемый формат/размер, `409` — `DUPLICATE_DOCUMENT` (если запрещено дублирование по бизнес-ключу), `422` — повреждённый файл.
-
----
 
 ### POST /documents/{doc_id}/versions
 
@@ -108,9 +85,9 @@ sequenceDiagram
 
 **Запрос**: `multipart/form-data`
 
-| Поле | Тип | Обязательность | Описание |
-|-------|-----|----------------|----------|
-| `file` | File | Да | Бинарный файл |
+| Поле   | Тип  | Обязательность | Описание      |
+| ------ | ---- | -------------- | ------------- |
+| `file` | File | Да             | Бинарный файл |
 
 **Ответ `202`**:
 
@@ -163,18 +140,18 @@ sequenceDiagram
 
 **Query-параметры** (дополнительно к существующим):
 
-| Параметр | Тип | Описание |
-|----------|-----|----------|
-| `source_type` | string | Фильтр по типу источника |
-| `era` | string | `USSR`, `CIS`, `RF`, `CURRENT` |
-| `validity_status` | string | `active`, `superseded`, `cancelled`, `historical`, `draft` |
-| `jurisdiction` | string | `RU`, `EU`, `US`, `NO`, `INTL` |
-| `mks_oks_code` | string | Фильтр по коду МКС/ОКС |
-| `okstu_code` | string | Фильтр по коду ОКСТУ |
-| `doc_code` | string | Поиск по номеру документа |
-| `status` | string | Фильтр по статусу FSM |
-| `search` | string | Поиск по названию |
-| `page`, `page_size` | int | Пагинация |
+| Параметр            | Тип    | Описание                                                   |
+| ------------------- | ------ | ---------------------------------------------------------- |
+| `source_type`       | string | Фильтр по типу источника                                   |
+| `era`               | string | `USSR`, `CIS`, `RF`, `CURRENT`                             |
+| `validity_status`   | string | `active`, `superseded`, `cancelled`, `historical`, `draft` |
+| `jurisdiction`      | string | `RU`, `EU`, `US`, `NO`, `INTL`                             |
+| `mks_oks_code`      | string | Фильтр по коду МКС/ОКС                                     |
+| `okstu_code`        | string | Фильтр по коду ОКСТУ                                       |
+| `doc_code`          | string | Поиск по номеру документа                                  |
+| `status`            | string | Фильтр по статусу FSM                                      |
+| `search`            | string | Поиск по названию                                          |
+| `page`, `page_size` | int    | Пагинация                                                  |
 
 **Ответ `200`**:
 
@@ -183,11 +160,13 @@ sequenceDiagram
   "summary": {
     "total": 128,
     "uploaded": 10,
-    "processing": 5,
+    "parsing": 3,
+    "validation": 2,
     "review_required": 3,
     "ready_for_promotion": 12,
     "approved": 95,
-    "failed": 3
+    "failed": 3,
+    "archived": 0
   },
   "items": [
     {
@@ -337,9 +316,11 @@ sequenceDiagram
 }
 ```
 
-**Статусы конвейера**: `uploaded` → `validating` → `processing` → `review_required` / `ready_for_promotion` → `approved` / `failed` / `archived`.
+**Статусы Пайплайна 1 (Формирование документа)**: `uploaded` → `parsing` → `validation` → `registry` / `review_required` → `archived` / `failed`.
 
-**Этапы `steps`**: `ocr`, `chunking`, `validation`, `promotion`. Статус этапа: `pending`, `in_progress`, `completed`, `error`, `blocked`.
+**Этапы `steps`**: `parsing`, `validation`, `registry`. Статус этапа: `pending`, `in_progress`, `completed`, `error`, `blocked`.
+
+После завершения Пайплайна 1 запускается **Пайплайн 2 (Индексация)** — `rag_indexing` → `indexed`.
 
 ---
 
@@ -362,7 +343,7 @@ sequenceDiagram
 
 ### POST /documents/{doc_id}/approve
 
-Утверждение документа. Переводит `review_required` / `ready_for_promotion` → `approved` и запускает промотирование в Registry (nsi).
+Утверждение документа. Переводит `review_required` → `approved` и запускает запись в Реестр (Пайплайн 1, Этап 3).
 
 **Запрос**:
 
@@ -373,10 +354,10 @@ sequenceDiagram
 }
 ```
 
-| Поле | Тип | Обязательность | Описание |
-|-------|-----|----------------|----------|
-| `force` | bool | Нет | Принудительный аппрув с warning'ами |
-| `comment` | string | Нет | Комментарий |
+| Поле      | Тип    | Обязательность | Описание                            |
+| --------- | ------ | -------------- | ----------------------------------- |
+| `force`   | bool   | Нет            | Принудительный аппрув с warning'ами |
+| `comment` | string | Нет            | Комментарий                         |
 
 **Ответ `202`**:
 
@@ -422,7 +403,7 @@ sequenceDiagram
 
 ### GET /documents/{doc_id}/promotion-status
 
-Статус промотирования документа из Purgatory в Registry.
+Статус записи документа в Реестр (Пайплайн 1, Этап 3). При успехе документ считается сформированным и готовым к индексации.
 
 **Ответ `200`** (в процессе):
 
@@ -553,8 +534,8 @@ sequenceDiagram
 }
 ```
 
-| Поле | Тип | Описание |
-|-------|-----|----------|
+| Поле   | Тип    | Описание                                                          |
+| ------ | ------ | ----------------------------------------------------------------- |
 | `mode` | string | `full`, `ocr_only`, `chunking_only`, `validation_only`, `reindex` |
 
 **Ответ `202`** — аналогичен `POST /documents`.
