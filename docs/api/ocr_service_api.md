@@ -44,7 +44,7 @@
 {
   "task_id": "task-8a3f2b",
   "version_id": "c4b9f2d3-...",
-  "file_id": "file-abc123",
+  "file_key": "file-abc123",
   "options": {
     "extract_tables": true,
     "extract_images": true,
@@ -57,7 +57,7 @@
 | ---- | --- | -------------- | -------- |
 | `task_id` | string | Да | Идентификатор задачи (генерируется Оркестратором) |
 | `version_id` | string | Да | ID версии документа (ссылка на `document_versions`) |
-| `file_id` | string | Да | ID файла в MinIO |
+| `file_key` | string | Да | Ключ файла в MinIO |
 | `options` | object | Нет | Параметры обработки |
 | `options.extract_tables` | bool | Нет | Извлекать таблицы в структурированном виде |
 | `options.extract_images` | bool | Нет | Извлекать изображения в MinIO |
@@ -169,7 +169,7 @@
         "type": "image",
         "content": {
           "image_id": "img-001",
-          "file_path": "b3a8f1c2/v1/img/fig1.png",
+          "file_key": "b3a8f1c2/v1/img/fig1.png",
           "width": 800,
           "height": 600
         },
@@ -228,7 +228,7 @@
 | `structure.sections[].title`           | string | Заголовок секции                                                     |
 | `structure.sections[].level`           | int    | Уровень вложенности (1 — верхний)                                    |
 | `structure.sections[].type`            | string | Тип элемента: `section`, `table`, `image`, `formula`                 |
-| `structure.sections[].content`         | JSONB  | Содержимое (зависит от `type`: текст, строки таблицы, ссылка и т.д.) |
+| `structure.sections[].content` | JSONB | Содержимое (зависит от `type`: текст, строки таблицы, file_key и т.д.) |
 | `structure.sections[].page`            | int    | Номер страницы                                                       |
 | `structure.sections[].bbox`            | object | Координаты блока: `x`, `y`, `width`, `height`                        |
 | `classification`                       | object | Извлечённые коды классификации                                       |
@@ -309,8 +309,8 @@
 | Свойство                             | Как достигнуто                                                                          |
 | ------------------------------------ | --------------------------------------------------------------------------------------- |
 | **Автономность OCR-сервиса**         | Сам ходит в MinIO, сам складывает изображения, сам управляет своим стейтом              |
-| **Тестируемость без инфраструктуры** | Storage, OCR, State — адаптеры. Тесты на фейках, без Redis/MinIO                        |
+| **Тестируемость без инфраструктуры** | Storage, OCR, State — адаптеры. Тесты на фейках, без внешних зависимостей (MinIO, MemoryCache и т.д.) |
 | **Управляемость Оркестратором**      | 3 эндпоинта (`process`, `status`, `result`) + `engines`; JSON-контейнер как чёрный ящик |
 | **Большие документы**                | Celery-воркер вне API-процесса, параллелизм страниц, потоковая загрузка из MinIO        |
-| **Готовые ссылки на изображения**    | OCR сам выгружает в MinIO, отдаёт `file_path` в ответе                                  |
+| **Готовые ссылки на изображения**    | OCR сам выгружает в MinIO, отдаёт `file_key` в ответе                                   |
 | **Независимая разработка**           | Другая группа может писать и тестировать OCR-сервис, имея только контракт API           |

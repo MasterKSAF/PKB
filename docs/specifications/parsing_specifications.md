@@ -2,7 +2,7 @@
 
 ### POST /ocr/process — запуск обработки
 
-**Запрос:** `task_id` (от Оркестратора), `version_id`, `file_id`, опционально `options` (выбор движка, языка, флаги извлечения таблиц/изображений/классификации).
+**Запрос:** `task_id` (от Оркестратора), `version_id`, `file_key`, опционально `options` (выбор движка, языка, флаги извлечения таблиц/изображений/классификации).
 
 **Ответ `202`:** `task_id`, `status`, `version_id`, `estimated_completion`.
 
@@ -70,7 +70,7 @@
 │    table_engine.py    детектор таблиц / Fake           │
 ├─────────────────────────────────────────┤
 │  state/                                 │  ← Управление состоянием задач
-│    manager.py         Redis (prod) / Memory (test)     │
+│    manager.py         MemoryCache (любая реализация: Redis, in-memory и т.д.) │
 └─────────────────────────────────────────┘
 ```
 
@@ -85,7 +85,7 @@ class StorageAdapter(ABC):
     """Абстракция над файловым хранилищем."""
     
     @abstractmethod
-    async def download(self, file_id: str) -> Path:
+    async def download(self, file_key: str) -> Path:
         """Скачать файл из хранилища → локальный путь."""
         ...
     
@@ -95,7 +95,7 @@ class StorageAdapter(ABC):
         ...
     
     @abstractmethod
-    async def exists(self, file_id: str) -> bool:
+    async def exists(self, file_key: str) -> bool:
         """Проверить существование файла."""
         ...
 
@@ -131,20 +131,20 @@ class FakeStorageAdapter(StorageAdapter):
         self._files = files or {}
         self._uploads: dict[str, Path] = {}  # remote_path → local_path
     
-    async def download(self, file_id: str) -> Path:
-        if file_id not in self._files:
-            raise FileNotFoundError(file_id)
-        path = Path(f"/tmp/test_storage/{file_id}")
+    async def download(self, file_key: str) -> Path:
+        if file_key not in self._files:
+            raise FileNotFoundError(file_key)
+        path = Path(f"/tmp/test_storage/{file_key}")
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(self._files[file_id])
+        path.write_bytes(self._files[file_key])
         return path
     
     async def upload(self, local_path: Path, remote_path: str) -> str:
         self._uploads[remote_path] = local_path
         return f"fake://storage/{remote_path}"
     
-    async def exists(self, file_id: str) -> bool:
-        return file_id in self._files
+    async def exists(self, file_key: str) -> bool:
+        return file_key in self._files
 
 class FakeOCREngine(OCREngineAdapter):
     engine_id = "fake"
@@ -183,12 +183,12 @@ class OCRPipeline:
         self.ocr = ocr_engine
         self.state = state
     
-    async def process(self, task_id: str, file_id: str, options: dict) -> dict:
+    async def process(self, task_id: str, file_key: str, options: dict) -> dict:
         """Главный метод. Выполняет все шаги, возвращает итоговый JSON."""
         await self.state.set_step(task_id, "downloading")
         
         # Шаг 1: скачать PDF
-        pdf_path = await self.storage.download(file_id)
+        pdf_path = await self.storage.download(file_key)
         
         # Шаг 2: разбить на страницы
         await self.state.set_step(task_id, "splitting")
@@ -253,7 +253,7 @@ class TaskStatus(str, Enum):
 
 class StateManager(ABC):
     @abstractmethod
-    async def create(self, task_id: str, file_id: str, version_id: str) -> None: ...
+    async def create(self, task_id: str, file_key: str, version_id: str) -> None: ...
     @abstractmethod
     async def set_step(self, task_id: str, step: str) -> None: ...
     @abstractmethod
@@ -268,9 +268,9 @@ class StateManager(ABC):
     async def delete(self, task_id: str) -> None: ...
 ```
 
-**Production-реализация — Redis:**
-- Ключ: `ocr:task:{task_id}` → хеш с полями `status`, `step`, `progress`, `started_at`, `result` (JSON-строка)
-- TTL: 24 часа после `completed` / `failed`
+**Пример реализации — MemoryCache на Redis:**
+- Например, в Redis: ключ `ocr:task:{task_id}` → хеш с полями `status`, `step`, `progress`, `started_at`, `result` (JSON-строка)
+- TTL (настраивается в зависимости от реализации, например, 24 часа после `completed` / `failed`)
 
 **Test-реализация — `dict` в памяти:**
 
@@ -279,10 +279,10 @@ class MemoryStateManager(StateManager):
     def __init__(self):
         self._tasks: dict[str, dict] = {}
     
-    async def create(self, task_id, file_id, version_id):
+    async def create(self, task_id, file_key, version_id):
         self._tasks[task_id] = {
             "status": "accepted",
-            "file_id": file_id,
+            "file_key": file_key,
             "version_id": version_id,
             "step": None,
             "progress_percent": 0,
@@ -361,11 +361,11 @@ async def test_ocr_page_failure_doesnt_crash_pipeline(pipeline):
 Сейчас Orchestrator на пре-стейдже делает:
 1. Принять файл от пользователя
 2. Вычислить SHA-256
-3. Загрузить в MinIO → получить `file_id`
+3. Загрузить в MinIO → получить `file_key`
 4. Вернуть `202 { document_id }`
 
 Добавляется:
-1. Вызвать `POST /ocr/process` с `file_id` и `version_id`
+1. Вызвать `POST /ocr/process` с `file_key` и `version_id`
 2. Получить `task_id`
 3. Поллинг `GET /ocr/process/{task_id}/status` (раз в 2 секунды)
 4. При `status: completed` → `GET /ocr/process/{task_id}/result`
@@ -380,8 +380,8 @@ async def test_ocr_page_failure_doesnt_crash_pipeline(pipeline):
 | Свойство | Как достигнуто |
 |---|---|
 | **Автономность OCR-сервиса** | Сам ходит в MinIO, сам складывает изображения, сам управляет своим стейтом |
-| **Тестируемость без инфраструктуры** | Storage, OCR, State — адаптеры. Тесты на фейках, без Redis/MinIO/Tesseract |
+| **Тестируемость без инфраструктуры** | Storage, OCR, State — адаптеры. Тесты на фейках, без внешних зависимостей (MinIO, MemoryCache и т.д.) |
 | **Управляемость Оркестратором** | 4 эндпоинта (`process`, `status`, `result`, `engines`), JSON-контейнер как чёрный ящик |
 | **Большие документы** | Celery-воркер вне API-процесса, параллелизм страниц, потоковая загрузка из MinIO |
-| **Готовые ссылки на изображения** | OCR сам выгружает в MinIO, отдаёт `file_path` в ответе |
+| **Готовые ссылки на изображения** | OCR сам выгружает в MinIO, отдаёт `file_key` в ответе |
 | **Независимая разработка** | Другая группа может писать и тестировать OCR-сервис, имея только контракт API и интерфейсы адаптеров |

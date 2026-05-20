@@ -121,7 +121,7 @@
       "version_number": 1,
       "format_code": "pdf_digital",
       "format_label": "PDF (цифровой)",
-      "file_path": "b3a8f1c2/v1/e3b0c442...855.pdf",
+      "file_key": "b3a8f1c2/v1/e3b0c442...855.pdf",
       "content_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "size_bytes": 2048576,
       "uploaded_at": "2026-05-15T10:00:00Z",
@@ -427,9 +427,9 @@
 {
   "promotion_id": "promo-9a3f2b",
   "status": "completed",
-  "registry_doc_id": "42",
+  "document_id": "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
   "steps": {
-    "documents": { "status": "completed", "registry_doc_id": "42" },
+    "documents": { "status": "completed", "document_id": "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c" },
     "chunks": { "status": "completed", "chunks_indexed": 34 },
     "images": { "status": "completed", "images_indexed": 7 },
     "tables": { "status": "completed", "tables_indexed": 3 },

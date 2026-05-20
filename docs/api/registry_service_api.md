@@ -797,7 +797,6 @@ POST /registry/documents
   "document_id": "b3a8f1c2-...",
   "version_id": "c4b9f2d3-...",
   "registry": {
-    "doc_id": 42,
     "title": "ГОСТ Р 12345-77",
     "doc_code": "20868-81",
     "source_type": "GOST",
@@ -872,10 +871,9 @@ POST /registry/documents
 
 | Поле | Тип | Описание |
 |---|---|---|
-| `document_id` | string | UUID документа в Orchestrator |
+| `document_id` | string | UUID документа (единый первичный ключ) |
 | `version_id` | string | UUID версии файла |
 | `registry` | object | Карточка документа в реестре (nsi) с метаданными и ссылками |
-| `registry.doc_id` | int | ID документа в реестре (nsi) |
 | `registry.links` | object | Ссылки на ресурсы документа в API реестра |
 | `registry.order` | int | Порядковый номер документа (используется при построении текста страницы) |
 | `classification` | object | Коды классификации со статусами верификации |
