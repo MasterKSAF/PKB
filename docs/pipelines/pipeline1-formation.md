@@ -208,4 +208,79 @@ sequenceDiagram
 - У каждой секции появился `section_id` (DB-идентификатор в `nsi_document_sections`)
 - Для таблиц добавлен `file_key` (ссылка на изображение в MinIO)
 - Добавлен блок `registry` с метаданными записи в БД
-- Этот обогащённый JSON передаётся в **Пайплайн 2 (Индексация)** как входной контейнер
+Этот обогащённый JSON передаётся в **Пайплайн 2 (Индексация)** как входной контейнер
+
+---
+
+#### Статусная модель (FSM)
+
+```mermaid
+stateDiagram-v2
+    [*] --> draft
+    draft --> uploaded : POST /documents
+    uploaded --> parsing : запуск Parsing
+    parsing --> validation : Parsing завершён
+    validation --> ready_for_promotion : Validation пройдена (auto)
+    validation --> review_required : требуется ручное подтверждение
+    review_required --> validation : повторная Validation
+    review_required --> approved : approve оператора
+    ready_for_promotion --> registry : промотирование в Registry
+    approved --> registry : промотирование в Registry
+    
+    registry --> [*] : документ сформирован
+    registry --> archived
+```
+
+**Описание состояний:**
+
+| Состояние | Описание |
+|---|---|
+| `draft` | Черновик после загрузки файла в MinIO |
+| `uploaded` | Файл загружен, ожидание запуска парсинга |
+| `parsing` | Выполняется OCR и распознавание структуры |
+| `validation` | Валидация структуры, классификация, уникальность |
+| `ready_for_promotion` | Авто-валидация пройдена, ожидание записи в Registry |
+| `review_required` | Требуется ручное подтверждение оператором |
+| `approved` | Оператор подтвердил, ожидание записи в Registry |
+| `registry` | Документ записан в реестр (nsi_documents) |
+| `archived` | Документ архивирован |
+
+---
+
+#### Обработка ошибок и компенсационные потоки
+
+| Этап | Действие | При ошибке | Компенсация |
+|---|---|---|---|
+| Пре-стейдж (загрузка) | Сохранение в MinIO, создание записи в БД | Ошибка MinIO | Удалить запись из БД, вернуть ошибку UI |
+| 1. Parsing | Распознавание и парсинг | Ошибка OCR/таймаут | Повтор (до 3 раз), при превышении — статус `failed` |
+| 2. Validation | Валидация JSON, классификация | Ошибка структуры JSON | Вернуть `validation.errors`, статус `review_required` |
+| 3. Registry | Запись карточки в БД | Ошибка записи | Откат транзакции, повтор (до 2 раз) |
+
+```mermaid
+graph TD
+    subgraph "Пайплайн 1: Формирование"
+        Upload[Загрузка файла] -->|Ошибка MinIO| Comp1[Компенсация: удалить запись из БД]
+        Upload -->|Успех| Pars[Parsing]
+        Pars -->|Ошибка OCR| Retry1[Повтор до 3 раз]
+        Retry1 -->|Все попытки исчерпаны| Fail1[failed]
+        Retry1 -->|Успех| Val[Validation]
+        Pars -->|Успех| Val
+        Val -->|Ошибка структуры| Review[review_required]
+        Val -->|Успех| Reg[Registry]
+        Reg -->|Ошибка записи| Retry2[Повтор до 2 раз]
+        Retry2 -->|Все попытки исчерпаны| Fail1
+        Retry2 -->|Успех| Done[Готово]
+    end
+```
+
+---
+
+#### Политики повторных попыток и таймаутов
+
+| Этап | Таймаут (max) | Retry | Стратегия | Backoff |
+|---|---|---|---|---|
+| Загрузка файла в MinIO | 60с | 0 | — | — |
+| OCR / Parsing | 300с (5 мин) | 3 | Exponential | 1с → 2с → 4с |
+| Validation (JSON) | 30с | 1 | Immediate | — |
+| Validation (уникальность) | 60с | 2 | Exponential | 1с → 2с |
+| Registry (запись) | 30с | 2 | Exponential | 500мс → 1с |
