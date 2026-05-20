@@ -270,15 +270,22 @@
   "status": "processing",
   "progress_percent": 60.0,
   "steps": {
-    "ocr": { "status": "completed", "pages_processed": 12, "pages_failed": 0, "avg_confidence": 0.92 },
-    "chunking": { "status": "completed", "chunks_generated": 34 },
-    "validation": { "status": "in_progress", "errors_found": 0 },
-    "promotion": { "status": "pending" }
+    "pipeline": {
+      "formation": {
+        "status": "in_progress",
+        "parsing": { "status": "completed", "pages_processed": 12, "pages_failed": 0, "avg_confidence": 0.92 },
+        "validation": { "status": "in_progress", "errors_found": 0 },
+        "registry": { "status": "pending" }
+      },
+      "indexation": {
+        "status": "pending",
+        "rag_indexing": { "status": "pending" }
+      }
+    }
   },
   "started_at": "2026-05-15T10:00:05Z",
   "estimated_completion": "2026-05-15T10:02:00Z"
-}
-```
+}```
 
 **Ответ `200`** (ждёт аппрува):
 
@@ -288,15 +295,22 @@
   "status": "review_required",
   "progress_percent": 80.0,
   "steps": {
-    "ocr": { "status": "completed" },
-    "chunking": { "status": "completed" },
-    "validation": { "status": "invalid", "errors_found": 2, "errors": [
-      {"code": "MISSING_EMBEDDING", "section_id": "sec-012"}
-    ]},
-    "promotion": { "status": "blocked" }
+    "pipeline": {
+      "formation": {
+        "status": "blocked",
+        "parsing": { "status": "completed" },
+        "validation": { "status": "invalid", "errors_found": 2, "errors": [
+          {"code": "MISSING_FIELD", "section_id": "sec-012"}
+        ]},
+        "registry": { "status": "blocked" }
+      },
+      "indexation": {
+        "status": "pending",
+        "rag_indexing": { "status": "pending" }
+      }
+    }
   }
-}
-```
+}```
 
 **Ответ `200`** (готов к промотированию):
 
@@ -304,23 +318,33 @@
 {
   "document_id": "b3a8f1c2-...",
   "status": "ready_for_promotion",
+  "progress_percent": 100.0,
   "steps": {
-    "ocr": { "status": "completed" },
-    "chunking": { "status": "completed" },
-    "validation": { "status": "valid" },
-    "promotion": { "status": "pending" }
+    "pipeline": {
+      "formation": {
+        "status": "completed",
+        "parsing": { "status": "completed" },
+        "validation": { "status": "valid" },
+        "registry": { "status": "completed" }
+      },
+      "indexation": {
+        "status": "completed",
+        "rag_indexing": { "status": "completed", "chunks_generated": 34 }
+      }
+    }
   },
   "chunk_summary": { "sections": 34, "chunks": 28, "embeddings": 28 },
   "started_at": "2026-05-15T10:00:05Z",
   "completed_at": "2026-05-15T10:01:30Z"
-}
-```
+}```
 
-**Статусы Пайплайна 1 (Формирование документа)**: `uploaded` → `parsing` → `validation` → `registry` / `review_required` → `archived` / `failed`.
+**Статусы Formation (Формирование документа)**: `uploaded` → `parsing` → `validation` → `registry` / `review_required` → `archived` / `failed`.
 
-**Этапы `steps`**: `parsing`, `validation`, `registry`. Статус этапа: `pending`, `in_progress`, `completed`, `error`, `blocked`.
+**Статусы Indexation (Индексация)**: `pending` → `rag_indexing` → `indexed` / `failed`.
 
-После завершения Пайплайна 1 запускается **Пайплайн 2 (Индексация)** — `rag_indexing` → `indexed`.
+**Группировка `steps.pipeline`**: каждый пайплайн имеет свой ключ (`formation`, `indexation`) с полем `status` — агрегированный статус пайплайна, и вложенными этапами. Статусы пайплайна: `pending`, `in_progress`, `completed`, `failed`, `blocked`. Статусы этапов: `pending`, `in_progress`, `completed`, `error`, `blocked`.
+
+После завершения Пайплайна 1 автоматически запускается **Пайплайн 2 (Индексация)**.
 
 ---
 
@@ -618,10 +642,18 @@
       "progress_percent": 60.0,
       "current_step": "validation",
       "steps": {
-        "ocr": "completed",
-        "chunking": "completed",
-        "validation": "in_progress",
-        "promotion": "pending"
+        "pipeline": {
+          "formation": {
+            "status": "in_progress",
+            "parsing": "completed",
+            "validation": "in_progress",
+            "registry": "pending"
+          },
+          "indexation": {
+            "status": "pending",
+            "rag_indexing": "pending"
+          }
+        }
       },
       "user_id": "u-001",
       "uploaded_by": "Иванов И.И.",
@@ -728,60 +760,6 @@
 ### GET /documents/{doc_id}/parameters
 
 Извлечённые параметры документа (спецификация, материалы).
-
----
-
-## Группа validate
-
-Публичные эндпоинты для сопоставления норм и проектов. Проксируются на **Analyse Service**.
-
-### POST /validate/compare
-
-Запуск сопоставления нормы и проекта (асинхронный).
-
-Идентификатор сравнения (`comparison_id`) генерируется Оркестратором и передаётся в Analyse Service.
-
-**Запрос:**
-
-```json
-{
-  "comparison_id": "cmp-007",
-  "normative_query": "толщина обшивки ледового класса Arc4",
-  "project_document_id": "doc-draw-001"
-}
-```
-
-| Поле | Тип | Обязательность | Описание |
-|------|-----|----------------|----------|
-| `comparison_id` | string | Да | Идентификатор сравнения (генерируется Оркестратором) |
-| `normative_query` | string | Да | Нормативный запрос |
-| `project_document_id` | string | Да | ID проектного документа |
-
-**Ответ `202`**:
-
-```json
-{
-  "comparison_id": "cmp-007",
-  "status": "processing",
-  "created_at": "2026-05-15T12:00:00Z"
-}
-```
-
-### GET /validate/compare/{comparison_id}
-
-Результат сопоставления. Статусы `match_status`: `match`, `possible_discrepancy`, `not_found_in_project`, `not_found_in_norm`, `insufficient_data`.
-
-### POST /validate/checks
-
-Запуск проверки проектного решения на соответствие НСИ (синхронный для UI). Агрегирует результаты `/validate/compare/batch`.
-
-### GET /validate/checks/{check_run_id}
-
-Статус и результаты проверки.
-
-### GET /validate/checks/{check_run_id}/export
-
-Выгрузка результатов в XLSX.
 
 ---
 

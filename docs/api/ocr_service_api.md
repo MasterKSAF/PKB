@@ -286,6 +286,7 @@
 | `FILE_NOT_FOUND`     | 404  | Файл не найден в MinIO           |
 | `FILE_TOO_LARGE`     | 413  | PDF > 500 MB / > 2000 страниц    |
 | `UNSUPPORTED_FORMAT` | 415  | Не PDF / не изображение          |
+| `ENGINE_UNAVAILABLE` | 503  | Запрошенный OCR-движок недоступен |
 | `OCR_FAILED`         | 500  | Критическая ошибка распознавания |
 | `STORAGE_ERROR`      | 502  | Ошибка доступа к MinIO           |
 | `TASK_NOT_FOUND`     | 404  | task_id не существует или протух |
