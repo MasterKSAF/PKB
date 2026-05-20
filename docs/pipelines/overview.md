@@ -1,30 +1,47 @@
 ## Пайплайны обработки документов (v3.0)
 
-Orchestrator координирует сквозную обработку документов через **три независимых пайплайна**, каждый из которых решает свою задачу и имеет строгую изоляцию по доступу к базе данных.
+Оркестратор координирует сквозную обработку документов через **два пайплайна** (Формирование и Индексация). Пайплайн 3 (Поиск) работает **независимо** — пользователь обращается напрямую к Query Service.
 
+```mermaid
+graph LR
+    subgraph "Оркестратор (Пайплайны 1 и 2)"
+        direction TB
+        P1[Пайплайн 1: Формирование документа] --> P2[Пайплайн 2: Индексация документа]
+    end
+
+    subgraph "Пайплайн 1: Формирование"
+        A[MinIO] -->|file_ref| B[Parsing]
+        B -->|JSON| C[Validation]
+        C -->|JSON| D[Registry]
+        D -->|JSON со ссылками| E[(PostgreSQL)]
+    end
+
+    subgraph "Пайплайн 2: Индексация"
+        D -->|обогащённый JSON| F[RAG Indexing]
+        F --> G[(pgvector)]
+    end
+
+    subgraph "Пайплайн 3: Поиск (независимый)"
+        H[UI] -->|вопрос| I[Query Service]
+        I -->|query| J[RAG Search]
+        J -->|чанки| I
+        I -->|answer| H
+    end
+
+    style B fill:#e6f3ff
+    style C fill:#fff3e6
+    style D fill:#e6ffe6
+    style F fill:#ffe6f3
+    style I fill:#fffacd
+    style J fill:#f3e6ff
 ```
-Пайплайн 1: Формирование документа
-====================================
-MinIO (ссылка) → [Parsing] → JSON → [Validation] → JSON → [Registry] → JSON со ссылками в БД
-                    (изоляция)      (читает БД)          (пишет БД)
-                                                              ↓
-Пайплайн 2: Индексация документа
-====================================
-       Обогащённый JSON от Registry → [RAG Indexing] → Статус
-                                               (пишет БД)
 
-Пайплайн 3: Поиск документа
-====================================
-       вопрос → [Query Service] → LLM генерация + обогащение цитирований → ответ
-                    ↓
-              [RAG Search] → чанки
-                 (читает БД)
-```
-
-**Роль Оркестратора:** управляет последовательностью вызовов, передаёт JSON-контейнеры между этапами как **непрозрачные артефакты** (структура JSON известна только сервисам). Помимо координации, Оркестратор:
+**Роль Оркестратора:** управляет последовательностью вызовов **Пайплайнов 1 и 2**, передаёт JSON-контейнеры между этапами как **непрозрачные артефакты** (структура JSON известна только сервисам). Помимо координации, Оркестратор:
 - Выполняет пре-стейдж загрузки: сохраняет файл в MinIO, вычисляет SHA-256, создаёт запись в БД
 - Ведёт историю обработки документа (`GET /documents/{doc_id}/history`)
 - Управляет статусной моделью FSM для каждого пайплайна независимо
+
+Пайплайн 3 (Поиск) работает **независимо** — пользователь обращается напрямую к Query Service, минуя Оркестратор.
 
 Детальное описание пайплайнов:
 - [Пайплайн 1: Формирование документа](pipeline1-formation.md)
@@ -66,14 +83,6 @@ stateDiagram-v2
     ready_for_promotion --> registry : промотирование в Registry
     approved --> registry : промотирование в Registry
     
-    draft --> failed
-    uploaded --> failed
-    parsing --> failed
-    validation --> failed
-    review_required --> failed
-    ready_for_promotion --> failed
-    approved --> failed
-    
     registry --> [*] : документ сформирован
     registry --> archived
 ```
@@ -86,9 +95,6 @@ stateDiagram-v2
     pending --> indexing : запуск индексации
     indexing --> indexed : индексация завершена
     indexed --> [*] : готов к поиску
-    
-    pending --> failed
-    indexing --> failed
 ```
 
 #### Пайплайн 3: Поиск документа
@@ -103,12 +109,6 @@ stateDiagram-v2
     generating --> enriching_citations : ответ LLM получен
     enriching_citations --> answered : цитирования обогащены
     answered --> [*] : ответ готов к отображению
-
-    pending --> failed
-    enriching --> failed
-    searching --> failed
-    generating --> failed
-    enriching_citations --> failed
 ```
 
 Детальное описание FSM для каждого пайплайна:
@@ -154,9 +154,9 @@ stateDiagram-v2
 |---|---|---|---|
 | `POST` | `/validate/document` | Комплексная валидация документа (структура, классификация, уникальность) | Читает |
 | `POST` | `/validate/classifiers` | Валидация классификационных кодов | Читает |
-| `POST` | `/validate/check` | Проверка правил (внутренний, не путать с `POST /validate/checks` Orchestrator) | Нет |
+| `POST` | `/validate/check` | Проверка правил | Нет |
 
-> **Важно:** `POST /validate/check` (Validation Service) — **внутренний** эндпоинт сервиса валидации. Публичный `POST /validate/checks` (Orchestrator) — агрегирует результаты пакетного сравнения через Analyse Service. Разные назначения, несмотря на похожие названия.
+> **Важно:** `POST /validate/check` (Validation Service) — **внутренний** эндпоинт сервиса валидации.
 
 #### Analyse Service
 
@@ -273,7 +273,7 @@ graph LR
 
 | Решение | Обоснование |
 |---|---|
-| **Три независимых пайплайна** | Разделяют concerns: формирование документа (бизнес-логика), индексация для поиска (RAG) и поиск/генерация ответа. Каждый пайплайн имеет изоляцию по доступу к БД и свою FSM. Позволяет индексировать повторно без повторного распознавания |
+| **Два независимых пайплайна + поиск** | Оркестратор координирует формирование документа (бизнес-логика) и индексацию для поиска (RAG). Пайплайн 3 (Поиск/генерация ответа) работает независимо — пользователь обращается напрямую к Query Service. Каждый пайплайн имеет изоляцию по доступу к БД и свою FSM. Позволяет индексировать повторно без повторного распознавания |
 | **Чанкинг в RAG Indexing, а не в Parsing** | Parsing отвечает только за распознавание и структурирование. Чанкинг — задача RAG для оптимизации поиска. Разные стратегии чанкинга не влияют на карточку документа |
 | **Изоляция доступа к БД по этапам** | Parsing не зависит от БД — может масштабироваться горизонтально. Validation читает, Registry пишет — исключены гонки и каскадные锁. RAG Indexing пишет, RAG Search читает — консистентность данных |
 | **Оркестратор оперирует JSON как контейнером** | Структура JSON известна только сервисам. Orchestrator не имеет доступа к БД (кроме пре-стейджа загрузки). Снижает связанность, упрощает тестирование и замену сервисов |
@@ -285,7 +285,7 @@ graph LR
 
 ### 9. End-to-end sequence diagram (сквозной поток с точки зрения Оркестратора)
 
-Ниже показана полная последовательность вызовов при обработке документа от загрузки до индексации, а также отдельно — поток поискового запроса. Оркестратор координирует Пайплайны 1 и 2; Пайплайн 3 инициируется напрямую UI через Query Service.
+#### Пайплайны 1 и 2: координируются Оркестратором
 
 ```mermaid
 sequenceDiagram
@@ -361,11 +361,16 @@ sequenceDiagram
     Orch->>DB: Обновление статуса (status: indexed)
     Orch-->>UI: status: indexed
     deactivate Orch
+```
 
-    Note over UI,RAGi: === Пайплайн 3: Поиск документа ===
+#### Пайплайн 3: Поиск (независимый, без участия Оркестратора)
 
+```mermaid
+sequenceDiagram
+    participant UI as UI
     participant QS as Query Service
     participant RAGs as RAG Search
+    participant DB as PostgreSQL
     participant LLM as LLM
 
     UI->>QS: POST .../messages (content)
@@ -376,16 +381,21 @@ sequenceDiagram
 
     UI->>QS: GET .../sessions/{id}?longpoll=15
     activate QS
+
     QS->>QS: Обогащение запроса терминами
+    Note over QS: Поиск raw_term → standard_term<br/>через словарь Registry
+
     QS->>RAGs: POST /rag/search (query + filters)
     activate RAGs
     RAGs->>DB: Поиск по векторному индексу
     RAGs-->>QS: Массив чанков с содержимым
     deactivate RAGs
+
     QS->>LLM: Генерация ответа
     activate LLM
     LLM-->>QS: Текст ответа
     deactivate LLM
+
     QS->>QS: Обогащение цитирований
     QS->>QS: Сохранение ответа в истории
     QS-->>UI: messages[] с answer + sources[excerpt]
@@ -396,14 +406,14 @@ sequenceDiagram
 - Оркестратор координирует только Пайплайны 1 и 2
 - Пайплайн 3 работает независимо, напрямую между UI, Query Service и RAG Search
 - Все асинхронные вызовы используют longpoll-механизм (таймаут 15с)
-- Единый `document_id` проходит через все пайплайны без трансформации
-- JSON-контейнер передаётся между этапами как непрозрачный артефакт
+- Единый `document_id` проходит через Пайплайны 1 и 2 без трансформации
+- JSON-контейнер передаётся между этапами Пайплайнов 1 и 2 как непрозрачный артефакт
 
 ---
 
 ### 10. Сводная статусная модель жизненного цикла документа
 
-Объединённая FSM, показывающая полный жизненный цикл документа от загрузки до готовности к поиску, включая все три пайплайна.
+Объединённая FSM, показывающая полный жизненный цикл документа от загрузки до готовности к поиску.
 
 ```mermaid
 stateDiagram-v2
@@ -433,18 +443,6 @@ stateDiagram-v2
         searching --> generating : генерация LLM
         generating --> answered : цитирование
     }
-
-    %% Failures
-    draft --> failed
-    uploaded --> failed
-    parsing --> failed
-    validation --> failed
-    review_required --> failed
-    ready_for_promotion --> failed
-    approved --> failed
-    registry --> failed
-    pending_index --> failed
-    indexing --> failed
 
     %% Terminal
     indexed --> [*] : готов к поиску
@@ -600,8 +598,6 @@ Search Mode<br/>:8087]
 Registry DB<br/>:5432)]
         VEC[(PostgreSQL
 pgvector<br/>:5432)]
-        MQ[Message Queue
-RabbitMQ<br/>:5672]
         MinIO[(MinIO
 Object Storage<br/>:9000)]
     end
@@ -622,7 +618,6 @@ OpenAI / Custom]
     Orch --> Reg
     Orch --> RAGi
 
-    P -.->|Только чтение| MQ
     V -->|Чтение| PG
     Reg -->|Запись| PG
     RAGi -->|Запись| VEC
@@ -672,7 +667,7 @@ OpenAI / Custom]
 | База данных | PostgreSQL | 15+ | С расширением pgvector |
 | Векторный индекс | pgvector | 0.7+ | Для хранения эмбеддингов |
 | Объектное хранилище | MinIO | LATEST | Для файлов документов |
-| Очередь сообщений | RabbitMQ | 3.12+ | Для асинхронных задач (опционально) |
+| Кэш и очереди | Redis | 7+ | Для кэширования и асинхронных задач |
 | LLM | OpenAI API / Custom | — | Для генерации ответов |
 
 ---
