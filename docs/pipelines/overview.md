@@ -119,36 +119,35 @@ graph LR
 ### 7. Поток данных (Data Flow)
 
 ```mermaid
-graph LR
+flowchart LR
     subgraph "Пайплайн 1: Формирование документа"
-        MinIO[(MinIO)] -->|file_ref| P[Parsing]
-        P -->|JSON (opaque)| V[Validation]
-        V -->|JSON (opaque)| R[Registry]
-        R -->|JSON со ссылками| DB[(PostgreSQL Registry)]
+        MinIO[(MinIO)] -->|"file_ref"| Pars[Parsing]
+        Pars -->|"JSON (opaque)"| Val[Validation]
+        Val -->|"JSON (opaque)"| Reg[Registry]
+        Reg -->|"JSON со ссылками"| DB[(PostgreSQL Registry)]
     end
 
     subgraph "Пайплайн 2: Индексация документа"
-        R -->|Обогащённый JSON| RI[RAG Indexing]
-        RI -->|status| DB
-        RI --> VI[(Векторный индекс pgvector)]
+        Reg -->|"Обогащённый JSON"| RAGi[RAG Indexing]
+        RAGi -->|"status"| DB
+        RAGi --> Vec[(Векторный индекс pgvector)]
     end
 
     subgraph "Пайплайн 3: Поиск документа"
-        UI[User Interface] -->|question| QS[Query Service]
-        QS -->|query + filters| RS[RAG Search]
-        VI --> RS
-        RS -->|чанки| QS
-        QS -->|LLM генерация + обогащение| QS_internal[LLM processing]
-        QS_internal --> QS
-        QS -->|answer + аннотированные сноски| UI
+        UI[User Interface] -->|"question"| QS[Query Service]
+        QS -->|"query + filters"| RAGs[RAG Search]
+        Vec --> RAGs
+        RAGs -->|"чанки"| QS
+        QS -->|"answer + сноски"| UI
     end
 
-    style P fill:#e6f3ff,stroke:#333
-    style V fill:#fff3e6,stroke:#333
-    style R fill:#e6ffe6,stroke:#333
-    style RI fill:#ffe6f3,stroke:#333
-    style RS fill:#f3e6ff,stroke:#333
+    style Pars fill:#e6f3ff,stroke:#333
+    style Val fill:#fff3e6,stroke:#333
+    style Reg fill:#e6ffe6,stroke:#333
+    style RAGi fill:#ffe6f3,stroke:#333
+    style RAGs fill:#f3e6ff,stroke:#333
     style QS fill:#fffacd,stroke:#333
+
 ```
 
 **Форматы передачи между этапами:**
