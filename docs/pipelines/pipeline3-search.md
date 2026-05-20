@@ -4,13 +4,13 @@
 
 **Вход (триггер):** сообщение пользователя в чате (UI → Query Service).
 
-**Процесс асинхронный** — UI сначала получает подтверждение, затем опрашивает историю чата для получения результата.
+**Процесс асинхронный** — UI сначала получает подтверждение, затем ожидает результат через longpoll-запрос к истории чата. По умолчанию таймаут longpoll — 15 секунд.
 
 ```mermaid
 sequenceDiagram
     participant UI as UI
     participant QS as Query Service
-    participant RAGs as RAG Поиск
+    participant RAGs as RAG Search
 
     UI->>QS: POST .../messages (content)
     activate QS
@@ -32,9 +32,9 @@ sequenceDiagram
     QS->>QS: Сохранение результата в истории чата
     deactivate QS
 
-    Note over UI,QS: UI периодически опрашивает историю
+    Note over UI,QS: UI ожидает через longpoll (15c)
 
-    UI->>QS: GET .../sessions/{id} (polling)
+    UI->>QS: GET .../sessions/{id}?longpoll=15
     QS-->>UI: messages[] с answer + sources[excerpt]
 ```
 
@@ -150,6 +150,6 @@ sequenceDiagram
 |---|---|---|---|
 | Поиск | 1. Приём сообщения | **Пишет** (история чата) | Вход: content → Выход: 202 + message_id |
 | Поиск | 2. Обогащение терминами | **Читает** (словарь терминов) | Вход: текст → Выход: обогащённый запрос |
-| Поиск | 3. RAG поиск чанков | **Читает** | Вход: query + filters → Выход: массив чанков |
+| Поиск | 3. RAG Search | **Читает** | Вход: query + filters → Выход: массив чанков |
 | Поиск | 3b. Генерация ответа LLM | **Нет** | Вход: чанки → Выход: текст ответа |
 | Поиск | 4. Обогащение цитирований | **Нет** | Вход: текст LLM + чанки → Выход: answer с аннотированными сносками |

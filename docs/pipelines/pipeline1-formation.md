@@ -6,9 +6,9 @@
 sequenceDiagram
     participant UI as UI / API
     participant Orch as Orchestrator
-    participant Pars as Парсинг
-    participant Val as Валидация
-    participant Reg as Реестр
+    participant Pars as Parsing
+    participant Val as Validation
+    participant Reg as Registry
 
     UI->>Orch: POST /documents (файл)
     activate Orch
@@ -19,14 +19,14 @@ sequenceDiagram
     UI->>Orch: GET /documents/{id}/status
     activate Orch
 
-    %% Этап 1: Парсинг (изоляция от БД)
+    %% Этап 1: Parsing (изоляция от БД)
     Orch->>Pars: POST /ocr/process (file_ref)
     activate Pars
     Pars-->>Orch: JSON-контейнер (структура документа)
     deactivate Pars
     Orch-->>UI: status: parsing_completed
 
-    %% Этап 2: Валидация (читает БД)
+    %% Этап 2: Validation (читает БД)
     Orch->>Val: POST /validate (JSON-контейнер)
     activate Val
     Val->>Val: Проверка структуры
@@ -35,7 +35,7 @@ sequenceDiagram
     Val-->>Orch: JSON с оценкой (auto / review)
     deactivate Val
 
-    %% Этап 3: Реестр документов (пишет БД)
+    %% Этап 3: Registry (пишет БД)
     Orch->>Reg: POST /registry/documents (JSON)
     activate Reg
     Reg->>Reg: Преобразование, карточка, БД
@@ -50,9 +50,9 @@ sequenceDiagram
 
 ---
 
-#### Этап 1: Парсинг (полная изоляция от БД)
+#### Этап 1: Parsing (полная изоляция от БД)
 
-**Сервис:** Парсинг / OCR Service
+**Сервис:** Parsing / OCR Service
 
 **Вход:** ссылка на файл в MinIO (изображение или PDF).
 
@@ -71,15 +71,15 @@ sequenceDiagram
 
 **Выход:** JSON-контейнер со структурой документа (`structure`), классификационными кодами (`classification`) и оценкой качества распознавания (`quality`). Детальный формат — в спецификации сервиса OCR.
 
-> **Примечание:** JSON-формат известен только сервису Парсинга и downstream-сервисам. Оркестратор оперирует им как непрозрачным контейнером.
+> **Примечание:** JSON-формат известен только сервису Parsing и downstream-сервисам. Оркестратор оперирует им как непрозрачным контейнером.
 
 ---
 
-#### Этап 2: Валидация (читает БД)
+#### Этап 2: Validation (читает БД)
 
 **Сервис:** Validation Service
 
-**Вход:** структурированный JSON от этапа Парсинга.
+**Вход:** структурированный JSON от этапа Parsing.
 
 **Процесс:**
 
@@ -93,15 +93,15 @@ sequenceDiagram
 
 **Особенность:** единственный этап, который **читает** из базы данных.
 
-**Выход:** JSON от Парсинга, обогащённый результатами валидации — флаг `structure_valid`, статусы классификационных кодов (`classifiers`), результаты проверки уникальности (`uniqueness`) и сопоставления (`matching`), а также итоговое решение (`decision`: `auto` / `review_required`). Структура документа передаётся сквозным потоком.
+**Выход:** JSON от Parsing, обогащённый результатами валидации — флаг `structure_valid`, статусы классификационных кодов (`classifiers`), результаты проверки уникальности (`uniqueness`) и сопоставления (`matching`), а также итоговое решение (`decision`: `auto` / `review_required`). Структура документа передаётся сквозным потоком.
 
 ---
 
-#### Этап 3: Реестр документов (пишет БД)
+#### Этап 3: Registry (пишет БД)
 
 **Сервис:** Registry Service
 
-**Вход:** JSON от этапа Валидации (содержит структуру документа + результаты валидации).
+**Вход:** JSON от этапа Validation (содержит структуру документа + результаты валидации).
 
 **Процесс:**
 

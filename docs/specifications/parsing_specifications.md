@@ -6,9 +6,9 @@
 
 **Ответ `202`:** `task_id`, `status`, `version_id`, `estimated_completion`.
 
-Идентификатор задачи (`task_id`) генерируется Оркестратором, передаётся в OCR-сервис и используется для всех последующих операций — опроса статуса и получения результата.
+Идентификатор задачи (`task_id`) генерируется Оркестратором, передаётся в OCR-сервис и используется для всех последующих операций — longpoll-ожидания статуса и получения результата.
 
-### GET /ocr/process/{task_id}/status — опрос статуса
+### GET /ocr/process/{task_id}/status — статус обработки (longpoll)
 
 **Ответ `200`:** `task_id`, `status`, `progress_percent`, `pages_processed`, `pages_total`, `avg_confidence`, `started_at`, `completed_at`, а также `step` (текущий шаг обработки) и `step_detail`.
 
@@ -367,11 +367,13 @@ async def test_ocr_page_failure_doesnt_crash_pipeline(pipeline):
 Добавляется:
 1. Вызвать `POST /ocr/process` с `file_key` и `version_id`
 2. Получить `task_id`
-3. Поллинг `GET /ocr/process/{task_id}/status` (раз в 2 секунды)
+3. Ожидание результата через longpoll: `GET /ocr/process/{task_id}/status?longpoll=15`
+   - При завершении → сразу ответ
+   - При таймауте 15c → ответ с прогрессом, повтор longpoll
 4. При `status: completed` → `GET /ocr/process/{task_id}/result`
-5. Передать JSON-контейнер дальше по пайплайну (Валидация)
+5. Передать JSON-контейнер дальше по пайплайну (Validation)
 
-**Контракт не меняется.** Вся логика ожидания результата уже описана в `common.md` (модель async с polling).
+**Контракт не меняется.** Вся логика ожидания результата описана в `common.md` (модель async с longpoll).
 
 ---
 

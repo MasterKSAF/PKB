@@ -5,19 +5,19 @@ Orchestrator координирует сквозную обработку док
 ```
 Пайплайн 1: Формирование документа
 ====================================
-MinIO (ссылка) → [Парсинг] → JSON → [Валидация] → JSON → [Реестр] → JSON со ссылками в БД
+MinIO (ссылка) → [Parsing] → JSON → [Validation] → JSON → [Registry] → JSON со ссылками в БД
                     (изоляция)      (читает БД)          (пишет БД)
                                                               ↓
 Пайплайн 2: Индексация документа
 ====================================
-       Обогащённый JSON от Registry → [RAG индексация] → Статус
+       Обогащённый JSON от Registry → [RAG Indexing] → Статус
                                                (пишет БД)
 
 Пайплайн 3: Поиск документа
 ====================================
        вопрос → [Query Service] → LLM генерация + обогащение цитирований → ответ
                     ↓
-              [RAG поиск] → чанки
+              [RAG Search] → чанки
                  (читает БД)
 ```
 
@@ -37,13 +37,13 @@ MinIO (ссылка) → [Парсинг] → JSON → [Валидация] → 
 
 | Пайплайн | Этап | Доступ к БД | Направление данных |
 |----------|------|-------------|-------------------|
-| Формирование | 1. Парсинг | **Нет** (изоляция) | Вход: ссылка MinIO → Выход: JSON |
-| Формирование | 2. Валидация | **Читает** | Вход: JSON → Выход: JSON с решением |
-| Формирование | 3. Реестр | **Пишет** | Вход: JSON → Выход: JSON со ссылками |
-| Индексация | 1. RAG индексация | **Пишет** | Вход: обогащённый JSON → Выход: статус |
+| Формирование | 1. Parsing | **Нет** (изоляция) | Вход: ссылка MinIO → Выход: JSON |
+| Формирование | 2. Validation | **Читает** | Вход: JSON → Выход: JSON с решением |
+| Формирование | 3. Registry | **Пишет** | Вход: JSON → Выход: JSON со ссылками |
+| Индексация | 1. RAG Indexing | **Пишет** | Вход: обогащённый JSON → Выход: статус |
 | Поиск | 1. Приём сообщения | **Пишет** (история чата) | Вход: content → Выход: 202 + message_id |
 | Поиск | 2. Обогащение терминами | **Читает** (словарь терминов) | Вход: текст → Выход: обогащённый запрос |
-| Поиск | 3. RAG поиск чанков | **Читает** | Вход: query + filters → Выход: массив чанков |
+| Поиск | 3. RAG Search | **Читает** | Вход: query + filters → Выход: массив чанков |
 | Поиск | 3b. Генерация ответа LLM | **Нет** | Вход: чанки → Выход: текст ответа |
 | Поиск | 4. Обогащение цитирований | **Нет** | Вход: текст LLM + чанки → Выход: answer с аннотированными сносками |
 
@@ -57,14 +57,14 @@ MinIO (ссылка) → [Парсинг] → JSON → [Валидация] → 
 stateDiagram-v2
     [*] --> draft
     draft --> uploaded : POST /documents
-    uploaded --> parsing : запуск Парсинга
-    parsing --> validation : Парсинг завершён
-    validation --> ready_for_promotion : Валидация пройдена (auto)
+    uploaded --> parsing : запуск Parsing
+    parsing --> validation : Parsing завершён
+    validation --> ready_for_promotion : Validation пройдена (auto)
     validation --> review_required : требуется ручное подтверждение
-    review_required --> validation : повторная валидация
+    review_required --> validation : повторная Validation
     review_required --> approved : approve оператора
-    ready_for_promotion --> registry : промотирование в Реестр
-    approved --> registry : промотирование в Реестр
+    ready_for_promotion --> registry : промотирование в Registry
+    approved --> registry : промотирование в Registry
     
     draft --> failed
     uploaded --> failed
@@ -98,14 +98,14 @@ stateDiagram-v2
 | Операция | Пайплайн | Этап | Сервис | Доступ к БД |
 |---|---|---|---|---|
 | Загрузка файла, SHA-256, MinIO | 1 | Пре-стейдж | **Orchestrator** | Пишет |
-| Распознавание, парсинг структуры | 1 | 1. Парсинг | **Парсинг / OCR Service** | Нет |
-| Валидация JSON, классификация | 1 | 2. Валидация | **Validation Service** | Читает |
-| Проверка кодов по справочнику | 1 | 2. Валидация | **Registry Service** | Читает |
-| Запись карточки документа в БД | 1 | 3. Реестр | **Registry Service** | Пишет |
-| Чанкинг + Embeddings + Индекс | 2 | 1. RAG индексация | **RAG Service** | Пишет |
+| Распознавание, парсинг структуры | 1 | 1. Parsing | **Parsing / OCR Service** | Нет |
+| Валидация JSON, классификация | 1 | 2. Validation | **Validation Service** | Читает |
+| Проверка кодов по справочнику | 1 | 2. Validation | **Registry Service** | Читает |
+| Запись карточки документа в БД | 1 | 3. Registry | **Registry Service** | Пишет |
+| Чанкинг + Embeddings + Индекс | 2 | 1. RAG Indexing | **RAG Service** | Пишет |
 | Приём сообщения | 3 | 1. Query Service | **Query Service** | Пишет |
 | Обогащение терминами | 3 | 2. Query Service | **Query Service** | Читает |
-| RAG поиск чанков | 3 | 3. RAG поиск | **RAG Service** | Читает |
+| RAG поиск чанков | 3 | 3. RAG Search | **RAG Service** | Читает |
 | Генерация ответа LLM | 3 | 3b. Query Service | **Query Service** | Нет |
 | Обогащение цитирований | 3 | 4. Query Service | **Query Service** | Нет |
 | Управление файлами, экспорт во внешние системы | — | Вспомогательный | **Integration Service** | Читает/Пишет |
@@ -115,7 +115,7 @@ stateDiagram-v2
 
 ### 6. Эндпоинты внутренних сервисов
 
-#### Парсинг / OCR Service
+#### Parsing / OCR Service
 
 | Метод | Путь | Описание | Доступ к БД |
 |---|---|---|---|
@@ -158,7 +158,7 @@ stateDiagram-v2
 
 | Метод | Путь | Описание | Доступ к БД |
 |---|---|---|---|
-| `POST` | `/registry/documents` | Создание карточки документа (Реестр) | Пишет |
+| `POST` | `/registry/documents` | Создание карточки документа (Registry) | Пишет |
 | `GET` | `/registry/documents` | Список документов в реестре | Читает |
 | `GET` | `/registry/documents/{id}` | Детали документа | Читает |
 | `POST` | `/registry/classifiers/validate` | Валидация классификационных кодов по справочнику | Читает |
@@ -180,21 +180,21 @@ stateDiagram-v2
 ```mermaid
 graph LR
     subgraph "Пайплайн 1: Формирование документа"
-        MinIO[(MinIO)] -->|file_ref| P[Парсинг]
-        P -->|JSON (opaque)| V[Валидация]
-        V -->|JSON (opaque)| R[Реестр]
+        MinIO[(MinIO)] -->|file_ref| P[Parsing]
+        P -->|JSON (opaque)| V[Validation]
+        V -->|JSON (opaque)| R[Registry]
         R -->|JSON со ссылками| DB[(PostgreSQL\nRegistry)]
     end
 
     subgraph "Пайплайн 2: Индексация документа"
-        R -->|Обогащённый JSON| RI[RAG Индексация]
+        R -->|Обогащённый JSON| RI[RAG Indexing]
         RI -->|status| DB
         RI --> VI[(Векторный индекс\npgvector)]
     end
 
     subgraph "Пайплайн 3: Поиск документа"
         UI -->|question| QS[Query Service]
-        QS -->|query + filters| RS[RAG Поиск]
+        QS -->|query + filters| RS[RAG Search]
         VI --> RS
         RS -->|чанки| QS
         QS -->|LLM генерация + обогащение| QS
@@ -213,18 +213,34 @@ graph LR
 
 | Между | Формат | Протокол | Примечание |
 |---|---|---|---|
-| Orchestrator → Парсинг | `file_ref` (ссылка MinIO) | JSON via HTTP | — |
-| Парсинг → Orchestrator | **JSON-контейнер** (структура документа) | JSON via HTTP | Непрозрачен для Orchestrator |
-| Orchestrator → Валидация | **JSON-контейнер** (от Парсинга) | JSON via HTTP | Непрозрачен для Orchestrator |
-| Валидация → Orchestrator | **JSON с решением** (auto / review) | JSON via HTTP | Непрозрачен для Orchestrator |
-| Orchestrator → Реестр | **JSON с решением** (от Валидации) | JSON via HTTP | Непрозрачен для Orchestrator |
-| Реестр → Orchestrator | **Обогащённый JSON (структура + ссылки в БД)** | JSON via HTTP | — |
-| Orchestrator → RAG индексация | **Обогащённый JSON от Registry** | JSON via HTTP | — |
-| RAG индексация → Orchestrator | Статус завершения | JSON via HTTP | — |
+| Orchestrator → Parsing | `file_ref` (ссылка MinIO) | JSON via HTTP | — |
+| Parsing → Orchestrator | **JSON-контейнер** (структура документа) | JSON via HTTP | Непрозрачен для Orchestrator |
+| Orchestrator → Validation | **JSON-контейнер** (от Parsing) | JSON via HTTP | Непрозрачен для Orchestrator |
+| Validation → Orchestrator | **JSON с решением** (auto / review) | JSON via HTTP | Непрозрачен для Orchestrator |
+| Orchestrator → Registry | **JSON с решением** (от Validation) | JSON via HTTP | Непрозрачен для Orchestrator |
+| Registry → Orchestrator | **Обогащённый JSON (структура + ссылки в БД)** | JSON via HTTP | — |
+| Orchestrator → RAG Indexing | **Обогащённый JSON от Registry** | JSON via HTTP | — |
+| RAG Indexing → Orchestrator | Статус завершения | JSON via HTTP | — |
 | UI → Query Service | Вопрос / поисковый запрос | JSON via HTTP | — |
-| Query Service → RAG поиск | **query + filters** | JSON via HTTP | Поиск чанков (без генерации) |
-| RAG поиск → Query Service | **Массив чанков с полным содержимым** | JSON via HTTP | Query Service формирует контекст и вызывает LLM |
+| Query Service → RAG Search | **query + filters** | JSON via HTTP | Поиск чанков (без генерации) |
+| RAG Search → Query Service | **Массив чанков с полным содержимым** | JSON via HTTP | Query Service формирует контекст и вызывает LLM |
 | Query Service → UI | **answer + аннотированные сноски** | JSON via HTTP | Обогащение цитирований идентификаторами |
+
+#### Асинхронное ожидание (Longpoll)
+
+Все внутренние вызовы между сервисами, помеченные как асинхронные (`202`), используют **longpoll-механизм** для ожидания результата:
+
+1. Orchestrator отправляет запрос на запуск операции → получает `202 {task_id}`
+2. Orchestrator вызывает `GET .../{task_id}/status?longpoll=15`
+3. Сервис держит соединение до 15 секунд:
+   - **Операция завершилась** → немедленный ответ с результатом
+   - **Статус изменился** → ответ с текущим прогрессом
+   - **Таймаут 15c** → ответ с текущим прогрессом
+4. При нефинальном статусе — повторный longpoll
+
+Это справедливо для всех этапов: OCR, Validation (проверка уникальности), Registry, RAG Indexing, Analyse.
+
+Подробнее — [Модель выполнения](../api/common.md#модель-выполнения-sync--async).
 
 ---
 
@@ -233,9 +249,9 @@ graph LR
 | Решение | Обоснование |
 |---|---|
 | **Три независимых пайплайна** | Разделяют concerns: формирование документа (бизнес-логика), индексация для поиска (RAG) и поиск/генерация ответа. Каждый пайплайн имеет изоляцию по доступу к БД и свою FSM. Позволяет индексировать повторно без повторного распознавания |
-| **Чанкинг в RAG индексации, а не в Парсинге** | Парсинг отвечает только за распознавание и структурирование. Чанкинг — задача RAG для оптимизации поиска. Разные стратегии чанкинга не влияют на карточку документа |
-| **Изоляция доступа к БД по этапам** | Парсинг не зависит от БД — может масштабироваться горизонтально. Валидация читает, Реестр пишет — исключены гонки и каскадные锁. RAG индексация пишет, RAG поиск читает — консистентность данных |
+| **Чанкинг в RAG Indexing, а не в Parsing** | Parsing отвечает только за распознавание и структурирование. Чанкинг — задача RAG для оптимизации поиска. Разные стратегии чанкинга не влияют на карточку документа |
+| **Изоляция доступа к БД по этапам** | Parsing не зависит от БД — может масштабироваться горизонтально. Validation читает, Registry пишет — исключены гонки и каскадные锁. RAG Indexing пишет, RAG Search читает — консистентность данных |
 | **Оркестратор оперирует JSON как контейнером** | Структура JSON известна только сервисам. Orchestrator не имеет доступа к БД (кроме пре-стейджа загрузки). Снижает связанность, упрощает тестирование и замену сервисов |
 | **CAS-пути для файлов** | `{doc_id}/v{n}/{hash}.{ext}` — гарантирует целостность и исключает дубликаты |
 | **Бизнес-ключ `title_hash_sha256`** | Учитывает `era`, `source_type`, коды классификации — исключает коллизии (ГОСТ СССР vs ГОСТ РФ с одинаковым номером) |
-| **Единый `document_id`** | Orchestrator генерирует UUID документа при загрузке. Этот же `document_id` используется как первичный ключ во всех сервисах — Парсинг, Валидация, Реестр и RAG. Registry не создаёт свой numeric ID, а пишет `document_id` как есть. Это исключает маппинг идентификаторов на стыке пайплайнов и упрощает трассировку документа от загрузки до поиска. |
+| **Единый `document_id`** | Orchestrator генерирует UUID документа при загрузке. Этот же `document_id` используется как первичный ключ во всех сервисах — Parsing, Validation, Registry и RAG. Registry не создаёт свой numeric ID, а пишет `document_id` как есть. Это исключает маппинг идентификаторов на стыке пайплайнов и упрощает трассировку документа от загрузки до поиска. |

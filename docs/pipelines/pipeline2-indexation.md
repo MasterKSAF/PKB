@@ -7,7 +7,7 @@
 ```mermaid
 sequenceDiagram
     participant Orch as Orchestrator
-    participant RAGi as RAG Индексация
+    participant RAGi as RAG Indexing
 
     Orch->>RAGi: POST /rag/index (обогащённый JSON от Registry)
     activate RAGi
@@ -18,7 +18,7 @@ sequenceDiagram
     deactivate RAGi
 ```
 
-#### Этап 1: RAG индексация (пишет БД)
+#### Этап 1: RAG Indexing (пишет БД)
 
 **Сервис:** RAG Service
 
