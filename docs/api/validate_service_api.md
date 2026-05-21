@@ -1,61 +1,148 @@
-## API Validation Service (validation-service:8086)
+## API Validation Service / Validation (validation-service:8086)
 
-Сервис валидации, извлечения параметров и сопоставления.
+Сервис комплексной валидации документов.  
+Соответствует этапу **«Validation» Пайплайна 1 (Формирование документа)** — **читает** базу данных для проверки уникальности, классификации и сопоставления.
 
-*Внутренний сервис. Не предназначен для прямого вызова из frontend. Публичный API — в Orchestrator Service.*
+**Внутренний сервис.** Вызывается Orchestrator для валидации JSON-контейнера после этапа Parsing.
 
-**Базовый URL (внутренний)**: `http://127.0.0.1:8086/api/v1`  
-**Базовый URL (публичный через Orchestrator)**: `https://{host}/api/v1`
+**Базовый URL (внутренний)**: `http://127.0.0.1:8086/api/v1`
 
 ### Формат ответа
 
-Успех — данные возвращаются напрямую.
+Успех — данные возвращаются напрямую.  
+При ошибке: `{ "error": { "code": "VALIDATION_FAILED", "message": "...", "details": {} } }`
 
-При ошибке:
+---
+
+### POST /validate/document
+
+Комплексная валидация документа. Основной эндпоинт этапа **«Validation»**.  
+Принимает JSON-контейнер от этапа Parsing, выполняет все проверки.
+
+**Процесс внутри:**
+
+| Шаг | Действие | Доступ к БД |
+|---|---|---|
+| 1 | Валидация структуры JSON | Нет |
+| 2 | Классификация документа (тип, эра, юрисдикция) | Нет |
+| 3 | Проверка уникальности (SHA-256, title_hash) | **Читает** |
+| 4 | Сопоставление с существующими документами (predecessor/successor) | **Читает** |
+| 5 | Валидация классификационных кодов (через Registry) | **Читает** |
+
+**Запрос:**
 
 ```json
 {
-  "error": {
-    "code": "VALIDATION_FAILED",
-    "message": "Описание ошибки",
-    "details": {}
+  "task_id": "task-8a3f2b",
+  "version_id": "c4b9f2d3-...",
+  "structure": {
+    "type": "normative",
+    "title": "ГОСТ Р 12345-77",
+    "sections": [ ... ],
+    "tables": [ ... ],
+    "images": [ ... ]
+  },
+  "classification": {
+    "mks_oks_code": "47.020",
+    "okstu_code": null,
+    "udk_code": "629.5.021",
+    "year": "1981"
+  },
+  "quality": {
+    "confidence": 0.94,
+    "pages_processed": 12,
+    "pages_failed": 0
   }
 }
 ```
 
-### Группы
-
-| Группа | Описание |
-|--------|----------|
-| `validate` | Все endpoint'ы сервиса валидации |
-
-### POST /validate/extract/parameters
-
-Извлечение структурированных параметров из документов.
-
-**Запрос**:
+**Ответ `200`:**
 
 ```json
 {
-  "document_id": "doc-8a3f2b",
-  "page_id": null,
-  "document_type": "specification"
+  "validation_id": "val-001",
+  "document_id": "b3a8f1c2-...",
+  "structure_valid": true,
+  "classification": {
+    "mks_oks_code": "47.020",
+    "mks_status": "CONFIRMED",
+    "okstu_status": "NOT_USED",
+    "udk_code": "629.5.021",
+    "overall_status": "CONFIRMED"
+  },
+  "uniqueness": {
+    "is_duplicate_file": false,
+    "is_duplicate_document": false,
+    "content_hash_sha256": "abc123...",
+    "title_hash_sha256": "def456..."
+  },
+  "matching": {
+    "predecessor_doc_id": null,
+    "successor_doc_id": null
+  },
+  "decision": "auto",
+  "status": "completed"
 }
 ```
 
-| Поле | Тип | Обязательность | Описание |
-|------|-----|----------------|----------|
-| `document_id` | string | Да | ID документа |
-| `page_id` | string | Нет | ID страницы (опционально) |
-| `document_type` | string | Да | Тип документов |
+| Поле | Тип | Описание |
+|---|---|---|
+| `validation_id` | string | ID валидации |
+| `document_id` | string | ID документа. Назначается валидацией: извлекается существующий для дубликата, либо генерируется новый. |
+| `structure_valid` | bool | Результат проверки структуры |
+| `classification` | object | Статусы классификационных кодов |
+| `uniqueness` | object | Результаты проверки на дубликаты |
+| `matching` | object | Связи с существующими документами |
+| `decision` | string | `auto` — автоматическое продвижение, `review_required` — требуется ручное подтверждение |
+| `status` | string | Статус: `completed`, `failed` |
 
-**Ответ `200`**: Структура параметров (см. `GET /documents/{doc_id}/parameters`) + `processing_time_ms`.
+---
+
+### POST /validate/classifiers
+
+Валидация классификационных кодов по справочнику Registry.
+
+**Запрос:**
+
+```json
+{
+  "classification": {
+    "mks_oks_code": "47.020",
+    "okstu_code": null,
+    "udk_code": "629.5.021"
+  }
+}
+```
+
+**Ответ `200`:**
+
+```json
+{
+  "mks_status": "CONFIRMED",
+  "mks_display_name": "Конструкция корпуса",
+  "okstu_status": "NOT_USED",
+  "udk_valid": true,
+  "overall_status": "CONFIRMED"
+}
+```
+
+**Статусы:**
+
+| Статус | Значение |
+|---|---|
+| `CONFIRMED` | Код найден в справочнике и верифицирован |
+| `PENDING_REVIEW` | Код не найден в справочнике — требует ручного разбора |
+| `NOT_FOUND` | Парсер не обнаружил код на первых страницах |
+| `NOT_USED` | Не применяется для данной эры/типа документа |
+| `UNASSIGNED` | Начальное состояние — классификация ещё не выполнялась |
+
+---
 
 ### POST /validate/check
 
-Выполнение заданного набора проверок над текстом.
+Проверка текста на соответствие набору правил.
 
-**Запрос**:
+**Запрос:**
 
 ```json
 {
@@ -65,185 +152,50 @@
 }
 ```
 
-| Поле | Тип | Обязательность | Описание |
-|------|-----|----------------|----------|
-| `text` | string | Да | Текст для проверки |
-| `rules` | string[] | Да | Список правил |
-| `document_type` | string | Да | Тип документов |
-
-**Ответ `200`**:
+**Ответ `200`:**
 
 ```json
 {
   "passed": false,
   "checks": [
-    {
-      "rule": "min_thickness_12mm",
-      "status": "ERROR",
-      "message": "Толщина 10 мм меньше требования 12 мм",
-      "details": "..."
-    }
+    { "rule": "min_thickness_12mm", "status": "ERROR", "message": "Толщина 10 мм меньше требования 12 мм" }
   ],
   "processing_time_ms": 50
 }
 ```
 
-### POST /validate/calculate
+### POST /validate/extract/parameters
 
-Арифметический движок для вычислений.
+Извлечение структурированных параметров из документов.
 
-**Запрос**:
+**Запрос:**
 
 ```json
 {
-  "expression": "(1200 + 2*10) / 2",
-  "context": {"переменная": 10}
+  "document_id": "doc-8a3f2b",
+  "page_id": null,
+  "document_type": "specification"
 }
 ```
 
-| Поле | Тип | Обязательность | Описание |
-|------|-----|----------------|----------|
-| `expression` | string | Да | Математическое выражение |
-| `context` | object | Нет | Переменные для подстановки |
+**Ответ `200`**: структура параметров (спецификация, материалы, размеры).
 
-**Ответ `200`**:
+---
 
-```json
-{
-  "expression": "(1200 + 2*10) / 2",
-  "result": 610,
-  "unit": "мм",
-  "steps": ["1200 + 20 = 1220", "1220 / 2 = 610"]
-}
-```
+## Сводная информация
 
-| Поле | Тип | Описание |
-|------|-----|----------|
-| `expression` | string | Исходное выражение |
-| `result` | float | Результат вычисления |
-| `unit` | string | Единица измерения (определяется парсингом исходных операндов) |
-| `steps` | string[] | Пошаговое решение |
+| Аспект | Значение |
+|---|---|
+| Доступ к БД | **Читает** (классификаторы, документы для проверки уникальности) |
+| Пайплайн | 1 (Формирование документа), Этап 2 |
+| Вход | JSON-контейнер от этапа Parsing |
+| Выход | JSON с решением (auto / review_required) |
 
-### POST /validate/recommend
+### Матрица эндпоинтов
 
-Рекомендации по исправлению ошибок проверки.
-
-**Запрос**:
-
-```json
-{
-  "failures": [
-    {"rule": "min_thickness_12mm", "status": "fail"}
-  ],
-  "document_type": "drawing"
-}
-```
-
-| Поле | Тип | Обязательность | Описание |
-|------|-----|----------------|----------|
-| `failures` | array | Да | Список ошибок |
-| `document_type` | string | Да | Тип документов |
-
-**Ответ `200`**:
-
-```json
-{
-  "recommendations": [
-    {
-      "failure_ref": "min_thickness_12mm",
-      "recommendation_text": "Увеличить толщину обшивки до 12 мм согласно Правилам РС, часть I, стр.42.",
-      "severity": "critical",
-      "reference_document": "doc-norm-001"
-    }
-  ]
-}
-```
-
-### POST /validate/compare
-
-Сопоставление нормы и проектных данных (асинхронное).
-
-**Запрос**:
-
-```json
-{
-  "normative_text": "Толщина обшивки ледового пояса ≥ 12 мм",
-  "project_text": "Обшивка ледового пояса 14 мм",
-  "document_type": "drawing"
-}
-```
-
-| Поле | Тип | Обязательность | Описание |
-|------|-----|----------------|----------|
-| `normative_text` | string | Да | Текст нормативного требования |
-| `project_text` | string | Да | Текст проектного параметра |
-| `document_type` | string | Да | Тип документов |
-
-**Ответ `202`** (запрос принят, результат будет доступен позже):
-
-```json
-{
-  "comparison_id": "cmp-007",
-  "status": "processing",
-  "created_at": "2026-04-27T12:00:00Z"
-}
-```
-
-> Статус обновляется: `processing` → `completed` / `failed`.  
-> Для опроса используйте `GET /validate/compare/{comparison_id}`.
-
-### GET /validate/compare/{comparison_id}
-
-Получение ранее созданного сопоставления.
-
-**Ответ `200`** (результат готов):
-
-Если статус `processing` — повторите запрос позже.
-
-```json
-{
-  "comparison_id": "cmp-007",
-  "status": "completed",
-  "match_status": "match",
-  "summary": "Толщина 14 мм соответствует требованию ≥12 мм",
-  "processing_time_ms": 3200
-}
-```
-
-### POST /validate/compare/batch
-
-Массовое сопоставление пар фрагментов.
-
-**Запрос**:
-
-```json
-{
-  "pairs": [
-    {"normative_chunk_id": "frg-42", "project_chunk_id": "frg-5"}
-  ]
-}
-```
-
-| Поле | Тип | Обязательность | Описание |
-|------|-----|----------------|----------|
-| `pairs` | array | Да | Пары для сопоставления |
-| `pairs[].normative_chunk_id` | string | Да | ID фрагмента нормы |
-| `pairs[].project_chunk_id` | string | Да | ID фрагмента проекта |
-
-**Ответ `200`**:
-
-```json
-{
-  "batch_id": "batch-001",
-  "comparisons": [
-    {
-      "comparison_id": "cmp-007",
-      "match_status": "match",
-      "summary": "Толщина 14 мм соответствует требованию ≥12 мм"
-    }
-  ],
-  "total_pairs": 1,
-  "matched": 1,
-  "discrepancies_found": 0,
-  "insufficient_data": 0
-}
+| Метод | Путь | Описание | Доступ к БД |
+|---|---|---|---|
+| `POST` | `/validate/document` | Комплексная валидация документа | **Читает** |
+| `POST` | `/validate/classifiers` | Валидация классификационных кодов | **Читает** |
+| `POST` | `/validate/check` | Проверка правил | Нет |
+| `POST` | `/validate/extract/parameters` | Извлечение параметров | **Читает** |
