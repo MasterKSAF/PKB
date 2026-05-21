@@ -1,6 +1,6 @@
 """
 Orchestrator Service Mock
-Основной шлюз API — документы, поиск, валидация, мониторинг (in-memory).
+Основной шлюз API — документы, поиск, мониторинг (in-memory).
 Порт: 8081
 """
 
@@ -10,23 +10,21 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import copy
+import hashlib
 import random
 from typing import Any, Dict, List, Optional
 
 from common import (
-    SEED_COMPARISONS,
     SEED_DOCUMENT_ERRORS,
     SEED_DOCUMENTS,
     SEED_METRICS,
-    SEED_QUEUE,
-    SEED_VALIDATION_CHECKS,
     error_response,
     new_id,
     paginate,
     utcnow,
 )
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/v1")
 
@@ -36,31 +34,95 @@ router = APIRouter(prefix="/api/v1")
 
 _documents: Dict[str, dict] = {}
 _document_errors: List[dict] = {}
-_queue: List[dict] = {}
-_validation_checks: Dict[str, dict] = {}
-_comparisons: Dict[str, dict] = {}
+_versions: Dict[str, List[dict]] = {}
+_chunks: Dict[str, List[dict]] = {}
+_history: Dict[str, List[dict]] = {}
+_approvals: Dict[str, dict] = {}
+_promotions: Dict[str, dict] = {}
 _metrics: dict = {}
 
-# Счётчик для версий документов
+# Счётчик для ID
 _doc_id_counter: int = 100
+_version_counter: int = 200
 
 
 def _init_data():
     global \
         _documents, \
         _document_errors, \
-        _queue, \
-        _validation_checks, \
-        _comparisons, \
+        _versions, \
+        _chunks, \
+        _history, \
+        _approvals, \
+        _promotions, \
         _metrics
+    if _documents:
+        return
     _documents = {d["document_id"]: copy.deepcopy(d) for d in SEED_DOCUMENTS}
     _document_errors = copy.deepcopy(SEED_DOCUMENT_ERRORS)
-    _queue = copy.deepcopy(SEED_QUEUE)
-    _validation_checks = {
-        c["check_run_id"]: copy.deepcopy(c) for c in SEED_VALIDATION_CHECKS
-    }
-    _comparisons = {c["comparison_id"]: copy.deepcopy(c) for c in SEED_COMPARISONS}
     _metrics = copy.deepcopy(SEED_METRICS)
+
+    # Инициализация версий для seed-документов
+    for doc_id, doc in _documents.items():
+        ver = doc.get("total_versions", 1)
+        _versions[doc_id] = [
+            {
+                "version_id": f"ver-{new_id()}",
+                "version_number": v + 1,
+                "document_id": doc_id,
+                "title": doc.get("title", ""),
+                "file_size": doc.get("file_size", 0),
+                "content_hash_sha256": hashlib.sha256(
+                    f"{doc_id}-v{v + 1}".encode()
+                ).hexdigest(),
+                "title_hash_sha256": hashlib.sha256(
+                    doc.get("title", "").encode()
+                ).hexdigest(),
+                "status": "completed",
+                "created_at": doc.get("created_at", utcnow()),
+                "uploaded_by": doc.get("uploaded_by", ""),
+            }
+            for v in range(ver)
+        ]
+        _versions[doc_id].reverse()  # newest first
+
+        # Инициализация истории статусов
+        _history[doc_id] = [
+            {
+                "event_id": f"evt-{new_id()}",
+                "document_id": doc_id,
+                "from_status": None,
+                "to_status": doc.get("status", "uploaded"),
+                "timestamp": doc.get("created_at", utcnow()),
+                "user_id": doc.get("user_id", "u-001"),
+                "comment": "Документ создан",
+            },
+            {
+                "event_id": f"evt-{new_id()}",
+                "document_id": doc_id,
+                "from_status": "uploaded",
+                "to_status": doc.get("status", "completed"),
+                "timestamp": doc.get("updated_at", utcnow()),
+                "user_id": doc.get("user_id", "u-001"),
+                "comment": f"Обработка завершена со статусом {doc.get('status', 'completed')}",
+            },
+        ]
+
+        # Инициализация chunks
+        chunk_count = doc.get("chunk_count", 0)
+        _chunks[doc_id] = [
+            {
+                "chunk_id": f"chunk-{new_id()}",
+                "chunk_number": i + 1,
+                "document_id": doc_id,
+                "content": f"Фрагмент {i + 1} документа {doc.get('title', '')}. Содержание этого фрагмента описывает ключевые характеристики.",
+                "page": (i % max(doc.get("pages_total", 1), 1)) + 1,
+                "score": round(random.uniform(0.7, 0.99), 2),
+                "is_indexed": doc.get("status") == "completed",
+                "created_at": doc.get("created_at", utcnow()),
+            }
+            for i in range(chunk_count)
+        ]
 
 
 def _get_document(doc_id: str) -> dict:
@@ -123,6 +185,72 @@ def _get_page_block(doc_id: str, page_num: int) -> dict:
     }
 
 
+def _get_queue_from_documents():
+    """Генерирует очередь из текущего состояния документов."""
+    queue = []
+    for doc_id, doc in _documents.items():
+        status = doc.get("status", "unknown")
+        if status in (
+            "queued",
+            "processing",
+            "failed",
+            "uploaded",
+            "parsing",
+            "validation",
+        ):
+            queue.append(
+                {
+                    "document_id": doc_id,
+                    "title": doc.get("title", ""),
+                    "document_type": doc.get("source_type", ""),
+                    "status": status,
+                    "progress_percent": doc.get("pages_processed", 0)
+                    / max(doc.get("pages_total", 1), 1)
+                    * 100
+                    if doc.get("pages_total", 0) > 0
+                    else 0,
+                    "pipeline": {
+                        "formation": {
+                            "parsing": "completed"
+                            if status
+                            in (
+                                "completed",
+                                "validation",
+                                "review_required",
+                                "ready_for_promotion",
+                                "approved",
+                            )
+                            else doc.get("ocr_status", "pending"),
+                            "validation": "completed"
+                            if status in ("ready_for_promotion", "approved")
+                            else ("pending" if status == "parsing" else "pending"),
+                            "registry": "completed"
+                            if status in ("approved",)
+                            else "pending",
+                        },
+                        "indexation": {
+                            "rag_indexing": "completed"
+                            if status == "approved"
+                            else (
+                                "pending"
+                                if status == "ready_for_promotion"
+                                else doc.get("index_status", "pending")
+                            ),
+                        },
+                    },
+                    "user_id": doc.get("user_id", ""),
+                    "uploaded_by": doc.get("uploaded_by", ""),
+                    "created_at": doc.get("created_at", ""),
+                    "started_at": doc.get("created_at", "")
+                    if status != "queued"
+                    else None,
+                    "estimated_completion": None,
+                }
+            )
+    queue.sort(key=lambda q: q.get("created_at", ""), reverse=True)
+    return queue
+
+
 # ---------------------------------------------------------------------------
 # Модели данных
 # ---------------------------------------------------------------------------
@@ -133,19 +261,6 @@ class SearchRequest(BaseModel):
     document_ids: Optional[List[str]] = None
     top_k: Optional[int] = 10
     filters: Optional[Dict[str, Any]] = None
-
-
-class ValidateCompareRequest(BaseModel):
-    normative_query: Optional[str] = None
-    project_document_id: Optional[str] = None
-    normative_fragment_id: Optional[str] = None
-    project_fragment_id: Optional[str] = None
-
-
-class ValidateChecksRequest(BaseModel):
-    project_document_ids: List[str]
-    nsi_document_ids: Optional[List[str]] = None
-    parameters: Optional[List[str]] = None
 
 
 class ReprocessRequest(BaseModel):
@@ -160,17 +275,24 @@ class ReprocessRequest(BaseModel):
 class DocumentListItem(BaseModel):
     document_id: str
     title: str
-    document_type: str
-    source: str
-    version: int
-    pages: int
-    ocr_status: str
-    index_status: str
+    doc_code: Optional[str] = None
+    source_type: str
+    era: str
+    validity_status: str
+    jurisdiction: Optional[str] = None
+    issuing_body: Optional[str] = None
+    mks_oks_code: Optional[str] = None
+    okstu_code: Optional[str] = None
+    classification_status: Dict[str, str]
+    status: str
+    latest_version: int
+    total_versions: int
+    chunk_count: int
+    chunk_validation: Optional[Dict[str, Any]] = None
     user_id: str
     uploaded_by: str
     created_at: str
     updated_at: str
-    registry_doc_id: Optional[str] = None
 
 
 class DocumentListResponse(BaseModel):
@@ -181,60 +303,42 @@ class DocumentListResponse(BaseModel):
 
 class DocumentDetailResponse(BaseModel):
     document_id: str
-    filename: str
-    document_type: str
+    title: str
+    doc_code: Optional[str] = None
+    source_type: str
+    era: str
+    validity_status: str
+    jurisdiction: Optional[str] = None
+    issuing_body: Optional[str] = None
+    mks_oks_code: Optional[str] = None
+    okstu_code: Optional[str] = None
+    classification_status: Dict[str, str]
+    successor_doc_id: Optional[str] = None
+    predecessor_doc_id: Optional[str] = None
+    chunk_container_id: Optional[str] = None
+    metadata: Dict[str, Any]
+    latest_version: int
+    total_versions: int
+    chunk_count: int
+    user_id: str
+    uploaded_by: str
     status: str
     file_size: int
     pages_total: int
     pages_processed: int
     pages_failed: int
-    user_id: str
-    uploaded_by: str
-    created_at: str
-    updated_at: str
-    metadata: Dict[str, Any]
-    registry_doc_id: Optional[str] = None
-
-
-class CheckItemSource(BaseModel):
-    document_id: str
-    page: int
-    page_preview_url: str
-    document_url: str
-
-
-class CheckItem(BaseModel):
-    check_item_id: str
-    project: str
-    section: str
-    parameter: str
-    project_value: str
-    nsi_requirement: str
-    nsi_document: str
-    status: str
-    match_status: str
-    comment: str
-    project_source: CheckItemSource
-    nsi_source: CheckItemSource
-
-
-class CheckResultResponse(BaseModel):
-    check_run_id: str
-    status: str
-    summary: Dict[str, int]
-    items: List[CheckItem]
     created_at: str
     updated_at: str
 
 
 class SearchResultItem(BaseModel):
-    fragment_id: str
+    section_id: str
     document_id: str
     document_title: str
     document_type: str
-    section: str
+    clause: str
     page: int
-    fragment: str
+    content: str
     score: float
     page_preview_url: str
     document_url: str
@@ -260,71 +364,108 @@ _init_data()
 
 
 @router.post("/documents", status_code=202)
-async def upload_document(
-    file: UploadFile = File(None),
-    document_type: str = Form("normative"),
-    title: str = Form(None),
-    metadata: str = Form(None),
-):
+async def upload_document(file: UploadFile = File(...), request: Request = None):
     """Загрузка документа (асинхронная)."""
     global _doc_id_counter
     _doc_id_counter += 1
     doc_id = f"doc-{new_id()}"
     now = utcnow()
 
+    user_id = (request.state.user.get("user_id") or "system") if request else "system"
+    user_name = (request.state.user.get("full_name") or user_id) if request else user_id
+
+    content_bytes = (file.filename or f"document_{doc_id}").encode()
+    content_hash = hashlib.sha256(content_bytes).hexdigest()
+    title_hash = hashlib.sha256(
+        (file.filename or f"Документ {doc_id}").encode()
+    ).hexdigest()
+
+    version_id = f"ver-{new_id()}"
+
     new_doc = {
         "document_id": doc_id,
-        "filename": file.filename if file else f"document_{doc_id}.pdf",
-        "title": title or file.filename or f"Документ {doc_id}",
-        "document_type": document_type,
+        "filename": file.filename or f"document_{doc_id}.pdf",
+        "title": file.filename or f"Документ {doc_id}",
+        "doc_code": None,
+        "source_type": "GOST",
+        "era": "CURRENT",
+        "validity_status": "active",
+        "jurisdiction": "RF",
+        "issuing_body": None,
+        "mks_oks_code": None,
+        "okstu_code": None,
+        "classification_status": {"mks_status": "unknown", "okstu_status": "unknown"},
+        "successor_doc_id": None,
+        "predecessor_doc_id": None,
+        "chunk_container_id": None,
+        "document_type": "specification",
         "source": "upload",
         "version": 1,
-        "status": "queued",
+        "latest_version": 1,
+        "total_versions": 1,
+        "chunk_count": 0,
+        "chunk_validation": None,
+        "status": "uploaded",
         "file_size": 1024000,
         "pages_total": 0,
         "pages_processed": 0,
         "pages_failed": 0,
         "ocr_status": "pending",
         "index_status": "pending",
-        "user_id": "u-001",
-        "uploaded_by": "Иванов С.П.",
-        "metadata": {"project": "ПКБ-101", "author": "Иванов С.П."},
+        "user_id": user_id,
+        "uploaded_by": user_name,
+        "metadata": {"year": 2026, "udc": "", "tags": []},
         "pages": [],
         "parameters": {},
         "extraction_confidence": 0.0,
         "unconfirmed_fields": [],
         "created_at": now,
         "updated_at": now,
+        "registry_doc_id": None,
     }
 
     _documents[doc_id] = new_doc
 
-    # Добавляем в очередь
-    _queue.append(
+    # Добавляем первую версию
+    _versions[doc_id] = [
         {
+            "version_id": version_id,
+            "version_number": 1,
             "document_id": doc_id,
             "title": new_doc["title"],
-            "document_type": document_type,
-            "status": "queued",
-            "progress_percent": 0,
-            "steps": {
-                "ocr": "pending",
-                "layout_parsing": "pending",
-                "indexing": "pending",
-            },
-            "user_id": "u-001",
-            "uploaded_by": "Иванов С.П.",
+            "file_size": new_doc["file_size"],
+            "content_hash_sha256": content_hash,
+            "title_hash_sha256": title_hash,
+            "status": "uploaded",
             "created_at": now,
-            "started_at": None,
-            "estimated_completion": None,
+            "uploaded_by": user_name,
         }
-    )
+    ]
+
+    # Инициализируем историю
+    _history[doc_id] = [
+        {
+            "event_id": f"evt-{new_id()}",
+            "document_id": doc_id,
+            "from_status": None,
+            "to_status": "uploaded",
+            "timestamp": now,
+            "user_id": user_id,
+            "comment": "Документ загружен",
+        }
+    ]
+
+    # Инициализируем chunks
+    _chunks[doc_id] = []
 
     return {
-        "document_id": doc_id,
-        "status": "queued",
-        "user_id": "u-001",
         "task_id": f"task-{new_id()}",
+        "version_id": version_id,
+        "status": "uploaded",
+        "content_hash_sha256": content_hash,
+        "is_duplicate_file": False,
+        "is_duplicate_document": False,
+        "title_hash_sha256": title_hash,
         "created_at": now,
     }
 
@@ -343,7 +484,7 @@ async def list_documents(
     if status:
         items = [d for d in items if d.get("status") == status]
     if document_type:
-        items = [d for d in items if d.get("document_type") == document_type]
+        items = [d for d in items if d.get("source_type") == document_type]
     if search:
         search_lower = search.lower()
         items = [
@@ -356,35 +497,56 @@ async def list_documents(
     # Сортируем по created_at (сначала новые)
     items.sort(key=lambda d: d.get("created_at", ""), reverse=True)
 
-    # Summary
+    # Summary с новыми статусами
     total = len(_documents)
-    ocr_completed = sum(
-        1 for d in _documents.values() if d.get("ocr_status") == "completed"
+    uploaded = sum(1 for d in _documents.values() if d.get("status") == "uploaded")
+    parsing = sum(
+        1
+        for d in _documents.values()
+        if d.get("status") == "parsing"
+        or (d.get("status") == "processing" and d.get("ocr_status") == "processing")
     )
-    indexed = sum(
-        1 for d in _documents.values() if d.get("index_status") == "completed"
+    validation = sum(1 for d in _documents.values() if d.get("status") == "validation")
+    review_required = sum(
+        1 for d in _documents.values() if d.get("status") == "review_required"
     )
-    need_attention = sum(
-        1 for d in _documents.values() if d.get("status") in ("failed", "processing")
+    ready_for_promotion = sum(
+        1
+        for d in _documents.values()
+        if d.get("status") == "ready_for_promotion" or d.get("status") == "completed"
     )
+    approved = sum(1 for d in _documents.values() if d.get("status") == "approved")
+    failed = sum(1 for d in _documents.values() if d.get("status") == "failed")
+    archived = sum(1 for d in _documents.values() if d.get("status") == "archived")
 
     result = []
     for d in items:
+        classification_status = d.get("classification_status", {})
+        if not isinstance(classification_status, dict):
+            classification_status = {"mks_status": "unknown", "okstu_status": "unknown"}
+
         result.append(
             {
                 "document_id": d["document_id"],
                 "title": d.get("title", ""),
-                "document_type": d.get("document_type", ""),
-                "source": d.get("source", ""),
-                "version": d.get("version", 1),
-                "pages": d.get("pages_total", 0),
-                "ocr_status": d.get("ocr_status", "pending"),
-                "index_status": d.get("index_status", "pending"),
+                "doc_code": d.get("doc_code"),
+                "source_type": d.get("source_type", ""),
+                "era": d.get("era", ""),
+                "validity_status": d.get("validity_status", ""),
+                "jurisdiction": d.get("jurisdiction"),
+                "issuing_body": d.get("issuing_body"),
+                "mks_oks_code": d.get("mks_oks_code"),
+                "okstu_code": d.get("okstu_code"),
+                "classification_status": classification_status,
+                "status": d.get("status", ""),
+                "latest_version": d.get("total_versions", 1),
+                "total_versions": d.get("total_versions", 1),
+                "chunk_count": d.get("chunk_count", 0),
+                "chunk_validation": d.get("chunk_validation"),
                 "user_id": d.get("user_id", ""),
                 "uploaded_by": d.get("uploaded_by", ""),
                 "created_at": d.get("created_at", ""),
                 "updated_at": d.get("updated_at", ""),
-                "registry_doc_id": d.get("metadata", {}).get("registry_doc_id"),
             }
         )
 
@@ -392,9 +554,14 @@ async def list_documents(
     return {
         "summary": {
             "total": total,
-            "ocr_completed": ocr_completed,
-            "indexed": indexed,
-            "need_attention": need_attention,
+            "uploaded": uploaded,
+            "parsing": parsing,
+            "validation": validation,
+            "review_required": review_required,
+            "ready_for_promotion": ready_for_promotion,
+            "approved": approved,
+            "failed": failed,
+            "archived": archived,
         },
         "items": paged["items"],
         "meta": paged["meta"],
@@ -407,11 +574,12 @@ async def get_document_queue(
     page_size: int = Query(50, ge=1, le=200),
 ):
     """Очередь обработки документов."""
-    paged = paginate(list(_queue), page, page_size)
+    queue = _get_queue_from_documents()
+    paged = paginate(queue, page, page_size)
     return {
         "queue": paged["items"],
         "meta": {
-            "total_in_queue": len(_queue),
+            "total_in_queue": len(queue),
             "page": paged["meta"]["page"],
             "page_size": paged["meta"]["page_size"],
         },
@@ -426,54 +594,53 @@ async def get_document_queue(
 @router.post("/documents/search", response_model=SearchResponse)
 async def search_documents(req: SearchRequest):
     """Поиск по документам."""
-    query_lower = req.query.lower()
 
-    # Mock-результаты поиска
+    # Mock-результаты поиска с обновлёнными полями
     mock_results = [
         {
-            "fragment_id": f"frag-{new_id()}",
+            "section_id": f"sec-{new_id()}",
             "document_id": "doc-001",
             "document_title": "Спецификация по ГОСТ 2.109",
             "document_type": "specification",
-            "section": "Основные требования",
+            "clause": "Основные требования",
             "page": 3,
-            "fragment": "Толщина стенки корпуса: 5 мм, материал: Сталь 45",
+            "content": "Толщина стенки корпуса: 5 мм, материал: Сталь 45",
             "score": 0.95,
             "page_preview_url": "/api/v1/documents/doc-001/pages/3/preview",
             "document_url": "/api/v1/documents/doc-001",
         },
         {
-            "fragment_id": f"frag-{new_id()}",
+            "section_id": f"sec-{new_id()}",
             "document_id": "rd-001",
             "document_title": "ГОСТ 2.109-73",
             "document_type": "normative",
-            "section": "Раздел 3",
+            "clause": "Раздел 3",
             "page": 5,
-            "fragment": "Толщина стенки не менее 4 мм для изделий данного типа",
+            "content": "Толщина стенки не менее 4 мм для изделий данного типа",
             "score": 0.92,
             "page_preview_url": "/api/v1/documents/rd-001/pages/5/preview",
             "document_url": "/api/v1/documents/rd-001",
         },
         {
-            "fragment_id": f"frag-{new_id()}",
+            "section_id": f"sec-{new_id()}",
             "document_id": "doc-002",
             "document_title": "Чертеж детали 101",
             "document_type": "drawing",
-            "section": "Габаритные размеры",
+            "clause": "Габаритные размеры",
             "page": 1,
-            "fragment": "150x80x25 мм, Сталь 45",
+            "content": "150x80x25 мм, Сталь 45",
             "score": 0.88,
             "page_preview_url": "/api/v1/documents/doc-002/pages/1/preview",
             "document_url": "/api/v1/documents/doc-002",
         },
         {
-            "fragment_id": f"frag-{new_id()}",
+            "section_id": f"sec-{new_id()}",
             "document_id": "rd-002",
             "document_title": "ГОСТ 2.307-2011",
             "document_type": "normative",
-            "section": "Допуски",
+            "clause": "Допуски",
             "page": 3,
-            "fragment": "Предельные отклонения размеров: H11, h11",
+            "content": "Предельные отклонения размеров: H11, h11",
             "score": 0.85,
             "page_preview_url": "/api/v1/documents/rd-002/pages/3/preview",
             "document_url": "/api/v1/documents/rd-002",
@@ -494,7 +661,6 @@ async def search_documents(req: SearchRequest):
 
     # Фильтр по датам (упрощённо)
     if req.filters and (req.filters.get("date_from") or req.filters.get("date_to")):
-        # Для мока просто возвращаем все результаты
         pass
 
     # Сортируем по score
@@ -521,7 +687,6 @@ async def search_documents_get(
     page_size: int = Query(50, ge=1, le=200),
 ):
     """Поиск GET-методом."""
-    # Перенаправляем на POST-метод
     doc_ids = document_ids.split(",") if document_ids else None
     return await search_documents(
         SearchRequest(query=q, document_ids=doc_ids, top_k=top_k)
@@ -532,90 +697,126 @@ async def search_documents_get(
 async def get_document(doc_id: str):
     """Детали документа."""
     doc = _get_document(doc_id)
+
+    classification_status = doc.get("classification_status", {})
+    if not isinstance(classification_status, dict):
+        classification_status = {"mks_status": "unknown", "okstu_status": "unknown"}
+
+    metadata = doc.get("metadata", {})
+    if not isinstance(metadata, dict):
+        metadata = {}
+
     return {
         "document_id": doc["document_id"],
-        "filename": doc.get("filename", ""),
-        "document_type": doc.get("document_type", ""),
+        "title": doc.get("title", ""),
+        "doc_code": doc.get("doc_code"),
+        "source_type": doc.get("source_type", ""),
+        "era": doc.get("era", ""),
+        "validity_status": doc.get("validity_status", ""),
+        "jurisdiction": doc.get("jurisdiction"),
+        "issuing_body": doc.get("issuing_body"),
+        "mks_oks_code": doc.get("mks_oks_code"),
+        "okstu_code": doc.get("okstu_code"),
+        "classification_status": classification_status,
+        "successor_doc_id": doc.get("successor_doc_id"),
+        "predecessor_doc_id": doc.get("predecessor_doc_id"),
+        "chunk_container_id": doc.get("chunk_container_id"),
+        "metadata": metadata,
+        "latest_version": doc.get("total_versions", 1),
+        "total_versions": doc.get("total_versions", 1),
+        "chunk_count": doc.get("chunk_count", 0),
+        "user_id": doc.get("user_id", ""),
+        "uploaded_by": doc.get("uploaded_by", ""),
         "status": doc.get("status", ""),
         "file_size": doc.get("file_size", 0),
         "pages_total": doc.get("pages_total", 0),
         "pages_processed": doc.get("pages_processed", 0),
         "pages_failed": doc.get("pages_failed", 0),
-        "user_id": doc.get("user_id", ""),
-        "uploaded_by": doc.get("uploaded_by", ""),
         "created_at": doc.get("created_at", ""),
         "updated_at": doc.get("updated_at", ""),
-        "metadata": doc.get("metadata", {}),
-        "registry_doc_id": doc.get("metadata", {}).get("registry_doc_id"),
     }
 
 
 @router.get("/documents/{doc_id}/status")
 async def get_document_status(doc_id: str):
-    """Статус обработки документа."""
+    """Статус обработки документа с обновлённой структурой pipeline."""
     doc = _get_document(doc_id)
     status = doc.get("status", "unknown")
 
-    base = {
+    # Определяем статусы этапов pipeline
+    parsing_status = "pending"
+    validation_status = "pending"
+    registry_status = "pending"
+    rag_indexing_status = "pending"
+
+    if status == "completed" or status == "ready_for_promotion":
+        parsing_status = "completed"
+        validation_status = "completed"
+        registry_status = "completed"
+        rag_indexing_status = (
+            "completed" if status == "ready_for_promotion" else "pending"
+        )
+    elif status == "approved":
+        parsing_status = "completed"
+        validation_status = "completed"
+        registry_status = "completed"
+        rag_indexing_status = "completed"
+    elif status == "processing" or status == "parsing":
+        parsing_status = doc.get("ocr_status", "processing")
+    elif status == "validation":
+        parsing_status = "completed"
+        validation_status = "processing"
+    elif status == "failed":
+        parsing_status = "failed"
+    elif status == "uploaded":
+        parsing_status = "pending"
+    else:
+        parsing_status = doc.get("ocr_status", "pending")
+
+    # Определяем признак наличия ошибок
+    error_details = None
+    if status == "failed":
+        error_details = {
+            "code": "OCR_FAILED",
+            "message": "Ошибка OCR-распознавания",
+            "details": {"failed_pages": doc.get("pages_failed", 0)},
+        }
+
+    return {
         "document_id": doc_id,
         "user_id": doc.get("user_id", ""),
         "status": status,
-        "progress_percent": 0,
-        "steps": {
-            "ocr": doc.get("ocr_status", "pending"),
-            "layout_parsing": "pending",
-            "indexing": doc.get("index_status", "pending"),
+        "progress_percent": (
+            100
+            if status in ("completed", "ready_for_promotion", "approved")
+            else (
+                int(
+                    (doc.get("pages_processed", 0) / max(doc.get("pages_total", 1), 1))
+                    * 100
+                )
+                if doc.get("pages_total", 0) > 0
+                else 0
+            )
+        ),
+        "pipeline": {
+            "formation": {
+                "parsing": parsing_status,
+                "validation": validation_status,
+                "registry": registry_status,
+            },
+            "indexation": {
+                "rag_indexing": rag_indexing_status,
+            },
+        },
+        "chunk_summary": {
+            "total": doc.get("chunk_count", 0),
+            "indexed": doc.get("chunk_count", 0)
+            if rag_indexing_status == "completed"
+            else 0,
         },
         "started_at": doc.get("created_at", ""),
+        "error": error_details,
     }
-
-    if status == "completed":
-        base.update(
-            {
-                "progress_percent": 100,
-                "ocr_result": {
-                    "pages_total": doc.get("pages_total", 0),
-                    "pages_processed": doc.get("pages_processed", 0),
-                    "pages_failed": doc.get("pages_failed", 0),
-                    "low_confidence_pages": [1]
-                    if doc.get("pages_total", 0) > 0
-                    and doc.get("extraction_confidence", 1) < 0.5
-                    else [],
-                    "avg_confidence": doc.get("extraction_confidence", 0.9),
-                },
-                "index_result": {
-                    "chunks_indexed": doc.get("pages_total", 0) * 3,
-                    "status": "completed",
-                },
-                "completed_at": doc.get("updated_at", ""),
-            }
-        )
-        return base
-
-    if status == "processing":
-        total = doc.get("pages_total", 1) or 1
-        processed = doc.get("pages_processed", 0)
-        base["progress_percent"] = int((processed / total) * 100)
-        base["estimated_completion"] = utcnow()
-        base["started_at"] = doc.get("created_at", "")
-        return base
-
-    if status == "failed":
-        base.update(
-            {
-                "progress_percent": 50,
-                "error": {
-                    "code": "OCR_FAILED",
-                    "message": "Ошибка OCR-распознавания",
-                    "details": {"failed_pages": doc.get("pages_failed", 0)},
-                },
-                "failed_at": doc.get("updated_at", ""),
-            }
-        )
-        return base
-
-    # queued
-    return base
 
 
 @router.get("/documents/{doc_id}/file")
@@ -648,11 +849,14 @@ async def get_page_preview(doc_id: str, page_num: int):
 @router.delete("/documents/{doc_id}")
 async def delete_document(doc_id: str):
     """Удалить документ."""
-    doc = _get_document(doc_id)
+    _get_document(doc_id)
     del _documents[doc_id]
-    # Также удаляем из очереди
-    global _queue
-    _queue = [q for q in _queue if q["document_id"] != doc_id]
+    # Также удаляем связанные данные
+    _versions.pop(doc_id, None)
+    _chunks.pop(doc_id, None)
+    _history.pop(doc_id, None)
+    _approvals.pop(doc_id, None)
+    _promotions.pop(doc_id, None)
     return {
         "document_id": doc_id,
         "deleted_at": utcnow(),
@@ -660,43 +864,41 @@ async def delete_document(doc_id: str):
 
 
 @router.post("/documents/{doc_id}/reprocess", status_code=202)
-async def reprocess_document(doc_id: str, req: Optional[ReprocessRequest] = None):
+async def reprocess_document(
+    doc_id: str, req: Optional[ReprocessRequest] = None, request: Request = None
+):
     """Переобработка документа."""
     doc = _get_document(doc_id)
     mode = req.mode if req and req.mode else "full"
+    user_id = (request.state.user.get("user_id") or "system") if request else "system"
 
     # Сбрасываем статус
-    doc["status"] = "queued"
+    doc["status"] = "parsing"
     doc["ocr_status"] = "pending"
     doc["index_status"] = "pending"
     doc["updated_at"] = utcnow()
 
-    _queue.append(
+    # Добавляем запись в историю
+    if doc_id not in _history:
+        _history[doc_id] = []
+    _history[doc_id].append(
         {
+            "event_id": f"evt-{new_id()}",
             "document_id": doc_id,
-            "title": doc.get("title", ""),
-            "document_type": doc.get("document_type", ""),
-            "status": "queued",
-            "progress_percent": 0,
-            "steps": {
-                "ocr": "pending",
-                "layout_parsing": "pending",
-                "indexing": "pending",
-            },
-            "user_id": doc.get("user_id", ""),
-            "uploaded_by": doc.get("uploaded_by", ""),
-            "created_at": utcnow(),
-            "started_at": None,
-            "estimated_completion": None,
+            "from_status": doc.get("status", "unknown"),
+            "to_status": "parsing",
+            "timestamp": utcnow(),
+            "user_id": user_id,
+            "comment": f"Запущена переобработка (режим: {mode})",
         }
     )
 
     return {
         "mode": mode,
         "document_id": doc_id,
-        "user_id": doc.get("user_id", ""),
+        "user_id": user_id,
         "task_id": f"task-{new_id()}",
-        "status": "queued",
+        "status": "parsing",
         "created_at": utcnow(),
     }
 
@@ -708,13 +910,239 @@ async def get_document_errors(
     page_size: int = Query(50, ge=1, le=200),
 ):
     """Ошибки обработки документа."""
-    doc = _get_document(doc_id)
+    _get_document(doc_id)
     items = [e for e in _document_errors if e["document_id"] == doc_id]
 
     paged = paginate(items, page, page_size)
     return {
         "errors": paged["items"],
         "meta": paged["meta"],
+    }
+
+
+# ===========================================================================
+# Группа versions
+# ===========================================================================
+
+
+@router.post("/documents/{doc_id}/versions", status_code=201)
+async def add_document_version(
+    doc_id: str, file: UploadFile = File(...), request: Request = None
+):
+    """Добавить новую версию документа."""
+    doc = _get_document(doc_id)
+    now = utcnow()
+    user_id = (request.state.user.get("user_id") or "system") if request else "system"
+    version_number = doc.get("total_versions", 1) + 1
+
+    content_bytes = (file.filename or f"{doc_id}_v{version_number}").encode()
+    content_hash = hashlib.sha256(content_bytes).hexdigest()
+    title_hash = hashlib.sha256(doc.get("title", "").encode()).hexdigest()
+
+    version_id = f"ver-{new_id()}"
+
+    new_version = {
+        "version_id": version_id,
+        "version_number": version_number,
+        "document_id": doc_id,
+        "title": doc.get("title", ""),
+        "file_size": doc.get("file_size", 0),
+        "content_hash_sha256": content_hash,
+        "title_hash_sha256": title_hash,
+        "status": "uploaded",
+        "created_at": now,
+        "uploaded_by": doc.get("uploaded_by", ""),
+    }
+
+    if doc_id not in _versions:
+        _versions[doc_id] = []
+    _versions[doc_id].insert(0, new_version)
+
+    doc["total_versions"] = version_number
+    doc["latest_version"] = version_number
+    doc["updated_at"] = now
+
+    # Добавляем запись в историю
+    if doc_id not in _history:
+        _history[doc_id] = []
+    _history[doc_id].append(
+        {
+            "event_id": f"evt-{new_id()}",
+            "document_id": doc_id,
+            "from_status": None,
+            "to_status": doc.get("status", "uploaded"),
+            "timestamp": now,
+            "user_id": user_id,
+            "comment": f"Добавлена версия {version_number}",
+        }
+    )
+
+    return {
+        "version_id": version_id,
+        "version_number": version_number,
+        "document_id": doc_id,
+        "content_hash_sha256": content_hash,
+        "title_hash_sha256": title_hash,
+        "status": "uploaded",
+        "created_at": now,
+    }
+
+
+@router.get("/documents/{doc_id}/versions")
+async def list_document_versions(doc_id: str):
+    """Список версий документа."""
+    _get_document(doc_id)
+    versions = _versions.get(doc_id, [])
+    return {
+        "document_id": doc_id,
+        "versions": versions,
+        "total": len(versions),
+    }
+
+
+# ===========================================================================
+# Группа approve / promote
+# ===========================================================================
+
+
+@router.post("/documents/{doc_id}/approve")
+async def approve_document(doc_id: str, request: Request = None):
+    """Подтверждение валидации документа."""
+    doc = _get_document(doc_id)
+    now = utcnow()
+    user_id = (request.state.user.get("user_id") or "system") if request else "system"
+
+    old_status = doc.get("status", "")
+    doc["status"] = "approved"
+    doc["updated_at"] = now
+
+    _approvals[doc_id] = {
+        "document_id": doc_id,
+        "approved_by": user_id,
+        "approved_at": now,
+        "previous_status": old_status,
+    }
+
+    if doc_id not in _history:
+        _history[doc_id] = []
+    _history[doc_id].append(
+        {
+            "event_id": f"evt-{new_id()}",
+            "document_id": doc_id,
+            "from_status": old_status,
+            "to_status": "approved",
+            "timestamp": now,
+            "user_id": user_id,
+            "comment": "Документ подтверждён",
+        }
+    )
+
+    return {
+        "document_id": doc_id,
+        "status": "approved",
+        "approved_at": now,
+        "previous_status": old_status,
+    }
+
+
+@router.post("/documents/{doc_id}/promote")
+async def promote_document(doc_id: str, request: Request = None):
+    """Продвижение документа в RAG-индекс."""
+    doc = _get_document(doc_id)
+    now = utcnow()
+    user_id = (request.state.user.get("user_id") or "system") if request else "system"
+
+    old_status = doc.get("status", "")
+    doc["status"] = "ready_for_promotion"
+    doc["updated_at"] = now
+
+    # Обновляем chunks — помечаем как индексированные
+    if doc_id in _chunks:
+        for chunk in _chunks[doc_id]:
+            chunk["is_indexed"] = True
+
+    _promotions[doc_id] = {
+        "document_id": doc_id,
+        "promoted_by": user_id,
+        "promoted_at": now,
+        "previous_status": old_status,
+        "chunks_indexed": doc.get("chunk_count", 0),
+    }
+
+    if doc_id not in _history:
+        _history[doc_id] = []
+    _history[doc_id].append(
+        {
+            "event_id": f"evt-{new_id()}",
+            "document_id": doc_id,
+            "from_status": old_status,
+            "to_status": "ready_for_promotion",
+            "timestamp": now,
+            "user_id": user_id,
+            "comment": "Документ отправлен в RAG-индекс",
+        }
+    )
+
+    return {
+        "document_id": doc_id,
+        "status": "ready_for_promotion",
+        "promoted_at": now,
+        "chunks_indexed": doc.get("chunk_count", 0),
+    }
+
+
+@router.get("/documents/{doc_id}/promotion-status")
+async def get_promotion_status(doc_id: str):
+    """Статус продвижения в RAG-индекс."""
+    doc = _get_document(doc_id)
+    promotion = _promotions.get(doc_id)
+    approval = _approvals.get(doc_id)
+
+    is_promoted = doc.get("status") in ("ready_for_promotion", "approved")
+    total_chunks = doc.get("chunk_count", 0)
+    indexed_chunks = sum(1 for c in _chunks.get(doc_id, []) if c.get("is_indexed"))
+
+    return {
+        "document_id": doc_id,
+        "is_promoted": is_promoted,
+        "promotion_status": "promoted" if is_promoted else "not_promoted",
+        "approval_status": "approved"
+        if doc.get("status") == "approved"
+        else (
+            "not_approved"
+            if doc.get("status") in ("uploaded", "parsing", "processing")
+            else "approved"
+        ),
+        "chunks_total": total_chunks,
+        "chunks_indexed": indexed_chunks,
+        "promoted_at": promotion.get("promoted_at") if promotion else None,
+        "approved_at": approval.get("approved_at") if approval else None,
+    }
+
+
+@router.get("/documents/{doc_id}/history")
+async def get_document_history(doc_id: str):
+    """История статусов документа."""
+    _get_document(doc_id)
+    events = _history.get(doc_id, [])
+    # Сортируем от новых к старым
+    events.sort(key=lambda e: e.get("timestamp", ""), reverse=True)
+    return {
+        "document_id": doc_id,
+        "events": events,
+        "total": len(events),
+    }
+
+
+@router.get("/documents/{doc_id}/chunks")
+async def get_document_chunks(doc_id: str):
+    """Чанки (фрагменты) документа."""
+    _get_document(doc_id)
+    chunks = _chunks.get(doc_id, [])
+    return {
+        "document_id": doc_id,
+        "chunks": chunks,
+        "total": len(chunks),
     }
 
 
@@ -798,183 +1226,11 @@ async def get_document_parameters(doc_id: str):
 
     return {
         "document_id": doc_id,
-        "document_type": doc.get("document_type", ""),
+        "document_type": doc.get("source_type", ""),
         "parameters": params,
         "extraction_confidence": doc.get("extraction_confidence", 0.0),
         "unconfirmed_fields": doc.get("unconfirmed_fields", []),
         "updated_at": doc.get("updated_at", ""),
-    }
-
-
-# ===========================================================================
-# Группа validate
-# ===========================================================================
-
-
-@router.post("/validate/compare", status_code=202)
-async def validate_compare(req: ValidateCompareRequest):
-    """Сравнение с эталоном (асинхронно)."""
-    comparison_id = f"comp-{new_id()}"
-    now = utcnow()
-
-    new_comparison = {
-        "comparison_id": comparison_id,
-        "status": "processing",
-        "normative_block": {
-            "document_id": req.normative_fragment_id or "rd-001",
-            "document_title": "ГОСТ 2.109-73",
-            "page": 5,
-            "requirement_text": "Толщина стенки должна быть не менее 4 мм для данного типа изделий.",
-        },
-        "project_block": {
-            "document_id": req.project_document_id or "doc-001",
-            "document_title": "Спецификация по ГОСТ 2.109",
-            "page": 3,
-            "parameter_text": "Толщина стенки: 5 мм",
-        },
-        "match_status": "match",
-        "details": "Значение 5 мм соответствует требованию ≥ 4 мм.",
-        "sources": [
-            {"document_id": "rd-001", "page": 5},
-            {"document_id": "doc-001", "page": 3},
-        ],
-        "disclaimer": "Результат требует инженерной верификации.",
-        "processing_time_ms": random.randint(500, 3000),
-    }
-    _comparisons[comparison_id] = new_comparison
-
-    return {
-        "normative_query": req.normative_query or "",
-        "project_document_id": req.project_document_id or "",
-        "normative_fragment_id": req.normative_fragment_id or "",
-        "project_fragment_id": req.project_fragment_id or "",
-        "comparison_id": comparison_id,
-        "status": "processing",
-        "created_at": now,
-    }
-
-
-@router.get("/validate/compare/{comparison_id}")
-async def get_comparison(comparison_id: str):
-    """Результат сравнения."""
-    comparison = _comparisons.get(comparison_id)
-    if not comparison:
-        raise HTTPException(
-            status_code=404,
-            detail=error_response("NOT_FOUND", "Сравнение не найдено"),
-        )
-
-    # Если статус processing, через пару вызовов станет completed
-    if comparison["status"] == "processing":
-        comparison["status"] = "completed"
-
-    return comparison
-
-
-@router.post("/validate/checks", status_code=200, response_model=CheckResultResponse)
-async def validate_checks(req: ValidateChecksRequest):
-    """Массовая проверка по НСИ (синхронно)."""
-    check_run_id = f"check-{new_id()}"
-    now = utcnow()
-
-    # Генерируем mock-результаты
-    mock_items = []
-    statuses = ["ok", "warning", "error"]
-    match_statuses = ["match", "mismatch", "partial_match"]
-    ok_count = 0
-    warn_count = 0
-    err_count = 0
-
-    for i in range(5):
-        s = random.choices(statuses, weights=[6, 3, 1])[0]
-        if s == "ok":
-            ok_count += 1
-        elif s == "warning":
-            warn_count += 1
-        else:
-            err_count += 1
-
-        mock_items.append(
-            {
-                "check_item_id": f"ci-{new_id()}",
-                "project": "ПКБ-101",
-                "section": f"Раздел {i + 1}",
-                "parameter": f"Параметр {i + 1}",
-                "project_value": f"Значение {i + 1}",
-                "nsi_requirement": f"Требование {i + 1}",
-                "nsi_document": f"ГОСТ 2.{100 + i * 10}-73",
-                "status": s,
-                "match_status": random.choice(match_statuses),
-                "comment": "" if s == "ok" else "Требуется проверка",
-                "project_source": {
-                    "document_id": req.project_document_ids[0]
-                    if req.project_document_ids
-                    else "doc-001",
-                    "page": i + 1,
-                    "page_preview_url": f"/api/v1/documents/{req.project_document_ids[0] if req.project_document_ids else 'doc-001'}/pages/{i + 1}/preview",
-                    "document_url": f"/api/v1/documents/{req.project_document_ids[0] if req.project_document_ids else 'doc-001'}",
-                },
-                "nsi_source": {
-                    "document_id": req.nsi_document_ids[0]
-                    if req.nsi_document_ids
-                    else "rd-001",
-                    "page": i + 1,
-                    "page_preview_url": f"/api/v1/documents/{req.nsi_document_ids[0] if req.nsi_document_ids else 'rd-001'}/pages/{i + 1}/preview",
-                    "document_url": f"/api/v1/documents/{req.nsi_document_ids[0] if req.nsi_document_ids else 'rd-001'}",
-                },
-            }
-        )
-
-    new_check = {
-        "check_run_id": check_run_id,
-        "status": "completed",
-        "summary": {"ok": ok_count, "warning": warn_count, "error": err_count},
-        "items": mock_items,
-        "created_at": now,
-        "updated_at": now,
-    }
-    _validation_checks[check_run_id] = new_check
-
-    return new_check
-
-
-@router.get("/validate/checks/{check_run_id}")
-async def get_check_result(check_run_id: str):
-    """Статус проверки."""
-    check = _validation_checks.get(check_run_id)
-    if not check:
-        raise HTTPException(
-            status_code=404,
-            detail=error_response("NOT_FOUND", "Проверка не найдена"),
-        )
-
-    return {
-        "check_run_id": check["check_run_id"],
-        "status": check.get("status", "completed"),
-        "progress_percent": 100 if check.get("status") == "completed" else 50,
-        "created_at": check.get("created_at", ""),
-        "updated_at": check.get("updated_at", ""),
-    }
-
-
-@router.get("/validate/checks/{check_run_id}/export")
-async def export_check_result(
-    check_run_id: str,
-    format: str = Query("pdf"),
-):
-    """Экспорт результата проверки."""
-    check = _validation_checks.get(check_run_id)
-    if not check:
-        raise HTTPException(
-            status_code=404,
-            detail=error_response("NOT_FOUND", "Проверка не найдена"),
-        )
-
-    return {
-        "check_run_id": check_run_id,
-        "export_url": f"/api/v1/exports/check_{check_run_id}.{format}",
-        "format": format,
-        "created_at": utcnow(),
     }
 
 

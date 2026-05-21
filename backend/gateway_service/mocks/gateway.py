@@ -9,7 +9,6 @@ Combines all 5 routers on a single port 8081 with:
 - Unified error format (Registry spec)
 """
 
-import asyncio
 import json
 import os
 import sys
@@ -40,6 +39,12 @@ from mocks.registry_service.main import registry_docs_router
 
 _ACCESS_TOKEN_USER: Dict[str, str] = {}  # access_token -> user_id
 _MOCK_USERS: Dict[str, dict] = {u["user_id"]: u for u in SEED_USERS}
+
+# ---------------------------------------------------------------------------
+# Test mode flag — при True анонимные запросы пропускаются
+# (используется в тестах, чтобы не переписывать каждый вызов с токеном)
+# ---------------------------------------------------------------------------
+ALLOW_ANONYMOUS = False
 
 _orig_make_token = auth_mod._make_token
 
@@ -72,6 +77,7 @@ class RBACMiddleware(BaseHTTPMiddleware):
 
         user_context: Dict[str, Any] = {
             "user_id": None,
+            "full_name": None,
             "roles": [],
             "role": None,
             "permissions": {},
@@ -86,6 +92,7 @@ class RBACMiddleware(BaseHTTPMiddleware):
                 user = _MOCK_USERS[user_id]
                 user_context.update(
                     user_id=user_id,
+                    full_name=user.get("full_name"),
                     roles=user.get("roles", []),
                     role=user.get("role"),
                     permissions=user.get("permissions", {}),
@@ -95,7 +102,29 @@ class RBACMiddleware(BaseHTTPMiddleware):
 
         request.state.user = user_context
 
-        # RBAC enforcement for /admin/* paths
+        # RBAC enforcement
+        # ────────────────────────────────────────────────────────
+        # Флаг для тестов — позволяет анонимный доступ.
+        # В реальной эксплуатации выставить ALLOW_ANONYMOUS = False.
+        # ────────────────────────────────────────────────────────
+        if ALLOW_ANONYMOUS:
+            # Режим "soft mock" — анонимные запросы пропускаются,
+            # проверка permissions только для аутентифицированных.
+            pass
+        else:
+            # Режим "hard mock" — блокируем всех, кроме /auth/* и /system/health
+            if not (
+                path.startswith("/api/v1/auth/") or path == "/api/v1/system/health"
+            ):
+                if not user_context["is_authenticated"]:
+                    return JSONResponse(
+                        status_code=401,
+                        content=error_response(
+                            "UNAUTHORIZED", "Требуется аутентификация"
+                        ),
+                    )
+
+        # /admin/* — только system_admin
         if path.startswith("/api/v1/admin"):
             if not user_context["is_authenticated"]:
                 return JSONResponse(
@@ -111,6 +140,99 @@ class RBACMiddleware(BaseHTTPMiddleware):
                         "Недостаточно прав для доступа к административным функциям",
                     ),
                 )
+
+        # ────────────────────────────────────────────────────────
+        # Если пользователь аутентифицирован — проверяем permissions
+        # на write-операции. Анонимные запросы пропускаем (fallback).
+        # ────────────────────────────────────────────────────────
+        if user_context["is_authenticated"]:
+            permissions = user_context.get("permissions", {})
+
+            # POST /documents — can_upload_documents
+            if request.method == "POST" and path == "/api/v1/documents":
+                if not permissions.get("can_upload_documents", False):
+                    return JSONResponse(
+                        status_code=403,
+                        content=error_response(
+                            "FORBIDDEN",
+                            "Недостаточно прав для загрузки документов",
+                        ),
+                    )
+
+            # POST/PUT/DELETE /classifiers — can_manage_classifiers
+            if request.method in ("POST", "PUT", "PATCH", "DELETE") and path.startswith(
+                "/api/v1/classifiers"
+            ):
+                if not permissions.get("can_manage_classifiers", False):
+                    return JSONResponse(
+                        status_code=403,
+                        content=error_response(
+                            "FORBIDDEN",
+                            "Недостаточно прав для управления классификаторами",
+                        ),
+                    )
+
+            # POST/PUT/DELETE /terminology — can_manage_terminology
+            if request.method in ("POST", "PUT", "PATCH", "DELETE") and path.startswith(
+                "/api/v1/terminology"
+            ):
+                if not permissions.get("can_manage_terminology", False):
+                    return JSONResponse(
+                        status_code=403,
+                        content=error_response(
+                            "FORBIDDEN",
+                            "Недостаточно прав для управления терминологией",
+                        ),
+                    )
+
+            # POST/PUT/DELETE /registry/documents — can_manage_registry
+            if request.method in ("POST", "PUT", "PATCH", "DELETE") and path.startswith(
+                "/api/v1/registry/documents"
+            ):
+                if not permissions.get("can_manage_registry", False):
+                    return JSONResponse(
+                        status_code=403,
+                        content=error_response(
+                            "FORBIDDEN",
+                            "Недостаточно прав для управления реестром",
+                        ),
+                    )
+
+            # DELETE /documents/{id}, POST /documents/{id}/reprocess,
+            # POST /documents/{id}/approve, POST /documents/{id}/promote
+            # — knowledge_admin / system_admin only
+            _doc_write = request.method == "DELETE" or (
+                request.method == "POST"
+                and path.startswith("/api/v1/documents/")
+                and not path.startswith("/api/v1/documents/search")
+                and not path.startswith("/api/v1/documents/queue")
+            )
+            if _doc_write:
+                if not (
+                    permissions.get("can_manage_classifiers", False)
+                    or permissions.get("can_manage_terminology", False)
+                ):
+                    return JSONResponse(
+                        status_code=403,
+                        content=error_response(
+                            "FORBIDDEN",
+                            "Недостаточно прав для управления документами",
+                        ),
+                    )
+
+            # GET /monitor/metrics — knowledge_admin / system_admin
+            if request.method == "GET" and path == "/api/v1/monitor/metrics":
+                if not (
+                    permissions.get("can_manage_classifiers", False)
+                    or permissions.get("can_manage_registry", False)
+                ):
+                    return JSONResponse(
+                        status_code=403,
+                        content=error_response(
+                            "FORBIDDEN",
+                            "Недостаточно прав для просмотра метрик",
+                        ),
+                    )
 
         return await call_next(request)
 
@@ -149,15 +271,9 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         if response.status_code < 500:
             try:
-                body = await asyncio.gather(response.body())
-                body_json = (
-                    json.loads(body[0]) if isinstance(body[0], bytes) else body[0]
-                )
+                body_json = json.loads(response.body)
             except Exception:
-                try:
-                    body_json = json.loads(str(response.body))
-                except Exception:
-                    body_json = {"detail": "cached"}
+                body_json = {"detail": "cached"}
             _IDEMPOTENCY_STORE[key] = {
                 "status_code": response.status_code,
                 "body": body_json,

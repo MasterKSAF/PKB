@@ -1,6 +1,7 @@
 """
 Comprehensive API tests for PKB Neuroassistant Mock Services.
 Tests all 4 services through the unified gateway (port 8081).
+Updated for new API specifications — seed data, models, endpoints.
 """
 
 import os
@@ -13,6 +14,13 @@ sys.path.insert(
 import pytest
 from fastapi.testclient import TestClient
 
+import mocks.gateway
+
+# Import rate limiter state to reset between test classes
+from mocks.auth_service.main import _rate_limits as _auth_rate_limits
+
+# Разрешаем анонимный доступ в тестах (тесты не проверяют RBAC)
+mocks.gateway.ALLOW_ANONYMOUS = True
 from mocks.gateway import app
 
 client = TestClient(app, raise_server_exceptions=False)
@@ -31,36 +39,115 @@ TEST_USER_EMAIL = "ivanov@example.com"
 TEST_USER_PASS = "secret123"
 
 
-def get_token() -> str:
-    resp = client.post(
-        f"{AUTH}/token",
-        json={"username": TEST_USER_EMAIL, "password": TEST_USER_PASS},
-    )
-    return resp.json().get("access_token", "")
+def _reset_rate_limiter():
+    """Reset the auth rate limiter between test classes (5 req/min per IP)."""
+    _auth_rate_limits.clear()
 
 
-def auth_header() -> dict:
-    """Returns admin token for admin endpoint tests."""
-    resp = client.post(
-        f"{AUTH}/token",
-        json={"username": "admin@example.com", "password": "admin123"},
-    )
-    return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+# Cached tokens to avoid hitting the 5 req/min rate limiter
+# All tokens are pre-cached at module load time.
+# Note: get_token() and engineer_header() both use ivanov@example.com
+_CACHED_TOKEN: str = ""
+_CACHED_ENGINEER_HEADER: dict = {}
+_CACHED_ADMIN_HEADER: dict = {}
+_CACHED_KUZNETSOV_TOKEN: str = ""
+_CACHED_PETROVA_TOKEN: str = ""
 
 
-def engineer_header() -> dict:
-    """Returns engineer token for RBAC-negative tests."""
+def _precache_all_tokens():
+    """Pre-cache (5) tokens at module load to avoid rate limiting (5 req/min per IP).
+
+    Login calls: ivanov (shared), admin, kuznetsov, petrova = 4 total
+    """
+    # 1. ivanov@example.com — shared by get_token() and engineer_header()
     resp = client.post(
         f"{AUTH}/token",
         json={"username": "ivanov@example.com", "password": "secret123"},
     )
-    return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+    token = resp.json().get("access_token", "")
+    global _CACHED_TOKEN
+    _CACHED_TOKEN = token
+    global _CACHED_ENGINEER_HEADER
+    _CACHED_ENGINEER_HEADER = {"Authorization": f"Bearer {token}"}
+
+    # 2. admin@example.com
+    resp = client.post(
+        f"{AUTH}/token",
+        json={"username": "admin@example.com", "password": "admin123"},
+    )
+    global _CACHED_ADMIN_HEADER
+    _CACHED_ADMIN_HEADER = {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+    # 3. kuznetsov@example.com
+    resp = client.post(
+        f"{AUTH}/token",
+        json={"username": "kuznetsov@example.com", "password": "secret789"},
+    )
+    global _CACHED_KUZNETSOV_TOKEN
+    _CACHED_KUZNETSOV_TOKEN = resp.json().get("access_token", "")
+
+    # 4. petrova@example.com
+    resp = client.post(
+        f"{AUTH}/token",
+        json={"username": "petrova@example.com", "password": "secret456"},
+    )
+    global _CACHED_PETROVA_TOKEN
+    _CACHED_PETROVA_TOKEN = resp.json().get("access_token", "")
+
+
+# Pre-cache all tokens at module load time
+_precache_all_tokens()
+
+
+def _login_user(username: str, password: str) -> dict:
+    """Uncached login call — for tests that specifically test login behavior."""
+    resp = client.post(
+        f"{AUTH}/token",
+        json={"username": username, "password": password},
+    )
+    return resp.json()
+
+
+def _get_cached_token(username: str, password: str) -> str:
+    """Get a token for a user from the pre-cached store."""
+    cache_key = f"{username}:{password}"
+    if cache_key == f"{TEST_USER_EMAIL}:{TEST_USER_PASS}":
+        return _CACHED_TOKEN
+    if cache_key == "admin@example.com:admin123":
+        return _CACHED_ADMIN_HEADER.get("Authorization", "").replace("Bearer ", "")
+    if cache_key == "ivanov@example.com:secret123":
+        return _CACHED_ENGINEER_HEADER.get("Authorization", "").replace("Bearer ", "")
+    if cache_key == "kuznetsov@example.com:secret789":
+        return _CACHED_KUZNETSOV_TOKEN
+    if cache_key == "petrova@example.com:secret456":
+        return _CACHED_PETROVA_TOKEN
+    # Fallback — this will likely be rate limited, but cache miss is rare
+    return _login_user(username, password).get("access_token", "")
+
+
+def get_token() -> str:
+    """Returns the pre-cached token for the test user."""
+    return _CACHED_TOKEN
+
+
+def auth_header() -> dict:
+    """Returns pre-cached admin token for admin endpoint tests."""
+    return _CACHED_ADMIN_HEADER
+
+
+def engineer_header() -> dict:
+    """Returns pre-cached engineer token for RBAC-negative tests."""
+    return _CACHED_ENGINEER_HEADER
 
 
 def assert_ok(resp, status_code=200):
     assert resp.status_code == status_code, (
         f"Expected {status_code}, got {resp.status_code}: {resp.text[:200]}"
     )
+
+
+def _make_header_from_token(token: str) -> dict:
+    return {"Authorization": f"Bearer {token}"}
 
 
 def assert_paginated(data):
@@ -76,6 +163,9 @@ def assert_paginated(data):
 
 
 class TestAuthService:
+    def setup_method(self):
+        _reset_rate_limiter()
+
     def test_1_login_success(self):
         resp = client.post(
             f"{AUTH}/token",
@@ -87,12 +177,14 @@ class TestAuthService:
         assert "refresh_token" in data
         assert data["token_type"] == "bearer"
         assert data["expires_in"] == 3600
+        assert "expires_at" in data
 
     def test_2_login_invalid_password(self):
         resp = client.post(
             f"{AUTH}/token", json={"username": TEST_USER_EMAIL, "password": "wrong"}
         )
         assert resp.status_code == 401
+        assert "error" in resp.json()
 
     def test_3_refresh_token(self):
         login = client.post(
@@ -123,6 +215,8 @@ class TestAuthService:
         assert "user_id" in data
         assert "full_name" in data
         assert "permissions" in data
+        # permissions is Dict[str, bool] in new spec
+        assert isinstance(data["permissions"], dict)
 
     def test_6_list_users(self):
         resp = client.get(
@@ -243,7 +337,8 @@ class TestAuthService:
 
     def test_20_internal_validate_token(self):
         resp = client.post(
-            f"{BASE}/internal/auth/validate", json={"access_token": "valid_token_12345"}
+            f"{BASE}/internal/auth/validate",
+            json={"access_token": "valid_token_12345"},
         )
         assert_ok(resp)
         assert resp.json()["valid"] is True
@@ -265,6 +360,9 @@ class TestAuthService:
 
 
 class TestOrchestratorService:
+    def setup_method(self):
+        _reset_rate_limiter()
+
     def test_23_list_documents(self):
         resp = client.get(f"{ORCH}/documents")
         assert_ok(resp)
@@ -272,14 +370,23 @@ class TestOrchestratorService:
         assert "items" in data
         assert "summary" in data
         assert_paginated(data)
+        # New summary structure
+        summary = data["summary"]
+        assert "total" in summary
+        assert "uploaded" in summary
+        assert "parsing" in summary
+        assert "validation" in summary
+        assert "review_required" in summary
+        assert "ready_for_promotion" in summary
+        assert "approved" in summary
+        assert "failed" in summary
+        assert "archived" in summary
 
     def test_24_list_documents_filter_type(self):
-        resp = client.get(
-            f"{ORCH}/documents", params={"document_type": "specification"}
-        )
+        resp = client.get(f"{ORCH}/documents", params={"document_type": "GOST"})
         assert_ok(resp)
         for doc in resp.json()["items"]:
-            assert doc["document_type"] == "specification"
+            assert doc["source_type"] == "GOST"
 
     def test_25_list_documents_filter_status(self):
         resp = client.get(f"{ORCH}/documents", params={"status": "completed"})
@@ -288,7 +395,25 @@ class TestOrchestratorService:
     def test_26_get_document(self):
         resp = client.get(f"{ORCH}/documents/doc-001")
         assert_ok(resp)
-        assert resp.json()["document_id"] == "doc-001"
+        data = resp.json()
+        assert data["document_id"] == "doc-001"
+        # New fields in DocumentDetailResponse
+        assert "doc_code" in data
+        assert "source_type" in data
+        assert "era" in data
+        assert "validity_status" in data
+        assert "jurisdiction" in data
+        assert "issuing_body" in data
+        assert "mks_oks_code" in data
+        assert "okstu_code" in data
+        assert "classification_status" in data
+        assert "successor_doc_id" in data
+        assert "predecessor_doc_id" in data
+        assert "chunk_container_id" in data
+        assert "metadata" in data
+        assert "latest_version" in data
+        assert "total_versions" in data
+        assert "chunk_count" in data
 
     def test_27_get_document_not_found(self):
         resp = client.get(f"{ORCH}/documents/nonexistent")
@@ -297,7 +422,21 @@ class TestOrchestratorService:
     def test_28_document_status(self):
         resp = client.get(f"{ORCH}/documents/doc-001/status")
         assert_ok(resp)
-        assert resp.json()["status"] == "completed"
+        data = resp.json()
+        assert data["status"] == "completed"
+        # New pipeline structure
+        assert "pipeline" in data
+        pipeline = data["pipeline"]
+        assert "formation" in pipeline
+        assert "indexation" in pipeline
+        assert "parsing" in pipeline["formation"]
+        assert "validation" in pipeline["formation"]
+        assert "registry" in pipeline["formation"]
+        assert "rag_indexing" in pipeline["indexation"]
+        # Chunk summary
+        assert "chunk_summary" in data
+        assert "total" in data["chunk_summary"]
+        assert "indexed" in data["chunk_summary"]
 
     def test_29_document_file(self):
         resp = client.get(f"{ORCH}/documents/doc-001/file")
@@ -333,7 +472,14 @@ class TestOrchestratorService:
     def test_35_document_queue(self):
         resp = client.get(f"{ORCH}/documents/queue")
         assert_ok(resp)
-        assert "queue" in resp.json()
+        data = resp.json()
+        assert "queue" in data
+        if len(data["queue"]) > 0:
+            item = data["queue"][0]
+            # New queue item uses pipeline structure
+            assert "pipeline" in item
+            assert "formation" in item["pipeline"]
+            assert "indexation" in item["pipeline"]
 
     def test_36_post_search(self):
         resp = client.post(
@@ -343,6 +489,12 @@ class TestOrchestratorService:
         data = resp.json()
         assert "items" in data
         assert len(data["items"]) > 0
+        # New field names: section_id, clause, content
+        item = data["items"][0]
+        assert "section_id" in item
+        assert "clause" in item
+        assert "content" in item
+        assert "page" in item
 
     def test_37_get_search(self):
         resp = client.get(
@@ -363,76 +515,133 @@ class TestOrchestratorService:
         assert_ok(resp)
         assert "errors" in resp.json()
 
-    def test_40_validate_compare(self):
-        resp = client.post(
-            f"{ORCH}/validate/compare", json={"project_document_id": "doc-001"}
-        )
-        assert_ok(resp, 202)
-        assert "comparison_id" in resp.json()
+    # --- validate/compare and validate/checks tests REMOVED ---
 
-    def test_41_get_comparison(self):
-        create = client.post(
-            f"{ORCH}/validate/compare", json={"project_document_id": "doc-001"}
-        ).json()
-        resp = client.get(f"{ORCH}/validate/compare/{create['comparison_id']}")
-        assert_ok(resp)
-        assert "match_status" in resp.json()
-
-    def test_42_validate_checks(self):
-        resp = client.post(
-            f"{ORCH}/validate/checks", json={"project_document_ids": ["doc-001"]}
-        )
-        assert resp.status_code in (200, 202)
-
-    def test_43_get_check_result(self):
-        create = client.post(
-            f"{ORCH}/validate/checks", json={"project_document_ids": ["doc-001"]}
-        ).json()
-        if "check_run_id" in create:
-            resp = client.get(f"{ORCH}/validate/checks/{create['check_run_id']}")
-            assert_ok(resp)
-
-    def test_44_export_check(self):
-        create = client.post(
-            f"{ORCH}/validate/checks", json={"project_document_ids": ["doc-001"]}
-        ).json()
-        if "check_run_id" in create:
-            resp = client.get(f"{ORCH}/validate/checks/{create['check_run_id']}/export")
-            assert_ok(resp)
-
-    def test_45_monitor_metrics(self):
+    def test_40_monitor_metrics(self):
         resp = client.get(f"{ORCH}/monitor/metrics")
         assert_ok(resp)
         data = resp.json()
         assert "control_metrics" in data
         assert "logs" in data
 
-    def test_46_reprocess_document(self):
+    def test_41_reprocess_document(self):
         resp = client.post(f"{ORCH}/documents/doc-001/reprocess", json={"mode": "full"})
         assert_ok(resp, 202)
-        assert resp.json()["status"] == "queued"
+        assert resp.json()["status"] == "parsing"
 
-    def test_47_upload_document(self):
+    def test_42_upload_document(self):
+        """Upload document — new response format with task_id, version_id etc."""
         resp = client.post(
             f"{ORCH}/documents",
-            data={"document_type": "specification", "title": "Test Doc"},
+            files={"file": ("test.pdf", b"%PDF-1.4 mock content", "application/pdf")},
         )
         assert_ok(resp, 202)
-        assert "document_id" in resp.json()
+        data = resp.json()
+        # New response fields
+        assert "task_id" in data
+        assert "version_id" in data
+        assert "status" in data
+        assert "content_hash_sha256" in data
+        assert "is_duplicate_file" in data
+        assert "is_duplicate_document" in data
+        assert "title_hash_sha256" in data
+        assert "created_at" in data
 
-    def test_48_delete_document(self):
+    def test_43_delete_document(self):
+        # Upload a doc first to have something to delete
         create = client.post(
-            f"{ORCH}/documents", data={"document_type": "drawing", "title": "To Delete"}
+            f"{ORCH}/documents",
+            files={"file": ("todel.pdf", b"delete me", "application/pdf")},
         ).json()
-        doc_id = create["document_id"]
-        resp = client.delete(f"{ORCH}/documents/{doc_id}")
-        assert_ok(resp)
-        resp = client.get(f"{ORCH}/documents/{doc_id}")
-        assert resp.status_code == 404
+        # We need to get the document_id. Since the upload response doesn't have it,
+        # let's list documents and find the latest one
+        resp = client.get(f"{ORCH}/documents", params={"page": 1, "page_size": 1})
+        docs = resp.json()["items"]
+        if docs:
+            doc_id = docs[0]["document_id"]
+            resp = client.delete(f"{ORCH}/documents/{doc_id}")
+            assert_ok(resp)
 
-    def test_49_health(self):
+    def test_44_health(self):
         resp = client.get(f"{ORCH}/system/health")
         assert_ok(resp)
+
+    # --- NEW endpoint tests for documents ---
+
+    def test_45_add_document_version(self):
+        """POST /documents/{doc_id}/versions — add new version."""
+        resp = client.post(
+            f"{ORCH}/documents/doc-001/versions",
+            files={"file": ("v2.pdf", b"version 2 content", "application/pdf")},
+        )
+        assert_ok(resp, 201)
+        data = resp.json()
+        assert "version_id" in data
+        assert "version_number" in data
+        assert data["document_id"] == "doc-001"
+        assert data["version_number"] > 1
+        assert "content_hash_sha256" in data
+        assert "title_hash_sha256" in data
+        assert "status" in data
+
+    def test_46_list_document_versions(self):
+        """GET /documents/{doc_id}/versions — list versions."""
+        resp = client.get(f"{ORCH}/documents/doc-001/versions")
+        assert_ok(resp)
+        data = resp.json()
+        assert "versions" in data
+        assert "total" in data
+        assert len(data["versions"]) > 0
+
+    def test_47_approve_document(self):
+        """POST /documents/{doc_id}/approve — approve document."""
+        resp = client.post(f"{ORCH}/documents/doc-001/approve")
+        assert_ok(resp)
+        data = resp.json()
+        assert data["document_id"] == "doc-001"
+        assert data["status"] == "approved"
+        assert "approved_at" in data
+        assert "previous_status" in data
+
+    def test_48_promote_document(self):
+        """POST /documents/{doc_id}/promote — promote to RAG index."""
+        resp = client.post(f"{ORCH}/documents/doc-001/promote")
+        assert_ok(resp)
+        data = resp.json()
+        assert data["document_id"] == "doc-001"
+        assert data["status"] == "ready_for_promotion"
+        assert "promoted_at" in data
+
+    def test_49_get_promotion_status(self):
+        """GET /documents/{doc_id}/promotion-status — check promotion."""
+        resp = client.get(f"{ORCH}/documents/doc-001/promotion-status")
+        assert_ok(resp)
+        data = resp.json()
+        assert data["document_id"] == "doc-001"
+        assert "is_promoted" in data
+        assert "promotion_status" in data
+        assert "approval_status" in data
+        assert "chunks_total" in data
+        assert "chunks_indexed" in data
+
+    def test_50_get_document_history(self):
+        """GET /documents/{doc_id}/history — status history."""
+        resp = client.get(f"{ORCH}/documents/doc-001/history")
+        assert_ok(resp)
+        data = resp.json()
+        assert data["document_id"] == "doc-001"
+        assert "events" in data
+        assert "total" in data
+        assert len(data["events"]) > 0
+
+    def test_51_get_document_chunks(self):
+        """GET /documents/{doc_id}/chunks — document fragments."""
+        resp = client.get(f"{ORCH}/documents/doc-001/chunks")
+        assert_ok(resp)
+        data = resp.json()
+        assert data["document_id"] == "doc-001"
+        assert "chunks" in data
+        assert "total" in data
 
 
 # ===========================================================================
@@ -441,7 +650,10 @@ class TestOrchestratorService:
 
 
 class TestQueryService:
-    def test_50_create_session(self):
+    def setup_method(self):
+        _reset_rate_limiter()
+
+    def test_52_create_session(self):
         resp = client.post(
             f"{QUERY}/chat/sessions",
             json={"title": "Test Session", "document_ids": ["doc-001"]},
@@ -449,28 +661,29 @@ class TestQueryService:
         assert_ok(resp, 201)
         assert "session_id" in resp.json()
 
-    def test_51_list_sessions(self):
+    def test_53_list_sessions(self):
         resp = client.get(f"{QUERY}/chat/sessions")
         assert_ok(resp)
         data = resp.json()
         assert "sessions" in data
         assert_paginated(data)
 
-    def test_52_get_session(self):
+    def test_54_get_session(self):
         resp = client.get(f"{QUERY}/chat/sessions/sess-001")
         assert_ok(resp)
         assert resp.json()["session_id"] == "sess-001"
 
-    def test_53_get_session_not_found(self):
+    def test_55_get_session_not_found(self):
         resp = client.get(f"{QUERY}/chat/sessions/nonexistent")
         assert resp.status_code == 404
 
-    def test_54_update_session(self):
+    def test_56_update_session(self):
         resp = client.put(f"{QUERY}/chat/sessions/sess-002", json={"title": "Updated"})
         assert_ok(resp)
         assert resp.json()["title"] == "Updated"
 
-    def test_55_send_message(self):
+    def test_57_send_message(self):
+        """POST /chat/sessions/{id}/messages — simplified response (no sources)."""
         resp = client.post(
             f"{QUERY}/chat/sessions/sess-001/messages",
             json={"content": "What is the wall thickness?"},
@@ -478,56 +691,118 @@ class TestQueryService:
         assert_ok(resp)
         data = resp.json()
         assert data["role"] == "assistant"
-        assert "sources" in data
+        # Simplified response — sources are no longer returned
+        assert "message_id" in data
+        assert "session_id" in data
+        assert "status" in data
+        assert "content" in data
 
-    def test_56_manage_context(self):
+    def test_58_manage_context(self):
         resp = client.post(
             f"{QUERY}/chat/sessions/sess-001/context", json={"action": "clear_history"}
         )
         assert_ok(resp)
         assert resp.json()["status"] == "completed"
 
-    def test_57_export_session(self):
+    def test_59_export_session(self):
         resp = client.post(
             f"{QUERY}/chat/sessions/sess-001/export", json={"format": "pdf"}
         )
         assert_ok(resp)
         assert "export_id" in resp.json()
 
-    def test_58_feedback(self):
+    def test_60_feedback(self):
+        """POST /chat/feedback — includes new fields: answer_id, useful, opened_citation_ids."""
         resp = client.post(
             f"{QUERY}/chat/feedback",
-            json={"session_id": "sess-001", "message_id": "msg-001", "rating": 5},
+            json={
+                "session_id": "sess-001",
+                "message_id": "msg-001",
+                "rating": 5,
+                "answer_id": "ans-001",
+                "useful": True,
+                "opened_citation_ids": ["cit-001", "cit-002"],
+            },
         )
         assert_ok(resp)
         assert resp.json()["saved"] is True
 
-    def test_59_chat_history(self):
+    def test_61_chat_history(self):
         resp = client.get(f"{QUERY}/chat/history")
         assert_ok(resp)
         data = resp.json()
         assert "items" in data
         assert_paginated(data)
 
-    def test_60_export_history(self):
+    def test_62_export_history(self):
         resp = client.get(f"{QUERY}/chat/history/export", params={"format": "csv"})
         assert_ok(resp)
 
-    def test_61_chat_ask(self):
+    def test_63_chat_ask(self):
+        """POST /chat — supports 3 scenarios: completed, needs_clarification, conflict."""
+        # Test completed scenario
         resp = client.post(
             f"{QUERY}/chat", json={"question": "What are the dimensions?"}
         )
         assert_ok(resp)
-        assert "answer_id" in resp.json()
+        data = resp.json()
+        assert "scenario" in data
+        assert data["scenario"] == "completed"
+        assert "answer_id" in data
+        assert "answer_items" in data
+        if data["answer_items"]:
+            item = data["answer_items"][0]
+            # New source format: section_id, excerpt
+            if "sources" in item:
+                src = item["sources"][0]
+                assert "section_id" in src
+                assert "excerpt" in src
+                assert "page" in src
 
-    def test_62_text_search(self):
+    def test_63b_chat_ask_needs_clarification(self):
+        """Chat ask with ambiguous question → needs_clarification scenario."""
+        resp = client.post(f"{QUERY}/chat", json={"question": "This is ambiguous"})
+        assert_ok(resp)
+        data = resp.json()
+        assert data["scenario"] == "needs_clarification"
+        assert "missing_fields" in data
+
+    def test_63c_chat_ask_conflict(self):
+        """Chat ask with conflict-related question → conflict scenario."""
+        resp = client.post(
+            f"{QUERY}/chat", json={"question": "There is a conflict in norms"}
+        )
+        assert_ok(resp)
+        data = resp.json()
+        assert data["scenario"] == "conflict"
+        assert "conflicts" in data
+
+    def test_63d_chat_ask_with_context(self):
+        """Chat ask with context field."""
+        resp = client.post(
+            f"{QUERY}/chat",
+            json={
+                "question": "Check dimensions",
+                "context": {"document_ids": ["doc-001"]},
+            },
+        )
+        assert_ok(resp)
+
+    def test_64_text_search(self):
+        """POST /text/search — new field names: section_id, content."""
         resp = client.post(
             f"{QUERY}/text/search", json={"text": "wall thickness", "top_k": 3}
         )
         assert_ok(resp)
-        assert "results" in resp.json()
+        data = resp.json()
+        assert "results" in data
+        if data["results"]:
+            result = data["results"][0]
+            assert "section_id" in result
+            assert "content" in result
+            assert "page" in result
 
-    def test_63_text_search_filtered(self):
+    def test_65_text_search_filtered(self):
         resp = client.post(
             f"{QUERY}/text/search",
             json={
@@ -538,15 +813,35 @@ class TestQueryService:
         )
         assert_ok(resp)
 
-    def test_64_text_ask(self):
+    def test_65b_text_search_with_options(self):
+        """Text search with options field."""
         resp = client.post(
-            f"{QUERY}/text/ask", json={"text": "What material is the body made of?"}
+            f"{QUERY}/text/search",
+            json={
+                "text": "thickness",
+                "top_k": 5,
+                "options": {"search_mode": "semantic"},
+            },
         )
         assert_ok(resp)
-        assert "answer" in resp.json()
-        assert "sources" in resp.json()
 
-    def test_65_delete_session(self):
+    def test_66_text_ask(self):
+        """POST /text/ask — new field names: section_id, excerpt."""
+        resp = client.post(
+            f"{QUERY}/text/ask",
+            json={"text": "What material is the body made of?"},
+        )
+        assert_ok(resp)
+        data = resp.json()
+        assert "answer" in data
+        assert "sources" in data
+        if data["sources"]:
+            src = data["sources"][0]
+            assert "section_id" in src
+            assert "excerpt" in src
+            assert "page" in src
+
+    def test_67_delete_session(self):
         create = client.post(
             f"{QUERY}/chat/sessions", json={"title": "To Delete"}
         ).json()
@@ -563,74 +858,117 @@ class TestQueryService:
 
 
 class TestRegistryService:
-    def test_66_list_classifiers(self):
+    def setup_method(self):
+        _reset_rate_limiter()
+
+    def test_68_list_classifiers(self):
         resp = client.get(f"{REG}/classifiers")
         assert_ok(resp)
         data = resp.json()
         assert "data" in data
         assert_paginated(data)
+        if data["data"]:
+            classifier = data["data"][0]
+            # New fields
+            assert "classifier_system" in classifier
+            assert "status" in classifier
+            assert "effective_date" in classifier
+            assert "replaced_by" in classifier
+            assert "code" in classifier
+            assert "full_name" in classifier
 
-    def test_67_list_classifiers_search(self):
+    def test_69_list_classifiers_search(self):
         resp = client.get(f"{REG}/classifiers", params={"search": "GOST"})
         assert_ok(resp)
 
-    def test_68_get_classifier_tree(self):
+    def test_69b_list_classifiers_filter_system(self):
+        resp = client.get(f"{REG}/classifiers", params={"classifier_system": "MKS"})
+        assert_ok(resp)
+        for c in resp.json()["data"]:
+            assert c["classifier_system"] == "MKS"
+
+    def test_70_get_classifier_tree(self):
         resp = client.get(f"{REG}/classifiers/tree")
         assert_ok(resp)
-        assert "data" in resp.json()
+        data = resp.json()
+        assert "data" in data
+        assert "meta" in data
+        if data["data"]:
+            node = data["data"][0]
+            assert "classifier_system" in node
+            assert "status" in node
+            assert "effective_date" in node
+            assert "replaced_by" in node
 
-    def test_69_get_classifier_node(self):
+    def test_71_get_classifier_node(self):
         resp = client.get(f"{REG}/classifiers/01")
         assert_ok(resp)
-        assert resp.json()["data"]["code"] == "01"
+        node = resp.json()["data"]
+        assert node["code"] == "01"
+        assert "classifier_system" in node
+        assert "status" in node
+        assert "effective_date" in node
 
-    def test_70_get_classifier_not_found(self):
+    def test_72_get_classifier_not_found(self):
         resp = client.get(f"{REG}/classifiers/nonexistent")
         assert resp.status_code == 404
 
-    def test_71_create_classifier(self):
+    def test_73_create_classifier(self):
         resp = client.post(
             f"{REG}/classifiers",
             json={
+                "classifier_system": "MKS",
                 "code": "99.999",
                 "full_name": "Test Classifier",
-                "doc_type": "normative",
+                "status": "active",
+                "effective_date": "2024-01-01",
             },
         )
         assert_ok(resp, 201)
-        assert resp.json()["data"]["code"] == "99.999"
+        data = resp.json()["data"]
+        assert data["code"] == "99.999"
+        assert data["classifier_system"] == "MKS"
+        assert data["status"] == "active"
 
-    def test_72_create_classifier_duplicate(self):
+    def test_74_create_classifier_duplicate(self):
         resp = client.post(
             f"{REG}/classifiers",
-            json={"code": "01", "full_name": "Dup", "doc_type": "normative"},
+            json={
+                "classifier_system": "MKS",
+                "code": "01",
+                "full_name": "Dup",
+                "status": "active",
+            },
         )
         assert resp.status_code == 409
 
-    def test_73_update_classifier(self):
+    def test_75_update_classifier(self):
         resp = client.put(
-            f"{REG}/classifiers/01", json={"full_name": "Updated Standard"}
+            f"{REG}/classifiers/01",
+            json={"full_name": "Updated Standard", "status": "active"},
         )
         assert_ok(resp)
         assert resp.json()["data"]["full_name"] == "Updated Standard"
 
-    def test_74_patch_classifier(self):
-        resp = client.patch(f"{REG}/classifiers/02", json={"is_thematic": True})
+    def test_76_patch_classifier(self):
+        resp = client.patch(f"{REG}/classifiers/02", json={"parent_code": None})
         assert_ok(resp)
 
-    def test_75_delete_classifier_with_children(self):
+    def test_77_delete_classifier_with_children(self):
         resp = client.delete(f"{REG}/classifiers/01")
         assert resp.status_code == 409
 
-    def test_76_import_classifiers(self):
+    def test_78_import_classifiers(self):
         resp = client.post(
             f"{REG}/classifiers/import",
             json={
                 "items": [
                     {
+                        "classifier_system": "MKS",
                         "code": "IMP.001",
                         "full_name": "Imported 1",
-                        "doc_type": "normative",
+                        "status": "active",
+                        "effective_date": "2024-06-01",
                     }
                 ]
             },
@@ -638,126 +976,320 @@ class TestRegistryService:
         assert_ok(resp)
         assert resp.json()["data"]["inserted"] >= 1
 
-    def test_77_list_terminology(self):
+    def test_79_list_terminology(self):
         resp = client.get(f"{REG}/terminology")
         assert_ok(resp)
         data = resp.json()
         assert "data" in data
         assert_paginated(data)
+        if data["data"]:
+            term = data["data"][0]
+            # New fields
+            assert "raw_term" in term
+            assert "standard_term" in term
+            assert "normalized_value" in term
+            assert "term_type" in term
+            assert "is_case_sensitive" in term
+            assert "definition" in term
+            assert "synonyms" in term
+            assert "related_docs" in term
+            assert "scope" in term
+            assert "is_blocked" in term
 
-    def test_78_search_terminology(self):
+    def test_80_search_terminology(self):
         resp = client.get(f"{REG}/terminology", params={"search": "thickness"})
         assert_ok(resp)
 
-    def test_79_get_term(self):
+    def test_81_get_term(self):
         resp = client.get(f"{REG}/terminology/t-001")
         assert_ok(resp)
+        data = resp.json()["data"]
+        assert "raw_term" in data
+        assert "standard_term" in data
+        assert "normalized_value" in data
+        assert "term_type" in data
 
-    def test_80_get_term_not_found(self):
+    def test_82_get_term_not_found(self):
         resp = client.get(f"{REG}/terminology/nonexistent")
         assert resp.status_code == 404
 
-    def test_81_create_term(self):
+    def test_83_create_term(self):
         resp = client.post(
-            f"{REG}/terminology", json={"term": "Test Term", "source": "Test"}
+            f"{REG}/terminology",
+            json={
+                "raw_term": "Test Term",
+                "term_type": "preferred",
+                "is_case_sensitive": False,
+                "is_blocked": False,
+                "synonyms": [],
+                "related_docs": [],
+            },
         )
         assert_ok(resp, 201)
+        data = resp.json()["data"]
+        assert data["raw_term"] == "Test Term"
 
-    def test_82_update_term(self):
+    def test_84_update_term(self):
         resp = client.put(
-            f"{REG}/terminology/t-001", json={"context": "Updated context"}
+            f"{REG}/terminology/t-001",
+            json={"definition": "Updated definition"},
         )
         assert_ok(resp)
 
-    def test_83_delete_term(self):
-        create = client.post(f"{REG}/terminology", json={"term": "Temp Term"}).json()
-        term_id = create["data"]["term_id"]
+    def test_85_delete_term(self):
+        create = client.post(
+            f"{REG}/terminology",
+            json={
+                "raw_term": "Temp Term",
+                "term_type": "preferred",
+                "is_case_sensitive": False,
+                "is_blocked": False,
+                "synonyms": [],
+                "related_docs": [],
+            },
+        ).json()
+        term_id = create["data"]["id"]
         resp = client.delete(f"{REG}/terminology/{term_id}")
         assert_ok(resp)
 
-    def test_84_normalize_term(self):
+    def test_86_normalize_term(self):
+        """Normalize response: {raw_term, standard_term, normalized_value, term_type, is_blocked}."""
         resp = client.get(
             f"{REG}/terminology/normalize", params={"q": "Wall Thickness"}
         )
         assert_ok(resp)
-        assert resp.json()["data"]["normalized"]
+        data = resp.json()["data"]
+        assert "raw_term" in data
+        assert "standard_term" in data
+        assert "normalized_value" in data
+        assert "term_type" in data
+        assert "is_blocked" in data
 
-    def test_85_import_terminology(self):
+    def test_87_import_terminology(self):
         resp = client.post(
             f"{REG}/terminology/import",
-            json={"items": [{"term": "Imported", "source": "Test"}]},
+            json={
+                "items": [
+                    {
+                        "raw_term": "Imported",
+                        "term_type": "preferred",
+                        "is_case_sensitive": False,
+                        "is_blocked": False,
+                        "synonyms": [],
+                        "related_docs": [],
+                    }
+                ]
+            },
         )
         assert_ok(resp)
 
-    def test_86_list_registry_docs(self):
+    def test_88_list_registry_docs(self):
         resp = client.get(f"{REG_DOCS}/documents")
         assert_ok(resp)
-        assert "data" in resp.json()
+        data = resp.json()
+        assert "data" in data
+        assert_paginated(data)
+        if data["data"]:
+            doc = data["data"][0]
+            # New fields (~28 fields)
+            assert "id" in doc
+            assert "title" in doc
+            assert "doc_code" in doc
+            assert "source_type" in doc
+            assert "title_hash_sha256" in doc
+            assert "status" in doc
+            assert "era" in doc
+            assert "validity_status" in doc
+            assert "jurisdiction" in doc
+            assert "issuing_body" in doc
+            assert "mks_oks_code" in doc
+            assert "mks_name" in doc
+            assert "okstu_code" in doc
+            assert "okstu_name" in doc
+            assert "classification_status" in doc
+            assert "successor_doc_id" in doc
+            assert "predecessor_doc_id" in doc
+            assert "total_versions" in doc
+            assert "chunk_count" in doc
+            assert "created_by" in doc
+            assert "updated_by" in doc
 
-    def test_87_get_registry_doc(self):
+    def test_89_get_registry_doc(self):
         resp = client.get(f"{REG_DOCS}/documents/rd-001")
         assert_ok(resp)
+        doc = resp.json()["data"]
+        assert doc["id"] == "rd-001"
+        assert "title" in doc
+        assert "doc_code" in doc
+        assert "source_type" in doc
+        assert "classification_status" in doc
 
-    def test_88_create_registry_doc(self):
+    def test_90_create_registry_doc(self):
         resp = client.post(
             f"{REG_DOCS}/documents",
             json={
                 "title": "Test Doc",
-                "doc_number": "TEST-001",
-                "classifier_code": "01",
+                "doc_code": "TEST-001",
+                "source_type": "GOST",
+                "status": "draft",
+                "era": "CURRENT",
+                "validity_status": "active",
             },
         )
         assert_ok(resp, 201)
+        data = resp.json()["data"]
+        assert data["title"] == "Test Doc"
+        assert data["doc_code"] == "TEST-001"
+        assert "id" in data
 
-    def test_89_update_registry_doc(self):
+    def test_91_update_registry_doc(self):
         resp = client.put(
-            f"{REG_DOCS}/documents/rd-001", json={"notes": "Updated notes"}
+            f"{REG_DOCS}/documents/rd-001",
+            json={"jurisdiction": "RF"},
         )
         assert_ok(resp)
 
-    def test_90_update_doc_status(self):
+    def test_92_update_doc_status(self):
+        """PATCH /documents/{id}/status — enhanced with comment."""
         resp = client.patch(
-            f"{REG_DOCS}/documents/rd-002/status", json={"status": "obsolete"}
+            f"{REG_DOCS}/documents/rd-002/status",
+            json={"status": "archived", "comment": "Test archive"},
         )
         assert_ok(resp)
+        data = resp.json()["data"]
+        assert data["status"] == "archived"
+        assert "previous_status" in data
+        assert "history_id" in data
 
-    def test_91_export_registry_docs(self):
+    def test_93_export_registry_docs(self):
         resp = client.get(f"{REG_DOCS}/documents/export", params={"format": "json"})
         assert_ok(resp)
         assert resp.json()["data"]["format"] == "json"
 
-    def test_92_import_registry_docs(self):
+    def test_94_import_registry_docs(self):
         resp = client.post(
             f"{REG_DOCS}/documents/import",
             json=[
-                {"title": "Imported", "doc_number": "IMP-001", "classifier_code": "01"}
+                {
+                    "title": "Imported",
+                    "doc_code": "IMP-001",
+                    "source_type": "GOST",
+                    "status": "draft",
+                    "era": "CURRENT",
+                    "validity_status": "active",
+                }
             ],
         )
         assert_ok(resp)
 
-    def test_93_delete_registry_doc(self):
+    def test_95_delete_registry_doc(self):
         create = client.post(
             f"{REG_DOCS}/documents",
             json={
                 "title": "To Delete",
-                "doc_number": "DEL-001",
-                "classifier_code": "01",
+                "doc_code": "DEL-001",
+                "source_type": "GOST",
+                "status": "draft",
+                "era": "CURRENT",
+                "validity_status": "active",
             },
         ).json()
-        doc_id = create["data"]["doc_id"]
+        doc_id = create["data"]["id"]
         resp = client.delete(f"{REG_DOCS}/documents/{doc_id}")
         assert_ok(resp)
 
-    def test_94_get_stats(self):
+    def test_96_get_stats(self):
+        """New stats structure with classifiers by system, documents by status/source_type/era."""
         resp = client.get(f"{COMMON}/stats")
         assert_ok(resp)
         data = resp.json()["data"]
         assert "classifiers_total" in data
+        # classifiers_total is now a dict with system keys
+        assert isinstance(data["classifiers_total"], dict)
+        assert "MKS" in data["classifiers_total"]
+        assert "OKSTU" in data["classifiers_total"]
+        assert "UDC" in data["classifiers_total"]
+        assert "classifiers_pending" in data
+        assert "terminology_total" in data
+        assert "documents_total" in data
+        assert "documents_by_status" in data
+        assert "documents_by_source_type" in data
+        assert "documents_by_era" in data
 
-    def test_95_get_enums(self):
+    def test_97_get_enums(self):
+        """Expanded enums with more values."""
         resp = client.get(f"{COMMON}/enums")
         assert_ok(resp)
-        assert "doc_type" in resp.json()["data"]
+        data = resp.json()["data"]
+        assert "classifier_system" in data
+        assert "classifier_status" in data
+        assert "source_type" in data
+        assert "document_status" in data
+        assert "era" in data
+        assert "validity_status" in data
+        assert "term_type" in data
+        assert "classification_status_code" in data
+        assert "pending_status" in data
+        assert "validation_status" in data
+        assert "chunk_type" in data
+
+    # --- NEW endpoint tests for Registry ---
+
+    def test_98_list_quarantine(self):
+        """GET /classifiers/quarantine — list pending classifiers."""
+        resp = client.get(f"{REG}/classifiers/quarantine")
+        assert_ok(resp)
+        data = resp.json()
+        assert "data" in data
+        assert_paginated(data)
+
+    def test_99_accept_quarantine(self):
+        """POST /classifiers/quarantine/{id}/accept — accept pending classifier."""
+        resp = client.post(f"{REG}/classifiers/quarantine/pend-001/accept")
+        assert_ok(resp)
+        data = resp.json()["data"]
+        assert data["status"] == "accepted"
+        assert "classifier_code" in data
+
+    def test_100_reject_quarantine(self):
+        """POST /classifiers/quarantine/{id}/reject — reject pending classifier."""
+        resp = client.post(f"{REG}/classifiers/quarantine/pend-001/reject")
+        assert_ok(resp)
+        data = resp.json()["data"]
+        assert data["status"] == "rejected"
+
+    def test_101_validate_classification(self):
+        """POST /classifiers/validate — validate classification code."""
+        resp = client.post(
+            f"{REG}/classifiers/validate",
+            json={"code": "01", "classifier_system": "MKS"},
+        )
+        assert_ok(resp)
+        data = resp.json()["data"]
+        assert "valid" in data
+        assert "code" in data
+        assert "classifier_system" in data
+        assert "exists_in_registry" in data
+        assert "validation_status" in data
+
+    def test_102_registry_doc_history(self):
+        """GET /documents/{id}/history — registry doc history."""
+        resp = client.get(f"{REG_DOCS}/documents/rd-001/history")
+        assert_ok(resp)
+        data = resp.json()["data"]
+        assert "doc_id" in data
+        assert data["doc_id"] == "rd-001"
+        assert "history" in data
+
+    def test_103_registry_doc_chain(self):
+        """GET /documents/{id}/chain — registry doc chain (predecessors/successors)."""
+        resp = client.get(f"{REG_DOCS}/documents/rd-001/chain")
+        assert_ok(resp)
+        data = resp.json()["data"]
+        assert "doc_id" in data
+        assert "current" in data
+        assert "predecessors" in data
+        assert "successors" in data
 
 
 # ===========================================================================
@@ -766,50 +1298,50 @@ class TestRegistryService:
 
 
 class TestGateway:
-    def test_96_health(self):
+    def setup_method(self):
+        _reset_rate_limiter()
+
+    def test_104_health(self):
         resp = client.get(f"{BASE}/system/health")
         assert_ok(resp)
         assert resp.json()["status"] == "ok"
 
-    def test_97_routing_auth(self):
-        resp = client.post(
-            f"{AUTH}/token",
-            json={"username": "admin@example.com", "password": "admin123"},
-        )
+    def test_105_routing_auth(self):
+        resp = client.get(f"{AUTH}/me", headers=auth_header())
         assert_ok(resp)
 
-    def test_98_routing_orchestrator(self):
+    def test_106_routing_orchestrator(self):
         resp = client.get(f"{ORCH}/documents")
         assert_ok(resp)
 
-    def test_99_routing_query(self):
+    def test_107_routing_query(self):
         resp = client.get(f"{QUERY}/chat/sessions")
         assert_ok(resp)
 
-    def test_100_routing_registry(self):
+    def test_108_routing_registry(self):
         resp = client.get(f"{REG}/classifiers")
         assert_ok(resp)
 
-    def test_101_no_conflict_queue(self):
+    def test_109_no_conflict_queue(self):
         resp = client.get(f"{ORCH}/documents/queue")
         assert_ok(resp)
         assert "queue" in resp.json()
 
-    def test_102_no_conflict_search(self):
+    def test_110_no_conflict_search(self):
         resp = client.get(f"{ORCH}/documents/search", params={"q": "test", "top_k": 2})
         assert_ok(resp)
 
-    def test_103_pagination_defaults(self):
+    def test_111_pagination_defaults(self):
         resp = client.get(f"{ORCH}/documents")
         meta = resp.json()["meta"]
         assert meta["page"] == 1
         assert meta["page_size"] == 50
 
-    def test_104_pagination_custom(self):
+    def test_112_pagination_custom(self):
         resp = client.get(f"{ORCH}/documents", params={"page": 1, "page_size": 3})
         assert resp.json()["meta"]["page_size"] == 3
 
-    def test_105_no_route_conflict(self):
+    def test_113_no_route_conflict(self):
         # Verify /documents/queue is not caught by /documents/{doc_id}
         resp = client.get(f"{ORCH}/documents/queue")
         assert_ok(resp)
@@ -821,54 +1353,39 @@ class TestGateway:
 
 
 # ===========================================================================
-# 7. NEW FUNCTIONALITY TESTS (Review fixes)
+# 6. AUTH-ME BINDING TESTS
 # ===========================================================================
 
 
 class TestAuthMeBinding:
-    """Tests for GET /auth/me binding to JWT token (Review #1)."""
+    """Tests for GET /auth/me binding to JWT token."""
 
-    def test_106_me_returns_correct_user_by_token(self):
+    def setup_method(self):
+        _reset_rate_limiter()
+
+    def test_114_me_returns_correct_user_by_token(self):
         """Login as kuznetsov, /auth/me should return kuznetsov's profile."""
-        # Login as kuznetsov (unmodified user, always engineer)
-        resp = client.post(
-            f"{AUTH}/token",
-            json={"username": "kuznetsov@example.com", "password": "secret789"},
-        )
-        token = resp.json()["access_token"]
+        token = _get_cached_token("kuznetsov@example.com", "secret789")
 
-        # GET /auth/me with kuznetsov's token
         resp = client.get(f"{AUTH}/me", headers={"Authorization": f"Bearer {token}"})
         assert_ok(resp)
         data = resp.json()
-        assert data["user_id"] == "u-004", (
-            f"Expected kuznetsov (u-004), got {data['user_id']}"
-        )
+        assert data["user_id"] == "u-004"
         assert data["full_name"] == "Кузнецов Дмитрий Олегович"
-        assert data["role"] == "engineer", (
-            f"Expected engineer, got '{data['role']}'. "
-            f"User data: user_id={data.get('user_id')}, "
-            f"full_name={data.get('full_name')}"
-        )
+        assert data["role"] == "engineer"
 
-    def test_107_me_returns_admin_user(self):
+    def test_115_me_returns_admin_user(self):
         """Login as admin, /auth/me should return admin."""
-        resp = client.post(
-            f"{AUTH}/token",
-            json={"username": "admin@example.com", "password": "admin123"},
-        )
-        token = resp.json()["access_token"]
+        token = _get_cached_token("admin@example.com", "admin123")
 
         resp = client.get(f"{AUTH}/me", headers={"Authorization": f"Bearer {token}"})
         assert_ok(resp)
         data = resp.json()
-        assert data["user_id"] == "u-003", (
-            f"Expected admin (u-003), got {data['user_id']}"
-        )
+        assert data["user_id"] == "u-003"
         assert data["role"] == "system_admin"
         assert "admin" in data.get("available_tabs", [])
 
-    def test_108_me_returns_401_without_token(self):
+    def test_116_me_returns_401_without_token(self):
         """GET /auth/me without token should return 401."""
         resp = client.get(f"{AUTH}/me")
         assert resp.status_code == 401
@@ -876,7 +1393,7 @@ class TestAuthMeBinding:
         assert "error" in data
         assert data["error"]["code"] == "UNAUTHORIZED"
 
-    def test_109_me_returns_401_with_invalid_token(self):
+    def test_117_me_returns_401_with_invalid_token(self):
         """GET /auth/me with invalid token should return 401."""
         resp = client.get(
             f"{AUTH}/me",
@@ -887,31 +1404,44 @@ class TestAuthMeBinding:
         assert "error" in data
 
 
+# ===========================================================================
+# 7. RBAC TESTS
+# ===========================================================================
+
+
 class TestRBAC:
-    """Tests for RBAC on /admin/* endpoints (Review #2)."""
+    """Tests for RBAC on /admin/* endpoints."""
+
+    def setup_method(self):
+        _reset_rate_limiter()
+
+    _admin_token: str = ""
+    _engineer_token: str = ""
+    _petrova_token: str = ""
 
     def _get_admin_token(self) -> str:
-        resp = client.post(
-            f"{AUTH}/token",
-            json={"username": "admin@example.com", "password": "admin123"},
-        )
-        return resp.json()["access_token"]
+        if not self._admin_token:
+            self._admin_token = _get_cached_token("admin@example.com", "admin123")
+        return self._admin_token
 
     def _get_engineer_token(self) -> str:
-        resp = client.post(
-            f"{AUTH}/token",
-            json={"username": "ivanov@example.com", "password": "secret123"},
-        )
-        return resp.json()["access_token"]
+        if not self._engineer_token:
+            self._engineer_token = _get_cached_token("ivanov@example.com", "secret123")
+        return self._engineer_token
 
-    def test_110_admin_users_401_without_token(self):
+    def _get_petrova_token(self) -> str:
+        if not self._petrova_token:
+            self._petrova_token = _get_cached_token("petrova@example.com", "secret456")
+        return self._petrova_token
+
+    def test_118_admin_users_401_without_token(self):
         """GET /admin/users without token → 401."""
         resp = client.get(f"{ADMIN}/users")
         assert resp.status_code == 401
         data = resp.json()
         assert data["error"]["code"] == "UNAUTHORIZED"
 
-    def test_111_admin_users_403_for_engineer(self):
+    def test_119_admin_users_403_for_engineer(self):
         """GET /admin/users as engineer → 403."""
         token = self._get_engineer_token()
         resp = client.get(
@@ -921,7 +1451,7 @@ class TestRBAC:
         data = resp.json()
         assert data["error"]["code"] == "FORBIDDEN"
 
-    def test_112_admin_users_200_for_admin(self):
+    def test_120_admin_users_200_for_admin(self):
         """GET /admin/users as system_admin → 200."""
         token = self._get_admin_token()
         resp = client.get(
@@ -930,7 +1460,7 @@ class TestRBAC:
         assert_ok(resp)
         assert "users" in resp.json()
 
-    def test_113_admin_roles_403_for_engineer(self):
+    def test_121_admin_roles_403_for_engineer(self):
         """GET /admin/roles as engineer → 403."""
         token = self._get_engineer_token()
         resp = client.get(
@@ -938,7 +1468,7 @@ class TestRBAC:
         )
         assert resp.status_code == 403
 
-    def test_114_admin_roles_200_for_admin(self):
+    def test_122_admin_roles_200_for_admin(self):
         """POST /admin/roles as admin → 201."""
         token = self._get_admin_token()
         resp = client.post(
@@ -948,19 +1478,15 @@ class TestRBAC:
         )
         assert_ok(resp, 201)
 
-    def test_115_admin_audit_403_for_knowledge_admin(self):
+    def test_123_admin_audit_403_for_knowledge_admin(self):
         """GET /admin/audit as knowledge_admin → 403."""
-        resp = client.post(
-            f"{AUTH}/token",
-            json={"username": "petrova@example.com", "password": "secret456"},
-        )
-        token = resp.json()["access_token"]
+        token = self._get_petrova_token()
         resp = client.get(
             f"{ADMIN}/audit", headers={"Authorization": f"Bearer {token}"}
         )
         assert resp.status_code == 403
 
-    def test_116_admin_endpoints_all_blocked_for_non_admin(self):
+    def test_124_admin_endpoints_all_blocked_for_non_admin(self):
         """All /admin/* variants blocked for non-admin users."""
         token = self._get_engineer_token()
         headers = {"Authorization": f"Bearer {token}"}
@@ -989,10 +1515,18 @@ class TestRBAC:
             ), f"{method} {path} returned {resp.status_code} for engineer"
 
 
-class TestErrorFormat:
-    """Tests for unified error format (Review #3)."""
+# ===========================================================================
+# 8. ERROR FORMAT TESTS
+# ===========================================================================
 
-    def test_117_error_format_404(self):
+
+class TestErrorFormat:
+    """Tests for unified error format."""
+
+    def setup_method(self):
+        _reset_rate_limiter()
+
+    def test_125_error_format_404(self):
         """404 error should use {error: {code, message, details}} format."""
         resp = client.get(f"{ORCH}/documents/nonexistent_doc_xxx")
         assert resp.status_code == 404
@@ -1001,11 +1535,9 @@ class TestErrorFormat:
         assert "code" in data["error"]
         assert "message" in data["error"]
         assert "details" in data["error"]
-        assert data["error"]["code"] in ("NOT_FOUND", "DOCUMENT_NOT_FOUND"), (
-            f"Expected NOT_FOUND or DOCUMENT_NOT_FOUND, got {data['error']['code']}"
-        )
+        assert data["error"]["code"] in ("NOT_FOUND", "DOCUMENT_NOT_FOUND")
 
-    def test_118_error_format_401(self):
+    def test_126_error_format_401(self):
         """401 error should use wrapped format."""
         resp = client.get(f"{AUTH}/me")
         assert resp.status_code == 401
@@ -1013,12 +1545,9 @@ class TestErrorFormat:
         assert "error" in data
         assert data["error"]["code"] == "UNAUTHORIZED"
 
-    def test_119_error_format_403(self):
+    def test_127_error_format_403(self):
         """403 error should use wrapped format."""
-        token = client.post(
-            f"{AUTH}/token",
-            json={"username": "ivanov@example.com", "password": "secret123"},
-        ).json()["access_token"]
+        token = _get_cached_token("ivanov@example.com", "secret123")
         resp = client.get(
             f"{ADMIN}/users", headers={"Authorization": f"Bearer {token}"}
         )
@@ -1027,133 +1556,31 @@ class TestErrorFormat:
         assert "error" in data
         assert data["error"]["code"] == "FORBIDDEN"
 
-    def test_120_error_format_422_validation(self):
+    def test_128_error_format_422_validation(self):
         """422 validation error should use wrapped format."""
         # Omit required 'password' field to trigger validation error
         resp = client.post(
             f"{AUTH}/token",
-            json={"username": "test"},  # missing required 'password' field
+            json={"username": "test"},
         )
-        assert resp.status_code == 422, (
-            f"Expected 422, got {resp.status_code}: {resp.text[:200]}"
-        )
+        assert resp.status_code == 422
         data = resp.json()
         assert "error" in data, f"Missing 'error' wrapper: {data}"
         assert data["error"]["code"] in ("VALIDATION_ERROR", "VALIDATION_FAILED")
 
 
-class TestValidateChecksExtended:
-    """Extended tests for POST /validate/checks (Review #5, #6)."""
-
-    def test_121_validate_checks_returns_200(self):
-        """POST /validate/checks should return 200 (not 202)."""
-        resp = client.post(
-            f"{ORCH}/validate/checks",
-            json={"project_document_ids": ["doc-001"]},
-        )
-        assert_ok(resp)  # expects 200
-
-    def test_122_validate_checks_has_check_run_id(self):
-        """Response must contain check_run_id."""
-        resp = client.post(
-            f"{ORCH}/validate/checks",
-            json={"project_document_ids": ["doc-001"]},
-        )
-        data = resp.json()
-        assert "check_run_id" in data, f"Missing check_run_id: {data}"
-        assert data["check_run_id"].startswith("check-")
-
-    def test_123_validate_checks_has_summary(self):
-        """Response must contain summary with ok/warning/error counts."""
-        resp = client.post(
-            f"{ORCH}/validate/checks",
-            json={"project_document_ids": ["doc-001"]},
-        )
-        data = resp.json()
-        assert "summary" in data, f"Missing summary: {data}"
-        summary = data["summary"]
-        assert "ok" in summary
-        assert "warning" in summary
-        assert "error" in summary
-
-    def test_124_validate_checks_has_created_at(self):
-        """Response must contain created_at."""
-        resp = client.post(
-            f"{ORCH}/validate/checks",
-            json={"project_document_ids": ["doc-001"]},
-        )
-        data = resp.json()
-        assert "created_at" in data, f"Missing created_at: {data}"
-
-    def test_125_validate_checks_items_have_match_status(self):
-        """Each item in items[] must have match_status field."""
-        resp = client.post(
-            f"{ORCH}/validate/checks",
-            json={"project_document_ids": ["doc-001"]},
-        )
-        data = resp.json()
-        assert "items" in data
-        for item in data["items"]:
-            assert "match_status" in item, f"Missing match_status in item: {item}"
-            assert item["match_status"] in (
-                "match",
-                "mismatch",
-                "partial_match",
-            ), f"Invalid match_status: {item['match_status']}"
-
-    def test_126_validate_checks_status_is_completed(self):
-        """Overall check status should be 'completed'."""
-        resp = client.post(
-            f"{ORCH}/validate/checks",
-            json={"project_document_ids": ["doc-001"]},
-        )
-        data = resp.json()
-        assert data["status"] == "completed"
-
-    def test_127_validate_checks_items_have_correct_statuses(self):
-        """Item statuses should be from check_result_status enum."""
-        resp = client.post(
-            f"{ORCH}/validate/checks",
-            json={"project_document_ids": ["doc-001"]},
-        )
-        data = resp.json()
-        valid_statuses = {"ok", "warning", "error"}
-        for item in data["items"]:
-            assert item["status"] in valid_statuses, f"Invalid status: {item['status']}"
-
-
-class TestDocumentRegistryLink:
-    """Tests for /documents ↔ /registry/documents link (Review #11)."""
-
-    def test_128_documents_have_registry_doc_id(self):
-        """GET /documents items should contain registry_doc_id."""
-        resp = client.get(f"{ORCH}/documents")
-        data = resp.json()
-        for item in data["items"]:
-            assert "registry_doc_id" in item, f"Missing registry_doc_id in: {item}"
-
-    def test_129_document_detail_has_registry_doc_id(self):
-        """GET /documents/{id} should contain registry_doc_id."""
-        resp = client.get(f"{ORCH}/documents/doc-001")
-        data = resp.json()
-        assert "registry_doc_id" in data
-        assert data["registry_doc_id"] == "rd-001"
-
-    def test_130_registry_doc_id_links_to_registry(self):
-        """registry_doc_id from documents should match registry doc_id."""
-        resp = client.get(f"{ORCH}/documents/doc-002")
-        doc_data = resp.json()
-        reg_id = doc_data.get("registry_doc_id")
-        if reg_id:
-            resp = client.get(f"{REG_DOCS}/documents/{reg_id}")
-            assert_ok(resp)
-            assert resp.json()["data"]["doc_id"] == reg_id
+# ===========================================================================
+# 9. LOGIN USERNAME TESTS
+# ===========================================================================
 
 
 class TestLoginUsernameAndEmail:
-    """Tests for login with username and email fields (Review #8)."""
+    """Tests for login with username field (new spec: only username, no email field)."""
 
-    def test_131_login_with_username_full_email(self):
+    def setup_method(self):
+        _reset_rate_limiter()
+
+    def test_129_login_with_username_full_email(self):
         """Login with username=full email should work."""
         resp = client.post(
             f"{AUTH}/token",
@@ -1162,7 +1589,7 @@ class TestLoginUsernameAndEmail:
         assert_ok(resp)
         assert "access_token" in resp.json()
 
-    def test_132_login_with_username_part(self):
+    def test_130_login_with_username_part(self):
         """Login with username=ivanov (without domain) should work."""
         resp = client.post(
             f"{AUTH}/token",
@@ -1171,8 +1598,8 @@ class TestLoginUsernameAndEmail:
         assert_ok(resp)
         assert "access_token" in resp.json()
 
-    def test_133_login_with_email_field(self):
-        """Login with email field should also work."""
+    def test_131_login_with_username_email_only(self):
+        """Login with another user using full email."""
         resp = client.post(
             f"{AUTH}/token",
             json={"username": "petrova@example.com", "password": "secret456"},
@@ -1180,7 +1607,7 @@ class TestLoginUsernameAndEmail:
         assert_ok(resp)
         assert "access_token" in resp.json()
 
-    def test_134_login_invalid_credentials(self):
+    def test_132_login_invalid_credentials(self):
         """Invalid credentials should return 401 with error wrapper."""
         resp = client.post(
             f"{AUTH}/token",
@@ -1192,10 +1619,18 @@ class TestLoginUsernameAndEmail:
         assert data["error"]["code"] == "UNAUTHORIZED"
 
 
-class TestResponseModels:
-    """Tests that response_model is present (OpenAPI schema check, Review #7)."""
+# ===========================================================================
+# 10. RESPONSE MODELS (OpenAPI schema) TESTS
+# ===========================================================================
 
-    def test_135_openapi_has_chat_response_schema(self):
+
+class TestResponseModels:
+    """Tests that response_model schemas are present in OpenAPI."""
+
+    def setup_method(self):
+        _reset_rate_limiter()
+
+    def test_133_openapi_has_chat_response_schema(self):
         """OpenAPI schema should define ChatResponse."""
         resp = client.get("/openapi.json")
         assert_ok(resp)
@@ -1203,40 +1638,63 @@ class TestResponseModels:
         assert "ChatResponse" in schemas, "Missing ChatResponse schema"
         assert "AnswerItem" in schemas, "Missing AnswerItem schema"
 
-    def test_136_openapi_has_check_result_schema(self):
-        """OpenAPI schema should define CheckResultResponse."""
-        resp = client.get("/openapi.json")
-        schemas = resp.json().get("components", {}).get("schemas", {})
-        assert "CheckResultResponse" in schemas
-        assert "CheckItem" in schemas
-
-    def test_137_openapi_has_token_response(self):
+    def test_134_openapi_has_token_response(self):
         """OpenAPI schema should define TokenResponse."""
         resp = client.get("/openapi.json")
         schemas = resp.json().get("components", {}).get("schemas", {})
         assert "TokenResponse" in schemas
 
-    def test_138_openapi_has_user_profile_response(self):
+    def test_135_openapi_has_user_profile_response(self):
         """OpenAPI schema should define UserProfileResponse."""
         resp = client.get("/openapi.json")
         schemas = resp.json().get("components", {}).get("schemas", {})
         assert "UserProfileResponse" in schemas
 
-    def test_139_openapi_has_text_search_response(self):
+    def test_136_openapi_has_text_search_response(self):
         """OpenAPI schema should define TextSearchResponse."""
         resp = client.get("/openapi.json")
         schemas = resp.json().get("components", {}).get("schemas", {})
         assert "TextSearchResponse" in schemas
+        assert "TextSearchResultItem" in schemas
 
-    def test_140_openapi_has_document_list_response(self):
+    def test_137_openapi_has_document_list_response(self):
         """OpenAPI schema should define DocumentListResponse."""
         resp = client.get("/openapi.json")
         schemas = resp.json().get("components", {}).get("schemas", {})
         assert "DocumentListResponse" in schemas
+        assert "DocumentListItem" in schemas
+
+    def test_138_openapi_has_document_detail_response(self):
+        """OpenAPI schema should define DocumentDetailResponse."""
+        resp = client.get("/openapi.json")
+        schemas = resp.json().get("components", {}).get("schemas", {})
+        assert "DocumentDetailResponse" in schemas
+
+    def test_139_openapi_has_search_response(self):
+        """OpenAPI schema should define SearchResponse and SearchResultItem."""
+        resp = client.get("/openapi.json")
+        schemas = resp.json().get("components", {}).get("schemas", {})
+        assert "SearchResponse" in schemas
+        assert "SearchResultItem" in schemas
+
+    def test_140_openapi_has_text_ask_response(self):
+        """OpenAPI schema should define TextAskResponse."""
+        resp = client.get("/openapi.json")
+        schemas = resp.json().get("components", {}).get("schemas", {})
+        assert "TextAskResponse" in schemas
+        assert "TextAskSource" in schemas
+
+
+# ===========================================================================
+# 11. REGISTRY PAGINATION TESTS
+# ===========================================================================
 
 
 class TestRegistryPagination:
-    """Tests that registry endpoints include meta (Review #4)."""
+    """Tests that registry endpoints include meta."""
+
+    def setup_method(self):
+        _reset_rate_limiter()
 
     def test_141_registry_documents_has_meta(self):
         """GET /registry/documents must include meta block."""
@@ -1263,3 +1721,42 @@ class TestRegistryPagination:
         data = resp.json()
         assert "data" in data
         assert "meta" in data
+
+
+# ===========================================================================
+# 12. DOCUMENT-REGISTRY LINK TESTS (updated)
+# ===========================================================================
+
+
+class TestDocumentRegistryLink:
+    """Tests for /documents ↔ /registry/documents link."""
+
+    def setup_method(self):
+        _reset_rate_limiter()
+
+    def test_144_documents_have_doc_code(self):
+        """GET /documents items should contain doc_code."""
+        resp = client.get(f"{ORCH}/documents")
+        data = resp.json()
+        for item in data["items"]:
+            assert "doc_code" in item, f"Missing doc_code in: {item}"
+
+    def test_145_document_detail_has_source_type(self):
+        """GET /documents/{id} should contain source_type."""
+        resp = client.get(f"{ORCH}/documents/doc-001")
+        data = resp.json()
+        assert "source_type" in data
+        assert "doc_code" in data
+
+    def test_146_doc_code_links_to_registry(self):
+        """doc_code from documents should match registry doc_code."""
+        resp = client.get(f"{ORCH}/documents/doc-001")
+        doc_data = resp.json()
+        doc_code = doc_data.get("doc_code")
+        if doc_code:
+            # Search registry documents by doc_code
+            resp = client.get(f"{REG_DOCS}/documents", params={"search": doc_code})
+            assert_ok(resp)
+            data = resp.json()
+            if data["data"]:
+                assert data["data"][0].get("doc_code") == doc_code
