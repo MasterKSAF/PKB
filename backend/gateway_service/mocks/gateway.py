@@ -9,7 +9,6 @@ Combines all 5 routers on a single port 8081 with:
 - Unified error format (Registry spec)
 """
 
-import asyncio
 import json
 import os
 import sys
@@ -149,15 +148,9 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         if response.status_code < 500:
             try:
-                body = await asyncio.gather(response.body())
-                body_json = (
-                    json.loads(body[0]) if isinstance(body[0], bytes) else body[0]
-                )
+                body_json = json.loads(response.body)
             except Exception:
-                try:
-                    body_json = json.loads(str(response.body))
-                except Exception:
-                    body_json = {"detail": "cached"}
+                body_json = {"detail": "cached"}
             _IDEMPOTENCY_STORE[key] = {
                 "status_code": response.status_code,
                 "body": body_json,

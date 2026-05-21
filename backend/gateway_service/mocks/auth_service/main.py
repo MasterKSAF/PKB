@@ -12,11 +12,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import copy
 import hashlib
 import json
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 from ..common import (
     SEED_AUDIT,
@@ -38,15 +39,18 @@ _users: Dict[str, dict] = {}
 _roles: Dict[str, dict] = {}
 _audit: List[dict] = []
 _tokens: Dict[str, str] = {}  # refresh_token -> user_id
+_tokens_meta: Dict[str, dict] = {}  # refresh_token -> {user_id, expires_at, created_at}
 _blacklist: Dict[str, str] = {}  # refresh_token -> revoked_at
 _password_hashes: Dict[str, str] = {}  # user_id -> hashed password
+_rate_limits: Dict[str, dict] = {}  # ip -> {"count": int, "reset_at": str}
 
 
 def _init_data():
-    global _users, _roles, _audit, _tokens, _password_hashes
+    global _users, _roles, _audit, _tokens, _tokens_meta, _password_hashes, _rate_limits
     _users = {u["user_id"]: copy.deepcopy(u) for u in SEED_USERS}
     _roles = {r["role_id"]: copy.deepcopy(r) for r in SEED_ROLES}
     _audit = copy.deepcopy(SEED_AUDIT)
+    _rate_limits = {}
 
     # Хеши паролей (простой SHA256 для мока)
     for u in SEED_USERS:
@@ -54,21 +58,42 @@ def _init_data():
             u["password"].encode()
         ).hexdigest()
 
-    # Начальные refresh-токены (для u-001)
+    # Начальные refresh-токены (для u-001, u-002, u-003)
+    now = utcnow()
+    expires_at = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
     _tokens["rt-mock-001"] = "u-001"
+    _tokens_meta["rt-mock-001"] = {
+        "user_id": "u-001",
+        "expires_at": expires_at,
+        "created_at": now,
+    }
     _tokens["rt-mock-002"] = "u-002"
+    _tokens_meta["rt-mock-002"] = {
+        "user_id": "u-002",
+        "expires_at": expires_at,
+        "created_at": now,
+    }
     _tokens["rt-mock-003"] = "u-003"
+    _tokens_meta["rt-mock-003"] = {
+        "user_id": "u-003",
+        "expires_at": expires_at,
+        "created_at": now,
+    }
 
 
 def _make_token(user_id: str) -> dict:
     """Генерирует пару токенов."""
     rt = f"rt-mock-{new_id()}"
+    now = utcnow()
+    expires_at = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
     _tokens[rt] = user_id
+    _tokens_meta[rt] = {"user_id": user_id, "expires_at": expires_at, "created_at": now}
     return {
         "access_token": f"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.mock.{new_id()}",
         "refresh_token": rt,
         "token_type": "bearer",
         "expires_in": 3600,
+        "expires_at": expires_at,
     }
 
 
@@ -104,17 +129,8 @@ def _add_audit(
 
 
 class LoginRequest(BaseModel):
-    username: Optional[str] = None
-    email: Optional[str] = None
+    username: str
     password: str
-
-    @model_validator(mode="before")
-    @classmethod
-    def check_login_field(cls, data):
-        if isinstance(data, dict):
-            if not data.get("username") and not data.get("email"):
-                raise ValueError("Необходимо указать username или email")
-        return data
 
 
 class RefreshRequest(BaseModel):
@@ -138,6 +154,7 @@ class UpdateUserRequest(BaseModel):
     position: Optional[str] = None
     roles: Optional[List[str]] = None
     is_active: Optional[bool] = None
+    password: Optional[str] = None
 
 
 class PatchUserRequest(BaseModel):
@@ -147,6 +164,7 @@ class PatchUserRequest(BaseModel):
     full_name: Optional[str] = None
     position: Optional[str] = None
     is_active: Optional[bool] = None
+    password: Optional[str] = None
 
 
 class CreateRoleRequest(BaseModel):
@@ -168,6 +186,7 @@ class TokenResponse(BaseModel):
     refresh_token: str
     token_type: str
     expires_in: int
+    expires_at: str
 
 
 class UserProfileResponse(BaseModel):
@@ -204,7 +223,7 @@ class UserDetailResponse(BaseModel):
     full_name: str
     position: str
     roles: List[str]
-    permissions: List[str]
+    permissions: Dict[str, bool]
     is_active: bool
     last_login_at: str
     created_at: str
@@ -287,19 +306,34 @@ _init_data()
 @router.post("/auth/token", response_model=TokenResponse)
 async def login(req: LoginRequest, request: Request):
     """Получение JWT-токенов."""
+    # Rate limiting: не более 5 запросов в минуту с одного IP
+    ip = request.client.host if request.client else "127.0.0.1"
+    now = utcnow()
+
+    if ip not in _rate_limits:
+        _rate_limits[ip] = {"count": 0, "reset_at": now}
+
+    # Сброс счётчика, если прошла минута
+    reset_at = datetime.fromisoformat(_rate_limits[ip]["reset_at"])
+    if datetime.now(timezone.utc) - reset_at > timedelta(minutes=1):
+        _rate_limits[ip] = {"count": 0, "reset_at": now}
+
+    if _rate_limits[ip]["count"] >= 5:
+        raise HTTPException(
+            status_code=429,
+            detail=error_response(
+                "TOO_MANY_REQUESTS", "Слишком много запросов. Попробуйте позже"
+            ),
+        )
+    _rate_limits[ip]["count"] += 1
+
+    # Поиск пользователя
     user = None
-    # Поиск по username (может быть email или логин) или по полю email
-    login_value = (req.username or "").strip().lower()
-    email_value = (req.email or "").strip().lower()
+    login_value = req.username.strip().lower()
     for u in _users.values():
         user_email = u.get("email", "").lower()
         user_login = user_email.split("@")[0]
         if user_email == login_value or user_login == login_value:
-            stored_hash = _password_hashes.get(u["user_id"], "")
-            if _hash_password(req.password) == stored_hash:
-                user = u
-                break
-        if email_value and user_email == email_value:
             stored_hash = _password_hashes.get(u["user_id"], "")
             if _hash_password(req.password) == stored_hash:
                 user = u
@@ -338,6 +372,19 @@ async def refresh(req: RefreshRequest):
             detail=error_response("INVALID_TOKEN", "Токен отозван"),
         )
 
+    # Проверка срока действия refresh-токена
+    rt_meta = _tokens_meta.get(req.refresh_token)
+    if rt_meta:
+        expires_at = datetime.fromisoformat(rt_meta["expires_at"])
+        if datetime.now(timezone.utc) > expires_at:
+            # Очищаем истёкший токен
+            _tokens.pop(req.refresh_token, None)
+            _tokens_meta.pop(req.refresh_token, None)
+            raise HTTPException(
+                status_code=401,
+                detail=error_response("INVALID_TOKEN", "Refresh-токен истёк"),
+            )
+
     user_id = _tokens.get(req.refresh_token)
     if not user_id or user_id not in _users:
         raise HTTPException(
@@ -353,6 +400,7 @@ async def revoke(req: RevokeRequest):
     """Отзыв refresh-токена."""
     if req.refresh_token in _tokens:
         del _tokens[req.refresh_token]
+    _tokens_meta.pop(req.refresh_token, None)
 
     _blacklist[req.refresh_token] = utcnow()
 
@@ -504,9 +552,9 @@ async def get_user(user_id: str):
         "full_name": user.get("full_name", ""),
         "position": user.get("position", ""),
         "roles": user.get("roles", []),
-        "permissions": list(user.get("permissions", {}).keys())
+        "permissions": user.get("permissions", {})
         if isinstance(user.get("permissions"), dict)
-        else [],
+        else {},
         "is_active": user.get("is_active", True),
         "last_login_at": user.get("last_login_at", ""),
         "created_at": user.get("created_at", ""),
@@ -535,6 +583,13 @@ async def update_user(user_id: str, req: UpdateUserRequest):
         user["role"] = req.roles[0] if req.roles else user["role"]
     if req.is_active is not None:
         user["is_active"] = req.is_active
+    if req.password is not None:
+        _password_hashes[user_id] = _hash_password(req.password)
+        # Отозвать все refresh-токены этого пользователя
+        tokens_to_remove = [rt for rt, uid in _tokens.items() if uid == user_id]
+        for rt in tokens_to_remove:
+            del _tokens[rt]
+            _tokens_meta.pop(rt, None)
 
     user["updated_at"] = utcnow()
     _add_audit("u-003", "user.update", "user", user_id)
@@ -568,6 +623,13 @@ async def patch_user(user_id: str, req: PatchUserRequest):
         user["position"] = req.position
     if req.is_active is not None:
         user["is_active"] = req.is_active
+    if req.password is not None:
+        _password_hashes[user_id] = _hash_password(req.password)
+        # Отозвать все refresh-токены этого пользователя
+        tokens_to_remove = [rt for rt, uid in _tokens.items() if uid == user_id]
+        for rt in tokens_to_remove:
+            del _tokens[rt]
+            _tokens_meta.pop(rt, None)
 
     user["updated_at"] = utcnow()
     _add_audit("u-003", "user.patch", "user", user_id)
@@ -681,9 +743,9 @@ async def validate_token(req: ValidateTokenRequest):
         "user_id": user["user_id"],
         "email": user.get("email", ""),
         "roles": user.get("roles", []),
-        "permissions": list(user.get("permissions", {}).keys())
+        "permissions": user.get("permissions", {})
         if isinstance(user.get("permissions"), dict)
-        else [],
+        else {},
         "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
     }
 
@@ -700,18 +762,3 @@ async def health():
         "service": "auth-service",
         "timestamp": utcnow(),
     }
-
-
-# ===========================================================================
-# Запуск
-# ===========================================================================
-
-from fastapi import FastAPI
-
-app = FastAPI(title="Auth Service Mock", version="1.0.0")
-app.include_router(router)
-
-if __name__ == "__main__":
-    import uvicorn
-
-    uvicorn.run(app, host="127.0.0.1", port=8082)

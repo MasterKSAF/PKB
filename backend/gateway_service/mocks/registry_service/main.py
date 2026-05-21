@@ -11,9 +11,10 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import copy
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from common import (
+    SEED_CLASSIFIER_PENDING,
     SEED_CLASSIFIERS,
     SEED_REGISTRY_DOCUMENTS,
     SEED_TERMINOLOGY,
@@ -23,10 +24,11 @@ from common import (
     utcnow,
 )
 from fastapi import APIRouter, FastAPI, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 main_router = APIRouter(prefix="/api/v1")
 registry_docs_router = APIRouter()
+admin_router = APIRouter()
 
 # ---------------------------------------------------------------------------
 # In-memory хранилища
@@ -35,29 +37,60 @@ registry_docs_router = APIRouter()
 _classifiers: Dict[str, dict] = {}
 _terminology: Dict[str, dict] = {}
 _registry_docs: Dict[str, dict] = {}
+_pending_classifiers: Dict[str, dict] = {}
+_doc_history: Dict[str, list] = {}
 
 
 def _init_data():
-    global _classifiers, _terminology, _registry_docs
+    global \
+        _classifiers, \
+        _terminology, \
+        _registry_docs, \
+        _pending_classifiers, \
+        _doc_history
     _classifiers = {c["code"]: copy.deepcopy(c) for c in SEED_CLASSIFIERS}
-    _terminology = {t["term_id"]: copy.deepcopy(t) for t in SEED_TERMINOLOGY}
-    _registry_docs = {d["doc_id"]: copy.deepcopy(d) for d in SEED_REGISTRY_DOCUMENTS}
+    _terminology = {t["id"]: copy.deepcopy(t) for t in SEED_TERMINOLOGY}
+    _registry_docs = {d["id"]: copy.deepcopy(d) for d in SEED_REGISTRY_DOCUMENTS}
+    _pending_classifiers = {p["id"]: copy.deepcopy(p) for p in SEED_CLASSIFIER_PENDING}
+    _doc_history = {}
+    for d in SEED_REGISTRY_DOCUMENTS:
+        _doc_history[d["id"]] = [
+            {
+                "history_id": f"hist-{new_id()}",
+                "doc_id": d["id"],
+                "previous_status": None,
+                "new_status": d.get("status", "draft"),
+                "comment": "Initial state",
+                "changed_by": d.get("created_by", "system"),
+                "changed_at": d.get("created_at", utcnow()),
+            }
+        ]
 
 
 def _build_tree(
-    nodes: Dict[str, dict], parent_code: Optional[str] = None, depth: int = 0
+    nodes: Dict[str, dict],
+    parent_code: Optional[str] = None,
+    classifier_system: Optional[str] = None,
+    depth: int = 0,
 ) -> list:
     """Строит дерево классификаторов."""
     result = []
     for code, node in sorted(nodes.items()):
         if node.get("parent_code") == parent_code:
-            children = _build_tree(nodes, code, depth + 1)
+            if (
+                classifier_system is not None
+                and node.get("classifier_system") != classifier_system
+            ):
+                continue
+            children = _build_tree(nodes, code, classifier_system, depth + 1)
             entry = {
                 "code": node["code"],
+                "classifier_system": node.get("classifier_system", "MKS"),
                 "full_name": node["full_name"],
-                "doc_type": node["doc_type"],
-                "oks_code": node.get("oks_code", ""),
-                "is_thematic": node.get("is_thematic", False),
+                "parent_code": node.get("parent_code"),
+                "status": node.get("status", "active"),
+                "effective_date": node.get("effective_date"),
+                "replaced_by": node.get("replaced_by"),
             }
             if children:
                 entry["children"] = children
@@ -76,82 +109,112 @@ def _count_children(code: str) -> int:
 
 
 class ClassifierCreate(BaseModel):
+    classifier_system: str = "MKS"
     code: str
     parent_code: Optional[str] = None
     full_name: str
-    doc_type: str = "normative"
-    jurisdiction: Optional[str] = None
-    language: Optional[str] = None
-    oks_code: Optional[str] = None
-    is_thematic: bool = False
+    status: str = "active"
+    effective_date: Optional[str] = None
 
 
 class ClassifierUpdate(BaseModel):
-    full_name: Optional[str] = None
+    classifier_system: Optional[str] = None
     parent_code: Optional[str] = None
-    doc_type: Optional[str] = None
-    jurisdiction: Optional[str] = None
-    language: Optional[str] = None
-    oks_code: Optional[str] = None
-    is_thematic: Optional[bool] = None
-
-
-class TermCreate(BaseModel):
-    term: str
-    normalized_term: Optional[str] = None
-    context: Optional[str] = None
-    source: Optional[str] = None
-
-
-class TermUpdate(BaseModel):
-    term: Optional[str] = None
-    normalized_term: Optional[str] = None
-    context: Optional[str] = None
-    source: Optional[str] = None
-
-
-class RegistryDocCreate(BaseModel):
-    title: str
-    doc_number: str
-    classifier_code: str
-    status: str = "draft"
-    source: Optional[str] = None
-    notes: Optional[str] = None
-
-
-class RegistryDocUpdate(BaseModel):
-    title: Optional[str] = None
-    doc_number: Optional[str] = None
-    classifier_code: Optional[str] = None
-    source: Optional[str] = None
-    notes: Optional[str] = None
-
-
-class RegistryDocStatusUpdate(BaseModel):
-    status: str
+    full_name: Optional[str] = None
+    status: Optional[str] = None
+    effective_date: Optional[str] = None
+    replaced_by: Optional[str] = None
 
 
 class ClassifierImportRow(BaseModel):
+    classifier_system: str = "MKS"
     code: str
     full_name: str
     parent_code: Optional[str] = None
-    doc_type: str = "normative"
-    oks_code: Optional[str] = None
+    status: str = "active"
+    effective_date: Optional[str] = None
 
 
 class ClassifierImportRequest(BaseModel):
     items: List[ClassifierImportRow]
 
 
+class TermCreate(BaseModel):
+    raw_term: str
+    standard_term: Optional[str] = None
+    normalized_value: Optional[str] = None
+    term_type: str = "preferred"
+    is_case_sensitive: bool = False
+    definition: Optional[str] = None
+    synonyms: Optional[List[str]] = None
+    related_docs: Optional[List[str]] = None
+    scope: Optional[str] = None
+    is_blocked: bool = False
+
+
+class TermUpdate(BaseModel):
+    raw_term: Optional[str] = None
+    standard_term: Optional[str] = None
+    normalized_value: Optional[str] = None
+    term_type: Optional[str] = None
+    is_case_sensitive: Optional[bool] = None
+    definition: Optional[str] = None
+    synonyms: Optional[List[str]] = None
+    related_docs: Optional[List[str]] = None
+    scope: Optional[str] = None
+    is_blocked: Optional[bool] = None
+
+
 class TermImportRow(BaseModel):
-    term: str
-    normalized_term: Optional[str] = None
-    context: Optional[str] = None
-    source: Optional[str] = None
+    raw_term: str
+    standard_term: Optional[str] = None
+    normalized_value: Optional[str] = None
+    term_type: str = "preferred"
+    is_case_sensitive: bool = False
+    definition: Optional[str] = None
+    synonyms: Optional[List[str]] = None
+    related_docs: Optional[List[str]] = None
+    scope: Optional[str] = None
+    is_blocked: bool = False
 
 
 class TermImportRequest(BaseModel):
     items: List[TermImportRow]
+
+
+class RegistryDocCreate(BaseModel):
+    title: str
+    doc_code: str
+    source_type: str = "GOST"
+    status: str = "draft"
+    era: str = "CURRENT"
+    validity_status: str = "active"
+    jurisdiction: Optional[str] = None
+    issuing_body: Optional[str] = None
+    mks_oks_code: Optional[str] = None
+    okstu_code: Optional[str] = None
+
+
+class RegistryDocUpdate(BaseModel):
+    title: Optional[str] = None
+    doc_code: Optional[str] = None
+    source_type: Optional[str] = None
+    status: Optional[str] = None
+    era: Optional[str] = None
+    validity_status: Optional[str] = None
+    jurisdiction: Optional[str] = None
+    issuing_body: Optional[str] = None
+    mks_oks_code: Optional[str] = None
+    okstu_name: Optional[str] = None
+    okstu_code: Optional[str] = None
+    successor_doc_id: Optional[str] = None
+    predecessor_doc_id: Optional[str] = None
+
+
+class RegistryDocStatusUpdate(BaseModel):
+    status: str
+    comment: Optional[str] = None
+    changed_by: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -169,7 +232,8 @@ _init_data()
 @main_router.get("/classifiers")
 async def list_classifiers(
     search: Optional[str] = Query(None),
-    doc_type: Optional[str] = Query(None),
+    classifier_system: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
 ):
@@ -184,21 +248,22 @@ async def list_classifiers(
             if search_lower in c.get("full_name", "").lower()
             or search_lower in c.get("code", "").lower()
         ]
-    if doc_type:
-        items = [c for c in items if c.get("doc_type") == doc_type]
+    if classifier_system:
+        items = [c for c in items if c.get("classifier_system") == classifier_system]
+    if status:
+        items = [c for c in items if c.get("status") == status]
 
     result = []
     for c in items:
         result.append(
             {
                 "code": c["code"],
+                "classifier_system": c.get("classifier_system", "MKS"),
                 "parent_code": c.get("parent_code"),
                 "full_name": c.get("full_name"),
-                "doc_type": c.get("doc_type"),
-                "jurisdiction": c.get("jurisdiction"),
-                "language": c.get("language"),
-                "oks_code": c.get("oks_code"),
-                "is_thematic": c.get("is_thematic", False),
+                "status": c.get("status", "active"),
+                "effective_date": c.get("effective_date"),
+                "replaced_by": c.get("replaced_by"),
                 "created_at": c.get("created_at"),
                 "updated_at": c.get("updated_at"),
             }
@@ -231,26 +296,24 @@ async def import_classifiers(req: ClassifierImportRequest):
         try:
             if row.code in _classifiers:
                 node = _classifiers[row.code]
+                node["classifier_system"] = row.classifier_system
                 node["full_name"] = row.full_name
                 if row.parent_code is not None:
                     node["parent_code"] = row.parent_code
-                if row.doc_type:
-                    node["doc_type"] = row.doc_type
-                if row.oks_code:
-                    node["oks_code"] = row.oks_code
+                node["status"] = row.status
+                node["effective_date"] = row.effective_date
                 node["updated_at"] = utcnow()
                 updated += 1
             else:
                 now = utcnow()
                 _classifiers[row.code] = {
+                    "classifier_system": row.classifier_system,
                     "code": row.code,
                     "parent_code": row.parent_code,
                     "full_name": row.full_name,
-                    "doc_type": row.doc_type,
-                    "jurisdiction": None,
-                    "language": None,
-                    "oks_code": row.oks_code,
-                    "is_thematic": False,
+                    "status": row.status,
+                    "effective_date": row.effective_date,
+                    "replaced_by": None,
                     "created_at": now,
                     "updated_at": now,
                 }
@@ -263,6 +326,131 @@ async def import_classifiers(req: ClassifierImportRequest):
             "inserted": inserted,
             "updated": updated,
             "errors": errors,
+        }
+    }
+
+
+# ---------------------------------------------------------------------------
+# 1a. Quarantine endpoints (main_router)
+# ---------------------------------------------------------------------------
+
+
+@main_router.get("/classifiers/quarantine")
+async def list_quarantine(
+    status: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+):
+    """Список элементов в карантине классификаторов."""
+    items = list(_pending_classifiers.values())
+
+    if status:
+        items = [p for p in items if p.get("status") == status]
+
+    result = []
+    for p in items:
+        result.append(
+            {
+                "id": p["id"],
+                "system": p.get("system"),
+                "code": p.get("code"),
+                "found_in_document_id": p.get("found_in_document_id"),
+                "found_in_document_title": p.get("found_in_document_title"),
+                "status": p.get("status"),
+                "suggested_parent_code": p.get("suggested_parent_code"),
+                "suggested_parent_name": p.get("suggested_parent_name"),
+                "admin_comment": p.get("admin_comment"),
+                "created_at": p.get("created_at"),
+            }
+        )
+
+    return paginate_registry(result, page, page_size)
+
+
+@main_router.post("/classifiers/quarantine/{pending_id}/accept")
+async def accept_quarantine(pending_id: str):
+    """Принять элемент из карантина в классификатор."""
+    pending = _pending_classifiers.get(pending_id)
+    if not pending:
+        raise HTTPException(
+            status_code=404,
+            detail=error_response("PENDING_NOT_FOUND", "Элемент карантина не найден"),
+        )
+
+    # Создаём узел классификатора из pending-элемента
+    now = utcnow()
+    new_code = pending.get("code", f"auto-{new_id()}")
+    classifier_node = {
+        "classifier_system": pending.get("system", "MKS"),
+        "code": new_code,
+        "parent_code": pending.get("suggested_parent_code"),
+        "full_name": pending.get("found_in_document_title", ""),
+        "status": "active",
+        "effective_date": now[:10],
+        "replaced_by": None,
+        "created_at": now,
+        "updated_at": now,
+    }
+    _classifiers[new_code] = classifier_node
+
+    # Обновляем статус pending
+    pending["status"] = "accepted"
+    pending["admin_comment"] = f"Accepted and moved to classifier as {new_code}"
+
+    return {
+        "data": {
+            "id": pending_id,
+            "status": "accepted",
+            "classifier_code": new_code,
+            "classifier_system": classifier_node["classifier_system"],
+            "updated_at": now,
+        }
+    }
+
+
+@main_router.post("/classifiers/quarantine/{pending_id}/reject")
+async def reject_quarantine(pending_id: str):
+    """Отклонить элемент из карантина."""
+    pending = _pending_classifiers.get(pending_id)
+    if not pending:
+        raise HTTPException(
+            status_code=404,
+            detail=error_response("PENDING_NOT_FOUND", "Элемент карантина не найден"),
+        )
+
+    now = utcnow()
+    pending["status"] = "rejected"
+    pending["admin_comment"] = "Rejected by administrator"
+
+    return {
+        "data": {
+            "id": pending_id,
+            "status": "rejected",
+            "updated_at": now,
+        }
+    }
+
+
+@main_router.post("/classifiers/validate")
+async def validate_classification(req: dict):
+    """Валидация классификационного кода (мок)."""
+    code = req.get("code", "")
+    classifier_system = req.get("classifier_system", "MKS")
+
+    node = _classifiers.get(code) if code else None
+    system_valid = classifier_system in ["MKS", "OKSTU", "UDC", "EXTERNAL"]
+
+    valid = node is not None and system_valid
+    return {
+        "data": {
+            "valid": valid,
+            "code": code,
+            "classifier_system": classifier_system,
+            "exists_in_registry": node is not None,
+            "validation_status": "valid"
+            if valid
+            else ("error" if not system_valid else "warning"),
+            "message": "Validation passed" if valid else "Validation failed",
         }
     }
 
@@ -294,14 +482,13 @@ async def create_classifier(req: ClassifierCreate):
 
     now = utcnow()
     new_node = {
+        "classifier_system": req.classifier_system,
         "code": req.code,
         "parent_code": req.parent_code,
         "full_name": req.full_name,
-        "doc_type": req.doc_type,
-        "jurisdiction": req.jurisdiction,
-        "language": req.language,
-        "oks_code": req.oks_code,
-        "is_thematic": req.is_thematic,
+        "status": req.status,
+        "effective_date": req.effective_date,
+        "replaced_by": None,
         "created_at": now,
         "updated_at": now,
     }
@@ -382,6 +569,7 @@ async def delete_classifier(code: str):
 @main_router.get("/terminology")
 async def list_terminology(
     search: Optional[str] = Query(None),
+    term_type: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
 ):
@@ -393,21 +581,31 @@ async def list_terminology(
         items = [
             t
             for t in items
-            if search_lower in t.get("term", "").lower()
-            or search_lower in t.get("normalized_term", "").lower()
-            or search_lower in t.get("context", "").lower()
+            if search_lower in t.get("raw_term", "").lower()
+            or search_lower in t.get("standard_term", "").lower()
+            or search_lower in t.get("normalized_value", "").lower()
+            or any(search_lower in (s or "").lower() for s in t.get("synonyms", []))
         ]
+    if term_type:
+        items = [t for t in items if t.get("term_type") == term_type]
 
     result = []
     for t in items:
         result.append(
             {
-                "term_id": t["term_id"],
-                "term": t.get("term"),
-                "normalized_term": t.get("normalized_term"),
-                "context": t.get("context"),
-                "source": t.get("source"),
+                "id": t["id"],
+                "raw_term": t.get("raw_term"),
+                "standard_term": t.get("standard_term"),
+                "normalized_value": t.get("normalized_value"),
+                "term_type": t.get("term_type"),
+                "is_case_sensitive": t.get("is_case_sensitive", False),
+                "definition": t.get("definition"),
+                "synonyms": t.get("synonyms", []),
+                "related_docs": t.get("related_docs", []),
+                "scope": t.get("scope"),
+                "is_blocked": t.get("is_blocked", False),
                 "created_at": t.get("created_at"),
+                "updated_at": t.get("updated_at"),
             }
         )
 
@@ -420,32 +618,39 @@ async def normalize_term(q: str = Query(..., description="Термин для н
     q_lower = q.lower()
     found = None
     for t in _terminology.values():
-        if t.get("normalized_term", "").lower() == q_lower:
+        if t.get("normalized_value", "").lower() == q_lower:
             found = t
             break
-        if t.get("term", "").lower() == q_lower:
+        if t.get("raw_term", "").lower() == q_lower:
             found = t
             break
-        if found is None and q_lower in t.get("term", "").lower():
+        if t.get("standard_term", "").lower() == q_lower:
+            found = t
+            break
+        if found is None and q_lower in t.get("raw_term", "").lower():
             found = t
 
     if found:
         return {
             "data": {
-                "original": q,
-                "normalized": found.get("normalized_term", found["term"]),
-                "term_id": found["term_id"],
-                "context": found.get("context"),
+                "raw_term": found.get("raw_term"),
+                "standard_term": found.get("standard_term"),
+                "normalized_value": found.get(
+                    "normalized_value", found.get("raw_term")
+                ),
+                "term_type": found.get("term_type"),
+                "is_blocked": found.get("is_blocked", False),
             }
         }
 
     # Если не нашли, возвращаем исходный термин как нормализованный
     return {
         "data": {
-            "original": q,
-            "normalized": q.lower(),
-            "term_id": None,
-            "context": None,
+            "raw_term": q,
+            "standard_term": q.lower(),
+            "normalized_value": q.lower(),
+            "term_type": "preferred",
+            "is_blocked": False,
         }
     }
 
@@ -460,17 +665,27 @@ async def import_terminology(req: TermImportRequest):
     for row in req.items:
         try:
             term_id = f"t-{new_id()}"
+            now = utcnow()
             _terminology[term_id] = {
-                "term_id": term_id,
-                "term": row.term,
-                "normalized_term": row.normalized_term or row.term.lower(),
-                "context": row.context,
-                "source": row.source,
-                "created_at": utcnow(),
+                "id": term_id,
+                "raw_term": row.raw_term,
+                "standard_term": row.standard_term or row.raw_term.lower(),
+                "normalized_value": row.normalized_value or row.raw_term.lower(),
+                "term_type": row.term_type,
+                "is_case_sensitive": row.is_case_sensitive,
+                "definition": row.definition,
+                "synonyms": row.synonyms or [],
+                "related_docs": row.related_docs or [],
+                "scope": row.scope,
+                "is_blocked": row.is_blocked,
+                "created_at": now,
+                "updated_at": now,
             }
             inserted += 1
         except Exception as e:
-            errors.append({"row": row.term, "code": "IMPORT_ERROR", "message": str(e)})
+            errors.append(
+                {"row": row.raw_term, "code": "IMPORT_ERROR", "message": str(e)}
+            )
 
     return {
         "data": {
@@ -497,13 +712,21 @@ async def get_term(term_id: str):
 async def create_term(req: TermCreate):
     """Создать термин."""
     term_id = f"t-{new_id()}"
+    now = utcnow()
     new_term = {
-        "term_id": term_id,
-        "term": req.term,
-        "normalized_term": req.normalized_term or req.term.lower(),
-        "context": req.context,
-        "source": req.source,
-        "created_at": utcnow(),
+        "id": term_id,
+        "raw_term": req.raw_term,
+        "standard_term": req.standard_term or req.raw_term.lower(),
+        "normalized_value": req.normalized_value or req.raw_term.lower(),
+        "term_type": req.term_type,
+        "is_case_sensitive": req.is_case_sensitive,
+        "definition": req.definition,
+        "synonyms": req.synonyms or [],
+        "related_docs": req.related_docs or [],
+        "scope": req.scope,
+        "is_blocked": req.is_blocked,
+        "created_at": now,
+        "updated_at": now,
     }
     _terminology[term_id] = new_term
     return {"data": new_term}
@@ -519,14 +742,11 @@ async def update_term(term_id: str, req: TermUpdate):
             detail=error_response("TERM_NOT_FOUND", "Термин не найден"),
         )
 
-    if req.term is not None:
-        term["term"] = req.term
-    if req.normalized_term is not None:
-        term["normalized_term"] = req.normalized_term
-    if req.context is not None:
-        term["context"] = req.context
-    if req.source is not None:
-        term["source"] = req.source
+    update_data = req.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        if value is not None:
+            term[key] = value
+    term["updated_at"] = utcnow()
 
     return {"data": term}
 
@@ -540,7 +760,7 @@ async def delete_term(term_id: str):
             detail=error_response("TERM_NOT_FOUND", "Термин не найден"),
         )
     del _terminology[term_id]
-    return {"data": {"term_id": term_id, "deleted": True, "deleted_at": utcnow()}}
+    return {"data": {"id": term_id, "deleted": True, "deleted_at": utcnow()}}
 
 
 # ===========================================================================
@@ -552,7 +772,8 @@ async def delete_term(term_id: str):
 async def list_registry_documents(
     search: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
-    classifier_code: Optional[str] = Query(None),
+    source_type: Optional[str] = Query(None),
+    era: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
 ):
@@ -565,25 +786,40 @@ async def list_registry_documents(
             d
             for d in items
             if search_lower in d.get("title", "").lower()
-            or search_lower in d.get("doc_number", "").lower()
+            or search_lower in d.get("doc_code", "").lower()
         ]
     if status:
         items = [d for d in items if d.get("status") == status]
-    if classifier_code:
-        items = [d for d in items if d.get("classifier_code") == classifier_code]
+    if source_type:
+        items = [d for d in items if d.get("source_type") == source_type]
+    if era:
+        items = [d for d in items if d.get("era") == era]
 
     result = []
     for d in items:
         result.append(
             {
-                "doc_id": d["doc_id"],
+                "id": d["id"],
                 "title": d.get("title"),
-                "doc_number": d.get("doc_number"),
-                "classifier_code": d.get("classifier_code"),
-                "classifier_name": d.get("classifier_name"),
+                "doc_code": d.get("doc_code"),
+                "source_type": d.get("source_type"),
+                "title_hash_sha256": d.get("title_hash_sha256"),
                 "status": d.get("status"),
-                "source": d.get("source"),
-                "notes": d.get("notes"),
+                "era": d.get("era"),
+                "validity_status": d.get("validity_status"),
+                "jurisdiction": d.get("jurisdiction"),
+                "issuing_body": d.get("issuing_body"),
+                "mks_oks_code": d.get("mks_oks_code"),
+                "mks_name": d.get("mks_name"),
+                "okstu_code": d.get("okstu_code"),
+                "okstu_name": d.get("okstu_name"),
+                "classification_status": d.get("classification_status"),
+                "successor_doc_id": d.get("successor_doc_id"),
+                "predecessor_doc_id": d.get("predecessor_doc_id"),
+                "total_versions": d.get("total_versions"),
+                "chunk_count": d.get("chunk_count"),
+                "created_by": d.get("created_by"),
+                "updated_by": d.get("updated_by"),
                 "created_at": d.get("created_at"),
                 "updated_at": d.get("updated_at"),
             }
@@ -623,21 +859,57 @@ async def import_registry_documents(req: List[RegistryDocCreate]):
         try:
             doc_id = f"rd-{new_id()}"
             now = utcnow()
+            mks_name = ""
+            if item.mks_oks_code:
+                cl = _classifiers.get(item.mks_oks_code)
+                if cl:
+                    mks_name = cl.get("full_name", "")
+            okstu_name = ""
+            if item.okstu_code:
+                cl = _classifiers.get(item.okstu_code)
+                if cl:
+                    okstu_name = cl.get("full_name", "")
+
             new_doc = {
-                "doc_id": doc_id,
+                "id": doc_id,
                 "title": item.title,
-                "doc_number": item.doc_number,
-                "classifier_code": item.classifier_code,
-                "classifier_name": _classifiers.get(item.classifier_code, {}).get(
-                    "full_name", ""
-                ),
+                "doc_code": item.doc_code,
+                "source_type": item.source_type,
+                "title_hash_sha256": None,
                 "status": item.status,
-                "source": item.source,
-                "notes": item.notes,
+                "era": item.era,
+                "validity_status": item.validity_status,
+                "jurisdiction": item.jurisdiction,
+                "issuing_body": item.issuing_body,
+                "mks_oks_code": item.mks_oks_code,
+                "mks_name": mks_name,
+                "okstu_code": item.okstu_code,
+                "okstu_name": okstu_name,
+                "classification_status": {
+                    "mks_status": "unknown",
+                    "okstu_status": "unknown",
+                },
+                "successor_doc_id": None,
+                "predecessor_doc_id": None,
+                "total_versions": 1,
+                "chunk_count": 0,
+                "created_by": "system",
+                "updated_by": "system",
                 "created_at": now,
                 "updated_at": now,
             }
             _registry_docs[doc_id] = new_doc
+            _doc_history[doc_id] = [
+                {
+                    "history_id": f"hist-{new_id()}",
+                    "doc_id": doc_id,
+                    "previous_status": None,
+                    "new_status": item.status,
+                    "comment": "Document created",
+                    "changed_by": "system",
+                    "changed_at": now,
+                }
+            ]
             inserted += 1
         except Exception as e:
             errors.append(
@@ -670,21 +942,59 @@ async def create_registry_document(req: RegistryDocCreate):
     """Создать документ в реестре."""
     doc_id = f"rd-{new_id()}"
     now = utcnow()
+
+    mks_name = ""
+    if req.mks_oks_code:
+        cl = _classifiers.get(req.mks_oks_code)
+        if cl:
+            mks_name = cl.get("full_name", "")
+    okstu_name = ""
+    if req.okstu_code:
+        cl = _classifiers.get(req.okstu_code)
+        if cl:
+            okstu_name = cl.get("full_name", "")
+
     new_doc = {
-        "doc_id": doc_id,
+        "id": doc_id,
         "title": req.title,
-        "doc_number": req.doc_number,
-        "classifier_code": req.classifier_code,
-        "classifier_name": _classifiers.get(req.classifier_code, {}).get(
-            "full_name", ""
-        ),
+        "doc_code": req.doc_code,
+        "source_type": req.source_type,
+        "title_hash_sha256": None,
         "status": req.status,
-        "source": req.source,
-        "notes": req.notes,
+        "era": req.era,
+        "validity_status": req.validity_status,
+        "jurisdiction": req.jurisdiction,
+        "issuing_body": req.issuing_body,
+        "mks_oks_code": req.mks_oks_code,
+        "mks_name": mks_name,
+        "okstu_code": req.okstu_code,
+        "okstu_name": okstu_name,
+        "classification_status": {
+            "mks_status": "unknown",
+            "okstu_status": "unknown",
+        },
+        "successor_doc_id": None,
+        "predecessor_doc_id": None,
+        "total_versions": 1,
+        "chunk_count": 0,
+        "created_by": "system",
+        "updated_by": "system",
         "created_at": now,
         "updated_at": now,
     }
     _registry_docs[doc_id] = new_doc
+    _doc_history[doc_id] = [
+        {
+            "history_id": f"hist-{new_id()}",
+            "doc_id": doc_id,
+            "previous_status": None,
+            "new_status": req.status,
+            "comment": "Document created",
+            "changed_by": "system",
+            "changed_at": now,
+        }
+    ]
+
     return {"data": new_doc}
 
 
@@ -698,27 +1008,30 @@ async def update_registry_document(doc_id: str, req: RegistryDocUpdate):
             detail=error_response("DOCUMENT_NOT_FOUND", "Документ не найден"),
         )
 
-    if req.title is not None:
-        doc["title"] = req.title
-    if req.doc_number is not None:
-        doc["doc_number"] = req.doc_number
-    if req.classifier_code is not None:
-        doc["classifier_code"] = req.classifier_code
-        doc["classifier_name"] = _classifiers.get(req.classifier_code, {}).get(
-            "full_name", ""
-        )
-    if req.source is not None:
-        doc["source"] = req.source
-    if req.notes is not None:
-        doc["notes"] = req.notes
+    update_data = req.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        if value is not None:
+            doc[key] = value
+
+    # If mks_oks_code changed, update mks_name
+    if "mks_oks_code" in update_data and update_data["mks_oks_code"] is not None:
+        cl = _classifiers.get(update_data["mks_oks_code"])
+        doc["mks_name"] = cl.get("full_name", "") if cl else ""
+
+    # If okstu_code changed, update okstu_name
+    if "okstu_code" in update_data and update_data["okstu_code"] is not None:
+        cl = _classifiers.get(update_data["okstu_code"])
+        doc["okstu_name"] = cl.get("full_name", "") if cl else ""
+
     doc["updated_at"] = utcnow()
+    doc["updated_by"] = "system"
 
     return {"data": doc}
 
 
 @registry_docs_router.patch("/documents/{doc_id}/status")
 async def update_document_status(doc_id: str, req: RegistryDocStatusUpdate):
-    """Обновить статус документа."""
+    """Обновить статус документа с комментарием."""
     doc = _registry_docs.get(doc_id)
     if not doc:
         raise HTTPException(
@@ -726,10 +1039,115 @@ async def update_document_status(doc_id: str, req: RegistryDocStatusUpdate):
             detail=error_response("DOCUMENT_NOT_FOUND", "Документ не найден"),
         )
 
-    doc["status"] = req.status
-    doc["updated_at"] = utcnow()
+    previous_status = doc.get("status")
+    new_status = req.status
+    now = utcnow()
 
-    return {"data": doc}
+    doc["status"] = new_status
+    doc["updated_at"] = now
+    doc["updated_by"] = req.changed_by or "system"
+
+    history_entry = {
+        "history_id": f"hist-{new_id()}",
+        "doc_id": doc_id,
+        "previous_status": previous_status,
+        "new_status": new_status,
+        "comment": req.comment or "Status updated",
+        "changed_by": req.changed_by or "system",
+        "changed_at": now,
+    }
+
+    if doc_id not in _doc_history:
+        _doc_history[doc_id] = []
+    _doc_history[doc_id].append(history_entry)
+
+    return {
+        "data": {
+            "id": doc_id,
+            "status": new_status,
+            "previous_status": previous_status,
+            "history_id": history_entry["history_id"],
+            "updated_at": now,
+        }
+    }
+
+
+@registry_docs_router.get("/documents/{doc_id}/history")
+async def get_document_history(doc_id: str):
+    """История изменений статуса документа."""
+    if doc_id not in _registry_docs:
+        raise HTTPException(
+            status_code=404,
+            detail=error_response("DOCUMENT_NOT_FOUND", "Документ не найден"),
+        )
+
+    history = _doc_history.get(doc_id, [])
+    return {
+        "data": {
+            "doc_id": doc_id,
+            "history": history,
+        }
+    }
+
+
+@registry_docs_router.get("/documents/{doc_id}/chain")
+async def get_document_chain(doc_id: str):
+    """Цепочка наследования документа (преемник/предшественник)."""
+    doc = _registry_docs.get(doc_id)
+    if not doc:
+        raise HTTPException(
+            status_code=404,
+            detail=error_response("DOCUMENT_NOT_FOUND", "Документ не найден"),
+        )
+
+    # Build predecessor chain (walk backwards)
+    predecessor_chain = []
+    current_pred_id = doc.get("predecessor_doc_id")
+    while current_pred_id:
+        pred_doc = _registry_docs.get(current_pred_id)
+        if pred_doc:
+            predecessor_chain.append(
+                {
+                    "id": pred_doc["id"],
+                    "title": pred_doc.get("title"),
+                    "doc_code": pred_doc.get("doc_code"),
+                    "status": pred_doc.get("status"),
+                }
+            )
+            current_pred_id = pred_doc.get("predecessor_doc_id")
+        else:
+            break
+
+    # Build successor chain (walk forwards)
+    successor_chain = []
+    current_succ_id = doc.get("successor_doc_id")
+    while current_succ_id:
+        succ_doc = _registry_docs.get(current_succ_id)
+        if succ_doc:
+            successor_chain.append(
+                {
+                    "id": succ_doc["id"],
+                    "title": succ_doc.get("title"),
+                    "doc_code": succ_doc.get("doc_code"),
+                    "status": succ_doc.get("status"),
+                }
+            )
+            current_succ_id = succ_doc.get("successor_doc_id")
+        else:
+            break
+
+    return {
+        "data": {
+            "doc_id": doc_id,
+            "current": {
+                "id": doc["id"],
+                "title": doc.get("title"),
+                "doc_code": doc.get("doc_code"),
+            },
+            "predecessors": predecessor_chain,
+            "successors": successor_chain,
+        }
+    }
 
 
 @registry_docs_router.delete("/documents/{doc_id}")
@@ -742,7 +1160,9 @@ async def delete_registry_document(doc_id: str):
         )
 
     del _registry_docs[doc_id]
-    return {"data": {"doc_id": doc_id, "deleted": True, "deleted_at": utcnow()}}
+    if doc_id in _doc_history:
+        del _doc_history[doc_id]
+    return {"data": {"id": doc_id, "deleted": True, "deleted_at": utcnow()}}
 
 
 # ===========================================================================
@@ -755,21 +1175,50 @@ async def get_registry_stats():
     """Статистика реестра."""
     docs = list(_registry_docs.values())
     docs_by_status = {}
+    docs_by_source_type = {}
+    docs_by_era = {}
     for d in docs:
         status = d.get("status", "draft")
         docs_by_status[status] = docs_by_status.get(status, 0) + 1
+        source_type = d.get("source_type", "unknown")
+        docs_by_source_type[source_type] = docs_by_source_type.get(source_type, 0) + 1
+        era = d.get("era", "CURRENT")
+        docs_by_era[era] = docs_by_era.get(era, 0) + 1
+
+    # Classifiers by system
+    classifiers_by_system = {}
+    for c in _classifiers.values():
+        system = c.get("classifier_system", "MKS")
+        classifiers_by_system[system] = classifiers_by_system.get(system, 0) + 1
 
     return {
         "data": {
-            "classifiers_total": len(_classifiers),
+            "classifiers_total": {
+                "MKS": classifiers_by_system.get("MKS", 0),
+                "OKSTU": classifiers_by_system.get("OKSTU", 0),
+                "UDC": classifiers_by_system.get("UDC", 0),
+                "EXTERNAL": classifiers_by_system.get("EXTERNAL", 0),
+            },
+            "classifiers_pending": len(_pending_classifiers),
             "terminology_total": len(_terminology),
             "documents_total": len(_registry_docs),
             "documents_by_status": {
                 "draft": docs_by_status.get("draft", 0),
-                "active": docs_by_status.get("active", 0),
-                "obsolete": docs_by_status.get("obsolete", 0),
-                "need_to_buy": docs_by_status.get("need_to_buy", 0),
-                "searching": docs_by_status.get("searching", 0),
+                "uploaded": docs_by_status.get("uploaded", 0),
+                "parsing": docs_by_status.get("parsing", 0),
+                "validation": docs_by_status.get("validation", 0),
+                "review_required": docs_by_status.get("review_required", 0),
+                "ready_for_promotion": docs_by_status.get("ready_for_promotion", 0),
+                "approved": docs_by_status.get("approved", 0),
+                "failed": docs_by_status.get("failed", 0),
+                "archived": docs_by_status.get("archived", 0),
+            },
+            "documents_by_source_type": dict(docs_by_source_type),
+            "documents_by_era": {
+                "USSR": docs_by_era.get("USSR", 0),
+                "CIS": docs_by_era.get("CIS", 0),
+                "RF": docs_by_era.get("RF", 0),
+                "CURRENT": docs_by_era.get("CURRENT", 0),
             },
         }
     }
@@ -780,46 +1229,27 @@ async def get_allowed_values():
     """Допустимые значения полей."""
     return {
         "data": {
-            "doc_type": ["normative", "archival_scan", "drawing", "specification"],
-            "jurisdiction": ["GOST", "OST", "TU", "STO", "ISO", "IEC"],
-            "language": ["ru", "en", "de", "fr"],
+            "classifier_system": ["MKS", "OKSTU", "UDC", "EXTERNAL"],
+            "classifier_status": ["active", "expired", "replaced"],
+            "source_type": ["GOST", "GOST_R", "OST", "TU", "ISO", "DNV", "ASTM"],
             "document_status": [
                 "draft",
-                "active",
-                "obsolete",
-                "need_to_buy",
-                "searching",
-            ],
-            "context": [
-                "ГОСТ 2.109-73, раздел 3",
-                "ГОСТ 2.307-2011, п. 4.2",
-                "ГОСТ 2.309-73",
-                "ГОСТ 2.308-2011",
-                "ГОСТ 2.104-2006",
-            ],
-            "file_document_type": [
-                "normative",
-                "archival_scan",
-                "drawing",
-                "specification",
-            ],
-            "file_document_status": [
-                "queued",
-                "processing",
-                "completed",
+                "uploaded",
+                "parsing",
+                "validation",
+                "review_required",
+                "ready_for_promotion",
+                "approved",
                 "failed",
-                "pending",
+                "archived",
             ],
-            "check_result_status": ["ok", "warning", "error"],
-            "match_status": ["match", "mismatch", "partial_match"],
-            "ocr_engine": ["tesseract", "easyocr", "azure_read"],
-            "chat_status": [
-                "idle",
-                "processing",
-                "completed",
-                "failed",
-                "needs_review",
-            ],
+            "era": ["USSR", "CIS", "RF", "CURRENT"],
+            "validity_status": ["active", "replaced", "cancelled"],
+            "term_type": ["abbreviation", "synonym", "preferred", "deprecated"],
+            "classification_status_code": ["valid", "deprecated", "unknown"],
+            "pending_status": ["new", "review", "accepted", "rejected"],
+            "validation_status": ["valid", "warning", "error"],
+            "chunk_type": ["text", "table", "image"],
         }
     }
 
@@ -842,7 +1272,7 @@ async def health():
 # Запуск
 # ===========================================================================
 
-app = FastAPI(title="Registry Service Mock", version="1.0.0")
+app = FastAPI(title="Registry Service Mock", version="2.0.0")
 app.include_router(main_router)
 app.include_router(registry_docs_router, prefix="/api/v1")
 

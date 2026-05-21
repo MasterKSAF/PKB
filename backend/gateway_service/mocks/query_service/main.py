@@ -58,34 +58,46 @@ _MOCK_SOURCES = [
     {
         "document_id": "doc-001",
         "document_title": "Спецификация по ГОСТ 2.109",
-        "page_number": 3,
-        "fragment_id": f"frag-{new_id()}",
-        "text": "Толщина стенки корпуса: 5 мм, материал: Сталь 45",
+        "page": 3,
+        "section_id": f"sect-{new_id()}",
+        "excerpt": "Толщина стенки корпуса: 5 мм, материал: Сталь 45",
         "score": round(random.uniform(0.85, 0.99), 2),
+        "clause": "Основные требования",
+        "page_preview_url": "/api/v1/documents/doc-001/pages/3/preview",
+        "document_url": "/api/v1/documents/doc-001",
     },
     {
         "document_id": "doc-002",
         "document_title": "Чертеж детали 101",
-        "page_number": 1,
-        "fragment_id": f"frag-{new_id()}",
-        "text": "Габаритные размеры: 150x80x25 мм",
+        "page": 1,
+        "section_id": f"sect-{new_id()}",
+        "excerpt": "Габаритные размеры: 150x80x25 мм",
         "score": round(random.uniform(0.85, 0.99), 2),
+        "clause": "Габаритные размеры",
+        "page_preview_url": "/api/v1/documents/doc-002/pages/1/preview",
+        "document_url": "/api/v1/documents/doc-002",
     },
     {
         "document_id": "rd-001",
         "document_title": "ГОСТ 2.109-73",
-        "page_number": 5,
-        "fragment_id": f"frag-{new_id()}",
-        "text": "Толщина стенки не менее 4 мм для изделий данного типа",
+        "page": 5,
+        "section_id": f"sect-{new_id()}",
+        "excerpt": "Толщина стенки не менее 4 мм для изделий данного типа",
         "score": round(random.uniform(0.90, 1.0), 2),
+        "clause": "п. 3.2",
+        "page_preview_url": "/api/v1/documents/rd-001/pages/5/preview",
+        "document_url": "/api/v1/documents/rd-001",
     },
     {
         "document_id": "rd-002",
         "document_title": "ГОСТ 2.307-2011",
-        "page_number": 3,
-        "fragment_id": f"frag-{new_id()}",
-        "text": "Предельные отклонения размеров: H11, h11",
+        "page": 3,
+        "section_id": f"sect-{new_id()}",
+        "excerpt": "Предельные отклонения размеров: H11, h11",
         "score": round(random.uniform(0.80, 0.95), 2),
+        "clause": "п. 4.1",
+        "page_preview_url": "/api/v1/documents/rd-002/pages/3/preview",
+        "document_url": "/api/v1/documents/rd-002",
     },
 ]
 
@@ -150,6 +162,9 @@ class FeedbackRequest(BaseModel):
     rating: Optional[int] = None
     comment: Optional[str] = None
     aspects: Optional[List[Dict[str, Any]]] = None
+    answer_id: Optional[str] = None
+    useful: Optional[bool] = None
+    opened_citation_ids: Optional[List[str]] = None
 
 
 class ChatRequest(BaseModel):
@@ -177,13 +192,13 @@ class TextAskRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class CitationModel(BaseModel):
-    citation_id: str
+class SourceItem(BaseModel):
+    section_id: str
     document_id: str
     document_title: str
-    section: str
+    clause: str
     page: int
-    fragment: str
+    excerpt: str
     page_preview_url: str
     document_url: str
 
@@ -191,24 +206,27 @@ class CitationModel(BaseModel):
 class AnswerItem(BaseModel):
     number: int
     text: str
-    citations: List[CitationModel]
+    sources: List[SourceItem]
 
 
 class ChatResponse(BaseModel):
-    answer_id: str
-    session_id: str
-    status: str
-    message: str
-    answer_items: List[AnswerItem]
-    latency_ms: int
+    scenario: str = "completed"
+    answer_id: Optional[str] = None
+    session_id: Optional[str] = None
+    status: Optional[str] = None
+    message: Optional[str] = None
+    answer_items: Optional[List[AnswerItem]] = None
+    latency_ms: Optional[int] = None
+    missing_fields: Optional[List[str]] = None
+    conflicts: Optional[List[dict]] = None
 
 
 class TextSearchResultItem(BaseModel):
-    fragment_id: str
+    section_id: str
     document_id: str
     document_title: str
-    page_number: int
-    text: str
+    page: int
+    content: str
     score: float
     document_type: str
     matched_subquery: str
@@ -225,9 +243,9 @@ class TextSearchResponse(BaseModel):
 class TextAskSource(BaseModel):
     document_id: str
     document_title: str
-    page_number: int
-    fragment_id: str
-    text: str
+    page: int
+    section_id: str
+    excerpt: str
     score: float
 
 
@@ -400,6 +418,7 @@ async def send_message(session_id: str, req: SendMessageRequest):
         "model_used": answer["model_used"],
         "processing_time_ms": answer["processing_time_ms"],
         "timestamp": utcnow(),
+        "feedback": None,
     }
     session["messages"].append(assistant_message)
     session["message_count"] = len(session["messages"])
@@ -422,7 +441,15 @@ async def send_message(session_id: str, req: SendMessageRequest):
         }
     )
 
-    return assistant_message
+    # Упрощённый ответ без sources
+    return {
+        "message_id": asst_msg_id,
+        "session_id": session_id,
+        "role": "assistant",
+        "status": "completed",
+        "content": answer["content"],
+        "timestamp": assistant_message["timestamp"],
+    }
 
 
 @router.post("/chat/sessions/{session_id}/context")
@@ -480,6 +507,9 @@ async def submit_feedback(req: FeedbackRequest):
             "rating": req.rating,
             "comment": req.comment,
             "aspects": req.aspects or [],
+            "answer_id": req.answer_id,
+            "useful": req.useful,
+            "opened_citation_ids": req.opened_citation_ids or [],
             "created_at": utcnow(),
         }
     )
@@ -534,11 +564,43 @@ async def export_history(
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat_ask(req: ChatRequest):
-    """Задать вопрос (вне сессии)."""
+    """Задать вопрос (вне сессии).
+
+    Поддерживает три сценария ответа:
+    - completed:      содержит answer_items со sources
+    - needs_clarification: содержит missing_fields
+    - conflict:       содержит conflicts
+    """
+    # Эмулируем разные сценарии в зависимости от ключевых слов вопроса
+    query_lower = req.question.lower()
+
+    if "неопределён" in query_lower or "ambiguous" in query_lower:
+        return {
+            "scenario": "needs_clarification",
+            "missing_fields": ["document_ids", "nsi_version"],
+        }
+
+    if "конфликт" in query_lower or "conflict" in query_lower:
+        return {
+            "scenario": "conflict",
+            "conflicts": [
+                {
+                    "type": "normative_conflict",
+                    "description": "Обнаружено противоречие между ГОСТ 2.109-73 (п.3.2) и ОСТ 1.00000-80 (п.5.1)",
+                    "sources": [
+                        {"document_id": "rd-001", "clause": "п. 3.2"},
+                        {"document_id": "rd-003", "clause": "п. 5.1"},
+                    ],
+                }
+            ],
+        }
+
+    # Сценарий completed по умолчанию
     answer = _generate_answer(req.question)
     answer_id = f"ans-{new_id()}"
 
     return {
+        "scenario": "completed",
         "answer_id": answer_id,
         "session_id": req.session_id or f"sess-{new_id()}",
         "status": "completed",
@@ -547,16 +609,22 @@ async def chat_ask(req: ChatRequest):
             {
                 "number": 1,
                 "text": answer["content"],
-                "citations": [
+                "sources": [
                     {
-                        "citation_id": f"cit-{new_id()}",
+                        "section_id": s.get("section_id", f"sect-{new_id()}"),
                         "document_id": s["document_id"],
                         "document_title": s["document_title"],
-                        "section": "Основные требования",
-                        "page": s["page_number"],
-                        "fragment": s["text"][:100],
-                        "page_preview_url": f"/api/v1/documents/{s['document_id']}/pages/{s['page_number']}/preview",
-                        "document_url": f"/api/v1/documents/{s['document_id']}",
+                        "clause": s.get("clause", "Основные требования"),
+                        "page": s["page"],
+                        "excerpt": s["excerpt"],
+                        "page_preview_url": s.get(
+                            "page_preview_url",
+                            f"/api/v1/documents/{s['document_id']}/pages/{s['page']}/preview",
+                        ),
+                        "document_url": s.get(
+                            "document_url",
+                            f"/api/v1/documents/{s['document_id']}",
+                        ),
                     }
                     for s in answer["sources"]
                 ],
@@ -581,38 +649,38 @@ async def text_search(req: TextSearchRequest):
     # Используем seed-данные для имитации результатов
     all_texts = [
         {
-            "fragment_id": "frag-001",
+            "section_id": "sect-001",
             "document_id": "doc-001",
             "document_title": "Спецификация по ГОСТ 2.109",
-            "page_number": 3,
-            "text": "Толщина стенки корпуса: 5 мм, материал: Сталь 45",
+            "page": 3,
+            "content": "Толщина стенки корпуса: 5 мм, материал: Сталь 45",
             "score": 0.95,
             "document_type": "specification",
         },
         {
-            "fragment_id": "frag-002",
+            "section_id": "sect-002",
             "document_id": "rd-001",
             "document_title": "ГОСТ 2.109-73",
-            "page_number": 5,
-            "text": "Толщина стенки не менее 4 мм для изделий данного типа",
+            "page": 5,
+            "content": "Толщина стенки не менее 4 мм для изделий данного типа",
             "score": 0.92,
             "document_type": "normative",
         },
         {
-            "fragment_id": "frag-003",
+            "section_id": "sect-003",
             "document_id": "doc-002",
             "document_title": "Чертеж детали 101",
-            "page_number": 1,
-            "text": "Габаритные размеры: 150x80x25 мм. Материал: Сталь 45.",
+            "page": 1,
+            "content": "Габаритные размеры: 150x80x25 мм. Материал: Сталь 45.",
             "score": 0.88,
             "document_type": "drawing",
         },
         {
-            "fragment_id": "frag-004",
+            "section_id": "sect-004",
             "document_id": "rd-002",
             "document_title": "ГОСТ 2.307-2011",
-            "page_number": 3,
-            "text": "Предельные отклонения размеров: H11, h11 для свободных размеров",
+            "page": 3,
+            "content": "Предельные отклонения размеров: H11, h11 для свободных размеров",
             "score": 0.85,
             "document_type": "normative",
         },
@@ -652,11 +720,11 @@ async def text_search(req: TextSearchRequest):
         },
         "results": [
             {
-                "fragment_id": r["fragment_id"],
+                "section_id": r["section_id"],
                 "document_id": r["document_id"],
                 "document_title": r["document_title"],
-                "page_number": r["page_number"],
-                "text": r["text"],
+                "page": r["page"],
+                "content": r["content"],
                 "score": r["score"],
                 "document_type": r["document_type"],
                 "matched_subquery": req.text,
@@ -681,9 +749,9 @@ async def text_ask(req: TextAskRequest):
             {
                 "document_id": s["document_id"],
                 "document_title": s["document_title"],
-                "page_number": s["page_number"],
-                "fragment_id": s["fragment_id"],
-                "text": s["text"],
+                "page": s["page"],
+                "section_id": s["section_id"],
+                "excerpt": s["excerpt"],
                 "score": s["score"],
             }
             for s in answer["sources"]
