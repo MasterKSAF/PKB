@@ -23,7 +23,7 @@ from common import (
     paginate,
     utcnow,
 )
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/v1")
@@ -56,6 +56,8 @@ def _init_data():
         _approvals, \
         _promotions, \
         _metrics
+    if _documents:
+        return
     _documents = {d["document_id"]: copy.deepcopy(d) for d in SEED_DOCUMENTS}
     _document_errors = copy.deepcopy(SEED_DOCUMENT_ERRORS)
     _metrics = copy.deepcopy(SEED_METRICS)
@@ -362,12 +364,15 @@ _init_data()
 
 
 @router.post("/documents", status_code=202)
-async def upload_document(file: UploadFile = File(...)):
+async def upload_document(file: UploadFile = File(...), request: Request = None):
     """Загрузка документа (асинхронная)."""
     global _doc_id_counter
     _doc_id_counter += 1
     doc_id = f"doc-{new_id()}"
     now = utcnow()
+
+    user_id = (request.state.user.get("user_id") or "system") if request else "system"
+    user_name = (request.state.user.get("full_name") or user_id) if request else user_id
 
     content_bytes = (file.filename or f"document_{doc_id}").encode()
     content_hash = hashlib.sha256(content_bytes).hexdigest()
@@ -407,8 +412,8 @@ async def upload_document(file: UploadFile = File(...)):
         "pages_failed": 0,
         "ocr_status": "pending",
         "index_status": "pending",
-        "user_id": "u-001",
-        "uploaded_by": "Иванов С.П.",
+        "user_id": user_id,
+        "uploaded_by": user_name,
         "metadata": {"year": 2026, "udc": "", "tags": []},
         "pages": [],
         "parameters": {},
@@ -433,7 +438,7 @@ async def upload_document(file: UploadFile = File(...)):
             "title_hash_sha256": title_hash,
             "status": "uploaded",
             "created_at": now,
-            "uploaded_by": "Иванов С.П.",
+            "uploaded_by": user_name,
         }
     ]
 
@@ -445,7 +450,7 @@ async def upload_document(file: UploadFile = File(...)):
             "from_status": None,
             "to_status": "uploaded",
             "timestamp": now,
-            "user_id": "u-001",
+            "user_id": user_id,
             "comment": "Документ загружен",
         }
     ]
@@ -859,10 +864,13 @@ async def delete_document(doc_id: str):
 
 
 @router.post("/documents/{doc_id}/reprocess", status_code=202)
-async def reprocess_document(doc_id: str, req: Optional[ReprocessRequest] = None):
+async def reprocess_document(
+    doc_id: str, req: Optional[ReprocessRequest] = None, request: Request = None
+):
     """Переобработка документа."""
     doc = _get_document(doc_id)
     mode = req.mode if req and req.mode else "full"
+    user_id = (request.state.user.get("user_id") or "system") if request else "system"
 
     # Сбрасываем статус
     doc["status"] = "parsing"
@@ -880,7 +888,7 @@ async def reprocess_document(doc_id: str, req: Optional[ReprocessRequest] = None
             "from_status": doc.get("status", "unknown"),
             "to_status": "parsing",
             "timestamp": utcnow(),
-            "user_id": doc.get("user_id", "u-001"),
+            "user_id": user_id,
             "comment": f"Запущена переобработка (режим: {mode})",
         }
     )
@@ -888,7 +896,7 @@ async def reprocess_document(doc_id: str, req: Optional[ReprocessRequest] = None
     return {
         "mode": mode,
         "document_id": doc_id,
-        "user_id": doc.get("user_id", ""),
+        "user_id": user_id,
         "task_id": f"task-{new_id()}",
         "status": "parsing",
         "created_at": utcnow(),
@@ -918,10 +926,13 @@ async def get_document_errors(
 
 
 @router.post("/documents/{doc_id}/versions", status_code=201)
-async def add_document_version(doc_id: str, file: UploadFile = File(...)):
+async def add_document_version(
+    doc_id: str, file: UploadFile = File(...), request: Request = None
+):
     """Добавить новую версию документа."""
     doc = _get_document(doc_id)
     now = utcnow()
+    user_id = (request.state.user.get("user_id") or "system") if request else "system"
     version_number = doc.get("total_versions", 1) + 1
 
     content_bytes = (file.filename or f"{doc_id}_v{version_number}").encode()
@@ -961,7 +972,7 @@ async def add_document_version(doc_id: str, file: UploadFile = File(...)):
             "from_status": None,
             "to_status": doc.get("status", "uploaded"),
             "timestamp": now,
-            "user_id": doc.get("user_id", "u-001"),
+            "user_id": user_id,
             "comment": f"Добавлена версия {version_number}",
         }
     )
@@ -995,10 +1006,11 @@ async def list_document_versions(doc_id: str):
 
 
 @router.post("/documents/{doc_id}/approve")
-async def approve_document(doc_id: str):
+async def approve_document(doc_id: str, request: Request = None):
     """Подтверждение валидации документа."""
     doc = _get_document(doc_id)
     now = utcnow()
+    user_id = (request.state.user.get("user_id") or "system") if request else "system"
 
     old_status = doc.get("status", "")
     doc["status"] = "approved"
@@ -1006,7 +1018,7 @@ async def approve_document(doc_id: str):
 
     _approvals[doc_id] = {
         "document_id": doc_id,
-        "approved_by": doc.get("user_id", "u-001"),
+        "approved_by": user_id,
         "approved_at": now,
         "previous_status": old_status,
     }
@@ -1020,7 +1032,7 @@ async def approve_document(doc_id: str):
             "from_status": old_status,
             "to_status": "approved",
             "timestamp": now,
-            "user_id": doc.get("user_id", "u-001"),
+            "user_id": user_id,
             "comment": "Документ подтверждён",
         }
     )
@@ -1034,10 +1046,11 @@ async def approve_document(doc_id: str):
 
 
 @router.post("/documents/{doc_id}/promote")
-async def promote_document(doc_id: str):
+async def promote_document(doc_id: str, request: Request = None):
     """Продвижение документа в RAG-индекс."""
     doc = _get_document(doc_id)
     now = utcnow()
+    user_id = (request.state.user.get("user_id") or "system") if request else "system"
 
     old_status = doc.get("status", "")
     doc["status"] = "ready_for_promotion"
@@ -1050,7 +1063,7 @@ async def promote_document(doc_id: str):
 
     _promotions[doc_id] = {
         "document_id": doc_id,
-        "promoted_by": doc.get("user_id", "u-001"),
+        "promoted_by": user_id,
         "promoted_at": now,
         "previous_status": old_status,
         "chunks_indexed": doc.get("chunk_count", 0),
@@ -1065,7 +1078,7 @@ async def promote_document(doc_id: str):
             "from_status": old_status,
             "to_status": "ready_for_promotion",
             "timestamp": now,
-            "user_id": doc.get("user_id", "u-001"),
+            "user_id": user_id,
             "comment": "Документ отправлен в RAG-индекс",
         }
     )

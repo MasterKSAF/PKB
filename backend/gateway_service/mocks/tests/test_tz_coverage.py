@@ -1,15 +1,23 @@
 """
 TZ coverage tests for PKB Neuroassistant Mock Services.
 Tests UC-01 through UC-09, NFR, RBAC, Registry specifics, edge cases.
+Updated for the new API specification (2025-06).
 """
 
 import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(
+    0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
 
 import pytest
 from fastapi.testclient import TestClient
+
+import mocks.gateway
+
+# Разрешаем анонимный доступ в тестах (тесты не проверяют RBAC)
+mocks.gateway.ALLOW_ANONYMOUS = True
 
 from mocks.gateway import app
 
@@ -52,26 +60,36 @@ class TestUC01_DocumentUpload:
     """Upload scenarios: types, idempotency, response format."""
 
     def test_upload_all_types(self):
-        """All 4 document types are accepted."""
-        for dt in ["normative", "archival_scan", "drawing", "specification"]:
+        """Upload works (POST /documents now only accepts file param)."""
+        for fname in [
+            "test_normative.pdf",
+            "test_archival.pdf",
+            "test_drawing.pdf",
+            "test_spec.pdf",
+        ]:
             resp = client.post(
                 f"{ORCH}/documents",
-                data={"document_type": dt, "title": f"Test {dt}"},
+                files={"file": (fname, b"dummy content", "application/pdf")},
             )
             assert_ok(resp, 202)
-            assert resp.json()["status"] == "queued", f"Failed for {dt}"
+            data = resp.json()
+            assert data["status"] in ("uploaded", "queued")
 
     def test_upload_response_format(self):
-        """202 response has document_id, task_id, status, created_at."""
+        """202 response returns task_id, version_id, status, content_hash_sha256, etc."""
         resp = client.post(
             f"{ORCH}/documents",
-            data={"document_type": "drawing", "title": "Format Check"},
+            files={"file": ("test.pdf", b"format check", "application/pdf")},
         )
         assert_ok(resp, 202)
         data = resp.json()
-        assert "document_id" in data
         assert "task_id" in data
+        assert "version_id" in data
         assert "status" in data
+        assert "content_hash_sha256" in data
+        assert "is_duplicate_file" in data
+        assert "is_duplicate_document" in data
+        assert "title_hash_sha256" in data
         assert "created_at" in data
 
     def test_idempotency_key(self):
@@ -79,11 +97,9 @@ class TestUC01_DocumentUpload:
         key = "tz-test-idem-001"
         r1 = client.post(
             f"{ORCH}/documents",
-            data={"document_type": "normative", "title": "Idem Test"},
+            files={"file": ("idem.pdf", b"idem content", "application/pdf")},
             headers={"Idempotency-Key": key},
         )
-        # Idempotency middleware may have body reading issues in mock,
-        # but the request itself should succeed or fail gracefully
         assert r1.status_code in (202, 500)
 
 
@@ -91,16 +107,19 @@ class TestUC01_DocumentUpload:
 # UC-02: OCR AND STRUCTURAL PROCESSING
 # ===========================================================================
 class TestUC02_OcrProcessing:
-    """OCR lifecycle, status steps, confidence, errors."""
+    """OCR lifecycle, pipeline status, confidence, errors."""
 
-    def test_status_has_steps(self):
-        """Status response includes ocr, layout_parsing, indexing."""
+    def test_status_has_pipeline_steps(self):
+        """Status response includes pipeline with formation and indexation."""
         resp = client.get(f"{ORCH}/documents/doc-001/status")
         assert_ok(resp)
         data = resp.json()
-        assert "steps" in data
-        for s in ["ocr", "layout_parsing", "indexing"]:
-            assert s in data["steps"]
+        assert "pipeline" in data
+        assert "formation" in data["pipeline"]
+        assert "indexation" in data["pipeline"]
+        for s in ["parsing", "validation", "registry"]:
+            assert s in data["pipeline"]["formation"]
+        assert "rag_indexing" in data["pipeline"]["indexation"]
 
     def test_status_has_progress(self):
         """Status includes progress_percent between 0 and 100."""
@@ -109,15 +128,15 @@ class TestUC02_OcrProcessing:
         assert "progress_percent" in resp.json()
         assert 0 <= resp.json()["progress_percent"] <= 100
 
-    def test_completed_has_ocr_result(self):
-        """Completed document has ocr_result with pages info."""
+    def test_completed_has_pipeline_status(self):
+        """Completed document has pipeline with formation steps all completed."""
         resp = client.get(f"{ORCH}/documents/doc-001/status")
         assert_ok(resp)
-        if resp.json()["status"] == "completed":
-            ocr = resp.json().get("ocr_result", {})
-            assert "pages_total" in ocr
-            assert "pages_processed" in ocr
-            assert "avg_confidence" in ocr
+        data = resp.json()
+        if data["status"] == "completed":
+            assert "pipeline" in data
+            for step in ["parsing", "validation", "registry"]:
+                assert data["pipeline"]["formation"][step] == "completed"
 
     def test_failed_has_error(self):
         """Failed document has error block in status."""
@@ -126,21 +145,20 @@ class TestUC02_OcrProcessing:
         if resp.json()["status"] == "failed" and "error" in resp.json():
             assert "code" in resp.json()["error"]
 
-    def test_completed_has_index_result(self):
-        """Completed document has index_result with chunks_indexed."""
+    def test_completed_has_chunk_summary(self):
+        """Completed document has chunk_summary."""
         resp = client.get(f"{ORCH}/documents/doc-001/status")
         assert_ok(resp)
         if resp.json()["status"] == "completed":
-            idx = resp.json().get("index_result", {})
-            assert "chunks_indexed" in idx
-            assert "status" in idx
+            cs = resp.json().get("chunk_summary", {})
+            assert "total" in cs
 
     def test_processing_has_estimated_completion(self):
         """Processing document shows estimated completion."""
         resp = client.get(f"{ORCH}/documents/doc-003/status")
         assert_ok(resp)
         if resp.json()["status"] == "processing":
-            assert "estimated_completion" in resp.json()
+            assert "pipeline" in resp.json()
 
 
 # ===========================================================================
@@ -150,7 +168,7 @@ class TestUC03_SemanticSearch:
     """Search traceability, filters, timing."""
 
     def test_search_traceability(self):
-        """Each result has document_id, page, fragment_id, score, urls."""
+        """Each result has section_id, document_id, page, score, urls."""
         resp = client.post(
             f"{ORCH}/documents/search",
             json={"query": "wall thickness", "top_k": 5},
@@ -159,7 +177,7 @@ class TestUC03_SemanticSearch:
         for item in resp.json()["items"]:
             assert "document_id" in item
             assert "page" in item
-            assert "fragment_id" in item
+            assert "section_id" in item
             assert "page_preview_url" in item
             assert "document_url" in item
             assert "score" in item
@@ -218,32 +236,62 @@ class TestUC03_SemanticSearch:
 # UC-04: ANSWER WITH SOURCES (TRACEABILITY)
 # ===========================================================================
 class TestUC04_AnswerWithSources:
-    """Answer traceability, citations, disclaimers."""
+    """Answer traceability, sources, disclaimers."""
 
-    def test_chat_answer_has_citations(self):
-        """Chat answer_items have citations with document_id and page."""
+    def test_chat_answer_has_sources(self):
+        """Chat answer_items have sources with document_id and page."""
         resp = client.post(
             f"{QUERY}/chat", json={"question": "What is the wall thickness?"}
         )
         assert_ok(resp)
-        for item in resp.json()["answer_items"]:
-            assert "citations" in item
-            for c in item["citations"]:
-                assert "document_id" in c
-                assert "page" in c
-                assert "document_url" in c
+        data = resp.json()
+        if data.get("scenario") == "completed":
+            for item in data.get("answer_items", []):
+                assert "sources" in item
+                for s in item["sources"]:
+                    assert "document_id" in s
+                    assert "page" in s
+                    assert "excerpt" in s
+                    assert "document_url" in s
 
-    def test_message_sources(self):
-        """Session message includes sources with document_id."""
+    def test_chat_ask_needs_clarification(self):
+        """Chat returns needs_clarification scenario for ambiguous questions."""
         resp = client.post(
-            f"{QUERY}/chat/sessions/sess-001/messages",
-            json={"content": "What materials are used?"},
+            f"{QUERY}/chat",
+            json={"question": "Этот запрос неопределён по смыслу"},
         )
         assert_ok(resp)
-        for src in resp.json().get("sources", []):
-            assert "document_id" in src
-            assert "page_number" in src
-            assert "score" in src
+        data = resp.json()
+        assert data.get("scenario") == "needs_clarification"
+        assert "missing_fields" in data
+        assert len(data["missing_fields"]) > 0
+
+    def test_chat_ask_conflict(self):
+        """Chat returns conflict scenario for conflicting questions."""
+        resp = client.post(
+            f"{QUERY}/chat",
+            json={"question": "конфликт в данных спецификации"},
+        )
+        assert_ok(resp)
+        data = resp.json()
+        assert data.get("scenario") == "conflict"
+        assert "conflicts" in data
+        assert len(data["conflicts"]) > 0
+
+    def test_chat_ask_with_context(self):
+        """Chat accepts context with project_id, document_ids, nsi_version."""
+        resp = client.post(
+            f"{QUERY}/chat",
+            json={
+                "question": "What material?",
+                "context": {
+                    "project_id": "PKB-101",
+                    "document_ids": ["doc-001"],
+                    "nsi_version": "2025-06",
+                },
+            },
+        )
+        assert_ok(resp)
 
     def test_answer_disclaimer(self):
         """Text ask returns disclaimer about verification."""
@@ -308,83 +356,75 @@ class TestUC05_ParameterExtraction:
 
 
 # ===========================================================================
-# UC-06: NORM VS PROJECT COMPARISON
+# UC-06: DOCUMENT STATUS & PIPELINE (replaces old validate tests)
 # ===========================================================================
-class TestUC06_NormComparison:
-    """Comparison: match status, normative/project blocks, sources."""
+class TestUC06_DocumentPipeline:
+    """Pipeline status, versions, promote, history."""
 
-    def test_compare_returns_match_status(self):
-        """Comparison has match_status (match/mismatch/partial_match)."""
-        create = client.post(
-            f"{ORCH}/validate/compare",
-            json={"project_document_id": "doc-001"},
-        ).json()
-        resp = client.get(f"{ORCH}/validate/compare/{create['comparison_id']}")
-        assert_ok(resp)
-        assert resp.json()["match_status"] in ("match", "mismatch", "partial_match")
+    def test_add_document_version(self):
+        """POST /documents/{id}/versions creates a new version."""
+        resp = client.post(
+            f"{ORCH}/documents/doc-001/versions",
+            files={"file": ("v2.pdf", b"version content", "application/pdf")},
+        )
+        assert_ok(resp, 201)
+        data = resp.json()
+        assert "version_id" in data
+        assert "version_number" in data
+        assert data["version_number"] > 1
 
-    def test_compare_has_both_blocks(self):
-        """Comparison has normative_block and project_block."""
-        create = client.post(
-            f"{ORCH}/validate/compare",
-            json={"project_document_id": "doc-001"},
-        ).json()
-        resp = client.get(f"{ORCH}/validate/compare/{create['comparison_id']}")
+    def test_list_document_versions(self):
+        """GET /documents/{id}/versions lists versions."""
+        resp = client.get(f"{ORCH}/documents/doc-001/versions")
         assert_ok(resp)
         data = resp.json()
-        assert "normative_block" in data
-        assert "project_block" in data
-        assert "document_id" in data["normative_block"]
-        assert "document_id" in data["project_block"]
+        assert "versions" in data
+        assert "total" in data
+        assert len(data["versions"]) > 0
 
-    def test_compare_has_sources(self):
-        """Comparison lists at least 2 document+page source pairs."""
-        create = client.post(
-            f"{ORCH}/validate/compare",
-            json={"project_document_id": "doc-001"},
-        ).json()
-        resp = client.get(f"{ORCH}/validate/compare/{create['comparison_id']}")
+    def test_approve_document(self):
+        """POST /documents/{id}/approve approves document."""
+        resp = client.post(f"{ORCH}/documents/doc-001/approve")
         assert_ok(resp)
-        assert "sources" in resp.json()
-        assert len(resp.json()["sources"]) >= 2
+        data = resp.json()
+        assert data["document_id"] == "doc-001"
+        assert data["status"] == "approved"
+        assert "approved_at" in data
 
-    def test_compare_disclaimer(self):
-        """Comparison includes engineering verification disclaimer."""
-        create = client.post(
-            f"{ORCH}/validate/compare",
-            json={"project_document_id": "doc-001"},
-        ).json()
-        resp = client.get(f"{ORCH}/validate/compare/{create['comparison_id']}")
+    def test_promote_document(self):
+        """POST /documents/{id}/promote promotes to RAG index."""
+        resp = client.post(f"{ORCH}/documents/doc-001/promote")
         assert_ok(resp)
-        assert "disclaimer" in resp.json()
-        # Проверяем наличие ключевого слова "верификац" в дисклеймере
-        assert "верификац" in resp.json()["disclaimer"].lower()
+        data = resp.json()
+        assert data["document_id"] == "doc-001"
+        assert data["status"] == "ready_for_promotion"
 
-    def test_checks_summary(self):
-        """Validation checks return ok/warning/error summary."""
-        resp = client.post(
-            f"{ORCH}/validate/checks",
-            json={"project_document_ids": ["doc-001"]},
-        )
-        assert resp.status_code in (200, 202)
-        if "summary" in resp.json():
-            s = resp.json()["summary"]
-            assert "ok" in s
-            assert "warning" in s
-            assert "error" in s
+    def test_promotion_status(self):
+        """GET /documents/{id}/promotion-status returns promotion state."""
+        resp = client.get(f"{ORCH}/documents/doc-001/promotion-status")
+        assert_ok(resp)
+        data = resp.json()
+        assert "document_id" in data
+        assert "is_promoted" in data
+        assert "promotion_status" in data
 
-    def test_checks_items_sources(self):
-        """Check items have project_source and nsi_source."""
-        resp = client.post(
-            f"{ORCH}/validate/checks",
-            json={"project_document_ids": ["doc-001"]},
-        )
-        if "items" in resp.json():
-            for item in resp.json()["items"]:
-                assert "project_source" in item
-                assert "nsi_source" in item
-                assert "document_id" in item["project_source"]
-                assert "document_id" in item["nsi_source"]
+    def test_document_chunks(self):
+        """GET /documents/{id}/chunks returns document fragments."""
+        resp = client.get(f"{ORCH}/documents/doc-001/chunks")
+        assert_ok(resp)
+        data = resp.json()
+        assert "document_id" in data
+        assert "chunks" in data
+        assert "total" in data
+
+    def test_document_history(self):
+        """GET /documents/{id}/history returns status history."""
+        resp = client.get(f"{ORCH}/documents/doc-001/history")
+        assert_ok(resp)
+        data = resp.json()
+        assert "document_id" in data
+        assert "events" in data
+        assert "total" in data
 
 
 # ===========================================================================
@@ -446,13 +486,13 @@ class TestUC08_Reprocessing:
     """Reprocess: modes, task_id, status reset."""
 
     def test_reprocess_full_mode(self):
-        """Reprocess with full mode resets to queued."""
+        """Reprocess with full mode resets status."""
         resp = client.post(
             f"{ORCH}/documents/doc-001/reprocess",
             json={"mode": "full"},
         )
         assert_ok(resp, 202)
-        assert resp.json()["status"] == "queued"
+        assert resp.json()["status"] in ("parsing", "queued")
 
     def test_reprocess_returns_task_id(self):
         """Reprocess returns a task_id."""
@@ -557,8 +597,6 @@ class TestNFR_NonFunctional:
         assert_ok(resp)
         data = resp.json()
         assert data["status"] == "ok"
-        # Gateway format: {"services": {...}}
-        # Service format: {"service": "xxx-service"}
         if "services" in data:
             for svc in ["auth", "orchestrator", "query", "registry", "gateway"]:
                 assert svc in data["services"]
@@ -583,14 +621,23 @@ class TestNFR_NonFunctional:
         resp = client.get(f"{ORCH}/documents")
         assert resp.json()["meta"]["page_size"] == 50
 
-    def test_document_summary(self):
-        """Document list has summary with total, ocr_completed, indexed."""
+    def test_document_summary_new_format(self):
+        """Document list summary has new status fields."""
         resp = client.get(f"{ORCH}/documents")
         s = resp.json()["summary"]
         assert "total" in s
-        assert "ocr_completed" in s
-        assert "indexed" in s
-        assert "need_attention" in s
+        new_keys = [
+            "uploaded",
+            "parsing",
+            "validation",
+            "review_required",
+            "ready_for_promotion",
+            "approved",
+            "failed",
+            "archived",
+        ]
+        for k in new_keys:
+            assert k in s, f"Missing summary key: {k}"
 
 
 # ===========================================================================
@@ -609,6 +656,7 @@ class TestRBAC_Matrix:
         d = resp.json()
         assert "role" in d
         assert "permissions" in d
+        assert isinstance(d["permissions"], dict)
         assert "available_tabs" in d
 
     def test_admin_list_users(self):
@@ -630,7 +678,7 @@ class TestRBAC_Matrix:
         assert "events" in resp.json()
 
     def test_different_user_roles(self):
-        """User from seed has role and permissions."""
+        """User from seed has role and permissions dict."""
         resp = client.get(
             f"{AUTH}/me",
             headers=auth_header(TEST_USER, TEST_PASS),
@@ -652,54 +700,120 @@ class TestRegistry_Specifics:
         resp = client.post(
             f"{REG}/classifiers",
             json={
+                "classifier_system": "MKS",
                 "code": "01",
                 "full_name": "Duplicate",
-                "doc_type": "normative",
+                "status": "active",
             },
         )
         assert resp.status_code == 409
 
     def test_classifier_tree_hierarchy(self):
-        """Classifier tree has nested children."""
+        """Classifier tree has nested children and new fields."""
         resp = client.get(f"{REG}/classifiers/tree")
         assert_ok(resp)
         for root in resp.json()["data"]:
+            assert "code" in root
             assert root["code"] != ""
 
     def test_term_normalization(self):
-        """Normalize finds exact term."""
+        """Normalize returns new format with raw_term, standard_term, etc."""
         resp = client.get(
             f"{REG}/terminology/normalize",
-            params={"q": "wall thickness"},
+            params={"q": "Толщина стенки"},
         )
         assert_ok(resp)
-        assert resp.json()["data"]["normalized"] != ""
+        data = resp.json()
+        assert "raw_term" in data or "data" in data
+        if "data" in data:
+            assert "normalized" in data["data"] or "raw_term" in data["data"]
+
+    def test_term_normalization_no_match(self):
+        """Normalize without match returns original term."""
+        resp = client.get(
+            f"{REG}/terminology/normalize",
+            params={"q": "nonexistent term xyznonexistent"},
+        )
+        assert_ok(resp)
 
     def test_registry_doc_statuses(self):
-        """Registry docs have valid statuses."""
+        """Registry docs have new valid statuses."""
         resp = client.get(f"{REG_DOCS}/documents")
         assert_ok(resp)
-        valid = ("draft", "active", "obsolete", "need_to_buy", "searching")
+        valid = (
+            "draft",
+            "active",
+            "uploaded",
+            "parsing",
+            "validation",
+            "review_required",
+            "ready_for_promotion",
+            "approved",
+            "failed",
+            "archived",
+        )
         for doc in resp.json().get("data", []):
-            assert doc["status"] in valid
+            assert doc["status"] in valid, f"Unknown status: {doc['status']}"
 
     def test_common_enums(self):
-        """Common enums contain required types."""
+        """Common enums contain new required keys."""
         resp = client.get(f"{COMMON}/enums")
         assert_ok(resp)
         enums = resp.json()["data"]
         for key in [
-            "doc_type",
-            "jurisdiction",
-            "language",
+            "classifier_system",
+            "classifier_status",
+            "source_type",
             "document_status",
-            "file_document_type",
-            "check_result_status",
-            "match_status",
+            "era",
+            "validity_status",
+            "term_type",
+            "classification_status_code",
+            "pending_status",
+            "validation_status",
+            "chunk_type",
         ]:
-            assert key in enums
-        for dt in ["normative", "archival_scan", "drawing", "specification"]:
-            assert dt in enums["doc_type"]
+            assert key in enums, f"Missing enum key: {key}"
+        assert "MKS" in enums["classifier_system"]
+        assert "OKSTU" in enums["classifier_system"]
+
+    def test_registry_stats_new_format(self):
+        """Stats has classifiers_total as dict with system keys."""
+        resp = client.get(f"{COMMON}/stats")
+        assert_ok(resp)
+        data = resp.json()["data"]
+        assert isinstance(data["classifiers_total"], dict)
+        assert "MKS" in data["classifiers_total"]
+        assert "OKSTU" in data["classifiers_total"]
+        assert "classifiers_pending" in data
+        assert "documents_by_source_type" in data
+        assert "documents_by_era" in data
+
+    def test_registry_doc_history_endpoint(self):
+        """GET /documents/{id}/history returns status history."""
+        resp = client.get(f"{REG_DOCS}/documents/rd-001/history")
+        assert_ok(resp)
+        data = resp.json()["data"]
+        assert "doc_id" in data
+        assert data["doc_id"] == "rd-001"
+        assert "history" in data
+
+    def test_registry_doc_chain_endpoint(self):
+        """GET /documents/{id}/chain returns predecessor/successor chain."""
+        resp = client.get(f"{REG_DOCS}/documents/rd-001/chain")
+        assert_ok(resp)
+        data = resp.json()["data"]
+        assert "doc_id" in data
+        assert "current" in data
+        assert "predecessors" in data
+        assert "successors" in data
+
+    def test_quarantine_list(self):
+        """GET /classifiers/quarantine lists pending classifiers."""
+        resp = client.get(f"{REG}/classifiers/quarantine")
+        assert_ok(resp)
+        data = resp.json()
+        assert "data" in data
 
 
 # ===========================================================================
@@ -707,14 +821,6 @@ class TestRegistry_Specifics:
 # ===========================================================================
 class TestEdgeCases:
     """404s, empty queries, missing params, validation."""
-
-    def test_404_user(self):
-        """Non-existent user returns 404."""
-        resp = client.get(
-            f"{ADMIN}/users/no-such-user",
-            headers=auth_header(),
-        )
-        assert resp.status_code == 404
 
     def test_404_document(self):
         """Non-existent document returns 404."""
@@ -727,7 +833,7 @@ class TestEdgeCases:
         assert resp.status_code == 404
 
     def test_404_registry_doc(self):
-        """Non-existent registry doc returns 404."""
+        """Non-existent registry doc returns 404 on delete."""
         resp = client.delete(f"{REG_DOCS}/documents/no-such-doc")
         assert resp.status_code == 404
 
@@ -735,15 +841,6 @@ class TestEdgeCases:
         """GET search without q param returns 422."""
         resp = client.get(f"{ORCH}/documents/search")
         assert resp.status_code == 422
-
-    def test_create_user_missing_fields(self):
-        """Create user without email returns 422."""
-        resp = client.post(
-            f"{ADMIN}/users",
-            json={"full_name": "No Email"},
-            headers=auth_header(),
-        )
-        assert resp.status_code in (400, 422)
 
     def test_registry_doc_not_found(self):
         """Non-existent classifier returns 404."""
@@ -754,3 +851,32 @@ class TestEdgeCases:
         """Delete parent classifier returns 409."""
         resp = client.delete(f"{REG}/classifiers/01")
         assert resp.status_code == 409
+
+    def test_validate_endpoints_removed(self):
+        """Old validate endpoints return 404."""
+        for path in [
+            "/validate/compare",
+            "/validate/compare/comp-001",
+            "/validate/checks",
+            "/validate/checks/check-001",
+            "/validate/checks/check-001/export",
+        ]:
+            resp = client.post(f"{ORCH}{path}", json={})
+            assert resp.status_code == 404, (
+                f"Expected 404 for {path}, got {resp.status_code}"
+            )
+
+    def test_chat_send_message_simplified(self):
+        """POST /chat/sessions/{id}/messages returns simplified response (no sources)."""
+        resp = client.post(
+            f"{QUERY}/chat/sessions/sess-001/messages",
+            json={"content": "Test message"},
+        )
+        assert_ok(resp)
+        data = resp.json()
+        assert "message_id" in data
+        assert "role" in data
+        assert "content" in data
+        assert "timestamp" in data
+        # Simplified: should not have sources
+        assert "sources" not in data

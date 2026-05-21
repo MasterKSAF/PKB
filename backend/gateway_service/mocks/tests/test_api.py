@@ -14,8 +14,13 @@ sys.path.insert(
 import pytest
 from fastapi.testclient import TestClient
 
+import mocks.gateway
+
 # Import rate limiter state to reset between test classes
 from mocks.auth_service.main import _rate_limits as _auth_rate_limits
+
+# Разрешаем анонимный доступ в тестах (тесты не проверяют RBAC)
+mocks.gateway.ALLOW_ANONYMOUS = True
 from mocks.gateway import app
 
 client = TestClient(app, raise_server_exceptions=False)

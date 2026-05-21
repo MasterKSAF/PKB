@@ -48,6 +48,8 @@ def _init_data():
         _registry_docs, \
         _pending_classifiers, \
         _doc_history
+    if _classifiers and _terminology:
+        return  # already initialized — preserve existing state
     _classifiers = {c["code"]: copy.deepcopy(c) for c in SEED_CLASSIFIERS}
     _terminology = {t["id"]: copy.deepcopy(t) for t in SEED_TERMINOLOGY}
     _registry_docs = {d["id"]: copy.deepcopy(d) for d in SEED_REGISTRY_DOCUMENTS}
@@ -447,9 +449,9 @@ async def validate_classification(req: dict):
             "code": code,
             "classifier_system": classifier_system,
             "exists_in_registry": node is not None,
-            "validation_status": "valid"
+            "validation_status": "VALID"
             if valid
-            else ("error" if not system_valid else "warning"),
+            else ("ERROR" if not system_valid else "WARNING"),
             "message": "Validation passed" if valid else "Validation failed",
         }
     }
@@ -657,31 +659,62 @@ async def normalize_term(q: str = Query(..., description="Термин для н
 
 @main_router.post("/terminology/import")
 async def import_terminology(req: TermImportRequest):
-    """Массовый импорт терминов."""
+    """Массовый импорт терминов с проверкой дубликатов."""
     inserted = 0
     updated = 0
     errors = []
 
     for row in req.items:
         try:
-            term_id = f"t-{new_id()}"
+            # Проверка дубликата по raw_term
+            existing_id = None
+            for tid, term in _terminology.items():
+                if term.get("raw_term", "").lower() == row.raw_term.lower():
+                    existing_id = tid
+                    break
+
             now = utcnow()
-            _terminology[term_id] = {
-                "id": term_id,
-                "raw_term": row.raw_term,
-                "standard_term": row.standard_term or row.raw_term.lower(),
-                "normalized_value": row.normalized_value or row.raw_term.lower(),
-                "term_type": row.term_type,
-                "is_case_sensitive": row.is_case_sensitive,
-                "definition": row.definition,
-                "synonyms": row.synonyms or [],
-                "related_docs": row.related_docs or [],
-                "scope": row.scope,
-                "is_blocked": row.is_blocked,
-                "created_at": now,
-                "updated_at": now,
-            }
-            inserted += 1
+            if existing_id:
+                # Update existing term
+                existing = _terminology[existing_id]
+                existing["standard_term"] = row.standard_term or existing.get(
+                    "standard_term", row.raw_term.lower()
+                )
+                existing["normalized_value"] = row.normalized_value or existing.get(
+                    "normalized_value", row.raw_term.lower()
+                )
+                existing["term_type"] = row.term_type
+                existing["is_case_sensitive"] = row.is_case_sensitive
+                if row.definition is not None:
+                    existing["definition"] = row.definition
+                if row.synonyms is not None:
+                    existing["synonyms"] = row.synonyms
+                if row.related_docs is not None:
+                    existing["related_docs"] = row.related_docs
+                if row.scope is not None:
+                    existing["scope"] = row.scope
+                existing["is_blocked"] = row.is_blocked
+                existing["updated_at"] = now
+                updated += 1
+            else:
+                # Create new term
+                term_id = f"t-{new_id()}"
+                _terminology[term_id] = {
+                    "id": term_id,
+                    "raw_term": row.raw_term,
+                    "standard_term": row.standard_term or row.raw_term.lower(),
+                    "normalized_value": row.normalized_value or row.raw_term.lower(),
+                    "term_type": row.term_type,
+                    "is_case_sensitive": row.is_case_sensitive,
+                    "definition": row.definition,
+                    "synonyms": row.synonyms or [],
+                    "related_docs": row.related_docs or [],
+                    "scope": row.scope,
+                    "is_blocked": row.is_blocked,
+                    "created_at": now,
+                    "updated_at": now,
+                }
+                inserted += 1
         except Exception as e:
             errors.append(
                 {"row": row.raw_term, "code": "IMPORT_ERROR", "message": str(e)}
@@ -850,67 +883,109 @@ async def export_registry_documents(
 
 @registry_docs_router.post("/documents/import")
 async def import_registry_documents(req: List[RegistryDocCreate]):
-    """Массовый импорт документов в реестр."""
+    """Массовый импорт документов в реестр с проверкой дубликатов по doc_code."""
     inserted = 0
     updated = 0
     errors = []
 
     for item in req:
         try:
-            doc_id = f"rd-{new_id()}"
-            now = utcnow()
-            mks_name = ""
-            if item.mks_oks_code:
-                cl = _classifiers.get(item.mks_oks_code)
-                if cl:
-                    mks_name = cl.get("full_name", "")
-            okstu_name = ""
-            if item.okstu_code:
-                cl = _classifiers.get(item.okstu_code)
-                if cl:
-                    okstu_name = cl.get("full_name", "")
+            # Проверка дубликата по doc_code
+            existing_id = None
+            if item.doc_code:
+                for did, doc in _registry_docs.items():
+                    if doc.get("doc_code") == item.doc_code:
+                        existing_id = did
+                        break
 
-            new_doc = {
-                "id": doc_id,
-                "title": item.title,
-                "doc_code": item.doc_code,
-                "source_type": item.source_type,
-                "title_hash_sha256": None,
-                "status": item.status,
-                "era": item.era,
-                "validity_status": item.validity_status,
-                "jurisdiction": item.jurisdiction,
-                "issuing_body": item.issuing_body,
-                "mks_oks_code": item.mks_oks_code,
-                "mks_name": mks_name,
-                "okstu_code": item.okstu_code,
-                "okstu_name": okstu_name,
-                "classification_status": {
-                    "mks_status": "unknown",
-                    "okstu_status": "unknown",
-                },
-                "successor_doc_id": None,
-                "predecessor_doc_id": None,
-                "total_versions": 1,
-                "chunk_count": 0,
-                "created_by": "system",
-                "updated_by": "system",
-                "created_at": now,
-                "updated_at": now,
-            }
-            _registry_docs[doc_id] = new_doc
-            _doc_history[doc_id] = [
-                {
-                    "history_id": f"hist-{new_id()}",
-                    "doc_id": doc_id,
-                    "previous_status": None,
-                    "new_status": item.status,
-                    "comment": "Document created",
-                    "changed_by": "system",
-                    "changed_at": now,
+            now = utcnow()
+            if existing_id:
+                # Update existing document
+                existing = _registry_docs[existing_id]
+                existing["title"] = item.title
+                existing["source_type"] = item.source_type
+                existing["status"] = item.status
+                existing["era"] = item.era
+                existing["validity_status"] = item.validity_status
+                if item.jurisdiction is not None:
+                    existing["jurisdiction"] = item.jurisdiction
+                if item.issuing_body is not None:
+                    existing["issuing_body"] = item.issuing_body
+                if item.mks_oks_code is not None:
+                    existing["mks_oks_code"] = item.mks_oks_code
+                    cl = _classifiers.get(item.mks_oks_code)
+                    existing["mks_name"] = cl.get("full_name", "") if cl else ""
+                if item.okstu_code is not None:
+                    existing["okstu_code"] = item.okstu_code
+                    cl = _classifiers.get(item.okstu_code)
+                    existing["okstu_name"] = cl.get("full_name", "") if cl else ""
+                existing["updated_at"] = now
+                _doc_history[existing_id].append(
+                    {
+                        "history_id": f"hist-{new_id()}",
+                        "doc_id": existing_id,
+                        "previous_status": existing.get("status"),
+                        "new_status": item.status,
+                        "comment": "Document updated via import",
+                        "changed_by": "system",
+                        "changed_at": now,
+                    }
+                )
+                updated += 1
+            else:
+                doc_id = f"rd-{new_id()}"
+                mks_name = ""
+                if item.mks_oks_code:
+                    cl = _classifiers.get(item.mks_oks_code)
+                    if cl:
+                        mks_name = cl.get("full_name", "")
+                okstu_name = ""
+                if item.okstu_code:
+                    cl = _classifiers.get(item.okstu_code)
+                    if cl:
+                        okstu_name = cl.get("full_name", "")
+
+                new_doc = {
+                    "id": doc_id,
+                    "title": item.title,
+                    "doc_code": item.doc_code,
+                    "source_type": item.source_type,
+                    "title_hash_sha256": None,
+                    "status": item.status,
+                    "era": item.era,
+                    "validity_status": item.validity_status,
+                    "jurisdiction": item.jurisdiction,
+                    "issuing_body": item.issuing_body,
+                    "mks_oks_code": item.mks_oks_code,
+                    "mks_name": mks_name,
+                    "okstu_code": item.okstu_code,
+                    "okstu_name": okstu_name,
+                    "classification_status": {
+                        "mks_status": "unknown",
+                        "okstu_status": "unknown",
+                    },
+                    "successor_doc_id": None,
+                    "predecessor_doc_id": None,
+                    "total_versions": 1,
+                    "chunk_count": 0,
+                    "created_by": "system",
+                    "updated_by": "system",
+                    "created_at": now,
+                    "updated_at": now,
                 }
-            ]
-            inserted += 1
+                _registry_docs[doc_id] = new_doc
+                _doc_history[doc_id] = [
+                    {
+                        "history_id": f"hist-{new_id()}",
+                        "doc_id": doc_id,
+                        "previous_status": None,
+                        "new_status": item.status,
+                        "comment": "Document created",
+                        "changed_by": "system",
+                        "changed_at": now,
+                    }
+                ]
+                inserted += 1
         except Exception as e:
             errors.append(
                 {"row": item.title, "code": "IMPORT_ERROR", "message": str(e)}
@@ -1248,7 +1323,7 @@ async def get_allowed_values():
             "term_type": ["abbreviation", "synonym", "preferred", "deprecated"],
             "classification_status_code": ["valid", "deprecated", "unknown"],
             "pending_status": ["new", "review", "accepted", "rejected"],
-            "validation_status": ["valid", "warning", "error"],
+            "validation_status": ["VALID", "WARNING", "ERROR"],
             "chunk_type": ["text", "table", "image"],
         }
     }

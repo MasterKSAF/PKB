@@ -21,7 +21,7 @@ from common import (
     paginate,
     utcnow,
 )
-from fastapi import APIRouter, FastAPI, HTTPException, Query
+from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/api/v1")
@@ -38,8 +38,10 @@ _export_store: Dict[str, dict] = {}
 
 def _init_data():
     global _sessions, _history
-    _sessions = copy.deepcopy({s["session_id"]: s for s in SEED_SESSIONS})
-    _history = copy.deepcopy(SEED_HISTORY)
+    if not _sessions:
+        _sessions = copy.deepcopy({s["session_id"]: s for s in SEED_SESSIONS})
+    if not _history:
+        _history = copy.deepcopy(SEED_HISTORY)
 
 
 # ---------------------------------------------------------------------------
@@ -54,59 +56,100 @@ _MOCK_ANSWERS = [
     "Ссылки на НСИ: ГОСТ 2.109-73 (п. 3.2), ГОСТ 2.307-2011 (п. 4.1), ГОСТ 2.309-73 (п. 2.5).",
 ]
 
-_MOCK_SOURCES = [
-    {
-        "document_id": "doc-001",
-        "document_title": "Спецификация по ГОСТ 2.109",
-        "page": 3,
-        "section_id": f"sect-{new_id()}",
-        "excerpt": "Толщина стенки корпуса: 5 мм, материал: Сталь 45",
-        "score": round(random.uniform(0.85, 0.99), 2),
-        "clause": "Основные требования",
-        "page_preview_url": "/api/v1/documents/doc-001/pages/3/preview",
-        "document_url": "/api/v1/documents/doc-001",
-    },
-    {
-        "document_id": "doc-002",
-        "document_title": "Чертеж детали 101",
-        "page": 1,
-        "section_id": f"sect-{new_id()}",
-        "excerpt": "Габаритные размеры: 150x80x25 мм",
-        "score": round(random.uniform(0.85, 0.99), 2),
-        "clause": "Габаритные размеры",
-        "page_preview_url": "/api/v1/documents/doc-002/pages/1/preview",
-        "document_url": "/api/v1/documents/doc-002",
-    },
-    {
-        "document_id": "rd-001",
-        "document_title": "ГОСТ 2.109-73",
-        "page": 5,
-        "section_id": f"sect-{new_id()}",
-        "excerpt": "Толщина стенки не менее 4 мм для изделий данного типа",
-        "score": round(random.uniform(0.90, 1.0), 2),
-        "clause": "п. 3.2",
-        "page_preview_url": "/api/v1/documents/rd-001/pages/5/preview",
-        "document_url": "/api/v1/documents/rd-001",
-    },
-    {
-        "document_id": "rd-002",
-        "document_title": "ГОСТ 2.307-2011",
-        "page": 3,
-        "section_id": f"sect-{new_id()}",
-        "excerpt": "Предельные отклонения размеров: H11, h11",
-        "score": round(random.uniform(0.80, 0.95), 2),
-        "clause": "п. 4.1",
-        "page_preview_url": "/api/v1/documents/rd-002/pages/3/preview",
-        "document_url": "/api/v1/documents/rd-002",
-    },
-]
+
+def _generate_sources() -> list:
+    """Генерирует источники динамически, чтобы разные запросы ссылались на разные документы."""
+    all_sources = [
+        {
+            "document_id": "doc-001",
+            "document_title": "Спецификация по ГОСТ 2.109",
+            "page": 3,
+            "section_id": f"sect-{new_id()}",
+            "excerpt": "Толщина стенки корпуса: 5 мм, материал: Сталь 45",
+            "score": round(random.uniform(0.85, 0.99), 2),
+            "clause": "Основные требования",
+            "page_preview_url": "/api/v1/documents/doc-001/pages/3/preview",
+            "document_url": "/api/v1/documents/doc-001",
+        },
+        {
+            "document_id": "doc-002",
+            "document_title": "Чертеж детали 101",
+            "page": 1,
+            "section_id": f"sect-{new_id()}",
+            "excerpt": "Габаритные размеры: 150x80x25 мм",
+            "score": round(random.uniform(0.85, 0.99), 2),
+            "clause": "Габаритные размеры",
+            "page_preview_url": "/api/v1/documents/doc-002/pages/1/preview",
+            "document_url": "/api/v1/documents/doc-002",
+        },
+        {
+            "document_id": "rd-001",
+            "document_title": "ГОСТ 2.109-73",
+            "page": 5,
+            "section_id": f"sect-{new_id()}",
+            "excerpt": "Толщина стенки не менее 4 мм для изделий данного типа",
+            "score": round(random.uniform(0.90, 1.0), 2),
+            "clause": "п. 3.2",
+            "page_preview_url": "/api/v1/documents/rd-001/pages/5/preview",
+            "document_url": "/api/v1/documents/rd-001",
+        },
+        {
+            "document_id": "rd-002",
+            "document_title": "ГОСТ 2.307-2011",
+            "page": 3,
+            "section_id": f"sect-{new_id()}",
+            "excerpt": "Предельные отклонения размеров: H11, h11",
+            "score": round(random.uniform(0.80, 0.95), 2),
+            "clause": "п. 4.1",
+            "page_preview_url": "/api/v1/documents/rd-002/pages/3/preview",
+            "document_url": "/api/v1/documents/rd-002",
+        },
+    ]
+    # Динамически добавляем варианты источников для разнообразия
+    extra = [
+        {
+            "document_id": "doc-003",
+            "document_title": "Архивная копия альбома чертежей 1985",
+            "page": random.randint(1, 45),
+            "section_id": f"sect-{new_id()}",
+            "excerpt": "Фрагмент архивного чертежа, масштаб 1:1",
+            "score": round(random.uniform(0.60, 0.80), 2),
+            "clause": "Архивные данные",
+            "page_preview_url": "/api/v1/documents/doc-003/pages/{page}/preview",
+            "document_url": "/api/v1/documents/doc-003",
+        },
+        {
+            "document_id": "rd-003",
+            "document_title": "ОСТ 1.00000-80 — Общие требования",
+            "page": random.randint(1, 10),
+            "section_id": f"sect-{new_id()}",
+            "excerpt": "Общие требования к изделиям авиационной техники",
+            "score": round(random.uniform(0.75, 0.93), 2),
+            "clause": "Раздел 1",
+            "page_preview_url": "/api/v1/documents/rd-003/pages/{page}/preview",
+            "document_url": "/api/v1/documents/rd-003",
+        },
+        {
+            "document_id": "rd-004",
+            "document_title": "ГОСТ 2.104-2006 — Основные надписи",
+            "page": random.randint(1, 8),
+            "section_id": f"sect-{new_id()}",
+            "excerpt": "Форма и размеры основной надписи",
+            "score": round(random.uniform(0.80, 0.95), 2),
+            "clause": "Приложение А",
+            "page_preview_url": "/api/v1/documents/rd-004/pages/{page}/preview",
+            "document_url": "/api/v1/documents/rd-004",
+        },
+    ]
+    return all_sources + extra
 
 
 def _generate_answer(question: str) -> dict:
     """Генерирует mock-ответ на вопрос."""
+    sources_pool = _generate_sources()
     return {
         "content": random.choice(_MOCK_ANSWERS),
-        "sources": random.sample(_MOCK_SOURCES, min(3, len(_MOCK_SOURCES))),
+        "sources": random.sample(sources_pool, min(3, len(sources_pool))),
         "model_used": "gpt-4",
         "processing_time_ms": random.randint(500, 3000),
     }
@@ -272,14 +315,15 @@ _init_data()
 
 
 @router.post("/chat/sessions", status_code=201)
-async def create_session(req: CreateSessionRequest):
-    """Создать сессию чата."""
+async def create_session(req: CreateSessionRequest, request: Request = None):
+    """Создать сессии чата."""
+    user_id = (request.state.user.get("user_id") or "system") if request else "system"
     session_id = f"sess-{new_id()}"
     now = utcnow()
     new_session = {
         "session_id": session_id,
         "title": req.title or f"Сессия {session_id}",
-        "user_id": "u-001",
+        "user_id": user_id,
         "document_ids": req.document_ids or [],
         "options": req.options
         or {
@@ -384,8 +428,12 @@ async def delete_session(session_id: str):
 
 
 @router.post("/chat/sessions/{session_id}/messages")
-async def send_message(session_id: str, req: SendMessageRequest):
+async def send_message(
+    session_id: str, req: SendMessageRequest, request: Request = None
+):
     """Отправить сообщение в сессию."""
+    user_id = (request.state.user.get("user_id") or "system") if request else "system"
+    user_name = (request.state.user.get("full_name") or user_id) if request else user_id
     session = _sessions.get(session_id)
     if not session:
         raise HTTPException(
@@ -406,23 +454,63 @@ async def send_message(session_id: str, req: SendMessageRequest):
     session.setdefault("messages", []).append(user_message)
 
     # Генерируем ответ ассистента
-    answer = _generate_answer(req.content)
     asst_msg_id = f"msg-{new_id()}"
-    assistant_message = {
-        "message_id": asst_msg_id,
-        "session_id": session_id,
-        "role": "assistant",
-        "status": "completed",
-        "content": answer["content"],
-        "sources": answer["sources"],
-        "model_used": answer["model_used"],
-        "processing_time_ms": answer["processing_time_ms"],
-        "timestamp": utcnow(),
-        "feedback": None,
-    }
+
+    # Эмулируем разные статусы ответа в зависимости от содержимого вопроса
+    if "ошибка" in req.content.lower() or "error" in req.content.lower():
+        # Ошибка генерации ответа
+        assistant_message = {
+            "message_id": asst_msg_id,
+            "session_id": session_id,
+            "role": "assistant",
+            "status": "failed",
+            "content": "Произошла ошибка при генерации ответа. Попробуйте переформулировать вопрос.",
+            "sources": [],
+            "model_used": "gpt-4",
+            "processing_time_ms": 0,
+            "timestamp": utcnow(),
+            "feedback": None,
+            "error_details": {
+                "code": "GENERATION_FAILED",
+                "message": "Ошибка генерации ответа",
+            },
+        }
+        status = "failed"
+    elif "долго" in req.content.lower() or "long" in req.content.lower():
+        # Ответ ещё генерируется (pending)
+        assistant_message = {
+            "message_id": asst_msg_id,
+            "session_id": session_id,
+            "role": "assistant",
+            "status": "pending",
+            "content": "Ответ генерируется. Пожалуйста, ожидайте.",
+            "sources": [],
+            "model_used": "gpt-4",
+            "processing_time_ms": 200,
+            "timestamp": utcnow(),
+            "feedback": None,
+        }
+        status = "pending"
+    else:
+        # Успешная генерация
+        answer = _generate_answer(req.content)
+        assistant_message = {
+            "message_id": asst_msg_id,
+            "session_id": session_id,
+            "role": "assistant",
+            "status": "completed",
+            "content": answer["content"],
+            "sources": answer["sources"],
+            "model_used": answer["model_used"],
+            "processing_time_ms": answer["processing_time_ms"],
+            "timestamp": utcnow(),
+            "feedback": None,
+        }
+        status = "completed"
+
     session["messages"].append(assistant_message)
     session["message_count"] = len(session["messages"])
-    session["last_message_preview"] = answer["content"][:80] + "..."
+    session["last_message_preview"] = assistant_message["content"][:80] + "..."
     session["updated_at"] = utcnow()
 
     # Добавляем в историю
@@ -431,23 +519,23 @@ async def send_message(session_id: str, req: SendMessageRequest):
             "history_id": f"hist-{new_id()}",
             "session_id": session_id,
             "created_at": utcnow(),
-            "user_id": "u-001",
-            "user_name": "Иванов С.П.",
+            "user_id": user_id,
+            "user_name": user_name,
             "question": req.content,
-            "answer_preview": answer["content"][:80] + "...",
-            "status": "completed",
-            "source_count": len(answer["sources"]),
+            "answer_preview": assistant_message["content"][:80] + "...",
+            "status": status,
+            "source_count": len(assistant_message.get("sources", [])),
             "answer_id": f"ans-{new_id()}",
         }
     )
 
-    # Упрощённый ответ без sources
+    # Упрощённый ответ
     return {
         "message_id": asst_msg_id,
         "session_id": session_id,
         "role": "assistant",
-        "status": "completed",
-        "content": answer["content"],
+        "status": status,
+        "content": assistant_message["content"],
         "timestamp": assistant_message["timestamp"],
     }
 
@@ -591,6 +679,37 @@ async def chat_ask(req: ChatRequest):
                         {"document_id": "rd-001", "clause": "п. 3.2"},
                         {"document_id": "rd-003", "clause": "п. 5.1"},
                     ],
+                }
+            ],
+        }
+
+    # Сценарий pending (ответ в процессе генерации)
+    if "долго" in query_lower or "wait" in query_lower or "pending" in query_lower:
+        answer_id = f"ans-{new_id()}"
+        return {
+            "scenario": "pending",
+            "answer_id": answer_id,
+            "session_id": req.session_id or f"sess-{new_id()}",
+            "status": "pending",
+            "message": "Запрос обрабатывается, пожалуйста, ожидайте",
+            "latency_ms": None,
+        }
+
+    # Сценарий failed (ошибка обработки)
+    if "сбой" in query_lower or "fail" in query_lower or "ошибк" in query_lower:
+        answer_id = f"ans-{new_id()}"
+        return {
+            "scenario": "failed",
+            "answer_id": answer_id,
+            "session_id": req.session_id or f"sess-{new_id()}",
+            "status": "failed",
+            "message": "Не удалось обработать запрос из-за внутренней ошибки",
+            "latency_ms": None,
+            "conflicts": [
+                {
+                    "type": "generation_error",
+                    "description": "Ошибка генерации ответа модели",
+                    "sources": [],
                 }
             ],
         }

@@ -19,6 +19,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pytest
 from fastapi.testclient import TestClient
 
+import mocks.gateway
+
+# Разрешаем анонимный доступ в тестах (тесты не проверяют RBAC)
+mocks.gateway.ALLOW_ANONYMOUS = True
+
 from mocks.auth_service.main import _rate_limits as _auth_rate_limits
 from mocks.gateway import app
 
@@ -825,3 +830,300 @@ class TestSearchEdgeCases:
             return  # Valid
         assert_ok(resp)
         assert "scenario" in resp.json()
+
+
+# ===========================================================================
+# FIX VERIFICATION TESTS — проверки исправленных багов
+# ===========================================================================
+
+
+class TestFixes:
+    """Tests that verify specific bugfixes: hardcoded IDs, enum case, chat statuses,
+    duplicate imports, RBAC blocking, OpenAPI types."""
+
+    def setup_method(self):
+        _reset_rate_limiter()
+
+    def test_51_uploaded_document_has_no_hardcoded_user(self):
+        """После загрузки документа user_id не равен 'u-001'.
+
+        Проверка: загружаем документ → получаем его детали →
+        user_id и uploaded_by не должны быть хардкодными seed-значениями.
+        Используем petrova (knowledge_admin), т.к. engineer не может загружать.
+        """
+        unique_filename = f"fix_{uuid.uuid4().hex}.pdf"
+
+        # Загружаем документ (с токеном petrova, у которой can_upload_documents=True)
+        token = get_token("petrova@example.com", "secret456")
+        headers = {"Authorization": f"Bearer {token}"}
+        upload = client.post(
+            f"{ORCH}/documents",
+            files={"file": (unique_filename, b"fix test content", "application/pdf")},
+            headers=headers,
+        )
+        assert_ok(upload, 202)
+
+        # Ищем наш документ по уникальному имени файла
+        resp = client.get(
+            f"{ORCH}/documents",
+            params={"search": unique_filename.replace(".pdf", "")},
+            headers=headers,
+        )
+        assert_ok(resp)
+        docs = resp.json()["items"]
+        assert len(docs) > 0, f"Документ {unique_filename} не найден"
+        doc = docs[0]
+
+        # user_id не должен быть хардкодным "u-001"
+        assert doc["user_id"] != "u-001", (
+            f"user_id всё ещё хардкодный: {doc['user_id']}"
+        )
+        # uploaded_by не должен быть хардкодным "Иванов С.П."
+        assert doc["uploaded_by"] != "Иванов С.П.", (
+            f"uploaded_by всё ещё хардкодный: {doc['uploaded_by']}"
+        )
+        # Должен совпадать с реальным пользователем (Петрова А.В.)
+        assert doc["uploaded_by"] == "Петрова Анна Викторовна"
+
+    def test_52_validate_classification_returns_uppercase_status(self):
+        """POST /classifiers/validate возвращает UPPERCASE validation_status.
+
+        Проверка: VALID, WARNING, ERROR (а не valid, warning, error).
+        """
+        # Существующий код → VALID
+        resp = client.post(
+            f"{REG}/classifiers/validate",
+            json={"code": "01", "classifier_system": "MKS"},
+        )
+        assert_ok(resp)
+        status = resp.json()["data"]["validation_status"]
+        assert status == "VALID", f"Ожидался VALID, получен {status}"
+
+        # Неизвестная система → ERROR
+        resp = client.post(
+            f"{REG}/classifiers/validate",
+            json={"code": "01", "classifier_system": "UNKNOWN_SYSTEM"},
+        )
+        assert_ok(resp)
+        status = resp.json()["data"]["validation_status"]
+        assert status == "ERROR", f"Ожидался ERROR, получен {status}"
+
+        # Неизвестный код, но известная система → WARNING
+        resp = client.post(
+            f"{REG}/classifiers/validate",
+            json={"code": "ZZZZ_NOT_EXISTS", "classifier_system": "MKS"},
+        )
+        assert_ok(resp)
+        status = resp.json()["data"]["validation_status"]
+        assert status == "WARNING", f"Ожидался WARNING, получен {status}"
+
+    def test_53_chat_message_returns_failed_on_error_keyword(self):
+        """Сообщение со словом 'ошибка' → статус 'failed'."""
+        # Создаём сессию
+        sess = client.post(
+            f"{QUERY}/chat/sessions",
+            json={"title": "test-failed"},
+        ).json()
+        sess_id = sess["session_id"]
+
+        # Шлём сообщение с "ошибка"
+        resp = client.post(
+            f"{QUERY}/chat/sessions/{sess_id}/messages",
+            json={"content": "тут ошибка в расчетах"},
+        )
+        assert_ok(resp)
+        data = resp.json()
+        assert data["status"] == "failed", (
+            f"Ожидался статус 'failed', получен {data['status']}"
+        )
+
+    def test_54_chat_message_returns_pending_on_long_keyword(self):
+        """Сообщение со словом 'долго' → статус 'pending'."""
+        sess = client.post(
+            f"{QUERY}/chat/sessions",
+            json={"title": "test-pending"},
+        ).json()
+        sess_id = sess["session_id"]
+
+        resp = client.post(
+            f"{QUERY}/chat/sessions/{sess_id}/messages",
+            json={"content": "долго обрабатывается запрос"},
+        )
+        assert_ok(resp)
+        data = resp.json()
+        assert data["status"] == "pending", (
+            f"Ожидался статус 'pending', получен {data['status']}"
+        )
+
+    def test_55_chat_ask_returns_pending_and_failed_scenarios(self):
+        """POST /chat возвращает сценарии 'pending' и 'failed'."""
+        # pending
+        resp = client.post(
+            f"{QUERY}/chat",
+            json={"question": "долго жду ответа"},
+        )
+        assert_ok(resp)
+        assert resp.json()["scenario"] == "pending"
+
+        # failed
+        resp = client.post(
+            f"{QUERY}/chat",
+            json={"question": "произошел сбой системы"},
+        )
+        assert_ok(resp)
+        assert resp.json()["scenario"] == "failed"
+
+    def test_56_import_terminology_deduplication(self):
+        """Импорт термина с существующим raw_term — upsert, не дубликат.
+
+        Проверка: повторный импорт того же raw_term не создаёт новый термин,
+        а обновляет существующий.
+        """
+        unique_term = f"Тест-термин-{uuid.uuid4().hex[:6]}"
+
+        # Первый импорт
+        resp1 = client.post(
+            f"{REG}/terminology/import",
+            json={
+                "items": [
+                    {
+                        "raw_term": unique_term,
+                        "standard_term": unique_term.lower(),
+                        "term_type": "preferred",
+                    }
+                ]
+            },
+        )
+        assert_ok(resp1)
+        result1 = resp1.json()["data"]
+        assert result1["inserted"] == 1
+        assert result1["updated"] == 0
+
+        # Второй импорт того же raw_term — должен быть update, не insert
+        resp2 = client.post(
+            f"{REG}/terminology/import",
+            json={
+                "items": [
+                    {
+                        "raw_term": unique_term,
+                        "standard_term": unique_term.lower(),
+                        "term_type": "deprecated",
+                    }
+                ]
+            },
+        )
+        assert_ok(resp2)
+        result2 = resp2.json()["data"]
+        assert result2["inserted"] == 0, "Дубликат вставился как новый!"
+        assert result2["updated"] == 1, "Дубликат не обновился!"
+
+        # Проверяем, что term_type изменился на 'deprecated'
+        resp3 = client.get(f"{REG}/terminology/normalize?q={unique_term}")
+        assert_ok(resp3)
+        assert resp3.json()["data"]["term_type"] == "deprecated"
+
+    def test_57_openapi_field_types_are_specific(self):
+        """Проверка, что в OpenAPI-схеме коллекции имеют конкретный тип элемента.
+
+        Проблема: list вместо List[DocumentListItem] даёт any[] в TypeScript.
+        """
+        resp = client.get("/openapi.json")
+        assert_ok(resp)
+        schemas = resp.json().get("components", {}).get("schemas", {})
+
+        # DocumentListResponse.items должен быть массивом DocumentListItem
+        doc_list = schemas.get("DocumentListResponse", {})
+        items_prop = doc_list.get("properties", {}).get("items", {})
+        assert items_prop.get("type") == "array", "items должен быть array"
+        items_ref = items_prop.get("items", {}).get("$ref", "")
+        assert "DocumentListItem" in items_ref, (
+            f"items должен ссылаться на DocumentListItem, а не any. "
+            f"Получено: items={items_prop.get('items', {})}"
+        )
+
+        # ChatResponse.answer_items — Optional[List[AnswerItem]],
+        # OpenAPI генерирует anyOf: [array, null]
+        chat_resp = schemas.get("ChatResponse", {})
+        answer_items = chat_resp.get("properties", {}).get("answer_items", {})
+        if answer_items:
+            any_of = answer_items.get("anyOf", [])
+            assert len(any_of) > 0, (
+                f"answer_items должен содержать anyOf: {answer_items}"
+            )
+            # Ищем array-вариант внутри anyOf
+            array_variant = next((v for v in any_of if v.get("type") == "array"), None)
+            assert array_variant is not None, (
+                f"answer_items.anyOf должен содержать array: {any_of}"
+            )
+            ref = array_variant.get("items", {}).get("$ref", "")
+            assert "AnswerItem" in ref, (
+                f"answer_items должен ссылаться на AnswerItem. ref={ref}"
+            )
+
+        # UserListResponse.users должен быть массивом UserListItem
+        user_list = schemas.get("UserListResponse", {})
+        users_prop = user_list.get("properties", {}).get("users", {})
+        assert users_prop.get("type") == "array", "users должен быть array"
+        users_ref = users_prop.get("items", {}).get("$ref", "")
+        assert "UserListItem" in users_ref, (
+            f"users должен ссылаться на UserListItem. ref={users_ref}"
+        )
+
+    def test_58_list_documents_returns_401_without_token(self):
+        """Без токена GET /documents возвращает 401.
+
+        Временно отключаем ALLOW_ANONYMOUS для проверки RBAC.
+        """
+        import mocks.gateway as gw
+
+        old_value = gw.ALLOW_ANONYMOUS
+        try:
+            gw.ALLOW_ANONYMOUS = False
+            resp = client.get(f"{ORCH}/documents")
+            assert resp.status_code == 401, (
+                f"Ожидался 401, получен {resp.status_code}: {resp.text[:200]}"
+            )
+            error = resp.json()["error"]
+            assert error["code"] == "UNAUTHORIZED"
+        finally:
+            gw.ALLOW_ANONYMOUS = old_value
+
+    def test_59_write_to_classifiers_returns_403_for_engineer(self):
+        """Инженер без can_manage_classifiers получает 403 на POST /classifiers."""
+        token = get_token("ivanov@example.com", "secret123")
+        headers = {"Authorization": f"Bearer {token}"}
+
+        resp = client.post(
+            f"{REG}/classifiers",
+            json={
+                "classifier_system": "MKS",
+                "code": f"TEST-{uuid.uuid4().hex[:6]}",
+                "full_name": "Test Classifier",
+            },
+            headers=headers,
+        )
+        assert resp.status_code == 403, (
+            f"Ожидался 403, получен {resp.status_code}: {resp.text[:200]}"
+        )
+
+    def test_60_admin_endpoints_returns_403_for_knowledge_admin(self):
+        """knowledge_admin не имеет доступа к /admin/* (только system_admin)."""
+        token = get_token("petrova@example.com", "secret456")
+        headers = {"Authorization": f"Bearer {token}"}
+
+        resp = client.get(f"{ADMIN}/users", headers=headers)
+        assert resp.status_code == 403, (
+            f"Ожидался 403 для knowledge_admin, получен {resp.status_code}"
+        )
+
+    def test_61_anonymous_gets_401_on_admin_endpoints(self):
+        """Без токена /admin/* возвращает 401."""
+        import mocks.gateway as gw
+
+        old_value = gw.ALLOW_ANONYMOUS
+        try:
+            gw.ALLOW_ANONYMOUS = False
+            resp = client.get(f"{ADMIN}/users")
+            assert resp.status_code == 401
+        finally:
+            gw.ALLOW_ANONYMOUS = old_value

@@ -47,6 +47,8 @@ _rate_limits: Dict[str, dict] = {}  # ip -> {"count": int, "reset_at": str}
 
 def _init_data():
     global _users, _roles, _audit, _tokens, _tokens_meta, _password_hashes, _rate_limits
+    if _users and _roles:
+        return  # already initialized — preserve existing state
     _users = {u["user_id"]: copy.deepcopy(u) for u in SEED_USERS}
     _roles = {r["role_id"]: copy.deepcopy(r) for r in SEED_ROLES}
     _audit = copy.deepcopy(SEED_AUDIT)
@@ -494,7 +496,7 @@ async def list_users(
 
 
 @router.post("/admin/users", status_code=201, response_model=UserCreateResponse)
-async def create_user(req: CreateUserRequest):
+async def create_user(req: CreateUserRequest, request: Request):
     """Создание пользователя."""
     # Проверка дубликата email
     for u in _users.values():
@@ -531,7 +533,13 @@ async def create_user(req: CreateUserRequest):
     _users[user_id] = new_user
     _password_hashes[user_id] = _hash_password(req.password)
 
-    _add_audit("u-003", "user.create", "user", user_id, {"email": req.email})
+    _add_audit(
+        request.state.user.get("user_id") or "system",
+        "user.create",
+        "user",
+        user_id,
+        {"email": req.email},
+    )
 
     return new_user
 
@@ -563,7 +571,7 @@ async def get_user(user_id: str):
 
 
 @router.put("/admin/users/{user_id}", response_model=UserCreateResponse)
-async def update_user(user_id: str, req: UpdateUserRequest):
+async def update_user(user_id: str, req: UpdateUserRequest, request: Request):
     """Обновление пользователя."""
     user = _users.get(user_id)
     if not user:
@@ -592,13 +600,15 @@ async def update_user(user_id: str, req: UpdateUserRequest):
             _tokens_meta.pop(rt, None)
 
     user["updated_at"] = utcnow()
-    _add_audit("u-003", "user.update", "user", user_id)
+    _add_audit(
+        request.state.user.get("user_id") or "system", "user.update", "user", user_id
+    )
 
     return user
 
 
 @router.patch("/admin/users/{user_id}", response_model=PatchUserResponse)
-async def patch_user(user_id: str, req: PatchUserRequest):
+async def patch_user(user_id: str, req: PatchUserRequest, request: Request):
     """Частичное обновление пользователя."""
     user = _users.get(user_id)
     if not user:
@@ -632,7 +642,9 @@ async def patch_user(user_id: str, req: PatchUserRequest):
             _tokens_meta.pop(rt, None)
 
     user["updated_at"] = utcnow()
-    _add_audit("u-003", "user.patch", "user", user_id)
+    _add_audit(
+        request.state.user.get("user_id") or "system", "user.patch", "user", user_id
+    )
 
     return {
         "user_id": user["user_id"],
@@ -643,7 +655,7 @@ async def patch_user(user_id: str, req: PatchUserRequest):
 
 
 @router.delete("/admin/users/{user_id}", response_model=DeactivateResponse)
-async def deactivate_user(user_id: str):
+async def deactivate_user(user_id: str, request: Request):
     """Деактивация пользователя."""
     user = _users.get(user_id)
     if not user:
@@ -654,7 +666,12 @@ async def deactivate_user(user_id: str):
 
     user["is_active"] = False
     now = utcnow()
-    _add_audit("u-003", "user.deactivate", "user", user_id)
+    _add_audit(
+        request.state.user.get("user_id") or "system",
+        "user.deactivate",
+        "user",
+        user_id,
+    )
 
     return {
         "user_id": user["user_id"],
@@ -670,7 +687,7 @@ async def list_roles():
 
 
 @router.post("/admin/roles", status_code=201)
-async def create_role(req: CreateRoleRequest):
+async def create_role(req: CreateRoleRequest, request: Request):
     """Создание роли."""
     role_id = f"r-{new_id()}"
     new_role = {
@@ -680,7 +697,9 @@ async def create_role(req: CreateRoleRequest):
         "created_at": utcnow(),
     }
     _roles[role_id] = new_role
-    _add_audit("u-003", "role.create", "role", role_id)
+    _add_audit(
+        request.state.user.get("user_id") or "system", "role.create", "role", role_id
+    )
 
     return new_role
 
