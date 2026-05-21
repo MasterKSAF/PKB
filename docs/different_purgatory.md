@@ -63,7 +63,7 @@ Purgatory (полный проект) = purgatory.* (staging) + nsi.* (knowledge
 | `id` / `document_id` | `UUID PK` | `uuid id PK` | UUID |
 | `title` | `TEXT NOT NULL` | `text title` | TEXT |
 | `doc_code` | `TEXT` | `text doc_code` | TEXT |
-| `validity_status` | `ENUM` | `text validity_status` | ⚠️ ENUM vs TEXT |
+| `validity_status` | `ENUM` | `text validity_status` | ENUM ✅ |
 
 > В ERD `docs/` показаны только ключевые поля `purgatory_documents`. Полный набор полей (status, era, jurisdiction, issuing_body, mks_oks_code, okstu_code, title_hash_sha256 и т.д.) присутствует в API-спецификации Orchestrator/Registry. См. детальное сравнение в differents.md.
 
@@ -77,8 +77,9 @@ Purgatory (полный проект) = purgatory.* (staging) + nsi.* (knowledge
 |---|---|---|---|
 | `id` | `UUID PK` | `version_id UUID` | Переименовано |
 | `document_id` | `UUID FK` | (через endpoint) | Неявно |
+| `source_filename` | `TEXT NOT NULL` | `TEXT` | ✅ добавлено в `docs/` |
 | `content_hash_sha256` | `TEXT UNIQUE` | `TEXT` | ✅ |
-| `size_bytes` | `BIGINT` | `INTEGER` | ⚠️ BIGINT vs INTEGER |
+| `size_bytes` | `BIGINT` | `INTEGER` | BIGINT ✅ |
 | `uploaded_at` | `TIMESTAMP` | `TIMESTAMP` | ✅ |
 | `uploaded_by` | `TEXT` | `TEXT` | ✅ |
 
@@ -86,11 +87,9 @@ Purgatory (полный проект) = purgatory.* (staging) + nsi.* (knowledge
 
 | Поле (Purgatory) | `docs/` аналог | Разница |
 |---|---|---|
-| `source_filename TEXT NOT NULL` | ❌ отсутствует | В `docs/` нет исходного имени файла |
 | `format_code TEXT FK→format_registry` | `format_code TEXT` | FK-ограничение есть только в Purgatory |
 | `file_path TEXT NOT NULL` (CAS) | `file_key TEXT` | Purgatory: `{doc_id}/v{n}/{hash}.ext`; `docs/`: `file_key` (не CAS) |
-| ❌ отсутствует | `version_number INTEGER` | В `docs/` есть нумерация версий |
-| ❌ отсутствует | `format_label TEXT` | В `docs/` есть читаемое название формата |
+
 
 ### A2.3. CAS-путь
 
@@ -140,7 +139,7 @@ Purgatory (полный проект) = purgatory.* (staging) + nsi.* (knowledge
 | `document_id` | (через endpoint path) | ✅ неявно |
 | `old_status` | `old_status` | ✅ |
 | `new_status` | `new_status` | ✅ |
-| `comment JSONB {reason, details}` | `comment JSONB {reason}` | ⚠️ в Purgatory `details` есть; в `docs/` только `reason` |
+| `comment JSONB {reason, details}` | `comment JSONB {reason, details}` | ✅ `details` добавлен в `docs/` |
 | `changed_by TEXT` | `changed_by TEXT` | ✅ |
 | `changed_at TIMESTAMP` | `changed_at TIMESTAMP` | ✅ |
 
@@ -152,7 +151,7 @@ Purgatory (полный проект) = purgatory.* (staging) + nsi.* (knowledge
 
 | Поле | Purgatory | `docs/` (Registry API) | Тип |
 |---|---|---|---|
-| `classifier_system` | `ENUM (MKS/OKSTU/UDC/EXTERNAL)` | `TEXT` | ⚠️ ENUM vs TEXT |
+| `classifier_system` | `ENUM (MKS/OKSTU/UDC/EXTERNAL)` | `TEXT` | ENUM ✅ |
 | `code` | `TEXT PK` (composite) | `TEXT PK` (composite) | ✅ |
 | `parent_code` | `TEXT FK→self` | `TEXT FK→self` | ✅ |
 | `full_name` | `TEXT NOT NULL` | `TEXT NOT NULL` | ✅ |
@@ -181,14 +180,11 @@ FOREIGN KEY (classifier_system, parent_code)
 | `id UUID PK` | `id UUID PK` | ✅ |
 | `system TEXT` | `system TEXT` | ✅ |
 | `code TEXT` | `code TEXT` | ✅ |
-| `source_document_id UUID FK→documents` | `found_in_document_id UUID` | 🔴 Переименовано |
-| `source_version_id UUID FK→document_versions` | ❌ **отсутствует** | В `docs/` нет привязки к конкретной версии файла |
-| `status TEXT ('new'/'mapped'/'rejected')` | `status TEXT` | ⚠️ В `docs/` статусы не специфицированы |
+| `source_document_id UUID FK→documents` | `source_document_id UUID` | ✅ переименовано в `docs/` |
+| `source_version_id UUID FK→document_versions` | `source_version_id UUID` | ✅ добавлено в `docs/` |
+| `status TEXT ('new'/'mapped'/'rejected')` | `status TEXT ('new'/'mapped'/'rejected')` | ✅ специфицированы статусы |
 | `admin_comment TEXT` | `admin_comment TEXT` | ✅ |
 | `created_at TIMESTAMP` | `created_at TIMESTAMP` | ✅ |
-| ❌ | `found_in_document_title TEXT` | 🆕 Денормализованное название документа (для UI) |
-| ❌ | `suggested_parent_code TEXT` | 🆕 Предложенный родитель (от парсера) |
-| ❌ | `suggested_parent_name TEXT` | 🆕 Название предложенного родителя |
 
 ---
 
@@ -205,7 +201,7 @@ CREATE TABLE purgatory.format_registry (
 );
 ```
 
-**В `docs/`:** ❌ Аналога нет. `format_code` используется в ответах (например, в версиях документов), но реестр MIME-типов и парсеров не специфицирован. Вместо этого в `docs/` используется `format_label` (человекочитаемое название).
+**В `docs/`:** ➕ Добавлен. Реестр форматов с MIME-типами, парсерами и `created_at`.
 
 ---
 
@@ -254,7 +250,7 @@ CREATE TABLE purgatory.format_registry (
 | `bbox` | `JSONB` | `text bbox` | ⚠️ JSONB vs TEXT |
 | `type` | ❌ (типы в отдельных таблицах) | `text type` ('section'/'table'/'image') | 🔴 Purgatory: типы разнесены |
 | `content` | ❌ (контент в `nsi.chunks`) | `jsonb content` | 🔴 Purgatory: контент в чанках |
-| `created_at` | `TIMESTAMPTZ` | ❌ | 🆕 Purgatory |
+| `created_at` | `TIMESTAMPTZ` | `TIMESTAMPTZ` | ✅ добавлен в `docs/` |
 | `valid_ltree_path` CHECK | ✅ | ❌ | 🆕 Purgatory |
 
 ### B1.2. Модель иерархии
@@ -270,7 +266,7 @@ CREATE TABLE purgatory.format_registry (
 | Поле | Purgatory (`nsi.chunks`) | `docs/` (`nsi_chunks`) | Совпадение |
 |---|---|---|---|
 | `id` | `UUID PK` | `uuid id PK` | ✅ |
-| `document_id` | `UUID FK → purgatory.documents.id` | ❌ (связь через `section_id → document_sections → document_id`) | 🔴 |
+| `document_id` | `UUID FK → purgatory.documents.id` | `uuid document_id FK → purgatory_documents` | ✅ добавлен в `docs/` для индексов чанков |
 | `section_id` | `UUID FK → nsi.document_sections.id` | `uuid section_id FK → nsi_document_sections` | ✅ |
 | `content` | `TEXT NOT NULL` | `text content` | ✅ |
 | `embedding` | `VECTOR(N)` — pgvector | `vector embedding` | ✅ |
@@ -283,8 +279,7 @@ CREATE TABLE purgatory.format_registry (
 | `confidence` | `FLOAT (0–1)` | `float confidence` | ✅ |
 | `tenant_id` | `TEXT DEFAULT 'default'` | `text tenant_id` | ✅ |
 | `deleted_at` | `TIMESTAMPTZ` | `text deleted_at` | ⚠️ TIMESTAMPTZ vs TEXT |
-| `section_title` | ❌ | ❌ (не было) | ✅ отсутствует в обеих |
-| `created_at` | `TIMESTAMPTZ` | ❌ | 🆕 Purgatory |
+| `created_at` | `TIMESTAMPTZ` | `TIMESTAMPTZ` | ✅ добавлен в `docs/` |
 
 ### B2.2. Ключевые различия
 
@@ -325,10 +320,10 @@ CREATE TABLE purgatory.format_registry (
 | `document_id UUID FK` | `nsi_document_sections.document_id` |
 | `figure_id TEXT` | в `content.image_id` |
 | `title TEXT` | `nsi_document_sections.title` |
-| `caption TEXT` | ❌ |
-| `description TEXT` | ❌ |
+| `caption TEXT` | `content.caption` |
+| `description TEXT` | `content.description` |
 | `file_path TEXT` (S3) | в `content.file_key` |
-| `file_type TEXT` | ❌ |
+| `file_type TEXT` | `content.file_type` |
 | `metadata JSONB` (размеры, DPI) | `content.width`, `content.height` |
 | `page INT` | `nsi_document_sections.page` |
 | `bbox JSONB` | `nsi_document_sections.bbox` (TEXT) |
@@ -344,12 +339,12 @@ CREATE TABLE purgatory.format_registry (
 | `caption TEXT` | `nsi_document_sections.title` |
 | `page INT` | `nsi_document_sections.page` |
 | `bbox JSONB` | `nsi_document_sections.bbox` (TEXT) |
-| `unit TEXT` | ❌ |
+| `unit TEXT` | `content.unit` |
 | `headers JSONB` | в `content.headers` |
 | `rows JSONB` | в `content.rows` |
-| `footnotes JSONB` | ❌ |
-| `image_s3_path TEXT` | ❌ |
-| `created_at TIMESTAMPTZ` | ❌ |
+| `footnotes JSONB` | `content.footnotes` |
+| `image_s3_path TEXT` | `content.image_s3_path` |
+| `created_at TIMESTAMPTZ` | `TIMESTAMPTZ` |
 
 ---
 
@@ -377,12 +372,12 @@ CREATE TABLE purgatory.format_registry (
 | `replacement_date` | `DATE` | `date replacement_date` | ✅ |
 | `is_resolved` | `BOOLEAN DEFAULT FALSE` | `bool is_resolved` | ✅ |
 | `resolved_document_id` | `UUID FK → purgatory.documents.id` | `uuid resolved_document_id FK → purgatory_documents` | ✅ |
-| `created_at` | `TIMESTAMPTZ` | ❌ | 🆕 Purgatory |
+| `created_at` | `TIMESTAMPTZ` | `TIMESTAMPTZ` | ✅ добавлен в `docs/` |
 | UNIQUE | `(source, target, type)` | ✅ `UK: UNIQUE(source_document_id, target_doc_code, reference_type)` | ✅ |
 
 ### B5.2. Вывод
 
-**Таблицы практически идентичны.** Единственное расхождение: Purgatory добавляет `created_at`. Все остальные поля (reference_type ENUM, context, current_status, replaced_by, replacement_date, resolved_document_id, UNIQUE-ограничение) совпадают.
+**Таблицы полностью идентичны.** ✅ Все поля (reference_type ENUM, context, current_status, replaced_by, replacement_date, resolved_document_id, UNIQUE-ограничение, `created_at`) совпадают.
 
 ---
 
@@ -401,12 +396,13 @@ CREATE TABLE purgatory.format_registry (
 | `source_version_id` | `UUID` (версия файла) | ❌ | 🆕 Purgatory |
 | `source_container_id` | `UUID` (контейнер чанков) | ❌ | 🆕 Purgatory |
 | `document_snapshot` | ❌ | `jsonb document_snapshot` | 🆕 docs |
+| `source_task_id` | ❌ | `TEXT` (ID задачи оркестратора) | 🆕 docs; ссылка на первичный источник |
 
 ### B6.2. Ключевые различия
 
 **Purgatory:** специализированная таблица только для промоушенов, с привязкой к версии файла (`source_version_id`) и контейнеру чанков (`source_container_id`).
 
-**`docs/`:** универсальная event-таблица для всех событий жизненного цикла (`event_type`). Содержит `document_snapshot` — снимок состояния документа на момент события. Нет привязки к версии/контейнеру.
+**`docs/`:** универсальная event-таблица для всех событий жизненного цикла (`event_type`). Содержит `document_snapshot` — снимок состояния документа на момент события и `source_task_id` — ссылку на задачу оркестратора (первичный источник). Нет привязки к версии/контейнеру.
 
 ---
 
@@ -459,9 +455,14 @@ CREATE TABLE purgatory.format_registry (
 
 ### C3.1. Создание документа
 
+**Flow:** Оркестратор создаёт задачу → получает `task_id` → передаёт `task_id` в OCR (не `document_id`).
+`document_id` назначается на стадии валидации, когда можно оценить уникальность документа:
+либо извлекается существующий `document_id` (для дубликатов), либо генерируется новый.
+
 | Аспект | Purgatory | `docs/` |
 |---|---|---|
 | Путь | `POST /upload` | `POST /documents` |
+| Первичный идентификатор | `document_id` (назначается при загрузке) | `task_id` (назначается оркестратором); `document_id` — на стадии валидации |
 | `version_id` в ответе | ❌ | ✅ |
 | `content_hash_sha256` | ❌ | ✅ |
 | `title_hash_sha256` | ❌ | ✅ |
