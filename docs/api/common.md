@@ -8,7 +8,7 @@
 
 - Формат данных: `application/json`, для загрузки файлов – `multipart/form-data`
 
-- Аутентификация: все запросы, кроме `/auth/*` и `/system/health`, требуют заголовок
+- Аутентификация: все запросы, кроме `/auth/*` и `/monitor/health`, требуют заголовок
   `Authorization: Bearer <access_token>`. Токен получается через `/auth/token`.
 
 ---
@@ -156,10 +156,7 @@ GET .../{id}/status?longpoll=15
 | `POST /documents/search`, `GET /documents/search`          | ✓          | ✓                 | ✓              |
 
 | `POST /documents/{doc_id}/approve` | ✗ | ✓ | ✓ |
-| `POST /documents/{doc_id}/promote` | ✗ | ✓ | ✓ |
-| `GET /documents/{doc_id}/promotion-status` | ✓ | ✓ | ✓ |
 | `GET /documents/{doc_id}/history` | ✓ | ✓ | ✓ |
-| `GET /documents/{doc_id}/chunks` | ✓ | ✓ | ✓ |
 | `GET /documents/{doc_id}/errors` | ✓ | ✓ | ✓ |
 | `GET /documents/queue` | ✓ | ✓ | ✓ |
 | `GET /admin/users`, `POST/PUT/PATCH/DELETE /admin/users` | ✗ | ✗ | ✓ |
@@ -202,6 +199,31 @@ GET .../{id}/status?longpoll=15
 - **Лимиты загрузки:** максимальный размер файла — 100 МБ. Поддерживаемые MIME-типы: `application/pdf`, `image/png`, `image/jpeg`, `image/tiff`. При превышении лимита возвращается `413 PAYLOAD_TOO_LARGE`.
 
 - **Идемпотентность:** опциональный заголовок `Idempotency-Key` поддерживается для `POST /documents` и `POST /chat/ask`. При повторном запросе с тем же ключом в течение 24 часов возвращается сохранённый результат.
+
+---
+
+### Безопасность и логирование
+
+#### Защита чувствительных данных (PII)
+
+Все сервисы обязаны соблюдать следующие правила при обработке чувствительных данных:
+
+| Поле | Правило обработки |
+|------|-------------------|
+| `password` | Не логировать, не возвращать в ответах API, не передавать в промежуточные сервисы без необходимости. Хранить только в хэшированном виде (bcrypt, cost factor ≥ 12). |
+| `refresh_token` | Не логировать. Хранить в БД в хэшированном виде. |
+| `access_token` | Не логировать. |
+
+#### Логирование
+
+- Поля `password`, `refresh_token`, `access_token` должны быть **отфильтрованы или замаскированы** (например, заменены на `***`) во всех логах сервисов.
+- Запрещено логировать **тело запроса/ответа** эндпоинтов `/auth/*`, `/internal/auth/*`.
+- Рекомендуется использовать структурное логирование с явным списком полей, исключённых из вывода (PII filter).
+
+#### Планы развития
+
+- **Краткосрочно:** вынести смену пароля пользователя в отдельный эндпоинт `POST /admin/users/{user_id}/reset-password` с обязательной аудит-записью.
+- **Среднесрочно:** переход с Password Grant (`POST /auth/token` с `username` + `password`) на **Authorization Code + PKCE** — пароль перестаёт передаваться API, аутентификация выполняется на стороне клиента с одноразовым code.
 
 ---
 
