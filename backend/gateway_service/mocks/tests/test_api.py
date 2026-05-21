@@ -603,27 +603,6 @@ class TestOrchestratorService:
         assert "approved_at" in data
         assert "previous_status" in data
 
-    def test_48_promote_document(self):
-        """POST /documents/{doc_id}/promote — promote to RAG index."""
-        resp = client.post(f"{ORCH}/documents/doc-001/promote")
-        assert_ok(resp)
-        data = resp.json()
-        assert data["document_id"] == "doc-001"
-        assert data["status"] == "ready_for_promotion"
-        assert "promoted_at" in data
-
-    def test_49_get_promotion_status(self):
-        """GET /documents/{doc_id}/promotion-status — check promotion."""
-        resp = client.get(f"{ORCH}/documents/doc-001/promotion-status")
-        assert_ok(resp)
-        data = resp.json()
-        assert data["document_id"] == "doc-001"
-        assert "is_promoted" in data
-        assert "promotion_status" in data
-        assert "approval_status" in data
-        assert "chunks_total" in data
-        assert "chunks_indexed" in data
-
     def test_50_get_document_history(self):
         """GET /documents/{doc_id}/history — status history."""
         resp = client.get(f"{ORCH}/documents/doc-001/history")
@@ -633,15 +612,6 @@ class TestOrchestratorService:
         assert "events" in data
         assert "total" in data
         assert len(data["events"]) > 0
-
-    def test_51_get_document_chunks(self):
-        """GET /documents/{doc_id}/chunks — document fragments."""
-        resp = client.get(f"{ORCH}/documents/doc-001/chunks")
-        assert_ok(resp)
-        data = resp.json()
-        assert data["document_id"] == "doc-001"
-        assert "chunks" in data
-        assert "total" in data
 
 
 # ===========================================================================

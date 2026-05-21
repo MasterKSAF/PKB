@@ -38,7 +38,6 @@ _versions: Dict[str, List[dict]] = {}
 _chunks: Dict[str, List[dict]] = {}
 _history: Dict[str, List[dict]] = {}
 _approvals: Dict[str, dict] = {}
-_promotions: Dict[str, dict] = {}
 _metrics: dict = {}
 
 # Счётчик для ID
@@ -54,7 +53,6 @@ def _init_data():
         _chunks, \
         _history, \
         _approvals, \
-        _promotions, \
         _metrics
     if _documents:
         return
@@ -856,7 +854,6 @@ async def delete_document(doc_id: str):
     _chunks.pop(doc_id, None)
     _history.pop(doc_id, None)
     _approvals.pop(doc_id, None)
-    _promotions.pop(doc_id, None)
     return {
         "document_id": doc_id,
         "deleted_at": utcnow(),
@@ -1001,7 +998,7 @@ async def list_document_versions(doc_id: str):
 
 
 # ===========================================================================
-# Группа approve / promote
+# Группа approve
 # ===========================================================================
 
 
@@ -1045,81 +1042,6 @@ async def approve_document(doc_id: str, request: Request = None):
     }
 
 
-@router.post("/documents/{doc_id}/promote")
-async def promote_document(doc_id: str, request: Request = None):
-    """Продвижение документа в RAG-индекс."""
-    doc = _get_document(doc_id)
-    now = utcnow()
-    user_id = (request.state.user.get("user_id") or "system") if request else "system"
-
-    old_status = doc.get("status", "")
-    doc["status"] = "ready_for_promotion"
-    doc["updated_at"] = now
-
-    # Обновляем chunks — помечаем как индексированные
-    if doc_id in _chunks:
-        for chunk in _chunks[doc_id]:
-            chunk["is_indexed"] = True
-
-    _promotions[doc_id] = {
-        "document_id": doc_id,
-        "promoted_by": user_id,
-        "promoted_at": now,
-        "previous_status": old_status,
-        "chunks_indexed": doc.get("chunk_count", 0),
-    }
-
-    if doc_id not in _history:
-        _history[doc_id] = []
-    _history[doc_id].append(
-        {
-            "event_id": f"evt-{new_id()}",
-            "document_id": doc_id,
-            "from_status": old_status,
-            "to_status": "ready_for_promotion",
-            "timestamp": now,
-            "user_id": user_id,
-            "comment": "Документ отправлен в RAG-индекс",
-        }
-    )
-
-    return {
-        "document_id": doc_id,
-        "status": "ready_for_promotion",
-        "promoted_at": now,
-        "chunks_indexed": doc.get("chunk_count", 0),
-    }
-
-
-@router.get("/documents/{doc_id}/promotion-status")
-async def get_promotion_status(doc_id: str):
-    """Статус продвижения в RAG-индекс."""
-    doc = _get_document(doc_id)
-    promotion = _promotions.get(doc_id)
-    approval = _approvals.get(doc_id)
-
-    is_promoted = doc.get("status") in ("ready_for_promotion", "approved")
-    total_chunks = doc.get("chunk_count", 0)
-    indexed_chunks = sum(1 for c in _chunks.get(doc_id, []) if c.get("is_indexed"))
-
-    return {
-        "document_id": doc_id,
-        "is_promoted": is_promoted,
-        "promotion_status": "promoted" if is_promoted else "not_promoted",
-        "approval_status": "approved"
-        if doc.get("status") == "approved"
-        else (
-            "not_approved"
-            if doc.get("status") in ("uploaded", "parsing", "processing")
-            else "approved"
-        ),
-        "chunks_total": total_chunks,
-        "chunks_indexed": indexed_chunks,
-        "promoted_at": promotion.get("promoted_at") if promotion else None,
-        "approved_at": approval.get("approved_at") if approval else None,
-    }
-
-
 @router.get("/documents/{doc_id}/history")
 async def get_document_history(doc_id: str):
     """История статусов документа."""
@@ -1131,18 +1053,6 @@ async def get_document_history(doc_id: str):
         "document_id": doc_id,
         "events": events,
         "total": len(events),
-    }
-
-
-@router.get("/documents/{doc_id}/chunks")
-async def get_document_chunks(doc_id: str):
-    """Чанки (фрагменты) документа."""
-    _get_document(doc_id)
-    chunks = _chunks.get(doc_id, [])
-    return {
-        "document_id": doc_id,
-        "chunks": chunks,
-        "total": len(chunks),
     }
 
 
