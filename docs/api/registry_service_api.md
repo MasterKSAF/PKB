@@ -685,7 +685,7 @@ POST /registry/documents
 
 **Назначение:** создание карточки документа. Используется как при прямом вызове из UI/админки, так и со стороны этапа **«Registry»** Пайплайна 1 (Формирование документа).
 
-> **Важно:** Registry использует `document_id` (UUID), сгенерированный Orchestrator при загрузке, как **единый первичный ключ**. Собственный numeric ID не создаётся — `document_id` проходит сквозь все сервисы без маппинга.
+> **Важно:** Registry использует `document_id` (UUID) как **единый первичный ключ**. `document_id` назначается на этапе Validation (Пайплайн 1, Этап 2) после проверки уникальности: извлекается существующий для дубликата, либо генерируется новый. Собственный numeric ID не создаётся — `document_id` проходит сквозь все сервисы без маппинга.
 
 В режиме пайплайна оркестратор передаёт JSON-контейнер (результат валидации) как непрозрачный артефакт — сервис сам маппит поля в модель данных.
 
@@ -1126,7 +1126,7 @@ GET /registry/enums
 
 | Поле | Тип | Ограничения |
 |------|-----|-------------|
-| `classifier_system` | varchar(20) | PK (составной), `MKS`, `OKSTU`, `UDC`, `EXTERNAL` |
+| `classifier_system` | classifier_system_enum | PK (составной), ENUM: `MKS`, `OKSTU`, `UDC`, `EXTERNAL` |
 | `code` | text | PK (составной) |
 | `parent_code` | text | FK → self (`classifier_system`, `code`), nullable |
 | `full_name` | text | NOT NULL |
@@ -1197,6 +1197,17 @@ GET /registry/enums
 | `updated_by` | text | nullable |
 
 > Сгенерированные колонки `mks_system` и `okstu_system` (GENERATED ALWAYS AS 'MKS'/'OKSTU') обеспечивают строгую FK-проверку к системе классификации.
+
+### 5.5. format_registry
+
+| Поле | Тип | Ограничения |
+|------|-----|-------------|
+| `id` | uuid | PK |
+| `format_code` | text | UNIQUE, NOT NULL — `pdf`, `png`, `jpg`, `tiff`, `docx` |
+| `mime_type` | text | NOT NULL — `application/pdf`, `image/png` и т.д. |
+| `parser_engine` | text | NOT NULL — `docling`, `tesseract`, `easyocr` |
+| `supported` | boolean | DEFAULT true |
+| `created_at` | timestamptz | NOT NULL |
 
 ---
 

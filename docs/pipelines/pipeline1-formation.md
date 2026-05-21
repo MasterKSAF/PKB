@@ -13,7 +13,7 @@ sequenceDiagram
     UI->>Orch: POST /documents (файл)
     activate Orch
     Orch->>Orch: Загрузка, SHA-256, MinIO
-    Orch-->>UI: 202 {document_id, status: uploaded}
+    Orch-->>UI: 202 {task_id, status: uploaded}
     deactivate Orch
 
     UI->>Orch: GET /documents/{id}/status
@@ -130,7 +130,6 @@ sequenceDiagram
 
 ```json
 {
-  "document_id": "b3a8f1c2-...",
   "document": { ... },
   "structure": { ... },
   "classification": { ... },
@@ -138,11 +137,13 @@ sequenceDiagram
 }
 ```
 
-**Выход Validation (добавляется блок `validation`):**
+> **Примечание:** `document_id` на этом этапе ещё не назначен. Он появится после прохождения этапа Validation.
+
+**Выход Validation (добавляется блок `validation` и назначается `document_id`):**
 
 ```json
 {
-  "document_id": "b3a8f1c2-...",
+  "document_id": "b3a8f1c2-...",  // ← НАЗНАЧЕНО валидацией
   "document": { ... },          // без изменений
   "structure": { ... },         // без изменений
   "classification": { ... },    // без изменений

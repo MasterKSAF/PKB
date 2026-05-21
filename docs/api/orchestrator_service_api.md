@@ -64,11 +64,9 @@
 
 ```json
 {
-  "document_id": "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+  "task_id": "task-8a3f2b",
   "version_id": "c4b9f2d3-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
   "status": "uploaded",
-  "user_id": "u-001",
-  "task_id": "task-8a3f2b",
   "content_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "is_duplicate_file": false,
   "is_duplicate_document": false,
@@ -77,7 +75,7 @@
 }
 ```
 
-
+> **Примечание:** `document_id` назначается на стадии валидации после проверки уникальности. Первичный идентификатор — `task_id`.
 
 ### POST /documents/{doc_id}/versions
 
@@ -305,7 +303,7 @@
       "formation": {
         "status": "blocked",
         "parsing": { "status": "completed" },
-        "validation": { "status": "invalid", "errors_found": 2, "errors": [
+        "validation": { "status": "invalid", "errors_found": 2, "document_id": "b3a8f1c2-...", "errors": [
           {"code": "MISSING_FIELD", "section_id": "sec-012"}
         ]},
         "registry": { "status": "blocked" }
@@ -330,7 +328,7 @@
       "formation": {
         "status": "completed",
         "parsing": { "status": "completed" },
-        "validation": { "status": "valid" },
+        "validation": { "status": "valid", "document_id": "b3a8f1c2-..." },
         "registry": { "status": "completed" }
       },
       "indexation": {
@@ -491,7 +489,7 @@
       "history_id": "h-001",
       "old_status": null,
       "new_status": "uploaded",
-      "comment": { "reason": "initial_upload" },
+      "comment": { "reason": "initial_upload", "details": null },
       "changed_by": "ivanov_ai",
       "changed_at": "2026-05-15T10:00:00Z"
     },
@@ -499,7 +497,7 @@
       "history_id": "h-002",
       "old_status": "ready_for_promotion",
       "new_status": "approved",
-      "comment": { "reason": "manual_approve" },
+      "comment": { "reason": "manual_approve", "details": "Утверждено главным инженером" },
       "changed_by": "ivanov_ai",
       "changed_at": "2026-05-15T12:00:00Z"
     }

@@ -362,7 +362,7 @@ async def test_ocr_page_failure_doesnt_crash_pipeline(pipeline):
 1. Принять файл от пользователя
 2. Вычислить SHA-256
 3. Загрузить в MinIO → получить `file_key`
-4. Вернуть `202 { document_id }`
+4. Вернуть `202 { task_id }`
 
 Добавляется:
 1. Вызвать `POST /ocr/process` с `file_key` и `version_id`

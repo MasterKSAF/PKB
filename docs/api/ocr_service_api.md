@@ -140,7 +140,7 @@
 
 ```json
 {
-  "document_id": "b3a8f1c2-...",
+  "task_id": "task-8a3f2b",
   "version_id": "c4b9f2d3-...",
   "structure": {
     "type": "normative",
@@ -224,7 +224,7 @@
 
 | Поле                                   | Тип    | Описание                                                             |
 | -------------------------------------- | ------ | -------------------------------------------------------------------- |
-| `document_id`                          | string | UUID документа                                                       |
+| `task_id`                              | string | ID задачи оркестратора                                               |
 | `version_id`                           | string | UUID версии                                                          |
 | `structure`                            | object | Распознанная структура: тип, заголовок, секции                       |
 | `structure.type`                       | string | Тип документа: `normative`, `technical` и др.                        |

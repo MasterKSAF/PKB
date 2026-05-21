@@ -437,7 +437,7 @@ CREATE TABLE purgatory.format_registry (
 | `PENDING_REVIEW` | ✅ | ✅ |
 | `NOT_FOUND` | ✅ | ✅ |
 | `NOT_USED` | ✅ | ✅ |
-| `UNASSIGNED` | ✅ | ❌ (нет в docs Validation API) |
+| `UNASSIGNED` | ✅ | ✅ |
 
 ### C2.3. Статусы документа (FSM)
 
@@ -512,9 +512,9 @@ CREATE TABLE purgatory.format_registry (
 | 4 | Поле `source_filename` в версию документа | purgatory | Исходное имя файла |
 | 5 | CAS-путь `{doc_id}/v{n}/{hash}.ext` | purgatory | Гарантия целостности файлов |
 | 6 | Поле `source_version_id` в `classifier_pending` | purgatory | Привязка кода к версии файла |
-| 7 | Статус `UNASSIGNED` для классификации | purgatory | Начальное состояние до парсинга |
+| 7 | Статус `UNASSIGNED` для классификации | purgatory | ✅ Добавлено — начальное состояние до парсинга |
 | 8 | `metadata.author`, `metadata.language` | purgatory | Дополнительные метаданные |
-| 9 | `comment.details` в `status_history` | purgatory | Структурированная причина перехода |
+| 9 | `comment` → `{reason, details}` в `status_history` | purgatory | ✅ Добавлено — структурированная причина перехода |
 | 10 | `path LTREE` в `nsi_document_sections` | nsi | Иерархические запросы (сейчас TEXT) |
 | 11 | Прямой `document_id` в `nsi_chunks` | nsi | Ускорение поиска (сейчас через section_id) |
 | 12 | `clause` в `nsi_chunks` | nsi | Денормализация для скорости (сейчас в sections) |
