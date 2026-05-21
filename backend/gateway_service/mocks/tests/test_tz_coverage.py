@@ -391,32 +391,6 @@ class TestUC06_DocumentPipeline:
         assert data["status"] == "approved"
         assert "approved_at" in data
 
-    def test_promote_document(self):
-        """POST /documents/{id}/promote promotes to RAG index."""
-        resp = client.post(f"{ORCH}/documents/doc-001/promote")
-        assert_ok(resp)
-        data = resp.json()
-        assert data["document_id"] == "doc-001"
-        assert data["status"] == "ready_for_promotion"
-
-    def test_promotion_status(self):
-        """GET /documents/{id}/promotion-status returns promotion state."""
-        resp = client.get(f"{ORCH}/documents/doc-001/promotion-status")
-        assert_ok(resp)
-        data = resp.json()
-        assert "document_id" in data
-        assert "is_promoted" in data
-        assert "promotion_status" in data
-
-    def test_document_chunks(self):
-        """GET /documents/{id}/chunks returns document fragments."""
-        resp = client.get(f"{ORCH}/documents/doc-001/chunks")
-        assert_ok(resp)
-        data = resp.json()
-        assert "document_id" in data
-        assert "chunks" in data
-        assert "total" in data
-
     def test_document_history(self):
         """GET /documents/{id}/history returns status history."""
         resp = client.get(f"{ORCH}/documents/doc-001/history")

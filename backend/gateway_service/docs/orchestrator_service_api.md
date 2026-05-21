@@ -28,8 +28,7 @@
 
 | Группа      | Описание                                                            |
 | ----------- | ------------------------------------------------------------------- |
-| `system`    | Служебные методы: health                                            |
-| `monitor`   | Мониторинг и метрики                                                |
+| `monitor`   | Мониторинг, метрики и health                                         |
 | `documents` | Документы: загрузка, список, статус, версии, аппрув, промотирование |
 | `pages`     | Просмотр страниц и текстового слоя                                  |
 | `search`    | Поиск фрагментов                                                    |
@@ -403,78 +402,6 @@
 
 ---
 
-### POST /documents/{doc_id}/promote
-
-Явный запуск переноса данных в Registry. Обычно вызывается автоматически после аппрува.
-
-**Запрос**:
-
-```json
-{
-  "target_schema": "nsi",
-  "options": { "reindex": true }
-}
-```
-
-**Ответ `202`**:
-
-```json
-{
-  "document_id": "b3a8f1c2-...",
-  "promotion_id": "promo-9a3f2b",
-  "status": "promoting",
-  "created_at": "2026-05-15T12:00:05Z"
-}
-```
-
----
-
-### GET /documents/{doc_id}/promotion-status
-
-Статус записи документа в Registry (Пайплайн 1, Этап 3). При успехе документ считается сформированным и готовым к индексации.
-
-**Параметры запроса:**
-
-| Параметр | Тип | По умолчанию | Описание |
-| -------- | --- | ------------ | -------- |
-| `longpoll` | int | `15` | Время ожидания в секундах. Сервер держит соединение, возвращая ответ при изменении статуса промотирования или по таймауту. |
-
-**Ответ `200`** (в процессе):
-
-```json
-{
-  "promotion_id": "promo-9a3f2b",
-  "status": "promoting",
-  "progress_percent": 66,
-  "steps": {
-    "chunks": { "status": "in_progress", "chunks_processed": 22, "chunks_total": 34 },
-    "images": { "status": "pending" },
-    "tables": { "status": "pending" },
-    "relations": { "status": "pending" }
-  }
-}
-```
-
-**Ответ `200`** (завершено):
-
-```json
-{
-  "promotion_id": "promo-9a3f2b",
-  "status": "completed",
-  "document_id": "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
-  "steps": {
-    "documents": { "status": "completed", "document_id": "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c" },
-    "chunks": { "status": "completed", "chunks_indexed": 34 },
-    "images": { "status": "completed", "images_indexed": 7 },
-    "tables": { "status": "completed", "tables_indexed": 3 },
-    "relations": { "status": "completed", "relations_created": 12 }
-  },
-  "completed_at": "2026-05-15T12:00:18Z"
-}
-```
-
----
-
 ### GET /documents/{doc_id}/history
 
 История переходов статусов документа (аудит).
@@ -507,66 +434,6 @@
 ```
 
 ---
-
-### GET /documents/{doc_id}/chunks
-
-Чанки документа для ручного ревью перед аппрувом.
-
-**Query-параметры**: `page`, `page_size`, `section` (фильтр по разделу, `nsi_document_sections.id`).
-
-**Ответ `200`**:
-
-```json
-{
-  "document_id": "b3a8f1c2-...",
-  "container_id": "e5d0c3b4-...",
-  "validation_status": "valid",
-  "total_chunks": 34,
-  "chunks": [
-    {
-      "section_id": "sec-001",
-      "chunk_index": 1,
-      "clause": "1. Общие положения",
-      "content": "Настоящий стандарт распространяется на стойки установочные...",
-      "page": 1,
-      "strategy": "text",
-      "has_embedding": true,
-      "bbox": "120,350,520,410"
-    },
-    {
-      "section_id": "sec-012",
-      "chunk_index": 12,
-      "clause": "Таблица 1 — Основные размеры",
-      "strategy": "table",
-      "content": "| Параметр | Значение |",
-      "table_data": { "headers": ["Обозначение", "D, мм"], "rows": [["СУ-1", "25"]] },
-      "page": 5
-    }
-  ],
-  "meta": { "total": 34, "page": 1, "page_size": 20 }
-}
-```
-
-| Поле                    | Тип      | Описание                                                                     |
-| ----------------------- | -------- | ---------------------------------------------------------------------------- |
-| `document_id`           | UUID     | Идентификатор документа                                                       |
-| `container_id`          | UUID     | Идентификатор контейнера чанков (`rag_document_chunks` partition)             |
-| `validation_status`     | string   | Статус валидации: `valid`, `invalid`, `in_progress`                           |
-| `total_chunks`          | integer  | Общее количество чанков в документе                                           |
-| `chunks`                | array    | Массив объектов чанков                                                        |
-| `chunks[].section_id`     | string   | Уникальный идентификатор секции (`nsi_document_sections.id`)                   |
-| `chunks[].chunk_index`  | integer  | Порядковый номер чанка (`rag_document_chunks.chunk_index`)                    |
-| `chunks[].clause`       | string   | Заголовок секции/пункта (`nsi_document_sections.clause`)                      |
-| `chunks[].content`      | string   | Текстовое содержимое чанка (`rag_document_chunks.content`)                    |
-| `chunks[].page`         | integer  | Номер страницы в исходном документе                                           |
-| `chunks[].strategy`     | string   | Стратегия разбиения (`rag_document_chunks.strategy`): `text`, `table`, `image`|
-| `chunks[].has_embedding`| boolean  | Наличие векторного представления (производное от `embedding IS NOT NULL`)     |
-| `chunks[].bbox`         | string   | Координаты bounding box в формате `x1,y1,x2,y2`                                |
-| `chunks[].table_data`   | object   | Данные таблицы (`headers`, `rows`) — только для `strategy: table`             |
-| `meta`                  | object   | Мета-информация о пагинации                                                   |
-| `meta.total`            | integer  | Общее количество элементов                                                    |
-| `meta.page`             | integer  | Текущая страница                                                              |
-| `meta.page_size`        | integer  | Размер страницы                                                               |
 
 ---
 
@@ -773,9 +640,9 @@
 
 ---
 
-## Группа system
+## Группа monitor
 
-### GET /system/health
+### GET /monitor/health
 
 Проверка состояния системы.
 
@@ -791,10 +658,6 @@
   "storage": "online"
 }
 ```
-
----
-
-## Группа monitor
 
 ### GET /monitor/metrics
 

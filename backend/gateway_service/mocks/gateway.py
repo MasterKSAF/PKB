@@ -199,7 +199,7 @@ class RBACMiddleware(BaseHTTPMiddleware):
                     )
 
             # DELETE /documents/{id}, POST /documents/{id}/reprocess,
-            # POST /documents/{id}/approve, POST /documents/{id}/promote
+            # POST /documents/{id}/approve
             # — knowledge_admin / system_admin only
             _doc_write = request.method == "DELETE" or (
                 request.method == "POST"

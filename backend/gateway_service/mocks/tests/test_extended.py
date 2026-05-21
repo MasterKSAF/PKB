@@ -244,17 +244,6 @@ class TestOrchestratorExtended:
         assert "approved_at" in data
         assert "previous_status" in data
 
-    def test_8_promote_document(self):
-        """Promote document returns status=ready_for_promotion."""
-        doc_id = "doc-001"
-        resp = client.post(f"{ORCH}/documents/{doc_id}/promote")
-        assert_ok(resp)
-        data = resp.json()
-        assert data["document_id"] == doc_id
-        assert data["status"] == "ready_for_promotion"
-        assert "promoted_at" in data
-        assert "chunks_indexed" in data
-
     def test_9_version_number_increments(self):
         """Adding a version increments version_number."""
         doc_id = "doc-001"
@@ -296,19 +285,6 @@ class TestOrchestratorExtended:
         data = resp.json()
         assert "metadata" in data
         assert isinstance(data["metadata"], dict)
-
-    def test_12_get_document_chunks_structure(self):
-        """Document chunk response includes chunks and total."""
-        resp = client.get(f"{ORCH}/documents/doc-001/chunks")
-        assert_ok(resp)
-        data = resp.json()
-        assert "chunks" in data
-        assert "total" in data
-        if data["chunks"]:
-            chunk = data["chunks"][0]
-            # Should have content, page, chunk_number
-            assert "content" in chunk
-            assert "page" in chunk
 
 
 # ===========================================================================
