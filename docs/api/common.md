@@ -8,7 +8,7 @@
 
 - Формат данных: `application/json`, для загрузки файлов – `multipart/form-data`
 
-- Аутентификация: все запросы, кроме `/auth/*` и `/system/health`, требуют заголовок
+- Аутентификация: все запросы, кроме `/auth/*` и `/monitor/health`, требуют заголовок
   `Authorization: Bearer <access_token>`. Токен получается через `/auth/token`.
 
 ---
@@ -156,10 +156,7 @@ GET .../{id}/status?longpoll=15
 | `POST /documents/search`, `GET /documents/search`          | ✓          | ✓                 | ✓              |
 
 | `POST /documents/{doc_id}/approve` | ✗ | ✓ | ✓ |
-| `POST /documents/{doc_id}/promote` | ✗ | ✓ | ✓ |
-| `GET /documents/{doc_id}/promotion-status` | ✓ | ✓ | ✓ |
 | `GET /documents/{doc_id}/history` | ✓ | ✓ | ✓ |
-| `GET /documents/{doc_id}/chunks` | ✓ | ✓ | ✓ |
 | `GET /documents/{doc_id}/errors` | ✓ | ✓ | ✓ |
 | `GET /documents/queue` | ✓ | ✓ | ✓ |
 | `GET /admin/users`, `POST/PUT/PATCH/DELETE /admin/users` | ✗ | ✗ | ✓ |

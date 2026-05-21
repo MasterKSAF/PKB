@@ -480,7 +480,7 @@ CREATE TABLE purgatory.format_registry (
 
 | Аспект | Purgatory | `docs/` |
 |---|---|---|
-| Механизм | Автоматический шаг воркера | Явный `POST /documents/{id}/promote` |
+| Механизм | Автоматический шаг воркера | — |
 | `target_schema` | ❌ (всегда nsi) | ✅ |
 | `options.reindex` | ❌ | ✅ |
 | Переиндексация | `repromote_document()` — транзакция очистки+вставки | `DELETE /rag/index/{id}` + повторный `POST` |
