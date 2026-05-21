@@ -1,7 +1,10 @@
-## API Registry Service (registry-service:8084)
+## API Registry Service / Registry (registry-service:8084)
 
 Базовый реестр НСИ (нормативно-справочной информации).  
-Хранит классификаторы, документы и терминологию после промотирования из Purgatory.  
+Хранит классификаторы, документы и терминологию.  
+Соответствует этапу **«Registry» Пайплайна 1 (Формирование документа)** — **пишет** данные в БД.  
+Также участвует в этапе **«Validation»** — **читает** справочники классификаторов для проверки кодов.
+
 **Внутренний сервис**. Публичный API — через Orchestrator.
 
 **Базовый URL**: `http://127.0.0.1:8084/api/v1`
@@ -376,6 +379,62 @@ POST /registry/classifiers/pending/{pending_id}/reject
 
 ---
 
+### 1.12. Валидация классификации
+
+```
+POST /registry/classifiers/validate
+```
+
+Проверка и подтверждение извлечённых классификационных кодов (МКС/ОКС, ОКСТУ, УДК) по справочнику Registry.  
+**Синхронная операция.** Не имеет побочных эффектов.
+
+**Запрос:**
+
+```json
+{
+  "classification": {
+    "mks_oks_code": "47.020",
+    "okstu_code": null,
+    "udk_code": "629.5.021"
+  }
+}
+```
+
+| Поле | Тип | Обязательность | Описание |
+|---|---|---|---|
+| `classification.mks_oks_code` | string | Нет | Код МКС/ОКС |
+| `classification.okstu_code` | string | Нет | Код ОКСТУ |
+| `classification.udk_code` | string | Нет | Код УДК |
+
+**Ответ `200`:**
+
+```json
+{
+  "data": {
+    "mks_status": "CONFIRMED",
+    "mks_display_name": "Конструкция корпуса",
+    "okstu_status": "NOT_USED",
+    "udk_valid": true,
+    "overall_status": "valid"
+  }
+}
+```
+
+**Статусы `*_status`:**
+
+| Значение | Описание |
+|---|---|
+| `CONFIRMED` | Код найден в справочнике и верифицирован |
+| `PENDING_REVIEW` | Извлечён автоматически, не найден в справочнике — требует ручного разбора |
+| `NOT_FOUND` | Парсер не обнаружил код на первых страницах |
+| `NOT_USED` | Не применяется для данной эры/типа документа |
+| `UNASSIGNED` | Классификация не назначалась |
+
+Registry Service — source of truth для классификаторов. Проверяет коды напрямую по `classifier_registry`.  
+Решение о создании `classifier_pending` принимает **Оркестратор**, анализируя возвращённые статусы.
+
+---
+
 ## Группа terminology
 
 ### 2.1. Список
@@ -618,13 +677,19 @@ GET /registry/documents/{doc_id}
 
 ---
 
-### 3.3. Создать
+### 3.3. Создать (основной / из Пайплайна 1)
 
 ```
 POST /registry/documents
 ```
 
-**Тело запроса:**
+**Назначение:** создание карточки документа. Используется как при прямом вызове из UI/админки, так и со стороны этапа **«Registry»** Пайплайна 1 (Формирование документа).
+
+> **Важно:** Registry использует `document_id` (UUID) как **единый первичный ключ**. `document_id` назначается на этапе Validation (Пайплайн 1, Этап 2) после проверки уникальности: извлекается существующий для дубликата, либо генерируется новый. Собственный numeric ID не создаётся — `document_id` проходит сквозь все сервисы без маппинга.
+
+В режиме пайплайна оркестратор передаёт JSON-контейнер (результат валидации) как непрозрачный артефакт — сервис сам маппит поля в модель данных.
+
+**Тело запроса (прямое создание):**
 
 ```json
 {
@@ -647,9 +712,68 @@ POST /registry/documents
 }
 ```
 
+**Тело запроса (из пайплайна — сквозной JSON-контейнер от этапа Валидации):**
+
+```json
+{
+  "document_id": "b3a8f1c2-...",
+  "version_id": "c4b9f2d3-...",
+  "document_reference": [],
+  "structure": {
+    "type": "normative",
+    "sections": [
+      {
+        "clause": "1. Общие положения",
+        "title": "Общие положения",
+        "level": 1,
+        "type": "section",
+        "content": { "text": "Настоящий стандарт..." },
+        "page": 1,
+        "bbox": "x1,y1,x2,y2",
+        "subsections": []
+      }
+    ]
+  },
+  "classification": {
+    "mks_oks_code": "47.020",
+    "okstu_code": null,
+    "udk_code": "629.5.021",
+    "year": "1981"
+  },
+  "quality": {
+    "confidence": 0.94,
+    "pages_processed": 12,
+    "pages_failed": 0
+  },
+  "validation": {
+    "id": "val-001",
+    "structure_valid": true,
+    "classifiers": {
+      "mks_status": "CONFIRMED",
+      "okstu_status": "NOT_USED",
+      "overall_status": "CONFIRMED"
+    },
+    "uniqueness": {
+      "is_duplicate_file": false,
+      "is_duplicate_document": false,
+      "content_hash_sha256": "abc123...",
+      "title_hash_sha256": "def456..."
+    },
+    "matching": {
+      "predecessor_doc_id": null,
+      "successor_doc_id": null
+    },
+    "decision": "auto",
+    "status": "completed"
+  }
+}
+```
+
+> Registry сохраняет данные в БД и **возвращает тот же JSON**, но с проставленными идентификаторами и ссылками. Сервис не меняет структуру документа — только enrich.
+
 | Поле | Тип | Обязательность | Описание |
 |------|-----|----------------|----------|
-| `title` | string | Да | Полное название |
+| `title` | string | Да* | Полное название |
 | `doc_code` | string | Нет | Регистрационный номер |
 | `source_type` | string | Нет | Тип источника |
 | `era` | string | Нет | Эра документа |
@@ -663,13 +787,121 @@ POST /registry/documents
 | `predecessor_doc_id` | UUID | Нет | Предшественник |
 | `metadata` | JSONB | Нет | Доп. данные |
 
+> *`title` обязателен при прямом создании; в режиме пайплайна берётся из структуры JSON-контейнера.
+
 Система **автоматически вычисляет** `title_hash_sha256` по формуле:  
 `SHA-256(era|source_type|mks_oks_code|okstu_code|doc_code|normalized_title)`
 
-**Ответ `201`**: созданный объект.  
+**Ответ `201`:** возвращает полную структуру документа со ссылками в БД — все данные, необходимые RAG для индексации и цитирования.
+
+```json
+{
+  "document_id": "b3a8f1c2-...",
+  "version_id": "c4b9f2d3-...",
+  "registry": {
+    "title": "ГОСТ Р 12345-77",
+    "doc_code": "20868-81",
+    "source_type": "GOST",
+    "era": "USSR",
+    "validity_status": "active",
+    "jurisdiction": "RU",
+    "issuing_body": "Госстандарт СССР",
+    "title_hash_sha256": "a1b2c3d4...",
+    "order": 0,
+    "links": {
+      "document": "/api/v1/registry/documents/42",
+      "versions": "/api/v1/registry/documents/42/versions"
+    },
+    "created_at": "2026-05-15T12:00:00Z"
+  },
+  "classification": {
+    "mks_oks_code": "47.020",
+    "mks_display_name": "Конструкция корпуса",
+    "mks_status": "CONFIRMED",
+    "okstu_code": null,
+    "okstu_status": "NOT_USED",
+    "udk_code": "629.5.021",
+    "year": "1981"
+  },
+  "structure": {
+    "type": "normative",
+    "sections": [
+      {
+        "id": "sec-001",
+        "clause": "1. Общие положения",
+        "title": "Общие положения",
+        "level": 1,
+        "type": "section",
+        "content": { "text": "Настоящий стандарт распространяется..." },
+        "page": 1,
+        "bbox": "x1,y1,x2,y2",
+        "subsections": [
+          {
+            "id": "sec-001-1",
+            "clause": "1.1 Область применения",
+            "title": "Область применения",
+            "level": 2,
+            "type": "subsection",
+            "content": { "text": "..." },
+            "page": 1,
+            "bbox": "x1,y1,x2,y2"
+          }
+        ]
+      }
+    ]
+  },
+  "document_reference": [
+    {
+      "id": "ref-001",
+      "target_doc_code": "ГОСТ 12345-88",
+      "reference_type": "normative",
+      "is_resolved": false
+    }
+  ],
+  "files": {
+    "original": "/api/v1/files/file-xyz",
+    "preview": "/api/v1/documents/b3a8f1c2.../pages/1/preview"
+  },
+  "quality": {
+    "confidence": 0.94,
+    "pages_processed": 12,
+    "pages_failed": 0
+  },
+  "status": "archived"
+}
+```
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `document_id` | string | UUID документа (единый первичный ключ) |
+| `version_id` | string | UUID версии файла |
+| `registry` | object | Карточка документа в реестре (nsi) с метаданными и ссылками |
+| `registry.links` | object | Ссылки на ресурсы документа в API реестра |
+| `registry.order` | int | Порядковый номер документа (используется при построении текста страницы) |
+| `classification` | object | Коды классификации со статусами верификации |
+| `structure` | object | Полная структура документа: секции (с ID сущностей в БД) |
+| `structure.sections[].id` | string | ID секции в `nsi.document_sections` |
+| `structure.sections[].clause` | string | Номер пункта/заголовка (напр. «1.», «1.1») |
+| `structure.sections[].title` | string | Название секции без номера |
+| `structure.sections[].level` | int | Уровень вложенности (1 — верхний) |
+| `structure.sections[].type` | string | Тип элемента (`section`, `subsection`, `paragraph`) |
+| `structure.sections[].content` | JSONB | Содержимое секции (`{"text": "..."}`) |
+| `structure.sections[].page` | int | Номер страницы |
+| `structure.sections[].bbox` | string | Координаты bounding box (`x1,y1,x2,y2`) |
+| `document_reference[]` | array | Ссылки на другие документы |
+| `document_reference[].id` | string | ID ссылки |
+| `document_reference[].target_doc_code` | string | Код целевого документа |
+| `document_reference[].reference_type` | string | Тип ссылки (`normative`, `informative`, `replacement`) |
+| `document_reference[].is_resolved` | bool | Разрешена ли ссылка (документ найден в реестре) |
+| `files` | object | Ссылки на оригинальный файл и превью страниц |
+| `quality` | object | Оценка качества распознавания |
+| `status` | string | Статус (`archived` — документ готов к индексации) |
+
 **Ошибки**: `409` — `DUPLICATE_DOCUMENT`.
 
 ---
+
+
 
 ### 3.4. Обновить
 
@@ -830,8 +1062,8 @@ GET /registry/stats
     "documents_by_status": {
       "draft": 2,
       "uploaded": 5,
-      "validating": 1,
-      "processing": 3,
+      "parsing": 3,
+      "validation": 1,
       "review_required": 2,
       "ready_for_promotion": 4,
       "approved": 30,
@@ -894,7 +1126,7 @@ GET /registry/enums
 
 | Поле | Тип | Ограничения |
 |------|-----|-------------|
-| `classifier_system` | varchar(20) | PK (составной), `MKS`, `OKSTU`, `UDC`, `EXTERNAL` |
+| `classifier_system` | classifier_system_enum | PK (составной), ENUM: `MKS`, `OKSTU`, `UDC`, `EXTERNAL` |
 | `code` | text | PK (составной) |
 | `parent_code` | text | FK → self (`classifier_system`, `code`), nullable |
 | `full_name` | text | NOT NULL |
@@ -965,6 +1197,17 @@ GET /registry/enums
 | `updated_by` | text | nullable |
 
 > Сгенерированные колонки `mks_system` и `okstu_system` (GENERATED ALWAYS AS 'MKS'/'OKSTU') обеспечивают строгую FK-проверку к системе классификации.
+
+### 5.5. format_registry
+
+| Поле | Тип | Ограничения |
+|------|-----|-------------|
+| `id` | uuid | PK |
+| `format_code` | text | UNIQUE, NOT NULL — `pdf`, `png`, `jpg`, `tiff`, `docx` |
+| `mime_type` | text | NOT NULL — `application/pdf`, `image/png` и т.д. |
+| `parser_engine` | text | NOT NULL — `docling`, `tesseract`, `easyocr` |
+| `supported` | boolean | DEFAULT true |
+| `created_at` | timestamptz | NOT NULL |
 
 ---
 

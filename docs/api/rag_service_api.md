@@ -1,9 +1,11 @@
 ## API RAG Service (rag-service:8087)
 
-Сервис векторного поиска, генерации ответов, вычисления embeddings и валидации chunk-контейнеров.  
-**Внутренний сервис.** Используется в двух режимах:  
-1. **Конвейер Purgatory** — вычисление embeddings + валидация контейнеров + проверка классификации  
-2. **Production RAG** — поиск и генерация ответов
+Сервис индексации документов, векторного поиска и вычисления embeddings.  
+**Внутренний сервис.** Используется в двух режимах, соответствующих пайплайнам системы:
+
+1. **Пайплайн индексации (Pipeline 2)**
+   - **Режим A: RAG Indexing** — чанкинг, вычисление embeddings, построение векторного индекса (**пишет БД**)
+   - **Режим B: RAG Search** — гибридный поиск релевантных чанков (**читает БД**)
 
 **Базовый URL (внутренний)**: `http://127.0.0.1:8087/api/v1`
 
@@ -14,333 +16,212 @@
 
 ---
 
-## Режим 1: Конвейер Purgatory
+## Режим A: RAG индексация (пишет БД)
 
-### POST /rag/embed
-
-Вычисление векторных представлений (embeddings) для чанков в контейнере.  
-Вызывается Orchestrator после OCR на этапе `processing`.
-
-RAG Service — **stateless-функция**: получает контейнер в теле запроса, вычисляет embedding для каждого текстового чанка, возвращает обновлённый контейнер в теле ответа. **Не имеет доступа к БД.**
-
-**Запрос**:
-```json
-{
-  "container": {
-    "container_id": "cnt-001",
-    "document_id": "b3a8f1c2-...",
-    "chunks": [
-      { "chunk_id": "chk-001", "text": "Настоящий стандарт...", "has_embedding": false }
-    ],
-    "images": [ ... ],
-    "classification": { ... }
-  },
-  "model": "default"
-}
-```
-
-| Поле | Тип | Обязательность | Описание |
-|---|---|---|---|
-| `container` | object | Да | **Полный JSON контейнера** (opaque для Оркестратора) |
-| `container.chunks` | array | Да | Массив чанков с текстом и метаданными |
-| `container.images` | array | Нет | Извлечённые изображения |
-| `container.classification` | object | Нет | Извлечённые коды классификации |
-| `model` | string | Нет | Модель эмбеддинга |
-
-**Ответ `200`**:
-```json
-{
-  "container": {
-    "container_id": "cnt-001",
-    "document_id": "b3a8f1c2-...",
-    "chunks": [
-      { "chunk_id": "chk-001", "text": "Настоящий стандарт...",
-        "has_embedding": true,
-        "embedding": [0.123, -0.456, ...] }
-    ],
-    "images": [ ... ],
-    "classification": { ... }
-  },
-  "embedded_chunks": 34,
-  "failed_chunks": 0,
-  "status": "completed"
-}
-```
-
-### GET /rag/embed/{task_id}/status
-
-Статус асинхронного вычисления embeddings.
-
-**Ответ `200`**:
-```json
-{
-  "task_id": "embed-task-001",
-  "status": "completed",
-  "container_id": "cnt-001",
-  "embedded_chunks": 34,
-  "failed_chunks": 0,
-  "completed_at": "2026-05-15T10:01:00Z"
-}
-```
-
----
-
-### POST /rag/validate-chunks
-
-Валидация chunk container на соответствие JSON Schema Purgatory v2.3.  
-**Read-only операция** — контейнер не изменяется. RAG не имеет доступа к БД.
-
-**Запрос**:
-```json
-{
-  "container": {
-    "container_id": "cnt-001",
-    "chunks": [
-      { "chunk_id": "...", "text": "...", "ltree_path": "...",
-        "has_embedding": true, "embedding": [...] }
-    ],
-    "images": [ ... ],
-    "classification": { ... }
-  },
-  "schema_version": "purgatory-v2.3"
-}
-```
-
-| Поле | Тип | Обязательность | Описание |
-|---|---|---|---|
-| `container` | object | Да | **Полный JSON контейнера** (read-only) |
-| `schema_version` | string | Нет | Версия схемы валидации |
-
-Проверки:
-- все чанки имеют `text`
-- все чанки имеют `ltree_path`
-- все текстовые чанки имеют `embedding`
-- нет orphan-чанков (висящих без родителя)
-- ltree-структура валидна (нет двойных точек, циклов)
-- `chunk_type` соответствует содержимому (text/table/image/formula)
-
-**Ответ `200`** (успех):
-```json
-{
-  "container_id": "cnt-001",
-  "status": "valid",
-  "checks_passed": 14,
-  "checks_failed": 0,
-  "validation_detail": {
-    "schema": "purgatory-v2.3",
-    "chunks_all_have_text": true,
-    "chunks_all_have_ltree": true,
-    "chunks_all_have_embedding": true,
-    "no_orphan_chunks": true,
-    "ltree_structure_valid": true
-  }
-}
-```
-
-**Ответ `200`** (ошибки):
-```json
-{
-  "container_id": "cnt-001",
-  "status": "invalid",
-  "checks_passed": 12,
-  "checks_failed": 2,
-  "errors": [
-    {
-      "chunk_id": "chk-012",
-      "code": "MISSING_EMBEDDING",
-      "severity": "error",
-      "message": "Чанк не содержит embedding"
-    },
-    {
-      "chunk_id": "chk-025",
-      "code": "INVALID_LTREE",
-      "severity": "error",
-      "message": "ltree-путь root.invalid..path содержит двойную точку"
-    }
-  ]
-}
-```
-
----
-
-### POST /rag/validate-classify
-
-Проверка и подтверждение извлечённых классификационных кодов (МКС/ОКС, ОКСТУ, УДК) по справочнику Registry.
-
-**Запрос**:
-```json
-{
-  "document_id": "b3a8f1c2-...",
-  "classification": {
-    "mks_oks_code": "47.020",
-    "okstu_code": null,
-    "udk_code": "629.5.021"
-  }
-}
-```
-
-| Поле | Тип | Обязательность | Описание |
-|---|---|---|---|
-| `document_id` | string | Да | ID документа |
-| `classification.mks_oks_code` | string | Нет | Код МКС/ОКС |
-| `classification.okstu_code` | string | Нет | Код ОКСТУ |
-| `classification.udk_code` | string | Нет | Код УДК |
-
-**Ответ `200`**:
-```json
-{
-  "mks_status": "CONFIRMED",
-  "mks_display_name": "Конструкция корпуса",
-  "okstu_status": "NOT_USED",
-  "udk_valid": true,
-  "overall_status": "valid"
-}
-```
-
-**Статусы `*_status`**:
-
-| Значение | Описание |
-|---|---|
-| `CONFIRMED` | Код найден в справочнике и верифицирован |
-| `PENDING_REVIEW` | Извлечён автоматически, не найден в справочнике — запись в `classifier_pending` |
-| `NOT_FOUND` | Парсер не обнаружил код на первых страницах |
-| `NOT_USED` | Не применяется для данной эры/типа документа |
-| `UNASSIGNED` | Классификация не назначалась |
-
-RAG Service **только проверяет** — возвращает статус по каждому коду. Никаких outbound-вызовов к другим сервисам. Решение о создании `classifier_pending` принимает **Оркестратор**, анализируя возвращённые статусы.
-
----
-
-## Режим 2: Production RAG (поиск и генерация)
+Этот режим запускается после успешного завершения **Пайплайна 1 (Формирование документа)**.  
+На вход получает обогащённый JSON от Registry (структура документа, ссылки на ресурсы), на выходе — статус завершения индексации.
 
 ### POST /rag/index
 
-Добавление чанков документа в векторный индекс для поиска.  
-При повторной индексации того же `document_id` старые чанки заменяются.
+Построение чанков, вычисление embeddings и индексация документа.  
+Вызывается Orchestrator после завершения Пайплайна 1.
 
-**Запрос**:
+**Процесс внутри:**
+
+| Шаг | Действие | Результат |
+|---|---|---|
+| 1 | Чтение структуры документа из входного JSON (обогащённый контейнер от Registry) | Документ, секции, таблицы, изображения |
+| 2 | Построение чанков и иерархии | Разбиение на семантические фрагменты (не более 512 токенов), построение иерархии секций (path) |
+| 3 | Вычисление Embeddings | Векторные представления для каждого текстового чанка |
+| 4 | Построение векторного индекса | Сохранение чанков, эмбеддингов и индексов в БД |
+
+**Запрос:**
 ```json
 {
-  "document_id": "doc-8a3f2b",
-  "chunks": [
-    {
-      "chunk_id": "chk-001",
-      "text": "Для ледового класса Arc4...",
-      "page": 42,
-      "coordinates": { "x": 120, "y": 350, "width": 400, "height": 60 },
-      "metadata": { "title": "Правила РС" }
-    }
-  ]
+  "document_id": "b3a8f1c2-...",
+  "options": {
+    "strategy": "semantic_512"
+  }
 }
 ```
 
 | Поле | Тип | Обязательность | Описание |
 |---|---|---|---|
-| `document_id` | string | Да | ID документа |
-| `chunks[].chunk_id` | string | Да | ID чанка |
-| `chunks[].text` | string | Да | Текст чанка |
-| `chunks[].page` | int | Да | Номер страницы |
-| `chunks[].coordinates` | object | Нет | Координаты на странице |
-| `chunks[].metadata` | object | Нет | Метаданные |
+| `document_id` | string | Да | ID документа (UUID) |
+| `options.strategy` | string | Нет | Стратегия разбиения → `rag_document_chunks.strategy` (`semantic_512`, `fixed_256`) |
 
-**Ответ `201`**:
+**Ответ `201`:**
 ```json
 {
-  "document_id": "doc-8a3f2b",
-  "indexed_count": 128,
-  "status": "completed"
+  "document_id": "b3a8f1c2-...",
+  "status": "completed",
+  "indexed_at": "2026-05-15T12:00:18Z",
+  "chunks_count": 34,
+  "index_stats": {
+    "sections": 12,
+    "chunks": 34,
+    "embeddings": 31
+  }
 }
 ```
 
+| Поле | Тип | Описание |
+|---|---|---|
+| `document_id` | string | ID документа |
+| `status` | string | Статус: `completed`, `failed` |
+| `indexed_at` | string | Время завершения индексации |
+| `chunks_count` | int | Общее количество созданных чанков |
+| `index_stats.sections` | int | Количество секций (структурных единиц) |
+| `index_stats.chunks` | int | Количество чанков |
+| `index_stats.embeddings` | int | Количество вычисленных эмбеддингов |
+
+---
+
 ### DELETE /rag/index/{document_id}
 
-Удаление всех чанков документа из индекса.
+Удаление всех чанков документа из векторного индекса.
 
-**Ответ `200`**:
+**Ответ `200`:**
 ```json
 {
-  "document_id": "doc-8a3f2b",
+  "document_id": "b3a8f1c2-...",
   "deleted_count": 128,
   "status": "completed"
 }
 ```
 
+---
+
+### GET /rag/index/{document_id}/status
+
+Статус индексации документа.
+
+**Параметры запроса:**
+
+| Параметр | Тип | По умолчанию | Описание |
+| -------- | --- | ------------ | -------- |
+| `longpoll` | int | `15` | Время ожидания в секундах. Сервер держит соединение, возвращая ответ при завершении индексации или по таймауту. |
+
+**Ответ `200`:**
+```json
+{
+  "document_id": "b3a8f1c2-...",
+  "status": "indexed",
+  "chunks_count": 34,
+  "has_embeddings": true,
+  "indexed_at": "2026-05-15T12:00:18Z"
+}
+```
+
+---
+
+## Режим B: RAG поиск (читает БД)
+
+RAG Service отвечает только за поиск и выдачу чанков. **Без генерации ответа LLM** — генерация выполняется в Query Service.
+
+**Процесс внутри:**
+
+| Шаг | Действие | Результат |
+|---|---|---|
+| 1 | Гибридный поиск (dense + sparse + pg_trgm) с реранжированием | Релевантные чанки со скорами |
+
+**Гибридное ранжирование (RRF):** результаты векторного поиска (`cosine_similarity` по `rag_document_chunks.embedding`) и полнотекстового (`ts_rank` по `rag_document_chunks.tsv`) объединяются алгоритмом Reciprocal Rank Fusion: `score(d) = Σ 1 / (k + rank_i(d))`, k = 60.
+
 ### POST /rag/search
 
-Гибридный поиск (dense + sparse + pg_trgm).
+Поиск релевантных чанков по запросу. Возвращает сырые чанки с полным содержимым и метаданными.
 
-**Запрос**:
+**Запрос:**
 ```json
 {
   "query": "ледовый класс Arc4",
   "top_k": 10,
-  "filters": { "document_type": ["normative"] },
-  "search_type": "hybrid"
+  "filters": {
+    "document_type": ["normative"],
+    "date_from": "2000-01-01",
+    "date_to": "2026-12-31"
+  },
+  "search_type": "hybrid",
+  "rerank": true
 }
 ```
 
 | Поле | Тип | Обязательность | Описание |
 |---|---|---|---|
 | `query` | string | Да | Поисковый запрос |
-| `top_k` | int | Нет | Число результатов |
-| `filters` | object | Нет | Фильтры: `document_type` (string[]) |
-| `search_type` | string | Нет | `hybrid`, `sparse`, `dense` |
+| `top_k` | int | Нет | Число результатов (по умолчанию 10) |
+| `filters` | object | Нет | Фильтры: `document_type`, `date_from`, `date_to` |
+| `search_type` | string | Нет | `hybrid`, `sparse`, `dense` (по умолчанию `hybrid`) |
+| `rerank` | bool | Нет | Применять реранжирование (по умолчанию true) |
 
-**Ответ `200`**:
+**Ответ `200`:** массив релевантных чанков с полным содержимым.
+
 ```json
 {
+  "query": "ледовый класс Arc4",
   "results": [
     {
       "chunk_id": "chk-001",
       "document_id": "doc-norm-001",
+      "document_title": "Правила РС",
+      "section_id": "sec-4.2",
       "page": 42,
-      "text": "Для ледового класса Arc4 толщина обшивки...",
+      "content": "Для ледового класса Arc4 толщина обшивки должна быть не менее 12 мм.",
       "score": 0.92,
-      "metadata": { "title": "Правила РС" }
+      "clause": "4.2 Требования к обшивке",
+      "section_title": "Ледовые усиления",
+      "confidence": 0.85
     }
   ],
   "search_type_used": "hybrid",
-  "processing_time_ms": 120
+  "processing_time_ms": 120,
+  "total_found": 15
 }
 ```
 
-### POST /rag/generate
+| Поле | Тип | Описание |
+|---|---|---|
+| `chunk_id` | string | ID чанка |
+| `document_id` | string | ID документа |
+| `document_title` | string | Название документа |
+| `section_id` | string | ID секции в БД |
+| `page` | int | Номер страницы |
+| `content` | string | Полное текстовое содержимое чанка |
+| `score` | float | Оценка релевантности |
+| `clause` | string | Пункт/раздел документа |
+| `section_title` | string | Название раздела |
+| `confidence` | float | Уверенность в релевантности |
 
-Генерация ответа LLM с опорой на контекстные чанки.
+## Сводная таблица эндпоинтов
 
-**Запрос**:
-```json
-{
-  "messages": [
-    { "role": "system", "content": "Ты — ассистент инженера-судостроителя." },
-    { "role": "user", "content": "Какая толщина обшивки для Arc4?" }
-  ],
-  "context_chunks": [
-    {
-      "chunk_id": "chk-001",
-      "text": "Для ледового класса Arc4 толщина обшивки должна быть не менее 12 мм.",
-      "document_id": "doc-norm-001",
-      "page": 42
-    }
-  ],
-  "model": "llama-3-70b",
-  "temperature": 0.2
-}
-```
+| Метод | Путь | Режим | Описание | Доступ к БД |
+|---|---|---|---|---|
+| `POST` | `/rag/index` | Индексация | Чанкинг + Embeddings + построение индекса | **Пишет** |
+| `DELETE` | `/rag/index/{document_id}` | Индексация | Удаление чанков документа из индекса | **Пишет** |
+| `GET` | `/rag/index/{document_id}/status` | Индексация | Статус индексации | **Читает** |
+| `POST` | `/rag/search` | Поиск | Поиск чанков (без генерации LLM) | **Читает** |
 
-| Поле | Тип | Обязательность | Описание |
-|---|---|---|---|
-| `messages` | array | Да | Сообщения диалога |
-| `context_chunks` | array | Да | Контекстные чанки |
-| `model` | string | Нет | Модель LLM |
-| `temperature` | float | Нет | Температура генерации |
+---
 
-**Ответ `200`**:
-```json
-{
-  "content": "Согласно Правилам, толщина обшивки для Arc4 не менее 12 мм.",
-  "model_used": "llama-3-70b",
-  "usage": { "prompt_tokens": 150, "completion_tokens": 40 },
-  "finish_reason": "stop"
-}
-```
+### Сводная информация о доступе к данным
+
+| Аспект      | Значение                               |
+| ----------- | -------------------------------------- |
+| Доступ к БД | **Пишет** (индексация), **Читает** (поиск) |
+| Пайплайн    | 2 (Индексация документа)               |
+| Вход        | Обогащённый JSON от Registry (индексация) / поисковый запрос (поиск) |
+| Выход       | Статус индексации / Массив чанков с полным содержимым |
+
+---
+
+### Резюме: что даёт такая архитектура
+
+| Свойство                             | Как достигнуто                                                                          |
+| ------------------------------------ | --------------------------------------------------------------------------------------- |
+| **Изоляция чанкинга от парсинга**    | Чанкинг выполняется в RAG, а не в Parsing — разные стратегии не влияют на карточку документа |
+| **Работа с обогащённым JSON**        | RAG получает готовые данные от Registry, без самостоятельной загрузки из БД             |
+| **Единый document_id**               | Сквозной UUID от Orchestrator через все сервисы — не требует маппинга идентификаторов   |
+| **Гибридный поиск (RRF)**            | Dense + sparse + pg_trgm с реранжированием — максимальная релевантность результатов     |
+| **Поиск чанков**    | RAG возвращает только чанки — генерация ответа LLM выполняется в Query Service |
+| **Чанки с полным содержимым**        | RAG возвращает полный текст чанка — Query Service формирует excerpt и генерирует ответ |
+| **Независимая разработка**           | Контракт API фиксирован — RAG-сервис можно разрабатывать и тестировать независимо       |

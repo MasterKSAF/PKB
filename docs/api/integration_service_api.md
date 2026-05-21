@@ -46,7 +46,7 @@
 
 ```json
 {
-  "file_id": "file-xyz",
+  "file_key": "file-xyz",
   "filename": "page_5.png",
   "size": 1048576,
   "mime_type": "image/png",
@@ -57,20 +57,20 @@
 
 | Поле | Тип | Описание |
 |------|-----|----------|
-| `file_id` | string | ID файла |
+| `file_key` | string | Ключ файла |
 | `filename` | string | Имя файла |
 | `size` | int | Размер в байтах |
 | `mime_type` | string | MIME-тип |
 | `url` | string | URL для доступа |
 | `uploaded_at` | string | Дата загрузки |
 
-### GET /files/{file_id}
+### GET /files/{file_key}
 
 Получение бинарного потока файла.
 
 **Ответ `200`**: Бинарные данные файла с корректными заголовками `Content-Type` и `Content-Length`.
 
-### DELETE /files/{file_id}
+### DELETE /files/{file_key}
 
 Удаление файла.
 
@@ -78,12 +78,12 @@
 
 ```json
 {
-  "file_id": "file-xyz",
+  "file_key": "file-xyz",
   "deleted_at": "2026-04-27T10:30:00Z"
 }
 ```
 
-### GET /files/{file_id}/info
+### GET /files/{file_key}/info
 
 Метаданные файла без скачивания.
 

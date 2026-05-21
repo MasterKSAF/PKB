@@ -26,14 +26,14 @@
 
 ### Группы
 
-| Группа | Описание |
-|--------|----------|
-| `system` | Служебные методы: health |
-| `monitor` | Мониторинг и метрики |
+| Группа      | Описание                                                            |
+| ----------- | ------------------------------------------------------------------- |
+| `system`    | Служебные методы: health                                            |
+| `monitor`   | Мониторинг и метрики                                                |
 | `documents` | Документы: загрузка, список, статус, версии, аппрув, промотирование |
-| `pages` | Просмотр страниц и текстового слоя |
-| `search` | Поиск фрагментов |
-| `validate` | Валидация: сопоставление норм и проекта |
+| `pages`     | Просмотр страниц и текстового слоя                                  |
+| `search`    | Поиск фрагментов                                                    |
+| `validate`  | Validation: сопоставление норм и проекта                             |
 
 ---
 
@@ -47,28 +47,26 @@
 
 **Запрос**: `multipart/form-data`
 
-| Поле | Тип | Обязательность | Описание |
-|---|---|---|---|
-| `file` | File | Да | Бинарный файл (PDF, PNG, JPG, TIFF) |
-| `source_type` | string | Да | `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `OTHER` |
-| `title` | string | Нет | Название документа |
-| `doc_code` | string | Нет | Регистрационный номер (напр. `20868-81`) |
-| `mks_oks_code` | string | Нет | Код МКС/ОКС |
-| `okstu_code` | string | Нет | Код ОКСТУ |
-| `era` | string | Нет | `USSR`, `CIS`, `RF`, `CURRENT` |
-| `jurisdiction` | string | Нет | `RU`, `EU`, `US`, `NO`, `INTL` |
-| `issuing_body` | string | Нет | Организация-издатель |
-| `metadata` | string | Нет | JSON-строка с доп. данными |
+| Поле           | Тип    | Обязательность | Описание                                                           |
+| -------------- | ------ | -------------- | ------------------------------------------------------------------ |
+| `file`         | File   | Да             | Бинарный файл (PDF, PNG, JPG, TIFF)                                |
+| `source_type`  | string | Да             | `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `OTHER` |
+| `title`        | string | Нет            | Название документа                                                 |
+| `doc_code`     | string | Нет            | Регистрационный номер (напр. `20868-81`)                           |
+| `mks_oks_code` | string | Нет            | Код МКС/ОКС                                                        |
+| `okstu_code`   | string | Нет            | Код ОКСТУ                                                          |
+| `era`          | string | Нет            | `USSR`, `CIS`, `RF`, `CURRENT`                                     |
+| `jurisdiction` | string | Нет            | `RU`, `EU`, `US`, `NO`, `INTL`                                     |
+| `issuing_body` | string | Нет            | Организация-издатель                                               |
+| `metadata`     | string | Нет            | JSON-строка с доп. данными                                         |
 
 **Ответ `202`**:
 
 ```json
 {
-  "document_id": "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+  "task_id": "task-8a3f2b",
   "version_id": "c4b9f2d3-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
   "status": "uploaded",
-  "user_id": "u-001",
-  "task_id": "task-8a3f2b",
   "content_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "is_duplicate_file": false,
   "is_duplicate_document": false,
@@ -77,30 +75,7 @@
 }
 ```
 
-**Асинхронный флоу:**
-
-```mermaid
-sequenceDiagram
-    participant UI
-    participant Orchestrator
-    participant OCR
-    participant Validation
-    participant Registry
-    UI->>Orchestrator: POST /documents (file)
-    Orchestrator-->>UI: 202 { document_id, status: "uploaded" }
-    loop Polling
-        UI->>Orchestrator: GET /documents/{doc_id}/status
-        Orchestrator-->>UI: { status, steps: {ocr, chunking, validation, promotion} }
-    end
-    Note over OCR,Validation: OCR → chunking → validation → ready
-    UI->>Orchestrator: POST /documents/{doc_id}/approve
-    Orchestrator-->>UI: 202 { status: "approved" }
-    Note over Orchestrator,Registry: Promotion → Registry
-```
-
-**Ошибки**: `400` — неподдерживаемый формат/размер, `409` — `DUPLICATE_DOCUMENT` (если запрещено дублирование по бизнес-ключу), `422` — повреждённый файл.
-
----
+> **Примечание:** `document_id` назначается на стадии валидации после проверки уникальности. Первичный идентификатор — `task_id`.
 
 ### POST /documents/{doc_id}/versions
 
@@ -108,9 +83,9 @@ sequenceDiagram
 
 **Запрос**: `multipart/form-data`
 
-| Поле | Тип | Обязательность | Описание |
-|-------|-----|----------------|----------|
-| `file` | File | Да | Бинарный файл |
+| Поле   | Тип  | Обязательность | Описание      |
+| ------ | ---- | -------------- | ------------- |
+| `file` | File | Да             | Бинарный файл |
 
 **Ответ `202`**:
 
@@ -144,7 +119,7 @@ sequenceDiagram
       "version_number": 1,
       "format_code": "pdf_digital",
       "format_label": "PDF (цифровой)",
-      "file_path": "b3a8f1c2/v1/e3b0c442...855.pdf",
+      "file_key": "b3a8f1c2/v1/e3b0c442...855.pdf",
       "content_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "size_bytes": 2048576,
       "uploaded_at": "2026-05-15T10:00:00Z",
@@ -163,18 +138,18 @@ sequenceDiagram
 
 **Query-параметры** (дополнительно к существующим):
 
-| Параметр | Тип | Описание |
-|----------|-----|----------|
-| `source_type` | string | Фильтр по типу источника |
-| `era` | string | `USSR`, `CIS`, `RF`, `CURRENT` |
-| `validity_status` | string | `active`, `superseded`, `cancelled`, `historical`, `draft` |
-| `jurisdiction` | string | `RU`, `EU`, `US`, `NO`, `INTL` |
-| `mks_oks_code` | string | Фильтр по коду МКС/ОКС |
-| `okstu_code` | string | Фильтр по коду ОКСТУ |
-| `doc_code` | string | Поиск по номеру документа |
-| `status` | string | Фильтр по статусу FSM |
-| `search` | string | Поиск по названию |
-| `page`, `page_size` | int | Пагинация |
+| Параметр            | Тип    | Описание                                                   |
+| ------------------- | ------ | ---------------------------------------------------------- |
+| `source_type`       | string | Фильтр по типу источника                                   |
+| `era`               | string | `USSR`, `CIS`, `RF`, `CURRENT`                             |
+| `validity_status`   | string | `active`, `superseded`, `cancelled`, `historical`, `draft` |
+| `jurisdiction`      | string | `RU`, `EU`, `US`, `NO`, `INTL`                             |
+| `mks_oks_code`      | string | Фильтр по коду МКС/ОКС                                     |
+| `okstu_code`        | string | Фильтр по коду ОКСТУ                                       |
+| `doc_code`          | string | Поиск по номеру документа                                  |
+| `status`            | string | Фильтр по статусу FSM                                      |
+| `search`            | string | Поиск по названию                                          |
+| `page`, `page_size` | int    | Пагинация                                                  |
 
 **Ответ `200`**:
 
@@ -183,11 +158,13 @@ sequenceDiagram
   "summary": {
     "total": 128,
     "uploaded": 10,
-    "processing": 5,
+    "parsing": 3,
+    "validation": 2,
     "review_required": 3,
     "ready_for_promotion": 12,
     "approved": 95,
-    "failed": 3
+    "failed": 3,
+    "archived": 0
   },
   "items": [
     {
@@ -283,6 +260,12 @@ sequenceDiagram
 
 Прогресс обработки документа. UI вызывает для отслеживания асинхронного конвейера после загрузки.
 
+**Параметры запроса:**
+
+| Параметр | Тип | По умолчанию | Описание |
+| -------- | --- | ------------ | -------- |
+| `longpoll` | int | `15` | Время ожидания в секундах. Сервер держит соединение, возвращая ответ при изменении статуса или по таймауту. Подробнее — [Модель выполнения](../api/common.md#модель-выполнения-sync--async). |
+
 **Ответ `200`** (в процессе):
 
 ```json
@@ -291,15 +274,22 @@ sequenceDiagram
   "status": "processing",
   "progress_percent": 60.0,
   "steps": {
-    "ocr": { "status": "completed", "pages_processed": 12, "pages_failed": 0, "avg_confidence": 0.92 },
-    "chunking": { "status": "completed", "chunks_generated": 34 },
-    "validation": { "status": "in_progress", "errors_found": 0 },
-    "promotion": { "status": "pending" }
+    "pipeline": {
+      "formation": {
+        "status": "in_progress",
+        "parsing": { "status": "completed", "pages_processed": 12, "pages_failed": 0, "avg_confidence": 0.92 },
+        "validation": { "status": "in_progress", "errors_found": 0 },
+        "registry": { "status": "pending" }
+      },
+      "indexation": {
+        "status": "pending",
+        "rag_indexing": { "status": "pending" }
+      }
+    }
   },
   "started_at": "2026-05-15T10:00:05Z",
   "estimated_completion": "2026-05-15T10:02:00Z"
-}
-```
+}```
 
 **Ответ `200`** (ждёт аппрува):
 
@@ -309,15 +299,22 @@ sequenceDiagram
   "status": "review_required",
   "progress_percent": 80.0,
   "steps": {
-    "ocr": { "status": "completed" },
-    "chunking": { "status": "completed" },
-    "validation": { "status": "invalid", "errors_found": 2, "errors": [
-      {"code": "MISSING_EMBEDDING", "chunk_id": "chk-012"}
-    ]},
-    "promotion": { "status": "blocked" }
+    "pipeline": {
+      "formation": {
+        "status": "blocked",
+        "parsing": { "status": "completed" },
+        "validation": { "status": "invalid", "errors_found": 2, "document_id": "b3a8f1c2-...", "errors": [
+          {"code": "MISSING_FIELD", "section_id": "sec-012"}
+        ]},
+        "registry": { "status": "blocked" }
+      },
+      "indexation": {
+        "status": "pending",
+        "rag_indexing": { "status": "pending" }
+      }
+    }
   }
-}
-```
+}```
 
 **Ответ `200`** (готов к промотированию):
 
@@ -325,21 +322,33 @@ sequenceDiagram
 {
   "document_id": "b3a8f1c2-...",
   "status": "ready_for_promotion",
+  "progress_percent": 100.0,
   "steps": {
-    "ocr": { "status": "completed" },
-    "chunking": { "status": "completed" },
-    "validation": { "status": "valid" },
-    "promotion": { "status": "pending" }
+    "pipeline": {
+      "formation": {
+        "status": "completed",
+        "parsing": { "status": "completed" },
+        "validation": { "status": "valid", "document_id": "b3a8f1c2-..." },
+        "registry": { "status": "completed" }
+      },
+      "indexation": {
+        "status": "completed",
+        "rag_indexing": { "status": "completed", "chunks_generated": 34 }
+      }
+    }
   },
-  "chunk_summary": { "total_chunks": 34, "text_chunks": 28, "table_chunks": 3, "image_chunks": 3 },
+  "chunk_summary": { "sections": 34, "chunks": 28, "embeddings": 28 },
   "started_at": "2026-05-15T10:00:05Z",
   "completed_at": "2026-05-15T10:01:30Z"
-}
-```
+}```
 
-**Статусы конвейера**: `uploaded` → `validating` → `processing` → `review_required` / `ready_for_promotion` → `approved` / `failed` / `archived`.
+**Статусы Formation (Формирование документа)**: `uploaded` → `parsing` → `validation` → `registry` / `review_required` → `archived` / `failed`.
 
-**Этапы `steps`**: `ocr`, `chunking`, `validation`, `promotion`. Статус этапа: `pending`, `in_progress`, `completed`, `error`, `blocked`.
+**Статусы Indexation (Индексация)**: `pending` → `rag_indexing` → `indexed` / `failed`.
+
+**Группировка `steps.pipeline`**: каждый пайплайн имеет свой ключ (`formation`, `indexation`) с полем `status` — агрегированный статус пайплайна, и вложенными этапами. Статусы пайплайна: `pending`, `in_progress`, `completed`, `failed`, `blocked`. Статусы этапов: `pending`, `in_progress`, `completed`, `error`, `blocked`.
+
+После завершения Пайплайна 1 автоматически запускается **Пайплайн 2 (Индексация)**.
 
 ---
 
@@ -362,7 +371,7 @@ sequenceDiagram
 
 ### POST /documents/{doc_id}/approve
 
-Утверждение документа. Переводит `review_required` / `ready_for_promotion` → `approved` и запускает промотирование в Registry (nsi).
+Утверждение документа. Переводит `review_required` → `approved` и запускает запись в Registry (Пайплайн 1, Этап 3).
 
 **Запрос**:
 
@@ -373,10 +382,10 @@ sequenceDiagram
 }
 ```
 
-| Поле | Тип | Обязательность | Описание |
-|-------|-----|----------------|----------|
-| `force` | bool | Нет | Принудительный аппрув с warning'ами |
-| `comment` | string | Нет | Комментарий |
+| Поле      | Тип    | Обязательность | Описание                            |
+| --------- | ------ | -------------- | ----------------------------------- |
+| `force`   | bool   | Нет            | Принудительный аппрув с warning'ами |
+| `comment` | string | Нет            | Комментарий                         |
 
 **Ответ `202`**:
 
@@ -422,7 +431,13 @@ sequenceDiagram
 
 ### GET /documents/{doc_id}/promotion-status
 
-Статус промотирования документа из Purgatory в Registry.
+Статус записи документа в Registry (Пайплайн 1, Этап 3). При успехе документ считается сформированным и готовым к индексации.
+
+**Параметры запроса:**
+
+| Параметр | Тип | По умолчанию | Описание |
+| -------- | --- | ------------ | -------- |
+| `longpoll` | int | `15` | Время ожидания в секундах. Сервер держит соединение, возвращая ответ при изменении статуса промотирования или по таймауту. |
 
 **Ответ `200`** (в процессе):
 
@@ -446,9 +461,9 @@ sequenceDiagram
 {
   "promotion_id": "promo-9a3f2b",
   "status": "completed",
-  "registry_doc_id": "42",
+  "document_id": "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
   "steps": {
-    "documents": { "status": "completed", "registry_doc_id": "42" },
+    "documents": { "status": "completed", "document_id": "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c" },
     "chunks": { "status": "completed", "chunks_indexed": 34 },
     "images": { "status": "completed", "images_indexed": 7 },
     "tables": { "status": "completed", "tables_indexed": 3 },
@@ -474,7 +489,7 @@ sequenceDiagram
       "history_id": "h-001",
       "old_status": null,
       "new_status": "uploaded",
-      "comment": { "reason": "initial_upload" },
+      "comment": { "reason": "initial_upload", "details": null },
       "changed_by": "ivanov_ai",
       "changed_at": "2026-05-15T10:00:00Z"
     },
@@ -482,7 +497,7 @@ sequenceDiagram
       "history_id": "h-002",
       "old_status": "ready_for_promotion",
       "new_status": "approved",
-      "comment": { "reason": "manual_approve" },
+      "comment": { "reason": "manual_approve", "details": "Утверждено главным инженером" },
       "changed_by": "ivanov_ai",
       "changed_at": "2026-05-15T12:00:00Z"
     }
@@ -497,7 +512,7 @@ sequenceDiagram
 
 Чанки документа для ручного ревью перед аппрувом.
 
-**Query-параметры**: `page`, `page_size`, `section` (ltree-путь).
+**Query-параметры**: `page`, `page_size`, `section` (фильтр по разделу, `nsi_document_sections.id`).
 
 **Ответ `200`**:
 
@@ -509,34 +524,49 @@ sequenceDiagram
   "total_chunks": 34,
   "chunks": [
     {
-      "chunk_id": "chk-001",
-      "sequence": 1,
-      "ltree_path": "root.section1.subsection1_1",
-      "heading": "1. Общие положения",
-      "text": "Настоящий стандарт распространяется на стойки установочные...",
+      "section_id": "sec-001",
+      "chunk_index": 1,
+      "clause": "1. Общие положения",
+      "content": "Настоящий стандарт распространяется на стойки установочные...",
       "page": 1,
-      "chunk_type": "text",
-      "token_count": 256,
+      "strategy": "text",
       "has_embedding": true,
-      "bbox": { "x": 120, "y": 350, "width": 400, "height": 60 },
-      "references": ["ГОСТ 12345-77"],
-      "validation_status": "valid"
+      "bbox": "120,350,520,410"
     },
     {
-      "chunk_id": "chk-012",
-      "sequence": 12,
-      "ltree_path": "root.section2.table1",
-      "heading": "Таблица 1 — Основные размеры",
-      "chunk_type": "table",
-      "text": "| Параметр | Значение |",
+      "section_id": "sec-012",
+      "chunk_index": 12,
+      "clause": "Таблица 1 — Основные размеры",
+      "strategy": "table",
+      "content": "| Параметр | Значение |",
       "table_data": { "headers": ["Обозначение", "D, мм"], "rows": [["СУ-1", "25"]] },
-      "page": 5,
-      "validation_status": "valid"
+      "page": 5
     }
   ],
   "meta": { "total": 34, "page": 1, "page_size": 20 }
 }
 ```
+
+| Поле                    | Тип      | Описание                                                                     |
+| ----------------------- | -------- | ---------------------------------------------------------------------------- |
+| `document_id`           | UUID     | Идентификатор документа                                                       |
+| `container_id`          | UUID     | Идентификатор контейнера чанков (`rag_document_chunks` partition)             |
+| `validation_status`     | string   | Статус валидации: `valid`, `invalid`, `in_progress`                           |
+| `total_chunks`          | integer  | Общее количество чанков в документе                                           |
+| `chunks`                | array    | Массив объектов чанков                                                        |
+| `chunks[].section_id`     | string   | Уникальный идентификатор секции (`nsi_document_sections.id`)                   |
+| `chunks[].chunk_index`  | integer  | Порядковый номер чанка (`rag_document_chunks.chunk_index`)                    |
+| `chunks[].clause`       | string   | Заголовок секции/пункта (`nsi_document_sections.clause`)                      |
+| `chunks[].content`      | string   | Текстовое содержимое чанка (`rag_document_chunks.content`)                    |
+| `chunks[].page`         | integer  | Номер страницы в исходном документе                                           |
+| `chunks[].strategy`     | string   | Стратегия разбиения (`rag_document_chunks.strategy`): `text`, `table`, `image`|
+| `chunks[].has_embedding`| boolean  | Наличие векторного представления (производное от `embedding IS NOT NULL`)     |
+| `chunks[].bbox`         | string   | Координаты bounding box в формате `x1,y1,x2,y2`                                |
+| `chunks[].table_data`   | object   | Данные таблицы (`headers`, `rows`) — только для `strategy: table`             |
+| `meta`                  | object   | Мета-информация о пагинации                                                   |
+| `meta.total`            | integer  | Общее количество элементов                                                    |
+| `meta.page`             | integer  | Текущая страница                                                              |
+| `meta.page_size`        | integer  | Размер страницы                                                               |
 
 ---
 
@@ -553,8 +583,8 @@ sequenceDiagram
 }
 ```
 
-| Поле | Тип | Описание |
-|-------|-----|----------|
+| Поле   | Тип    | Описание                                                          |
+| ------ | ------ | ----------------------------------------------------------------- |
 | `mode` | string | `full`, `ocr_only`, `chunking_only`, `validation_only`, `reindex` |
 
 **Ответ `202`** — аналогичен `POST /documents`.
@@ -622,10 +652,18 @@ sequenceDiagram
       "progress_percent": 60.0,
       "current_step": "validation",
       "steps": {
-        "ocr": "completed",
-        "chunking": "completed",
-        "validation": "in_progress",
-        "promotion": "pending"
+        "pipeline": {
+          "formation": {
+            "status": "in_progress",
+            "parsing": "completed",
+            "validation": "in_progress",
+            "registry": "pending"
+          },
+          "indexation": {
+            "status": "pending",
+            "rag_indexing": "pending"
+          }
+        }
       },
       "user_id": "u-001",
       "uploaded_by": "Иванов И.И.",
@@ -668,13 +706,13 @@ sequenceDiagram
   "query": "...",
   "items": [
     {
-      "fragment_id": "sr-001",
+      "section_id": "sec-001",
       "document_id": "doc-norm-001",
       "document_title": "Правила классификации...",
       "document_type": "normative",
-      "section": "Корпус",
+      "clause": "Корпус",
       "page": 42,
-      "fragment": "Для ледового класса Arc4 толщина обшивки должна быть не менее 12 мм...",
+      "content": "Для ледового класса Arc4 толщина обшивки должна быть не менее 12 мм...",
       "score": 0.92,
       "page_preview_url": "/documents/doc-norm-001/pages/42/preview",
       "document_url": "/documents/doc-norm-001/file"
@@ -732,41 +770,6 @@ sequenceDiagram
 ### GET /documents/{doc_id}/parameters
 
 Извлечённые параметры документа (спецификация, материалы).
-
----
-
-## Группа validate
-
-### POST /validate/compare
-
-Запуск сопоставления нормы и проекта (асинхронный, низкоуровневый).
-
-**Запрос** (по запросу или по ID фрагментов):
-
-```json
-{
-  "normative_query": "толщина обшивки ледового класса Arc4",
-  "project_document_id": "doc-draw-001"
-}
-```
-
-**Ответ `202`**: `{ "comparison_id": "cmp-007", "status": "processing", "created_at": "..." }`
-
-### GET /validate/compare/{comparison_id}
-
-Результат сопоставления. Статусы `match_status`: `match`, `possible_discrepancy`, `not_found_in_project`, `not_found_in_norm`, `insufficient_data`.
-
-### POST /validate/checks
-
-Запуск проверки проектного решения на соответствие НСИ (синхронный для UI). Агрегирует результаты `/validate/compare/batch`.
-
-### GET /validate/checks/{check_run_id}
-
-Статус и результаты проверки.
-
-### GET /validate/checks/{check_run_id}/export
-
-Выгрузка результатов в XLSX.
 
 ---
 
