@@ -69,7 +69,7 @@
 ║                            │                                     ║
 ║                            ▼                                     ║
 ║  ┌──────────────────────────────────────────────────────────┐    ║
-║  │           cross_references — массив                      │    ║
+║  │           document_references — массив                    │    ║
 ║  │  • target_doc, type, context, current_status             │    ║
 ║  │  • replaced_by, replacement_date, note                   │    ║
 ║  └──────────────────────────────────────────────────────────┘    ║
@@ -200,7 +200,7 @@
 ║                            │                                      ║
 ║                            ▼                                      ║
 ║  ┌───────────────────────────────────────────────────────────┐    ║
-║  │           cross_references — массив                       │    ║
+║  │           document_references — массив                     │    ║
 ║  │  • target_doc, type, context, current_status              │    ║
 ║  │  • replaced_by, replacement_date, note                    │    ║
 ║  └───────────────────────────────────────────────────────────┘    ║
@@ -220,7 +220,7 @@
 ║                            │                                      ║
 ║                            ▼                                      ║
 ║  ┌───────────────────────────────────────────────────────────┐    ║
-║  │              nsi_documents — массив                       │    ║
+║  │              documents — массив                           │    ║
 ║  │  • id, doc_code, title, full_title, normalized_title      │    ║
 ║  │  • group, mks, okstu, udc, era                            │    ║
 ║  │  • validity_status, issuing_body                          │    ║
@@ -236,7 +236,7 @@
 ║                            │                                      ║
 ║                            ▼                                      ║
 ║  ┌──────────────────────────────────────────────────────────┐    ║
-║  │           nsi_document_sections — массив                 │    ║
+║  │           document_sections — массив                     │    ║
 ║  │                                                          │    ║
 ║  │  Общие поля: id, document_id, parent_id, clause,         │    ║
 ║  │  title, level, path, page, bbox, type, created_at        │    ║
@@ -256,7 +256,7 @@
 ║                            │                                     ║
 ║                            ▼                                     ║
 ║  ┌──────────────────────────────────────────────────────────┐    ║
-║  │          nsi_cross_references — массив                   │    ║
+║  │          document_references — массив                     │    ║
 ║  │  • id, source_document_id, target_doc_code               │    ║
 ║  │  • reference_type, context, current_status               │    ║
 ║  │  • replaced_by, replacement_date                         │    ║
@@ -337,16 +337,16 @@
 ║                            ▼                                              ║
 ║  ┌──────────────────────────────────────────────────────────────────┐    ║
 ║  │  content                                                         │    ║
-║  │  text → nsi_document_sections                                    │    ║
-║  │  tables → nsi_document_sections + columns                        │    ║
-║  │  figures → nsi_document_sections                                 │    ║
-║  │  formulas → nsi_document_sections                                │    ║
+║  │  text → document_sections                                        │    ║
+║  │  tables → document_sections + columns                            │    ║
+║  │  figures → document_sections                                     │    ║
+║  │  formulas → document_sections                                    │    ║
 ║  └──────────────────────────────────────────────────────────────────┘    ║
 ║                            │                                              ║
 ║                            ▼                                              ║
 ║  ┌──────────────────────────────────────────────────────────────────┐    ║
-║  │  cross_references                                                │    ║
-║  │  → nsi_cross_references                                          │    ║
+║  │  document_references                                              │    ║
+║  │  → document_references                                            │    ║
 ║  │  Добавлено: is_resolved, resolved_document_id,                   │    ║
 ║  │  created_at, source_document_id                                  │    ║
 ║  └──────────────────────────────────────────────────────────────────┘    ║
