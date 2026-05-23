@@ -34,14 +34,14 @@ Purgatory (полный проект) = purgatory.* (staging) + nsi.* (knowledge
 | **purgatory.classifier_pending** | (Registry API / pending) | 🟡 Частичное |
 | **purgatory.terminology_registry** | (Registry API / terminology) | 🟢 Идентично |
 | **purgatory.format_registry** | ❌ Нет аналога | 🔴 Отсутствует |
-| **nsi.document_sections** | `nsi_document_sections` | 🟢 Почти полное |
-| **nsi.chunks** | `nsi_chunks` | 🟢 Почти полное |
-| **nsi.images** | 🔹 `nsi_document_sections (type='image')` | 🟡 Иная модель |
-| **nsi.extracted_tables** | 🔹 `nsi_document_sections (type='table')` | 🟡 Иная модель |
+| **nsi.document_sections** | `registry.document_sections` | 🟢 Почти полное |
+| **nsi.chunks** | `rag.chunks` | 🟢 Почти полное |
+| **nsi.images** | 🔹 `registry.document_sections (type='image')` | 🟡 Иная модель |
+| **nsi.extracted_tables** | 🔹 `registry.document_sections (type='table')` | 🟡 Иная модель |
 | **nsi.formulas** | ❌ Нет аналога | 🔴 Отсутствует |
 | **nsi.formula_parameters** | ❌ Нет аналога | 🔴 Отсутствует |
-| **nsi.cross_references** | `nsi_cross_references` | 🟢 Почти полное |
-| **nsi.promotion_history** | `nsi_document_history` | 🟡 Частичное |
+| **nsi.cross_references** | `registry.document_references` | 🟢 Почти полное |
+| **nsi.promotion_history** | `registry.document_history` | 🟡 Частичное |
 | Нет отдельной таблицы док-в | (нет — только purgatory_documents) | 🟢 Согласовано |
 | ❌ Нет аналога | Чат/сессии (Query Service) | 🆕 Выходит за рамки Purgatory |
 | ❌ Нет аналога | Auth / Users / Roles | 🆕 Выходит за рамки Purgatory |
@@ -115,7 +115,7 @@ Purgatory (полный проект) = purgatory.* (staging) + nsi.* (knowledge
 
 ### A3.2. `docs/`: поштучное хранение
 
-В `docs/` чанки — построчные записи (`nsi_chunks`). Ответ API содержит:
+В `docs/` чанки — построчные записи (`rag.chunks`). Ответ API содержит:
 
 | Поле | Описание |
 |---|---|
@@ -237,7 +237,7 @@ CREATE TABLE purgatory.format_registry (
 
 ### B1.1. Поля
 
-| Поле | Purgatory (`nsi.document_sections`) | `docs/` (`nsi_document_sections`) | Совпадение |
+| Поле | Purgatory (`nsi.document_sections`) | `docs/` (`registry.document_sections`) | Совпадение |
 |---|---|---|---|
 | `id` | `UUID PK` | `uuid id PK` | ✅ |
 | `document_id` | `UUID FK → purgatory.documents.id` | `uuid document_id FK → purgatory_documents` | ✅ |
@@ -247,8 +247,8 @@ CREATE TABLE purgatory.format_registry (
 | `level` | `INT NOT NULL DEFAULT 1` | `int level` | ✅ |
 | `path` | `LTREE NOT NULL` | `ltree path` | ✅ |
 | `page` | `INT` | `int page` | ✅ |
-| `bbox` | `JSONB` | `text bbox` | ⚠️ JSONB vs TEXT |
-| `type` | ❌ (типы в отдельных таблицах) | `text type` ('section'/'table'/'image') | 🔴 Purgatory: типы разнесены |
+| `bbox` | `JSONB` | `jsonb bbox` | ✅ |
+| `type` | ❌ (типы в отдельных таблицах) | `text type` ('section', 'table', 'image', 'formula') | 🔴 Purgatory: типы разнесены |
 | `content` | ❌ (контент в `nsi.chunks`) | `jsonb content` | 🔴 Purgatory: контент в чанках |
 | `created_at` | `TIMESTAMPTZ` | `TIMESTAMPTZ` | ✅ добавлен в `docs/` |
 | `valid_ltree_path` CHECK | ✅ | ❌ | 🆕 Purgatory |
@@ -263,31 +263,31 @@ CREATE TABLE purgatory.format_registry (
 
 ### B2.1. Поля
 
-| Поле | Purgatory (`nsi.chunks`) | `docs/` (`nsi_chunks`) | Совпадение |
+| Поле | Purgatory (`nsi.chunks`) | `docs/` (`rag.chunks`) | Совпадение |
 |---|---|---|---|
 | `id` | `UUID PK` | `uuid id PK` | ✅ |
-| `document_id` | `UUID FK → purgatory.documents.id` | `uuid document_id FK → purgatory_documents` | ✅ добавлен в `docs/` для индексов чанков |
-| `section_id` | `UUID FK → nsi.document_sections.id` | `uuid section_id FK → nsi_document_sections` | ✅ |
+| `document_id` | `UUID FK → purgatory.documents.id` | `uuid document_id FK → registry.documents` | ✅ |
+| `section_id` | `UUID FK → nsi.document_sections.id` | `bigint section_id FK → registry.document_sections` | ✅ |
 | `content` | `TEXT NOT NULL` | `text content` | ✅ |
 | `embedding` | `VECTOR(N)` — pgvector | `vector embedding` | ✅ |
 | `tsv` | `TSVECTOR` (автотриггер) | `tsvector tsv` | ✅ |
-| `clause` | `TEXT` | ❌ (находится в `nsi_document_sections.clause`) | 🔴 |
+| `clause` | `TEXT` | ❌ (находится в `registry.document_sections.clause`) | 🔴 |
 | `page` | `INT` | `int page` | ✅ |
 | `chunk_index` | `INT` | `int chunk_index` | ✅ |
 | `chunk_strategy` / `strategy` | `TEXT` | `text strategy` | ⚠️ переименовано |
-| `bbox` | `JSONB` | `text bbox` | ⚠️ JSONB vs TEXT |
+| `bbox` | `JSONB` | `jsonb bbox` | ✅ |
 | `confidence` | `FLOAT (0–1)` | `float confidence` | ✅ |
 | `tenant_id` | `TEXT DEFAULT 'default'` | `text tenant_id` | ✅ |
-| `deleted_at` | `TIMESTAMPTZ` | `text deleted_at` | ⚠️ TIMESTAMPTZ vs TEXT |
+| `deleted_at` | `TIMESTAMPTZ` | `timestamptz deleted_at` | ✅ |
 | `created_at` | `TIMESTAMPTZ` | `TIMESTAMPTZ` | ✅ добавлен в `docs/` |
 
 ### B2.2. Ключевые различия
 
-1. **Связь с документом:** Purgatory хранит `document_id` напрямую в `nsi.chunks`. `docs/` идёт через `section_id → nsi_document_sections.document_id`. Это на один JOIN больше для поиска.
+1. **Связь с документом:** Purgatory хранит `document_id` напрямую в `nsi.chunks`. `docs/` идёт через `section_id → registry.document_sections.document_id`. Это на один JOIN больше для поиска.
 2. **`tenant_id` и `deleted_at`:** Есть в обеих схемах — ✅ согласовано.
 3. **`clause`:** В Purgatory — в чанках (денормализация для скорости). В `docs/` — только в `document_sections` (нужен JOIN).
-4. **Тип `bbox`:** Purgatory — JSONB; `docs/` — TEXT.
-5. **Тип `deleted_at`:** Purgatory — TIMESTAMPTZ; `docs/` — TEXT.
+4. **Тип `bbox`:** ✅ Согласовано — обе схемы используют `jsonb`.
+5. **Тип `deleted_at`:** ✅ Согласовано — обе схемы используют `timestamptz`.
 
 ### B2.3. Индексы и триггер
 
@@ -307,7 +307,7 @@ CREATE TABLE purgatory.format_registry (
 
 **Purgatory:** две отдельные таблицы — `nsi.images` и `nsi.extracted_tables` с богатыми метаданными (caption, footnotes, unit, DPI, image_s3_path).
 
-**`docs/`:** изображения и таблицы хранятся как записи в `nsi_document_sections` с `type='image'` / `type='table'`, а содержимое — в `jsonb content`:
+**`docs/`:** изображения и таблицы хранятся как записи в `registry.document_sections` с `type='image'` / `type='table'`, а содержимое — в `jsonb content`:
 
 - Для таблиц: `content = {"headers": [...], "rows": [...]}`
 - Для изображений: `content = {"image_id": "...", "file_key": "...", "width": ..., "height": ...}`
@@ -316,29 +316,29 @@ CREATE TABLE purgatory.format_registry (
 
 | Поле Purgatory (`nsi.images`) | `docs/` аналог |
 |---|---|
-| `id UUID PK` | `nsi_document_sections.id` |
-| `document_id UUID FK` | `nsi_document_sections.document_id` |
+| `id UUID PK` | `registry.document_sections.id` |
+| `document_id UUID FK` | `registry.document_sections.document_id` |
 | `figure_id TEXT` | в `content.image_id` |
-| `title TEXT` | `nsi_document_sections.title` |
+| `title TEXT` | `registry.document_sections.title` |
 | `caption TEXT` | `content.caption` |
 | `description TEXT` | `content.description` |
 | `file_path TEXT` (S3) | в `content.file_key` |
 | `file_type TEXT` | `content.file_type` |
 | `metadata JSONB` (размеры, DPI) | `content.width`, `content.height` |
-| `page INT` | `nsi_document_sections.page` |
-| `bbox JSONB` | `nsi_document_sections.bbox` (TEXT) |
+| `page INT` | `registry.document_sections.page` |
+| `bbox JSONB` | `registry.document_sections.bbox` (TEXT) |
 
 ### B3.3. Поля таблиц (сопоставление)
 
 | Поле Purgatory (`nsi.extracted_tables`) | `docs/` аналог |
 |---|---|
-| `id UUID PK` | `nsi_document_sections.id` |
-| `document_id UUID FK` | `nsi_document_sections.document_id` |
+| `id UUID PK` | `registry.document_sections.id` |
+| `document_id UUID FK` | `registry.document_sections.document_id` |
 | `section_id UUID FK` | ❌ (сама является секцией) |
 | `table_id TEXT` | ❌ |
-| `caption TEXT` | `nsi_document_sections.title` |
-| `page INT` | `nsi_document_sections.page` |
-| `bbox JSONB` | `nsi_document_sections.bbox` (TEXT) |
+| `caption TEXT` | `registry.document_sections.title` |
+| `page INT` | `registry.document_sections.page` |
+| `bbox JSONB` | `registry.document_sections.bbox` (TEXT) |
 | `unit TEXT` | `content.unit` |
 | `headers JSONB` | в `content.headers` |
 | `rows JSONB` | в `content.rows` |
@@ -360,7 +360,7 @@ CREATE TABLE purgatory.format_registry (
 
 ### B5.1. Поля
 
-| Поле | Purgatory (`nsi.cross_references`) | `docs/` (`nsi_cross_references`) | Совпадение |
+| Поле | Purgatory (`nsi.cross_references`) | `docs/` (`registry.document_references`) | Совпадение |
 |---|---|---|---|
 | `id` | `UUID PK` | `uuid id PK` | ✅ |
 | `source_document_id` | `UUID FK → purgatory.documents.id` | `uuid source_document_id FK → purgatory_documents` | ✅ |
@@ -385,7 +385,7 @@ CREATE TABLE purgatory.format_registry (
 
 ### B6.1. Поля
 
-| Поле | Purgatory (`nsi.promotion_history`) | `docs/` (`nsi_document_history`) | Совпадение |
+| Поле | Purgatory (`nsi.promotion_history`) | `docs/` (`registry.document_history`) | Совпадение |
 |---|---|---|---|
 | `id` | `UUID PK` | `uuid id PK` | ✅ |
 | `document_id` | `UUID FK → purgatory.documents.id` | `uuid document_id FK → purgatory_documents` | ✅ |
@@ -414,8 +414,8 @@ CREATE TABLE purgatory.format_registry (
 
 | Аспект | Purgatory | `docs/` |
 |---|---|---|
-| Отдельная таблица документов в `nsi` | ❌ Нет. Только `purgatory.documents` | ❌ **Нет.** Только `purgatory_documents` |
-| JOIN для поиска | `JOIN purgatory.documents` | `JOIN purgatory_documents` |
+| Отдельная таблица документов в `nsi` | ❌ Нет. Только `purgatory.documents` | ✅ **Есть.** `registry.documents` — таблица core-слоя с метаданными документа |
+| JOIN для поиска | `JOIN purgatory.documents` | `JOIN registry.documents` |
 
 **Вывод:** ✅ **Полностью согласовано.** Оба подхода хранят метаданные документа только в `purgatory.documents` / `purgatory_documents` и используют FK из `nsi`.
 
@@ -517,10 +517,10 @@ CREATE TABLE purgatory.format_registry (
 | 7 | Статус `UNASSIGNED` для классификации | purgatory | ✅ Добавлено — начальное состояние до парсинга |
 | 8 | `metadata.author`, `metadata.language` | purgatory | Дополнительные метаданные |
 | 9 | `comment` → `{reason, details}` в `status_history` | purgatory | ✅ Добавлено — структурированная причина перехода |
-| 10 | `path LTREE` в `nsi_document_sections` | nsi | Иерархические запросы (сейчас TEXT) |
-| 11 | Прямой `document_id` в `nsi_chunks` | nsi | Ускорение поиска (сейчас через section_id) |
-| 12 | `clause` в `nsi_chunks` | nsi | Денормализация для скорости (сейчас в sections) |
-| 13 | `created_at` в `nsi_chunks`, `nsi_cross_references` | nsi | Стандартное поле аудита |
+| 10 | `path LTREE` в `registry.document_sections` | nsi | Иерархические запросы (сейчас TEXT) |
+| 11 | Прямой `document_id` в `rag.chunks` | nsi | Ускорение поиска (сейчас через section_id) |
+| 12 | `clause` в `rag.chunks` | nsi | Денормализация для скорости (сейчас в sections) |
+| 13 | `created_at` в `rag.chunks`, `registry.document_references` | nsi | Стандартное поле аудита |
 | 14 | UNIQUE `(source, target, type)` на cross_references | nsi | Защита от дублей |
 | 15 | ENUM для `reference_type` | nsi | Валидация на уровне БД |
 | 16 | Отдельная таблица `nsi.images` | nsi | Изображения как самостоятельные сущности |
@@ -553,15 +553,15 @@ CREATE TABLE purgatory.format_registry (
 | № | Вопрос | Purgatory | `docs/` |
 |---|---|---|---|
 | 1 | **ENUM vs TEXT** | Все статусы — ENUM в БД | Частично согласовано: `validity_status`, `type`, `reference_type` — ENUM; `classifier_system`, `doc_status` — TEXT (не согласовано) |
-| 2 | **Хранение чанков** | Один JSONB-контейнер (`chunk_containers`) | Построчные записи (`nsi_chunks`) |
+| 2 | **Хранение чанков** | Один JSONB-контейнер (`chunk_containers`) | Построчные записи (`rag.chunks`) |
 | 3 | **CAS-пути** | Строгий CAS через content_hash | `file_key` без спецификации |
 | 4 | **FK-изоляция классификатора** | Composite FK с generated columns | FK без гарантии изоляции |
 | 5 | **Изображения/таблицы** | Отдельные таблицы | Секции с type='image'/'table' |
 | 6 | **Связь chunks→document** | Прямой `document_id` | Через `section_id` → документ |
 | 7 | **`clause` в чанках** | Да (денормализация) | Нет (только в sections) |
-| 8 | **Тип `bbox`** | JSONB | TEXT |
-| 9 | **Тип `deleted_at`** | TIMESTAMPTZ | TEXT |
-| 10 | **История: специализированная vs event** | `promotion_history` (только промоуты) | `nsi_document_history` (все события) |
+| 8 | **Тип `bbox`** | JSONB | `jsonb` (согласовано) |
+| 9 | **Тип `deleted_at`** | TIMESTAMPTZ | `timestamptz` (согласовано) |
+| 10 | **История: специализированная vs event** | `promotion_history` (только промоуты) | `registry.document_history` (все события) |
 | 11 | **Формулы** | Входят в MVP | Не поддерживаются |
 | 12 | **Статус FSM** | `processing` (единый) | `parsing` + `validation` (раздельные) |
 
@@ -570,16 +570,16 @@ CREATE TABLE purgatory.format_registry (
 ## D4. Полностью согласованные сущности
 
 - `purgatory.classifier_registry` / classifiers — ⚠️ (ENUM vs TEXT для classifier_system — не согласовано)
-- **`nsi.cross_references` / `nsi_cross_references`** — 🟢 на ~95% (разница: `created_at`)
-- **`nsi.chunks` / `nsi_chunks`** — 🟢 на ~90% (разница: связь с документом и clause)
-- **`nsi.document_sections` / `nsi_document_sections`** — 🟢 на ~95% (разница: bbox, content, type)
+- **`nsi.cross_references` / `registry.document_references`** — 🟢 на ~95% (разница: `created_at`)
+- **`nsi.chunks` / `rag.chunks`** — 🟢 на ~90% (разница: связь с документом и clause)
+- **`nsi.document_sections` / `registry.document_sections`** — 🟢 на ~95% (разница: bbox, content, type)
 
 ## D5. Частично согласованные
 
 - `purgatory.documents` — ✅ на ~90% (отличия: ENUM vs TEXT, отсутствие user_id/tags)
 - `purgatory.classifier_pending` — ⚠️ на ~70%
 - `purgatory.document_versions` — ⚠️ на ~65%
-- `nsi.promotion_history` / `nsi_document_history` — ⚠️ на ~60% (специализированная vs event-модель)
+- `nsi.promotion_history` / `registry.document_history` — ⚠️ на ~60% (специализированная vs event-модель)
 
 ## D6. Не согласованные
 
@@ -600,5 +600,5 @@ CREATE TABLE purgatory.format_registry (
 5. **Хранение чанков** — JSONB-контейнер vs нормализованные таблицы (возможно и то, и другое: контейнер для целостности, таблицы для поиска).
 6. **CAS-пути** — внедрить CAS как стандарт де-факто.
 7. **FK-изоляция классификаторов** — внедрить composite FK с generated columns.
-8. **История: специализированная (`promotion_history`) или event-модель (`nsi_document_history`)?** Event-модель универсальнее; специализированная — точнее для трейсинга промоутов.
+8. **История: специализированная (`promotion_history`) или event-модель (`registry.document_history`)?** Event-модель универсальнее; специализированная — точнее для трейсинга промоутов.
 9. **FSM** — согласовать единую FSM на 10–14 состояний (дополнив Purgatory статусами `parsing`, `validation`, `registry`, а `docs/` — исключив `pending_index` если это не входит в MVP).

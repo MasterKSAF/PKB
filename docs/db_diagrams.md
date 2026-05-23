@@ -8,15 +8,20 @@
 
 ```mermaid
 erDiagram
-    nsi_documents {
+    registry.documents {
         uuid id PK
         text doc_code
         text title
         varchar validity_status
+        uuid successor_doc_id FK
+        uuid predecessor_doc_id FK
+        varchar era
+        varchar group
+        text title_hash_sha256
     }
 
-    nsi_document_sections {
-        uuid id PK
+    registry.document_sections {
+        bigint id PK
         uuid document_id FK
         uuid parent_id FK
         text clause
@@ -30,9 +35,9 @@ erDiagram
         timestamptz created_at
     }
 
-    nsi_chunks {
+    rag.chunks {
         uuid id PK
-        uuid section_id FK
+        bigint section_id FK
         uuid document_id FK
         int chunk_index
         text content
@@ -47,7 +52,7 @@ erDiagram
         timestamptz created_at
     }
 
-    nsi_cross_references {
+    registry.document_references {
         uuid id PK
         uuid source_document_id FK
         text target_doc_code
@@ -61,7 +66,7 @@ erDiagram
         timestamptz created_at
     }
 
-    nsi_document_history {
+    registry.document_history {
         uuid id PK
         uuid document_id FK
         text event_type
@@ -72,28 +77,30 @@ erDiagram
         jsonb document_snapshot
     }
 
-    nsi_documents ||--o{ nsi_document_sections : has
-    nsi_document_sections ||--o{ nsi_document_sections : parent
-    nsi_document_sections ||--o{ nsi_chunks : contains
-    nsi_documents ||--o{ nsi_cross_references : source
-    nsi_documents ||--o{ nsi_cross_references : resolved
-    nsi_documents ||--o{ nsi_chunks : has
-    nsi_documents ||--o{ nsi_document_history : has
+    registry.documents ||--o{ registry.document_sections : has
+    registry.document_sections ||--o{ registry.document_sections : parent
+    registry.document_sections ||--o{ rag.chunks : contains
+    registry.documents ||--o{ registry.document_references : source
+    registry.documents ||--o{ registry.document_references : resolved
+    registry.documents ||--o{ rag.chunks : has
+    registry.documents ||--o{ registry.document_history : has
 ```
 
 ### UNIQUE-ограничения
 
-- `nsi_documents.title` — бизнес-ключ документа (через title_hash_sha256)
-- `nsi_cross_references (source_document_id, target_doc_code, reference_type)` — защита от дублей связей
+- `registry.documents.title` — бизнес-ключ документа (через title_hash_sha256)
+- `registry.document_references (source_document_id, target_doc_code, reference_type)` — защита от дублей связей
 
 ### CHECK-ограничения
 
-- `nsi_document_sections.type IN ('section', 'table', 'image', 'formula')`
+- `registry.document_sections.type IN ('section', 'table', 'image', 'formula')`
 
 ---
 
 ### Примечания
 
-1. **Preview-данные** не хранятся в БД. Они живут исключительно в журнале пайплайна Orchestrator (временные артефакты фазы Preview).
-2. **`nsi_document_sections`** — это **секции** документа (разделы, подразделы, пункты), создаваемые сервисом Registry на этапе сегментации. Не путать с чанками!
-3. **`nsi_chunks`** — это **чанки**, формируемые сервисом RAG Builder на основе секций. Поле `section_id` ссылается на `nsi_document_sections.id`. Одна секция может порождать несколько чанков.
+1. **`chunk_container_id`** — staging-only, принадлежит схеме `purgatory`.
+
+2. **Preview-данные** не хранятся в БД. Они живут исключительно в журнале пайплайна Orchestrator (временные артефакты фазы Preview).
+3. **`registry.document_sections`** — это **секции** документа (разделы, подразделы, пункты), создаваемые сервисом Registry на этапе сегментации. Не путать с чанками!
+4. **`rag.chunks`** — это **чанки**, формируемые сервисом RAG Builder на основе секций. Поле `section_id` ссылается на `registry.document_sections.id`. Одна секция может порождать несколько чанков.

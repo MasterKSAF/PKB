@@ -11,7 +11,7 @@ sequenceDiagram
     participant Pars as Parser-сервис
     participant Conv as Converter-validator
     participant Reg as Registry
-    participant RAGb as RAG Builder
+
 
     %% Фаза Preview
     UI->>Orch: POST /documents/{doc_id}/preview
@@ -72,12 +72,6 @@ sequenceDiagram
         Reg-->>Orch: JSON со ссылками в БД
         deactivate Reg
 
-        Orch->>RAGb: POST /rag/build
-        activate RAGb
-        RAGb->>RAGb: Чанкование секций → эмбеддинги → индекс
-        RAGb-->>Orch: Статус индексации
-        deactivate RAGb
-
         Orch-->>UI: status: completed
     else action = stop_duplicate
         Orch-->>UI: status: duplicate
@@ -115,7 +109,7 @@ sequenceDiagram
 
 ### Фаза Full (полная обработка)
 
-Запускается после решения пользователя `proceed`. Состоит из четырёх этапов.
+Запускается после решения пользователя `proceed`. Состоит из трёх этапов.
 
 #### Этап 1: OCR-сервис и Parser-сервис (распознавание и извлечение сырых данных)
 
@@ -172,27 +166,13 @@ sequenceDiagram
 
 | Шаг | Действие | Результат |
 |-----|----------|-----------|
-| 3.1 | Сохранение карточки документа в `nsi_documents` | `document_id`, ссылки на ресурсы |
-| 3.2 | **Сегментирование:** разбиение на секции (`nsi_document_sections`) | Каждая секция получает DB-идентификатор |
-| 3.3 | Сохранение перекрёстных ссылок в `nsi_document_references` | Связи между элементами документа |
-| 3.4 | Запись в `nsi_document_history` | Фиксация факта публикации документа |
+| 3.1 | Сохранение карточки документа в `registry.documents` | `document_id`, ссылки на ресурсы |
+| 3.2 | **Сегментирование:** разбиение на секции (`registry.document_sections`) | Каждая секция получает DB-идентификатор |
+| 3.3 | Сохранение перекрёстных ссылок в `registry.document_references` | Связи между элементами документа |
+| 3.4 | Запись в `registry.document_history` | Фиксация факта публикации документа |
 
 **Выход:** плоский JSON со списком **секций** (не чанков) с метаданными и ссылками в БД.
-
-#### Этап 4: RAG Builder (построение векторного индекса)
-
-**Сервис:** RAG Builder
-
-**Вход:** плоский JSON от Registry (секции `nsi_document_sections`).
-
-**Процесс:**
-
-| Шаг | Действие | Результат |
-|-----|----------|-----------|
-| 4.1 | Парсинг JSON — чтение секций | Документ, секции |
-| 4.2 | **Чанкование:** разбиение секций на более мелкие чанки (≤512 токенов) | Чанки с привязкой к секциям |
-| 4.3 | Вычисление эмбеддингов | Векторные представления |
-| 4.4 | Сохранение в векторный индекс (pgvector) | Готовый к поиску индекс |
+**Далее:** статус `pending_index` → **передано в Пайплайн 2 (Индексация)**.
 
 ---
 
@@ -248,7 +228,7 @@ stateDiagram-v2
     parsing --> validation : OCR/Parser завершён
     validation --> ready_for_promotion : Validation пройдена (auto)
     validation --> review_required : требуется ручное подтверждение
-    review_required --> validation : повторная Validation
+
     review_required --> approved : approve оператора
     ready_for_promotion --> registry : промотирование в Registry
     approved --> registry : промотирование в Registry
@@ -272,7 +252,7 @@ stateDiagram-v2
 | `ready_for_promotion` | Авто-валидация пройдена, ожидание записи в Registry |
 | `review_required` | Требуется ручное подтверждение оператором |
 | `approved` | Оператор подтвердил, ожидание записи в Registry |
-| `registry` | Документ записан в реестр (nsi_documents) |
+| `registry` | Документ записан в реестр (registry.documents) |
 | `pending_index` | Ожидание запуска RAG Builder (Пайплайн 2) |
 | `duplicate` | Документ-дубликат, обработка завершена |
 | `new_version` | Создана новая версия существующего документа |

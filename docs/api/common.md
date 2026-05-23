@@ -15,7 +15,8 @@
 
 ### Формат ответа
 
-#### Публичные API (Orchestrator, Auth, Query, Integration, OCR, RAG, Validation)
+#### Публичные API (Orchestrator, Auth, Query, Integration, OCR, RAG Builder (internal), RAG Search (internal), Validation)
+> **Примечание:** RAG Builder и RAG Search — внутренние сервисы. Публичный доступ к RAG-функциональности осуществляется через Orchestrator / Query Service.
 
 Успех — данные возвращаются напрямую (без обёртки). Поле `data` опционально — используется для группировки с `meta` или когда ответ не является списком/объектом напрямую.
 
@@ -81,7 +82,7 @@ API поддерживает две модели выполнения:
 После получения `202 Accepted` клиент вызывает GET-статус endpoint с параметром `longpoll`:
 
 ```
-GET .../{id}/status?longpoll=15
+GET .../{doc_id}/status?longpoll=15
 ```
 
 | Параметр    | Тип | По умолчанию | Описание                                                                                 |
@@ -150,9 +151,9 @@ GET .../{id}/status?longpoll=15
 | ---------------------------------------------------------- | ---------- | ----------------- | -------------- |
 | `GET /auth/me`, `POST /auth/token`, `/refresh`, `/revoke`  | ✓          | ✓                 | ✓              |
 | `POST /documents`                                          | ✓          | ✓                 | ✓              |
-| `GET /documents` (+ `/{id}`, `/status`, `/file`, `/pages`) | ✓          | ✓                 | ✓              |
-| `DELETE /documents/{id}`                                   | ✗          | ✓                 | ✓              |
-| `POST /documents/{id}/reprocess`                           | ✗          | ✓                 | ✓              |
+| `GET /documents` (+ `/{doc_id}`, `/status`, `/file`, `/pages`) | ✓          | ✓                 | ✓              |
+| `DELETE /documents/{doc_id}`                                   | ✗          | ✓                 | ✓              |
+| `POST /documents/{doc_id}/reprocess`                           | ✗          | ✓                 | ✓              |
 | `POST /documents/search`, `GET /documents/search`          | ✓          | ✓                 | ✓              |
 
 | `POST /documents/{doc_id}/approve` | ✗ | ✓ | ✓ |
@@ -239,14 +240,19 @@ Orchestrator управляет **тремя независимыми пайпл
 3. **Решение пользователя** — продолжить / остановить (дубликат) / принудительная новая версия
 
 **Фаза Full (полная обработка):**
+
+**Статусная цепочка Pipeline 1:** `draft → uploaded → previewing → awaiting_decision → parsing → validation → ready_for_promotion / review_required → approved → registry → pending_index`
+
 4. **OCR/Parser (full)** — полное распознавание всех страниц, сохранение бинарных объектов
 5. **Converter-validator (full)** — построение иерархии, LLM, метаданные, валидация
 6. **Registry** — сохранение карточки документа, сегментация на секции
-7. **RAG Builder** — чанкование секций, эмбеддинги, векторный индекс
+
 
 ### Пайплайн 2: Индексация документа
 
 1. **RAG Builder** (пишет БД) — чанкинг, embeddings, построение векторного индекса
+
+**Статусная цепочка Pipeline 2:** `pending → indexing → indexed`
 
 ### Пайплайн 3: Поиск документа
 

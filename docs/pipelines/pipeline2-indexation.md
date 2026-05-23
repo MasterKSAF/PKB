@@ -10,14 +10,14 @@ sequenceDiagram
     participant RAGi as RAG Builder
     participant DB as PostgreSQL<br/>(pgvector)
 
-    Orch->>RAGi: POST /rag/index (обогащённый JSON от Registry)
+    Orch->>RAGi: POST /rag/build (обогащённый JSON от Registry)
     activate RAGi
     RAGi-->>Orch: 202 {task_id}
     deactivate RAGi
 
     Note over Orch,RAGi: Longpoll-ожидание (15с)
 
-    Orch->>RAGi: GET /rag/index/{doc_id}/status?longpoll=15
+    Orch->>RAGi: GET /rag/build/{doc_id}/status?longpoll=15
     activate RAGi
 
     RAGi->>RAGi: 1. Парсинг JSON — чтение структуры документа
@@ -44,7 +44,7 @@ sequenceDiagram
 
 **Сервис:** RAG Builder
 
-**Вход:** плоский JSON от Registry (секции `nsi_document_sections`, не чанки)
+**Вход:** плоский JSON от Registry (секции `registry.document_sections`, не чанки)
 
 **Процесс:**
 
@@ -65,9 +65,9 @@ sequenceDiagram
 
 Вызов RAG Builder является асинхронным. Оркестратор использует longpoll-механизм для ожидания результата (аналогично Pipeline 1):
 
-1. **Запуск**: Оркестратор отправляет `POST /rag/index` с обогащённым JSON от Registry
+1. **Запуск**: Оркестратор отправляет `POST /rag/build` с обогащённым JSON от Registry
    → Получает `202 Accepted { "task_id": "..." }`
-2. **Ожидание**: Оркестратор вызывает `GET /rag/index/{document_id}/status?longpoll=15`
+2. **Ожидание**: Оркестратор вызывает `GET /rag/build/{document_id}/status?longpoll=15`
 3. **Сервис RAG** держит соединение до 15 секунд:
    - **Индексация завершена** → немедленный ответ с результатом и статусом `completed`
    - **Индексация в процессе** → ответ с текущим прогрессом (`chunks_generated`, `embeddings_count`)

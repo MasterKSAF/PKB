@@ -40,6 +40,9 @@
       "parent_section_id": null
     }
   ],
+  "protected_spans": [
+    { "section_id": "...", "start_offset": 0, "end_offset": 128 }
+  ],
   "options": {
     "strategy": "semantic_512"
   }
@@ -50,6 +53,7 @@
 |---|---|---|---|
 | `document_id` | string | Да | ID документа (UUID) |
 | `sections` | array | Да | Массив секций документа (плоский JSON из Registry) |
+| `protected_spans` | array | Нет | Массив неразрывных блоков: `{section_id, start_offset, end_offset}`. Запрещает чанкование внутри указанного диапазона секции |
 | `options.strategy` | string | Нет | Стратегия разбиения → `rag_document_chunks.strategy` (`semantic_512`, `fixed_256`) |
 
 **Ответ `201`:**

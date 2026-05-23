@@ -762,7 +762,7 @@ POST /registry/documents
 }
 ```
 
-> Registry сохраняет данные в БД, **сегментирует** документ на **секции** (`nsi_document_sections`) и возвращает **плоский JSON** — список секций с проставленными `id`, без иерархии `subsections`. Этот плоский JSON передаётся в RAG Builder для чанкования.
+> Registry сохраняет данные в БД, **сегментирует** документ на **секции** (`registry.document_sections`) и возвращает **плоский JSON** — список секций с проставленными `id`, без иерархии `subsections`. Этот плоский JSON передаётся в RAG Builder для чанкования.
 
 | Поле | Тип | Обязательность | Описание |
 |------|-----|----------------|----------|
@@ -887,7 +887,7 @@ POST /registry/documents
 | `document.id` | string | UUID документа (единый первичный ключ) |
 | `document.doc_code` | string | Обозначение документа |
 | `document.title` | string | Полное название |
-| `sections[].id` | string | UUID секции в `nsi_document_sections` |
+| `sections[].id` | string | UUID секции в `registry.document_sections` |
 | `sections[].document_id` | string | UUID документа |
 | `sections[].parent_id` | string|null | UUID родительской секции (`null` для корневых) |
 | `sections[].clause` | string | Номер пункта |
