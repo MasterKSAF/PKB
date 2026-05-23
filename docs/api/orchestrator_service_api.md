@@ -275,8 +275,6 @@
       "status": "approved",
       "latest_version": 1,
       "total_versions": 2,
-      "chunk_count": 34,
-      "chunk_validation": "valid",
       "user_id": "u-001",
       "uploaded_by": "Иванов И.И.",
       "created_at": "2026-04-27T10:00:00Z",
@@ -319,9 +317,6 @@
     "extracted_by": "purgatory_parser_v2",
     "confidence": 0.95
   },
-  "successor_doc_id": null,
-  "predecessor_doc_id": null,
-  "chunk_container_id": "e5d0c3b4-7a8b-9c0d-1e2f-3a4b5c6d7e8f",
   "metadata": {
     "year": "1981",
     "udc": "629.5.021",
@@ -449,7 +444,7 @@
 
 **Статусы Formation (Формирование документа)**: `uploaded` → `previewing` → `awaiting_decision` → `parsing` → `validation` → `registry` / `review_required` → `archived` / `failed`.
 
-**Статусы Indexation (Индексация)**: `pending` → `rag_indexing` → `indexed` / `failed`.
+**Статусы Indexation (Индексация)**: `pending` → `rag_indexing` → `indexed` / `failed`. Подробнее — [статусная модель FSM](../pipelines/pipeline2-indexation.md#статусная-модель-fsm).
 
 **Группировка `steps.pipeline`**: каждый пайплайн имеет свой ключ (`formation`, `indexation`) с полем `status` — агрегированный статус пайплайна, и вложенными этапами. Статусы пайплайна: `pending`, `in_progress`, `completed`, `failed`, `blocked`. Статусы этапов: `pending`, `in_progress`, `completed`, `error`, `blocked`.
 

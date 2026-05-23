@@ -91,6 +91,110 @@ Query Service принимает запросы от UI, вызывает RAG Se
 
 ---
 
+### Longpoll-механизм для сообщений
+
+После отправки сообщения через `POST /chat/sessions/{session_id}/messages` клиент получает
+`202 Accepted` с `message_id` и статусом `pending`. Далее клиент ожидает результат через
+longpoll-запрос к `GET /chat/sessions/{session_id}?longpoll=15`.
+
+**Параметры longpoll:**
+
+| Параметр | Тип | По умолчанию | Описание |
+|---|---|---|---|
+| `longpoll` | int | `15` | Максимальное время ожидания в секундах. Сервер держит соединение, возвращая ответ при изменении статуса или по таймауту. |
+
+**Логика сервера:**
+
+1. Проверить статус последнего сообщения в сессии.
+2. Если сообщение уже в финальном статусе (`answered`, `failed`) — немедленно вернуть ответ.
+3. Если сообщение в промежуточном статусе — ожидать до `longpoll` секунд:
+   - **Статус изменился на финальный** → вернуть полную историю сессии.
+   - **Таймаут истёк** → вернуть текущую историю (нефинальный статус сообщения).
+4. Клиент, получив нефинальный статус, повторяет longpoll-запрос.
+
+**Статусы сообщения:**
+
+| Статус | Описание | Действие клиента |
+|---|---|---|
+| `pending` | Сообщение принято, отправлено на обогащение | Повторить longpoll |
+| `enriching` | Выполняется обогащение запроса терминами (словарь Registry) | Повторить longpoll |
+| `searching` | Выполняется гибридный поиск чанков в RAG Search | Повторить longpoll |
+| `generating` | LLM генерирует ответ на основе найденных чанков | Повторить longpoll |
+| `enriching_citations` | Выполняется обогащение цитирований (machine-readable сноски) | Повторить longpoll |
+| `answered` | Ответ готов, полные данные в `messages[]` | Отобразить результат |
+| `failed` | Ошибка на одном из этапов | Показать ошибку |
+
+**Форматы ответа `GET /chat/sessions/{session_id}?longpoll=15`**
+
+**Финальный статус (`answered`):**
+```json
+{
+  "session_id": "s-001",
+  "title": "Ледовые усиления",
+  "document_ids": ["doc-001"],
+  "messages": [
+    { "message_id": "msg-001", "role": "user", "content": "...", "timestamp": "..." },
+    {
+      "message_id": "msg-002",
+      "role": "assistant",
+      "status": "answered",
+      "content": "Для ледового класса Arc4 толщина обшивки должна быть не менее 12 мм...",
+      "sources": [
+        {
+          "document_id": "doc-norm-001",
+          "document_title": "Правила РС",
+          "page": 42,
+          "section_id": "sec-4.2",
+          "excerpt": "Для ледового класса Arc4 толщина обшивки должна быть не менее 12 мм.",
+          "score": 0.92
+        }
+      ],
+      "processing_time_ms": 3450,
+      "timestamp": "2026-05-15T12:05:00Z"
+    }
+  ],
+  "has_more": false
+}
+```
+
+**Промежуточный статус (`pending` / `enriching` / `searching` / `generating` / `enriching_citations`):**
+```json
+{
+  "session_id": "s-001",
+  "messages": [
+    { "message_id": "msg-001", "role": "user", "content": "...", "timestamp": "..." },
+    {
+      "message_id": "msg-002",
+      "role": "assistant",
+      "status": "searching",
+      "content": null,
+      "timestamp": "2026-05-15T12:00:01Z"
+    }
+  ]
+}
+```
+
+**Статус `failed`:**
+```json
+{
+  "session_id": "s-001",
+  "messages": [
+    { "message_id": "msg-001", "role": "user", "content": "...", "timestamp": "..." },
+    {
+      "message_id": "msg-002",
+      "role": "assistant",
+      "status": "failed",
+      "content": null,
+      "timestamp": "2026-05-15T12:00:01Z"
+    }
+  ]
+}
+```
+
+Полное описание FSM сообщения — в [pipeline3-search.md](../pipelines/pipeline3-search.md#статусная-модель-fsm).
+
+---
+
 ### Обогащение цитирований
 
 Query Service выполняет постобработку ответов от RAG Search (`document_id`, `section_id`).

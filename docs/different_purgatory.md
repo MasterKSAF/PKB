@@ -41,12 +41,19 @@ Purgatory (полный проект) = purgatory.* (staging) + nsi.* (knowledge
 | **nsi.formulas** | ❌ Нет аналога | 🔴 Отсутствует |
 | **nsi.formula_parameters** | ❌ Нет аналога | 🔴 Отсутствует |
 | **nsi.cross_references** | `registry.document_references` | 🟢 Почти полное |
+| ❌ Нет аналога | `registry.document_references` (новая) | 🆕 Новая таблица, связка «документ → перекрёстная ссылка» |
 | **nsi.promotion_history** | `registry.document_history` | 🟡 Частичное |
 | Нет отдельной таблицы док-в | (нет — только purgatory_documents) | 🟢 Согласовано |
 | ❌ Нет аналога | Чат/сессии (Query Service) | 🆕 Выходит за рамки Purgatory |
 | ❌ Нет аналога | Auth / Users / Roles | 🆕 Выходит за рамки Purgatory |
 
 > 🔹 — в `docs/` изображения и таблицы хранятся как секции документа с типом `'image'` / `'table'`, а не отдельными таблицами.
+
+> **`registry_document_references`** — новая таблица, отсутствующая в Purgatory.
+> Хранит связь «документ → его перекрёстные ссылки». Поля: `id (PK)`,
+> `document_id (FK → registry_documents)`, `reference_id (FK → registry_cross_references)`.
+> Создана для оптимизации поиска ссылок конкретного документа без фильтрации
+> по `source_document_id` в `registry_cross_references`.
 
 ---
 
