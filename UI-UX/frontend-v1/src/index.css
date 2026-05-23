@@ -250,6 +250,38 @@ body[data-pkb-theme='light'] .app-action-button.Mui-disabled {
   border-radius: 8px !important;
 }
 
+.MuiTableContainer-root::-webkit-scrollbar,
+.preview-scroll-panel::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.MuiTableContainer-root::-webkit-scrollbar-track,
+.preview-scroll-panel::-webkit-scrollbar-track {
+  margin: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 999px;
+}
+
+.MuiTableContainer-root::-webkit-scrollbar-thumb,
+.preview-scroll-panel::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(184, 196, 216, 0.34);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+body[data-pkb-theme='light'] .MuiTableContainer-root::-webkit-scrollbar-track,
+body[data-pkb-theme='light'] .preview-scroll-panel::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.06);
+}
+
+body[data-pkb-theme='light'] .MuiTableContainer-root::-webkit-scrollbar-thumb,
+body[data-pkb-theme='light'] .preview-scroll-panel::-webkit-scrollbar-thumb {
+  background: rgba(71, 85, 105, 0.34);
+  background-clip: content-box;
+}
+
 body[data-pkb-theme='light'] .metric-state-chip {
   color: #334155 !important;
   background-color: #f8fafc !important;

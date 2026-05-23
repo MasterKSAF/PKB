@@ -45,10 +45,12 @@ export default function App() {
     isAuthenticated,
     logout,
     themeMode,
+    workMode,
     setActiveTab,
     setCurrentRole,
     setFocusMode,
     setThemeMode,
+    toggleWorkMode,
   } = useUIStore();
   const appTheme = useMemo(() => getAppTheme(themeMode), [themeMode]);
   const currentUser = adminUsers.find((user) => user.id === currentUserId) ?? adminUsers[0];
@@ -324,16 +326,22 @@ export default function App() {
 
                     <Chip
                       label={
-                        apiStatus === 'online'
+                        workMode === 'demo'
+                          ? 'Демо-режим'
+                          : apiStatus === 'online'
                           ? 'Система онлайн'
-                          : apiStatus === 'offline'
-                            ? 'Система офлайн'
-                            : 'Демо-режим'
+                          : 'Система офлайн'
                       }
-                      color={apiStatus === 'online' ? 'success' : apiStatus === 'offline' ? 'error' : 'warning'}
+                      color={workMode === 'demo' ? 'warning' : apiStatus === 'online' ? 'success' : 'error'}
                       variant="outlined"
+                      onClick={toggleWorkMode}
                       sx={{
                         bgcolor: 'rgba(255,255,255,0.03)',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        '&:hover': {
+                          filter: 'brightness(1.08)',
+                        },
                       }}
                     />
                   </Stack>

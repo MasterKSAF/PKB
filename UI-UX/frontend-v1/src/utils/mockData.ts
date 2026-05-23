@@ -8,7 +8,13 @@ export interface Citation {
   confidence?: number;
 }
 
-export type AnswerStatus = 'answered' | 'needs_clarification' | 'insufficient_data' | 'source_conflict';
+export type AnswerStatus =
+  | 'answered'
+  | 'needs_clarification'
+  | 'insufficient_data'
+  | 'source_conflict'
+  | 'not_found'
+  | 'backend_error';
 
 export interface ChatMessage {
   id: string;

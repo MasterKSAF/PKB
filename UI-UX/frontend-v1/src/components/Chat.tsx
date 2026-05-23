@@ -29,18 +29,22 @@ import {
   X,
   FileText,
   Search,
+  Download,
 } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
 import { chatApi } from '../utils/http';
 import { ChatMessage, Citation } from '../utils/mockData';
 import { Feedback } from './Feedback';
 import { useUIStore } from '../store/uiStore';
+import { downloadPreviewFile } from '../utils/downloadPreview';
 
 const statusLabel = {
   answered: 'ответ найден',
   needs_clarification: 'нужно уточнение',
   insufficient_data: 'недостаточно данных',
   source_conflict: 'конфликт источников',
+  not_found: 'ничего не найдено',
+  backend_error: 'backend недоступен',
 } as const;
 
 type ChatPreview = Citation & {
@@ -79,6 +83,24 @@ function buildAnsweredView(content: string, citations: Citation[] = []) {
   return {
     supported,
   };
+}
+
+function sourceButtonSx(isLight: boolean, fontSize = '0.74rem') {
+  return {
+    px: 0.9,
+    py: 0.28,
+    minWidth: 0,
+    height: 'auto',
+    fontSize,
+    color: isLight ? '#0f5f6f' : '#b8c4d8',
+    border: isLight ? '1px solid rgba(15, 95, 111, 0.24)' : '1px solid rgba(184,196,216,0.20)',
+    borderRadius: 999,
+    bgcolor: isLight ? 'rgba(15, 95, 111, 0.06)' : 'rgba(184,196,216,0.06)',
+    '&:hover': {
+      bgcolor: isLight ? 'rgba(15, 95, 111, 0.10)' : 'rgba(184,196,216,0.10)',
+      borderColor: isLight ? 'rgba(15, 95, 111, 0.36)' : 'rgba(184,196,216,0.28)',
+    },
+  } as const;
 }
 
 function countMatches(text: string, query: string) {
@@ -440,7 +462,7 @@ export const Chat: React.FC = () => {
                                       variant="text"
                                       startIcon={<ExternalLink size={14} />}
                                       className="source-link-button"
-                                      sx={{ px: 0.9, py: 0.28, minWidth: 0, height: 'auto', fontSize: '0.74rem', color: '#b8c4d8', border: '1px solid rgba(184,196,216,0.20)', borderRadius: 999, bgcolor: 'rgba(184,196,216,0.06)' }}
+                                      sx={sourceButtonSx(isLight)}
                                       onClick={() => openPreview(item.citation, 'source')}
                                     >
                                       Страница
@@ -450,7 +472,7 @@ export const Chat: React.FC = () => {
                                       variant="text"
                                       startIcon={<FileText size={14} />}
                                       className="source-link-button"
-                                      sx={{ px: 0.9, py: 0.28, minWidth: 0, height: 'auto', fontSize: '0.74rem', color: '#b8c4d8', border: '1px solid rgba(184,196,216,0.20)', borderRadius: 999, bgcolor: 'rgba(184,196,216,0.06)' }}
+                                      sx={sourceButtonSx(isLight)}
                                       onClick={() => openPreview(item.citation, 'document')}
                                     >
                                       Документ
@@ -460,6 +482,10 @@ export const Chat: React.FC = () => {
                               </Box>
                             ))}
                           </Box>
+                        ) : msg.status === 'not_found' || msg.status === 'backend_error' ? (
+                          <Alert severity={msg.status === 'backend_error' ? 'error' : 'info'} variant="outlined" sx={{ mt: 1.4 }}>
+                            {highlightText(msg.content, normalizedChatSearch, isLight)}
+                          </Alert>
                         ) : (
                           <Typography
                             variant="body1"
@@ -522,7 +548,7 @@ export const Chat: React.FC = () => {
                                         variant="text"
                                         startIcon={<ExternalLink size={14} />}
                                         className="source-link-button"
-                                        sx={{ px: 0.9, py: 0.28, minWidth: 0, height: 'auto', fontSize: '0.76rem', color: '#b8c4d8', border: '1px solid rgba(184,196,216,0.20)', borderRadius: 999, bgcolor: 'rgba(184,196,216,0.06)' }}
+                                        sx={sourceButtonSx(isLight, '0.76rem')}
                                         onClick={() => openPreview(cite, 'source')}
                                       >
                                         Страница
@@ -532,7 +558,7 @@ export const Chat: React.FC = () => {
                                         variant="text"
                                         startIcon={<FileText size={14} />}
                                         className="source-link-button"
-                                        sx={{ px: 0.9, py: 0.28, minWidth: 0, height: 'auto', fontSize: '0.76rem', color: '#b8c4d8', border: '1px solid rgba(184,196,216,0.20)', borderRadius: 999, bgcolor: 'rgba(184,196,216,0.06)' }}
+                                        sx={sourceButtonSx(isLight, '0.76rem')}
                                         onClick={() => openPreview(cite, 'document')}
                                       >
                                         Документ
@@ -787,8 +813,8 @@ export const Chat: React.FC = () => {
             minWidth: 320,
             maxWidth: 720,
             position: 'relative',
-            borderLeft: '1px solid rgba(255,255,255,0.10)',
-            bgcolor: '#101116',
+            borderLeft: isLight ? '1px solid rgba(15,23,42,0.14)' : '1px solid rgba(255,255,255,0.10)',
+            bgcolor: isLight ? '#f5f7fa' : '#101116',
             display: 'flex',
             flexDirection: 'column',
           }}
@@ -806,13 +832,13 @@ export const Chat: React.FC = () => {
             }}
           />
 
-          <Box sx={{ p: 1.5, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+          <Box sx={{ p: 1.5, borderBottom: isLight ? '1px solid rgba(15,23,42,0.12)' : '1px solid rgba(255,255,255,0.08)' }}>
             <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
               {openedCitations.map((citation) => (
                 <Chip
                   key={citation.previewId}
                   size="small"
-                  label={`${citation.previewKind === 'source' ? 'страница' : 'документ'} · стр. ${citation.page}`}
+                  label={citation.previewKind === 'source' ? `Страница ${citation.page}` : 'Документ'}
                   color={citation.previewId === activeCitation?.previewId ? 'primary' : 'default'}
                   variant={citation.previewId === activeCitation?.previewId ? 'filled' : 'outlined'}
                   onClick={() => setActiveCitationId(citation.previewId)}
@@ -824,38 +850,45 @@ export const Chat: React.FC = () => {
           </Box>
 
           {activeCitation && (
-            <Box sx={{ overflow: activeCitation.previewKind === 'document' ? 'auto' : 'hidden', flexGrow: 1 }}>
+            <Box className="preview-scroll-panel" sx={{ overflow: activeCitation.previewKind === 'document' ? 'auto' : 'hidden', flexGrow: 1 }}>
               <Box
                 sx={{
                   position: 'sticky',
                   top: 0,
                   zIndex: 2,
-                  p: 2,
-                  pb: 1.5,
-                  bgcolor: '#101116',
-                  borderBottom: '1px solid rgba(255,255,255,0.08)',
+                  px: 1.35,
+                  py: 1,
+                  bgcolor: isLight ? '#f5f7fa' : '#101116',
+                  borderBottom: isLight ? '1px solid rgba(15,23,42,0.12)' : '1px solid rgba(255,255,255,0.08)',
                 }}
               >
-                <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                  <FileText size={18} />
-                  <Typography variant="subtitle2">
-                    {activeCitation.previewKind === 'source' ? 'Страница документа' : 'Документ'}
-                  </Typography>
-                </Stack>
-
-                <Box sx={{ mt: 1.5 }}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                <Button
+                  variant="text"
+                  size="small"
+                  className="source-link-button"
+                  startIcon={<Download size={14} />}
+                  title={activeCitation.document}
+                  onClick={() =>
+                    downloadPreviewFile(
+                      activeCitation.document,
+                      `${activeCitation.document}\n${activeCitation.section}\nСтраница ${activeCitation.page}\n\n${activeCitation.text}`,
+                    )
+                  }
+                  sx={{
+                    ...sourceButtonSx(isLight, '0.82rem'),
+                    justifyContent: 'flex-start',
+                    textAlign: 'left',
+                    px: 0.9,
+                    maxWidth: '100%',
+                  }}
+                >
+                  <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 280 }}>
                     {activeCitation.document}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {activeCitation.previewKind === 'document'
-                      ? `с первой страницы · ${activeCitation.version}`
-                      : `${activeCitation.section} · стр. ${activeCitation.page} · ${activeCitation.version}`}
-                  </Typography>
-                </Box>
+                  </Box>
+                </Button>
               </Box>
 
-              <Box sx={{ p: 2 }}>
+              <Box sx={{ p: 1.5 }}>
               <Stack spacing={1.5}>
                 <Paper
                   variant="outlined"
@@ -869,9 +902,6 @@ export const Chat: React.FC = () => {
                     transformOrigin: 'top left',
                   }}
                 >
-                  <Typography variant="caption" sx={{ color: '#666', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                    {activeCitation.previewKind === 'source' ? 'Страница / один лист' : 'Полный документ'}
-                  </Typography>
                   <Typography variant="caption" sx={{ color: '#777' }}>
                     Страница {activeCitation.page}
                   </Typography>

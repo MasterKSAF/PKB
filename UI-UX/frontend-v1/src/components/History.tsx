@@ -4,6 +4,10 @@ import {
   Button,
   Chip,
   Container,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControl,
   IconButton,
   InputLabel,
@@ -25,6 +29,7 @@ import { useQuery } from '@tanstack/react-query';
 import { historyApi } from '../utils/http';
 import type { AnswerStatus, Citation, QueryHistoryItem } from '../utils/mockData';
 import { useUIStore } from '../store/uiStore';
+import { downloadPreviewFile } from '../utils/downloadPreview';
 
 type HistoryPreview = Citation & {
   previewKind: 'source' | 'document';
@@ -35,6 +40,8 @@ const statusLabel: Record<AnswerStatus, string> = {
   needs_clarification: 'нужно уточнение',
   insufficient_data: 'недостаточно данных',
   source_conflict: 'конфликт источников',
+  not_found: 'ничего не найдено',
+  backend_error: 'backend недоступен',
 };
 
 const statusColor: Record<AnswerStatus, 'success' | 'warning' | 'error' | 'info'> = {
@@ -42,6 +49,8 @@ const statusColor: Record<AnswerStatus, 'success' | 'warning' | 'error' | 'info'
   needs_clarification: 'warning',
   insufficient_data: 'error',
   source_conflict: 'info',
+  not_found: 'info',
+  backend_error: 'error',
 };
 
 const tableShellSx = {
@@ -112,6 +121,7 @@ function citationButtonSx(themeMode: 'dark' | 'light') {
 
 export const History: React.FC = () => {
   const { setActiveTab, setChatMessages, themeMode } = useUIStore();
+  const isLight = themeMode === 'light';
   const [queryFilter, setQueryFilter] = useState('');
   const [userFilter, setUserFilter] = useState('all');
   const [projectFilter, setProjectFilter] = useState('all');
@@ -119,6 +129,7 @@ export const History: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<'all' | AnswerStatus>('all');
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
   const [activePreview, setActivePreview] = useState<HistoryPreview | null>(null);
+  const [pendingContinueItem, setPendingContinueItem] = useState<QueryHistoryItem | null>(null);
 
   const { data = [] } = useQuery<QueryHistoryItem[]>({
     queryKey: ['history'],
@@ -174,9 +185,16 @@ export const History: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  const handleContinueChat = (item: QueryHistoryItem) => {
-    setChatMessages(item.messages);
+  const confirmContinueChat = () => {
+    if (!pendingContinueItem) return;
+
+    setChatMessages(pendingContinueItem.messages);
     setActiveTab('chat');
+    setPendingContinueItem(null);
+  };
+
+  const handleContinueChat = (item: QueryHistoryItem) => {
+    setPendingContinueItem(item);
   };
 
   const handleOpenPreview = (citation: Citation, previewKind: HistoryPreview['previewKind']) => {
@@ -321,7 +339,11 @@ export const History: React.FC = () => {
                           }}
                           sx={{
                             cursor: 'pointer',
-                            bgcolor: expanded ? 'rgba(152, 217, 216, 0.08) !important' : undefined,
+                            bgcolor: expanded
+                              ? isLight
+                                ? 'rgba(14, 116, 144, 0.08) !important'
+                                : 'rgba(152, 217, 216, 0.08) !important'
+                              : undefined,
                             outline: expanded ? '1px solid rgba(152, 217, 216, 0.24)' : 'none',
                           }}
                         >
@@ -349,17 +371,25 @@ export const History: React.FC = () => {
 
                         {expanded && (
                           <TableRow>
-                            <TableCell colSpan={7} sx={{ p: 0, bgcolor: 'rgba(5, 10, 16, 0.72)' }}>
+                            <TableCell
+                              colSpan={7}
+                              sx={{
+                                p: 0,
+                                bgcolor: isLight ? 'rgba(241, 245, 249, 0.78)' : 'rgba(5, 10, 16, 0.72)',
+                              }}
+                            >
                               <Box sx={{ p: 2 }}>
                                 <Paper
                                   variant="outlined"
                                   sx={{
                                     p: 2,
                                     borderRadius: 2.6,
-                                    bgcolor: 'rgba(22, 23, 27, 0.78)',
-                                    borderColor: 'rgba(198, 216, 240, 0.34)',
+                                    bgcolor: isLight ? '#ffffff' : 'rgba(22, 23, 27, 0.78)',
+                                    borderColor: isLight ? 'rgba(15, 23, 42, 0.14)' : 'rgba(198, 216, 240, 0.34)',
                                     borderWidth: 1.5,
-                                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045)',
+                                    boxShadow: isLight
+                                      ? '0 8px 24px rgba(15, 23, 42, 0.06)'
+                                      : 'inset 0 1px 0 rgba(255,255,255,0.045)',
                                   }}
                                 >
                                   <Stack spacing={1.5}>
@@ -375,7 +405,10 @@ export const History: React.FC = () => {
                                         variant="outlined"
                                         className="app-action-button"
                                         startIcon={<MessageSquarePlus size={15} />}
-                                        onClick={() => handleContinueChat(item)}
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          handleContinueChat(item);
+                                        }}
                                         sx={{ whiteSpace: 'nowrap', alignSelf: { xs: 'flex-start', md: 'center' } }}
                                       >
                                         Продолжить чат
@@ -393,8 +426,14 @@ export const History: React.FC = () => {
                                             sx={{
                                               p: 1.35,
                                               borderRadius: 2.2,
-                                              bgcolor: isAssistant ? 'rgba(255,255,255,0.045)' : 'rgba(255,255,255,0.07)',
-                                              borderColor: 'rgba(198, 216, 240, 0.26)',
+                                              bgcolor: isLight
+                                                ? isAssistant
+                                                  ? '#ffffff'
+                                                  : '#f3f7f8'
+                                                : isAssistant
+                                                  ? 'rgba(255,255,255,0.045)'
+                                                  : 'rgba(255,255,255,0.07)',
+                                              borderColor: isLight ? 'rgba(15, 23, 42, 0.14)' : 'rgba(198, 216, 240, 0.26)',
                                               borderWidth: 1.5,
                                             }}
                                           >
@@ -481,32 +520,44 @@ export const History: React.FC = () => {
           sx={{
             width: 420,
             minWidth: 340,
-            borderLeft: '1.5px solid rgba(198, 216, 240, 0.22)',
-            bgcolor: '#101116',
+            borderLeft: isLight ? '1px solid rgba(15,23,42,0.14)' : '1.5px solid rgba(198, 216, 240, 0.22)',
+            bgcolor: isLight ? '#f5f7fa' : '#101116',
             display: 'flex',
             flexDirection: 'column',
           }}
         >
-          <Box sx={{ p: 1.5, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+          <Box sx={{ px: 1.35, py: 1, borderBottom: isLight ? '1px solid rgba(15,23,42,0.12)' : '1px solid rgba(255,255,255,0.08)' }}>
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-              <FileText size={18} />
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography variant="subtitle2">
-                  {activePreview.previewKind === 'source' ? 'Страница документа' : 'Документ'}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {activePreview.previewKind === 'document'
-                    ? `с первой страницы · ${activePreview.version}`
-                    : `${activePreview.section} · стр. ${activePreview.page}`}
-                </Typography>
-              </Box>
+              <Button
+                variant="text"
+                size="small"
+                className="source-link-button"
+                startIcon={<Download size={14} />}
+                title={activePreview.document}
+                onClick={() =>
+                  downloadPreviewFile(
+                    activePreview.document,
+                    `${activePreview.document}\n${activePreview.section}\nСтраница ${activePreview.page}\n\n${activePreview.text}`,
+                  )
+                }
+                sx={{
+                  ...citationButtonSx(themeMode),
+                  maxWidth: '100%',
+                  flex: 1,
+                  justifyContent: 'flex-start',
+                }}
+              >
+                <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 280 }}>
+                  {activePreview.document}
+                </Box>
+              </Button>
               <IconButton size="small" onClick={() => setActivePreview(null)} sx={{ color: 'text.secondary' }}>
                 <X size={16} />
               </IconButton>
             </Stack>
           </Box>
 
-          <Box sx={{ overflow: activePreview.previewKind === 'document' ? 'auto' : 'hidden', flexGrow: 1, p: 2 }}>
+          <Box className="preview-scroll-panel" sx={{ overflow: activePreview.previewKind === 'document' ? 'auto' : 'hidden', flexGrow: 1, p: 1.5 }}>
             <Paper
               variant="outlined"
               sx={{
@@ -518,14 +569,16 @@ export const History: React.FC = () => {
                 borderColor: 'rgba(255,255,255,0.12)',
               }}
             >
-              <Typography variant="caption" sx={{ color: '#666', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                {activePreview.previewKind === 'source' ? 'Страница / один лист' : 'Полный документ'}
+              <Typography variant="caption" sx={{ color: '#777' }}>
+                Страница {activePreview.page}
               </Typography>
               <Typography variant="h6" sx={{ mt: 1, mb: 1, color: '#1f1f1f', fontFamily: 'Georgia, serif' }}>
-                {activePreview.document}
+                {activePreview.previewKind === 'document' ? 'Титульная страница документа' : activePreview.section}
               </Typography>
               <Typography variant="body2" sx={{ color: '#555', mb: 2 }}>
-                {activePreview.section} · стр. {activePreview.page} · {activePreview.version}
+                {activePreview.previewKind === 'source'
+                  ? 'Открыта только страница, на которую ссылается запись истории.'
+                  : 'Открыт весь документ: страницы идут ниже друг за другом, область просмотра прокручивается вниз.'}
               </Typography>
               <Box
                 sx={{
@@ -556,6 +609,35 @@ export const History: React.FC = () => {
           </Box>
         </Box>
       )}
+
+      <Dialog
+        open={Boolean(pendingContinueItem)}
+        onClose={() => setPendingContinueItem(null)}
+        slotProps={{
+          paper: {
+            sx: {
+              borderRadius: 3,
+              bgcolor: isLight ? '#ffffff' : 'rgba(22, 23, 27, 0.96)',
+              border: isLight ? '1px solid rgba(15,23,42,0.14)' : '1.5px solid rgba(198, 216, 240, 0.34)',
+            },
+          },
+        }}
+      >
+        <DialogTitle>Продолжить выбранный чат?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            Текущий диалог в окне чата будет заменен историей: {pendingContinueItem?.session}.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.4 }}>
+          <Button variant="outlined" onClick={() => setPendingContinueItem(null)}>
+            Нет
+          </Button>
+          <Button className="app-action-button" variant="contained" onClick={confirmContinueChat} disableElevation>
+            Да
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

@@ -8,6 +8,7 @@ import {
   MOCK_METRICS,
   type ChatMessage,
 } from './mockData';
+import { useUIStore } from '../store/uiStore';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
@@ -30,9 +31,50 @@ function needsClarification(query: string) {
   return hasBroadIntent && !hasContext;
 }
 
+function shouldShowNoKnowledgeResult(query: string) {
+  const normalized = query.toLowerCase();
+  const noKnowledgeMarkers = [
+    'ничего не найдено',
+    'нет данных',
+    'не найден',
+    'несуществ',
+    'погода',
+    'температура на улице',
+    'курс валют',
+  ];
+
+  return noKnowledgeMarkers.some((marker) => normalized.includes(marker));
+}
+
+function isDemoMode() {
+  return useUIStore.getState().workMode === 'demo';
+}
+
+function backendUnavailableMessage(): ChatMessage {
+  return {
+    id: Math.random().toString(36).slice(2),
+    role: 'assistant',
+    content: 'Backend недоступен. Повторите запрос позже или переключитесь в demo-режим для просмотра демонстрационных сценариев.',
+    status: 'backend_error',
+    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  };
+}
+
+function notFoundMessage(query: string): ChatMessage {
+  return {
+    id: Math.random().toString(36).slice(2),
+    role: 'assistant',
+    content: `В базе знаний не найдено подтвержденных фрагментов по запросу «${query}». Попробуйте уточнить формулировку, проект, раздел или документ.`,
+    status: 'not_found',
+    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  };
+}
+
 export const chatApi = {
   send: async (query: string): Promise<ChatMessage> => {
-    if (needsClarification(query)) {
+    const demoMode = isDemoMode();
+
+    if (demoMode && needsClarification(query)) {
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       return {
@@ -49,9 +91,20 @@ export const chatApi = {
 
     try {
       const response = await apiClient.post('/chat', { q: query });
+      useUIStore.getState().setApiStatus('online');
       return response.data;
     } catch {
+      useUIStore.getState().setApiStatus(demoMode ? 'demo' : 'offline');
+
+      if (!demoMode) {
+        return backendUnavailableMessage();
+      }
+
       await new Promise((resolve) => setTimeout(resolve, 1200));
+
+      if (shouldShowNoKnowledgeResult(query)) {
+        return notFoundMessage(query);
+      }
 
       return {
         id: Math.random().toString(36).slice(2),
@@ -70,10 +123,23 @@ export const chatApi = {
 
 export const searchApi = {
   query: async (q: string) => {
+    const demoMode = isDemoMode();
+
     try {
       const response = await apiClient.get('/search', { params: { q } });
+      useUIStore.getState().setApiStatus('online');
       return response.data;
     } catch {
+      useUIStore.getState().setApiStatus(demoMode ? 'demo' : 'offline');
+
+      if (!demoMode) {
+        throw new Error('Backend недоступен');
+      }
+
+      if (shouldShowNoKnowledgeResult(q)) {
+        return [];
+      }
+
       return MOCK_DOCUMENTS.map((doc) => ({
         ...doc,
         relevance: 0.92,

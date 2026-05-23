@@ -21,6 +21,8 @@ import {
 import { AlertCircle, Download, ExternalLink, FileText, Play, Upload, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { MOCK_CHECKS, MOCK_DOCUMENTS, type ParameterCheck } from '../utils/mockData';
+import { useUIStore } from '../store/uiStore';
+import { downloadPreviewFile } from '../utils/downloadPreview';
 
 type CheckPreview = {
   previewId: string;
@@ -62,23 +64,25 @@ const TABLE_SX = {
   },
 } as const;
 
-const linkButtonSx = {
+function linkButtonSx(isLight: boolean) {
+  return {
   px: 0.9,
   py: 0.28,
   minWidth: 0,
   height: 'auto',
   fontSize: '0.74rem',
-  color: '#b8c4d8',
-  border: '1px solid rgba(184,196,216,0.20)',
+  color: isLight ? '#0f5f6f' : '#b8c4d8',
+  border: isLight ? '1px solid rgba(15, 95, 111, 0.24)' : '1px solid rgba(184,196,216,0.20)',
   borderRadius: 999,
-  bgcolor: 'rgba(184,196,216,0.06)',
+  bgcolor: isLight ? 'rgba(15, 95, 111, 0.06)' : 'rgba(184,196,216,0.06)',
   textTransform: 'none',
   justifyContent: 'flex-start',
   '&:hover': {
-    bgcolor: 'rgba(184,196,216,0.10)',
-    borderColor: 'rgba(184,196,216,0.28)',
+    bgcolor: isLight ? 'rgba(15, 95, 111, 0.10)' : 'rgba(184,196,216,0.10)',
+    borderColor: isLight ? 'rgba(15, 95, 111, 0.36)' : 'rgba(184,196,216,0.28)',
   },
 } as const;
+}
 
 function buildPagePreview(check: ParameterCheck, scope: 'project' | 'nsi'): CheckPreview {
   const isProject = scope === 'project';
@@ -177,6 +181,8 @@ function exportChecksToExcel(checks: ParameterCheck[]) {
 }
 
 export const ChecksPanel: React.FC = () => {
+  const themeMode = useUIStore((state) => state.themeMode);
+  const isLight = themeMode === 'light';
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [openedPreviews, setOpenedPreviews] = useState<CheckPreview[]>([]);
   const [activePreviewId, setActivePreviewId] = useState<string | null>(null);
@@ -492,7 +498,7 @@ export const ChecksPanel: React.FC = () => {
                               className="source-link-button"
                               startIcon={<ExternalLink size={14} />}
                               onClick={() => openPreview(buildPagePreview(check, 'project'))}
-                              sx={linkButtonSx}
+                              sx={linkButtonSx(isLight)}
                             >
                               Страница
                             </Button>
@@ -502,7 +508,7 @@ export const ChecksPanel: React.FC = () => {
                               className="source-link-button"
                               startIcon={<FileText size={14} />}
                               onClick={() => openPreview(buildDocumentPreview(check, 'project'))}
-                              sx={linkButtonSx}
+                              sx={linkButtonSx(isLight)}
                             >
                               Документ
                             </Button>
@@ -559,7 +565,7 @@ export const ChecksPanel: React.FC = () => {
                               className="source-link-button"
                               startIcon={<ExternalLink size={14} />}
                               onClick={() => openPreview(buildPagePreview(check, 'nsi'))}
-                              sx={linkButtonSx}
+                              sx={linkButtonSx(isLight)}
                             >
                               Страница
                             </Button>
@@ -569,7 +575,7 @@ export const ChecksPanel: React.FC = () => {
                               className="source-link-button"
                               startIcon={<FileText size={14} />}
                               onClick={() => openPreview(buildDocumentPreview(check, 'nsi'))}
-                              sx={linkButtonSx}
+                              sx={linkButtonSx(isLight)}
                             >
                               Документ
                             </Button>
@@ -652,8 +658,8 @@ export const ChecksPanel: React.FC = () => {
             minWidth: 320,
             maxWidth: 720,
             position: 'relative',
-            borderLeft: '1px solid rgba(255,255,255,0.10)',
-            bgcolor: '#101116',
+            borderLeft: isLight ? '1px solid rgba(15,23,42,0.14)' : '1px solid rgba(255,255,255,0.10)',
+            bgcolor: isLight ? '#f5f7fa' : '#101116',
             display: 'flex',
             flexDirection: 'column',
           }}
@@ -671,14 +677,14 @@ export const ChecksPanel: React.FC = () => {
             }}
           />
 
-          <Box sx={{ p: 1.5, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+          <Box sx={{ p: 1.5, borderBottom: isLight ? '1px solid rgba(15,23,42,0.12)' : '1px solid rgba(255,255,255,0.08)' }}>
             <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
               {openedPreviews.map((preview) => (
                 <Chip
                   key={preview.previewId}
                   size="small"
                   label={`${preview.scope === 'project' ? 'проект' : 'НСИ'} · ${
-                    preview.previewKind === 'page' ? `стр. ${preview.page}` : 'документ'
+                    preview.previewKind === 'page' ? `Страница ${preview.page}` : 'Документ'
                   }`}
                   color={preview.previewId === activePreview?.previewId ? 'primary' : 'default'}
                   variant={preview.previewId === activePreview?.previewId ? 'filled' : 'outlined'}
@@ -691,44 +697,42 @@ export const ChecksPanel: React.FC = () => {
           </Box>
 
           {activePreview && (
-            <Box sx={{ overflow: activePreview.previewKind === 'document' ? 'auto' : 'hidden', flexGrow: 1 }}>
+            <Box className="preview-scroll-panel" sx={{ overflow: activePreview.previewKind === 'document' ? 'auto' : 'hidden', flexGrow: 1 }}>
               <Box
                 sx={{
                   position: 'sticky',
                   top: 0,
                   zIndex: 2,
-                  p: 2,
-                  pb: 1.5,
-                  bgcolor: '#101116',
-                  borderBottom: '1px solid rgba(255,255,255,0.08)',
+                  px: 1.35,
+                  py: 1,
+                  bgcolor: isLight ? '#f5f7fa' : '#101116',
+                  borderBottom: isLight ? '1px solid rgba(15,23,42,0.12)' : '1px solid rgba(255,255,255,0.08)',
                 }}
               >
-                <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                  <FileText size={18} />
-                  <Typography variant="subtitle2">
-                    {activePreview.previewKind === 'page'
-                      ? activePreview.scope === 'project'
-                        ? 'Страница проектного документа'
-                        : 'Страница документа НСИ'
-                      : activePreview.scope === 'project'
-                        ? 'Проектный документ'
-                        : 'Документ НСИ'}
-                  </Typography>
-                </Stack>
-
-                <Box sx={{ mt: 1.5 }}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                <Button
+                  variant="text"
+                  size="small"
+                  className="source-link-button"
+                  startIcon={<Download size={14} />}
+                  title={activePreview.document}
+                  onClick={() =>
+                    downloadPreviewFile(
+                      activePreview.document,
+                      `${activePreview.document}\n${activePreview.section}\nСтраница ${activePreview.page}\n\n${activePreview.text}`,
+                    )
+                  }
+                  sx={{
+                    ...linkButtonSx(isLight),
+                    maxWidth: '100%',
+                  }}
+                >
+                  <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 280 }}>
                     {activePreview.document}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {activePreview.previewKind === 'document'
-                      ? `с первой страницы · ${activePreview.version}`
-                      : `${activePreview.section} · стр. ${activePreview.page} · ${activePreview.version}`}
-                  </Typography>
-                </Box>
+                  </Box>
+                </Button>
               </Box>
 
-              <Box sx={{ p: 2 }}>
+              <Box sx={{ p: 1.5 }}>
                 <Stack spacing={1.5}>
                   <Paper
                     variant="outlined"
@@ -742,15 +746,6 @@ export const ChecksPanel: React.FC = () => {
                       transformOrigin: 'top left',
                     }}
                   >
-                    <Typography variant="caption" sx={{ color: '#666', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                      {activePreview.previewKind === 'page'
-                        ? activePreview.scope === 'project'
-                          ? 'Проект / одна страница'
-                          : 'НСИ / одна страница'
-                        : activePreview.scope === 'project'
-                          ? 'Проект / полный документ'
-                          : 'НСИ / полный документ'}
-                    </Typography>
                     <Typography variant="caption" sx={{ color: '#777' }}>
                       Страница {activePreview.page}
                     </Typography>

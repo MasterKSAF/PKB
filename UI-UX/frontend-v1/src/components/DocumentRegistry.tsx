@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import {
+  Alert,
   Box,
   Button,
   Chip,
@@ -35,6 +36,8 @@ const PANEL_SX = {
 } as const;
 
 export const DocumentRegistry: React.FC = () => {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [selectedFileName, setSelectedFileName] = useState('');
   const completedOcrCount = MOCK_DOCUMENTS.filter((doc) => doc.ocrStatus === 'Завершено').length;
   const indexedCount = MOCK_DOCUMENTS.filter((doc) => doc.indexStatus === 'Индексировано').length;
   const problemCount = MOCK_DOCUMENTS.filter((doc) => doc.ocrStatus !== 'Завершено' || doc.indexStatus !== 'Индексировано').length;
@@ -85,6 +88,18 @@ export const DocumentRegistry: React.FC = () => {
     },
   ];
 
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setSelectedFileName(file.name);
+    event.target.value = '';
+  };
+
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Stack spacing={3}>
@@ -102,17 +117,17 @@ export const DocumentRegistry: React.FC = () => {
             sx={{ justifyContent: 'flex-end', alignItems: { xs: 'flex-start', md: 'center' } }}
           >
             <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-            <Button className="app-action-button" variant="contained" startIcon={<Upload size={16} />}>
+            <Button className="app-action-button" variant="contained" startIcon={<Upload size={16} />} onClick={handleUploadClick}>
               Загрузить документ
             </Button>
-            <Button className="app-action-button" variant="outlined" startIcon={<RefreshCw size={16} />}>
-              Обновить индекс
-            </Button>
-            <Button className="app-action-button" variant="outlined" startIcon={<RefreshCw size={16} />}>
-              Переобработать OCR
-            </Button>
+            <input ref={fileInputRef} type="file" hidden onChange={handleFileSelect} />
           </Stack>
           </Stack>
+          {selectedFileName && (
+            <Alert severity="info" variant="outlined" sx={{ mt: 1.4, borderRadius: 2 }}>
+              Выбран файл: {selectedFileName}. После подключения backend он будет отправлен в хранилище, OCR и индекс.
+            </Alert>
+          )}
         </Paper>
 
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>

@@ -27,6 +27,9 @@ interface UIState {
   setCurrentRole: (role: UserRole) => void;
   themeMode: 'dark' | 'light';
   setThemeMode: (mode: 'dark' | 'light') => void;
+  workMode: 'demo' | 'prod';
+  setWorkMode: (mode: 'demo' | 'prod') => void;
+  toggleWorkMode: () => void;
   focusMode: boolean;
   setFocusMode: (enabled: boolean) => void;
   toggleFocusMode: () => void;
@@ -62,6 +65,13 @@ export const useUIStore = create<UIState>((set) => ({
   setCurrentRole: (currentRole) => set({ currentRole }),
   themeMode: 'dark',
   setThemeMode: (themeMode) => set({ themeMode }),
+  workMode: 'demo',
+  setWorkMode: (workMode) => set({ workMode, apiStatus: workMode === 'demo' ? 'demo' : 'offline' }),
+  toggleWorkMode: () =>
+    set((state) => {
+      const workMode = state.workMode === 'demo' ? 'prod' : 'demo';
+      return { workMode, apiStatus: workMode === 'demo' ? 'demo' : 'offline' };
+    }),
   focusMode: false,
   setFocusMode: (focusMode) => set({ focusMode }),
   toggleFocusMode: () => set((state) => ({ focusMode: !state.focusMode })),

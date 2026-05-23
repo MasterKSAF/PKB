@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Alert,
   Box,
   Button,
   Chip,
@@ -14,9 +15,11 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { ExternalLink, FileText, Filter, Hash, Search as SearchIcon, X } from 'lucide-react';
+import { ExternalLink, FileText, Filter, Hash, Search as SearchIcon, X, Download } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { searchApi } from '../utils/http';
+import { useUIStore } from '../store/uiStore';
+import { downloadPreviewFile } from '../utils/downloadPreview';
 
 type DocumentPreview = {
   id: string;
@@ -29,24 +32,28 @@ type DocumentPreview = {
   fragment: string;
 };
 
-const previewLinkButtonSx = {
+function previewLinkButtonSx(isLight: boolean) {
+  return {
   px: 0.9,
   py: 0.28,
   minWidth: 0,
   height: 'auto',
   fontSize: '0.74rem',
-  color: '#b8c4d8',
-  border: '1px solid rgba(184,196,216,0.20)',
+  color: isLight ? '#0f5f6f' : '#b8c4d8',
+  border: isLight ? '1px solid rgba(15, 95, 111, 0.24)' : '1px solid rgba(184,196,216,0.20)',
   borderRadius: 999,
-  bgcolor: 'rgba(184,196,216,0.06)',
+  bgcolor: isLight ? 'rgba(15, 95, 111, 0.06)' : 'rgba(184,196,216,0.06)',
   textTransform: 'none',
   '&:hover': {
-    bgcolor: 'rgba(184,196,216,0.10)',
-    borderColor: 'rgba(184,196,216,0.28)',
+    bgcolor: isLight ? 'rgba(15, 95, 111, 0.10)' : 'rgba(184,196,216,0.10)',
+    borderColor: isLight ? 'rgba(15, 95, 111, 0.36)' : 'rgba(184,196,216,0.28)',
   },
 } as const;
+}
 
 export const Search: React.FC = () => {
+  const themeMode = useUIStore((state) => state.themeMode);
+  const isLight = themeMode === 'light';
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState({ type: 'all', version: 'all' });
   const [openedDocuments, setOpenedDocuments] = useState<DocumentPreview[]>([]);
@@ -61,6 +68,11 @@ export const Search: React.FC = () => {
     queryFn: () => searchApi.query(query),
     enabled: false,
   });
+  const hasNoResults =
+    searchQuery.isFetched &&
+    !searchQuery.isError &&
+    Array.isArray(searchQuery.data) &&
+    searchQuery.data.length === 0;
 
   useEffect(() => {
     if (!isResizing) return;
@@ -185,7 +197,11 @@ export const Search: React.FC = () => {
 
           <Box sx={{ mb: 2, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
             <Typography variant="body2" color="text.secondary">
-              {searchQuery.data ? `Найдено результатов: ${searchQuery.data.length}` : 'Готов к поиску'}
+              {searchQuery.isError
+                ? 'Поиск недоступен'
+                : searchQuery.data
+                  ? `Найдено результатов: ${searchQuery.data.length}`
+                  : 'Готов к поиску'}
             </Typography>
           </Box>
 
@@ -194,6 +210,18 @@ export const Search: React.FC = () => {
               <Typography sx={{ textAlign: 'center', py: 3 }} color="text.secondary">
                 Выполнение поиска...
               </Typography>
+            )}
+
+            {searchQuery.isError && (
+              <Alert severity="error" variant="outlined" sx={{ borderRadius: 2.5 }}>
+                Backend недоступен. Подключите серверную часть или переключитесь в demo-режим для просмотра демонстрационных данных.
+              </Alert>
+            )}
+
+            {hasNoResults && (
+              <Alert severity="info" variant="outlined" sx={{ borderRadius: 2.5 }}>
+                По запросу ничего не найдено. Случайный документ не подставляется: уточните формулировку, проект, раздел или документ.
+              </Alert>
             )}
 
             {searchQuery.data && searchQuery.data.map((item: any, idx: number) => (
@@ -242,7 +270,7 @@ export const Search: React.FC = () => {
                       className="source-link-button"
                       startIcon={<FileText size={14} />}
                       onClick={() => openDocument(item, idx)}
-                      sx={previewLinkButtonSx}
+                      sx={previewLinkButtonSx(isLight)}
                     >
                       Открыть документ
                     </Button>
@@ -261,8 +289,8 @@ export const Search: React.FC = () => {
             minWidth: 320,
             maxWidth: 720,
             position: 'relative',
-            borderLeft: '1px solid rgba(255,255,255,0.10)',
-            bgcolor: '#101116',
+            borderLeft: isLight ? '1px solid rgba(15,23,42,0.14)' : '1px solid rgba(255,255,255,0.10)',
+            bgcolor: isLight ? '#f5f7fa' : '#101116',
             display: 'flex',
             flexDirection: 'column',
           }}
@@ -280,13 +308,13 @@ export const Search: React.FC = () => {
             }}
           />
 
-          <Box sx={{ p: 1.5, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+          <Box sx={{ p: 1.5, borderBottom: isLight ? '1px solid rgba(15,23,42,0.12)' : '1px solid rgba(255,255,255,0.08)' }}>
             <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
               {openedDocuments.map((doc) => (
                 <Chip
                   key={doc.id}
                   size="small"
-                  label={`стр. ${doc.page}`}
+                  label={`Страница ${doc.page}`}
                   color={doc.id === activeDocument?.id ? 'primary' : 'default'}
                   variant={doc.id === activeDocument?.id ? 'filled' : 'outlined'}
                   onClick={() => setActiveDocumentId(doc.id)}
@@ -298,34 +326,44 @@ export const Search: React.FC = () => {
           </Box>
 
           {activeDocument && (
-            <Box sx={{ overflow: 'auto', flexGrow: 1 }}>
+            <Box className="preview-scroll-panel" sx={{ overflow: 'auto', flexGrow: 1 }}>
               <Box
                 sx={{
                   position: 'sticky',
                   top: 0,
                   zIndex: 2,
-                  p: 2,
-                  pb: 1.5,
-                  bgcolor: '#101116',
-                  borderBottom: '1px solid rgba(255,255,255,0.08)',
+                  px: 1.35,
+                  py: 1,
+                  bgcolor: isLight ? '#f5f7fa' : '#101116',
+                  borderBottom: isLight ? '1px solid rgba(15,23,42,0.12)' : '1px solid rgba(255,255,255,0.08)',
                 }}
               >
-                <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                  <FileText size={18} />
-                  <Typography variant="subtitle2">Превью документа</Typography>
-                </Stack>
-
-                <Box sx={{ mt: 1.5 }}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                <Button
+                  variant="text"
+                  size="small"
+                  className="source-link-button"
+                  startIcon={<Download size={14} />}
+                  title={activeDocument.name}
+                  onClick={() =>
+                    downloadPreviewFile(
+                      activeDocument.name,
+                      `${activeDocument.name}\n${activeDocument.section}\nСтраница ${activeDocument.page}\n\n${activeDocument.fragment}`,
+                    )
+                  }
+                  sx={{
+                    ...previewLinkButtonSx(isLight),
+                    justifyContent: 'flex-start',
+                    textAlign: 'left',
+                    maxWidth: '100%',
+                  }}
+                >
+                  <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 280 }}>
                     {activeDocument.name}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {activeDocument.type} · с первой страницы · {activeDocument.version}
-                  </Typography>
-                </Box>
+                  </Box>
+                </Button>
               </Box>
 
-              <Box sx={{ p: 2 }}>
+              <Box sx={{ p: 1.5 }}>
               <Stack spacing={1.5}>
                 {activeDocument.type === 'XLSX' ? (
                   <Paper
