@@ -687,7 +687,7 @@ POST /registry/documents
 
 > **Важно:** Registry использует `document_id` (UUID) как **единый первичный ключ**. `document_id` назначается на этапе Validation (Пайплайн 1, Этап 2) после проверки уникальности: извлекается существующий для дубликата, либо генерируется новый. Собственный numeric ID не создаётся — `document_id` проходит сквозь все сервисы без маппинга.
 
-В режиме пайплайна оркестратор передаёт JSON-контейнер (результат валидации) как непрозрачный артефакт — сервис сам маппит поля в модель данных.
+В режиме пайплайна оркестратор передаёт JSON-контейнер (результат Converter-validator) как непрозрачный артефакт — сервис сам маппит поля в модель данных.
 
 **Тело запроса (прямое создание):**
 
@@ -712,13 +712,22 @@ POST /registry/documents
 }
 ```
 
-**Тело запроса (из пайплайна — сквозной JSON-контейнер от этапа Валидации):**
+**Тело запроса (из пайплайна — иерархический JSON-контейнер от этапа Converter-validator):**
 
 ```json
 {
   "document_id": "b3a8f1c2-...",
   "version_id": "c4b9f2d3-...",
-  "document_reference": [],
+  "document": {
+    "doc_code": "ГОСТ 20868-81",
+    "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
+    "normalized_title": "стойки установочные крепежные технические требования",
+    "group": "ПО4",
+    "mks": "31.240",
+    "era": "USSR",
+    "validity_status": "active",
+    ...
+  },
   "structure": {
     "type": "normative",
     "sections": [
@@ -729,47 +738,31 @@ POST /registry/documents
         "type": "section",
         "content": { "text": "Настоящий стандарт..." },
         "page": 1,
-        "bbox": "x1,y1,x2,y2",
-        "subsections": []
+        "bbox": "x1,y1,x2,y2"
+      },
+      {
+        "clause": "1.1",
+        "title": "Область применения",
+        "level": 2,
+        "type": "section",
+        "content": { "text": "..." },
+        "page": 1,
+        "bbox": "x1,y1,x2,y2"
       }
     ]
   },
-  "classification": {
-    "mks_oks_code": "47.020",
-    "okstu_code": null,
-    "udk_code": "629.5.021",
-    "year": "1981"
-  },
-  "quality": {
-    "confidence": 0.94,
-    "pages_processed": 12,
-    "pages_failed": 0
-  },
-  "validation": {
-    "id": "val-001",
-    "structure_valid": true,
-    "classifiers": {
-      "mks_status": "CONFIRMED",
-      "okstu_status": "NOT_USED",
-      "overall_status": "CONFIRMED"
-    },
-    "uniqueness": {
-      "is_duplicate_file": false,
-      "is_duplicate_document": false,
-      "content_hash_sha256": "abc123...",
-      "title_hash_sha256": "def456..."
-    },
-    "matching": {
-      "predecessor_doc_id": null,
-      "successor_doc_id": null
-    },
-    "decision": "auto",
-    "status": "completed"
+  "classification": { ... },
+  "quality": { ... },
+  "validation": { ... },
+  "conversion": {
+    "llm_used": true,
+    "hierarchy_built": true,
+    "metadata_extracted": true
   }
 }
 ```
 
-> Registry сохраняет данные в БД и **возвращает тот же JSON**, но с проставленными идентификаторами и ссылками. Сервис не меняет структуру документа — только enrich.
+> Registry сохраняет данные в БД, **сегментирует** документ на **секции** (`nsi_document_sections`) и возвращает **плоский JSON** — список секций с проставленными `id`, без иерархии `subsections`. Этот плоский JSON передаётся в RAG Builder для чанкования.
 
 | Поле | Тип | Обязательность | Описание |
 |------|-----|----------------|----------|
@@ -792,110 +785,122 @@ POST /registry/documents
 Система **автоматически вычисляет** `title_hash_sha256` по формуле:  
 `SHA-256(era|source_type|mks_oks_code|okstu_code|doc_code|normalized_title)`
 
-**Ответ `201`:** возвращает полную структуру документа со ссылками в БД — все данные, необходимые RAG для индексации и цитирования.
+**Ответ `201`:** возвращает **плоский JSON** — список **секций** с метаданными и DB-ссылками. Этот JSON передаётся в RAG Builder для чанкования.
 
 ```json
 {
-  "document_id": "b3a8f1c2-...",
-  "version_id": "c4b9f2d3-...",
-  "registry": {
-    "title": "ГОСТ Р 12345-77",
-    "doc_code": "20868-81",
-    "source_type": "GOST",
+  "metadata": {
+    "schema": "registry_flat_v1",
+    "created_at": "2026-05-17T09:15:00Z"
+  },
+  "document": {
+    "id": "b3a8f1c2-...",
+    "doc_code": "ГОСТ 20868-81",
+    "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
+    "normalized_title": "стойки установочные крепежные технические требования",
+    "group": "ПО4",
+    "mks": "31.240",
+    "okstu": null,
+    "udc": null,
     "era": "USSR",
     "validity_status": "active",
-    "jurisdiction": "RU",
-    "issuing_body": "Госстандарт СССР",
-    "title_hash_sha256": "a1b2c3d4...",
-    "order": 0,
-    "links": {
-      "document": "/api/v1/registry/documents/42",
-      "versions": "/api/v1/registry/documents/42/versions"
-    },
-    "created_at": "2026-05-15T12:00:00Z"
+    "issuing_body": "Государственный Комитет СССР по стандартам",
+    "adoption_date": "1981-04-15",
+    "effective_from": "1982-07-01",
+    "replaces": "ГОСТ 20868-75",
+    "page_count": 2,
+    "file_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
-  "classification": {
-    "mks_oks_code": "47.020",
-    "mks_display_name": "Конструкция корпуса",
-    "mks_status": "CONFIRMED",
-    "okstu_code": null,
-    "okstu_status": "NOT_USED",
-    "udk_code": "629.5.021",
-    "year": "1981"
-  },
-  "structure": {
-    "type": "normative",
-    "sections": [
-      {
-        "id": "sec-001",
-        "clause": "1. Общие положения",
-        "title": "Общие положения",
-        "level": 1,
-        "type": "section",
-        "content": { "text": "Настоящий стандарт распространяется..." },
-        "page": 1,
-        "bbox": "x1,y1,x2,y2",
-        "subsections": [
-          {
-            "id": "sec-001-1",
-            "clause": "1.1 Область применения",
-            "title": "Область применения",
-            "level": 2,
-            "type": "subsection",
-            "content": { "text": "..." },
-            "page": 1,
-            "bbox": "x1,y1,x2,y2"
-          }
-        ]
-      }
-    ]
-  },
-  "document_reference": [
+  "sections": [
     {
-      "id": "ref-001",
-      "target_doc_code": "ГОСТ 12345-88",
-      "reference_type": "normative",
-      "is_resolved": false
+      "id": "sec_1",
+      "document_id": "b3a8f1c2-...",
+      "parent_id": null,
+      "clause": "1",
+      "title": null,
+      "level": 1,
+      "path": "1",
+      "page": 1,
+      "bbox": [0.048, 0.034, 0.476, 0.061],
+      "type": "section",
+      "content": {
+        "text": "Настоящий стандарт распространяется на металлические крепежные установочные стойки..."
+      },
+      "created_at": "2026-05-17T09:15:00Z"
+    },
+    {
+      "id": "sec_t1",
+      "document_id": "b3a8f1c2-...",
+      "parent_id": "sec_6",
+      "clause": "6.1",
+      "title": "Допуск соосности при степени точности",
+      "level": 2,
+      "path": "6.1.table1",
+      "page": 2,
+      "bbox": [0.048, 0.505, 0.952, 0.842],
+      "type": "table",
+      "content": {
+        "columns": [ ... ],
+        "rows": [ ... ]
+      },
+      "created_at": "2026-05-17T09:15:00Z"
+    },
+    {
+      "id": "sec_fig1",
+      "document_id": "b3a8f1c2-...",
+      "parent_id": "sec_6",
+      "clause": "6.1",
+      "title": "Черт. 1 – Схема допуска соосности",
+      "level": 2,
+      "path": "6.1.fig1",
+      "page": 2,
+      "bbox": [0.143, 0.875, 0.857, 1.010],
+      "type": "image",
+      "content": {
+        "caption": "Черт. 1 – Схема допуска соосности",
+        "file_key": "purgatory/assets/a1b2c3d4/fig1.png",
+        "description": "Схема для определения допуска соосности"
+      },
+      "created_at": "2026-05-17T09:15:00Z"
     }
   ],
-  "files": {
-    "original": "/api/v1/files/file-xyz",
-    "preview": "/api/v1/documents/b3a8f1c2.../pages/1/preview"
-  },
-  "quality": {
-    "confidence": 0.94,
-    "pages_processed": 12,
-    "pages_failed": 0
-  },
-  "status": "archived"
+  "terminology": [ ... ],
+  "registry": {
+    "document_id": "b3a8f1c2-...",
+    "version_id": "ver-001",
+    "created_at": "2026-05-17T09:15:00Z",
+    "sections_count": 3,
+    "references_count": 0
+  }
 }
 ```
 
+**Особенности плоского формата:**
+- Секции — плоский массив (нет вложенных `subsections`)
+- Иерархия задаётся через `parent_id` → `id`
+- Каждая секция имеет `type`: `section`, `table`, `image`, `formula`
+- `file_key` для бинарных объектов (изображения таблиц, фигуры)
+- `bbox` в нормированных координатах 0..1
+
 | Поле | Тип | Описание |
 |---|---|---|
-| `document_id` | string | UUID документа (единый первичный ключ) |
-| `version_id` | string | UUID версии файла |
-| `registry` | object | Карточка документа в реестре (nsi) с метаданными и ссылками |
-| `registry.links` | object | Ссылки на ресурсы документа в API реестра |
-| `registry.order` | int | Порядковый номер документа (используется при построении текста страницы) |
-| `classification` | object | Коды классификации со статусами верификации |
-| `structure` | object | Полная структура документа: секции (с ID сущностей в БД) |
-| `structure.sections[].id` | string | ID секции в `nsi.document_sections` |
-| `structure.sections[].clause` | string | Номер пункта/заголовка (напр. «1.», «1.1») |
-| `structure.sections[].title` | string | Название секции без номера |
-| `structure.sections[].level` | int | Уровень вложенности (1 — верхний) |
-| `structure.sections[].type` | string | Тип элемента (`section`, `subsection`, `paragraph`) |
-| `structure.sections[].content` | JSONB | Содержимое секции (`{"text": "..."}`) |
-| `structure.sections[].page` | int | Номер страницы |
-| `structure.sections[].bbox` | string | Координаты bounding box (`x1,y1,x2,y2`) |
-| `document_reference[]` | array | Ссылки на другие документы |
-| `document_reference[].id` | string | ID ссылки |
-| `document_reference[].target_doc_code` | string | Код целевого документа |
-| `document_reference[].reference_type` | string | Тип ссылки (`normative`, `informative`, `replacement`) |
-| `document_reference[].is_resolved` | bool | Разрешена ли ссылка (документ найден в реестре) |
-| `files` | object | Ссылки на оригинальный файл и превью страниц |
-| `quality` | object | Оценка качества распознавания |
-| `status` | string | Статус (`archived` — документ готов к индексации) |
+| `document.id` | string | UUID документа (единый первичный ключ) |
+| `document.doc_code` | string | Обозначение документа |
+| `document.title` | string | Полное название |
+| `sections[].id` | string | UUID секции в `nsi_document_sections` |
+| `sections[].document_id` | string | UUID документа |
+| `sections[].parent_id` | string|null | UUID родительской секции (`null` для корневых) |
+| `sections[].clause` | string | Номер пункта |
+| `sections[].title` | string|null | Заголовок секции |
+| `sections[].level` | int | Уровень вложенности (1 — верхний) |
+| `sections[].path` | string | ltree-путь для иерархии |
+| `sections[].type` | string | Тип: `section`, `table`, `image`, `formula` |
+| `sections[].content` | JSONB | Содержимое секции |
+| `sections[].page` | int | Номер страницы |
+| `sections[].bbox` | array | Координаты bbox `[x1,y1,x2,y2]` (0..1) |
+| `sections[].file_key` | string|null | Ссылка на бинарный объект (для `table`/`image`) |
+| `registry` | object | Метаданные записи в БД |
+| `registry.sections_count` | int | Количество сохранённых секций |
 
 **Ошибки**: `409` — `DUPLICATE_DOCUMENT`.
 

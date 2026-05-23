@@ -78,9 +78,9 @@ sequenceDiagram
 
 ---
 
-#### Этап 3: Поиск чанков (RAG Service)
+### Этап 3: Поиск чанков (RAG Search)
 
-**Сервис:** RAG Service
+**Сервис:** RAG Search
 
 **Вход:** обогащённый запрос с вопросом и фильтрами.
 
@@ -98,7 +98,7 @@ sequenceDiagram
 
 **Сервис:** Query Service
 
-**Вход:** массив чанков от RAG Service.
+**Вход:** массив чанков от RAG Search.
 
 **Процесс:**
 
@@ -116,7 +116,7 @@ sequenceDiagram
 
 **Сервис:** Query Service
 
-**Вход:** текст ответа LLM + массив чанков от RAG.
+**Вход:** текст ответа LLM + массив чанков от RAG Search.
 
 **Процесс:**
 
@@ -166,7 +166,7 @@ stateDiagram-v2
     idle --> pending : POST .../messages
     pending --> enriching : запуск обработки
     enriching --> searching : обогащение терминами завершено
-    searching --> generating : чанки получены от RAG
+    searching --> generating : чанки получены от RAG Search
     generating --> enriching_citations : ответ LLM получен
     enriching_citations --> answered : цитирования обогащены
     answered --> [*] : ответ готов к отображению
@@ -187,7 +187,7 @@ stateDiagram-v2
 | `idle` | Ожидание нового сообщения от пользователя | — |
 | `pending` | Сообщение получено, сохранено в истории чата | UI отображает индикатор ожидания |
 | `enriching` | Обогащение запроса терминами через словарь Registry | Поиск `raw_term → standard_term` |
-| `searching` | Поиск релевантных чанков в RAG Service | Гибридный поиск (dense + sparse + pg_trgm) |
+| `searching` | Поиск релевантных чанков в RAG Search | Гибридный поиск (dense + sparse + pg_trgm) |
 | `generating` | Генерация ответа LLM на основе найденных чанков | Формирование промпта, вызов LLM |
 | `enriching_citations` | Обогащение цитирований machine-readable идентификаторами | Замена/добавление сносок с `document_id`, `section_id` |
 | `answered` | Финальный ответ готов, сохранён в истории чата | UI получает ответ через longpoll |
@@ -213,7 +213,7 @@ graph TD
         Msg[Новое сообщение] -->|Ошибка сохранения| Fail3[failed]
         Msg -->|Успех| Enrich[Обогащение]
         Enrich -->|Ошибка словаря| Skip[Пропуск обогащения]
-        Skip --> Search[Поиск RAG]
+        Skip --> Search[Поиск в RAG Search]
         Enrich -->|Успех| Search
         Search -->|Ошибка поиска| Retry5[Повтор до 2 раз]
         Retry5 -->|Все попытки исчерпаны| Fail3

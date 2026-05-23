@@ -40,7 +40,7 @@
 
 ### POST /documents
 
-Асинхронная загрузка файла. Orchestrator вычисляет SHA-256 содержимого, определяет формат, создаёт/находит логический документ по бизнес-ключу, помещает в очередь Celery. Конвейер: OCR → чанкинг → валидация → промотирование.
+Асинхронная загрузка файла. Orchestrator вычисляет SHA-256 содержимого, определяет формат, создаёт/находит логический документ по бизнес-ключу, помещает в очередь Celery. Двухфазный конвейер: **Preview** (OCR/Parser preview → Converter-validator preview → решение пользователя) → **Full** (OCR/Parser → Converter-validator → Registry → RAG Builder).
 
 `user_id` определяется из контекста аутентификации.
 
@@ -75,6 +75,93 @@
 ```
 
 > **Примечание:** `document_id` назначается на стадии валидации после проверки уникальности. Первичный идентификатор — `task_id`.
+
+### POST /documents/{doc_id}/preview
+
+Запуск фазы превью для документа. Возвращает preview-данные (метаданные, кандидаты в дубликаты).
+
+**Путь:** `/api/v1/documents/{doc_id}/preview`
+**Метод:** `POST`
+
+**Ответ `202`:**
+
+```json
+{
+  "preview_task_id": "prev-001",
+  "status": "previewing",
+  "estimated_completion": "2026-05-15T12:00:30Z"
+}
+```
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `preview_task_id` | string | ID задачи превью |
+| `status` | string | Статус: `previewing` |
+| `estimated_completion` | string | Предполагаемое время завершения |
+
+### GET /documents/{doc_id}/preview/status
+
+Статус превью с longpoll-механизмом.
+
+**Путь:** `/api/v1/documents/{doc_id}/preview/status`
+**Метод:** `GET`
+
+**Параметры запроса:**
+
+| Параметр | Тип | По умолчанию | Описание |
+|---|---|---|---|
+| `longpoll` | int | 15 | Время ожидания в секундах |
+
+**Ответ `200`:**
+
+```json
+{
+  "document_id": "b3a8f1c2-...",
+  "status": "completed",
+  "ocr_parser_status": "completed",
+  "converter_validator_status": "completed",
+  "metadata": {
+    "designation": "ГОСТ 20868-81",
+    "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
+    "document_type": "normative",
+    "year": "1981"
+  },
+  "duplicates_found": [],
+  "decision_required": false
+}
+```
+
+### POST /documents/{doc_id}/decide
+
+Принятие решения пользователем после фазы превью.
+
+**Путь:** `/api/v1/documents/{doc_id}/decide`
+**Метод:** `POST`
+
+**Запрос:**
+
+```json
+{
+  "action": "proceed",
+  "comment": "Продолжить обработку"
+}
+```
+
+| Поле | Тип | Обязательность | Описание |
+|---|---|---|---|
+| `action` | string | Да | `proceed` / `stop_duplicate` / `force_new_version` |
+| `comment` | string | Нет | Комментарий пользователя |
+
+**Ответ `202`:**
+
+```json
+{
+  "document_id": "b3a8f1c2-...",
+  "status": "proceeding",
+  "action": "proceed",
+  "message": "Запущена полная обработка документа"
+}
+```
 
 ### POST /documents/{doc_id}/versions
 
@@ -157,6 +244,8 @@
   "summary": {
     "total": 128,
     "uploaded": 10,
+    "previewing": 0,
+    "awaiting_decision": 0,
     "parsing": 3,
     "validation": 2,
     "review_required": 3,
@@ -276,6 +365,21 @@
     "pipeline": {
       "formation": {
         "status": "in_progress",
+        "preview": {
+          "status": "completed",
+          "ocr_parser": {
+            "status": "completed",
+            "pages_processed": 3
+          },
+          "converter_validator": {
+            "status": "completed",
+            "metadata_extracted": true
+          },
+          "decision": {
+            "status": "awaiting",
+            "action": null
+          }
+        },
         "parsing": { "status": "completed", "pages_processed": 12, "pages_failed": 0, "avg_confidence": 0.92 },
         "validation": { "status": "in_progress", "errors_found": 0 },
         "registry": { "status": "pending" }
@@ -341,7 +445,7 @@
   "completed_at": "2026-05-15T10:01:30Z"
 }```
 
-**Статусы Formation (Формирование документа)**: `uploaded` → `parsing` → `validation` → `registry` / `review_required` → `archived` / `failed`.
+**Статусы Formation (Формирование документа)**: `uploaded` → `previewing` → `awaiting_decision` → `parsing` → `validation` → `registry` / `review_required` → `archived` / `failed`.
 
 **Статусы Indexation (Индексация)**: `pending` → `rag_indexing` → `indexed` / `failed`.
 
@@ -503,7 +607,7 @@
 
 ### GET /documents/queue
 
-Очередь обработки документов (статусы `uploaded`, `validating`, `processing`).
+Очередь обработки документов (статусы `uploaded`, `previewing`, `awaiting_decision`, `validating`, `processing`).
 
 **Ответ `200`**:
 

@@ -15,8 +15,8 @@ Purgatory (полный проект) = purgatory.* (staging) + nsi.* (knowledge
 
 | Слой | Схема | Назначение | Описан в |
 |---|---|---|---|
-| Staging | `purgatory.*` | Приём, дедупликация, парсинг, валидация, FSM | Purgatory v2.3 |
-| Knowledge Base | `nsi.*` | Поисковые индексы, граф связей, контент для RAG | KB MVP v1.1 |
+| Staging | `purgatory.*` | Приём, дедупликация, OCR + Parser, Converter-validator, FSM | Purgatory v2.3 |
+| Knowledge Base | `nsi.*` | Поисковые индексы, граф связей, контент для RAG Builder + RAG Search | KB MVP v1.1 |
 
 Оба слоя — части единого проекта. `docs/` описывает аналогичную функциональность, но с другой декомпозицией сервисов.
 
@@ -455,9 +455,11 @@ CREATE TABLE purgatory.format_registry (
 
 ### C3.1. Создание документа
 
-**Flow:** Оркестратор создаёт задачу → получает `task_id` → передаёт `task_id` в OCR (не `document_id`).
-`document_id` назначается на стадии валидации, когда можно оценить уникальность документа:
+**Flow:** Оркестратор создаёт задачу → получает `task_id` → передаёт `task_id` в OCR + Parser (не `document_id`).
+`document_id` назначается на стадии Converter-validator, когда можно оценить уникальность документа:
 либо извлекается существующий `document_id` (для дубликатов), либо генерируется новый.
+
+> **Примечание:** Preview-фаза не существует в Purgatory. В `docs/` это новый этап — быстрая проверка уникальности документа до полной обработки (см. Пайплайн 1: Формирование документа, двухфазный).
 
 | Аспект | Purgatory | `docs/` |
 |---|---|---|
@@ -483,7 +485,7 @@ CREATE TABLE purgatory.format_registry (
 | Механизм | Автоматический шаг воркера | — |
 | `target_schema` | ❌ (всегда nsi) | ✅ |
 | `options.reindex` | ❌ | ✅ |
-| Переиндексация | `repromote_document()` — транзакция очистки+вставки | `DELETE /rag/index/{id}` + повторный `POST` |
+| Переиндексация | `repromote_document()` — транзакция очистки+вставки | `DELETE /rag/index/{id}` (RAG Builder) + повторный `POST` |
 
 ### C3.4. Гибридный поиск
 
