@@ -112,6 +112,32 @@
 
 ---
 
+### Маппинг полей между этапами
+
+В процессе прохождения документа через пайплайн имена полей могут изменяться.
+Ниже приведена таблица соответствия ключевых полей на разных этапах.
+
+| Этап → Этап | Поле (исходное) | Поле (результирующее) | Примечание |
+|---|---|---|---|
+| OCR/Parser → Converter-validator | `designation` / `doc_code` | `doc_code` | Стандартизация названия поля |
+| OCR/Parser → Converter-validator | `raw_text` | иерархический `content` | Построение иерархии |
+| OCR/Parser → Converter-validator | `figure` / `image` | `type: image`, `content.image_key` | Бинарные объекты → image_key (ссылка на фрагмент изображения) |
+| OCR/Parser → Converter-validator | `table` | `type: table`, `content.columns/rows` | Структуризация таблиц |
+| OCR/Parser → Converter-validator | `formula` (raw) | `type: formula`, `content.latex` | Извлечение LaTeX |
+| Converter-validator → Registry | `doc_code` | `doc_code` | Сквозное поле |
+| Converter-validator → Registry | `type` | `type` | Тип секции сохраняется сквозным полем |
+| Converter-validator → Registry | `image_key` | `content.image_key` | image_key — ссылка на фрагмент изображения (не file_key) |
+| Converter-validator → Registry | `bbox` (сырые) | `bbox` (0..1) | Нормировка координат |
+| Registry → RAG Builder | `content.image_key` | `content.image_key` | Сквозной проход image_key |
+| Registry → RAG Builder | `path` (ltree) | `path` | Иерархический путь секции |
+
+> **Примечание:** поле `ltree_path` в сыром JSON от Parser/OCR может отсутствовать.
+> Оно формируется на этапе Converter-validator при построении иерархии и передаётся
+> в Registry как `path`. В БД хранится как `ltree`. RAG Builder получает его как
+> строковое представление пути.
+
+---
+
 ## 3. Описание микросервисов
 
 
@@ -427,28 +453,7 @@
 
 
 
-| Источник (OCR/Parser/Purgatory) | Цель (Registry/registry.documents) | Примечание |
-
-|---|---|---|
-
-| `metadata.gost_code` | `doc_code` | Нормализованное обозначение документа |
-
-| `ltree_path` | `path` | Иерархический путь в `registry.document_sections` |
-
-| `figures[]` (контейнер) / `type: "figure"` (OCR) | `type: "image"` (БД) | Тип секции `image` в `registry.document_sections` |
-
-| `image_key` | `file_key` / `image_key` | Унифицировать именование — рекомендуется `file_key` |
-
-| `clause` | `clause` | Пункт/раздел документа |
-
-| `level` | `level` | Уровень вложенности секции |
-
-| `page` | `page` | Номер страницы |
-
-| `bbox` | `bbox` (jsonb) | Координаты блока на странице |
-
-| `document_version_id` | — | **Не передаётся** — заполняется Orchestrator'ом, не OCR/Parser |
-
+> Подробная таблица маппинга полей между этапами — в разделе выше («Маппинг полей между этапами» между разделами 2 и 3).
 
 
 ```text
