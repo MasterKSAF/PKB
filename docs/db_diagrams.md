@@ -21,7 +21,7 @@ erDiagram
     }
 
     registry.document_sections {
-        bigint id PK
+        uuid id PK
         uuid document_id FK
         uuid parent_id FK
         text clause
@@ -37,7 +37,7 @@ erDiagram
 
     rag.chunks {
         uuid id PK
-        bigint section_id FK
+        uuid section_id FK
         uuid document_id FK
         int chunk_index
         text content

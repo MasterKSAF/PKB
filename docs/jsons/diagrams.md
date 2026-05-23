@@ -27,7 +27,7 @@
 ║  │                            ▼                             │    ║
 ║  │  ┌────────────────────────────────────────────────────┐  │    ║
 ║  │  │                   metadata                         │  │    ║
-║  │  • gost_code, full_title, normalized_title               │    ║
+║  │  • doc_code, full_title, normalized_title               │    ║
 ║  │  • group, mks, okstu, udc, era                           │    ║
 ║  │  • validity_status, issuing_body                         │    ║
 ║  │  • adoption: date, authority, document_number,           │    ║
@@ -169,7 +169,7 @@
 ║  │                            ▼                             │    ║
 ║  │  ┌────────────────────────────────────────────────────┐  │    ║
 ║  │  │                   metadata                         │  │    ║
-║  │  • gost_code, full_title, normalized_title               │    ║
+║  │  • doc_code, full_title, normalized_title               │    ║
 ║  │  • group, mks, okstu, udc, era                           │    ║
 ║  │  • validity_status, issuing_body                         │    ║
 ║  │  • adoption: date, authority, document_number,           │    ║
