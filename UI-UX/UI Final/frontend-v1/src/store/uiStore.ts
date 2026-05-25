@@ -25,6 +25,8 @@ interface UIState {
   setCurrentUserId: (userId: string) => void;
   currentRole: UserRole;
   setCurrentRole: (role: UserRole) => void;
+  activeProjectId: string;
+  setActiveProjectId: (projectId: string) => void;
   themeMode: 'dark' | 'light';
   setThemeMode: (mode: 'dark' | 'light') => void;
   workMode: 'demo' | 'prod';
@@ -63,6 +65,8 @@ export const useUIStore = create<UIState>((set) => ({
   setCurrentUserId: (currentUserId) => set({ currentUserId }),
   currentRole: 'user',
   setCurrentRole: (currentRole) => set({ currentRole }),
+  activeProjectId: 'project-223m',
+  setActiveProjectId: (activeProjectId) => set({ activeProjectId }),
   themeMode: 'dark',
   setThemeMode: (themeMode) => set({ themeMode }),
   workMode: 'demo',

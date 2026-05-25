@@ -26,7 +26,7 @@ const SCENES = [
     image: 'https://images.unsplash.com/photo-1454165833767-027521e4129b?q=80&w=800&auto=format&fit=crop',
   },
   {
-    title: 'Реестр документов',
+    title: 'База знаний',
     description: 'Контролируйте статус обработки ваших документов. Система автоматически производит OCR и индексацию новых файлов.',
     image: 'https://images.unsplash.com/photo-1568667256549-094345857637?q=80&w=800&auto=format&fit=crop',
   },

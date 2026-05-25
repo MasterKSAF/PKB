@@ -16,8 +16,8 @@ import {
   TableRow,
   Typography,
 } from '@mui/material';
-import { AlertTriangle, CheckCircle2, FileText, MoreVertical, RefreshCw, Upload } from 'lucide-react';
-import { MOCK_DOCUMENTS } from '../utils/mockData';
+import { AlertTriangle, CheckCircle2, Database, FileText, Link2, MoreVertical, RefreshCw, ScanText, Upload } from 'lucide-react';
+import { MOCK_DOCUMENTS, MOCK_KNOWLEDGE_SECTIONS } from '../utils/mockData';
 
 const TABLE_SX = {
   borderRadius: 3,
@@ -101,7 +101,7 @@ export const DocumentRegistry: React.FC = () => {
   };
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Container maxWidth="xl" sx={{ py: 3 }}>
       <Stack spacing={3}>
         <Paper
           variant="outlined"
@@ -117,11 +117,17 @@ export const DocumentRegistry: React.FC = () => {
             sx={{ justifyContent: 'flex-end', alignItems: { xs: 'flex-start', md: 'center' } }}
           >
             <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-            <Button className="app-action-button" variant="contained" startIcon={<Upload size={16} />} onClick={handleUploadClick}>
-              Загрузить документ
-            </Button>
-            <input ref={fileInputRef} type="file" hidden onChange={handleFileSelect} />
-          </Stack>
+              <Button className="app-action-button" variant="contained" startIcon={<Upload size={16} />} onClick={handleUploadClick}>
+                Загрузить документ
+              </Button>
+              <Button className="app-action-button" variant="contained" startIcon={<Link2 size={16} />}>
+                Загрузить по ссылке
+              </Button>
+              <Button className="app-action-button" variant="contained" startIcon={<ScanText size={16} />}>
+                Повторить OCR
+              </Button>
+              <input ref={fileInputRef} type="file" hidden onChange={handleFileSelect} />
+            </Stack>
           </Stack>
           {selectedFileName && (
             <Alert severity="info" variant="outlined" sx={{ mt: 1.4, borderRadius: 2 }}>
@@ -170,6 +176,62 @@ export const DocumentRegistry: React.FC = () => {
             </Box>
           ))}
         </Box>
+
+        <Paper
+          variant="outlined"
+          sx={{
+            p: 1.8,
+            borderRadius: 3,
+            ...PANEL_SX,
+          }}
+        >
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.2} sx={{ alignItems: { md: 'center' }, mb: 1.4 }}>
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flex: 1 }}>
+              <Database size={18} color="#98d9d8" />
+              <Box>
+                <Typography sx={{ fontWeight: 560, color: 'rgba(233, 237, 243, 0.92)' }}>
+                  База знаний по разделам
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Тематические области нормативно-справочных документов для судостроительных проектов.
+                </Typography>
+              </Box>
+            </Stack>
+            <Chip size="small" label={`${MOCK_KNOWLEDGE_SECTIONS.length} разделов`} variant="outlined" />
+          </Stack>
+
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)', xl: 'repeat(6, 1fr)' }, gap: 1 }}>
+            {MOCK_KNOWLEDGE_SECTIONS.map((section) => (
+              <Paper
+                key={section.id}
+                variant="outlined"
+                sx={{
+                  p: 1.15,
+                  minHeight: 112,
+                  borderRadius: 2.1,
+                  bgcolor: 'rgba(255,255,255,0.028)',
+                  borderColor: 'rgba(198,216,240,0.22)',
+                }}
+              >
+                <Stack spacing={0.7} sx={{ height: '100%' }}>
+                  <Stack direction="row" spacing={0.7} sx={{ alignItems: 'center' }}>
+                    <FileText size={15} color="#d9b783" />
+                    <Typography sx={{ fontSize: '0.8rem', fontWeight: 560, lineHeight: 1.2 }}>{section.title}</Typography>
+                  </Stack>
+                  <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.32 }}>
+                    {section.description}
+                  </Typography>
+                  <Chip
+                    size="small"
+                    label={`${section.documents} док.`}
+                    variant="outlined"
+                    sx={{ mt: 'auto', alignSelf: 'flex-start', height: 20, fontSize: '0.66rem' }}
+                  />
+                </Stack>
+              </Paper>
+            ))}
+          </Box>
+        </Paper>
 
         <TableContainer component={Paper} variant="outlined" sx={TABLE_SX}>
           <Table

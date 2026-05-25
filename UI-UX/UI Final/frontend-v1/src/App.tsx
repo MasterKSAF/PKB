@@ -6,11 +6,11 @@ import {
   Typography,
   Chip,
   Stack,
-  Button,
   Paper,
+  Button,
 } from '@mui/material';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Focus, LogOut, Minimize2, Moon, Sun, UserRound } from 'lucide-react';
+import { Focus, LogOut, Minimize2, UserRound } from 'lucide-react';
 import { getAppTheme } from './theme';
 import { useUIStore } from './store/uiStore';
 import { ModeSwitcher } from './components/ModeSwitcher';
@@ -49,13 +49,16 @@ export default function App() {
     setActiveTab,
     setCurrentRole,
     setFocusMode,
-    setThemeMode,
     toggleWorkMode,
   } = useUIStore();
   const appTheme = useMemo(() => getAppTheme(themeMode), [themeMode]);
   const currentUser = adminUsers.find((user) => user.id === currentUserId) ?? adminUsers[0];
-  const activeNavHeaderBackground = themeMode === 'dark' ? '#242829' : '#d3e4eb';
-  const activeNavHeaderBorder = themeMode === 'dark' ? 'rgba(198, 216, 240, 0.38)' : 'rgba(14, 116, 144, 0.24)';
+  const currentUserMeta =
+    currentUser.position === currentUser.role
+      ? currentUser.role
+      : `${currentUser.position} · ${currentUser.role}`;
+  const activeNavHeaderBackground = themeMode === 'dark' ? '#242829' : '#e0f2fe';
+  const activeNavHeaderBorder = themeMode === 'dark' ? 'rgba(198, 216, 240, 0.38)' : '#7dd3fc';
 
   useEffect(() => {
     document.body.dataset.pkbTheme = themeMode;
@@ -116,7 +119,7 @@ export default function App() {
             background:
               themeMode === 'dark'
                 ? 'radial-gradient(circle at 25% 0%, rgba(112,161,255,0.12), transparent 32%), linear-gradient(135deg, #0b0c0e 0%, #11131a 48%, #0b0c0e 100%)'
-                : 'radial-gradient(circle at 24% 0%, rgba(14, 116, 144, 0.10), transparent 34%), radial-gradient(circle at 92% 18%, rgba(202, 138, 4, 0.08), transparent 28%), linear-gradient(135deg, #f3f6f8 0%, #eef3f7 48%, #e7edf2 100%)',
+                : 'radial-gradient(circle at 24% 0%, rgba(56, 189, 248, 0.16), transparent 34%), radial-gradient(circle at 92% 18%, rgba(14, 165, 233, 0.10), transparent 28%), linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 48%, #f8fafc 100%)',
           }}
         >
           {!focusMode && <ModeSwitcher />}
@@ -129,7 +132,7 @@ export default function App() {
               display: 'flex',
               flexDirection: 'column',
               p: focusMode ? 0 : 2,
-              pt: focusMode ? 0 : 1.8,
+              pt: focusMode ? 0 : 2,
               pl: focusMode ? 0 : 2.6,
               boxShadow:
                 focusMode || themeMode === 'light'
@@ -185,10 +188,15 @@ export default function App() {
                 className="workspace-header-panel"
                 sx={{
                   px: { xs: 1.8, md: 2.3 },
-                  pt: 0.92,
-                  pb: 4.1,
+                  pt: { xs: 1.1, md: 0.95 },
+                  pb: { xs: 1.1, md: 0.95 },
                   mb: 1.5,
-                  mt: 0.05,
+                  mt: 0,
+                  height: 89,
+                  flexShrink: 0,
+                  boxSizing: 'border-box',
+                  display: 'flex',
+                  alignItems: 'center',
                   border: themeMode === 'dark' ? '1.5px solid' : '1px solid',
                   borderColor: activeNavHeaderBorder,
                   borderRadius: 3,
@@ -200,39 +208,45 @@ export default function App() {
                 <Stack
                   direction={{ xs: 'column', md: 'row' }}
                   spacing={1.5}
-                  sx={{ justifyContent: 'space-between', alignItems: { xs: 'flex-start', md: 'center' } }}
+                  sx={{
+                    width: '100%',
+                    justifyContent: 'space-between',
+                    alignItems: { xs: 'flex-start', md: 'center' },
+                  }}
                 >
                   <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography
-                      variant="overline"
-                      sx={{
-                        display: 'block',
-                        mb: 0.1,
-                        color: themeMode === 'dark' ? 'rgba(198, 208, 222, 0.84)' : '#475569',
-                        letterSpacing: '0.16em',
-                        fontSize: '0.68rem',
-                        fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
-                      }}
-                    >
-                      Рабочая область
-                    </Typography>
-                    <Typography
-                      variant="h5"
-                      sx={{
-                        lineHeight: 1.1,
-                        fontSize: { xs: '1.12rem', md: '1.28rem' },
-                        fontWeight: 500,
-                        color: themeMode === 'dark' ? 'rgba(230, 236, 244, 0.86)' : '#111827',
-                        fontFamily: '"Segoe UI Variable Display", "Segoe UI", "Inter", sans-serif',
-                      }}
-                    >
-                      {TAB_TITLES[activeTab]}
-                    </Typography>
-                    {TAB_DESCRIPTIONS[activeTab] && (
-                      <Typography variant="body2" color="text.secondary">
-                        {TAB_DESCRIPTIONS[activeTab]}
+                    <Stack spacing={0.65} sx={{ alignItems: 'flex-start' }}>
+                      <Typography
+                        variant="overline"
+                        sx={{
+                          display: 'block',
+                          color: themeMode === 'dark' ? 'rgba(198, 208, 222, 0.84)' : '#475569',
+                          letterSpacing: '0.16em',
+                          fontSize: '0.68rem',
+                          lineHeight: 1,
+                          fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
+                        }}
+                      >
+                        Рабочая область
                       </Typography>
-                    )}
+                      <Typography
+                        variant="h5"
+                        sx={{
+                          lineHeight: 1.05,
+                          fontSize: { xs: '1.12rem', md: '1.24rem' },
+                          fontWeight: 500,
+                          color: themeMode === 'dark' ? 'rgba(230, 236, 244, 0.86)' : '#111827',
+                          fontFamily: '"Segoe UI Variable Display", "Segoe UI", "Inter", sans-serif',
+                        }}
+                      >
+                        {TAB_TITLES[activeTab]}
+                      </Typography>
+                      {TAB_DESCRIPTIONS[activeTab] && (
+                        <Typography variant="body2" color="text.secondary">
+                          {TAB_DESCRIPTIONS[activeTab]}
+                        </Typography>
+                      )}
+                    </Stack>
                   </Box>
 
                   <Stack
@@ -242,6 +256,9 @@ export default function App() {
                       alignItems: 'center',
                       justifyContent: { xs: 'flex-start', md: 'flex-end' },
                       flexWrap: 'wrap',
+                      ml: { md: 'auto' },
+                      flexShrink: 0,
+                      alignSelf: { md: 'center' },
                     }}
                   >
                     <Paper
@@ -285,27 +302,11 @@ export default function App() {
                               whiteSpace: 'nowrap',
                             }}
                           >
-                            {currentUser.position} · {currentUser.role}
+                            {currentUserMeta}
                           </Typography>
                         </Box>
                       </Stack>
                     </Paper>
-
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      startIcon={themeMode === 'dark' ? <Moon size={15} /> : <Sun size={15} />}
-                      onClick={() => setThemeMode(themeMode === 'dark' ? 'light' : 'dark')}
-                      sx={{
-                        height: 34,
-                        px: 1.2,
-                        borderColor:
-                          themeMode === 'dark' ? 'rgba(124, 165, 214, 0.30)' : 'rgba(15, 23, 42, 0.18)',
-                        color: themeMode === 'dark' ? 'rgba(224, 234, 245, 0.88)' : '#0f5f6f',
-                      }}
-                    >
-                      {themeMode === 'dark' ? 'Тёмная' : 'Светлая'}
-                    </Button>
 
                     <Button
                       size="small"
@@ -352,7 +353,7 @@ export default function App() {
             <Box
               sx={{
                 flexGrow: 1,
-                overflowY: 'auto',
+                overflowY: activeTab === 'chat' ? 'hidden' : 'auto',
                 position: 'relative',
                 border: 'none',
                 borderRadius: 0,

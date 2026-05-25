@@ -110,6 +110,54 @@ export interface ProcessingLogItem {
   visibility: 'Инженер' | 'Администратор';
 }
 
+export interface KnowledgeSection {
+  id: string;
+  title: string;
+  description: string;
+  documents: number;
+  updatedAt: string;
+  status: 'Готово' | 'В обработке' | 'Нужна проверка';
+}
+
+export interface ProjectContext {
+  id: string;
+  name: string;
+  stage: string;
+  system: string;
+  activeSession: string;
+  owner: string;
+}
+
+export interface ContextDocument extends Citation {
+  status: 'актуален' | 'проверить версию' | 'OCR';
+  format: 'PDF' | 'DOCX' | 'XLSX' | 'DWG';
+}
+
+export interface ProcessingQueueItem {
+  id: string;
+  document: string;
+  stage: 'OCR' | 'Индексация' | 'Разбор таблиц';
+  progress: number;
+  status: 'в очереди' | 'в работе' | 'ошибка';
+}
+
+export interface CadMetadataItem {
+  id: string;
+  node: string;
+  component: string;
+  material: string;
+  mass: string;
+  status: 'сопоставлено' | 'требует сверки' | 'нет связи с НСИ';
+}
+
+export interface GatewayNeed {
+  id: string;
+  area: string;
+  uiNeeds: string;
+  gatewayContract: string;
+  status: 'описать контракт' | 'согласовать поля' | 'готово к стыковке';
+}
+
 export const MOCK_CITATIONS: Citation[] = [
   {
     id: 'c1',
@@ -192,6 +240,240 @@ export const MOCK_DOCUMENTS: Document[] = [
     ocrStatus: 'Завершено',
     indexStatus: 'Индексировано',
     updatedAt: '2026-04-19',
+  },
+];
+
+export const MOCK_KNOWLEDGE_SECTIONS: KnowledgeSection[] = [
+  {
+    id: 'kb-hull',
+    title: 'Корпус',
+    description: 'Конструкции корпуса, прочность, обшивка, набор, водонепроницаемость.',
+    documents: 34,
+    updatedAt: '2026-05-21',
+    status: 'Готово',
+  },
+  {
+    id: 'kb-machinery',
+    title: 'Энергетика',
+    description: 'Главные и вспомогательные механизмы, двигатели, насосы, агрегаты.',
+    documents: 27,
+    updatedAt: '2026-05-20',
+    status: 'В обработке',
+  },
+  {
+    id: 'kb-electrical',
+    title: 'Электрика',
+    description: 'Электрооборудование, кабельные сети, питание, аварийные системы.',
+    documents: 22,
+    updatedAt: '2026-05-19',
+    status: 'Готово',
+  },
+  {
+    id: 'kb-piping',
+    title: 'Трубопроводы',
+    description: 'Судовые системы, трубопроводы, арматура, насосные магистрали.',
+    documents: 19,
+    updatedAt: '2026-05-18',
+    status: 'Готово',
+  },
+  {
+    id: 'kb-ventilation',
+    title: 'Вентиляция',
+    description: 'Вентиляция, кондиционирование, дымоудаление, воздуховоды.',
+    documents: 14,
+    updatedAt: '2026-05-18',
+    status: 'Готово',
+  },
+  {
+    id: 'kb-automation',
+    title: 'Автоматика',
+    description: 'АСУ, датчики, сигнализация, блокировки, дистанционное управление.',
+    documents: 16,
+    updatedAt: '2026-05-17',
+    status: 'В обработке',
+  },
+  {
+    id: 'kb-navigation',
+    title: 'Навигация и связь',
+    description: 'Радиосвязь, навигационное оборудование, мостик, сигнализация.',
+    documents: 13,
+    updatedAt: '2026-05-17',
+    status: 'Готово',
+  },
+  {
+    id: 'kb-fire',
+    title: 'Пожарная безопасность',
+    description: 'Пожаротушение, обнаружение пожара, изоляция, эвакуация.',
+    documents: 18,
+    updatedAt: '2026-05-16',
+    status: 'Готово',
+  },
+  {
+    id: 'kb-lifesaving',
+    title: 'Спасательные средства',
+    description: 'Шлюпки, плоты, индивидуальные средства, размещение и нормы.',
+    documents: 11,
+    updatedAt: '2026-05-16',
+    status: 'Готово',
+  },
+  {
+    id: 'kb-materials',
+    title: 'Материалы',
+    description: 'Стали, сплавы, покрытия, сварочные материалы, сертификаты.',
+    documents: 21,
+    updatedAt: '2026-05-15',
+    status: 'Нужна проверка',
+  },
+  {
+    id: 'kb-welding',
+    title: 'Сварка',
+    description: 'Технологии сварки, контроль швов, допуски, испытания.',
+    documents: 17,
+    updatedAt: '2026-05-15',
+    status: 'Готово',
+  },
+  {
+    id: 'kb-environment',
+    title: 'Экология',
+    description: 'Балласт, сточные воды, выбросы, предотвращение загрязнений.',
+    documents: 10,
+    updatedAt: '2026-05-14',
+    status: 'Готово',
+  },
+];
+
+export const MOCK_PROJECTS: ProjectContext[] = [
+  {
+    id: 'project-223m',
+    name: 'Проект 223-М',
+    stage: 'Проверка корпуса',
+    system: 'Корпусные конструкции',
+    activeSession: 'Сессия: толщина листа и материалы',
+    owner: 'Сергей Орлов',
+  },
+  {
+    id: 'project-arctic',
+    name: 'Проект 22220 "Арктика"',
+    stage: 'Сверка НСИ',
+    system: 'Силовая установка',
+    activeSession: 'Сессия: насосные агрегаты',
+    owner: 'Елена Климова',
+  },
+  {
+    id: 'project-nsi',
+    name: 'База НСИ',
+    stage: 'Администрирование',
+    system: 'Нормативные документы',
+    activeSession: 'Сессия: контроль OCR',
+    owner: 'Анна Волкова',
+  },
+];
+
+export const MOCK_CONTEXT_DOCUMENTS: ContextDocument[] = [
+  {
+    ...MOCK_CITATIONS[0],
+    id: 'ctx-1',
+    status: 'актуален',
+    format: 'PDF',
+  },
+  {
+    ...MOCK_CITATIONS[1],
+    id: 'ctx-2',
+    status: 'проверить версию',
+    format: 'DOCX',
+  },
+  {
+    id: 'ctx-3',
+    document: 'Ведомость материалов корпуса',
+    section: 'Таблица 3. Листовой прокат',
+    page: 8,
+    text: 'Ведомость материалов содержит марки стали, толщины листов и привязку к проектным узлам корпуса.',
+    version: 'Рев. 6',
+    confidence: 0.82,
+    status: 'OCR',
+    format: 'XLSX',
+  },
+];
+
+export const MOCK_PROCESSING_QUEUE: ProcessingQueueItem[] = [
+  {
+    id: 'queue-1',
+    document: 'Отчет об испытаниях 2024',
+    stage: 'OCR',
+    progress: 64,
+    status: 'в работе',
+  },
+  {
+    id: 'queue-2',
+    document: 'Архивный скан РКО',
+    stage: 'Разбор таблиц',
+    progress: 32,
+    status: 'ошибка',
+  },
+  {
+    id: 'queue-3',
+    document: 'ГОСТ 2.103-2013',
+    stage: 'Индексация',
+    progress: 88,
+    status: 'в очереди',
+  },
+];
+
+export const MOCK_CAD_METADATA: CadMetadataItem[] = [
+  {
+    id: 'cad-1',
+    node: 'Корпус / шпангоут 12',
+    component: 'Лист наружной обшивки',
+    material: '10ХСНД',
+    mass: '1840 кг',
+    status: 'сопоставлено',
+  },
+  {
+    id: 'cad-2',
+    node: 'Силовая установка',
+    component: 'Насосный агрегат',
+    material: 'Сталь 09Г2С',
+    mass: '4750 кг',
+    status: 'требует сверки',
+  },
+  {
+    id: 'cad-3',
+    node: 'Палубный узел',
+    component: 'Кронштейн крепления',
+    material: 'Алюминиевый сплав',
+    mass: '128 кг',
+    status: 'нет связи с НСИ',
+  },
+];
+
+export const MOCK_GATEWAY_NEEDS: GatewayNeed[] = [
+  {
+    id: 'gateway-auth',
+    area: 'Авторизация и профиль',
+    uiNeeds: 'ФИО, должность, роль, доступные вкладки и права на действия.',
+    gatewayContract: 'GET /profile или аналогичный метод Gateway после входа пользователя.',
+    status: 'согласовать поля',
+  },
+  {
+    id: 'gateway-chat',
+    area: 'Чат и источники',
+    uiNeeds: 'Ответ, статус, цитаты, документ, страница, формат источника и ссылки предпросмотра.',
+    gatewayContract: 'POST /chat с возвратом JSON-ответа и массива источников.',
+    status: 'описать контракт',
+  },
+  {
+    id: 'gateway-docs',
+    area: 'Документы и OCR',
+    uiNeeds: 'База знаний, статусы обработки, очередь OCR, загрузка файла и загрузка по ссылке.',
+    gatewayContract: 'GET /documents, POST /documents, POST /documents/{id}/reprocess.',
+    status: 'описать контракт',
+  },
+  {
+    id: 'gateway-history',
+    area: 'История и QA',
+    uiNeeds: 'Истории чатов, поиск по диалогам, оценки инженеров, журналы проверки.',
+    gatewayContract: 'GET /history, POST /feedback, GET /metrics.',
+    status: 'готово к стыковке',
   },
 ];
 
@@ -387,7 +669,7 @@ export const MOCK_ADMIN_USERS: AdminUser[] = [
     position: 'Администратор базы НСИ',
     login: 'a.volkova',
     role: 'Администратор знаний',
-    access: 'Реестр, поиск, проверка, история, QA, OCR-артефакты, журналы обработки',
+    access: 'База знаний, поиск, проверка, история, QA, OCR-артефакты, журналы обработки',
     status: 'Активен',
     lastSeen: '2026-04-29 09:20',
   },
