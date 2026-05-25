@@ -8,8 +8,11 @@
 
 - Формат данных: `application/json`, для загрузки файлов – `multipart/form-data`
 
-- Аутентификация: все запросы, кроме `/auth/*` и `/monitor/health`, требуют заголовок
-  `Authorization: Bearer <access_token>`. Токен получается через `/auth/token`.
+Аутентификация:
+  - **Публичные эндпоинты (через Orchestrator):** все запросы, кроме `/auth/*` и `/monitor/health`, требуют заголовок
+    `Authorization: Bearer <access_token>`. Токен получается через `/auth/token`.
+  - **Внутренние сервисы (межсервисное взаимодействие):** вызовы между микросервисами выполняются
+    по внутренней сети `127.0.0.1:{port}`.
 
 ---
 
@@ -135,8 +138,18 @@ GET .../{doc_id}/status?longpoll=15
 | 409      | `HAS_DOCUMENTS`           | Есть документы, ссылающиеся на код классификатора | Registry               |
 | 409      | `CROSS_SYSTEM_PARENT`     | Родитель в другой системе классификации           | Registry               |
 | 410      | `TASK_EXPIRED`            | Результат задачи удалён (старше N дней)           | OCR                    |
-| 413      | `FILE_TOO_LARGE`          | Превышение лимита размера файла (100 МБ)          | Integration, OCR       |
+| 400      | `EMPTY_FILE`              | Загружен пустой файл (0 байт)                     | Orchestrator           |
+| 400      | `FILE_TOO_SMALL`          | Файл менее 1 КБ — нецелесообразный документ       | Orchestrator           |
+| 400      | `EMPTY_MESSAGE`           | Пустое сообщение в чате                           | Query                  |
+| 400      | `INVALID_DATE_RANGE`      | date_from позже date_to                           | Query, Orchestrator    |
+| 400      | `INVALID_STATE_TRANSITION`| Недопустимый переход статуса                     | Orchestrator, Registry |
+| 409      | `DUPLICATE_FILE`          | Файл с таким SHA-256 уже обрабатывается           | Orchestrator           |
+| 409      | `ALREADY_PROCESSING`      | Документ уже в обработке (reprocess)              | Orchestrator           |
+| 413      | `FILE_TOO_LARGE`          | Превышение лимита размера файла (>= 100 МБ)       | Integration, OCR       |
 | 422      | `VALIDATION_FAILED`       | Ошибка семантической валидации                    | Validation             |
+| 429      | `TOO_MANY_REQUESTS`       | Превышен лимит запросов (rate limit)              | все                    |
+| 502      | `BAD_GATEWAY`             | Ошибка при вызове LLM (все retry исчерпаны)       | Query                  |
+| 503      | `SERVICE_UNAVAILABLE`     | Недоступен внешний сервис (MinIO, БД)             | все                    |
 | 500      | `INTERNAL_ERROR`          | Внутренняя ошибка сервера                         | все                    |
 | 500      | `INDEXING_FAILED`         | Ошибка индексации документа                       | RAG                    |
 | 500      | `OCR_FAILED`              | Ошибка OCR-распознавания                          | OCR, Orchestrator      |
@@ -160,6 +173,28 @@ GET .../{doc_id}/status?longpoll=15
 | `GET /documents/{doc_id}/history` | ✓ | ✓ | ✓ |
 | `GET /documents/{doc_id}/errors` | ✓ | ✓ | ✓ |
 | `GET /documents/queue` | ✓ | ✓ | ✓ |
+
+| `POST /chat/sessions`, `GET /chat/sessions` (+ `/{id}`)   | ✓          | ✓                 | ✓              |
+| `PUT /chat/sessions/{id}`, `DELETE /chat/sessions/{id}`   | ✓          | ✓                 | ✓              |
+| `POST /chat/sessions/{id}/messages`                        | ✓          | ✓                 | ✓              |
+| `POST /chat/sessions/{id}/context`                         | ✓          | ✓                 | ✓              |
+| `POST /chat/sessions/{id}/export`                          | ✓          | ✓                 | ✓              |
+| `POST /chat/feedback`                                      | ✓          | ✓                 | ✓              |
+| `GET /chat/history` (+ `/export`)                          | ✓          | ✓                 | ✓              |
+| `POST /chat/ask`                                           | ✓          | ✓                 | ✓              |
+
+| `POST /text/search`                                        | ✓          | ✓                 | ✓              |
+| `POST /text/ask`                                           | ✓          | ✓                 | ✓              |
+
+| `POST /validate/document`, `POST /validate/check`          | ✗          | ✓                 | ✓              |
+| `POST /validate/classifiers`                               | ✗          | ✓                 | ✓              |
+| `POST /validate/extract/parameters`                        | ✗          | ✓                 | ✓              |
+
+| `POST /analyse/compare`, `GET /analyse/compare/{id}`       | ✓          | ✓                 | ✓              |
+| `POST /analyse/calculate`                                  | ✓          | ✓                 | ✓              |
+| `POST /analyse/recommend`                                  | ✓          | ✓                 | ✓              |
+
+| `POST /meridian/export`                                    | ✗          | ✓                 | ✓              |
 | `GET /admin/users`, `POST/PUT/PATCH/DELETE /admin/users` | ✗ | ✗ | ✓ |
 | `GET /admin/roles`, `POST /admin/roles` | ✗ | ✗ | ✓ |
 | `GET /admin/audit` | ✗ | ✗ | ✓ |
@@ -172,13 +207,96 @@ GET .../{doc_id}/status?longpoll=15
 
 ---
 
+### Rate Limiting (ограничение запросов)
+
+Для защиты от перегрузок и DoS-атак на все публичные эндпоинты действуют следующие лимиты:
+
+| Эндпоинт / Группа                     | Лимит                     | Блокировка          | Примечание                         |
+| ------------------------------------- | ------------------------- | ------------------- | ---------------------------------- |
+| `POST /auth/token`                    | 10 запросов / мин         | 5 мин               | Защита от брутфорса                |
+| `POST /auth/refresh`                  | 20 запросов / мин         | 5 мин               |                                    |
+| `POST /documents`                     | 10 запросов / мин         | 1 мин               | Загрузка документов                |
+| `GET /documents` (+ `/{id}`, `/status`, `/file`, `/pages`) | 100 запросов / мин | 1 мин |                                    |
+| `POST /documents/search`              | 30 запросов / мин         | 1 мин               |                                    |
+| `POST /chat/*`, `POST /text/*`        | 30 запросов / мин         | 1 мин               | Чат и текстовые запросы            |
+| `GET /admin/*`                        | 60 запросов / мин         | 1 мин               | Административные                   |
+| `POST /admin/*`                       | 20 запросов / мин         | 1 мин               |                                    |
+| `GET /monitor/health`                 | Не ограничен              | —                   | Health check                       |
+| Остальные эндпоинты                   | 60 запросов / мин         | 1 мин               | По умолчанию                       |
+
+При превышении лимита возвращается HTTP `429 Too Many Requests` с телом:
+
+```json
+{
+  "error": {
+    "code": "TOO_MANY_REQUESTS",
+    "message": "Превышен лимит запросов. Попробуйте через N секунд",
+    "details": {
+      "retry_after_seconds": 60
+    }
+  }
+}
+```
+
+Лимиты настраиваются через переменные окружения. Для распределённого rate limiting должен использоваться Redis.
+
+---
+
+### Edge Cases (граничные случаи)
+
+#### Пустой / нулевой документ
+- При загрузке файла размером **0 байт** возвращается `400 BAD_REQUEST` с кодом `EMPTY_FILE`.
+- При загрузке файла размером **менее 1 КБ** (нецелесообразный документ) — `400 BAD_REQUEST` с кодом `FILE_TOO_SMALL`.
+- Если документ после распознавания содержит **0 страниц** (пустой PDF/изображение) — статус `failed`, код `EMPTY_DOCUMENT`.
+- Лимит размера файла: строго **< 100 МБ**. При `>= 100 МБ` возвращается `413 FILE_TOO_LARGE`.
+
+#### Пустое сообщение в чате
+- `POST /chat/sessions/{id}/messages` с пустым `content` (пустая строка или только пробелы)
+  возвращает `400 BAD_REQUEST` с кодом `EMPTY_MESSAGE`.
+- `POST /chat` и `POST /text/ask` — аналогичная проверка.
+
+#### Документы с максимальной длиной полей
+
+| Поле | Максимальная длина | Действие при превышении |
+|------|--------------------|-------------------------|
+| `title` | 1024 символа | `400 VALIDATION_ERROR` |
+| `doc_code` | 128 символов | `400 VALIDATION_ERROR` |
+| `content` (сообщение чата) | 65536 символов | `400 VALIDATION_ERROR` |
+| `comment` (любой) | 4096 символов | `400 VALIDATION_ERROR` |
+
+#### Граничные значения дат
+- `date_from` должен быть раньше `date_to`. Иначе — `400 BAD_REQUEST` с кодом `INVALID_DATE_RANGE`.
+- Максимальный диапазон дат для поиска — 100 лет.
+
+#### Конкуренция (concurrent requests)
+- Одновременная загрузка одного и того же файла (одинаковый SHA-256) — первый запрос проходит,
+  второй получает `409 CONFLICT` с кодом `DUPLICATE_FILE` (если файл уже обрабатывается).
+- Одновременный вызов `POST /documents/{doc_id}/reprocess` для одного документа — второй запрос
+  получает `409 CONFLICT` с кодом `ALREADY_PROCESSING`.
+- Idempotency-Key: при повторном запросе с тем же ключом в течение 24 часов возвращается
+  сохранённый результат первого запроса.
+
+#### Поведение при недоступности внешних сервисов
+
+| Внешний сервис | Эндпоинт | Поведение | HTTP-код |
+|---|---|---|---|
+| MinIO | `POST /documents`, `GET /documents/{id}/file` | Ошибка загрузки/получения файла | `503 SERVICE_UNAVAILABLE` |
+| Redis | Все эндпоинты (кэш/очереди) | Rate limiting отключается, запросы проходят без ограничения | — (логируется) |
+| LLM | `POST /chat/*`, `POST /text/*` | Retry 2 раза с усечением контекста; при всех неудачах — `502 BAD_GATEWAY` | `502 BAD_GATEWAY` |
+| PostgreSQL | Все эндпоинты с доступом к БД | Connection pool исчерпан — `503 SERVICE_UNAVAILABLE` | `503 SERVICE_UNAVAILABLE` |
+| Меридиан | `POST /meridian/export` | Экспорт ставится в очередь, повтор раз в 10 минут; статус `deferred` | `202` |
+
+---
+
 ### Примечания по реализации
 
 - **Типы документов** строго фиксированы: `normative`, `technical`, `archival_scan`, `drawing`, `specification`. Именно эти значения ожидаются в полях `document_type`.
 
 - **Обработка полным документом:** API не содержит методов для ручного выделения областей. Распознавание запускается для всего документа сразу после загрузки; пользователь не может отметить фрагмент для OCR. Просмотр страниц возможен только в режиме чтения.
 
-- **Пороговые значения confidence:** система помечает страницы с низким качеством OCR и логирует их (UC-02, UC-09). Конкретные пороги настраиваются на уровне сервисов.
+- **Пороговые значения confidence:** система помечает страницы с низким качеством OCR и логирует их (UC-02, UC-09). Пороговые значения задаются через переменные окружения каждого сервиса:
+  - `OCR_MIN_CONFIDENCE` — минимальный порог confidence для страницы (по умолчанию `0.5`).
+  - `OCR_AVG_MIN_CONFIDENCE` — минимальный средний confidence по документу (по умолчанию `0.6`).
 
 - **Трассируемость ответов:** все ответы поиска и вопросно-ответной системы обязательно содержат `document_id` и `page`. Прямая ссылка на страницу формируется согласно публичному API просмотра (`/documents/{doc_id}/pages/{page_num}`).
 
@@ -219,7 +337,9 @@ GET .../{doc_id}/status?longpoll=15
 
 - Поля `password`, `refresh_token`, `access_token` должны быть **отфильтрованы или замаскированы** (например, заменены на `***`) во всех логах сервисов.
 - Запрещено логировать **тело запроса/ответа** эндпоинтов `/auth/*`, `/internal/auth/*`.
-- Рекомендуется использовать структурное логирование с явным списком полей, исключённых из вывода (PII filter).
+- **Должно быть использовано** структурное логирование с явным списком полей, исключённых из вывода (PII filter).
+  Конфигурация PII filter задаётся через `LOG_PII_FIELDS` (список полей через запятую, по умолчанию:
+  `password, access_token, refresh_token`).
 
 #### Планы развития
 

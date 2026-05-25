@@ -32,16 +32,15 @@
   "document_id": "b3a8f1c2-...",
   "sections": [
     {
-      "section_id": "sec-1",
+      "section_id": 420001,
       "title": "Ледовые усиления",
       "content": "...",
       "page": 42,
-      "clause": "4.2 Требования к обшивке",
-      "parent_section_id": null
+      "clause": "4.2 Требования к обшивке"
     }
   ],
   "protected_spans": [
-    { "section_id": "...", "start_offset": 0, "end_offset": 128 }
+    { "section_id": 420001, "start_offset": 0, "end_offset": 128 }
   ],
   "options": {
     "strategy": "semantic_512"
@@ -52,7 +51,7 @@
 | Поле | Тип | Обязательность | Описание |
 |---|---|---|---|
 | `document_id` | string | Да | ID документа (UUID) |
-| `sections` | array | Да | Массив секций документа (плоский JSON из Registry) |
+| `sections` | array | Да | Массив секций документа (плоский JSON из Registry). Каждая секция содержит: `section_id`, `title`, `content`, `page`, `clause` |
 | `protected_spans` | array | Нет | Массив неразрывных блоков: `{section_id, start_offset, end_offset}`. Запрещает чанкование внутри указанного диапазона секции |
 | `options.strategy` | string | Нет | Стратегия разбиения → `rag_document_chunks.strategy` (`semantic_512`, `fixed_256`) |
 

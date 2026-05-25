@@ -459,7 +459,7 @@
         "status": "blocked",
         "parsing": { "status": "completed" },
         "validation": { "status": "invalid", "errors_found": 2, "document_id": "b3a8f1c2-...", "errors": [
-          {"code": "MISSING_FIELD", "section_id": "sec-012"}
+          {"code": "MISSING_FIELD", "section_id": 420012}
         ]},
         "registry": { "status": "blocked" }
       },
@@ -729,7 +729,7 @@
   "query": "...",
   "items": [
     {
-      "section_id": "sec-001",
+      "section_id": 420001,
       "document_id": "doc-norm-001",
       "document_title": "Правила классификации...",
       "document_type": "normative",
@@ -748,7 +748,21 @@
 
 ### GET /documents/search
 
-Быстрый GET-вариант поиска. **Query**: `q`, `document_id`, `page`, `page_size`, `document_type`. Ответ аналогичен `POST`.
+Быстрый GET-вариант поиска. Предназначен для простых поисковых запросов без сложных фильтров.
+
+**Параметры запроса (query):**
+
+| Параметр       | Тип    | Обязательность | Значение по умолчанию | Описание                                |
+|----------------|--------|----------------|-----------------------|-----------------------------------------|
+| `q`            | string | Да             | —                    | Поисковый запрос                         |
+| `document_id`  | string | Нет            | —                    | Ограничить поиск одним документом (UUID) |
+| `page`         | int    | Нет            | 1                    | Номер страницы результатов              |
+| `page_size`    | int    | Нет            | 10                   | Записей на странице (max 100)           |
+| `document_type`| string | Нет            | —                    | Фильтр по типу документа                 |
+
+**Ответ `200`:** Аналогичен ответу `POST /documents/search`.
+
+**Ограничения:** GET-вариант не поддерживает фильтры `date_from`, `date_to`, множество `document_ids`. Для сложных запросов используйте POST.
 
 ---
 

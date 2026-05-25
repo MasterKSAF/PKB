@@ -13,11 +13,16 @@ erDiagram
         text doc_code
         text title
         varchar validity_status
+        varchar processing_status "FSM-статус обработки: draft, uploaded, previewing, awaiting_decision, parsing, validation, ready_for_promotion, review_required, approved, registry, pending_index, indexed, duplicate, new_version, archived, failed"
         uuid successor_doc_id FK
         uuid predecessor_doc_id FK
         varchar era
         varchar group
         text title_hash_sha256
+        timestamptz created_at
+        timestamptz updated_at
+        text created_by
+        text updated_by
     }
 
     registry.document_sections {
@@ -36,7 +41,7 @@ erDiagram
     }
 
     rag.chunks {
-        uuid id PK
+        bigint id PK
         bigint section_id FK
         uuid document_id FK
         int chunk_index
@@ -77,6 +82,31 @@ erDiagram
         jsonb document_snapshot
     }
 
+    chat.sessions {
+        uuid id PK
+        text title
+        uuid user_id FK
+        uuid[] document_ids
+        jsonb options
+        int message_count
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    chat.messages {
+        bigint id PK
+        uuid session_id FK
+        text role
+        text content
+        text status "idle, pending, enriching, searching, generating, enriching_citations, answered, failed"
+        jsonb sources
+        jsonb attachments
+        jsonb options
+        jsonb feedback
+        int processing_time_ms
+        timestamptz created_at
+    }
+
     registry.documents ||--o{ registry.document_sections : has
     registry.document_sections ||--o{ registry.document_sections : parent
     registry.document_sections ||--o{ rag.chunks : contains
@@ -84,6 +114,7 @@ erDiagram
     registry.documents ||--o{ registry.document_references : resolved
     registry.documents ||--o{ rag.chunks : has
     registry.documents ||--o{ registry.document_history : has
+    chat.sessions ||--o{ chat.messages : contains
 ```
 
 ### UNIQUE-ограничения
@@ -104,3 +135,6 @@ erDiagram
 2. **Preview-данные** не хранятся в БД. Они живут исключительно в журнале пайплайна Orchestrator (временные артефакты фазы Preview).
 3. **`registry.document_sections`** — это **секции** документа (разделы, подразделы, пункты), создаваемые сервисом Registry на этапе сегментации. Не путать с чанками!
 4. **`rag.chunks`** — это **чанки**, формируемые сервисом RAG Builder на основе секций. Поле `section_id` ссылается на `registry.document_sections.id`. Одна секция может порождать несколько чанков.
+5. **Поле `rag.chunks.tenant_id`** — зарезервировано для будущей мультитенантности, в текущей версии пайплайнов не используется.
+6. **Таблицы `chat.sessions` и `chat.messages`** — хранят историю чат-сессий пользователей (Pipeline 3). Не относятся к реестру документов, выделены в отдельную схему `chat`.
+7. **Поле `registry.documents.processing_status`** — хранит FSM-статус обработки документа (промежуточные состояния пайплайна). Не путать с `validity_status` (юридический статус действия документа).

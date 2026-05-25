@@ -54,10 +54,10 @@
   "query": "ледовый класс Arc4",
   "results": [
     {
-      "chunk_id": "chk-001",
+      "chunk_id": 420001,
       "document_id": "doc-norm-001",
       "document_title": "Правила РС",
-      "section_id": "sec-4.2",
+      "section_id": 420001,
       "page": 42,
       "content": "Для ледового класса Arc4 толщина обшивки должна быть не менее 12 мм.",
       "score": 0.92,
@@ -74,10 +74,10 @@
 
 | Поле | Тип | Описание |
 |---|---|---|
-| `chunk_id` | string | ID чанка |
+| `chunk_id` | bigint | ID чанка |
 | `document_id` | string | ID документа |
 | `document_title` | string | Название документа |
-| `section_id` | string | ID секции в БД |
+| `section_id` | bigint | ID секции в БД |
 | `page` | int | Номер страницы |
 | `content` | string | Полное текстовое содержимое чанка |
 | `score` | float | Оценка релевантности |

@@ -81,7 +81,7 @@ Query Service принимает запросы от UI, вызывает RAG Se
 | -------------------- | ------------------ | --------------------------------------------- |
 | ID документа         | `document_id`      |                                               |
 | Номер страницы       | `page`             |                                               |
-| ID раздела           | `section_id`       |                                               |
+| ID раздела           | `section_id`       | Тип int (bigint), соответствует `registry.document_sections.id` |
 | Цитата из источника  | `excerpt`          | До 300 символов, публичный API                |
 | Полное содержимое    | `content`          | Сырой чанк от RAG (внутренний)            |
 | Раздел документа     | `clause`           |                                               |
@@ -144,7 +144,7 @@ longpoll-запрос к `GET /chat/sessions/{session_id}?longpoll=15`.
           "document_id": "doc-norm-001",
           "document_title": "Правила РС",
           "page": 42,
-          "section_id": "sec-4.2",
+          "section_id": 420042,
           "excerpt": "Для ледового класса Arc4 толщина обшивки должна быть не менее 12 мм.",
           "score": 0.92
         }
@@ -337,7 +337,7 @@ UI использует этот endpoint для получения ответа
           "document_id": "doc-norm-001",
           "document_title": "Правила РС, часть I",
           "page": 42,
-          "section_id": "frg-042",
+          "section_id": 420042,
           "excerpt": "Для ледового класса Arc4 толщина обшивки...",
           "score": 0.94
         }
@@ -698,7 +698,7 @@ LLM возвращает ответ вида:
       "text": "Минимальная толщина листа не должна определяться отдельно от проекта. Ее нужно проверять по району корпуса, материалу и расчетной нагрузке.",
       "sources": [
         {
-          "section_id": "cit-001",
+          "section_id": 420001,
           "document_id": "doc-norm-001",
           "document_title": "Правила классификации и постройки морских судов",
           "clause": "Корпус",
@@ -813,7 +813,7 @@ LLM возвращает ответ вида:
   },
   "results": [
     {
-      "section_id": "frg-042",
+      "section_id": 420042,
       "document_id": "doc-norm-001",
       "document_title": "Правила РС, часть I",
       "page": 42,
@@ -856,7 +856,7 @@ LLM возвращает ответ вида:
       "document_id": "doc-gost-001",
       "document_title": "ГОСТ 11265-73",
       "page": 3,
-      "section_id": "frg-201",
+      "section_id": 420201,
       "excerpt": "Для изготовления кнехтов применяется сталь марки 10ХСНД...",
       "score": 0.91
     }
