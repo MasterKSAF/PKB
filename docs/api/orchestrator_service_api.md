@@ -67,6 +67,7 @@
   "version_id": "c4b9f2d3-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
   "status": "uploaded",
   "content_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "file_size_bytes": 2048576,
   "is_duplicate_file": false,
   "is_duplicate_document": false,
   "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
@@ -327,6 +328,8 @@
         "extracted_by": "purgatory_parser_v2",
         "confidence": 0.95
       },
+      "content_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "file_size_bytes": 2048576,
       "status": "approved",
       "latest_version": 1,
       "total_versions": 2,

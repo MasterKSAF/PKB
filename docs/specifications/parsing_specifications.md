@@ -390,9 +390,10 @@ async def test_preview_mode_first_3_pages(pipeline):
 1. Определить тип файла (скан/изображение → OCR, цифровой PDF/DOC → Parser)
 2. Вызвать `POST /ocr/preview` или `POST /parser/preview` с `max_pages=3`
 3. Получить частичный сырой JSON (первые N страниц)
-4. Передать в Converter-validator (preview API): `POST /converter/preview/metadata` + `POST /converter/preview/uniqueness`
-5. Отобразить пользователю метаданные и кандидатов в дубликаты
-6. Ожидать решение пользователя: `proceed` / `stop_duplicate` / `force_new_version`
+4. Передать в Converter-validator (preview API): `POST /converter/preview/metadata`
+5. Выполнить проверку уникальности: **Оркестратор → Registry**: `POST /registry/documents/check-uniqueness` (с метаданными из шага 4)
+6. Отобразить пользователю метаданные и кандидатов в дубликаты
+7. Ожидать решение пользователя: `proceed` / `stop_duplicate` / `force_new_version`
 
 **Фаза Full (при `proceed`):**
 1. Вызвать `POST /ocr/process` или `POST /parser/process` (полный режим, без `max_pages`)
@@ -402,8 +403,9 @@ async def test_preview_mode_first_3_pages(pipeline):
      - При таймауте 15c → ответ с прогрессом, повтор longpoll
    - При `status: completed` → `GET /ocr/process/{task_id}/result`
 2. Передать полный сырой JSON в Converter-validator: `POST /converter/convert`
-3. Передать иерархический JSON в Registry: `POST /registry/documents`
-4. Передать плоский JSON (секции) в RAG Builder: `POST /rag/build`
+3. Выполнить проверку уникальности (Оркестратор): `POST /registry/documents/check-uniqueness`
+4. Если дубликат не найден — передать иерархический JSON в Registry: `POST /registry/documents`
+5. Передать плоский JSON (секции) в RAG Builder: `POST /rag/build`
 
 **Особенности preview-режима:**
 - Параметр `?preview=true` (или `max_pages=N`) в `POST /ocr/preview` / `POST /parser/preview`

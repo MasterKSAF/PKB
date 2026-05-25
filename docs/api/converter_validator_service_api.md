@@ -59,50 +59,6 @@
 | `year` | string | Год издания/утверждения |
 | `revision` | string\|null | Номер редакции, если применимо |
 
-### POST /converter/preview/uniqueness
-
-Проверка уникальности по первичным метаданным. Выполняет поиск возможных дубликатов.
-
-**Вход:** базовые метаданные (designation, title, document_type, year).
-
-**Выход:** список найденных дубликатов и флаг необходимости ручного решения.
-
-**Запрос:**
-
-```json
-{
-  "designation": "ГОСТ 20868-81",
-  "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
-  "document_type": "normative",
-  "year": "1981"
-}
-```
-
-**Ответ `200`:**
-
-```json
-{
-  "duplicates": [
-    {
-      "document_id": "b3a8f1c2-...",
-      "designation": "ГОСТ 20868-81",
-      "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
-      "similarity": 0.98
-    }
-  ],
-  "decision_required": false
-}
-```
-
-| Поле | Тип | Описание |
-|---|---|---|
-| `duplicates` | array | Список найденных кандидатов-дубликатов |
-| `duplicates[].document_id` | string | ID документа в системе |
-| `duplicates[].designation` | string | Обозначение документа-дубликата |
-| `duplicates[].title` | string | Название документа-дубликата |
-| `duplicates[].similarity` | float | Степень сходства (0.0 — 1.0) |
-| `decision_required` | bool | `true` — требуется ручное подтверждение пользователя перед полной конвертацией |
-
 ---
 
 ## Full API
@@ -128,7 +84,7 @@
 | 3 | Извлечение и валидация метаданных | Шаг 1–2 |
 | 4 | Валидация структуры JSON | Шаг 1 |
 | 5 | Классификация документа (тип, эра, юрисдикция) | Шаг 3 |
-| 6 | Проверка уникальности (SHA-256, title_hash) | Шаг 3 |
+| 6 | Вычисление хэшей SHA-256 (content_hash, title_hash) | Шаг 3 |
 | 7 | Сопоставление с существующими документами (predecessor/successor) | Шаг 3 |
 | 8 | Валидация классификационных кодов (через Registry) | Шаг 5 |
 | 9 | Построение кросс-ссылок | Шаг 1, 7 |
@@ -316,9 +272,7 @@
       "udk_code": "629.5.021",
       "overall_status": "CONFIRMED"
     },
-    "uniqueness": {
-      "is_duplicate_file": false,
-      "is_duplicate_document": false,
+    "fingerprint": {
       "content_hash_sha256": "abc123...",
       "title_hash_sha256": "def456..."
     },
@@ -347,7 +301,7 @@
 | `document_id` | string | ID документа. Назначается при конвертации: извлекается существующий для дубликата, либо генерируется новый |
 | `metadata` | object | Служебные метаданные ответа (схема, дата, информация о парсере) |
 | `document` | object | Полная структура документа: источник, метаданные, контент, терминология, ссылки |
-| `validation` | object | Результаты полной валидации (структура, классификация, уникальность, сопоставление, кросс-ссылки) |
+| `validation` | object | Результаты полной валидации (структура, классификация, fingerprint, сопоставление, кросс-ссылки) |
 | `llm_usage` | object | Статистика использования LLM (если `use_llm = true`) |
 
 **Поля `metadata`:**
@@ -424,7 +378,7 @@
 | `validation_id` | string | ID валидации |
 | `structure_valid` | bool | Результат проверки структуры |
 | `classification` | object | Статусы классификационных кодов |
-| `uniqueness` | object | Результаты проверки на дубликаты |
+| `fingerprint` | object | Хэши документа (content_hash_sha256, title_hash_sha256) |
 | `matching` | object | Связи с существующими документами (predecessor/successor) |
 | `cross_references` | array | Список кросс-ссылок на другие документы |
 | `decision` | string | `auto` — автоматическое продвижение, `review_required` — требуется ручное подтверждение |
@@ -465,9 +419,7 @@
     "udk_code": "629.5.021",
     "overall_status": "CONFIRMED"
   },
-  "uniqueness": {
-    "is_duplicate_file": false,
-    "is_duplicate_document": false,
+  "fingerprint": {
     "content_hash_sha256": "abc123...",
     "title_hash_sha256": "def456..."
   },
@@ -486,7 +438,7 @@
 | `document_id` | string | ID документа. Назначается валидацией: извлекается существующий для дубликата, либо генерируется новый. |
 | `structure_valid` | bool | Результат проверки структуры |
 | `classification` | object | Статусы классификационных кодов |
-| `uniqueness` | object | Результаты проверки на дубликаты |
+| `fingerprint` | object | Хэши документа (content_hash_sha256, title_hash_sha256) |
 | `matching` | object | Связи с существующими документами |
 | `decision` | string | `auto` — автоматическое продвижение, `review_required` — требуется ручное подтверждение |
 | `status` | string | Статус: `completed`, `failed` |
@@ -593,7 +545,6 @@
 | Метод | Путь | Режим | Описание | Запись в БД |
 |---|---|---|---|---|
 | `POST` | `/converter/preview/metadata` | Preview | Извлечение базовых метаданных (designation, title, document_type, year, revision) | Нет |
-| `POST` | `/converter/preview/uniqueness` | Preview | Проверка уникальности, поиск дубликатов | Нет |
 | `POST` | `/converter/convert` | Full | Полная конвертация + валидация + LLM + кросс-ссылки (схема `validated_v2`) | Нет |
 | `POST` | `/validate/document` | Full / Standalone | Комплексная валидация документа | Нет |
 | `POST` | `/validate/classifiers` | Full / Standalone | Валидация классификационных кодов | Нет |

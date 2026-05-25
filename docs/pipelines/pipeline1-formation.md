@@ -32,11 +32,10 @@ sequenceDiagram
     activate Conv
     Conv-->>Orch: Первичные метаданные
     deactivate Conv
-    Orch->>Conv: POST /converter/preview/uniqueness
-    activate Conv
-    Conv->>Conv: Быстрая проверка уникальности (через Registry)
-    Conv-->>Orch: Список кандидатов-дубликатов
-    deactivate Conv
+    Orch->>Reg: POST /registry/documents/check-uniqueness (метаданные + file_size_bytes)
+    activate Reg
+    Reg-->>Orch: Список кандидатов-дубликатов
+    deactivate Reg
     Orch-->>UI: Preview-данные (метаданные, дубликаты)
     deactivate Orch
 
@@ -66,13 +65,20 @@ sequenceDiagram
         Conv-->>Orch: Иерархический типизированный JSON
         deactivate Conv
 
-        Orch->>Reg: POST /registry/documents (JSON)
+        Orch->>Reg: POST /registry/documents/check-uniqueness (метаданные + file_size_bytes)
         activate Reg
-        Reg->>Reg: Сохранение карточки, сегментация на секции
-        Reg-->>Orch: JSON со ссылками в БД
+        Reg-->>Orch: { is_duplicate, candidates }
         deactivate Reg
-
-        Orch-->>UI: status: completed
+        alt is_duplicate = true
+            Orch-->>UI: status: duplicate (финальная проверка)
+        else
+            Orch->>Reg: POST /registry/documents (JSON)
+            activate Reg
+            Reg->>Reg: Сохранение карточки, сегментация на секции
+            Reg-->>Orch: JSON со ссылками в БД
+            deactivate Reg
+            Orch-->>UI: status: completed
+        end
     else action = stop_duplicate
         Orch-->>UI: status: duplicate
     else action = force_new_version
@@ -93,7 +99,7 @@ sequenceDiagram
 | P.1 | Определение типа файла (скан/цифровой) | Оркестратор | Выбор OCR или Parser |
 | P.2 | Preview-распознавание (первые N страниц) | OCR-сервис или Parser-сервис | Частичный сырой JSON |
 | P.3 | Извлечение первичных метаданных | Converter-validator (preview API) | Обозначение, наименование, тип, даты |
-| P.4 | Быстрая проверка уникальности | Converter-validator (preview API) → `POST /registry/documents/check-uniqueness` | Список кандидатов-дубликатов |
+| P.4 | Проверка уникальности (по метаданным + размеру) | Оркестратор → `POST /registry/documents/check-uniqueness` | Список кандидатов-дубликатов |
 | P.5 | Отображение preview пользователю | UI | Метаданные + дубликаты |
 | P.6 | Решение пользователя | UI → Оркестратор | proceed / stop_duplicate / force_new_version |
 
@@ -151,7 +157,7 @@ sequenceDiagram
 | 2.3 | Извлечение метаданных (LLM, эвристики) | Обозначение, наименование, тип, даты, редакция |
 | 2.4 | Распознавание перекрёстных ссылок | Нормализованные ссылки на ГОСТ/ТУ |
 | 2.5 | Валидация структуры и полноты | Проверка соответствия схеме |
-| 2.6 | Проверка уникальности (по точным метаданным) | Поиск дубликатов через Registry |
+| 2.6 | — | Вычисление хэшей SHA-256 (content_hash, title_hash). Проверка уникальности выполняется Оркестратором после получения JSON (через `POST /registry/documents/check-uniqueness`) |
 
 **Особенность:** использует LLM для иерархии, классификации и метаданных.  
 **Выход:** иерархический типизированный JSON, близкий к итоговому документу.
@@ -199,14 +205,17 @@ sequenceDiagram
 > эти значения совпадают, но в общем случае `doc_code` может отличаться
 > после нормализации (удаление префиксов, приведение регистра и т.д.).
 
-##### Этап 1 → 2
+##### Проверка уникальности (Оркестратор → Registry)
 
-**Выход preview/uniqueness:**
+**Ответ `POST /registry/documents/check-uniqueness`:**
 ```json
 {
   "is_duplicate": false,
+  "is_duplicate_file": false,
   "candidates": [],
-  "decision_required": false
+  "content_hash_sha256": "a1b2c3d4...",
+  "title_hash_sha256": "e5f6a7b8...",
+  "checked_at": "2026-05-15T12:00:00Z"
 }
 ```
 
@@ -274,9 +283,11 @@ stateDiagram-v2
 |---|---|---|---|
 | Пре-стейдж (загрузка) | Сохранение в MinIO, создание записи в БД | Ошибка MinIO | Удалить запись из БД, вернуть ошибку UI |
 | Preview OCR/Parser | Распознавание первых N страниц | Ошибка распознавания | Статус `preview_failed` |
-| Preview Converter-validator | Извлечение метаданных, проверка уникальности | Ошибка уникальности | `awaiting_decision` с флагом ошибки |
+| Preview Converter-validator | Извлечение метаданных | Ошибка извлечения метаданных | `awaiting_decision` с флагом ошибки |
+| Preview проверка уникальности (Оркестратор → Registry) | Проверка по метаданным через `check-uniqueness` | Ошибка Registry | `awaiting_decision` (повтор при доступности) |
 | Full OCR/Parser | Распознавание и парсинг | Ошибка OCR/таймаут | Повтор (до 3 раз), при превышении — статус `failed` |
 | Full Converter-validator | Конвертация, валидация | Ошибка структуры JSON | Вернуть `validation.errors`, статус `review_required` |
+| Full проверка уникальности (Оркестратор → Registry) | Финальная верификация через `check-uniqueness` | Ошибка Registry / дубликат | `duplicate` (если дубликат) / повтор (если ошибка Registry) |
 | Registry | Запись карточки в БД | Ошибка записи | Откат транзакции, повтор (до 2 раз) |
 
 ```mermaid
@@ -285,7 +296,7 @@ graph TD
         Upload[Загрузка файла] -->|Ошибка MinIO| Comp1[Компенсация: удалить запись из БД]
         Upload -->|Успех| Prev[Preview]
         Prev -->|Ошибка OCR/Parser| PrevFail[preview_failed]
-        Prev -->|Ошибка уникальности| AwaitDec[awaiting_decision с флагом ошибки]
+        Prev -->|Ошибка метаданных| AwaitDec[awaiting_decision с флагом ошибки]
         Prev -->|Успех| AwaitDec
         AwaitDec -->|proceed| Pars[OCR/Parser Full]
         AwaitDec -->|stop| Dup[duplicate]
@@ -295,7 +306,12 @@ graph TD
         Retry1 -->|Успех| Val[Converter-validator]
         Pars -->|Успех| Val
         Val -->|Ошибка структуры| Review[review_required]
-        Val -->|Успех| Reg[Registry]
+        Val -->|Успех| Uniq{Проверка уникальности}
+        Uniq -->|Ошибка Registry| RetryUniq[Повтор]
+        RetryUniq -->|Успех| Uniq
+        RetryUniq -->|Все попытки| Fail
+        Uniq -->|Дубликат| Dup
+        Uniq -->|Уникален| Reg[Registry]
         Reg -->|Ошибка записи| Retry2[Повтор до 2 раз]
         Retry2 -->|Все попытки исчерпаны| Fail
         Retry2 -->|Успех| Done[Готово]
@@ -312,7 +328,8 @@ graph TD
 | OCR preview | 60с | 1 | Immediate | — |
 | Parser preview | 30с | 1 | Immediate | — |
 | Converter preview (metadata) | 15с | 0 | — | — |
-| Converter preview (uniqueness) | 15с | 0 | — | — |
+| Registry check-uniqueness (preview) | 15с | 1 | Immediate | — |
+| Registry check-uniqueness (full) | 15с | 1 | Immediate | — |
 | OCR Full | 300с (5 мин) | 3 | Exponential | 1с → 2с → 4с |
 | Parser Full | 300с (5 мин) | 3 | Exponential | 1с → 2с → 4с |
 | Converter-validator (full) | 120с (2 мин) | 2 | Exponential | 1с → 2с |

@@ -638,6 +638,8 @@ GET /registry/documents
       "doc_code": "20868-81",
       "source_type": "GOST",
       "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+      "content_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "file_size_bytes": 2048576,
       "status": "approved",
       "era": "USSR",
       "validity_status": "active",
@@ -683,8 +685,8 @@ GET /registry/documents/{doc_id}
 POST /registry/documents/check-uniqueness
 ```
 
-Быстрая проверка уникальности документа по метаданным. Используется Converter-validator
-на preview-этапе Пайплайна 1 для поиска дубликатов до полной обработки.
+Быстрая проверка уникальности документа по метаданным. Вызывается **Оркестратором**
+на preview- и full-этапах Пайплайна 1 для поиска дубликатов до записи в Registry.
 
 **Тело запроса:**
 
@@ -694,12 +696,14 @@ POST /registry/documents/check-uniqueness
 | `doc_code` | string | Нет | Код документа (ГОСТ, ОСТ и т.д.) |
 | `era` | string | Нет | Эпоха действия документа |
 | `source_type` | string | Нет | Тип источника |
+| `file_size_bytes` | int | Нет | Размер файла в байтах. Используется для pre-filtering при поиске кандидатов |
 
 ```json
 {
   "title": "Стойки установочные крепежные. Технические требования",
   "doc_code": "ГОСТ 20868-81",
-  "era": "USSR"
+  "era": "USSR",
+  "file_size_bytes": 2048576
 }
 ```
 
@@ -716,21 +720,24 @@ POST /registry/documents/check-uniqueness
         "title": "ГОСТ 20868-81",
         "doc_code": "20868-81",
         "similarity": 0.98,
-        "status": "archived"
+        "status": "archived",
+        "file_size_bytes": 1048576
       }
     ],
     "content_hash_sha256": null,
     "title_hash_sha256": "a1b2c3d4e5f6...",
+    "file_size_bytes": 2048576,
     "checked_at": "2026-05-15T12:00:00Z"
   }
 }
 ```
 
 **Логика определения дубликатов:**
-1. Поиск по `title_hash_sha256` (точное совпадение нормализованного названия).
-2. Поиск по `doc_code` + `era` (документ с тем же кодом в ту же эпоху).
-3. Если кандидат найден и имеет статус обработки `registry` или `indexed` — считается дубликатом.
-4. Если кандидат найден, но находится в `draft` или `failed` — возвращается как кандидат,
+1. Pre-filter по размеру: если передан `file_size_bytes`, кандидаты с существенно отличающимся размером отфильтровываются (`|size₁ - size₂| > 0.5% max(size₁, size₂)` — false positive отличия метаданных в архиве).
+2. Поиск по `title_hash_sha256` (точное совпадение нормализованного названия).
+3. Поиск по `doc_code` + `era` (документ с тем же кодом в ту же эпоху).
+4. Если кандидат найден и имеет статус обработки `registry` или `indexed` — считается дубликатом.
+5. Если кандидат найден, но находится в `draft` или `failed` — возвращается как кандидат,
    решение принимает пользователь.
 
 ---
@@ -784,6 +791,7 @@ POST /registry/documents
     "mks": "31.240",
     "era": "USSR",
     "validity_status": "active",
+    "file_size_bytes": 2048576,
     ...
   },
   "structure": {
@@ -869,7 +877,9 @@ POST /registry/documents
     "effective_from": "1982-07-01",
     "replaces": "ГОСТ 20868-75",
     "page_count": 2,
-    "file_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    "file_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "content_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "file_size_bytes": 2048576
   },
   "sections": [
     {

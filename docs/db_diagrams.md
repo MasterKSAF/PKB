@@ -13,12 +13,14 @@ erDiagram
         text doc_code
         text title
         varchar validity_status
-        varchar processing_status "FSM-статус обработки: draft, uploaded, previewing, awaiting_decision, parsing, validation, ready_for_promotion, review_required, approved, registry, pending_index, indexed, duplicate, new_version, archived, failed"
+        varchar processing_status
         uuid successor_doc_id FK
         uuid predecessor_doc_id FK
         varchar era
         varchar group
         text title_hash_sha256
+        text content_hash_sha256
+        bigint file_size_bytes
         timestamptz created_at
         timestamptz updated_at
         text created_by
@@ -46,8 +48,8 @@ erDiagram
         uuid document_id FK
         int chunk_index
         text content
-        text embedding "pgvector"
-        text tsv "tsvector"
+        vector(1536) embedding
+        tsvector tsv
         text strategy
         int page
         jsonb bbox
@@ -98,7 +100,7 @@ erDiagram
         uuid session_id FK
         text role
         text content
-        text status "idle, pending, enriching, searching, generating, enriching_citations, answered, failed"
+        text status
         jsonb sources
         jsonb attachments
         jsonb options
@@ -117,10 +119,31 @@ erDiagram
     chat.sessions ||--o{ chat.messages : contains
 ```
 
+---
+
+### Комментарии к полям
+
+| Таблица | Поле | Тип | Комментарий |
+|---------|------|-----|-------------|
+| `registry.documents` | `processing_status` | varchar | FSM-статус обработки: `draft`, `uploaded`, `previewing`, `awaiting_decision`, `parsing`, `validation`, `ready_for_promotion`, `review_required`, `approved`, `registry`, `pending_index`, `indexed`, `duplicate`, `new_version`, `archived`, `failed` |
+| `registry.document_sections` | `type` | varchar | Тип секции: `section`, `table`, `image`, `formula` |
+| `registry.documents` | `file_size_bytes` | bigint | Размер исходного загруженного файла в байтах. Используется для pre-filtering при duplicate-детекции и для отображения в UI |
+| `registry.documents` | `content_hash_sha256` | text | SHA-256 содержимого файла последней версии документа. Используется для быстрого поиска по хэшу (duplicate-детекция на уровне файла). Индексируется для ускорения `WHERE content_hash_sha256 = ...` |
+| `rag.chunks` | `embedding` | vector(1536) | Векторное представление для семантического поиска (pgvector). Размерность зависит от модели эмбеддингов. |
+| `rag.chunks` | `tsv` | tsvector | Полнотекстовый индекс для гибридного поиска (pg_trgm + ts_rank) |
+| `rag.chunks` | `tenant_id` | text | Зарезервировано для будущей мультитенантности, в текущей версии не используется |
+| `chat.messages` | `status` | text | Статус обработки сообщения: `idle`, `pending`, `enriching`, `searching`, `generating`, `enriching_citations`, `answered`, `failed` |
+
+---
+
 ### UNIQUE-ограничения
 
 - `registry.documents.title` — бизнес-ключ документа (через title_hash_sha256)
 - `registry.document_references (source_document_id, target_doc_code, reference_type)` — защита от дублей связей
+
+### INDEX
+
+- `registry.documents.content_hash_sha256` — индекс для быстрого поиска по SHA-256 файла (`WHERE content_hash_sha256 = ?`). Not unique — разные версии документа могут иметь одинаковый хэш.
 
 ### CHECK-ограничения
 
