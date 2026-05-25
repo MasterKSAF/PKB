@@ -15,11 +15,12 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { ExternalLink, FileText, Filter, Hash, Search as SearchIcon, X, Download } from 'lucide-react';
+import { Database, ExternalLink, FileText, Filter, Hash, Search as SearchIcon, X, Download } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { searchApi } from '../utils/http';
 import { useUIStore } from '../store/uiStore';
 import { downloadPreviewFile } from '../utils/downloadPreview';
+import { MOCK_KNOWLEDGE_SECTIONS } from '../utils/mockData';
 
 type DocumentPreview = {
   id: string;
@@ -60,6 +61,7 @@ export const Search: React.FC = () => {
   const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null);
   const [previewWidth, setPreviewWidth] = useState(420);
   const [isResizing, setIsResizing] = useState(false);
+  const knowledgeSections = MOCK_KNOWLEDGE_SECTIONS;
 
   const activeDocument = openedDocuments.find((doc) => doc.id === activeDocumentId) ?? openedDocuments[0];
 
@@ -132,6 +134,45 @@ export const Search: React.FC = () => {
     <Box sx={{ display: 'flex', height: 'calc(100vh - 142px)', minHeight: 0 }}>
       <Box sx={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
         <Container maxWidth="lg" sx={{ py: 4 }}>
+          <Paper
+            variant="outlined"
+            sx={{
+              p: 1.5,
+              mb: 2,
+              borderRadius: 3,
+              bgcolor: 'rgba(22, 23, 27, 0.72)',
+              border: '1.5px solid rgba(198, 216, 240, 0.34)',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045)',
+            }}
+          >
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.2} sx={{ alignItems: { md: 'center' } }}>
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 190 }}>
+                <Database size={17} color={isLight ? '#0f5f6f' : '#98d9d8'} />
+                <Box>
+                  <Typography sx={{ fontSize: '0.86rem', fontWeight: 560 }}>Поиск по базе знаний</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Разделы для сужения выдачи
+                  </Typography>
+                </Box>
+              </Stack>
+              <Stack direction="row" spacing={0.8} useFlexGap sx={{ flexWrap: 'wrap' }}>
+                {knowledgeSections.map((section) => (
+                  <Chip
+                    key={section.id}
+                    size="small"
+                    label={`${section.title}: ${section.documents}`}
+                    variant="outlined"
+                    sx={{
+                      borderColor: isLight ? 'rgba(15,95,111,0.20)' : 'rgba(152,217,216,0.22)',
+                      color: isLight ? '#0f5f6f' : '#cfe7e7',
+                      bgcolor: isLight ? 'rgba(15,95,111,0.045)' : 'rgba(152,217,216,0.045)',
+                    }}
+                  />
+                ))}
+              </Stack>
+            </Stack>
+          </Paper>
+
           <Paper
             sx={{
               p: 3,

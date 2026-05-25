@@ -13,11 +13,13 @@ import {
   Collapse,
   Alert,
   Stack,
+  Dialog,
 } from '@mui/material';
 import {
   Send,
   User,
   Anchor,
+  Ship,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -30,6 +32,9 @@ import {
   FileText,
   Search,
   Download,
+  Maximize2,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
 import { chatApi } from '../utils/http';
@@ -92,13 +97,13 @@ function sourceButtonSx(isLight: boolean, fontSize = '0.74rem') {
     minWidth: 0,
     height: 'auto',
     fontSize,
-    color: isLight ? '#0f5f6f' : '#b8c4d8',
-    border: isLight ? '1px solid rgba(15, 95, 111, 0.24)' : '1px solid rgba(184,196,216,0.20)',
+    color: isLight ? '#075985' : '#b8c4d8',
+    border: isLight ? '1px solid #7dd3fc' : '1px solid rgba(184,196,216,0.20)',
     borderRadius: 999,
-    bgcolor: isLight ? 'rgba(15, 95, 111, 0.06)' : 'rgba(184,196,216,0.06)',
+    bgcolor: isLight ? '#e0f2fe' : 'rgba(184,196,216,0.06)',
     '&:hover': {
-      bgcolor: isLight ? 'rgba(15, 95, 111, 0.10)' : 'rgba(184,196,216,0.10)',
-      borderColor: isLight ? 'rgba(15, 95, 111, 0.36)' : 'rgba(184,196,216,0.28)',
+      bgcolor: isLight ? '#bae6fd' : 'rgba(184,196,216,0.10)',
+      borderColor: isLight ? '#38bdf8' : 'rgba(184,196,216,0.28)',
     },
   } as const;
 }
@@ -165,14 +170,17 @@ function highlightText(text: string, query: string, isLight: boolean) {
 export const Chat: React.FC = () => {
   const { appendChatMessages, chatMessages, themeMode } = useUIStore();
   const isLight = themeMode === 'light';
-  const assistantAccent = isLight ? '#0f5f6f' : '#98d9d8';
+  const assistantAccent = isLight ? '#0284c7' : '#98d9d8';
   const messages = chatMessages;
   const [input, setInput] = useState('');
   const [chatSearch, setChatSearch] = useState('');
+  const [previewSearch, setPreviewSearch] = useState('');
   const [expandedCitations, setExpandedCitations] = useState<Record<string, boolean>>({});
   const [openedCitations, setOpenedCitations] = useState<ChatPreview[]>([]);
   const [activeCitationId, setActiveCitationId] = useState<string | null>(null);
   const [previewWidth, setPreviewWidth] = useState(420);
+  const [previewZoom, setPreviewZoom] = useState(1);
+  const [expandedPreviewOpen, setExpandedPreviewOpen] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [activeSearchMatch, setActiveSearchMatch] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -180,6 +188,7 @@ export const Chat: React.FC = () => {
 
   const activeCitation = openedCitations.find((citation) => citation.previewId === activeCitationId) ?? openedCitations[0];
   const normalizedChatSearch = chatSearch.trim().toLowerCase();
+  const normalizedPreviewSearch = previewSearch.trim().toLowerCase();
   const searchMatches = useMemo(
     () =>
       normalizedChatSearch
@@ -322,19 +331,19 @@ export const Chat: React.FC = () => {
                     {isAssistant && (
                       <Avatar
                         sx={{
-                          bgcolor: isLight ? '#eef7f8' : 'rgba(152, 217, 216, 0.16)',
-                          color: isLight ? '#0f5f6f' : '#98d9d8',
+                          bgcolor: isLight ? '#e0f2fe' : 'rgba(152, 217, 216, 0.16)',
+                          color: assistantAccent,
                           width: 34,
                           height: 34,
                           mt: 0.55,
                           border: '1px solid',
-                          borderColor: isLight ? 'rgba(15, 95, 111, 0.34)' : 'rgba(152, 217, 216, 0.26)',
+                          borderColor: isLight ? 'rgba(2, 132, 199, 0.36)' : 'rgba(152, 217, 216, 0.26)',
                           boxShadow: isLight
-                            ? 'inset 0 1px 0 rgba(255,255,255,0.70), 0 1px 2px rgba(15,23,42,0.08)'
+                            ? 'inset 0 1px 0 rgba(255,255,255,0.70), 0 2px 7px rgba(2,132,199,0.13)'
                             : 'inset 0 1px 0 rgba(255,255,255,0.08), 0 6px 14px rgba(0,0,0,0.16)',
                         }}
                       >
-                        <Anchor size={18} />
+                        {isLight ? <Ship size={18} /> : <Anchor size={18} />}
                       </Avatar>
                     )}
 
@@ -383,14 +392,14 @@ export const Chat: React.FC = () => {
                               border: '1px solid',
                               borderColor: isAssistant
                                 ? isLight
-                                  ? 'rgba(15, 95, 111, 0.34)'
+                                  ? 'rgba(2, 132, 199, 0.36)'
                                   : 'rgba(152, 217, 216, 0.24)'
                                 : isLight
                                   ? 'rgba(159, 116, 64, 0.34)'
                                   : 'rgba(216, 176, 122, 0.24)',
                               bgcolor: isAssistant
                                 ? isLight
-                                  ? '#eef7f8'
+                                  ? '#e0f2fe'
                                   : 'rgba(152, 217, 216, 0.07)'
                                 : isLight
                                   ? '#fff6e8'
@@ -400,7 +409,7 @@ export const Chat: React.FC = () => {
                                 : 'inset 0 1px 0 rgba(255,255,255,0.06)',
                               fontWeight: 600,
                               letterSpacing: '0.04em',
-                              color: isAssistant ? (isLight ? '#0f5f6f' : '#98d9d8') : isLight ? '#8a5f2b' : '#d8b07a',
+                              color: isAssistant ? assistantAccent : isLight ? '#8a5f2b' : '#d8b07a',
                               fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
                               fontSize: '0.79rem',
                             }}
@@ -626,8 +635,16 @@ export const Chat: React.FC = () => {
 
               {chatMutation.isPending && (
                 <Box sx={{ display: 'flex', gap: 1.5 }}>
-                  <Avatar sx={{ bgcolor: 'rgba(152, 217, 216, 0.16)', color: '#98d9d8', width: 34, height: 34 }}>
-                    <Anchor size={18} />
+                  <Avatar
+                    sx={{
+                      bgcolor: isLight ? '#e0f2fe' : 'rgba(152, 217, 216, 0.16)',
+                      color: assistantAccent,
+                      width: 34,
+                      height: 34,
+                      border: isLight ? '1px solid rgba(2, 132, 199, 0.36)' : 'none',
+                    }}
+                  >
+                    {isLight ? <Ship size={18} /> : <Anchor size={18} />}
                   </Avatar>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <CircularProgress size={16} thickness={5} />
@@ -705,14 +722,14 @@ export const Chat: React.FC = () => {
                     borderColor: assistantAccent,
                     bgcolor: input.trim()
                       ? isLight
-                        ? 'rgba(15, 95, 111, 0.13)'
+                        ? 'rgba(2, 132, 199, 0.13)'
                         : 'rgba(152, 217, 216, 0.16)'
                       : isLight
-                        ? 'rgba(15, 95, 111, 0.05)'
+                        ? 'rgba(2, 132, 199, 0.05)'
                         : 'rgba(152, 217, 216, 0.06)',
                     color: assistantAccent,
                     '&:hover': {
-                      bgcolor: isLight ? 'rgba(15, 95, 111, 0.18)' : 'rgba(152, 217, 216, 0.22)',
+                      bgcolor: isLight ? 'rgba(2, 132, 199, 0.18)' : 'rgba(152, 217, 216, 0.22)',
                     },
                     '&.Mui-disabled': {
                       color: assistantAccent,
@@ -813,7 +830,7 @@ export const Chat: React.FC = () => {
             minWidth: 320,
             maxWidth: 720,
             position: 'relative',
-            borderLeft: isLight ? '1px solid rgba(15,23,42,0.14)' : '1px solid rgba(255,255,255,0.10)',
+            borderLeft: isLight ? '2px solid rgba(14, 116, 144, 0.26)' : '2px solid rgba(198, 216, 240, 0.40)',
             bgcolor: isLight ? '#f5f7fa' : '#101116',
             display: 'flex',
             flexDirection: 'column',
@@ -862,30 +879,59 @@ export const Chat: React.FC = () => {
                   borderBottom: isLight ? '1px solid rgba(15,23,42,0.12)' : '1px solid rgba(255,255,255,0.08)',
                 }}
               >
-                <Button
-                  variant="text"
-                  size="small"
-                  className="source-link-button"
-                  startIcon={<Download size={14} />}
-                  title={activeCitation.document}
-                  onClick={() =>
-                    downloadPreviewFile(
-                      activeCitation.document,
-                      `${activeCitation.document}\n${activeCitation.section}\nСтраница ${activeCitation.page}\n\n${activeCitation.text}`,
-                    )
-                  }
-                  sx={{
-                    ...sourceButtonSx(isLight, '0.82rem'),
-                    justifyContent: 'flex-start',
-                    textAlign: 'left',
-                    px: 0.9,
-                    maxWidth: '100%',
-                  }}
-                >
-                  <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 280 }}>
-                    {activeCitation.document}
-                  </Box>
-                </Button>
+                <Stack spacing={1}>
+                  <Stack direction="row" spacing={0.8} sx={{ alignItems: 'center' }}>
+                    <Button
+                      variant="text"
+                      size="small"
+                      className="source-link-button"
+                      startIcon={<Download size={14} />}
+                      title={activeCitation.document}
+                      onClick={() =>
+                        downloadPreviewFile(
+                          activeCitation.document,
+                          `${activeCitation.document}\n${activeCitation.section}\nСтраница ${activeCitation.page}\n\n${activeCitation.text}`,
+                        )
+                      }
+                      sx={{
+                        ...sourceButtonSx(isLight, '0.82rem'),
+                        justifyContent: 'flex-start',
+                        textAlign: 'left',
+                        px: 0.9,
+                        flex: 1,
+                        minWidth: 0,
+                      }}
+                    >
+                      <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {activeCitation.document}
+                      </Box>
+                    </Button>
+                    <IconButton size="small" onClick={() => setPreviewZoom((value) => Math.max(0.75, value - 0.1))}>
+                      <ZoomOut size={16} />
+                    </IconButton>
+                    <Typography variant="caption" color="text.secondary" sx={{ minWidth: 42, textAlign: 'center' }}>
+                      {Math.round(previewZoom * 100)}%
+                    </Typography>
+                    <IconButton size="small" onClick={() => setPreviewZoom((value) => Math.min(1.45, value + 0.1))}>
+                      <ZoomIn size={16} />
+                    </IconButton>
+                    <IconButton size="small" onClick={() => setExpandedPreviewOpen(true)}>
+                      <Maximize2 size={16} />
+                    </IconButton>
+                  </Stack>
+                  <TextField
+                    size="small"
+                    value={previewSearch}
+                    onChange={(event) => setPreviewSearch(event.target.value)}
+                    placeholder="Поиск по открытому документу"
+                    variant="outlined"
+                    slotProps={{
+                      input: {
+                        startAdornment: <Search size={15} style={{ marginRight: 8, opacity: 0.62 }} />,
+                      },
+                    }}
+                  />
+                </Stack>
               </Box>
 
               <Box sx={{ p: 1.5 }}>
@@ -899,7 +945,10 @@ export const Chat: React.FC = () => {
                     bgcolor: '#f4f1e8',
                     color: '#242424',
                     borderColor: 'rgba(255,255,255,0.12)',
+                    width: `${100 / previewZoom}%`,
+                    transform: `scale(${previewZoom})`,
                     transformOrigin: 'top left',
+                    transition: 'transform 160ms ease, width 160ms ease',
                   }}
                 >
                   <Typography variant="caption" sx={{ color: '#777' }}>
@@ -917,13 +966,13 @@ export const Chat: React.FC = () => {
                     sx={{
                       mt: 2,
                       p: 2,
-                      border: '2px solid rgba(112,161,255,0.55)',
-                      bgcolor: 'rgba(112,161,255,0.08)',
+                      border: '2px solid rgba(56, 189, 248, 0.55)',
+                      bgcolor: 'rgba(56, 189, 248, 0.10)',
                       borderRadius: 1,
                     }}
                   >
                     <Typography variant="body2" sx={{ lineHeight: 1.8 }}>
-                      {activeCitation.text}
+                      {highlightText(activeCitation.text, normalizedPreviewSearch, isLight)}
                     </Typography>
                   </Box>
                   {activeCitation.previewKind === 'document' && [1, 2, 3, 4].map((pageOffset) => {
@@ -967,6 +1016,118 @@ export const Chat: React.FC = () => {
           )}
         </Box>
       )}
+
+      <Dialog
+        open={expandedPreviewOpen && Boolean(activeCitation)}
+        onClose={() => setExpandedPreviewOpen(false)}
+        maxWidth="lg"
+        fullWidth
+      >
+        {activeCitation && (
+          <Box
+            sx={{
+              bgcolor: isLight ? '#f8fafc' : '#101116',
+              color: 'text.primary',
+              border: isLight ? '1px solid #bae6fd' : '1px solid rgba(198, 216, 240, 0.32)',
+            }}
+          >
+            <Box
+              sx={{
+                px: 2,
+                py: 1.3,
+                borderBottom: isLight ? '1px solid #dbeafe' : '1px solid rgba(255,255,255,0.08)',
+              }}
+            >
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                <FileText size={18} color={assistantAccent} />
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography
+                    title={activeCitation.document}
+                    sx={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                  >
+                    {activeCitation.document}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {activeCitation.previewKind === 'source' ? `Страница ${activeCitation.page}` : 'Документ'} · {activeCitation.section}
+                  </Typography>
+                </Box>
+                <TextField
+                  size="small"
+                  value={previewSearch}
+                  onChange={(event) => setPreviewSearch(event.target.value)}
+                  placeholder="Поиск по документу"
+                  sx={{ width: 260, display: { xs: 'none', md: 'block' } }}
+                  slotProps={{
+                    input: {
+                      startAdornment: <Search size={15} style={{ marginRight: 8, opacity: 0.62 }} />,
+                    },
+                  }}
+                />
+                <IconButton onClick={() => setExpandedPreviewOpen(false)}>
+                  <X size={18} />
+                </IconButton>
+              </Stack>
+            </Box>
+
+            <Box className="preview-scroll-panel" sx={{ maxHeight: '76vh', overflow: 'auto', p: 2.4 }}>
+              <Paper
+                variant="outlined"
+                sx={{
+                  maxWidth: 820,
+                  minHeight: activeCitation.previewKind === 'document' ? 980 : 560,
+                  mx: 'auto',
+                  p: 3.2,
+                  borderRadius: 2,
+                  bgcolor: '#f4f1e8',
+                  color: '#242424',
+                  borderColor: '#d2cec2',
+                  boxShadow: '0 22px 70px rgba(15, 23, 42, 0.20)',
+                }}
+              >
+                <Typography variant="caption" sx={{ color: '#777' }}>
+                  Страница {activeCitation.page}
+                </Typography>
+                <Typography variant="h6" sx={{ mt: 1, mb: 1.2, color: '#1f1f1f', fontFamily: 'Georgia, serif' }}>
+                  {activeCitation.previewKind === 'document' ? 'Титульная страница документа' : activeCitation.section}
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#555', mb: 2.2 }}>
+                  {activeCitation.previewKind === 'source'
+                    ? 'Открыт фрагмент страницы, на который ссылается ответ ассистента.'
+                    : 'Открыт демонстрационный просмотр всего документа с вертикальной прокруткой страниц.'}
+                </Typography>
+                <Box
+                  sx={{
+                    mt: 2,
+                    p: 2.2,
+                    border: '2px solid rgba(56, 189, 248, 0.55)',
+                    bgcolor: 'rgba(56, 189, 248, 0.10)',
+                    borderRadius: 1,
+                  }}
+                >
+                  <Typography variant="body2" sx={{ lineHeight: 1.85 }}>
+                    {highlightText(activeCitation.text, normalizedPreviewSearch, isLight)}
+                  </Typography>
+                </Box>
+                {activeCitation.previewKind === 'document' &&
+                  [1, 2, 3].map((pageOffset) => (
+                    <Box key={pageOffset} sx={{ mt: 4, pt: 3, minHeight: 420, borderTop: '1px solid #d2cec2' }}>
+                      <Typography variant="caption" sx={{ color: '#777' }}>
+                        Страница {activeCitation.page + pageOffset}
+                      </Typography>
+                      <Typography variant="subtitle2" sx={{ color: '#1f1f1f', fontWeight: 700, mt: 1, mb: 1 }}>
+                        Связанный раздел документа
+                      </Typography>
+                      <Typography variant="body2" sx={{ lineHeight: 1.85 }}>
+                        Здесь показана следующая часть исходного документа. При подключении backend в этой области будет
+                        отображаться оригинальная страница или подготовленное preview с сохранением формата источника.
+                      </Typography>
+                    </Box>
+                  ))}
+              </Paper>
+            </Box>
+          </Box>
+        )}
+      </Dialog>
     </Box>
   );
 };

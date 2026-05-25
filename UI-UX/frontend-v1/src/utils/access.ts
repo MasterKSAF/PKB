@@ -16,14 +16,14 @@ export const USER_ROLE_BY_LABEL: Record<string, UserRole> = {
 
 export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
   user: 'работа с чатами, поиском, проверкой и своей историей диалогов',
-  knowledgeAdmin: 'ведение базы знаний, реестра документов, OCR-артефактов, проверки и QA-метрик',
+  knowledgeAdmin: 'ведение базы знаний, документов, OCR-артефактов, проверки и QA-метрик',
   systemAdmin: 'полный доступ ко всем разделам, пользователям, ролям, правам и журналам',
 };
 
 export const TAB_TITLES: Record<AppTab, string> = {
   chat: 'Чат инженера',
   search: 'Поиск',
-  documents: 'Реестр',
+  documents: 'База знаний',
   checks: 'Проверка на соответствие требований НСИ',
   history: 'История',
   qa: 'QA',

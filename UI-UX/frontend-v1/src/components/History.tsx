@@ -158,6 +158,28 @@ export const History: React.FC = () => {
       return matchesQuery && matchesUser && matchesProject && matchesTopic && matchesStatus;
     });
   }, [data, projectFilter, queryFilter, statusFilter, topicFilter, userFilter]);
+  const historySlices = [
+    {
+      label: 'Диалоги',
+      value: `${data.length}`,
+      note: 'всего сохраненных сессий',
+    },
+    {
+      label: 'Проекты',
+      value: `${projects.length}`,
+      note: 'срез по проектному контуру',
+    },
+    {
+      label: 'Совпадения',
+      value: `${filteredData.length}`,
+      note: 'по текущим фильтрам',
+    },
+    {
+      label: 'Ответы с источниками',
+      value: `${data.filter((item) => item.sources > 0).length}`,
+      note: 'можно открыть страницу или документ',
+    },
+  ];
 
   const handleExport = () => {
     const rows = [
@@ -210,6 +232,33 @@ export const History: React.FC = () => {
       <Box sx={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
         <Container maxWidth="xl" sx={{ py: 3.2 }}>
           <Stack spacing={2.4}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(4, 1fr)' }, gap: 1.25 }}>
+              {historySlices.map((slice) => (
+                <Paper
+                  key={slice.label}
+                  variant="outlined"
+                  sx={{
+                    p: 1.45,
+                    borderRadius: 2.6,
+                    bgcolor: 'rgba(22, 23, 27, 0.72)',
+                    borderColor: 'rgba(198, 216, 240, 0.34)',
+                    borderWidth: 1.5,
+                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045)',
+                  }}
+                >
+                  <Typography variant="caption" color="text.secondary">
+                    {slice.label}
+                  </Typography>
+                  <Typography sx={{ mt: 0.35, fontSize: '1.25rem', fontWeight: 560, lineHeight: 1 }}>
+                    {slice.value}
+                  </Typography>
+                  <Typography variant="caption" sx={{ mt: 0.55, display: 'block', color: 'rgba(171, 183, 201, 0.72)' }}>
+                    {slice.note}
+                  </Typography>
+                </Paper>
+              ))}
+            </Box>
+
             <Paper
               variant="outlined"
               sx={{

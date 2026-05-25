@@ -44,7 +44,7 @@ const ROLE_OPTIONS: RoleLabel[] = ['Пользователь', 'Админист
 const ACCESS_OPTIONS: Array<{ key: AccessKey; label: string; description: string }> = [
   { key: 'chat', label: 'Чат', description: 'вопросы к ассистенту и просмотр ответов' },
   { key: 'search', label: 'Поиск', description: 'поиск документов и фрагментов по базе знаний' },
-  { key: 'documents', label: 'Реестр', description: 'просмотр и обслуживание базы документов' },
+  { key: 'documents', label: 'База знаний', description: 'просмотр и обслуживание базы документов' },
   { key: 'checks', label: 'Проверка', description: 'сверка проектных решений с требованиями НСИ' },
   { key: 'history', label: 'История', description: 'журнал запросов и ответов' },
   { key: 'qa', label: 'QA', description: 'метрики качества и инженерские оценки' },
@@ -207,6 +207,36 @@ export const AdminPanel: React.FC = () => {
   const logs = canSeeFullLogs
     ? MOCK_PROCESSING_LOGS
     : MOCK_PROCESSING_LOGS.filter((log) => log.visibility !== 'Администратор');
+  const contentAdminCards = [
+    {
+      label: 'Документы',
+      value: 'загрузка и версии',
+      note: 'файлы, ссылки, источник хранения',
+      icon: <ClipboardList size={17} />,
+      accent: '#9fb6d8',
+    },
+    {
+      label: 'OCR',
+      value: 'повторная обработка',
+      note: 'страницы, качество распознавания',
+      icon: <SlidersHorizontal size={17} />,
+      accent: '#98d9d8',
+    },
+    {
+      label: 'Артефакты',
+      value: 'текст, чанки, индекс',
+      note: 'то, что передается в поиск и LLM',
+      icon: <ShieldCheck size={17} />,
+      accent: '#d9b783',
+    },
+    {
+      label: 'Журналы',
+      value: 'обработка и ошибки',
+      note: 'контроль pipeline и повторных попыток',
+      icon: <UserCog size={17} />,
+      accent: '#c5afff',
+    },
+  ];
 
   const [selectedUserId, setSelectedUserId] = useState(currentUser?.id ?? adminUsers[0]?.id ?? '');
   const selectedUser = adminUsers.find((user) => user.id === selectedUserId) ?? adminUsers[0];
@@ -355,6 +385,66 @@ export const AdminPanel: React.FC = () => {
             />
           </Box>
         </Box>
+
+        <Paper
+          variant="outlined"
+          sx={{
+            p: 2.1,
+            borderRadius: 3,
+            bgcolor: 'rgba(22, 23, 27, 0.72)',
+            borderColor: 'rgba(198, 216, 240, 0.34)',
+            borderWidth: 1.5,
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045)',
+          }}
+        >
+          <Stack spacing={1.35}>
+            <Box>
+              <Typography sx={{ fontWeight: 560, color: 'rgba(233, 237, 243, 0.92)' }}>
+                Управление контентом базы знаний
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Идея из версии Елены: администратор знаний видит весь pipeline документа от загрузки до индекса.
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(4, 1fr)' }, gap: 1.15 }}>
+              {contentAdminCards.map((item) => (
+                <Paper
+                  key={item.label}
+                  variant="outlined"
+                  sx={{
+                    p: 1.35,
+                    borderRadius: 2.2,
+                    bgcolor: 'rgba(255,255,255,0.025)',
+                    borderColor: 'rgba(198,216,240,0.22)',
+                  }}
+                >
+                  <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
+                    <Box
+                      sx={{
+                        p: 0.8,
+                        borderRadius: 1.6,
+                        color: item.accent,
+                        bgcolor: 'rgba(255,255,255,0.035)',
+                        border: '1px solid rgba(198,216,240,0.18)',
+                      }}
+                    >
+                      {item.icon}
+                    </Box>
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography sx={{ fontSize: '0.84rem', fontWeight: 560 }}>{item.label}</Typography>
+                      <Typography variant="caption" sx={{ display: 'block', mt: 0.25, color: 'rgba(233,237,243,0.86)' }}>
+                        {item.value}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.35, lineHeight: 1.35 }}>
+                        {item.note}
+                      </Typography>
+                    </Box>
+                  </Stack>
+                </Paper>
+              ))}
+            </Box>
+          </Stack>
+        </Paper>
 
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 1.35fr) minmax(360px, 0.9fr)' }, gap: 2.4 }}>
           <Paper
