@@ -785,6 +785,8 @@ POST /registry/documents
 Система **автоматически вычисляет** `title_hash_sha256` по формуле:  
 `SHA-256(era|source_type|mks_oks_code|okstu_code|doc_code|normalized_title)`
 
+> **Полный формат данных:** [`docs/jsons/document3_for_rag.json`](../jsons/document3_for_rag.json) (схема `for_rag_v1`)
+
 **Ответ `201`:** возвращает **плоский JSON** — список **секций** с метаданными и DB-ссылками. Этот JSON передаётся в RAG Builder для чанкования.
 
 ```json
@@ -824,7 +826,8 @@ POST /registry/documents
       "bbox": [0.048, 0.034, 0.476, 0.061],
       "type": "section",
       "content": {
-        "text": "Настоящий стандарт распространяется на металлические крепежные установочные стойки..."
+        "text": "Настоящий стандарт распространяется на металлические крепежные установочные стойки, предназначенные для монтажа радиоэлектронной аппаратуры, и устанавливает технические требования, предъявляемые к ним.",
+        "amendments": []
       },
       "created_at": "2026-05-17T09:15:00Z"
     },
@@ -840,8 +843,44 @@ POST /registry/documents
       "bbox": [0.048, 0.505, 0.952, 0.842],
       "type": "table",
       "content": {
-        "columns": [ ... ],
-        "rows": [ ... ]
+        "columns": [
+          { "name": "L_range", "header": "L, мм", "index": 0, "type": "range", "value_type": "number", "unit": "мм" },
+          { "name": "normal", "header": "нормальная", "index": 1, "type": "value", "value_type": "number", "unit": "мм" },
+          { "name": "high", "header": "повышенная", "index": 2, "type": "value", "value_type": "number", "unit": "мм" }
+        ],
+        "rows": [
+          {
+            "row_index": 0, "type": "data",
+            "cells": {
+              "L_range": { "label": "От 6 до 50", "range": { "min": 6, "max": 50, "min_inclusive": true, "max_inclusive": true } },
+              "normal": { "value": 0.1 },
+              "high": { "value": 0.05 }
+            }
+          },
+          {
+            "row_index": 1, "type": "data",
+            "cells": {
+              "L_range": { "label": "Св. 50 до 80", "range": { "min": 50, "max": 80, "min_inclusive": false, "max_inclusive": true } },
+              "normal": { "value": 0.12 },
+              "high": { "value": 0.06 }
+            }
+          },
+          {
+            "row_index": 2, "type": "data",
+            "cells": {
+              "L_range": { "label": "Св. 80", "range": { "min": 80, "max": null, "min_inclusive": false, "max_inclusive": false } },
+              "normal": { "value": 0.15 },
+              "high": { "value": 0.08 }
+            }
+          }
+        ],
+        "footnotes": [
+          { "footnote_id": 1, "text": "Значения допусков соосности оси отверстия Б относительно оси поверхности А (черт. 1) или относительно отверстия А (черт. 2)", "applies_to": "whole_table" }
+        ],
+        "amendments": [
+          { "amendment_id": "amd_1", "type": "Изменение № 1", "source": "ИУС 4-87", "affected_columns": ["normal", "high"], "action": "values_updated", "note": "Изменены допуски для нормальной и повышенной точности" }
+        ],
+        "image_key": "purgatory/assets/a1b2c3d4/tables/t1.png"
       },
       "created_at": "2026-05-17T09:15:00Z"
     },
@@ -850,21 +889,49 @@ POST /registry/documents
       "document_id": "b3a8f1c2-...",
       "parent_id": "sec_6",
       "clause": "6.1",
-      "title": "Черт. 1 – Схема допуска соосности",
+      "title": "Черт. 1 – Схема допуска соосности оси отверстия Б относительно оси поверхности А",
       "level": 2,
       "path": "6.1.fig1",
       "page": 2,
       "bbox": [0.143, 0.875, 0.857, 1.010],
       "type": "image",
       "content": {
-        "caption": "Черт. 1 – Схема допуска соосности",
+        "caption": "Черт. 1 – Схема допуска соосности оси отверстия Б относительно оси поверхности А",
         "file_key": "purgatory/assets/a1b2c3d4/fig1.png",
-        "description": "Схема для определения допуска соосности"
+        "description": "Схема для определения допуска соосности оси отверстия Б относительно оси поверхности А"
+      },
+      "created_at": "2026-05-17T09:15:00Z"
+    },
+    {
+      "id": "sec_f1",
+      "document_id": "b3a8f1c2-...",
+      "parent_id": "sec_6",
+      "clause": "6.1",
+      "title": "Формула допуска соосности",
+      "level": 2,
+      "path": "6.1.formula1",
+      "page": 1,
+      "bbox": [0.476, 0.471, 0.857, 0.538],
+      "type": "formula",
+      "content": {
+        "latex": "R_{\\text{доп}} = \\frac{\\Delta}{2}",
+        "meaning": "Формула расчёта допустимого радиуса R_доп как половины заданного отклонения Δ. Используется в п. 6.1 для определения допуска соосности.",
+        "parameters": [
+          { "symbol": "R_{\\text{доп}}", "description": "Допустимый радиус", "unit": "мм" },
+          { "symbol": "\\Delta", "description": "Заданное отклонение", "unit": "мм" }
+        ]
       },
       "created_at": "2026-05-17T09:15:00Z"
     }
   ],
-  "terminology": [ ... ],
+  "terminology": [
+    {
+      "term": "стойка установочная крепежная",
+      "definition": "Металлическая деталь для монтажа радиоэлектронной аппаратуры.",
+      "source_clause": "1",
+      "normalized_term": "стойка установочная крепежная"
+    }
+  ],
   "registry": {
     "document_id": "b3a8f1c2-...",
     "version_id": "ver-001",
@@ -887,20 +954,95 @@ POST /registry/documents
 | `document.id` | string | UUID документа (единый первичный ключ) |
 | `document.doc_code` | string | Обозначение документа |
 | `document.title` | string | Полное название |
+| `document.normalized_title` | string | Нормализованное название |
+| `document.group` | string | Группа документа |
+| `document.mks` | string | Код МКС |
+| `document.okstu` | string\|null | Код ОКСТУ |
+| `document.udc` | string\|null | Код УДК |
+| `document.era` | string | Эра документа |
+| `document.validity_status` | string | Статус действия |
+| `document.issuing_body` | string | Организация-издатель |
+| `document.adoption_date` | string | Дата принятия |
+| `document.effective_from` | string | Дата введения в действие |
+| `document.replaces` | string\|null | Заменяемый документ |
+| `document.page_count` | int | Количество страниц |
+| `document.file_hash_sha256` | string | SHA-256 хеш файла |
 | `sections[].id` | string | UUID секции в `registry.document_sections` |
 | `sections[].document_id` | string | UUID документа |
-| `sections[].parent_id` | string|null | UUID родительской секции (`null` для корневых) |
+| `sections[].parent_id` | string\|null | UUID родительской секции (`null` для корневых) |
 | `sections[].clause` | string | Номер пункта |
-| `sections[].title` | string|null | Заголовок секции |
+| `sections[].title` | string\|null | Заголовок секции |
 | `sections[].level` | int | Уровень вложенности (1 — верхний) |
 | `sections[].path` | string | ltree-путь для иерархии |
 | `sections[].type` | string | Тип: `section`, `table`, `image`, `formula` |
-| `sections[].content` | JSONB | Содержимое секции |
+| `sections[].content` | JSONB | Содержимое секции (см. ниже) |
 | `sections[].page` | int | Номер страницы |
 | `sections[].bbox` | array | Координаты bbox `[x1,y1,x2,y2]` (0..1) |
-| `sections[].file_key` | string|null | Ссылка на бинарный объект (для `table`/`image`) |
+| `terminology` | array | Массив терминов документа |
+| `terminology[].term` | string | Термин |
+| `terminology[].definition` | string | Определение термина |
+| `terminology[].source_clause` | string | Пункт-источник |
+| `terminology[].normalized_term` | string | Нормализованная форма термина |
 | `registry` | object | Метаданные записи в БД |
+| `registry.document_id` | string | UUID документа |
+| `registry.version_id` | string | UUID версии |
+| `registry.created_at` | string | Дата создания записи |
 | `registry.sections_count` | int | Количество сохранённых секций |
+| `registry.references_count` | int | Количество ссылок |
+
+**Структура `sections[].content` по типам:**
+
+Для `type: "section"`:
+```json
+{
+  "text": "...",
+  "amendments": []
+}
+```
+
+Для `type: "table"`:
+```json
+{
+  "columns": [
+    { "name": "...", "header": "...", "index": 0, "type": "range|value", "value_type": "number|string", "unit": "..." }
+  ],
+  "rows": [
+    {
+      "row_index": 0, "type": "data|header",
+      "cells": {
+        "column_name": { "value": ..., "label": "...", "range": { "min": ..., "max": ..., "min_inclusive": true, "max_inclusive": true } }
+      }
+    }
+  ],
+  "footnotes": [
+    { "footnote_id": 1, "text": "...", "applies_to": "whole_table|cell" }
+  ],
+  "amendments": [
+    { "amendment_id": "...", "type": "...", "source": "...", "affected_columns": [], "action": "...", "note": "..." }
+  ],
+  "image_key": "purgatory/assets/.../tables/t1.png"
+}
+```
+
+Для `type: "image"`:
+```json
+{
+  "caption": "...",
+  "file_key": "purgatory/assets/.../fig1.png",
+  "description": "..."
+}
+```
+
+Для `type: "formula"`:
+```json
+{
+  "latex": "...",
+  "meaning": "...",
+  "parameters": [
+    { "symbol": "...", "description": "...", "unit": "..." }
+  ]
+}
+```
 
 **Ошибки**: `409` — `DUPLICATE_DOCUMENT`.
 

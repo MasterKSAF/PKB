@@ -1,6 +1,6 @@
 ## API Converter-validator Service (converter-validator:8086)
 
-Сервис конвертации и валидации документов. Объединяет конвейер преобразования сырого JSON в иерархический типизированный JSON с опциональным использованием LLM.
+Сервис конвертации и валидации документов. Объединяет конвейер преобразования сырого JSON (результат Parser/OCR) в иерархический типизированный JSON с опциональным использованием LLM.
 
 **Внутренний сервис.** Имеет два режима работы:
 1. **Preview** — быстрые операции без записи в БД и без LLM (если не указано иное).
@@ -23,21 +23,19 @@
 
 Извлечение базовых метаданных из частичного сырого JSON.
 
-**Вход:** частичный raw JSON (может содержать неполные данные).
+**Вход:** сырой JSON (результат Parser/OCR) — может содержать неполные данные.
 
-**Выход:** designation, title, type, dates, revision.
+**Выход:** designation, title, document_type, year, revision.
+
+> **Полный формат данных:** [`docs/jsons/document2b_preview.json`](../jsons/document2b_preview.json) (схема `converter_validator_preview_v1`)
 
 **Запрос:**
 
 ```json
 {
-  "raw": {
-    "designation": "ГОСТ Р 12345-77",
-    "title": "Название документа",
-    "type": "normative",
-    "date_publication": "1981-01-15",
-    "revision": "1"
-  }
+  "task_id": "task-8a3f2b",
+  "version_id": "c4b9f2d3-...",
+  "raw_json": { ... }
 }
 ```
 
@@ -45,33 +43,38 @@
 
 ```json
 {
-  "designation": "ГОСТ Р 12345-77",
-  "title": "Название документа",
-  "type": "normative",
-  "dates": {
-    "publication": "1981-01-15",
-    "effective": null,
-    "expiry": null
-  },
-  "revision": "1"
+  "designation": "ГОСТ 20868-81",
+  "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
+  "document_type": "normative",
+  "year": "1981",
+  "revision": null
 }
 ```
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `designation` | string | Обозначение документа |
+| `title` | string | Полное название документа |
+| `document_type` | string | Тип документа (`normative`, `drawing`, `specification`, ...) |
+| `year` | string | Год издания/утверждения |
+| `revision` | string\|null | Номер редакции, если применимо |
 
 ### POST /converter/preview/uniqueness
 
 Проверка уникальности по первичным метаданным. Выполняет поиск возможных дубликатов.
 
-**Вход:** первичные метаданные (designation, title, type, dates).
+**Вход:** базовые метаданные (designation, title, document_type, year).
 
-**Выход:** список кандидатов-дубликатов с краткими карточками.
+**Выход:** список найденных дубликатов и флаг необходимости ручного решения.
 
 **Запрос:**
 
 ```json
 {
-  "designation": "ГОСТ Р 12345-77",
-  "title": "Название документа",
-  "type": "normative"
+  "designation": "ГОСТ 20868-81",
+  "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
+  "document_type": "normative",
+  "year": "1981"
 }
 ```
 
@@ -79,19 +82,26 @@
 
 ```json
 {
-  "duplicate_candidates": [
+  "duplicates": [
     {
       "document_id": "b3a8f1c2-...",
-      "designation": "ГОСТ Р 12345-77",
-      "title": "Название документа",
-      "similarity": 0.98,
-      "type": "normative",
-      "revision": "2"
+      "designation": "ГОСТ 20868-81",
+      "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
+      "similarity": 0.98
     }
   ],
-  "total_candidates": 1
+  "decision_required": false
 }
 ```
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `duplicates` | array | Список найденных кандидатов-дубликатов |
+| `duplicates[].document_id` | string | ID документа в системе |
+| `duplicates[].designation` | string | Обозначение документа-дубликата |
+| `duplicates[].title` | string | Название документа-дубликата |
+| `duplicates[].similarity` | float | Степень сходства (0.0 — 1.0) |
+| `decision_required` | bool | `true` — требуется ручное подтверждение пользователя перед полной конвертацией |
 
 ---
 
@@ -101,11 +111,13 @@
 
 ### POST /converter/convert
 
-Полная конвертация: иерархия, LLM, метаданные, кросс-ссылки.
+Полная конвертация: построение иерархии документа, LLM-обработка, валидация, кросс-ссылки.
 
-**Вход:** полный raw JSON (все секции, таблицы, изображения, метаданные).
+**Вход:** полный сырой JSON (результат Parser/OCR: все секции, таблицы, изображения, метаданные).
 
-**Выход:** иерархический типизированный JSON.
+**Выход:** иерархический типизированный JSON со структурой `validated_v2`.
+
+> **Полный формат данных:** [`docs/jsons/document2_validate.json`](../jsons/document2_validate.json) (схема `validated_v2`)
 
 **Процесс внутри:**
 
@@ -140,48 +152,159 @@
   "llm_model": "gpt-4o-mini",
   "llm_max_tokens": 4096,
   "llm_timeout": 60,
-  "structure": {
-    "type": "normative",
-    "title": "ГОСТ Р 12345-77",
-    "sections": [ ... ],
-    "tables": [ ... ],
-    "images": [ ... ]
-  },
-  "classification": {
-    "mks_oks_code": "47.020",
-    "okstu_code": null,
-    "udk_code": "629.5.021",
-    "year": "1981"
-  },
-  "quality": {
-    "confidence": 0.94,
-    "pages_processed": 12,
-    "pages_failed": 0
-  }
+  "raw_json": { ... }
 }
 ```
 
-**Ответ `200`:**
+**Ответ `200` (схема `validated_v2`):**
 
 ```json
 {
-  "conversion_id": "conv-001",
+  "task_id": "task-8a3f2b",
+  "version_id": "c4b9f2d3-...",
   "document_id": "b3a8f1c2-...",
-  "hierarchy": {
-    "type": "normative",
-    "title": "ГОСТ Р 12345-77",
-    "children": [ ... ]
-  },
   "metadata": {
-    "designation": "ГОСТ Р 12345-77",
-    "title": "Название документа",
-    "type": "normative",
-    "dates": {
-      "publication": "1981-01-15",
-      "effective": null,
-      "expiry": null
+    "schema": "validated_v2",
+    "created_at": "2026-05-17T09:15:00Z",
+    "parser": {
+      "name": "docling",
+      "version": "2.1.0",
+      "ocr_engine": "paddleocr",
+      "ocr_fallback": false
+    }
+  },
+  "document": {
+    "source": {
+      "document_version_id": "c4b9f2d3-...",
+      "file_name": "GOST_20868-81_scan.pdf",
+      "file_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "page_count": 2
     },
-    "revision": "1"
+    "metadata": {
+      "doc_code": "ГОСТ 20868-81",
+      "full_title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
+      "normalized_title": "стойки установочные крепежные технические требования",
+      "group": "ПО4",
+      "mks": "31.240",
+      "okstu": null,
+      "udc": null,
+      "era": "USSR",
+      "validity_status": "active",
+      "issuing_body": "Государственный Комитет СССР по стандартам",
+      "adoption": {
+        "date": "1981-04-15",
+        "authority": "Государственный Комитет СССР по стандартам",
+        "document_number": "1983",
+        "effective_from": "1982-07-01"
+      },
+      "replaces": "ГОСТ 20868-75",
+      "validity_restriction_removed": {
+        "date": "1992-09-10",
+        "authority": "Госстандарт",
+        "document_number": "1166"
+      },
+      "amendments": [
+        { "type": "Изменение № 1", "source": "ИУС 4-87", "affected_clauses": ["6.4"] },
+        { "type": "Поправка", "source": "ИУС 5-82", "affected_clauses": ["2"] }
+      ],
+      "status_note": "С 01.07.2005 введены ГОСТ 24705-2004 и ГОСТ 16093-2004"
+    },
+    "content": {
+      "text": [
+        {
+          "clause": "1",
+          "title": null,
+          "text": "Настоящий стандарт распространяется...",
+          "level": 1,
+          "parent_clause": null,
+          "ltree_path": "1",
+          "page": 1,
+          "bbox": [10, 20, 200, 40],
+          "amendments": []
+        }
+      ],
+      "tables": [
+        {
+          "table_id": "t1",
+          "caption": "Допуск соосности при степени точности",
+          "source_clause": "6.1",
+          "page": 2,
+          "bbox": [10, 150, 200, 250],
+          "image_key": "purgatory/assets/a1b2c3d4/tables/t1.png",
+          "columns": [
+            { "name": "L_range", "header": "L, мм", "index": 0, "type": "range", "value_type": "number", "unit": "мм" },
+            { "name": "normal", "header": "нормальная", "index": 1, "type": "value", "value_type": "number", "unit": "мм" },
+            { "name": "high", "header": "повышенная", "index": 2, "type": "value", "value_type": "number", "unit": "мм" }
+          ],
+          "rows": [
+            {
+              "row_index": 0, "type": "data",
+              "cells": {
+                "L_range": { "label": "От 6 до 50", "range": { "min": 6, "max": 50, "min_inclusive": true, "max_inclusive": true } },
+                "normal": { "value": 0.1 },
+                "high": { "value": 0.05 }
+              }
+            }
+          ],
+          "footnotes": [
+            { "footnote_id": 1, "text": "Значения допусков соосности...", "applies_to": "whole_table" }
+          ],
+          "amendments": [
+            { "amendment_id": "amd_1", "type": "Изменение № 1", "source": "ИУС 4-87", "affected_columns": ["normal", "high"], "action": "values_updated", "note": "Изменены допуски" }
+          ]
+        }
+      ],
+      "figures": [
+        {
+          "figure_id": "fig1",
+          "caption": "Черт. 1 – Схема допуска соосности оси отверстия Б относительно оси поверхности А",
+          "page": 2,
+          "bbox": [30, 260, 180, 300],
+          "image_key": "purgatory/assets/a1b2c3d4/fig1.png",
+          "description": "Схема для определения допуска соосности"
+        }
+      ],
+      "formulas": [
+        {
+          "formula_id": "eq1",
+          "latex": "R_{\\text{доп}} = \\frac{\\Delta}{2}",
+          "meaning": "Формула расчёта допустимого радиуса...",
+          "image_key": "purgatory/assets/a1b2c3d4/formulas/eq1.png",
+          "parameters": [
+            { "symbol": "R_{\\text{доп}}", "description": "Допустимый радиус", "unit": "мм" },
+            { "symbol": "\\Delta", "description": "Заданное отклонение", "unit": "мм" }
+          ],
+          "context_clause": "6.1",
+          "page": 1,
+          "bbox": [100, 140, 180, 160]
+        }
+      ]
+    },
+    "terminology": [
+      {
+        "term": "стойка установочная крепежная",
+        "definition": "Металлическая деталь для монтажа радиоэлектронной аппаратуры.",
+        "source_clause": "1",
+        "normalized_term": "стойка установочная крепежная"
+      }
+    ],
+    "references": [
+      {
+        "target_doc": "ГОСТ 20862-81 – ГОСТ 20867-81",
+        "type": "range",
+        "context": "изготовление крепежных установочных стоек",
+        "current_status": "active",
+        "note": null
+      },
+      {
+        "target_doc": "ГОСТ 24705-81",
+        "type": "single",
+        "context": "резьбы",
+        "current_status": "superseded",
+        "replaced_by": "ГОСТ 24705-2004",
+        "replacement_date": "2005-07-01"
+      }
+    ]
   },
   "validation": {
     "validation_id": "val-001",
@@ -203,13 +326,7 @@
       "predecessor_doc_id": null,
       "successor_doc_id": null
     },
-    "cross_references": [
-      {
-        "type": "replaces",
-        "target_document_id": "doc-...",
-        "target_designation": "ГОСТ Р 12234-76"
-      }
-    ],
+    "cross_references": [],
     "decision": "auto",
     "status": "completed"
   },
@@ -221,14 +338,97 @@
 }
 ```
 
+**Поля ответа (верхний уровень):**
+
 | Поле | Тип | Описание |
 |---|---|---|
-| `conversion_id` | string | ID конвертации |
-| `document_id` | string | ID документа. Назначается при конвертации: извлекается существующий для дубликата, либо генерируется новый. |
-| `hierarchy` | object | Построенная иерархическая структура документа |
-| `metadata` | object | Извлечённые метаданные |
+| `task_id` | string | ID задачи, переданный в запросе |
+| `version_id` | string | ID версии файла, переданный в запросе |
+| `document_id` | string | ID документа. Назначается при конвертации: извлекается существующий для дубликата, либо генерируется новый |
+| `metadata` | object | Служебные метаданные ответа (схема, дата, информация о парсере) |
+| `document` | object | Полная структура документа: источник, метаданные, контент, терминология, ссылки |
 | `validation` | object | Результаты полной валидации (структура, классификация, уникальность, сопоставление, кросс-ссылки) |
 | `llm_usage` | object | Статистика использования LLM (если `use_llm = true`) |
+
+**Поля `metadata`:**
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `schema` | string | Идентификатор схемы ответа — `"validated_v2"` |
+| `created_at` | string (datetime) | Дата и время формирования ответа |
+| `parser` | object | Информация о парсере, выполнившем первичную обработку |
+
+**Поля `document.source`:**
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `document_version_id` | string | ID версии файла-источника |
+| `file_name` | string | Имя исходного файла |
+| `file_hash_sha256` | string | SHA-256 хеш исходного файла |
+| `page_count` | int | Количество страниц |
+
+**Поля `document.metadata`:**
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `doc_code` | string | Обозначение документа (например, `ГОСТ 20868-81`) |
+| `full_title` | string | Полное название документа |
+| `normalized_title` | string | Нормализованное название (для поиска) |
+| `group` | string | Группа классификации (например, `ПО4`) |
+| `mks` | string | Код МКС |
+| `okstu` | string | Код ОКСТУ (может быть `null`) |
+| `udc` | string | Код УДК (может быть `null`) |
+| `era` | string | Историческая эра (`USSR`, `RF`, ...) |
+| `validity_status` | string | Статус действия (`active`, `superseded`, ...) |
+| `issuing_body` | string | Орган, утвердивший документ |
+| `adoption` | object | Информация о принятии (дата, орган, номер, дата введения) |
+| `replaces` | string | Какой документ заменяет данный |
+| `validity_restriction_removed` | object | Информация о снятии ограничения срока действия |
+| `amendments` | array | Список изменений/поправок к документу |
+| `status_note` | string | Примечание о статусе |
+
+**Поля `document.content`:**
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `text` | array | Список текстовых блоков (пунктов) документа |
+| `tables` | array | Таблицы документа |
+| `figures` | array | Изображения/чертежи |
+| `formulas` | array | Формулы (LaTeX + параметры) |
+
+**Поля `document.terminology`:**
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `term` | string | Термин |
+| `definition` | string | Определение |
+| `source_clause` | string | Пункт, где встречается термин |
+| `normalized_term` | string | Нормализованная форма термина |
+
+**Поля `document.references`:**
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `target_doc` | string | Обозначение целевого документа |
+| `type` | string | Тип ссылки: `single`, `range` |
+| `context` | string | Контекст ссылки |
+| `current_status` | string | Статус целевого документа |
+| `note` | string | Примечание (может быть `null`) |
+| `replaced_by` | string | Новый документ, заменивший целевой (если `superseded`) |
+| `replacement_date` | string | Дата замены |
+
+**Поля `validation`:**
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `validation_id` | string | ID валидации |
+| `structure_valid` | bool | Результат проверки структуры |
+| `classification` | object | Статусы классификационных кодов |
+| `uniqueness` | object | Результаты проверки на дубликаты |
+| `matching` | object | Связи с существующими документами (predecessor/successor) |
+| `cross_references` | array | Список кросс-ссылок на другие документы |
+| `decision` | string | `auto` — автоматическое продвижение, `review_required` — требуется ручное подтверждение |
+| `status` | string | Статус: `completed`, `failed` |
 
 ---
 
@@ -247,24 +447,7 @@
 {
   "task_id": "task-8a3f2b",
   "version_id": "c4b9f2d3-...",
-  "structure": {
-    "type": "normative",
-    "title": "ГОСТ Р 12345-77",
-    "sections": [ ... ],
-    "tables": [ ... ],
-    "images": [ ... ]
-  },
-  "classification": {
-    "mks_oks_code": "47.020",
-    "okstu_code": null,
-    "udk_code": "629.5.021",
-    "year": "1981"
-  },
-  "quality": {
-    "confidence": 0.94,
-    "pages_processed": 12,
-    "pages_failed": 0
-  }
+  "raw_json": { ... }
 }
 ```
 
@@ -403,15 +586,15 @@
 | Режимы | Preview (быстрые проверки) + Full (полный цикл конвертации и валидации) |
 | Пайплайн | 1 (Формирование документа), Этап 1.5 (Converter-validator) |
 | Вход | Raw JSON (частичный — для Preview, полный — для Full) |
-| Выход | Иерархический типизированный JSON с результатами валидации |
+| Выход | Иерархический типизированный JSON (схема `validated_v2`) с результатами валидации |
 
 ### Матрица эндпоинтов
 
 | Метод | Путь | Режим | Описание | Запись в БД |
 |---|---|---|---|---|
-| `POST` | `/converter/preview/metadata` | Preview | Извлечение базовых метаданных | Нет |
+| `POST` | `/converter/preview/metadata` | Preview | Извлечение базовых метаданных (designation, title, document_type, year, revision) | Нет |
 | `POST` | `/converter/preview/uniqueness` | Preview | Проверка уникальности, поиск дубликатов | Нет |
-| `POST` | `/converter/convert` | Full | Полная конвертация + валидация + LLM + кросс-ссылки | Нет |
+| `POST` | `/converter/convert` | Full | Полная конвертация + валидация + LLM + кросс-ссылки (схема `validated_v2`) | Нет |
 | `POST` | `/validate/document` | Full / Standalone | Комплексная валидация документа | Нет |
 | `POST` | `/validate/classifiers` | Full / Standalone | Валидация классификационных кодов | Нет |
 | `POST` | `/validate/check` | Full / Standalone | Проверка правил | Нет |

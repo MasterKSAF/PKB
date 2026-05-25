@@ -112,7 +112,9 @@
 |---|---|---|---|
 | `longpoll` | int | 15 | Время ожидания в секундах |
 
-**Ответ `200`:**
+> **Полный формат данных:** [`docs/jsons/document2b_preview.json`](../jsons/document2b_preview.json) (схема `converter_validator_preview_v1`)
+
+**Ответ `200`**:
 
 ```json
 {
@@ -120,17 +122,66 @@
   "status": "completed",
   "ocr_parser_status": "completed",
   "converter_validator_status": "completed",
-  "metadata": {
+  "preview": {
     "designation": "ГОСТ 20868-81",
     "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
     "document_type": "normative",
-    "year": "1981"
+    "year": "1981",
+    "revision": null
   },
-  "duplicates_found": [],
+  "duplicates": [],
   "decision_required": false
 }
 
+> **Поля ответа:**
+>
+> | Поле | Тип | Описание |
+> |------|-----|----------|
+> | `document_id` | string | UUID документа |
+> | `status` | string | Статус превью (`pending`, `processing`, `completed`, `failed`) |
+> | `ocr_parser_status` | string | Статус OCR-парсера |
+> | `converter_validator_status` | string | Статус converter-validator |
+> | `preview` | object | Метаданные превью (см. ниже) |
+> | `preview.designation` | string | Предварительное обозначение документа |
+> | `preview.title` | string | Предварительное название |
+> | `preview.document_type` | string | Тип документа (`normative`, `technical`, etc.) |
+> | `preview.year` | string | Год издания |
+> | `preview.revision` | string\|null | Номер редакции |
+> | `duplicates` | array | Массив найденных дубликатов |
+> | `duplicates[].document_id` | string | UUID найденного дубликата |
+> | `duplicates[].designation` | string | Обозначение документа-дубликата |
+> | `duplicates[].title` | string | Название документа-дубликата |
+> | `duplicates[].similarity` | float | Коэффициент схожести (0..1) |
+> | `decision_required` | bool | Требуется ли решение пользователя |
+>
 > **Примечание:** Поле `designation` (preview-метаданные) — предварительное обозначение документа. `doc_code` (в ответах `GET /documents{/id}`) — нормализованное значение, извлечённое на этапе Converter-validator. По существу это одна сущность на разных стадиях обработки.
+
+**Пример с найденными дубликатами:**
+
+```json
+{
+  "document_id": "b3a8f1c2-...",
+  "status": "completed",
+  "ocr_parser_status": "completed",
+  "converter_validator_status": "completed",
+  "preview": {
+    "designation": "ГОСТ 20868-81",
+    "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
+    "document_type": "normative",
+    "year": "1981",
+    "revision": null
+  },
+  "duplicates": [
+    {
+      "document_id": "d4e5f6a7-...",
+      "designation": "ГОСТ 20868-81",
+      "title": "Стойки установочные крепежные. Технические требования",
+      "similarity": 0.97
+    }
+  ],
+  "decision_required": true
+}
+```
 
 
 ### POST /documents/{doc_id}/decide
@@ -270,7 +321,11 @@
       "okstu_code": null,
       "classification_status": {
         "mks_status": "CONFIRMED",
-        "okstu_status": "NOT_USED"
+        "okstu_status": "NOT_USED",
+        "udk_code": null,
+        "extracted_at": "2026-05-15T10:01:00Z",
+        "extracted_by": "purgatory_parser_v2",
+        "confidence": 0.95
       },
       "status": "approved",
       "latest_version": 1,
