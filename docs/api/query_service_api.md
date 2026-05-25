@@ -78,6 +78,57 @@ Query Service принимает запросы от UI, вызывает RAG Se
 
 > UI обращается к Query Service напрямую. Orchestrator не проксирует чат-функции.
 
+### Сценарий работы UI с чатом
+
+Типовой сценарий взаимодействия UI с Query Service от открытия чата до получения ответа:
+
+```mermaid
+sequenceDiagram
+    participant UI as UI
+    participant QS as Query Service
+
+    Note over UI,QS: 1. Открытие чата
+    UI->>QS: GET .../messages/last?limit=20
+    QS-->>UI: { messages: [последние 20], has_older: bool }
+
+    Note over UI,QS: 2. Отправка сообщения
+    UI->>QS: POST .../messages { content, attachments? }
+    QS-->>UI: 202 { message_id, status: "pending" }
+
+    Note over UI,QS: 3. Ожидание ответа (longpoll)
+    UI->>QS: GET .../messages/{message_id}?longpoll=15
+    Note over QS: (сервер держит соединение до 15с)
+    QS-->>UI: { message: { status: "answered", content, sources } }
+
+    Note over UI,QS: 4. Проверка новых сообщений (опционально)
+    UI->>QS: GET .../messages?after={message_id}
+    QS-->>UI: { messages: [новые], has_more: bool }
+```
+
+**Пояснение шагов:**
+
+**Шаг 1 — Открытие чата**
+- Запрос: `GET /chat/sessions/{session_id}/messages/last?limit=20`
+- UI получает последние 20 сообщений (хвост диалога).
+- Если `has_older: true` — UI может подгрузить более старые сообщения через `GET .../messages?before=msg-XXX`.
+
+**Шаг 2 — Отправка сообщения**
+- Запрос: `POST /chat/sessions/{session_id}/messages`
+- UI отправляет текст сообщения и опциональные вложения (attachments).
+- Сервер возвращает `202 Accepted` с `message_id` и статусом `pending`.
+- UI запоминает `message_id` для следующего шага и отображает индикатор ожидания.
+
+**Шаг 3 — Ожидание ответа (longpoll)**
+- Запрос: `GET /chat/sessions/{session_id}/messages/{message_id}?longpoll=15`
+- Сервер держит соединение до 15 секунд. Как только статус сообщения меняется на `answered` — возвращает ответ.
+- Если за 15 секунд статус не стал финальным — сервер возвращает текущее состояние, UI повторяет запрос.
+- При получении статуса `answered` UI отображает ответ пользователю.
+
+**Шаг 4 — Проверка новых сообщений (опционально)**
+- Запрос: `GET /chat/sessions/{session_id}/messages?after={последний_message_id}`
+- Используется для синхронизации между вкладками или после перерыва в longpoll.
+- Возвращает только новые сообщения — дельта, без повторной передачи всей истории.
+
 ### Именование полей источников
 
 | Концепция            | Единое имя поля    | Примечание                                    |
