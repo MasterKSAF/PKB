@@ -188,11 +188,11 @@ flowchart LR
 
 | Между                                | Формат                                         | Протокол      | Примечание                                      |
 | ------------------------------------ | ---------------------------------------------- | ------------- | ----------------------------------------------- |
-| Orchestrator → OCR Service           | `file_ref` (ссылка MinIO)                      | JSON via HTTP | —                                               |
+| Orchestrator → OCR Service           | `file_ref` (ссылка MinIO)                      | JSON via HTTP | Выбор сервиса по типу файла (см. прим.)         |
 | OCR Service → Orchestrator           | **JSON-контейнер** (распознанный текст)        | JSON via HTTP | Непрозрачен для Orchestrator                    |
-| Orchestrator → Parser Service        | **JSON-контейнер** (от OCR)                    | JSON via HTTP | Непрозрачен для Orchestrator                    |
+| Orchestrator → Parser Service        | `file_ref` (ссылка MinIO)                      | JSON via HTTP | Выбор сервиса по типу файла (см. прим.)         |
 | Parser Service → Orchestrator        | **JSON-контейнер** (структура документа)       | JSON via HTTP | Непрозрачен для Orchestrator                    |
-| Orchestrator → Converter-validator   | **JSON-контейнер** (от Parser)                 | JSON via HTTP | Непрозрачен для Orchestrator                    |
+| Orchestrator → Converter-validator   | **JSON-контейнер** (от OCR _или_ Parser)       | JSON via HTTP | Непрозрачен для Orchestrator                    |
 | Converter-validator → Orchestrator   | **JSON с решением** (auto / review)            | JSON via HTTP | Непрозрачен для Orchestrator                    |
 | Orchestrator → Registry              | **JSON с решением** (от Converter-validator)   | JSON via HTTP | Непрозрачен для Orchestrator                    |
 | Registry → Orchestrator              | **Обогащённый JSON (структура + ссылки в БД)** | JSON via HTTP | —                                               |
@@ -207,6 +207,15 @@ flowchart LR
 | Query Service → RAG Search           | **query + filters**                            | JSON via HTTP | Поиск чанков (без генерации)                    |
 | RAG Search → Query Service           | **Массив чанков с полным содержимым**          | JSON via HTTP | Query Service формирует контекст и вызывает LLM |
 | Query Service → UI                   | **answer + аннотированные сноски**             | JSON via HTTP | Обогащение цитирований идентификаторами         |
+
+> **Важно:** OCR Service и Parser Service — **альтернативные**, не последовательные.
+> Orchestrator выбирает сервис на основе MIME-типа / `source_type` файла:
+> - `image/*`, `application/pdf` (сканированный) → **OCR Service**
+> - `application/pdf` (цифровой), `application/msword`, `application/vnd.openxmlformats-officedocument.*` → **Parser Service**
+> - Неподдерживаемый тип → ответ `422` с кодом `UNSUPPORTED_FILE_TYPE`
+>
+> JSON-контейнеры обоих сервисов имеют единый формат (`raw_ocr_v2`),
+> поэтому Converter-validator не зависит от того, какой сервис выполнил первичную обработку.
 
 #### Асинхронное ожидание (Longpoll)
 

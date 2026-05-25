@@ -132,7 +132,7 @@
   "ocr_parser_status": "completed",
   "converter_validator_status": "completed",
   "preview": {
-    "designation": "ГОСТ 20868-81",
+    "doc_code": "ГОСТ 20868-81",
     "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
     "document_type": "normative",
     "year": "1981",
@@ -148,22 +148,20 @@
 > |------|-----|----------|
 > | `document_id` | string | UUID документа |
 > | `status` | string | Статус превью (`pending`, `processing`, `completed`, `failed`) |
-> | `ocr_parser_status` | string | Статус OCR-парсера |
+> | `ocr_parser_status` | string | Статус выбранного сервиса распознавания (OCR или Parser) |
 > | `converter_validator_status` | string | Статус converter-validator |
 > | `preview` | object | Метаданные превью (см. ниже) |
-> | `preview.designation` | string | Предварительное обозначение документа |
-> | `preview.title` | string | Предварительное название |
+> | `preview.doc_code` | string | Обозначение документа (предварительное, извлекается на этапе preview) |
+> | `preview.title` | string | Название документа |
 > | `preview.document_type` | string | Тип документа (`normative`, `technical`, etc.) |
 > | `preview.year` | string | Год издания |
 > | `preview.revision` | string\|null | Номер редакции |
 > | `duplicates` | array | Массив найденных дубликатов |
 > | `duplicates[].document_id` | string | UUID найденного дубликата |
-> | `duplicates[].designation` | string | Обозначение документа-дубликата |
+> | `duplicates[].doc_code` | string | Обозначение документа-дубликата |
 > | `duplicates[].title` | string | Название документа-дубликата |
 > | `duplicates[].similarity` | float | Коэффициент схожести (0..1) |
 > | `decision_required` | bool | Требуется ли решение пользователя |
->
-> **Примечание:** Поле `designation` (preview-метаданные) — предварительное обозначение документа. `doc_code` (в ответах `GET /documents{/id}`) — нормализованное значение, извлечённое на этапе Converter-validator. По существу это одна сущность на разных стадиях обработки.
 
 **Пример с найденными дубликатами:**
 
@@ -174,7 +172,7 @@
   "ocr_parser_status": "completed",
   "converter_validator_status": "completed",
   "preview": {
-    "designation": "ГОСТ 20868-81",
+    "doc_code": "ГОСТ 20868-81",
     "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
     "document_type": "normative",
     "year": "1981",
@@ -183,7 +181,7 @@
   "duplicates": [
     {
       "document_id": "d4e5f6a7-...",
-      "designation": "ГОСТ 20868-81",
+      "doc_code": "ГОСТ 20868-81",
       "title": "Стойки установочные крепежные. Технические требования",
       "similarity": 0.97
     }
@@ -417,7 +415,9 @@
 | -------- | --- | ------------ | -------- |
 | `longpoll` | int | `15` | Время ожидания в секундах. Сервер держит соединение, возвращая ответ при изменении статуса или по таймауту. Подробнее — [Модель выполнения](../api/common.md#модель-выполнения-sync--async). |
 
-**Ответ `200`** (в процессе):
+#### Статус: `processing` (в процессе)
+
+Пайплайн 1 выполняется, фаза preview завершена, ожидается решение пользователя.
 
 ```json
 {
@@ -455,9 +455,12 @@
   },
   "started_at": "2026-05-15T10:00:05Z",
   "estimated_completion": "2026-05-15T10:02:00Z"
-}```
+}
+```
 
-**Ответ `200`** (ждёт аппрува):
+#### Статус: `review_required` (ждёт аппрува)
+
+Валидация выявила ошибки — требуется ручное утверждение.
 
 ```json
 {
@@ -480,9 +483,12 @@
       }
     }
   }
-}```
+}
+```
 
-**Ответ `200`** (готов к промотированию):
+#### Статус: `ready_for_promotion` (готов к промотированию)
+
+Оба пайплайна завершены, документ готов к записи в Registry.
 
 ```json
 {
@@ -506,7 +512,8 @@
   "chunk_summary": { "sections": 34, "chunks": 28, "embeddings": 28 },
   "started_at": "2026-05-15T10:00:05Z",
   "completed_at": "2026-05-15T10:01:30Z"
-}```
+}
+```
 
 **Статусы Formation (Формирование документа)**: `uploaded` → `previewing` → `awaiting_decision` → `parsing` → `validation` → `registry` / `review_required` → `archived` / `failed`.
 

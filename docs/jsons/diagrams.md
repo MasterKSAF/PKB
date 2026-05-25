@@ -148,11 +148,11 @@
 
 ```
 ╔══════════════════════════════════════════════════════════════════╗
-║              document2_validate.json  validated_v2               ║
+║              document2_validate.json  validated_v3               ║
 ║                                                                  ║
 ║  ┌──────────────────────────────────────────────────────────┐    ║
 ║  │                      metadata                            │    ║
-║  │  • schema: validated_v2                                  │    ║
+║  │  • schema: validated_v3                                  │    ║
 ║  │  • created_at                                            │    ║
 ║  │  • parser: docling, version, paddleocr                   │    ║
 ║  └──────────────────────────────────────────────────────────┘    ║
@@ -162,58 +162,62 @@
 ║  │                      document                            │    ║
 ║  │                                                          │    ║
 ║  │  ┌────────────────────────────────────────────────────┐  │    ║
-║  │  │  source: document_version_id, file_name,            │  │    ║
-║  │  │  file_hash, page_count                             │  │    ║
+║  │  │  source: file_name, file_hash, page_count        │  │    ║
 ║  │  └────────────────────────────────────────────────────┘  │    ║
 ║  │                            │                             │    ║
 ║  │                            ▼                             │    ║
 ║  │  ┌────────────────────────────────────────────────────┐  │    ║
 ║  │  │                   metadata                         │  │    ║
-║  │  • doc_code, full_title, normalized_title               │    ║
-║  │  • group, mks, okstu, udc, era                           │    ║
-║  │  • validity_status, issuing_body                         │    ║
-║  │  • adoption: date, authority, document_number,           │    ║
-║  │    effective_from                                        │    ║
-║  │  • replaces, validity_restriction_removed                │    ║
-║  │  • amendments — массив                                   │    ║
-║  │  • status_note                                           │    ║
+║  │  • doc_code, title, normalized_title, title_hash_sha256   │    ║
+║  │  • group, mks_oks_code, okstu_code, udc, era              │    ║
+║  │  • validity_status, issuing_body                          │    ║
+║  │  • adoption: date, authority, document_number,            │    ║
+║  │    effective_from                                         │    ║
+║  │  • replaces, validity_restriction_removed                 │    ║
+║  │  • amendments — массив                                    │    ║
+║  │  • status_note                                            │    ║
 ║  └──────────────────────────────────────────────────────────┘    ║
 ║                            │                                      ║
 ║                            ▼                                      ║
 ║  ┌───────────────────────────────────────────────────────────┐    ║
-║  │                       content                             │    ║
+║  │              content — единый плоский массив              │    ║
+║  │  Общие поля секции: clause, title, level, parent_clause,  │    ║
+║  │  path, page, bbox, type (section/table/image/formula)     │    ║
 ║  │                                                           │    ║
 ║  │  ┌────────────────────────────────────────────────────┐   │    ║
-║  │  │  text — массив (аналогично purgatory)              │   │    ║
+║  │  │  type: section                                     │   │    ║
+║  │  │  content: { text, amendments }                     │   │    ║
 ║  │  └────────────────────────────────────────────────────┘   │    ║
 ║  │                       │                                   │    ║
 ║  │                       ▼                                   │    ║
 ║  │  ┌────────────────────────────────────────────────────┐   │    ║
-║  │  │  tables — массив                                   │   │    ║
-║  │  │  • table_id, caption, source_clause, page, bbox,   │   │    ║
-║  │  │    image_key                                       │   │    ║
-║  │  │  • columns — массив: name, header, index, type,    │   │    ║
-║  │  │    value_type, unit                                │   │    ║
-║  │  │  • rows — массив: row_index, type, cells,          │   │    ║
-║  │  │    range и value (типизированные)                  │   │    ║
-║  │  │  • footnotes — массив: footnote_id, text,          │   │    ║
-║  │  │    applies_to                                      │   │    ║
-║  │  │  • amendments — массив: amendment_id, type,        │   │    ║
-║  │  │    source, affected_columns, action, note          │   │    ║
+║  │  │  type: table                                       │   │    ║
+║  │  │  content: { caption, columns[], rows[],            │   │    ║
+║  │  │  footnotes[], amendments[], image_key }            │   │    ║
+║  │  │                                                     │   │    ║
+║  │  │  columns[] — объекты: name, header, index,         │   │    ║
+║  │  │  type, value_type, unit                            │   │    ║
+║  │  │  rows[] — объекты: row_index, type, cells          │   │    ║
+║  │  │  cells — объект: column_name → { value }           │   │    ║
+║  │  │  или { range: { min, max, min_inclusive,           │   │    ║
+║  │  │  max_inclusive } }                                 │   │    ║
+║  │  │  footnotes[] — объекты: footnote_id, text,         │   │    ║
+║  │  │  applies_to                                        │   │    ║
+║  │  │  amendments[] — объекты: amendment_id, type,       │   │    ║
+║  │  │  source, affected_columns, action, note            │   │    ║
 ║  │  └────────────────────────────────────────────────────┘   │    ║
 ║  │                       │                                   │    ║
 ║  │                       ▼                                   │    ║
 ║  │  ┌────────────────────────────────────────────────────┐   │    ║
-║  │  │  figures — массив                                  │   │    ║
-║  │  │  figure_id, caption, page, bbox, file_key,         │   │    ║
-║  │  │  description                                       │   │    ║
+║  │  │  type: image                                       │   │    ║
+║  │  │  content: { caption, image_key, description }      │   │    ║
 ║  │  └────────────────────────────────────────────────────┘   │    ║
 ║  │                       │                                   │    ║
 ║  │                       ▼                                   │    ║
 ║  │  ┌────────────────────────────────────────────────────┐   │    ║
-║  │  │  formulas — массив                                 │   │    ║
-║  │  │  formula_id, latex, image_key, parameters,         │   │    ║
-║  │  │  meaning, context_clause, page, bbox           │   │    ║
+║  │  │  type: formula                                     │   │    ║
+║  │  │  content: { latex, meaning, image_key,             │   │    ║
+║  │  │  parameters[] }                                    │   │    ║
 ║  │  └────────────────────────────────────────────────────┘   │    ║
 ║  └───────────────────────────────────────────────────────────┘    ║
 ║                            │                                      ║
@@ -226,7 +230,7 @@
 ║                            ▼                                      ║
 ║  ┌───────────────────────────────────────────────────────────┐    ║
 ║  │           references — массив                             │    ║
-║  │  • target_doc, type, context, current_status              │    ║
+║  │  • target_doc_code, type, context, current_status         │    ║
 ║  │  • replaced_by, replacement_date, note                    │    ║
 ║  └───────────────────────────────────────────────────────────┘    ║
 ║                                                                    ║

@@ -119,7 +119,7 @@
 
 | Этап → Этап | Поле (исходное) | Поле (результирующее) | Примечание |
 |---|---|---|---|
-| OCR/Parser → Converter-validator | `designation` / `doc_code` | `doc_code` | Стандартизация названия поля |
+| OCR/Parser → Converter-validator | `doc_code` | `doc_code` | Сквозное поле, имя не меняется |
 | OCR/Parser → Converter-validator | `raw_text` | иерархический `content` | Построение иерархии |
 | OCR/Parser → Converter-validator | `figure` / `image` | `type: image`, `content.image_key` | Бинарные объекты → image_key (ссылка на фрагмент изображения) |
 | OCR/Parser → Converter-validator | `table` | `type: table`, `content.columns/rows` | Структуризация таблиц |

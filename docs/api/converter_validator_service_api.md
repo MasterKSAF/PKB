@@ -25,7 +25,7 @@
 
 **Вход:** сырой JSON (результат Parser/OCR) — может содержать неполные данные.
 
-**Выход:** designation, title, document_type, year, revision.
+**Выход:** doc_code, title, document_type, year, revision.
 
 > **Полный формат данных:** [`docs/jsons/document2b_preview.json`](../jsons/document2b_preview.json) (схема `converter_validator_preview_v1`)
 
@@ -43,7 +43,7 @@
 
 ```json
 {
-  "designation": "ГОСТ 20868-81",
+  "doc_code": "ГОСТ 20868-81",
   "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
   "document_type": "normative",
   "year": "1981",
@@ -53,7 +53,7 @@
 
 | Поле | Тип | Описание |
 |---|---|---|
-| `designation` | string | Обозначение документа |
+| `doc_code` | string | Обозначение документа |
 | `title` | string | Полное название документа |
 | `document_type` | string | Тип документа (`normative`, `drawing`, `specification`, ...) |
 | `year` | string | Год издания/утверждения |
@@ -71,9 +71,9 @@
 
 **Вход:** полный сырой JSON (результат Parser/OCR: все секции, таблицы, изображения, метаданные).
 
-**Выход:** иерархический типизированный JSON со структурой `validated_v2`.
+**Выход:** иерархический типизированный JSON (схема `validated_v3`)
 
-> **Полный формат данных:** [`docs/jsons/document2_validate.json`](../jsons/document2_validate.json) (схема `validated_v2`)
+> **Полный формат данных:** [`docs/jsons/document2_validate.json`](../jsons/document2_validate.json) (схема `validated_v3`)
 
 **Процесс внутри:**
 
@@ -323,7 +323,7 @@
 
 | Поле | Тип | Описание |
 |---|---|---|
-| `schema` | string | Идентификатор схемы ответа — `"validated_v2"` |
+| `schema` | string | Идентификатор схемы ответа — `"validated_v3"` |
 | `created_at` | string (datetime) | Дата и время формирования ответа |
 | `parser` | object | Информация о парсере, выполнившем первичную обработку |
 
@@ -331,7 +331,6 @@
 
 | Поле | Тип | Описание |
 |---|---|---|
-| `document_version_id` | string | ID версии файла-источника |
 | `file_name` | string | Имя исходного файла |
 | `file_hash_sha256` | string | SHA-256 хеш исходного файла |
 | `page_count` | int | Количество страниц |
@@ -341,11 +340,12 @@
 | Поле | Тип | Описание |
 |---|---|---|
 | `doc_code` | string | Обозначение документа (например, `ГОСТ 20868-81`) |
-| `full_title` | string | Полное название документа |
+| `title` | string | Полное название документа |
 | `normalized_title` | string | Нормализованное название (для поиска) |
+| `title_hash_sha256` | string | SHA-256 хеш названия (бизнес-ключ) |
 | `group` | string | Группа классификации (например, `ПО4`) |
-| `mks` | string | Код МКС |
-| `okstu` | string | Код ОКСТУ (может быть `null`) |
+| `mks_oks_code` | string | Код МКС/ОКС |
+| `okstu_code` | string | Код ОКСТУ (может быть `null`) |
 | `udc` | string | Код УДК (может быть `null`) |
 | `era` | string | Историческая эра (`USSR`, `RF`, ...) |
 | `validity_status` | string | Статус действия (`active`, `superseded`, ...) |
@@ -360,10 +360,16 @@
 
 | Поле | Тип | Описание |
 |---|---|---|
-| `text` | array | Список текстовых блоков (пунктов) документа |
-| `tables` | array | Таблицы документа |
-| `figures` | array | Изображения/чертежи |
-| `formulas` | array | Формулы (LaTeX + параметры) |
+| `content` | array | Единый плоский массив секций документа |
+| `content[].clause` | string | Номер пункта/раздела |
+| `content[].title` | string | Заголовок секции (может быть `null`) |
+| `content[].level` | int | Уровень вложенности |
+| `content[].parent_clause` | string | Родительский пункт |
+| `content[].path` | string | Путь к секции (уникальный идентификатор в рамках документа) |
+| `content[].page` | int | Номер страницы |
+| `content[].bbox` | array | Координаты bounding box `[x1, y1, x2, y2]` |
+| `content[].type` | string | Тип секции: `section`, `table`, `image`, `formula` |
+| `content[].content` | object | Объектный контент, структура зависит от `type` |
 
 **Поля `document.terminology`:**
 
@@ -378,10 +384,10 @@
 
 | Поле | Тип | Описание |
 |---|---|---|
-| `target_doc` | string | Обозначение целевого документа |
+| `target_doc_code` | string | Обозначение целевого документа |
 | `type` | string | Тип ссылки: `single`, `range` |
 | `context` | string | Контекст ссылки |
-| `current_status` | string | Статус целевого документа |
+| `current_status` | string | Статус целевого документа (`active`, `superseded`, ...) |
 | `note` | string | Примечание (может быть `null`) |
 | `replaced_by` | string | Новый документ, заменивший целевой (если `superseded`) |
 | `replacement_date` | string | Дата замены |
@@ -393,8 +399,8 @@
 | `validation_id` | string | ID валидации |
 | `structure_valid` | bool | Результат проверки структуры |
 | `classification` | object | Статусы классификационных кодов |
-| `fingerprint` | object | Хэши документа (content_hash_sha256, title_hash_sha256) |
-| `matching` | object | Связи с существующими документами (predecessor/successor) |
+| `fingerprint` | object | Хэши документа (`content_hash_sha256`, `title_hash_sha256`) |
+| `matching` | object | Связи с существующими документами (`predecessor_doc_id`, `successor_doc_id`) |
 | `cross_references` | array | Список кросс-ссылок на другие документы |
 | `decision` | string | `auto` — автоматическое продвижение, `review_required` — требуется ручное подтверждение |
 | `status` | string | Статус: `completed`, `failed` |
@@ -403,7 +409,7 @@
 
 ## Отдельные эндпоинты валидации (`/validate/*`)
 
-Эндпоинты валидации могут вызываться как часть полного цикла `/converter/convert` (шаги 4–8), так и отдельно для проверки отдельных аспектов документа.
+Эндпоинты валидации могут вызываться как часть полного цикла `/converter/convert` (шаги 4–8), так и отдельно для повторной проверки отдельных аспектов документа.
 
 ### POST /validate/document
 
@@ -453,94 +459,18 @@
 | `document_id` | string | ID документа. Назначается валидацией: извлекается существующий для дубликата, либо генерируется новый. |
 | `structure_valid` | bool | Результат проверки структуры |
 | `classification` | object | Статусы классификационных кодов |
-| `fingerprint` | object | Хэши документа (content_hash_sha256, title_hash_sha256) |
+| `fingerprint` | object | Хэши документа (`content_hash_sha256`, `title_hash_sha256`) |
 | `matching` | object | Связи с существующими документами |
 | `decision` | string | `auto` — автоматическое продвижение, `review_required` — требуется ручное подтверждение |
 | `status` | string | Статус: `completed`, `failed` |
 
----
-
-### POST /validate/classifiers
-
-Валидация классификационных кодов по справочнику Registry.
-
-**Запрос:**
-
-```json
-{
-  "classification": {
-    "mks_oks_code": "47.020",
-    "okstu_code": null,
-    "udk_code": "629.5.021"
-  }
-}
-```
-
-**Ответ `200`:**
-
-```json
-{
-  "mks_status": "CONFIRMED",
-  "mks_display_name": "Конструкция корпуса",
-  "okstu_status": "NOT_USED",
-  "udk_valid": true,
-  "overall_status": "CONFIRMED"
-}
-```
-
-**Статусы:**
-
-| Статус | Значение |
-|---|---|
-| `CONFIRMED` | Код найден в справочнике и верифицирован |
-| `PENDING_REVIEW` | Код не найден в справочнике — требует ручного разбора |
-| `NOT_FOUND` | Парсер не обнаружил код на первых страницах |
-| `NOT_USED` | Не применяется для данной эры/типа документа |
-| `UNASSIGNED` | Начальное состояние — классификация ещё не выполнялась |
-
----
-
-### POST /validate/check
-
-Проверка текста на соответствие набору правил.
-
-**Запрос:**
-
-```json
-{
-  "text": "Обшивка ледового пояса 10 мм",
-  "rules": ["min_thickness_12mm"],
-  "document_type": "drawing"
-}
-```
-
-**Ответ `200`:**
-
-```json
-{
-  "passed": false,
-  "checks": [
-    { "rule": "min_thickness_12mm", "status": "ERROR", "message": "Толщина 10 мм меньше требования 12 мм" }
-  ],
-  "processing_time_ms": 50
-}
-```
-
-### POST /validate/extract/parameters
-
-Извлечение структурированных параметров из документов.
-
-**Запрос:**
-
-```json
-{
-  "document_id": "doc-8a3f2b",
-  "page_id": null,
-  "document_type": "specification"
-}
-```
-
-**Ответ `200`**: структура параметров (спецификация, материалы, размеры).
+> **Внутренние функции валидации:**
+> - `/validate/classifiers` — валидация классификационных кодов по справочнику Registry.
+> - `/validate/check` — проверка текста на соответствие набору правил.
+> - `/validate/extract/parameters` — извлечение структурированных параметров из документов (спецификации, материалы, размеры).
+>
+> Эти эндпоинты являются внутренними и вызываются Orchestrator'ом или Analyse Service по мере необходимости.
+> Детальное описание форматов запроса/ответа — во внутренней документации сервиса.
 
 ---
 
@@ -553,15 +483,13 @@
 | Режимы | Preview (быстрые проверки) + Full (полный цикл конвертации и валидации) |
 | Пайплайн | 1 (Формирование документа), Этап 1.5 (Converter-validator) |
 | Вход | Raw JSON (частичный — для Preview, полный — для Full) |
-| Выход | Иерархический типизированный JSON (схема `validated_v2`) с результатами валидации |
+| Выход | Иерархический типизированный JSON (схема `validated_v3`) с результатами валидации |
 
 ### Матрица эндпоинтов
 
 | Метод | Путь | Режим | Описание | Запись в БД |
 |---|---|---|---|---|
-| `POST` | `/converter/preview/metadata` | Preview | Извлечение базовых метаданных (designation, title, document_type, year, revision) | Нет |
-| `POST` | `/converter/convert` | Full | Полная конвертация + валидация + LLM + кросс-ссылки (схема `validated_v2`) | Нет |
-| `POST` | `/validate/document` | Full / Standalone | Комплексная валидация документа | Нет |
-| `POST` | `/validate/classifiers` | Full / Standalone | Валидация классификационных кодов | Нет |
-| `POST` | `/validate/check` | Full / Standalone | Проверка правил | Нет |
-| `POST` | `/validate/extract/parameters` | Full / Standalone | Извлечение параметров | Нет |
+| `POST` | `/converter/preview/metadata` | Preview | Извлечение базовых метаданных (doc_code, title, document_type, year, revision) | Нет |
+| `POST` | `/converter/convert` | Full | Полная конвертация + валидация + LLM + кросс-ссылки (схема `validated_v3`) | Нет |
+| `POST` | `/validate/document` | Standalone | Комплексная валидация документа без переконвертации | Нет |
+

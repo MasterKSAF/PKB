@@ -945,6 +945,14 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
         "content": { "columns": [...], "rows": [...], "footnotes": [...], "amendments": [...], "image_key": "..." }
       }
     ],
+    "terminology": [
+      {
+        "term": "стойка установочная крепежная",
+        "definition": "Металлическая деталь для монтажа радиоэлектронной аппаратуры.",
+        "source_clause": "1",
+        "normalized_term": "стойка установочная крепежная"
+      }
+    ],
     "references": [
       {
         "target_doc_code": "ГОСТ 24705-81",
