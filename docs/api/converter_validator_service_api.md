@@ -112,7 +112,7 @@
 }
 ```
 
-**Ответ `200` (схема `validated_v2`):**
+**Ответ `200` (схема `validated_v3`):**
 
 ```json
 {
@@ -120,7 +120,8 @@
   "version_id": "c4b9f2d3-...",
   "document_id": "b3a8f1c2-...",
   "metadata": {
-    "schema": "validated_v2",
+    "schema": "validated_v3",
+    "task_id": "task-8a3f2b",
     "created_at": "2026-05-17T09:15:00Z",
     "parser": {
       "name": "docling",
@@ -131,18 +132,17 @@
   },
   "document": {
     "source": {
-      "document_version_id": "c4b9f2d3-...",
       "file_name": "GOST_20868-81_scan.pdf",
       "file_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "page_count": 2
     },
     "metadata": {
       "doc_code": "ГОСТ 20868-81",
-      "full_title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
+      "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
       "normalized_title": "стойки установочные крепежные технические требования",
       "group": "ПО4",
-      "mks": "31.240",
-      "okstu": null,
+      "mks_oks_code": "31.240",
+      "okstu_code": null,
       "udc": null,
       "era": "USSR",
       "validity_status": "active",
@@ -160,33 +160,38 @@
         "document_number": "1166"
       },
       "amendments": [
-        { "type": "Изменение № 1", "source": "ИУС 4-87", "affected_clauses": ["6.4"] },
-        { "type": "Поправка", "source": "ИУС 5-82", "affected_clauses": ["2"] }
+        { "type": "Изменение № 1", "source": "ИУС 4-87", "affected_clauses": ["6.4"], "note": null },
+        { "type": "Поправка", "source": "ИУС 5-82", "affected_clauses": ["2"], "note": null }
       ],
-      "status_note": "С 01.07.2005 введены ГОСТ 24705-2004 и ГОСТ 16093-2004"
+      "status_note": "С 01.07.2005 введены ГОСТ 24705-2004 и ГОСТ 16093-2004",
+      "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
     },
-    "content": {
-      "text": [
-        {
-          "clause": "1",
-          "title": null,
+    "content": [
+      {
+        "clause": "1",
+        "title": null,
+        "level": 1,
+        "parent_clause": null,
+        "path": "1",
+        "page": 1,
+        "bbox": [10, 20, 200, 40],
+        "type": "section",
+        "content": {
           "text": "Настоящий стандарт распространяется...",
-          "level": 1,
-          "parent_clause": null,
-          "ltree_path": "1",
-          "page": 1,
-          "bbox": [10, 20, 200, 40],
           "amendments": []
         }
-      ],
-      "tables": [
-        {
-          "table_id": "t1",
+      },
+      {
+        "clause": "6.1",
+        "title": "Допуск соосности при степени точности",
+        "level": 2,
+        "parent_clause": "6",
+        "path": "6.1.table1",
+        "page": 2,
+        "bbox": [10, 150, 200, 250],
+        "type": "table",
+        "content": {
           "caption": "Допуск соосности при степени точности",
-          "source_clause": "6.1",
-          "page": 2,
-          "bbox": [10, 150, 200, 250],
-          "image_key": "purgatory/assets/a1b2c3d4/tables/t1.png",
           "columns": [
             { "name": "L_range", "header": "L, мм", "index": 0, "type": "range", "value_type": "number", "unit": "мм" },
             { "name": "normal", "header": "нормальная", "index": 1, "type": "value", "value_type": "number", "unit": "мм" },
@@ -207,35 +212,45 @@
           ],
           "amendments": [
             { "amendment_id": "amd_1", "type": "Изменение № 1", "source": "ИУС 4-87", "affected_columns": ["normal", "high"], "action": "values_updated", "note": "Изменены допуски" }
-          ]
+          ],
+          "image_key": "purgatory/assets/a1b2c3d4/tables/t1.png"
         }
-      ],
-      "figures": [
-        {
-          "figure_id": "fig1",
-          "caption": "Черт. 1 – Схема допуска соосности оси отверстия Б относительно оси поверхности А",
-          "page": 2,
-          "bbox": [30, 260, 180, 300],
+      },
+      {
+        "clause": "6.1",
+        "title": "Черт. 1 – Схема допуска соосности",
+        "level": 2,
+        "parent_clause": "6",
+        "path": "6.1.fig1",
+        "page": 2,
+        "bbox": [30, 260, 180, 300],
+        "type": "image",
+        "content": {
+          "caption": "Черт. 1 – Схема допуска соосности",
           "image_key": "purgatory/assets/a1b2c3d4/fig1.png",
           "description": "Схема для определения допуска соосности"
         }
-      ],
-      "formulas": [
-        {
-          "formula_id": "eq1",
+      },
+      {
+        "clause": "6.1",
+        "title": "Формула допуска соосности",
+        "level": 2,
+        "parent_clause": "6",
+        "path": "6.1.formula1",
+        "page": 1,
+        "bbox": [100, 140, 180, 160],
+        "type": "formula",
+        "content": {
           "latex": "R_{\\text{доп}} = \\frac{\\Delta}{2}",
           "meaning": "Формула расчёта допустимого радиуса...",
           "image_key": "purgatory/assets/a1b2c3d4/formulas/eq1.png",
           "parameters": [
             { "symbol": "R_{\\text{доп}}", "description": "Допустимый радиус", "unit": "мм" },
             { "symbol": "\\Delta", "description": "Заданное отклонение", "unit": "мм" }
-          ],
-          "context_clause": "6.1",
-          "page": 1,
-          "bbox": [100, 140, 180, 160]
+          ]
         }
-      ]
-    },
+      }
+    ],
     "terminology": [
       {
         "term": "стойка установочная крепежная",
@@ -246,14 +261,14 @@
     ],
     "references": [
       {
-        "target_doc": "ГОСТ 20862-81 – ГОСТ 20867-81",
+        "target_doc_code": "ГОСТ 20862-81 – ГОСТ 20867-81",
         "type": "range",
         "context": "изготовление крепежных установочных стоек",
         "current_status": "active",
         "note": null
       },
       {
-        "target_doc": "ГОСТ 24705-81",
+        "target_doc_code": "ГОСТ 24705-81",
         "type": "single",
         "context": "резьбы",
         "current_status": "superseded",

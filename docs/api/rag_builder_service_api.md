@@ -26,17 +26,56 @@
 | 3 | Вычисление Embeddings | Векторные представления для каждого текстового чанка |
 | 4 | Построение векторного индекса | Сохранение чанков, эмбеддингов и индексов в БД |
 
-**Запрос:**
+RAG Builder принимает JSON от Registry (через `GET /registry/documents/{doc_id}/sections`) — формат см. [`document3_for_rag.json`](../jsons/document3_for_rag.json).
+
+Каждая секция содержит объектный `content`, структура которого зависит от `type`:
+
+| type | Как формируется чанк | Источник данных |
+|------|---------------------|----------------|
+| `section` | Разбивка `content.text` на чанки ≤512 токенов | `content.text` |
+| `table` | Весь объект целиком → один чанк (Markdown-таблица) | Заголовки из `content.columns`, строки из `content.rows` |
+| `image` | Один чанк | `content.caption + content.description` |
+| `formula` | Один чанк | `content.latex + content.meaning` |
+
+**Запрос (получается из Registry без модификации):**
+
 ```json
 {
   "document_id": "b3a8f1c2-...",
   "sections": [
     {
       "section_id": 420001,
-      "title": "Ледовые усиления",
-      "content": "...",
-      "page": 42,
-      "clause": "4.2 Требования к обшивке"
+      "document_id": "b3a8f1c2-...",
+      "clause": "1",
+      "title": null,
+      "level": 1,
+      "path": "1",
+      "page": 1,
+      "type": "section",
+      "content": {
+        "text": "Настоящий стандарт распространяется...",
+        "amendments": []
+      }
+    },
+    {
+      "section_id": 420005,
+      "document_id": "b3a8f1c2-...",
+      "clause": "6.1",
+      "title": "Допуск соосности при степени точности",
+      "level": 2,
+      "path": "6.1.table1",
+      "page": 2,
+      "type": "table",
+      "content": {
+        "caption": "Допуск соосности...",
+        "columns": [
+          { "name": "L_range", "header": "L, мм" },
+          { "name": "normal", "header": "нормальная" }
+        ],
+        "rows": [
+          { "row_index": 0, "cells": { "L_range": { "label": "От 6 до 50" }, "normal": { "value": 0.1 } } }
+        ]
+      }
     }
   ],
   "protected_spans": [
@@ -51,7 +90,9 @@
 | Поле | Тип | Обязательность | Описание |
 |---|---|---|---|
 | `document_id` | string | Да | ID документа (UUID) |
-| `sections` | array | Да | Массив секций документа (плоский JSON из Registry). Каждая секция содержит: `section_id`, `title`, `content`, `page`, `clause` |
+| `sections` | array | Да | Массив секций документа от Registry. Каждая секция содержит: `section_id`, `document_id`, `clause`, `title`, `level`, `path`, `page`, `type`, `content`, `created_at` |
+| `sections[].type` | string | Да | Тип секции: `section`, `table`, `image`, `formula`. Влияет на стратегию чанкования |
+| `sections[].content` | object | Да | Объектный контент. Структура зависит от `type` |
 | `protected_spans` | array | Нет | Массив неразрывных блоков: `{section_id, start_offset, end_offset}`. Запрещает чанкование внутри указанного диапазона секции |
 | `options.strategy` | string | Нет | Стратегия разбиения → `rag_document_chunks.strategy` (`semantic_512`, `fixed_256`) |
 

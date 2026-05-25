@@ -1,10 +1,10 @@
 # Схема базы данных (объединённая)
 
-> Сводная ER-диаграмма, объединяющая принятую схему `docs/` с дополнениями из проекта Purgatory (v2.3 + nsi).
+> Сводная ER-диаграмма.
 
 ---
 
-## 0. Принятая схема `docs/` (core)
+## ER-диаграмма
 
 ```mermaid
 erDiagram
@@ -12,76 +12,102 @@ erDiagram
         uuid id PK
         text doc_code
         text title
-        varchar validity_status
-        varchar processing_status
+        text normalized_title
+        varchar source_type "GOST, OST, TU, ISO..."
+        varchar group "ПО4"
+        text mks_oks_code
+        text okstu_code
+        text udc
+        varchar era "USSR, CIS, RF, CURRENT"
+        varchar validity_status "active, superseded, expired"
+        varchar jurisdiction "RU, EU, US, NO, INTL"
+        text issuing_body
+        date adoption_date
+        date effective_from
+        text replaces
+        text status_note
+        text content_hash_sha256 "хэш бинарного файла (вычисляется при загрузке)"
+        text title_hash_sha256 "хэш doc_code+title+era (вычисляется в Converter)"
+        text file_hash_sha256 "хэш файла (дублирует content_hash)"
+        bigint file_size_bytes
+        varchar processing_status "FSM: draft, uploaded, previewing, awaiting_decision, parsing, validation, ready_for_promotion, review_required, approved, registry, pending_index, indexed, duplicate, new_version, archived, failed"
+        int chunk_count "обновляется RAG Builder после индексации"
         uuid successor_doc_id FK
         uuid predecessor_doc_id FK
-        varchar era
-        varchar group
-        text title_hash_sha256
-        text content_hash_sha256
-        bigint file_size_bytes
-        timestamptz created_at
-        timestamptz updated_at
         text created_by
         text updated_by
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     registry.document_sections {
-        bigint id PK
+        bigint id PK "назначается Registry (sequence)"
         uuid document_id FK
-        bigint parent_id FK
-        text clause
+        bigint parent_id FK "ссылка на родительскую секцию (id)"
+        text clause "1, 6.1, 6.1.table1"
         text title
-        int level
-        ltree path
+        int level "уровень вложенности (1, 2, 3...)"
+        ltree path "ltree-путь в иерархии"
         int page
-        jsonb bbox
-        varchar type
-        jsonb content
-        timestamptz created_at
-    }
-
-    rag.chunks {
-        bigint id PK
-        bigint section_id FK
-        uuid document_id FK
-        int chunk_index
-        text content
-        vector(1536) embedding
-        tsvector tsv
-        text strategy
-        int page
-        jsonb bbox
-        float confidence
-        text tenant_id
-        timestamptz deleted_at
+        jsonb bbox "[x1,y1,x2,y2]"
+        varchar type "section, table, image, formula"
+        jsonb content "разнородный: свои поля для каждого type"
         timestamptz created_at
     }
 
     registry.document_references {
         uuid id PK
-        uuid source_document_id FK
-        text target_doc_code
-        varchar reference_type
-        text context
-        text current_status
+        uuid source_document_id FK "документ-источник"
+        text target_doc_code "целевой ГОСТ/ТУ"
+        varchar reference_type "single, range"
+        text context "контекст ссылки"
+        text current_status "active, superseded"
         text replaced_by
         date replacement_date
-        bool is_resolved
+        boolean is_resolved
         uuid resolved_document_id FK
         timestamptz created_at
+    }
+
+    registry.document_versions {
+        uuid id PK
+        uuid document_id FK
+        int version_number
+        text content_hash_sha256
+        text file_hash_sha256
+        bigint file_size_bytes
+        text format_code "pdf, doc, tiff..."
+        text format_label
+        text file_key "ссылка на MinIO"
+        text uploaded_by
+        timestamptz uploaded_at
     }
 
     registry.document_history {
         uuid id PK
         uuid document_id FK
-        text event_type
-        timestamp event_at
-        text event_by
-        text source_task_id
+        text event_type "created, preview_failed, decided, parsed, validated, promoted, indexed, failed"
+        text old_status
+        text new_status
         text comment
-        jsonb document_snapshot
+        text changed_by
+        jsonb document_snapshot "слепок enriched JSON на момент события"
+        timestamptz event_at
+    }
+
+    rag.document_chunks {
+        bigint id PK
+        bigint section_id FK "registry.document_sections.id"
+        uuid document_id FK
+        int chunk_index "порядковый номер чанка в секции"
+        text content "текст чанка (plain text для section, Markdown для table)"
+        vector embedding "dim=1536, pgvector"
+        tsvector tsv "полнотекстовый индекс (to_tsvector)"
+        varchar strategy "semantic_512, fixed_256"
+        int page
+        jsonb bbox
+        float confidence
+        timestamptz created_at
     }
 
     chat.sessions {
@@ -98,10 +124,10 @@ erDiagram
     chat.messages {
         bigint id PK
         uuid session_id FK
-        text role
+        text role "user, assistant"
         text content
-        text status
-        jsonb sources
+        text status "FSM: idle, pending, enriching, searching, generating, enriching_citations, answered, failed"
+        jsonb sources "[{chunk_id, section_id, document_id, excerpt, score}]"
         jsonb attachments
         jsonb options
         jsonb feedback
@@ -110,54 +136,43 @@ erDiagram
     }
 
     registry.documents ||--o{ registry.document_sections : has
-    registry.document_sections ||--o{ registry.document_sections : parent
-    registry.document_sections ||--o{ rag.chunks : contains
-    registry.documents ||--o{ registry.document_references : source
-    registry.documents ||--o{ registry.document_references : resolved
-    registry.documents ||--o{ rag.chunks : has
-    registry.documents ||--o{ registry.document_history : has
-    chat.sessions ||--o{ chat.messages : contains
+    registry.document_sections ||--o{ registry.document_sections : parent_of
+    registry.document_sections ||--o{ rag.document_chunks : contains
+    registry.documents ||--o{ registry.document_references : source_of
+    registry.documents ||--o{ registry.document_history : audited_by
+    registry.documents ||--o{ registry.document_versions : versioned_by
+    registry.documents ||--o{ rag.document_chunks : chunked_by
+    chat.sessions ||--o{ chat.messages : has_messages
 ```
 
 ---
 
-### Комментарии к полям
+## Ключевые условия и ограничения
 
-| Таблица | Поле | Тип | Комментарий |
-|---------|------|-----|-------------|
-| `registry.documents` | `processing_status` | varchar | FSM-статус обработки: `draft`, `uploaded`, `previewing`, `awaiting_decision`, `parsing`, `validation`, `ready_for_promotion`, `review_required`, `approved`, `registry`, `pending_index`, `indexed`, `duplicate`, `new_version`, `archived`, `failed` |
-| `registry.document_sections` | `type` | varchar | Тип секции: `section`, `table`, `image`, `formula` |
-| `registry.documents` | `file_size_bytes` | bigint | Размер исходного загруженного файла в байтах. Используется для pre-filtering при duplicate-детекции и для отображения в UI |
-| `registry.documents` | `content_hash_sha256` | text | SHA-256 содержимого файла последней версии документа. Используется для быстрого поиска по хэшу (duplicate-детекция на уровне файла). Индексируется для ускорения `WHERE content_hash_sha256 = ...` |
-| `rag.chunks` | `embedding` | vector(1536) | Векторное представление для семантического поиска (pgvector). Размерность зависит от модели эмбеддингов. |
-| `rag.chunks` | `tsv` | tsvector | Полнотекстовый индекс для гибридного поиска (pg_trgm + ts_rank) |
-| `rag.chunks` | `tenant_id` | text | Зарезервировано для будущей мультитенантности, в текущей версии не используется |
-| `chat.messages` | `status` | text | Статус обработки сообщения: `idle`, `pending`, `enriching`, `searching`, `generating`, `enriching_citations`, `answered`, `failed` |
+| Таблица | Поле | Условие |
+|---------|------|---------|
+| `registry.document_sections` | `type` | `CHECK (type IN ('section','table','image','formula'))` |
+| `registry.documents` | `content_hash_sha256` | Для быстрого дубликат-детекта (`WHERE content_hash_sha256 = ? AND file_size_bytes = ?`) |
+| `registry.documents` | `title_hash_sha256` | Индекс для полнотекстового поиска дубликатов по `doc_code + title + era` |
+| `rag.document_chunks` | `embedding` | `VECTOR(1536)` — pgvector, `IVFFlat` индекс для `cosine_similarity` |
+| `rag.document_chunks` | `tsv` | `tsvector` — GIN-индекс для полнотекстового поиска (`ts_rank`) |
 
 ---
 
-### UNIQUE-ограничения
+## Примечания
 
-- `registry.documents.title` — бизнес-ключ документа (через title_hash_sha256)
-- `registry.document_references (source_document_id, target_doc_code, reference_type)` — защита от дублей связей
+1. **`document_id` (UUID)** назначается только в Registry при создании документа. До этого — `task_id` (UUID), который используется всеми начальными сервисами (OCR/Parser, Converter-Validator).
 
-### INDEX
+2. **`registry.document_sections.content`** — JSONB с разнородной структурой, зависящей от `type`:
+   - `section` → `{ text, amendments }`
+   - `table` → `{ caption, columns, rows, footnotes, amendments, image_key }`
+   - `image` → `{ caption, image_key, description }`
+   - `formula` → `{ latex, meaning, image_key, parameters }`
 
-- `registry.documents.content_hash_sha256` — индекс для быстрого поиска по SHA-256 файла (`WHERE content_hash_sha256 = ?`). Not unique — разные версии документа могут иметь одинаковый хэш.
+3. **`rag.document_chunks`** — унифицированное хранение. `content` — строка (plain text или Markdown). `tsv` строится через `to_tsvector('russian', content)` при вставке.
 
-### CHECK-ограничения
+4. **`registry.documents.processing_status`** — FSM-статус конвейера (не путать с `validity_status` — юридическим статусом документа).
 
-- `registry.document_sections.type IN ('section', 'table', 'image', 'formula')`
+5. **Связь `rag.document_chunks → registry.document_sections`**: чанк всегда привязан к конкретной секции документа. Одна секция может порождать несколько чанков (для `type=section` с разбивкой на ≤512 токенов) или один чанк (для `type=table/image/formula`).
 
----
-
-### Примечания
-
-1. **`chunk_container_id`** — staging-only, принадлежит схеме `purgatory`.
-
-2. **Preview-данные** не хранятся в БД. Они живут исключительно в журнале пайплайна Orchestrator (временные артефакты фазы Preview).
-3. **`registry.document_sections`** — это **секции** документа (разделы, подразделы, пункты), создаваемые сервисом Registry на этапе сегментации. Не путать с чанками!
-4. **`rag.chunks`** — это **чанки**, формируемые сервисом RAG Builder на основе секций. Поле `section_id` ссылается на `registry.document_sections.id`. Одна секция может порождать несколько чанков.
-5. **Поле `rag.chunks.tenant_id`** — зарезервировано для будущей мультитенантности, в текущей версии пайплайнов не используется.
-6. **Таблицы `chat.sessions` и `chat.messages`** — хранят историю чат-сессий пользователей (Pipeline 3). Не относятся к реестру документов, выделены в отдельную схему `chat`.
-7. **Поле `registry.documents.processing_status`** — хранит FSM-статус обработки документа (промежуточные состояния пайплайна). Не путать с `validity_status` (юридический статус действия документа).
+6. **Таблицы `chat.sessions` и `chat.messages`** не относятся к реестру документов, выделены в отдельную схему `chat`.

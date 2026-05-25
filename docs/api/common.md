@@ -8,6 +8,27 @@
 
 - Формат данных: `application/json`, для загрузки файлов – `multipart/form-data`
 
+### Порты сервисов
+
+| Сервис | Порт |
+|--------|------|
+| Orchestrator | `8081` |
+| Auth | `8082` |
+| Query | `8083` |
+| Registry | `8084` |
+| Integration | `8085` |
+| Converter-Validator | `8086` |
+| Parser | `8087` |
+| OCR | `8088` |
+| Analyse | `8089` |
+| RAG Builder | `8090` |
+| RAG Search | `8091` |
+
+### Идентификаторы
+
+- **`task_id` (UUID)** — первичный идентификатор на этапах загрузки и preview. Используется в URL `/tasks/{task_id}/...`.
+- **`document_id` (UUID)** — назначается только в Registry при создании документа. Все дальнейшие операции после записи в Registry используют `document_id` в URL `/documents/{document_id}/...`.
+
 Аутентификация:
   - **Публичные эндпоинты (через Orchestrator):** все запросы, кроме `/auth/*` и `/monitor/health`, требуют заголовок
     `Authorization: Bearer <access_token>`. Токен получается через `/auth/token`.

@@ -669,13 +669,137 @@ GET /registry/documents
 
 ---
 
-### 3.2. Один документ
+### 3.2. Один документ (описание)
 
 ```
 GET /registry/documents/{doc_id}
 ```
 
-**Ответ `200`** — полный объект документа с версиями файлов, цепочками преемственности.
+**Ответ `200`** — метаданные документа (описание карточки) из таблицы `registry_documents`.
+Без секций, терминологии и ссылок.
+
+Ключевые поля:
+- `id` — UUID документа
+- `doc_code` — код документа (ГОСТ, ОСТ и т.д.)
+- `title` — название документа
+- `title_hash_sha256` — хэш бизнес-ключа
+- `status` — FSM-статус обработки
+- `era` — эпоха (`USSR`, `CIS`, `RF`, `CURRENT`)
+- `validity_status` — юридический статус (`active`, `superseded`, `cancelled`, `historical`, `draft`)
+- `jurisdiction` — юрисдикция (`RU`, `EU`, `US`, `NO`, `INTL`)
+- `issuing_body` — организация-издатель
+- `source_type` — тип источника (`GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `OTHER`)
+- `mks_oks_code` — код МКС/ОКС
+- `okstu_code` — код ОКСТУ
+- `classification_status` — статус классификации (`{ mks_status, okstu_status }`)
+- `successor_doc_id` — ID документа-преемника
+- `predecessor_doc_id` — ID документа-предшественника
+- `chunk_container_id` — ID контейнера чанков
+- `metadata` — произвольные метаданные (JSONB)
+- `created_at` / `updated_at` — даты создания и обновления
+- `created_by` / `updated_by` — кем создан/обновлён
+
+**Пример ответа:**
+
+```json
+{
+  "data": {
+    "id": "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+    "doc_code": "ГОСТ 20868-81",
+    "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
+    "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+    "status": "approved",
+    "era": "USSR",
+    "validity_status": "active",
+    "jurisdiction": "RU",
+    "issuing_body": "Государственный Комитет СССР по стандартам",
+    "source_type": "GOST",
+    "mks_oks_code": "31.240",
+    "okstu_code": null,
+    "classification_status": {
+      "mks_status": "CONFIRMED",
+      "okstu_status": "NOT_USED"
+    },
+    "successor_doc_id": null,
+    "predecessor_doc_id": null,
+    "chunk_container_id": null,
+    "metadata": {},
+    "created_at": "2026-04-27T10:00:00Z",
+    "updated_at": "2026-04-27T14:00:00Z",
+    "created_by": "system_registry_sync",
+    "updated_by": "ivanov_ai"
+  }
+}
+```
+
+---
+
+### 3.2.1. Секции документа (полный объект для RAG Builder)
+
+```
+GET /registry/documents/{doc_id}/sections
+```
+
+**Ответ `200`** — полный объект документа со всеми секциями, терминологией и ссылками.
+Этот JSON используется RAG Builder для построения чанков: RAG Builder самостоятельно
+разбирает `content` каждой секции в зависимости от `type`.
+
+Формат ответа — см. [`document3_for_rag.json`](../jsons/document3_for_rag.json).
+
+Ключевые поля:
+- `document` — метаданные документа (id, doc_code, title, era, validity_status и др.)
+- `sections[]` — массив секций с полями: `section_id`, `document_id`, `parent_id`, `clause`, `title`, `level`, `path`, `page`, `bbox`, `type`, `content`, `created_at`
+  - `content` — объектный, зависит от `type` (см. описание схемы БД)
+- `terminology[]` — термины документа
+- `references[]` — ссылки документа
+
+**Пример ответа (сокращён):**
+
+```json
+{
+  "document": {
+    "id": "b3a8f1c2-...",
+    "doc_code": "ГОСТ 20868-81",
+    "title": "СТОЙКИ УСТАНОВОЧНЫЕ...",
+    "era": "USSR",
+    "validity_status": "active"
+  },
+  "sections": [
+    {
+      "section_id": 1001,
+      "document_id": "b3a8f1c2-...",
+      "parent_id": null,
+      "clause": "1",
+      "title": null,
+      "level": 1,
+      "path": "1",
+      "page": 1,
+      "type": "section",
+      "content": { "text": "...", "amendments": [] }
+    },
+    {
+      "section_id": 1005,
+      "document_id": "b3a8f1c2-...",
+      "parent_id": 1003,
+      "clause": "6.1",
+      "title": "Допуск соосности при степени точности",
+      "level": 2,
+      "path": "6.1.table1",
+      "page": 2,
+      "type": "table",
+      "content": { "columns": [...], "rows": [...], "footnotes": [...] }
+    }
+  ],
+  "terminology": [],
+  "references": []
+}
+```
+
+> **RAG Builder** получает этот JSON и строит чанки:
+> - `type=section` → `content.text` разбивается на чанки ≤512 токенов
+> - `type=table` → весь `content` → один чанк (Markdown-таблица)
+> - `type=image` → `content.caption + content.description` → один чанк
+> - `type=formula` → `content.latex + content.meaning` → один чанк
 
 ---
 
@@ -777,53 +901,60 @@ POST /registry/documents
 }
 ```
 
-**Тело запроса (из пайплайна — иерархический JSON-контейнер от этапа Converter-validator):**
+**Тело запроса (из пайплайна — enriched JSON от Converter-validator):**
+
+Registry принимает enriched JSON (схема `validated_v3`) напрямую от Converter-validator.
+Формат — см. [`document2_validate.json`](../jsons/document2_validate.json).
+
+Ключевые элементы запроса:
+- `document.metadata.*` — метаданные документа (doc_code, title, title_hash_sha256, era и др.)
+- `document.content[]` — единый плоский массив секций с полем `type` (`section`, `table`, `image`, `formula`)
+- `document.terminology[]` — термины документа
+- `document.references[]` — перекрёстные ссылки на другие нормативные документы
 
 ```json
 {
-  "document_id": "b3a8f1c2-...",
-  "version_id": "c4b9f2d3-...",
   "document": {
-    "doc_code": "ГОСТ 20868-81",
-    "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
-    "normalized_title": "стойки установочные крепежные технические требования",
-    "group": "ПО4",
-    "mks": "31.240",
-    "era": "USSR",
-    "validity_status": "active",
-    "file_size_bytes": 2048576,
-    ...
-  },
-  "structure": {
-    "type": "normative",
-    "sections": [
+    "source": { "file_name": "...", "file_hash_sha256": "...", "page_count": 2 },
+    "metadata": {
+      "doc_code": "ГОСТ 20868-81",
+      "title": "СТОЙКИ УСТАНОВОЧНЫЕ...",
+      "normalized_title": "стойки установочные...",
+      "title_hash_sha256": "a1b2c3d4...",
+      "era": "USSR",
+      "validity_status": "active",
+      "mks_oks_code": "31.240"
+    },
+    "content": [
       {
-        "clause": "1. Общие положения",
-        "title": "Общие положения",
+        "clause": "1",
+        "title": null,
         "level": 1,
-        "type": "section",
-        "content": { "text": "Настоящий стандарт..." },
+        "path": "1",
         "page": 1,
-        "bbox": "x1,y1,x2,y2"
+        "type": "section",
+        "content": { "text": "Настоящий стандарт...", "amendments": [] }
       },
       {
-        "clause": "1.1",
-        "title": "Область применения",
+        "clause": "6.1",
+        "title": "Допуск соосности при степени точности",
         "level": 2,
-        "type": "section",
-        "content": { "text": "..." },
-        "page": 1,
-        "bbox": "x1,y1,x2,y2"
+        "path": "6.1.table1",
+        "page": 2,
+        "type": "table",
+        "content": { "columns": [...], "rows": [...], "footnotes": [...], "amendments": [...], "image_key": "..." }
+      }
+    ],
+    "references": [
+      {
+        "target_doc_code": "ГОСТ 24705-81",
+        "type": "single",
+        "context": "резьбы",
+        "current_status": "superseded",
+        "replaced_by": "ГОСТ 24705-2004",
+        "replacement_date": "2005-07-01"
       }
     ]
-  },
-  "classification": { ... },
-  "quality": { ... },
-  "validation": { ... },
-  "conversion": {
-    "llm_used": true,
-    "hierarchy_built": true,
-    "metadata_extracted": true
   }
 }
 ```
@@ -853,164 +984,56 @@ POST /registry/documents
 
 > **Полный формат данных:** [`docs/jsons/document3_for_rag.json`](../jsons/document3_for_rag.json) (схема `for_rag_v1`)
 
-**Ответ `201`:** возвращает **плоский JSON** — список **секций** с метаданными и DB-ссылками. Этот JSON передаётся в RAG Builder для чанкования.
+**Ответ `201`:** Registry назначает DB-ID и возвращает компактный ответ с идентификаторами.
 
 ```json
 {
-  "metadata": {
-    "schema": "registry_flat_v1",
-    "created_at": "2026-05-17T09:15:00Z"
-  },
-  "document": {
-    "id": "b3a8f1c2-...",
-    "doc_code": "ГОСТ 20868-81",
-    "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
-    "normalized_title": "стойки установочные крепежные технические требования",
-    "group": "ПО4",
-    "mks": "31.240",
-    "okstu": null,
-    "udc": null,
-    "era": "USSR",
-    "validity_status": "active",
-    "issuing_body": "Государственный Комитет СССР по стандартам",
-    "adoption_date": "1981-04-15",
-    "effective_from": "1982-07-01",
-    "replaces": "ГОСТ 20868-75",
-    "page_count": 2,
-    "file_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "content_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "file_size_bytes": 2048576
-  },
+  "document_id": "b3a8f1c2-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+  "version_id": "v1-b3a8f1c2-...",
   "sections": [
     {
-      "id": "sec_1",
-      "document_id": "b3a8f1c2-...",
-      "parent_id": null,
-      "clause": "1",
-      "title": null,
-      "level": 1,
-      "path": "1",
-      "page": 1,
-      "bbox": [0.048, 0.034, 0.476, 0.061],
+      "section_id": 1001,
       "type": "section",
-      "content": {
-        "text": "Настоящий стандарт распространяется на металлические крепежные установочные стойки, предназначенные для монтажа радиоэлектронной аппаратуры, и устанавливает технические требования, предъявляемые к ним.",
-        "amendments": []
-      },
-      "created_at": "2026-05-17T09:15:00Z"
+      "clause": "1",
+      "path": "1",
+      "page": 1
     },
     {
-      "id": "sec_t1",
-      "document_id": "b3a8f1c2-...",
-      "parent_id": "sec_6",
-      "clause": "6.1",
-      "title": "Допуск соосности при степени точности",
-      "level": 2,
-      "path": "6.1.table1",
-      "page": 2,
-      "bbox": [0.048, 0.505, 0.952, 0.842],
+      "section_id": 1005,
       "type": "table",
-      "content": {
-        "columns": [
-          { "name": "L_range", "header": "L, мм", "index": 0, "type": "range", "value_type": "number", "unit": "мм" },
-          { "name": "normal", "header": "нормальная", "index": 1, "type": "value", "value_type": "number", "unit": "мм" },
-          { "name": "high", "header": "повышенная", "index": 2, "type": "value", "value_type": "number", "unit": "мм" }
-        ],
-        "rows": [
-          {
-            "row_index": 0, "type": "data",
-            "cells": {
-              "L_range": { "label": "От 6 до 50", "range": { "min": 6, "max": 50, "min_inclusive": true, "max_inclusive": true } },
-              "normal": { "value": 0.1 },
-              "high": { "value": 0.05 }
-            }
-          },
-          {
-            "row_index": 1, "type": "data",
-            "cells": {
-              "L_range": { "label": "Св. 50 до 80", "range": { "min": 50, "max": 80, "min_inclusive": false, "max_inclusive": true } },
-              "normal": { "value": 0.12 },
-              "high": { "value": 0.06 }
-            }
-          },
-          {
-            "row_index": 2, "type": "data",
-            "cells": {
-              "L_range": { "label": "Св. 80", "range": { "min": 80, "max": null, "min_inclusive": false, "max_inclusive": false } },
-              "normal": { "value": 0.15 },
-              "high": { "value": 0.08 }
-            }
-          }
-        ],
-        "footnotes": [
-          { "footnote_id": 1, "text": "Значения допусков соосности оси отверстия Б относительно оси поверхности А (черт. 1) или относительно отверстия А (черт. 2)", "applies_to": "whole_table" }
-        ],
-        "amendments": [
-          { "amendment_id": "amd_1", "type": "Изменение № 1", "source": "ИУС 4-87", "affected_columns": ["normal", "high"], "action": "values_updated", "note": "Изменены допуски для нормальной и повышенной точности" }
-        ],
-        "image_key": "purgatory/assets/a1b2c3d4/tables/t1.png"
-      },
-      "created_at": "2026-05-17T09:15:00Z"
+      "clause": "6.1",
+      "path": "6.1.table1",
+      "page": 2
     },
     {
-      "id": "sec_fig1",
-      "document_id": "b3a8f1c2-...",
-      "parent_id": "sec_6",
-      "clause": "6.1",
-      "title": "Черт. 1 – Схема допуска соосности оси отверстия Б относительно оси поверхности А",
-      "level": 2,
-      "path": "6.1.fig1",
-      "page": 2,
-      "bbox": [0.143, 0.875, 0.857, 1.010],
+      "section_id": 1009,
       "type": "image",
-      "content": {
-        "caption": "Черт. 1 – Схема допуска соосности оси отверстия Б относительно оси поверхности А",
-        "file_key": "purgatory/assets/a1b2c3d4/fig1.png",
-        "description": "Схема для определения допуска соосности оси отверстия Б относительно оси поверхности А"
-      },
-      "created_at": "2026-05-17T09:15:00Z"
+      "clause": "6.1",
+      "path": "6.1.fig1",
+      "page": 2
     },
     {
-      "id": "sec_f1",
-      "document_id": "b3a8f1c2-...",
-      "parent_id": "sec_6",
-      "clause": "6.1",
-      "title": "Формула допуска соосности",
-      "level": 2,
-      "path": "6.1.formula1",
-      "page": 1,
-      "bbox": [0.476, 0.471, 0.857, 0.538],
+      "section_id": 1011,
       "type": "formula",
-      "content": {
-        "latex": "R_{\\text{доп}} = \\frac{\\Delta}{2}",
-        "meaning": "Формула расчёта допустимого радиуса R_доп как половины заданного отклонения Δ. Используется в п. 6.1 для определения допуска соосности.",
-        "parameters": [
-          { "symbol": "R_{\\text{доп}}", "description": "Допустимый радиус", "unit": "мм" },
-          { "symbol": "\\Delta", "description": "Заданное отклонение", "unit": "мм" }
-        ]
-      },
-      "created_at": "2026-05-17T09:15:00Z"
-    }
-  ],
-  "terminology": [
-    {
-      "term": "стойка установочная крепежная",
-      "definition": "Металлическая деталь для монтажа радиоэлектронной аппаратуры.",
-      "source_clause": "1",
-      "normalized_term": "стойка установочная крепежная"
+      "clause": "6.1",
+      "path": "6.1.formula1",
+      "page": 1
     }
   ],
   "registry": {
     "document_id": "b3a8f1c2-...",
-    "version_id": "ver-001",
-    "created_at": "2026-05-17T09:15:00Z",
-    "sections_count": 3,
-    "references_count": 0
+    "version_id": "v1-...",
+    "sections_count": 11,
+    "references_count": 4,
+    "created_at": "2026-05-17T09:15:00Z"
   }
 }
 ```
 
-**Особенности плоского формата:**
+> **Формат данных для RAG Builder:** Registry хранит секции в БД. Для индексации Orchestrator запрашивает `GET /registry/documents/{doc_id}/sections` и получает полный JSON с объектным `content` — см. [`document3_for_rag.json`](../jsons/document3_for_rag.json). RAG Builder самостоятельно разбирает `content` по `type`.
+> **Полный формат ответа `GET /registry/documents/{doc_id}/sections`** — см. [`document3_for_rag.json`](../jsons/document3_for_rag.json).
+
+**Особенности формата секций:**
 - Секции — плоский массив (нет вложенных `subsections`)
 - Иерархия задаётся через `parent_id` → `id`
 - Каждая секция имеет `type`: `section`, `table`, `image`, `formula`
@@ -1035,9 +1058,9 @@ POST /registry/documents
 | `document.replaces` | string\|null | Заменяемый документ |
 | `document.page_count` | int | Количество страниц |
 | `document.file_hash_sha256` | string | SHA-256 хеш файла |
-| `sections[].id` | string | UUID секции в `registry.document_sections` |
+| `sections[].section_id` | bigint | ID секции в `registry.document_sections` |
 | `sections[].document_id` | string | UUID документа |
-| `sections[].parent_id` | string\|null | UUID родительской секции (`null` для корневых) |
+| `sections[].parent_id` | bigint\|null | ID родительской секции (`null` для корневых) |
 | `sections[].clause` | string | Номер пункта |
 | `sections[].title` | string\|null | Заголовок секции |
 | `sections[].level` | int | Уровень вложенности (1 — верхний) |

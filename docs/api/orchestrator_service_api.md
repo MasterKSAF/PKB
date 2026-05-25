@@ -28,11 +28,12 @@
 
 | Группа      | Описание                                                            |
 | ----------- | ------------------------------------------------------------------- |
-| `monitor`   | Мониторинг, метрики и health                                         |
+| `monitor`   | Мониторинг, метрики и health                                        |
 | `documents` | Документы: загрузка, список, статус, версии, аппрув, промотирование |
+| `tasks`     | Задачи: preview фаза и решение (работает с `task_id`)               |
 | `pages`     | Просмотр страниц и текстового слоя                                  |
 | `search`    | Поиск фрагментов                                                    |
-| `validate`  | Validation: сопоставление норм и проекта                             |
+| `validate`  | Validation: сопоставление норм и проекта                            |
 
 ---
 
@@ -77,12 +78,19 @@
 
 > **Примечание:** `document_id` назначается на стадии валидации после проверки уникальности. Первичный идентификатор — `task_id`.
 
-### POST /documents/{doc_id}/preview
+### POST /tasks/{task_id}/preview
 
 Запуск фазы превью для документа. Возвращает preview-данные (метаданные, кандидаты в дубликаты).
 
-**Путь:** `/api/v1/documents/{doc_id}/preview`
+**Путь:** `/api/v1/tasks/{task_id}/preview`
 **Метод:** `POST`
+
+> **Важно:** на этапе preview `document_id` ещё не назначен. Используется `task_id` — временный UUID, 
+  полученный при загрузке (`POST /documents`). После записи в Registry все дальнейшие вызовы 
+  используют `document_id`.
+
+**Группа `tasks`** — все эндпоинты, работающие с `task_id`, выделены в отдельное пространство имён,
+  чтобы избежать конфликта с `documents/{document_id}`.
 
 **Ответ `202`:**
 
@@ -100,11 +108,11 @@
 | `status` | string | Статус: `previewing` |
 | `estimated_completion` | string | Предполагаемое время завершения |
 
-### GET /documents/{doc_id}/preview/status
+### GET /tasks/{task_id}/preview/status
 
 Статус превью с longpoll-механизмом.
 
-**Путь:** `/api/v1/documents/{doc_id}/preview/status`
+**Путь:** `/api/v1/tasks/{task_id}/preview/status`
 **Метод:** `GET`
 
 **Параметры запроса:**
@@ -185,11 +193,11 @@
 ```
 
 
-### POST /documents/{doc_id}/decide
+### POST /tasks/{task_id}/decide
 
 Принятие решения пользователем после фазы превью.
 
-**Путь:** `/api/v1/documents/{doc_id}/decide`
+**Путь:** `/api/v1/tasks/{task_id}/decide`
 **Метод:** `POST`
 
 **Запрос:**
@@ -826,7 +834,7 @@
   "status": "ok",
   "version": "1.0.0",
   "uptime_seconds": 234567,
-  "services": { "auth": "ok", "rag": "ok", "ocr": "degraded", "validation": "ok", "integration": "ok" },
+  "services": { "auth": "ok", "rag_builder": "ok", "rag_search": "ok", "ocr": "degraded", "validation": "ok", "integration": "ok" }
   "database": "online",
   "search_index": "ready",
   "ocr_queue": "idle",

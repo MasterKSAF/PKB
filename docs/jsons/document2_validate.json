@@ -1,6 +1,7 @@
 {
   "metadata": {
-    "schema": "validated_v2",
+    "schema": "validated_v3",
+    "task_id": "task-a1b2c3-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
     "created_at": "2026-05-17T09:15:00Z",
     "parser": {
       "name": "docling",
@@ -11,18 +12,17 @@
   },
   "document": {
     "source": {
-      "document_version_id": "a1b2c3d4-...",
       "file_name": "GOST_20868-81_scan.pdf",
       "file_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "page_count": 2
     },
     "metadata": {
       "doc_code": "ГОСТ 20868-81",
-      "full_title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
+      "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
       "normalized_title": "стойки установочные крепежные технические требования",
       "group": "ПО4",
-      "mks": "31.240",
-      "okstu": null,
+      "mks_oks_code": "31.240",
+      "okstu_code": null,
       "udc": null,
       "era": "USSR",
       "validity_status": "active",
@@ -43,104 +43,143 @@
         {
           "type": "Изменение № 1",
           "source": "ИУС 4-87",
-          "affected_clauses": ["6.4"]
+          "affected_clauses": ["6.4"],
+          "note": null
         },
         {
           "type": "Поправка",
           "source": "ИУС 5-82",
-          "affected_clauses": ["2"]
+          "affected_clauses": ["2"],
+          "note": null
         }
       ],
-      "status_note": "С 01.07.2005 введены ГОСТ 24705-2004 и ГОСТ 16093-2004"
+      "status_note": "С 01.07.2005 введены ГОСТ 24705-2004 и ГОСТ 16093-2004",
+      "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
     },
-    "content": {
-      "text": [
-        {
-          "clause": "1",
-          "title": null,
+    "content": [
+      {
+        "clause": "1",
+        "title": null,
+        "level": 1,
+        "parent_clause": null,
+        "path": "1",
+        "page": 1,
+        "bbox": [10, 20, 200, 40],
+        "type": "section",
+        "content": {
           "text": "Настоящий стандарт распространяется на металлические крепежные установочные стойки, предназначенные для монтажа радиоэлектронной аппаратуры, и устанавливает технические требования, предъявляемые к ним.",
-          "level": 1,
-          "parent_clause": null,
-          "ltree_path": "1",
-          "page": 1,
-          "bbox": [10, 20, 200, 40],
           "amendments": []
-        },
-        {
-          "clause": "2",
-          "title": null,
-          "text": "Крепежные установочные стойки следует изготовлять в соответствии с требованиями настоящего стандарта по ГОСТ 20862-81 – ГОСТ 20867-81.",
-          "level": 1,
-          "parent_clause": null,
-          "ltree_path": "2",
-          "page": 1,
-          "bbox": [10, 50, 200, 80],
-          "amendments": ["Поправка (ИУС 5-82)"]
-        },
-        {
-          "clause": "6",
-          "title": "Допуски формы и расположения поверхностей",
-          "text": "Допуски формы и расположения поверхностей установлены в зависимости от степени точности установочных стоек.",
-          "level": 1,
-          "parent_clause": null,
-          "ltree_path": "6",
-          "page": 1,
-          "bbox": [10, 90, 200, 120],
-          "amendments": []
-        },
-        {
-          "clause": "6.1",
-          "title": null,
-          "text": "Допуск соосности оси отверстия Б относительно оси поверхности А (черт. 1) или относительно отверстия А (черт. 2) должен соответствовать приведенной в таблице.",
-          "level": 2,
-          "parent_clause": "6",
-          "ltree_path": "6.1",
-          "page": 1,
-          "bbox": [20, 130, 200, 160],
-          "amendments": []
-        },
-        {
-          "clause": "6.2",
-          "title": null,
-          "text": "Допуск перпендикулярности поверхности В относительно оси отверстия (поверхности) А для стоек нормальной точности – не более 0,1 мм, повышенной точности – 0,05 мм.",
-          "level": 2,
-          "parent_clause": "6",
-          "ltree_path": "6.2",
-          "page": 2,
-          "bbox": [20, 10, 200, 40],
-          "amendments": []
-        },
-        {
-          "clause": "6.3",
-          "title": null,
-          "text": "Допуск параллельности поверхности Г относительно поверхности В для стоек нормальной точности – не более 0,1 мм, повышенной точности – 0,05 мм.",
-          "level": 2,
-          "parent_clause": "6",
-          "ltree_path": "6.3",
-          "page": 2,
-          "bbox": [20, 50, 200, 80],
-          "amendments": []
-        },
-        {
-          "clause": "6.4",
-          "title": null,
-          "text": "Неуказанные допуски формы и расположения поверхностей – в пределах поля допуска на соответствующие размеры.",
-          "level": 2,
-          "parent_clause": "6",
-          "ltree_path": "6.4",
-          "page": 2,
-          "bbox": [20, 90, 200, 120],
-          "amendments": ["Измененная редакция, Изм. № 1"]
         }
-      ],
-      "tables": [
-        {
-          "table_id": "t1",
+      },
+      {
+        "clause": "2",
+        "title": null,
+        "level": 1,
+        "parent_clause": null,
+        "path": "2",
+        "page": 1,
+        "bbox": [10, 50, 200, 80],
+        "type": "section",
+        "content": {
+          "text": "Крепежные установочные стойки следует изготовлять в соответствии с требованиями настоящего стандарта по ГОСТ 20862-81 – ГОСТ 20867-81.",
+          "amendments": [
+            {
+              "type": "Поправка",
+              "source": "ИУС 5-82",
+              "affected_clauses": ["2"],
+              "note": null
+            }
+          ]
+        }
+      },
+      {
+        "clause": "6",
+        "title": "Допуски формы и расположения поверхностей",
+        "level": 1,
+        "parent_clause": null,
+        "path": "6",
+        "page": 1,
+        "bbox": [10, 90, 200, 120],
+        "type": "section",
+        "content": {
+          "text": "Допуски формы и расположения поверхностей установлены в зависимости от степени точности установочных стоек.",
+          "amendments": []
+        }
+      },
+      {
+        "clause": "6.1",
+        "title": null,
+        "level": 2,
+        "parent_clause": "6",
+        "path": "6.1",
+        "page": 1,
+        "bbox": [20, 130, 200, 160],
+        "type": "section",
+        "content": {
+          "text": "Допуск соосности оси отверстия Б относительно оси поверхности А (черт. 1) или относительно отверстия А (черт. 2) должен соответствовать приведенной в таблице.",
+          "amendments": []
+        }
+      },
+      {
+        "clause": "6.2",
+        "title": null,
+        "level": 2,
+        "parent_clause": "6",
+        "path": "6.2",
+        "page": 2,
+        "bbox": [20, 10, 200, 40],
+        "type": "section",
+        "content": {
+          "text": "Допуск перпендикулярности поверхности В относительно оси отверстия (поверхности) А для стоек нормальной точности – не более 0,1 мм, повышенной точности – 0,05 мм.",
+          "amendments": []
+        }
+      },
+      {
+        "clause": "6.3",
+        "title": null,
+        "level": 2,
+        "parent_clause": "6",
+        "path": "6.3",
+        "page": 2,
+        "bbox": [20, 50, 200, 80],
+        "type": "section",
+        "content": {
+          "text": "Допуск параллельности поверхности Г относительно поверхности В для стоек нормальной точности – не более 0,1 мм, повышенной точности – 0,05 мм.",
+          "amendments": []
+        }
+      },
+      {
+        "clause": "6.4",
+        "title": null,
+        "level": 2,
+        "parent_clause": "6",
+        "path": "6.4",
+        "page": 2,
+        "bbox": [20, 90, 200, 120],
+        "type": "section",
+        "content": {
+          "text": "Неуказанные допуски формы и расположения поверхностей – в пределах поля допуска на соответствующие размеры.",
+          "amendments": [
+            {
+              "type": "Изменение № 1",
+              "source": "ИУС 4-87",
+              "affected_clauses": ["6.4"],
+              "note": "Измененная редакция, Изм. № 1"
+            }
+          ]
+        }
+      },
+      {
+        "clause": "6.1",
+        "title": "Допуск соосности при степени точности",
+        "level": 2,
+        "parent_clause": "6",
+        "path": "6.1.table1",
+        "page": 2,
+        "bbox": [10, 150, 200, 250],
+        "type": "table",
+        "content": {
           "caption": "Допуск соосности при степени точности",
-          "source_clause": "6.1",
-          "page": 2,
-          "bbox": [10, 150, 200, 250],
-          "image_key": "purgatory/assets/a1b2c3d4/tables/t1.png",
           "columns": [
             {
               "name": "L_range",
@@ -236,30 +275,50 @@
               "action": "values_updated",
               "note": "Изменены допуски для нормальной и повышенной точности"
             }
-          ]
+          ],
+          "image_key": "purgatory/assets/a1b2c3d4/tables/t1.png"
         }
-      ],
-      "figures": [
-        {
-          "figure_id": "fig1",
+      },
+      {
+        "clause": "6.1",
+        "title": "Черт. 1 – Схема допуска соосности оси отверстия Б относительно оси поверхности А",
+        "level": 2,
+        "parent_clause": "6",
+        "path": "6.1.fig1",
+        "page": 2,
+        "bbox": [30, 260, 180, 300],
+        "type": "image",
+        "content": {
           "caption": "Черт. 1 – Схема допуска соосности оси отверстия Б относительно оси поверхности А",
-          "page": 2,
-          "bbox": [30, 260, 180, 300],
           "image_key": "purgatory/assets/a1b2c3d4/fig1.png",
           "description": "Схема для определения допуска соосности оси отверстия Б относительно оси поверхности А"
-        },
-        {
-          "figure_id": "fig2",
+        }
+      },
+      {
+        "clause": "6.1",
+        "title": "Черт. 2 – Схема допуска соосности оси отверстия Б относительно отверстия А",
+        "level": 2,
+        "parent_clause": "6",
+        "path": "6.1.fig2",
+        "page": 2,
+        "bbox": [30, 310, 180, 350],
+        "type": "image",
+        "content": {
           "caption": "Черт. 2 – Схема допуска соосности оси отверстия Б относительно отверстия А",
-          "page": 2,
-          "bbox": [30, 310, 180, 350],
           "image_key": "purgatory/assets/a1b2c3d4/fig2.png",
           "description": "Схема для определения допуска соосности оси отверстия Б относительно отверстия А"
         }
-      ],
-      "formulas": [
-        {
-          "formula_id": "eq1",
+      },
+      {
+        "clause": "6.1",
+        "title": "Формула допуска соосности",
+        "level": 2,
+        "parent_clause": "6",
+        "path": "6.1.formula1",
+        "page": 1,
+        "bbox": [100, 140, 180, 160],
+        "type": "formula",
+        "content": {
           "latex": "R_{\\text{доп}} = \\frac{\\Delta}{2}",
           "meaning": "Формула расчёта допустимого радиуса R_доп как половины заданного отклонения Δ. R доп = Δ / 2. Используется в п. 6.1 для определения допуска соосности.",
           "image_key": "purgatory/assets/a1b2c3d4/formulas/eq1.png",
@@ -274,13 +333,10 @@
               "description": "Заданное отклонение",
               "unit": "мм"
             }
-          ],
-          "context_clause": "6.1",
-          "page": 1,
-          "bbox": [100, 140, 180, 160]
+          ]
         }
-      ]
-    },
+      }
+    ],
     "terminology": [
       {
         "term": "стойка установочная крепежная",
@@ -291,14 +347,14 @@
     ],
     "references": [
       {
-        "target_doc": "ГОСТ 20862-81 – ГОСТ 20867-81",
+        "target_doc_code": "ГОСТ 20862-81 – ГОСТ 20867-81",
         "type": "range",
         "context": "изготовление крепежных установочных стоек",
         "current_status": "active",
         "note": null
       },
       {
-        "target_doc": "ГОСТ 24705-81",
+        "target_doc_code": "ГОСТ 24705-81",
         "type": "single",
         "context": "резьбы",
         "current_status": "superseded",
@@ -306,7 +362,7 @@
         "replacement_date": "2005-07-01"
       },
       {
-        "target_doc": "ГОСТ 16093-81",
+        "target_doc_code": "ГОСТ 16093-81",
         "type": "single",
         "context": "поля допусков",
         "current_status": "superseded",
@@ -314,7 +370,7 @@
         "replacement_date": "2005-07-01"
       },
       {
-        "target_doc": "ГОСТ 10549-80",
+        "target_doc_code": "ГОСТ 10549-80",
         "type": "single",
         "context": "сбеги резьбы, недорезы, фаски",
         "current_status": "active",
