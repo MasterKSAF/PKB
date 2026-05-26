@@ -152,7 +152,7 @@
 - **Access token**: живёт 1 час (значение `expires_in` в ответе `/auth/token`).
 - **Refresh token**: живёт 30 дней, можно отозвать через `POST /auth/revoke`.
 - При смене пароля все refresh-токены пользователя отзываются.
-- Rate limit: не более 5 запросов в минуту на `/auth/token` с одного IP.
+Rate limit: не более 10 запросов в минуту на `/auth/token` с одного IP (согласно глобальной политике Rate Limiting).
 - Blacklist: отозванные refresh-токены хранятся в blacklist до истечения их исходного срока жизни.
 
 #### GET /auth/me
@@ -261,7 +261,14 @@
   "full_name": "Иванов И.И.",
   "position": "Инженер-конструктор",
   "roles": ["engineer"],
-  "permissions": ["documents:read", "search"],
+  "permissions": {
+    "can_upload_documents": false,
+    "can_run_ocr": false,
+    "can_manage_users": false,
+    "can_manage_classifiers": false,
+    "can_manage_terminology": false,
+    "can_manage_registry": false
+  },
   "is_active": true,
   "last_login_at": "2026-05-01T08:20:00Z",
   "created_at": "2025-12-01T08:00:00Z",
@@ -415,7 +422,14 @@
   "user_id": "u-001",
   "email": "ivanov@example.com",
   "roles": ["engineer"],
-  "permissions": ["documents:read", "search"],
+  "permissions": {
+    "can_upload_documents": false,
+    "can_run_ocr": false,
+    "can_manage_users": false,
+    "can_manage_classifiers": false,
+    "can_manage_terminology": false,
+    "can_manage_registry": false
+  },
   "exp": 1714234567
 }
 ```
@@ -431,3 +445,78 @@
   }
 }
 ```
+
+---
+
+## Политика безопасности паролей
+
+### Хранение
+
+- Пароли хранятся только в хэшированном виде (bcrypt, cost factor ≥ 12).
+- Пароли **никогда** не возвращаются в ответах API.
+- Refresh-токены хранятся в БД в хэшированном виде.
+- Поле `password` исключено из логирования на всех уровнях (см. `common_api.md`).
+
+### Передача
+
+- Пароль передаётся только при создании пользователя (`POST /admin/users`) и получении токена (`POST /auth/token`).
+- Все эндпоинты, принимающие пароль, доступны только через **HTTPS** (публичный API).
+- Внутренние вызовы между сервисами (Orchestrator → Auth Service) не содержат пароль в теле после первичного обмена — используется JWT-токен.
+
+### Жизненный цикл
+
+| Событие | Действие |
+|---------|----------|
+| Создание пользователя | Пароль хэшируется, сохраняется в БД, plaintext отбрасывается |
+| Вход (`/auth/token`) | Пароль проверяется против хэша, при успехе выдаются JWT |
+| Смена пароля (админ) | Выдаётся новый refresh-токен, старые refresh-токены пользователя отзываются |
+| Отзыв токена (`/auth/revoke`) | Refresh-токен помещается в blacklist до истечения срока |
+
+---
+
+## Планы развития
+
+### 1. Отдельный эндпоинт смены пароля
+
+Вместо включения `password` в `PUT /admin/users/{user_id}` планируется выделенный endpoint:
+
+```
+POST /admin/users/{user_id}/reset-password
+```
+
+```json
+{
+  "password": "NewStr0ng!Pass"
+}
+```
+
+**Преимущества:**
+- Явная семантика — смена пароля, а не «обновление пользователя с полем password»
+- Обязательная аудит-запись с типом `password.change`
+- Возможность добавить подтверждение (второй администратор) без изменения основного API
+- Пароль не появляется в общем теле обновления пользователя
+
+### 2. Переход на Authorization Code + PKCE
+
+Текущий flow (`POST /auth/token` с `username` + `password`) является упрощённым (OAuth2 Resource Owner Password Credentials Grant).
+В следующих релизах планируется переход на **Authorization Code + PKCE**, где пароль вводится только на стороне клиента и не передаётся API:
+
+```
+Фронтенд                          Бэкенд
+    |                                |
+    |  GET /auth/authorize           |
+    |  <-- code_challenge, state     |
+    |                                |
+    |  (ввод логина/пароля           |
+    |   локально на клиенте)         |
+    |                                |
+    |  POST /auth/token              |
+    |  { code, code_verifier }       |
+    |  --> access_token,             |
+    |       refresh_token            |
+```
+
+**Преимущества:**
+- Пароль не покидает браузер пользователя
+- API не видит и не может скомпрометировать пароль
+- Одноразовый code бесполезен без code_verifier (даже при перехвате)

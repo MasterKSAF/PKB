@@ -1,6 +1,7 @@
 ## API Orchestrator Service (orchestrator-service:8081)
 
-Единая точка входа для публичного API Нейроассистента ПКБ.
+Единая точка входа для публичного API Нейроассистента ПКБ.  
+Оркестрирует конвейер обработки документов: загрузка → OCR → чанкинг → валидация → промотирование в Registry.
 
 **Базовый URL (публичный)**: `https://{host}/api/v1`  
 **Базовый URL (внутренний)**: `http://127.0.0.1:8081/api/v1`
@@ -25,14 +26,13 @@
 
 ### Группы
 
-| Группа | Описание |
-|--------|----------|
-| `system` | Служебные методы: health |
-| `monitor` | Мониторинг и метрики |
-| `documents` | Документы: CRUD, поиск, очередь, просмотр, параметры |
-| `pages` | Просмотр страниц и текстового слоя |
-| `search` | Поиск фрагментов |
-| `validate` | Валидация: сопоставление норм и проекта (`/validate/compare`, `/validate/checks`) |
+| Группа      | Описание                                                            |
+| ----------- | ------------------------------------------------------------------- |
+| `monitor`   | Мониторинг, метрики и health                                        |
+| `documents` | Документы: загрузка, список, статус, версии, аппрув, промотирование |
+| `tasks`     | Задачи: preview фаза и решение (работает с `task_id`)               |
+| `pages`     | Просмотр страниц и текстового слоя                                  |
+| `search`    | Поиск фрагментов                                                    |
 
 ---
 
@@ -40,75 +40,261 @@
 
 ### POST /documents
 
-Асинхронная загрузка документа в очередь обработки. После загрузки документ проходит OCR-распознавание, парсинг структуры и индексацию — это может длиться от секунд до минут в зависимости от объёма. UI отслеживает прогресс через `GET /documents/{doc_id}/status`.
+Асинхронная загрузка файла. Orchestrator вычисляет SHA-256 содержимого, определяет формат, создаёт/находит логический документ по бизнес-ключу, помещает в очередь Celery. Двухфазный конвейер: **Preview** (OCR/Parser preview → Converter-validator preview → решение пользователя) → **Full** (OCR/Parser → Converter-validator → Registry → RAG Builder).
 
-`user_id` определяется из контекста аутентификации (`Authorization: Bearer`), не передаётся в теле запроса.
+`user_id` определяется из контекста аутентификации.
 
 **Запрос**: `multipart/form-data`
 
-| Поле | Тип | Обязательность | Описание |
-|------|-----|----------------|----------|
-| `file` | File | Да | Бинарный файл (PDF, PNG, JPG, TIFF) |
-| `document_type` | string | Да | Тип документа: `normative`, `archival_scan`, `drawing`, `specification` |
-| `metadata` | string | Нет | JSON-строка с метаданными |
+| Поле           | Тип    | Обязательность | Описание                                                           |
+| -------------- | ------ | -------------- | ------------------------------------------------------------------ |
+| `file`         | File   | Да             | Бинарный файл (PDF, PNG, JPG, TIFF)                                |
+| `source_type`  | string | Да             | `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `OTHER` |
+| `title`        | string | Нет            | Название документа                                                 |
+| `doc_code`     | string | Нет            | Регистрационный номер (напр. `20868-81`)                           |
+| `mks_oks_code` | string | Нет            | Код МКС/ОКС                                                        |
+| `okstu_code`   | string | Нет            | Код ОКСТУ                                                          |
+| `era`          | string | Нет            | `USSR`, `CIS`, `RF`, `CURRENT`                                     |
+| `jurisdiction` | string | Нет            | `RU`, `EU`, `US`, `NO`, `INTL`                                     |
+| `issuing_body` | string | Нет            | Организация-издатель                                               |
+| `metadata`     | string | Нет            | JSON-строка с доп. данными                                         |
 
-**Ответ `202`** (принят в обработку):
+**Ответ `202`**:
 
 ```json
 {
-  "document_id": "doc-8a3f2b",
-  "status": "queued",
-  "user_id": "u-001",
-  "task_id": "task-001",
-  "created_at": "2026-04-27T10:00:00Z"
+  "task_id": 420000,
+  "version_id": "c4b9f2d3-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+  "status": "uploaded",
+  "content_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "file_size_bytes": 2048576,
+  "is_duplicate_file": false,
+  "is_duplicate_document": false,
+  "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+  "created_at": "2026-05-15T10:00:00Z"
+}
+```
+
+> **Примечание:** `document_id` назначается на стадии валидации после проверки уникальности. Первичный идентификатор — `task_id`.
+
+### POST /tasks/{task_id}/preview
+
+Запуск фазы превью для документа. Возвращает preview-данные (метаданные, кандидаты в дубликаты).
+
+**Путь:** `/api/v1/tasks/{task_id}/preview`
+**Метод:** `POST`
+
+> **Важно:** на этапе preview `document_id` ещё не назначен. Используется `task_id` — временный идентификатор (bigint), 
+  полученный при загрузке (`POST /documents`). После записи в Registry все дальнейшие вызовы 
+  используют `document_id`.
+
+**Группа `tasks`** — все эндпоинты, работающие с `task_id`, выделены в отдельное пространство имён,
+  чтобы избежать конфликта с `documents/{document_id}`.
+
+**Ответ `202`:**
+
+```json
+{
+  "task_id": 420000,
+  "status": "previewing",
+  "estimated_completion": "2026-05-15T12:00:30Z"
 }
 ```
 
 | Поле | Тип | Описание |
-|------|-----|----------|
-| `document_id` | string | ID документа — использовать для опроса статуса |
-| `status` | string | Статус: `queued`, `processing`, `processed`, `error` |
-| `user_id` | string | ID пользователя, загрузившего документ |
-| `task_id` | string | ID задачи обработки (для опроса статуса) |
-| `created_at` | string | Дата создания |
+|---|---|---|
+| `task_id` | bigint | ID задачи превью (тот же, что при загрузке) |
+| `status` | string | Статус: `previewing` |
+| `estimated_completion` | string | Предполагаемое время завершения |
 
-**Асинхронный флоу:**
+### GET /tasks/{task_id}/preview/status
 
-```mermaid
-sequenceDiagram
-    participant UI
-    participant Orchestrator
-    participant OCR
-    participant RAG
-    UI->>Orchestrator: POST /documents (file)
-    Orchestrator-->>UI: 202 { document_id, status: "queued" }
-    loop Polling
-        UI->>Orchestrator: GET /documents/{doc_id}/status
-        Orchestrator-->>UI: { status: "processing", progress_percent, steps }
-    end
-    Note over OCR,RAG: OCR completed → parsing → indexing
-    UI->>Orchestrator: GET /documents/{doc_id}/status
-    Orchestrator-->>UI: { status: "processed", steps: { ocr: "completed", indexing: "ready" } }
+Статус превью с longpoll-механизмом.
+
+**Путь:** `/api/v1/tasks/{task_id}/preview/status`
+**Метод:** `GET`
+
+**Параметры запроса:**
+
+| Параметр | Тип | По умолчанию | Описание |
+|---|---|---|---|
+| `longpoll` | int | 15 | Время ожидания в секундах |
+
+> **Полный формат данных:** [`docs/schema/document2b_preview.json`](../schema/document2b_preview.json) (схема `converter_validator_preview_v1`)
+
+**Ответ `200`**:
+
+```json
+{
+  "document_id": "b3a8f1c2-...",
+  "status": "completed",
+  "ocr_parser_status": "completed",
+  "converter_validator_status": "completed",
+  "preview": {
+    "doc_code": "ГОСТ 20868-81",
+    "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
+    "document_type": "normative",
+    "year": "1981",
+    "revision": null
+  },
+  "duplicates": [],
+  "decision_required": false
+}
+
+> **Поля ответа:**
+>
+> | Поле | Тип | Описание |
+> |------|-----|----------|
+> | `document_id` | string | UUID документа |
+> | `status` | string | Статус превью (`pending`, `processing`, `completed`, `failed`) |
+> | `ocr_parser_status` | string | Статус выбранного сервиса распознавания (OCR или Parser) |
+> | `converter_validator_status` | string | Статус converter-validator |
+> | `preview` | object | Метаданные превью (см. ниже) |
+> | `preview.doc_code` | string | Обозначение документа (предварительное, извлекается на этапе preview) |
+> | `preview.title` | string | Название документа |
+> | `preview.document_type` | string | Тип документа (`normative`, `technical`, etc.) |
+> | `preview.year` | string | Год издания |
+> | `preview.revision` | string\|null | Номер редакции |
+> | `duplicates` | array | Массив найденных дубликатов |
+> | `duplicates[].document_id` | string | UUID найденного дубликата |
+> | `duplicates[].doc_code` | string | Обозначение документа-дубликата |
+> | `duplicates[].title` | string | Название документа-дубликата |
+> | `duplicates[].similarity` | float | Коэффициент схожести (0..1) |
+> | `decision_required` | bool | Требуется ли решение пользователя |
+
+**Пример с найденными дубликатами:**
+
+```json
+{
+  "document_id": "b3a8f1c2-...",
+  "status": "completed",
+  "ocr_parser_status": "completed",
+  "converter_validator_status": "completed",
+  "preview": {
+    "doc_code": "ГОСТ 20868-81",
+    "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
+    "document_type": "normative",
+    "year": "1981",
+    "revision": null
+  },
+  "duplicates": [
+    {
+      "document_id": "d4e5f6a7-...",
+      "doc_code": "ГОСТ 20868-81",
+      "title": "Стойки установочные крепежные. Технические требования",
+      "similarity": 0.97
+    }
+  ],
+  "decision_required": true
+}
 ```
 
-**Ошибки**: `400` — неподдерживаемый формат/размер, `422` — повреждённый файл.
+
+### POST /tasks/{task_id}/decide
+
+Принятие решения пользователем после фазы превью.
+
+**Путь:** `/api/v1/tasks/{task_id}/decide`
+**Метод:** `POST`
+
+**Запрос:**
+
+```json
+{
+  "action": "proceed",
+  "comment": "Продолжить обработку"
+}
+```
+
+| Поле | Тип | Обязательность | Описание |
+|---|---|---|---|
+| `action` | string | Да | `proceed` / `stop_duplicate` / `force_new_version` |
+| `comment` | string | Нет | Комментарий пользователя |
+
+**Ответ `202`:**
+
+```json
+{
+  "document_id": "b3a8f1c2-...",
+  "status": "proceeding",
+  "action": "proceed",
+  "message": "Запущена полная обработка документа"
+}
+```
+
+### POST /documents/{doc_id}/versions
+
+Загрузка дополнительной версии файла к существующему логическому документу (скан к цифре, чертёж к спецификации и т.д.).
+
+**Запрос**: `multipart/form-data`
+
+| Поле   | Тип  | Обязательность | Описание      |
+| ------ | ---- | -------------- | ------------- |
+| `file` | File | Да             | Бинарный файл |
+
+**Ответ `202`**:
+
+```json
+{
+  "document_id": "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+  "version_id": "d5c0a3e4-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
+  "version_number": 2,
+  "status": "uploaded",
+  "task_id": 420001,
+  "content_hash_sha256": "6ca13d52ca70c883e0f0bb101e425a89e8624de51db2d2392593af6a84118090",
+  "is_duplicate_file": false,
+  "created_at": "2026-05-15T11:00:00Z"
+}
+```
+
+---
+
+### GET /documents/{doc_id}/versions
+
+Список всех версий файлов логического документа.
+
+**Ответ `200`**:
+
+```json
+{
+  "document_id": "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+  "versions": [
+    {
+      "version_id": "c4b9f2d3-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+      "version_number": 1,
+      "format_code": "pdf_digital",
+      "format_label": "PDF (цифровой)",
+      "file_key": "b3a8f1c2/v1/e3b0c442...855.pdf",
+      "content_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 2048576,
+      "uploaded_at": "2026-05-15T10:00:00Z",
+      "uploaded_by": "Иванов И.И."
+    }
+  ],
+  "meta": { "total": 2 }
+}
+```
+
+---
 
 ### GET /documents
 
 Список документов с фильтрацией.
 
-**Параметры query**:
+**Query-параметры** (дополнительно к существующим):
 
-| Параметр | Тип | Описание |
-|----------|-----|----------|
-| `user_id` | string | Фильтр по пользователю, загрузившему документ |
-| `status` | string | Фильтр по статусу: `queued`, `processing`, `processed`, `error` |
-| `document_type` | string | Фильтр по типу документа |
-| `date_from` | string | Дата начала (ISO 8601) |
-| `date_to` | string | Дата окончания |
-| `search` | string | Поиск по имени файла |
-| `page` | int | Номер страницы |
-| `page_size` | int | Записей на странице |
+| Параметр            | Тип    | Описание                                                   |
+| ------------------- | ------ | ---------------------------------------------------------- |
+| `source_type`       | string | Фильтр по типу источника                                   |
+| `era`               | string | `USSR`, `CIS`, `RF`, `CURRENT`                             |
+| `validity_status`   | string | `active`, `superseded`, `cancelled`, `historical`, `draft` |
+| `jurisdiction`      | string | `RU`, `EU`, `US`, `NO`, `INTL`                             |
+| `mks_oks_code`      | string | Фильтр по коду МКС/ОКС                                     |
+| `okstu_code`        | string | Фильтр по коду ОКСТУ                                       |
+| `doc_code`          | string | Поиск по номеру документа                                  |
+| `status`            | string | Фильтр по статусу FSM                                      |
+| `search`            | string | Поиск по названию                                          |
+| `page`, `page_size` | int    | Пагинация                                                  |
 
 **Ответ `200`**:
 
@@ -116,268 +302,355 @@ sequenceDiagram
 {
   "summary": {
     "total": 128,
-    "ocr_completed": 112,
-    "indexed": 108,
-    "need_attention": 4
+    "uploaded": 10,
+    "previewing": 0,
+    "awaiting_decision": 0,
+    "parsing": 3,
+    "validation": 2,
+    "review_required": 3,
+    "ready_for_promotion": 12,
+    "approved": 95,
+    "failed": 3,
+    "archived": 0
   },
   "items": [
     {
-      "document_id": "doc-8a3f2b",
-      "title": "21900M2_spec.pdf",
-      "document_type": "specification",
-      "source": "РС",
-      "version": "2026",
-      "pages": 12,
-      "ocr_status": "completed",
-      "index_status": "ready",
+      "document_id": "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+      "title": "Стойки установочные",
+      "doc_code": "20868-81",
+      "source_type": "GOST",
+      "era": "USSR",
+      "validity_status": "active",
+      "jurisdiction": "RU",
+      "issuing_body": "Госстандарт СССР",
+      "mks_oks_code": "31.240",
+      "okstu_code": null,
+      "classification_status": {
+        "mks_status": "CONFIRMED",
+        "okstu_status": "NOT_USED",
+        "udk_code": null,
+        "extracted_at": "2026-05-15T10:01:00Z",
+        "extracted_by": "purgatory_parser_v2",
+        "confidence": 0.95
+      },
+      "content_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "file_size_bytes": 2048576,
+      "status": "approved",
+      "latest_version": 1,
+      "total_versions": 2,
       "user_id": "u-001",
       "uploaded_by": "Иванов И.И.",
       "created_at": "2026-04-27T10:00:00Z",
-      "updated_at": "2026-04-27T10:02:00Z"
+      "updated_at": "2026-04-27T14:00:00Z"
     }
   ],
-  "meta": { "total": 18, "page": 1, "page_size": 20 }
+  "meta": { "total": 128, "page": 1, "page_size": 20 }
 }
 ```
 
-| Поле | Тип | Описание |
-|------|-----|----------|
-| `summary.total` | int | Общее количество документов |
-| `summary.ocr_completed` | int | Количество с завершённым OCR |
-| `summary.indexed` | int | Количество проиндексированных |
-| `summary.need_attention` | int | Количество требующих внимания |
-| `items[].document_id` | string | ID документа |
-| `items[].title` | string | Название документа (отображаемое имя) |
-| `items[].document_type` | string | Тип документа: `normative`, `archival_scan`, `drawing`, `specification` |
-| `items[].source` | string | Источник |
-| `items[].version` | string | Версия |
-| `items[].pages` | int | Количество страниц |
-| `items[].ocr_status` | string | Статус OCR: `not_started`, `queued`, `processing`, `completed`, `error` |
-| `items[].index_status` | string | Статус индексации: `not_started`, `ready`, `error` |
-| `items[].user_id` | string | ID пользователя, загрузившего документ |
-| `items[].uploaded_by` | string | ФИО пользователя, загрузившего документ |
+---
 
 ### GET /documents/{doc_id}
 
-Детальная информация о документе.
+Детальная информация о документе со всеми метаданными и версиями файлов.
 
 **Ответ `200`**:
 
 ```json
 {
-  "document_id": "doc-8a3f2b",
-  "filename": "21900M2_spec.pdf",
-  "document_type": "specification",
-  "status": "processed",
-  "file_size": 2048576,
-  "pages_total": 12,
-  "pages_processed": 12,
-  "pages_failed": 0,
+  "document_id": "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+  "title": "Стойки установочные",
+  "doc_code": "20868-81",
+  "source_type": "GOST",
+  "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+  "status": "approved",
+  "era": "USSR",
+  "validity_status": "active",
+  "jurisdiction": "RU",
+  "issuing_body": "Госстандарт СССР",
+  "industry_code": null,
+  "enterprise_id": null,
+  "mks_oks_code": "31.240",
+  "okstu_code": null,
+  "classification_status": {
+    "mks_status": "CONFIRMED",
+    "okstu_status": "NOT_USED",
+    "udk_code": null,
+    "extracted_at": "2026-05-15T10:01:00Z",
+    "extracted_by": "purgatory_parser_v2",
+    "confidence": 0.95
+  },
+  "metadata": {
+    "year": "1981",
+    "udc": "629.5.021",
+    "tags": ["судостроение", "стойки"]
+  },
+  "latest_version": {
+    "version_id": "c4b9f2d3-...",
+    "version_number": 1,
+    "format_code": "pdf_digital",
+    "content_hash_sha256": "e3b0c442...",
+    "size_bytes": 2048576
+  },
+  "total_versions": 2,
   "user_id": "u-001",
   "uploaded_by": "Иванов И.И.",
+  "created_by": "system_registry_sync",
+  "updated_by": "ivanov_ai",
   "created_at": "2026-04-27T10:00:00Z",
-  "updated_at": "2026-04-27T10:05:00Z",
-  "metadata": {
-    "project": "21900M2",
-    "author": "Иванов"
+  "updated_at": "2026-04-27T14:00:00Z"
+}
+```
+
+---
+
+### GET /documents/{doc_id}/status
+
+Прогресс обработки документа. UI вызывает для отслеживания асинхронного конвейера после загрузки.
+
+**Параметры запроса:**
+
+| Параметр | Тип | По умолчанию | Описание |
+| -------- | --- | ------------ | -------- |
+| `longpoll` | int | `15` | Время ожидания в секундах. Сервер держит соединение, возвращая ответ при изменении статуса или по таймауту. Подробнее — [Модель выполнения](../api/common_api.md#модель-выполнения-sync--async). |
+
+#### Статус: `processing` (в процессе)
+
+Пайплайн 1 выполняется, фаза preview завершена, ожидается решение пользователя.
+
+```json
+{
+  "document_id": "b3a8f1c2-...",
+  "status": "processing",
+  "progress_percent": 60.0,
+  "steps": {
+    "pipeline": {
+      "formation": {
+        "status": "in_progress",
+        "preview": {
+          "status": "completed",
+          "ocr_parser": {
+            "status": "completed",
+            "pages_processed": 3
+          },
+          "converter_validator": {
+            "status": "completed",
+            "metadata_extracted": true
+          },
+          "decision": {
+            "status": "awaiting",
+            "action": null
+          }
+        },
+        "parsing": { "status": "completed", "pages_processed": 12, "pages_failed": 0, "avg_confidence": 0.92 },
+        "validation": { "status": "in_progress", "errors_found": 0 },
+        "registry": { "status": "pending" }
+      },
+      "indexation": {
+        "status": "pending",
+        "rag_indexing": { "status": "pending" }
+      }
+    }
+  },
+  "started_at": "2026-05-15T10:00:05Z",
+  "estimated_completion": "2026-05-15T10:02:00Z"
+}
+```
+
+#### Статус: `review_required` (ждёт аппрува)
+
+Валидация выявила ошибки — требуется ручное утверждение.
+
+```json
+{
+  "document_id": "b3a8f1c2-...",
+  "status": "review_required",
+  "progress_percent": 80.0,
+  "steps": {
+    "pipeline": {
+      "formation": {
+        "status": "blocked",
+        "parsing": { "status": "completed" },
+        "validation": { "status": "invalid", "errors_found": 2, "document_id": "b3a8f1c2-...", "errors": [
+          {"code": "MISSING_FIELD", "section_id": 420012}
+        ]},
+        "registry": { "status": "blocked" }
+      },
+      "indexation": {
+        "status": "pending",
+        "rag_indexing": { "status": "pending" }
+      }
+    }
   }
 }
 ```
 
-### GET /documents/{doc_id}/status
+#### Статус: `ready_for_promotion` (готов к промотированию)
 
-Прогресс обработки документа. UI вызывает этот endpoint для отслеживания асинхронного флоу после `POST /documents`.
-
-**Ответ `200`** (в процессе):
+Оба пайплайна завершены, документ готов к записи в Registry.
 
 ```json
 {
-  "document_id": "doc-8a3f2b",
-  "user_id": "u-001",
-  "status": "processing",
-  "progress_percent": 41.7,
+  "document_id": "b3a8f1c2-...",
+  "status": "ready_for_promotion",
+  "progress_percent": 100.0,
   "steps": {
-    "ocr": "in_progress",
-    "layout_parsing": "pending",
-    "indexing": "pending"
+    "pipeline": {
+      "formation": {
+        "status": "completed",
+        "parsing": { "status": "completed" },
+        "validation": { "status": "valid", "document_id": "b3a8f1c2-..." },
+        "registry": { "status": "completed" }
+      },
+      "indexation": {
+        "status": "completed",
+        "rag_indexing": { "status": "completed", "chunks_generated": 34 }
+      }
+    }
   },
-  "started_at": "2026-04-27T10:00:30Z",
-  "estimated_completion": "2026-04-27T10:06:00Z"
+  "chunk_summary": { "sections": 34, "chunks": 28, "embeddings": 28 },
+  "started_at": "2026-05-15T10:00:05Z",
+  "completed_at": "2026-05-15T10:01:30Z"
 }
 ```
 
-**Ответ `200`** (завершён):
+**Статусы Formation (Формирование документа)**: `uploaded` → `previewing` → `awaiting_decision` → `parsing` → `validation` → `registry` / `review_required` → `archived` / `failed`.
 
-```json
-{
-  "document_id": "doc-8a3f2b",
-  "user_id": "u-001",
-  "status": "processed",
-  "progress_percent": 100,
-  "steps": {
-    "ocr": "completed",
-    "layout_parsing": "completed",
-    "indexing": "completed"
-  },
-  "ocr_result": {
-    "pages_total": 12,
-    "pages_processed": 12,
-    "pages_failed": 0,
-    "low_confidence_pages": 1,
-    "avg_confidence": 0.94
-  },
-  "index_result": {
-    "chunks_indexed": 128,
-    "status": "ready"
-  },
-  "started_at": "2026-04-27T10:00:30Z",
-  "completed_at": "2026-04-27T10:05:00Z"
-}
-```
+**Статусы Indexation (Индексация)**: `pending` → `rag_indexing` → `indexed` / `failed`. Подробнее — [статусная модель FSM](../pipelines/pipeline2-indexation.md#статусная-модель-fsm).
 
-**Ответ `200`** (ошибка):
+**Группировка `steps.pipeline`**: каждый пайплайн имеет свой ключ (`formation`, `indexation`) с полем `status` — агрегированный статус пайплайна, и вложенными этапами. Статусы пайплайна: `pending`, `in_progress`, `completed`, `failed`, `blocked`. Статусы этапов: `pending`, `in_progress`, `completed`, `error`, `blocked`.
 
-```json
-{
-  "document_id": "doc-8a3f2b",
-  "user_id": "u-001",
-  "status": "error",
-  "progress_percent": 50,
-  "steps": {
-    "ocr": "error",
-    "layout_parsing": "pending",
-    "indexing": "pending"
-  },
-  "error": {
-    "code": "OCR_FAILED",
-    "message": "Не удалось распознать документ: повреждённый PDF",
-    "details": {}
-  },
-  "started_at": "2026-04-27T10:00:30Z",
-  "failed_at": "2026-04-27T10:02:00Z"
-}
-```
+После завершения Пайплайна 1 автоматически запускается **Пайплайн 2 (Индексация)**.
 
-| Поле | Тип | Описание |
-|------|-----|----------|
-| `status` | string | `queued`, `processing`, `processed`, `error` |
-| `progress_percent` | float | Процент выполнения (0–100) |
-| `steps` | object | Статус этапов: `pending`, `in_progress`, `completed`, `error` |
-| `ocr_result` | object\|null | Результаты OCR (только при `processed`) |
-| `ocr_result.pages_total` | int | Всего страниц |
-| `ocr_result.pages_processed` | int | Успешно обработано |
-| `ocr_result.pages_failed` | int | Ошибок |
-| `ocr_result.low_confidence_pages` | int | Страниц с низким качеством |
-| `ocr_result.avg_confidence` | float | Средняя уверенность распознавания (0–1) |
-| `index_result` | object\|null | Результаты индексации (только при `processed`) |
-| `index_result.chunks_indexed` | int | Количество проиндексированных чанков |
-| `index_result.status` | string | `ready`, `error` |
-| `error` | object\|null | Детали ошибки (только при `error`) |
+---
 
 ### GET /documents/{doc_id}/file
 
-Получение полного файла документа.
+Получение полного файла документа (последняя версия).
 
-**Ответ `200`**: Backend возвращает бинарный поток файла с корректным `Content-Type` или JSON со ссылкой:
+**Ответ `200`**: бинарный поток или JSON со ссылкой:
 
 ```json
 {
-  "document_id": "doc-8a3f2b",
-  "document_title": "21900M2_spec.pdf",
+  "document_id": "b3a8f1c2-...",
+  "version_id": "c4b9f2d3-...",
   "content_type": "application/pdf",
-  "file_url": "/files/doc-8a3f2b/full.pdf"
+  "file_url": "/files/b3a8f1c2/full.pdf"
 }
 ```
 
-### GET /documents/{doc_id}/pages/{page_num}/preview
+---
 
-Агрегированный просмотр страницы: изображение + текст + подсветка фрагмента.
+### POST /documents/{doc_id}/approve
 
-**Параметры query**:
-
-| Параметр | Тип | Описание |
-|----------|-----|----------|
-| `highlight` | string | Текст для подсветки (опционально) |
-
-**Ответ `200`**:
-
-```json
-{
-  "document_id": "doc-8a3f2b",
-  "document_title": "21900M2_spec.pdf",
-  "page": 42,
-  "content_type": "application/pdf",
-  "preview_url": "/files/doc-8a3f2b/page-5.png",
-  "text": "Спецификация...\nПоз. 1 Кница...",
-  "highlight": "Кница"
-}
-```
-
-| Поле | Тип | Описание |
-|------|-----|----------|
-| `document_id` | string | ID документа |
-| `document_title` | string | Название документа |
-| `page` | int | Номер страницы |
-| `content_type` | string | MIME-тип |
-| `preview_url` | string | URL изображения страницы |
-| `text` | string | Распознанный текст страницы |
-| `highlight` | string|null | Фрагмент для подсветки |
-
-> Внутренняя реализация: агрегирует ответы от `/documents/{doc_id}/pages/{page_num}` (изображение) и `/documents/{doc_id}/pages/{page_num}/text` (текст).
-
-### DELETE /documents/{doc_id}
-
-Удаление документа и всех связанных данных.
-
-**Ответ `200`**:
-
-```json
-{
-  "document_id": "doc-8a3f2b",
-  "deleted_at": "2026-04-27T10:30:00Z"
-}
-```
-
-### POST /documents/{doc_id}/reprocess
-
-Асинхронная повторная обработка документа (перезапуск OCR и индексации). Прогресс отслеживается через `GET /documents/{doc_id}/status`. `user_id` определяется из контекста аутентификации.
+Утверждение документа. Переводит `review_required` → `approved` и запускает запись в Registry (Пайплайн 1, Этап 3).
 
 **Запрос**:
 
 ```json
 {
-  "mode": "enhanced_preprocess"
+  "force": false,
+  "comment": "Все ошибки исправлены, контейнер валиден"
 }
 ```
 
-| Поле | Тип | Обязательность | Описание |
-|------|-----|----------------|----------|
-| `mode` | string | Нет | Режим обработки: `standard` (по умолчанию), `enhanced_preprocess` (улучшенная предобработка), `fallback_ocr` (альтернативный OCR-движок) |
+| Поле      | Тип    | Обязательность | Описание                            |
+| --------- | ------ | -------------- | ----------------------------------- |
+| `force`   | bool   | Нет            | Принудительный аппрув с warning'ами |
+| `comment` | string | Нет            | Комментарий                         |
 
 **Ответ `202`**:
 
 ```json
 {
-  "document_id": "doc-8a3f2b",
-  "user_id": "u-001",
-  "task_id": "task-ocr-002",
-  "status": "queued",
-  "created_at": "2026-04-27T11:00:00Z"
+  "document_id": "b3a8f1c2-...",
+  "status": "approved",
+  "promotion_task_id": "promo-task-001",
+  "approved_by": "ivanov_ai",
+  "approved_at": "2026-05-15T12:00:00Z"
 }
 ```
+
+**Ошибки**: `409` — неверный статус для аппрува, `422` — контейнер не валиден (без `force`).
+
+---
+
+### GET /documents/{doc_id}/history
+
+История переходов статусов документа (аудит).
+
+**Ответ `200`**:
+
+```json
+{
+  "document_id": "b3a8f1c2-...",
+  "history": [
+    {
+      "history_id": "h-001",
+      "old_status": null,
+      "new_status": "uploaded",
+      "comment": { "reason": "initial_upload", "details": null },
+      "changed_by": "ivanov_ai",
+      "changed_at": "2026-05-15T10:00:00Z"
+    },
+    {
+      "history_id": "h-002",
+      "old_status": "ready_for_promotion",
+      "new_status": "approved",
+      "comment": { "reason": "manual_approve", "details": "Утверждено главным инженером" },
+      "changed_by": "ivanov_ai",
+      "changed_at": "2026-05-15T12:00:00Z"
+    }
+  ],
+  "meta": { "total": 5 }
+}
+```
+
+---
+
+---
+
+### POST /documents/{doc_id}/reprocess
+
+Асинхронная переобработка документа. `user_id` из контекста аутентификации.
+
+**Запрос**:
+
+```json
+{
+  "mode": "full",
+  "options": { "engine": "paddleocr", "language": "ru", "pages": "1-5" }
+}
+```
+
+| Поле   | Тип    | Описание                                                          |
+| ------ | ------ | ----------------------------------------------------------------- |
+| `mode` | string | `full`, `ocr_only`, `chunking_only`, `validation_only`, `reindex` |
+
+**Ответ `202`** — аналогичен `POST /documents`.
+
+---
+
+### DELETE /documents/{doc_id}
+
+Удаление документа и всех связанных данных (версии, чанки, статусы).
+
+**Ответ `200`**:
+
+```json
+{
+  "document_id": "b3a8f1c2-...",
+  "deleted_at": "2026-05-15T10:30:00Z"
+}
+```
+
+---
 
 ### GET /documents/{doc_id}/errors
 
 Журнал ошибок обработки.
 
-**Параметры query**:
-
-| Параметр | Тип | Описание |
-|----------|-----|----------|
-| `stage` | string | Этап: `upload`, `ocr`, `parsing`, `indexing`, `generation` |
-| `severity` | string | Уровень: `warning`, `error` |
-| `page` | int | Номер страницы |
-| `page_size` | int | Записей на странице |
+**Query-параметры**: `stage` (`upload`, `ocr`, `parsing`, `indexing`), `severity` (`warning`, `error`), `page`, `page_size`.
 
 **Ответ `200`**:
 
@@ -386,33 +659,24 @@ sequenceDiagram
   "errors": [
     {
       "error_id": "err-001",
-      "document_id": "doc-8a3f2b",
-      "page": 5,
       "stage": "ocr",
+      "page": 5,
       "error_code": "LOW_CONFIDENCE",
-      "error_message": "Качество распознавания страницы ниже порога (confidence=0.62)",
+      "error_message": "Качество распознавания ниже порога (confidence=0.62)",
       "severity": "warning",
       "retry_attempt": 0,
-      "timestamp": "2026-04-27T10:01:00Z"
+      "timestamp": "2026-05-15T10:01:00Z"
     }
   ],
   "meta": { "total": 1, "page": 1, "page_size": 20 }
 }
 ```
 
+---
+
 ### GET /documents/queue
 
-Очередь обработки документов для текущего пользователя. Возвращает документы со статусами `queued`, `processing` — те, что ещё не завершили обработку.
-
-`user_id` определяется из контекста аутентификации. Для администратора возвращаются все документы в обработке.
-
-**Параметры query**:
-
-| Параметр | Тип | Описание |
-|----------|-----|----------|
-| `user_id` | string | Фильтр по пользователю (админ может смотреть чужие очереди) |
-| `page` | int | Номер страницы |
-| `page_size` | int | Записей на странице |
+Очередь обработки документов (статусы `uploaded`, `previewing`, `awaiting_decision`, `validating`, `processing`).
 
 **Ответ `200`**:
 
@@ -420,38 +684,37 @@ sequenceDiagram
 {
   "queue": [
     {
-      "document_id": "doc-8a3f2b",
-      "title": "21900M2_spec.pdf",
-      "document_type": "specification",
+      "document_id": "b3a8f1c2-...",
+      "title": "Стойки установочные",
+      "doc_code": "20868-81",
+      "source_type": "GOST",
       "status": "processing",
-      "progress_percent": 41.7,
+      "progress_percent": 60.0,
+      "current_step": "validation",
       "steps": {
-        "ocr": "in_progress",
-        "layout_parsing": "pending",
-        "indexing": "pending"
+        "pipeline": {
+          "formation": {
+            "status": "in_progress",
+            "parsing": "completed",
+            "validation": "in_progress",
+            "registry": "pending"
+          },
+          "indexation": {
+            "status": "pending",
+            "rag_indexing": "pending"
+          }
+        }
       },
       "user_id": "u-001",
       "uploaded_by": "Иванов И.И.",
-      "created_at": "2026-04-27T10:00:00Z",
-      "started_at": "2026-04-27T10:00:30Z",
-      "estimated_completion": "2026-04-27T10:06:00Z"
+      "created_at": "2026-05-15T10:00:00Z",
+      "started_at": "2026-05-15T10:00:05Z",
+      "estimated_completion": "2026-05-15T10:02:00Z"
     }
   ],
-  "meta": { "total_in_queue": 3, "page": 1, "page_size": 20 }
+  "meta": { "total_in_queue": 5, "page": 1, "page_size": 20 }
 }
 ```
-
-| Поле | Тип | Описание |
-|------|-----|----------|
-| `queue[].document_id` | string | ID документа |
-| `queue[].title` | string | Название документа |
-| `queue[].document_type` | string | Тип документа |
-| `queue[].status` | string | `queued`, `processing` |
-| `queue[].progress_percent` | float | Прогресс обработки (0–100) |
-| `queue[].steps` | object | Статусы этапов |
-| `queue[].user_id` | string | ID пользователя |
-| `queue[].uploaded_by` | string | ФИО пользователя |
-| `total_in_queue` | int | Общее количество в очереди |
 
 ---
 
@@ -466,7 +729,7 @@ sequenceDiagram
 ```json
 {
   "query": "требования к ледовому классу Arc4",
-  "document_ids": ["doc-norm-001", "doc-norm-002"],
+  "document_ids": ["doc-norm-001"],
   "top_k": 5,
   "filters": {
     "document_type": ["normative"],
@@ -476,27 +739,20 @@ sequenceDiagram
 }
 ```
 
-| Поле | Тип | Обязательность | Описание |
-|------|-----|----------------|----------|
-| `query` | string | Да | Поисковый запрос |
-| `document_ids` | string[] | Нет | Ограничить поиск документами |
-| `top_k` | int | Нет | Число результатов (по умолчанию 5) |
-| `filters` | object | Нет | Фильтры по типу, дате |
-
 **Ответ `200`**:
 
 ```json
 {
-  "query": "требования к ледовому классу Arc4",
+  "query": "...",
   "items": [
     {
-      "fragment_id": "sr-001",
+      "section_id": 420001,
       "document_id": "doc-norm-001",
-      "document_title": "Правила классификации и постройки морских судов. Часть I",
+      "document_title": "Правила классификации...",
       "document_type": "normative",
-      "section": "Корпус",
+      "clause": "Корпус",
       "page": 42,
-      "fragment": "Для ледового класса Arc4 толщина обшивки должна быть не менее 12 мм...",
+      "content": "Для ледового класса Arc4 толщина обшивки должна быть не менее 12 мм...",
       "score": 0.92,
       "page_preview_url": "/documents/doc-norm-001/pages/42/preview",
       "document_url": "/documents/doc-norm-001/file"
@@ -507,30 +763,23 @@ sequenceDiagram
 }
 ```
 
-| Поле | Тип | Описание |
-|------|-----|----------|
-| `items[].fragment_id` | string | ID фрагмента |
-| `items[].document_id` | string | ID документа |
-| `items[].document_title` | string | Название документа |
-| `items[].document_type` | string | Тип документа: `normative`, `archival_scan`, `drawing`, `specification` |
-| `items[].section` | string | Раздел |
-| `items[].page` | int | Номер страницы |
-| `items[].fragment` | string | Текст фрагмента |
-| `items[].score` | float | Оценка релевантности (0–1) |
-| `items[].page_preview_url` | string | URL preview страницы |
-| `items[].document_url` | string | URL полного документа |
-
-**Ошибки**: `400` — пустой запрос.
-
 ### GET /documents/search
 
-Быстрый GET-вариант семантического поиска. Предназначен для простых/тестовых запросов. Для полнофункционального поиска с фильтрацией используйте `POST /documents/search`.
+Быстрый GET-вариант поиска. Предназначен для простых поисковых запросов без сложных фильтров.
 
-**Параметры query**: `q`, `document_id`, `page`, `page_size`, `document_type`
+**Параметры запроса (query):**
 
-**Ответ**: Аналогичен `POST /documents/search` (поле `query` в ответе соответствует `q`).
+| Параметр       | Тип    | Обязательность | Значение по умолчанию | Описание                                |
+|----------------|--------|----------------|-----------------------|-----------------------------------------|
+| `q`            | string | Да             | —                    | Поисковый запрос                         |
+| `document_id`  | string | Нет            | —                    | Ограничить поиск одним документом (UUID) |
+| `page`         | int    | Нет            | 1                    | Номер страницы результатов              |
+| `page_size`    | int    | Нет            | 10                   | Записей на странице (max 100)           |
+| `document_type`| string | Нет            | —                    | Фильтр по типу документа                 |
 
+**Ответ `200`:** Аналогичен ответу `POST /documents/search`.
 
+**Ограничения:** GET-вариант не поддерживает фильтры `date_from`, `date_to`, множество `document_ids`. Для сложных запросов используйте POST.
 
 ---
 
@@ -538,14 +787,7 @@ sequenceDiagram
 
 ### GET /documents/{doc_id}/pages
 
-Список страниц документа с базовой информацией о каждой.
-
-**Параметры query**:
-
-| Параметр | Тип | Описание |
-|----------|-----|----------|
-| `page` | int | Номер страницы |
-| `page_size` | int | Записей на странице |
+Список страниц документа.
 
 **Ответ `200`**:
 
@@ -561,234 +803,40 @@ sequenceDiagram
       "ocr_status": "completed",
       "confidence": 0.95,
       "has_text_layer": true
-    },
-    {
-      "page": 2,
-      "width": 2480,
-      "height": 3508,
-      "ocr_status": "completed",
-      "confidence": 0.92,
-      "has_text_layer": true
     }
   ],
   "meta": { "total": 12, "page": 1, "page_size": 50 }
 }
-```
 
-| Поле | Тип | Описание |
-|------|-----|----------|
-| `pages[].page` | int | Номер страницы |
-| `pages[].width` | int | Ширина изображения в пикселях |
-| `pages[].height` | int | Высота изображения в пикселях |
-| `pages[].ocr_status` | string | Статус OCR: `not_started`, `processing`, `completed`, `error` |
-| `pages[].confidence` | float|null | Уверенность распознавания (0–1) |
-| `pages[].has_text_layer` | bool | Доступен ли текстовый слой |
+> **Примечание:** Поле `has_text_layer` указывает, содержит ли страница встроенный текстовый слой (цифровой PDF) или является сканированным изображением. Источник данных — OCR-сервис (этап распознавания).
+```
 
 ### GET /documents/{doc_id}/pages/{page_num}
 
-Изображение страницы с подсветкой блоков.
-
-**Параметры query**:
-
-| Параметр | Тип | Описание |
-|----------|-----|----------|
-| `highlight` | string | ID блока для подсветки |
-
-**Ответ `200`**:
-
-```json
-{
-  "image_url": "/files/page-img/doc-8a3f2b_5.png",
-  "page": 5,
-  "width": 2480,
-  "height": 3508,
-  "blocks": [
-    {
-      "block_id": "blk-001",
-      "type": "title_block",
-      "coordinates": {"x": 200, "y": 100, "width": 800, "height": 50},
-      "text": "Спецификация 21900M2.362135.0903",
-      "highlighted": false
-    },
-    {
-      "block_id": "blk-002",
-      "type": "table",
-      "coordinates": {"x": 150, "y": 200, "width": 1800, "height": 600},
-      "text": "...",
-      "highlighted": true
-    }
-  ]
-}
-```
+Изображение страницы с блоками. **Query**: `highlight` (ID блока).
 
 ### GET /documents/{doc_id}/pages/{page_num}/text
 
-Текстовый слой и структура страницы.
+Текстовый слой и структура страницы с блоками, таблицами.
 
-**Ответ `200`**:
+### GET /documents/{doc_id}/pages/{page_num}/preview
 
-```json
-{
-  "page": 5,
-  "full_text": "Спецификация...\nПоз. 1 Кница...",
-  "blocks": [
-    {
-      "block_id": "blk-001",
-      "type": "title_block",
-      "coordinates": {"x": 200, "y": 100, "width": 800, "height": 50},
-      "text": "Спецификация 21900M2.362135.0903",
-      "confidence": 0.98
-    },
-    {
-      "block_id": "blk-002",
-      "type": "table",
-      "coordinates": {"x": 150, "y": 200, "width": 1800, "height": 600},
-      "text": "Поз.|Наименование|Кол.|Масса|Материал",
-      "confidence": 0.92,
-      "table_data": [
-        ["Поз.", "Наименование", "Кол.", "Масса", "Материал"],
-        ["1", "Кница", "2", "0.5", "сталь 09Г2С"]
-      ]
-    }
-  ]
-}
-```
-
-
+Агрегированный просмотр: изображение + текст + подсветка.
 
 ### GET /documents/{doc_id}/parameters
 
-Извлечённые структурированные параметры документа. Относится к группе `documents`.
-
-Извлечённые структурированные параметры документа.
-
-**Ответ `200`**:
-
-```json
-{
-  "document_id": "doc-8a3f2b",
-  "document_type": "specification",
-  "parameters": {
-    "designation": "21900M2.362135.0903",
-    "title": "Секция 0903",
-    "materials": ["сталь 09Г2С", "алюминий АМг5"],
-    "dimensions": ["1200x800x6", "L=2500"],
-    "references": ["21900M2.362135.0901СБ", "21900M2.362135.0902СБ"],
-    "specification_items": [
-      {
-        "position": "1",
-        "name": "Кница",
-        "quantity": "2",
-        "dimensions": "10x200x300",
-        "weight": "0.5",
-        "material": "сталь 09Г2С",
-        "note": ""
-      }
-    ]
-  },
-  "extraction_confidence": 0.89,
-  "unconfirmed_fields": ["dimensions позиции 3"],
-  "updated_at": "2026-04-27T10:05:00Z"
-}
-```
-
-### POST /validate/compare
-
-Запуск сопоставления нормы и проектного документа (низкоуровневый, асинхронный).
-
-> Для UI используется синхронный endpoint `POST /validate/checks` (см. группу `validate`), который внутри вызывает `POST /validate/compare` / `POST /validate/compare/batch` и агрегирует результат.
-
-> **Важно:** при `status: "processing"` периодически опрашивайте `GET /validate/compare/{comparison_id}` до получения `status: "completed"` или `status: "failed"`.
-
-**Запрос** (вариант 1 — по запросу):
-
-```json
-{
-  "normative_query": "толщина обшивки ледового класса Arc4",
-  "project_document_id": "doc-draw-001"
-}
-```
-
-**Запрос** (вариант 2 — по фрагментам):
-
-```json
-{
-  "normative_fragment_id": "frg-norm-42",
-  "project_fragment_id": "frg-draw-5"
-}
-```
-
-| Поле | Тип | Обязательность | Описание |
-|------|-----|----------------|----------|
-| `normative_query` | string | Нет | Поисковый запрос к нормативным документам |
-| `project_document_id` | string | Нет | ID проектного документа |
-| `normative_fragment_id` | string | Нет | ID фрагмента нормы |
-| `project_fragment_id` | string | Нет | ID фрагмента проекта |
-
-**Ответ `202`** (запрос принят, результат будет доступен позже):
-
-```json
-{
-  "comparison_id": "cmp-007",
-  "status": "processing",
-  "created_at": "2026-04-27T12:00:00Z"
-}
-```
-
-### GET /validate/compare/{comparison_id}
-
-Результат сопоставления.
-
-**Ответ `200`** (результат готов):
-
-Если статус `processing` — повторите запрос позже. Статус обновляется: `processing` → `completed` / `failed`.
-
-```json
-{
-  "comparison_id": "cmp-007",
-  "status": "completed",
-  "normative_block": {
-    "document_id": "doc-norm-001",
-    "document_title": "Правила РС часть I",
-    "page": 42,
-    "requirement_text": "Толщина обшивки в районе ледового пояса для класса Arc4 ≥ 12 мм"
-  },
-  "project_block": {
-    "document_id": "doc-draw-001",
-    "document_title": "21900M2.362135.0903СБ",
-    "page": 1,
-    "parameter_text": "Обшивка ледового пояса t=14 мм"
-  },
-  "match_status": "match",
-  "details": "Требование выполнено: проектная толщина 14 мм превышает минимальные 12 мм.",
-  "sources": [
-    {"document_id": "doc-norm-001", "page": 42},
-    {"document_id": "doc-draw-001", "page": 1}
-  ],
-  "disclaimer": "Результат носит информационный характер и подлежит обязательной инженерной проверке.",
-  "processing_time_ms": 8700
-}
-```
-
-**Статусы `match_status`**:
-
-| Статус | Описание |
-|--------|----------|
-| `match` | Совпадает |
-| `possible_discrepancy` | Возможное расхождение |
-| `not_found_in_project` | Не найдено в проекте |
-| `not_found_in_norm` | Не найдено в норме |
-| `insufficient_data` | Недостаточно данных |
+Извлечённые параметры документа (спецификация, материалы).
 
 ---
 
-## Группа system
+## Группа monitor
 
-### GET /system/health
+### GET /monitor/health
 
-Проверка состояния системы.
+Агрегированная проверка состояния системы.
 
-**Ответ `200`**:
+Orchestrator последовательно опрашивает `GET /health` каждого внутреннего сервиса
+(см. [Мониторинг (Health Check)](common_api.md#мониторинг-health-check)) и возвращает сведённый результат.
 
 ```json
 {
@@ -797,7 +845,8 @@ sequenceDiagram
   "uptime_seconds": 234567,
   "services": {
     "auth": "ok",
-    "rag": "ok",
+    "rag_builder": "ok",
+    "rag_search": "ok",
     "ocr": "degraded",
     "validation": "ok",
     "integration": "ok"
@@ -811,167 +860,23 @@ sequenceDiagram
 
 | Поле | Тип | Описание |
 |------|-----|----------|
-| `database` | string | Статус БД: `online`, `offline`, `degraded` |
-| `search_index` | string | Статус индекса: `ready`, `building`, `error` |
-| `ocr_queue` | string | Статус очереди OCR: `idle`, `processing`, `paused` |
-| `storage` | string | Статус хранилища: `online`, `offline` |
-
-
-
-## Группа validate
-
-### POST /validate/checks
-
-Запуск проверки проектного решения на соответствие требованиям НСИ (синхронный вариант для UI).
-
-**Запрос**:
-
-```json
-{
-  "project_document_ids": ["doc-project-001"],
-  "nsi_document_ids": ["doc-nsi-001", "doc-nsi-002"],
-  "parameters": ["толщина листа", "марка стали"]
-}
-```
-
-`user_id` определяется из контекста аутентификации (`Authorization: Bearer`), не передаётся в теле запроса.
-
-| Поле | Тип | Обязательность | Описание |
-|------|-----|----------------|----------|
-| `project_document_ids` | string[] | Да | ID проектных документов |
-| `nsi_document_ids` | string[] | Да | ID нормативных документов |
-| `parameters` | string[] | Нет | Параметры для проверки |
-
-**Ответ `200`**:
-
-```json
-{
-  "check_run_id": "check-001",
-  "status": "completed",
-  "summary": {
-    "ok": 8,
-    "warning": 2,
-    "error": 1
-  },
-  "items": [
-    {
-      "check_item_id": "chk-item-001",
-      "project": "Проект 17",
-      "section": "Корпус",
-      "parameter": "Толщина листа",
-      "project_value": "8 мм",
-      "nsi_requirement": "Не менее 10 мм",
-      "nsi_document": "Правила классификации и постройки морских судов",
-      "status": "ERROR",
-      "comment": "Значение в проекте ниже требования НСИ.",
-      "project_source": {
-        "document_id": "doc-project-001",
-        "page": 12,
-        "page_preview_url": "/documents/doc-project-001/pages/12/preview",
-        "document_url": "/documents/doc-project-001/file"
-      },
-      "nsi_source": {
-        "document_id": "doc-nsi-001",
-        "page": 45,
-        "page_preview_url": "/documents/doc-nsi-001/pages/45/preview",
-        "document_url": "/documents/doc-nsi-001/file"
-      }
-    }
-  ]
-}
-```
-
-| Поле | Тип | Описание |
-|------|-----|----------|
-| `check_run_id` | string | ID проверки |
-| `status` | string | `completed`, `processing` |
-| `summary.ok` | int | Количество совпадений |
-| `summary.warning` | int | Количество предупреждений |
-| `summary.error` | int | Количество ошибок |
-| `items[].status` | string | `OK`, `WARNING`, `ERROR` |
-| `items[].project_source` | object | Ссылка на источник проекта |
-| `items[].nsi_source` | object | Ссылка на нормативный источник |
-
-> Внутренняя реализация: разделяет запрос на пары нормативных и проектных фрагментов через Validation Service (`POST /validate/compare/batch`), агрегирует результаты, маппит `match_status` → `OK`/`WARNING`/`ERROR`.
-
-### GET /validate/checks/{check_run_id}
-
-Получение статуса и результатов проверки (для асинхронного сценария, когда `POST /validate/checks` вернул `status: "processing"`).
-
-**Ответ `200`** (завершено) — структура, аналогичная ответу `POST /validate/checks`.
-
-**Ответ `200`** (ещё выполняется):
-
-```json
-{
-  "check_run_id": "check-001",
-  "status": "processing",
-  "progress_percent": 60,
-  "created_at": "2026-04-27T12:00:00Z",
-  "updated_at": "2026-04-27T12:01:30Z"
-}
-```
-
-### GET /validate/checks/{check_run_id}/export
-
-Выгрузка результатов проверки в XLSX.
-
-**Ответ `200`**: Backend возвращает XLSX-файл или JSON со ссылкой:
-
-```json
-{
-  "check_run_id": "check-001",
-  "export_url": "/files/exports/check-001.xlsx",
-  "format": "xlsx",
-  "created_at": "2026-04-27T12:05:00Z"
-}
-```
-
----
-
-## Группа monitor
+| `status` | string | Общий статус системы: `ok`, `degraded`, `error` |
+| `version` | string | Версия Orchestrator |
+| `uptime_seconds` | int | Время работы с момента запуска |
+| `services` | object | Статусы внутренних сервисов (ключ — имя сервиса, значение — `ok`, `degraded`, `error`) |
+| `database` | string | Статус подключения к БД |
+| `search_index` | string | Состояние поискового индекса |
+| `ocr_queue` | string | Состояние очереди OCR |
+| `storage` | string | Статус файлового хранилища (MinIO) |
 
 ### GET /monitor/metrics
 
-Метрики контроля качества системы. Относится к группе `monitor`.
-
-**Ответ `200`**:
+Метрики качества системы.
 
 ```json
 {
-  "control_metrics": {
-    "ocr_quality": 0.984,
-    "retrieval_quality": 0.91,
-    "answers_with_sources": 0.96,
-    "avg_latency_ms": 1420
-  },
-  "answer_metrics": {
-    "useful_rate": 0.84,
-    "rated_answers": 43,
-    "flagged_for_review": 5,
-    "open_questions": 3
-  },
-  "logs": [
-    {
-      "time": "12:34:02",
-      "type": "search",
-      "text": "По запросу найдено 5 релевантных документов",
-      "level": "info"
-    }
-  ]
+  "control_metrics": { "ocr_quality": 0.984, "retrieval_quality": 0.91, "answers_with_sources": 0.96, "avg_latency_ms": 1420 },
+  "answer_metrics": { "useful_rate": 0.84, "rated_answers": 43, "flagged_for_review": 5, "open_questions": 3 },
+  "logs": [ { "time": "12:34:02", "type": "search", "text": "...", "level": "info" } ]
 }
 ```
-
-| Поле | Тип | Описание |
-|------|-----|----------|
-| `control_metrics.ocr_quality` | float | Качество OCR (0–1) |
-| `control_metrics.retrieval_quality` | float | Качество поиска (0–1) |
-| `control_metrics.answers_with_sources` | float | Доля ответов с источниками (0–1) |
-| `control_metrics.avg_latency_ms` | int | Среднее время ответа |
-| `answer_metrics.useful_rate` | float | Доля полезных ответов (0–1) |
-| `answer_metrics.rated_answers` | int | Количество оценённых ответов |
-| `answer_metrics.flagged_for_review` | int | На проверке |
-| `answer_metrics.open_questions` | int | Открытые вопросы |
-| `logs[]` | array | Журнал событий |
-
-> Внутренняя реализация: агрегирует данные из OCR Service (confidence), RAG Service (score), Query Service (feedback, latency), логов сервисов.

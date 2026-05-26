@@ -45,6 +45,8 @@ Desktop.ini
 .vscode/
 .idea/
 .gigaide/gigaide.properties
-docs/.kilo/kilo.jsonc
-docs/.gigaide/gigaide.properties
-docs/.kilo/agent-manager.json
+.kilo/agent-manager.json
+.kilo/kilo.jsonc
+gigaide.properties
+agent-manager.json
+kilo.jsonc
