@@ -33,7 +33,6 @@
 | `tasks`     | Задачи: preview фаза и решение (работает с `task_id`)               |
 | `pages`     | Просмотр страниц и текстового слоя                                  |
 | `search`    | Поиск фрагментов                                                    |
-| `validate`  | Validation: сопоставление норм и проекта                            |
 
 ---
 
@@ -64,7 +63,7 @@
 
 ```json
 {
-  "task_id": "task-8a3f2b",
+  "task_id": 420000,
   "version_id": "c4b9f2d3-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
   "status": "uploaded",
   "content_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -85,7 +84,7 @@
 **Путь:** `/api/v1/tasks/{task_id}/preview`
 **Метод:** `POST`
 
-> **Важно:** на этапе preview `document_id` ещё не назначен. Используется `task_id` — временный UUID, 
+> **Важно:** на этапе preview `document_id` ещё не назначен. Используется `task_id` — временный идентификатор (bigint), 
   полученный при загрузке (`POST /documents`). После записи в Registry все дальнейшие вызовы 
   используют `document_id`.
 
@@ -96,7 +95,7 @@
 
 ```json
 {
-  "preview_task_id": "prev-001",
+  "task_id": 420000,
   "status": "previewing",
   "estimated_completion": "2026-05-15T12:00:30Z"
 }
@@ -104,7 +103,7 @@
 
 | Поле | Тип | Описание |
 |---|---|---|
-| `preview_task_id` | string | ID задачи превью |
+| `task_id` | bigint | ID задачи превью (тот же, что при загрузке) |
 | `status` | string | Статус: `previewing` |
 | `estimated_completion` | string | Предполагаемое время завершения |
 
@@ -241,7 +240,7 @@
   "version_id": "d5c0a3e4-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
   "version_number": 2,
   "status": "uploaded",
-  "task_id": "task-9b4g3c",
+  "task_id": 420001,
   "content_hash_sha256": "6ca13d52ca70c883e0f0bb101e425a89e8624de51db2d2392593af6a84118090",
   "is_duplicate_file": false,
   "created_at": "2026-05-15T11:00:00Z"

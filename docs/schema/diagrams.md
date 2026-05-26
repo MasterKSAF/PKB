@@ -28,7 +28,7 @@
 ║  │  ┌────────────────────────────────────────────────────┐  │    ║
 ║  │  │                   metadata                         │  │    ║
 ║  │  • doc_code, full_title, normalized_title               │    ║
-║  │  • group, mks, okstu, udc, era                           │    ║
+║  │  • group, mks_oks_code, okstu, udc, era                           │    ║
 ║  │  • validity_status, issuing_body                         │    ║
 ║  │  • adoption: date, authority, document_number,           │    ║
 ║  │    effective_from                                        │    ║
@@ -43,7 +43,7 @@
 ║  │  ┌──────────────────────────────────────────────────┐    │    ║
 ║  │  │  text — массив                                   │    │    ║
 ║  │  │  clause, title, text, level, parent_clause,      │    │    ║
-║  │  │  ltree_path, page, bbox, amendments              │    │    ║
+║  │  │  path, page, bbox, amendments              │    │    ║
 ║  │  └──────────────────────────────────────────────────┘    │    ║
 ║  │                       │                                  │    ║
 ║  │                       ▼                                  │    ║
@@ -77,7 +77,7 @@
 ║                            │                                     ║
 ║                            ▼                                     ║
 ║  ┌──────────────────────────────────────────────────────────┐    ║
-║  │           document_references — массив                   │    ║
+║  │           references — массив                   │    ║
 ║  │  • target_doc, type, context, current_status             │    ║
 ║  │  • replaced_by, replacement_date, note                   │    ║
 ║  └──────────────────────────────────────────────────────────┘    ║
@@ -257,7 +257,7 @@
 ║  ┌───────────────────────────────────────────────────────────┐    ║
 ║  │                      document                             │    ║
 ║  │  • id, doc_code, title, full_title, normalized_title      │    ║
-║  │  • group, mks, okstu, udc, era                            │    ║
+║  │  • group, mks_oks_code, okstu, udc, era                            │    ║
 ║  │  • validity_status, issuing_body                          │    ║
 ║  │  • Плоские поля: adoption_date, adoption_authority,       │    ║
 ║  │    adoption_document_number, effective_from               │    ║

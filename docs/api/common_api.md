@@ -126,6 +126,20 @@
 }
 ```
 
+**Поля `details`:**
+
+| Поле | Тип | Когда присутствует | Описание |
+|------|-----|--------------------|----------|
+| `retry_after_seconds` | int | HTTP `429 Too Many Requests` | Время ожидания до следующей попытки |
+| `validation_errors` | array | HTTP `400 VALIDATION_ERROR` | Спислок ошибок валидации полей: `[{field, reason, value?, constraint?}]` |
+| `conflict_document_id` | string | HTTP `409 DUPLICATE_DOCUMENT` | UUID документа-дубликата |
+| `failed_endpoint` | string | HTTP `502 BAD_GATEWAY` / `504 GATEWAY_TIMEOUT` | Эндпоинт, на котором произошла ошибка |
+| `failed_service` | string | HTTP `502 BAD_GATEWAY` / `504 GATEWAY_TIMEOUT` | Сервис, на котором произошла ошибка |
+
+**Запрещено включать в `details`:** `stack_trace`, `internal_message`, `sql_query`, `file_path`, `config_value` — любые внутренние данные сервера.
+
+Если дополнительных данных нет — `details: {}` (пустой объект).
+
 ---
 
 ### Пагинация
@@ -222,7 +236,7 @@ GET .../{doc_id}/status?longpoll=15
 | 409      | `DUPLICATE_FILE`          | Файл с таким SHA-256 уже обрабатывается           | Orchestrator           |
 | 409      | `ALREADY_PROCESSING`      | Документ уже в обработке (reprocess)              | Orchestrator           |
 | 413      | `FILE_TOO_LARGE`          | Превышение лимита размера файла (>= 100 МБ)       | Integration, OCR       |
-| 422      | `VALIDATION_FAILED`       | Ошибка семантической валидации                    | Validation             |
+| 422      | `VALIDATION_FAILED`       | Ошибка семантической валидации                    | Converter-validator   |
 | 429      | `TOO_MANY_REQUESTS`       | Превышен лимит запросов (rate limit)              | все                    |
 | 502      | `BAD_GATEWAY`             | Ошибка при вызове LLM (все retry исчерпаны)       | Query                  |
 | 503      | `SERVICE_UNAVAILABLE`     | Недоступен внешний сервис (MinIO, БД)             | все                    |
@@ -262,9 +276,7 @@ GET .../{doc_id}/status?longpoll=15
 | `POST /text/search`                                        | ✓          | ✓                 | ✓              |
 | `POST /text/ask`                                           | ✓          | ✓                 | ✓              |
 
-| `POST /validate/document`, `POST /validate/check`          | ✗          | ✓                 | ✓              |
-| `POST /validate/classifiers`                               | ✗          | ✓                 | ✓              |
-| `POST /validate/extract/parameters`                        | ✗          | ✓                 | ✓              |
+| `POST /tasks/*` (preview, decide)                          | ✓          | ✓                 | ✓              |
 
 | `POST /analyse/compare`, `GET /analyse/compare/{id}`       | ✓          | ✓                 | ✓              |
 | `POST /analyse/calculate`                                  | ✓          | ✓                 | ✓              |

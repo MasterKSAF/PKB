@@ -132,9 +132,9 @@
 | Registry → RAG Builder | `path` (ltree) | `path` | Иерархический путь секции |
 | Registry → RAG Builder / API | `section_id` | Registry присваивает каждой секции ID при сохранении. |
 
-> **Примечание:** поле `ltree_path` в сыром JSON от Parser/OCR может отсутствовать.
-> Оно формируется на этапе Converter-validator при построении иерархии и передаётся
-> в Registry как `path`. В БД хранится как `ltree`. RAG Builder получает его как
+> **Примечание:** поле `path` формируется на этапе Converter-validator при построении иерархии.
+> В сыром JSON от Parser/OCR (тип `raw_ocr_v2`) это поле может отсутствовать, так как оно
+> формируется Converter-validator. В БД хранится как `ltree`. RAG Builder получает его как
 > строковое представление пути.
 
 ---

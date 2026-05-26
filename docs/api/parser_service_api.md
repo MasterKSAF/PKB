@@ -42,7 +42,7 @@
 
 ```json
 {
-  "task_id": "task-9b4c1d",
+  "task_id": 420000,
   "version_id": "d5e0f3a2-...",
   "file_key": "file-def456",
   "options": {
@@ -54,7 +54,7 @@
 
 | Поле | Тип | Обязательность | Описание |
 | ---- | --- | -------------- | -------- |
-| `task_id` | string | Да | Идентификатор задачи (генерируется Оркестратором) |
+| `task_id` | bigint | Да | Идентификатор задачи (генерируется Оркестратором) |
 | `version_id` | string | Да | ID версии документа (ссылка на `document_versions`) |
 | `file_key` | string | Да | Ключ файла в MinIO |
 | `options` | object | Нет | Параметры обработки |
@@ -65,7 +65,7 @@
 
 ```json
 {
-  "task_id": "task-9b4c1d",
+  "task_id": 420000,
   "status": "accepted",
   "version_id": "d5e0f3a2-...",
   "estimated_completion": "2026-05-15T10:02:00Z"
@@ -82,7 +82,7 @@
 
 ```json
 {
-  "task_id": "task-9b4c1d",
+  "task_id": 420000,
   "version_id": "d5e0f3a2-...",
   "file_key": "file-def456",
   "max_pages": 3,
@@ -95,7 +95,7 @@
 
 | Поле | Тип | По умолчанию | Обязательность | Описание |
 | ---- | --- | ------------ | -------------- | -------- |
-| `task_id` | string | — | Да | Идентификатор задачи (генерируется Оркестратором) |
+| `task_id` | bigint | — | Да | Идентификатор задачи (генерируется Оркестратором) |
 | `version_id` | string | — | Да | ID версии документа |
 | `file_key` | string | — | Да | Ключ файла в MinIO |
 | `max_pages` | int | `3` | Нет | Количество страниц для предпросмотра |
@@ -105,12 +105,12 @@
 
 ```json
 {
-  "task_id": "task-9b4c1d",
+  "task_id": 420000,
   "version_id": "d5e0f3a2-...",
   "preview": true,
   "max_pages": 3,
   "metadata": {
-    "schema": "raw_ocr_v1",
+    "schema": "raw_ocr_v2",
     "created_at": "2026-05-17T09:15:00Z",
     "parser": {
       "name": "docling",
@@ -216,7 +216,7 @@
 
 | Поле               | Тип    | Описание                                                |
 | ------------------ | ------ | ------------------------------------------------------- |
-| `task_id`          | string | ID задачи                                               |
+| `task_id`          | bigint | ID задачи                                               |
 | `status`           | string | Статус: `accepted`, `processing`, `completed`, `failed` |
 | `progress_percent` | int    | Процент выполнения (0–100)                              |
 | `pages_processed`  | int    | Обработано страниц                                      |
@@ -246,16 +246,16 @@
 
 > **Важно:** сервис **не пишет в БД** — отдаёт JSON тому, кто вызвал. JSON-формат известен только сервису Parser и downstream-сервисам (Validation, Registry). Изображения — только ссылки (сами файлы загружены в MinIO сервисом).
 
-> **Полный формат данных:** [`docs/schema/document1_parser.json`](../schema/document1_parser.json) (схема `raw_ocr_v1`)
+> **Полный формат данных:** [`docs/schema/document1_parser.json`](../schema/document1_parser.json) (схема `raw_ocr_v2`)
 
 **Ответ `200`**:
 
 ```json
 {
-  "task_id": "task-9b4c1d",
+  "task_id": 420000,
   "version_id": "d5e0f3a2-...",
   "metadata": {
-    "schema": "raw_ocr_v1",
+    "schema": "raw_ocr_v2",
     "created_at": "2026-05-17T09:15:00Z",
     "parser": {
       "name": "docling",
@@ -342,10 +342,10 @@
 
 | Поле                                         | Тип    | Описание                                                             |
 | -------------------------------------------- | ------ | -------------------------------------------------------------------- |
-| `task_id`                                    | string | ID задачи оркестратора                                               |
+| `task_id`                                    | bigint | ID задачи оркестратора                                               |
 | `version_id`                                 | string | UUID версии                                                          |
 | `metadata`                                   | object | Метаданные обработки                                                 |
-| `metadata.schema`                            | string | Идентификатор схемы (напр. `"raw_ocr_v1"`)                          |
+| `metadata.schema`                            | string | Идентификатор схемы (напр. `"raw_ocr_v2"`)                          |
 | `metadata.created_at`                        | string | Время создания результата (ISO 8601)                                 |
 | `metadata.parser`                            | object | Информация о парсере                                                 |
 | `metadata.parser.name`                       | string | Название парсера (напр. `"docling"`)                                 |
@@ -413,7 +413,7 @@
 
 | Поле               | Тип    | Описание                         |
 | ------------------ | ------ | -------------------------------- |
-| `task_id`          | string | ID задачи                        |
+| `task_id`          | bigint | ID задачи                        |
 | `version_id`       | string | ID версии документа              |
 | `status`           | string | Статус: `accepted`, `processing` |
 | `progress_percent` | int    | Процент выполнения               |
