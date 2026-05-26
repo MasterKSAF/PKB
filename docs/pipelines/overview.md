@@ -231,7 +231,7 @@ flowchart LR
 
 Это справедливо для всех этапов: OCR, Parser, Converter-validator, Registry (проверка уникальности), RAG Builder, Analyse.
 
-Подробнее — [Модель выполнения](../api/common.md#модель-выполнения-sync--async).
+Подробнее — [Модель выполнения](../api/common_api.md#модель-выполнения-sync--async).
 
 ---
 

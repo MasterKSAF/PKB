@@ -13,7 +13,7 @@ docs/
 ├── README.md                         # ← Этот файл (навигация)
 │
 ├── api/                              # API-спецификации микросервисов
-│   ├── common.md                     #   Общие положения (форматы, auth, rate limits, edge cases)
+│   ├── common_api.md                 #   Общие положения (форматы, auth, rate limits, health check, edge cases)
 │   ├── orchestrator_service_api.md   #   Orchestrator (публичное API)
 │   ├── auth_service_api.md           #   Auth Service (JWT, users, roles)
 │   ├── query_service_api.md          #   Query Service (чат, поиск, генерация ответов)
@@ -25,7 +25,7 @@ docs/
 │   ├── analyse_service_api.md        #   Analyse Service (анализ проектных решений)
 │   ├── rag_builder_service_api.md    #   RAG Builder (чанкинг, embeddings, индексация)
 │   ├── rag_search_service_api.md     #   RAG Search (гибридный поиск)
-│   └── rag_service_api.md            #   (deprecated — заменён на Builder + Search)
+│   └── validate_service_api.md       #   (deprecated — см. converter_validator_service_api.md)
 │
 ├── pipelines/                        # Логические пайплайны обработки документов
 │   ├── overview.md                   #   Общая схема, FSM, матрица ответственности
@@ -34,25 +34,27 @@ docs/
 │   ├── pipeline2-indexation.md       #   Пайплайн 2: Индексация (RAG Builder)
 │   └── pipeline3-search.md           #   Пайплайн 3: Поиск и генерация ответов
 │
-├── specifications/                   # Технические спецификации
-│   └── parsing_specifications.md     #   Спецификация парсинга для разработчиков
+├── database/                         # Модели базы данных
+│   └── db_diagrams.md                #   ER-диаграмма базы данных
 │
-├── schema/                          # JSON-схемы данных (контракты между сервисами)
-│   ├── diagrams.md
-│   ├── document1_parser.json
-│   ├── document2_validate.json
-│   ├── document2b_preview.json
-│   ├── document3_for_rag.json
-│   └── document_container_purgatory.json
+├── schema/                           # JSON-схемы данных (контракты между сервисами)
+│   ├── diagrams.md                   #   Диаграммы JSON-файлов (документная модель)
+│   ├── document1_parser.json         #   Сырой JSON от Parser
+│   ├── document2_validate.json       #   Валидированный JSON от Converter-validator
+│   ├── document2b_preview.json       #   Preview JSON
+│   ├── document3_for_rag.json        #   JSON для RAG Builder
+│   └── document_container_purgatory.json  #   Контейнер «чистилища»
 │
 ├── discussions/                      # Исторические обсуждения архитектуры
 │   ├── 23_05_26.md
 │   ├── 23_05_26_plan.md
 │   └── pipeline1-formation_discussion.md
 │
-├── db_diagrams.md                    # ER-диаграмма базы данных
-├── different_purgatory.md            # Сравнение схем docs/ vs Purgatory
-└── check_rule.md                     # Чек-лист аудита документации
+├── rules/                            # Правила и чек-листы
+│   └── check_rule.md                 #   Чек-лист аудита документации
+│
+└── specifications/                   # Технические спецификации
+    └── parsing_specifications.md     #   Спецификация парсинга для разработчиков
 ```
 
 ---
@@ -252,7 +254,7 @@ curl -X POST https://{host}/api/v1/text/search \
 ### Сервис реестра документов (Registry Service)
 **Порт:** `8084`
 **Документация:** [`docs/api/registry_service_api.md`](api/registry_service_api.md)
-**Описание также в:** [`pipelines/pipeline1-formation.md`](pipelines/pipeline1-formation.md), [`pipelines/pipeline1-formation_detail.md`](pipelines/pipeline1-formation_detail.md), [`db_diagrams.md`](db_diagrams.md)
+**Описание также в:** [`pipelines/pipeline1-formation.md`](pipelines/pipeline1-formation.md), [`pipelines/pipeline1-formation_detail.md`](pipelines/pipeline1-formation_detail.md), [`database/db_diagrams.md`](database/db_diagrams.md)
 
 **Назначение:**
 Центральное хранилище нормативно-справочной информации (НСИ): карточки документов, классификаторы (МКС, ОКСТУ, УДК), терминология. На этапе Формирования документа **пишет** данные в БД, на этапе Валидации **читает** справочники.
@@ -398,9 +400,8 @@ curl -X POST https://{host}/api/v1/text/search \
 |--------|-----------|
 | **Общая документация** | |
 | API-спецификации (все эндпоинты) | [`docs/api/`](api/) |
-| Формат ошибок, rate limits, edge cases | [`docs/api/common.md`](api/common.md) |
-| ER-диаграмма и типы данных | [`docs/db_diagrams.md`](db_diagrams.md) |
-| Сравнение схем docs/ vs Purgatory | [`docs/different_purgatory.md`](../docs/different_purgatory.md) |
+| Формат ошибок, rate limits, health check, edge cases | [`docs/api/common_api.md`](api/common_api.md) |
+| ER-диаграмма и типы данных | [`docs/database/db_diagrams.md`](database/db_diagrams.md) |
 | **Пайплайны** | |
 | FSM жизненного цикла документа, матрица ответственности | [`docs/pipelines/overview.md`](pipelines/overview.md) |
 | Пайплайн 1: Формирование (preview + full) | [`docs/pipelines/pipeline1-formation.md`](pipelines/pipeline1-formation.md) |
