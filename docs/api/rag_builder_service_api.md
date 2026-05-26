@@ -26,7 +26,7 @@
 | 3 | Вычисление Embeddings | Векторные представления для каждого текстового чанка |
 | 4 | Построение векторного индекса | Сохранение чанков, эмбеддингов и индексов в БД |
 
-RAG Builder принимает JSON от Registry (через `GET /registry/documents/{doc_id}/sections`) — формат см. [`document3_for_rag.json`](../jsons/document3_for_rag.json).
+RAG Builder принимает JSON от Registry (через `GET /registry/documents/{doc_id}/sections`) — формат см. [`document3_for_rag.json`](../schema/document3_for_rag.json).
 
 Каждая секция содержит объектный `content`, структура которого зависит от `type`:
 

@@ -121,7 +121,7 @@
 |---|---|---|---|
 | `longpoll` | int | 15 | Время ожидания в секундах |
 
-> **Полный формат данных:** [`docs/jsons/document2b_preview.json`](../jsons/document2b_preview.json) (схема `converter_validator_preview_v1`)
+> **Полный формат данных:** [`docs/schema/document2b_preview.json`](../schema/document2b_preview.json) (схема `converter_validator_preview_v1`)
 
 **Ответ `200`**:
 

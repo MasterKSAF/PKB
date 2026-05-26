@@ -27,7 +27,7 @@
 
 **Выход:** doc_code, title, document_type, year, revision.
 
-> **Полный формат данных:** [`docs/jsons/document2b_preview.json`](../jsons/document2b_preview.json) (схема `converter_validator_preview_v1`)
+> **Полный формат данных:** [`docs/schema/document2b_preview.json`](../schema/document2b_preview.json) (схема `converter_validator_preview_v1`)
 
 **Запрос:**
 
@@ -73,7 +73,7 @@
 
 **Выход:** иерархический типизированный JSON (схема `validated_v3`)
 
-> **Полный формат данных:** [`docs/jsons/document2_validate.json`](../jsons/document2_validate.json) (схема `validated_v3`)
+> **Полный формат данных:** [`docs/schema/document2_validate.json`](../schema/document2_validate.json) (схема `validated_v3`)
 
 **Процесс внутри:**
 

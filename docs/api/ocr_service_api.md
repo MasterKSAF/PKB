@@ -246,7 +246,7 @@
 
 > **Важно:** сервис **не пишет в БД** — отдаёт JSON тому, кто вызвал. JSON-формат известен только сервису OCR и downstream-сервисам (Validation, Registry). Изображения — только ссылки (сами файлы загружены в MinIO сервисом).
 
-> **Полный формат данных:** [`docs/jsons/document1_parser.json`](../jsons/document1_parser.json) (схема `raw_ocr_v1`)
+> **Полный формат данных:** [`docs/schema/document1_parser.json`](../schema/document1_parser.json) (схема `raw_ocr_v1`)
 
 **Ответ `200`**:
 
