@@ -14,7 +14,7 @@ import hashlib
 import json
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -35,14 +35,14 @@ router = APIRouter(prefix="/api/v1")
 # In-memory хранилища
 # ---------------------------------------------------------------------------
 
-_users: Dict[str, dict] = {}
-_roles: Dict[str, dict] = {}
-_audit: List[dict] = []
-_tokens: Dict[str, str] = {}  # refresh_token -> user_id
-_tokens_meta: Dict[str, dict] = {}  # refresh_token -> {user_id, expires_at, created_at}
-_blacklist: Dict[str, str] = {}  # refresh_token -> revoked_at
-_password_hashes: Dict[str, str] = {}  # user_id -> hashed password
-_rate_limits: Dict[str, dict] = {}  # ip -> {"count": int, "reset_at": str}
+_users: dict[str, dict] = {}
+_roles: dict[str, dict] = {}
+_audit: list[dict] = []
+_tokens: dict[str, str] = {}  # refresh_token -> user_id
+_tokens_meta: dict[str, dict] = {}  # refresh_token -> {user_id, expires_at, created_at}
+_blacklist: dict[str, str] = {}  # refresh_token -> revoked_at
+_password_hashes: dict[str, str] = {}  # user_id -> hashed password
+_rate_limits: dict[str, dict] = {}  # ip -> {"count": int, "reset_at": str}
 
 
 def _init_data():
@@ -108,7 +108,7 @@ def _add_audit(
     action: str,
     resource_type: str,
     resource_id: str = "",
-    details: Optional[dict] = None,
+    details: dict | None = None,
     ip: str = "127.0.0.1",
 ):
     _audit.append(
@@ -147,31 +147,31 @@ class CreateUserRequest(BaseModel):
     email: str
     full_name: str
     password: str
-    roles: List[str]
+    roles: list[str]
 
 
 class UpdateUserRequest(BaseModel):
-    email: Optional[str] = None
-    full_name: Optional[str] = None
-    position: Optional[str] = None
-    roles: Optional[List[str]] = None
-    is_active: Optional[bool] = None
-    password: Optional[str] = None
+    email: str | None = None
+    full_name: str | None = None
+    position: str | None = None
+    roles: list[str] | None = None
+    is_active: bool | None = None
+    password: str | None = None
 
 
 class PatchUserRequest(BaseModel):
-    role: Optional[str] = None
-    roles: Optional[List[str]] = None
-    email: Optional[str] = None
-    full_name: Optional[str] = None
-    position: Optional[str] = None
-    is_active: Optional[bool] = None
-    password: Optional[str] = None
+    role: str | None = None
+    roles: list[str] | None = None
+    email: str | None = None
+    full_name: str | None = None
+    position: str | None = None
+    is_active: bool | None = None
+    password: str | None = None
 
 
 class CreateRoleRequest(BaseModel):
     name: str
-    permissions: List[str]
+    permissions: list[str]
 
 
 class ValidateTokenRequest(BaseModel):
@@ -197,8 +197,8 @@ class UserProfileResponse(BaseModel):
     position: str
     role: str
     role_title: str
-    available_tabs: List[str]
-    permissions: Dict[str, Any]
+    available_tabs: list[str]
+    permissions: dict[str, Any]
     last_login_at: str
     created_at: str
 
@@ -208,15 +208,15 @@ class UserListItem(BaseModel):
     email: str
     full_name: str
     position: str
-    roles: List[str]
+    roles: list[str]
     is_active: bool
     last_login_at: str
     created_at: str
 
 
 class UserListResponse(BaseModel):
-    users: List[UserListItem]
-    meta: Dict[str, Any]
+    users: list[UserListItem]
+    meta: dict[str, Any]
 
 
 class UserDetailResponse(BaseModel):
@@ -224,8 +224,8 @@ class UserDetailResponse(BaseModel):
     email: str
     full_name: str
     position: str
-    roles: List[str]
-    permissions: Dict[str, bool]
+    roles: list[str]
+    permissions: dict[str, bool]
     is_active: bool
     last_login_at: str
     created_at: str
@@ -237,12 +237,12 @@ class UserCreateResponse(BaseModel):
     email: str
     full_name: str
     position: str
-    roles: List[str]
+    roles: list[str]
     role: str
     role_title: str
     is_active: bool
-    available_tabs: List[str]
-    permissions: Dict[str, Any]
+    available_tabs: list[str]
+    permissions: dict[str, Any]
     last_login_at: str
     created_at: str
     updated_at: str
@@ -251,12 +251,12 @@ class UserCreateResponse(BaseModel):
 class RoleResponse(BaseModel):
     role_id: str
     name: str
-    permissions: List[str]
+    permissions: list[str]
     created_at: str
 
 
 class RolesListResponse(BaseModel):
-    roles: List[RoleResponse]
+    roles: list[RoleResponse]
 
 
 class AuditEvent(BaseModel):
@@ -265,14 +265,14 @@ class AuditEvent(BaseModel):
     action: str
     resource_type: str
     resource_id: str
-    details: Dict[str, Any]
+    details: dict[str, Any]
     ip_address: str
     timestamp: str
 
 
 class AuditListResponse(BaseModel):
-    events: List[AuditEvent]
-    meta: Dict[str, Any]
+    events: list[AuditEvent]
+    meta: dict[str, Any]
 
 
 class MessageResponse(BaseModel):
@@ -453,8 +453,8 @@ async def get_me(request: Request):
 
 @router.get("/admin/users", response_model=UserListResponse)
 async def list_users(
-    role: Optional[str] = Query(None),
-    search: Optional[str] = Query(None),
+    role: str | None = Query(None),
+    search: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=200),
 ):
@@ -706,10 +706,10 @@ async def create_role(req: CreateRoleRequest, request: Request):
 
 @router.get("/admin/audit")
 async def list_audit(
-    user_id: Optional[str] = Query(None),
-    action: Optional[str] = Query(None),
-    date_from: Optional[str] = Query(None),
-    date_to: Optional[str] = Query(None),
+    user_id: str | None = Query(None),
+    action: str | None = Query(None),
+    date_from: str | None = Query(None),
+    date_to: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
 ):

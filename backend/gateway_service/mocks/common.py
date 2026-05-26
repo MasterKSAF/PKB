@@ -6,7 +6,7 @@
 import json
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, TypeVar
+from typing import Any, TypeVar
 
 # ---------------------------------------------------------------------------
 # Утилиты
@@ -56,7 +56,7 @@ def paginate_registry(items: list, page: int = 1, page_size: int = 50) -> dict:
     }
 
 
-def error_response(code: str, message: str, details: Optional[dict] = None) -> dict:
+def error_response(code: str, message: str, details: dict | None = None) -> dict:
     return {
         "error": {
             "code": code,
@@ -81,7 +81,7 @@ class InMemoryStore(dict):
 # Seed-данные для Auth Service
 # ---------------------------------------------------------------------------
 
-SEED_USERS: List[Dict[str, Any]] = [
+SEED_USERS: list[dict[str, Any]] = [
     {
         "user_id": "u-001",
         "email": "ivanov@example.com",
@@ -215,7 +215,7 @@ SEED_USERS: List[Dict[str, Any]] = [
     },
 ]
 
-SEED_ROLES: List[Dict[str, Any]] = [
+SEED_ROLES: list[dict[str, Any]] = [
     {
         "role_id": "r-engineer",
         "name": "Инженер",
@@ -263,7 +263,7 @@ SEED_ROLES: List[Dict[str, Any]] = [
     },
 ]
 
-SEED_AUDIT: List[Dict[str, Any]] = [
+SEED_AUDIT: list[dict[str, Any]] = [
     {
         "event_id": "evt-001",
         "user_id": "u-001",
@@ -320,7 +320,7 @@ SEED_AUDIT: List[Dict[str, Any]] = [
 # Seed-данные для Registry Service
 # ---------------------------------------------------------------------------
 
-SEED_CLASSIFIERS: List[Dict[str, Any]] = [
+SEED_CLASSIFIERS: list[dict[str, Any]] = [
     {
         "classifier_system": "MKS",
         "code": "01",
@@ -400,7 +400,7 @@ SEED_CLASSIFIERS: List[Dict[str, Any]] = [
     },
 ]
 
-SEED_CLASSIFIER_PENDING: List[Dict[str, Any]] = [
+SEED_CLASSIFIER_PENDING: list[dict[str, Any]] = [
     {
         "id": "pend-001",
         "system": "MKS",
@@ -415,7 +415,7 @@ SEED_CLASSIFIER_PENDING: List[Dict[str, Any]] = [
     },
 ]
 
-SEED_TERMINOLOGY: List[Dict[str, Any]] = [
+SEED_TERMINOLOGY: list[dict[str, Any]] = [
     {
         "id": "t-001",
         "raw_term": "Толщина стенки",
@@ -508,7 +508,7 @@ SEED_TERMINOLOGY: List[Dict[str, Any]] = [
     },
 ]
 
-SEED_REGISTRY_DOCUMENTS: List[Dict[str, Any]] = [
+SEED_REGISTRY_DOCUMENTS: list[dict[str, Any]] = [
     {
         "id": "rd-001",
         "title": "ГОСТ 2.109-73 — Основные требования к чертежам",
@@ -643,7 +643,7 @@ SEED_REGISTRY_DOCUMENTS: List[Dict[str, Any]] = [
 # Seed-данные для Orchestrator Service
 # ---------------------------------------------------------------------------
 
-SEED_DOCUMENTS: List[Dict[str, Any]] = [
+SEED_DOCUMENTS: list[dict[str, Any]] = [
     {
         "document_id": "doc-001",
         "filename": "spec_ГОСТ_2.109.pdf",
@@ -951,7 +951,7 @@ SEED_DOCUMENTS: List[Dict[str, Any]] = [
     },
 ]
 
-SEED_DOCUMENT_ERRORS: List[Dict[str, Any]] = [
+SEED_DOCUMENT_ERRORS: list[dict[str, Any]] = [
     {
         "error_id": "err-001",
         "document_id": "doc-005",
@@ -987,7 +987,7 @@ SEED_DOCUMENT_ERRORS: List[Dict[str, Any]] = [
     },
 ]
 
-SEED_METRICS: Dict[str, Any] = {
+SEED_METRICS: dict[str, Any] = {
     "control_metrics": {
         "ocr_quality": 0.87,
         "retrieval_quality": 0.92,
@@ -1038,7 +1038,7 @@ SEED_METRICS: Dict[str, Any] = {
 # Seed-данные для Query Service
 # ---------------------------------------------------------------------------
 
-SEED_SESSIONS: List[Dict[str, Any]] = [
+SEED_SESSIONS: list[dict[str, Any]] = [
     {
         "session_id": "sess-001",
         "title": "Анализ спецификации ПКБ-101",
@@ -1139,7 +1139,7 @@ SEED_SESSIONS: List[Dict[str, Any]] = [
     },
 ]
 
-SEED_HISTORY: List[Dict[str, Any]] = [
+SEED_HISTORY: list[dict[str, Any]] = [
     {
         "history_id": "hist-001",
         "session_id": "sess-001",

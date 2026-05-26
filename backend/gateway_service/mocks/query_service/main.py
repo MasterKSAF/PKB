@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import copy
 import random
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from common import (
     SEED_HISTORY,
@@ -30,10 +30,10 @@ router = APIRouter(prefix="/api/v1")
 # In-memory хранилища
 # ---------------------------------------------------------------------------
 
-_sessions: Dict[str, dict] = {}
-_history: List[dict] = []
-_feedback_store: List[dict] = []
-_export_store: Dict[str, dict] = {}
+_sessions: dict[str, dict] = {}
+_history: list[dict] = []
+_feedback_store: list[dict] = []
+_export_store: dict[str, dict] = {}
 
 
 def _init_data():
@@ -161,73 +161,73 @@ def _generate_answer(question: str) -> dict:
 
 
 class CreateSessionRequest(BaseModel):
-    title: Optional[str] = None
-    document_ids: Optional[List[str]] = None
-    options: Optional[Dict[str, Any]] = None
+    title: str | None = None
+    document_ids: list[str] | None = None
+    options: dict[str, Any] | None = None
 
 
 class UpdateSessionRequest(BaseModel):
-    title: Optional[str] = None
-    document_ids: Optional[List[str]] = None
+    title: str | None = None
+    document_ids: list[str] | None = None
 
 
 class AttachmentModel(BaseModel):
     type: str = "text"
-    text: Optional[str] = None
-    source_document_id: Optional[str] = None
-    source_page_number: Optional[int] = None
+    text: str | None = None
+    source_document_id: str | None = None
+    source_page_number: int | None = None
 
 
 class MessageOptions(BaseModel):
-    search_in_session_docs: Optional[bool] = True
-    use_full_context: Optional[bool] = False
+    search_in_session_docs: bool | None = True
+    use_full_context: bool | None = False
 
 
 class SendMessageRequest(BaseModel):
     content: str
-    attachments: Optional[List[AttachmentModel]] = None
-    options: Optional[MessageOptions] = None
+    attachments: list[AttachmentModel] | None = None
+    options: MessageOptions | None = None
 
 
 class ContextActionRequest(BaseModel):
     action: str
-    params: Optional[Dict[str, Any]] = None
+    params: dict[str, Any] | None = None
 
 
 class ExportSessionRequest(BaseModel):
     format: str = "pdf"
-    options: Optional[Dict[str, Any]] = None
+    options: dict[str, Any] | None = None
 
 
 class FeedbackRequest(BaseModel):
     session_id: str
     message_id: str
-    rating: Optional[int] = None
-    comment: Optional[str] = None
-    aspects: Optional[List[Dict[str, Any]]] = None
-    answer_id: Optional[str] = None
-    useful: Optional[bool] = None
-    opened_citation_ids: Optional[List[str]] = None
+    rating: int | None = None
+    comment: str | None = None
+    aspects: list[dict[str, Any]] | None = None
+    answer_id: str | None = None
+    useful: bool | None = None
+    opened_citation_ids: list[str] | None = None
 
 
 class ChatRequest(BaseModel):
     question: str
-    session_id: Optional[str] = None
-    context: Optional[Dict[str, Any]] = None
+    session_id: str | None = None
+    context: dict[str, Any] | None = None
 
 
 class TextSearchRequest(BaseModel):
     text: str
-    document_ids: Optional[List[str]] = None
-    top_k: Optional[int] = 5
-    filters: Optional[Dict[str, Any]] = None
-    options: Optional[Dict[str, Any]] = None
+    document_ids: list[str] | None = None
+    top_k: int | None = 5
+    filters: dict[str, Any] | None = None
+    options: dict[str, Any] | None = None
 
 
 class TextAskRequest(BaseModel):
     text: str
-    document_ids: Optional[List[str]] = None
-    options: Optional[Dict[str, Any]] = None
+    document_ids: list[str] | None = None
+    options: dict[str, Any] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -249,19 +249,19 @@ class SourceItem(BaseModel):
 class AnswerItem(BaseModel):
     number: int
     text: str
-    sources: List[SourceItem]
+    sources: list[SourceItem]
 
 
 class ChatResponse(BaseModel):
     scenario: str = "completed"
-    answer_id: Optional[str] = None
-    session_id: Optional[str] = None
-    status: Optional[str] = None
-    message: Optional[str] = None
-    answer_items: Optional[List[AnswerItem]] = None
-    latency_ms: Optional[int] = None
-    missing_fields: Optional[List[str]] = None
-    conflicts: Optional[List[dict]] = None
+    answer_id: str | None = None
+    session_id: str | None = None
+    status: str | None = None
+    message: str | None = None
+    answer_items: list[AnswerItem] | None = None
+    latency_ms: int | None = None
+    missing_fields: list[str] | None = None
+    conflicts: list[dict] | None = None
 
 
 class TextSearchResultItem(BaseModel):
@@ -277,8 +277,8 @@ class TextSearchResultItem(BaseModel):
 
 class TextSearchResponse(BaseModel):
     original_text: str
-    analysis: Dict[str, Any]
-    results: List[TextSearchResultItem]
+    analysis: dict[str, Any]
+    results: list[TextSearchResultItem]
     total_found: int
     processing_time_ms: int
 
@@ -296,7 +296,7 @@ class TextAskResponse(BaseModel):
     original_text: str
     normalized_question: str
     answer: str
-    sources: List[TextAskSource]
+    sources: list[TextAskSource]
     disclaimer: str
     processing_time_ms: int
     model_used: str
@@ -617,7 +617,7 @@ async def submit_feedback(req: FeedbackRequest):
 async def get_chat_history(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
-    user_id: Optional[str] = Query(None),
+    user_id: str | None = Query(None),
 ):
     """История вопросов."""
     items = list(_history)

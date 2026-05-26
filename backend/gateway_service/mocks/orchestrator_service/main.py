@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import copy
 import hashlib
 import random
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from common import (
     SEED_DOCUMENT_ERRORS,
@@ -32,12 +32,12 @@ router = APIRouter(prefix="/api/v1")
 # In-memory хранилища
 # ---------------------------------------------------------------------------
 
-_documents: Dict[str, dict] = {}
-_document_errors: List[dict] = {}
-_versions: Dict[str, List[dict]] = {}
-_chunks: Dict[str, List[dict]] = {}
-_history: Dict[str, List[dict]] = {}
-_approvals: Dict[str, dict] = {}
+_documents: dict[str, dict] = {}
+_document_errors: list[dict] = {}
+_versions: dict[str, list[dict]] = {}
+_chunks: dict[str, list[dict]] = {}
+_history: dict[str, list[dict]] = {}
+_approvals: dict[str, dict] = {}
 _metrics: dict = {}
 
 # Счётчик для ID
@@ -256,13 +256,13 @@ def _get_queue_from_documents():
 
 class SearchRequest(BaseModel):
     query: str
-    document_ids: Optional[List[str]] = None
-    top_k: Optional[int] = 10
-    filters: Optional[Dict[str, Any]] = None
+    document_ids: list[str] | None = None
+    top_k: int | None = 10
+    filters: dict[str, Any] | None = None
 
 
 class ReprocessRequest(BaseModel):
-    mode: Optional[str] = None
+    mode: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -273,20 +273,20 @@ class ReprocessRequest(BaseModel):
 class DocumentListItem(BaseModel):
     document_id: str
     title: str
-    doc_code: Optional[str] = None
+    doc_code: str | None = None
     source_type: str
     era: str
     validity_status: str
-    jurisdiction: Optional[str] = None
-    issuing_body: Optional[str] = None
-    mks_oks_code: Optional[str] = None
-    okstu_code: Optional[str] = None
-    classification_status: Dict[str, str]
+    jurisdiction: str | None = None
+    issuing_body: str | None = None
+    mks_oks_code: str | None = None
+    okstu_code: str | None = None
+    classification_status: dict[str, str]
     status: str
     latest_version: int
     total_versions: int
     chunk_count: int
-    chunk_validation: Optional[Dict[str, Any]] = None
+    chunk_validation: dict[str, Any] | None = None
     user_id: str
     uploaded_by: str
     created_at: str
@@ -294,27 +294,27 @@ class DocumentListItem(BaseModel):
 
 
 class DocumentListResponse(BaseModel):
-    summary: Dict[str, Any]
-    items: List[DocumentListItem]
-    meta: Dict[str, Any]
+    summary: dict[str, Any]
+    items: list[DocumentListItem]
+    meta: dict[str, Any]
 
 
 class DocumentDetailResponse(BaseModel):
     document_id: str
     title: str
-    doc_code: Optional[str] = None
+    doc_code: str | None = None
     source_type: str
     era: str
     validity_status: str
-    jurisdiction: Optional[str] = None
-    issuing_body: Optional[str] = None
-    mks_oks_code: Optional[str] = None
-    okstu_code: Optional[str] = None
-    classification_status: Dict[str, str]
-    successor_doc_id: Optional[str] = None
-    predecessor_doc_id: Optional[str] = None
-    chunk_container_id: Optional[str] = None
-    metadata: Dict[str, Any]
+    jurisdiction: str | None = None
+    issuing_body: str | None = None
+    mks_oks_code: str | None = None
+    okstu_code: str | None = None
+    classification_status: dict[str, str]
+    successor_doc_id: str | None = None
+    predecessor_doc_id: str | None = None
+    chunk_container_id: str | None = None
+    metadata: dict[str, Any]
     latest_version: int
     total_versions: int
     chunk_count: int
@@ -344,7 +344,7 @@ class SearchResultItem(BaseModel):
 
 class SearchResponse(BaseModel):
     query: str
-    items: List[SearchResultItem]
+    items: list[SearchResultItem]
     total_found: int
     processing_time_ms: int
 
@@ -470,9 +470,9 @@ async def upload_document(file: UploadFile = File(...), request: Request = None)
 
 @router.get("/documents", response_model=DocumentListResponse)
 async def list_documents(
-    status: Optional[str] = Query(None),
-    document_type: Optional[str] = Query(None),
-    search: Optional[str] = Query(None),
+    status: str | None = Query(None),
+    document_type: str | None = Query(None),
+    search: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
 ):
@@ -677,7 +677,7 @@ async def search_documents(req: SearchRequest):
 @router.get("/documents/search")
 async def search_documents_get(
     q: str = Query(..., description="Поисковый запрос"),
-    document_ids: Optional[str] = Query(
+    document_ids: str | None = Query(
         None, description="ID документов через запятую"
     ),
     top_k: int = Query(10, ge=1, le=100),
@@ -862,7 +862,7 @@ async def delete_document(doc_id: str):
 
 @router.post("/documents/{doc_id}/reprocess", status_code=202)
 async def reprocess_document(
-    doc_id: str, req: Optional[ReprocessRequest] = None, request: Request = None
+    doc_id: str, req: ReprocessRequest | None = None, request: Request = None
 ):
     """Переобработка документа."""
     doc = _get_document(doc_id)

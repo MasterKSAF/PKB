@@ -15,7 +15,7 @@ import sys
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any, Dict
+from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -37,8 +37,8 @@ from mocks.query_service.main import router as query_router
 from mocks.registry_service.main import main_router as registry_router
 from mocks.registry_service.main import registry_docs_router
 
-_ACCESS_TOKEN_USER: Dict[str, str] = {}  # access_token -> user_id
-_MOCK_USERS: Dict[str, dict] = {u["user_id"]: u for u in SEED_USERS}
+_ACCESS_TOKEN_USER: dict[str, str] = {}  # access_token -> user_id
+_MOCK_USERS: dict[str, dict] = {u["user_id"]: u for u in SEED_USERS}
 
 # ---------------------------------------------------------------------------
 # Test mode flag — при True анонимные запросы пропускаются
@@ -75,7 +75,7 @@ class RBACMiddleware(BaseHTTPMiddleware):
         auth = request.headers.get("Authorization", "")
         path = request.url.path
 
-        user_context: Dict[str, Any] = {
+        user_context: dict[str, Any] = {
             "user_id": None,
             "full_name": None,
             "roles": [],
@@ -241,7 +241,7 @@ class RBACMiddleware(BaseHTTPMiddleware):
 # Idempotency-Key middleware
 # ---------------------------------------------------------------------------
 
-_IDEMPOTENCY_STORE: Dict[str, dict] = {}
+_IDEMPOTENCY_STORE: dict[str, dict] = {}
 _IDEMPOTENCY_TTL = 3600
 _IDEMPOTENCY_PREFIXES = ("/api/v1/documents", "/api/v1/chat")
 

@@ -12,7 +12,7 @@ Covers edge cases, negative scenarios, and missing coverage gaps.
 import os
 import sys
 import uuid
-from typing import Dict, Optional
+
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -53,11 +53,11 @@ def get_token(user: str = TEST_USER, pwd: str = TEST_PASS) -> str:
     return resp.json().get("access_token", "")
 
 
-def auth_header(user: str = TEST_USER, pwd: str = TEST_PASS) -> Dict[str, str]:
+def auth_header(user: str = TEST_USER, pwd: str = TEST_PASS) -> dict[str, str]:
     return {"Authorization": f"Bearer {get_token(user, pwd)}"}
 
 
-def admin_header() -> Dict[str, str]:
+def admin_header() -> dict[str, str]:
     """Get admin auth header (first resets rate limiter to avoid 429)."""
     _reset_rate_limiter()
     return auth_header(ADMIN_USER, ADMIN_PASS)
@@ -1017,7 +1017,7 @@ class TestFixes:
             f"Получено: items={items_prop.get('items', {})}"
         )
 
-        # ChatResponse.answer_items — Optional[List[AnswerItem]],
+        # ChatResponse.answer_items — List[AnswerItem] | None,
         # OpenAPI генерирует anyOf: [array, null]
         chat_resp = schemas.get("ChatResponse", {})
         answer_items = chat_resp.get("properties", {}).get("answer_items", {})

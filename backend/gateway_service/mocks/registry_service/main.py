@@ -11,7 +11,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import copy
-from typing import Dict, List, Optional
+
 
 from common import (
     SEED_CLASSIFIER_PENDING,
@@ -34,11 +34,11 @@ admin_router = APIRouter()
 # In-memory хранилища
 # ---------------------------------------------------------------------------
 
-_classifiers: Dict[str, dict] = {}
-_terminology: Dict[str, dict] = {}
-_registry_docs: Dict[str, dict] = {}
-_pending_classifiers: Dict[str, dict] = {}
-_doc_history: Dict[str, list] = {}
+_classifiers: dict[str, dict] = {}
+_terminology: dict[str, dict] = {}
+_registry_docs: dict[str, dict] = {}
+_pending_classifiers: dict[str, dict] = {}
+_doc_history: dict[str, list] = {}
 
 
 def _init_data():
@@ -70,9 +70,9 @@ def _init_data():
 
 
 def _build_tree(
-    nodes: Dict[str, dict],
-    parent_code: Optional[str] = None,
-    classifier_system: Optional[str] = None,
+    nodes: dict[str, dict],
+    parent_code: str | None = None,
+    classifier_system: str | None = None,
     depth: int = 0,
 ) -> list:
     """Строит дерево классификаторов."""
@@ -113,75 +113,75 @@ def _count_children(code: str) -> int:
 class ClassifierCreate(BaseModel):
     classifier_system: str = "MKS"
     code: str
-    parent_code: Optional[str] = None
+    parent_code: str | None = None
     full_name: str
     status: str = "active"
-    effective_date: Optional[str] = None
+    effective_date: str | None = None
 
 
 class ClassifierUpdate(BaseModel):
-    classifier_system: Optional[str] = None
-    parent_code: Optional[str] = None
-    full_name: Optional[str] = None
-    status: Optional[str] = None
-    effective_date: Optional[str] = None
-    replaced_by: Optional[str] = None
+    classifier_system: str | None = None
+    parent_code: str | None = None
+    full_name: str | None = None
+    status: str | None = None
+    effective_date: str | None = None
+    replaced_by: str | None = None
 
 
 class ClassifierImportRow(BaseModel):
     classifier_system: str = "MKS"
     code: str
     full_name: str
-    parent_code: Optional[str] = None
+    parent_code: str | None = None
     status: str = "active"
-    effective_date: Optional[str] = None
+    effective_date: str | None = None
 
 
 class ClassifierImportRequest(BaseModel):
-    items: List[ClassifierImportRow]
+    items: list[ClassifierImportRow]
 
 
 class TermCreate(BaseModel):
     raw_term: str
-    standard_term: Optional[str] = None
-    normalized_value: Optional[str] = None
+    standard_term: str | None = None
+    normalized_value: str | None = None
     term_type: str = "preferred"
     is_case_sensitive: bool = False
-    definition: Optional[str] = None
-    synonyms: Optional[List[str]] = None
-    related_docs: Optional[List[str]] = None
-    scope: Optional[str] = None
+    definition: str | None = None
+    synonyms: list[str] | None = None
+    related_docs: list[str] | None = None
+    scope: str | None = None
     is_blocked: bool = False
 
 
 class TermUpdate(BaseModel):
-    raw_term: Optional[str] = None
-    standard_term: Optional[str] = None
-    normalized_value: Optional[str] = None
-    term_type: Optional[str] = None
-    is_case_sensitive: Optional[bool] = None
-    definition: Optional[str] = None
-    synonyms: Optional[List[str]] = None
-    related_docs: Optional[List[str]] = None
-    scope: Optional[str] = None
-    is_blocked: Optional[bool] = None
+    raw_term: str | None = None
+    standard_term: str | None = None
+    normalized_value: str | None = None
+    term_type: str | None = None
+    is_case_sensitive: bool | None = None
+    definition: str | None = None
+    synonyms: list[str] | None = None
+    related_docs: list[str] | None = None
+    scope: str | None = None
+    is_blocked: bool | None = None
 
 
 class TermImportRow(BaseModel):
     raw_term: str
-    standard_term: Optional[str] = None
-    normalized_value: Optional[str] = None
+    standard_term: str | None = None
+    normalized_value: str | None = None
     term_type: str = "preferred"
     is_case_sensitive: bool = False
-    definition: Optional[str] = None
-    synonyms: Optional[List[str]] = None
-    related_docs: Optional[List[str]] = None
-    scope: Optional[str] = None
+    definition: str | None = None
+    synonyms: list[str] | None = None
+    related_docs: list[str] | None = None
+    scope: str | None = None
     is_blocked: bool = False
 
 
 class TermImportRequest(BaseModel):
-    items: List[TermImportRow]
+    items: list[TermImportRow]
 
 
 class RegistryDocCreate(BaseModel):
@@ -191,32 +191,32 @@ class RegistryDocCreate(BaseModel):
     status: str = "draft"
     era: str = "CURRENT"
     validity_status: str = "active"
-    jurisdiction: Optional[str] = None
-    issuing_body: Optional[str] = None
-    mks_oks_code: Optional[str] = None
-    okstu_code: Optional[str] = None
+    jurisdiction: str | None = None
+    issuing_body: str | None = None
+    mks_oks_code: str | None = None
+    okstu_code: str | None = None
 
 
 class RegistryDocUpdate(BaseModel):
-    title: Optional[str] = None
-    doc_code: Optional[str] = None
-    source_type: Optional[str] = None
-    status: Optional[str] = None
-    era: Optional[str] = None
-    validity_status: Optional[str] = None
-    jurisdiction: Optional[str] = None
-    issuing_body: Optional[str] = None
-    mks_oks_code: Optional[str] = None
-    okstu_name: Optional[str] = None
-    okstu_code: Optional[str] = None
-    successor_doc_id: Optional[str] = None
-    predecessor_doc_id: Optional[str] = None
+    title: str | None = None
+    doc_code: str | None = None
+    source_type: str | None = None
+    status: str | None = None
+    era: str | None = None
+    validity_status: str | None = None
+    jurisdiction: str | None = None
+    issuing_body: str | None = None
+    mks_oks_code: str | None = None
+    okstu_name: str | None = None
+    okstu_code: str | None = None
+    successor_doc_id: str | None = None
+    predecessor_doc_id: str | None = None
 
 
 class RegistryDocStatusUpdate(BaseModel):
     status: str
-    comment: Optional[str] = None
-    changed_by: Optional[str] = None
+    comment: str | None = None
+    changed_by: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -233,9 +233,9 @@ _init_data()
 
 @main_router.get("/classifiers")
 async def list_classifiers(
-    search: Optional[str] = Query(None),
-    classifier_system: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
+    search: str | None = Query(None),
+    classifier_system: str | None = Query(None),
+    status: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
 ):
@@ -339,7 +339,7 @@ async def import_classifiers(req: ClassifierImportRequest):
 
 @main_router.get("/classifiers/quarantine")
 async def list_quarantine(
-    status: Optional[str] = Query(None),
+    status: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
 ):
@@ -570,8 +570,8 @@ async def delete_classifier(code: str):
 
 @main_router.get("/terminology")
 async def list_terminology(
-    search: Optional[str] = Query(None),
-    term_type: Optional[str] = Query(None),
+    search: str | None = Query(None),
+    term_type: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
 ):
@@ -803,10 +803,10 @@ async def delete_term(term_id: str):
 
 @registry_docs_router.get("/documents")
 async def list_registry_documents(
-    search: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
-    source_type: Optional[str] = Query(None),
-    era: Optional[str] = Query(None),
+    search: str | None = Query(None),
+    status: str | None = Query(None),
+    source_type: str | None = Query(None),
+    era: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
 ):
@@ -864,7 +864,7 @@ async def list_registry_documents(
 @registry_docs_router.get("/documents/export")
 async def export_registry_documents(
     format: str = Query("json"),
-    status: Optional[str] = Query(None),
+    status: str | None = Query(None),
 ):
     """Экспорт документов реестра."""
     items = list(_registry_docs.values())
@@ -882,7 +882,7 @@ async def export_registry_documents(
 
 
 @registry_docs_router.post("/documents/import")
-async def import_registry_documents(req: List[RegistryDocCreate]):
+async def import_registry_documents(req: list[RegistryDocCreate]):
     """Массовый импорт документов в реестр с проверкой дубликатов по doc_code."""
     inserted = 0
     updated = 0

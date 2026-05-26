@@ -215,7 +215,7 @@ class TestAuthService:
         assert "user_id" in data
         assert "full_name" in data
         assert "permissions" in data
-        # permissions is Dict[str, bool] in new spec
+        # permissions is dict[str, bool] in new spec
         assert isinstance(data["permissions"], dict)
 
     def test_6_list_users(self):
