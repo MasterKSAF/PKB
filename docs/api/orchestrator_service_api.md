@@ -834,20 +834,41 @@
 
 ### GET /monitor/health
 
-Проверка состояния системы.
+Агрегированная проверка состояния системы.
+
+Orchestrator последовательно опрашивает `GET /health` каждого внутреннего сервиса
+(см. [Мониторинг (Health Check)](common.md#мониторинг-health-check)) и возвращает сведённый результат.
 
 ```json
 {
   "status": "ok",
   "version": "1.0.0",
   "uptime_seconds": 234567,
-  "services": { "auth": "ok", "rag_builder": "ok", "rag_search": "ok", "ocr": "degraded", "validation": "ok", "integration": "ok" }
+  "services": {
+    "auth": "ok",
+    "rag_builder": "ok",
+    "rag_search": "ok",
+    "ocr": "degraded",
+    "validation": "ok",
+    "integration": "ok"
+  },
   "database": "online",
   "search_index": "ready",
   "ocr_queue": "idle",
   "storage": "online"
 }
 ```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `status` | string | Общий статус системы: `ok`, `degraded`, `error` |
+| `version` | string | Версия Orchestrator |
+| `uptime_seconds` | int | Время работы с момента запуска |
+| `services` | object | Статусы внутренних сервисов (ключ — имя сервиса, значение — `ok`, `degraded`, `error`) |
+| `database` | string | Статус подключения к БД |
+| `search_index` | string | Состояние поискового индекса |
+| `ocr_queue` | string | Состояние очереди OCR |
+| `storage` | string | Статус файлового хранилища (MinIO) |
 
 ### GET /monitor/metrics
 
