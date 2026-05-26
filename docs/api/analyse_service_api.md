@@ -93,7 +93,7 @@
 ```json
 {
   "pairs": [
-    { "normative_chunk_id": "frg-42", "project_chunk_id": "frg-5" }
+    { "normative_chunk_id": 420042, "project_chunk_id": 420005 }
   ]
 }
 ```

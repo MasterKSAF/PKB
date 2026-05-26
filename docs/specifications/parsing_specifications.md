@@ -183,7 +183,7 @@ class OCRPipeline:
         self.ocr = ocr_engine
         self.state = state
     
-    async def process(self, task_id: str, file_key: str, options: dict) -> dict:
+    async def process(self, task_id: str, file_key: str, options: dict, max_pages: int | None = None) -> dict:
         """Главный метод. Выполняет все шаги, возвращает итоговый JSON."""
         await self.state.set_step(task_id, "downloading")
         
@@ -194,6 +194,9 @@ class OCRPipeline:
         await self.state.set_step(task_id, "splitting")
         page_images = await split_pages(pdf_path)  # → [Path("page_001.png"), ...]
         total = len(page_images)
+        if max_pages is not None:
+            page_images = page_images[:max_pages]
+            total = len(page_images)
         await self.state.set_progress(task_id, pages_total=total)
         
         # Шаг 3: OCR страниц (параллельно)
@@ -253,7 +256,7 @@ class TaskStatus(str, Enum):
 
 class StateManager(ABC):
     @abstractmethod
-    async def create(self, task_id: str, file_key: str, version_id: str) -> None: ...
+    async def create(self, task_id: str, file_key: str, version_id: str, preview: bool = False) -> None: ...
     @abstractmethod
     async def set_step(self, task_id: str, step: str) -> None: ...
     @abstractmethod
@@ -279,11 +282,12 @@ class MemoryStateManager(StateManager):
     def __init__(self):
         self._tasks: dict[str, dict] = {}
     
-    async def create(self, task_id, file_key, version_id):
+    async def create(self, task_id, file_key, version_id, preview=False):
         self._tasks[task_id] = {
             "status": "accepted",
             "file_key": file_key,
             "version_id": version_id,
+            "preview": preview,
             "step": None,
             "progress_percent": 0,
             "pages_processed": 0,
@@ -350,6 +354,22 @@ async def test_ocr_page_failure_doesnt_crash_pipeline(pipeline):
     result = await pipeline.process(...)
     assert result["quality"]["pages_failed"] == 1
     assert result["status"] == "completed"  # не failed!
+
+@pytest.mark.asyncio
+async def test_preview_mode_first_3_pages(pipeline):
+    """Preview mode — обрабатываются только первые 3 страницы."""
+    task_id = "test-preview-001"
+    await pipeline.state.create(task_id, "file-001", "v1", preview=True)
+    
+    result = await pipeline.process(task_id, "file-001", {
+        "language": "ru",
+        "version_id": "v1",
+        "document_id": "doc-preview",
+    }, max_pages=3)
+    
+    assert result["quality"]["pages_processed"] == 3
+    assert result["status"] == "completed"
+    assert pipeline.state._tasks[task_id]["preview"] is True
 ```
 
 Ни одного поднятого Redis, MinIO, или Tesseract.
@@ -364,16 +384,36 @@ async def test_ocr_page_failure_doesnt_crash_pipeline(pipeline):
 3. Загрузить в MinIO → получить `file_key`
 4. Вернуть `202 { task_id }`
 
-Добавляется:
-1. Вызвать `POST /ocr/process` с `file_key` и `version_id`
-2. Получить `task_id`
-3. Ожидание результата через longpoll: `GET /ocr/process/{task_id}/status?longpoll=15`
-   - При завершении → сразу ответ
-   - При таймауте 15c → ответ с прогрессом, повтор longpoll
-4. При `status: completed` → `GET /ocr/process/{task_id}/result`
-5. Передать JSON-контейнер дальше по пайплайну (Validation)
+Добавляется (двухфазный пайплайн):
 
-**Контракт не меняется.** Вся логика ожидания результата описана в `common.md` (модель async с longpoll).
+**Фаза Preview:**
+1. Определить тип файла (скан/изображение → OCR, цифровой PDF/DOC → Parser)
+2. Вызвать `POST /ocr/preview` или `POST /parser/preview` с `max_pages=3`
+3. Получить частичный сырой JSON (первые N страниц)
+4. Передать в Converter-validator (preview API): `POST /converter/preview/metadata`
+5. Выполнить проверку уникальности: **Оркестратор → Registry**: `POST /registry/documents/check-uniqueness` (с метаданными из шага 4)
+6. Отобразить пользователю метаданные и кандидатов в дубликаты
+7. Ожидать решение пользователя: `proceed` / `stop_duplicate` / `force_new_version`
+
+**Фаза Full (при `proceed`):**
+1. Вызвать `POST /ocr/process` или `POST /parser/process` (полный режим, без `max_pages`)
+   - Получить `task_id`
+   - Ожидание результата через longpoll: `GET /ocr/process/{task_id}/status?longpoll=15`
+     - При завершении → сразу ответ
+     - При таймауте 15c → ответ с прогрессом, повтор longpoll
+   - При `status: completed` → `GET /ocr/process/{task_id}/result`
+2. Передать полный сырой JSON в Converter-validator: `POST /converter/convert`
+3. Выполнить проверку уникальности (Оркестратор): `POST /registry/documents/check-uniqueness`
+4. Если дубликат не найден — передать иерархический JSON в Registry: `POST /registry/documents`
+5. Передать плоский JSON (секции) в RAG Builder: `POST /rag/build`
+
+**Особенности preview-режима:**
+- Параметр `?preview=true` (или `max_pages=N`) в `POST /ocr/preview` / `POST /parser/preview`
+- Preview-ответ: без `file_key`, без сохранения бинарных объектов
+- Сервис не использует LLM в preview-режиме
+- Оркестратор хранит preview-данные в журнале пайплайна (не в БД)
+
+**Контракт не меняется.** Вся логика ожидания результата описана в `common_api.md` (модель async с longpoll).
 
 ---
 
