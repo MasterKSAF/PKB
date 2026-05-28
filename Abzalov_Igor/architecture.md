@@ -1,239 +1,323 @@
-Cогласована по функциональным блокам с ТЗ от 13.04.2026: загрузка документов, OCR, извлечение данных, база знаний, поиск, диалог, проверка решений, рекомендации, расчёты, история и интеграция. 
+# ARCHITECTURE.md
 
-```text id="q2jz1d"
-[ Источники документов ]
-(PDF text / PDF scan / DOC/DOCX / CAD metadata / HTML/XML / API)
-        |
-        v
-[ Ingestion API / document_loader ]
-        |
-        v
-[ Document Classifier + Metadata Extractor ]
-(тип документа, язык, качество скана, страницы, dpi)
-        |
-        v
-[ Preprocessing ]
-(очистка, deskew, contrast, denoise, layout/zones)
-        |
-        v
-[ OCR Service / OCR Orchestrator ]
-(EasyOCR as base OCR, fallback OCR if needed)
-        |
-        +-----------------------------+-----------------------------+------------------+
-        |                             |                             |
-        v                             v                             v
-[ Text OCR ]                  [ Formula Extraction ]         [ Table/Image Extraction ]
-(EasyOCR)                     (specialized parser)           (parser/extractor)
-        |                             |                             |
-        +-----------------------------+-----------------------------+
-                                      |
-                                      v
-                              [ Document Reconstruction ]
-                    (blocks, sections, tables, formulas, page structure)
-                                      |
-                                      v
-                               [ Normalization ]
-          (OCR cleanup, ГОСТ normalization, units, materials, terms, aliases)
-                                      |
-                                      v
-                                  [ Chunking ]
-                    (semantic/structural chunks, bbox, page refs, metadata)
-                                      |
-                        +--------------------------+
-                        |                          |
-                        v                          v
-                  [ Embeddings ]       [ Entity/Relation Extraction ]
-                        |                          |
-                        +-------------+------------+
-                                      |
-                                      v
-                         [ Neo4j Graph + Vector Index ]
-                                      |
-                                      v
-                           [ Graph RAG Retrieval ]
-                                      |
-             +-----------------+------------------+------------------+
-             |                 |                  |                  |
-             v                 v                  v                  v
-   [ dialog_manager ] [ validation_engine ] [ recommendation_engine ] [ calculation_engine ]
-             \                 |                  |                  /
-              \                |                  |                 /
-               +---------------+------------------+----------------+
-                                      |
-                                      v
-                                    [ LLM ]
-                                      |
-                                      v
-                           [ Response with sources ]
-                                      |
-                         +------------+------------+
-                         |                         |
-                         v                         v
-                [ history_service ]   [ integration_service / Meridian API ]
-                         |                         |
-                         +------------+------------+
-                                      |
-                                      v
-                                 [ Backend API ]
-                                      |
-                                      v
-                                   [ Frontend ]
+# System Architecture — RAG Builder Service
+
+---
+
+# SYSTEM PURPOSE
+
+RAG Builder Service отвечает за построение векторного индекса документов для семантического поиска.
+
+Сервис:
+
+* получает нормализованный JSON
+* выполняет chunking
+* генерирует embeddings
+* сохраняет данные в PostgreSQL + pgvector
+* предоставляет статус индексирования
+* удаляет индекс документа
+
+---
+
+# SOURCE OF TRUTH (IMMUTABLE)
+
+Agents MUST read BEFORE implementation.
+
+## API
+
+`C:\Users\Игорь\projects\PKB\PKB_neuroassistant\docs\api\rag_builder_service_api.md`
+
+## Pipeline
+
+`C:\Users\Игорь\projects\PKB\PKB_neuroassistant\docs\pipelines\pipeline2-indexation.md`
+
+## Input Schema
+
+`C:\Users\Игорь\projects\PKB\PKB_neuroassistant\docs\schema\document3_for_rag.json`
+
+## Database Models
+
+`C:\Users\Игорь\projects\PKB\PKB_neuroassistant\docs\database\db_diagrams.md`
+
+Agents are FORBIDDEN to modify these files.
+
+---
+
+# HIGH LEVEL ARCHITECTURE
+
+```text id="7k2d91"
+                    +-------------------+
+                    | FastAPI API       |
+                    | Port 8090         |
+                    +---------+---------+
+                              |
+                              v
+                    +-------------------+
+                    | Service Layer     |
+                    +---------+---------+
+                              |
+               +--------------+--------------+
+               |                             |
+               v                             v
+    +-------------------+         +-------------------+
+    | Chunking Engine   |         | Embedding Engine  |
+    +-------------------+         +-------------------+
+               |                             |
+               +--------------+--------------+
+                              |
+                              v
+                    +-------------------+
+                    | Repository Layer  |
+                    +---------+---------+
+                              |
+                              v
+               +-------------------------------+
+               | PostgreSQL 16 + pgvector      |
+               +-------------------------------+
 ```
 
-## Описание блоков
+---
 
-### **Источники документов**
+# ARCHITECTURAL PRINCIPLES
 
-Источник входных данных для системы.
-Отвечает за поступление нормативных, проектных и рабочих документов в разных форматах: PDF, сканы, DOC/DOCX, CAD-данные, HTML/XML и внешние API. 
+## Mandatory Principles
 
-### **Ingestion API / document_loader**
+* async-first architecture
+* deterministic processing
+* strict layering
+* isolated business logic
+* repository abstraction
+* immutable contracts
 
-Модуль приёма и регистрации документов.
-Отвечает за загрузку файлов, первичную проверку формата, присвоение идентификатора документу, сохранение в хранилище и запуск конвейера обработки. 
+---
 
-### **Document Classifier + Metadata Extractor**
+# LAYER DEFINITIONS
 
-Модуль первичной классификации документа.
-Отвечает за определение типа документа, языка, качества скана, количества страниц и извлечение базовых метаданных, необходимых для дальнейшей маршрутизации обработки.
+## 1. API Layer
 
-### **Preprocessing**
+Responsibilities:
 
-Модуль подготовки документов к распознаванию.
-Отвечает за очистку изображения, выравнивание страниц, шумоподавление, повышение контраста и выделение зон документа для повышения качества OCR. В ТЗ preprocessing отдельно указан как способ снижения риска при сложных документах. 
+* request validation
+* JWT authentication
+* OpenAPI generation
+* response serialization
+* longpoll endpoints
 
-### **OCR Service / OCR Orchestrator**
+Forbidden:
 
-Управляющий OCR-модуль.
-Отвечает за запуск распознавания, выбор OCR-сценария для разных типов страниц и зон, контроль качества распознавания и маршрутизацию данных в ветки текста, формул, таблиц и изображений. OCR для сканов и fallback OCR закреплены в ТЗ. 
+* business logic
+* SQL
+* chunking
+* embedding generation
 
-### **Text OCR**
+---
 
-Модуль распознавания текстовых областей.
-Отвечает за извлечение основного текста из сканов, технических требований, пояснений и нормативных разделов документа.
+## 2. Service Layer
 
-### **Formula Extraction**
+Responsibilities:
 
-Модуль извлечения формул.
-Отвечает за выделение и распознавание формул и расчетных выражений из документа с последующей передачей в структурированную форму.
+* orchestration
+* transaction coordination
+* indexing pipeline execution
 
-### **Table/Image Extraction**
+Rules:
 
-Модуль извлечения таблиц и изображений.
-Отвечает за выделение табличных структур, сохранение строк и ячеек, а также извлечение изображений и графических фрагментов, если они нужны для анализа. ТЗ прямо требует извлечение текста, таблиц и изображений. 
+* pure business logic
+* repository access only via interfaces
+* no HTTP dependencies
 
-### **Document Reconstruction**
+---
 
-Модуль восстановления структуры документа.
-Отвечает за сбор OCR-результатов в единую модель документа: блоки текста, секции, таблицы, формулы, страницы и связи между ними.
+## 3. Chunking Layer
 
-### **Normalization**
+Responsibilities:
 
-Модуль нормализации данных.
-Отвечает за очистку OCR-ошибок, унификацию обозначений, нормализацию ГОСТ, единиц измерения, материалов, терминов и вариантов написания для дальнейшего корректного поиска и анализа.
+* semantic chunking
+* protected spans handling
+* token counting
+* table chunking
 
-### **Chunking**
+Rules:
 
-Модуль разбиения документа на фрагменты.
-Отвечает за формирование смысловых и структурных чанков, привязку к страницам, координатам и метаданным. Это соответствует требованию ТЗ по разбиению документов на чанки и формированию базы знаний. 
+* max 512 tokens
+* deterministic output
+* stable chunk IDs
 
-### **Embeddings**
+---
 
-Модуль векторизации фрагментов.
-Отвечает за построение embedding-представлений для чанков и других объектов, чтобы обеспечить семантический поиск по базе знаний. Создание embeddings прямо указано в ТЗ. 
+## 4. Embedding Layer
 
-### **Entity/Relation Extraction**
+Responsibilities:
 
-Модуль извлечения сущностей и связей.
-Отвечает за выделение из документов материалов, деталей, стандартов, требований, терминов, параметров и связей между ними для построения графовой модели знаний.
+* OpenAI-compatible embedding API integration
+* batching
+* retries
+* vector validation
 
-### **Neo4j Graph + Vector Index**
+Rules:
 
-Графовая векторная база знаний.
-Отвечает за хранение сущностей, связей, документов, фрагментов и их векторных представлений, чтобы обеспечить совмещённый графовый и семантический поиск.
+* vector dimensions immutable
+* timeout-safe
+* retry-safe
+* async execution only
 
-### **Graph RAG Retrieval**
+---
 
-Модуль поиска контекста для LLM.
-Отвечает за комбинированный поиск релевантных фрагментов и связанных сущностей в базе знаний, формирование контекста ответа и передачу его языковой модели.
+## 5. Repository Layer
 
-### **dialog_manager**
+Responsibilities:
 
-Модуль управления диалогом.
-Отвечает за поддержку многошагового взаимодействия, хранение контекста текущего запроса и формирование уточняющих вопросов, если данных недостаточно. Диалоговый режим и уточняющие вопросы закреплены в ТЗ. 
+* database access
+* vector persistence
+* transactional operations
 
-### **validation_engine**
+Rules:
 
-Модуль проверки инженерных решений.
-Отвечает за анализ проектных решений на соответствие нормативно-справочной информации и выявление нарушений с результатом типа OK / WARNING / ERROR. Это прямо задано в ТЗ. 
+* SQLAlchemy 2.x only
+* async sessions only
+* no business logic
 
-### **recommendation_engine**
+---
 
-Модуль рекомендаций.
-Отвечает за выявление конфликтов решений, предложение альтернатив и учёт смежных систем при подготовке рекомендаций пользователю. 
+# DATABASE ARCHITECTURE
 
-### **calculation_engine**
+## PostgreSQL
 
-Расчётный модуль.
-Отвечает за перерасчёт параметров и выполнение инженерных расчётов по методикам из нормативно-справочной информации, например массы и нагрузки. 
+Version:
 
-### **LLM**
+* PostgreSQL 16.14
 
-Языковая модель генерации ответа.
-Отвечает за формирование понятного ответа пользователю на основе найденного контекста, без принятия самостоятельных инженерных решений. ТЗ отдельно фиксирует, что ИИ используется как инструмент поиска, извлечения и структурирования, а финальное инженерное решение остаётся за сотрудником. 
+## pgvector
 
-### **Response with sources**
+Version:
 
-Модуль формирования финального ответа.
-Отвечает за выдачу текста ответа вместе со ссылками на документы и фрагментами источников. Это одно из ключевых обязательных требований ТЗ.  
+* pgvector 0.8.2
 
-### **history_service**
+## Connection
 
-Модуль истории запросов.
-Отвечает за сохранение запросов, ответов, пользователей и использованных источников, а также за поиск, аналитику и экспорт истории. 
+```text id="31fjq8"
+postgresql://pkb_user:pkb_pass@localhost:5433/pkb_db
+```
 
-### **integration_service / Meridian API**
+---
 
-Интеграционный модуль.
-Отвечает за обмен данными с ИС «Меридиан» через API: получение данных, запись результатов и сохранение истории интеграционных операций. 
+# VECTOR STORAGE
 
-### **Backend API**
+Stored entities:
 
-Серверный интерфейс системы.
-Отвечает за объединение всех внутренних модулей, обработку пользовательских запросов, выдачу ответов, работу с фронтендом и внешними интеграциями.
+* chunks
+* embeddings
+* metadata
+* indexing status
 
-### **Frontend**
+Vector index requirements:
 
-Пользовательский интерфейс системы.
-Отвечает за экраны ввода запроса, отображение ответа с источниками, ведение диалога, просмотр истории и административные функции. Это соответствует UI/UX требованиям ТЗ. 
+* cosine similarity
+* ANN index support
+* batch insert optimization
 
-## Короткая версия для вставки прямо под диаграмму
+---
 
-Если нужен совсем компактный вариант, можно вставить так:
+# INDEXATION FLOW
 
-* **Источники документов** — входные файлы и внешние данные.
-* **Ingestion API** — загрузка и регистрация документов.
-* **Classifier + Metadata** — определение типа и параметров документа.
-* **Preprocessing** — подготовка сканов к распознаванию.
-* **OCR Orchestrator** — управление процессом OCR и маршрутизацией.
-* **Text OCR** — распознавание текстовых областей.
-* **Formula Extraction** — извлечение формул.
-* **Table/Image Extraction** — извлечение таблиц и изображений.
-* **Document Reconstruction** — восстановление структуры документа.
-* **Normalization** — очистка и унификация данных.
-* **Chunking** — разбиение документа на смысловые фрагменты.
-* **Embeddings** — векторизация фрагментов.
-* **Entity/Relation Extraction** — выделение сущностей и связей.
-* **Neo4j Graph + Vector Index** — хранение графа знаний и векторов.
-* **Graph RAG Retrieval** — поиск релевантного контекста.
-* **dialog_manager** — ведение диалога и уточняющие вопросы.
-* **validation_engine** — проверка инженерных решений.
-* **recommendation_engine** — выдача рекомендаций.
-* **calculation_engine** — инженерные расчёты.
-* **LLM** — генерация ответа по найденному контексту.
-* **Response with sources** — ответ со ссылками на источники.
-* **history_service** — хранение истории запросов и ответов.
-* **integration_service** — интеграция с ИС «Меридиан».
-* **Backend API** — серверная логика и интерфейсы.
-* **Frontend** — пользовательский интерфейс.
+1. document accepted
+2. schema validation
+3. chunk generation
+4. embedding generation
+5. vector persistence
+6. status update
 
+---
+
+# LONGPOLL ARCHITECTURE
+
+Flow:
+
+1. client requests status
+2. API checks current state
+3. waits asynchronously
+4. returns final status
+
+---
+
+# OBSERVABILITY
+
+Mandatory:
+
+* structured logs
+* correlation IDs
+* request tracing
+* DB timing metrics
+
+---
+
+# SECURITY
+
+Required:
+
+* JWT access token validation
+* refresh token flow
+* env-based secrets
+* no secrets in repository
+* input validation everywhere
+
+---
+
+# DOCKER ARCHITECTURE
+
+Containers:
+
+* FastAPI
+* PostgreSQL
+* Docker network
+
+Rules:
+
+* non-root containers
+* healthchecks mandatory
+* deterministic builds
+
+---
+
+# FORBIDDEN ARCHITECTURE VIOLATIONS
+
+NEVER:
+
+* bypass service layer
+* embed SQL in routes
+* mutate Source of Truth
+* duplicate schema definitions
+* access DB directly from API layer
+* use sync DB sessions
+
+---
+
+# PERFORMANCE TARGETS
+
+API:
+
+* p95 < 300ms for status endpoints
+
+Chunking:
+
+* deterministic runtime
+
+Embedding:
+
+* batch optimized
+
+DB:
+
+* indexed vector search only
+
+---
+
+# DEPLOYMENT TARGET
+
+Primary runtime:
+
+* Docker Compose
+
+Service Port:
+
+* 8090
