@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     embedding_api_key: str = ""
     embedding_retries: int = 2
     jwt_secret: str = "change-me"
+    jwt_algorithm: str = "HS256"
+    jwt_access_expire_minutes: int = 30
+    jwt_refresh_expire_minutes: int = 10080
+    auth_username: str = "admin"
+    auth_password: str = "admin"
 
     api_prefix: str = "/api/v1"
     default_longpoll_seconds: int = 15

@@ -5,6 +5,7 @@ from loguru import logger
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from rag_builder.auth.dependencies import require_access_token
 from rag_builder.core.config import settings
 from rag_builder.db.session import get_session
 from rag_builder.models.contracts import BuildRequest, BuildResponse, DeleteResponse, StatusResponse
@@ -105,6 +106,7 @@ async def build(
             }
         },
     ),
+    _sub: str = Depends(require_access_token),
     session: AsyncSession = Depends(get_session),
 ) -> BuildResponse:
     logger.info("POST /rag/build document_id={} sections={}", req.document_id, len(req.sections))
@@ -125,7 +127,11 @@ async def build(
         500: {"description": "Внутренняя ошибка при удалении индекса."},
     },
 )
-async def delete(doc_id: UUID, session: AsyncSession = Depends(get_session)) -> DeleteResponse:
+async def delete(
+    doc_id: UUID,
+    _sub: str = Depends(require_access_token),
+    session: AsyncSession = Depends(get_session),
+) -> DeleteResponse:
     logger.info("DELETE /rag/build/{}", doc_id)
     try:
         return await indexing_service.delete(doc_id, session)
@@ -155,6 +161,7 @@ async def status(
         le=120,
         description="Время longpoll-ожидания в секундах (0..120).",
     ),
+    _sub: str = Depends(require_access_token),
     session: AsyncSession = Depends(get_session),
 ) -> StatusResponse:
     logger.info("GET /rag/build/{}/status longpoll={}", doc_id, longpoll)
