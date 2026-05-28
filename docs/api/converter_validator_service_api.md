@@ -27,7 +27,7 @@
 
 **Выход:** doc_code, title, document_type, year, revision.
 
-> **Полный формат данных:** [`docs/schema/document2b_preview.json`](../schema/document2b_preview.json) (схема `converter_validator_preview_v1`)
+> **Полный формат данных:** [`docs/schema/schema_parser_preview.json`](../schema/schema_parser_preview.json) (схема `converter_validator_preview_v1`)
 
 **Запрос:**
 
@@ -73,7 +73,7 @@
 
 **Выход:** иерархический типизированный JSON (схема `validated_v3`)
 
-> ⚠️ **Полный формат данных:** [`docs/schema/document2_validate.json`](../schema/document2_validate.json) (схема `validated_v3`) — **обязательно** смотри этот файл, здесь приведён только сокращённый пример.
+> ⚠️ **Полный формат данных:** [`docs/schema/schema_converter_result.json`](../schema/schema_converter_result.json) (схема `validated_v3`) — **обязательно** смотри этот файл, здесь приведён только сокращённый пример.
 
 **Процесс внутри:**
 
@@ -137,7 +137,7 @@
         "level": 1,
         "path": "1",
         "page": 1,
-        "bbox": [10, 20, 200, 40],
+        "bbox": [0.05, 0.056, 1.0, 0.111],
         "type": "text",
         "content": { "text": "Настоящий стандарт распространяется..." }
       }
@@ -158,7 +158,7 @@
 }
 ```
 
-> **Полный формат данных:** см. [`docs/schema/document2_validate.json`](../schema/document2_validate.json) (схема `validated_v3`).
+> **Полный формат данных:** см. [`docs/schema/schema_converter_result.json`](../schema/schema_converter_result.json) (схема `validated_v3`).
 > Приведённый ниже пример — сокращённый. Все типы секций и полный состав полей — в эталонном JSON.
 
 **Поля ответа (верхний уровень):**

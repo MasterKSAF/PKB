@@ -39,11 +39,10 @@ docs/
 │
 ├── schema/                           # JSON-схемы данных (контракты между сервисами)
 │   ├── diagrams.md                   #   Диаграммы JSON-файлов (документная модель)
-│   ├── document1_parser.json         #   Сырой JSON от Parser
-│   ├── document2_validate.json       #   Валидированный JSON от Converter-validator
-│   ├── document2b_preview.json       #   Preview JSON
-│   ├── document3_for_rag.json        #   JSON для RAG Builder
-│   └── document_container_purgatory.json  #   Контейнер «чистилища»
+│   ├── schema_parser_result.json     #   Результат Parser (сырой)
+│   ├── schema_converter_result.json  #   Результат Converter-validator
+│   ├── schema_parser_preview.json    #   Preview от Parser
+│   ├── schema_registry_for_rag.json  #   JSON для Registry / RAG Builder
 │
 ├── discussions/                      # Исторические обсуждения архитектуры
 │   ├── 23_05_26.md
@@ -273,7 +272,7 @@ curl -X POST https://{host}/api/v1/text/search \
 ### Сервис конвертации и валидации (Converter-validator Service)
 **Порт:** `8086`
 **Документация:** [`docs/api/converter_validator_service_api.md`](api/converter_validator_service_api.md)
-**Описание также в:** [`pipelines/pipeline1-formation.md`](pipelines/pipeline1-formation.md), [`pipelines/pipeline1-formation_detail.md`](pipelines/pipeline1-formation_detail.md), [`schema/document2_validate.json`](schema/document2_validate.json), [`schema/document2b_preview.json`](schema/document2b_preview.json)
+**Описание также в:** [`pipelines/pipeline1-formation.md`](pipelines/pipeline1-formation.md), [`pipelines/pipeline1-formation_detail.md`](pipelines/pipeline1-formation_detail.md), [`schema/schema_converter_result.json`](schema/schema_converter_result.json), [`schema/schema_parser_preview.json`](schema/schema_parser_preview.json)
 
 **Назначение:**
 Принять сырые извлечённые данные, полученные от OCR или Parser, и превратить их в полноценный структурированный документ, полностью готовый к сохранению в базе данных. Не сохраняет данные в БД — только готовит структурированное представление.
@@ -293,7 +292,7 @@ curl -X POST https://{host}/api/v1/text/search \
 ### Сервис парсинга (Parser Service)
 **Порт:** `8087`
 **Документация:** [`docs/api/parser_service_api.md`](api/parser_service_api.md)
-**Описание также в:** [`pipelines/pipeline1-formation.md`](pipelines/pipeline1-formation.md), [`pipelines/pipeline1-formation_detail.md`](pipelines/pipeline1-formation_detail.md), [`schema/document1_parser.json`](schema/document1_parser.json)
+**Описание также в:** [`pipelines/pipeline1-formation.md`](pipelines/pipeline1-formation.md), [`pipelines/pipeline1-formation_detail.md`](pipelines/pipeline1-formation_detail.md), [`schema/schema_parser_result.json`](schema/schema_parser_result.json)
 
 **Назначение:**
 Извлечение текстовой структуры из цифровых PDF, DOC, DOCX и других офисных форматов с текстовым слоем (без OCR). Полная изоляция от БД.
@@ -347,7 +346,7 @@ curl -X POST https://{host}/api/v1/text/search \
 ### Сервис построения индекса (RAG Builder Service)
 **Порт:** `8090`
 **Документация:** [`docs/api/rag_builder_service_api.md`](api/rag_builder_service_api.md)
-**Описание также в:** [`pipelines/pipeline2-indexation.md`](pipelines/pipeline2-indexation.md), [`schema/document3_for_rag.json`](schema/document3_for_rag.json)
+**Описание также в:** [`pipelines/pipeline2-indexation.md`](pipelines/pipeline2-indexation.md), [`schema/schema_registry_for_rag.json`](schema/schema_registry_for_rag.json)
 
 **Назначение:**
 Построение векторного индекса для семантического поиска. Запускается фоновым Scheduler'ом (каждые 15 мин) для документов, успешно прошедших Пайплайн 1. **Пишет** данные в БД (pgvector).
@@ -412,7 +411,7 @@ curl -X POST https://{host}/api/v1/text/search \
 | Спецификация парсинга для разработчиков | [`docs/specifications/parsing_specifications.md`](specifications/parsing_specifications.md) |
 | **JSON-схемы (контракты)** | |
 | Структуры данных (диаграммы) | [`docs/schema/diagrams.md`](schema/diagrams.md) |
-| Сырой JSON от Parser | [`docs/schema/document1_parser.json`](schema/document1_parser.json) |
-| Валидированный JSON от Converter-validator | [`docs/schema/document2_validate.json`](schema/document2_validate.json) |
-| Preview JSON | [`docs/schema/document2b_preview.json`](schema/document2b_preview.json) |
-| JSON для RAG Builder | [`docs/schema/document3_for_rag.json`](schema/document3_for_rag.json) |
+| Результат Parser (сырой) | [`docs/schema/schema_parser_result.json`](schema/schema_parser_result.json) |
+| Результат Converter-validator | [`docs/schema/schema_converter_result.json`](schema/schema_converter_result.json) |
+| Preview от Parser | [`docs/schema/schema_parser_preview.json`](schema/schema_parser_preview.json) |
+| JSON для Registry / RAG Builder | [`docs/schema/schema_registry_for_rag.json`](schema/schema_registry_for_rag.json) |

@@ -123,7 +123,7 @@
 ```
 
 > **Полный формат данных** (схема `raw_ocr_v4`) — см.  
-> [`docs/schema/document1_parser.json`](../schema/document1_parser.json)
+> [`docs/schema/schema_parser_result.json`](../schema/schema_parser_result.json)
 
 > **Важно:** в режиме предпросмотра:
 > - Поле `image_key` **отсутствует** у блоков (не сохраняется в MinIO)
@@ -192,7 +192,7 @@
 
 > **Важно:** сервис **не пишет в БД** — отдаёт JSON тому, кто вызвал. JSON-формат известен только сервису Parser и downstream-сервисам (Validation, Registry). Изображения — только ссылки (сами файлы загружены в MinIO сервисом).
 
-> ⚠️ **Полный формат данных:** [`docs/schema/document1_parser.json`](../schema/document1_parser.json) (схема `raw_ocr_v4`) — **обязательно** смотри этот файл, здесь приведён только сокращённый пример.
+> ⚠️ **Полный формат данных:** [`docs/schema/schema_parser_result.json`](../schema/schema_parser_result.json) (схема `raw_ocr_v4`) — **обязательно** смотри этот файл, здесь приведён только сокращённый пример.
 
 **Ответ `200`**:
 

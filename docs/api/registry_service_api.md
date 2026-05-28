@@ -744,7 +744,7 @@ GET /registry/documents/{doc_id}/sections
 Этот JSON используется RAG Builder для построения чанков: RAG Builder самостоятельно
 разбирает `content` каждой секции в зависимости от `type`.
 
-Формат ответа — см. [`document3_for_rag.json`](../schema/document3_for_rag.json).
+Формат ответа — см. [`schema_registry_for_rag.json`](../schema/schema_registry_for_rag.json).
 
 Ключевые поля:
 - `document` — метаданные документа (id, doc_code, title, era, validity_status и др.)
@@ -905,7 +905,7 @@ POST /registry/documents
 **Тело запроса (из пайплайна — enriched JSON от Converter-validator):**
 
 Registry принимает enriched JSON (схема `validated_v3`) напрямую от Converter-validator.
-Формат — см. [`document2_validate.json`](../schema/document2_validate.json).
+Формат — см. [`schema_converter_result.json`](../schema/schema_converter_result.json).
 
 Ключевые элементы запроса:
 - `document.metadata.*` — метаданные документа (doc_code, title, title_hash_sha256, era и др.)
@@ -991,9 +991,9 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
 Система **автоматически вычисляет** `title_hash_sha256` по формуле:  
 `SHA-256(era|source_type|mks_oks_code|okstu_code|doc_code|normalized_title)`
 
-> **Полный формат данных:** [`docs/schema/document3_for_rag.json`](../schema/document3_for_rag.json) (схема `for_rag_v1`)
+> **Полный формат данных:** [`docs/schema/schema_registry_for_rag.json`](../schema/schema_registry_for_rag.json) (схема `for_rag_v1`)
 
-> **Полный формат данных:** см. [`docs/schema/document3_for_rag.json`](../schema/document3_for_rag.json) (схема `for_rag_v1`).
+> **Полный формат данных:** см. [`docs/schema/schema_registry_for_rag.json`](../schema/schema_registry_for_rag.json) (схема `for_rag_v1`).
 > Приведённый ниже пример — сокращённый. Все 7 типов секций и полный состав полей — в эталонном JSON.
 
 **Ответ `201`:** Registry назначает DB-ID и возвращает компактный ответ с идентификаторами.
@@ -1056,8 +1056,8 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
 }
 ```
 
-> **Формат данных для RAG Builder:** Registry хранит секции в БД. Для индексации Orchestrator запрашивает `GET /registry/documents/{doc_id}/sections` и получает полный JSON с объектным `content` — см. [`document3_for_rag.json`](../schema/document3_for_rag.json). RAG Builder самостоятельно разбирает `content` по `type`.
-> **Полный формат ответа `GET /registry/documents/{doc_id}/sections`** — см. [`document3_for_rag.json`](../schema/document3_for_rag.json).
+> **Формат данных для RAG Builder:** Registry хранит секции в БД. Для индексации Orchestrator запрашивает `GET /registry/documents/{doc_id}/sections` и получает полный JSON с объектным `content` — см. [`schema_registry_for_rag.json`](../schema/schema_registry_for_rag.json). RAG Builder самостоятельно разбирает `content` по `type`.
+> **Полный формат ответа `GET /registry/documents/{doc_id}/sections`** — см. [`schema_registry_for_rag.json`](../schema/schema_registry_for_rag.json).
 
 **Особенности формата секций:**
 - Секции — плоский массив (нет вложенных `subsections`)
