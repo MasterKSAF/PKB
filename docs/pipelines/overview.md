@@ -214,7 +214,7 @@ flowchart LR
 > - `application/pdf` (цифровой), `application/msword`, `application/vnd.openxmlformats-officedocument.*` → **Parser Service**
 > - Неподдерживаемый тип → ответ `422` с кодом `UNSUPPORTED_FILE_TYPE`
 >
-> JSON-контейнеры обоих сервисов имеют единый формат (`raw_ocr_v2`),
+> JSON-контейнеры обоих сервисов имеют единый формат (`raw_ocr_v4`),
 > поэтому Converter-validator не зависит от того, какой сервис выполнил первичную обработку.
 
 #### Асинхронное ожидание (Longpoll)

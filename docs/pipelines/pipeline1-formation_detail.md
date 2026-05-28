@@ -133,7 +133,7 @@
 | Registry → RAG Builder / API | `section_id` | Registry присваивает каждой секции ID при сохранении. |
 
 > **Примечание:** поле `path` формируется на этапе Converter-validator при построении иерархии.
-> В сыром JSON от Parser/OCR (тип `raw_ocr_v2`) это поле может отсутствовать, так как оно
+> В сыром JSON от Parser/OCR (тип `raw_ocr_v4`) это поле может отсутствовать, так как оно
 > формируется Converter-validator. В БД хранится как `ltree`. RAG Builder получает его как
 > строковое представление пути.
 

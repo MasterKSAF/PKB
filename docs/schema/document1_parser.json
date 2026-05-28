@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "schema": "raw_ocr_v2",
+    "schema": "raw_ocr_v4",
     "task_id": "task-a1b2c3-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
     "created_at": "2026-05-17T09:15:00Z",
     "parser": {
@@ -14,225 +14,530 @@
     "source": {
       "file_name": "GOST_20868-81_scan.pdf",
       "file_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "page_count": 2
+      "page_count": 2,
+      "author": "Государственный Комитет СССР по стандартам",
+      "title": "ГОСТ 20868-81 Стойки установочные крепежные. Технические требования",
+      "creation_date": null,
+      "modification_date": null
     },
     "pages": [
       {
         "page": 1,
         "width": 210,
-        "height": 297,
-        "blocks": [
-          {
-            "type": "text",
-            "text": "ГОСТ 20868-81",
-            "bbox": [10, 10, 100, 18],
-            "font": { "size": 12, "bold": true }
-          },
-          {
-            "type": "text",
-            "text": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
-            "bbox": [10, 20, 200, 28],
-            "font": { "size": 12, "bold": true }
-          },
-          {
-            "type": "text",
-            "text": "Настоящий стандарт распространяется на металлические крепежные установочные стойки, предназначенные для монтажа радиоэлектронной аппаратуры, и устанавливает технические требования, предъявляемые к ним.",
-            "bbox": [10, 35, 200, 55],
-            "font": { "size": 10, "bold": false }
-          },
-          {
-            "type": "text",
-            "text": "Крепежные установочные стойки следует изготовлять в соответствии с требованиями настоящего стандарта по ГОСТ 20862-81 – ГОСТ 20867-81.",
-            "bbox": [10, 60, 200, 80],
-            "font": { "size": 10, "bold": false }
-          },
-          {
-            "type": "text",
-            "text": "6. Допуски формы и расположения поверхностей",
-            "bbox": [10, 90, 200, 100],
-            "font": { "size": 10, "bold": true }
-          },
-          {
-            "type": "text",
-            "text": "Допуски формы и расположения поверхностей установлены в зависимости от степени точности установочных стоек.",
-            "bbox": [10, 105, 200, 125],
-            "font": { "size": 10, "bold": false }
-          },
-          {
-            "type": "text",
-            "text": "6.1 Допуск соосности оси отверстия Б относительно оси поверхности А (черт. 1) или относительно отверстия А (черт. 2) должен соответствовать приведенной в таблице.",
-            "bbox": [20, 130, 200, 150],
-            "font": { "size": 10, "bold": false }
-          },
-          {
-            "type": "formula",
-            "latex": "R_{\\text{доп}} = \\frac{\\Delta}{2}",
-            "meaning": "Формула расчёта допустимого радиуса R_доп как половины заданного отклонения Δ. R доп = Δ / 2.",
-            "bbox": [100, 155, 180, 175],
-            "image_key": "purgatory/assets/a1b2c3d4/formulas/eq1.png"
-          }
-        ]
+        "height": 297
       },
       {
         "page": 2,
         "width": 210,
-        "height": 297,
-        "blocks": [
+        "height": 297
+      }
+    ],
+    "block": [
+      {
+        "number": 1,
+        "type": "headerFooter",
+        "page": 1,
+        "bbox": [10.0, 10.0, 100.0, 18.0],
+        "font": "Arial",
+        "font_size": 10.0,
+        "text_color": "#666666",
+        "content": "ГОСТ 20868-81"
+      },
+      {
+        "number": 2,
+        "type": "heading",
+        "level": 1,
+        "page": 1,
+        "bbox": [10.0, 20.0, 200.0, 28.0],
+        "font": "Arial-Bold",
+        "font_size": 14.0,
+        "text_color": "#000000",
+        "content": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования"
+      },
+      {
+        "number": 3,
+        "type": "paragraph",
+        "page": 1,
+        "bbox": [10.0, 35.0, 200.0, 55.0],
+        "font": "Arial",
+        "font_size": 10.0,
+        "text_color": "#000000",
+        "content": "Настоящий стандарт распространяется на металлические крепежные установочные стойки, предназначенные для монтажа радиоэлектронной аппаратуры, и устанавливает технические требования, предъявляемые к ним."
+      },
+      {
+        "number": 4,
+        "type": "paragraph",
+        "page": 1,
+        "bbox": [10.0, 60.0, 200.0, 80.0],
+        "font": "Arial",
+        "font_size": 10.0,
+        "text_color": "#000000",
+        "content": "Крепежные установочные стойки следует изготовлять в соответствии с требованиями настоящего стандарта по ГОСТ 20862-81 – ГОСТ 20867-81."
+      },
+      {
+        "number": 5,
+        "type": "text_block",
+        "page": 1,
+        "bbox": [10.0, 85.0, 200.0, 100.0],
+        "block": [
           {
-            "type": "text",
-            "text": "6.2 Допуск перпендикулярности поверхности В относительно оси отверстия (поверхности) А для стоек нормальной точности – не более 0,1 мм, повышенной точности – 0,05 мм.",
-            "bbox": [20, 10, 200, 30],
-            "font": { "size": 10, "bold": false }
+            "font": "Arial-Bold",
+            "font_size": 10.0,
+            "text_color": "#000000",
+            "content": "Примечание — "
           },
           {
-            "type": "text",
-            "text": "6.3 Допуск параллельности поверхности Г относительно поверхности В для стоек нормальной точности – не более 0,1 мм, повышенной точности – 0,05 мм.",
-            "bbox": [20, 35, 200, 55],
-            "font": { "size": 10, "bold": false }
-          },
-          {
-            "type": "text",
-            "text": "6.4 Неуказанные допуски формы и расположения поверхностей – в пределах поля допуска на соответствующие размеры.",
-            "bbox": [20, 60, 200, 80],
-            "font": { "size": 10, "bold": false }
-          },
-          {
-            "type": "table",
-            "caption": "Допуск соосности при степени точности",
-            "bbox": [10, 90, 200, 200],
-            "num_rows": 4,
-            "num_cols": 3,
-            "grid": [
-              {
-                "row": 0,
-                "col": 0,
-                "rowspan": 1,
-                "colspan": 1,
-                "text": "L, мм",
-                "bbox": [10, 90, 70, 105],
-                "is_header": true
-              },
-              {
-                "row": 0,
-                "col": 1,
-                "rowspan": 1,
-                "colspan": 1,
-                "text": "нормальная",
-                "bbox": [70, 90, 135, 105],
-                "is_header": true
-              },
-              {
-                "row": 0,
-                "col": 2,
-                "rowspan": 1,
-                "colspan": 1,
-                "text": "повышенная",
-                "bbox": [135, 90, 200, 105],
-                "is_header": true
-              },
-              {
-                "row": 1,
-                "col": 0,
-                "rowspan": 1,
-                "colspan": 1,
-                "text": "От 6 до 50",
-                "bbox": [10, 105, 70, 120],
-                "is_header": false
-              },
-              {
-                "row": 1,
-                "col": 1,
-                "rowspan": 1,
-                "colspan": 1,
-                "text": "0.1",
-                "bbox": [70, 105, 135, 120],
-                "is_header": false
-              },
-              {
-                "row": 1,
-                "col": 2,
-                "rowspan": 1,
-                "colspan": 1,
-                "text": "0.05",
-                "bbox": [135, 105, 200, 120],
-                "is_header": false
-              },
-              {
-                "row": 2,
-                "col": 0,
-                "rowspan": 1,
-                "colspan": 1,
-                "text": "Св. 50 до 80",
-                "bbox": [10, 120, 70, 135],
-                "is_header": false
-              },
-              {
-                "row": 2,
-                "col": 1,
-                "rowspan": 1,
-                "colspan": 1,
-                "text": "0.12",
-                "bbox": [70, 120, 135, 135],
-                "is_header": false
-              },
-              {
-                "row": 2,
-                "col": 2,
-                "rowspan": 1,
-                "colspan": 1,
-                "text": "0.06",
-                "bbox": [135, 120, 200, 135],
-                "is_header": false
-              },
-              {
-                "row": 3,
-                "col": 0,
-                "rowspan": 1,
-                "colspan": 1,
-                "text": "Св. 80",
-                "bbox": [10, 135, 70, 150],
-                "is_header": false
-              },
-              {
-                "row": 3,
-                "col": 1,
-                "rowspan": 1,
-                "colspan": 1,
-                "text": "0.15",
-                "bbox": [70, 135, 135, 150],
-                "is_header": false
-              },
-              {
-                "row": 3,
-                "col": 2,
-                "rowspan": 1,
-                "colspan": 1,
-                "text": "0.08",
-                "bbox": [135, 135, 200, 150],
-                "is_header": false
-              }
-            ],
-            "raw_footnotes": [
-              {
-                "text": "Значения допусков соосности оси отверстия Б относительно оси поверхности А (черт. 1) или относительно отверстия А (черт. 2)",
-                "bbox": [10, 155, 200, 170]
-              }
-            ],
-            "image_key": "purgatory/assets/a1b2c3d4/tables/t1.png"
-          },
-          {
-            "type": "figure",
-            "caption": "Черт. 1 – Схема допуска соосности оси отверстия Б относительно оси поверхности А",
-            "bbox": [30, 220, 180, 250],
-            "image_key": "purgatory/assets/a1b2c3d4/fig1.png"
-          },
-          {
-            "type": "figure",
-            "caption": "Черт. 2 – Схема допуска соосности оси отверстия Б относительно отверстия А",
-            "bbox": [30, 260, 180, 290],
-            "image_key": "purgatory/assets/a1b2c3d4/fig2.png"
+            "font": "Arial",
+            "font_size": 10.0,
+            "text_color": "#333333",
+            "content": "Изменения и поправки к настоящему стандарту публикуются в ИУС (Информационном Указателе Стандартов)."
           }
         ]
+      },
+      {
+        "number": 6,
+        "type": "heading",
+        "level": 2,
+        "page": 1,
+        "bbox": [10.0, 90.0, 200.0, 100.0],
+        "font": "Arial-Bold",
+        "font_size": 11.0,
+        "text_color": "#000000",
+        "content": "6. Допуски формы и расположения поверхностей"
+      },
+      {
+        "number": 7,
+        "type": "paragraph",
+        "page": 1,
+        "bbox": [10.0, 105.0, 200.0, 125.0],
+        "font": "Arial",
+        "font_size": 10.0,
+        "text_color": "#000000",
+        "content": "Допуски формы и расположения поверхностей установлены в зависимости от степени точности установочных стоек."
+      },
+      {
+        "number": 8,
+        "type": "heading",
+        "level": 3,
+        "page": 1,
+        "bbox": [20.0, 130.0, 200.0, 142.0],
+        "font": "Arial-Bold",
+        "font_size": 10.0,
+        "text_color": "#000000",
+        "content": "6.1 Допуск соосности оси отверстия Б относительно оси поверхности А (черт. 1) или относительно отверстия А (черт. 2)"
+      },
+      {
+        "number": 9,
+        "type": "paragraph",
+        "page": 1,
+        "bbox": [20.0, 145.0, 200.0, 155.0],
+        "font": "Arial",
+        "font_size": 10.0,
+        "text_color": "#000000",
+        "content": "Допуск соосности оси отверстия Б относительно оси поверхности А (черт. 1) или относительно отверстия А (черт. 2) должен соответствовать приведенной в таблице."
+      },
+      {
+        "number": 10,
+        "type": "formula",
+        "page": 1,
+        "bbox": [100.0, 155.0, 180.0, 175.0],
+        "font": "Arial-Italic",
+        "font_size": 11.0,
+        "text_color": "#000000",
+        "latex": "R_{\\text{доп}} = \\frac{\\Delta}{2}",
+        "meaning": "Формула расчёта допустимого радиуса R_доп как половины заданного отклонения Δ. R доп = Δ / 2.",
+        "image_key": "purgatory/assets/a1b2c3d4/formulas/eq1.png"
+      },
+      {
+        "number": 11,
+        "type": "heading",
+        "level": 3,
+        "page": 2,
+        "bbox": [20.0, 10.0, 200.0, 22.0],
+        "font": "Arial-Bold",
+        "font_size": 10.0,
+        "text_color": "#000000",
+        "content": "6.2 Допуск перпендикулярности поверхности В относительно оси отверстия (поверхности) А"
+      },
+      {
+        "number": 12,
+        "type": "paragraph",
+        "page": 2,
+        "bbox": [20.0, 25.0, 200.0, 45.0],
+        "font": "Arial",
+        "font_size": 10.0,
+        "text_color": "#000000",
+        "content": "Допуск перпендикулярности поверхности В относительно оси отверстия (поверхности) А для стоек нормальной точности – не более 0,1 мм, повышенной точности – 0,05 мм."
+      },
+      {
+        "number": 13,
+        "type": "list",
+        "page": 2,
+        "bbox": [25.0, 48.0, 200.0, 72.0],
+        "numbering_style": "bullet",
+        "text_color": "#000000",
+        "block": [
+          {
+            "type": "paragraph",
+            "page": 2,
+            "bbox": [35.0, 48.0, 200.0, 56.0],
+            "font": "Arial",
+            "font_size": 10.0,
+            "text_color": "#000000",
+            "content": "Для стоек нормальной точности: допуск не более 0,1 мм"
+          },
+          {
+            "type": "paragraph",
+            "page": 2,
+            "bbox": [35.0, 60.0, 200.0, 68.0],
+            "font": "Arial",
+            "font_size": 10.0,
+            "text_color": "#000000",
+            "content": "Для стоек повышенной точности: допуск не более 0,05 мм"
+          }
+        ]
+      },
+      {
+        "number": 14,
+        "type": "heading",
+        "level": 3,
+        "page": 2,
+        "bbox": [20.0, 75.0, 200.0, 87.0],
+        "font": "Arial-Bold",
+        "font_size": 10.0,
+        "text_color": "#000000",
+        "content": "6.3 Допуск параллельности поверхности Г относительно поверхности В"
+      },
+      {
+        "number": 15,
+        "type": "paragraph",
+        "page": 2,
+        "bbox": [20.0, 90.0, 200.0, 110.0],
+        "font": "Arial",
+        "font_size": 10.0,
+        "text_color": "#000000",
+        "content": "Допуск параллельности поверхности Г относительно поверхности В для стоек нормальной точности – не более 0,1 мм, повышенной точности – 0,05 мм."
+      },
+      {
+        "number": 16,
+        "type": "heading",
+        "level": 3,
+        "page": 2,
+        "bbox": [20.0, 115.0, 200.0, 127.0],
+        "font": "Arial-Bold",
+        "font_size": 10.0,
+        "text_color": "#000000",
+        "content": "6.4 Неуказанные допуски формы и расположения поверхностей"
+      },
+      {
+        "number": 17,
+        "type": "paragraph",
+        "page": 2,
+        "bbox": [20.0, 130.0, 200.0, 150.0],
+        "font": "Arial",
+        "font_size": 10.0,
+        "text_color": "#000000",
+        "content": "Неуказанные допуски формы и расположения поверхностей – в пределах поля допуска на соответствующие размеры."
+      },
+      {
+        "number": 18,
+        "type": "table",
+        "page": 2,
+        "bbox": [10.0, 155.0, 200.0, 240.0],
+        "number_of_rows": 4,
+        "number_of_columns": 3,
+        "caption": {
+          "type": "caption",
+          "page": 2,
+          "bbox": [10.0, 145.0, 200.0, 155.0],
+          "font": "Arial-Bold",
+          "font_size": 9.0,
+          "text_color": "#000000",
+          "linked_number": 18,
+          "content": "Таблица — Допуск соосности при степени точности"
+        },
+        "rows": [
+          {
+            "type": "table row",
+            "row_number": 1,
+            "cells": [
+              {
+                "type": "table cell",
+                "row_number": 1,
+                "column_number": 1,
+                "row_span": 1,
+                "column_span": 1,
+                "page": 2,
+                "bbox": [10.0, 155.0, 70.0, 168.0],
+                "block": [
+                  {
+                    "font": "Arial-Bold",
+                    "font_size": 9.0,
+                    "text_color": "#000000",
+                    "content": "L, мм"
+                  }
+                ]
+              },
+              {
+                "type": "table cell",
+                "row_number": 1,
+                "column_number": 2,
+                "row_span": 1,
+                "column_span": 1,
+                "page": 2,
+                "bbox": [70.0, 155.0, 135.0, 168.0],
+                "block": [
+                  {
+                    "font": "Arial-Bold",
+                    "font_size": 9.0,
+                    "text_color": "#000000",
+                    "content": "нормальная"
+                  }
+                ]
+              },
+              {
+                "type": "table cell",
+                "row_number": 1,
+                "column_number": 3,
+                "row_span": 1,
+                "column_span": 1,
+                "page": 2,
+                "bbox": [135.0, 155.0, 200.0, 168.0],
+                "block": [
+                  {
+                    "font": "Arial-Bold",
+                    "font_size": 9.0,
+                    "text_color": "#000000",
+                    "content": "повышенная"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "table row",
+            "row_number": 2,
+            "cells": [
+              {
+                "type": "table cell",
+                "row_number": 2,
+                "column_number": 1,
+                "row_span": 1,
+                "column_span": 1,
+                "page": 2,
+                "bbox": [10.0, 168.0, 70.0, 182.0],
+                "block": [
+                  {
+                    "font": "Arial",
+                    "font_size": 9.0,
+                    "text_color": "#000000",
+                    "content": "От 6 до 50"
+                  }
+                ]
+              },
+              {
+                "type": "table cell",
+                "row_number": 2,
+                "column_number": 2,
+                "row_span": 1,
+                "column_span": 1,
+                "page": 2,
+                "bbox": [70.0, 168.0, 135.0, 182.0],
+                "block": [
+                  {
+                    "font": "Arial",
+                    "font_size": 9.0,
+                    "text_color": "#000000",
+                    "content": "0.1"
+                  }
+                ]
+              },
+              {
+                "type": "table cell",
+                "row_number": 2,
+                "column_number": 3,
+                "row_span": 1,
+                "column_span": 1,
+                "page": 2,
+                "bbox": [135.0, 168.0, 200.0, 182.0],
+                "block": [
+                  {
+                    "font": "Arial",
+                    "font_size": 9.0,
+                    "text_color": "#000000",
+                    "content": "0.05"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "table row",
+            "row_number": 3,
+            "cells": [
+              {
+                "type": "table cell",
+                "row_number": 3,
+                "column_number": 1,
+                "row_span": 1,
+                "column_span": 1,
+                "page": 2,
+                "bbox": [10.0, 182.0, 70.0, 196.0],
+                "block": [
+                  {
+                    "font": "Arial",
+                    "font_size": 9.0,
+                    "text_color": "#000000",
+                    "content": "Св. 50 до 80"
+                  }
+                ]
+              },
+              {
+                "type": "table cell",
+                "row_number": 3,
+                "column_number": 2,
+                "row_span": 1,
+                "column_span": 1,
+                "page": 2,
+                "bbox": [70.0, 182.0, 135.0, 196.0],
+                "block": [
+                  {
+                    "font": "Arial",
+                    "font_size": 9.0,
+                    "text_color": "#000000",
+                    "content": "0.12"
+                  }
+                ]
+              },
+              {
+                "type": "table cell",
+                "row_number": 3,
+                "column_number": 3,
+                "row_span": 1,
+                "column_span": 1,
+                "page": 2,
+                "bbox": [135.0, 182.0, 200.0, 196.0],
+                "block": [
+                  {
+                    "font": "Arial",
+                    "font_size": 9.0,
+                    "text_color": "#000000",
+                    "content": "0.06"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "table row",
+            "row_number": 4,
+            "cells": [
+              {
+                "type": "table cell",
+                "row_number": 4,
+                "column_number": 1,
+                "row_span": 1,
+                "column_span": 1,
+                "page": 2,
+                "bbox": [10.0, 196.0, 70.0, 210.0],
+                "block": [
+                  {
+                    "font": "Arial",
+                    "font_size": 9.0,
+                    "text_color": "#000000",
+                    "content": "Св. 80"
+                  }
+                ]
+              },
+              {
+                "type": "table cell",
+                "row_number": 4,
+                "column_number": 2,
+                "row_span": 1,
+                "column_span": 1,
+                "page": 2,
+                "bbox": [70.0, 196.0, 135.0, 210.0],
+                "block": [
+                  {
+                    "font": "Arial",
+                    "font_size": 9.0,
+                    "text_color": "#000000",
+                    "content": "0.15"
+                  }
+                ]
+              },
+              {
+                "type": "table cell",
+                "row_number": 4,
+                "column_number": 3,
+                "row_span": 1,
+                "column_span": 1,
+                "page": 2,
+                "bbox": [135.0, 196.0, 200.0, 210.0],
+                "block": [
+                  {
+                    "font": "Arial",
+                    "font_size": 9.0,
+                    "text_color": "#000000",
+                    "content": "0.08"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "footnotes": [
+          {
+            "font": "Arial",
+            "font_size": 8.0,
+            "text_color": "#333333",
+            "bbox": [10.0, 210.0, 200.0, 225.0],
+            "content": "Значения допусков соосности оси отверстия Б относительно оси поверхности А (черт. 1) или относительно отверстия А (черт. 2)"
+          }
+        ],
+        "next_table_number": null,
+        "previous_table_number": null,
+        "image_key": "purgatory/assets/a1b2c3d4/tables/t1.png"
+      },
+      {
+        "number": 19,
+        "type": "image",
+        "page": 2,
+        "bbox": [30.0, 235.0, 180.0, 255.0],
+        "image_path": "purgatory/assets/a1b2c3d4/fig1.png",
+        "width": 150.0,
+        "height": 20.0
+      },
+      {
+        "number": 20,
+        "type": "caption",
+        "page": 2,
+        "bbox": [30.0, 255.0, 180.0, 265.0],
+        "font": "Arial",
+        "font_size": 9.0,
+        "text_color": "#000000",
+        "linked_number": 19,
+        "content": "Черт. 1 – Схема допуска соосности оси отверстия Б относительно оси поверхности А"
+      },
+      {
+        "number": 21,
+        "type": "image",
+        "page": 2,
+        "bbox": [30.0, 270.0, 180.0, 290.0],
+        "image_path": "purgatory/assets/a1b2c3d4/fig2.png",
+        "width": 150.0,
+        "height": 20.0
+      },
+      {
+        "number": 22,
+        "type": "caption",
+        "page": 2,
+        "bbox": [30.0, 290.0, 180.0, 300.0],
+        "font": "Arial",
+        "font_size": 9.0,
+        "text_color": "#000000",
+        "linked_number": 21,
+        "content": "Черт. 2 – Схема допуска соосности оси отверстия Б относительно отверстия А"
       }
     ]
   }

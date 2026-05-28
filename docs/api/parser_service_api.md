@@ -110,74 +110,20 @@
   "preview": true,
   "max_pages": 3,
   "metadata": {
-    "schema": "raw_ocr_v2",
-    "created_at": "2026-05-17T09:15:00Z",
-    "parser": {
-      "name": "docling",
-      "version": "2.1.0",
-      "ocr_engine": null,
-      "ocr_fallback": false
-    }
+    "schema": "raw_ocr_v4",
+    "created_at": "2026-05-17T09:15:00Z"
   },
   "document": {
     "source": {
       "file_name": "GOST_20868-81_scan.pdf",
-      "file_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "page_count": 2
-    },
-    "pages": [
-      {
-        "page": 1,
-        "width": 210,
-        "height": 297,
-        "blocks": [
-          {
-            "type": "text",
-            "text": "ГОСТ 20868-81",
-            "bbox": [10, 10, 100, 18],
-            "font": { "size": 12, "bold": true }
-          },
-          {
-            "type": "formula",
-            "latex": "R_{\\text{доп}} = \\frac{\\Delta}{2}",
-            "meaning": "Формула расчёта допустимого радиуса R_доп как половины заданного отклонения Δ.",
-            "bbox": [100, 155, 180, 175]
-          },
-          {
-            "type": "table",
-            "caption": "Допуск соосности при степени точности",
-            "bbox": [10, 90, 200, 200],
-            "num_rows": 4,
-            "num_cols": 3,
-            "grid": [
-              { "row": 0, "col": 0, "rowspan": 1, "colspan": 1, "text": "L, мм", "bbox": [10, 90, 70, 105], "is_header": true },
-              { "row": 0, "col": 1, "rowspan": 1, "colspan": 1, "text": "нормальная", "bbox": [70, 90, 135, 105], "is_header": true },
-              { "row": 0, "col": 2, "rowspan": 1, "colspan": 1, "text": "повышенная", "bbox": [135, 90, 200, 105], "is_header": true },
-              { "row": 1, "col": 0, "rowspan": 1, "colspan": 1, "text": "От 6 до 50", "bbox": [10, 105, 70, 120], "is_header": false },
-              { "row": 1, "col": 1, "rowspan": 1, "colspan": 1, "text": "0.1", "bbox": [70, 105, 135, 120], "is_header": false },
-              { "row": 1, "col": 2, "rowspan": 1, "colspan": 1, "text": "0.05", "bbox": [135, 105, 200, 120], "is_header": false }
-            ],
-            "raw_footnotes": [
-              { "text": "Значения допусков соосности оси отверстия Б относительно оси поверхности А (черт. 1) или относительно отверстия А (черт. 2)", "bbox": [10, 155, 200, 170] }
-            ]
-          },
-          {
-            "type": "figure",
-            "caption": "Черт. 1 – Схема допуска соосности оси отверстия Б относительно оси поверхности А",
-            "bbox": [30, 220, 180, 250]
-          }
-        ]
-      }
-    ]
-  },
-  "quality": {
-    "confidence": 0.95,
-    "pages_processed": 3,
-    "pages_failed": 0
-  },
-  "status": "completed"
+    }
+  }
 }
 ```
+
+> **Полный формат данных** (схема `raw_ocr_v4`) — см.  
+> [`docs/schema/document1_parser.json`](../schema/document1_parser.json)
 
 > **Важно:** в режиме предпросмотра:
 > - Поле `image_key` **отсутствует** у блоков (не сохраняется в MinIO)
@@ -246,7 +192,7 @@
 
 > **Важно:** сервис **не пишет в БД** — отдаёт JSON тому, кто вызвал. JSON-формат известен только сервису Parser и downstream-сервисам (Validation, Registry). Изображения — только ссылки (сами файлы загружены в MinIO сервисом).
 
-> **Полный формат данных:** [`docs/schema/document1_parser.json`](../schema/document1_parser.json) (схема `raw_ocr_v2`)
+> **Полный формат данных:** [`docs/schema/document1_parser.json`](../schema/document1_parser.json) (схема `raw_ocr_v4`)
 
 **Ответ `200`**:
 
@@ -255,7 +201,7 @@
   "task_id": 420000,
   "version_id": "d5e0f3a2-...",
   "metadata": {
-    "schema": "raw_ocr_v2",
+    "schema": "raw_ocr_v4",
     "created_at": "2026-05-17T09:15:00Z",
     "parser": {
       "name": "docling",
@@ -270,51 +216,37 @@
       "file_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "page_count": 2
     },
-    "pages": [
+    "block": [
       {
+        "number": 1,
+        "type": "headerFooter",
         "page": 1,
-        "width": 210,
-        "height": 297,
-        "blocks": [
-          {
-            "type": "text",
-            "text": "ГОСТ 20868-81",
-            "bbox": [10, 10, 100, 18],
-            "font": { "size": 12, "bold": true }
-          },
-          {
-            "type": "formula",
-            "latex": "R_{\\text{доп}} = \\frac{\\Delta}{2}",
-            "meaning": "Формула расчёта допустимого радиуса R_доп как половины заданного отклонения Δ.",
-            "bbox": [100, 155, 180, 175],
-            "image_key": "purgatory/assets/a1b2c3d4/formulas/eq1.png"
-          },
-          {
-            "type": "table",
-            "caption": "Допуск соосности при степени точности",
-            "bbox": [10, 90, 200, 200],
-            "num_rows": 4,
-            "num_cols": 3,
-            "grid": [
-              { "row": 0, "col": 0, "rowspan": 1, "colspan": 1, "text": "L, мм", "bbox": [10, 90, 70, 105], "is_header": true },
-              { "row": 0, "col": 1, "rowspan": 1, "colspan": 1, "text": "нормальная", "bbox": [70, 90, 135, 105], "is_header": true },
-              { "row": 0, "col": 2, "rowspan": 1, "colspan": 1, "text": "повышенная", "bbox": [135, 90, 200, 105], "is_header": true },
-              { "row": 1, "col": 0, "rowspan": 1, "colspan": 1, "text": "От 6 до 50", "bbox": [10, 105, 70, 120], "is_header": false },
-              { "row": 1, "col": 1, "rowspan": 1, "colspan": 1, "text": "0.1", "bbox": [70, 105, 135, 120], "is_header": false },
-              { "row": 1, "col": 2, "rowspan": 1, "colspan": 1, "text": "0.05", "bbox": [135, 105, 200, 120], "is_header": false }
-            ],
-            "raw_footnotes": [
-              { "text": "Значения допусков соосности оси отверстия Б относительно оси поверхности А (черт. 1) или относительно отверстия А (черт. 2)", "bbox": [10, 155, 200, 170] }
-            ],
-            "image_key": "purgatory/assets/a1b2c3d4/tables/t1.png"
-          },
-          {
-            "type": "figure",
-            "caption": "Черт. 1 – Схема допуска соосности оси отверстия Б относительно оси поверхности А",
-            "bbox": [30, 220, 180, 250],
-            "image_key": "purgatory/assets/a1b2c3d4/fig1.png"
-          }
-        ]
+        "bbox": [10.0, 10.0, 100.0, 18.0],
+        "font": "Arial",
+        "font_size": 10.0,
+        "text_color": "#666666",
+        "content": "ГОСТ 20868-81"
+      },
+      {
+        "number": 2,
+        "type": "heading",
+        "level": 1,
+        "page": 1,
+        "bbox": [10.0, 20.0, 200.0, 28.0],
+        "font": "Arial-Bold",
+        "font_size": 14.0,
+        "text_color": "#000000",
+        "content": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования"
+      },
+      {
+        "number": 3,
+        "type": "paragraph",
+        "page": 1,
+        "bbox": [10.0, 35.0, 200.0, 55.0],
+        "font": "Arial",
+        "font_size": 10.0,
+        "text_color": "#000000",
+        "content": "Настоящий стандарт распространяется на металлические крепежные установочные стойки..."
       }
     ]
   },
@@ -323,29 +255,23 @@
     "pages_processed": 12,
     "pages_failed": 0,
     "per_page": [
-      { "page": 1, "confidence": 0.97, "status": "ok" },
-      { "page": 2, "confidence": 0.88, "status": "low_confidence" }
+      { "page": 1, "confidence": 0.97, "status": "ok" }
     ]
   },
-  "errors": [
-    {
-      "stage": "parsing",
-      "page": 7,
-      "code": "EMPTY_PAGE",
-      "message": "Страница не содержит текста",
-      "severity": "warning"
-    }
-  ],
+  "errors": [],
   "status": "completed"
 }
 ```
+
+> **Полный формат данных** (схема `raw_ocr_v4`) — см.  
+> [`docs/schema/document1_parser.json`](../schema/document1_parser.json)
 
 | Поле                                         | Тип    | Описание                                                             |
 | -------------------------------------------- | ------ | -------------------------------------------------------------------- |
 | `task_id`                                    | bigint | ID задачи оркестратора                                               |
 | `version_id`                                 | string | UUID версии                                                          |
 | `metadata`                                   | object | Метаданные обработки                                                 |
-| `metadata.schema`                            | string | Идентификатор схемы (напр. `"raw_ocr_v2"`)                          |
+| `metadata.schema`                            | string | Идентификатор схемы (напр. `"raw_ocr_v4"`)                          |
 | `metadata.created_at`                        | string | Время создания результата (ISO 8601)                                 |
 | `metadata.parser`                            | object | Информация о парсере                                                 |
 | `metadata.parser.name`                       | string | Название парсера (напр. `"docling"`)                                 |
@@ -357,30 +283,18 @@
 | `document.source.file_name`                  | string | Имя исходного файла                                                  |
 | `document.source.file_hash_sha256`           | string | SHA256-хеш исходного файла                                           |
 | `document.source.page_count`                 | int    | Общее количество страниц в документе                                 |
-| `document.pages`                             | array  | Массив страниц документа                                             |
+| `document.pages`                             | array  | Массив страниц документа (только геометрия)                          |
 | `document.pages[].page`                      | int    | Номер страницы (начиная с 1)                                         |
 | `document.pages[].width`                     | float  | Ширина страницы в мм                                                 |
 | `document.pages[].height`                    | float  | Высота страницы в мм                                                 |
-| `document.pages[].blocks`                    | array  | **Плоский** массив блоков на странице (без иерархии)                 |
-| `blocks[].type`                              | string | Тип блока: `text`, `formula`, `table`, `figure`                      |
-| `blocks[].text`                              | string | Текст блока (только для `type: text`)                                |
-| `blocks[].font`                              | object | Шрифт текста (только для `type: text`): `size`, `bold`               |
-| `blocks[].latex`                             | string | LaTeX-представление формулы (только для `type: formula`)             |
-| `blocks[].meaning`                           | string | Смысловая расшифровка формулы (только для `type: formula`)           |
-| `blocks[].caption`                           | string | Заголовок/подпись (только для `type: table`, `figure`)               |
-| `blocks[].num_rows`                          | int    | Количество строк таблицы (только для `type: table`)                  |
-| `blocks[].num_cols`                          | int    | Количество столбцов таблицы (только для `type: table`)               |
-| `blocks[].grid`                              | array  | Ячейки таблицы с row/col/rowspan/colspan/text/bbox/is_header         |
-| `blocks[].grid[].row`                        | int    | Номер строки ячейки (начиная с 0)                                    |
-| `blocks[].grid[].col`                        | int    | Номер столбца ячейки (начиная с 0)                                   |
-| `blocks[].grid[].rowspan`                    | int    | Объединение строк (1 — без объединения)                              |
-| `blocks[].grid[].colspan`                    | int    | Объединение столбцов (1 — без объединения)                           |
-| `blocks[].grid[].text`                       | string | Текст ячейки                                                         |
-| `blocks[].grid[].bbox`                       | array  | Координаты ячейки `[x1, y1, x2, y2]` в мм                           |
-| `blocks[].grid[].is_header`                  | bool   | Является ли ячейка заголовочной                                      |
-| `blocks[].raw_footnotes`                     | array  | Подстрочные примечания к таблице (только для `type: table`)          |
-| `blocks[].image_key`                         | string | Ключ изображения в MinIO (для `formula`, `table`, `figure`)          |
-| `blocks[].bbox`                              | array  | Координаты блока `[x1, y1, x2, y2]` в мм                            |
+| `document.block`                             | array  | **Единый** массив всех элементов в reading order (сквозная нумерация)|
+| `block[].number`                             | int    | Порядковый номер элемента в reading order                            |
+| `block[].type`                               | string | Тип элемента: `headerFooter`, `heading`, `paragraph`, `text_block`, `list`, `table`, `image`, `caption`, `formula` |
+| `block[].page`                               | int    | Номер страницы                                                       |
+| `block[].bbox`                               | array  | Координаты `[left, bottom, right, top]` в мм                         |
+| `block[].font`                               | string | Название шрифта (напр. `"Arial-Bold"`)                               |
+| `block[].font_size`                          | float  | Размер шрифта                                                        |
+| `block[].text_color`                         | string | Цвет текста в hex (напр. `"#000000"`)                                |
 | `quality`                                    | object | Общая оценка качества + `per_page` — детализация по страницам        |
 | `quality.per_page[].status`                  | string | `ok`, `low_confidence`, `failed`                                     |
 | `quality.per_page[].error`                   | string | Код ошибки страницы (только при `status: failed`)                    |
