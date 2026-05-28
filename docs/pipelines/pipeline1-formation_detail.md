@@ -134,9 +134,13 @@
 | Converter-validator → Registry | `type` | `type` | Тип секции сохраняется сквозным полем |
 | Converter-validator → Registry | `image_key` | `content.image_key` | image_key — ссылка на фрагмент изображения (не file_key) |
 | Converter-validator → Registry | `bbox` (сырые) | `bbox` (0..1) | Нормировка координат |
-| Registry → RAG Builder | `content.image_key` | `content.image_key` | Сквозной проход image_key |
-| Registry → RAG Builder | `path` (ltree) | `path` | Иерархический путь секции |
-| Registry → RAG Builder / API | `section_id` | Registry присваивает каждой секции ID при сохранении. |
+| Registry → RAG Builder / for_rag | `content.image_key` | `content.image_key` | Сквозной проход image_key |
+| Registry → RAG Builder / for_rag | `path` (ltree) | `path` | Иерархический путь секции |
+| Registry → RAG Builder / for_rag | `section_id` | Registry присваивает каждой секции ID при сохранении. |
+| Registry → for_rag | `content.block[]` (textBlock) | `content.text` | Font display details отбрасываются, остаётся только текст для индексации |
+| Registry → for_rag | `bbox` | ❌ удаляется | Bbox не нужен для индексации, остаётся только `page` |
+| Converter-validator → for_rag | `table` / `list` / `image` / `formula` | `content.markdown` (опционально) | Markdown-представление генерируется для сложных структур. Добавляется при формировании for_rag, в validated_v3 не хранится. |
+| Registry → for_rag | `references[].target_doc_code` | `references[].target_document_id` | Добавляется UUID связанного документа из БД (null, если документ ещё не загружен).
 
 > **Примечание:** поле `path` формируется на этапе Converter-validator при построении иерархии.
 > В сыром JSON от Parser/OCR (тип `raw_ocr_v4`) это поле может отсутствовать, так как оно
@@ -342,11 +346,13 @@
 
 - **Чанкование:** разбивает **секции** (полученные от Registry) на более мелкие **чанки** для эмбеддингов с привязкой к ID секций и документа. При разбиении учитывает (в будущем) protected spans – неразрывные блоки.
 
-- Генерирует эмбеддинги для текстовых фрагментов.
+Генерирует эмбеддинги для текстовых фрагментов.
 
 - Сохраняет векторы и связанные метаданные в выбранное векторное хранилище.
 
 - Каждый чанк содержит только текст и ссылки на сегменты для цитирования. Не включает информацию для визуального отображения (полноразмерные картинки, графика, вёрстка).
+
+- Для сложных структур (`table`, `list`, `image`, `formula`) RAG Builder получает готовое `content.markdown` — единое текстовое представление, не требующее дополнительного парсинга. Для `text`/`textBlock`/`headerFooter` используется `content.text`. Markdown генерируется на этапе формирования for_rag (Converter или adapter), а не validated_v3.
 
 
 

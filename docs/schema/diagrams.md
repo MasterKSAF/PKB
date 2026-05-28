@@ -327,14 +327,14 @@
 ║  ┌───────────────────────────────────────────────────────────┐    ║
 ║  │                      metadata                             │    ║
 ║  │  • schema: for_rag_v1                                     │    ║
-║  │  • created_at                                             │    ║
+║  │  • document_id, created_at                                │    ║
 ║  └───────────────────────────────────────────────────────────┘    ║
 ║                            │                                      ║
 ║                            ▼                                      ║
 ║  ┌───────────────────────────────────────────────────────────┐    ║
 ║  │                      document                             │    ║
 ║  │  • id, doc_code, title, full_title, normalized_title      │    ║
-║  │  • group, mks_oks_code, okstu, udc, era                            │    ║
+║  │  • group, mks_oks_code, okstu, udc, era                  │    ║
 ║  │  • validity_status, issuing_body                          │    ║
 ║  │  • Плоские поля: adoption_date, adoption_authority,       │    ║
 ║  │    adoption_document_number, effective_from               │    ║
@@ -344,29 +344,39 @@
 ║  │    validity_restriction_removed_document_number           │    ║
 ║  │  • page_count, file_hash_sha256                           │    ║
 ║  │  • amendments — массив, status_note                       │    ║
+║  │  • references — массив                                    │    ║
+║  │    target_document_id, target_doc_code, type, context,    │    ║
+║  │    current_status, replaced_by, replacement_date, note    │    ║
 ║  └───────────────────────────────────────────────────────────┘    ║
 ║                            │                                      ║
 ║                            ▼                                      ║
 ║  ┌──────────────────────────────────────────────────────────┐    ║
 ║  │           sections — массив                             │    ║
 ║  │                                                          │    ║
-║  │  Общие поля: id, document_id, parent_id, clause,         │    ║
-║  │  title, level, path, page, bbox, type, created_at        │    ║
+║  │  Общие поля: section_id, document_id, parent_id,         │    ║
+║  │  clause, title, level, path, page, type, created_at      │    ║
+║  │  (bbox — ❌ удалён, не нужен для индексации)              │    ║
 ║  │                            │                             │    ║
 ║  │                            ▼                             │    ║
 ║  │  ┌────────────────────────────────────────────────────┐  │    ║
 ║  │  │              type options                          │  │    ║
-║  │  │  • text: content включает text, amendments          │  │    ║
-║  │  │  • table: content включает columns, rows,          │  │    ║
-║  │  │    footnotes (text, bbox), amendments, image_key   │  │    ║
-║  │  │  • list: content включает numbering_style, items[] │  │    ║
-║  │  │  • headerFooter: content включает text            │  │    ║
-║  │  │  • textBlock: content включает block[] (font +     │  │    ║
-║  │  │    content) — rich-форматирование                   │  │    ║
-║  │  │  • image: content включает caption, image_key,     │  │    ║
-║  │  │    description                                     │  │    ║
-║  │  │  • formula: content включает latex,              │  │    ║
-║  │  │    meaning, parameters                        │  │    ║
+║  │  │  • text: content.text + amendments                  │  │    ║
+║  │  │  • textBlock: content.text (font details           │  │    ║
+║  │  │    отброшены — только текст для индексации)        │  │    ║
+║  │  │  • headerFooter: content.text                      │  │    ║
+║  │  │  • list: content.markdown + numbering_style,       │  │    ║
+║  │  │    items[]                                           │  │    ║
+║  │  │  • table: content.markdown + columns, rows,        │  │    ║
+║  │  │    footnotes, amendments, image_key                │  │    ║
+║  │  │  • image: content.markdown + caption,              │  │    ║
+║  │  │    image_key, description                          │  │    ║
+║  │  │  • formula: content.markdown + latex,              │  │    ║
+║  │  │    meaning, parameters                             │  │    ║
+║  │  │                                                    │  │    ║
+║  │  │  markdown — единое текстовое представление         │  │    ║
+║  │  │  для сложных структур (table/list/image/formula).  │  │    ║
+║  │  │  Генерируется при формировании for_rag,            │  │    ║
+║  │  │  в validated_v3 не хранится.                       │  │    ║
 ║  │  └────────────────────────────────────────────────────┘  │    ║
 ║  └──────────────────────────────────────────────────────────┘    ║
 ║                            │                                     ║

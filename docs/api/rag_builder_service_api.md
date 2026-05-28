@@ -32,10 +32,13 @@ RAG Builder принимает JSON от Registry (через `GET /registry/doc
 
 | type | Как формируется чанк | Источник данных |
 |------|---------------------|----------------|
-| `section` | Разбивка `content.text` на чанки ≤512 токенов | `content.text` |
-| `table` | Весь объект целиком → один чанк (Markdown-таблица) | Заголовки из `content.columns`, строки из `content.rows` |
-| `image` | Один чанк | `content.caption + content.description` |
-| `formula` | Один чанк | `content.latex + content.meaning` |
+| `text` | Разбивка `content.text` на чанки ≤512 токенов | `content.text` |
+| `textBlock` | Разбивка `content.text` на чанки ≤512 токенов | `content.text` (font display details отброшены) |
+| `headerFooter` | Всё содержимое → один чанк | `content.text` |
+| `table` | Весь объект целиком → один чанк | `content.markdown` (если есть), иначе сборка из `columns`/`rows` |
+| `list` | Весь объект целиком → один чанк | `content.markdown` (если есть), иначе сборка из `items[]` |
+| `image` | Один чанк | `content.markdown` или `content.caption + content.description` |
+| `formula` | Один чанк | `content.markdown` или `content.latex + content.meaning` |
 
 **Запрос (получается из Registry без модификации):**
 
@@ -51,7 +54,7 @@ RAG Builder принимает JSON от Registry (через `GET /registry/doc
       "level": 1,
       "path": "1",
       "page": 1,
-      "type": "section",
+      "type": "text",
       "content": {
         "text": "Настоящий стандарт распространяется...",
         "amendments": []
@@ -67,7 +70,7 @@ RAG Builder принимает JSON от Registry (через `GET /registry/doc
       "page": 2,
       "type": "table",
       "content": {
-        "caption": "Допуск соосности...",
+        "markdown": "| L, мм | нормальная |\n|-------|-----------|\n| От 6 до 50 | 0,1 |",
         "columns": [
           { "name": "L_range", "header": "L, мм" },
           { "name": "normal", "header": "нормальная" }
@@ -91,7 +94,7 @@ RAG Builder принимает JSON от Registry (через `GET /registry/doc
 |---|---|---|---|
 | `document_id` | string | Да | ID документа (UUID) |
 | `sections` | array | Да | Массив секций документа от Registry. Каждая секция содержит: `section_id`, `document_id`, `clause`, `title`, `level`, `path`, `page`, `type`, `content`, `created_at` |
-| `sections[].type` | string | Да | Тип секции: `section`, `table`, `image`, `formula`. Влияет на стратегию чанкования |
+| `sections[].type` | string | Да | Тип секции: `text`, `textBlock`, `headerFooter`, `table`, `list`, `image`, `formula`. Влияет на стратегию чанкования |
 | `sections[].content` | object | Да | Объектный контент. Структура зависит от `type` |
 | `protected_spans` | array | Нет | Массив неразрывных блоков: `{section_id, start_offset, end_offset}`. Запрещает чанкование внутри указанного диапазона секции |
 | `options.strategy` | string | Нет | Стратегия разбиения → `rag_document_chunks.strategy` (`semantic_512`, `fixed_256`) |

@@ -748,7 +748,7 @@ GET /registry/documents/{doc_id}/sections
 
 Ключевые поля:
 - `document` — метаданные документа (id, doc_code, title, era, validity_status и др.)
-- `sections[]` — массив секций с полями: `section_id`, `document_id`, `parent_id`, `clause`, `title`, `level`, `path`, `page`, `bbox`, `type`, `content`, `created_at`
+- `sections[]` — массив секций с полями: `section_id`, `document_id`, `parent_id`, `clause`, `title`, `level`, `path`, `page`, `type`, `content`, `created_at`
   - `content` — объектный, зависит от `type` (см. описание схемы БД)
 - `terminology[]` — термины документа
 - `references[]` — ссылки документа
@@ -796,10 +796,11 @@ GET /registry/documents/{doc_id}/sections
 ```
 
 > **RAG Builder** получает этот JSON и строит чанки:
-> - `type=text` → `content.text` разбивается на чанки ≤512 токенов
-> - `type=table` → весь `content` → один чанк (Markdown-таблица)
-> - `type=image` → `content.caption + content.description` → один чанк
-> - `type=formula` → `content.latex + content.meaning` → один чанк
+> - `type=text` / `type=textBlock` → `content.text` разбивается на чанки ≤512 токенов
+> - `type=headerFooter` → весь `content.text` → один чанк
+> - `type=table` / `type=list` → `content.markdown` (если есть), иначе сборка из структуры → один чанк
+> - `type=image` → `content.markdown` или `content.caption + content.description` → один чанк
+> - `type=formula` → `content.markdown` или `content.latex + content.meaning` → один чанк
 
 ---
 
@@ -992,6 +993,9 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
 
 > **Полный формат данных:** [`docs/schema/document3_for_rag.json`](../schema/document3_for_rag.json) (схема `for_rag_v1`)
 
+> **Полный формат данных:** см. [`docs/schema/document3_for_rag.json`](../schema/document3_for_rag.json) (схема `for_rag_v1`).
+> Приведённый ниже пример — сокращённый. Все 7 типов секций и полный состав полей — в эталонном JSON.
+
 **Ответ `201`:** Registry назначает DB-ID и возвращает компактный ответ с идентификаторами.
 
 ```json
@@ -1007,10 +1011,24 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
       "page": 1
     },
     {
+      "section_id": 1002,
+      "type": "textBlock",
+      "clause": "1",
+      "path": "1.note1",
+      "page": 1
+    },
+    {
       "section_id": 1005,
       "type": "table",
       "clause": "6.1",
       "path": "6.1.table1",
+      "page": 2
+    },
+    {
+      "section_id": 1008,
+      "type": "list",
+      "clause": "6.2",
+      "path": "6.2.list1",
       "page": 2
     },
     {
@@ -1044,9 +1062,10 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
 **Особенности формата секций:**
 - Секции — плоский массив (нет вложенных `subsections`)
 - Иерархия задаётся через `parent_id` → `id`
-- Каждая секция имеет `type`: `text`, `table`, `image`, `formula`, `list`, `headerFooter`, `textBlock`
+- Каждая секция имеет `type`: `text`, `textBlock`, `headerFooter`, `table`, `list`, `image`, `formula`
 - `image_key` для бинарных объектов (изображения таблиц, фигуры)
-- `bbox` в нормированных координатах 0..1
+- Для `table`/`list`/`image`/`formula` доступен `content.markdown` — единое текстовое представление для RAG
+- `bbox` присутствует только в validated_v3; в for_rag удалён (не нужен для индексации)
 
 | Поле | Тип | Описание |
 |---|---|---|
@@ -1055,7 +1074,7 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
 | `document.title` | string | Полное название |
 | `document.normalized_title` | string | Нормализованное название |
 | `document.group` | string | Группа документа |
-| `document.mks` | string | Код МКС |
+| `document.mks_oks_code` | string | Код МКС/ОКС |
 | `document.okstu` | string\|null | Код ОКСТУ |
 | `document.udc` | string\|null | Код УДК |
 | `document.era` | string | Эра документа |
