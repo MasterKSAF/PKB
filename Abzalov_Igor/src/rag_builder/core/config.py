@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     embedding_api_url: str = "http://localhost:8000/v1/embeddings"
     embedding_model: str = "text-embedding-3-small"
     embedding_timeout: int = 30
+    embedding_batch_size: int = 32
     embedding_provider: str = "openai_compatible"  # mock | openai_compatible
     embedding_api_key: str = ""
     embedding_retries: int = 2
