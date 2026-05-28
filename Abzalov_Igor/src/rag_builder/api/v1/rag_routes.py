@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from loguru import logger
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -57,7 +57,56 @@ async def health_ready(session: AsyncSession = Depends(get_session)) -> dict[str
         500: {"description": "Внутренняя ошибка при построении индекса."},
     },
 )
-async def build(req: BuildRequest, session: AsyncSession = Depends(get_session)) -> BuildResponse:
+async def build(
+    req: BuildRequest = Body(
+        ...,
+        openapi_examples={
+            "document3_full": {
+                "summary": "Полный вход по document3_for_rag.json",
+                "description": "Пример полного payload со структурой metadata/document/sections/terminology.",
+                "value": {
+                    "metadata": {
+                        "schema": "for_rag_v1",
+                        "document_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "created_at": "2026-05-28T12:00:00Z",
+                    },
+                    "document": {
+                        "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "doc_code": "GOST-TEST-001",
+                        "title": "Тестовый нормативный документ",
+                    },
+                    "sections": [
+                        {
+                            "section_id": 1,
+                            "document_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "parent_id": None,
+                            "clause": "1",
+                            "title": None,
+                            "level": 1,
+                            "path": "1",
+                            "page": 1,
+                            "bbox": [10, 20, 200, 40],
+                            "type": "section",
+                            "content": {"text": "Тестовый текст раздела для индексации."},
+                            "created_at": "2026-05-28T12:00:00Z",
+                        }
+                    ],
+                    "terminology": [
+                        {
+                            "term": "допуск",
+                            "definition": "Предельно допустимое отклонение параметра",
+                            "source_clause": "1",
+                            "normalized_term": "допуск",
+                        }
+                    ],
+                    "protected_spans": [],
+                    "options": {"strategy": "semantic_512"},
+                },
+            }
+        },
+    ),
+    session: AsyncSession = Depends(get_session),
+) -> BuildResponse:
     logger.info("POST /rag/build document_id={} sections={}", req.document_id, len(req.sections))
     try:
         return await indexing_service.build(req, session)
