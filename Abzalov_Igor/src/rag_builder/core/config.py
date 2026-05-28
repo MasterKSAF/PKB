@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     embedding_provider: str = "openai_compatible"  # mock | openai_compatible
     embedding_api_key: str = ""
     embedding_retries: int = 2
-    jwt_secret: str = "change-me"
+    jwt_secret: str = "change-me-at-least-32-characters"
     jwt_algorithm: str = "HS256"
     jwt_access_expire_minutes: int = 30
     jwt_refresh_expire_minutes: int = 10080
