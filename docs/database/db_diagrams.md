@@ -109,9 +109,9 @@ erDiagram
     }
 
     chat.sessions {
-        uuid id PK
+        bigint id PK
         text title
-        uuid user_id FK
+        bigint user_id FK
         uuid[] document_ids
         jsonb options
         int message_count
@@ -121,7 +121,7 @@ erDiagram
 
     chat.messages {
         bigint id PK
-        uuid session_id FK
+        bigint session_id FK
         text role
         text content
         text status
@@ -149,7 +149,7 @@ erDiagram
 
 | Таблица | Поле | Условие |
 |---------|------|---------|
-| `registry.document_sections` | `type` | `CHECK (type IN ('section','table','image','formula'))` |
+| `registry.document_sections` | `type` | `CHECK (type IN ('text','textBlock','headerFooter','table','list','image','formula'))` |
 | `registry.documents` | `file_hash_sha256` | Для быстрого дубликат-детекта (`WHERE file_hash_sha256 = ? AND file_size_bytes = ?`) |
 | `registry.documents` | `title_hash_sha256` | Индекс для поиска дубликатов по `doc_code + title + era` |
 | `rag.document_chunks` | `embedding` | `VECTOR(1536)` — pgvector, `IVFFlat` индекс для `cosine_similarity` |
@@ -163,14 +163,14 @@ erDiagram
 
 | Поле | Примечание |
 |------|------------|
-| `source_type` | Тип документа: `GOST`, `OST`, `TU`, `ISO` и др. |
+| `source_type` | Тип документа: `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `OTHER` |
 | `group` | Группа проекта (например, `ПО4`) |
 | `era` | Эпоха: `USSR`, `CIS`, `RF`, `CURRENT` |
 | `validity_status` | Статус действия: `active`, `superseded`, `expired` |
 | `jurisdiction` | Юрисдикция: `RU`, `EU`, `US`, `NO`, `INTL` |
 | `file_hash_sha256` | Хэш бинарного файла (вычисляется при загрузке) |
 | `title_hash_sha256` | Хэш `doc_code + title + era` (вычисляется в Converter) |
-| `processing_status` | FSM статус конвейера (не путать с `validity_status` — юридическим статусом документа). Возможные значения: `draft`, `uploaded`, `previewing`, `awaiting_decision`, `parsing`, `validation`, `ready_for_promotion`, `review_required`, `approved`, `registry`, `pending_index`, `indexed`, `duplicate`, `new_version`, `archived`, `failed` |
+| `processing_status` | FSM статус конвейера (не путать с `validity_status` — юридическим статусом документа). Возможные значения: `uploaded`, `previewing`, `awaiting_decision`, `parsing`, `validation`, `ready_for_promotion`, `review_required`, `approved`, `registry`, `pending_index`, `indexing`, `indexed`, `duplicate`, `new_version`, `archived`, `failed` |
 | `chunk_count` | Обновляется RAG Builder после индексации |
 
 ### 2. Разделы документов (`registry.document_sections`)

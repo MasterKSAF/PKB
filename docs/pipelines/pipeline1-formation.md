@@ -229,33 +229,50 @@ sequenceDiagram
 
 ```mermaid
 stateDiagram-v2
-    [*] --> draft
-    draft --> uploaded : POST /documents
-    uploaded --> previewing : POST /documents/{id}/preview
+    [*] --> uploaded : POST /documents
+    uploaded --> previewing : запуск preview
     previewing --> awaiting_decision : Preview завершён
+    previewing --> failed : ошибка распознавания
+
     awaiting_decision --> parsing : decision = proceed
     awaiting_decision --> duplicate : decision = stop_duplicate
     awaiting_decision --> new_version : decision = force_new_version
+    awaiting_decision --> failed : таймаут 24ч
+
     parsing --> validation : OCR/Parser завершён
-    validation --> ready_for_promotion : Validation пройдена (auto)
-    validation --> review_required : требуется ручное подтверждение
+    parsing --> failed : таймаут 15 мин
+
+    validation --> ready_for_promotion : авто-валидация пройдена
+    validation --> review_required : требует ручного подтверждения
+    validation --> failed : таймаут 30 мин
 
     review_required --> approved : approve оператора
-    ready_for_promotion --> registry : промотирование в Registry
-    approved --> registry : промотирование в Registry
+    review_required --> validation : повторная валидация
+    review_required --> failed : отклонено оператором
+    review_required --> archived : таймаут 48ч
+
+    ready_for_promotion --> registry : промотирование
+    ready_for_promotion --> failed : таймаут 24ч
+
+    approved --> registry : промотирование
+
     registry --> pending_index : запуск RAG Builder
-    
-    registry --> [*] : документ сформирован
+    registry --> failed : ошибка записи в БД
     registry --> archived
-    pending_index --> [*] : передано в Пайплайн 2
+
+    pending_index --> indexing : запуск индексации
+    indexing --> indexed : индексация завершена
+    indexing --> failed : ошибка индексации
+    indexed --> [*] : готов к поиску
+
+    failed --> uploaded : reprocess
 ```
 
 **Описание состояний:**
 
 | Состояние | Описание |
 |---|---|
-| `draft` | Черновик после загрузки файла в MinIO |
-| `uploaded` | Файл загружен, ожидание запуска preview |
+| `uploaded` | Файл загружен в MinIO, ожидание запуска preview |
 | `previewing` | Выполняется preview-фаза (OCR/Parser preview + Converter preview) |
 | `awaiting_decision` | Preview завершён, ожидание решения пользователя |
 | `parsing` | Выполняется полный OCR/Parser |
@@ -267,6 +284,9 @@ stateDiagram-v2
 | `pending_index` | Ожидание запуска RAG Builder (Пайплайн 2) |
 | `duplicate` | Документ-дубликат, обработка завершена |
 | `new_version` | Создана новая версия существующего документа |
+| `indexing` | Выполняется чанкинг, вычисление эмбеддингов, построение индекса |
+| `indexed` | Документ проиндексирован, готов к поиску |
+| `failed` | Ошибка на одном из этапов обработки |
 | `archived` | Документ архивирован |
 
 ---

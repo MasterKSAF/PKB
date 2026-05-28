@@ -85,8 +85,8 @@ graph LR
 
 Детальные FSM-диаграммы и описание состояний — в соответствующих документах:
 
-- **Пайплайн 1 (Формирование):** `draft → uploaded → previewing → awaiting_decision → parsing → validation → ready_for_promotion / review_required → approved → registry → archived` — [FSM и таблица состояний](pipeline1-formation.md#статусная-модель-fsm)
-- **Пайплайн 2 (Индексация):** `pending → indexing → indexed` — [FSM и таблица состояний](pipeline2-indexation.md#статусная-модель-fsm)
+- **Пайплайн 1 (Формирование):** `uploaded → previewing → awaiting_decision → parsing → validation → ready_for_promotion / review_required → approved → registry` — [FSM и таблица состояний](pipeline1-formation.md#статусная-модель-fsm)
+- **Пайплайн 2 (Индексация):** `pending_index → indexing → indexed` — [FSM и таблица состояний](pipeline2-indexation.md#статусная-модель-fsm)
 - **Пайплайн 3 (Поиск):** `idle → pending → enriching → searching → generating → enriching_citations → answered` — [FSM и таблица состояний](pipeline3-search.md#статусная-модель-fsm)
 
 ---
@@ -281,34 +281,48 @@ flowchart LR
 ```mermaid
 stateDiagram-v2
     state "Пайплайн 1: Формирование" as P1 {
-        [*] --> draft
-        draft --> uploaded : POST /documents
+        [*] --> uploaded : POST /documents
         uploaded --> previewing : запуск preview
         previewing --> awaiting_decision : preview завершён
-        awaiting_decision --> parsing : утверждено пользователем
-        awaiting_decision --> draft : отклонено (rework)
-        parsing --> validation : Parsing завершён
-        validation --> ready_for_promotion : auto
+        previewing --> failed : ошибка распознавания
+        awaiting_decision --> parsing : решение = proceed
+        awaiting_decision --> duplicate : решение = stop_duplicate
+        awaiting_decision --> new_version : решение = force_new_version
+        awaiting_decision --> failed : таймаут 24ч
+        parsing --> validation : OCR/Parser завершён
+        parsing --> failed : таймаут 15 мин
+        validation --> ready_for_promotion : авто-валидация
         validation --> review_required : требуется подтверждение
+        validation --> failed : таймаут 30 мин
         review_required --> approved : approve оператора
         review_required --> validation : повторная валидация
+        review_required --> failed : отклонено оператором
         review_required --> archived : таймаут 48ч
         ready_for_promotion --> registry : промотирование
+        ready_for_promotion --> failed : таймаут 24ч
         approved --> registry : промотирование
+        registry --> pending_index : запуск индексации
+        registry --> failed : ошибка записи
+        registry --> archived
     }
 
     state "Пайплайн 2: Индексация" as P2 {
-        registry --> pending_index : запуск индексации
         pending_index --> indexing : чанкинг + embeddings
         indexing --> indexed : индексация завершена
+        indexing --> failed : ошибка индексации
     }
 
     state "Пайплайн 3: Поиск (сообщение)" as P3 {
-        idle --> pending_msg : новое сообщение
-        pending_msg --> enriching : обогащение
+        [*] --> idle
+        idle --> pending : новое сообщение
+        pending --> enriching : обогащение терминами
         enriching --> searching : поиск чанков
         searching --> generating : генерация LLM
         generating --> answered : цитирование
+        pending --> failed
+        enriching --> failed
+        searching --> failed
+        generating --> failed
     }
 
     %% Terminal
@@ -316,17 +330,14 @@ stateDiagram-v2
     answered --> [*] : ответ отправлен
 
     %% Дополнительно
-    registry --> archived : архивация
     indexed --> pending_index : реиндексация
-    parsing --> failed : таймаут 15 мин
-    validation --> failed : таймаут 30 мин
+    failed --> uploaded : reprocess
 ```
 
 **Карта соответствия состояний:**
 
 | Состояние             | Пайплайн | Описание                                                 |
 | --------------------- | -------- | -------------------------------------------------------- |
-| `draft`               | 1        | Черновик после загрузки файла                            |
 | `uploaded`            | 1        | Файл загружен в MinIO, ожидание preview                  |
 | `previewing`          | 1        | Выполняется preview OCR/Parser и Converter-validator     |
 | `awaiting_decision`   | 1        | Preview завершён, ожидание решения пользователя          |
@@ -339,6 +350,8 @@ stateDiagram-v2
 | `pending_index`       | 2        | Ожидание начала индексации                               |
 | `indexing`            | 2        | Выполняется чанкинг и построение векторного индекса      |
 | `indexed`             | 2        | Документ проиндексирован, готов к поиску                 |
+| `duplicate`           | 1        | Документ-дубликат, обработка завершена                  |
+| `new_version`         | 1        | Создана новая версия существующего документа             |
 | `failed`              | 1/2/3    | Ошибка на одном из этапов                                |
 | `archived`            | 1        | Документ архивирован (неактивен)                         |
 

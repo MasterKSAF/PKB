@@ -8,6 +8,14 @@
 
 - Формат данных: `application/json`, для загрузки файлов – `multipart/form-data`
 
+### Версионирование API
+
+- Путь: `/api/v{major}.{minor}` в URL (например, `/api/v1`).
+- **Breaking changes** (несовместимые изменения) — новая major-версия (`/api/v2`).
+- **Backward-compatible changes** (добавление полей, новых эндпоинтов) — minor-версия без смены URL.
+- Предыдущая major-версия поддерживается не менее 6 месяцев после выхода новой.
+- Между внутренними сервисами версионирование не применяется — все внутренние вызовы используют `/api/v1`.
+
 ### Порты сервисов
 
 | Сервис | Порт |
@@ -81,8 +89,21 @@
 
 ### Идентификаторы
 
-- **`task_id` (UUID)** — первичный идентификатор на этапах загрузки и preview. Используется в URL `/tasks/{task_id}/...`.
-- **`document_id` (UUID)** — назначается только в Registry при создании документа. Все дальнейшие операции после записи в Registry используют `document_id` в URL `/documents/{document_id}/...`.
+| Идентификатор | Тип | Назначается | Используется в URL |
+|---|---|---|---|
+| `task_id` | bigint | Оркестратором при `POST /documents` | `/tasks/{task_id}/...` (до создания карточки) |
+| `document_id` | UUID | Registry при создании карточки документа | `/documents/{document_id}/...` (после записи в Registry) |
+| `version_id` | UUID | Оркестратором при создании новой версии | В ответах `POST /documents/{doc_id}/versions` |
+| `section_id` | bigint | Registry (sequence) при сохранении секции | В ответах Registry, RAG Builder |
+| `chunk_id` | bigint | RAG Builder при индексации | В ответах RAG Search |
+| `session_id` | bigint | Query Service при создании сессии чата | `/chat/sessions/{session_id}/...` |
+| `message_id` | bigint | Query Service при создании сообщения | `/chat/sessions/{session_id}/messages/{message_id}` |
+
+**Жизненный цикл идентификаторов:**
+1. `task_id` (bigint) — назначается Оркестратором при `POST /documents`, используется в `/tasks/{task_id}/...`
+2. `document_id` (UUID) — назначается Registry при создании карточки документа
+3. После записи в Registry все операции переключаются на `/documents/{document_id}/...`
+4. Оркестратор хранит маппинг `task_id → document_id`
 
 Аутентификация:
   - **Публичные эндпоинты (через Orchestrator):** все запросы, кроме `/auth/*` и `/monitor/health`, требуют заголовок
@@ -97,7 +118,7 @@
 #### Публичные API (Orchestrator, Auth, Query, Integration, OCR, RAG Builder (internal), RAG Search (internal), Validation)
 > **Примечание:** RAG Builder и RAG Search — внутренние сервисы. Публичный доступ к RAG-функциональности осуществляется через Orchestrator / Query Service.
 
-Успех — данные возвращаются напрямую (без обёртки). Поле `data` опционально — используется для группировки с `meta` или когда ответ не является списком/объектом напрямую.
+Успех — данные возвращаются напрямую (без обёртки). Поле `data` / `items` / именованная коллекция опционально — используется для группировки с `meta` или когда ответ не является списком/объектом напрямую.
 
 Поле `meta` на верхнем уровне содержит пагинацию:
 
@@ -126,6 +147,11 @@
 }
 ```
 
+**Политика локализации:**
+- `error.message` — человекочитаемое описание на **русском языке** для отображения в UI конечному пользователю.
+- `error.code` — машиночитаемый идентификатор (на английском, `UPPER_SNAKE_CASE`) для обработки в клиентской логике.
+- При добавлении мультиязычности `message` будет определяться по заголовку `Accept-Language`, `code` остаётся неизменным.
+
 **Поля `details`:**
 
 | Поле | Тип | Когда присутствует | Описание |
@@ -135,6 +161,22 @@
 | `conflict_document_id` | string | HTTP `409 DUPLICATE_DOCUMENT` | UUID документа-дубликата |
 | `failed_endpoint` | string | HTTP `502 BAD_GATEWAY` / `504 GATEWAY_TIMEOUT` | Эндпоинт, на котором произошла ошибка |
 | `failed_service` | string | HTTP `502 BAD_GATEWAY` / `504 GATEWAY_TIMEOUT` | Сервис, на котором произошла ошибка |
+
+**Пример ошибки валидации (`400 VALIDATION_ERROR`):**
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Ошибка валидации полей",
+    "details": {
+      "validation_errors": [
+        {"field": "title", "reason": "max_length", "value": "... (очень длинный текст)", "constraint": "1024"},
+        {"field": "era", "reason": "invalid_enum", "value": "ussr", "constraint": "USSR, CIS, RF, CURRENT"}
+      ]
+    }
+  }
+}
+```
 
 **Запрещено включать в `details`:** `stack_trace`, `internal_message`, `sql_query`, `file_path`, `config_value` — любые внутренние данные сервера.
 
@@ -167,7 +209,7 @@ API поддерживает две модели выполнения:
 
 | Модель                         | HTTP-код ответа | Описание                                                                                                         | Примеры                                                 |
 | ------------------------------ | --------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| **Синхронная**                 | `200` / `201`   | Результат готов в теле ответа                                                                                    | `GET /documents`, `POST /chat/ask`, `POST /auth/token`  |
+| **Синхронная**                 | `200` / `201`   | Результат готов в теле ответа                                                                                    | `GET /documents`, `POST /chat/sessions/{session_id}/messages`, `POST /auth/token`  |
 | **Асинхронная (longpoll)**     | `202`           | Запрос принят, сервер возвращает `task_id`. Клиент ожидает результат через longpoll-запрос с переданным таймаутом. | `POST /documents`, `POST /documents/{doc_id}/reprocess` |
 
 #### Асинхронная модель (longpoll)
@@ -180,7 +222,7 @@ GET .../{doc_id}/status?longpoll=15
 
 | Параметр    | Тип | По умолчанию | Описание                                                                                 |
 | ----------- | --- | ------------ | ---------------------------------------------------------------------------------------- |
-| `longpoll`  | int | `15`         | Максимальное время ожидания в секундах. Если задача завершится раньше — ответ придёт сразу. |
+| `longpoll`  | int | `15`         | Максимальное время ожидания в секундах. Допустимые значения: `0` (синхронный режим) — `60`. При `0` сервер возвращает текущий статус немедленно. При превышении `60` сервер ограничивает до `60`. Если задача завершится раньше — ответ придёт сразу. |
 
 **Логика сервера:**
 
@@ -218,7 +260,8 @@ GET .../{doc_id}/status?longpoll=15
 | 404      | `CLASSIFIER_NOT_FOUND`    | Узел классификатора не найден                     | Registry               |
 | 404      | `TERM_NOT_FOUND`          | Термин не найден                                  | Registry               |
 | 404      | `DOCUMENT_NOT_FOUND`      | Документ не найден (реестр НСИ или файловый)      | Registry, Orchestrator |
-| 404      | `SESSION_NOT_FOUND`       | Сессия чата не найдена                            | Query                  |
+| 404      | `SESSION_NOT_FOUND`       | Сессия чата не найдена                                    | Query                  |
+| 404      | `MESSAGE_NOT_FOUND`       | Сообщение чата не найдено                                 | Query                  |
 | 404      | `FILE_NOT_FOUND`          | Файл не найден                                    | Integration            |
 | 409      | `HAS_CHILDREN`            | Нельзя удалить узел с дочерними                   | Registry               |
 | 409      | `DUPLICATE_CODE`          | Код классификатора уже существует                 | Registry               |
@@ -238,11 +281,19 @@ GET .../{doc_id}/status?longpoll=15
 | 413      | `FILE_TOO_LARGE`          | Превышение лимита размера файла (>= 100 МБ)       | Integration, OCR       |
 | 422      | `VALIDATION_FAILED`       | Ошибка семантической валидации                    | Converter-validator   |
 | 429      | `TOO_MANY_REQUESTS`       | Превышен лимит запросов (rate limit)              | все                    |
-| 502      | `BAD_GATEWAY`             | Ошибка при вызове LLM (все retry исчерпаны)       | Query                  |
+| 502      | `BAD_GATEWAY`             | Ошибка при вызове внутреннего сервиса              | Orchestrator           |
+| 502      | `LLM_GENERATION_FAILED`   | Ошибка генерации LLM (все retry исчерпаны)        | Query                  |
 | 503      | `SERVICE_UNAVAILABLE`     | Недоступен внешний сервис (MinIO, БД)             | все                    |
+| 422      | `UNSUPPORTED_FILE_TYPE`   | Неподдерживаемый тип файла                        | Orchestrator           |
 | 500      | `INTERNAL_ERROR`          | Внутренняя ошибка сервера                         | все                    |
+| 500      | `BUILD_FAILED`            | Ошибка построения чанков/эмбеддингов              | RAG Builder            |
+| 500      | `SEARCH_FAILED`           | Ошибка поиска чанков                              | RAG Search             |
 | 500      | `INDEXING_FAILED`         | Ошибка индексации документа                       | RAG                    |
 | 500      | `OCR_FAILED`              | Ошибка OCR-распознавания                          | OCR, Orchestrator      |
+| 500      | `ANALYSIS_FAILED`         | Ошибка анализа/сопоставления                      | Analyse                |
+| 500      | `CONVERSION_FAILED`       | Ошибка конвертации документа                     | Converter-validator    |
+| 500      | `VALIDATION_FAILED`       | Ошибка семантической валидации                    | Converter-validator    |
+| 503      | `CIRCUIT_BREAKER_OPEN`    | Этап временно отключён (Circuit Breaker)          | Orchestrator           |
 | 501      | `NOT_IMPLEMENTED`         | Метод не реализован                               | все                    |
 | 504      | `GATEWAY_TIMEOUT`         | Таймаут при вызове внутреннего сервиса            | Orchestrator           |
 
@@ -261,6 +312,9 @@ GET .../{doc_id}/status?longpoll=15
 | `GET /documents/{doc_id}/history` | ✓ | ✓ | ✓ |
 | `GET /documents/{doc_id}/errors` | ✓ | ✓ | ✓ |
 | `GET /documents/queue` | ✓ | ✓ | ✓ |
+| `GET /documents/{doc_id}/versions` | ✓ | ✓ | ✓ |
+| `POST /documents/{doc_id}/versions` | ✗ | ✓ | ✓ |
+| `GET /documents/{doc_id}/parameters` | ✓ | ✓ | ✓ |
 
 | `POST /chat/sessions`, `GET /chat/sessions` (+ `/{id}`)   | ✓          | ✓                 | ✓              |
 | `PUT /chat/sessions/{id}`, `DELETE /chat/sessions/{id}`   | ✓          | ✓                 | ✓              |
@@ -271,7 +325,9 @@ GET .../{doc_id}/status?longpoll=15
 | `GET /chat/history` (+ `/export`)                          | ✓          | ✓                 | ✓              |
 | `POST /text/search`                                        | ✓          | ✓                 | ✓              |
 
-| `POST /tasks/*` (preview, decide)                          | ✓          | ✓                 | ✓              |
+| `POST /tasks/{task_id}/preview`                            | ✓          | ✓                 | ✓              |
+| `GET /tasks/{task_id}/preview/status`                      | ✓          | ✓                 | ✓              |
+| `POST /tasks/{task_id}/decide`                             | ✓          | ✓                 | ✓              |
 
 | `POST /analyse/compare`, `GET /analyse/compare/{id}`       | ✓          | ✓                 | ✓              |
 | `POST /analyse/calculate`                                  | ✓          | ✓                 | ✓              |
@@ -281,12 +337,15 @@ GET .../{doc_id}/status?longpoll=15
 | `GET /admin/users`, `POST/PUT/PATCH/DELETE /admin/users` | ✗ | ✗ | ✓ |
 | `GET /admin/roles`, `POST /admin/roles` | ✗ | ✗ | ✓ |
 | `GET /admin/audit` | ✗ | ✗ | ✓ |
+| `GET /monitor/health` | ✓ (публичный, без аутентификации) | ✓ | ✓ |
+| `GET /monitor/metrics` | ✗ | ✓ | ✓ |
 | `GET /registry/*` | ✓ | ✓ | ✓ |
 | `POST /PUT /DELETE /registry/*` | ✗ | ✓ | ✓ |
-| `GET /monitor/metrics` | ✗ | ✓ | ✓ |
 
-> Роли: `engineer` — инженер-конструктор; `knowledge_admin` — администратор НСИ; `system_admin` — системный администратор.
-> Матрица применяется ко всем эндпоинтам публичного API (Orchestrator). Внутренние сервисы могут иметь собственные политики доступа.
+> **Примечания:**
+> - Роли: `engineer` — инженер-конструктор; `knowledge_admin` — администратор НСИ; `system_admin` — системный администратор.
+> - Матрица применяется ко всем эндпоинтам публичного API (через Orchestrator). Внутренние сервисы вызываются только Оркестратором; RBAC на них не распространяется.
+> - `GET /monitor/health` является публичным эндпоинтом (доступен без аутентификации) для использования инфраструктурными системами мониторинга.
 
 ---
 
@@ -300,8 +359,10 @@ GET .../{doc_id}/status?longpoll=15
 | `POST /auth/refresh`                  | 20 запросов / мин         | 5 мин               |                                    |
 | `POST /documents`                     | 10 запросов / мин         | 1 мин               | Загрузка документов                |
 | `GET /documents` (+ `/{id}`, `/status`, `/file`, `/pages`) | 100 запросов / мин | 1 мин |                                    |
-| `POST /documents/search`              | 30 запросов / мин         | 1 мин               |                                    |
-| `POST /chat/*`, `POST /text/*`        | 30 запросов / мин         | 1 мин               | Чат и текстовые запросы            |
+| `POST /chat/sessions`, `POST /chat/sessions/{id}/messages`      | 30 запросов / мин         | 1 мин               | Чат и текстовые запросы            |
+| `POST /chat/sessions/{id}/context`, `POST /chat/sessions/{id}/export` | 30 запросов / мин | 1 мин |
+| `POST /chat/feedback` | 30 запросов / мин | 1 мин |
+| `POST /text/search` | 30 запросов / мин | 1 мин | Текстовый поиск |
 | `GET /admin/*`                        | 60 запросов / мин         | 1 мин               | Административные                   |
 | `POST /admin/*`                       | 20 запросов / мин         | 1 мин               |                                    |
 | `GET /monitor/health`                 | Не ограничен              | —                   | Health check                       |
@@ -336,7 +397,7 @@ GET .../{doc_id}/status?longpoll=15
 #### Пустое сообщение в чате
 - `POST /chat/sessions/{id}/messages` с пустым `content` (пустая строка или только пробелы)
   возвращает `400 BAD_REQUEST` с кодом `EMPTY_MESSAGE`.
-- `POST /chat` и `POST /text/ask` — аналогичная проверка.
+- `POST /chat/sessions`, `POST /chat/sessions/{id}/messages`, `POST /text/search` — аналогичная проверка.
 
 #### Документы с максимальной длиной полей
 
@@ -368,6 +429,21 @@ GET .../{doc_id}/status?longpoll=15
 | LLM | `POST /chat/*`, `POST /text/*` | Retry 2 раза с усечением контекста; при всех неудачах — `502 BAD_GATEWAY` | `502 BAD_GATEWAY` |
 | PostgreSQL | Все эндпоинты с доступом к БД | Connection pool исчерпан — `503 SERVICE_UNAVAILABLE` | `503 SERVICE_UNAVAILABLE` |
 | Меридиан | `POST /meridian/export` | Экспорт ставится в очередь, повтор раз в 10 минут; статус `deferred` | `202` |
+
+---
+
+### Координаты блоков (bbox)
+
+Система координат bbox различается на этапах обработки:
+
+| Этап | Формат | Единицы | Порядок |
+|---|---|---|---|
+| OCR / Parser (сырой JSON) | `[left, bottom, right, top]` | мм | Левая нижняя → правая верхняя |
+| Converter-validator | `[x1, y1, x2, y2]` | мм → нормализация | Для Registry — нормализованные (0..1) |
+| Registry (БД) | `[x1, y1, x2, y2]` | нормализованные (0..1) | Левая верхняя → правая нижняя |
+| Orchestrator (публичный API) | `[x1, y1, x2, y2]` | нормализованные (0..1) | Левая верхняя (0,0), Y вниз |
+
+> **Трансформация:** на этапе Converter-validator координаты из мм преобразуются в нормализованные (0..1) относительно размеров страницы. Начало координат — левый верхний угол, ось Y направлена вниз.
 
 ---
 
@@ -445,7 +521,7 @@ Orchestrator управляет **тремя независимыми пайпл
 
 **Фаза Full (полная обработка):**
 
-**Статусная цепочка Pipeline 1:** `draft → uploaded → previewing → awaiting_decision → parsing → validation → ready_for_promotion / review_required → approved → registry → pending_index`
+**Статусная цепочка Pipeline 1:** `uploaded → previewing → awaiting_decision → parsing → validation → ready_for_promotion / review_required → approved → registry → pending_index`
 
 5. **OCR/Parser (full)** — полное распознавание всех страниц, сохранение бинарных объектов
 6. **Converter-validator (full)** — построение иерархии, LLM, метаданные, валидация
@@ -456,7 +532,7 @@ Orchestrator управляет **тремя независимыми пайпл
 
 1. **RAG Builder** (пишет БД) — чанкинг, embeddings, построение векторного индекса
 
-**Статусная цепочка Pipeline 2:** `pending → indexing → indexed`
+**Статусная цепочка Pipeline 2:** `pending_index → indexing → indexed`
 
 ### Пайплайн 3: Поиск документа
 
