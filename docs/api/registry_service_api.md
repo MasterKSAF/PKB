@@ -638,7 +638,7 @@ GET /registry/documents
       "doc_code": "20868-81",
       "source_type": "GOST",
       "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
-      "content_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "file_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "file_size_bytes": 2048576,
       "status": "approved",
       "era": "USSR",
@@ -694,7 +694,6 @@ GET /registry/documents/{doc_id}
 - `classification_status` — статус классификации (`{ mks_status, okstu_status }`)
 - `successor_doc_id` — ID документа-преемника
 - `predecessor_doc_id` — ID документа-предшественника
-- `chunk_container_id` — ID контейнера чанков
 - `metadata` — произвольные метаданные (JSONB)
 - `created_at` / `updated_at` — даты создания и обновления
 - `created_by` / `updated_by` — кем создан/обновлён
@@ -722,7 +721,6 @@ GET /registry/documents/{doc_id}
     },
     "successor_doc_id": null,
     "predecessor_doc_id": null,
-    "chunk_container_id": null,
     "metadata": {},
     "created_at": "2026-04-27T10:00:00Z",
     "updated_at": "2026-04-27T14:00:00Z",
@@ -849,7 +847,7 @@ POST /registry/documents/check-uniqueness
         "file_size_bytes": 1048576
       }
     ],
-    "content_hash_sha256": null,
+    "file_hash_sha256": null,
     "title_hash_sha256": "a1b2c3d4e5f6...",
     "file_size_bytes": 2048576,
     "checked_at": "2026-05-15T12:00:00Z"
@@ -1454,7 +1452,6 @@ GET /registry/enums
 | `classification_status` | jsonb | DEFAULT `{}` |
 | `successor_doc_id` | uuid | FK → self, nullable |
 | `predecessor_doc_id` | uuid | FK → self, nullable |
-| `chunk_container_id` | uuid | nullable |
 | `metadata` | jsonb | DEFAULT `{}` |
 | `created_at` | timestamptz | NOT NULL |
 | `created_by` | text | nullable |

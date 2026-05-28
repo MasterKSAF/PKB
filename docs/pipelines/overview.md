@@ -292,6 +292,7 @@ stateDiagram-v2
         validation --> review_required : требуется подтверждение
         review_required --> approved : approve оператора
         review_required --> validation : повторная валидация
+        review_required --> archived : таймаут 48ч
         ready_for_promotion --> registry : промотирование
         approved --> registry : промотирование
     }
@@ -317,6 +318,8 @@ stateDiagram-v2
     %% Дополнительно
     registry --> archived : архивация
     indexed --> pending_index : реиндексация
+    parsing --> failed : таймаут 15 мин
+    validation --> failed : таймаут 30 мин
 ```
 
 **Карта соответствия состояний:**

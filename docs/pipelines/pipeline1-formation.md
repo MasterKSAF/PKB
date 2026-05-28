@@ -207,7 +207,7 @@ sequenceDiagram
   "is_duplicate": false,
   "is_duplicate_file": false,
   "candidates": [],
-  "content_hash_sha256": "a1b2c3d4...",
+  "file_hash_sha256": "a1b2c3d4...",
   "title_hash_sha256": "e5f6a7b8...",
   "checked_at": "2026-05-15T12:00:00Z"
 }
@@ -332,13 +332,15 @@ graph TD
 #### Защита от «зависших» состояний (тупиковые таймауты)
 
 Для состояний, требующих действия человека или внешнего триггера, установлены **таймауты ожидания**,
-по истечении которых документ автоматически переводится в `failed` с соответствующим кодом ошибки:
+по истечении которых документ автоматически переводится в `failed` (или `archived`) с соответствующим кодом ошибки:
 
 | Состояние | Таймаут ожидания | Действие по истечении | Код ошибки |
 |---|---|---|---|
 | `awaiting_decision` | 24 часа | Перевод в `failed` | `DECISION_TIMEOUT` |
-| `review_required` | 48 часов | Перевод в `failed` | `REVIEW_TIMEOUT` |
+| `review_required` | 48 часов | Перевод в `archived` | `REVIEW_TIMEOUT` |
 | `pending_index` | 1 час | Перевод в `failed` | `INDEX_TRIGGER_TIMEOUT` |
+| `parsing` | 15 минут | Перевод в `failed` | `PARSING_TIMEOUT` |
+| `validation` | 30 минут | Перевод в `failed` | `VALIDATION_TIMEOUT` |
 
 Таймауты отсчитываются с момента входа в состояние и проверяются **Scheduler-сервисом** (или CRON-задачей),
 запускаемым каждые 5 минут. При переводе в `failed`:

@@ -257,8 +257,6 @@ GET .../{doc_id}/status?longpoll=15
 | `GET /documents` (+ `/{doc_id}`, `/status`, `/file`, `/pages`) | ✓          | ✓                 | ✓              |
 | `DELETE /documents/{doc_id}`                                   | ✗          | ✓                 | ✓              |
 | `POST /documents/{doc_id}/reprocess`                           | ✗          | ✓                 | ✓              |
-| `POST /documents/search`, `GET /documents/search`          | ✓          | ✓                 | ✓              |
-
 | `POST /documents/{doc_id}/approve` | ✗ | ✓ | ✓ |
 | `GET /documents/{doc_id}/history` | ✓ | ✓ | ✓ |
 | `GET /documents/{doc_id}/errors` | ✓ | ✓ | ✓ |
@@ -271,10 +269,7 @@ GET .../{doc_id}/status?longpoll=15
 | `POST /chat/sessions/{id}/export`                          | ✓          | ✓                 | ✓              |
 | `POST /chat/feedback`                                      | ✓          | ✓                 | ✓              |
 | `GET /chat/history` (+ `/export`)                          | ✓          | ✓                 | ✓              |
-| `POST /chat/ask`                                           | ✓          | ✓                 | ✓              |
-
 | `POST /text/search`                                        | ✓          | ✓                 | ✓              |
-| `POST /text/ask`                                           | ✓          | ✓                 | ✓              |
 
 | `POST /tasks/*` (preview, decide)                          | ✓          | ✓                 | ✓              |
 
@@ -417,7 +412,7 @@ GET .../{doc_id}/status?longpoll=15
 
 | Поле | Правило обработки |
 |------|-------------------|
-| `password` | Не логировать, не возвращать в ответах API, не передавать в промежуточные сервисы без необходимости. Хранить только в хэшированном виде (bcrypt, cost factor ≥ 12). |
+| `password` | Не логировать, не возвращать в ответах API, не передавать в промежуточные сервисы. Хранить только в хэшированном виде (bcrypt, cost factor ≥ 12). |
 | `refresh_token` | Не логировать. Хранить в БД в хэшированном виде. |
 | `access_token` | Не логировать. |
 

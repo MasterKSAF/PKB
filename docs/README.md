@@ -409,6 +409,8 @@ curl -X POST https://{host}/api/v1/text/search \
 | Пайплайн 3: Поиск и генерация ответов | [`docs/pipelines/pipeline3-search.md`](pipelines/pipeline3-search.md) |
 | **Спецификации** | |
 | Спецификация парсинга для разработчиков | [`docs/specifications/parsing_specifications.md`](specifications/parsing_specifications.md) |
+| **Справочники** | |
+| Глоссарий терминов и сокращений | [`docs/glossary.md`](glossary.md) |
 | **JSON-схемы (контракты)** | |
 | Структуры данных (диаграммы) | [`docs/schema/diagrams.md`](schema/diagrams.md) |
 | Результат Parser (сырой) | [`docs/schema/schema_parser_result.json`](schema/schema_parser_result.json) |

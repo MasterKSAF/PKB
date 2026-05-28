@@ -149,7 +149,7 @@
     "validation_id": "val-001",
     "structure_valid": true,
     "classification": { "mks_oks_code": "47.020", "overall_status": "CONFIRMED" },
-    "fingerprint": { "content_hash_sha256": "...", "title_hash_sha256": "..." },
+    "fingerprint": { "file_hash_sha256": "...", "title_hash_sha256": "..." },
     "matching": { "predecessor_doc_id": null, "successor_doc_id": null },
     "decision": "auto",
     "status": "completed"
@@ -253,7 +253,7 @@
 | `validation_id` | string | ID валидации |
 | `structure_valid` | bool | Результат проверки структуры |
 | `classification` | object | Статусы классификационных кодов |
-| `fingerprint` | object | Хэши документа (`content_hash_sha256`, `title_hash_sha256`) |
+| `fingerprint` | object | Хэши документа (`file_hash_sha256`, `title_hash_sha256`) |
 | `matching` | object | Связи с существующими документами (`predecessor_doc_id`, `successor_doc_id`) |
 | `cross_references` | array | Список кросс-ссылок на другие документы |
 | `decision` | string | `auto` — автоматическое продвижение, `review_required` — требуется ручное подтверждение |
@@ -295,7 +295,7 @@
     "overall_status": "CONFIRMED"
   },
   "fingerprint": {
-    "content_hash_sha256": "abc123...",
+    "file_hash_sha256": "abc123...",
     "title_hash_sha256": "def456..."
   },
   "matching": {
@@ -313,7 +313,7 @@
 | `document_id` | string | ID документа. Назначается валидацией: извлекается существующий для дубликата, либо генерируется новый. |
 | `structure_valid` | bool | Результат проверки структуры |
 | `classification` | object | Статусы классификационных кодов |
-| `fingerprint` | object | Хэши документа (`content_hash_sha256`, `title_hash_sha256`) |
+| `fingerprint` | object | Хэши документа (`file_hash_sha256`, `title_hash_sha256`) |
 | `matching` | object | Связи с существующими документами |
 | `decision` | string | `auto` — автоматическое продвижение, `review_required` — требуется ручное подтверждение |
 | `status` | string | Статус: `completed`, `failed` |
@@ -323,7 +323,7 @@
 > - `/validate/check` — проверка текста на соответствие набору правил.
 > - `/validate/extract/parameters` — извлечение структурированных параметров из документов (спецификации, материалы, размеры).
 >
-> Эти эндпоинты являются внутренними и вызываются Orchestrator'ом или Analyse Service по мере необходимости.
+> Эти эндпоинты являются внутренними и вызываются Orchestrator'ом (для пост-обработки документа) или Analyse Service (для анализа проектных решений).
 > Детальное описание форматов запроса/ответа — во внутренней документации сервиса.
 
 ---
@@ -332,7 +332,7 @@
 
 | Аспект | Значение |
 |---|---|
-| Доступ к БД | **Нет** (сервис не пишет и не читает БД напрямую; при необходимости данные передаются через Orchestrator) |
+| Доступ к БД | **Нет** (сервис изолирован от БД; данные для работы получает через Orchestrator в теле запроса) |
 | LLM | Опционально (управляется параметром `use_llm`) |
 | Режимы | Preview (быстрые проверки) + Full (полный цикл конвертации и валидации) |
 | Пайплайн | 1 (Формирование документа), Этап 1.5 (Converter-validator) |
