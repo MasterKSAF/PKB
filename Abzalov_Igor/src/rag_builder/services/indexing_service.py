@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 from uuid import UUID
 
@@ -16,6 +16,7 @@ from rag_builder.models.contracts import BuildRequest, BuildResponse, DeleteResp
 from rag_builder.repositories.chunk_repository import ChunkRepository
 
 StatusType = Literal["pending", "indexing", "indexed", "failed"]
+UTC_PLUS_3 = timezone(timedelta(hours=3))
 
 
 @dataclass
@@ -46,7 +47,7 @@ class IndexingService:
             async with session.begin():
                 await repo.delete_by_document(doc_id)
                 created = await repo.insert_chunks(chunks, vectors_for_repo)
-            now = datetime.now(UTC)
+            now = datetime.now(UTC_PLUS_3)
             self._set_status(doc_id, DocStatus(status="indexed", chunks_count=created, has_embeddings=created > 0, indexed_at=now))
             logger.info("Indexing completed document_id={} chunks={}", doc_id, created)
             return BuildResponse(

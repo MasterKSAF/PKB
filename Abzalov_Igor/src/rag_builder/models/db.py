@@ -8,6 +8,8 @@ from sqlalchemy import DateTime, Float, Index, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+from rag_builder.core.config import settings
+
 
 class Base(DeclarativeBase):
     pass
@@ -22,7 +24,7 @@ class RagDocumentChunk(Base):
     document_id: Mapped[UUID]
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(1536), nullable=True)
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(settings.vector_dimension), nullable=True)
     strategy: Mapped[str] = mapped_column(String(32), nullable=False)
     page: Mapped[int | None] = mapped_column(Integer, nullable=True)
     bbox: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)

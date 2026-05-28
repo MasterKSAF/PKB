@@ -30,7 +30,7 @@ docker exec pkb-pg16 psql -U pkb_user -d pkb_db -c "CREATE EXTENSION IF NOT EXIS
 Ожидается `0.8.2` (или выше 0.7).
 
 ## 2. Подготовить .env
-Создай `.env` рядом с `.env.example`:
+Создайте `.env` рядом с `.env.example`:
 ```env
 APP_PORT=8090
 DB_HOST=host.docker.internal
@@ -63,16 +63,7 @@ DEFAULT_LONGPOLL_SECONDS=15
 docker build -t rag-builder-service:local -f Dockerfile .
 ```
 
-Копипаст-вариант (без переносов):
-```powershell
-docker build -t rag-builder-service:local -f .\Dockerfile .
-```
-
-Важно:
-- точка `.` в конце обязательна (это build context);
-- `-f .\Dockerfile` указывает Docker, какой Dockerfile использовать.
-
-Если снова видите ошибку `docker buildx build requires 1 argument`, значит команда запущена без последнего аргумента `.`.
+Если видите ошибку `docker buildx build requires 1 argument`, значит команда запущена без последнего аргумента `.`
 
 ## 4. Запустить контейнер приложения
 
@@ -89,6 +80,8 @@ docker run -d --name rag-builder-service `
 ```powershell
 curl http://127.0.0.1:8090/openapi.json
 ```
+или открываем в браузере:  http://127.0.0.1:8090/docs
+
 
 Проверить логи:
 ```powershell
@@ -103,16 +96,3 @@ docker stop rag-builder-service pkb-pg16
 docker rm rag-builder-service pkb-pg16
 ```
 
-## Пример Dockerfile
-Если файла `Dockerfile` еще нет, используй:
-
-```dockerfile
-FROM python:3.13-slim
-WORKDIR /app
-COPY pyproject.toml ./
-COPY src ./src
-COPY .env.example ./
-RUN pip install --no-cache-dir -e .
-EXPOSE 8090
-CMD ["python", "-m", "uvicorn", "rag_builder.main:app", "--host", "0.0.0.0", "--port", "8090"]
-```
