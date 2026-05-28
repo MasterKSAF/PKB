@@ -774,7 +774,7 @@ GET /registry/documents/{doc_id}/sections
       "level": 1,
       "path": "1",
       "page": 1,
-      "type": "section",
+      "type": "text",
       "content": { "text": "...", "amendments": [] }
     },
     {
@@ -796,7 +796,7 @@ GET /registry/documents/{doc_id}/sections
 ```
 
 > **RAG Builder** получает этот JSON и строит чанки:
-> - `type=section` → `content.text` разбивается на чанки ≤512 токенов
+> - `type=text` → `content.text` разбивается на чанки ≤512 токенов
 > - `type=table` → весь `content` → один чанк (Markdown-таблица)
 > - `type=image` → `content.caption + content.description` → один чанк
 > - `type=formula` → `content.latex + content.meaning` → один чанк
@@ -908,7 +908,7 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
 
 Ключевые элементы запроса:
 - `document.metadata.*` — метаданные документа (doc_code, title, title_hash_sha256, era и др.)
-- `document.content[]` — единый плоский массив секций с полем `type` (`section`, `table`, `image`, `formula`)
+- `document.content[]` — единый плоский массив секций с полем `type` (`text`, `table`, `image`, `formula`, `list`, `headerFooter`, `textBlock`)
 - `document.terminology[]` — термины документа
 - `document.references[]` — перекрёстные ссылки на другие нормативные документы
 
@@ -932,7 +932,7 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
         "level": 1,
         "path": "1",
         "page": 1,
-        "type": "section",
+        "type": "text",
         "content": { "text": "Настоящий стандарт...", "amendments": [] }
       },
       {
@@ -1001,7 +1001,7 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
   "sections": [
     {
       "section_id": 1001,
-      "type": "section",
+      "type": "text",
       "clause": "1",
       "path": "1",
       "page": 1
@@ -1044,7 +1044,7 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
 **Особенности формата секций:**
 - Секции — плоский массив (нет вложенных `subsections`)
 - Иерархия задаётся через `parent_id` → `id`
-- Каждая секция имеет `type`: `section`, `table`, `image`, `formula`
+- Каждая секция имеет `type`: `text`, `table`, `image`, `formula`, `list`, `headerFooter`, `textBlock`
 - `image_key` для бинарных объектов (изображения таблиц, фигуры)
 - `bbox` в нормированных координатах 0..1
 
@@ -1073,7 +1073,7 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
 | `sections[].title` | string\|null | Заголовок секции |
 | `sections[].level` | int | Уровень вложенности (1 — верхний) |
 | `sections[].path` | string | ltree-путь для иерархии |
-| `sections[].type` | string | Тип: `section`, `table`, `image`, `formula` |
+| `sections[].type` | string | Тип: `text`, `table`, `image`, `formula`, `list`, `headerFooter`, `textBlock` |
 | `sections[].content` | JSONB | Содержимое секции (см. ниже) |
 | `sections[].page` | int | Номер страницы |
 | `sections[].bbox` | array | Координаты bbox `[x1,y1,x2,y2]` (0..1) |
@@ -1091,7 +1091,7 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
 
 **Структура `sections[].content` по типам:**
 
-Для `type: "section"`:
+Для `type: "text"`:
 ```json
 {
   "text": "...",
@@ -1114,7 +1114,7 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
     }
   ],
   "footnotes": [
-    { "footnote_id": 1, "text": "...", "applies_to": "whole_table|cell" }
+    { "text": "...", "applies_to": "whole_table|cell", "bbox": [20, 130, 200, 200] }
   ],
   "amendments": [
     { "amendment_id": "...", "type": "...", "source": "...", "affected_columns": [], "action": "...", "note": "..." }

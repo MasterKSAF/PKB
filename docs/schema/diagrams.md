@@ -116,8 +116,7 @@
 ║  │  │    width, height }     │  │    с полем number (int)       │   │    ║
 ║  │  └─────────────────────────┘  │  • Каждый элемент имеет       │   │    ║
 ║  │                               │    type, page,                │   │    ║
-║  │                               │    bbox, font,                │   │    ║
-║  │                               │    font_size, text_color     │   │    ║
+║  │                               │    bbox, font (object)        │   │    ║
 ║  │                               │                                │   │    ║
 ║  │                               │  ┌──────────────────────────┐ │   │    ║
 ║  │                               │  │  ТИПЫ ЭЛЕМЕНТОВ (8+1):  │ │   │    ║
@@ -126,7 +125,7 @@
 ║  │                               │  │     • content (строка)   │ │   │    ║
 ║  │                               │  │                          │ │   │    ║
 ║  │                               │  │  2. heading              │ │   │    ║
-║  │                               │  │     • level (1-6)       │ │   │    ║
+║  │                               │  │     • heading_level (1-6)│ │   │    ║
 ║  │                               │  │     • content            │ │   │    ║
 ║  │                               │  │                          │ │   │    ║
 ║  │                               │  │  3. paragraph            │ │   │    ║
@@ -135,8 +134,7 @@
 ║  │                               │  │  4. text_block           │ │   │    ║
 ║  │                               │  │     • block[] — вложенные│ │   │    ║
 ║  │                               │  │       блоки с разными    │ │   │    ║
-║  │                               │  │       font/font_size/    │ │   │    ║
-║  │                               │  │       text_color         │ │   │    ║
+║  │                               │  │       font (объект)      │ │   │    ║
 ║  │                               │  │                          │ │   │    ║
 ║  │                               │  │  5. list                 │ │   │    ║
 ║  │                               │  │     • numbering_style    │ │   │    ║
@@ -168,7 +166,7 @@
 ║  │                               │  │     • image_key           │ │   │    ║
 ║  │                               │  │                          │ │   │    ║
 ║  │                               │  │  7. image                │ │   │    ║
-║  │                               │  │     • image_path         │ │   │    ║
+║  │                               │  │     • image_key          │ │   │    ║
 ║  │                               │  │     • width, height      │ │   │    ║
 ║  │                               │  │                          │ │   │    ║
 ║  │                               │  │  8. caption              │ │   │    ║
@@ -195,9 +193,9 @@
 > - ❌ `text` → ✅ `heading`/`paragraph`/`text_block` с семантическими типами
 > - ❌ `bounding_box` → ✅ `bbox`
 > - ❌ `page_number` → ✅ `page`
-> - ❌ `heading_level` → ✅ `level`
+> - ✅ `heading_level` (1-6) — типографический уровень заголовка
 > - ✅ Добавлены типы: `headerFooter`, `list`, `image`, `caption`, `text_block`
-> - ✅ Добавлены поля: `level`, `numbering_style`, `font`, `font_size`, `text_color`, `image_path`, `next_table_number`, `previous_table_number`
+> - ✅ Добавлены поля: `heading_level`, `numbering_style`, `font` (объект: size, color, bold, italic, underline), `image_key`, `next_table_number`, `previous_table_number`
 > - ✅ Вложенность: `list.block[]`, `text_block.block[]`, `table.rows[].cells[].block[]`
 > - ✅ `pages[]` сохранён для геометрии страниц (width, height)
 
@@ -241,10 +239,11 @@
 ║  ┌───────────────────────────────────────────────────────────┐    ║
 ║  │              content — единый плоский массив              │    ║
 ║  │  Общие поля секции: clause, title, level, parent_clause,  │    ║
-║  │  path, page, bbox, type (section/table/image/formula)     │    ║
+║  │  path, page, bbox, type (text/table/image/formula/       │    ║
+║  │       list/headerFooter/textBlock)                          │    ║
 ║  │                                                           │    ║
 ║  │  ┌────────────────────────────────────────────────────┐   │    ║
-║  │  │  type: section                                     │   │    ║
+║  │  │  type: text                                        │   │    ║
 ║  │  │  content: { text, amendments }                     │   │    ║
 ║  │  └────────────────────────────────────────────────────┘   │    ║
 ║  │                       │                                   │    ║
@@ -260,8 +259,8 @@
 ║  │  │  cells — объект: column_name → { value }           │   │    ║
 ║  │  │  или { range: { min, max, min_inclusive,           │   │    ║
 ║  │  │  max_inclusive } }                                 │   │    ║
-║  │  │  footnotes[] — объекты: footnote_id, text,         │   │    ║
-║  │  │  applies_to                                        │   │    ║
+║  │  │  footnotes[] — объекты: text, applies_to,         │   │    ║
+║  │  │  bbox                                              │   │    ║
 ║  │  │  amendments[] — объекты: amendment_id, type,       │   │    ║
 ║  │  │  source, affected_columns, action, note            │   │    ║
 ║  │  └────────────────────────────────────────────────────┘   │    ║
@@ -277,6 +276,25 @@
 ║  │  │  type: formula                                     │   │    ║
 ║  │  │  content: { latex, meaning, image_key,             │   │    ║
 ║  │  │  parameters[] }                                    │   │    ║
+║  │  └────────────────────────────────────────────────────┘   │    ║
+║  │                       │                                   │    ║
+║  │                       ▼                                   │    ║
+║  │  ┌────────────────────────────────────────────────────┐   │    ║
+║  │  │  type: list                                        │   │    ║
+║  │  │  content: { numbering_style, items[] }             │   │    ║
+║  │  └────────────────────────────────────────────────────┘   │    ║
+║  │                       │                                   │    ║
+║  │                       ▼                                   │    ║
+║  │  ┌────────────────────────────────────────────────────┐   │    ║
+║  │  │  type: headerFooter                                │   │    ║
+║  │  │  content: { text }                                 │   │    ║
+║  │  └────────────────────────────────────────────────────┘   │    ║
+║  │                       │                                   │    ║
+║  │                       ▼                                   │    ║
+║  │  ┌────────────────────────────────────────────────────┐   │    ║
+║  │  │  type: textBlock                                   │   │    ║
+║  │  │  content: { block[] } — массив объектов с font     │   │    ║
+║  │  │  и content (rich-форматирование)                   │   │    ║
 ║  │  └────────────────────────────────────────────────────┘   │    ║
 ║  └───────────────────────────────────────────────────────────┘    ║
 ║                            │                                      ║
@@ -338,10 +356,14 @@
 ║  │                            ▼                             │    ║
 ║  │  ┌────────────────────────────────────────────────────┐  │    ║
 ║  │  │              type options                          │  │    ║
-║  │  │  • section: content включает text, amendments      │  │    ║
+║  │  │  • text: content включает text, amendments          │  │    ║
 ║  │  │  • table: content включает columns, rows,          │  │    ║
-║  │  │    footnotes, amendments, image_key                │  │    ║
-║  │  │  • image: content включает caption, file_key,      │  │    ║
+║  │  │    footnotes (text, bbox), amendments, image_key   │  │    ║
+║  │  │  • list: content включает numbering_style, items[] │  │    ║
+║  │  │  • headerFooter: content включает text            │  │    ║
+║  │  │  • textBlock: content включает block[] (font +     │  │    ║
+║  │  │    content) — rich-форматирование                   │  │    ║
+║  │  │  • image: content включает caption, image_key,     │  │    ║
 ║  │  │    description                                     │  │    ║
 ║  │  │  • formula: content включает latex,              │  │    ║
 ║  │  │    meaning, parameters                        │  │    ║

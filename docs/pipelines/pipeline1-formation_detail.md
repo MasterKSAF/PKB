@@ -120,10 +120,16 @@
 | Этап → Этап | Поле (исходное) | Поле (результирующее) | Примечание |
 |---|---|---|---|
 | OCR/Parser → Converter-validator | `doc_code` | `doc_code` | Сквозное поле, имя не меняется |
-| OCR/Parser → Converter-validator | `raw_text` | иерархический `content` | Построение иерархии |
-| OCR/Parser → Converter-validator | `figure` / `image` | `type: image`, `content.image_key` | Бинарные объекты → image_key (ссылка на фрагмент изображения) |
+| OCR/Parser → Converter-validator | `heading` | `type: text`, извлечение clause из content | Построение иерархии разделов |
+| OCR/Parser → Converter-validator | `paragraph` | `type: text`, `content.text` | Прямой перенос |
+| OCR/Parser → Converter-validator | `text_block` | `type: textBlock`, `content.block[]` | Rich-форматирование сохраняется объектно |
+| OCR/Parser → Converter-validator | `caption` | встраивается в image/table по `linked_number` | Слияние с родительским элементом |
+| OCR/Parser → Converter-validator | `image_key` | `type: image`, `content.image_key` | Бинарные объекты → image_key (ссылка на фрагмент изображения) |
 | OCR/Parser → Converter-validator | `table` | `type: table`, `content.columns/rows` | Структуризация таблиц |
 | OCR/Parser → Converter-validator | `formula` (raw) | `type: formula`, `content.latex` | Извлечение LaTeX |
+| OCR/Parser → Converter-validator | `heading_level` | `content.level` | Типографический уровень заголовка → уровень вложенности в `content[]` |
+| OCR/Parser → Converter-validator | `list` | `type: list`, `content.items[]` | Структуризация списка |
+| OCR/Parser → Converter-validator | `headerFooter` | `type: headerFooter`, `content.text` | Прямой проход |
 | Converter-validator → Registry | `doc_code` | `doc_code` | Сквозное поле |
 | Converter-validator → Registry | `type` | `type` | Тип секции сохраняется сквозным полем |
 | Converter-validator → Registry | `image_key` | `content.image_key` | image_key — ссылка на фрагмент изображения (не file_key) |

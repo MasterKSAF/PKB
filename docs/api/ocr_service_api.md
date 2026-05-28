@@ -127,7 +127,7 @@
 
 > **Важно:** в режиме предпросмотра:
 > - Поле `image_key` **отсутствует** у блоков (не сохраняется в MinIO)
-> - Поле `font` может отсутствовать у text-блоков
+> - Поле `font` (объект) может отсутствовать у text-блоков
 > - Отсутствует детализация `quality.per_page`
 > - Возвращаются только первые N страниц документа
 
@@ -192,7 +192,7 @@
 
 > **Важно:** сервис **не пишет в БД** — отдаёт JSON тому, кто вызвал. JSON-формат известен только сервису OCR и downstream-сервисам (Validation, Registry). Изображения — только ссылки (сами файлы загружены в MinIO сервисом).
 
-> **Полный формат данных:** [`docs/schema/document1_parser.json`](../schema/document1_parser.json) (схема `raw_ocr_v4`)
+> ⚠️ **Полный формат данных:** [`docs/schema/document1_parser.json`](../schema/document1_parser.json) (схема `raw_ocr_v4`) — **обязательно** смотри этот файл, здесь приведён только сокращённый пример.
 
 **Ответ `200`**:
 
@@ -203,68 +203,26 @@
   "metadata": {
     "schema": "raw_ocr_v4",
     "created_at": "2026-05-17T09:15:00Z",
-    "parser": {
-      "name": "docling",
-      "version": "2.1.0",
-      "ocr_engine": "paddleocr",
-      "ocr_fallback": false
-    }
+    "parser": { "name": "docling", "version": "2.1.0", "ocr_engine": "paddleocr", "ocr_fallback": false }
   },
   "document": {
-    "source": {
-      "file_name": "GOST_20868-81_scan.pdf",
-      "file_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "page_count": 2
-    },
+    "source": { "file_name": "GOST_20868-81_scan.pdf", "file_hash_sha256": "...", "page_count": 2 },
     "block": [
       {
         "number": 1,
-        "type": "headerFooter",
-        "page": 1,
-        "bbox": [10.0, 10.0, 100.0, 18.0],
-        "font": "Arial",
-        "font_size": 10.0,
-        "text_color": "#666666",
-        "content": "ГОСТ 20868-81"
-      },
-      {
-        "number": 2,
         "type": "heading",
-        "level": 1,
+        "heading_level": 1,
         "page": 1,
         "bbox": [10.0, 20.0, 200.0, 28.0],
-        "font": "Arial-Bold",
-        "font_size": 14.0,
-        "text_color": "#000000",
-        "content": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования"
-      },
-      {
-        "number": 3,
-        "type": "paragraph",
-        "page": 1,
-        "bbox": [10.0, 35.0, 200.0, 55.0],
-        "font": "Arial",
-        "font_size": 10.0,
-        "text_color": "#000000",
-        "content": "Настоящий стандарт распространяется на металлические крепежные установочные стойки..."
+        "content": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
+        "font": { "size": 14.0, "color": "#000000", "bold": true, "italic": false, "underline": false }
       }
     ]
   },
-  "quality": {
-    "confidence": 0.94,
-    "pages_processed": 12,
-    "pages_failed": 0,
-    "per_page": [
-      { "page": 1, "confidence": 0.97, "status": "ok" }
-    ]
-  },
+  "quality": { "confidence": 0.94, "pages_processed": 12, "pages_failed": 0 },
   "errors": [],
   "status": "completed"
 }
-```
-
-> **Полный формат данных** (схема `raw_ocr_v4`) — см.  
-> [`docs/schema/document1_parser.json`](../schema/document1_parser.json)
 
 | Поле                                         | Тип    | Описание                                                             |
 | -------------------------------------------- | ------ | -------------------------------------------------------------------- |
@@ -292,9 +250,7 @@
 | `block[].type`                               | string | Тип элемента: `headerFooter`, `heading`, `paragraph`, `text_block`, `list`, `table`, `image`, `caption`, `formula` |
 | `block[].page`                               | int    | Номер страницы                                                       |
 | `block[].bbox`                               | array  | Координаты `[left, bottom, right, top]` в мм                         |
-| `block[].font`                               | string | Название шрифта (напр. `"Arial-Bold"`)                               |
-| `block[].font_size`                          | float  | Размер шрифта                                                        |
-| `block[].text_color`                         | string | Цвет текста в hex (напр. `"#000000"`)                                |
+| `block[].font`                               | object | Объект шрифта: `{ size: float, color: string, bold: bool, italic: bool, underline: bool }` |
 | `quality`                                    | object | Общая оценка качества + `per_page` — детализация по страницам        |
 | `quality.per_page[].status`                  | string | `ok`, `low_confidence`, `failed`                                     |
 | `quality.per_page[].error`                   | string | Код ошибки страницы (только при `status: failed`)                    |

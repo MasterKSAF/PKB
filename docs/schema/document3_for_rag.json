@@ -32,12 +32,41 @@
       {
         "type": "Изменение № 1",
         "source": "ИУС 4-87",
-        "affected_clauses": ["6.4"]
+        "affected_clauses": [
+          "6.4"
+        ]
       },
-      { "type": "Поправка", "source": "ИУС 5-82", "affected_clauses": ["2"] }
+      {
+        "type": "Поправка",
+        "source": "ИУС 5-82",
+        "affected_clauses": [
+          "2"
+        ]
+      }
     ]
   },
   "sections": [
+    {
+      "section_id": 0,
+      "document_id": "a1b2c3d4-...",
+      "parent_id": null,
+      "clause": null,
+      "title": null,
+      "level": 0,
+      "path": ".headerFooter.1",
+      "page": 1,
+      "bbox": [
+        10,
+        10,
+        100,
+        18
+      ],
+      "type": "headerFooter",
+      "content": {
+        "text": "ГОСТ 20868-81"
+      },
+      "created_at": "2026-05-17T09:15:00Z"
+    },
     {
       "section_id": 1,
       "document_id": "a1b2c3d4-...",
@@ -47,8 +76,13 @@
       "level": 1,
       "path": "1",
       "page": 1,
-      "bbox": [10, 20, 200, 40],
-      "type": "section",
+      "bbox": [
+        10,
+        20,
+        200,
+        40
+      ],
+      "type": "text",
       "content": {
         "text": "Настоящий стандарт распространяется на металлические крепежные установочные стойки, предназначенные для монтажа радиоэлектронной аппаратуры, и устанавливает технические требования, предъявляемые к ним.",
         "amendments": []
@@ -58,17 +92,42 @@
     {
       "section_id": 2,
       "document_id": "a1b2c3d4-...",
-      "parent_id": null,
-      "clause": "2",
+      "parent_id": 1,
+      "clause": "1",
       "title": null,
-      "level": 1,
-      "path": "2",
+      "level": 2,
+      "path": "1.note1",
       "page": 1,
-      "bbox": [10, 50, 200, 80],
-      "type": "section",
+      "bbox": [
+        10,
+        85,
+        200,
+        100
+      ],
+      "type": "textBlock",
       "content": {
-        "text": "Крепежные установочные стойки следует изготовлять в соответствии с требованиями настоящего стандарта по ГОСТ 20862-81 – ГОСТ 20867-81.",
-        "amendments": [{ "type": "Поправка", "source": "ИУС 5-82" }]
+        "block": [
+          {
+            "font": {
+              "size": 10.0,
+              "color": "#000000",
+              "bold": true,
+              "italic": false,
+              "underline": false
+            },
+            "content": "Примечание — "
+          },
+          {
+            "font": {
+              "size": 10.0,
+              "color": "#333333",
+              "bold": false,
+              "italic": false,
+              "underline": false
+            },
+            "content": "Изменения и поправки к настоящему стандарту публикуются в ИУС (Информационном Указателе Стандартов)."
+          }
+        ]
       },
       "created_at": "2026-05-17T09:15:00Z"
     },
@@ -76,13 +135,45 @@
       "section_id": 3,
       "document_id": "a1b2c3d4-...",
       "parent_id": null,
+      "clause": "2",
+      "title": null,
+      "level": 1,
+      "path": "2",
+      "page": 1,
+      "bbox": [
+        10,
+        50,
+        200,
+        80
+      ],
+      "type": "text",
+      "content": {
+        "text": "Крепежные установочные стойки следует изготовлять в соответствии с требованиями настоящего стандарта по ГОСТ 20862-81 – ГОСТ 20867-81.",
+        "amendments": [
+          {
+            "type": "Поправка",
+            "source": "ИУС 5-82"
+          }
+        ]
+      },
+      "created_at": "2026-05-17T09:15:00Z"
+    },
+    {
+      "section_id": 4,
+      "document_id": "a1b2c3d4-...",
+      "parent_id": null,
       "clause": "6",
       "title": "Допуски формы и расположения поверхностей",
       "level": 1,
       "path": "6",
       "page": 1,
-      "bbox": [10, 90, 200, 120],
-      "type": "section",
+      "bbox": [
+        10,
+        90,
+        200,
+        120
+      ],
+      "type": "text",
       "content": {
         "text": "Допуски формы и расположения поверхностей установлены в зависимости от степени точности установочных стоек.",
         "amendments": []
@@ -90,16 +181,21 @@
       "created_at": "2026-05-17T09:15:00Z"
     },
     {
-      "section_id": 4,
+      "section_id": 5,
       "document_id": "a1b2c3d4-...",
-      "parent_id": 3,
+      "parent_id": 4,
       "clause": "6.1",
       "title": null,
       "level": 2,
       "path": "6.1",
       "page": 1,
-      "bbox": [20, 130, 200, 160],
-      "type": "section",
+      "bbox": [
+        20,
+        130,
+        200,
+        160
+      ],
+      "type": "text",
       "content": {
         "text": "Допуск соосности оси отверстия Б относительно оси поверхности А (черт. 1) или относительно отверстия А (черт. 2) должен соответствовать приведенной в таблице.",
         "amendments": []
@@ -107,15 +203,20 @@
       "created_at": "2026-05-17T09:15:00Z"
     },
     {
-      "section_id": 5,
+      "section_id": 6,
       "document_id": "a1b2c3d4-...",
-      "parent_id": 3,
+      "parent_id": 4,
       "clause": "6.1",
       "title": "Допуск соосности при степени точности",
       "level": 2,
       "path": "6.1.table1",
       "page": 2,
-      "bbox": [10, 150, 200, 250],
+      "bbox": [
+        10,
+        150,
+        200,
+        250
+      ],
       "type": "table",
       "content": {
         "columns": [
@@ -158,8 +259,12 @@
                   "max_inclusive": true
                 }
               },
-              "normal": { "value": 0.1 },
-              "high": { "value": 0.05 }
+              "normal": {
+                "value": 0.1
+              },
+              "high": {
+                "value": 0.05
+              }
             }
           },
           {
@@ -175,8 +280,12 @@
                   "max_inclusive": true
                 }
               },
-              "normal": { "value": 0.12 },
-              "high": { "value": 0.06 }
+              "normal": {
+                "value": 0.12
+              },
+              "high": {
+                "value": 0.06
+              }
             }
           },
           {
@@ -192,15 +301,24 @@
                   "max_inclusive": false
                 }
               },
-              "normal": { "value": 0.15 },
-              "high": { "value": 0.08 }
+              "normal": {
+                "value": 0.15
+              },
+              "high": {
+                "value": 0.08
+              }
             }
           }
         ],
         "footnotes": [
           {
-            "footnote_id": 1,
-            "text": "Значения допусков соосности оси отверстия Б относительно оси поверхности А (черт. 1) или относительно отверстия А (черт. 2)"
+            "text": "Значения допусков соосности оси отверстия Б относительно оси поверхности А (черт. 1) или относительно отверстия А (черт. 2)",
+            "bbox": [
+              20,
+              130,
+              200,
+              200
+            ]
           }
         ],
         "amendments": [
@@ -208,7 +326,10 @@
             "amendment_id": "amd_1",
             "type": "Изменение № 1",
             "source": "ИУС 4-87",
-            "affected_columns": ["normal", "high"],
+            "affected_columns": [
+              "normal",
+              "high"
+            ],
             "action": "values_updated",
             "note": "Изменены допуски для нормальной и повышенной точности"
           }
@@ -218,16 +339,21 @@
       "created_at": "2026-05-17T09:15:00Z"
     },
     {
-      "section_id": 6,
+      "section_id": 7,
       "document_id": "a1b2c3d4-...",
-      "parent_id": 3,
+      "parent_id": 4,
       "clause": "6.2",
       "title": null,
       "level": 2,
       "path": "6.2",
       "page": 2,
-      "bbox": [20, 10, 200, 40],
-      "type": "section",
+      "bbox": [
+        20,
+        10,
+        200,
+        40
+      ],
+      "type": "text",
       "content": {
         "text": "Допуск перпендикулярности поверхности В относительно оси отверстия (поверхности) А для стоек нормальной точности – не более 0,1 мм, повышенной точности – 0,05 мм.",
         "amendments": []
@@ -235,16 +361,46 @@
       "created_at": "2026-05-17T09:15:00Z"
     },
     {
-      "section_id": 7,
+      "section_id": 8,
       "document_id": "a1b2c3d4-...",
-      "parent_id": 3,
+      "parent_id": 4,
+      "clause": "6.2",
+      "title": null,
+      "level": 2,
+      "path": "6.2.list1",
+      "page": 2,
+      "bbox": [
+        25,
+        48,
+        200,
+        72
+      ],
+      "type": "list",
+      "content": {
+        "numbering_style": "bullet",
+        "items": [
+          "Для стоек нормальной точности: допуск не более 0,1 мм",
+          "Для стоек повышенной точности: допуск не более 0,05 мм"
+        ]
+      },
+      "created_at": "2026-05-17T09:15:00Z"
+    },
+    {
+      "section_id": 9,
+      "document_id": "a1b2c3d4-...",
+      "parent_id": 4,
       "clause": "6.3",
       "title": null,
       "level": 2,
       "path": "6.3",
       "page": 2,
-      "bbox": [20, 50, 200, 80],
-      "type": "section",
+      "bbox": [
+        20,
+        50,
+        200,
+        80
+      ],
+      "type": "text",
       "content": {
         "text": "Допуск параллельности поверхности Г относительно поверхности В для стоек нормальной точности – не более 0,1 мм, повышенной точности – 0,05 мм.",
         "amendments": []
@@ -252,16 +408,21 @@
       "created_at": "2026-05-17T09:15:00Z"
     },
     {
-      "section_id": 8,
+      "section_id": 10,
       "document_id": "a1b2c3d4-...",
-      "parent_id": 3,
+      "parent_id": 4,
       "clause": "6.4",
       "title": null,
       "level": 2,
       "path": "6.4",
       "page": 2,
-      "bbox": [20, 90, 200, 120],
-      "type": "section",
+      "bbox": [
+        20,
+        90,
+        200,
+        120
+      ],
+      "type": "text",
       "content": {
         "text": "Неуказанные допуски формы и расположения поверхностей – в пределах поля допуска на соответствующие размеры.",
         "amendments": [
@@ -275,15 +436,20 @@
       "created_at": "2026-05-17T09:15:00Z"
     },
     {
-      "section_id": 9,
+      "section_id": 11,
       "document_id": "a1b2c3d4-...",
-      "parent_id": 3,
+      "parent_id": 4,
       "clause": "6.1",
       "title": "Черт. 1 – Схема допуска соосности оси отверстия Б относительно оси поверхности А",
       "level": 2,
       "path": "6.1.fig1",
       "page": 2,
-      "bbox": [30, 260, 180, 300],
+      "bbox": [
+        30,
+        260,
+        180,
+        300
+      ],
       "type": "image",
       "content": {
         "caption": "Черт. 1 – Схема допуска соосности оси отверстия Б относительно оси поверхности А",
@@ -293,15 +459,20 @@
       "created_at": "2026-05-17T09:15:00Z"
     },
     {
-      "section_id": 10,
+      "section_id": 12,
       "document_id": "a1b2c3d4-...",
-      "parent_id": 3,
+      "parent_id": 4,
       "clause": "6.1",
       "title": "Черт. 2 – Схема допуска соосности оси отверстия Б относительно отверстия А",
       "level": 2,
       "path": "6.1.fig2",
       "page": 2,
-      "bbox": [30, 310, 180, 350],
+      "bbox": [
+        30,
+        310,
+        180,
+        350
+      ],
       "type": "image",
       "content": {
         "caption": "Черт. 2 – Схема допуска соосности оси отверстия Б относительно отверстия А",
@@ -311,15 +482,20 @@
       "created_at": "2026-05-17T09:15:00Z"
     },
     {
-      "section_id": 11,
+      "section_id": 13,
       "document_id": "a1b2c3d4-...",
-      "parent_id": 3,
+      "parent_id": 4,
       "clause": "6.1",
       "title": "Формула допуска соосности",
       "level": 2,
       "path": "6.1.formula1",
       "page": 1,
-      "bbox": [100, 140, 180, 160],
+      "bbox": [
+        100,
+        140,
+        180,
+        160
+      ],
       "type": "formula",
       "content": {
         "latex": "R_{\\text{доп}} = \\frac{\\Delta}{2}",
@@ -330,7 +506,11 @@
             "description": "Допустимый радиус",
             "unit": "мм"
           },
-          { "symbol": "Δ", "description": "Заданное отклонение", "unit": "мм" }
+          {
+            "symbol": "Δ",
+            "description": "Заданное отклонение",
+            "unit": "мм"
+          }
         ]
       },
       "created_at": "2026-05-17T09:15:00Z"
