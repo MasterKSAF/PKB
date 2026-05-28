@@ -39,13 +39,25 @@ DB_NAME=pkb_db
 DB_USER=pkb_user
 DB_PASSWORD=pkb_pass
 DATABASE_URL=
+JWT_SECRET=change-me-at-least-32-characters
+JWT_ALGORITHM=HS256
+JWT_ACCESS_EXPIRE_MINUTES=30
+JWT_REFRESH_EXPIRE_MINUTES=10080
+AUTH_USERNAME=admin
+AUTH_PASSWORD=admin
 LOG_LEVEL=DEBUG
 LOG_DIR=logs
 LOG_FILE=rag_builder.log
-JWT_SECRET=change-me
-EMBEDDING_API_URL=http://host.docker.internal:8000/v1/embeddings
+LOG_ROTATION=10 MB
+LOG_RETENTION=14 days
+LOG_COMPRESSION=zip
+EMBEDDING_API_URL=https://api.openai.com/v1/embeddings
 EMBEDDING_MODEL=text-embedding-3-small
 EMBEDDING_TIMEOUT=30
+EMBEDDING_BATCH_SIZE=32
+EMBEDDING_PROVIDER=openai_compatible
+EMBEDDING_API_KEY=
+EMBEDDING_RETRIES=2
 EMBEDDING_DIM=1536
 VECTOR_DIMENSION=1536
 CHUNK_SIZE=512
@@ -54,10 +66,11 @@ MAX_TOKENS=512
 CHUNK_DEFAULT_STRATEGY=semantic_512
 API_PREFIX=/api/v1
 DEFAULT_LONGPOLL_SECONDS=15
+
 ```
 
 ## 3. Собрать образ приложения
-Из папки `Abzalov_Igor`:
+перейти локально в ветку rag_builder_service подтянуть посл изменения и из папки `Abzalov_Igor`:
 
 ```powershell
 docker build -t rag-builder-service:local -f Dockerfile .
