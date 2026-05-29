@@ -120,20 +120,30 @@
 | Этап → Этап | Поле (исходное) | Поле (результирующее) | Примечание |
 |---|---|---|---|
 | OCR/Parser → Converter-validator | `doc_code` | `doc_code` | Сквозное поле, имя не меняется |
-| OCR/Parser → Converter-validator | `raw_text` | иерархический `content` | Построение иерархии |
-| OCR/Parser → Converter-validator | `figure` / `image` | `type: image`, `content.image_key` | Бинарные объекты → image_key (ссылка на фрагмент изображения) |
+| OCR/Parser → Converter-validator | `heading` | `type: text`, извлечение clause из content | Построение иерархии разделов |
+| OCR/Parser → Converter-validator | `paragraph` | `type: text`, `content.text` | Прямой перенос |
+| OCR/Parser → Converter-validator | `text_block` | `type: textBlock`, `content.block[]` | Rich-форматирование сохраняется объектно |
+| OCR/Parser → Converter-validator | `caption` | встраивается в image/table по `linked_number` | Слияние с родительским элементом |
+| OCR/Parser → Converter-validator | `image_key` | `type: image`, `content.image_key` | Бинарные объекты → image_key (ссылка на фрагмент изображения) |
 | OCR/Parser → Converter-validator | `table` | `type: table`, `content.columns/rows` | Структуризация таблиц |
 | OCR/Parser → Converter-validator | `formula` (raw) | `type: formula`, `content.latex` | Извлечение LaTeX |
+| OCR/Parser → Converter-validator | `heading_level` | `content.level` | Типографический уровень заголовка → уровень вложенности в `content[]` |
+| OCR/Parser → Converter-validator | `list` | `type: list`, `content.items[]` | Структуризация списка |
+| OCR/Parser → Converter-validator | `headerFooter` | `type: headerFooter`, `content.text` | Прямой проход |
 | Converter-validator → Registry | `doc_code` | `doc_code` | Сквозное поле |
 | Converter-validator → Registry | `type` | `type` | Тип секции сохраняется сквозным полем |
 | Converter-validator → Registry | `image_key` | `content.image_key` | image_key — ссылка на фрагмент изображения (не file_key) |
 | Converter-validator → Registry | `bbox` (сырые) | `bbox` (0..1) | Нормировка координат |
-| Registry → RAG Builder | `content.image_key` | `content.image_key` | Сквозной проход image_key |
-| Registry → RAG Builder | `path` (ltree) | `path` | Иерархический путь секции |
-| Registry → RAG Builder / API | `section_id` | Registry присваивает каждой секции ID при сохранении. |
+| Registry → RAG Builder / for_rag | `content.image_key` | `content.image_key` | Сквозной проход image_key |
+| Registry → RAG Builder / for_rag | `path` (ltree) | `path` | Иерархический путь секции |
+| Registry → RAG Builder / for_rag | `section_id` | Registry присваивает каждой секции ID при сохранении. |
+| Registry → for_rag | `content.block[]` (textBlock) | `content.text` | Font display details отбрасываются, остаётся только текст для индексации |
+| Registry → for_rag | `bbox` | ❌ удаляется | Bbox не нужен для индексации, остаётся только `page` |
+| Converter-validator → for_rag | `table` / `list` / `image` / `formula` | `content.markdown` (опционально) | Markdown-представление генерируется для сложных структур. Добавляется при формировании for_rag, в validated_v3 не хранится. |
+| Registry → for_rag | `references[].target_doc_code` | `references[].target_document_id` | Добавляется UUID связанного документа из БД (null, если документ ещё не загружен).
 
 > **Примечание:** поле `path` формируется на этапе Converter-validator при построении иерархии.
-> В сыром JSON от Parser/OCR (тип `raw_ocr_v2`) это поле может отсутствовать, так как оно
+> В сыром JSON от Parser/OCR (тип `raw_ocr_v4`) это поле может отсутствовать, так как оно
 > формируется Converter-validator. В БД хранится как `ltree`. RAG Builder получает его как
 > строковое представление пути.
 
@@ -246,7 +256,7 @@
 
 - **Валидация** – проверка полноты данных, соответствия целевой схеме документа.
 
-- **Вычисление хэшей** – вычисление `content_hash_sha256` и `title_hash_sha256` для последующей проверки уникальности Оркестратором через Registry.
+- **Вычисление хэшей** – вычисление `file_hash_sha256` и `title_hash_sha256` для последующей проверки уникальности Оркестратором через Registry.
 
 - **Журналирование** – сохраняет промежуточные результаты и ошибки через оркестратор.
 
@@ -336,11 +346,13 @@
 
 - **Чанкование:** разбивает **секции** (полученные от Registry) на более мелкие **чанки** для эмбеддингов с привязкой к ID секций и документа. При разбиении учитывает (в будущем) protected spans – неразрывные блоки.
 
-- Генерирует эмбеддинги для текстовых фрагментов.
+Генерирует эмбеддинги для текстовых фрагментов.
 
 - Сохраняет векторы и связанные метаданные в выбранное векторное хранилище.
 
 - Каждый чанк содержит только текст и ссылки на сегменты для цитирования. Не включает информацию для визуального отображения (полноразмерные картинки, графика, вёрстка).
+
+- Для сложных структур (`table`, `list`, `image`, `formula`) RAG Builder получает готовое `content.markdown` — единое текстовое представление, не требующее дополнительного парсинга. Для `text`/`textBlock`/`headerFooter` используется `content.text`. Markdown генерируется на этапе формирования for_rag (Converter или adapter), а не validated_v3.
 
 
 
@@ -406,14 +418,12 @@
 6. Пользователь принимает решение:
 
    - `proceed` — продолжить полную обработку;
-
    - `stop_duplicate` — остановить (документ уже существует);
+   - `force_new_version` — принудительно создать новую версию существующего документа.
 
-   - `new_version` — создать новую версию.
-   - `overwrite` — перезаписать текущую версию.
-   - `force_overwrite` — принудительно перезаписать версию.
+   (Действия `overwrite` и `force_overwrite` не предусмотрены текущим API; при необходимости расширение действия `force_new_version` может быть дополнено в будущих версиях.)
 
-7. Решение передаётся оркестратору через `POST /documents/{doc_id}/decide`.
+7. Решение передаётся оркестратору через `POST /tasks/{task_id}/decide`.
 
 8. **Таймаут ожидания решения:** если пользователь не принял решение в течение 24 часов,
    документ автоматически переводится в `failed` (код `DECISION_TIMEOUT`).

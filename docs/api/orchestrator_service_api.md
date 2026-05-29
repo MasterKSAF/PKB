@@ -8,21 +8,19 @@
 
 ### Формат ответа
 
-Успех — данные возвращаются напрямую.
+Формат ответа и ошибок — см. [common_api.md](../common_api.md#формат-ответа).
 
-При ошибке:
-
+Для эндпоинтов с пагинацией используется формат:
 ```json
 {
-  "error": {
-    "code": "DOCUMENT_NOT_FOUND",
-    "message": "Документ не найден",
-    "details": {}
+  "items": [...],
+  "meta": {
+    "total": 150,
+    "page": 1,
+    "page_size": 50
   }
 }
 ```
-
-Для списковых ответов `meta` содержит пагинацию на верхнем уровне.
 
 ### Группы
 
@@ -32,7 +30,6 @@
 | `documents` | Документы: загрузка, список, статус, версии, аппрув, промотирование |
 | `tasks`     | Задачи: preview фаза и решение (работает с `task_id`)               |
 | `pages`     | Просмотр страниц и текстового слоя                                  |
-| `search`    | Поиск фрагментов                                                    |
 
 ---
 
@@ -66,7 +63,7 @@
   "task_id": 420000,
   "version_id": "c4b9f2d3-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
   "status": "uploaded",
-  "content_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "file_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "file_size_bytes": 2048576,
   "is_duplicate_file": false,
   "is_duplicate_document": false,
@@ -120,7 +117,7 @@
 |---|---|---|---|
 | `longpoll` | int | 15 | Время ожидания в секундах |
 
-> **Полный формат данных:** [`docs/schema/document2b_preview.json`](../schema/document2b_preview.json) (схема `converter_validator_preview_v1`)
+> **Полный формат данных:** [`docs/schema/schema_parser_preview.json`](../schema/schema_parser_preview.json) (схема `converter_validator_preview_v1`)
 
 **Ответ `200`**:
 
@@ -241,7 +238,7 @@
   "version_number": 2,
   "status": "uploaded",
   "task_id": 420001,
-  "content_hash_sha256": "6ca13d52ca70c883e0f0bb101e425a89e8624de51db2d2392593af6a84118090",
+  "file_hash_sha256": "6ca13d52ca70c883e0f0bb101e425a89e8624de51db2d2392593af6a84118090",
   "is_duplicate_file": false,
   "created_at": "2026-05-15T11:00:00Z"
 }
@@ -265,7 +262,7 @@
       "format_code": "pdf_digital",
       "format_label": "PDF (цифровой)",
       "file_key": "b3a8f1c2/v1/e3b0c442...855.pdf",
-      "content_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "file_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "size_bytes": 2048576,
       "uploaded_at": "2026-05-15T10:00:00Z",
       "uploaded_by": "Иванов И.И."
@@ -333,7 +330,7 @@
         "extracted_by": "purgatory_parser_v2",
         "confidence": 0.95
       },
-      "content_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "file_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "file_size_bytes": 2048576,
       "status": "approved",
       "latest_version": 1,
@@ -389,7 +386,7 @@
     "version_id": "c4b9f2d3-...",
     "version_number": 1,
     "format_code": "pdf_digital",
-    "content_hash_sha256": "e3b0c442...",
+    "file_hash_sha256": "e3b0c442...",
     "size_bytes": 2048576
   },
   "total_versions": 2,
@@ -633,7 +630,7 @@
 
 ### DELETE /documents/{doc_id}
 
-Удаление документа и всех связанных данных (версии, чанки, статусы).
+**Soft-delete:** документ помечается как удалённый (`deleted_at`), но запись в БД сохраняется. Связанные сущности (секции, версии, история, чанки) также помечаются как недоступные. Повторный вызов возвращает `404 NOT_FOUND`.
 
 **Ответ `200`**:
 
@@ -718,71 +715,6 @@
 
 ---
 
-## Группа search
-
-### POST /documents/search
-
-Семантический поиск фрагментов по документам.
-
-**Запрос**:
-
-```json
-{
-  "query": "требования к ледовому классу Arc4",
-  "document_ids": ["doc-norm-001"],
-  "top_k": 5,
-  "filters": {
-    "document_type": ["normative"],
-    "date_from": "2020-01-01",
-    "date_to": null
-  }
-}
-```
-
-**Ответ `200`**:
-
-```json
-{
-  "query": "...",
-  "items": [
-    {
-      "section_id": 420001,
-      "document_id": "doc-norm-001",
-      "document_title": "Правила классификации...",
-      "document_type": "normative",
-      "clause": "Корпус",
-      "page": 42,
-      "content": "Для ледового класса Arc4 толщина обшивки должна быть не менее 12 мм...",
-      "score": 0.92,
-      "page_preview_url": "/documents/doc-norm-001/pages/42/preview",
-      "document_url": "/documents/doc-norm-001/file"
-    }
-  ],
-  "total_found": 3,
-  "processing_time_ms": 450
-}
-```
-
-### GET /documents/search
-
-Быстрый GET-вариант поиска. Предназначен для простых поисковых запросов без сложных фильтров.
-
-**Параметры запроса (query):**
-
-| Параметр       | Тип    | Обязательность | Значение по умолчанию | Описание                                |
-|----------------|--------|----------------|-----------------------|-----------------------------------------|
-| `q`            | string | Да             | —                    | Поисковый запрос                         |
-| `document_id`  | string | Нет            | —                    | Ограничить поиск одним документом (UUID) |
-| `page`         | int    | Нет            | 1                    | Номер страницы результатов              |
-| `page_size`    | int    | Нет            | 10                   | Записей на странице (max 100)           |
-| `document_type`| string | Нет            | —                    | Фильтр по типу документа                 |
-
-**Ответ `200`:** Аналогичен ответу `POST /documents/search`.
-
-**Ограничения:** GET-вариант не поддерживает фильтры `date_from`, `date_to`, множество `document_ids`. Для сложных запросов используйте POST.
-
----
-
 ## Группа pages
 
 ### GET /documents/{doc_id}/pages
@@ -813,19 +745,149 @@
 
 ### GET /documents/{doc_id}/pages/{page_num}
 
-Изображение страницы с блоками. **Query**: `highlight` (ID блока).
+Изображение страницы с наложенными блоками (bbox). Используется для визуального просмотра страницы с подсветкой распознанных элементов.
+
+**Параметры запроса (query):**
+
+| Параметр | Тип | Обязательность | Описание |
+|---|---|---|---|
+| `highlight` | string | Нет | ID блока для подсветки (число из поля `block[].number` ответа `/text`). Если передан — соответствующий блок выделяется на изображении. |
+
+**Ответ `200`:** Бинарные данные изображения страницы (PNG/JPEG) с заголовками:
+- `Content-Type: image/png` (или `image/jpeg`)
+- `Content-Length`
+
+**Ошибки:**
+| HTTP-код | Код ошибки | Описание |
+|---|---|---|
+| `404` | `DOCUMENT_NOT_FOUND` | Документ не найден |
+| `404` | `PAGE_NOT_FOUND` | Страница с указанным номером не существует |
 
 ### GET /documents/{doc_id}/pages/{page_num}/text
 
-Текстовый слой и структура страницы с блоками, таблицами.
+Текстовый слой и структура страницы: блоки, таблицы, изображения с координатами (bbox).
+
+**Ответ `200`:**
+
+```json
+{
+  "document_id": "doc-8a3f2b",
+  "page": 1,
+  "width": 2480,
+  "height": 3508,
+  "blocks": [
+    {
+      "number": 1,
+      "type": "paragraph",
+      "bbox": [0.05, 0.056, 1.0, 0.111],
+      "content": "Настоящий стандарт распространяется...",
+      "confidence": 0.95
+    },
+    {
+      "number": 5,
+      "type": "table",
+      "bbox": [0.05, 0.417, 1.0, 0.694],
+      "content": {
+        "columns": ["L, мм", "нормальная", "повышенная"],
+        "rows": [["От 6 до 50", "0,1", "0,05"]]
+      },
+      "confidence": 0.88
+    }
+  ]
+}
+```
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `document_id` | string | ID документа |
+| `page` | int | Номер страницы |
+| `width` | int | Ширина страницы в пикселях |
+| `height` | int | Высота страницы в пикселях |
+| `blocks` | array | Массив блоков на странице в порядке чтения |
+| `blocks[].number` | int | Порядковый номер блока |
+| `blocks[].type` | string | Тип блока: `paragraph`, `heading`, `table`, `list`, `image`, `formula`, `headerFooter` |
+| `blocks[].bbox` | array | Координаты блока: `[x1, y1, x2, y2]` в нормализованных единицах (0..1) |
+| `blocks[].content` | string/object | Текстовое содержимое или структурированный объект (для таблиц) |
+| `blocks[].confidence` | float | Уверенность распознавания (0..1) |
 
 ### GET /documents/{doc_id}/pages/{page_num}/preview
 
-Агрегированный просмотр: изображение + текст + подсветка.
+Агрегированный просмотр: изображение страницы + текстовый слой + подсветка блоков. 
+Объединяет функциональность `/pages/{page_num}` и `/pages/{page_num}/text` в одном ответе.
+
+**Параметры запроса (query):**
+
+| Параметр | Тип | Обязательность | Описание |
+|---|---|---|---|
+| `highlight` | string | Нет | ID блока для подсветки |
+| `format` | string | Нет | Формат ответа: `json` (по умолчанию) — структурированные данные, `html` — встроенный HTML с canvas |
+
+**Ответ `200` (`format=json`):**
+
+```json
+{
+  "document_id": "doc-8a3f2b",
+  "page": 1,
+  "image_url": "/documents/doc-8a3f2b/pages/1",
+  "blocks": [
+    {
+      "number": 1,
+      "type": "paragraph",
+      "bbox": [0.05, 0.056, 1.0, 0.111],
+      "content": "Настоящий стандарт распространяется..."
+    }
+  ],
+  "text_layer": "Настоящий стандарт распространяется..."
+}
+```
+
+**Ответ `200` (`format=html`):** HTML-документ с встроенным SVG/canvas-отображением страницы и наложенными блоками.
 
 ### GET /documents/{doc_id}/parameters
 
-Извлечённые параметры документа (спецификация, материалы).
+Извлечённые параметры документа — структурированные данные из спецификаций, таблиц и формул.
+
+**Ответ `200`:**
+
+```json
+{
+  "document_id": "doc-8a3f2b",
+  "parameters": [
+    {
+      "symbol": "R_доп",
+      "description": "Допустимый радиус",
+      "unit": "мм",
+      "value": 0.05,
+      "source_clause": "6.1",
+      "source_page": 1
+    },
+    {
+      "symbol": "L",
+      "description": "Длина стойки",
+      "unit": "мм",
+      "range": { "min": 6, "max": 80 },
+      "source_clause": "6.1.table1",
+      "source_page": 2
+    }
+  ],
+  "total": 2
+}
+```
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `document_id` | string | ID документа |
+| `parameters` | array | Массив извлечённых параметров |
+| `parameters[].symbol` | string | Обозначение параметра (например, `L`, `R_доп`) |
+| `parameters[].description` | string | Описание параметра |
+| `parameters[].unit` | string | Единица измерения |
+| `parameters[].value` | number | Числовое значение (если применимо) |
+| `parameters[].range` | object | Диапазон значений: `{ min, max, min_inclusive, max_inclusive }` |
+| `parameters[].source_clause` | string | Пункт документа-источника |
+| `parameters[].source_page` | int | Страница документа-источника |
+| `total` | int | Общее количество параметров |
+
+> **Источник данных:** параметры извлекаются Converter-validator'ом на этапе полной обработки из таблиц, формул и спецификаций документа. Поле `parameters` присутствует в `registry.document_sections.content` для секций типа `formula` и `table`.
 
 ---
 

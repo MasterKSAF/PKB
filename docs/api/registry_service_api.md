@@ -11,28 +11,19 @@
 
 ### Формат ответа
 
-Все ответы обёрнуты в `{ data, meta }`:
+Формат ошибок — см. [common_api.md](../common_api.md#формат-ответа).
 
+Списочные ответы обёрнуты в `{ data, meta }`:
 ```json
 {
   "data": [ ... ],
   "meta": { "total": 150, "page": 1, "page_size": 50 }
 }
 ```
-
 Для одиночных объектов:
-
 ```json
 {
   "data": { "id": "b3a8f1c2-...", "title": "..." }
-}
-```
-
-При ошибке:
-
-```json
-{
-  "error": { "code": "NOT_FOUND", "message": "Не найдено", "details": {} }
 }
 ```
 
@@ -638,7 +629,7 @@ GET /registry/documents
       "doc_code": "20868-81",
       "source_type": "GOST",
       "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
-      "content_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "file_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "file_size_bytes": 2048576,
       "status": "approved",
       "era": "USSR",
@@ -694,7 +685,6 @@ GET /registry/documents/{doc_id}
 - `classification_status` — статус классификации (`{ mks_status, okstu_status }`)
 - `successor_doc_id` — ID документа-преемника
 - `predecessor_doc_id` — ID документа-предшественника
-- `chunk_container_id` — ID контейнера чанков
 - `metadata` — произвольные метаданные (JSONB)
 - `created_at` / `updated_at` — даты создания и обновления
 - `created_by` / `updated_by` — кем создан/обновлён
@@ -722,7 +712,6 @@ GET /registry/documents/{doc_id}
     },
     "successor_doc_id": null,
     "predecessor_doc_id": null,
-    "chunk_container_id": null,
     "metadata": {},
     "created_at": "2026-04-27T10:00:00Z",
     "updated_at": "2026-04-27T14:00:00Z",
@@ -744,11 +733,11 @@ GET /registry/documents/{doc_id}/sections
 Этот JSON используется RAG Builder для построения чанков: RAG Builder самостоятельно
 разбирает `content` каждой секции в зависимости от `type`.
 
-Формат ответа — см. [`document3_for_rag.json`](../schema/document3_for_rag.json).
+Формат ответа — см. [`schema_registry_for_rag.json`](../schema/schema_registry_for_rag.json).
 
 Ключевые поля:
 - `document` — метаданные документа (id, doc_code, title, era, validity_status и др.)
-- `sections[]` — массив секций с полями: `section_id`, `document_id`, `parent_id`, `clause`, `title`, `level`, `path`, `page`, `bbox`, `type`, `content`, `created_at`
+- `sections[]` — массив секций с полями: `section_id`, `document_id`, `parent_id`, `clause`, `title`, `level`, `path`, `page`, `type`, `content`, `created_at`
   - `content` — объектный, зависит от `type` (см. описание схемы БД)
 - `terminology[]` — термины документа
 - `references[]` — ссылки документа
@@ -774,7 +763,7 @@ GET /registry/documents/{doc_id}/sections
       "level": 1,
       "path": "1",
       "page": 1,
-      "type": "section",
+      "type": "text",
       "content": { "text": "...", "amendments": [] }
     },
     {
@@ -796,10 +785,11 @@ GET /registry/documents/{doc_id}/sections
 ```
 
 > **RAG Builder** получает этот JSON и строит чанки:
-> - `type=section` → `content.text` разбивается на чанки ≤512 токенов
-> - `type=table` → весь `content` → один чанк (Markdown-таблица)
-> - `type=image` → `content.caption + content.description` → один чанк
-> - `type=formula` → `content.latex + content.meaning` → один чанк
+> - `type=text` / `type=textBlock` → `content.text` разбивается на чанки ≤512 токенов
+> - `type=headerFooter` → весь `content.text` → один чанк
+> - `type=table` / `type=list` → `content.markdown` (если есть), иначе сборка из структуры → один чанк
+> - `type=image` → `content.markdown` или `content.caption + content.description` → один чанк
+> - `type=formula` → `content.markdown` или `content.latex + content.meaning` → один чанк
 
 ---
 
@@ -848,7 +838,7 @@ POST /registry/documents/check-uniqueness
         "file_size_bytes": 1048576
       }
     ],
-    "content_hash_sha256": null,
+    "file_hash_sha256": null,
     "title_hash_sha256": "a1b2c3d4e5f6...",
     "file_size_bytes": 2048576,
     "checked_at": "2026-05-15T12:00:00Z"
@@ -904,11 +894,11 @@ POST /registry/documents
 **Тело запроса (из пайплайна — enriched JSON от Converter-validator):**
 
 Registry принимает enriched JSON (схема `validated_v3`) напрямую от Converter-validator.
-Формат — см. [`document2_validate.json`](../schema/document2_validate.json).
+Формат — см. [`schema_converter_result.json`](../schema/schema_converter_result.json).
 
 Ключевые элементы запроса:
 - `document.metadata.*` — метаданные документа (doc_code, title, title_hash_sha256, era и др.)
-- `document.content[]` — единый плоский массив секций с полем `type` (`section`, `table`, `image`, `formula`)
+- `document.content[]` — единый плоский массив секций с полем `type` (`text`, `table`, `image`, `formula`, `list`, `headerFooter`, `textBlock`)
 - `document.terminology[]` — термины документа
 - `document.references[]` — перекрёстные ссылки на другие нормативные документы
 
@@ -932,7 +922,7 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
         "level": 1,
         "path": "1",
         "page": 1,
-        "type": "section",
+        "type": "text",
         "content": { "text": "Настоящий стандарт...", "amendments": [] }
       },
       {
@@ -990,7 +980,10 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
 Система **автоматически вычисляет** `title_hash_sha256` по формуле:  
 `SHA-256(era|source_type|mks_oks_code|okstu_code|doc_code|normalized_title)`
 
-> **Полный формат данных:** [`docs/schema/document3_for_rag.json`](../schema/document3_for_rag.json) (схема `for_rag_v1`)
+> **Полный формат данных:** [`docs/schema/schema_registry_for_rag.json`](../schema/schema_registry_for_rag.json) (схема `for_rag_v1`)
+
+> **Полный формат данных:** см. [`docs/schema/schema_registry_for_rag.json`](../schema/schema_registry_for_rag.json) (схема `for_rag_v1`).
+> Приведённый ниже пример — сокращённый. Все 7 типов секций и полный состав полей — в эталонном JSON.
 
 **Ответ `201`:** Registry назначает DB-ID и возвращает компактный ответ с идентификаторами.
 
@@ -1001,9 +994,16 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
   "sections": [
     {
       "section_id": 1001,
-      "type": "section",
+      "type": "text",
       "clause": "1",
       "path": "1",
+      "page": 1
+    },
+    {
+      "section_id": 1002,
+      "type": "textBlock",
+      "clause": "1",
+      "path": "1.note1",
       "page": 1
     },
     {
@@ -1011,6 +1011,13 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
       "type": "table",
       "clause": "6.1",
       "path": "6.1.table1",
+      "page": 2
+    },
+    {
+      "section_id": 1008,
+      "type": "list",
+      "clause": "6.2",
+      "path": "6.2.list1",
       "page": 2
     },
     {
@@ -1038,15 +1045,16 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
 }
 ```
 
-> **Формат данных для RAG Builder:** Registry хранит секции в БД. Для индексации Orchestrator запрашивает `GET /registry/documents/{doc_id}/sections` и получает полный JSON с объектным `content` — см. [`document3_for_rag.json`](../schema/document3_for_rag.json). RAG Builder самостоятельно разбирает `content` по `type`.
-> **Полный формат ответа `GET /registry/documents/{doc_id}/sections`** — см. [`document3_for_rag.json`](../schema/document3_for_rag.json).
+> **Формат данных для RAG Builder:** Registry хранит секции в БД. Для индексации Orchestrator запрашивает `GET /registry/documents/{doc_id}/sections` и получает полный JSON с объектным `content` — см. [`schema_registry_for_rag.json`](../schema/schema_registry_for_rag.json). RAG Builder самостоятельно разбирает `content` по `type`.
+> **Полный формат ответа `GET /registry/documents/{doc_id}/sections`** — см. [`schema_registry_for_rag.json`](../schema/schema_registry_for_rag.json).
 
 **Особенности формата секций:**
 - Секции — плоский массив (нет вложенных `subsections`)
 - Иерархия задаётся через `parent_id` → `id`
-- Каждая секция имеет `type`: `section`, `table`, `image`, `formula`
+- Каждая секция имеет `type`: `text`, `textBlock`, `headerFooter`, `table`, `list`, `image`, `formula`
 - `image_key` для бинарных объектов (изображения таблиц, фигуры)
-- `bbox` в нормированных координатах 0..1
+- Для `table`/`list`/`image`/`formula` доступен `content.markdown` — единое текстовое представление для RAG
+- `bbox` присутствует только в validated_v3; в for_rag удалён (не нужен для индексации)
 
 | Поле | Тип | Описание |
 |---|---|---|
@@ -1055,7 +1063,7 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
 | `document.title` | string | Полное название |
 | `document.normalized_title` | string | Нормализованное название |
 | `document.group` | string | Группа документа |
-| `document.mks` | string | Код МКС |
+| `document.mks_oks_code` | string | Код МКС/ОКС |
 | `document.okstu` | string\|null | Код ОКСТУ |
 | `document.udc` | string\|null | Код УДК |
 | `document.era` | string | Эра документа |
@@ -1073,7 +1081,7 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
 | `sections[].title` | string\|null | Заголовок секции |
 | `sections[].level` | int | Уровень вложенности (1 — верхний) |
 | `sections[].path` | string | ltree-путь для иерархии |
-| `sections[].type` | string | Тип: `section`, `table`, `image`, `formula` |
+| `sections[].type` | string | Тип: `text`, `table`, `image`, `formula`, `list`, `headerFooter`, `textBlock` |
 | `sections[].content` | JSONB | Содержимое секции (см. ниже) |
 | `sections[].page` | int | Номер страницы |
 | `sections[].bbox` | array | Координаты bbox `[x1,y1,x2,y2]` (0..1) |
@@ -1091,7 +1099,7 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
 
 **Структура `sections[].content` по типам:**
 
-Для `type: "section"`:
+Для `type: "text"`:
 ```json
 {
   "text": "...",
@@ -1114,7 +1122,7 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
     }
   ],
   "footnotes": [
-    { "footnote_id": 1, "text": "...", "applies_to": "whole_table|cell" }
+    { "text": "...", "applies_to": "whole_table|cell", "bbox": [20, 130, 200, 200] }
   ],
   "amendments": [
     { "amendment_id": "...", "type": "...", "source": "...", "affected_columns": [], "action": "...", "note": "..." }
@@ -1435,7 +1443,6 @@ GET /registry/enums
 | `classification_status` | jsonb | DEFAULT `{}` |
 | `successor_doc_id` | uuid | FK → self, nullable |
 | `predecessor_doc_id` | uuid | FK → self, nullable |
-| `chunk_container_id` | uuid | nullable |
 | `metadata` | jsonb | DEFAULT `{}` |
 | `created_at` | timestamptz | NOT NULL |
 | `created_by` | text | nullable |
