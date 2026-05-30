@@ -10,27 +10,38 @@ Registry API
 - Базовый URL: `https://{host}/api/v1`
 - Базовые документы находятся в ```docs/api```
 
-- Запуск сервера в среде разработчика производится из директории ```registry_service``` командой (порт по усмотрению):
+- Запуск сервера в среде разработчика производится из директории ```registry_service``` командой:
 ```commandline
-uvicorn main:app --reload --port 8100
+uvicorn main:app --reload --port 8084
 ```
-Потом смотреть по адресу: ```http://27.0.0.1:8100/api/v1``` и дальше добавить по описанию.
+Потом смотреть по адресу: ```http://127.0.0.1:8084/api/v1``` и дальше добавить по описанию.
 
-- На производстве порт будет 80 и запуск из докера.
-
-- в среде разработки можно сделать локальный файл ```..\registry_service\env.py``` который не загружаеться на GitHub,
-с записями указанными ниже
-
-```
-os.environ.setdefault("DB_DATABASE","<database>")
-os.environ.setdefault("DB_PASSWORD", "<user_password>")
-os.environ.setdefault("DB_USERNAME", "<username>")
-os.environ.setdefault("DB_HOST", "<host>")
-os.environ.setdefault("DB_PORT", "<port>")
-```
 - Тест скрипты сапускаются с директории ```registry_service``` командой ```pytest```.
 - Пока автоматические тесты проверяют на наличии рабочих URL.
   - следующий шаг - разработка тестов на функционал
+
+# Окружение и конфигурация
+
+## Переменные окружения
+
+Сервис требует следующие переменные окружения, определённые в файле `.env` в корне директории `registry_service`:
+
+```env
+DB_USERNAME=<database_user>
+DB_PASSWORD=<database_password>
+DB_HOST=<database_host>
+DB_PORT=<database_port>
+DB_DATABASE=<database_name>
+```
+
+**Описание переменных:**
+- `DB_USERNAME` — пользователь PostgreSQL
+- `DB_PASSWORD` — пароль пользователя
+- `DB_HOST` — хост БД (например: 127.0.0.1)
+- `DB_PORT` — порт PostgreSQL (по умолчанию: 5432)
+- `DB_DATABASE` — имя базы данных
+
+Файл `.env` **не должен** включаться в систему контроля версий (уже добавлен в `.gitignore`).
 
 # Статусы разработки API
 
