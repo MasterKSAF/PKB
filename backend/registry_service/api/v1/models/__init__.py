@@ -1,18 +1,20 @@
 from .base import Base
+from .document import Document
+from .document_history import DocumentHistory
+from .document_references import DocumentReference
+from .document_sections import DocumentSection
+from .document_versions import DocumentVersion
+from .exports import Export
+from .files import File
 
-# Classifier Models
-from .classifier import ClassifierRegistryPurgatory
+__all__ = [
+    'Base',
+    'Document',
+    'DocumentHistory',
+    'DocumentReference',
+    'DocumentSection',
+    'DocumentVersion',
+    'Export',
+    'File',
+]
 
-# Terminology Models
-from .terminology import TerminologyRegistryPurgatory
-
-# Document Models
-from .document import (
-    DocumentsPurgatory,
-    FormatRegistryPurgatory,
-    ChunkContainersPurgatory,
-    DocumentVersionsPurgatory,
-    StatusHistoryPurgatory,
-    DocStatus,
-    ValidationStatus
-)

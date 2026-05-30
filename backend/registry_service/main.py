@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from fastapi.requests import Request
 import builtins
 
+import env
 from services.response import DomainException, success_response
 # Inject into builtins BEFORE importing any routers so it's available globally during module evaluation
 builtins.success_response = success_response

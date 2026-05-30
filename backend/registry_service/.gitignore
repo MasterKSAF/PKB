@@ -1,2 +1,8 @@
 env.py
 migrations/
+.venv/
+__pycache__/
+*.pyc
+.env
+.vscode/
+.idea/

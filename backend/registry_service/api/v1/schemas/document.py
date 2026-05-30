@@ -1,66 +1,42 @@
-from pydantic import BaseModel, ConfigDict, Field
-from typing import Optional, Any
-from datetime import datetime
-from uuid import UUID
-from api.v1.models.document import DocStatus
+from __future__ import annotations
 
-class DocumentsPurgatoryBase(BaseModel):
+from datetime import date, datetime
+from typing import Any, Optional
+
+from pydantic import BaseModel, Field
+
+
+class DocumentSchema(BaseModel):
+    id: str
+    doc_code: str
     title: str
-    doc_code: Optional[str] = None
+    normalized_title: Optional[str] = None
     source_type: Optional[str] = None
+    group_: Optional[str] = Field(None, alias='group')
+    mks_oks_code: Optional[str] = None
+    okstu_code: Optional[str] = None
+    udc: Optional[str] = None
     era: Optional[str] = None
     validity_status: Optional[str] = None
     jurisdiction: Optional[str] = None
     issuing_body: Optional[str] = None
-    classifier_system: Optional[str] = "MKS"
-    mks_oks_code: Optional[str] = None
-    okstu_code: Optional[str] = None
-    classification_status: Optional[dict] = None
-    successor_doc_id: Optional[UUID] = None
-    predecessor_doc_id: Optional[UUID] = None
-    metadata: Optional[dict] = Field(default=None, alias='metadata_')
-    status: Optional[DocStatus] = None
-
-    model_config = ConfigDict(populate_by_name=True)
-
-class DocumentsPurgatoryCreate(DocumentsPurgatoryBase):
-    pass
-
-class DocumentsPurgatoryUpdate(BaseModel):
-    title: Optional[str] = None
-    doc_code: Optional[str] = None
-    source_type: Optional[str] = None
-    era: Optional[str] = None
-    validity_status: Optional[str] = None
-    jurisdiction: Optional[str] = None
-    issuing_body: Optional[str] = None
-    classifier_system: Optional[str] = None
-    mks_oks_code: Optional[str] = None
-    okstu_code: Optional[str] = None
-    classification_status: Optional[dict] = None
-    successor_doc_id: Optional[UUID] = None
-    predecessor_doc_id: Optional[UUID] = None
-    metadata: Optional[dict] = Field(default=None, alias='metadata_')
-    status: Optional[DocStatus] = None
-
-    model_config = ConfigDict(populate_by_name=True)
-
-class DocumentsPurgatoryStatusUpdate(BaseModel):
-    status: DocStatus
-    comment: Optional[str] = None
-    changed_by: Optional[str] = None
-
-class DocumentsPurgatoryResponse(DocumentsPurgatoryBase):
-    id: UUID
-    mks_name: Optional[str] = None
-    okstu_name: Optional[str] = None
+    adoption_date: Optional[date] = None
+    effective_from: Optional[date] = None
+    replaces: Optional[str] = None
+    status_note: Optional[str] = None
+    file_hash_sha256: Optional[str] = None
     title_hash_sha256: Optional[str] = None
-    status: Optional[DocStatus] = None
-    total_versions: Optional[int] = None
+    file_size_bytes: Optional[int] = None
+    processing_status: Optional[str] = None
     chunk_count: Optional[int] = None
-    created_at: Optional[datetime]
+    successor_doc_id: Optional[str] = None
+    predecessor_doc_id: Optional[str] = None
     created_by: Optional[str] = None
-    updated_at: Optional[datetime]
     updated_by: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    model_config = {
+        'extra': 'ignore',
+        'populate_by_name': True,
+    }
