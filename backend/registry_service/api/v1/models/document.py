@@ -1,3 +1,5 @@
+import uuid
+
 from sqlalchemy import Column, String, Text, BigInteger, Integer, Boolean, Date, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 
@@ -8,7 +10,7 @@ class Document(Base):
     __tablename__ = 'documents'
     __table_args__ = {'schema': 'registry'}
 
-    id = Column('id', UUID(as_uuid=True), primary_key=True)
+    id = Column('id', UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     doc_code = Column('doc_code', Text, nullable=False)
     title = Column('title', Text, nullable=False)
     normalized_title = Column('normalized_title', Text)
@@ -19,6 +21,7 @@ class Document(Base):
     udc = Column('udc', Text)
     era = Column('era', String(50))
     validity_status = Column('validity_status', String(50))
+    status = Column('status', String(50))
     jurisdiction = Column('jurisdiction', String(50))
     issuing_body = Column('issuing_body', Text)
     adoption_date = Column('adoption_date', Date)

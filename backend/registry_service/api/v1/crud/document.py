@@ -1,3 +1,4 @@
+import uuid
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
@@ -10,17 +11,25 @@ def get_documents(
     page: int = 1,
     page_size: int = 50,
     doc_code: Optional[str] = None,
-    processing_status: Optional[str] = None,
+    title: Optional[str] = None,
+    status: Optional[str] = None,
+    mks_oks_code: Optional[str] = None,
 ) -> tuple[List[Document], int]:
     """Retrieve documents with pagination and optional filters."""
     query = db.query(Document)
 
     if doc_code:
         query = query.filter(Document.doc_code.ilike(f'%{doc_code}%'))
-    
-    if processing_status:
-        query = query.filter(Document.processing_status == processing_status)
-    
+
+    if title:
+        query = query.filter(Document.title.ilike(f'%{title}%'))
+
+    if status:
+        query = query.filter(Document.status == status)
+
+    if mks_oks_code:
+        query = query.filter(Document.mks_oks_code == mks_oks_code)
+
     total = query.count()
     
     skip = (page - 1) * page_size
@@ -31,7 +40,11 @@ def get_documents(
 
 def get_document_by_id(db: Session, document_id: str) -> Optional[Document]:
     """Retrieve a single document by ID."""
-    return db.query(Document).filter(Document.id == document_id).first()
+    try:
+        document_uuid = uuid.UUID(str(document_id))
+    except (ValueError, TypeError):
+        return None
+    return db.query(Document).filter(Document.id == document_uuid).first()
 
 
 def create_document(db: Session, doc_code: str, title: str, **kwargs) -> Document:
