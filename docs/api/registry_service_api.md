@@ -1,35 +1,29 @@
-## API Registry Service (registry-service:8084)
+## API Registry Service / Registry (registry-service:8084)
 
 Базовый реестр НСИ (нормативно-справочной информации).  
-Хранит классификаторы, документы и терминологию после промотирования из Purgatory.  
+Хранит классификаторы, документы и терминологию.  
+Соответствует этапу **«Registry» Пайплайна 1 (Формирование документа)** — **пишет** данные в БД.  
+Также участвует в этапе **«Validation»** — **читает** справочники классификаторов для проверки кодов.
+
 **Внутренний сервис**. Публичный API — через Orchestrator.
 
 **Базовый URL**: `http://127.0.0.1:8084/api/v1`
 
 ### Формат ответа
 
-Все ответы обёрнуты в `{ data, meta }`:
+Формат ошибок — см. [common_api.md](../common_api.md#формат-ответа).
 
+Списочные ответы обёрнуты в `{ data, meta }`:
 ```json
 {
   "data": [ ... ],
   "meta": { "total": 150, "page": 1, "page_size": 50 }
 }
 ```
-
 Для одиночных объектов:
-
 ```json
 {
   "data": { "id": "b3a8f1c2-...", "title": "..." }
-}
-```
-
-При ошибке:
-
-```json
-{
-  "error": { "code": "NOT_FOUND", "message": "Не найдено", "details": {} }
 }
 ```
 
@@ -376,6 +370,62 @@ POST /registry/classifiers/pending/{pending_id}/reject
 
 ---
 
+### 1.12. Валидация классификации
+
+```
+POST /registry/classifiers/validate
+```
+
+Проверка и подтверждение извлечённых классификационных кодов (МКС/ОКС, ОКСТУ, УДК) по справочнику Registry.  
+**Синхронная операция.** Не имеет побочных эффектов.
+
+**Запрос:**
+
+```json
+{
+  "classification": {
+    "mks_oks_code": "47.020",
+    "okstu_code": null,
+    "udk_code": "629.5.021"
+  }
+}
+```
+
+| Поле | Тип | Обязательность | Описание |
+|---|---|---|---|
+| `classification.mks_oks_code` | string | Нет | Код МКС/ОКС |
+| `classification.okstu_code` | string | Нет | Код ОКСТУ |
+| `classification.udk_code` | string | Нет | Код УДК |
+
+**Ответ `200`:**
+
+```json
+{
+  "data": {
+    "mks_status": "CONFIRMED",
+    "mks_display_name": "Конструкция корпуса",
+    "okstu_status": "NOT_USED",
+    "udk_valid": true,
+    "overall_status": "valid"
+  }
+}
+```
+
+**Статусы `*_status`:**
+
+| Значение | Описание |
+|---|---|
+| `CONFIRMED` | Код найден в справочнике и верифицирован |
+| `PENDING_REVIEW` | Извлечён автоматически, не найден в справочнике — требует ручного разбора |
+| `NOT_FOUND` | Парсер не обнаружил код на первых страницах |
+| `NOT_USED` | Не применяется для данной эры/типа документа |
+| `UNASSIGNED` | Классификация не назначалась |
+
+Registry Service — source of truth для классификаторов. Проверяет коды напрямую по `classifier_registry`.  
+Решение о создании `classifier_pending` принимает **Оркестратор**, анализируя возвращённые статусы.
+
+---
+
 ## Группа terminology
 
 ### 2.1. Список
@@ -579,6 +629,8 @@ GET /registry/documents
       "doc_code": "20868-81",
       "source_type": "GOST",
       "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+      "file_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "file_size_bytes": 2048576,
       "status": "approved",
       "era": "USSR",
       "validity_status": "active",
@@ -608,23 +660,215 @@ GET /registry/documents
 
 ---
 
-### 3.2. Один документ
+### 3.2. Один документ (описание)
 
 ```
 GET /registry/documents/{doc_id}
 ```
 
-**Ответ `200`** — полный объект документа с версиями файлов, цепочками преемственности.
+**Ответ `200`** — метаданные документа (описание карточки) из таблицы `registry_documents`.
+Без секций, терминологии и ссылок.
+
+Ключевые поля:
+- `id` — UUID документа
+- `doc_code` — код документа (ГОСТ, ОСТ и т.д.)
+- `title` — название документа
+- `title_hash_sha256` — хэш бизнес-ключа
+- `status` — FSM-статус обработки
+- `era` — эпоха (`USSR`, `CIS`, `RF`, `CURRENT`)
+- `validity_status` — юридический статус (`active`, `superseded`, `cancelled`, `historical`, `draft`)
+- `jurisdiction` — юрисдикция (`RU`, `EU`, `US`, `NO`, `INTL`)
+- `issuing_body` — организация-издатель
+- `source_type` — тип источника (`GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `OTHER`)
+- `mks_oks_code` — код МКС/ОКС
+- `okstu_code` — код ОКСТУ
+- `classification_status` — статус классификации (`{ mks_status, okstu_status }`)
+- `successor_doc_id` — ID документа-преемника
+- `predecessor_doc_id` — ID документа-предшественника
+- `metadata` — произвольные метаданные (JSONB)
+- `created_at` / `updated_at` — даты создания и обновления
+- `created_by` / `updated_by` — кем создан/обновлён
+
+**Пример ответа:**
+
+```json
+{
+  "data": {
+    "id": "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+    "doc_code": "ГОСТ 20868-81",
+    "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
+    "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+    "status": "approved",
+    "era": "USSR",
+    "validity_status": "active",
+    "jurisdiction": "RU",
+    "issuing_body": "Государственный Комитет СССР по стандартам",
+    "source_type": "GOST",
+    "mks_oks_code": "31.240",
+    "okstu_code": null,
+    "classification_status": {
+      "mks_status": "CONFIRMED",
+      "okstu_status": "NOT_USED"
+    },
+    "successor_doc_id": null,
+    "predecessor_doc_id": null,
+    "metadata": {},
+    "created_at": "2026-04-27T10:00:00Z",
+    "updated_at": "2026-04-27T14:00:00Z",
+    "created_by": "system_registry_sync",
+    "updated_by": "ivanov_ai"
+  }
+}
+```
 
 ---
 
-### 3.3. Создать
+### 3.2.1. Секции документа (полный объект для RAG Builder)
+
+```
+GET /registry/documents/{doc_id}/sections
+```
+
+**Ответ `200`** — полный объект документа со всеми секциями, терминологией и ссылками.
+Этот JSON используется RAG Builder для построения чанков: RAG Builder самостоятельно
+разбирает `content` каждой секции в зависимости от `type`.
+
+Формат ответа — см. [`schema_registry_for_rag.json`](../schema/schema_registry_for_rag.json).
+
+Ключевые поля:
+- `document` — метаданные документа (id, doc_code, title, era, validity_status и др.)
+- `sections[]` — массив секций с полями: `section_id`, `document_id`, `parent_id`, `clause`, `title`, `level`, `path`, `page`, `type`, `content`, `created_at`
+  - `content` — объектный, зависит от `type` (см. описание схемы БД)
+- `terminology[]` — термины документа
+- `references[]` — ссылки документа
+
+**Пример ответа (сокращён):**
+
+```json
+{
+  "document": {
+    "id": "b3a8f1c2-...",
+    "doc_code": "ГОСТ 20868-81",
+    "title": "СТОЙКИ УСТАНОВОЧНЫЕ...",
+    "era": "USSR",
+    "validity_status": "active"
+  },
+  "sections": [
+    {
+      "section_id": 1001,
+      "document_id": "b3a8f1c2-...",
+      "parent_id": null,
+      "clause": "1",
+      "title": null,
+      "level": 1,
+      "path": "1",
+      "page": 1,
+      "type": "text",
+      "content": { "text": "...", "amendments": [] }
+    },
+    {
+      "section_id": 1005,
+      "document_id": "b3a8f1c2-...",
+      "parent_id": 1003,
+      "clause": "6.1",
+      "title": "Допуск соосности при степени точности",
+      "level": 2,
+      "path": "6.1.table1",
+      "page": 2,
+      "type": "table",
+      "content": { "columns": [...], "rows": [...], "footnotes": [...] }
+    }
+  ],
+  "terminology": [],
+  "references": []
+}
+```
+
+> **RAG Builder** получает этот JSON и строит чанки:
+> - `type=text` / `type=textBlock` → `content.text` разбивается на чанки ≤512 токенов
+> - `type=headerFooter` → весь `content.text` → один чанк
+> - `type=table` / `type=list` → `content.markdown` (если есть), иначе сборка из структуры → один чанк
+> - `type=image` → `content.markdown` или `content.caption + content.description` → один чанк
+> - `type=formula` → `content.markdown` или `content.latex + content.meaning` → один чанк
+
+---
+
+### 3.2.5. Проверить уникальность документа
+
+```
+POST /registry/documents/check-uniqueness
+```
+
+Быстрая проверка уникальности документа по метаданным. Вызывается **Оркестратором**
+на preview- и full-этапах Пайплайна 1 для поиска дубликатов до записи в Registry.
+
+**Тело запроса:**
+
+| Поле | Тип | Обязательность | Описание |
+|------|-----|----------------|----------|
+| `title` | string | Да | Название документа (нормализованное) |
+| `doc_code` | string | Нет | Код документа (ГОСТ, ОСТ и т.д.) |
+| `era` | string | Нет | Эпоха действия документа |
+| `source_type` | string | Нет | Тип источника |
+| `file_size_bytes` | int | Нет | Размер файла в байтах. Используется для pre-filtering при поиске кандидатов |
+
+```json
+{
+  "title": "Стойки установочные крепежные. Технические требования",
+  "doc_code": "ГОСТ 20868-81",
+  "era": "USSR",
+  "file_size_bytes": 2048576
+}
+```
+
+**Ответ `200`:**
+
+```json
+{
+  "data": {
+    "is_duplicate": false,
+    "is_duplicate_file": false,
+    "candidates": [
+      {
+        "document_id": "b3a8f1c2-...",
+        "title": "ГОСТ 20868-81",
+        "doc_code": "20868-81",
+        "similarity": 0.98,
+        "status": "archived",
+        "file_size_bytes": 1048576
+      }
+    ],
+    "file_hash_sha256": null,
+    "title_hash_sha256": "a1b2c3d4e5f6...",
+    "file_size_bytes": 2048576,
+    "checked_at": "2026-05-15T12:00:00Z"
+  }
+}
+```
+
+**Логика определения дубликатов:**
+1. Pre-filter по размеру: если передан `file_size_bytes`, кандидаты с существенно отличающимся размером отфильтровываются (`|size₁ - size₂| > 0.5% max(size₁, size₂)` — false positive отличия метаданных в архиве).
+2. Поиск по `title_hash_sha256` (точное совпадение нормализованного названия).
+3. Поиск по `doc_code` + `era` (документ с тем же кодом в ту же эпоху).
+4. Если кандидат найден и имеет статус обработки `registry` или `indexed` — считается дубликатом.
+5. Если кандидат найден, но находится в `draft` или `failed` — возвращается как кандидат,
+   решение принимает пользователь.
+
+---
+
+### 3.3. Создать (основной / из Пайплайна 1)
 
 ```
 POST /registry/documents
 ```
 
-**Тело запроса:**
+**Назначение:** создание карточки документа. Используется как при прямом вызове из UI/админки, так и со стороны этапа **«Registry»** Пайплайна 1 (Формирование документа).
+
+> **Важно:** Registry использует `document_id` (UUID) как **единый первичный ключ**. `document_id` назначается на этапе Validation (Пайплайн 1, Этап 2) после проверки уникальности: извлекается существующий для дубликата, либо генерируется новый. Собственный numeric ID не создаётся — `document_id` проходит сквозь все сервисы без маппинга.
+
+В режиме пайплайна оркестратор передаёт JSON-контейнер (результат Converter-validator) как непрозрачный артефакт — сервис сам маппит поля в модель данных.
+
+**Тело запроса (прямое создание):**
 
 ```json
 {
@@ -647,9 +891,77 @@ POST /registry/documents
 }
 ```
 
+**Тело запроса (из пайплайна — enriched JSON от Converter-validator):**
+
+Registry принимает enriched JSON (схема `validated_v3`) напрямую от Converter-validator.
+Формат — см. [`schema_converter_result.json`](../schema/schema_converter_result.json).
+
+Ключевые элементы запроса:
+- `document.metadata.*` — метаданные документа (doc_code, title, title_hash_sha256, era и др.)
+- `document.content[]` — единый плоский массив секций с полем `type` (`text`, `table`, `image`, `formula`, `list`, `headerFooter`, `textBlock`)
+- `document.terminology[]` — термины документа
+- `document.references[]` — перекрёстные ссылки на другие нормативные документы
+
+```json
+{
+  "document": {
+    "source": { "file_name": "...", "file_hash_sha256": "...", "page_count": 2 },
+    "metadata": {
+      "doc_code": "ГОСТ 20868-81",
+      "title": "СТОЙКИ УСТАНОВОЧНЫЕ...",
+      "normalized_title": "стойки установочные...",
+      "title_hash_sha256": "a1b2c3d4...",
+      "era": "USSR",
+      "validity_status": "active",
+      "mks_oks_code": "31.240"
+    },
+    "content": [
+      {
+        "clause": "1",
+        "title": null,
+        "level": 1,
+        "path": "1",
+        "page": 1,
+        "type": "text",
+        "content": { "text": "Настоящий стандарт...", "amendments": [] }
+      },
+      {
+        "clause": "6.1",
+        "title": "Допуск соосности при степени точности",
+        "level": 2,
+        "path": "6.1.table1",
+        "page": 2,
+        "type": "table",
+        "content": { "columns": [...], "rows": [...], "footnotes": [...], "amendments": [...], "image_key": "..." }
+      }
+    ],
+    "terminology": [
+      {
+        "term": "стойка установочная крепежная",
+        "definition": "Металлическая деталь для монтажа радиоэлектронной аппаратуры.",
+        "source_clause": "1",
+        "normalized_term": "стойка установочная крепежная"
+      }
+    ],
+    "references": [
+      {
+        "target_doc_code": "ГОСТ 24705-81",
+        "type": "single",
+        "context": "резьбы",
+        "current_status": "superseded",
+        "replaced_by": "ГОСТ 24705-2004",
+        "replacement_date": "2005-07-01"
+      }
+    ]
+  }
+}
+```
+
+> Registry сохраняет данные в БД, **сегментирует** документ на **секции** (`registry.document_sections`) и возвращает **плоский JSON** — список секций с проставленными `id`, без иерархии `subsections`. Этот плоский JSON передаётся в RAG Builder для чанкования.
+
 | Поле | Тип | Обязательность | Описание |
 |------|-----|----------------|----------|
-| `title` | string | Да | Полное название |
+| `title` | string | Да* | Полное название |
 | `doc_code` | string | Нет | Регистрационный номер |
 | `source_type` | string | Нет | Тип источника |
 | `era` | string | Нет | Эра документа |
@@ -663,13 +975,187 @@ POST /registry/documents
 | `predecessor_doc_id` | UUID | Нет | Предшественник |
 | `metadata` | JSONB | Нет | Доп. данные |
 
+> *`title` обязателен при прямом создании; в режиме пайплайна берётся из структуры JSON-контейнера.
+
 Система **автоматически вычисляет** `title_hash_sha256` по формуле:  
 `SHA-256(era|source_type|mks_oks_code|okstu_code|doc_code|normalized_title)`
 
-**Ответ `201`**: созданный объект.  
+> **Полный формат данных:** [`docs/schema/schema_registry_for_rag.json`](../schema/schema_registry_for_rag.json) (схема `for_rag_v1`)
+
+> **Полный формат данных:** см. [`docs/schema/schema_registry_for_rag.json`](../schema/schema_registry_for_rag.json) (схема `for_rag_v1`).
+> Приведённый ниже пример — сокращённый. Все 7 типов секций и полный состав полей — в эталонном JSON.
+
+**Ответ `201`:** Registry назначает DB-ID и возвращает компактный ответ с идентификаторами.
+
+```json
+{
+  "document_id": "b3a8f1c2-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+  "version_id": "v1-b3a8f1c2-...",
+  "sections": [
+    {
+      "section_id": 1001,
+      "type": "text",
+      "clause": "1",
+      "path": "1",
+      "page": 1
+    },
+    {
+      "section_id": 1002,
+      "type": "textBlock",
+      "clause": "1",
+      "path": "1.note1",
+      "page": 1
+    },
+    {
+      "section_id": 1005,
+      "type": "table",
+      "clause": "6.1",
+      "path": "6.1.table1",
+      "page": 2
+    },
+    {
+      "section_id": 1008,
+      "type": "list",
+      "clause": "6.2",
+      "path": "6.2.list1",
+      "page": 2
+    },
+    {
+      "section_id": 1009,
+      "type": "image",
+      "clause": "6.1",
+      "path": "6.1.fig1",
+      "page": 2
+    },
+    {
+      "section_id": 1011,
+      "type": "formula",
+      "clause": "6.1",
+      "path": "6.1.formula1",
+      "page": 1
+    }
+  ],
+  "registry": {
+    "document_id": "b3a8f1c2-...",
+    "version_id": "v1-...",
+    "sections_count": 11,
+    "references_count": 4,
+    "created_at": "2026-05-17T09:15:00Z"
+  }
+}
+```
+
+> **Формат данных для RAG Builder:** Registry хранит секции в БД. Для индексации Orchestrator запрашивает `GET /registry/documents/{doc_id}/sections` и получает полный JSON с объектным `content` — см. [`schema_registry_for_rag.json`](../schema/schema_registry_for_rag.json). RAG Builder самостоятельно разбирает `content` по `type`.
+> **Полный формат ответа `GET /registry/documents/{doc_id}/sections`** — см. [`schema_registry_for_rag.json`](../schema/schema_registry_for_rag.json).
+
+**Особенности формата секций:**
+- Секции — плоский массив (нет вложенных `subsections`)
+- Иерархия задаётся через `parent_id` → `id`
+- Каждая секция имеет `type`: `text`, `textBlock`, `headerFooter`, `table`, `list`, `image`, `formula`
+- `image_key` для бинарных объектов (изображения таблиц, фигуры)
+- Для `table`/`list`/`image`/`formula` доступен `content.markdown` — единое текстовое представление для RAG
+- `bbox` присутствует только в validated_v3; в for_rag удалён (не нужен для индексации)
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `document.id` | string | UUID документа (единый первичный ключ) |
+| `document.doc_code` | string | Обозначение документа |
+| `document.title` | string | Полное название |
+| `document.normalized_title` | string | Нормализованное название |
+| `document.group` | string | Группа документа |
+| `document.mks_oks_code` | string | Код МКС/ОКС |
+| `document.okstu` | string\|null | Код ОКСТУ |
+| `document.udc` | string\|null | Код УДК |
+| `document.era` | string | Эра документа |
+| `document.validity_status` | string | Статус действия |
+| `document.issuing_body` | string | Организация-издатель |
+| `document.adoption_date` | string | Дата принятия |
+| `document.effective_from` | string | Дата введения в действие |
+| `document.replaces` | string\|null | Заменяемый документ |
+| `document.page_count` | int | Количество страниц |
+| `document.file_hash_sha256` | string | SHA-256 хеш файла |
+| `sections[].section_id` | bigint | ID секции в `registry.document_sections` |
+| `sections[].document_id` | string | UUID документа |
+| `sections[].parent_id` | bigint\|null | ID родительской секции (`null` для корневых) |
+| `sections[].clause` | string | Номер пункта |
+| `sections[].title` | string\|null | Заголовок секции |
+| `sections[].level` | int | Уровень вложенности (1 — верхний) |
+| `sections[].path` | string | ltree-путь для иерархии |
+| `sections[].type` | string | Тип: `text`, `table`, `image`, `formula`, `list`, `headerFooter`, `textBlock` |
+| `sections[].content` | JSONB | Содержимое секции (см. ниже) |
+| `sections[].page` | int | Номер страницы |
+| `sections[].bbox` | array | Координаты bbox `[x1,y1,x2,y2]` (0..1) |
+| `terminology` | array | Массив терминов документа |
+| `terminology[].term` | string | Термин |
+| `terminology[].definition` | string | Определение термина |
+| `terminology[].source_clause` | string | Пункт-источник |
+| `terminology[].normalized_term` | string | Нормализованная форма термина |
+| `registry` | object | Метаданные записи в БД |
+| `registry.document_id` | string | UUID документа |
+| `registry.version_id` | string | UUID версии |
+| `registry.created_at` | string | Дата создания записи |
+| `registry.sections_count` | int | Количество сохранённых секций |
+| `registry.references_count` | int | Количество ссылок |
+
+**Структура `sections[].content` по типам:**
+
+Для `type: "text"`:
+```json
+{
+  "text": "...",
+  "amendments": []
+}
+```
+
+Для `type: "table"`:
+```json
+{
+  "columns": [
+    { "name": "...", "header": "...", "index": 0, "type": "range|value", "value_type": "number|string", "unit": "..." }
+  ],
+  "rows": [
+    {
+      "row_index": 0, "type": "data|header",
+      "cells": {
+        "column_name": { "value": ..., "label": "...", "range": { "min": ..., "max": ..., "min_inclusive": true, "max_inclusive": true } }
+      }
+    }
+  ],
+  "footnotes": [
+    { "text": "...", "applies_to": "whole_table|cell", "bbox": [20, 130, 200, 200] }
+  ],
+  "amendments": [
+    { "amendment_id": "...", "type": "...", "source": "...", "affected_columns": [], "action": "...", "note": "..." }
+  ],
+  "image_key": "purgatory/assets/.../tables/t1.png"
+}
+```
+
+Для `type: "image"`:
+```json
+{
+  "caption": "...",
+  "file_key": "purgatory/assets/.../fig1.png",
+  "description": "..."
+}
+```
+
+Для `type: "formula"`:
+```json
+{
+  "latex": "...",
+  "meaning": "...",
+  "parameters": [
+    { "symbol": "...", "description": "...", "unit": "..." }
+  ]
+}
+```
+
 **Ошибки**: `409` — `DUPLICATE_DOCUMENT`.
 
 ---
+
+
 
 ### 3.4. Обновить
 
@@ -830,8 +1316,8 @@ GET /registry/stats
     "documents_by_status": {
       "draft": 2,
       "uploaded": 5,
-      "validating": 1,
-      "processing": 3,
+      "parsing": 3,
+      "validation": 1,
       "review_required": 2,
       "ready_for_promotion": 4,
       "approved": 30,
@@ -894,7 +1380,7 @@ GET /registry/enums
 
 | Поле | Тип | Ограничения |
 |------|-----|-------------|
-| `classifier_system` | varchar(20) | PK (составной), `MKS`, `OKSTU`, `UDC`, `EXTERNAL` |
+| `classifier_system` | classifier_system_enum | PK (составной), ENUM: `MKS`, `OKSTU`, `UDC`, `EXTERNAL` |
 | `code` | text | PK (составной) |
 | `parent_code` | text | FK → self (`classifier_system`, `code`), nullable |
 | `full_name` | text | NOT NULL |
@@ -957,7 +1443,6 @@ GET /registry/enums
 | `classification_status` | jsonb | DEFAULT `{}` |
 | `successor_doc_id` | uuid | FK → self, nullable |
 | `predecessor_doc_id` | uuid | FK → self, nullable |
-| `chunk_container_id` | uuid | nullable |
 | `metadata` | jsonb | DEFAULT `{}` |
 | `created_at` | timestamptz | NOT NULL |
 | `created_by` | text | nullable |
@@ -965,6 +1450,17 @@ GET /registry/enums
 | `updated_by` | text | nullable |
 
 > Сгенерированные колонки `mks_system` и `okstu_system` (GENERATED ALWAYS AS 'MKS'/'OKSTU') обеспечивают строгую FK-проверку к системе классификации.
+
+### 5.5. format_registry
+
+| Поле | Тип | Ограничения |
+|------|-----|-------------|
+| `id` | uuid | PK |
+| `format_code` | text | UNIQUE, NOT NULL — `pdf`, `png`, `jpg`, `tiff`, `docx` |
+| `mime_type` | text | NOT NULL — `application/pdf`, `image/png` и т.д. |
+| `parser_engine` | text | NOT NULL — `docling`, `tesseract`, `easyocr` |
+| `supported` | boolean | DEFAULT true |
+| `created_at` | timestamptz | NOT NULL |
 
 ---
 

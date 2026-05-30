@@ -4,24 +4,19 @@
 
 *Внутренний сервис. Не предназначен для прямого вызова из frontend. Публичный API — в Orchestrator Service.*
 
-**Базовый URL (внутренний)**: `http://127.0.0.1:8085/api/v1`  
+**Базовый URL (внутренний)**: `http://127.0.0.1:8085/api/v1`
 **Базовый URL (публичный через Orchestrator)**: `https://{host}/api/v1`
 
 ### Формат ответа
 
-Успех — данные возвращаются напрямую.
+Формат ответа и ошибок — см. [common_api.md](../common_api.md#формат-ответа).
 
-При ошибке:
-
-```json
-{
-  "error": {
-    "code": "FILE_NOT_FOUND",
-    "message": "Описание ошибки",
-    "details": {}
-  }
-}
-```
+**Специфичные коды ошибок Integration-сервиса:**
+| HTTP | `error.code` | Описание |
+|------|-------------|----------|
+| 400 | `VALIDATION_ERROR` | Неверные параметры запроса |
+| 404 | `FILE_NOT_FOUND` | Файл не найден |
+| 413 | `FILE_TOO_LARGE` | Превышение лимита размера файла |
 
 ### Группы
 
@@ -46,7 +41,7 @@
 
 ```json
 {
-  "file_id": "file-xyz",
+  "file_key": "file-xyz",
   "filename": "page_5.png",
   "size": 1048576,
   "mime_type": "image/png",
@@ -57,20 +52,20 @@
 
 | Поле | Тип | Описание |
 |------|-----|----------|
-| `file_id` | string | ID файла |
+| `file_key` | string | Ключ файла |
 | `filename` | string | Имя файла |
 | `size` | int | Размер в байтах |
 | `mime_type` | string | MIME-тип |
 | `url` | string | URL для доступа |
 | `uploaded_at` | string | Дата загрузки |
 
-### GET /files/{file_id}
+### GET /files/{file_key}
 
 Получение бинарного потока файла.
 
 **Ответ `200`**: Бинарные данные файла с корректными заголовками `Content-Type` и `Content-Length`.
 
-### DELETE /files/{file_id}
+### DELETE /files/{file_key}
 
 Удаление файла.
 
@@ -78,12 +73,12 @@
 
 ```json
 {
-  "file_id": "file-xyz",
+  "file_key": "file-xyz",
   "deleted_at": "2026-04-27T10:30:00Z"
 }
 ```
 
-### GET /files/{file_id}/info
+### GET /files/{file_key}/info
 
 Метаданные файла без скачивания.
 
