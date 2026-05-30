@@ -7,7 +7,7 @@ Registry API
 
 [Общие постановления](../../../docs/api/common.md)
 
-- Базовый URL: `https://{host}/api/v1`
+- Базовый URL: `https://{host}:8084/api/v1`
 - Базовые документы находятся в ```docs/api```
 
 - Запуск сервера в среде разработчика производится из директории ```registry_service``` командой:
@@ -46,45 +46,49 @@ DB_DATABASE=<database_name>
 # Статусы разработки API
 
 ## 1. Классификаторы
-| METHOD | EndPoint                      | Описание                | Статус     | Коментарии    |
-|--------|-------------------------------|-------------------------|------------|---------------|
-| GET    | /registry/classifiers         | Список (плоский)        | GENERATED  |  |
-| GET    | /registry/classifiers/tree    | Дерево (иерархическое)  | GENERATED  |  |
-| GET    | /registry/classifiers/{code}  | Один узел               | GENERATED  |  |
-| POST   | /registry/classifiers         | Создать                 | GENERATED  |  |
-| PUT    | /registry/classifiers/{code}  | Обновить полностю       | GENERATED  |  |
-| PATCH  |  /registry/classifiers/{code} | Обновить отдельные поля | GENERATED  |  |
-| DELETE | /registry/classifiers/{code}  | Удалить | GENERATED  |  |
-| POST  | /registry/classifiers/import  | Импорт | GENERATED |  |
+| METHOD | EndPoint                      | Описание                         | Статус      | Комментарии          |
+|--------|-------------------------------|----------------------------------|-------------|----------------------|
+| GET    | /registry/classifiers/        | Список классификаторов           | Реализовано |                      |
+| GET    | /registry/classifiers/tree    | Деревянная иерархия классификаторов | Реализовано |                      |
+| GET    | /registry/classifiers/{code}  | Получить один классификатор      | Реализовано |                      |
+| POST   | /registry/classifiers/        | Создать классификатор            | Реализовано |                      |
+| PUT    | /registry/classifiers/{code}  | Полное обновление классификатора | Реализовано |                      |
+| PATCH  | /registry/classifiers/{code}  | Частичное обновление            | Реализовано |                      |
+| DELETE | /registry/classifiers/{code}  | Удалить классификатор            | Реализовано |                      |
+| POST   | /registry/classifiers/import  | Импорт классификаторов           | Реализовано | Заглушка             |
 
 ## 2. Термины
-| METHOD | EndPoint              | Описание                | Статус | Коментарии                                                |
-|--------|-----------------------|-------------------------|--------|-----------------------------------------------------------|
-| GET    | /registry/terminology | Список      | GENERATED |  |
-| GET    | /registry/terminology/{term_id} | Один термин  | GENERATED |  |
-| POST   | /registry/terminology | Создать      | GENERATED |  |
-| PUT    | /registry/terminology/{term_id} | Обновить | GENERATED |  |
-| DELETE | /registry/terminology/{term_id} | Удалить | GENERATED |  |
-| GET  | /registry/terminology/normalize | Поиск нормализованной формы | GENERATED |  |
-| POST  | /registry/terminology/import  | Импорт | GENERATED |  |
+| METHOD | EndPoint                              | Описание                                | Статус      | Комментарии          |
+|--------|---------------------------------------|-----------------------------------------|-------------|----------------------|
+| GET    | /registry/terminology/                 | Список терминов                          | Реализовано |                      |
+| GET    | /registry/terminology/{term_id}        | Получить термин                         | Реализовано |                      |
+| POST   | /registry/terminology/                 | Создать термин                          | Реализовано |                      |
+| PUT    | /registry/terminology/{term_id}        | Полное обновление термина               | Реализовано |                      |
+| PATCH  | /registry/terminology/{term_id}        | Частичное обновление                   | Реализовано |                      |
+| DELETE | /registry/terminology/{term_id}        | Удалить термин                          | Реализовано |                      |
+| GET    | /registry/terminology/normalize       | Нормализация/поиск термина              | Реализовано |                      |
+| POST   | /registry/terminology/import          | Импорт терминов                         | Реализовано | Заглушка             |
 
 ## 3. Реестр документов НСИ
-| METHOD | EndPoint            | Описание                | Статус | Коментарии                                                |
-|--------|---------------------|-------------------------|--------|-----------------------------------------------------------|
-| GET    | /registry/documents | Список      | GENERATED |  |
-| GET    | /registry/documents/{doc_id} | Один документ      | GENERATED |  |
-| POST   | /registry/documents | Создать      | GENERATED |  |
-| PUT    | /registry/documents/{doc_id} | Обновить      | GENERATED |  |
-| PATCH  | /registry/documents/{doc_id}/status | Обновить статус      | GENERATED |  |
-| DELETE | /registry/documents/{doc_id} | Удалить      | GENERATED |  |
-| GET   | /registry/documents/export | Экспорт      | GENERATED |  |
-| POST   | /registry/documents/import | Массовый импорт      | GENERATED |  |
+| METHOD | EndPoint                                    | Описание                                 | Статус      | Комментарии          |
+|--------|---------------------------------------------|------------------------------------------|-------------|----------------------|
+| GET    | /registry/documents/                         | Список документов                         | Реализовано |                      |
+| GET    | /registry/documents/{document_id}           | Получить документ                        | Реализовано |                      |
+| POST   | /registry/documents/                         | Создать документ                         | Реализовано |                      |
+| PUT    | /registry/documents/{document_id}           | Полное обновление документа              | Реализовано |                      |
+| PATCH  | /registry/documents/{document_id}/status    | Обновить статус документа                | Реализовано |                      |
+| PATCH  | /registry/documents/{document_id}           | Частичное обновление документа           | Реализовано |                      |
+| DELETE | /registry/documents/{document_id}           | Удалить документ                         | Реализовано |                      |
+| GET    | /registry/documents/export                 | Экспорт документов в CSV                 | Реализовано |                      |
+| POST   | /registry/documents/import                 | Импорт документов                        | Реализовано | Заглушка             |
+| GET    | /registry/documents/{document_id}/history  | История документа                        | Реализовано | Возвращает заглушку  |
+| GET    | /registry/documents/{document_id}/succession | История смены/приемственности документа | Реализовано | Возвращает заглушку  |
 
 ## 4. Общие
-| METHOD | EndPoint            | Описание                | Статус | Коментарии                                                |
-|--------|---------------------|-------------------------|--------|-----------------------------------------------------------|
-| GET    | /registry/stats | Статистика      | GENERATED |  |
-| GET    | /registry/enums | Допустимые значения      | GENERATED |  |
+| METHOD | EndPoint            | Описание                     | Статус      | Комментарии          |
+|--------|---------------------|------------------------------|-------------|----------------------|
+| GET    | /registry/stats     | Статистика по реестру        | Реализовано |                      |
+| GET    | /registry/enums     | Списки допустимых значений   | Реализовано |                      |
 
 ## 5. Модели данных
 
