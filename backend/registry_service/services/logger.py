@@ -1,6 +1,8 @@
 import datetime
 from typing import Any, Optional
 
+from settings import LOGGING_LEVELS
+
 LOG_FILE = 'service.log'
 
 
@@ -26,6 +28,7 @@ def log_event(severity: str, endpoint: str, query_string: Optional[str] = None, 
         'data': data,
         'error': error
     }
-    # Simple file append; in production, use structured logging or external monitoring
-    with open(LOG_FILE, 'a', encoding='utf-8') as f:
-        f.write(f"{log_entry}\n")
+    # Write to file only if severity level is configured in LOGGING_LEVELS
+    if severity in LOGGING_LEVELS.values():
+        with open(LOG_FILE, 'a', encoding='utf-8') as f:
+            f.write(f"{log_entry}\n")
