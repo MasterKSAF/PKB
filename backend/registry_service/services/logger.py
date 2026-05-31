@@ -1,9 +1,14 @@
 import datetime
-from typing import Any, Optional
+from typing import Optional
 
 from settings import LOGGING_LEVELS
 
 LOG_FILE = 'service.log'
+
+
+def log_payload(payload: Optional[dict] = None) -> Optional[dict]:
+    """Return request payload for log data, or None if missing or empty."""
+    return payload or None
 
 
 def log_event(severity: str, endpoint: str, query_string: Optional[str] = None, data: Optional[dict] = None, error: Optional[str] = None) -> None:
