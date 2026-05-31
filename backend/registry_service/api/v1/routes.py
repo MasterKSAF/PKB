@@ -10,7 +10,7 @@ from api.v1.crud import document as document_crud, classifier as classifier_crud
 from api.v1.models import Classifier, Document, Terminology
 from api.v1.schemas import DocumentSchema, ClassifierSchema, TerminologySchema
 from api.v1.schemas.response import SingleResponse, ListResponse, PaginationMeta, ErrorResponse
-from services.logger import log_event
+from services.logger import log_event, log_payload
 
 routes = APIRouter()
 
@@ -33,6 +33,7 @@ def list_documents(
     GET /registry/documents/
     List all documents with pagination and optional filters.
     """
+    log_event('INFO', '/registry/documents', None, None)
     try:
         documents, total = document_crud.get_documents(
             db,
@@ -69,6 +70,7 @@ def export_documents(
     GET /registry/documents/export
     Export documents as CSV.
     """
+    log_event('INFO', '/registry/documents/export', None, None)
     try:
         documents, _ = document_crud.get_documents(db, page=page, page_size=page_size)
         rows = ['id,doc_code,title,status,mks_oks_code']
@@ -99,6 +101,7 @@ def import_documents(
     POST /registry/documents/import
     Import documents from a file.
     """
+    log_event('INFO', '/registry/documents/import', None, None)
     try:
         if not file:
             raise HTTPException(
@@ -125,6 +128,7 @@ def get_document(
     GET /registry/documents/{document_id}
     Retrieve a single document by ID.
     """
+    log_event('INFO', f'/registry/documents/{document_id}', None, None)
     try:
         document = document_crud.get_document_by_id(db, document_id)
         
@@ -154,6 +158,7 @@ def create_document(
     POST /registry/documents/
     Create a new document.
     """
+    log_event('INFO', '/registry/documents', None, log_payload(payload))
     try:
         title = payload.get('title')
         doc_code = payload.get('doc_code') or (title or '').strip().upper().replace(' ', '-').replace('/', '-')
@@ -204,6 +209,7 @@ def update_document(
     PUT /registry/documents/{document_id}
     Update an entire document.
     """
+    log_event('INFO', f'/registry/documents/{document_id}', None, log_payload(payload))
     try:
         document = document_crud.update_document(db, document_id, **payload)
         
@@ -236,6 +242,7 @@ def patch_document_status(
     PATCH /registry/documents/{document_id}/status
     Update the status of a document.
     """
+    log_event('INFO', f'/registry/documents/{document_id}/status', None, log_payload(payload))
     try:
         status = payload.get('status')
         if status is None:
@@ -272,6 +279,7 @@ def patch_document(
     PATCH /registry/documents/{document_id}
     Partially update a document.
     """
+    log_event('INFO', f'/registry/documents/{document_id}', None, log_payload(payload))
     try:
         document = document_crud.update_document(db, document_id, **payload)
         
@@ -303,6 +311,7 @@ def delete_document(
     DELETE /registry/documents/{document_id}
     Delete a document.
     """
+    log_event('INFO', f'/registry/documents/{document_id}', None, None)
     try:
         if not document_crud.delete_document(db, document_id):
             log_event('WARNING', f'/registry/documents/{document_id}', None, None, 'Document not found')
@@ -332,6 +341,7 @@ def document_history(
     GET /registry/documents/{document_id}/history
     Return document history.
     """
+    log_event('INFO', f'/registry/documents/{document_id}/history', None, None)
     try:
         document = document_crud.get_document_by_id(db, document_id)
         if not document:
@@ -357,6 +367,7 @@ def document_succession(
     GET /registry/documents/{document_id}/succession
     Return document succession.
     """
+    log_event('INFO', f'/registry/documents/{document_id}/succession', None, None)
     try:
         document = document_crud.get_document_by_id(db, document_id)
         if not document:
@@ -378,6 +389,7 @@ def create_classifier(
     payload: dict,
     db: Session = Depends(get_db),
 ):
+    log_event('INFO', '/registry/classifiers', None, log_payload(payload))
     try:
         classifier_system = payload.get('classifier_system')
         code = payload.get('code')
@@ -430,6 +442,7 @@ def list_classifiers(
     parent_code: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
+    log_event('INFO', '/registry/classifiers', None, None)
     try:
         classifiers, total = classifier_crud.get_classifiers(
             db,
@@ -463,6 +476,7 @@ def classifier_tree(
     search: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
+    log_event('INFO', '/registry/classifiers/tree', None, None)
     try:
         classifiers = classifier_crud.get_classifier_tree(db, classifier_system, root_code=root_code, search=search)
         data = [ClassifierSchema.model_validate(item).model_dump(mode='json', by_alias=True, exclude_none=True) for item in classifiers]
@@ -481,6 +495,7 @@ def import_classifiers(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
+    log_event('INFO', '/registry/classifiers/import', None, None)
     try:
         if not file:
             raise HTTPException(
@@ -504,6 +519,7 @@ def get_classifier(
     classifier_system: str = Query(...),
     db: Session = Depends(get_db),
 ):
+    log_event('INFO', f'/registry/classifiers/{code}', None, None)
     try:
         classifier = classifier_crud.get_classifier(db, classifier_system, code)
         if not classifier:
@@ -529,6 +545,7 @@ def update_classifier(
     classifier_system: str = Query(...),
     db: Session = Depends(get_db),
 ):
+    log_event('INFO', f'/registry/classifiers/{code}', None, log_payload(payload))
     try:
         classifier = classifier_crud.update_classifier(db, classifier_system, code, **payload)
         if not classifier:
@@ -554,6 +571,7 @@ def patch_classifier(
     classifier_system: str = Query(...),
     db: Session = Depends(get_db),
 ):
+    log_event('INFO', f'/registry/classifiers/{code}', None, log_payload(payload))
     try:
         classifier = classifier_crud.update_classifier(db, classifier_system, code, **payload)
         if not classifier:
@@ -579,6 +597,7 @@ def delete_classifier(
     force: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
+    log_event('INFO', f'/registry/classifiers/{code}', None, None)
     try:
         force_flag = str(force).lower() == 'true'
         try:
@@ -610,6 +629,7 @@ def create_terminology(
     payload: dict,
     db: Session = Depends(get_db),
 ):
+    log_event('INFO', '/registry/terminology', None, log_payload(payload))
     try:
         raw_term = payload.get('raw_term')
         standard_term = payload.get('standard_term')
@@ -662,6 +682,7 @@ def list_terminology(
     is_blocked: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
+    log_event('INFO', '/registry/terminology', None, None)
     try:
         blocked = None
         if is_blocked is not None:
@@ -696,6 +717,7 @@ def normalize_terminology(
     term: str = Query(...),
     db: Session = Depends(get_db),
 ):
+    log_event('INFO', '/registry/terminology/normalize', None, None)
     try:
         result = terminology_crud.get_terminology_by_raw_term(db, term)
         if result:
@@ -722,6 +744,7 @@ def import_terminology(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
+    log_event('INFO', '/registry/terminology/import', None, None)
     try:
         if not file:
             raise HTTPException(
@@ -744,6 +767,7 @@ def get_terminology(
     term_id: str,
     db: Session = Depends(get_db),
 ):
+    log_event('INFO', f'/registry/terminology/{term_id}', None, None)
     try:
         term = terminology_crud.get_terminology_by_id(db, term_id)
         if not term:
@@ -768,6 +792,7 @@ def update_terminology(
     payload: dict,
     db: Session = Depends(get_db),
 ):
+    log_event('INFO', f'/registry/terminology/{term_id}', None, log_payload(payload))
     try:
         term = terminology_crud.update_terminology(db, term_id, **payload)
         if not term:
@@ -792,6 +817,7 @@ def patch_terminology(
     payload: dict,
     db: Session = Depends(get_db),
 ):
+    log_event('INFO', f'/registry/terminology/{term_id}', None, log_payload(payload))
     try:
         term = terminology_crud.update_terminology(db, term_id, **payload)
         if not term:
@@ -815,6 +841,7 @@ def delete_terminology(
     term_id: str,
     db: Session = Depends(get_db),
 ):
+    log_event('INFO', f'/registry/terminology/{term_id}', None, None)
     try:
         if not terminology_crud.delete_terminology(db, term_id):
             raise HTTPException(
@@ -834,6 +861,7 @@ def delete_terminology(
 
 @routes.get('/registry/enums')
 def get_enums():
+    log_event('INFO', '/registry/enums', None, None)
     return {
         'data': {
             'doc_type': ['OKS', 'FAC', 'STD'],
@@ -847,6 +875,7 @@ def get_enums():
 
 @routes.get('/registry/stats')
 def get_stats(db: Session = Depends(get_db)):
+    log_event('INFO', '/registry/stats', None, None)
     try:
         classifiers_total = db.query(Classifier).count()
     except Exception:
@@ -881,4 +910,5 @@ def get_stats(db: Session = Depends(get_db)):
 @routes.get('/health')
 def health_check():
     """Health check endpoint."""
+    log_event('INFO', '/health', None, None)
     return {'status': 'ok'}
