@@ -1,5 +1,8 @@
 """
 Health check endpoint.
+
+Per API doc — orchestrator polls GET /health of each internal service
+and returns an aggregated result.
 """
 
 from datetime import datetime
@@ -17,20 +20,21 @@ router = APIRouter()
 
 @router.get("/system/health", response_model=HealthStatus)
 async def health_check():
-    """System health check."""
+    """System health check — aggregated health of all internal services.
+
+    In mock mode, all services are ``ok``.
+    """
     uptime = (datetime.utcnow() - START_TIME).total_seconds()
 
-    # Check external services status
-    # In mock mode, all services are "ok"
     services_status = {
         "auth": "ok",
-        "rag": "ok",
+        "rag_builder": "ok",
+        "rag_search": "ok",
         "ocr": "ok",
         "validation": "ok",
         "integration": "ok",
     }
 
-    # Determine overall status
     all_ok = all(s == "ok" for s in services_status.values())
     status = "ok" if all_ok else "degraded"
 
@@ -39,8 +43,8 @@ async def health_check():
         version=settings.APP_VERSION,
         uptime_seconds=int(uptime),
         services=services_status,
-        database="ok",
-        search_index="ok",
-        ocr_queue="ok",
-        storage="ok",
+        database="online",
+        search_index="ready",
+        ocr_queue="idle",
+        storage="online",
     )

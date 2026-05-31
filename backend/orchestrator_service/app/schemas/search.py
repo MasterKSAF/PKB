@@ -22,7 +22,12 @@ class SearchRequest(BaseModel):
 
     query: str
     document_ids: Optional[List[str]] = None
-    top_k: int = 5
+    top_k: int = Field(
+        default=5,
+        ge=1,
+        le=100,
+        description="Количество результатов (1..100)",
+    )
     filters: Optional[SearchFilters] = None
 
 
