@@ -905,13 +905,13 @@ class TestUploadWithNewFields:
         self, client: TestClient, auth_header: dict
     ):
         """All valid SourceType enum values are accepted."""
-        for source_type in ("GOST", "GOST_R", "OST", "RD", "TU", "ISO", "DNV", "ASTM", "OTHER"):
+        for i, source_type in enumerate(("GOST", "GOST_R", "OST", "RD", "TU", "ISO", "DNV", "ASTM", "OTHER")):
             response = client.post(
                 self.UPLOAD_URL,
                 files={
                     "file": (
-                        "doc.pdf",
-                        io.BytesIO(b"%PDF-1.4"),
+                        f"doc_{i}.pdf",
+                        io.BytesIO(f"%PDF-1.4 source_type={source_type}".encode()),
                         "application/pdf",
                     )
                 },
@@ -966,8 +966,8 @@ class TestUploadWithNewFields:
                 self.UPLOAD_URL,
                 files={
                     "file": (
-                        "doc.pdf",
-                        io.BytesIO(b"%PDF-1.4"),
+                        f"doc_{era}.pdf",
+                        io.BytesIO(f"%PDF-1.4 era={era}".encode()),
                         "application/pdf",
                     )
                 },
@@ -985,8 +985,8 @@ class TestUploadWithNewFields:
                 self.UPLOAD_URL,
                 files={
                     "file": (
-                        "doc.pdf",
-                        io.BytesIO(b"%PDF-1.4"),
+                        f"doc_{jurisdiction}.pdf",
+                        io.BytesIO(f"%PDF-1.4 jurisdiction={jurisdiction}".encode()),
                         "application/pdf",
                     )
                 },

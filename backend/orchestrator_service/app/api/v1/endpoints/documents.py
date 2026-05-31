@@ -1,5 +1,6 @@
 """Documents API endpoints — upload, list, view, delete, reprocess, errors, pages, parameters, queue, tasks, versions, approve, history."""
 
+import logging
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -90,6 +91,13 @@ from app.schemas.documents import (
 from app.services.integration_client import IntegrationServiceClient
 from app.services.rag_client import RAGServiceClient
 
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.db.base import get_db
+from app.repositories.document import DocumentRepository
+from app.core.pipeline.orchestrator import PipelineOrchestrator
+
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 MOCK_USER_ID = "u-mock-001"
@@ -145,6 +153,7 @@ async def upload_document(
     issuing_body: Optional[str] = Form(None, description="Организация-издатель"),
     metadata: Optional[str] = Form(None, description="JSON-строка с доп. данными"),
     current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> DocumentCreateResponse:
     """Upload a new document for processing.
 
@@ -239,6 +248,31 @@ async def upload_document(
     title_hash = None
     if title:
         title_hash = _compute_sha256(title.encode("utf-8"))
+
+    # --- Create document record in database ---
+    doc_repo = DocumentRepository(db)
+    document = await doc_repo.create(
+        file_hash_sha256=file_hash,
+        original_filename=file.filename or "uploaded_file",
+        file_size_bytes=file_size,
+        mime_type=file.content_type or "application/octet-stream",
+        source_type=source_type,
+        title=title,
+        doc_code=doc_code,
+        era=era,
+        jurisdiction=jurisdiction,
+        issuing_body=issuing_body,
+        title_hash_sha256=title_hash,
+    )
+
+    # --- Start Pipeline 1 (formation) ---
+    try:
+        orchestrator = PipelineOrchestrator(db)
+        job_id = await orchestrator.start_pipeline_1(document.id)
+    except Exception as exc:
+        # If pipeline start fails, document is still created in uploaded state
+        # The cleanup_stale_jobs scheduler will handle orphaned docs
+        logger.warning(f"Pipeline 1 start failed for {document.id}: {exc}")
 
     return DocumentCreateResponse(
         task_id=task_id,

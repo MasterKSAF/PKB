@@ -22,6 +22,10 @@ os.environ["REGISTRY_SERVICE_MOCK"] = "true"
 
 from app.main import create_application
 
+# Use in-memory SQLite for tests
+os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test.db"
+os.environ["DEBUG"] = "false"
+
 
 @pytest.fixture(scope="session")
 def app():
@@ -40,6 +44,56 @@ def client(app) -> Generator:
 def auth_header() -> dict:
     """Provide a mock Bearer token header for authenticated requests."""
     return {"Authorization": "Bearer mock_access_token_12345"}
+
+
+# ---------------------------------------------------------------------------
+# Database fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def db_engine():
+    """Create a fresh SQLAlchemy engine for the test session."""
+    from app.db.base import engine, Base
+
+    import asyncio
+
+    async def _init():
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
+    asyncio.run(_init())
+    return engine
+
+
+@pytest.fixture(autouse=True)
+def clean_db(db_engine):
+    """Clean all tables between tests."""
+    from app.db.base import Base
+    import asyncio
+
+    async def _clean():
+        async with db_engine.begin() as conn:
+            for table in reversed(Base.metadata.sorted_tables):
+                await conn.execute(table.delete())
+
+    asyncio.run(_clean())
+    yield
+
+
+@pytest.fixture
+async def db_session():
+    """Provide a clean async DB session per test."""
+    from app.db.base import AsyncSessionLocal
+
+    session = AsyncSessionLocal()
+    try:
+        yield session
+        await session.commit()
+    except Exception:
+        await session.rollback()
+    finally:
+        await session.close()
 
 
 @pytest.fixture
