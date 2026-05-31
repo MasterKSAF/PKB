@@ -5,7 +5,7 @@ Supports dual mode: real API calls or mock/stub mode for each external service.
 
 from typing import Optional
 
-from pydantic import Field
+from pydantic import ConfigDict, Field
 from pydantic_settings import BaseSettings
 
 
@@ -158,10 +158,11 @@ class Settings(BaseSettings):
     # Pipeline Configuration
     pipeline: PipelineConfig = PipelineConfig()
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        env_nested_delimiter = "__"
+    model_config = ConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        env_nested_delimiter="__",
+    )
 
 
 # Global settings instance

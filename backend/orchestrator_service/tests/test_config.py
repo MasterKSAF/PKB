@@ -129,10 +129,9 @@ class TestEnvFileLoading:
     """Tests for .env file loading."""
 
     def test_settings_has_env_file_configured(self):
-        """Verify that Settings.Config has env_file set."""
-        assert hasattr(Settings.Config, "env_file")
-        assert Settings.Config.env_file == ".env"
+        """Verify that Settings.model_config has env_file set."""
+        assert Settings.model_config.get("env_file") == ".env"
 
     def test_env_nested_delimiter(self):
-        """Verify nested env delimiter is configured for ServiceConfig."""
-        assert Settings.Config.env_nested_delimiter == "__"
+        """Verify nested env delimiter is configured."""
+        assert Settings.model_config.get("env_nested_delimiter") == "__"

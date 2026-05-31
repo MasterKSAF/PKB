@@ -25,7 +25,7 @@ Pipeline 2 FSM states:
   pending_index → indexing → indexed
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, UTC, timedelta
 from enum import Enum
 
 import pytest
@@ -178,7 +178,7 @@ class TestPipelineStatusResponseStructure:
 
     def test_processing_status_shape(self):
         """DocumentStatusProcessing must match the documented shape."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         status = DocumentStatusProcessing(
             document_id="b3a8f1c2-...",
             status="processing",
@@ -332,7 +332,7 @@ class TestPipelineStatusResponseStructure:
 
     def test_ready_for_promotion_status_shape(self):
         """DocumentStatusReadyForPromotion must match the documented shape."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         status = DocumentStatusReadyForPromotion(
             document_id="b3a8f1c2-...",
             status="ready_for_promotion",
@@ -1313,7 +1313,7 @@ class TestSchemaEdgeCases:
             old_status=None,
             new_status="uploaded",
             changed_by="user",
-            changed_at=datetime.utcnow(),
+            changed_at=datetime.now(UTC),
         )
         assert item.old_status is None
 

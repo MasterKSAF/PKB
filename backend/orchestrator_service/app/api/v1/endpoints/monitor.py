@@ -2,7 +2,7 @@
 Monitor and metrics API endpoints.
 """
 
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends
@@ -75,7 +75,7 @@ async def get_metrics(
     Only users with ``knowledge_admin`` or ``system_admin`` roles have
     access (enforced by RBAC in production).
     """
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
 
     return MonitorMetricsResponse(
         control_metrics=ControlMetrics(

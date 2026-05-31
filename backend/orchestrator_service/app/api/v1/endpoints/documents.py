@@ -2,7 +2,7 @@
 
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Optional
 
 from fastapi import (
@@ -283,7 +283,7 @@ async def upload_document(
         is_duplicate_file=False,
         is_duplicate_document=False,
         title_hash_sha256=title_hash,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
     )
 
 
@@ -310,7 +310,7 @@ async def start_preview(
     return TaskPreviewResponse(
         task_id=task_id,
         status="previewing",
-        estimated_completion=datetime.utcnow() + timedelta(seconds=30),
+        estimated_completion=datetime.now(UTC) + timedelta(seconds=30),
     )
 
 
@@ -442,7 +442,7 @@ async def upload_version(
         task_id=task_id,
         file_hash_sha256=file_hash,
         is_duplicate_file=False,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
     )
 
 
@@ -463,7 +463,7 @@ async def list_versions(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> VersionsListResponse:
     """List all file versions of a document."""
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     return VersionsListResponse(
         document_id=doc_id,
         versions=[
@@ -515,7 +515,7 @@ async def list_documents(
 ) -> DocumentListResponse:
     """List documents with optional filtering and sorting."""
     user_id = _mock_user()
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
 
     items = [
         DocumentListItem(
@@ -587,7 +587,7 @@ async def get_queue(
 ) -> DocumentQueueResponse:
     """Get the current document processing queue."""
     user_id = _mock_user()
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
 
     queue_items = [
         QueueItem(
@@ -644,7 +644,7 @@ async def get_document(
 ) -> DocumentDetailResponse:
     """Get detailed document information with all metadata."""
     user_id = _mock_user()
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
 
     return DocumentDetailResponse(
         document_id=doc_id,
@@ -715,7 +715,7 @@ async def get_document_status(
     """
     from datetime import timedelta
 
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
 
     return DocumentStatusProcessing(
         document_id=doc_id,
@@ -799,7 +799,7 @@ async def approve_document(
         status="approved",
         promotion_task_id=promotion_task_id,
         approved_by=current_user.user_id,
-        approved_at=datetime.utcnow(),
+        approved_at=datetime.now(UTC),
     )
 
 
@@ -820,7 +820,7 @@ async def get_document_history(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> DocumentHistoryResponse:
     """Get the status transition history (audit log) for a document."""
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
 
     return DocumentHistoryResponse(
         document_id=doc_id,
@@ -1071,7 +1071,7 @@ async def get_document_errors(
                 error_message="Качество распознавания страницы ниже порога (confidence=0.62)",
                 severity=severity or "warning",
                 retry_attempt=0,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(UTC),
             )
         )
 
@@ -1157,7 +1157,7 @@ async def delete_document(
 
     return DocumentDeleteResponse(
         document_id=doc_id,
-        deleted_at=datetime.utcnow(),
+        deleted_at=datetime.now(UTC),
     )
 
 
@@ -1189,5 +1189,5 @@ async def reprocess_document(
         user_id=current_user.user_id,
         task_id=task_id,
         status="reprocessing_queued",
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
     )

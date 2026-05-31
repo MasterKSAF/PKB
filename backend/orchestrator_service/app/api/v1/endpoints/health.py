@@ -5,7 +5,7 @@ Per API doc — orchestrator polls GET /health of each internal service
 and returns an aggregated result.
 """
 
-from datetime import datetime
+from datetime import datetime, UTC
 
 from fastapi import APIRouter
 
@@ -13,7 +13,7 @@ from app.core.config import settings
 from app.schemas.validation import HealthStatus
 
 # Service start time for uptime calculation
-START_TIME = datetime.utcnow()
+START_TIME = datetime.now(UTC)
 
 router = APIRouter()
 
@@ -24,7 +24,7 @@ async def health_check():
 
     In mock mode, all services are ``ok``.
     """
-    uptime = (datetime.utcnow() - START_TIME).total_seconds()
+    uptime = (datetime.now(UTC) - START_TIME).total_seconds()
 
     services_status = {
         "auth": "ok",
