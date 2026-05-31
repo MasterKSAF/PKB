@@ -172,6 +172,14 @@ class PipelineOrchestrator:
             logger.error(f"Job {job_id} not found on step completion")
             return
 
+        # Guard: skip if job is already completed
+        if job.status in ("completed", "failed", "dead"):
+            logger.warning(
+                f"on_step_completed called for already terminal job {job_id} "
+                f"(status={job.status}, step={step_name})"
+            )
+            return
+
         # Find the step log for this step and mark complete
         step_logs = await self.pipeline_repo.get_step_logs_for_job(job_id)
         current_log = None
@@ -265,6 +273,14 @@ class PipelineOrchestrator:
         job = await self.pipeline_repo.get_job(job_id)
         if not job:
             logger.error(f"Job {job_id} not found on step failure")
+            return
+
+        # Guard: skip if job is already in a terminal state
+        if job.status in ("completed", "failed", "dead"):
+            logger.warning(
+                f"on_step_failed called for already terminal job {job_id} "
+                f"(status={job.status}, step={step_name})"
+            )
             return
 
         # Mark the running step log as failed

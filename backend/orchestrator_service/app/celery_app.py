@@ -17,14 +17,14 @@ celery_app = Celery(
         "app.tasks.pipeline_formation",
         "app.tasks.pipeline_indexation",
         "app.tasks.compensation",
+        "app.tasks.scheduler",
     ],
 )
 
 # Task routing: different queues for different workloads
 celery_app.conf.task_routes = {
-    "app.tasks.pipeline_formation.*": {"queue": "pipeline"},
-    "app.tasks.pipeline_indexation.*": {"queue": "pipeline"},
-    "app.tasks.compensation.*": {"queue": "saga"},
+    "tasks.pipeline.*": {"queue": "pipeline"},
+    "tasks.compensation.*": {"queue": "saga"},
 }
 
 # Task serialization
