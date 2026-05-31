@@ -27,7 +27,7 @@
 
 **Выход:** doc_code, title, document_type, year, revision.
 
-> **Полный формат данных:** [`docs/schema/document2b_preview.json`](../schema/document2b_preview.json) (схема `converter_validator_preview_v1`)
+> **Полный формат данных:** [`docs/schema/schema_parser_preview.json`](../schema/schema_parser_preview.json) (схема `converter_validator_preview_v1`)
 
 **Запрос:**
 
@@ -73,7 +73,7 @@
 
 **Выход:** иерархический типизированный JSON (схема `validated_v3`)
 
-> **Полный формат данных:** [`docs/schema/document2_validate.json`](../schema/document2_validate.json) (схема `validated_v3`)
+> ⚠️ **Полный формат данных:** [`docs/schema/schema_converter_result.json`](../schema/schema_converter_result.json) (схема `validated_v3`) — **обязательно** смотри этот файл, здесь приведён только сокращённый пример.
 
 **Процесс внутри:**
 
@@ -123,189 +123,43 @@
     "schema": "validated_v3",
     "task_id": "task-8a3f2b",
     "created_at": "2026-05-17T09:15:00Z",
-    "parser": {
-      "name": "docling",
-      "version": "2.1.0",
-      "ocr_engine": "paddleocr",
-      "ocr_fallback": false
-    }
+    "parser": { "name": "docling", "version": "2.1.0", "ocr_engine": "paddleocr", "ocr_fallback": false }
   },
   "document": {
-    "source": {
-      "file_name": "GOST_20868-81_scan.pdf",
-      "file_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "page_count": 2
-    },
+    "source": { "file_name": "GOST_20868-81_scan.pdf", "file_hash_sha256": "...", "page_count": 2 },
     "metadata": {
       "doc_code": "ГОСТ 20868-81",
-      "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
-      "normalized_title": "стойки установочные крепежные технические требования",
-      "group": "ПО4",
-      "mks_oks_code": "31.240",
-      "okstu_code": null,
-      "udc": null,
-      "era": "USSR",
-      "validity_status": "active",
-      "issuing_body": "Государственный Комитет СССР по стандартам",
-      "adoption": {
-        "date": "1981-04-15",
-        "authority": "Государственный Комитет СССР по стандартам",
-        "document_number": "1983",
-        "effective_from": "1982-07-01"
-      },
-      "replaces": "ГОСТ 20868-75",
-      "validity_restriction_removed": {
-        "date": "1992-09-10",
-        "authority": "Госстандарт",
-        "document_number": "1166"
-      },
-      "amendments": [
-        { "type": "Изменение № 1", "source": "ИУС 4-87", "affected_clauses": ["6.4"], "note": null },
-        { "type": "Поправка", "source": "ИУС 5-82", "affected_clauses": ["2"], "note": null }
-      ],
-      "status_note": "С 01.07.2005 введены ГОСТ 24705-2004 и ГОСТ 16093-2004",
-      "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
+      "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования"
     },
     "content": [
       {
         "clause": "1",
-        "title": null,
         "level": 1,
-        "parent_clause": null,
         "path": "1",
         "page": 1,
-        "bbox": [10, 20, 200, 40],
-        "type": "section",
-        "content": {
-          "text": "Настоящий стандарт распространяется...",
-          "amendments": []
-        }
-      },
-      {
-        "clause": "6.1",
-        "title": "Допуск соосности при степени точности",
-        "level": 2,
-        "parent_clause": "6",
-        "path": "6.1.table1",
-        "page": 2,
-        "bbox": [10, 150, 200, 250],
-        "type": "table",
-        "content": {
-          "caption": "Допуск соосности при степени точности",
-          "columns": [
-            { "name": "L_range", "header": "L, мм", "index": 0, "type": "range", "value_type": "number", "unit": "мм" },
-            { "name": "normal", "header": "нормальная", "index": 1, "type": "value", "value_type": "number", "unit": "мм" },
-            { "name": "high", "header": "повышенная", "index": 2, "type": "value", "value_type": "number", "unit": "мм" }
-          ],
-          "rows": [
-            {
-              "row_index": 0, "type": "data",
-              "cells": {
-                "L_range": { "label": "От 6 до 50", "range": { "min": 6, "max": 50, "min_inclusive": true, "max_inclusive": true } },
-                "normal": { "value": 0.1 },
-                "high": { "value": 0.05 }
-              }
-            }
-          ],
-          "footnotes": [
-            { "footnote_id": 1, "text": "Значения допусков соосности...", "applies_to": "whole_table" }
-          ],
-          "amendments": [
-            { "amendment_id": "amd_1", "type": "Изменение № 1", "source": "ИУС 4-87", "affected_columns": ["normal", "high"], "action": "values_updated", "note": "Изменены допуски" }
-          ],
-          "image_key": "purgatory/assets/a1b2c3d4/tables/t1.png"
-        }
-      },
-      {
-        "clause": "6.1",
-        "title": "Черт. 1 – Схема допуска соосности",
-        "level": 2,
-        "parent_clause": "6",
-        "path": "6.1.fig1",
-        "page": 2,
-        "bbox": [30, 260, 180, 300],
-        "type": "image",
-        "content": {
-          "caption": "Черт. 1 – Схема допуска соосности",
-          "image_key": "purgatory/assets/a1b2c3d4/fig1.png",
-          "description": "Схема для определения допуска соосности"
-        }
-      },
-      {
-        "clause": "6.1",
-        "title": "Формула допуска соосности",
-        "level": 2,
-        "parent_clause": "6",
-        "path": "6.1.formula1",
-        "page": 1,
-        "bbox": [100, 140, 180, 160],
-        "type": "formula",
-        "content": {
-          "latex": "R_{\\text{доп}} = \\frac{\\Delta}{2}",
-          "meaning": "Формула расчёта допустимого радиуса...",
-          "image_key": "purgatory/assets/a1b2c3d4/formulas/eq1.png",
-          "parameters": [
-            { "symbol": "R_{\\text{доп}}", "description": "Допустимый радиус", "unit": "мм" },
-            { "symbol": "\\Delta", "description": "Заданное отклонение", "unit": "мм" }
-          ]
-        }
+        "bbox": [0.05, 0.056, 1.0, 0.111],
+        "type": "text",
+        "content": { "text": "Настоящий стандарт распространяется..." }
       }
     ],
-    "terminology": [
-      {
-        "term": "стойка установочная крепежная",
-        "definition": "Металлическая деталь для монтажа радиоэлектронной аппаратуры.",
-        "source_clause": "1",
-        "normalized_term": "стойка установочная крепежная"
-      }
-    ],
-    "references": [
-      {
-        "target_doc_code": "ГОСТ 20862-81 – ГОСТ 20867-81",
-        "type": "range",
-        "context": "изготовление крепежных установочных стоек",
-        "current_status": "active",
-        "note": null
-      },
-      {
-        "target_doc_code": "ГОСТ 24705-81",
-        "type": "single",
-        "context": "резьбы",
-        "current_status": "superseded",
-        "replaced_by": "ГОСТ 24705-2004",
-        "replacement_date": "2005-07-01"
-      }
-    ]
+    "terminology": [],
+    "references": []
   },
   "validation": {
     "validation_id": "val-001",
     "structure_valid": true,
-    "classification": {
-      "mks_oks_code": "47.020",
-      "mks_status": "CONFIRMED",
-      "okstu_status": "NOT_USED",
-      "udk_code": "629.5.021",
-      "overall_status": "CONFIRMED"
-    },
-    "fingerprint": {
-      "content_hash_sha256": "abc123...",
-      "title_hash_sha256": "def456..."
-    },
-    "matching": {
-      "predecessor_doc_id": null,
-      "successor_doc_id": null
-    },
-    "cross_references": [],
+    "classification": { "mks_oks_code": "47.020", "overall_status": "CONFIRMED" },
+    "fingerprint": { "file_hash_sha256": "...", "title_hash_sha256": "..." },
+    "matching": { "predecessor_doc_id": null, "successor_doc_id": null },
     "decision": "auto",
     "status": "completed"
   },
-  "llm_usage": {
-    "model": "gpt-4o-mini",
-    "tokens_used": 2048,
-    "processing_time_ms": 3200
-  }
+  "llm_usage": { "model": "gpt-4o-mini", "tokens_used": 2048, "processing_time_ms": 3200 }
 }
 ```
+
+> **Полный формат данных:** см. [`docs/schema/schema_converter_result.json`](../schema/schema_converter_result.json) (схема `validated_v3`).
+> Приведённый ниже пример — сокращённый. Все типы секций и полный состав полей — в эталонном JSON.
 
 **Поля ответа (верхний уровень):**
 
@@ -368,8 +222,8 @@
 | `content[].path` | string | Путь к секции (уникальный идентификатор в рамках документа) |
 | `content[].page` | int | Номер страницы |
 | `content[].bbox` | array | Координаты bounding box `[x1, y1, x2, y2]` |
-| `content[].type` | string | Тип секции: `section`, `table`, `image`, `formula` |
-| `content[].content` | object | Объектный контент, структура зависит от `type` |
+| `content[].type` | string | Тип секции: `text`, `table`, `image`, `formula`, `list`, `headerFooter`, `textBlock` |
+| `content[].content` | object | Объектный контент, структура зависит от `type`. `list`: `{ numbering_style, items[] }`. `headerFooter`: `{ text }`. `textBlock`: `{ block[] }` с элементами `{ font, content }`. |
 
 **Поля `document.terminology`:**
 
@@ -399,7 +253,7 @@
 | `validation_id` | string | ID валидации |
 | `structure_valid` | bool | Результат проверки структуры |
 | `classification` | object | Статусы классификационных кодов |
-| `fingerprint` | object | Хэши документа (`content_hash_sha256`, `title_hash_sha256`) |
+| `fingerprint` | object | Хэши документа (`file_hash_sha256`, `title_hash_sha256`) |
 | `matching` | object | Связи с существующими документами (`predecessor_doc_id`, `successor_doc_id`) |
 | `cross_references` | array | Список кросс-ссылок на другие документы |
 | `decision` | string | `auto` — автоматическое продвижение, `review_required` — требуется ручное подтверждение |
@@ -441,7 +295,7 @@
     "overall_status": "CONFIRMED"
   },
   "fingerprint": {
-    "content_hash_sha256": "abc123...",
+    "file_hash_sha256": "abc123...",
     "title_hash_sha256": "def456..."
   },
   "matching": {
@@ -459,7 +313,7 @@
 | `document_id` | string | ID документа. Назначается валидацией: извлекается существующий для дубликата, либо генерируется новый. |
 | `structure_valid` | bool | Результат проверки структуры |
 | `classification` | object | Статусы классификационных кодов |
-| `fingerprint` | object | Хэши документа (`content_hash_sha256`, `title_hash_sha256`) |
+| `fingerprint` | object | Хэши документа (`file_hash_sha256`, `title_hash_sha256`) |
 | `matching` | object | Связи с существующими документами |
 | `decision` | string | `auto` — автоматическое продвижение, `review_required` — требуется ручное подтверждение |
 | `status` | string | Статус: `completed`, `failed` |
@@ -469,7 +323,7 @@
 > - `/validate/check` — проверка текста на соответствие набору правил.
 > - `/validate/extract/parameters` — извлечение структурированных параметров из документов (спецификации, материалы, размеры).
 >
-> Эти эндпоинты являются внутренними и вызываются Orchestrator'ом или Analyse Service по мере необходимости.
+> Эти эндпоинты являются внутренними и вызываются Orchestrator'ом (для пост-обработки документа) или Analyse Service (для анализа проектных решений).
 > Детальное описание форматов запроса/ответа — во внутренней документации сервиса.
 
 ---
@@ -478,7 +332,7 @@
 
 | Аспект | Значение |
 |---|---|
-| Доступ к БД | **Нет** (сервис не пишет и не читает БД напрямую; при необходимости данные передаются через Orchestrator) |
+| Доступ к БД | **Нет** (сервис изолирован от БД; данные для работы получает через Orchestrator в теле запроса) |
 | LLM | Опционально (управляется параметром `use_llm`) |
 | Режимы | Preview (быстрые проверки) + Full (полный цикл конвертации и валидации) |
 | Пайплайн | 1 (Формирование документа), Этап 1.5 (Converter-validator) |
