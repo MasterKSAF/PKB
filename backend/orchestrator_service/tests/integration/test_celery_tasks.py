@@ -18,11 +18,14 @@ from unittest.mock import patch
 import celery.exceptions
 import nest_asyncio
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.celery_app import celery_app
 from app.core.fsm import PIPELINE_1_STEPS
 from app.core.pipeline.orchestrator import PipelineOrchestrator
+from app.models.document import Document
+from app.models.pipeline import PipelineJob
 from app.repositories.document import DocumentRepository
 from app.repositories.pipeline import PipelineRepository
 
@@ -59,7 +62,6 @@ async def _get_fresh(db_session: AsyncSession, model, pk_value: str):
     The test session's identity map may cache stale objects, so we use
     populate_existing=True to force a fresh read from the database.
     """
-    from sqlalchemy import select
     result = await db_session.execute(
         select(model)
         .where(model.id == pk_value)
@@ -70,7 +72,6 @@ async def _get_fresh(db_session: AsyncSession, model, pk_value: str):
 
 async def _get_doc_fresh(db_session: AsyncSession, doc_id: str):
     """Read document with populate_existing to bypass identity map."""
-    from app.models.document import Document
     return await _get_fresh(db_session, Document, doc_id)
 
 
@@ -390,11 +391,6 @@ class TestTaskErrorHandling:
         assert job.error_code == "OCR_ERROR", f"Unexpected error_code: {job.error_code}"
         assert job.error_message is not None, "error_message not set"
 
-        # Document error_code is only set when retries are exhausted
-        # (the on_step_failed guard for terminal states triggers doc.set_error)
-        doc_updated = await _get_doc_fresh(db_session, doc.id)
-        # Document may or may not have error_code depending on retry exhaustion
-
     async def test_on_step_completed_not_called_when_job_terminal(self, db_session):
         """If job is already completed, on_step_completed is skipped gracefully."""
         doc, job_id = await _setup_pipeline_1_at_step(
@@ -499,7 +495,6 @@ class TestSchedulerTask:
         assert result.result["cleaned"] >= 1, "Expected at least 1 stale job"
 
         # Job should now be 'dead' (read fresh to bypass identity map)
-        from app.models.pipeline import PipelineJob
         job = await _get_fresh(db_session, PipelineJob, job_id)
         assert job.status == "dead"
 
