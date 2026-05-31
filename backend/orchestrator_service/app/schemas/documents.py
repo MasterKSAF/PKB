@@ -33,7 +33,13 @@ class SourceType(str, Enum):
 
 
 class DocumentStatus(str, Enum):
-    """Document processing status (FSM states)."""
+    """Document processing status (combined FSM states for Pipeline 1 and 2).
+
+    Pipeline 1: uploaded → previewing → awaiting_decision → parsing → validation
+                 → ready_for_promotion / review_required → approved → registry
+    Pipeline 2: pending_index → indexing → indexed
+    Terminal:   duplicate, new_version, failed, archived
+    """
 
     UPLOADED = "uploaded"
     PREVIEWING = "previewing"
@@ -43,6 +49,12 @@ class DocumentStatus(str, Enum):
     REVIEW_REQUIRED = "review_required"
     READY_FOR_PROMOTION = "ready_for_promotion"
     APPROVED = "approved"
+    REGISTRY = "registry"
+    PENDING_INDEX = "pending_index"
+    INDEXING = "indexing"
+    INDEXED = "indexed"
+    DUPLICATE = "duplicate"
+    NEW_VERSION = "new_version"
     FAILED = "failed"
     ARCHIVED = "archived"
 

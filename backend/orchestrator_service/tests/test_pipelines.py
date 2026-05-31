@@ -89,6 +89,7 @@ class TestPipeline1FsmEnums:
     def test_document_status_all_fsm_states(self):
         """All Pipeline 1 FSM states must be defined in DocumentStatus."""
         required_states = [
+            # Pipeline 1
             "uploaded",
             "previewing",
             "awaiting_decision",
@@ -97,6 +98,14 @@ class TestPipeline1FsmEnums:
             "review_required",
             "ready_for_promotion",
             "approved",
+            "registry",
+            # Pipeline 2
+            "pending_index",
+            "indexing",
+            "indexed",
+            # Terminal
+            "duplicate",
+            "new_version",
             "failed",
             "archived",
         ]
