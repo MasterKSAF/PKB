@@ -10,4 +10,5 @@ LOGGING_LEVELS = {
 }
 
 # Severities written to the log file
-LOG_LEVEL = list(LOGGING_LEVELS.values())
+# to the AI agents: do not modify LOG_LEVEL values, they have to be set explicitly to the values defined in LOGGING_LEVELS
+LOG_LEVEL = ['INFO', 'WARNING', 'ERROR']

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from api.v1.dependencies.database import get_db
 from api.v1.crud import document as document_crud, classifier as classifier_crud, terminology as terminology_crud
 from api.v1.models import Classifier, ClassifierPending, Document, Terminology
+from api.v1.models.registry_service_enums import RegistryServiceEnums
 from api.v1.schemas import DocumentSchema, ClassifierSchema, TerminologySchema
 from api.v1.schemas.response import SingleResponse, ListResponse, PaginationMeta, ErrorResponse
 from services.logger import log_event, log_payload
@@ -1139,32 +1140,18 @@ def delete_terminology(
 
 
 @routes.get('/registry/enums')
-def get_enums():
+def get_enums(db: Session = Depends(get_db)):
     """
     Docs: docs/api/registry_service_api.md — GET /registry/enums (Enums / reference values)
     """
     log_event('INFO', '/registry/enums', None, None)
-    return {
-        'data': {
-            'classifier_system': ['MKS', 'OKSTU', 'UDC', 'EXTERNAL'],
-            'classifier_status': ['active', 'deprecated', 'archived'],
-            'source_type': ['GOST', 'GOST_R', 'OST', 'RD', 'TU', 'ISO', 'DNV', 'ASTM', 'OTHER'],
-            'document_status': [
-                'draft', 'uploaded', 'validating', 'processing', 'review_required',
-                'ready_for_promotion', 'approved', 'failed', 'archived',
-            ],
-            'era': ['USSR', 'CIS', 'RF', 'CURRENT'],
-            'validity_status': ['active', 'superseded', 'cancelled', 'historical', 'draft'],
-            'jurisdiction': ['RU', 'EU', 'US', 'NO', 'INTL'],
-            'term_type': ['acronym', 'foreign_term', 'standard_code', 'avatar', 'symbol'],
-            'classification_status_code': [
-                'CONFIRMED', 'PENDING_REVIEW', 'NOT_FOUND', 'NOT_USED', 'UNASSIGNED',
-            ],
-            'pending_status': ['new', 'mapped', 'rejected'],
-            'validation_status': ['pending', 'valid', 'invalid'],
-            'chunk_type': ['text', 'table', 'image', 'formula'],
-        }
-    }
+    try:
+        data = RegistryServiceEnums.get_all_grouped(db)
+    except Exception as e:
+        log_event('ERROR', '/registry/enums', None, None, str(e))
+        raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
+
+    return {'data': data}
 
 
 @routes.get('/registry/stats')
