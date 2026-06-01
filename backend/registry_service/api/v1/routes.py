@@ -606,7 +606,7 @@ def import_classifiers(
             )
 
         return {
-            'data': {'message': 'Import accepted'},
+            'data': {'message': 'File for Import accepted - not implemented yet'},
         }
     except HTTPException:
         raise
