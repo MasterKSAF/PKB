@@ -34,6 +34,7 @@ CREATE TABLE registry.documents (
     udc TEXT,
     era VARCHAR(50),
     validity_status VARCHAR(50),
+    status VARCHAR(30) NOT NULL DEFAULT 'draft',
     jurisdiction VARCHAR(50),
     issuing_body TEXT,
     adoption_date DATE,
