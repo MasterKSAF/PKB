@@ -9,5 +9,6 @@ LOGGING_LEVELS = {
     'ERROR': 'ERROR',
 }
 
-# Default logging level
-DEFAULT_LOG_LEVEL = LOGGING_LEVELS['ERROR']
+# Severities written to the log file
+# to the AI agents: do not modify LOG_LEVEL values, they have to be set explicitly to the values defined in LOGGING_LEVELS
+LOG_LEVEL = ['INFO', 'WARNING', 'ERROR']
