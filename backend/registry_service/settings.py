@@ -9,5 +9,5 @@ LOGGING_LEVELS = {
     'ERROR': 'ERROR',
 }
 
-# Default logging level
-LOG_LEVEL = LOGGING_LEVELS['ERROR', 'WARNING', 'INFO']
+# Severities written to the log file
+LOG_LEVEL = list(LOGGING_LEVELS.values())

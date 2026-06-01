@@ -5,26 +5,21 @@ def test_get_enums(client):
     assert response.status_code == 200
     data = response.json()
     assert "data" in data
-    assert "doc_type" in data["data"]
-    assert "jurisdiction" in data["data"]
-    assert "language" in data["data"]
+    assert "classifier_system" in data["data"]
+    assert "source_type" in data["data"]
     assert "document_status" in data["data"]
-    assert "context" in data["data"]
+    assert "era" in data["data"]
 
 def test_get_enums_structure(client):
     response = client.get("/api/v1/registry/enums")
     assert response.status_code == 200
     data = response.json()
-    
-    # Verify enum values are lists
-    assert isinstance(data["data"]["doc_type"], list)
+
+    assert isinstance(data["data"]["classifier_system"], list)
     assert isinstance(data["data"]["jurisdiction"], list)
-    assert isinstance(data["data"]["language"], list)
-    
-    # Verify expected enum values exist
-    assert "OKS" in data["data"]["doc_type"]
-    assert "RF" in data["data"]["jurisdiction"]
-    assert "ru" in data["data"]["language"]
+    assert "MKS" in data["data"]["classifier_system"]
+    assert "RU" in data["data"]["jurisdiction"]
+    assert "draft" in data["data"]["document_status"]
 
 def test_get_stats_empty(client):
     response = client.get("/api/v1/registry/stats")
@@ -35,14 +30,12 @@ def test_get_stats_empty(client):
     assert "terminology_total" in data["data"]
     assert "documents_total" in data["data"]
     assert "documents_by_status" in data["data"]
-    
-    # Should be 0 when empty
-    assert data["data"]["classifiers_total"] == 0
+
+    assert data["data"]["classifiers_total"] == {}
     assert data["data"]["terminology_total"] == 0
     assert data["data"]["documents_total"] == 0
 
 def test_get_stats_with_data(client):
-    # Create some data
     client.post("/api/v1/registry/classifiers/", json={
         "classifier_system": "MKS",
         "code": "STATS_01",
@@ -53,14 +46,14 @@ def test_get_stats_with_data(client):
         "code": "STATS_02",
         "full_name": "Stats Classifier 2"
     })
-    
+
     client.post("/api/v1/registry/terminology/", json={
         "raw_term": "Stats Term",
         "standard_term": "Stats Term",
         "normalized_value": "stats term",
         "term_type": "term"
     })
-    
+
     client.post("/api/v1/registry/documents/", json={
         "title": "Stats Document",
         "status": "draft",
@@ -71,36 +64,27 @@ def test_get_stats_with_data(client):
         "status": "approved",
         "classifier_system": "MKS"
     })
-    
+
     response = client.get("/api/v1/registry/stats")
     assert response.status_code == 200
     data = response.json()
-    
-    # Verify counts
-    assert data["data"]["classifiers_total"] == 2
+
+    assert data["data"]["classifiers_total"]["MKS"] == 2
     assert data["data"]["terminology_total"] == 1
     assert data["data"]["documents_total"] == 2
-    
-    # Verify status breakdown
-    assert "documents_by_status" in data["data"]
     assert isinstance(data["data"]["documents_by_status"], dict)
 
 def test_get_stats_status_breakdown(client):
-    # Create documents with different statuses
     client.post("/api/v1/registry/documents/", json={"title": "Draft Doc Status", "status": "draft", "classifier_system": "MKS"})
     client.post("/api/v1/registry/documents/", json={"title": "Draft Doc Status 2", "status": "draft", "classifier_system": "MKS"})
     client.post("/api/v1/registry/documents/", json={"title": "Approved Doc Status", "status": "approved", "classifier_system": "MKS"})
     client.post("/api/v1/registry/documents/", json={"title": "Processing Doc Status", "status": "processing", "classifier_system": "MKS"})
-    
+
     response = client.get("/api/v1/registry/stats")
     assert response.status_code == 200
     data = response.json()
-    
-    # Verify status breakdown
+
     status_breakdown = data["data"]["documents_by_status"]
-    assert "draft" in status_breakdown
     assert status_breakdown["draft"] >= 2
-    assert "approved" in status_breakdown
     assert status_breakdown["approved"] >= 1
-    assert "processing" in status_breakdown
     assert status_breakdown["processing"] >= 1
