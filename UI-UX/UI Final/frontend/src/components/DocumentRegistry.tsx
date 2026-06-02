@@ -6,7 +6,10 @@ import {
   Chip,
   Container,
   IconButton,
+  Menu,
+  MenuItem,
   Paper,
+  Snackbar,
   Stack,
   Table,
   TableBody,
@@ -18,6 +21,7 @@ import {
 } from '@mui/material';
 import { AlertTriangle, CheckCircle2, Database, FileText, Link2, MoreVertical, RefreshCw, ScanText, Upload } from 'lucide-react';
 import { MOCK_DOCUMENTS, MOCK_KNOWLEDGE_SECTIONS } from '../utils/mockData';
+import { useUIStore } from '../store/uiStore';
 
 const TABLE_SX = {
   borderRadius: 3,
@@ -36,8 +40,14 @@ const PANEL_SX = {
 } as const;
 
 export const DocumentRegistry: React.FC = () => {
+  const { themeMode } = useUIStore();
+  const isLight = themeMode === 'light';
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [selectedFileName, setSelectedFileName] = useState('');
+  const [notice, setNotice] = useState('');
+  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
+  const [menuAnchorEl, setMenuAnchorEl] = useState<HTMLElement | null>(null);
+  const [menuDocumentName, setMenuDocumentName] = useState('');
   const completedOcrCount = MOCK_DOCUMENTS.filter((doc) => doc.ocrStatus === 'Завершено').length;
   const indexedCount = MOCK_DOCUMENTS.filter((doc) => doc.indexStatus === 'Индексировано').length;
   const problemCount = MOCK_DOCUMENTS.filter((doc) => doc.ocrStatus !== 'Завершено' || doc.indexStatus !== 'Индексировано').length;
@@ -100,6 +110,39 @@ export const DocumentRegistry: React.FC = () => {
     event.target.value = '';
   };
 
+  const showGatewayNotice = (message: string) => {
+    setNotice(`${message}. Реальное действие будет выполняться через Gateway/backend.`);
+  };
+
+  const handleDocumentMenuOpen = (event: React.MouseEvent<HTMLElement>, documentName: string) => {
+    event.stopPropagation();
+    setMenuAnchorEl(event.currentTarget);
+    setMenuDocumentName(documentName);
+  };
+
+  const handleDocumentMenuClose = () => {
+    setMenuAnchorEl(null);
+    setMenuDocumentName('');
+  };
+
+  const panelSx = {
+    ...PANEL_SX,
+    ...(isLight && {
+      bgcolor: 'rgba(255, 255, 255, 0.82)',
+      borderColor: 'rgba(14, 116, 144, 0.24)',
+      boxShadow: '0 8px 22px rgba(15,23,42,0.05)',
+    }),
+  };
+
+  const tableSx = {
+    ...TABLE_SX,
+    ...(isLight && {
+      bgcolor: 'rgba(255, 255, 255, 0.94)',
+      borderColor: 'rgba(14, 116, 144, 0.28)',
+      boxShadow: '0 0 0 1px rgba(14, 116, 144, 0.14), 0 14px 34px rgba(15,23,42,0.06)',
+    }),
+  };
+
   return (
     <Container maxWidth="xl" sx={{ py: 3 }}>
       <Stack spacing={3}>
@@ -108,7 +151,7 @@ export const DocumentRegistry: React.FC = () => {
           sx={{
             p: 1.4,
             borderRadius: 2.6,
-            ...PANEL_SX,
+            ...panelSx,
           }}
         >
           <Stack
@@ -120,10 +163,20 @@ export const DocumentRegistry: React.FC = () => {
               <Button className="app-action-button" variant="contained" startIcon={<Upload size={16} />} onClick={handleUploadClick}>
                 Загрузить документ
               </Button>
-              <Button className="app-action-button" variant="contained" startIcon={<Link2 size={16} />}>
+              <Button
+                className="app-action-button"
+                variant="contained"
+                startIcon={<Link2 size={16} />}
+                onClick={() => showGatewayNotice('Загрузка документа по ссылке')}
+              >
                 Загрузить по ссылке
               </Button>
-              <Button className="app-action-button" variant="contained" startIcon={<ScanText size={16} />}>
+              <Button
+                className="app-action-button"
+                variant="contained"
+                startIcon={<ScanText size={16} />}
+                onClick={() => showGatewayNotice('Повторный запуск OCR')}
+              >
                 Повторить OCR
               </Button>
               <input ref={fileInputRef} type="file" hidden onChange={handleFileSelect} />
@@ -147,7 +200,7 @@ export const DocumentRegistry: React.FC = () => {
                   alignItems: 'center',
                   gap: 1.8,
                   borderRadius: 2.4,
-                  ...PANEL_SX,
+                  ...panelSx,
                 }}
               >
                 <Box
@@ -168,7 +221,7 @@ export const DocumentRegistry: React.FC = () => {
                   <Typography variant="h6" sx={{ lineHeight: 1.05, fontWeight: 600 }}>
                     {stat.value}
                   </Typography>
-                  <Typography variant="caption" sx={{ color: 'rgba(171, 183, 201, 0.72)' }}>
+                  <Typography variant="caption" sx={{ color: isLight ? 'rgba(71, 85, 105, 0.80)' : 'rgba(171, 183, 201, 0.72)' }}>
                     {stat.note}
                   </Typography>
                 </Box>
@@ -182,14 +235,14 @@ export const DocumentRegistry: React.FC = () => {
           sx={{
             p: 1.8,
             borderRadius: 3,
-            ...PANEL_SX,
+            ...panelSx,
           }}
         >
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.2} sx={{ alignItems: { md: 'center' }, mb: 1.4 }}>
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flex: 1 }}>
-              <Database size={18} color="#98d9d8" />
+              <Database size={18} color={isLight ? '#0284c7' : '#98d9d8'} />
               <Box>
-                <Typography sx={{ fontWeight: 560, color: 'rgba(233, 237, 243, 0.92)' }}>
+                <Typography sx={{ fontWeight: 560, color: isLight ? '#0f172a' : 'rgba(233, 237, 243, 0.92)' }}>
                   База знаний по разделам
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
@@ -205,12 +258,35 @@ export const DocumentRegistry: React.FC = () => {
               <Paper
                 key={section.id}
                 variant="outlined"
+                onClick={() => {
+                  setSelectedSectionId((current) => (current === section.id ? null : section.id));
+                  setNotice(`Выбран раздел базы знаний: ${section.title}`);
+                }}
                 sx={{
                   p: 1.15,
                   minHeight: 112,
                   borderRadius: 2.1,
-                  bgcolor: 'rgba(255,255,255,0.028)',
-                  borderColor: 'rgba(198,216,240,0.22)',
+                  cursor: 'pointer',
+                  bgcolor: isLight ? 'rgba(248, 250, 252, 0.76)' : 'rgba(255,255,255,0.028)',
+                  borderColor:
+                    selectedSectionId === section.id
+                      ? isLight
+                        ? 'rgba(2, 132, 199, 0.62)'
+                        : 'rgba(152, 217, 216, 0.62)'
+                      : isLight
+                        ? 'rgba(14,116,144,0.18)'
+                        : 'rgba(198,216,240,0.22)',
+                  boxShadow:
+                    selectedSectionId === section.id
+                      ? isLight
+                        ? '0 0 0 2px rgba(2,132,199,0.10)'
+                        : '0 0 0 2px rgba(152,217,216,0.10)'
+                      : 'none',
+                  transition: 'border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease',
+                  '&:hover': {
+                    transform: 'translateY(-1px)',
+                    borderColor: isLight ? 'rgba(2,132,199,0.42)' : 'rgba(152,217,216,0.42)',
+                  },
                 }}
               >
                 <Stack spacing={0.7} sx={{ height: '100%' }}>
@@ -233,7 +309,7 @@ export const DocumentRegistry: React.FC = () => {
           </Box>
         </Paper>
 
-        <TableContainer component={Paper} variant="outlined" sx={TABLE_SX}>
+        <TableContainer component={Paper} variant="outlined" sx={tableSx}>
           <Table
             size="small"
               sx={{
@@ -246,9 +322,11 @@ export const DocumentRegistry: React.FC = () => {
                   px: 1.6,
                 },
                 '& .MuiTableHead-root .MuiTableCell-root': {
-                  color: 'rgba(230, 236, 244, 0.90)',
-                  borderBottom: '1px solid rgba(181, 198, 220, 0.36)',
-                  boxShadow: 'inset 0 -1px 0 rgba(181, 198, 220, 0.16), inset 0 1px 0 rgba(255,255,255,0.04)',
+                  color: isLight ? '#0f172a' : 'rgba(230, 236, 244, 0.90)',
+                  borderBottom: isLight ? '1px solid rgba(14,116,144,0.22)' : '1px solid rgba(181, 198, 220, 0.36)',
+                  boxShadow: isLight
+                    ? 'inset 0 -1px 0 rgba(14,116,144,0.12)'
+                    : 'inset 0 -1px 0 rgba(181, 198, 220, 0.16), inset 0 1px 0 rgba(255,255,255,0.04)',
                 fontWeight: 600,
                 letterSpacing: '0.01em',
                 textAlign: 'center',
@@ -269,12 +347,12 @@ export const DocumentRegistry: React.FC = () => {
                 '& .MuiTableBody-root .MuiTableCell-root': {
                   fontSize: '0.83rem',
                   lineHeight: 1.55,
-                  color: 'rgba(222, 230, 241, 0.84)',
+                  color: isLight ? '#1e293b' : 'rgba(222, 230, 241, 0.84)',
                 },
               }}
             >
             <TableHead>
-              <TableRow sx={{ bgcolor: 'rgba(156, 176, 204, 0.075)' }}>
+              <TableRow sx={{ bgcolor: isLight ? 'rgba(14,116,144,0.055)' : 'rgba(156, 176, 204, 0.075)' }}>
                 <TableCell>Документ</TableCell>
                 <TableCell>Тип</TableCell>
                 <TableCell>Версия</TableCell>
@@ -287,7 +365,12 @@ export const DocumentRegistry: React.FC = () => {
             </TableHead>
             <TableBody>
               {MOCK_DOCUMENTS.map((doc) => (
-                <TableRow key={doc.id} hover>
+                <TableRow
+                  key={doc.id}
+                  hover
+                  onClick={() => showGatewayNotice(`Открытие карточки документа «${doc.name}»`)}
+                  sx={{ cursor: 'pointer' }}
+                >
                   <TableCell sx={{ fontWeight: 500 }}>{doc.name}</TableCell>
                   <TableCell>{doc.type}</TableCell>
                   <TableCell>
@@ -314,7 +397,7 @@ export const DocumentRegistry: React.FC = () => {
                   </TableCell>
                   <TableCell>{doc.updatedAt}</TableCell>
                   <TableCell align="right">
-                    <IconButton size="small">
+                    <IconButton size="small" onClick={(event) => handleDocumentMenuOpen(event, doc.name)}>
                       <MoreVertical size={16} />
                     </IconButton>
                   </TableCell>
@@ -324,6 +407,28 @@ export const DocumentRegistry: React.FC = () => {
           </Table>
         </TableContainer>
       </Stack>
+      <Menu anchorEl={menuAnchorEl} open={Boolean(menuAnchorEl)} onClose={handleDocumentMenuClose}>
+        {[
+          'Открыть предпросмотр',
+          'Скачать документ',
+          'Перезапустить OCR',
+          'Изменить метаданные',
+          'История версий',
+          'Назначить раздел',
+          'Архивировать',
+        ].map((action) => (
+          <MenuItem
+            key={action}
+            onClick={() => {
+              showGatewayNotice(`${action}: ${menuDocumentName}`);
+              handleDocumentMenuClose();
+            }}
+          >
+            {action}
+          </MenuItem>
+        ))}
+      </Menu>
+      <Snackbar open={Boolean(notice)} autoHideDuration={4200} onClose={() => setNotice('')} message={notice} />
     </Container>
   );
 };

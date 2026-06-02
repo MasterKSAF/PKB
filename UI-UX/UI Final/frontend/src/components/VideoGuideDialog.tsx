@@ -10,7 +10,7 @@ import {
   Paper,
   Stack
 } from '@mui/material';
-import { X, ChevronRight, ChevronLeft, CheckCircle } from 'lucide-react';
+import { X, ChevronRight, ChevronLeft, CheckCircle, MessageSquare, Search, Database, ClipboardCheck, BarChart3 } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -18,33 +18,35 @@ const SCENES = [
   {
     title: 'Чат инженера',
     description: 'Задавайте вопросы на естественном языке. Система найдет ответы в базе ГОСТов, чертежей и спецификаций, предоставив точные цитаты.',
-    image: 'https://images.unsplash.com/photo-1531297484001-80022131f5a1?q=80&w=800&auto=format&fit=crop',
+    icon: MessageSquare,
   },
   {
     title: 'Поиск и исследование',
     description: 'Профессиональный поиск по фрагментам текстов. Фильтруйте результаты по версии документа, типу и релевантности.',
-    image: 'https://images.unsplash.com/photo-1454165833767-027521e4129b?q=80&w=800&auto=format&fit=crop',
+    icon: Search,
   },
   {
     title: 'База знаний',
     description: 'Контролируйте статус обработки ваших документов. Система автоматически производит OCR и индексацию новых файлов.',
-    image: 'https://images.unsplash.com/photo-1568667256549-094345857637?q=80&w=800&auto=format&fit=crop',
+    icon: Database,
   },
   {
     title: 'Сверка параметров',
     description: 'Автоматическое выявление расхождений между разными версиями документов или чертежей для минимизации ошибок.',
-    image: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?q=80&w=800&auto=format&fit=crop',
+    icon: ClipboardCheck,
   },
   {
     title: 'Мониторинг качества',
     description: 'Отслеживайте метрики точности ответов и качество распознавания текста в реальном времени.',
-    image: 'https://images.unsplash.com/photo-1551288049-bbbda536339a?q=80&w=800&auto=format&fit=crop',
+    icon: BarChart3,
   },
 ];
 
 export const VideoGuideDialog: React.FC = () => {
-  const { videoGuideOpen, setVideoGuideOpen } = useUIStore();
+  const { themeMode, videoGuideOpen, setVideoGuideOpen } = useUIStore();
   const [activeStep, setActiveStep] = useState(0);
+  const isLight = themeMode === 'light';
+  const SceneIcon = SCENES[activeStep].icon;
 
   const handleNext = () => setActiveStep((prev) => prev + 1);
   const handleBack = () => setActiveStep((prev) => prev - 1);
@@ -59,7 +61,9 @@ export const VideoGuideDialog: React.FC = () => {
           sx: {
             bgcolor: 'background.default',
             background:
-              'radial-gradient(circle at 22% 0%, rgba(112,161,255,0.12), transparent 30%), linear-gradient(135deg, #0b0c0e 0%, #11131a 48%, #0b0c0e 100%)',
+              isLight
+                ? 'radial-gradient(circle at 18% 4%, rgba(56, 189, 248, 0.18), transparent 32%), linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)'
+                : 'radial-gradient(circle at 22% 0%, rgba(112,161,255,0.12), transparent 30%), linear-gradient(135deg, #0b0c0e 0%, #11131a 48%, #0b0c0e 100%)',
           }
         }
       }}
@@ -87,9 +91,9 @@ export const VideoGuideDialog: React.FC = () => {
             px: { xs: 2.5, md: 4.5 },
             py: { xs: 3, md: 4 },
             borderRadius: 4,
-            border: '1px solid rgba(255,255,255,0.10)',
-            bgcolor: 'rgba(22, 23, 27, 0.82)',
-            boxShadow: '0 24px 60px rgba(0,0,0,0.32)',
+            border: isLight ? '1px solid rgba(15, 23, 42, 0.12)' : '1px solid rgba(255,255,255,0.10)',
+            bgcolor: isLight ? 'rgba(255,255,255,0.88)' : 'rgba(22, 23, 27, 0.82)',
+            boxShadow: isLight ? '0 24px 60px rgba(15,23,42,0.14)' : '0 24px 60px rgba(0,0,0,0.32)',
             backdropFilter: 'blur(16px)',
           }}
         >
@@ -143,22 +147,43 @@ export const VideoGuideDialog: React.FC = () => {
                       overflow: 'hidden', 
                       aspectRatio: '4/3', 
                       position: 'relative',
-                      border: '1px solid rgba(255,255,255,0.1)'
+                      display: 'grid',
+                      placeItems: 'center',
+                      border: isLight ? '1px solid rgba(2, 132, 199, 0.18)' : '1px solid rgba(255,255,255,0.1)',
+                      background: isLight
+                        ? 'linear-gradient(145deg, #eff6ff 0%, #e0f2fe 52%, #f8fafc 100%)'
+                        : 'linear-gradient(145deg, rgba(18,67,75,0.86), rgba(11,28,34,0.94))',
                     }}
                   >
-                    <img 
-                      src={SCENES[activeStep].image} 
-                      alt={SCENES[activeStep].title}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      referrerPolicy="no-referrer"
-                    />
-                    <Box 
-                      sx={{ 
-                        position: 'absolute', 
-                        inset: 0, 
-                        background: 'linear-gradient(to top, rgba(0,0,0,0.5), transparent)' 
-                      }} 
-                    />
+                    <Box
+                      sx={{
+                        width: 156,
+                        height: 156,
+                        borderRadius: '44px',
+                        display: 'grid',
+                        placeItems: 'center',
+                        color: isLight ? '#0284c7' : '#98d9d8',
+                        bgcolor: isLight ? 'rgba(255,255,255,0.72)' : 'rgba(255,255,255,0.055)',
+                        border: isLight ? '1px solid rgba(2,132,199,0.18)' : '1px solid rgba(152,217,216,0.18)',
+                        boxShadow: isLight
+                          ? '0 22px 45px rgba(2, 132, 199, 0.16)'
+                          : '0 22px 45px rgba(0,0,0,0.28)',
+                      }}
+                    >
+                      <SceneIcon size={76} strokeWidth={1.7} />
+                    </Box>
+                    <Typography
+                      sx={{
+                        position: 'absolute',
+                        left: 24,
+                        bottom: 22,
+                        color: isLight ? '#075985' : 'rgba(230, 246, 247, 0.88)',
+                        fontWeight: 700,
+                        letterSpacing: '0.04em',
+                      }}
+                    >
+                      {activeStep + 1} / {SCENES.length}
+                    </Typography>
                   </Paper>
                 </Box>
               </Box>
@@ -178,7 +203,10 @@ export const VideoGuideDialog: React.FC = () => {
                   width: '100%', 
                   height: 6, 
                   borderRadius: 3,
-                  bgcolor: 'rgba(255,255,255,0.05)'
+                  bgcolor: isLight ? 'rgba(15,23,42,0.10)' : 'rgba(255,255,255,0.05)'
+                },
+                '& .MuiLinearProgress-bar': {
+                  bgcolor: isLight ? '#0284c7' : '#c79b63',
                 }
               }}
               nextButton={

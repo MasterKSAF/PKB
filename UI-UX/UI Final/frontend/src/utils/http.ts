@@ -5,6 +5,7 @@ import {
   MOCK_CITATIONS,
   MOCK_DOCUMENTS,
   MOCK_HISTORY,
+  MOCK_KNOWLEDGE_SECTIONS,
   MOCK_METRICS,
   type ChatMessage,
 } from './mockData';
@@ -38,12 +39,16 @@ function shouldShowNoKnowledgeResult(query: string) {
     'нет данных',
     'не найден',
     'несуществ',
-    'погода',
-    'температура на улице',
-    'курс валют',
   ];
 
   return noKnowledgeMarkers.some((marker) => normalized.includes(marker));
+}
+
+function shouldShowOutOfScopeResult(query: string) {
+  const normalized = query.toLowerCase();
+  const outOfScopeMarkers = ['погода', 'температура на улице', 'курс валют', 'который час', 'сколько времени', 'текущее время'];
+
+  return outOfScopeMarkers.some((marker) => normalized.includes(marker));
 }
 
 function isDemoMode() {
@@ -70,23 +75,74 @@ function notFoundMessage(query: string): ChatMessage {
   };
 }
 
+function outOfScopeMessage(query: string): ChatMessage {
+  return {
+    id: Math.random().toString(36).slice(2),
+    role: 'assistant',
+    content: `Запрос «${query}» не относится к инженерным документам, НСИ или проектной проверке. Задайте вопрос в рамках базы знаний проекта, и система выполнит поиск по источникам.`,
+    status: 'out_of_scope',
+    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  };
+}
+
+async function demoChatMessage(query: string): Promise<ChatMessage> {
+  await new Promise((resolve) => setTimeout(resolve, 900));
+
+  if (needsClarification(query)) {
+    return {
+      id: Math.random().toString(36).slice(2),
+      role: 'assistant',
+      content:
+        'Нужно уточнить контекст, чтобы не дать слишком общий ответ. Укажите проект, тип конструкции, версию НСИ или конкретный документ, по которому нужно выполнить проверку.',
+      status: 'needs_clarification',
+      limitation:
+        'По ТЗ ассистент не должен угадывать недостающие параметры. Сначала уточняем контекст, затем ищем источники и формируем ответ.',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+  }
+
+  if (shouldShowOutOfScopeResult(query)) {
+    return outOfScopeMessage(query);
+  }
+
+  if (shouldShowNoKnowledgeResult(query)) {
+    return notFoundMessage(query);
+  }
+
+  return {
+    id: Math.random().toString(36).slice(2),
+    role: 'assistant',
+    content:
+      `1. По запросу "${query}" найдены релевантные фрагменты в базе знаний.\n` +
+      '2. Ответ сформирован только по документам, которые попали в подборку источников.\n' +
+      '3. Перед применением результата нужно открыть источник и сверить страницу, раздел и редакцию документа.',
+    status: 'answered',
+    citations: MOCK_CITATIONS,
+    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  };
+}
+
+function demoSearchResults(q: string) {
+  if (shouldShowNoKnowledgeResult(q) || shouldShowOutOfScopeResult(q)) {
+    return [];
+  }
+
+  return MOCK_DOCUMENTS.map((doc, index) => ({
+    ...doc,
+    section: MOCK_KNOWLEDGE_SECTIONS[index % MOCK_KNOWLEDGE_SECTIONS.length].title,
+    relevance: 0.92,
+    fragment:
+      'Найденный фрагмент в документе: описание технических требований и связанных параметров проекта.',
+  }));
+}
+
 export const chatApi = {
   send: async (query: string): Promise<ChatMessage> => {
     const demoMode = isDemoMode();
 
-    if (demoMode && needsClarification(query)) {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      return {
-        id: Math.random().toString(36).slice(2),
-        role: 'assistant',
-        content:
-          'Нужно уточнить контекст, чтобы не дать слишком общий ответ. Укажите проект, тип конструкции, версию НСИ или конкретный документ, по которому нужно выполнить проверку.',
-        status: 'needs_clarification',
-        limitation:
-          'По ТЗ ассистент не должен угадывать недостающие параметры. Сначала уточняем контекст, затем ищем источники и формируем ответ.',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
+    if (demoMode) {
+      useUIStore.getState().setApiStatus('demo');
+      return demoChatMessage(query);
     }
 
     try {
@@ -100,23 +156,7 @@ export const chatApi = {
         return backendUnavailableMessage();
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 1200));
-
-      if (shouldShowNoKnowledgeResult(query)) {
-        return notFoundMessage(query);
-      }
-
-      return {
-        id: Math.random().toString(36).slice(2),
-        role: 'assistant',
-        content:
-          `1. По запросу "${query}" найдены релевантные фрагменты в базе знаний.\n` +
-          '2. Ответ сформирован только по документам, которые попали в подборку источников.\n' +
-          '3. Перед применением результата нужно открыть источник и сверить страницу, раздел и редакцию документа.',
-        status: 'answered',
-        citations: MOCK_CITATIONS,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
+      return backendUnavailableMessage();
     }
   },
 };
@@ -125,6 +165,11 @@ export const searchApi = {
   query: async (q: string) => {
     const demoMode = isDemoMode();
 
+    if (demoMode) {
+      useUIStore.getState().setApiStatus('demo');
+      return demoSearchResults(q);
+    }
+
     try {
       const response = await apiClient.get('/search', { params: { q } });
       useUIStore.getState().setApiStatus('online');
@@ -132,26 +177,15 @@ export const searchApi = {
     } catch {
       useUIStore.getState().setApiStatus(demoMode ? 'demo' : 'offline');
 
-      if (!demoMode) {
-        throw new Error('Backend недоступен');
-      }
-
-      if (shouldShowNoKnowledgeResult(q)) {
-        return [];
-      }
-
-      return MOCK_DOCUMENTS.map((doc) => ({
-        ...doc,
-        relevance: 0.92,
-        fragment:
-          'Найденный фрагмент в документе: описание технических требований и связанных параметров проекта.',
-      }));
+      throw new Error('Backend недоступен');
     }
   },
 };
 
 export const documentsApi = {
   list: async () => {
+    if (isDemoMode()) return MOCK_DOCUMENTS;
+
     try {
       const response = await apiClient.get('/documents');
       return response.data;
@@ -163,6 +197,8 @@ export const documentsApi = {
 
 export const checksApi = {
   get: async () => {
+    if (isDemoMode()) return MOCK_CHECKS;
+
     try {
       const response = await apiClient.get('/checks');
       return response.data;
@@ -174,6 +210,8 @@ export const checksApi = {
 
 export const historyApi = {
   get: async () => {
+    if (isDemoMode()) return MOCK_HISTORY;
+
     try {
       const response = await apiClient.get('/history');
       return response.data;
@@ -185,6 +223,8 @@ export const historyApi = {
 
 export const metricsApi = {
   get: async () => {
+    if (isDemoMode()) return MOCK_METRICS;
+
     try {
       const response = await apiClient.get('/metrics');
       return response.data;

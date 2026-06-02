@@ -265,8 +265,8 @@ export const ChecksPanel: React.FC = () => {
   };
 
   const handleResetSelection = () => {
-    setDraftSelectedDocuments(defaultDocumentSelection);
-    setActiveSelectedDocuments(defaultDocumentSelection);
+    setDraftSelectedDocuments([]);
+    setActiveSelectedDocuments([]);
   };
 
   const handleUploadClick = () => {
@@ -396,6 +396,7 @@ export const ChecksPanel: React.FC = () => {
                       variant="contained"
                       startIcon={<Play size={16} />}
                       onClick={handleApplySelection}
+                      disabled={draftSelectedDocuments.length === 0}
                       disableElevation
                     >
                       Проверить выбранные

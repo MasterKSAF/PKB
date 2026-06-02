@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { AppTab, UserRole } from '../utils/access';
+import { USER_ROLE_BY_LABEL, getFallbackTab } from '../utils/access';
 import { MOCK_ADMIN_USERS, MOCK_CHATS } from '../utils/mockData';
 import type { AdminUser } from '../utils/mockData';
 import type { ChatMessage } from '../utils/mockData';
@@ -53,9 +54,13 @@ export const useUIStore = create<UIState>((set) => ({
   login: (currentUserId) =>
     set((state) => {
       const user = state.adminUsers.find((item) => item.id === currentUserId) ?? state.adminUsers[0];
+      const currentRole = USER_ROLE_BY_LABEL[user.role] ?? 'user';
+
       return {
         isAuthenticated: true,
         currentUserId: user.id,
+        currentRole,
+        activeTab: getFallbackTab(currentRole),
       };
     }),
   logout: () => set({ isAuthenticated: false, activeTab: 'chat', focusMode: false }),

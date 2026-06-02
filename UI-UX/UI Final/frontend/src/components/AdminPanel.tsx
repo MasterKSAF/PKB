@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   Box,
   Button,
   Checkbox,
@@ -197,8 +198,10 @@ export const AdminPanel: React.FC = () => {
     addAdminAuditLogItem,
     currentRole,
     currentUserId,
+    themeMode,
     updateAdminUser,
   } = useUIStore();
+  const isLight = themeMode === 'light';
   const currentUser = adminUsers.find((user) => user.id === currentUserId) ?? adminUsers[0];
   const availableSections = ADMIN_SECTIONS_ACCESS[currentRole];
   const canManageUsers = availableSections.includes('users');
@@ -241,6 +244,7 @@ export const AdminPanel: React.FC = () => {
   const [selectedUserId, setSelectedUserId] = useState(currentUser?.id ?? adminUsers[0]?.id ?? '');
   const selectedUser = adminUsers.find((user) => user.id === selectedUserId) ?? adminUsers[0];
   const [searchQuery, setSearchQuery] = useState('');
+  const [adminNotice, setAdminNotice] = useState('');
   const [draftRole, setDraftRole] = useState<RoleLabel>(selectedUser?.role ?? 'Пользователь');
   const [draftAccess, setDraftAccess] = useState<AccessKey[]>(selectedUser ? inferAccessKeys(selectedUser) : []);
 
@@ -268,8 +272,11 @@ export const AdminPanel: React.FC = () => {
   const savedAccess = selectedUser ? inferAccessKeys(selectedUser) : [];
   const hasChanges = Boolean(selectedUser) && (draftRole !== selectedUser.role || !sameAccess(draftAccess, savedAccess));
   const enabledUsersCount = adminUsers.filter((user) => user.status === 'Активен').length;
+  const editingOwnSystemRole = currentRole === 'systemAdmin' && selectedUser?.id === currentUserId;
 
   const handleRoleChange = (role: RoleLabel) => {
+    if (editingOwnSystemRole) return;
+
     setDraftRole(role);
     setDraftAccess(DEFAULT_ACCESS_BY_ROLE[role]);
   };
@@ -291,7 +298,7 @@ export const AdminPanel: React.FC = () => {
 
     const nextAccess = makeAccessText(draftAccess);
     updateAdminUser(selectedUser.id, {
-      role: draftRole,
+      role: editingOwnSystemRole ? selectedUser.role : draftRole,
       access: nextAccess,
       status: selectedUser.status === 'Ожидает настройки' ? 'Активен' : selectedUser.status,
     });
@@ -308,12 +315,40 @@ export const AdminPanel: React.FC = () => {
       actor: currentUser.name,
       target: selectedUser.name,
       action: 'Изменены роль и права',
-      details: `Роль: ${draftRole}. Доступ: ${nextAccess}.`,
+      details: `Роль: ${editingOwnSystemRole ? selectedUser.role : draftRole}. Доступ: ${nextAccess}.`,
     });
   };
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Container
+      maxWidth="lg"
+      sx={{
+        py: 4,
+        ...(isLight && {
+          '& .MuiPaper-root': {
+            bgcolor: 'rgba(255,255,255,0.86) !important',
+            borderColor: 'rgba(14,116,144,0.22) !important',
+            boxShadow: '0 10px 26px rgba(15,23,42,0.055) !important',
+          },
+          '& .MuiTableContainer-root': {
+            bgcolor: 'rgba(255,255,255,0.94) !important',
+          },
+          '& .MuiTableHead-root .MuiTableCell-root': {
+            color: '#0f172a !important',
+            borderBottomColor: 'rgba(14,116,144,0.22) !important',
+          },
+          '& .MuiTableBody-root .MuiTableCell-root': {
+            color: '#1e293b !important',
+          },
+          '& .MuiTypography-root': {
+            color: '#0f172a',
+          },
+          '& .MuiTypography-caption': {
+            color: '#475569 !important',
+          },
+        }),
+      }}
+    >
       <Stack spacing={3}>
         <Paper
           variant="outlined"
@@ -411,11 +446,22 @@ export const AdminPanel: React.FC = () => {
                 <Paper
                   key={item.label}
                   variant="outlined"
+                  onClick={() =>
+                    setAdminNotice(
+                      `${item.label}: действие будет открывать соответствующий раздел администрирования базы знаний после подключения Gateway/backend.`,
+                    )
+                  }
                   sx={{
                     p: 1.35,
                     borderRadius: 2.2,
                     bgcolor: 'rgba(255,255,255,0.025)',
                     borderColor: 'rgba(198,216,240,0.22)',
+                    cursor: 'pointer',
+                    transition: 'transform 160ms ease, border-color 160ms ease',
+                    '&:hover': {
+                      transform: 'translateY(-1px)',
+                      borderColor: isLight ? 'rgba(2,132,199,0.44)' : 'rgba(152,217,216,0.42)',
+                    },
                   }}
                 >
                   <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
@@ -443,6 +489,11 @@ export const AdminPanel: React.FC = () => {
                 </Paper>
               ))}
             </Box>
+            {adminNotice && (
+              <Alert severity="info" variant="outlined" onClose={() => setAdminNotice('')} sx={{ borderRadius: 2 }}>
+                {adminNotice}
+              </Alert>
+            )}
           </Stack>
         </Paper>
 
@@ -554,7 +605,13 @@ export const AdminPanel: React.FC = () => {
                 {hasChanges && <Chip size="small" label="есть изменения" color="warning" variant="outlined" />}
               </Stack>
 
-              <FormControl size="small" fullWidth disabled={!canManagePermissions}>
+              {editingOwnSystemRole && (
+                <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
+                  Роль текущего системного администратора защищена от случайного понижения в демо-режиме.
+                </Alert>
+              )}
+
+              <FormControl size="small" fullWidth disabled={!canManagePermissions || editingOwnSystemRole}>
                 <InputLabel>Роль</InputLabel>
                 <Select
                   value={draftRole}

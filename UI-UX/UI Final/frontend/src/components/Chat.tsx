@@ -14,6 +14,8 @@ import {
   Alert,
   Stack,
   Dialog,
+  Slider,
+  Tooltip,
 } from '@mui/material';
 import {
   Send,
@@ -48,6 +50,7 @@ const statusLabel = {
   needs_clarification: 'нужно уточнение',
   insufficient_data: 'недостаточно данных',
   source_conflict: 'конфликт источников',
+  out_of_scope: 'вне области системы',
   not_found: 'ничего не найдено',
   backend_error: 'backend недоступен',
 } as const;
@@ -122,7 +125,7 @@ function countMatches(text: string, query: string) {
   return count;
 }
 
-function highlightText(text: string, query: string, isLight: boolean) {
+function highlightText(text: string, query: string, isLight: boolean, activeOccurrence = -1) {
   if (!query) return text;
 
   const lowerText = text.toLowerCase();
@@ -136,6 +139,8 @@ function highlightText(text: string, query: string, isLight: boolean) {
       parts.push(text.slice(cursor, position));
     }
 
+    const isActive = index === activeOccurrence;
+
     parts.push(
       <Box
         component="mark"
@@ -145,7 +150,13 @@ function highlightText(text: string, query: string, isLight: boolean) {
           py: 0.05,
           borderRadius: 0.7,
           color: isLight ? '#111827' : '#f8fbff',
-          bgcolor: isLight ? 'rgba(202, 138, 4, 0.28)' : 'rgba(216, 176, 122, 0.36)',
+          bgcolor: isActive
+            ? isLight
+              ? 'rgba(14, 165, 233, 0.34)'
+              : 'rgba(56, 189, 248, 0.38)'
+            : isLight
+              ? 'rgba(202, 138, 4, 0.28)'
+              : 'rgba(216, 176, 122, 0.36)',
           boxShadow: isLight
             ? '0 0 0 1px rgba(146, 64, 14, 0.16)'
             : '0 0 0 1px rgba(216, 176, 122, 0.22)',
@@ -183,12 +194,14 @@ export const Chat: React.FC = () => {
   const [expandedPreviewOpen, setExpandedPreviewOpen] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [activeSearchMatch, setActiveSearchMatch] = useState(0);
+  const [activePreviewSearchMatch, setActivePreviewSearchMatch] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const activeCitation = openedCitations.find((citation) => citation.previewId === activeCitationId) ?? openedCitations[0];
   const normalizedChatSearch = chatSearch.trim().toLowerCase();
   const normalizedPreviewSearch = previewSearch.trim().toLowerCase();
+  const previewSearchMatches = activeCitation ? countMatches(activeCitation.text, normalizedPreviewSearch) : 0;
   const searchMatches = useMemo(
     () =>
       normalizedChatSearch
@@ -208,6 +221,10 @@ export const Chat: React.FC = () => {
   useEffect(() => {
     setActiveSearchMatch(0);
   }, [normalizedChatSearch]);
+
+  useEffect(() => {
+    setActivePreviewSearchMatch(0);
+  }, [activeCitation?.previewId, normalizedPreviewSearch]);
 
   useEffect(() => {
     if (!normalizedChatSearch || searchMatches.length === 0) return;
@@ -267,6 +284,16 @@ export const Chat: React.FC = () => {
       direction === 'next'
         ? (current + 1) % searchMatches.length
         : (current - 1 + searchMatches.length) % searchMatches.length,
+    );
+  };
+
+  const goToPreviewSearchMatch = (direction: 'prev' | 'next') => {
+    if (previewSearchMatches === 0) return;
+
+    setActivePreviewSearchMatch((current) =>
+      direction === 'next'
+        ? (current + 1) % previewSearchMatches
+        : (current - 1 + previewSearchMatches) % previewSearchMatches,
     );
   };
 
@@ -430,7 +457,15 @@ export const Chat: React.FC = () => {
                             <Chip
                               size="small"
                               label={statusLabel[msg.status]}
-                              color={msg.status === 'answered' ? 'success' : msg.status === 'needs_clarification' ? 'warning' : 'error'}
+                              color={
+                                msg.status === 'answered'
+                                  ? 'success'
+                                  : msg.status === 'needs_clarification'
+                                    ? 'warning'
+                                    : msg.status === 'out_of_scope' || msg.status === 'not_found'
+                                      ? 'info'
+                                      : 'error'
+                              }
                               variant="outlined"
                               sx={{ height: 22, ml: 'auto' }}
                             />
@@ -491,7 +526,7 @@ export const Chat: React.FC = () => {
                               </Box>
                             ))}
                           </Box>
-                        ) : msg.status === 'not_found' || msg.status === 'backend_error' ? (
+                        ) : msg.status === 'not_found' || msg.status === 'out_of_scope' || msg.status === 'backend_error' ? (
                           <Alert severity={msg.status === 'backend_error' ? 'error' : 'info'} variant="outlined" sx={{ mt: 1.4 }}>
                             {highlightText(msg.content, normalizedChatSearch, isLight)}
                           </Alert>
@@ -762,6 +797,12 @@ export const Chat: React.FC = () => {
                   size="small"
                   value={chatSearch}
                   onChange={(event) => setChatSearch(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && normalizedChatSearch) {
+                      event.preventDefault();
+                      goToSearchMatch(event.shiftKey ? 'prev' : 'next');
+                    }
+                  }}
                   placeholder="Поиск по чату"
                   variant="standard"
                   slotProps={{
@@ -782,32 +823,42 @@ export const Chat: React.FC = () => {
                           >
                             {searchMatches.length > 0 ? `${activeSearchMatch + 1}/${searchMatches.length}` : '0/0'}
                           </Typography>
-                          <IconButton
-                            aria-label="Предыдущее совпадение"
-                            size="small"
-                            disabled={searchMatches.length === 0}
-                            onClick={() => goToSearchMatch('prev')}
-                            sx={{ width: 24, height: 24 }}
-                          >
-                            <ChevronLeft size={14} />
-                          </IconButton>
-                          <IconButton
-                            aria-label="Следующее совпадение"
-                            size="small"
-                            disabled={searchMatches.length === 0}
-                            onClick={() => goToSearchMatch('next')}
-                            sx={{ width: 24, height: 24 }}
-                          >
-                            <ChevronRight size={14} />
-                          </IconButton>
-                          <IconButton
-                            aria-label="Очистить поиск по чату"
-                            size="small"
-                            onClick={() => setChatSearch('')}
-                            sx={{ width: 24, height: 24 }}
-                          >
-                            <X size={14} />
-                          </IconButton>
+                          <Tooltip title="Предыдущее совпадение">
+                            <span>
+                              <IconButton
+                                aria-label="Предыдущее совпадение"
+                                size="small"
+                                disabled={searchMatches.length === 0}
+                                onClick={() => goToSearchMatch('prev')}
+                                sx={{ width: 24, height: 24 }}
+                              >
+                                <ChevronLeft size={14} />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                          <Tooltip title="Следующее совпадение">
+                            <span>
+                              <IconButton
+                                aria-label="Следующее совпадение"
+                                size="small"
+                                disabled={searchMatches.length === 0}
+                                onClick={() => goToSearchMatch('next')}
+                                sx={{ width: 24, height: 24 }}
+                              >
+                                <ChevronRight size={14} />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                          <Tooltip title="Очистить поиск">
+                            <IconButton
+                              aria-label="Очистить поиск по чату"
+                              size="small"
+                              onClick={() => setChatSearch('')}
+                              sx={{ width: 24, height: 24 }}
+                            >
+                              <X size={14} />
+                            </IconButton>
+                          </Tooltip>
                         </Stack>
                       ) : null,
                       sx: {
@@ -906,28 +957,98 @@ export const Chat: React.FC = () => {
                         {activeCitation.document}
                       </Box>
                     </Button>
-                    <IconButton size="small" onClick={() => setPreviewZoom((value) => Math.max(0.75, value - 0.1))}>
-                      <ZoomOut size={16} />
-                    </IconButton>
+                    <Tooltip title="Уменьшить масштаб">
+                      <IconButton size="small" onClick={() => setPreviewZoom((value) => Math.max(0.75, value - 0.1))}>
+                        <ZoomOut size={16} />
+                      </IconButton>
+                    </Tooltip>
+                    <Slider
+                      size="small"
+                      value={Math.round(previewZoom * 100)}
+                      min={75}
+                      max={160}
+                      step={5}
+                      onChange={(_, value) => setPreviewZoom(Number(value) / 100)}
+                      aria-label="Масштаб документа"
+                      sx={{ width: 82, mx: 0.5 }}
+                    />
                     <Typography variant="caption" color="text.secondary" sx={{ minWidth: 42, textAlign: 'center' }}>
                       {Math.round(previewZoom * 100)}%
                     </Typography>
-                    <IconButton size="small" onClick={() => setPreviewZoom((value) => Math.min(1.45, value + 0.1))}>
-                      <ZoomIn size={16} />
-                    </IconButton>
-                    <IconButton size="small" onClick={() => setExpandedPreviewOpen(true)}>
-                      <Maximize2 size={16} />
-                    </IconButton>
+                    <Tooltip title="Увеличить масштаб">
+                      <IconButton size="small" onClick={() => setPreviewZoom((value) => Math.min(1.6, value + 0.1))}>
+                        <ZoomIn size={16} />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Открыть крупнее">
+                      <IconButton size="small" onClick={() => setExpandedPreviewOpen(true)}>
+                        <Maximize2 size={16} />
+                      </IconButton>
+                    </Tooltip>
                   </Stack>
                   <TextField
                     size="small"
                     value={previewSearch}
                     onChange={(event) => setPreviewSearch(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && normalizedPreviewSearch) {
+                        event.preventDefault();
+                        goToPreviewSearchMatch(event.shiftKey ? 'prev' : 'next');
+                      }
+                    }}
                     placeholder="Поиск по открытому документу"
                     variant="outlined"
                     slotProps={{
                       input: {
                         startAdornment: <Search size={15} style={{ marginRight: 8, opacity: 0.62 }} />,
+                        endAdornment: normalizedPreviewSearch ? (
+                          <Stack
+                            direction="row"
+                            spacing={0.25}
+                            sx={{ alignItems: 'center', ml: 0.8 }}
+                            onMouseDown={(event) => event.preventDefault()}
+                          >
+                            <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+                              {previewSearchMatches > 0 ? `${activePreviewSearchMatch + 1}/${previewSearchMatches}` : '0/0'}
+                            </Typography>
+                            <Tooltip title="Предыдущее совпадение">
+                              <span>
+                                <IconButton
+                                  aria-label="Предыдущее совпадение в документе"
+                                  size="small"
+                                  disabled={previewSearchMatches === 0}
+                                  onClick={() => goToPreviewSearchMatch('prev')}
+                                  sx={{ width: 24, height: 24 }}
+                                >
+                                  <ChevronLeft size={14} />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                            <Tooltip title="Следующее совпадение">
+                              <span>
+                                <IconButton
+                                  aria-label="Следующее совпадение в документе"
+                                  size="small"
+                                  disabled={previewSearchMatches === 0}
+                                  onClick={() => goToPreviewSearchMatch('next')}
+                                  sx={{ width: 24, height: 24 }}
+                                >
+                                  <ChevronRight size={14} />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                            <Tooltip title="Очистить поиск">
+                              <IconButton
+                                aria-label="Очистить поиск по документу"
+                                size="small"
+                                onClick={() => setPreviewSearch('')}
+                                sx={{ width: 24, height: 24 }}
+                              >
+                                <X size={14} />
+                              </IconButton>
+                            </Tooltip>
+                          </Stack>
+                        ) : null,
                       },
                     }}
                   />
@@ -972,7 +1093,7 @@ export const Chat: React.FC = () => {
                     }}
                   >
                     <Typography variant="body2" sx={{ lineHeight: 1.8 }}>
-                      {highlightText(activeCitation.text, normalizedPreviewSearch, isLight)}
+                      {highlightText(activeCitation.text, normalizedPreviewSearch, isLight, activePreviewSearchMatch)}
                     </Typography>
                   </Box>
                   {activeCitation.previewKind === 'document' && [1, 2, 3, 4].map((pageOffset) => {
@@ -1055,11 +1176,55 @@ export const Chat: React.FC = () => {
                   size="small"
                   value={previewSearch}
                   onChange={(event) => setPreviewSearch(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && normalizedPreviewSearch) {
+                      event.preventDefault();
+                      goToPreviewSearchMatch(event.shiftKey ? 'prev' : 'next');
+                    }
+                  }}
                   placeholder="Поиск по документу"
                   sx={{ width: 260, display: { xs: 'none', md: 'block' } }}
                   slotProps={{
                     input: {
                       startAdornment: <Search size={15} style={{ marginRight: 8, opacity: 0.62 }} />,
+                      endAdornment: normalizedPreviewSearch ? (
+                        <Stack
+                          direction="row"
+                          spacing={0.25}
+                          sx={{ alignItems: 'center', ml: 0.8 }}
+                          onMouseDown={(event) => event.preventDefault()}
+                        >
+                          <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+                            {previewSearchMatches > 0 ? `${activePreviewSearchMatch + 1}/${previewSearchMatches}` : '0/0'}
+                          </Typography>
+                          <Tooltip title="Предыдущее совпадение">
+                            <span>
+                              <IconButton
+                                aria-label="Предыдущее совпадение в документе"
+                                size="small"
+                                disabled={previewSearchMatches === 0}
+                                onClick={() => goToPreviewSearchMatch('prev')}
+                                sx={{ width: 24, height: 24 }}
+                              >
+                                <ChevronLeft size={14} />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                          <Tooltip title="Следующее совпадение">
+                            <span>
+                              <IconButton
+                                aria-label="Следующее совпадение в документе"
+                                size="small"
+                                disabled={previewSearchMatches === 0}
+                                onClick={() => goToPreviewSearchMatch('next')}
+                                sx={{ width: 24, height: 24 }}
+                              >
+                                <ChevronRight size={14} />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                        </Stack>
+                      ) : null,
                     },
                   }}
                 />
@@ -1105,7 +1270,7 @@ export const Chat: React.FC = () => {
                   }}
                 >
                   <Typography variant="body2" sx={{ lineHeight: 1.85 }}>
-                    {highlightText(activeCitation.text, normalizedPreviewSearch, isLight)}
+                    {highlightText(activeCitation.text, normalizedPreviewSearch, isLight, activePreviewSearchMatch)}
                   </Typography>
                 </Box>
                 {activeCitation.previewKind === 'document' &&

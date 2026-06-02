@@ -37,6 +37,7 @@ import {
 } from 'lucide-react';
 import { useUIStore, AppTab } from '../store/uiStore';
 import { ROLE_TAB_ACCESS } from '../utils/access';
+import { MOCK_CHAT_THREADS } from '../utils/mockData';
 
 const NAV_ITEMS: Array<{ value: AppTab; label: string; icon: React.ReactNode }> = [
   { value: 'chat', label: 'Чат', icon: <MessageSquare size={18} /> },
@@ -82,6 +83,7 @@ export const ModeSwitcher: React.FC = () => {
     themeMode,
     setActiveProjectId,
     setActiveTab,
+    setChatMessages,
     setThemeMode,
     setVideoGuideOpen,
     setFocusMode,
@@ -116,6 +118,7 @@ export const ModeSwitcher: React.FC = () => {
   const selectThread = (projectId: string, chatId: string) => {
     setActiveProjectId(projectId);
     setActiveThreadId(chatId);
+    setChatMessages(MOCK_CHAT_THREADS[chatId] ?? []);
     setActiveTab('chat');
   };
 
@@ -161,6 +164,7 @@ export const ModeSwitcher: React.FC = () => {
 
     if (activeThreadId === deleteCandidate.chatId) {
       setActiveThreadId('');
+      setChatMessages([]);
     }
 
     setDeleteCandidate(null);
@@ -554,7 +558,7 @@ export const ModeSwitcher: React.FC = () => {
             color: isLight ? '#075985' : 'rgba(224, 234, 245, 0.88)',
           }}
         >
-          {themeMode === 'dark' ? 'Тёмная тема' : 'Светлая тема'}
+          {themeMode === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
         </Button>
         <Button
           variant="outlined"

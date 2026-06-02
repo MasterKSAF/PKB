@@ -22,6 +22,7 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import { Download, ExternalLink, FileText, MessageSquarePlus, Search, X } from 'lucide-react';
@@ -40,6 +41,7 @@ const statusLabel: Record<AnswerStatus, string> = {
   needs_clarification: 'нужно уточнение',
   insufficient_data: 'недостаточно данных',
   source_conflict: 'конфликт источников',
+  out_of_scope: 'вне области системы',
   not_found: 'ничего не найдено',
   backend_error: 'backend недоступен',
 };
@@ -49,6 +51,7 @@ const statusColor: Record<AnswerStatus, 'success' | 'warning' | 'error' | 'info'
   needs_clarification: 'warning',
   insufficient_data: 'error',
   source_conflict: 'info',
+  out_of_scope: 'info',
   not_found: 'info',
   backend_error: 'error',
 };
@@ -120,7 +123,7 @@ function citationButtonSx(themeMode: 'dark' | 'light') {
 }
 
 export const History: React.FC = () => {
-  const { setActiveTab, setChatMessages, themeMode } = useUIStore();
+  const { adminUsers, currentRole, currentUserId, setActiveTab, setChatMessages, themeMode } = useUIStore();
   const isLight = themeMode === 'light';
   const [queryFilter, setQueryFilter] = useState('');
   const [userFilter, setUserFilter] = useState('all');
@@ -136,14 +139,21 @@ export const History: React.FC = () => {
     queryFn: historyApi.get,
   });
 
-  const users = useMemo(() => Array.from(new Set(data.map((item) => item.user))), [data]);
-  const projects = useMemo(() => Array.from(new Set(data.map((item) => item.project))), [data]);
-  const topics = useMemo(() => Array.from(new Set(data.map((item) => item.topic))), [data]);
+  const currentUser = adminUsers.find((user) => user.id === currentUserId);
+  const roleScopedData = useMemo(() => {
+    if (currentRole !== 'user') return data;
+
+    return data.filter((item) => item.user === currentUser?.name);
+  }, [currentRole, currentUser?.name, data]);
+
+  const users = useMemo(() => Array.from(new Set(roleScopedData.map((item) => item.user))), [roleScopedData]);
+  const projects = useMemo(() => Array.from(new Set(roleScopedData.map((item) => item.project))), [roleScopedData]);
+  const topics = useMemo(() => Array.from(new Set(roleScopedData.map((item) => item.topic))), [roleScopedData]);
 
   const filteredData = useMemo(() => {
     const normalized = queryFilter.trim().toLowerCase();
 
-    return data.filter((item) => {
+    return roleScopedData.filter((item) => {
       const chatText = item.messages.map((message) => message.content).join(' ');
       const matchesQuery =
         !normalized ||
@@ -157,12 +167,12 @@ export const History: React.FC = () => {
 
       return matchesQuery && matchesUser && matchesProject && matchesTopic && matchesStatus;
     });
-  }, [data, projectFilter, queryFilter, statusFilter, topicFilter, userFilter]);
+  }, [projectFilter, queryFilter, roleScopedData, statusFilter, topicFilter, userFilter]);
   const historySlices = [
     {
       label: 'Диалоги',
-      value: `${data.length}`,
-      note: 'всего сохраненных сессий',
+      value: `${roleScopedData.length}`,
+      note: currentRole === 'systemAdmin' ? 'всего сохраненных сессий' : 'доступно для текущей роли',
     },
     {
       label: 'Проекты',
@@ -176,7 +186,7 @@ export const History: React.FC = () => {
     },
     {
       label: 'Ответы с источниками',
-      value: `${data.filter((item) => item.sources > 0).length}`,
+      value: `${roleScopedData.filter((item) => item.sources > 0).length}`,
       note: 'можно открыть страницу или документ',
     },
   ];
@@ -311,7 +321,7 @@ export const History: React.FC = () => {
                     <Select label="Пользователь" value={userFilter} onChange={(event) => setUserFilter(event.target.value)}>
                       <MenuItem value="all">Все</MenuItem>
                       {users.map((user) => (
-                        <MenuItem key={user} value={user}>
+                        <MenuItem key={user} value={user} title={user}>
                           {user}
                         </MenuItem>
                       ))}
@@ -323,7 +333,7 @@ export const History: React.FC = () => {
                     <Select label="Проект" value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
                       <MenuItem value="all">Все</MenuItem>
                       {projects.map((project) => (
-                        <MenuItem key={project} value={project}>
+                        <MenuItem key={project} value={project} title={project}>
                           {project}
                         </MenuItem>
                       ))}
@@ -335,7 +345,7 @@ export const History: React.FC = () => {
                     <Select label="Тема" value={topicFilter} onChange={(event) => setTopicFilter(event.target.value)}>
                       <MenuItem value="all">Все</MenuItem>
                       {topics.map((topic) => (
-                        <MenuItem key={topic} value={topic}>
+                        <MenuItem key={topic} value={topic} title={topic}>
                           {topic}
                         </MenuItem>
                       ))}
@@ -401,10 +411,14 @@ export const History: React.FC = () => {
                           <TableCell>{item.project}</TableCell>
                           <TableCell>{item.topic}</TableCell>
                           <TableCell sx={{ maxWidth: 340 }}>
-                            <Typography sx={{ fontSize: '0.82rem', fontWeight: 520 }}>{item.session}</Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              {item.query}
-                            </Typography>
+                            <Tooltip title={item.session}>
+                              <Typography sx={{ fontSize: '0.82rem', fontWeight: 520 }}>{item.session}</Typography>
+                            </Tooltip>
+                            <Tooltip title={item.query}>
+                              <Typography variant="caption" color="text.secondary">
+                                {item.query}
+                              </Typography>
+                            </Tooltip>
                           </TableCell>
                           <TableCell>{item.sources}</TableCell>
                           <TableCell>

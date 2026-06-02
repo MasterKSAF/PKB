@@ -13,6 +13,7 @@ export type AnswerStatus =
   | 'needs_clarification'
   | 'insufficient_data'
   | 'source_conflict'
+  | 'out_of_scope'
   | 'not_found'
   | 'backend_error';
 
@@ -199,6 +200,81 @@ export const MOCK_CHATS: ChatMessage[] = [
     citations: [MOCK_CITATIONS[0], MOCK_CITATIONS[1]],
   },
 ];
+
+export const MOCK_CHAT_THREADS: Record<string, ChatMessage[]> = {
+  'chat-hull': MOCK_CHATS,
+  'chat-materials': [
+    {
+      id: 'materials-u1',
+      role: 'user',
+      content: 'Какие материалы нужно сверить перед применением в корпусных конструкциях?',
+      timestamp: '10:08',
+    },
+    {
+      id: 'materials-a1',
+      role: 'assistant',
+      content:
+        '1. Перед применением нужно сверить марку стали с проектной спецификацией и действующей редакцией НСИ.\n' +
+        '2. Для материалов с модификациями обозначения требуется отдельная инженерная проверка эквивалентности.\n' +
+        '3. В карточке источника нужно открыть документ и страницу, где указана применяемость материала.',
+      timestamp: '10:09',
+      status: 'answered',
+      citations: [MOCK_CITATIONS[0]],
+    },
+  ],
+  'chat-pumps': [
+    {
+      id: 'pumps-u1',
+      role: 'user',
+      content: 'Проверь требования по насосным агрегатам для проекта 22220.',
+      timestamp: '11:20',
+    },
+    {
+      id: 'pumps-a1',
+      role: 'assistant',
+      content:
+        '1. По насосным агрегатам найдены требования к вибрации и рабочему диапазону частот.\n' +
+        '2. Перед применением нужно проверить версию спецификации и фактическую комплектацию агрегата.',
+      timestamp: '11:21',
+      status: 'answered',
+      citations: [MOCK_CITATIONS[1]],
+    },
+  ],
+  'chat-cooling': [
+    {
+      id: 'cooling-u1',
+      role: 'user',
+      content: 'Что нужно уточнить по системе охлаждения?',
+      timestamp: '11:34',
+    },
+    {
+      id: 'cooling-a1',
+      role: 'assistant',
+      content:
+        'Нужно уточнить состав системы, проектную стадию и документ, по которому выполняется сверка. Без этого система не должна подставлять случайный источник.',
+      timestamp: '11:35',
+      status: 'needs_clarification',
+    },
+  ],
+  'chat-ocr': [
+    {
+      id: 'ocr-u1',
+      role: 'user',
+      content: 'Какие документы требуют повторного OCR?',
+      timestamp: '12:06',
+    },
+    {
+      id: 'ocr-a1',
+      role: 'assistant',
+      content:
+        '1. В демонстрационном наборе есть документы с незавершенным OCR и ожиданием индексации.\n' +
+        '2. Реальный список должен возвращать Gateway после обработки документов.',
+      timestamp: '12:07',
+      status: 'answered',
+      citations: [MOCK_CITATIONS[0]],
+    },
+  ],
+};
 
 export const MOCK_DOCUMENTS: Document[] = [
   {

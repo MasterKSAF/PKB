@@ -1,10 +1,17 @@
 import React, { useMemo, useState } from 'react';
-import { Box, Button, Paper, Stack, TextField, Typography } from '@mui/material';
-import { Anchor, Database, KeyRound, LogIn, Moon, Settings, Ship, Sun, UserRound, Waves } from 'lucide-react';
+import { Box, Button, IconButton, Paper, Stack, TextField, Typography } from '@mui/material';
+import { Anchor, Database, Eye, EyeOff, KeyRound, LogIn, Moon, Settings, Ship, Sun, UserRound, Waves } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
 
 const ROLE_ORDER = ['Пользователь', 'Администратор знаний', 'Системный администратор'] as const;
+const ROLE_FALLBACK_USER_ID: Record<(typeof ROLE_ORDER)[number], string> = {
+  Пользователь: 'u1',
+  'Администратор знаний': 'u3',
+  'Системный администратор': 'u4',
+};
 const DEMO_PASSWORD = 'demo';
+const LOGIN_LIMITS = { min: 3, max: 64 };
+const PASSWORD_LIMITS = { min: 4, max: 64 };
 
 export const LoginScreen: React.FC = () => {
   const { adminUsers, login, setThemeMode, themeMode } = useUIStore();
@@ -14,14 +21,24 @@ export const LoginScreen: React.FC = () => {
   const roleProfiles = useMemo(
     () =>
       ROLE_ORDER
-        .map((role) => adminUsers.find((user) => user.role === role))
-        .filter(Boolean),
+        .map((role) => ({
+          role,
+          user: adminUsers.find((item) => item.role === role) ?? adminUsers.find((item) => item.id === ROLE_FALLBACK_USER_ID[role]),
+        }))
+        .filter((profile) => Boolean(profile.user)),
     [adminUsers],
   );
-  const [selectedUserId, setSelectedUserId] = useState(roleProfiles[2]?.id ?? roleProfiles[0]?.id ?? '');
-  const selectedUser = adminUsers.find((user) => user.id === selectedUserId) ?? roleProfiles[0];
+  const [selectedUserId, setSelectedUserId] = useState(roleProfiles[2]?.user?.id ?? roleProfiles[0]?.user?.id ?? '');
+  const selectedUser = adminUsers.find((user) => user.id === selectedUserId) ?? roleProfiles[0]?.user;
   const [loginValue, setLoginValue] = useState(selectedUser?.login ?? '');
   const [passwordValue, setPasswordValue] = useState(DEMO_PASSWORD);
+  const [showPassword, setShowPassword] = useState(false);
+  const trimmedLogin = loginValue.trim();
+  const trimmedPassword = passwordValue.trim();
+  const loginError = Boolean(trimmedLogin) && (trimmedLogin.length < LOGIN_LIMITS.min || trimmedLogin.length > LOGIN_LIMITS.max);
+  const passwordError =
+    Boolean(trimmedPassword) && (trimmedPassword.length < PASSWORD_LIMITS.min || trimmedPassword.length > PASSWORD_LIMITS.max);
+  const canSubmit = Boolean(trimmedLogin && trimmedPassword) && !loginError && !passwordError;
 
   const handleProfileSelect = (userId: string) => {
     const user = adminUsers.find((item) => item.id === userId);
@@ -33,7 +50,9 @@ export const LoginScreen: React.FC = () => {
   };
 
   const handleLogin = () => {
-    const userByLogin = adminUsers.find((user) => user.login === loginValue.trim());
+    if (!canSubmit) return;
+
+    const userByLogin = adminUsers.find((user) => user.login === trimmedLogin);
     login(userByLogin?.id ?? selectedUserId);
   };
 
@@ -129,9 +148,12 @@ export const LoginScreen: React.FC = () => {
               size="small"
               label="Логин"
               value={loginValue}
+              error={loginError}
+              helperText={`Логин: ${LOGIN_LIMITS.min}-${LOGIN_LIMITS.max} символа`}
               onChange={(event) => setLoginValue(event.target.value)}
               slotProps={{
                 input: {
+                  inputProps: { minLength: LOGIN_LIMITS.min, maxLength: LOGIN_LIMITS.max },
                   startAdornment: <UserRound size={16} style={{ marginRight: 8, opacity: 0.7 }} />,
                 },
               }}
@@ -139,24 +161,39 @@ export const LoginScreen: React.FC = () => {
             <TextField
               size="small"
               label="Пароль"
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               value={passwordValue}
+              error={passwordError}
+              helperText={`Пароль: ${PASSWORD_LIMITS.min}-${PASSWORD_LIMITS.max} символа`}
               onChange={(event) => setPasswordValue(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === 'Enter' && loginValue.trim() && passwordValue.trim()) {
+                if (event.key === 'Enter' && canSubmit) {
                   handleLogin();
                 }
               }}
               slotProps={{
                 input: {
+                  inputProps: { minLength: PASSWORD_LIMITS.min, maxLength: PASSWORD_LIMITS.max },
                   startAdornment: <KeyRound size={16} style={{ marginRight: 8, opacity: 0.7 }} />,
+                  endAdornment: (
+                    <IconButton
+                      aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
+                      size="small"
+                      onClick={() => setShowPassword((value) => !value)}
+                      edge="end"
+                      sx={{ color: isLight ? '#075985' : 'text.secondary' }}
+                    >
+                      {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                    </IconButton>
+                  ),
                 },
               }}
             />
           </Stack>
 
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 1 }}>
-            {roleProfiles.map((user) => {
+            {roleProfiles.map((profile) => {
+              const user = profile.user;
               if (!user) return null;
 
               const selected = user.id === selectedUserId;
@@ -185,8 +222,16 @@ export const LoginScreen: React.FC = () => {
                         ? 'rgba(15,23,42,0.12)'
                         : 'rgba(198,216,240,0.18)',
                     '&:hover': {
-                      borderColor: isLight ? 'rgba(15, 95, 111, 0.30)' : 'rgba(152, 217, 216, 0.28)',
+                      borderColor: isLight ? 'rgba(2, 132, 199, 0.62)' : 'rgba(152, 217, 216, 0.38)',
+                      boxShadow: isLight
+                        ? '0 10px 24px rgba(2, 132, 199, 0.14), inset 0 1px 0 rgba(255,255,255,0.82)'
+                        : '0 10px 24px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.08)',
+                      transform: 'translateY(-1px)',
                     },
+                    '&:focus-within': {
+                      borderColor: isLight ? '#0284c7' : '#98d9d8',
+                    },
+                    transition: 'border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease',
                   }}
                 >
                   <Stack spacing={0.85}>
@@ -202,10 +247,10 @@ export const LoginScreen: React.FC = () => {
                         border: isLight ? '1px solid rgba(15,95,111,0.18)' : '1px solid rgba(152,217,216,0.18)',
                       }}
                     >
-                      {getRoleIcon(user.role)}
+                      {getRoleIcon(profile.role)}
                     </Box>
                     <Box>
-                      <Typography sx={{ fontSize: '0.88rem', fontWeight: 600, lineHeight: 1.2 }}>{user.role}</Typography>
+                      <Typography sx={{ fontSize: '0.88rem', fontWeight: 600, lineHeight: 1.2 }}>{profile.role}</Typography>
                       <Typography variant="caption" color="text.secondary">
                         {user.login}
                       </Typography>
@@ -223,7 +268,7 @@ export const LoginScreen: React.FC = () => {
               variant="contained"
               startIcon={<LogIn size={17} />}
               onClick={handleLogin}
-              disabled={!loginValue.trim() || !passwordValue.trim()}
+              disabled={!canSubmit}
             >
               Войти
             </Button>
@@ -233,7 +278,7 @@ export const LoginScreen: React.FC = () => {
               onClick={() => setThemeMode(themeMode === 'dark' ? 'light' : 'dark')}
               sx={{ minWidth: 132 }}
             >
-              {themeMode === 'dark' ? 'Тёмная' : 'Светлая'}
+              {themeMode === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
             </Button>
           </Stack>
         </Stack>
