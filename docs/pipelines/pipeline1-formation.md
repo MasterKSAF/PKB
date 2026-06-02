@@ -5,7 +5,7 @@
 
 ```mermaid
 sequenceDiagram
-    participant UI as UI / API
+    participant UI as Web UI
     participant Orch as Orchestrator
     participant OCR as OCR-сервис
     participant Pars as Parser-сервис

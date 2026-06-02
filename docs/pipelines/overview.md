@@ -251,7 +251,7 @@ flowchart LR
 | **OCR и Parser — независимые сервисы с единым контрактом** | Разделение OCR (распознавание изображения/PDF в текст) и Parser (структурирование текста в JSON) позволяет заменять OCR-движок без влияния на парсинг. Единый JSON-контракт между сервисами обеспечивает слабую связанность. |
 | **Таймауты для «зависших» состояний (Scheduler)** | Для состояний `awaiting_decision` и `review_required` установлены таймауты (24ч и 48ч), по истечении которых документ переводится в `failed`. Scheduler проверяет зависшие документы каждые 5 минут. |
 | **Проверка уникальности через `POST /registry/documents/check-uniqueness`** | Выделенный эндпоинт Registry для быстрой проверки уникальности по метаданным, вызываемый **Оркестратором** на preview- и full-этапах перед записью документа. Позволяет отделить логику поиска дубликатов от логики создания документа и обеспечивает единый механизм duplicate-детекции. |
-| **Rate Limiting для всех публичных эндпоинтов** | Единая политика ограничения запросов с разными лимитами для разных групп эндпоинтов. Redis для распределённого rate limiting. Код ошибки `429 TOO_MANY_REQUESTS`. |
+| **Rate Limiting для всех эндпоинтов через Gateway** | Единая политика ограничения запросов с разными лимитами для разных групп эндпоинтов. Redis для распределённого rate limiting. Код ошибки `429 TOO_MANY_REQUESTS`. |
 
 ---
 
@@ -376,7 +376,9 @@ graph TB
         UI[Web UI]
     end
 
-    subgraph "Сеть приложений"
+    subgraph "Внутренняя сеть"
+        GW[Gateway Service<br/>:8080]
+
         subgraph "Оркестратор"
             Orch[Orchestrator Service<br/>:8081]
         end
@@ -386,18 +388,15 @@ graph TB
             Pars[Parser-сервис<br/>:8087]
             CV[Converter-validator<br/>:8086]
             Reg[Registry<br/>:8084]
-            RAGb[RAG Builder<br/>:8090]
         end
 
         subgraph "Пайплайн 2: Индексация"
-            RAGi[RAG Builder
-:8090]
+            RAGb[RAG Builder<br/>:8090]
         end
 
         subgraph "Пайплайн 3: Поиск"
             QS[Query Service<br/>:8083]
-            RAGs[RAG Search
-:8091]
+            RAGs[RAG Search<br/>:8091]
         end
 
         subgraph "Вспомогательные сервисы"
@@ -423,9 +422,12 @@ OpenAI / Custom]
     end
 
     %% Соединения
-    LB --> Orch
-    UI --> QS
-    UI --> LB
+    LB -->|только Web UI| UI
+    UI -->|внутренние вызовы| GW
+    GW --> Auth
+    GW --> Orch
+    GW --> QS
+    GW --> IS
 
     Orch --> OCR
     Orch --> Pars
@@ -448,13 +450,13 @@ OpenAI / Custom]
     Orch --> PG
 
     %% Стили
+    style GW fill:#ff9900,color:#fff
     style Orch fill:#4a90d9,color:#fff
     style OCR fill:#e6f3ff
     style Pars fill:#e6f3ff
     style CV fill:#fff3e6
     style Reg fill:#e6ffe6
     style RAGb fill:#ffe6f3
-    style RAGi fill:#ffe6f3
     style RAGs fill:#f3e6ff
     style QS fill:#fffacd
     style PG fill:#f9f9f9

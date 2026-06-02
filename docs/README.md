@@ -14,7 +14,8 @@ docs/
 │
 ├── api/                              # API-спецификации микросервисов
 │   ├── common_api.md                 #   Общие положения (форматы, auth, rate limits, health check, edge cases)
-│   ├── orchestrator_service_api.md   #   Orchestrator (публичное API)
+│   ├── gateway_service_api.md        #   Gateway (JWT, RBAC, маршрутизация)
+│   ├── orchestrator_service_api.md   #   Orchestrator (координатор пайплайнов)
 │   ├── auth_service_api.md           #   Auth Service (JWT, users, roles)
 │   ├── query_service_api.md          #   Query Service (чат, поиск, генерация ответов)
 │   ├── registry_service_api.md       #   Registry (реестр документов, классификаторы, терминология)
@@ -137,7 +138,8 @@ graph LR
 
 | Сервис | Порт | Пайплайн | Доступ к БД |
 |--------|------|----------|-------------|
-| Orchestrator | 8081 | 1, 2 | Свой журнал (не PostgreSQL Registry) |
+| Gateway | 8080 | 1, 2, 3 | Нет (только маршрутизация) |
+| Orchestrator | 8081 | 1, 2 | Свой журнал PostgreSQ    |
 | Auth | 8082 | — | Читает |
 | Query Service | 8083 | 3 | Читает/Пишет |
 | Registry | 8084 | 1 | Пишет |
@@ -153,23 +155,26 @@ graph LR
 
 ## 🚀 Быстрый старт (для интегратора)
 
+> **Примечание:** API — внутренний, доступен только через Gateway (:8080).
+> Примеры ниже — для вызовов из Web UI (серверный код) по внутренней сети.
+
 ```bash
 # Получение токена
-curl -X POST https://{host}/api/v1/auth/token \
+curl -X POST http://127.0.0.1:8080/api/v1/auth/token \
   -H "Content-Type: application/json" \
   -d '{"username": "user", "password": "pass"}'
 
 # Загрузка документа (асинхронно)
-curl -X POST https://{host}/api/v1/documents \
+curl -X POST http://127.0.0.1:8080/api/v1/documents \
   -H "Authorization: Bearer <token>" \
   -F "file=@document.pdf"
 
 # Статус обработки
-curl -X GET https://{host}/api/v1/documents/{doc_id}/status \
+curl -X GET http://127.0.0.1:8080/api/v1/documents/{doc_id}/status \
   -H "Authorization: Bearer <token>"
 
 # Поиск
-curl -X POST https://{host}/api/v1/text/search \
+curl -X POST http://127.0.0.1:8080/api/v1/text/search \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{"text": "толщина обшивки ледового пояса"}'
@@ -193,13 +198,38 @@ curl -X POST https://{host}/api/v1/text/search \
 
 ---
 
+### Gateway Service (API Gateway)
+**Порт:** `8080`
+**Документация:** [`docs/api/gateway_service_api.md`](api/gateway_service_api.md)
+
+**Назначение:**
+Внутренний API Gateway, к которому обращается **Web UI** для выполнения **аутентификации (JWT)**, **проверки прав доступа (RBAC)** и **маршрутизации** вызовов к внутренним сервисам. Gateway не имеет внешнего порта — наружу через Nginx доступен только Web UI.
+
+**Схема подключения:**
+```
+Внешняя сеть → Nginx → Web UI → Gateway (:8080) → Внутренние сервисы (:8081–8091)
+```
+
+**Основные функции:**
+- Проверка JWT Bearer-токена — невалидный/отсутствующий токен → `401`
+- RBAC — проверка прав доступа на основе роли → недостаточно прав → `403`
+- Маршрутизация запросов к внутренним сервисам (Auth, Orchestrator, Query, Registry и др.)
+- Иденпотентность для критичных POST-операций (`Idempotency-Key`, TTL: 1 час)
+- Единый формат ошибок для всех HTTP-исключений
+- Health-check endpoint `/api/v1/system/health` с агрегированным статусом всех сервисов
+- CORS и `X-Process-Time` заголовок
+
+**Контроль доступа:** Gateway — внутренний сервис, к нему обращается только **Web UI** (который раздаётся через Nginx). Gateway проверяет JWT-токен и права доступа (RBAC) перед тем, как запрос попадёт к внутренним сервисам. Без валидного токена — `401`, без прав на операцию — `403`.
+
+---
+
 ### Оркестратор (Orchestrator Service)
 **Порт:** `8081`
 **Документация:** [`docs/api/orchestrator_service_api.md`](api/orchestrator_service_api.md)
 **Описание также в:** [`pipelines/overview.md`](pipelines/overview.md), [`pipelines/pipeline1-formation.md`](pipelines/pipeline1-formation.md), [`pipelines/pipeline1-formation_detail.md`](pipelines/pipeline1-formation_detail.md), [`pipelines/pipeline2-indexation.md`](pipelines/pipeline2-indexation.md)
 
 **Назначение:**
-Единая точка входа для публичного API. Координирует пайплайны 1 и 2: управляет последовательностью вызовов сервисов, передаёт JSON-контейнеры между этапами, ведёт журнал обработки, реализует двухфазную схему preview → решение → full.
+Координатор пайплайнов 1 и 2. Управляет последовательностью вызовов сервисов, передаёт JSON-контейнеры между этапами, ведёт журнал обработки, реализует двухфазную схему preview → решение → full.
 
 **Основные функции:**
 - Приём и валидация загружаемых файлов, вычисление SHA-256, сохранение в MinIO
@@ -399,6 +429,7 @@ curl -X POST https://{host}/api/v1/text/search \
 |--------|-----------|
 | **Общая документация** | |
 | API-спецификации (все эндпоинты) | [`docs/api/`](api/) |
+| Gateway Service (JWT, RBAC, маршрутизация) | [`docs/api/gateway_service_api.md`](api/gateway_service_api.md) |
 | Формат ошибок, rate limits, health check, edge cases | [`docs/api/common_api.md`](api/common_api.md) |
 | ER-диаграмма и типы данных | [`docs/database/db_diagrams.md`](database/db_diagrams.md) |
 | **Пайплайны** | |

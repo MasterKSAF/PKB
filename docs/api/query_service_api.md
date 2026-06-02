@@ -17,7 +17,7 @@ Query Service принимает запросы от UI, вызывает RAG Se
 10. UI ожидает ответ через longpoll на конкретное сообщение: `GET /chat/sessions/{session_id}/messages/{message_id}?longpoll=15`
 
 **Базовый URL (внутренний)**: `http://127.0.0.1:8083/api/v1`
-**Базовый URL (публичный через Orchestrator)**: `https://{host}/api/v1`
+**Базовый URL (через Gateway)**: `http://127.0.0.1:8080/api/v1`
 
 ### Группы
 
@@ -128,7 +128,7 @@ sequenceDiagram
 | ID документа         | `document_id`      |                                               |
 | Номер страницы       | `page`             |                                               |
 | ID раздела           | `section_id`       | Тип int (bigint), соответствует `registry.document_sections.id` |
-| Цитата из источника  | `excerpt`          | До 300 символов, публичный API                |
+| Цитата из источника  | `excerpt`          | До 300 символов, API                          |
 | Полное содержимое    | `content`          | Сырой чанк от RAG (внутренний)            |
 | Раздел документа     | `clause`           |                                               |
 | URL превью страницы  | `page_preview_url` |                                               |
