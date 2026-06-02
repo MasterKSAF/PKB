@@ -12,6 +12,8 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Menu,
+  MenuItem,
 } from '@mui/material';
 import {
   Anchor,
@@ -30,7 +32,9 @@ import {
   ChevronRight,
   Check,
   Edit3,
+  MoreVertical,
   Moon,
+  Plus,
   Sun,
   Trash2,
   X,
@@ -99,9 +103,40 @@ export const ModeSwitcher: React.FC = () => {
   const [editingThreadId, setEditingThreadId] = React.useState<string | null>(null);
   const [draftTitle, setDraftTitle] = React.useState('');
   const [deleteCandidate, setDeleteCandidate] = React.useState<{ projectId: string; chatId: string; title: string } | null>(null);
+  const [editingProjectId, setEditingProjectId] = React.useState<string | null>(null);
+  const [projectDraftName, setProjectDraftName] = React.useState('');
+  const [deleteProjectCandidate, setDeleteProjectCandidate] = React.useState<{
+    projectId: string;
+    name: string;
+    chatsCount: number;
+  } | null>(null);
+  const [projectMenuAnchor, setProjectMenuAnchor] = React.useState<HTMLElement | null>(null);
+  const [projectMenuTarget, setProjectMenuTarget] = React.useState<{ projectId: string; name: string; chatsCount: number } | null>(
+    null,
+  );
+  const [chatMenuAnchor, setChatMenuAnchor] = React.useState<HTMLElement | null>(null);
+  const [chatMenuTarget, setChatMenuTarget] = React.useState<{ projectId: string; chatId: string; title: string } | null>(
+    null,
+  );
 
   const toggleProject = (projectId: string) => {
     setExpandedProjects((state) => ({ ...state, [projectId]: !state[projectId] }));
+  };
+
+  const createProject = () => {
+    const newProjectNumber = chatProjects.filter((project) => project.name.startsWith('Новый проект')).length + 1;
+    const projectId = `project-${Date.now()}`;
+    const name = `Новый проект ${newProjectNumber}`;
+
+    setChatProjects((projects) => [{ id: projectId, name, chats: [] }, ...projects]);
+    setExpandedProjects((state) => ({ ...state, [projectId]: true }));
+    setChatTreeOpen(true);
+    setActiveProjectId(projectId);
+    setActiveThreadId('');
+    setChatMessages([]);
+    setEditingProjectId(projectId);
+    setProjectDraftName(name);
+    setActiveTab('chat');
   };
 
   const handleNavClick = (tab: AppTab) => {
@@ -122,9 +157,53 @@ export const ModeSwitcher: React.FC = () => {
     setActiveTab('chat');
   };
 
+  const createThread = (projectId: string) => {
+    const project = chatProjects.find((item) => item.id === projectId);
+    const newThreadNumber = (project?.chats.filter((chat) => chat.title.startsWith('Новый чат')).length ?? 0) + 1;
+    const chatId = `chat-${projectId}-${Date.now()}`;
+    const title = `Новый чат ${newThreadNumber}`;
+
+    setChatProjects((projects) =>
+      projects.map((item) =>
+        item.id === projectId
+          ? {
+              ...item,
+              chats: [{ id: chatId, title }, ...item.chats],
+            }
+          : item,
+      ),
+    );
+    setExpandedProjects((state) => ({ ...state, [projectId]: true }));
+    setActiveProjectId(projectId);
+    setActiveThreadId(chatId);
+    setChatMessages([]);
+    setEditingThreadId(chatId);
+    setDraftTitle(title);
+    setActiveTab('chat');
+  };
+
   const startRename = (chatId: string, title: string) => {
     setEditingThreadId(chatId);
     setDraftTitle(title);
+  };
+
+  const startRenameProject = (projectId: string, name: string) => {
+    setEditingProjectId(projectId);
+    setProjectDraftName(name);
+  };
+
+  const saveProjectRename = () => {
+    if (!editingProjectId || !projectDraftName.trim()) {
+      setEditingProjectId(null);
+      return;
+    }
+
+    setChatProjects((projects) =>
+      projects.map((project) =>
+        project.id === editingProjectId ? { ...project, name: projectDraftName.trim() } : project,
+      ),
+    );
+    setEditingProjectId(null);
   };
 
   const saveRename = () => {
@@ -146,6 +225,61 @@ export const ModeSwitcher: React.FC = () => {
 
   const requestDeleteThread = (projectId: string, chatId: string, title: string) => {
     setDeleteCandidate({ projectId, chatId, title });
+  };
+
+  const openChatMenu = (event: React.MouseEvent<HTMLElement>, projectId: string, chatId: string, title: string) => {
+    event.stopPropagation();
+    setChatMenuAnchor(event.currentTarget);
+    setChatMenuTarget({ projectId, chatId, title });
+  };
+
+  const closeChatMenu = () => {
+    setChatMenuAnchor(null);
+    setChatMenuTarget(null);
+  };
+
+  const handleChatMenuRename = () => {
+    if (!chatMenuTarget) return;
+    startRename(chatMenuTarget.chatId, chatMenuTarget.title);
+    closeChatMenu();
+  };
+
+  const handleChatMenuDelete = () => {
+    if (!chatMenuTarget) return;
+    requestDeleteThread(chatMenuTarget.projectId, chatMenuTarget.chatId, chatMenuTarget.title);
+    closeChatMenu();
+  };
+
+  const requestDeleteProject = (projectId: string, name: string, chatsCount: number) => {
+    setDeleteProjectCandidate({ projectId, name, chatsCount });
+  };
+
+  const openProjectMenu = (
+    event: React.MouseEvent<HTMLElement>,
+    projectId: string,
+    name: string,
+    chatsCount: number,
+  ) => {
+    event.stopPropagation();
+    setProjectMenuAnchor(event.currentTarget);
+    setProjectMenuTarget({ projectId, name, chatsCount });
+  };
+
+  const closeProjectMenu = () => {
+    setProjectMenuAnchor(null);
+    setProjectMenuTarget(null);
+  };
+
+  const handleProjectMenuRename = () => {
+    if (!projectMenuTarget) return;
+    startRenameProject(projectMenuTarget.projectId, projectMenuTarget.name);
+    closeProjectMenu();
+  };
+
+  const handleProjectMenuDelete = () => {
+    if (!projectMenuTarget) return;
+    requestDeleteProject(projectMenuTarget.projectId, projectMenuTarget.name, projectMenuTarget.chatsCount);
+    closeProjectMenu();
   };
 
   const confirmDeleteThread = () => {
@@ -170,16 +304,48 @@ export const ModeSwitcher: React.FC = () => {
     setDeleteCandidate(null);
   };
 
+  const confirmDeleteProject = () => {
+    if (!deleteProjectCandidate) return;
+
+    const remainingProjects = chatProjects.filter((project) => project.id !== deleteProjectCandidate.projectId);
+    const deletedProject = chatProjects.find((project) => project.id === deleteProjectCandidate.projectId);
+    const shouldResetThread = deletedProject?.chats.some((chat) => chat.id === activeThreadId);
+
+    setChatProjects(remainingProjects);
+    setExpandedProjects((state) => {
+      const nextState = { ...state };
+      delete nextState[deleteProjectCandidate.projectId];
+      return nextState;
+    });
+
+    if (activeProjectId === deleteProjectCandidate.projectId) {
+      setActiveProjectId(remainingProjects[0]?.id ?? '');
+    }
+
+    if (shouldResetThread || activeProjectId === deleteProjectCandidate.projectId) {
+      setActiveThreadId('');
+      setChatMessages([]);
+    }
+
+    setDeleteProjectCandidate(null);
+  };
+
   return (
     <Box
+      className="app-navigation-panel"
       sx={{
-        width: 292,
+        width: 316,
+        minWidth: 316,
+        flexBasis: 316,
         flexShrink: 0,
         borderRight: isLight ? '2px solid rgba(14, 116, 144, 0.26)' : '2px solid rgba(198, 216, 240, 0.40)',
         bgcolor: isLight ? '#f8fafc' : 'rgba(16, 17, 21, 0.96)',
         display: 'flex',
         flexDirection: 'column',
         overflowY: 'auto',
+        overflowX: 'hidden',
+        scrollbarGutter: 'stable',
+        boxSizing: 'border-box',
         p: 2,
         gap: 2.5,
         boxShadow: isLight
@@ -190,9 +356,10 @@ export const ModeSwitcher: React.FC = () => {
       <Box
         className="workspace-header-panel"
         sx={{
-          p: 2.2,
-          pb: 1.45,
+          p: 1.75,
+          pb: 1.35,
           height: 89,
+          minHeight: 89,
           flexShrink: 0,
           boxSizing: 'border-box',
           borderRadius: 3.2,
@@ -222,12 +389,18 @@ export const ModeSwitcher: React.FC = () => {
           },
         }}
       >
-        <Stack direction="row" spacing={1.6} sx={{ alignItems: 'center', position: 'relative', zIndex: 1 }}>
+        <Stack
+          direction="row"
+          spacing={1.35}
+          sx={{ alignItems: 'center', position: 'relative', zIndex: 1, minWidth: 0, flexWrap: 'nowrap' }}
+        >
           <Box
             sx={{
-              width: 58,
-              height: 58,
-              borderRadius: '18px',
+              width: 54,
+              height: 54,
+              minWidth: 54,
+              flexShrink: 0,
+              borderRadius: '17px',
               display: 'grid',
               placeItems: 'center',
               color: '#dfeeff',
@@ -260,11 +433,12 @@ export const ModeSwitcher: React.FC = () => {
             )}
           </Box>
 
-          <Box sx={{ minWidth: 0, pt: 0.45 }}>
+          <Box sx={{ minWidth: 0, flex: '1 1 auto', pt: 0.35, overflow: 'hidden' }}>
             <Box
               sx={{
                 display: 'inline-flex',
                 alignItems: 'center',
+                maxWidth: '100%',
                 px: 1.15,
                 py: 0.55,
                 borderRadius: 1.7,
@@ -285,6 +459,9 @@ export const ModeSwitcher: React.FC = () => {
                   letterSpacing: '0.015em',
                   color: isLight ? lightShipBlue : '#98d9d8',
                   fontFamily: '"Trebuchet MS", "Segoe UI", sans-serif',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
                 }}
               >
                 AI ассистент
@@ -296,9 +473,12 @@ export const ModeSwitcher: React.FC = () => {
               sx={{
                 display: 'block',
                 mt: 0.8,
-            color: isLight ? '#075985' : 'rgba(209, 225, 225, 0.72)',
+                color: isLight ? '#075985' : 'rgba(209, 225, 225, 0.72)',
                 fontWeight: isLight ? 650 : 400,
                 textAlign: 'center',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
               }}
             >
               сверка с НСИ
@@ -377,48 +557,210 @@ export const ModeSwitcher: React.FC = () => {
                       borderLeft: isLight ? '2px solid #bae6fd' : '2px solid rgba(198, 216, 240, 0.24)',
                     }}
                   >
-                    <Typography
-                      variant="caption"
+                    <Stack
+                      direction="row"
                       sx={{
-                        display: 'block',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 1,
                         mb: 0.6,
-                        color: isLight ? '#64748b' : 'rgba(198,208,222,0.72)',
-                        letterSpacing: '0.06em',
                       }}
                     >
-                      Мои проекты
-                    </Typography>
-                    <Stack spacing={0.45}>
-                      {chatProjects.map((project) => (
-                        <Box key={project.id}>
-                          <Button
-                            fullWidth
-                            size="small"
-                            startIcon={
-                              expandedProjects[project.id] ? <ChevronDown size={14} /> : <ChevronRight size={14} />
-                            }
-                            onClick={() => toggleProject(project.id)}
-                            sx={{
-                              justifyContent: 'flex-start',
-                              px: 0.9,
-                              py: 0.55,
-                              minHeight: 30,
-                              borderRadius: 1.6,
-                              color: activeProjectId === project.id ? (isLight ? '#075985' : '#98d9d8') : 'text.secondary',
-                              bgcolor:
-                                activeProjectId === project.id
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          display: 'block',
+                          color: isLight ? '#64748b' : 'rgba(198,208,222,0.72)',
+                          letterSpacing: '0.06em',
+                        }}
+                      >
+                        Мои проекты
+                      </Typography>
+                      <Tooltip title="Создать новый проект">
+                        <Button
+                          size="small"
+                          startIcon={<Plus size={12} />}
+                          onClick={createProject}
+                          sx={{
+                            width: 74,
+                            minHeight: 24,
+                            px: 0.75,
+                            py: 0.15,
+                            borderRadius: 1.4,
+                            fontSize: '0.68rem',
+                            color: isLight ? '#075985' : '#98d9d8',
+                            border: '1px solid',
+                            borderColor: isLight ? 'rgba(14, 116, 144, 0.24)' : 'rgba(152, 217, 216, 0.22)',
+                            bgcolor: isLight ? 'rgba(224, 242, 254, 0.64)' : 'rgba(152, 217, 216, 0.06)',
+                          }}
+                        >
+                          Проект
+                        </Button>
+                      </Tooltip>
+                    </Stack>
+                    <Stack spacing={0.6}>
+                      {chatProjects.map((project) => {
+                        const isProjectActive = activeProjectId === project.id;
+                        const isProjectEditing = editingProjectId === project.id;
+
+                        return (
+                          <Box key={project.id}>
+                            <Box
+                              sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 0.25,
+                                borderRadius: 1.8,
+                                border: '1px solid',
+                                borderColor: isProjectActive
+                                  ? isLight
+                                    ? '#bae6fd'
+                                    : 'rgba(152, 217, 216, 0.22)'
+                                  : isLight
+                                    ? 'rgba(148, 163, 184, 0.16)'
+                                    : 'rgba(198, 216, 240, 0.10)',
+                                bgcolor: isProjectActive
                                   ? isLight
                                     ? 'rgba(56, 189, 248, 0.12)'
                                     : 'rgba(152, 217, 216, 0.08)'
-                                  : 'transparent',
-                            }}
-                          >
-                            <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {project.name}
-                            </Box>
-                          </Button>
+                                  : isLight
+                                    ? 'rgba(248, 250, 252, 0.58)'
+                                    : 'rgba(255,255,255,0.018)',
+                              }}
+                            >
+                              {isProjectEditing ? (
+                                <>
+                                  <TextField
+                                    size="small"
+                                    variant="standard"
+                                    value={projectDraftName}
+                                    autoFocus
+                                    onChange={(event) => setProjectDraftName(event.target.value)}
+                                    onKeyDown={(event) => {
+                                      if (event.key === 'Enter') saveProjectRename();
+                                      if (event.key === 'Escape') setEditingProjectId(null);
+                                    }}
+                                    slotProps={{
+                                      input: {
+                                        disableUnderline: true,
+                                        sx: {
+                                          fontSize: '0.78rem',
+                                          px: 0.8,
+                                          py: 0.35,
+                                          color: isLight ? '#075985' : '#98d9d8',
+                                          fontWeight: 650,
+                                        },
+                                      },
+                                    }}
+                                    sx={{ flex: 1, minWidth: 0 }}
+                                  />
+                                  <IconButton size="small" onClick={saveProjectRename} sx={{ width: 25, height: 25 }}>
+                                    <Check size={13} />
+                                  </IconButton>
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => setEditingProjectId(null)}
+                                    sx={{ width: 25, height: 25 }}
+                                  >
+                                    <X size={13} />
+                                  </IconButton>
+                                </>
+                              ) : (
+                                <>
+                                  <Button
+                                    size="small"
+                                    startIcon={
+                                      expandedProjects[project.id] ? <ChevronDown size={14} /> : <ChevronRight size={14} />
+                                    }
+                                    onClick={() => toggleProject(project.id)}
+                                    sx={{
+                                      flex: 1,
+                                      minWidth: 0,
+                                      justifyContent: 'flex-start',
+                                      px: 0.75,
+                                      py: 0.5,
+                                      minHeight: 30,
+                                      borderRadius: 1.6,
+                                      color: isProjectActive ? (isLight ? '#075985' : '#98d9d8') : 'text.secondary',
+                                      fontWeight: isProjectActive ? 650 : 500,
+                                    }}
+                                  >
+                                    <Box
+                                      component="span"
+                                      sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                                    >
+                                      {project.name}
+                                    </Box>
+                                  </Button>
+                                  <Tooltip title="Действия с проектом">
+                                    <IconButton
+                                      size="small"
+                                      onClick={(event) => openProjectMenu(event, project.id, project.name, project.chats.length)}
+                                      sx={{
+                                        width: 25,
+                                        height: 25,
+                                        mr: 0.25,
+                                        color: isProjectActive ? (isLight ? '#075985' : '#98d9d8') : 'text.secondary',
+                                      }}
+                                    >
+                                      <MoreVertical size={13} />
+                                    </IconButton>
+                                  </Tooltip>
+                                </>
+                              )}
+                          </Box>
                           <Collapse in={Boolean(expandedProjects[project.id])} timeout={180} unmountOnExit>
-                            <Stack spacing={0.25} sx={{ mt: 0.35, ml: 2 }}>
+                            <Stack
+                              spacing={0.3}
+                              sx={{
+                                mt: 0.4,
+                                ml: 2.2,
+                                pl: 0.9,
+                                borderLeft: isLight ? '1px solid rgba(14, 116, 144, 0.18)' : '1px solid rgba(152, 217, 216, 0.14)',
+                              }}
+                            >
+                              <Stack
+                                direction="row"
+                                sx={{
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  gap: 0.6,
+                                  px: 0.35,
+                                  py: 0.15,
+                                }}
+                              >
+                                <Typography
+                                  variant="caption"
+                                  sx={{
+                                    color: isLight ? '#64748b' : 'rgba(198,208,222,0.66)',
+                                    fontSize: '0.66rem',
+                                    letterSpacing: '0.04em',
+                                  }}
+                                >
+                                  Чаты
+                                </Typography>
+                                <Tooltip title="Создать новый чат в проекте">
+                                  <Button
+                                    size="small"
+                                    startIcon={<Plus size={12} />}
+                                    onClick={() => createThread(project.id)}
+                                    sx={{
+                                      width: 74,
+                                      minHeight: 24,
+                                      px: 0.75,
+                                      py: 0.15,
+                                      borderRadius: 1.4,
+                                      fontSize: '0.68rem',
+                                      color: isLight ? '#075985' : '#98d9d8',
+                                      border: '1px solid',
+                                      borderColor: isLight ? 'rgba(14, 116, 144, 0.24)' : 'rgba(152, 217, 216, 0.22)',
+                                      bgcolor: isLight ? 'rgba(224, 242, 254, 0.64)' : 'rgba(152, 217, 216, 0.06)',
+                                    }}
+                                  >
+                                    Чат
+                                  </Button>
+                                </Tooltip>
+                              </Stack>
                               {project.chats.map((chat) => {
                                 const isChatActive = activeThreadId === chat.id;
                                 const isEditing = editingThreadId === chat.id;
@@ -491,22 +833,17 @@ export const ModeSwitcher: React.FC = () => {
                                             {chat.title}
                                           </Box>
                                         </Button>
-                                        <Tooltip title="Переименовать чат">
+                                        <Tooltip title="Действия с чатом">
                                           <IconButton
                                             size="small"
-                                            onClick={() => startRename(chat.id, chat.title)}
-                                            sx={{ width: 24, height: 24, color: 'text.secondary' }}
+                                            onClick={(event) => openChatMenu(event, project.id, chat.id, chat.title)}
+                                            sx={{
+                                              width: 24,
+                                              height: 24,
+                                              color: isChatActive ? (isLight ? '#075985' : '#98d9d8') : 'text.secondary',
+                                            }}
                                           >
-                                            <Edit3 size={12} />
-                                          </IconButton>
-                                        </Tooltip>
-                                        <Tooltip title="Удалить чат">
-                                          <IconButton
-                                            size="small"
-                                            onClick={() => requestDeleteThread(project.id, chat.id, chat.title)}
-                                            sx={{ width: 24, height: 24, color: 'text.secondary' }}
-                                          >
-                                            <Trash2 size={12} />
+                                            <MoreVertical size={12} />
                                           </IconButton>
                                         </Tooltip>
                                       </>
@@ -517,7 +854,8 @@ export const ModeSwitcher: React.FC = () => {
                             </Stack>
                           </Collapse>
                         </Box>
-                      ))}
+                        );
+                      })}
                     </Stack>
                   </Box>
                 </Collapse>
@@ -574,6 +912,72 @@ export const ModeSwitcher: React.FC = () => {
         </Button>
       </Box>
 
+      <Menu
+        anchorEl={projectMenuAnchor}
+        open={Boolean(projectMenuAnchor)}
+        onClose={closeProjectMenu}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        slotProps={{
+          paper: {
+            sx: {
+              minWidth: 178,
+              borderRadius: 2,
+              border: isLight ? '1px solid rgba(14, 116, 144, 0.18)' : '1px solid rgba(198, 216, 240, 0.20)',
+              bgcolor: isLight ? '#ffffff' : 'rgba(18, 20, 24, 0.98)',
+              boxShadow: isLight
+                ? '0 18px 40px rgba(15, 23, 42, 0.14)'
+                : '0 20px 48px rgba(0,0,0,0.42)',
+            },
+          },
+        }}
+      >
+        <MenuItem onClick={handleProjectMenuRename} sx={{ gap: 1.1, fontSize: '0.86rem' }}>
+          <Edit3 size={15} />
+          Редактировать проект
+        </MenuItem>
+        <MenuItem
+          onClick={handleProjectMenuDelete}
+          sx={{ gap: 1.1, fontSize: '0.86rem', color: isLight ? '#991b1b' : '#ee8f80' }}
+        >
+          <Trash2 size={15} />
+          Удалить проект
+        </MenuItem>
+      </Menu>
+
+      <Menu
+        anchorEl={chatMenuAnchor}
+        open={Boolean(chatMenuAnchor)}
+        onClose={closeChatMenu}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        slotProps={{
+          paper: {
+            sx: {
+              minWidth: 160,
+              borderRadius: 2,
+              border: isLight ? '1px solid rgba(14, 116, 144, 0.18)' : '1px solid rgba(198, 216, 240, 0.20)',
+              bgcolor: isLight ? '#ffffff' : 'rgba(18, 20, 24, 0.98)',
+              boxShadow: isLight
+                ? '0 18px 40px rgba(15, 23, 42, 0.14)'
+                : '0 20px 48px rgba(0,0,0,0.42)',
+            },
+          },
+        }}
+      >
+        <MenuItem onClick={handleChatMenuRename} sx={{ gap: 1.1, fontSize: '0.86rem' }}>
+          <Edit3 size={15} />
+          Редактировать чат
+        </MenuItem>
+        <MenuItem
+          onClick={handleChatMenuDelete}
+          sx={{ gap: 1.1, fontSize: '0.86rem', color: isLight ? '#991b1b' : '#ee8f80' }}
+        >
+          <Trash2 size={15} />
+          Удалить чат
+        </MenuItem>
+      </Menu>
+
       <Dialog
         open={Boolean(deleteCandidate)}
         onClose={() => setDeleteCandidate(null)}
@@ -606,6 +1010,45 @@ export const ModeSwitcher: React.FC = () => {
           </Button>
           <Button variant="contained" color="error" startIcon={<Trash2 size={15} />} onClick={confirmDeleteThread}>
             Удалить
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(deleteProjectCandidate)}
+        onClose={() => setDeleteProjectCandidate(null)}
+        maxWidth="xs"
+        fullWidth
+        slotProps={{
+          paper: {
+            sx: {
+              borderRadius: 3,
+              border: isLight ? '1px solid rgba(14, 116, 144, 0.22)' : '1.5px solid rgba(198, 216, 240, 0.30)',
+              bgcolor: isLight ? '#ffffff' : 'rgba(18, 20, 24, 0.98)',
+              boxShadow: isLight
+                ? '0 24px 70px rgba(15, 23, 42, 0.16)'
+                : '0 28px 80px rgba(0,0,0,0.44)',
+            },
+          },
+        }}
+      >
+        <DialogTitle sx={{ pb: 0.7, fontSize: '1.05rem', fontWeight: 700 }}>
+          Удалить проект?
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.65 }}>
+            Вы уверены, что хотите удалить проект «{deleteProjectCandidate?.name}»?
+            {deleteProjectCandidate?.chatsCount
+              ? ` Вместе с проектом будет удалено чатов: ${deleteProjectCandidate.chatsCount}.`
+              : ' В проекте пока нет чатов.'}
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.4, pt: 0.6 }}>
+          <Button variant="outlined" color="inherit" onClick={() => setDeleteProjectCandidate(null)}>
+            Отмена
+          </Button>
+          <Button variant="contained" color="error" startIcon={<Trash2 size={15} />} onClick={confirmDeleteProject}>
+            Удалить проект
           </Button>
         </DialogActions>
       </Dialog>

@@ -250,32 +250,50 @@ body[data-pkb-theme='light'] .app-action-button.Mui-disabled {
   border-radius: 8px !important;
 }
 
+.app-navigation-panel,
+.MuiTableContainer-root,
+.preview-scroll-panel {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(112, 128, 150, 0.42) rgba(8, 12, 18, 0.28);
+}
+
+body[data-pkb-theme='light'] .app-navigation-panel,
+body[data-pkb-theme='light'] .MuiTableContainer-root,
+body[data-pkb-theme='light'] .preview-scroll-panel {
+  scrollbar-color: rgba(71, 85, 105, 0.34) rgba(15, 23, 42, 0.07);
+}
+
+.app-navigation-panel::-webkit-scrollbar,
 .MuiTableContainer-root::-webkit-scrollbar,
 .preview-scroll-panel::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 
+.app-navigation-panel::-webkit-scrollbar-track,
 .MuiTableContainer-root::-webkit-scrollbar-track,
 .preview-scroll-panel::-webkit-scrollbar-track {
   margin: 8px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(8, 12, 18, 0.28);
   border-radius: 999px;
 }
 
+.app-navigation-panel::-webkit-scrollbar-thumb,
 .MuiTableContainer-root::-webkit-scrollbar-thumb,
 .preview-scroll-panel::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  background: rgba(184, 196, 216, 0.34);
+  background: rgba(112, 128, 150, 0.42);
   border: 2px solid transparent;
   background-clip: content-box;
 }
 
+body[data-pkb-theme='light'] .app-navigation-panel::-webkit-scrollbar-track,
 body[data-pkb-theme='light'] .MuiTableContainer-root::-webkit-scrollbar-track,
 body[data-pkb-theme='light'] .preview-scroll-panel::-webkit-scrollbar-track {
   background: rgba(15, 23, 42, 0.06);
 }
 
+body[data-pkb-theme='light'] .app-navigation-panel::-webkit-scrollbar-thumb,
 body[data-pkb-theme='light'] .MuiTableContainer-root::-webkit-scrollbar-thumb,
 body[data-pkb-theme='light'] .preview-scroll-panel::-webkit-scrollbar-thumb {
   background: rgba(71, 85, 105, 0.34);
