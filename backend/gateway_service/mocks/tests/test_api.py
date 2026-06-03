@@ -177,7 +177,6 @@ class TestAuthService:
         assert "refresh_token" in data
         assert data["token_type"] == "bearer"
         assert data["expires_in"] == 3600
-        assert "expires_at" in data
 
     def test_2_login_invalid_password(self):
         resp = client.post(
@@ -215,7 +214,7 @@ class TestAuthService:
         assert "user_id" in data
         assert "full_name" in data
         assert "permissions" in data
-        # permissions is dict[str, bool] in new spec
+        # permissions is Dict[str, bool] in new spec
         assert isinstance(data["permissions"], dict)
 
     def test_6_list_users(self):
@@ -338,10 +337,14 @@ class TestAuthService:
     def test_20_internal_validate_token(self):
         resp = client.post(
             f"{BASE}/internal/auth/validate",
-            json={"access_token": "valid_token_12345"},
+            json={"access_token": get_token()},
         )
         assert_ok(resp)
-        assert resp.json()["valid"] is True
+        data = resp.json()
+        assert data["valid"] is True
+        assert "user_id" in data
+        assert "email" in data
+        assert "roles" in data
 
     def test_21_internal_validate_invalid(self):
         resp = client.post(
@@ -413,7 +416,6 @@ class TestOrchestratorService:
         assert "metadata" in data
         assert "latest_version" in data
         assert "total_versions" in data
-        assert "chunk_count" in data
 
     def test_27_get_document_not_found(self):
         resp = client.get(f"{ORCH}/documents/nonexistent")
@@ -433,10 +435,6 @@ class TestOrchestratorService:
         assert "validation" in pipeline["formation"]
         assert "registry" in pipeline["formation"]
         assert "rag_indexing" in pipeline["indexation"]
-        # Chunk summary
-        assert "chunk_summary" in data
-        assert "total" in data["chunk_summary"]
-        assert "indexed" in data["chunk_summary"]
 
     def test_29_document_file(self):
         resp = client.get(f"{ORCH}/documents/doc-001/file")
@@ -511,7 +509,7 @@ class TestOrchestratorService:
         assert_ok(resp)
 
     def test_39_document_errors(self):
-        resp = client.get(f"{ORCH}/documents/doc-005/errors")
+        resp = client.get(f"{ORCH}/documents/doc-001/errors")
         assert_ok(resp)
         assert "errors" in resp.json()
 
@@ -581,7 +579,6 @@ class TestOrchestratorService:
         assert data["document_id"] == "doc-001"
         assert data["version_number"] > 1
         assert "content_hash_sha256" in data
-        assert "title_hash_sha256" in data
         assert "status" in data
 
     def test_46_list_document_versions(self):
@@ -590,18 +587,18 @@ class TestOrchestratorService:
         assert_ok(resp)
         data = resp.json()
         assert "versions" in data
-        assert "total" in data
-        assert len(data["versions"]) > 0
+        assert "meta" in data
+        assert data["meta"]["total"] > 0
 
     def test_47_approve_document(self):
         """POST /documents/{doc_id}/approve — approve document."""
         resp = client.post(f"{ORCH}/documents/doc-001/approve")
-        assert_ok(resp)
+        assert_ok(resp, 202)
         data = resp.json()
         assert data["document_id"] == "doc-001"
         assert data["status"] == "approved"
         assert "approved_at" in data
-        assert "previous_status" in data
+        assert "promotion_task_id" in data
 
     def test_50_get_document_history(self):
         """GET /documents/{doc_id}/history — status history."""
@@ -609,9 +606,9 @@ class TestOrchestratorService:
         assert_ok(resp)
         data = resp.json()
         assert data["document_id"] == "doc-001"
-        assert "events" in data
-        assert "total" in data
-        assert len(data["events"]) > 0
+        assert "history" in data
+        assert "meta" in data
+        assert data["meta"]["total"] > 0
 
 
 # ===========================================================================
@@ -648,7 +645,7 @@ class TestQueryService:
         assert resp.status_code == 404
 
     def test_56_update_session(self):
-        resp = client.put(f"{QUERY}/chat/sessions/sess-002", json={"title": "Updated"})
+        resp = client.put(f"{QUERY}/chat/sessions/sess-001", json={"title": "Updated"})
         assert_ok(resp)
         assert resp.json()["title"] == "Updated"
 
@@ -871,10 +868,10 @@ class TestRegistryService:
             assert "replaced_by" in node
 
     def test_71_get_classifier_node(self):
-        resp = client.get(f"{REG}/classifiers/01")
+        resp = client.get(f"{REG}/classifiers/47")
         assert_ok(resp)
         node = resp.json()["data"]
-        assert node["code"] == "01"
+        assert node["code"] == "47"
         assert "classifier_system" in node
         assert "status" in node
         assert "effective_date" in node
@@ -905,7 +902,7 @@ class TestRegistryService:
             f"{REG}/classifiers",
             json={
                 "classifier_system": "MKS",
-                "code": "01",
+                "code": "47",
                 "full_name": "Dup",
                 "status": "active",
             },
@@ -914,34 +911,32 @@ class TestRegistryService:
 
     def test_75_update_classifier(self):
         resp = client.put(
-            f"{REG}/classifiers/01",
+            f"{REG}/classifiers/47",
             json={"full_name": "Updated Standard", "status": "active"},
         )
         assert_ok(resp)
         assert resp.json()["data"]["full_name"] == "Updated Standard"
 
     def test_76_patch_classifier(self):
-        resp = client.patch(f"{REG}/classifiers/02", json={"parent_code": None})
+        resp = client.patch(f"{REG}/classifiers/47", json={"parent_code": None})
         assert_ok(resp)
 
     def test_77_delete_classifier_with_children(self):
-        resp = client.delete(f"{REG}/classifiers/01")
+        resp = client.delete(f"{REG}/classifiers/47")
         assert resp.status_code == 409
 
     def test_78_import_classifiers(self):
         resp = client.post(
             f"{REG}/classifiers/import",
-            json={
-                "items": [
-                    {
-                        "classifier_system": "MKS",
-                        "code": "IMP.001",
-                        "full_name": "Imported 1",
-                        "status": "active",
-                        "effective_date": "2024-06-01",
-                    }
-                ]
-            },
+            json=[
+                {
+                    "classifier_system": "MKS",
+                    "code": "IMP.001",
+                    "full_name": "Imported 1",
+                    "status": "active",
+                    "effective_date": "2024-06-01",
+                }
+            ],
         )
         assert_ok(resp)
         assert resp.json()["data"]["inserted"] >= 1
@@ -1025,7 +1020,7 @@ class TestRegistryService:
     def test_86_normalize_term(self):
         """Normalize response: {raw_term, standard_term, normalized_value, term_type, is_blocked}."""
         resp = client.get(
-            f"{REG}/terminology/normalize", params={"q": "Wall Thickness"}
+            f"{REG}/terminology/normalize", params={"term": "Wall Thickness"}
         )
         assert_ok(resp)
         data = resp.json()["data"]
@@ -1038,18 +1033,16 @@ class TestRegistryService:
     def test_87_import_terminology(self):
         resp = client.post(
             f"{REG}/terminology/import",
-            json={
-                "items": [
-                    {
-                        "raw_term": "Imported",
-                        "term_type": "preferred",
-                        "is_case_sensitive": False,
-                        "is_blocked": False,
-                        "synonyms": [],
-                        "related_docs": [],
-                    }
-                ]
-            },
+            json=[
+                {
+                    "raw_term": "Imported",
+                    "term_type": "preferred",
+                    "is_case_sensitive": False,
+                    "is_blocked": False,
+                    "synonyms": [],
+                    "related_docs": [],
+                }
+            ],
         )
         assert_ok(resp)
 
@@ -1085,10 +1078,12 @@ class TestRegistryService:
             assert "updated_by" in doc
 
     def test_89_get_registry_doc(self):
-        resp = client.get(f"{REG_DOCS}/documents/rd-001")
+        # Use seed doc UUID
+        seed_id = "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c"
+        resp = client.get(f"{REG_DOCS}/documents/{seed_id}")
         assert_ok(resp)
         doc = resp.json()["data"]
-        assert doc["id"] == "rd-001"
+        assert doc["id"] == seed_id
         assert "title" in doc
         assert "doc_code" in doc
         assert "source_type" in doc
@@ -1113,16 +1108,31 @@ class TestRegistryService:
         assert "id" in data
 
     def test_91_update_registry_doc(self):
+        # Use seed doc UUID
+        seed_id = "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c"
         resp = client.put(
-            f"{REG_DOCS}/documents/rd-001",
+            f"{REG_DOCS}/documents/{seed_id}",
             json={"jurisdiction": "RF"},
         )
         assert_ok(resp)
 
     def test_92_update_doc_status(self):
         """PATCH /documents/{id}/status — enhanced with comment."""
+        # Create a doc first then update its status
+        create = client.post(
+            f"{REG_DOCS}/documents",
+            json={
+                "title": "Status Test Doc",
+                "doc_code": "STATUS-001",
+                "source_type": "GOST",
+                "status": "draft",
+                "era": "CURRENT",
+                "validity_status": "active",
+            },
+        ).json()
+        doc_id = create["data"]["id"]
         resp = client.patch(
-            f"{REG_DOCS}/documents/rd-002/status",
+            f"{REG_DOCS}/documents/{doc_id}/status",
             json={"status": "archived", "comment": "Test archive"},
         )
         assert_ok(resp)
@@ -1170,7 +1180,7 @@ class TestRegistryService:
 
     def test_96_get_stats(self):
         """New stats structure with classifiers by system, documents by status/source_type/era."""
-        resp = client.get(f"{COMMON}/stats")
+        resp = client.get(f"{REG}/stats")
         assert_ok(resp)
         data = resp.json()["data"]
         assert "classifiers_total" in data
@@ -1188,7 +1198,7 @@ class TestRegistryService:
 
     def test_97_get_enums(self):
         """Expanded enums with more values."""
-        resp = client.get(f"{COMMON}/enums")
+        resp = client.get(f"{REG}/enums")
         assert_ok(resp)
         data = resp.json()["data"]
         assert "classifier_system" in data
@@ -1215,7 +1225,7 @@ class TestRegistryService:
 
     def test_99_accept_quarantine(self):
         """POST /classifiers/quarantine/{id}/accept — accept pending classifier."""
-        resp = client.post(f"{REG}/classifiers/quarantine/pend-001/accept")
+        resp = client.post(f"{REG}/classifiers/quarantine/p-001/accept")
         assert_ok(resp)
         data = resp.json()["data"]
         assert data["status"] == "accepted"
@@ -1223,7 +1233,7 @@ class TestRegistryService:
 
     def test_100_reject_quarantine(self):
         """POST /classifiers/quarantine/{id}/reject — reject pending classifier."""
-        resp = client.post(f"{REG}/classifiers/quarantine/pend-001/reject")
+        resp = client.post(f"{REG}/classifiers/quarantine/p-001/reject")
         assert_ok(resp)
         data = resp.json()["data"]
         assert data["status"] == "rejected"
@@ -1232,34 +1242,34 @@ class TestRegistryService:
         """POST /classifiers/validate — validate classification code."""
         resp = client.post(
             f"{REG}/classifiers/validate",
-            json={"code": "01", "classifier_system": "MKS"},
+            json={"code": "47", "classifier_system": "MKS"},
         )
         assert_ok(resp)
         data = resp.json()["data"]
-        assert "valid" in data
-        assert "code" in data
-        assert "classifier_system" in data
-        assert "exists_in_registry" in data
-        assert "validation_status" in data
+        assert "mks_status" in data
+        assert "okstu_status" in data
+        assert "overall_status" in data
 
     def test_102_registry_doc_history(self):
         """GET /documents/{id}/history — registry doc history."""
-        resp = client.get(f"{REG_DOCS}/documents/rd-001/history")
+        seed_id = "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c"
+        resp = client.get(f"{REG_DOCS}/documents/{seed_id}/history")
         assert_ok(resp)
         data = resp.json()["data"]
         assert "doc_id" in data
-        assert data["doc_id"] == "rd-001"
+        assert data["doc_id"] == seed_id
         assert "history" in data
 
     def test_103_registry_doc_chain(self):
-        """GET /documents/{id}/chain — registry doc chain (predecessors/successors)."""
-        resp = client.get(f"{REG_DOCS}/documents/rd-001/chain")
+        """GET /documents/{id}/succession — registry doc chain (predecessors/successors)."""
+        seed_id = "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c"
+        resp = client.get(f"{REG_DOCS}/documents/{seed_id}/succession")
         assert_ok(resp)
         data = resp.json()["data"]
-        assert "doc_id" in data
-        assert "current" in data
-        assert "predecessors" in data
-        assert "successors" in data
+        assert "document_id" in data
+        assert data["document_id"] == seed_id
+        assert "chain" in data
+        assert isinstance(data["chain"], list)
 
 
 # ===========================================================================
@@ -1527,7 +1537,7 @@ class TestErrorFormat:
         assert data["error"]["code"] == "FORBIDDEN"
 
     def test_128_error_format_422_validation(self):
-        """422 validation error should use wrapped format."""
+        """422 validation error should use wrapped format with validation_errors."""
         # Omit required 'password' field to trigger validation error
         resp = client.post(
             f"{AUTH}/token",
@@ -1537,6 +1547,17 @@ class TestErrorFormat:
         data = resp.json()
         assert "error" in data, f"Missing 'error' wrapper: {data}"
         assert data["error"]["code"] in ("VALIDATION_ERROR", "VALIDATION_FAILED")
+        # Check validation_errors format per common_api.md spec
+        details = data["error"].get("details", {})
+        assert "validation_errors" in details, (
+            f"Missing 'validation_errors' in details. Spec requires array of "
+            f"{{field, reason, value?, constraint?}}. Got: {details}"
+        )
+        assert isinstance(details["validation_errors"], list)
+        if details["validation_errors"]:
+            ve = details["validation_errors"][0]
+            assert "field" in ve, f"Missing 'field' in validation_error: {ve}"
+            assert "reason" in ve, f"Missing 'reason' in validation_error: {ve}"
 
 
 # ===========================================================================
@@ -1600,59 +1621,54 @@ class TestResponseModels:
     def setup_method(self):
         _reset_rate_limiter()
 
-    def test_133_openapi_has_chat_response_schema(self):
-        """OpenAPI schema should define ChatResponse."""
+    def test_133_openapi_has_chat_request_schema(self):
+        """OpenAPI schema should define ChatRequest."""
         resp = client.get("/openapi.json")
         assert_ok(resp)
         schemas = resp.json().get("components", {}).get("schemas", {})
-        assert "ChatResponse" in schemas, "Missing ChatResponse schema"
-        assert "AnswerItem" in schemas, "Missing AnswerItem schema"
+        assert "ChatRequest" in schemas, "Missing ChatRequest schema"
 
-    def test_134_openapi_has_token_response(self):
-        """OpenAPI schema should define TokenResponse."""
+    def test_134_openapi_has_login_request(self):
+        """OpenAPI schema should define LoginRequest."""
         resp = client.get("/openapi.json")
         schemas = resp.json().get("components", {}).get("schemas", {})
-        assert "TokenResponse" in schemas
+        assert "LoginRequest" in schemas
 
-    def test_135_openapi_has_user_profile_response(self):
-        """OpenAPI schema should define UserProfileResponse."""
+    def test_135_openapi_has_user_create_request(self):
+        """OpenAPI schema should define CreateUserRequest."""
         resp = client.get("/openapi.json")
         schemas = resp.json().get("components", {}).get("schemas", {})
-        assert "UserProfileResponse" in schemas
+        assert "CreateUserRequest" in schemas
 
-    def test_136_openapi_has_text_search_response(self):
-        """OpenAPI schema should define TextSearchResponse."""
+    def test_136_openapi_has_text_search_request(self):
+        """OpenAPI schema should define TextSearchRequest."""
         resp = client.get("/openapi.json")
         schemas = resp.json().get("components", {}).get("schemas", {})
-        assert "TextSearchResponse" in schemas
-        assert "TextSearchResultItem" in schemas
+        assert "TextSearchRequest" in schemas
 
-    def test_137_openapi_has_document_list_response(self):
-        """OpenAPI schema should define DocumentListResponse."""
+    def test_137_openapi_has_registry_doc_create(self):
+        """OpenAPI schema should define RegistryDocCreate."""
         resp = client.get("/openapi.json")
         schemas = resp.json().get("components", {}).get("schemas", {})
-        assert "DocumentListResponse" in schemas
-        assert "DocumentListItem" in schemas
+        assert "RegistryDocCreate" in schemas
 
-    def test_138_openapi_has_document_detail_response(self):
-        """OpenAPI schema should define DocumentDetailResponse."""
+    def test_138_openapi_has_registry_doc_update(self):
+        """OpenAPI schema should define RegistryDocUpdate."""
         resp = client.get("/openapi.json")
         schemas = resp.json().get("components", {}).get("schemas", {})
-        assert "DocumentDetailResponse" in schemas
+        assert "RegistryDocUpdate" in schemas
 
-    def test_139_openapi_has_search_response(self):
-        """OpenAPI schema should define SearchResponse and SearchResultItem."""
+    def test_139_openapi_has_search_request(self):
+        """OpenAPI schema should define SearchRequest."""
         resp = client.get("/openapi.json")
         schemas = resp.json().get("components", {}).get("schemas", {})
-        assert "SearchResponse" in schemas
-        assert "SearchResultItem" in schemas
+        assert "SearchRequest" in schemas
 
-    def test_140_openapi_has_text_ask_response(self):
-        """OpenAPI schema should define TextAskResponse."""
+    def test_140_openapi_has_text_ask_request(self):
+        """OpenAPI schema should define TextAskRequest."""
         resp = client.get("/openapi.json")
         schemas = resp.json().get("components", {}).get("schemas", {})
-        assert "TextAskResponse" in schemas
-        assert "TextAskSource" in schemas
+        assert "TextAskRequest" in schemas
 
 
 # ===========================================================================

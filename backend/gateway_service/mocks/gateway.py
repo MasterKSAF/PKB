@@ -15,7 +15,7 @@ import sys
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, Dict
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -37,8 +37,8 @@ from mocks.query_service.main import router as query_router
 from mocks.registry_service.main import main_router as registry_router
 from mocks.registry_service.main import registry_docs_router
 
-_ACCESS_TOKEN_USER: dict[str, str] = {}  # access_token -> user_id
-_MOCK_USERS: dict[str, dict] = {u["user_id"]: u for u in SEED_USERS}
+_ACCESS_TOKEN_USER: Dict[str, str] = {}  # access_token -> user_id
+_MOCK_USERS: Dict[str, dict] = {u["user_id"]: u for u in SEED_USERS}
 
 # ---------------------------------------------------------------------------
 # Test mode flag — при True анонимные запросы пропускаются
@@ -75,7 +75,7 @@ class RBACMiddleware(BaseHTTPMiddleware):
         auth = request.headers.get("Authorization", "")
         path = request.url.path
 
-        user_context: dict[str, Any] = {
+        user_context: Dict[str, Any] = {
             "user_id": None,
             "full_name": None,
             "roles": [],
@@ -241,7 +241,7 @@ class RBACMiddleware(BaseHTTPMiddleware):
 # Idempotency-Key middleware
 # ---------------------------------------------------------------------------
 
-_IDEMPOTENCY_STORE: dict[str, dict] = {}
+_IDEMPOTENCY_STORE: Dict[str, dict] = {}
 _IDEMPOTENCY_TTL = 3600
 _IDEMPOTENCY_PREFIXES = ("/api/v1/documents", "/api/v1/chat")
 
@@ -260,13 +260,25 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
         if not key:
             return await call_next(request)
 
+        # Cleanup expired entries periodically (every 100 requests)
+        if len(_IDEMPOTENCY_STORE) > 1000:
+            now = time.time()
+            expired = [k for k, v in _IDEMPOTENCY_STORE.items()
+                       if now - v.get("timestamp", 0) > _IDEMPOTENCY_TTL]
+            for k in expired:
+                del _IDEMPOTENCY_STORE[k]
+
         cached = _IDEMPOTENCY_STORE.get(key)
         if cached is not None:
-            return JSONResponse(
-                status_code=cached["status_code"],
-                content=cached["body"],
-                headers={"Idempotency-Key-Repeated": "true"},
-            )
+            # Check TTL
+            if time.time() - cached.get("timestamp", 0) > _IDEMPOTENCY_TTL:
+                del _IDEMPOTENCY_STORE[key]
+            else:
+                return JSONResponse(
+                    status_code=cached["status_code"],
+                    content=cached["body"],
+                    headers={"Idempotency-Key-Repeated": "true"},
+                )
 
         response = await call_next(request)
         if response.status_code < 500:
@@ -327,6 +339,9 @@ app = FastAPI(
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
+    # If detail is already a JSONResponse (from service error_response), pass through
+    if isinstance(exc.detail, JSONResponse):
+        return exc.detail
     return JSONResponse(
         status_code=exc.status_code,
         content=error_response(
@@ -342,8 +357,15 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     errors = exc.errors()
     if errors:
         details = {
-            "fields": [e["loc"] for e in errors],
-            "messages": [e["msg"] for e in errors],
+            "validation_errors": [
+                {
+                    "field": ".".join(str(p) for p in e.get("loc", [])),
+                    "reason": e.get("msg", "invalid"),
+                    "value": e.get("input", None),
+                    "constraint": e.get("ctx", {}).get("expected", None) if e.get("ctx") else None,
+                }
+                for e in errors
+            ]
         }
     return JSONResponse(
         status_code=422,
