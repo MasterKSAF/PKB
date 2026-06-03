@@ -1,0 +1,77 @@
+﻿{
+  "metadata": {
+    "schema": "for_rag_v1",
+    "document_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "created_at": "2026-05-28T12:00:00Z"
+  },
+  "document": {
+    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "doc_code": "GOST-TEST-001",
+    "title": "Тестовый нормативный документ",
+    "full_title": "Тестовый нормативный документ для RAG индексации",
+    "normalized_title": "тестовый нормативный документ для rag индексации",
+    "group": "PO4",
+    "mks_oks_code": "31.240",
+    "era": "RU",
+    "validity_status": "active",
+    "issuing_body": "Тестовый орган",
+    "adoption_date": "2024-01-15",
+    "effective_from": "2024-02-01",
+    "page_count": 2,
+    "file_hash_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "sections": [
+    {
+      "section_id": 1,
+      "document_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "parent_id": null,
+      "clause": "1",
+      "title": null,
+      "level": 1,
+      "path": "1",
+      "page": 1,
+      "bbox": [10, 20, 200, 40],
+      "type": "section",
+      "content": {
+        "text": "Тестовый текст раздела для проверки чанкинга и эмбеддингов.",
+        "amendments": []
+      },
+      "created_at": "2026-05-28T12:00:00Z"
+    },
+    {
+      "section_id": 2,
+      "document_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "parent_id": null,
+      "clause": "2",
+      "title": "Таблица допусков",
+      "level": 1,
+      "path": "2.table1",
+      "page": 2,
+      "bbox": [10, 50, 200, 120],
+      "type": "table",
+      "content": {
+        "columns": [
+          {"name": "param", "header": "Параметр", "index": 0},
+          {"name": "value", "header": "Значение", "index": 1}
+        ],
+        "rows": [
+          {"row_index": 0, "cells": {"param": {"value": "A"}, "value": {"value": "0.1"}}},
+          {"row_index": 1, "cells": {"param": {"value": "B"}, "value": {"value": "0.2"}}}
+        ]
+      },
+      "created_at": "2026-05-28T12:00:00Z"
+    }
+  ],
+  "terminology": [
+    {
+      "term": "допуск",
+      "definition": "Предельно допустимое отклонение параметра",
+      "source_clause": "2",
+      "normalized_term": "допуск"
+    }
+  ],
+  "protected_spans": [],
+  "options": {
+    "strategy": "semantic_512"
+  }
+}

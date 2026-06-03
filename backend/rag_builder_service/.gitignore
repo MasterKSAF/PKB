@@ -1,0 +1,40 @@
+﻿# Python cache and bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# IDE/editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local env files
+.env
+.env.*
+!.env.example
+
+# Project docs to keep local-only
+AGENTS.md
+SKILLS.md
+CONTROL_FLOW.md
+ARCHITECTURE.md
+TESTING.md
+PLANS.md
+CODEX_HANDOFF.md
