@@ -3,6 +3,7 @@ FROM python:3.13-slim AS builder
 
 WORKDIR /build
 COPY pyproject.toml .
+COPY app/ ./app/
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir .
 
