@@ -9,14 +9,13 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import uvicorn
-from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 app = FastAPI(title="Query Service", version="1.0.0")
-router = APIRouter()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 _counter = 0
@@ -156,7 +155,7 @@ class TextAskRequest(BaseModel):
     options: Optional[Dict[str, Any]] = None
 
 # Маршруты
-@router.post("/api/v1/chat/sessions", status_code=201)
+@app.post("/api/v1/chat/sessions", status_code=201)
 async def create_session(req: CreateSessionRequest):
     session_id = f"sess-{new_id()}"
     now = utcnow()
@@ -170,7 +169,7 @@ async def create_session(req: CreateSessionRequest):
     _sessions[session_id] = new_session
     return new_session
 
-@router.get("/api/v1/chat/sessions")
+@app.get("/api/v1/chat/sessions")
 async def list_sessions(page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=200)):
     items = sorted(_sessions.values(), key=lambda s: s.get("updated_at",""), reverse=True)
     result = [{
@@ -182,7 +181,7 @@ async def list_sessions(page: int = Query(1, ge=1), page_size: int = Query(50, g
     paged = paginate(result, page, page_size)
     return {"sessions": paged["items"], "meta": paged["meta"]}
 
-@router.get("/api/v1/chat/sessions/{session_id}")
+@app.get("/api/v1/chat/sessions/{session_id}")
 async def get_session(session_id: str):
     session = _sessions.get(session_id)
     if not session:
@@ -193,7 +192,7 @@ async def get_session(session_id: str):
         "messages": session.get("messages",[]), "has_more": session.get("has_more",False),
     }
 
-@router.put("/api/v1/chat/sessions/{session_id}")
+@app.put("/api/v1/chat/sessions/{session_id}")
 async def update_session(session_id: str, req: UpdateSessionRequest):
     session = _sessions.get(session_id)
     if not session:
@@ -205,14 +204,14 @@ async def update_session(session_id: str, req: UpdateSessionRequest):
     session["updated_at"] = utcnow()
     return session
 
-@router.delete("/api/v1/chat/sessions/{session_id}")
+@app.delete("/api/v1/chat/sessions/{session_id}")
 async def delete_session(session_id: str):
     if session_id not in _sessions:
         raise HTTPException(status_code=404, detail=error_response("SESSION_NOT_FOUND", "Сессия не найдена"))
     del _sessions[session_id]
     return {"session_id": session_id, "deleted_at": utcnow()}
 
-@router.post("/api/v1/chat/sessions/{session_id}/messages")
+@app.post("/api/v1/chat/sessions/{session_id}/messages")
 async def send_message(session_id: str, req: SendMessageRequest):
     session = _sessions.get(session_id)
     if not session:
@@ -260,14 +259,14 @@ async def send_message(session_id: str, req: SendMessageRequest):
         "timestamp": asst_msg["timestamp"],
     }
 
-@router.post("/api/v1/chat/sessions/{session_id}/context")
+@app.post("/api/v1/chat/sessions/{session_id}/context")
 async def manage_context(session_id: str, req: ContextActionRequest):
     if session_id not in _sessions:
         raise HTTPException(status_code=404, detail=error_response("SESSION_NOT_FOUND", "Сессия не найдена"))
     return {"session_id": session_id, "action": req.action, "status": "completed",
             "message": f"Контекст обновлён: {req.action}", "timestamp": utcnow()}
 
-@router.post("/api/v1/chat/sessions/{session_id}/export")
+@app.post("/api/v1/chat/sessions/{session_id}/export")
 async def export_session(session_id: str, req: ExportSessionRequest):
     if session_id not in _sessions:
         raise HTTPException(status_code=404, detail=error_response("SESSION_NOT_FOUND", "Сессия не найдена"))
@@ -277,7 +276,7 @@ async def export_session(session_id: str, req: ExportSessionRequest):
                                 "expires_at": utcnow(), "created_at": utcnow()}
     return _export_store[export_id]
 
-@router.post("/api/v1/chat/feedback")
+@app.post("/api/v1/chat/feedback")
 async def submit_feedback(req: FeedbackRequest):
     fb_id = f"fb-{new_id()}"
     _feedback_store.append({
@@ -289,7 +288,7 @@ async def submit_feedback(req: FeedbackRequest):
     return {"feedback_id": fb_id, "saved": True,
             "metrics_changed": {"rated_answers": len(_feedback_store), "useful_rate": 0.78, "flagged_for_review": 0}}
 
-@router.get("/api/v1/chat/history")
+@app.get("/api/v1/chat/history")
 async def chat_history(page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=200),
                       user_id: Optional[str] = Query(None)):
     items = sorted(_history, key=lambda h: h.get("created_at",""), reverse=True)
@@ -298,14 +297,14 @@ async def chat_history(page: int = Query(1, ge=1), page_size: int = Query(50, ge
     paged = paginate(items, page, page_size)
     return {"items": paged["items"], "meta": paged["meta"]}
 
-@router.get("/api/v1/chat/history/export")
+@app.get("/api/v1/chat/history/export")
 async def export_history(format: str = Query("csv")):
     export_id = f"export-{new_id()}"
     _export_store[export_id] = {"export_id": export_id, "format": format,
                                 "url": f"/exports/history_{export_id}.{format}", "created_at": utcnow()}
     return _export_store[export_id]
 
-@router.post("/api/v1/chat")
+@app.post("/api/v1/chat")
 async def chat_ask(req: ChatRequest):
     query_lower = req.question.lower()
     if "неопределён" in query_lower or "ambiguous" in query_lower:
@@ -337,7 +336,7 @@ async def chat_ask(req: ChatRequest):
         "latency_ms": answer["processing_time_ms"],
     }
 
-@router.post("/api/v1/text/search")
+@app.post("/api/v1/text/search")
 async def text_search(req: TextSearchRequest):
     all_results = [
         {"section_id":"sect-001","document_id":"doc-001","document_title":"Спецификация",
@@ -365,7 +364,7 @@ async def text_search(req: TextSearchRequest):
         "processing_time_ms": random.randint(100, 1000),
     }
 
-@router.post("/api/v1/text/ask")
+@app.post("/api/v1/text/ask")
 async def text_ask(req: TextAskRequest):
     answer = _generate_answer(req.text)
     return {
@@ -382,11 +381,9 @@ async def text_ask(req: TextAskRequest):
         "model_used": answer["model_used"],
     }
 
-@router.get("/api/v1/system/health")
+@app.get("/api/v1/system/health")
 async def health():
     return {"status": "ok", "service": "query-service", "timestamp": utcnow()}
-
-app.include_router(router)
 
 if __name__ == "__main__":
     import os

@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import uvicorn
-from fastapi import APIRouter, FastAPI, File, HTTPException, Query, Request, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -19,8 +19,6 @@ from pydantic import BaseModel
 
 app = FastAPI(title="Orchestrator Service", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-
-router = APIRouter()
 
 # ── вспомогательные функции ──────────────────────────────────────────────
 _counter = 0
@@ -191,22 +189,22 @@ class ReprocessRequest(BaseModel):
     mode: Optional[str] = "full"
 
 # ── маршруты ─────────────────────────────────────────────────────────────
-@router.get("/api/v1/system/health")
+@app.get("/api/v1/system/health")
 async def health():
     return {"status": "ok", "version": "1.0.0", "uptime_seconds": 86400,
             "services": {"auth":"ok","rag":"ok","ocr":"ok","validation":"ok","integration":"ok"},
             "database":"ok","search_index":"ok","ocr_queue":"ok","storage":"ok"}
 
-@router.get("/api/v1/monitor/health")
+@app.get("/api/v1/monitor/health")
 async def monitor_health():
     return await health()
 
-@router.get("/api/v1/monitor/metrics")
+@app.get("/api/v1/monitor/metrics")
 async def get_metrics():
     return _metrics
 
 # ВАЖНО: search и queue ДО {doc_id}
-@router.post("/api/v1/documents/search")
+@app.post("/api/v1/documents/search")
 async def search_post(req: SearchRequest):
     mock_results = [
         {"section_id": "sec-001", "document_id": "doc-001", "document_title": "Спецификация по ГОСТ 2.109",
@@ -231,19 +229,19 @@ async def search_post(req: SearchRequest):
         "processing_time_ms": random.randint(200, 1500),
     }
 
-@router.get("/api/v1/documents/search")
+@app.get("/api/v1/documents/search")
 async def search_get(q: str = Query(...), document_ids: Optional[str] = None,
                      top_k: int = 10, page: int = 1, page_size: int = 50):
     req = SearchRequest(query=q, document_ids=document_ids.split(",") if document_ids else None, top_k=top_k)
     return await search_post(req)
 
-@router.get("/api/v1/documents/queue")
+@app.get("/api/v1/documents/queue")
 async def document_queue(page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=200)):
     queue = _get_queue_from_documents()
     paged = paginate(queue, page, page_size)
     return {"queue": paged["items"], "meta": {"total_in_queue": len(queue), **paged["meta"]}}
 
-@router.post("/api/v1/documents", status_code=202)
+@app.post("/api/v1/documents", status_code=202)
 async def upload_document(file: UploadFile = File(...), request: Request = None):
     doc_id = f"doc-{new_id()}"
     now = utcnow()
@@ -280,7 +278,7 @@ async def upload_document(file: UploadFile = File(...), request: Request = None)
             "content_hash_sha256": content_hash, "is_duplicate_file": False,
             "is_duplicate_document": False, "title_hash_sha256": title_hash, "created_at": now}
 
-@router.get("/api/v1/documents")
+@app.get("/api/v1/documents")
 async def list_documents(
     status: Optional[str] = Query(None),
     source_type: Optional[str] = Query(None),
@@ -324,7 +322,7 @@ async def list_documents(
     paged = paginate(result, page, page_size)
     return {"summary": summary, "items": paged["items"], "meta": paged["meta"]}
 
-@router.get("/api/v1/documents/{doc_id}")
+@app.get("/api/v1/documents/{doc_id}")
 async def get_document(doc_id: str):
     doc = _get_document(doc_id)
     return {
@@ -345,7 +343,7 @@ async def get_document(doc_id: str):
         "created_at": doc.get("created_at",""), "updated_at": doc.get("updated_at",""),
     }
 
-@router.get("/api/v1/documents/{doc_id}/status")
+@app.get("/api/v1/documents/{doc_id}/status")
 async def document_status(doc_id: str, longpoll: int = 15):
     doc = _get_document(doc_id)
     status = doc.get("status")
@@ -366,13 +364,13 @@ async def document_status(doc_id: str, longpoll: int = 15):
         "started_at": doc.get("created_at",""), "completed_at": doc.get("updated_at","") if progress == 100 else None,
     }
 
-@router.get("/api/v1/documents/{doc_id}/file")
+@app.get("/api/v1/documents/{doc_id}/file")
 async def get_file(doc_id: str):
     doc = _get_document(doc_id)
     return {"document_id": doc_id, "version_id": _versions.get(doc_id, [{}])[0].get("version_id",""),
             "content_type": "application/pdf", "file_url": f"/files/{doc_id}/full.pdf"}
 
-@router.post("/api/v1/documents/{doc_id}/approve", status_code=202)
+@app.post("/api/v1/documents/{doc_id}/approve", status_code=202)
 async def approve_document(doc_id: str, request: Request = None):
     doc = _get_document(doc_id)
     doc["status"] = "approved"
@@ -380,13 +378,13 @@ async def approve_document(doc_id: str, request: Request = None):
     return {"document_id": doc_id, "status": "approved", "promotion_task_id": f"promo-{new_id()}",
             "approved_by": "system", "approved_at": utcnow()}
 
-@router.get("/api/v1/documents/{doc_id}/history")
+@app.get("/api/v1/documents/{doc_id}/history")
 async def document_history(doc_id: str):
     _get_document(doc_id)
     hist = _history.get(doc_id, [])
     return {"document_id": doc_id, "history": hist, "meta": {"total": len(hist)}}
 
-@router.post("/api/v1/documents/{doc_id}/reprocess", status_code=202)
+@app.post("/api/v1/documents/{doc_id}/reprocess", status_code=202)
 async def reprocess(doc_id: str, req: Optional[ReprocessRequest] = None):
     doc = _get_document(doc_id)
     doc["status"] = "parsing"
@@ -395,21 +393,21 @@ async def reprocess(doc_id: str, req: Optional[ReprocessRequest] = None):
             "status": "parsing", "content_hash_sha256": "...", "is_duplicate_file": False,
             "is_duplicate_document": False, "title_hash_sha256": "...", "created_at": utcnow()}
 
-@router.delete("/api/v1/documents/{doc_id}")
+@app.delete("/api/v1/documents/{doc_id}")
 async def delete_document(doc_id: str):
     _get_document(doc_id)
     del _documents[doc_id]
     _versions.pop(doc_id, None); _chunks.pop(doc_id, None); _history.pop(doc_id, None)
     return {"document_id": doc_id, "deleted_at": utcnow()}
 
-@router.get("/api/v1/documents/{doc_id}/errors")
+@app.get("/api/v1/documents/{doc_id}/errors")
 async def document_errors(doc_id: str, page: int = 1, page_size: int = 20):
     _get_document(doc_id)
     errs = [e for e in _document_errors if e["document_id"] == doc_id]
     paged = paginate(errs, page, page_size)
     return {"errors": paged["items"], "meta": paged["meta"]}
 
-@router.post("/api/v1/documents/{doc_id}/versions", status_code=201)
+@app.post("/api/v1/documents/{doc_id}/versions", status_code=201)
 async def add_version(doc_id: str, file: UploadFile = File(...)):
     doc = _get_document(doc_id)
     now = utcnow()
@@ -432,13 +430,13 @@ async def add_version(doc_id: str, file: UploadFile = File(...)):
             "status": "uploaded", "task_id": f"task-{new_id()}", "content_hash_sha256": content_hash,
             "is_duplicate_file": False, "created_at": now}
 
-@router.get("/api/v1/documents/{doc_id}/versions")
+@app.get("/api/v1/documents/{doc_id}/versions")
 async def list_versions(doc_id: str):
     _get_document(doc_id)
     vers = _versions.get(doc_id, [])
     return {"document_id": doc_id, "versions": vers, "meta": {"total": len(vers)}}
 
-@router.get("/api/v1/documents/{doc_id}/pages")
+@app.get("/api/v1/documents/{doc_id}/pages")
 async def list_pages(doc_id: str, page: int = 1, page_size: int = 50):
     doc = _get_document(doc_id)
     pages = doc.get("pages", [])
@@ -450,30 +448,28 @@ async def list_pages(doc_id: str, page: int = 1, page_size: int = 50):
     return {"document_id": doc_id, "pages_total": doc.get("pages_total",0),
             "pages": paged["items"], "meta": paged["meta"]}
 
-@router.get("/api/v1/documents/{doc_id}/pages/{page_num}")
+@app.get("/api/v1/documents/{doc_id}/pages/{page_num}")
 async def get_page(doc_id: str, page_num: int, highlight: Optional[str] = None):
     _get_document(doc_id)
     return _get_page_block(doc_id, page_num)
 
-@router.get("/api/v1/documents/{doc_id}/pages/{page_num}/text")
+@app.get("/api/v1/documents/{doc_id}/pages/{page_num}/text")
 async def page_text(doc_id: str, page_num: int):
     _get_document(doc_id)
     blocks = _get_page_block(doc_id, page_num)["blocks"]
     return {"page": page_num, "full_text": " ".join(b["text"] for b in blocks), "blocks": blocks}
 
-@router.get("/api/v1/documents/{doc_id}/pages/{page_num}/preview")
+@app.get("/api/v1/documents/{doc_id}/pages/{page_num}/preview")
 async def page_preview(doc_id: str, page_num: int):
     doc = _get_document(doc_id)
     return {"document_id": doc_id, "page": page_num, "preview_url": f"/preview/{doc_id}/{page_num}"}
 
-@router.get("/api/v1/documents/{doc_id}/parameters")
+@app.get("/api/v1/documents/{doc_id}/parameters")
 async def parameters(doc_id: str):
     doc = _get_document(doc_id)
     return {"document_id": doc_id, "parameters": doc.get("parameters", {}),
             "extraction_confidence": doc.get("extraction_confidence",0.0),
             "unconfirmed_fields": doc.get("unconfirmed_fields",[]), "updated_at": doc.get("updated_at","")}
-
-app.include_router(router)
 
 if __name__ == "__main__":
     import os

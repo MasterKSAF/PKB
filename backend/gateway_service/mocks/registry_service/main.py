@@ -9,15 +9,13 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 import uvicorn
-from fastapi import APIRouter, FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 app = FastAPI(title="Registry Service", version="2.0.0")
-main_router = APIRouter()
-registry_docs_router = APIRouter()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 # ── вспомогательные функции ──────────────────────────────────────────────
@@ -171,7 +169,7 @@ class RegistryDocStatusUpdate(BaseModel):
 # ── эндпоинты ─────────────────────────────────────────────────────────────
 
 # 1. classifiers
-@main_router.get("/api/v1/classifiers")
+@app.get("/api/v1/classifiers")
 async def list_classifiers(search: str = None, classifier_system: str = None,
                            status: str = None, page: int = 1, page_size: int = 50):
     items = list(_classifiers.values())
@@ -188,7 +186,7 @@ async def list_classifiers(search: str = None, classifier_system: str = None,
               for c in items]
     return paginate_registry(result, page, page_size)
 
-@main_router.get("/api/v1/classifiers/tree")
+@app.get("/api/v1/classifiers/tree")
 async def get_tree():
     def build(nodes, parent_code=None, system=None):
         tree = []
@@ -205,7 +203,7 @@ async def get_tree():
         return tree
     return {"data": build(_classifiers), "meta": {"total": len(_classifiers), "max_depth_reached": 5}}
 
-@main_router.post("/api/v1/classifiers/import")
+@app.post("/api/v1/classifiers/import")
 async def import_classifiers(req: List[ClassifierCreate]):
     inserted = updated = 0
     errors = []
@@ -227,14 +225,14 @@ async def import_classifiers(req: List[ClassifierCreate]):
             errors.append({"row": row.code, "message": str(e)})
     return {"data": {"inserted": inserted, "updated": updated, "errors": errors}}
 
-@main_router.get("/api/v1/classifiers/quarantine")
+@app.get("/api/v1/classifiers/quarantine")
 async def list_quarantine(status: str = None, page: int = 1, page_size: int = 50):
     items = list(_pending_classifiers.values())
     if status:
         items = [p for p in items if p.get("status") == status]
     return paginate_registry(items, page, page_size)
 
-@main_router.post("/api/v1/classifiers/quarantine/{pending_id}/accept")
+@app.post("/api/v1/classifiers/quarantine/{pending_id}/accept")
 async def accept_quarantine(pending_id: str):
     pending = _pending_classifiers.get(pending_id)
     if not pending:
@@ -247,7 +245,7 @@ async def accept_quarantine(pending_id: str):
     pending["status"] = "accepted"
     return {"data": {"id": pending_id, "status": "accepted", "classifier_code": code}}
 
-@main_router.post("/api/v1/classifiers/quarantine/{pending_id}/reject")
+@app.post("/api/v1/classifiers/quarantine/{pending_id}/reject")
 async def reject_quarantine(pending_id: str):
     pending = _pending_classifiers.get(pending_id)
     if not pending:
@@ -255,7 +253,7 @@ async def reject_quarantine(pending_id: str):
     pending["status"] = "rejected"
     return {"data": {"id": pending_id, "status": "rejected"}}
 
-@main_router.post("/api/v1/classifiers/validate")
+@app.post("/api/v1/classifiers/validate")
 async def validate_classification(req: dict):
     code = req.get("mks_oks_code", req.get("code"))
     node = _classifiers.get(code) if code else None
@@ -263,14 +261,14 @@ async def validate_classification(req: dict):
     status = "CONFIRMED" if valid else "NOT_FOUND"
     return {"data": {"mks_status": status, "okstu_status": "NOT_USED", "overall_status": "valid" if valid else "pending"}}
 
-@main_router.get("/api/v1/classifiers/{code}")
+@app.get("/api/v1/classifiers/{code}")
 async def get_classifier(code: str):
     node = _classifiers.get(code)
     if not node:
         raise HTTPException(404, detail=error_response("CLASSIFIER_NOT_FOUND", "Узел классификатора не найден"))
     return {"data": node}
 
-@main_router.post("/api/v1/classifiers", status_code=201)
+@app.post("/api/v1/classifiers", status_code=201)
 async def create_classifier(req: ClassifierCreate):
     if req.code in _classifiers:
         raise HTTPException(409, detail=error_response("DUPLICATE_CODE", "Код уже существует"))
@@ -280,7 +278,7 @@ async def create_classifier(req: ClassifierCreate):
     _classifiers[req.code] = new_node
     return {"data": new_node}
 
-@main_router.put("/api/v1/classifiers/{code}")
+@app.put("/api/v1/classifiers/{code}")
 async def update_classifier(code: str, req: ClassifierUpdate):
     node = _classifiers.get(code)
     if not node:
@@ -292,11 +290,11 @@ async def update_classifier(code: str, req: ClassifierUpdate):
     node["updated_at"] = utcnow()
     return {"data": node}
 
-@main_router.patch("/api/v1/classifiers/{code}")
+@app.patch("/api/v1/classifiers/{code}")
 async def patch_classifier(code: str, req: ClassifierUpdate):
     return await update_classifier(code, req)
 
-@main_router.delete("/api/v1/classifiers/{code}")
+@app.delete("/api/v1/classifiers/{code}")
 async def delete_classifier(code: str):
     node = _classifiers.get(code)
     if not node:
@@ -308,7 +306,7 @@ async def delete_classifier(code: str):
     return {"data": {"code": code, "deleted": True}}
 
 # 2. terminology
-@main_router.get("/api/v1/terminology")
+@app.get("/api/v1/terminology")
 async def list_terms(search: str = None, term_type: str = None, page: int = 1, page_size: int = 50):
     items = list(_terminology.values())
     if search:
@@ -318,7 +316,7 @@ async def list_terms(search: str = None, term_type: str = None, page: int = 1, p
         items = [t for t in items if t.get("term_type") == term_type]
     return paginate_registry(items, page, page_size)
 
-@main_router.get("/api/v1/terminology/normalize")
+@app.get("/api/v1/terminology/normalize")
 async def normalize_term(term: str = Query(...)):
     q = term.lower()
     for t in _terminology.values():
@@ -327,7 +325,7 @@ async def normalize_term(term: str = Query(...)):
                              "normalized_value": t.get("normalized_value", t["raw_term"]), "term_type": t.get("term_type"), "is_blocked": t.get("is_blocked", False)}}
     return {"data": {"raw_term": term, "standard_term": term.lower(), "normalized_value": term.lower(), "term_type": "preferred", "is_blocked": False}}
 
-@main_router.post("/api/v1/terminology/import")
+@app.post("/api/v1/terminology/import")
 async def import_terms(req: List[TermCreate]):
     inserted = updated = 0
     errors = []
@@ -356,14 +354,14 @@ async def import_terms(req: List[TermCreate]):
             errors.append({"row": row.raw_term, "message": str(e)})
     return {"data": {"inserted": inserted, "updated": updated, "errors": errors}}
 
-@main_router.get("/api/v1/terminology/{term_id}")
+@app.get("/api/v1/terminology/{term_id}")
 async def get_term(term_id: str):
     t = _terminology.get(term_id)
     if not t:
         raise HTTPException(404, detail=error_response("TERM_NOT_FOUND", "Термин не найден"))
     return {"data": t}
 
-@main_router.post("/api/v1/terminology", status_code=201)
+@app.post("/api/v1/terminology", status_code=201)
 async def create_term(req: TermCreate):
     tid = f"t-{new_id()}"
     new_term = {"id": tid, "raw_term": req.raw_term, "standard_term": req.standard_term or req.raw_term.lower(),
@@ -374,7 +372,7 @@ async def create_term(req: TermCreate):
     _terminology[tid] = new_term
     return {"data": new_term}
 
-@main_router.put("/api/v1/terminology/{term_id}")
+@app.put("/api/v1/terminology/{term_id}")
 async def update_term(term_id: str, req: TermUpdate):
     t = _terminology.get(term_id)
     if not t:
@@ -386,7 +384,7 @@ async def update_term(term_id: str, req: TermUpdate):
     t["updated_at"] = utcnow()
     return {"data": t}
 
-@main_router.delete("/api/v1/terminology/{term_id}")
+@app.delete("/api/v1/terminology/{term_id}")
 async def delete_term(term_id: str):
     if term_id not in _terminology:
         raise HTTPException(404, detail=error_response("TERM_NOT_FOUND", "Термин не найден"))
@@ -394,7 +392,7 @@ async def delete_term(term_id: str):
     return {"data": {"id": term_id, "deleted": True}}
 
 # 3. documents (registry)
-@registry_docs_router.get("/documents")
+@app.get("/api/v1/documents")
 async def list_registry_docs(search: str = None, status: str = None, source_type: str = None,
                              era: str = None, page: int = 1, page_size: int = 50):
     items = list(_registry_docs.values())
@@ -409,11 +407,11 @@ async def list_registry_docs(search: str = None, status: str = None, source_type
         items = [d for d in items if d.get("era") == era]
     return paginate_registry(items, page, page_size)
 
-@registry_docs_router.get("/documents/export")
+@app.get("/api/v1/documents/export")
 async def export_docs(format: str = "json"):
     return {"data": {"format": format, "total": len(_registry_docs), "items": list(_registry_docs.values())}}
 
-@registry_docs_router.post("/documents/import")
+@app.post("/api/v1/documents/import")
 async def import_docs(req: List[RegistryDocCreate]):
     inserted = updated = 0
     errors = []
@@ -444,14 +442,14 @@ async def import_docs(req: List[RegistryDocCreate]):
             errors.append({"row": item.title, "message": str(e)})
     return {"data": {"inserted": inserted, "updated": updated, "errors": errors}}
 
-@registry_docs_router.get("/documents/{doc_id}")
+@app.get("/api/v1/documents/{doc_id}")
 async def get_registry_doc(doc_id: str):
     doc = _registry_docs.get(doc_id)
     if not doc:
         raise HTTPException(404, detail=error_response("DOCUMENT_NOT_FOUND", "Документ не найден"))
     return {"data": doc}
 
-@registry_docs_router.post("/documents", status_code=201)
+@app.post("/api/v1/documents", status_code=201)
 async def create_registry_doc(req: RegistryDocCreate):
     doc_id = f"rd-{new_id()}"
     new_doc = {"id": doc_id, "title": req.title, "doc_code": req.doc_code, "source_type": req.source_type,
@@ -466,7 +464,7 @@ async def create_registry_doc(req: RegistryDocCreate):
                              "new_status": req.status, "comment": "Created", "changed_by": "system", "changed_at": utcnow()}]
     return {"data": new_doc}
 
-@registry_docs_router.put("/documents/{doc_id}")
+@app.put("/api/v1/documents/{doc_id}")
 async def update_registry_doc(doc_id: str, req: RegistryDocUpdate):
     doc = _registry_docs.get(doc_id)
     if not doc:
@@ -478,7 +476,7 @@ async def update_registry_doc(doc_id: str, req: RegistryDocUpdate):
     doc["updated_at"] = utcnow()
     return {"data": doc}
 
-@registry_docs_router.patch("/documents/{doc_id}/status")
+@app.patch("/api/v1/documents/{doc_id}/status")
 async def patch_status(doc_id: str, req: RegistryDocStatusUpdate):
     doc = _registry_docs.get(doc_id)
     if not doc:
@@ -492,13 +490,13 @@ async def patch_status(doc_id: str, req: RegistryDocStatusUpdate):
     _doc_history.setdefault(doc_id, []).append(entry)
     return {"data": {"id": doc_id, "status": req.status, "previous_status": prev, "history_id": entry["history_id"], "updated_at": utcnow()}}
 
-@registry_docs_router.get("/documents/{doc_id}/history")
+@app.get("/api/v1/documents/{doc_id}/history")
 async def doc_history(doc_id: str):
     if doc_id not in _registry_docs:
         raise HTTPException(404, detail=error_response("DOCUMENT_NOT_FOUND", "Документ не найден"))
     return {"data": {"doc_id": doc_id, "history": _doc_history.get(doc_id, [])}}
 
-@registry_docs_router.get("/documents/{doc_id}/succession")
+@app.get("/api/v1/documents/{doc_id}/succession")
 async def doc_succession(doc_id: str):
     doc = _registry_docs.get(doc_id)
     if not doc:
@@ -527,7 +525,7 @@ async def doc_succession(doc_id: str):
         *[{"id": s["id"], "title": s["title"], "doc_code": s["doc_code"], "era": s.get("era"), "relation": "successor", "depth": i+1} for i, s in enumerate(succs)]
     ]}}
 
-@registry_docs_router.delete("/documents/{doc_id}")
+@app.delete("/api/v1/documents/{doc_id}")
 async def delete_registry_doc(doc_id: str):
     if doc_id not in _registry_docs:
         raise HTTPException(404, detail=error_response("DOCUMENT_NOT_FOUND", "Документ не найден"))
@@ -535,7 +533,7 @@ async def delete_registry_doc(doc_id: str):
     return {"data": {"id": doc_id, "deleted": True}}
 
 # 4. common
-@main_router.get("/api/v1/stats")
+@app.get("/api/v1/stats")
 async def stats():
     docs_by_status = {}
     docs_by_source = {}
@@ -558,7 +556,7 @@ async def stats():
         "documents_by_era": docs_by_era
     }}
 
-@main_router.get("/api/v1/enums")
+@app.get("/api/v1/enums")
 async def enums():
     return {"data": {
         "classifier_system": ["MKS", "OKSTU", "UDC", "EXTERNAL"],
@@ -575,13 +573,9 @@ async def enums():
         "chunk_type": ["text", "table", "image", "formula"]
     }}
 
-@main_router.get("/api/v1/system/health")
+@app.get("/api/v1/system/health")
 async def health():
     return {"status": "ok", "service": "registry-service", "timestamp": utcnow()}
-
-app.include_router(main_router)
-app.include_router(registry_docs_router, prefix="/api/v1/registry")
-
 
 if __name__ == "__main__":
     import os
