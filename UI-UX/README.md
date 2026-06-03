@@ -1,6 +1,6 @@
 # UI/UX
 
-Рабочая зона объединенного интерфейса в ветке `feature/ui-final`.
+Рабочая зона объединенного интерфейса в ветке `feature/ui-final-gateway-current`.
 
 На этой ветке в папке `UI-UX` должна находиться только объединенная версия интерфейса `UI Final` и документация, относящаяся именно к ней.
 
@@ -10,15 +10,15 @@
 | --- | --- |
 | `UI Final/` | Объединенная версия интерфейса UI/UX. |
 | `UI Final/frontend/` | Исходный код React-приложения, Docker, Vite, MUI, mock-данные и настройки сборки. |
-| `UI Final/docs/` | Документация только по объединенной версии: первый запуск, план адаптации к Gateway, чек-лист проверки в Word. |
+| `UI Final/docs/` | Документация только по объединенной версии: первый запуск, запуск вместе с Gateway и текущая матрица интеграции. |
 | `UI Final/README.md` | Главный README объединенной версии: структура, запуск, экраны, текущее состояние. |
 
 ## Куда смотреть в первую очередь
 
 1. Запуск интерфейса: `UI Final/docs/first-run-ui-final.md`.
 2. Описание структуры: `UI Final/README.md`.
-3. План интеграции с Gateway: `UI Final/docs/ui-final-gateway-adaptation-plan-2026-05-27.md`.
-4. Чек-лист проверки: `UI Final/docs/ui-final-review-checklist-2026-05-27.docx`.
+3. Запуск UI вместе с Gateway: `UI Final/docs/first-run-ui-final-with-gateway.md`.
+4. Матрица интеграции с Gateway: `UI Final/docs/ui-final-gateway-current-status-2026-06-03.md`.
 
 ## Важно
 
