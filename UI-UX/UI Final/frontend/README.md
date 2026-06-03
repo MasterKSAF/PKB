@@ -88,6 +88,9 @@ src/utils/http.ts
 
 ```text
 VITE_API_BASE_URL=http://127.0.0.1:8081/api/v1
+VITE_GATEWAY_AUTO_LOGIN=true
+VITE_GATEWAY_USERNAME=admin@example.com
+VITE_GATEWAY_PASSWORD=admin123
 ```
 
 По текущим API-документам:
@@ -163,12 +166,13 @@ VITE_API_BASE_URL=http://127.0.0.1:8081/api/v1
 | `../README.md` | Общий README папки `UI Final`. |
 | `../docs/first-run-ui-final.md` | Инструкция первого запуска. |
 | `../docs/ui-final-gateway-adaptation-plan-2026-05-27.md` | Подробный план адаптации к Gateway. |
+| `../docs/ui-final-gateway-current-status-2026-06-03.md` | Фактический статус экспериментального подключения к актуальному Gateway. |
 | `../docs/ui-final-review-checklist-2026-05-27.docx` | Развернутый чек-лист проверки UI Final в Word. |
 
 ## Текущее состояние
 
 - Интерфейс готов для демонстрации без backend.
-- Основные сценарии UI Final собраны на mock-данных.
+- Чат, поиск, история, база знаний, QA и администрирование частично подключены к Gateway-контрактам с fallback на mock-данные.
 - Код собирается через `npm run build`.
 - TypeScript-проверка запускается через `npm run lint`.
-- Полноценная работа с реальными данными требует подключения Gateway и реализации API-контрактов.
+- Полноценный end-to-end тест требует рабочей единой точки Gateway.

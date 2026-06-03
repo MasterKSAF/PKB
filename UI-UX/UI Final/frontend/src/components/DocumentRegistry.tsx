@@ -20,8 +20,10 @@ import {
   Typography,
 } from '@mui/material';
 import { AlertTriangle, CheckCircle2, Database, FileText, Link2, MoreVertical, RefreshCw, ScanText, Upload } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { MOCK_DOCUMENTS, MOCK_KNOWLEDGE_SECTIONS } from '../utils/mockData';
 import { useUIStore } from '../store/uiStore';
+import { documentsApi } from '../utils/http';
 
 const TABLE_SX = {
   borderRadius: 3,
@@ -40,7 +42,7 @@ const PANEL_SX = {
 } as const;
 
 export const DocumentRegistry: React.FC = () => {
-  const { themeMode } = useUIStore();
+  const { themeMode, workMode } = useUIStore();
   const isLight = themeMode === 'light';
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [selectedFileName, setSelectedFileName] = useState('');
@@ -48,9 +50,23 @@ export const DocumentRegistry: React.FC = () => {
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
   const [menuAnchorEl, setMenuAnchorEl] = useState<HTMLElement | null>(null);
   const [menuDocumentName, setMenuDocumentName] = useState('');
-  const completedOcrCount = MOCK_DOCUMENTS.filter((doc) => doc.ocrStatus === 'Завершено').length;
-  const indexedCount = MOCK_DOCUMENTS.filter((doc) => doc.indexStatus === 'Индексировано').length;
-  const problemCount = MOCK_DOCUMENTS.filter((doc) => doc.ocrStatus !== 'Завершено' || doc.indexStatus !== 'Индексировано').length;
+
+  const documentsQuery = useQuery({
+    queryKey: ['gateway-documents', workMode],
+    queryFn: documentsApi.list,
+    staleTime: 30_000,
+  });
+  const knowledgeSectionsQuery = useQuery({
+    queryKey: ['gateway-knowledge-sections', workMode],
+    queryFn: documentsApi.knowledgeSections,
+    staleTime: 60_000,
+  });
+
+  const documents = documentsQuery.data ?? MOCK_DOCUMENTS;
+  const knowledgeSections = knowledgeSectionsQuery.data ?? MOCK_KNOWLEDGE_SECTIONS;
+  const completedOcrCount = documents.filter((doc) => doc.ocrStatus === 'Завершено').length;
+  const indexedCount = documents.filter((doc) => doc.indexStatus === 'Индексировано').length;
+  const problemCount = documents.filter((doc) => doc.ocrStatus !== 'Завершено' || doc.indexStatus !== 'Индексировано').length;
 
   const getOcrStatusColor = (status: string) => {
     switch (status) {
@@ -70,7 +86,7 @@ export const DocumentRegistry: React.FC = () => {
   const stats = [
     {
       label: 'Документов в реестре',
-      value: `${MOCK_DOCUMENTS.length}`,
+      value: `${documents.length}`,
       note: 'всего записей',
       icon: <FileText size={20} />,
       color: '#d9b783',
@@ -78,7 +94,7 @@ export const DocumentRegistry: React.FC = () => {
     {
       label: 'OCR завершен',
       value: `${completedOcrCount}`,
-      note: `из ${MOCK_DOCUMENTS.length} документов`,
+      note: `из ${documents.length} документов`,
       icon: <CheckCircle2 size={20} />,
       color: '#79c58b',
     },
@@ -108,10 +124,38 @@ export const DocumentRegistry: React.FC = () => {
 
     setSelectedFileName(file.name);
     event.target.value = '';
+
+    if (workMode === 'prod') {
+      setNotice(`Файл «${file.name}» отправляется в Gateway`);
+      void documentsApi
+        .upload(file)
+        .then(() => {
+          setNotice(`Файл «${file.name}» передан в Gateway для обработки`);
+          void documentsQuery.refetch();
+        })
+        .catch(() => {
+          setNotice(`Gateway не принял файл «${file.name}». Проверьте доступность backend`);
+        });
+    }
   };
 
   const showGatewayNotice = (message: string) => {
     setNotice(`${message}. Реальное действие будет выполняться через Gateway/backend.`);
+  };
+
+  const handleReprocess = () => {
+    const firstDocument = documents[0];
+
+    if (workMode !== 'prod' || !firstDocument) {
+      showGatewayNotice('Повторный запуск OCR');
+      return;
+    }
+
+    setNotice(`Повторная обработка документа «${firstDocument.name}» отправляется в Gateway`);
+    void documentsApi
+      .reprocess(firstDocument.id)
+      .then(() => setNotice(`Gateway принял задачу повторной обработки: ${firstDocument.name}`))
+      .catch(() => setNotice('Gateway не принял задачу повторной обработки. Проверьте backend'));
   };
 
   const handleDocumentMenuOpen = (event: React.MouseEvent<HTMLElement>, documentName: string) => {
@@ -175,7 +219,7 @@ export const DocumentRegistry: React.FC = () => {
                 className="app-action-button"
                 variant="contained"
                 startIcon={<ScanText size={16} />}
-                onClick={() => showGatewayNotice('Повторный запуск OCR')}
+                onClick={handleReprocess}
               >
                 Повторить OCR
               </Button>
@@ -250,11 +294,11 @@ export const DocumentRegistry: React.FC = () => {
                 </Typography>
               </Box>
             </Stack>
-            <Chip size="small" label={`${MOCK_KNOWLEDGE_SECTIONS.length} разделов`} variant="outlined" />
+            <Chip size="small" label={`${knowledgeSections.length} разделов`} variant="outlined" />
           </Stack>
 
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)', xl: 'repeat(6, 1fr)' }, gap: 1 }}>
-            {MOCK_KNOWLEDGE_SECTIONS.map((section) => (
+            {knowledgeSections.map((section) => (
               <Paper
                 key={section.id}
                 variant="outlined"
@@ -364,7 +408,7 @@ export const DocumentRegistry: React.FC = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {MOCK_DOCUMENTS.map((doc) => (
+              {documents.map((doc) => (
                 <TableRow
                   key={doc.id}
                   hover

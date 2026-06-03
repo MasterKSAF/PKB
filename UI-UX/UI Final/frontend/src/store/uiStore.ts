@@ -26,6 +26,8 @@ interface UIState {
   setCurrentUserId: (userId: string) => void;
   currentRole: UserRole;
   setCurrentRole: (role: UserRole) => void;
+  currentGatewaySessionId: string | null;
+  setCurrentGatewaySessionId: (sessionId: string | null) => void;
   activeProjectId: string;
   setActiveProjectId: (projectId: string) => void;
   themeMode: 'dark' | 'light';
@@ -41,6 +43,8 @@ interface UIState {
   apiStatus: 'online' | 'offline' | 'demo';
   setApiStatus: (status: 'online' | 'offline' | 'demo') => void;
   adminUsers: AdminUser[];
+  setAdminUsers: (users: AdminUser[]) => void;
+  upsertAdminUser: (user: AdminUser) => void;
   updateAdminUser: (userId: string, patch: Partial<AdminUser>) => void;
   adminAuditLog: AdminAuditLogItem[];
   addAdminAuditLogItem: (item: AdminAuditLogItem) => void;
@@ -63,13 +67,15 @@ export const useUIStore = create<UIState>((set) => ({
         activeTab: getFallbackTab(currentRole),
       };
     }),
-  logout: () => set({ isAuthenticated: false, activeTab: 'chat', focusMode: false }),
+  logout: () => set({ isAuthenticated: false, activeTab: 'chat', focusMode: false, currentGatewaySessionId: null }),
   activeTab: 'chat',
   setActiveTab: (activeTab) => set({ activeTab }),
   currentUserId: 'u1',
   setCurrentUserId: (currentUserId) => set({ currentUserId }),
   currentRole: 'user',
   setCurrentRole: (currentRole) => set({ currentRole }),
+  currentGatewaySessionId: null,
+  setCurrentGatewaySessionId: (currentGatewaySessionId) => set({ currentGatewaySessionId }),
   activeProjectId: 'project-223m',
   setActiveProjectId: (activeProjectId) => set({ activeProjectId }),
   themeMode: 'dark',
@@ -89,6 +95,17 @@ export const useUIStore = create<UIState>((set) => ({
   apiStatus: 'demo',
   setApiStatus: (apiStatus) => set({ apiStatus }),
   adminUsers: MOCK_ADMIN_USERS,
+  setAdminUsers: (adminUsers) => set({ adminUsers }),
+  upsertAdminUser: (user) =>
+    set((state) => {
+      const exists = state.adminUsers.some((item) => item.id === user.id);
+
+      return {
+        adminUsers: exists
+          ? state.adminUsers.map((item) => (item.id === user.id ? { ...item, ...user } : item))
+          : [user, ...state.adminUsers],
+      };
+    }),
   updateAdminUser: (userId, patch) =>
     set((state) => ({
       adminUsers: state.adminUsers.map((user) => (user.id === userId ? { ...user, ...patch } : user)),

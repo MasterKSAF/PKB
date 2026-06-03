@@ -27,7 +27,7 @@ import {
 } from '@mui/material';
 import { Download, ExternalLink, FileText, MessageSquarePlus, Search, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { historyApi } from '../utils/http';
+import { historyApi, sourceApi } from '../utils/http';
 import type { AnswerStatus, Citation, QueryHistoryItem } from '../utils/mockData';
 import { useUIStore } from '../store/uiStore';
 import { downloadPreviewFile } from '../utils/downloadPreview';
@@ -230,10 +230,21 @@ export const History: React.FC = () => {
   };
 
   const handleOpenPreview = (citation: Citation, previewKind: HistoryPreview['previewKind']) => {
-    setActivePreview({
+    const nextPreview = {
       ...citation,
       page: previewKind === 'document' ? 1 : citation.page,
       previewKind,
+    };
+
+    setActivePreview(nextPreview);
+
+    void sourceApi.preview(citation, previewKind).then((hydratedCitation) => {
+      setActivePreview({
+        ...nextPreview,
+        ...hydratedCitation,
+        page: previewKind === 'document' ? 1 : hydratedCitation.page,
+        previewKind,
+      });
     });
   };
 

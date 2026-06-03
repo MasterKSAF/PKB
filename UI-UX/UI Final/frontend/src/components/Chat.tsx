@@ -39,7 +39,7 @@ import {
   ZoomOut,
 } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
-import { chatApi } from '../utils/http';
+import { chatApi, sourceApi } from '../utils/http';
 import { ChatMessage, Citation } from '../utils/mockData';
 import { Feedback } from './Feedback';
 import { useUIStore } from '../store/uiStore';
@@ -315,6 +315,22 @@ export const Chat: React.FC = () => {
       return [...prev, preview];
     });
     setActiveCitationId(previewId);
+
+    void sourceApi.preview(citation, previewKind).then((hydratedCitation) => {
+      setOpenedCitations((prev) =>
+        prev.map((item) =>
+          item.previewId === previewId
+            ? {
+                ...item,
+                ...hydratedCitation,
+                page: previewKind === 'document' ? 1 : hydratedCitation.page,
+                previewId,
+                previewKind,
+              }
+            : item,
+        ),
+      );
+    });
   };
 
   const closePreview = (previewId: string) => {

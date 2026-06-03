@@ -1,11 +1,15 @@
 export interface Citation {
   id: string;
+  documentId?: string;
   document: string;
   section: string;
   page: number;
   text: string;
   version: string;
   confidence?: number;
+  pagePreviewUrl?: string;
+  documentUrl?: string;
+  contentType?: string;
 }
 
 export type AnswerStatus =

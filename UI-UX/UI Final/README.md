@@ -11,6 +11,7 @@
 | `frontend/` | Рабочее React-приложение объединенного интерфейса. Здесь исходный код, Dockerfile, nginx-конфиг, Vite, MUI и mock-данные. |
 | `docs/first-run-ui-final.md` | Короткая инструкция первого запуска локально через Docker или npm. |
 | `docs/ui-final-gateway-adaptation-plan-2026-05-27.md` | План адаптации UI Final к backend-слою Gateway. |
+| `docs/ui-final-gateway-current-status-2026-06-03.md` | Текущий статус экспериментального подключения UI Final к актуальному Gateway. |
 | `docs/ui-final-review-checklist-2026-05-27.docx` | Новый развернутый чек-лист проверки объединенной версии в формате Word. |
 
 ## Основные экраны
@@ -64,7 +65,7 @@ http://127.0.0.1:3310
 ## Текущее состояние
 
 - UI собран как демонстрационный рабочий контур.
-- Сценарии работают на mock-данных.
-- Структура экранов подготовлена под Gateway.
+- Часть сценариев уже подключена к Gateway-контрактам с fallback на mock-данные.
+- Полный end-to-end запуск зависит от исправления единой точки Gateway.
 - `npm run build` и `npm run lint` проверены для `frontend`.
-- Реальная интеграция с backend требует выполнения плана из `docs/ui-final-gateway-adaptation-plan-2026-05-27.md`.
+- Актуальный статус интеграции описан в `docs/ui-final-gateway-current-status-2026-06-03.md`.

@@ -27,6 +27,7 @@ import { ClipboardList, Save, Search, ShieldCheck, SlidersHorizontal, UserCog, U
 import { useUIStore } from '../store/uiStore';
 import { ADMIN_SECTIONS_ACCESS, ROLE_LABELS } from '../utils/access';
 import { MOCK_PROCESSING_LOGS, type AdminUser } from '../utils/mockData';
+import { adminApi } from '../utils/http';
 
 type RoleLabel = AdminUser['role'];
 type AccessKey =
@@ -41,6 +42,12 @@ type AccessKey =
   | 'processingLogs';
 
 const ROLE_OPTIONS: RoleLabel[] = ['Пользователь', 'Администратор знаний', 'Системный администратор'];
+
+const GATEWAY_ROLE_BY_LABEL: Record<RoleLabel, string> = {
+  Пользователь: 'engineer',
+  'Администратор знаний': 'knowledge_admin',
+  'Системный администратор': 'system_admin',
+};
 
 const ACCESS_OPTIONS: Array<{ key: AccessKey; label: string; description: string }> = [
   { key: 'chat', label: 'Чат', description: 'вопросы к ассистенту и просмотр ответов' },
@@ -198,8 +205,10 @@ export const AdminPanel: React.FC = () => {
     addAdminAuditLogItem,
     currentRole,
     currentUserId,
+    setAdminUsers,
     themeMode,
     updateAdminUser,
+    workMode,
   } = useUIStore();
   const isLight = themeMode === 'light';
   const currentUser = adminUsers.find((user) => user.id === currentUserId) ?? adminUsers[0];
@@ -207,9 +216,11 @@ export const AdminPanel: React.FC = () => {
   const canManageUsers = availableSections.includes('users');
   const canManagePermissions = availableSections.includes('permissions');
   const canSeeFullLogs = currentRole === 'systemAdmin';
+  const [gatewayProcessingLogs, setGatewayProcessingLogs] = useState<typeof MOCK_PROCESSING_LOGS>([]);
+  const processingLogs = gatewayProcessingLogs.length ? gatewayProcessingLogs : MOCK_PROCESSING_LOGS;
   const logs = canSeeFullLogs
-    ? MOCK_PROCESSING_LOGS
-    : MOCK_PROCESSING_LOGS.filter((log) => log.visibility !== 'Администратор');
+    ? processingLogs
+    : processingLogs.filter((log) => log.visibility !== 'Администратор');
   const contentAdminCards = [
     {
       label: 'Документы',
@@ -247,6 +258,26 @@ export const AdminPanel: React.FC = () => {
   const [adminNotice, setAdminNotice] = useState('');
   const [draftRole, setDraftRole] = useState<RoleLabel>(selectedUser?.role ?? 'Пользователь');
   const [draftAccess, setDraftAccess] = useState<AccessKey[]>(selectedUser ? inferAccessKeys(selectedUser) : []);
+
+  useEffect(() => {
+    let alive = true;
+
+    void adminApi.users().then((users) => {
+      if (alive && users.length) {
+        setAdminUsers(users);
+      }
+    });
+
+    void adminApi.audit().then((items) => {
+      if (alive && items.length) {
+        setGatewayProcessingLogs(items);
+      }
+    });
+
+    return () => {
+      alive = false;
+    };
+  }, [setAdminUsers, workMode]);
 
   useEffect(() => {
     if (!adminUsers.some((user) => user.id === selectedUserId) && adminUsers[0]) {
@@ -317,6 +348,15 @@ export const AdminPanel: React.FC = () => {
       action: 'Изменены роль и права',
       details: `Роль: ${editingOwnSystemRole ? selectedUser.role : draftRole}. Доступ: ${nextAccess}.`,
     });
+
+    if (workMode === 'prod') {
+      void adminApi
+        .updateUser(selectedUser.id, {
+          role: GATEWAY_ROLE_BY_LABEL[editingOwnSystemRole ? selectedUser.role : draftRole],
+        })
+        .then(() => setAdminNotice(`Права пользователя «${selectedUser.name}» отправлены в Gateway`))
+        .catch(() => setAdminNotice('Gateway не принял изменение прав. Локально правка отображена в UI'));
+    }
   };
 
   return (
