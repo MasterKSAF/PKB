@@ -3,7 +3,7 @@ Validation and comparison API endpoints.
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import List
 
 from fastapi import APIRouter, HTTPException, status
@@ -39,7 +39,7 @@ async def start_comparison(request: CompareRequest):
     return CompareInitResponse(
         comparison_id=comparison_id,
         status="processing",
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
     )
 
 
@@ -163,8 +163,8 @@ async def get_check_run_status(check_run_id: str):
         check_run_id=check_run_id,
         status="completed",
         progress_percent=100.0,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
 
@@ -175,5 +175,5 @@ async def export_check_run(check_run_id: str):
         check_run_id=check_run_id,
         export_url=f"/exports/{check_run_id}/report.xlsx",
         format="xlsx",
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
     )

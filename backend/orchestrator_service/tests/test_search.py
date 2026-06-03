@@ -149,6 +149,24 @@ class TestSearchPost:
         for item in data["items"]:
             assert 0.0 <= item["score"] <= 1.0, f"Score {item['score']} out of range"
 
+    def test_search_top_k_exceeds_max(self, client: TestClient, auth_header: dict):
+        """top_k > 100 should return 422 validation error (ge=1, le=100)."""
+        response = client.post(
+            self.SEARCH_URL,
+            json={"query": "тест", "top_k": 200},
+            headers=auth_header,
+        )
+        assert response.status_code == 422
+
+    def test_search_top_k_zero(self, client: TestClient, auth_header: dict):
+        """top_k = 0 should return 422 validation error (ge=1)."""
+        response = client.post(
+            self.SEARCH_URL,
+            json={"query": "тест", "top_k": 0},
+            headers=auth_header,
+        )
+        assert response.status_code == 422
+
     def test_search_without_auth(self, client: TestClient):
         """Search without auth should work (mock mode bypasses auth)."""
         response = client.post(

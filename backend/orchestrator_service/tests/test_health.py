@@ -49,17 +49,19 @@ class TestHealthEndpoint:
         response = client.get("/api/v1/system/health")
         data = response.json()
         services = data["services"]
-        expected_services = {"auth", "rag", "ocr", "validation", "integration"}
+        expected_services = {"auth", "rag_builder", "rag_search", "ocr", "validation", "integration"}
         assert set(services.keys()) == expected_services
         for service_name, status in services.items():
             assert status == "ok", f"Service {service_name} should be 'ok'"
 
     def test_health_check_subsystem_status(self, client: TestClient):
-        """Subsystems like database, search_index, etc. should be 'ok'."""
+        """Subsystems should report their specific status values."""
         response = client.get("/api/v1/system/health")
         data = response.json()
-        for key in ("database", "search_index", "ocr_queue", "storage"):
-            assert data[key] == "ok", f"Subsystem {key} should be 'ok'"
+        assert data["database"] == "online", "database should be 'online'"
+        assert data["search_index"] == "ready", "search_index should be 'ready'"
+        assert data["ocr_queue"] == "idle", "ocr_queue should be 'idle'"
+        assert data["storage"] == "online", "storage should be 'online'"
 
     def test_health_check_uptime_is_positive(self, client: TestClient):
         """Uptime should be a non-negative integer."""

@@ -28,7 +28,7 @@ async def search(request: SearchRequest):
         result = await rag_client.search(
             query=request.query,
             top_k=request.top_k,
-            filters=request.filters.dict() if request.filters else None,
+            filters=request.filters.model_dump() if request.filters else None,
             search_type="hybrid",
         )
 
@@ -91,7 +91,7 @@ async def ask(request: AskRequest):
         result = await query_client.text_ask(
             text=request.question,
             document_ids=request.document_ids,
-            options=request.options.dict() if request.options else None,
+            options=request.options.model_dump() if request.options else None,
         )
 
         # Convert Query service result to orchestrator format

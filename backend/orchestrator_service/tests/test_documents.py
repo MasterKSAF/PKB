@@ -33,16 +33,23 @@ class TestUploadDocument:
             files={
                 "file": ("test_doc.pdf", io.BytesIO(file_content), "application/pdf")
             },
-            data={"document_type": "normative"},
+            data={"source_type": "GOST"},
             headers=auth_header,
         )
         assert response.status_code == 202
         data = response.json()
-        # DocumentCreateResponse does NOT include document_type
-        assert data["document_id"].startswith("doc-")
-        assert data["status"] == "queued"
-        assert data["user_id"] == "u-mock-001"
-        assert data["task_id"].startswith("task-ocr-")
+        # DocumentCreateResponse: task_id (int), version_id, file_hash_sha256, file_size_bytes
+        assert isinstance(data["task_id"], int)
+        assert isinstance(data["version_id"], str)
+        assert len(data["version_id"]) > 0
+        assert data["status"] == "uploaded"
+        assert isinstance(data["file_hash_sha256"], str)
+        assert len(data["file_hash_sha256"]) == 64  # SHA-256 hex
+        assert isinstance(data["file_size_bytes"], int)
+        assert data["file_size_bytes"] == len(file_content)
+        assert isinstance(data["is_duplicate_file"], bool)
+        assert isinstance(data["is_duplicate_document"], bool)
+        assert "title_hash_sha256" in data
         assert "created_at" in data
 
     def test_upload_with_metadata(self, client: TestClient, auth_header: dict):
@@ -51,26 +58,23 @@ class TestUploadDocument:
         response = client.post(
             "/api/v1/documents/",
             files={"file": ("drawing.pdf", io.BytesIO(b"data"), "application/pdf")},
-            data={"document_type": "drawing", "metadata": metadata},
+            data={"source_type": "GOST", "metadata": metadata},
             headers=auth_header,
         )
         assert response.status_code == 202
         data = response.json()
-        assert "document_id" in data
-        assert data["status"] == "queued"
+        assert isinstance(data["task_id"], int)
+        assert data["status"] == "uploaded"
 
     def test_upload_unsupported_type(self, client: TestClient, auth_header: dict):
-        """Upload with invalid document type should fail (Pydantic validation)."""
-        # In mock mode, the file content-type is checked first (returns 400 for
-        # text/plain), but an invalid document_type value may also trigger 422
-        # via Pydantic validation on the Form field (depends on strict mode).
+        """Upload with invalid source_type should fail (400)."""
         response = client.post(
             "/api/v1/documents/",
-            files={"file": ("doc.txt", io.BytesIO(b"data"), "text/plain")},
-            data={"document_type": "invalid_type"},
+            files={"file": ("doc.pdf", io.BytesIO(b"data"), "application/pdf")},
+            data={"source_type": "INVALID_TYPE"},
             headers=auth_header,
         )
-        assert response.status_code in (400, 422)
+        assert response.status_code == 400
         data = response.json()
         assert "error" in data or "detail" in data
 
@@ -78,7 +82,7 @@ class TestUploadDocument:
         """Request without file should fail."""
         response = client.post(
             "/api/v1/documents/",
-            data={"document_type": "normative"},
+            data={"source_type": "GOST"},
             headers=auth_header,
         )
         assert response.status_code == 422
@@ -88,12 +92,12 @@ class TestUploadDocument:
         response = client.post(
             "/api/v1/documents/",
             files={"file": ("doc.pdf", io.BytesIO(b"data"), "application/pdf")},
-            data={"document_type": "normative"},
+            data={"source_type": "GOST"},
         )
         # In mock mode, auth dependency returns MOCK_USER for any request
         assert response.status_code == 202
         data = response.json()
-        assert data["user_id"] == "u-mock-001"
+        assert data["status"] == "uploaded"
 
 
 class TestListDocuments:
@@ -108,31 +112,42 @@ class TestListDocuments:
         assert "items" in data
         assert "meta" in data
         assert isinstance(data["items"], list)
-        # Default limit=20, offset=0 → page = (0//20)+1 = 1, page_size = 20
+        # Default page=1, page_size=20
         assert data["meta"]["page"] == 1
         assert data["meta"]["page_size"] == 20
 
     def test_list_documents_with_pagination(
         self, client: TestClient, auth_header: dict
     ):
-        """List documents with custom offset and limit."""
+        """List documents with custom page and page_size."""
         response = client.get(
-            "/api/v1/documents/?offset=10&limit=10",
+            "/api/v1/documents/?page=2&page_size=10",
             headers=auth_header,
         )
         assert response.status_code == 200
         data = response.json()
-        # page = (10 // 10) + 1 = 2, page_size = 10
         assert data["meta"]["page"] == 2
         assert data["meta"]["page_size"] == 10
 
     def test_list_documents_summary_fields(self, client: TestClient, auth_header: dict):
-        """Summary should contain expected statistics."""
+        """Summary should contain FSM status based statistics."""
         response = client.get("/api/v1/documents/", headers=auth_header)
         data = response.json()
         summary = data["summary"]
-        for key in ("total", "ocr_completed", "indexed", "need_attention"):
-            assert key in summary
+        for key in (
+            "total",
+            "uploaded",
+            "previewing",
+            "awaiting_decision",
+            "parsing",
+            "validation",
+            "review_required",
+            "ready_for_promotion",
+            "approved",
+            "failed",
+            "archived",
+        ):
+            assert key in summary, f"Missing summary field: {key}"
             assert isinstance(summary[key], int)
 
     def test_list_documents_item_structure(self, client: TestClient, auth_header: dict):
@@ -144,10 +159,20 @@ class TestListDocuments:
             for field in (
                 "document_id",
                 "title",
-                "document_type",
-                "pages",
-                "ocr_status",
-                "index_status",
+                "doc_code",
+                "source_type",
+                "era",
+                "validity_status",
+                "jurisdiction",
+                "issuing_body",
+                "mks_oks_code",
+                "okstu_code",
+                "classification_status",
+                "file_hash_sha256",
+                "file_size_bytes",
+                "status",
+                "latest_version",
+                "total_versions",
                 "user_id",
                 "uploaded_by",
                 "created_at",
@@ -156,9 +181,9 @@ class TestListDocuments:
                 assert field in item, f"Missing field: {field}"
 
     def test_list_documents_invalid_limit(self, client: TestClient, auth_header: dict):
-        """Limit=0 should fail (ge=1 constraint)."""
+        """page=0 should fail (ge=1 constraint)."""
         response = client.get(
-            "/api/v1/documents/?limit=0",
+            "/api/v1/documents/?page=0",
             headers=auth_header,
         )
         assert response.status_code == 422
@@ -174,11 +199,20 @@ class TestGetDocument:
         assert response.status_code == 200
         data = response.json()
         assert data["document_id"] == doc_id
-        assert data["filename"] == "21900M2_spec.pdf"
-        assert "document_type" in data
+        assert data["title"] == "Стойки установочные"
+        assert "doc_code" in data
+        assert "source_type" in data
         assert "status" in data
-        assert "file_size" in data
-        assert "pages_total" in data
+        assert "title_hash_sha256" in data
+        assert "era" in data
+        assert "validity_status" in data
+        assert "jurisdiction" in data
+        assert "issuing_body" in data
+        assert "mks_oks_code" in data
+        assert "classification_status" in data
+        assert "metadata" in data
+        assert "latest_version" in data
+        assert "total_versions" in data
 
     def test_get_document_full_schema(self, client: TestClient, auth_header: dict):
         """Document detail should contain all fields from DocumentDetailResponse."""
@@ -186,22 +220,40 @@ class TestGetDocument:
         data = response.json()
         for field in (
             "document_id",
-            "filename",
-            "document_type",
+            "title",
+            "doc_code",
+            "source_type",
+            "title_hash_sha256",
             "status",
-            "file_size",
-            "pages_total",
-            "pages_processed",
-            "pages_failed",
+            "era",
+            "validity_status",
+            "jurisdiction",
+            "issuing_body",
+            "industry_code",
+            "enterprise_id",
+            "mks_oks_code",
+            "okstu_code",
+            "classification_status",
+            "metadata",
+            "latest_version",
+            "total_versions",
             "user_id",
             "uploaded_by",
+            "created_by",
+            "updated_by",
             "created_at",
             "updated_at",
         ):
             assert field in data, f"Missing field: {field}"
-        # Mock mode always returns PROCESSED status
-        assert data["status"] == "processed"
-        assert data["document_type"] == "specification"
+        # Mock mode returns source_type == "GOST" and status == "approved"
+        assert data["source_type"] == "GOST"
+        assert data["status"] == "approved"
+        # latest_version should have version_id, version_number, etc.
+        lv = data["latest_version"]
+        assert "version_id" in lv
+        assert lv["version_number"] == 1
+        assert "file_hash_sha256" in lv
+        assert "size_bytes" in lv
 
     def test_get_nonexistent_document(self, client: TestClient, auth_header: dict):
         """Non-existent document returns data (mock mode — no 404)."""
@@ -228,10 +280,8 @@ class TestDocumentStatus:
     @pytest.mark.parametrize(
         "doc_id",
         [
-            "doc-mock-queued",
-            "doc-mock-processing",
-            "doc-mock-completed",
-            "doc-mock-failed",
+            "doc-mock-001",
+            "doc-mock-002",
         ],
     )
     def test_document_status_various_states(
@@ -247,9 +297,16 @@ class TestDocumentStatus:
         # Mock always returns DocumentStatusProcessing
         assert data["document_id"] == doc_id
         assert data["status"] == "processing"
+        assert "progress_percent" in data
+        # Steps should contain pipelines with formation and indexation
+        assert "steps" in data
+        steps = data["steps"]
+        assert "pipeline" in steps, "Missing pipeline wrapper"
+        assert "formation" in steps["pipeline"], "Missing formation pipeline"
+        assert "indexation" in steps["pipeline"], "Missing indexation pipeline"
 
     def test_document_status_has_progress(self, client: TestClient, auth_header: dict):
-        """Status should include progress percentage and steps."""
+        """Status should include progress percentage and pipeline steps."""
         response = client.get(
             "/api/v1/documents/doc-mock-001/status",
             headers=auth_header,
@@ -262,9 +319,22 @@ class TestDocumentStatus:
         assert isinstance(data["progress_percent"], (int, float))
         assert "steps" in data
         steps = data["steps"]
-        for step in ("ocr", "layout_parsing", "indexing"):
-            assert step in steps, f"Missing step: {step}"
-        assert steps["ocr"] == "in_progress"
+        # Formation pipeline is nested under 'pipeline' key
+        assert "pipeline" in steps
+        pipe = steps["pipeline"]
+        # Check formation pipeline has sub-steps
+        assert "formation" in pipe
+        formation = pipe["formation"]
+        assert "status" in formation
+        assert "preview" in formation
+        assert "parsing" in formation
+        assert "validation" in formation
+        assert "registry" in formation
+        # Check indexation pipeline
+        assert "indexation" in pipe
+        indexation = pipe["indexation"]
+        assert "status" in indexation
+        assert "rag_indexing" in indexation
 
     def test_document_status_nonexistent(self, client: TestClient, auth_header: dict):
         """Status for non-existent doc works (mock mode — no 404)."""
@@ -314,24 +384,24 @@ class TestDeleteDocument:
 class TestReprocessDocument:
     """Tests for POST /api/v1/documents/{doc_id}/reprocess"""
 
-    def test_reprocess_document_standard(self, client: TestClient, auth_header: dict):
-        """Reprocess in standard mode."""
+    def test_reprocess_document_full(self, client: TestClient, auth_header: dict):
+        """Reprocess in full mode."""
         response = client.post(
             "/api/v1/documents/doc-mock-001/reprocess",
-            json={"mode": "standard"},
+            json={"mode": "full"},
             headers=auth_header,
         )
         assert response.status_code == 202
         data = response.json()
         assert data["document_id"] == "doc-mock-001"
-        assert data["mode"] == "standard"
+        assert data["mode"] == "full"
         # ReprocessResponse.status is "reprocessing_queued"
         assert data["status"] == "reprocessing_queued"
         assert data["user_id"] == "u-mock-001"
-        assert data["task_id"].startswith("task-ocr-")
+        assert data["task_id"].startswith("task-repro-")
         assert "created_at" in data
 
-    @pytest.mark.parametrize("mode", ["enhanced_preprocess", "fallback_ocr"])
+    @pytest.mark.parametrize("mode", ["ocr_only", "chunking_only"])
     def test_reprocess_alternative_modes(
         self, client: TestClient, auth_header: dict, mode: str
     ):
@@ -359,7 +429,7 @@ class TestReprocessDocument:
         """Reprocess non-existent document works (mock mode — no 404)."""
         response = client.post(
             "/api/v1/documents/bad-doc/reprocess",
-            json={"mode": "standard"},
+            json={"mode": "full"},
             headers=auth_header,
         )
         assert response.status_code == 202
@@ -384,7 +454,7 @@ class TestDocumentErrors:
         assert isinstance(data["errors"], list)
 
     def test_document_error_item_structure(self, client: TestClient, auth_header: dict):
-        """Each error item should have required fields."""
+        """Each error item should have required fields (no document_id)."""
         response = client.get(
             "/api/v1/documents/doc-mock-001/errors",
             headers=auth_header,
@@ -394,7 +464,6 @@ class TestDocumentErrors:
             error = data["errors"][0]
             for field in (
                 "error_id",
-                "document_id",
                 "stage",
                 "error_code",
                 "error_message",
@@ -403,6 +472,7 @@ class TestDocumentErrors:
                 "timestamp",
             ):
                 assert field in error, f"Missing field: {field}"
+            # document_id is no longer part of ProcessingError
 
     def test_get_errors_for_any_document(self, client: TestClient, auth_header: dict):
         """Mock mode always returns at least one error for any document ID."""
@@ -412,9 +482,8 @@ class TestDocumentErrors:
         )
         assert response.status_code == 200
         data = response.json()
-        # Mock endpoint always returns an OCR error when stage is not specified
+        # Mock endpoint returns an OCR error when stage is not specified
         assert len(data["errors"]) >= 1
-        assert data["errors"][0]["document_id"] == "doc-mock-001"
         assert data["errors"][0]["stage"] == "ocr"
 
     def test_errors_nonexistent_doc(self, client: TestClient, auth_header: dict):
@@ -426,7 +495,6 @@ class TestDocumentErrors:
         assert response.status_code == 200
         data = response.json()
         assert len(data["errors"]) >= 1
-        assert data["errors"][0]["document_id"] == "bad-doc"
 
 
 class TestDocumentPages:
@@ -457,7 +525,7 @@ class TestDocumentPages:
                 assert field in page, f"Missing field: {field}"
 
     def test_get_page_view(self, client: TestClient, auth_header: dict):
-        """Get a specific page view with blocks."""
+        """Get a specific page view with blocks (returns JSONResponse)."""
         response = client.get(
             "/api/v1/documents/doc-mock-001/pages/1",
             headers=auth_header,
@@ -469,10 +537,7 @@ class TestDocumentPages:
         assert "width" in data
         assert "height" in data
         assert "blocks" in data
-        if data["blocks"]:
-            block = data["blocks"][0]
-            for field in ("block_id", "type", "coordinates", "text"):
-                assert field in block, f"Missing field: {field}"
+        # Page view returns blocks with minimal metadata (no dedicated Pydantic model)
 
     def test_get_page_text(self, client: TestClient, auth_header: dict):
         """Get OCR text for a specific page."""
@@ -482,16 +547,25 @@ class TestDocumentPages:
         )
         assert response.status_code == 200
         data = response.json()
+        assert data["document_id"] == "doc-mock-001"
         assert data["page"] == 1
-        assert "full_text" in data
+        assert "width" in data
+        assert "height" in data
+        # PageTextResponse has blocks but no full_text
+        assert "full_text" not in data, "full_text field should not be present"
         assert "blocks" in data
         if data["blocks"]:
             block = data["blocks"][0]
-            for field in ("block_id", "type", "coordinates", "text", "confidence"):
+            for field in ("number", "type", "bbox", "content", "confidence"):
                 assert field in block, f"Missing field: {field}"
+            # bbox should be a list of 4 floats in normalized 0..1 range
+            assert isinstance(block["bbox"], list)
+            assert len(block["bbox"]) == 4
+            for coord in block["bbox"]:
+                assert 0.0 <= coord <= 1.0, f"bbox coord {coord} out of range"
 
     def test_get_page_preview(self, client: TestClient, auth_header: dict):
-        """Get a page preview image URL."""
+        """Get a page preview with image URL, blocks and text layer."""
         response = client.get(
             "/api/v1/documents/doc-mock-001/pages/1/preview",
             headers=auth_header,
@@ -499,10 +573,10 @@ class TestDocumentPages:
         assert response.status_code == 200
         data = response.json()
         assert data["document_id"] == "doc-mock-001"
-        assert "document_title" in data
         assert data["page"] == 1
-        assert "preview_url" in data
-        assert "content_type" in data
+        assert "image_url" in data
+        assert "blocks" in data
+        assert "text_layer" in data
 
     def test_page_view_out_of_range(self, client: TestClient, auth_header: dict):
         """Page number out of range still returns data (mock mode — no 404)."""
@@ -527,7 +601,6 @@ class TestDocumentPages:
         assert response.status_code == 200
         data = response.json()
         assert data["page"] == 9999
-        assert "full_text" in data
         assert "blocks" in data
 
 
@@ -543,60 +616,51 @@ class TestDocumentParameters:
         assert response.status_code == 200
         data = response.json()
         assert data["document_id"] == "doc-mock-001"
-        assert "document_type" in data
-        assert data["document_type"] == "specification"
         assert "parameters" in data
-        assert "extraction_confidence" in data
-        assert "unconfirmed_fields" in data
-        assert "updated_at" in data
-        # Mock Validation Service returns empty unconfirmed_fields by default
-        assert data["unconfirmed_fields"] == []
+        assert isinstance(data["parameters"], list)
+        assert "total" in data
+        assert isinstance(data["total"], int)
 
-    def test_parameters_structure(self, client: TestClient, auth_header: dict):
-        """Parameters should contain expected sub-fields."""
+    def test_parameters_item_structure(self, client: TestClient, auth_header: dict):
+        """Each parameter item should have required fields."""
         response = client.get(
             "/api/v1/documents/doc-mock-001/parameters",
             headers=auth_header,
         )
-        data = response.json()["parameters"]
-        for field in (
-            "designation",
-            "title",
-            "materials",
-            "dimensions",
-            "references",
-            "specification_items",
-        ):
-            assert field in data, f"Missing field: {field}"
-        # Check mock data values
-        assert data["designation"] == "21900M2.362135.0903"
-        assert "сталь 09Г2С" in data["materials"]
-        assert len(data["specification_items"]) >= 1
+        data = response.json()
+        if data["parameters"]:
+            item = data["parameters"][0]
+            for field in (
+                "symbol",
+                "description",
+                "unit",
+                "value",
+                "range",
+                "source_clause",
+                "source_page",
+            ):
+                assert field in item, f"Missing field: {field}"
+            # Verify mock data values
+            assert item["symbol"] == "R_доп"
+            assert item["description"] == "Допустимый радиус"
+            assert item["unit"] == "мм"
 
-    def test_parameters_specification_items(
-        self, client: TestClient, auth_header: dict
-    ):
-        """Specification items should have proper structure."""
+    def test_parameters_with_range(self, client: TestClient, auth_header: dict):
+        """Parameter with range should have min/max fields."""
         response = client.get(
             "/api/v1/documents/doc-mock-001/parameters",
             headers=auth_header,
         )
-        items = response.json()["parameters"]["specification_items"]
-        assert len(items) >= 1
-        item = items[0]
-        for field in (
-            "position",
-            "name",
-            "quantity",
-            "dimensions",
-            "weight",
-            "material",
-            "note",
-        ):
-            assert field in item, f"Missing field: {field}"
-        # Verify mock data
-        assert item["position"] == "1"
-        assert item["name"] == "Кница"
+        data = response.json()
+        # Find the parameter with a range (second item in mock)
+        if len(data["parameters"]) >= 2:
+            range_item = data["parameters"][1]
+            assert range_item["symbol"] == "L"
+            assert range_item["range"] is not None
+            assert "min" in range_item["range"]
+            assert "max" in range_item["range"]
+            assert range_item["range"]["min"] == 6
+            assert range_item["range"]["max"] == 80
 
     def test_parameters_nonexistent_doc(self, client: TestClient, auth_header: dict):
         """Parameters for non-existent doc works (mock mode — no 404)."""
@@ -608,17 +672,6 @@ class TestDocumentParameters:
         data = response.json()
         assert data["document_id"] == "bad-doc"
         assert "parameters" in data
-
-    def test_unconfirmed_fields_value(self, client: TestClient, auth_header: dict):
-        """Unconfirmed fields should contain the expected mock value."""
-        response = client.get(
-            "/api/v1/documents/doc-mock-001/parameters",
-            headers=auth_header,
-        )
-        data = response.json()
-        assert isinstance(data["unconfirmed_fields"], list)
-        # Mock Validation Service returns empty unconfirmed_fields by default
-        assert data["unconfirmed_fields"] == []
 
 
 class TestDocumentQueue:
@@ -645,20 +698,27 @@ class TestDocumentQueue:
             for field in (
                 "document_id",
                 "title",
-                "document_type",
+                "doc_code",
+                "source_type",
                 "status",
                 "progress_percent",
+                "current_step",
                 "steps",
                 "user_id",
                 "uploaded_by",
                 "created_at",
+                "started_at",
+                "estimated_completion",
             ):
                 assert field in item, f"Missing field: {field}"
             # Verify mock data values
-            assert item["status"] == "processing"
-            assert "ocr" in item["steps"]
-            assert "layout_parsing" in item["steps"]
-            assert "indexing" in item["steps"]
+            assert item["source_type"] == "GOST"
+            assert item["status"] == "validation"
+            # Steps should be a QueuePipelineSteps with pipeline/formation/indexation
+            assert "pipeline" in item["steps"]
+            assert "formation" in item["steps"]["pipeline"]
+            assert "indexation" in item["steps"]["pipeline"]
+            assert item["steps"]["pipeline"]["formation"]["status"] == "in_progress"
 
     def test_queue_meta_structure(self, client: TestClient, auth_header: dict):
         """Queue metadata should contain expected fields."""
@@ -680,7 +740,7 @@ class TestDocumentFile:
         assert response.status_code == 200
         data = response.json()
         assert data["document_id"] == "doc-mock-001"
-        assert "document_title" in data
+        assert "version_id" in data
         assert "content_type" in data
         assert "file_url" in data
         assert data["content_type"] == "application/pdf"
@@ -694,4 +754,5 @@ class TestDocumentFile:
         assert response.status_code == 200
         data = response.json()
         assert data["document_id"] == "bad-doc"
+        assert "version_id" in data
         assert "file_url" in data
