@@ -78,10 +78,11 @@ src/utils/http.ts
 
 ## Интеграция с Gateway
 
-Актуальный план адаптации лежит в:
+Актуальный статус интеграции и инструкция проверки лежат здесь:
 
 ```text
-../docs/ui-final-gateway-adaptation-plan-2026-05-27.md
+../docs/ui-final-gateway-current-status-2026-06-03.md
+../docs/first-run-ui-final-with-gateway.md
 ```
 
 Ожидаемый базовый URL для локального Gateway/Orchestrator:
@@ -165,9 +166,8 @@ VITE_GATEWAY_PASSWORD=admin123
 | --- | --- |
 | `../README.md` | Общий README папки `UI Final`. |
 | `../docs/first-run-ui-final.md` | Инструкция первого запуска. |
-| `../docs/ui-final-gateway-adaptation-plan-2026-05-27.md` | Подробный план адаптации к Gateway. |
+| `../docs/first-run-ui-final-with-gateway.md` | Инструкция запуска связки UI Final + Gateway. |
 | `../docs/ui-final-gateway-current-status-2026-06-03.md` | Фактический статус экспериментального подключения к актуальному Gateway. |
-| `../docs/ui-final-review-checklist-2026-05-27.docx` | Развернутый чек-лист проверки UI Final в Word. |
 
 ## Текущее состояние
 

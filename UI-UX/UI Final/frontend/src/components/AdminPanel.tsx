@@ -23,7 +23,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { ClipboardList, Save, Search, ShieldCheck, SlidersHorizontal, UserCog, Users } from 'lucide-react';
+import { CheckCircle2, ClipboardList, Save, Search, ShieldCheck, SlidersHorizontal, UserCog, Users } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
 import { ADMIN_SECTIONS_ACCESS, ROLE_LABELS } from '../utils/access';
 import { MOCK_PROCESSING_LOGS, type AdminUser } from '../utils/mockData';
@@ -53,7 +53,6 @@ const ACCESS_OPTIONS: Array<{ key: AccessKey; label: string; description: string
   { key: 'chat', label: 'Чат', description: 'вопросы к ассистенту и просмотр ответов' },
   { key: 'search', label: 'Поиск', description: 'поиск документов и фрагментов по базе знаний' },
   { key: 'documents', label: 'База знаний', description: 'просмотр и обслуживание базы документов' },
-  { key: 'checks', label: 'Проверка', description: 'сверка проектных решений с требованиями НСИ' },
   { key: 'history', label: 'История', description: 'журнал запросов и ответов' },
   { key: 'qa', label: 'QA', description: 'метрики качества и инженерские оценки' },
   { key: 'admin', label: 'Администрирование', description: 'пользователи, роли и права доступа' },
@@ -62,8 +61,8 @@ const ACCESS_OPTIONS: Array<{ key: AccessKey; label: string; description: string
 ];
 
 const DEFAULT_ACCESS_BY_ROLE: Record<RoleLabel, AccessKey[]> = {
-  Пользователь: ['chat', 'search', 'checks', 'history'],
-  'Администратор знаний': ['chat', 'search', 'documents', 'checks', 'history', 'qa', 'ocrArtifacts', 'processingLogs'],
+  Пользователь: ['chat', 'search', 'history'],
+  'Администратор знаний': ['chat', 'search', 'documents', 'history', 'qa', 'ocrArtifacts', 'processingLogs'],
   'Системный администратор': ACCESS_OPTIONS.map((item) => item.key),
 };
 
@@ -206,6 +205,7 @@ export const AdminPanel: React.FC = () => {
     currentRole,
     currentUserId,
     setAdminUsers,
+    setActiveTab,
     themeMode,
     updateAdminUser,
     workMode,
@@ -534,6 +534,51 @@ export const AdminPanel: React.FC = () => {
                 {adminNotice}
               </Alert>
             )}
+          </Stack>
+        </Paper>
+
+        <Paper
+          variant="outlined"
+          sx={{
+            p: 2.1,
+            borderRadius: 3,
+            bgcolor: 'rgba(22, 23, 27, 0.72)',
+            borderColor: 'rgba(217, 183, 131, 0.38)',
+            borderWidth: 1.5,
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045)',
+          }}
+        >
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.6} sx={{ alignItems: { md: 'center' } }}>
+            <Box
+              sx={{
+                p: 1,
+                borderRadius: 1.8,
+                color: '#d9b783',
+                bgcolor: 'rgba(217,183,131,0.08)',
+                border: '1.5px solid rgba(217,183,131,0.28)',
+                alignSelf: { xs: 'flex-start', md: 'center' },
+              }}
+            >
+              <CheckCircle2 size={19} />
+            </Box>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography sx={{ fontWeight: 560, color: 'rgba(233, 237, 243, 0.92)' }}>
+                Служебный раздел «Проверка»
+              </Typography>
+              <Typography variant="body2" sx={{ mt: 0.45, color: 'rgba(171, 183, 201, 0.82)', lineHeight: 1.55 }}>
+                Раздел скрыт из основной навигации и не используется в рабочем сценарии: в Gateway нет API-контрактов
+                для сверки проектных параметров с требованиями НСИ, и интеграция этого сценария сейчас не планируется.
+              </Typography>
+            </Box>
+            <Button
+              className="app-action-button"
+              variant="outlined"
+              onClick={() => setActiveTab('checks')}
+              disabled={currentRole !== 'systemAdmin'}
+              sx={{ flexShrink: 0 }}
+            >
+              Открыть скрытый раздел
+            </Button>
           </Stack>
         </Paper>
 

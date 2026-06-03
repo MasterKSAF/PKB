@@ -15,8 +15,8 @@ export const USER_ROLE_BY_LABEL: Record<string, UserRole> = {
 };
 
 export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
-  user: 'работа с чатами, поиском, проверкой и своей историей диалогов',
-  knowledgeAdmin: 'ведение базы знаний, документов, OCR-артефактов, проверки и QA-метрик',
+  user: 'работа с чатами, поиском и своей историей диалогов',
+  knowledgeAdmin: 'ведение базы знаний, документов, OCR-артефактов и QA-метрик',
   systemAdmin: 'полный доступ ко всем разделам, пользователям, ролям, правам и журналам',
 };
 
@@ -41,8 +41,8 @@ export const TAB_DESCRIPTIONS: Record<AppTab, string> = {
 };
 
 export const ROLE_TAB_ACCESS: Record<UserRole, AppTab[]> = {
-  user: ['chat', 'search', 'checks', 'history'],
-  knowledgeAdmin: ['chat', 'search', 'documents', 'checks', 'history', 'qa'],
+  user: ['chat', 'search', 'history'],
+  knowledgeAdmin: ['chat', 'search', 'documents', 'history', 'qa'],
   systemAdmin: ['chat', 'search', 'documents', 'checks', 'history', 'qa', 'admin'],
 };
 

@@ -298,6 +298,12 @@ export const ChecksPanel: React.FC = () => {
       <Box sx={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
         <Container maxWidth={false} sx={{ py: 4, maxWidth: '1440px' }}>
           <Stack spacing={3}>
+            <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2.5 }}>
+              Раздел «Проверка» скрыт из основного пользовательского сценария и открыт только из администрирования.
+              В актуальном Gateway нет API-контрактов для сверки проектных параметров с требованиями НСИ, поэтому
+              данные здесь остаются демонстрационными, а интеграция раздела сейчас не планируется.
+            </Alert>
+
             <Paper
               variant="outlined"
             sx={{
