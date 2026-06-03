@@ -100,6 +100,19 @@ function setGatewayTokens(payload: { access_token?: string; refresh_token?: stri
   }
 }
 
+async function syncGatewayCurrentUser(accessToken?: string) {
+  const response = await apiClient.get('/auth/me', {
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+  });
+  const profile = mapGatewayProfileToAdminUser(response.data);
+  const store = useUIStore.getState();
+
+  store.upsertAdminUser(profile);
+  store.setCurrentUserId(profile.id);
+
+  return profile;
+}
+
 export function clearGatewayTokens() {
   if (typeof window === 'undefined') return;
   window.localStorage.removeItem(ACCESS_TOKEN_KEY);
@@ -115,13 +128,23 @@ apiClient.interceptors.request.use((config) => {
 });
 
 async function ensureGatewayToken() {
-  if (isDemoMode() || getAccessToken() || !GATEWAY_AUTO_LOGIN) return;
+  if (isDemoMode() || !GATEWAY_AUTO_LOGIN) return;
 
-  const response = await apiClient.post('/auth/token', {
-    username: GATEWAY_USERNAME,
-    password: GATEWAY_PASSWORD,
-  });
-  setGatewayTokens(response.data);
+  let token = getAccessToken();
+
+  if (!token) {
+    const response = await apiClient.post('/auth/token', {
+      username: GATEWAY_USERNAME,
+      password: GATEWAY_PASSWORD,
+    });
+    setGatewayTokens(response.data);
+    token = response.data?.access_token;
+  }
+
+  const currentUserId = useUIStore.getState().currentUserId;
+  if (!currentUserId.includes('-')) {
+    await syncGatewayCurrentUser(token ?? undefined);
+  }
 }
 
 async function gatewayRequest<T>(request: () => Promise<{ data: T }>) {
@@ -585,9 +608,7 @@ export const authApi = {
   login: async (username: string, password: string) => {
     const response = await apiClient.post('/auth/token', { username, password });
     setGatewayTokens(response.data);
-    const profile = await authApi.me();
-    useUIStore.getState().upsertAdminUser(profile);
-    useUIStore.getState().setCurrentUserId(profile.id);
+    const profile = await syncGatewayCurrentUser(response.data?.access_token);
     useUIStore.getState().setApiStatus('online');
     return profile;
   },
@@ -920,17 +941,31 @@ export const sourceApi = {
     if (!citation.documentId) return citation;
 
     try {
-      const response =
-        previewKind === 'document'
-          ? await gatewayRequest<any>(() => apiClient.get(`/documents/${citation.documentId}/file`))
-          : await gatewayRequest<any>(() => apiClient.get(`/documents/${citation.documentId}/pages/${citation.page}/preview`));
+      if (previewKind === 'document') {
+        const response = await gatewayRequest<any>(() => apiClient.get(`/documents/${citation.documentId}/file`));
+
+        return {
+          ...citation,
+          text: response.data?.text ?? response.data?.content ?? citation.text,
+          documentUrl: response.data?.file_url ?? response.data?.document_url ?? citation.documentUrl,
+          contentType: response.data?.content_type ?? citation.contentType,
+        };
+      }
+
+      const [previewResponse, textResponse] = await Promise.allSettled([
+        gatewayRequest<any>(() => apiClient.get(`/documents/${citation.documentId}/pages/${citation.page}/preview`)),
+        gatewayRequest<any>(() => apiClient.get(`/documents/${citation.documentId}/pages/${citation.page}/text`)),
+      ]);
+
+      const previewData = previewResponse.status === 'fulfilled' ? previewResponse.value.data : {};
+      const textData = textResponse.status === 'fulfilled' ? textResponse.value.data : {};
 
       return {
         ...citation,
-        text: response.data?.text ?? response.data?.content ?? citation.text,
-        pagePreviewUrl: response.data?.preview_url ?? response.data?.image_url ?? citation.pagePreviewUrl,
-        documentUrl: response.data?.file_url ?? response.data?.document_url ?? citation.documentUrl,
-        contentType: response.data?.content_type ?? citation.contentType,
+        text: textData?.full_text ?? textData?.text ?? previewData?.text ?? previewData?.content ?? citation.text,
+        pagePreviewUrl: previewData?.preview_url ?? previewData?.image_url ?? citation.pagePreviewUrl,
+        documentUrl: previewData?.file_url ?? previewData?.document_url ?? citation.documentUrl,
+        contentType: previewData?.content_type ?? textData?.content_type ?? citation.contentType,
       };
     } catch {
       return citation;

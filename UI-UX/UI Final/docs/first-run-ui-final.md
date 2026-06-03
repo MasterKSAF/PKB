@@ -14,7 +14,7 @@
 
 ## 2. Забрать только UI Final
 
-Для запуска UI Final не обязательно забирать все рабочие материалы проекта. Удобный вариант - скачать ZIP ветки `feature/ui-final` с GitHub и открыть только папку:
+Для запуска UI Final не обязательно забирать все рабочие материалы проекта. Удобный вариант - скачать ZIP ветки `feature/ui-final-gateway-current` с GitHub и открыть только папку:
 
 ```text
 UI-UX/UI Final/frontend
@@ -25,7 +25,7 @@ UI-UX/UI Final/frontend
 ```bash
 git clone --filter=blob:none --sparse https://github.com/NeuronsUII/PKB_neuroassistant.git
 cd PKB_neuroassistant
-git checkout feature/ui-final
+git checkout feature/ui-final-gateway-current
 git sparse-checkout set "UI-UX/UI Final"
 cd "UI-UX/UI Final/frontend"
 ```
@@ -150,4 +150,4 @@ npm run dev -- --host 127.0.0.1 --port 3311 --strictPort
 
 ## 9. Важно
 
-Сейчас UI работает на демонстрационных данных. Для работы с реальными документами, пользователями, историей и проверками нужна стыковка с Gateway и backend-сервисами.
+Сейчас UI умеет работать в демонстрационном режиме и в режиме стыковки с Gateway. Для проверки связки UI Final + Gateway используйте `docs/first-run-ui-final-with-gateway.md`.

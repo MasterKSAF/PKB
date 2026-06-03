@@ -42,6 +42,7 @@ import {
 import { useUIStore, AppTab } from '../store/uiStore';
 import { ROLE_TAB_ACCESS } from '../utils/access';
 import { MOCK_CHAT_THREADS } from '../utils/mockData';
+import { chatApi, type GatewayChatProject } from '../utils/http';
 
 const NAV_ITEMS: Array<{ value: AppTab; label: string; icon: React.ReactNode }> = [
   { value: 'chat', label: 'Чат', icon: <MessageSquare size={18} /> },
@@ -91,6 +92,8 @@ export const ModeSwitcher: React.FC = () => {
     setThemeMode,
     setVideoGuideOpen,
     setFocusMode,
+    workMode,
+    setCurrentGatewaySessionId,
   } = useUIStore();
   const isLight = themeMode === 'light';
   const lightShipBlue = '#0284c7';
@@ -98,7 +101,7 @@ export const ModeSwitcher: React.FC = () => {
   const visibleNavItems = NAV_ITEMS.filter((item) => availableTabs.includes(item.value));
   const [chatTreeOpen, setChatTreeOpen] = React.useState(false);
   const [expandedProjects, setExpandedProjects] = React.useState<Record<string, boolean>>({});
-  const [chatProjects, setChatProjects] = React.useState(CHAT_PROJECTS);
+  const [chatProjects, setChatProjects] = React.useState<GatewayChatProject[]>(CHAT_PROJECTS);
   const [activeThreadId, setActiveThreadId] = React.useState('chat-hull');
   const [editingThreadId, setEditingThreadId] = React.useState<string | null>(null);
   const [draftTitle, setDraftTitle] = React.useState('');
@@ -119,6 +122,27 @@ export const ModeSwitcher: React.FC = () => {
     null,
   );
 
+  React.useEffect(() => {
+    if (workMode !== 'prod') return;
+
+    let isMounted = true;
+
+    void chatApi
+      .sessions()
+      .then((projects) => {
+        if (!isMounted) return;
+        setChatProjects(projects.length ? projects : [{ id: 'gateway-dialogs', name: 'Диалоги Gateway', chats: [] }]);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setChatProjects(CHAT_PROJECTS);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [workMode]);
+
   const toggleProject = (projectId: string) => {
     setExpandedProjects((state) => ({ ...state, [projectId]: !state[projectId] }));
   };
@@ -133,6 +157,7 @@ export const ModeSwitcher: React.FC = () => {
     setChatTreeOpen(true);
     setActiveProjectId(projectId);
     setActiveThreadId('');
+    setCurrentGatewaySessionId(null);
     setChatMessages([]);
     setEditingProjectId(projectId);
     setProjectDraftName(name);
@@ -150,14 +175,27 @@ export const ModeSwitcher: React.FC = () => {
     setActiveTab(tab);
   };
 
-  const selectThread = (projectId: string, chatId: string) => {
+  const selectThread = async (projectId: string, chatId: string) => {
     setActiveProjectId(projectId);
     setActiveThreadId(chatId);
-    setChatMessages(MOCK_CHAT_THREADS[chatId] ?? []);
+    setCurrentGatewaySessionId(chatId);
     setActiveTab('chat');
+
+    if (workMode === 'prod') {
+      setChatMessages([]);
+      try {
+        const session = await chatApi.getSession(chatId);
+        setChatMessages(session.messages);
+      } catch {
+        setChatMessages([]);
+      }
+      return;
+    }
+
+    setChatMessages(MOCK_CHAT_THREADS[chatId] ?? []);
   };
 
-  const createThread = (projectId: string) => {
+  const createThread = async (projectId: string) => {
     const project = chatProjects.find((item) => item.id === projectId);
     const newThreadNumber = (project?.chats.filter((chat) => chat.title.startsWith('Новый чат')).length ?? 0) + 1;
     const chatId = `chat-${projectId}-${Date.now()}`;
@@ -176,10 +214,36 @@ export const ModeSwitcher: React.FC = () => {
     setExpandedProjects((state) => ({ ...state, [projectId]: true }));
     setActiveProjectId(projectId);
     setActiveThreadId(chatId);
+    setCurrentGatewaySessionId(workMode === 'prod' ? null : chatId);
     setChatMessages([]);
     setEditingThreadId(chatId);
     setDraftTitle(title);
     setActiveTab('chat');
+
+    if (workMode !== 'prod') return;
+
+    try {
+      const created = await chatApi.createSession(title);
+      const gatewayChatId = created.session_id ?? created.id ?? created.session?.session_id ?? chatId;
+      const gatewayTitle = created.title ?? title;
+
+      setChatProjects((projects) =>
+        projects.map((item) =>
+          item.id === projectId
+            ? {
+                ...item,
+                chats: item.chats.map((chat) => (chat.id === chatId ? { ...chat, id: gatewayChatId, title: gatewayTitle } : chat)),
+              }
+            : item,
+        ),
+      );
+      setActiveThreadId(gatewayChatId);
+      setCurrentGatewaySessionId(gatewayChatId);
+      setEditingThreadId(gatewayChatId);
+      setDraftTitle(gatewayTitle);
+    } catch {
+      setCurrentGatewaySessionId(null);
+    }
   };
 
   const startRename = (chatId: string, title: string) => {
@@ -206,21 +270,32 @@ export const ModeSwitcher: React.FC = () => {
     setEditingProjectId(null);
   };
 
-  const saveRename = () => {
+  const saveRename = async () => {
     if (!editingThreadId || !draftTitle.trim()) {
       setEditingThreadId(null);
       return;
     }
 
+    const sessionId = editingThreadId;
+    const title = draftTitle.trim();
+
     setChatProjects((projects) =>
       projects.map((project) => ({
         ...project,
         chats: project.chats.map((chat) =>
-          chat.id === editingThreadId ? { ...chat, title: draftTitle.trim() } : chat,
+          chat.id === sessionId ? { ...chat, title } : chat,
         ),
       })),
     );
     setEditingThreadId(null);
+
+    if (workMode === 'prod') {
+      try {
+        await chatApi.updateSession(sessionId, { title });
+      } catch {
+        // Local title stays visible; Gateway sync is covered by the online/offline indicator.
+      }
+    }
   };
 
   const requestDeleteThread = (projectId: string, chatId: string, title: string) => {
@@ -282,26 +357,36 @@ export const ModeSwitcher: React.FC = () => {
     closeProjectMenu();
   };
 
-  const confirmDeleteThread = () => {
+  const confirmDeleteThread = async () => {
     if (!deleteCandidate) return;
+    const candidate = deleteCandidate;
 
     setChatProjects((projects) =>
       projects.map((project) =>
-        project.id === deleteCandidate.projectId
+        project.id === candidate.projectId
           ? {
               ...project,
-              chats: project.chats.filter((chat) => chat.id !== deleteCandidate.chatId),
+              chats: project.chats.filter((chat) => chat.id !== candidate.chatId),
             }
           : project,
       ),
     );
 
-    if (activeThreadId === deleteCandidate.chatId) {
+    if (activeThreadId === candidate.chatId) {
       setActiveThreadId('');
+      setCurrentGatewaySessionId(null);
       setChatMessages([]);
     }
 
     setDeleteCandidate(null);
+
+    if (workMode === 'prod') {
+      try {
+        await chatApi.deleteSession(candidate.chatId);
+      } catch {
+        // Deletion is optimistic in the UI; Gateway errors are documented in the integration matrix.
+      }
+    }
   };
 
   const confirmDeleteProject = () => {
@@ -324,6 +409,7 @@ export const ModeSwitcher: React.FC = () => {
 
     if (shouldResetThread || activeProjectId === deleteProjectCandidate.projectId) {
       setActiveThreadId('');
+      setCurrentGatewaySessionId(null);
       setChatMessages([]);
     }
 

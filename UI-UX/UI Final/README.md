@@ -10,6 +10,7 @@
 | --- | --- |
 | `frontend/` | Рабочее React-приложение объединенного интерфейса. Здесь исходный код, Dockerfile, nginx-конфиг, Vite, MUI и mock-данные. |
 | `docs/first-run-ui-final.md` | Короткая инструкция первого запуска локально через Docker или npm. |
+| `docs/first-run-ui-final-with-gateway.md` | Инструкция, как одновременно забрать актуальный Gateway и UI Final, запустить их локально и проверить стыковку. |
 | `docs/ui-final-gateway-adaptation-plan-2026-05-27.md` | План адаптации UI Final к backend-слою Gateway. |
 | `docs/ui-final-gateway-current-status-2026-06-03.md` | Текущий статус экспериментального подключения UI Final к актуальному Gateway. |
 | `docs/ui-final-review-checklist-2026-05-27.docx` | Новый развернутый чек-лист проверки объединенной версии в формате Word. |
@@ -28,9 +29,10 @@
 ## Быстрый запуск
 
 Если нужно забрать только эту версию, используйте ZIP ветки или sparse checkout из `docs/first-run-ui-final.md`.
+Если нужно проверить связку UI Final + Gateway, используйте `docs/first-run-ui-final-with-gateway.md`.
 
 ```bash
-git checkout feature/ui-final
+git checkout feature/ui-final-gateway-current
 cd "UI-UX/UI Final/frontend"
 docker compose up --build
 ```
@@ -64,8 +66,9 @@ http://127.0.0.1:3310
 
 ## Текущее состояние
 
-- UI собран как демонстрационный рабочий контур.
-- Часть сценариев уже подключена к Gateway-контрактам с fallback на mock-данные.
-- Полный end-to-end запуск зависит от исправления единой точки Gateway.
-- `npm run build` и `npm run lint` проверены для `frontend`.
+- UI собран как основная рабочая версия для дальнейшей стыковки с Gateway.
+- Основной переходник к Gateway находится в `frontend/src/utils/http.ts`.
+- Чат, поиск, база знаний, история, QA и часть администрирования уже подключены к актуальному Gateway с fallback на mock-данные.
+- Инструкция запуска связки UI + Gateway описана в `docs/first-run-ui-final-with-gateway.md`.
+- `npm run build`, `npm run lint` и Gateway API tests проверены.
 - Актуальный статус интеграции описан в `docs/ui-final-gateway-current-status-2026-06-03.md`.
