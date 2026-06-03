@@ -43,6 +43,15 @@ Desktop.ini
 
 # IDE
 .vscode/
+
+# Windows artifacts
+NUL
+nul
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
 .idea/
 .gigaide/gigaide.properties
 .kilo/agent-manager.json
