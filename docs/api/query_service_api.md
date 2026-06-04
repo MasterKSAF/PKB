@@ -267,6 +267,7 @@ Query Service выполняет постобработку ответов от 
 ```json
 {
   "title": "Проверка требований Arc4 для проекта 21900M2",
+  "project_id": 42,
   "document_ids": ["doc-norm-001", "doc-draw-001", "doc-spec-001"],
   "options": {}
 }
@@ -275,6 +276,7 @@ Query Service выполняет постобработку ответов от 
 | Поле           | Тип      | Обязательность | Описание                                 |
 | -------------- | -------- | -------------- | ---------------------------------------- |
 | `title`        | string   | Нет            | Человекочитаемое название сессии         |
+| `project_id`   | bigint   | Нет            | ID проекта (судостроительный заказ)      |
 | `document_ids` | string[] | Нет            | Документы, ограничивающие область поиска |
 | `options`      | object   | Нет            | Дополнительные параметры сессии          |
 
@@ -285,6 +287,7 @@ Query Service выполняет постобработку ответов от 
   "session_id": "sess-a1b2c3",
   "title": "Проверка требований Arc4 для проекта 21900M2",
   "user_id": "u-001",
+  "project_id": 42,
   "document_ids": ["doc-norm-001", "doc-draw-001", "doc-spec-001"],
   "options": {},
   "message_count": 0,
@@ -297,7 +300,7 @@ Query Service выполняет постобработку ответов от 
 
 Список сессий текущего пользователя.
 
-**Параметры query**: `page`, `page_size`, `search` (по title).
+**Параметры query**: `page`, `page_size`, `search` (по title), `project_id` (фильтр по проекту).
 
 **Ответ `200`**:
 
@@ -307,6 +310,7 @@ Query Service выполняет постобработку ответов от 
     {
       "session_id": "sess-a1b2c3",
       "title": "Проверка требований Arc4",
+      "project_id": 42,
       "document_ids": ["doc-norm-001"],
       "message_count": 12,
       "last_message_preview": "Согласно Правилам РС, толщина обшивки...",
@@ -343,6 +347,7 @@ Query Service выполняет постобработку ответов от 
 {
   "session_id": "sess-a1b2c3",
   "title": "Проверка требований Arc4",
+  "project_id": 42,
   "document_ids": ["doc-norm-001"],
   "messages": [
     {
@@ -384,6 +389,7 @@ Query Service выполняет постобработку ответов от 
 ```json
 {
   "title": "Новое название",
+  "project_id": 42,
   "document_ids": ["doc-norm-001"]
 }
 ```
@@ -822,9 +828,10 @@ LLM возвращает ответ вида:
 | Параметр    | Тип    | Описание                                             |
 | ----------- | ------ | ---------------------------------------------------- |
 | `user_id`   | string | Фильтр по пользователю                               |
-| `status`    | string | `answered`, `needs_clarification`, `source_conflict` |
-| `date_from` | string | Дата начала (ISO 8601)                               |
-| `date_to`   | string | Дата окончания                                       |
+| `status`     | string | `answered`, `needs_clarification`, `source_conflict` |
+| `project_id` | bigint | Фильтр по проекту                                    |
+| `date_from`  | string | Дата начала (ISO 8601)                               |
+| `date_to`    | string | Дата окончания                                       |
 | `page`      | int    | Номер страницы                                       |
 | `page_size` | int    | Записей на странице                                  |
 

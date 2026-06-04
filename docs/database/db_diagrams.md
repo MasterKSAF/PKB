@@ -108,10 +108,21 @@ erDiagram
         timestamptz created_at
     }
 
+    chat.projects {
+        bigint id PK
+        text code
+        text name
+        text description
+        varchar status
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
     chat.sessions {
         bigint id PK
         text title
         bigint user_id FK
+        bigint project_id FK
         uuid[] document_ids
         jsonb options
         int message_count
@@ -140,6 +151,7 @@ erDiagram
     registry.documents ||--o{ registry.document_history : audited_by
     registry.documents ||--o{ registry.document_versions : versioned_by
     registry.documents ||--o{ rag.document_chunks : chunked_by
+    chat.projects ||--o{ chat.sessions : has_sessions
     chat.sessions ||--o{ chat.messages : has_messages
 ```
 
@@ -227,7 +239,25 @@ erDiagram
 
 Связь с секциями: чанк всегда привязан к конкретной секции документа. Одна секция может порождать несколько чанков (для `type=section` с разбивкой на ≤512 токенов) или один чанк (для `type=table/image/formula`).
 
-### 7. Сообщения чата (`chat.messages`)
+### 7. Проекты (`chat.projects`)
+
+| Поле | Примечание |
+|------|------------|
+| `code` | Уникальный код проекта (например, `21900M2`, `Arc4`) |
+| `name` | Человекочитаемое название проекта |
+| `description` | Описание/примечания |
+| `status` | Статус: `active`, `archived`, `draft` |
+
+### 8. Сессии чата (`chat.sessions`)
+
+| Поле | Примечание |
+|------|------------|
+| `project_id` | FK → `chat.projects.id`. Сессия привязана к судостроительному проекту. Может быть `NULL` для общих вопросов. |
+| `user_id` | FK → пользователь (Auth Service) |
+| `document_ids` | Массив UUID документов, ограничивающих область поиска в сессии |
+| `options` | JSONB с дополнительными параметрами сессии |
+
+### 9. Сообщения чата (`chat.messages`)
 
 | Поле | Примечание |
 |------|------------|
