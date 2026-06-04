@@ -126,7 +126,7 @@
     "annotator": "Полина",
     "indexing_params_snapshot": {
       "strategy": "semantic_512",
-      "model": "Qwen/Qwen2.5-4B-Instruct"
+      "model": "Qwen/Qwen3-Embedding-4B"
     }
   },
   "questions": [
