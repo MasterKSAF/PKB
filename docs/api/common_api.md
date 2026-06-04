@@ -93,8 +93,9 @@
 | Идентификатор | Тип | Назначается | Используется в URL |
 |---|---|---|---|
 | `task_id` | bigint | Оркестратором при `POST /documents` | `/tasks/{task_id}/...` (до создания карточки) |
-| `document_id` | UUID | Registry при создании карточки документа | `/documents/{document_id}/...` (после записи в Registry) |
-| `version_id` | UUID | Оркестратором при создании новой версии | В ответах `POST /documents/{doc_id}/versions` |
+| `document_id` | bigint (sequence) | Registry при создании карточки документа | `/documents/{document_id}/...` (после записи в Registry) |
+| `version_id` | bigint (sequence) | Оркестратором при создании новой версии | В ответах `POST /documents/{doc_id}/versions` |
+| `project_id` | bigint (sequence) | Query Service при создании проекта | `/chat/projects/{project_id}/...` |
 | `section_id` | bigint | Registry (sequence) при сохранении секции | В ответах Registry, RAG Builder |
 | `chunk_id` | bigint | RAG Builder при индексации | В ответах RAG Search |
 | `session_id` | bigint | Query Service при создании сессии чата | `/chat/sessions/{session_id}/...` |
@@ -102,7 +103,7 @@
 
 **Жизненный цикл идентификаторов:**
 1. `task_id` (bigint) — назначается Оркестратором при `POST /documents`, используется в `/tasks/{task_id}/...`
-2. `document_id` (UUID) — назначается Registry при создании карточки документа
+2. `document_id` (bigint) — назначается Registry при создании карточки документа
 3. После записи в Registry все операции переключаются на `/documents/{document_id}/...`
 4. Оркестратор хранит маппинг `task_id → document_id`
 
@@ -159,7 +160,7 @@
 |------|-----|--------------------|----------|
 | `retry_after_seconds` | int | HTTP `429 Too Many Requests` | Время ожидания до следующей попытки |
 | `validation_errors` | array | HTTP `400 VALIDATION_ERROR` | Спислок ошибок валидации полей: `[{field, reason, value?, constraint?}]` |
-| `conflict_document_id` | string | HTTP `409 DUPLICATE_DOCUMENT` | UUID документа-дубликата |
+| `conflict_document_id` | bigint | HTTP `409 DUPLICATE_DOCUMENT` | ID документа-дубликата |
 | `failed_endpoint` | string | HTTP `502 BAD_GATEWAY` / `504 GATEWAY_TIMEOUT` | Эндпоинт, на котором произошла ошибка |
 | `failed_service` | string | HTTP `502 BAD_GATEWAY` / `504 GATEWAY_TIMEOUT` | Сервис, на котором произошла ошибка |
 
@@ -439,18 +440,18 @@ GET .../{doc_id}/status?longpoll=15
 
 | Этап | Формат | Единицы | Порядок |
 |---|---|---|---|
-| OCR / Parser (сырой JSON) | `[left, bottom, right, top]` | мм | Левая нижняя → правая верхняя |
-| Converter-validator | `[x1, y1, x2, y2]` | мм → нормализация | Для Registry — нормализованные (0..1) |
-| Registry (БД) | `[x1, y1, x2, y2]` | нормализованные (0..1) | Левая верхняя → правая нижняя |
+| OCR / Parser (сырой JSON) | `[x1, y1, x2, y2]` | нормализованные (0..1) | Левая верхняя (0,0), Y вниз |
+| Converter-validator | `[x1, y1, x2, y2]` | нормализованные (0..1) | Левая верхняя (0,0), Y вниз |
+| Registry (БД) | `[x1, y1, x2, y2]` | нормализованные (0..1) | Левая верхняя (0,0), Y вниз |
 | Orchestrator (через Gateway) | `[x1, y1, x2, y2]` | нормализованные (0..1) | Левая верхняя (0,0), Y вниз |
 
-> **Трансформация:** на этапе Converter-validator координаты из мм преобразуются в нормализованные (0..1) относительно размеров страницы. Начало координат — левый верхний угол, ось Y направлена вниз.
+> **Единый формат:** bbox нормализован (0..1) относительно размеров страницы на всех этапах. Начало координат — левый верхний угол, ось Y направлена вниз. Конвертация пикселей в нормализованные координаты выполняется внутри OCR/Parser.
 
 ---
 
 ### Примечания по реализации
 
-- **Типы документов** строго фиксированы: `normative`, `technical`, `archival_scan`, `drawing`, `specification`. Именно эти значения ожидаются в полях `document_type`.
+**Категории контента (`document_type`)** строго фиксированы: `normative`, `technical`, `drawing`, `specification`, `archival_scan`. Именно эти значения ожидаются в полях `document_type`.
 
 - **Обработка полным документом:** API не содержит методов для ручного выделения областей. Распознавание запускается для всего документа сразу после загрузки; пользователь не может отметить фрагмент для OCR. Просмотр страниц возможен только в режиме чтения.
 

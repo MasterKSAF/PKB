@@ -92,8 +92,8 @@
 
 ```json
 {
-  "document_id": "doc-8a3f2b",
-  "data": {
+  "document_id": 1,
+    "data": {
     "designation": "21900M2.362135.0903СБ",
     "title": "Сборочный чертёж корпуса",
     "materials": ["Сталь 09Г2С"],

@@ -102,7 +102,7 @@ sequenceDiagram
 **Шаг 1 — Открытие чата**
 - Запрос: `GET /chat/sessions/{session_id}/messages/last?limit=20`
 - UI получает последние 20 сообщений (хвост диалога).
-- Если `has_older: true` — UI может подгрузить более старые сообщения через `GET .../messages?before=msg-XXX`.
+- Если `has_older: true` — UI может подгрузить более старые сообщения через `GET .../messages?before=42000XXX`.
 
 **Шаг 2 — Отправка сообщения**
 - Запрос: `POST /chat/sessions/{session_id}/messages`
@@ -180,7 +180,7 @@ longpoll-запрос к конкретному сообщению: `GET /chat/s
 ```json
 {
   "session_id": 1001,
-  "document_ids": ["doc-norm-001"],
+  "document_ids": [1],
   "message": {
     "message_id": 420002,
     "role": "assistant",
@@ -188,7 +188,7 @@ longpoll-запрос к конкретному сообщению: `GET /chat/s
     "content": "Для ледового класса Arc4 толщина обшивки должна быть не менее 12 мм...",
     "sources": [
       {
-        "document_id": "doc-norm-001",
+        "document_id": 1,
         "document_title": "Правила РС",
         "page": 42,
         "section_id": 420042,
@@ -205,10 +205,10 @@ longpoll-запрос к конкретному сообщению: `GET /chat/s
 **Промежуточный статус (`pending` / `enriching` / `searching` / `generating` / `enriching_citations`):**
 ```json
 {
-  "session_id": "s-001",
-  "document_ids": ["doc-norm-001"],
+  "session_id": 1001,
+  "document_ids": [1],
   "message": {
-    "message_id": "msg-002",
+    "message_id": 420002,
     "role": "assistant",
     "status": "searching",
     "content": null,
@@ -220,10 +220,10 @@ longpoll-запрос к конкретному сообщению: `GET /chat/s
 **Статус `failed`:**
 ```json
 {
-  "session_id": "s-001",
-  "document_ids": ["doc-norm-001"],
+  "session_id": 1001,
+  "document_ids": [1],
   "message": {
-    "message_id": "msg-002",
+    "message_id": 420002,
     "role": "assistant",
     "status": "failed",
     "content": null,
@@ -243,7 +243,7 @@ Query Service выполняет постобработку ответов от 
 **Алгоритм:**
 
 1. Получить текстовый ответ от LLM (без `section_id` и `document_id` в machine-readable формате).
-2. Пройти по массиву `sources` (извлечённому из поиска) и для каждого источника сформировать строку-сноску с идентификаторами, например: `(источник: «Правила РС» %[document_id:doc-norm-001]%, §4.2 %[section_id:sec-4.2]%, стр. 42)`.
+2. Пройти по массиву `sources` (извлечённому из поиска) и для каждого источника сформировать строку-сноску с идентификаторами, например: `(источник: «Правила РС» %[document_id:doc-norm-001]%, §4.2 %[section_id:420042]%, стр. 42)`.
 3. Добавить эти сноски в конец ответа или в то место, где уже стоит базовая ссылка. Если модель уже выдала `(источник: «Правила РС», раздел 4.2, стр. 42)`, заменить её на вариант с `section_id` через регулярное выражение или просто дописать идентификатор после пункта.
 
 **Пример:**
@@ -252,7 +252,7 @@ Query Service выполняет постобработку ответов от 
 > ... не менее **12 мм** (источник: «Правила РС», раздел 4.2, стр. 42).
 
 После обработки Query Service:
-> ... не менее **12 мм** (источник: «Правила РС» %[document_id:doc-norm-001]%, §4.2 %[section_id:sec-4.2]%, стр. 42).
+> ... не менее **12 мм** (источник: «Правила РС» %[document_id:doc-norm-001]%, §4.2 %[section_id:420042]%, стр. 42).
 
 ---
 
@@ -268,7 +268,7 @@ Query Service выполняет постобработку ответов от 
 {
   "title": "Проверка требований Arc4 для проекта 21900M2",
   "project_id": 42,
-  "document_ids": ["doc-norm-001", "doc-draw-001", "doc-spec-001"],
+  "document_ids": [1, 2, 3],
   "options": {}
 }
 ```
@@ -277,18 +277,18 @@ Query Service выполняет постобработку ответов от 
 | -------------- | -------- | -------------- | ---------------------------------------- |
 | `title`        | string   | Нет            | Человекочитаемое название сессии         |
 | `project_id`   | bigint   | Нет            | ID проекта (судостроительный заказ)      |
-| `document_ids` | string[] | Нет            | Документы, ограничивающие область поиска |
+| `document_ids` | bigint[] | Нет            | Документы, ограничивающие область поиска |
 | `options`      | object   | Нет            | Дополнительные параметры сессии          |
 
 **Ответ `201`**:
 
 ```json
 {
-  "session_id": "sess-a1b2c3",
+  "session_id": 1001,
   "title": "Проверка требований Arc4 для проекта 21900M2",
   "user_id": "u-001",
   "project_id": 42,
-  "document_ids": ["doc-norm-001", "doc-draw-001", "doc-spec-001"],
+  "document_ids": [1, 2, 3],
   "options": {},
   "message_count": 0,
   "created_at": "2026-04-27T14:00:00Z",
@@ -308,10 +308,10 @@ Query Service выполняет постобработку ответов от 
 {
   "sessions": [
     {
-      "session_id": "sess-a1b2c3",
+      "session_id": 1001,
       "title": "Проверка требований Arc4",
       "project_id": 42,
-      "document_ids": ["doc-norm-001"],
+      "document_ids": [1],
       "message_count": 12,
       "last_message_preview": "Согласно Правилам РС, толщина обшивки...",
       "created_at": "2026-04-27T14:00:00Z",
@@ -345,35 +345,35 @@ Query Service выполняет постобработку ответов от 
 
 ```json
 {
-  "session_id": "sess-a1b2c3",
+  "session_id": 1001,
   "title": "Проверка требований Arc4",
   "project_id": 42,
-  "document_ids": ["doc-norm-001"],
+  "document_ids": [1],
   "messages": [
     {
-      "message_id": "msg-001",
+      "message_id": 420001,
       "role": "user",
       "content": "Какая толщина обшивки для Arc4?",
       "timestamp": "2026-04-27T14:01:00Z"
     },
     {
-      "message_id": "msg-002",
+      "message_id": 420002,
       "role": "assistant",
       "status": "answered",
       "content": "Согласно Правилам РС (Часть I, стр. 42), толщина обшивки ледового пояса для класса Arc4 должна быть не менее 12 мм.",
-      "sources": [
-        {
-          "document_id": "doc-norm-001",
-          "document_title": "Правила РС, часть I",
-          "page": 42,
-          "section_id": 420042,
-          "excerpt": "Для ледового класса Arc4 толщина обшивки...",
-          "score": 0.94
-        }
-      ],
-      "processing_time_ms": 3200,
-      "feedback": null,
-      "timestamp": "2026-04-27T14:01:04Z"
+            "sources": [
+              {
+                "document_id": 1,
+                "document_title": "Правила РС, часть I",
+                "page": 42,
+                "section_id": 420042,
+                "excerpt": "Для ледового класса Arc4 толщина обшивки...",
+                "score": 0.94
+              }
+            ],
+            "processing_time_ms": 3200,
+            "feedback": null,
+            "timestamp": "2026-04-27T14:01:04Z"
     }
   ],
   "has_more": false
@@ -390,7 +390,7 @@ Query Service выполняет постобработку ответов от 
 {
   "title": "Новое название",
   "project_id": 42,
-  "document_ids": ["doc-norm-001"]
+  "document_ids": [1]
 }
 ```
 
@@ -404,7 +404,7 @@ Query Service выполняет постобработку ответов от 
 
 ```json
 {
-  "session_id": "sess-a1b2c3",
+  "session_id": 1001,
   "deleted_at": "2026-04-27T14:30:00Z"
 }
 ```
@@ -422,7 +422,7 @@ Query Service выполняет постобработку ответов от 
     {
       "type": "text_fragment",
       "text": "Обшивка ледового пояса t=14 мм",
-      "source_document_id": "doc-draw-001",
+      "source_document_id": 2,
       "source_page_number": 1
     }
   ],
@@ -445,8 +445,8 @@ Query Service выполняет постобработку ответов от 
 
 ```json
 {
-  "message_id": "msg-005",
-  "session_id": "sess-a1b2c3",
+  "message_id": 420005,
+  "session_id": 1001,
   "role": "user",
   "status": "pending",
   "content": "Проверь, соответствует ли толщина обшивки 14 мм в чертеже 21900M2 этому требованию",
@@ -486,30 +486,30 @@ Query Service выполняет постобработку ответов от 
 
 ```json
 {
-  "session_id": "sess-a1b2c3",
-  "document_ids": ["doc-norm-001"],
-  "messages": [
-    {
-      "message_id": "msg-005",
-      "role": "assistant",
-      "status": "answered",
-      "content": "Согласно Правилам РС, толщина обшивки...",
-      "sources": [
-        {
-          "document_id": "doc-norm-001",
-          "document_title": "Правила РС, часть I",
-          "page": 42,
-          "section_id": 420042,
-          "excerpt": "Для ледового класса Arc4 толщина обшивки...",
-          "score": 0.94
-        }
-      ],
-      "timestamp": "2026-04-27T14:03:10Z"
-    },
-    {
-      "message_id": "msg-004",
-      "role": "user",
-      "content": "Проверь, соответствует ли толщина обшивки 14 мм...",
+  "session_id": 1001,
+  "document_ids": [1],
+    "messages": [
+      {
+        "message_id": 420005,
+        "role": "assistant",
+        "status": "answered",
+        "content": "Согласно Правилам РС, толщина обшивки...",
+        "sources": [
+          {
+            "document_id": 1,
+            "document_title": "Правила РС, часть I",
+            "page": 42,
+            "section_id": 420042,
+            "excerpt": "Для ледового класса Arc4 толщина обшивки...",
+            "score": 0.94
+          }
+        ],
+        "timestamp": "2026-04-27T14:03:10Z"
+      },
+      {
+        "message_id": 420004,
+        "role": "user",
+        "content": "Проверь, соответствует ли толщина обшивки 14 мм...",
       "timestamp": "2026-04-27T14:03:05Z"
     }
   ],
@@ -547,17 +547,17 @@ Query Service выполняет постобработку ответов от 
 
 ```json
 {
-  "session_id": "sess-a1b2c3",
-  "document_ids": ["doc-norm-001"],
+  "session_id": 1001,
+  "document_ids": [1],
   "messages": [
     {
-      "message_id": "msg-006",
+      "message_id": 420006,
       "role": "user",
       "content": "А какова минимальная толщина для ледового пояса?",
       "timestamp": "2026-04-27T14:04:00Z"
     },
     {
-      "message_id": "msg-007",
+      "message_id": 420007,
       "role": "assistant",
       "status": "answered",
       "content": "Минимальная толщина обшивки...",
@@ -573,11 +573,11 @@ Query Service выполняет постобработку ответов от 
 
 ```json
 {
-  "session_id": "sess-a1b2c3",
-  "document_ids": ["doc-norm-001"],
+  "session_id": 1001,
+  "document_ids": [1],
   "messages": [
     {
-      "message_id": "msg-003",
+      "message_id": 420003,
       "role": "user",
       "content": "Старое сообщение...",
       "timestamp": "2026-04-27T14:02:00Z"
@@ -616,25 +616,25 @@ Query Service выполняет постобработку ответов от 
 
 ```json
 {
-  "session_id": "sess-a1b2c3",
-  "document_ids": ["doc-norm-001"],
+  "session_id": 1001,
+  "document_ids": [1],
   "message": {
-    "message_id": "msg-005",
-    "role": "assistant",
-    "status": "answered",
-    "content": "Согласно Правилам РС (Часть I, стр. 42), толщина обшивки ледового пояса для класса Arc4 должна быть не менее 12 мм.",
-    "sources": [
-      {
-        "document_id": "doc-norm-001",
-        "document_title": "Правила РС, часть I",
-        "page": 42,
-        "section_id": 420042,
-        "excerpt": "Для ледового класса Arc4 толщина обшивки...",
-        "score": 0.94
-      }
-    ],
-    "processing_time_ms": 3200,
-    "timestamp": "2026-04-27T14:03:10Z"
+    "message_id": 420005,
+        "role": "assistant",
+        "status": "answered",
+        "content": "Согласно Правилам РС (Часть I, стр. 42), толщина обшивки ледового пояса для класса Arc4 должна быть не менее 12 мм.",
+        "sources": [
+          {
+            "document_id": 1,
+            "document_title": "Правила РС, часть I",
+            "page": 42,
+            "section_id": 420042,
+            "excerpt": "Для ледового класса Arc4 толщина обшивки...",
+            "score": 0.94
+          }
+        ],
+        "processing_time_ms": 3200,
+        "timestamp": "2026-04-27T14:03:10Z"
   }
 }
 ```
@@ -709,7 +709,7 @@ LLM возвращает ответ вида:
 
 ```json
 {
-  "session_id": "sess-a1b2c3",
+  "session_id": 1001,
   "action": "clear",
   "status": "completed",
   "message": "История диалога очищена.",
@@ -745,7 +745,7 @@ LLM возвращает ответ вида:
 ```json
 {
   "export_id": "exp-001",
-  "session_id": "sess-a1b2c3",
+  "session_id": 1001,
   "format": "pdf",
   "status": "completed",
   "url": "/files/exports/exp-001/download",
@@ -777,7 +777,7 @@ LLM возвращает ответ вида:
 
 ```json
 {
-  "answer_id": "ans-001",
+  "answer_id": 1,
   "useful": true,
   "comment": "Ответ точный, источник подходит",
   "opened_citation_ids": ["cit-001"]
@@ -841,8 +841,8 @@ LLM возвращает ответ вида:
 {
   "items": [
     {
-      "history_id": "hist-001",
-      "session_id": "sess-a1b2c3",
+      "history_id": 1,
+      "session_id": 1001,
       "created_at": "2026-04-27T14:01:04Z",
       "user_id": "u-001",
       "user_name": "Иванов Сергей Петрович",
@@ -850,7 +850,7 @@ LLM возвращает ответ вида:
       "answer_preview": "Минимальная толщина зависит от...",
       "status": "answered",
       "source_count": 2,
-      "answer_id": "ans-001"
+      "answer_id": 1
     }
   ],
   "meta": { "total": 42, "page": 1, "page_size": 20 }
@@ -867,7 +867,7 @@ LLM возвращает ответ вида:
 
 ```json
 {
-  "export_id": "exp-hist-001",
+  "export_id": 1,
   "format": "xlsx",
   "url": "/files/exports/exp-hist-001/download",
   "created_at": "2026-04-27T14:35:00Z"
@@ -904,7 +904,7 @@ LLM возвращает ответ вида:
 | ------------------------ | -------- | -------------- | ----------------------------- |
 | `text`                   | string   | Да             | Произвольный текст для поиска |
 | `document_ids`           | string[] | Нет            | Ограничить поиск документами  |
-| `top_k`                  | int      | Нет            | Количество результатов        |
+| `top_k`                  | int      | Нет            | Количество результатов. Диапазон: [1, 100] |    |
 | `filters`                | object   | Нет            | Фильтры                       |
 | `options.auto_decompose` | bool     | Нет            | Авто-декомпозиция             |
 | `options.max_subqueries` | int      | Нет            | Макс. подзапросов             |
@@ -925,7 +925,7 @@ LLM возвращает ответ вида:
   "results": [
     {
       "section_id": 420042,
-      "document_id": "doc-norm-001",
+      "document_id": 1,
       "document_title": "Правила РС, часть I",
       "page": 42,
       "content": "Для ледового класса Arc4 толщина обшивки...",

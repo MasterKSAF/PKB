@@ -59,7 +59,7 @@
 ```json
 {
   "task_id": 420000,
-  "version_id": "c4b9f2d3-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+  "version_id": 420001,
   "status": "uploaded",
   "file_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "file_size_bytes": 2048576,
@@ -121,7 +121,7 @@
 
 ```json
 {
-  "document_id": "b3a8f1c2-...",
+  "document_id": 1,
   "status": "completed",
   "ocr_parser_status": "completed",
   "converter_validator_status": "completed",
@@ -140,8 +140,8 @@
 >
 > | Поле | Тип | Описание |
 > |------|-----|----------|
-> | `document_id` | string | UUID документа |
-> | `status` | string | Статус превью (`pending`, `processing`, `completed`, `failed`) |
+| `document_id` | bigint | ID документа |
+| `status` | string | Статус превью (`pending`, `processing`, `completed`, `failed`) |
 > | `ocr_parser_status` | string | Статус выбранного сервиса распознавания (OCR или Parser) |
 > | `converter_validator_status` | string | Статус converter-validator |
 > | `preview` | object | Метаданные превью (см. ниже) |
@@ -151,7 +151,7 @@
 > | `preview.year` | string | Год издания |
 > | `preview.revision` | string\|null | Номер редакции |
 > | `duplicates` | array | Массив найденных дубликатов |
-> | `duplicates[].document_id` | string | UUID найденного дубликата |
+| `duplicates[].document_id` | bigint | ID найденного дубликата |
 > | `duplicates[].doc_code` | string | Обозначение документа-дубликата |
 > | `duplicates[].title` | string | Название документа-дубликата |
 > | `duplicates[].similarity` | float | Коэффициент схожести (0..1) |
@@ -161,7 +161,7 @@
 
 ```json
 {
-  "document_id": "b3a8f1c2-...",
+  "document_id": 1,
   "status": "completed",
   "ocr_parser_status": "completed",
   "converter_validator_status": "completed",
@@ -174,7 +174,7 @@
   },
   "duplicates": [
     {
-      "document_id": "d4e5f6a7-...",
+      "document_id": 2,
       "doc_code": "ГОСТ 20868-81",
       "title": "Стойки установочные крепежные. Технические требования",
       "similarity": 0.97
@@ -210,7 +210,7 @@
 
 ```json
 {
-  "document_id": "b3a8f1c2-...",
+  "document_id": 1,
   "status": "proceeding",
   "action": "proceed",
   "message": "Запущена полная обработка документа"
@@ -231,8 +231,8 @@
 
 ```json
 {
-  "document_id": "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
-  "version_id": "d5c0a3e4-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
+  "document_id": 1,
+  "version_id": 420001,
   "version_number": 2,
   "status": "uploaded",
   "task_id": 420001,
@@ -252,10 +252,10 @@
 
 ```json
 {
-  "document_id": "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+  "document_id": 1,
   "versions": [
     {
-      "version_id": "c4b9f2d3-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+      "version_id": 420001,
       "version_number": 1,
       "format_code": "pdf_digital",
       "format_label": "PDF (цифровой)",
@@ -289,6 +289,8 @@
 | `doc_code`          | string | Поиск по номеру документа                                  |
 | `status`            | string | Фильтр по статусу FSM                                      |
 | `search`            | string | Поиск по названию                                          |
+| `sort_by`           | string | Поле сортировки: `title`, `doc_code`, `created_at`, `status` (по умолчанию `created_at`) |
+| `order`             | string | Направление: `asc`, `desc` (по умолчанию `desc`)            |
 | `page`, `page_size` | int    | Пагинация                                                  |
 
 **Ответ `200`**:
@@ -310,7 +312,7 @@
   },
   "items": [
     {
-      "document_id": "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+      "document_id": 1,
       "title": "Стойки установочные",
       "doc_code": "20868-81",
       "source_type": "GOST",
@@ -353,7 +355,7 @@
 
 ```json
 {
-  "document_id": "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+  "document_id": 1,
   "title": "Стойки установочные",
   "doc_code": "20868-81",
   "source_type": "GOST",
@@ -381,7 +383,7 @@
     "tags": ["судостроение", "стойки"]
   },
   "latest_version": {
-    "version_id": "c4b9f2d3-...",
+    "version_id": 420001,
     "version_number": 1,
     "format_code": "pdf_digital",
     "file_hash_sha256": "e3b0c442...",
@@ -415,7 +417,7 @@
 
 ```json
 {
-  "document_id": "b3a8f1c2-...",
+  "document_id": 1,
   "status": "processing",
   "progress_percent": 60.0,
   "steps": {
@@ -458,7 +460,7 @@
 
 ```json
 {
-  "document_id": "b3a8f1c2-...",
+  "document_id": 1,
   "status": "review_required",
   "progress_percent": 80.0,
   "steps": {
@@ -466,7 +468,7 @@
       "formation": {
         "status": "blocked",
         "parsing": { "status": "completed" },
-        "validation": { "status": "invalid", "errors_found": 2, "document_id": "b3a8f1c2-...", "errors": [
+        "validation": { "status": "invalid", "errors_found": 2, "document_id": 1, "errors": [
           {"code": "MISSING_FIELD", "section_id": 420012}
         ]},
         "registry": { "status": "blocked" }
@@ -486,7 +488,7 @@
 
 ```json
 {
-  "document_id": "b3a8f1c2-...",
+  "document_id": 1,
   "status": "ready_for_promotion",
   "progress_percent": 100.0,
   "steps": {
@@ -494,7 +496,7 @@
       "formation": {
         "status": "completed",
         "parsing": { "status": "completed" },
-        "validation": { "status": "valid", "document_id": "b3a8f1c2-..." },
+        "validation": { "status": "valid", "document_id": 1 },
         "registry": { "status": "completed" }
       },
       "indexation": {
@@ -527,8 +529,8 @@
 
 ```json
 {
-  "document_id": "b3a8f1c2-...",
-  "version_id": "c4b9f2d3-...",
+  "document_id": 1,
+  "version_id": 420001,
   "content_type": "application/pdf",
   "file_url": "/files/b3a8f1c2/full.pdf"
 }
@@ -558,7 +560,7 @@
 
 ```json
 {
-  "document_id": "b3a8f1c2-...",
+  "document_id": 1,
   "status": "approved",
   "promotion_task_id": "promo-task-001",
   "approved_by": "ivanov_ai",
@@ -578,7 +580,7 @@
 
 ```json
 {
-  "document_id": "b3a8f1c2-...",
+  "document_id": 1,
   "history": [
     {
       "history_id": "h-001",
@@ -634,7 +636,7 @@
 
 ```json
 {
-  "document_id": "b3a8f1c2-...",
+  "document_id": 1,
   "deleted_at": "2026-05-15T10:30:00Z"
 }
 ```
@@ -679,7 +681,7 @@
 {
   "queue": [
     {
-      "document_id": "b3a8f1c2-...",
+      "document_id": 1,
       "title": "Стойки установочные",
       "doc_code": "20868-81",
       "source_type": "GOST",
@@ -723,7 +725,7 @@
 
 ```json
 {
-  "document_id": "doc-8a3f2b",
+  "document_id": 1,
   "pages_total": 12,
   "pages": [
     {
@@ -769,7 +771,7 @@
 
 ```json
 {
-  "document_id": "doc-8a3f2b",
+  "document_id": 1,
   "page": 1,
   "width": 2480,
   "height": 3508,
@@ -824,9 +826,9 @@
 
 ```json
 {
-  "document_id": "doc-8a3f2b",
+  "document_id": 1,
   "page": 1,
-  "image_url": "/documents/doc-8a3f2b/pages/1",
+  "image_url": "/documents/1/pages/1",
   "blocks": [
     {
       "number": 1,
@@ -849,7 +851,7 @@
 
 ```json
 {
-  "document_id": "doc-8a3f2b",
+  "document_id": 1,
   "parameters": [
     {
       "symbol": "R_доп",

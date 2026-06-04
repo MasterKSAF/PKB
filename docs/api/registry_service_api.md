@@ -23,7 +23,7 @@
 Для одиночных объектов:
 ```json
 {
-  "data": { "id": "b3a8f1c2-...", "title": "..." }
+  "data": { "id": 1, "title": "..." }
 }
 ```
 
@@ -278,13 +278,13 @@ POST /registry/classifiers/import
 
 ---
 
-### 1.9. Список карантина
+### 1.9. Неизвестные коды классификатора
 
 ```
 GET /registry/classifiers/pending
 ```
 
-Коды, найденные в документах, но отсутствующие в справочнике. Требуют административного разбора.
+Коды классификатора (МКС, ОКСТУ, УДК), найденные в документах при распознавании, но отсутствующие в справочнике. Требуют административного разбора.
 
 **Query-параметры**: `system` (`MKS`, `OKSTU`, `UDC`, `EXTERNAL`), `status` (`new`, `mapped`, `rejected`), `page`, `page_size`.
 
@@ -294,10 +294,10 @@ GET /registry/classifiers/pending
 {
   "data": [
     {
-      "id": "p-001",
+      "id": 1,
       "system": "MKS",
       "code": "47.020.99",
-      "found_in_document_id": "b3a8f1c2-...",
+      "found_in_document_id": 1,
       "found_in_document_title": "Стойки установочные",
       "status": "new",
       "suggested_parent_code": "47.020",
@@ -312,7 +312,7 @@ GET /registry/classifiers/pending
 
 ---
 
-### 1.10. Принять код из карантина
+### 1.10. Принять неизвестный код
 
 ```
 POST /registry/classifiers/pending/{pending_id}/accept
@@ -335,8 +335,8 @@ POST /registry/classifiers/pending/{pending_id}/accept
 ```json
 {
   "data": {
-    "pending_id": "p-001",
-    "classifier_system": "MKS",
+    "pending_id": 1,
+        "classifier_system": "MKS",
     "code": "47.020.99",
     "status": "mapped",
     "registry_created": true
@@ -346,7 +346,7 @@ POST /registry/classifiers/pending/{pending_id}/accept
 
 ---
 
-### 1.11. Отклонить код из карантина
+### 1.11. Отклонить неизвестный код
 
 ```
 POST /registry/classifiers/pending/{pending_id}/reject
@@ -364,7 +364,7 @@ POST /registry/classifiers/pending/{pending_id}/reject
 
 ```json
 {
-  "data": { "pending_id": "p-001", "status": "rejected" }
+  "data": { "pending_id": 1, "status": "rejected" }
 }
 ```
 
@@ -615,6 +615,8 @@ GET /registry/documents
 | `issuing_body` | string | Организация-издатель |
 | `title_hash_sha256` | string | Точный поиск по бизнес-ключу |
 | `date_from` / `date_to` | date | Фильтр по дате создания |
+| `sort_by` | string | Поле сортировки: `title`, `doc_code`, `source_type`, `era`, `created_at`, `updated_at` (по умолчанию `created_at`) |
+| `order` | string | Направление: `asc`, `desc` (по умолчанию `desc`) |
 | `page` | int | Номер страницы |
 | `page_size` | int | Записей на странице (max 200) |
 
@@ -624,7 +626,7 @@ GET /registry/documents
 {
   "data": [
     {
-      "id": "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+      "id": 1,
       "title": "Стойки установочные",
       "doc_code": "20868-81",
       "source_type": "GOST",
@@ -694,7 +696,7 @@ GET /registry/documents/{doc_id}
 ```json
 {
   "data": {
-    "id": "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+    "id": 1,
     "doc_code": "ГОСТ 20868-81",
     "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
     "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
@@ -747,7 +749,7 @@ GET /registry/documents/{doc_id}/sections
 ```json
 {
   "document": {
-    "id": "b3a8f1c2-...",
+    "id": 1,
     "doc_code": "ГОСТ 20868-81",
     "title": "СТОЙКИ УСТАНОВОЧНЫЕ...",
     "era": "USSR",
@@ -756,7 +758,7 @@ GET /registry/documents/{doc_id}/sections
   "sections": [
     {
       "section_id": 1001,
-      "document_id": "b3a8f1c2-...",
+      "document_id": 1,
       "parent_id": null,
       "clause": "1",
       "title": null,
@@ -768,7 +770,7 @@ GET /registry/documents/{doc_id}/sections
     },
     {
       "section_id": 1005,
-      "document_id": "b3a8f1c2-...",
+      "document_id": 1,
       "parent_id": 1003,
       "clause": "6.1",
       "title": "Допуск соосности при степени точности",
@@ -830,7 +832,7 @@ POST /registry/documents/check-uniqueness
     "is_duplicate_file": false,
     "candidates": [
       {
-        "document_id": "b3a8f1c2-...",
+        "document_id": 1,
         "title": "ГОСТ 20868-81",
         "doc_code": "20868-81",
         "similarity": 0.98,
@@ -864,7 +866,7 @@ POST /registry/documents
 
 **Назначение:** создание карточки документа. Используется как при прямом вызове из UI/админки, так и со стороны этапа **«Registry»** Пайплайна 1 (Формирование документа).
 
-> **Важно:** Registry использует `document_id` (UUID) как **единый первичный ключ**. `document_id` назначается на этапе Validation (Пайплайн 1, Этап 2) после проверки уникальности: извлекается существующий для дубликата, либо генерируется новый. Собственный numeric ID не создаётся — `document_id` проходит сквозь все сервисы без маппинга.
+> **Важно:** Registry использует `document_id` (bigint, sequence) как **единый первичный ключ**. `document_id` назначается Registry при создании карточки документа (после проверки уникальности): для дубликата извлекается существующий, для нового документа генерируется новый (sequence). Собственный numeric ID не создаётся — `document_id` проходит сквозь все сервисы без маппинга.
 
 В режиме пайплайна оркестратор передаёт JSON-контейнер (результат Converter-validator) как непрозрачный артефакт — сервис сам маппит поля в модель данных.
 
@@ -875,6 +877,7 @@ POST /registry/documents
   "title": "Стойки установочные",
   "doc_code": "20868-81",
   "source_type": "GOST",
+  "document_type": "normative",
   "era": "USSR",
   "validity_status": "active",
   "jurisdiction": "RU",
@@ -963,7 +966,8 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
 |------|-----|----------------|----------|
 | `title` | string | Да* | Полное название |
 | `doc_code` | string | Нет | Регистрационный номер |
-| `source_type` | string | Нет | Тип источника |
+| `source_type` | string | Нет | Тип нормативного документа-источника |
+| `document_type`| string | Нет | Категория контента (`normative`, `technical`, `drawing`, `specification`, `archival_scan`) |
 | `era` | string | Нет | Эра документа |
 | `validity_status` | string | Нет | Статус действия |
 | `jurisdiction` | string | Нет | Юрисдикция |
@@ -989,8 +993,8 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
 
 ```json
 {
-  "document_id": "b3a8f1c2-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
-  "version_id": "v1-b3a8f1c2-...",
+  "document_id": 1,
+  "version_id": 420001,
   "sections": [
     {
       "section_id": 1001,
@@ -1036,8 +1040,8 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
     }
   ],
   "registry": {
-    "document_id": "b3a8f1c2-...",
-    "version_id": "v1-...",
+    "document_id": 1,
+    "version_id": 420001,
     "sections_count": 11,
     "references_count": 4,
     "created_at": "2026-05-17T09:15:00Z"
@@ -1075,7 +1079,7 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
 | `document.page_count` | int | Количество страниц |
 | `document.file_hash_sha256` | string | SHA-256 хеш файла |
 | `sections[].section_id` | bigint | ID секции в `registry.document_sections` |
-| `sections[].document_id` | string | UUID документа |
+| `sections[].document_id` | bigint | ID документа |
 | `sections[].parent_id` | bigint\|null | ID родительской секции (`null` для корневых) |
 | `sections[].clause` | string | Номер пункта |
 | `sections[].title` | string\|null | Заголовок секции |
@@ -1091,8 +1095,8 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
 | `terminology[].source_clause` | string | Пункт-источник |
 | `terminology[].normalized_term` | string | Нормализованная форма термина |
 | `registry` | object | Метаданные записи в БД |
-| `registry.document_id` | string | UUID документа |
-| `registry.version_id` | string | UUID версии |
+| `registry.document_id` | bigint | ID документа |
+| `registry.version_id` | bigint | ID версии |
 | `registry.created_at` | string | Дата создания записи |
 | `registry.sections_count` | int | Количество сохранённых секций |
 | `registry.references_count` | int | Количество ссылок |
@@ -1200,10 +1204,10 @@ PATCH /registry/documents/{doc_id}/status
 ```json
 {
   "data": {
-    "id": "b3a8f1c2-...",
+    "id": 1,
     "status": "archived",
     "previous_status": "approved",
-    "history_id": "h-006",
+    "history_id": 1,
     "updated_at": "2026-05-15T13:00:00Z"
   }
 }
@@ -1250,12 +1254,12 @@ GET /registry/documents/{doc_id}/succession
 ```json
 {
   "data": {
-    "document_id": "b3a8f1c2-...",
+    "document_id": 1,
     "title": "ГОСТ 20868-81",
     "chain": [
-      { "id": "a1b2c3d4-...", "title": "ГОСТ 20868-75", "doc_code": "20868-75", "era": "USSR", "relation": "predecessor", "depth": -1 },
-      { "id": "b3a8f1c2-...", "title": "ГОСТ 20868-81", "doc_code": "20868-81", "era": "USSR", "relation": "self", "depth": 0 },
-      { "id": "e5d0c3b4-...", "title": "ГОСТ Р 20868-2025", "doc_code": "20868-2025", "era": "RF", "relation": "successor", "depth": 1 }
+      { "id": 2, "title": "ГОСТ 20868-75", "doc_code": "20868-75", "era": "USSR", "relation": "predecessor", "depth": -1 },
+      { "id": 1, "title": "ГОСТ 20868-81", "doc_code": "20868-81", "era": "USSR", "relation": "self", "depth": 0 },
+      { "id": 3, "title": "ГОСТ Р 20868-2025", "doc_code": "20868-2025", "era": "RF", "relation": "successor", "depth": 1 }
     ]
   }
 }
@@ -1359,6 +1363,7 @@ GET /registry/enums
     "classifier_system": ["MKS", "OKSTU", "UDC", "EXTERNAL"],
     "classifier_status": ["active", "deprecated", "archived"],
     "source_type": ["GOST", "GOST_R", "OST", "RD", "TU", "ISO", "DNV", "ASTM", "OTHER"],
+    "document_type": ["normative", "technical", "drawing", "specification", "archival_scan"],
     "document_status": ["draft", "uploaded", "validating", "processing", "review_required", "ready_for_promotion", "approved", "failed", "archived"],
     "era": ["USSR", "CIS", "RF", "CURRENT"],
     "validity_status": ["active", "superseded", "cancelled", "historical", "draft"],
@@ -1470,4 +1475,4 @@ GET /registry/enums
 2. **title_hash_sha256** вычисляется автоматически, гарантирует дедупликацию. Формула: `SHA-256(era|source_type|mks|okstu|doc_code|normalized_title)`.
 3. **Параллельная классификация:** Документ может одновременно ссылаться на МКС/ОКС и ОКСТУ через разные FK.
 4. **Журнал статусов:** Все изменения `documents.status` автоматически логируются в `status_history` триггером БД.
-5. **Карантин кодов:** Коды, не найденные в справочнике, попадают в `classifier_pending`. Администратор разбирает их через UI.
+5. **Неизвестные коды классификатора:** Коды, не найденные в справочнике, попадают в `classifier_pending`. Администратор разбирает их через UI.

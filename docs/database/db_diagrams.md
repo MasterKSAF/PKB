@@ -9,11 +9,12 @@
 ```mermaid
 erDiagram
     registry.documents {
-        uuid id PK
+        bigint id PK
         text doc_code
         text title
         text normalized_title
         varchar source_type
+        varchar document_type
         varchar group
         text mks_oks_code
         text okstu_code
@@ -31,8 +32,8 @@ erDiagram
         bigint file_size_bytes
         varchar processing_status
         int chunk_count
-        uuid successor_doc_id FK
-        uuid predecessor_doc_id FK
+        bigint successor_doc_id FK
+        bigint predecessor_doc_id FK
         text created_by
         text updated_by
         timestamptz created_at
@@ -41,7 +42,7 @@ erDiagram
 
     registry.document_sections {
         bigint id PK
-        uuid document_id FK
+        bigint document_id FK
         bigint parent_id FK
         text clause
         text title
@@ -55,8 +56,8 @@ erDiagram
     }
 
     registry.document_references {
-        uuid id PK
-        uuid source_document_id FK
+        bigint id PK
+        bigint source_document_id FK
         text target_doc_code
         varchar reference_type
         text context
@@ -64,13 +65,13 @@ erDiagram
         text replaced_by
         date replacement_date
         boolean is_resolved
-        uuid resolved_document_id FK
+        bigint resolved_document_id FK
         timestamptz created_at
     }
 
     registry.document_versions {
-        uuid id PK
-        uuid document_id FK
+        bigint id PK
+        bigint document_id FK
         int version_number
         text file_hash_sha256
         bigint file_size_bytes
@@ -82,8 +83,8 @@ erDiagram
     }
 
     registry.document_history {
-        uuid id PK
-        uuid document_id FK
+        bigint id PK
+        bigint document_id FK
         text event_type
         text old_status
         text new_status
@@ -96,7 +97,7 @@ erDiagram
     rag.document_chunks {
         bigint id PK
         bigint section_id FK
-        uuid document_id FK
+        bigint document_id FK
         int chunk_index
         text content
         vector embedding
@@ -123,7 +124,7 @@ erDiagram
         text title
         bigint user_id FK
         bigint project_id FK
-        uuid[] document_ids
+        bigint[] document_ids
         jsonb options
         int message_count
         timestamptz created_at
@@ -175,7 +176,8 @@ erDiagram
 
 | Поле | Примечание |
 |------|------------|
-| `source_type` | Тип документа: `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `OTHER` |
+| `source_type` | Тип нормативного документа-источника: `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `OTHER` |
+| `document_type` | Категория контента: `normative`, `technical`, `drawing`, `specification`, `archival_scan`. Не путать с `source_type` |
 | `group` | Группа проекта (например, `ПО4`) |
 | `era` | Эпоха: `USSR`, `CIS`, `RF`, `CURRENT` |
 | `validity_status` | Статус действия: `active`, `superseded`, `expired` |
@@ -254,7 +256,7 @@ erDiagram
 |------|------------|
 | `project_id` | FK → `chat.projects.id`. Сессия привязана к судостроительному проекту. Может быть `NULL` для общих вопросов. |
 | `user_id` | FK → пользователь (Auth Service) |
-| `document_ids` | Массив UUID документов, ограничивающих область поиска в сессии |
+| `document_ids` | Массив ID документов (bigint), ограничивающих область поиска в сессии |
 | `options` | JSONB с дополнительными параметрами сессии |
 
 ### 9. Сообщения чата (`chat.messages`)
@@ -269,5 +271,5 @@ erDiagram
 
 ### 8. Общее
 
-- **`document_id` (UUID)** назначается только в Registry при создании документа. До этого — `task_id` (UUID), который используется всеми начальными сервисами (OCR/Parser, Converter-Validator).
+- **`document_id` (bigint)** назначается только в Registry при создании документа. До этого — `task_id` (bigint), который используется всеми начальными сервисами (OCR/Parser, Converter-Validator).
 - **`rag.document_chunks.content`** — унифицированное хранение. `content` — строка (plain text или Markdown). `tsv` строится через `to_tsvector('russian', content)` при вставке.

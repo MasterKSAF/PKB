@@ -289,6 +289,8 @@ stateDiagram-v2
 | `failed` | Ошибка на одном из этапов обработки |
 | `archived` | Документ архивирован |
 
+> **Черновики (drafts):** preview-фаза выделена в отдельный **черновик-пайплайн**. `file_key` — у черновика (`pipeline.drafts.file_key`). `raw_data` — в `pipeline.drafts.raw_data` (JSONB, результат Parser или OCR). MinIO — только для бинарных файлов (PDF, изображения). OCR/Parser выполняется **полностью** уже в черновике; Converter-validator — только извлечение метаданных. Полная конвертация (validated_v3) запускается при промотировании. Детальная реализация — см. [`docs/plans/drafts_storage_plan.md`](../plans/drafts_storage_plan.md).
+
 ---
 
 #### Обработка ошибок и компенсационные потоки
