@@ -140,7 +140,7 @@
 | Registry → for_rag | `content.block[]` (textBlock) | `content.text` | Font display details отбрасываются, остаётся только текст для индексации |
 | Registry → for_rag | `bbox` | ❌ удаляется | Bbox не нужен для индексации, остаётся только `page` |
 | Converter-validator → for_rag | `table` / `list` / `image` / `formula` | `content.markdown` (опционально) | Markdown-представление генерируется для сложных структур. Добавляется при формировании for_rag, в validated_v3 не хранится. |
-| Registry → for_rag | `references[].target_doc_code` | `references[].target_document_id` | Добавляется UUID связанного документа из БД (null, если документ ещё не загружен).
+| Registry → for_rag | `references[].target_doc_code` | `references[].target_document_id` | Добавляется bigint ID связанного документа из БД (null, если документ ещё не загружен).
 
 > **Примечание:** поле `path` формируется на этапе Converter-validator при построении иерархии.
 > В сыром JSON от Parser/OCR (тип `raw_ocr_v4`) это поле может отсутствовать, так как оно

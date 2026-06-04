@@ -14,7 +14,8 @@ docs/
 │
 ├── api/                              # API-спецификации микросервисов
 │   ├── common_api.md                 #   Общие положения (форматы, auth, rate limits, health check, edge cases)
-│   ├── orchestrator_service_api.md   #   Orchestrator (публичное API)
+│   ├── gateway_service_api.md        #   Gateway (JWT, RBAC, маршрутизация)
+│   ├── orchestrator_service_api.md   #   Orchestrator (координатор пайплайнов)
 │   ├── auth_service_api.md           #   Auth Service (JWT, users, roles)
 │   ├── query_service_api.md          #   Query Service (чат, поиск, генерация ответов)
 │   ├── registry_service_api.md       #   Registry (реестр документов, классификаторы, терминология)
@@ -44,17 +45,25 @@ docs/
 │   ├── schema_parser_preview.json    #   Preview от Parser
 │   ├── schema_registry_for_rag.json  #   JSON для Registry / RAG Builder
 │
-├── discussions/                      # Исторические обсуждения архитектуры
-│   ├── 23_05_26.md
-│   ├── 23_05_26_plan.md
-│   └── pipeline1-formation_discussion.md
+├── plans/                            # Планы и дорожные карты
+│   ├── СВОДНЫЙ_ПЛАН_РЕАЛИЗАЦИИ.md    #   Сводный план реализации (спринты 1–4, архитектура)
+│   ├── sprint1_04_06_10_06.md        #   План Спринта 1: 04.06 – 10.06
+│   ├── drafts_storage_plan.md        #   План хранилища черновиков (Purgatory)
+│   ├── Итоги встречи (совещание от 2026-06-02).md  #   Протокол от 02.06
+│   └── итоги общей встречи 03.06.26.md            #   Протокол от 03.06
 │
 ├── rules/                            # Правила и чек-листы
 │   └── check_rule.md                 #   Чек-лист аудита документации
 │
-└── specifications/                   # Технические спецификации
-    └── parsing_specifications.md     #   Спецификация парсинга для разработчиков
+├── specifications/                   # Технические спецификации
+│   ├── parsing_specifications.md     #   Спецификация парсинга для разработчиков
+│   └── справочник_предметных_областей_ПКБ.md  #   Справочник разделов ПКБ
+│
+├── glossary.md                       # Глоссарий терминов и сокращений
+└── specificity.md                    # Журнал аномалий и трудных моментов
 ```
+
+> 📂 **Исторические обсуждения и протоколы встреч** хранятся в директории [`../docs_discussions/`](../docs_discussions/) на уровне корня проекта.
 
 ---
 
@@ -116,6 +125,29 @@ graph LR
 - **Изоляция БД** — OCR/Parser не имеют доступа к БД, Converter-validator только читает (справочники), Registry пишет, RAG Builder пишет, RAG Search читает.
 - **Longpoll** (15с) для всех асинхронных операций.
 
+### 🖥 Архитектура экранов UI (Спринт 1)
+
+Web UI состоит из двух основных экранов, соответствующих циклу работы с документами:
+
+| Экран | Назначение | Ключевые элементы |
+|-------|-----------|-------------------|
+| **1. Загрузка документа** | Загрузка файла, просмотр preview, принятие решения по черновику (approve/reject) | Drag-and-drop зона, статус-бар обработки, карточка preview-метаданных, список дубликатов, кнопки «Утвердить» / «Отклонить», история черновиков (`GET /drafts?document_key=...`) |
+| **2. База знаний** | Просмотр прошедших обработку документов, навигация по категориям, поиск | Дерево категорий (Спринт 2), сетка/список документов, фильтры (тип, дата, статус), карточка документа с метаданными, кнопка «Задать вопрос» (переход в чат) |
+
+**Поток пользователя:**
+
+```mermaid
+flowchart LR
+    Upload[Экран 1: Загрузка] -->|drag-and-drop PDF| Preview[Preview-фаза]
+    Preview -->|метаданные + дубликаты| Decision{Решение}
+    Decision -->|approve| Processing[Полная обработка]
+    Decision -->|reject| Upload
+    Processing -->|документ готов| KB[Экран 2: База знаний]
+    KB -->|задать вопрос| Chat[Чат QueryService]
+```
+
+> **Примечание:** пользовательские категории документов (many-to-many) — см. открытый вопрос 4.5 в [sprint1_04_06_10_06.md](plans/sprint1_04_06_10_06.md). Реализация запланирована на Спринт 2 (дедлайн 17.06).
+
 ---
 
 ## 🔧 Стек технологий
@@ -137,7 +169,8 @@ graph LR
 
 | Сервис | Порт | Пайплайн | Доступ к БД |
 |--------|------|----------|-------------|
-| Orchestrator | 8081 | 1, 2 | Свой журнал (не PostgreSQL Registry) |
+| Gateway | 8080 | 1, 2, 3 | Нет (только маршрутизация) |
+| Orchestrator | 8081 | 1, 2 | Свой журнал PostgreSQ    |
 | Auth | 8082 | — | Читает |
 | Query Service | 8083 | 3 | Читает/Пишет |
 | Registry | 8084 | 1 | Пишет |
@@ -153,23 +186,26 @@ graph LR
 
 ## 🚀 Быстрый старт (для интегратора)
 
+> **Примечание:** API — внутренний, доступен только через Gateway (:8080).
+> Примеры ниже — для вызовов из Web UI (серверный код) по внутренней сети.
+
 ```bash
 # Получение токена
-curl -X POST https://{host}/api/v1/auth/token \
+curl -X POST http://127.0.0.1:8080/api/v1/auth/token \
   -H "Content-Type: application/json" \
   -d '{"username": "user", "password": "pass"}'
 
 # Загрузка документа (асинхронно)
-curl -X POST https://{host}/api/v1/documents \
+curl -X POST http://127.0.0.1:8080/api/v1/documents \
   -H "Authorization: Bearer <token>" \
   -F "file=@document.pdf"
 
 # Статус обработки
-curl -X GET https://{host}/api/v1/documents/{doc_id}/status \
+curl -X GET http://127.0.0.1:8080/api/v1/documents/{doc_id}/status \
   -H "Authorization: Bearer <token>"
 
 # Поиск
-curl -X POST https://{host}/api/v1/text/search \
+curl -X POST http://127.0.0.1:8080/api/v1/text/search \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{"text": "толщина обшивки ледового пояса"}'
@@ -181,9 +217,14 @@ curl -X POST https://{host}/api/v1/text/search \
 
 | Дата | Изменение |
 |------|-----------|
-| Текущая | **Duplicate-детекция**: переведена на единый механизм через Оркестратор (`check-uniqueness`) для preview и full-фаз (Вариант B). Убран прямой вызов Converter-validator → Registry. |
-| Текущая | **Pipeline 2 триггер**: описан фоновый Scheduler (15 мин) вместо неявного запуска. |
-| Текущая | **Схема БД**: inline-комментарии вынесены из ER-диаграммы в отдельную таблицу. Типы `embedding` и `tsv` исправлены на `vector(1536)` и `tsvector`. |
+| 04.06.2026 | **Методика экспериментов RAG**: полный перечень параметров, матрица запусков (3 фазы), метрики, псевдокод утилиты. См. [`../docs_discussions/features/rag_experiments_methodology.md`](../docs_discussions/features/rag_experiments_methodology.md). |
+| 04.06.2026 | **Переход на bigint**: все ID (`task_id`, `session_id`, `message_id`, `document_id`, `version_id`) — bigint (sequence). |
+| 04.06.2026 | **bbox**: нормализован [0,1] на всех этапах. `common_api.md` исправлен. |
+| 04.06.2026 | **UUID → bigint**: JSON-примеры во всех API-файлах синхронизированы с bigint-спецификациями. |
+| 04.06.2026 | Добавлены `specificity.md` (журнал аномалий) и `plans/` в структуру документации. |
+| 04–05.06.2026 | **Полная синхронизация документации Спринта 1**: все API, схемы, ER-диаграмма, глоссарий и пайплайны приведены к bigint; исправлены единицы bbox; `glossary.md` дополнен (`comparison_id`, `batch_id`, `Проект`); структура `docs/README.md` исправлена; UUID в `registry_service_api.md` заменены на bigint; `diagrams.md` и спринт-план актуализированы. См. `specificity.md` A1–A13 и `plans/sprint1_04_06_10_06.md`. |
+| 05.06.2026 | **Новый функционал**: группа `drafts` в API Оркестратора (5 эндпоинтов), FSM черновиков в `pipeline1-formation.md`, архитектура двух экранов UI (Загрузка / База знаний), маршрут `/api/v1/drafts/*` в Gateway. |
+| Текущая | **Схема БД**: все FK на bigint, добавлены `chat.projects`, `project_id`, `document_type`. |
 | v3.0 | Разделение RAG-сервиса на Builder и Search. |
 | v2.3 | Двухфазный пайплайн (preview + full). |
 
@@ -193,13 +234,38 @@ curl -X POST https://{host}/api/v1/text/search \
 
 ---
 
+### Gateway Service (API Gateway)
+**Порт:** `8080`
+**Документация:** [`docs/api/gateway_service_api.md`](api/gateway_service_api.md)
+
+**Назначение:**
+Внутренний API Gateway, к которому обращается **Web UI** для выполнения **аутентификации (JWT)**, **проверки прав доступа (RBAC)** и **маршрутизации** вызовов к внутренним сервисам. Gateway не имеет внешнего порта — наружу через Nginx доступен только Web UI.
+
+**Схема подключения:**
+```
+Внешняя сеть → Nginx → Web UI → Gateway (:8080) → Внутренние сервисы (:8081–8091)
+```
+
+**Основные функции:**
+- Проверка JWT Bearer-токена — невалидный/отсутствующий токен → `401`
+- RBAC — проверка прав доступа на основе роли → недостаточно прав → `403`
+- Маршрутизация запросов к внутренним сервисам (Auth, Orchestrator, Query, Registry и др.)
+- Иденпотентность для критичных POST-операций (`Idempotency-Key`, TTL: 1 час)
+- Единый формат ошибок для всех HTTP-исключений
+- Health-check endpoint `/api/v1/system/health` с агрегированным статусом всех сервисов
+- CORS и `X-Process-Time` заголовок
+
+**Контроль доступа:** Gateway — внутренний сервис, к нему обращается только **Web UI** (который раздаётся через Nginx). Gateway проверяет JWT-токен и права доступа (RBAC) перед тем, как запрос попадёт к внутренним сервисам. Без валидного токена — `401`, без прав на операцию — `403`.
+
+---
+
 ### Оркестратор (Orchestrator Service)
 **Порт:** `8081`
 **Документация:** [`docs/api/orchestrator_service_api.md`](api/orchestrator_service_api.md)
 **Описание также в:** [`pipelines/overview.md`](pipelines/overview.md), [`pipelines/pipeline1-formation.md`](pipelines/pipeline1-formation.md), [`pipelines/pipeline1-formation_detail.md`](pipelines/pipeline1-formation_detail.md), [`pipelines/pipeline2-indexation.md`](pipelines/pipeline2-indexation.md)
 
 **Назначение:**
-Единая точка входа для публичного API. Координирует пайплайны 1 и 2: управляет последовательностью вызовов сервисов, передаёт JSON-контейнеры между этапами, ведёт журнал обработки, реализует двухфазную схему preview → решение → full.
+Координатор пайплайнов 1 и 2. Управляет последовательностью вызовов сервисов, передаёт JSON-контейнеры между этапами, ведёт журнал обработки, реализует двухфазную схему preview → решение → full.
 
 **Основные функции:**
 - Приём и валидация загружаемых файлов, вычисление SHA-256, сохранение в MinIO
@@ -261,7 +327,7 @@ curl -X POST https://{host}/api/v1/text/search \
 **Основные функции:**
 - Ведение реестра документов: создание, обновление, история статусов, цепочки преемственности
 - Сегментация документа на секции (`registry.document_sections`)
-- Иерархический справочник классификаторов (CRUD, импорт, дерево, карантин)
+- Иерархический справочник классификаторов (CRUD, импорт, дерево, неизвестные коды)
 - Реестр терминов с нормализацией, синонимами и поиском
 - Быстрая проверка уникальности документа по метаданным (`POST /registry/documents/check-uniqueness`)
 - Экспорт и массовый импорт документов
@@ -331,10 +397,12 @@ curl -X POST https://{host}/api/v1/text/search \
 **Документация:** [`docs/api/analyse_service_api.md`](api/analyse_service_api.md)
 **Описание также в:** _(независимый сервис, не участвует в основных пайплайнах)_
 
-**Назначение:**
+> ⏸️ **Заморожен** — сервис спроектирован, но не разрабатывается в текущих спринтах. Решение о старте разработки будет принято после стабилизации Пайплайна 1.
+
+**Назначение (проектное):**
 Сопоставление проектных данных из спецификаций, чертежей и расчётов с нормативными требованиями (ГОСТы, Правила РС). Выполняет длительные операции анализа.
 
-**Основные функции:**
+**Основные функции (проектные):**
 - **Сопоставление норм и проекта** (`POST /analyse/compare`) — сравнение значений из проектного документа с нормативными требованиями
 - **Пакетное сравнение** (`POST /analyse/compare/batch`) — массовое сопоставление пар фрагментов
 - **Арифметический движок** (`POST /analyse/calculate`) — вычисления на основе формул с контекстом
@@ -399,6 +467,7 @@ curl -X POST https://{host}/api/v1/text/search \
 |--------|-----------|
 | **Общая документация** | |
 | API-спецификации (все эндпоинты) | [`docs/api/`](api/) |
+| Gateway Service (JWT, RBAC, маршрутизация) | [`docs/api/gateway_service_api.md`](api/gateway_service_api.md) |
 | Формат ошибок, rate limits, health check, edge cases | [`docs/api/common_api.md`](api/common_api.md) |
 | ER-диаграмма и типы данных | [`docs/database/db_diagrams.md`](database/db_diagrams.md) |
 | **Пайплайны** | |

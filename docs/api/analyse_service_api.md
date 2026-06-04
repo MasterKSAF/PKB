@@ -46,7 +46,7 @@
 | `comparison_id` | string | Да | Идентификатор сравнения (генерируется Оркестратором) |
 | `normative_query` | string | Да | Нормативный запрос |
 | `project_document_id` | string | Да | ID проектного документа |
-| `document_type` | string | Нет | Тип документа (`normative`, `drawing`, `specification`) |
+| `document_type` | string | Нет | Категория контента (`normative`, `technical`, `drawing`, `specification`, `archival_scan`) |
 
 **Ответ `202`:**
 

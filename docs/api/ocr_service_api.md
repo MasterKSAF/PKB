@@ -45,7 +45,7 @@
 ```json
 {
   "task_id": 420000,
-  "version_id": "c4b9f2d3-...",
+  "version_id": 420001,
   "file_key": "file-abc123",
   "options": {
     "extract_tables": true,
@@ -57,7 +57,7 @@
 | Поле | Тип | Обязательность | Описание |
 | ---- | --- | -------------- | -------- |
 | `task_id` | bigint | Да | Идентификатор задачи (генерируется Оркестратором) |
-| `version_id` | string | Да | ID версии документа (ссылка на `document_versions`) |
+| `version_id` | bigint | Да | ID версии документа |
 | `file_key` | string | Да | Ключ файла в MinIO |
 | `options` | object | Нет | Параметры обработки |
 | `options.extract_tables` | bool | Нет | Извлекать таблицы в структурированном виде |
@@ -69,7 +69,7 @@
 {
   "task_id": 420000,
   "status": "accepted",
-  "version_id": "c4b9f2d3-...",
+  "version_id": 420001,
   "estimated_completion": "2026-05-15T10:02:00Z"
 }
 ```
@@ -85,7 +85,7 @@
 ```json
 {
   "task_id": 420000,
-  "version_id": "c4b9f2d3-...",
+  "version_id": 420001,
   "file_key": "file-abc123",
   "max_pages": 3,
   "options": {
@@ -98,7 +98,7 @@
 | Поле | Тип | По умолчанию | Обязательность | Описание |
 | ---- | --- | ------------ | -------------- | -------- |
 | `task_id` | bigint | — | Да | Идентификатор задачи (генерируется Оркестратором) |
-| `version_id` | string | — | Да | ID версии документа |
+| `version_id` | bigint | — | Да | ID версии документа |
 | `file_key` | string | — | Да | Ключ файла в MinIO |
 | `max_pages` | int | `3` | Нет | Количество страниц для предпросмотра |
 | `options` | object | — | Нет | Параметры обработки |
@@ -108,7 +108,7 @@
 ```json
 {
   "task_id": 420000,
-  "version_id": "c4b9f2d3-...",
+  "version_id": 420001,
   "preview": true,
   "max_pages": 3,
   "metadata": {
@@ -149,7 +149,7 @@
 
 ```json
 {
-  "task_id": "ocr-task-001",
+  "task_id": 420000,
   "status": "processing",
   "progress_percent": 45,
   "pages_processed": 5,
@@ -201,7 +201,7 @@
 ```json
 {
   "task_id": 420000,
-  "version_id": "c4b9f2d3-...",
+  "version_id": 420001,
   "metadata": {
     "schema": "raw_ocr_v4",
     "created_at": "2026-05-17T09:15:00Z",
@@ -229,7 +229,7 @@
 | Поле                                         | Тип    | Описание                                                             |
 | -------------------------------------------- | ------ | -------------------------------------------------------------------- |
 | `task_id`                                    | bigint | ID задачи оркестратора                                               |
-| `version_id`                                 | string | UUID версии                                                          |
+| `version_id`                                 | bigint | ID версии                                                            |
 | `metadata`                                   | object | Метаданные обработки                                                 |
 | `metadata.schema`                            | string | Идентификатор схемы (напр. `"raw_ocr_v4"`)                          |
 | `metadata.created_at`                        | string | Время создания результата (ISO 8601)                                 |
@@ -251,7 +251,7 @@
 | `block[].number`                             | int    | Порядковый номер элемента в reading order                            |
 | `block[].type`                               | string | Тип элемента: `headerFooter`, `heading`, `paragraph`, `text_block`, `list`, `table`, `image`, `caption`, `formula` |
 | `block[].page`                               | int    | Номер страницы                                                       |
-| `block[].bbox`                               | array  | Координаты `[left, bottom, right, top]` в мм                         |
+| `block[].bbox`                               | array  | Координаты `[left, bottom, right, top]` в пикселях (сырые, px)       |
 | `block[].font`                               | object | Объект шрифта: `{ size: float, color: string, bold: bool, italic: bool, underline: bool }` |
 | `quality`                                    | object | Общая оценка качества + `per_page` — детализация по страницам        |
 | `quality.per_page[].status`                  | string | `ok`, `low_confidence`, `failed`                                     |
@@ -271,9 +271,9 @@
 {
   "processes": [
     {
-      "task_id": "ocr-task-001",
-      "version_id": "c4b9f2d3-...",
-      "status": "processing",
+          "task_id": 420000,
+          "version_id": 420001,
+          "status": "processing",
       "progress_percent": 45,
       "pages_processed": 5,
       "pages_total": 12,
@@ -286,7 +286,7 @@
 | Поле               | Тип    | Описание                         |
 | ------------------ | ------ | -------------------------------- |
 | `task_id`          | bigint | ID задачи                        |
-| `version_id`       | string | ID версии документа              |
+| `version_id`       | bigint | ID версии документа              |
 | `status`           | string | Статус: `accepted`, `processing` |
 | `progress_percent` | int    | Процент выполнения               |
 | `pages_processed`  | int    | Обработано страниц               |

@@ -1,9 +1,7 @@
 ## API Orchestrator Service (orchestrator-service:8081)
 
-Единая точка входа для публичного API Нейроассистента ПКБ.  
-Оркестрирует конвейер обработки документов: загрузка → OCR → чанкинг → валидация → промотирование в Registry.
+Координатор пайплайнов 1 и 2. Оркестрирует конвейер обработки документов: загрузка → OCR → чанкинг → валидация → промотирование в Registry.
 
-**Базовый URL (публичный)**: `https://{host}/api/v1`  
 **Базовый URL (внутренний)**: `http://127.0.0.1:8081/api/v1`
 
 ### Формат ответа
@@ -29,6 +27,7 @@
 | `monitor`   | Мониторинг, метрики и health                                        |
 | `documents` | Документы: загрузка, список, статус, версии, аппрув, промотирование |
 | `tasks`     | Задачи: preview фаза и решение (работает с `task_id`)               |
+| `drafts`    | Черновики: история попыток распознавания, решение (approve/reject)  |
 | `pages`     | Просмотр страниц и текстового слоя                                  |
 
 ---
@@ -61,7 +60,7 @@
 ```json
 {
   "task_id": 420000,
-  "version_id": "c4b9f2d3-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+  "version_id": 420001,
   "status": "uploaded",
   "file_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "file_size_bytes": 2048576,
@@ -123,7 +122,7 @@
 
 ```json
 {
-  "document_id": "b3a8f1c2-...",
+  "document_id": 1,
   "status": "completed",
   "ocr_parser_status": "completed",
   "converter_validator_status": "completed",
@@ -142,8 +141,8 @@
 >
 > | Поле | Тип | Описание |
 > |------|-----|----------|
-> | `document_id` | string | UUID документа |
-> | `status` | string | Статус превью (`pending`, `processing`, `completed`, `failed`) |
+| `document_id` | bigint | ID документа |
+| `status` | string | Статус превью (`pending`, `processing`, `completed`, `failed`) |
 > | `ocr_parser_status` | string | Статус выбранного сервиса распознавания (OCR или Parser) |
 > | `converter_validator_status` | string | Статус converter-validator |
 > | `preview` | object | Метаданные превью (см. ниже) |
@@ -153,7 +152,7 @@
 > | `preview.year` | string | Год издания |
 > | `preview.revision` | string\|null | Номер редакции |
 > | `duplicates` | array | Массив найденных дубликатов |
-> | `duplicates[].document_id` | string | UUID найденного дубликата |
+| `duplicates[].document_id` | bigint | ID найденного дубликата |
 > | `duplicates[].doc_code` | string | Обозначение документа-дубликата |
 > | `duplicates[].title` | string | Название документа-дубликата |
 > | `duplicates[].similarity` | float | Коэффициент схожести (0..1) |
@@ -163,7 +162,7 @@
 
 ```json
 {
-  "document_id": "b3a8f1c2-...",
+  "document_id": 1,
   "status": "completed",
   "ocr_parser_status": "completed",
   "converter_validator_status": "completed",
@@ -176,7 +175,7 @@
   },
   "duplicates": [
     {
-      "document_id": "d4e5f6a7-...",
+      "document_id": 2,
       "doc_code": "ГОСТ 20868-81",
       "title": "Стойки установочные крепежные. Технические требования",
       "similarity": 0.97
@@ -212,7 +211,7 @@
 
 ```json
 {
-  "document_id": "b3a8f1c2-...",
+  "document_id": 1,
   "status": "proceeding",
   "action": "proceed",
   "message": "Запущена полная обработка документа"
@@ -233,8 +232,8 @@
 
 ```json
 {
-  "document_id": "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
-  "version_id": "d5c0a3e4-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
+  "document_id": 1,
+  "version_id": 420001,
   "version_number": 2,
   "status": "uploaded",
   "task_id": 420001,
@@ -254,10 +253,10 @@
 
 ```json
 {
-  "document_id": "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+  "document_id": 1,
   "versions": [
     {
-      "version_id": "c4b9f2d3-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+      "version_id": 420001,
       "version_number": 1,
       "format_code": "pdf_digital",
       "format_label": "PDF (цифровой)",
@@ -291,6 +290,8 @@
 | `doc_code`          | string | Поиск по номеру документа                                  |
 | `status`            | string | Фильтр по статусу FSM                                      |
 | `search`            | string | Поиск по названию                                          |
+| `sort_by`           | string | Поле сортировки: `title`, `doc_code`, `created_at`, `status` (по умолчанию `created_at`) |
+| `order`             | string | Направление: `asc`, `desc` (по умолчанию `desc`)            |
 | `page`, `page_size` | int    | Пагинация                                                  |
 
 **Ответ `200`**:
@@ -312,7 +313,7 @@
   },
   "items": [
     {
-      "document_id": "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+      "document_id": 1,
       "title": "Стойки установочные",
       "doc_code": "20868-81",
       "source_type": "GOST",
@@ -355,7 +356,7 @@
 
 ```json
 {
-  "document_id": "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+  "document_id": 1,
   "title": "Стойки установочные",
   "doc_code": "20868-81",
   "source_type": "GOST",
@@ -383,7 +384,7 @@
     "tags": ["судостроение", "стойки"]
   },
   "latest_version": {
-    "version_id": "c4b9f2d3-...",
+    "version_id": 420001,
     "version_number": 1,
     "format_code": "pdf_digital",
     "file_hash_sha256": "e3b0c442...",
@@ -417,7 +418,7 @@
 
 ```json
 {
-  "document_id": "b3a8f1c2-...",
+  "document_id": 1,
   "status": "processing",
   "progress_percent": 60.0,
   "steps": {
@@ -460,7 +461,7 @@
 
 ```json
 {
-  "document_id": "b3a8f1c2-...",
+  "document_id": 1,
   "status": "review_required",
   "progress_percent": 80.0,
   "steps": {
@@ -468,7 +469,7 @@
       "formation": {
         "status": "blocked",
         "parsing": { "status": "completed" },
-        "validation": { "status": "invalid", "errors_found": 2, "document_id": "b3a8f1c2-...", "errors": [
+        "validation": { "status": "invalid", "errors_found": 2, "document_id": 1, "errors": [
           {"code": "MISSING_FIELD", "section_id": 420012}
         ]},
         "registry": { "status": "blocked" }
@@ -488,7 +489,7 @@
 
 ```json
 {
-  "document_id": "b3a8f1c2-...",
+  "document_id": 1,
   "status": "ready_for_promotion",
   "progress_percent": 100.0,
   "steps": {
@@ -496,7 +497,7 @@
       "formation": {
         "status": "completed",
         "parsing": { "status": "completed" },
-        "validation": { "status": "valid", "document_id": "b3a8f1c2-..." },
+        "validation": { "status": "valid", "document_id": 1 },
         "registry": { "status": "completed" }
       },
       "indexation": {
@@ -529,8 +530,8 @@
 
 ```json
 {
-  "document_id": "b3a8f1c2-...",
-  "version_id": "c4b9f2d3-...",
+  "document_id": 1,
+  "version_id": 420001,
   "content_type": "application/pdf",
   "file_url": "/files/b3a8f1c2/full.pdf"
 }
@@ -560,7 +561,7 @@
 
 ```json
 {
-  "document_id": "b3a8f1c2-...",
+  "document_id": 1,
   "status": "approved",
   "promotion_task_id": "promo-task-001",
   "approved_by": "ivanov_ai",
@@ -580,7 +581,7 @@
 
 ```json
 {
-  "document_id": "b3a8f1c2-...",
+  "document_id": 1,
   "history": [
     {
       "history_id": "h-001",
@@ -636,7 +637,7 @@
 
 ```json
 {
-  "document_id": "b3a8f1c2-...",
+  "document_id": 1,
   "deleted_at": "2026-05-15T10:30:00Z"
 }
 ```
@@ -681,7 +682,7 @@
 {
   "queue": [
     {
-      "document_id": "b3a8f1c2-...",
+      "document_id": 1,
       "title": "Стойки установочные",
       "doc_code": "20868-81",
       "source_type": "GOST",
@@ -725,7 +726,7 @@
 
 ```json
 {
-  "document_id": "doc-8a3f2b",
+  "document_id": 1,
   "pages_total": 12,
   "pages": [
     {
@@ -771,7 +772,7 @@
 
 ```json
 {
-  "document_id": "doc-8a3f2b",
+  "document_id": 1,
   "page": 1,
   "width": 2480,
   "height": 3508,
@@ -826,9 +827,9 @@
 
 ```json
 {
-  "document_id": "doc-8a3f2b",
+  "document_id": 1,
   "page": 1,
-  "image_url": "/documents/doc-8a3f2b/pages/1",
+  "image_url": "/documents/1/pages/1",
   "blocks": [
     {
       "number": 1,
@@ -851,7 +852,7 @@
 
 ```json
 {
-  "document_id": "doc-8a3f2b",
+  "document_id": 1,
   "parameters": [
     {
       "symbol": "R_доп",
@@ -888,6 +889,306 @@
 | `total` | int | Общее количество параметров |
 
 > **Источник данных:** параметры извлекаются Converter-validator'ом на этапе полной обработки из таблиц, формул и спецификаций документа. Поле `parameters` присутствует в `registry.document_sections.content` для секций типа `formula` и `table`.
+
+---
+
+## Группа drafts
+
+Черновики — промежуточные результаты черновик-пайплайна (preview-фазы) до промотирования в Registry.
+Один документ может проходить черновик-пайплайн несколько раз (разные попытки распознавания).
+Человек (или автомат) выбирает лучший черновик для публикации.
+
+Детальная концепция и поток — см. [drafts_storage_plan.md](../plans/drafts_storage_plan.md).
+
+### GET /drafts
+
+Список черновиков по бизнес-ключу документа (история попыток).
+
+**Query-параметры:**
+
+| Параметр | Тип | Обязательный | Описание |
+|----------|-----|-------------|----------|
+| `document_key` | string | Да | Бизнес-ключ документа (SHA-256) |
+| `status` | string | Нет | Фильтр по статусу: `new`, `preview_ready`, `promoted`, `discarded` |
+
+**Ответ `200`:**
+
+```json
+{
+  "items": [
+    {
+      "draft_id": 1,
+      "task_id": 100,
+      "file_key": "f-abc123",
+      "document_key": "sha256:def456",
+      "status": "promoted",
+      "confidence": 0.92,
+      "preview_metadata": {
+        "doc_code": "ГОСТ 20868-81",
+        "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ",
+        "document_type": "normative",
+        "year": "1981",
+        "revision": null
+      },
+      "promoted_document_id": 1300,
+      "created_at": "2026-06-05T10:00:00Z",
+      "updated_at": "2026-06-05T10:05:00Z"
+    },
+    {
+      "draft_id": 2,
+      "task_id": 101,
+      "file_key": "f-abc123",
+      "document_key": "sha256:def456",
+      "status": "discarded",
+      "confidence": 0.45,
+      "preview_metadata": {
+        "doc_code": "ГОСТ 20868-81",
+        "title": "СТОЙКИ УСТАНОВОЧНЫЕ",
+        "document_type": "normative",
+        "year": "1981",
+        "revision": null
+      },
+      "error_code": "LOW_CONFIDENCE",
+      "error_message": "Confidence below threshold (0.45 < 0.7)",
+      "promoted_document_id": null,
+      "created_at": "2026-06-05T10:10:00Z",
+      "updated_at": "2026-06-05T10:12:00Z"
+    }
+  ],
+  "meta": {
+    "total": 2,
+    "page": 1,
+    "page_size": 50
+  }
+}
+```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `draft_id` | bigint | Уникальный идентификатор черновика |
+| `task_id` | bigint | Связанная задача пайплайна (`pipeline.tasks`) |
+| `file_key` | string | Ссылка на файл в MinIO |
+| `document_key` | string | Бизнес-ключ документа (SHA-256) |
+| `status` | string | Статус черновика: `new`, `preview_ready`, `promoted`, `discarded` |
+| `confidence` | float | Оценка качества распознавания (0..1) |
+| `preview_metadata` | object | Preview-метаданные: `doc_code`, `title`, `document_type`, `year`, `revision` |
+| `promoted_document_id` | bigint \| null | `document_id` после промотирования (FK → `registry.documents`) |
+| `error_code` | string \| null | Код ошибки при `discarded` |
+| `error_message` | string \| null | Описание ошибки |
+| `created_at` | string | Время создания (ISO 8601) |
+| `updated_at` | string | Время последнего изменения (ISO 8601) |
+
+---
+
+### GET /drafts/{draft_id}
+
+Получить полную информацию о черновике, включая сырые данные распознавания (`raw_data`).
+
+**Ответ `200`:**
+
+```json
+{
+  "draft_id": 1,
+  "task_id": 100,
+  "file_key": "f-abc123",
+  "document_key": "sha256:def456",
+  "status": "preview_ready",
+  "confidence": 0.92,
+  "preview_metadata": {
+    "doc_code": "ГОСТ 20868-81",
+    "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
+    "document_type": "normative",
+    "year": "1981",
+    "revision": null
+  },
+  "raw_data": {
+    "schema": "raw_ocr_v4",
+    "pages": [
+      {
+        "page": 1,
+        "width": 595.0,
+        "height": 842.0,
+        "blocks": [
+          {
+            "number": 1,
+            "type": "text",
+            "bbox": [56.7, 70.9, 481.9, 18.0],
+            "content": "ГОСТ 20868-81",
+            "confidence": 0.99
+          }
+        ]
+      }
+    ]
+  },
+  "promoted_document_id": null,
+  "error_code": null,
+  "error_message": null,
+  "created_by": "user_10",
+  "created_at": "2026-06-05T10:00:00Z",
+  "updated_at": "2026-06-05T10:02:00Z"
+}
+```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `draft_id` | bigint | Уникальный идентификатор черновика |
+| `task_id` | bigint | Связанная задача пайплайна |
+| `file_key` | string | Ссылка на файл в MinIO |
+| `document_key` | string | Бизнес-ключ документа (SHA-256) |
+| `status` | string | Статус черновика |
+| `confidence` | float | Оценка качества распознавания (0..1) |
+| `preview_metadata` | object | Извлечённые метаданные |
+| `raw_data` | object | Сырые данные распознавания (`raw_ocr_v4`) — результат Parser или OCR |
+| `promoted_document_id` | bigint \| null | `document_id` после промотирования |
+| `error_code` | string \| null | Код ошибки |
+| `error_message` | string \| null | Описание ошибки |
+| `created_by` | string | Кто создал черновик |
+| `created_at` | string | Время создания (ISO 8601) |
+| `updated_at` | string | Время последнего изменения (ISO 8601) |
+
+**Возможные ошибки:**
+
+| HTTP | Код | Описание |
+|------|-----|----------|
+| 404 | `DRAFT_NOT_FOUND` | Черновик не существует |
+
+---
+
+### GET /drafts/{draft_id}/preview
+
+Получить preview-метаданные черновика (облегчённый ответ, без `raw_data`).
+
+**Ответ `200`:**
+
+```json
+{
+  "draft_id": 1,
+  "task_id": 100,
+  "file_key": "f-abc123",
+  "document_key": "sha256:def456",
+  "status": "preview_ready",
+  "confidence": 0.92,
+  "preview_metadata": {
+    "doc_code": "ГОСТ 20868-81",
+    "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
+    "document_type": "normative",
+    "year": "1981",
+    "revision": null
+  },
+  "created_at": "2026-06-05T10:00:00Z"
+}
+```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `draft_id` | bigint | Уникальный идентификатор черновика |
+| `task_id` | bigint | Связанная задача пайплайна |
+| `file_key` | string | Ссылка на файл в MinIO |
+| `document_key` | string | Бизнес-ключ документа (SHA-256) |
+| `status` | string | Статус черновика |
+| `confidence` | float | Оценка качества распознавания (0..1) |
+| `preview_metadata` | object | Извлечённые метаданные |
+| `created_at` | string | Время создания (ISO 8601) |
+
+**Возможные ошибки:**
+
+| HTTP | Код | Описание |
+|------|-----|----------|
+| 404 | `DRAFT_NOT_FOUND` | Черновик не существует |
+
+---
+
+### PATCH /drafts/{draft_id}/decide
+
+Принять решение по черновику. Доступно только для черновиков в статусе `preview_ready`.
+
+**Тело запроса:**
+
+```json
+{
+  "action": "approve",
+  "comment": "Метаданные корректны, уверенность 0.92"
+}
+```
+
+| Поле | Тип | Обязательное | Описание |
+|------|-----|-------------|----------|
+| `action` | string | Да | Решение: `approve` — промотировать в Registry; `reject` — отклонить (`discarded`) |
+| `comment` | string | Нет | Комментарий оператора |
+
+**Ответ `200` (approve):**
+
+```json
+{
+  "draft_id": 1,
+  "status": "promoted",
+  "action": "approve",
+  "promoted_document_id": 1300,
+  "message": "Черновик промотирован в Registry. Запущен Пайплайн 2 (индексация).",
+  "decided_by": "user_10",
+  "decided_at": "2026-06-05T10:05:00Z"
+}
+```
+
+**Ответ `200` (reject):**
+
+```json
+{
+  "draft_id": 2,
+  "status": "discarded",
+  "action": "reject",
+  "promoted_document_id": null,
+  "message": "Черновик отклонён. Можно загрузить файл повторно для новой попытки.",
+  "decided_by": "user_10",
+  "decided_at": "2026-06-05T10:12:00Z"
+}
+```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `draft_id` | bigint | Идентификатор черновика |
+| `status` | string | Новый статус: `promoted` или `discarded` |
+| `action` | string | Выполненное действие: `approve` или `reject` |
+| `promoted_document_id` | bigint \| null | `document_id` после промотирования (null при reject) |
+| `message` | string | Описание результата |
+| `decided_by` | string | Кто принял решение |
+| `decided_at` | string | Время решения (ISO 8601) |
+
+**Возможные ошибки:**
+
+| HTTP | Код | Описание |
+|------|-----|----------|
+| 404 | `DRAFT_NOT_FOUND` | Черновик не существует |
+| 409 | `DRAFT_ALREADY_DECIDED` | Решение уже принято (статус не `preview_ready`) |
+| 422 | `VALIDATION_ERROR` | Некорректный `action` (допустимы: `approve`, `reject`) |
+
+---
+
+### DELETE /drafts/{draft_id}
+
+Удалить черновик вручную. Работает для любых статусов.
+
+**Ответ `200`:**
+
+```json
+{
+  "draft_id": 3,
+  "deleted_at": "2026-06-05T10:15:00Z"
+}
+```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `draft_id` | bigint | Идентификатор удалённого черновика |
+| `deleted_at` | string | Время удаления (ISO 8601) |
+
+**Возможные ошибки:**
+
+| HTTP | Код | Описание |
+|------|-----|----------|
+| 404 | `DRAFT_NOT_FOUND` | Черновик не существует |
+
+> **Примечание:** черновики со статусом `promoted` также можно удалить — это не влияет на уже созданный документ в Registry.
 
 ---
 

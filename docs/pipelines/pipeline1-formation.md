@@ -5,7 +5,7 @@
 
 ```mermaid
 sequenceDiagram
-    participant UI as UI / API
+    participant UI as Web UI
     participant Orch as Orchestrator
     participant OCR as OCR-сервис
     participant Pars as Parser-сервис
@@ -288,6 +288,33 @@ stateDiagram-v2
 | `indexed` | Документ проиндексирован, готов к поиску |
 | `failed` | Ошибка на одном из этапов обработки |
 | `archived` | Документ архивирован |
+
+> **Черновики (drafts):** preview-фаза выделена в отдельный **черновик-пайплайн**. `file_key` — у черновика (`pipeline.drafts.file_key`). `raw_data` — в `pipeline.drafts.raw_data` (JSONB, результат Parser или OCR). MinIO — только для бинарных файлов (PDF, изображения). OCR/Parser выполняется **полностью** уже в черновике; Converter-validator — только извлечение метаданных. Полная конвертация (validated_v3) запускается при промотировании. Детальная реализация — см. [`docs/plans/drafts_storage_plan.md`](../plans/drafts_storage_plan.md).
+
+**Жизненный цикл черновика (Draft FSM):**
+
+```mermaid
+stateDiagram-v2
+    [*] --> new : POST /documents
+    new --> preview_ready : preview-фаза завершена
+    new --> discarded : ошибка preview
+
+    preview_ready --> promoted : approve
+    preview_ready --> discarded : reject
+    preview_ready --> discarded : автопромот не прошёл
+
+    promoted --> [*] : документ в Registry
+    discarded --> [*]
+```
+
+**Связь состояний черновика с состояниями документа:**
+
+| Статус черновика | Статус документа | Описание |
+|---|---|---|
+| `new` | `uploaded` / `previewing` | Черновик создан при загрузке файла, выполняется preview-фаза |
+| `preview_ready` | `awaiting_decision` | Preview завершён, метаданные извлечены. Если уникально и чисто — автопромот; иначе — ожидание решения человека |
+| `promoted` | `parsing` → `validation` → `registry` | Черновик утверждён. Запускается полная конвертация (validated_v3) и промотирование в Registry |
+| `discarded` | `failed` / `archived` | Черновик отклонён (человеком или автоматом). Можно загрузить файл повторно для новой попытки (новый draft) |
 
 ---
 
