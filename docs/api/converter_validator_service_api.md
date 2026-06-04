@@ -33,8 +33,8 @@
 
 ```json
 {
-  "task_id": "task-8a3f2b",
-  "version_id": "c4b9f2d3-...",
+  "task_id": 420000,
+  "version_id": 420001,
   "raw_json": { ... }
 }
 ```
@@ -55,7 +55,7 @@
 |---|---|---|
 | `doc_code` | string | Обозначение документа |
 | `title` | string | Полное название документа |
-| `document_type` | string | Тип документа (`normative`, `drawing`, `specification`, ...) |
+| `document_type` | string | Категория контента (`normative`, `technical`, `drawing`, `specification`, `archival_scan`) |
 | `year` | string | Год издания/утверждения |
 | `revision` | string\|null | Номер редакции, если применимо |
 
@@ -102,8 +102,8 @@
 
 ```json
 {
-  "task_id": "task-8a3f2b",
-  "version_id": "c4b9f2d3-...",
+  "task_id": 420000,
+  "version_id": 420001,
   "use_llm": true,
   "llm_model": "gpt-4o-mini",
   "llm_max_tokens": 4096,
@@ -116,12 +116,12 @@
 
 ```json
 {
-  "task_id": "task-8a3f2b",
-  "version_id": "c4b9f2d3-...",
-  "document_id": "b3a8f1c2-...",
+  "task_id": 420000,
+  "version_id": 420001,
+  "document_id": null,
   "metadata": {
     "schema": "validated_v3",
-    "task_id": "task-8a3f2b",
+    "task_id": 420000,
     "created_at": "2026-05-17T09:15:00Z",
     "parser": { "name": "docling", "version": "2.1.0", "ocr_engine": "paddleocr", "ocr_fallback": false }
   },
@@ -146,7 +146,7 @@
     "references": []
   },
   "validation": {
-    "validation_id": "val-001",
+    "validation_id": 1,
     "structure_valid": true,
     "classification": { "mks_oks_code": "47.020", "overall_status": "CONFIRMED" },
     "fingerprint": { "file_hash_sha256": "...", "title_hash_sha256": "..." },
@@ -165,9 +165,9 @@
 
 | Поле | Тип | Описание |
 |---|---|---|
-| `task_id` | string | ID задачи, переданный в запросе |
-| `version_id` | string | ID версии файла, переданный в запросе |
-| `document_id` | string | ID документа. Назначается при конвертации: извлекается существующий для дубликата, либо генерируется новый |
+| `task_id` | bigint | ID задачи, переданный в запросе |
+| `version_id` | bigint | ID версии файла, переданный в запросе |
+| `document_id` | bigint | ID документа. Заполняется для дубликатов — передаётся от Оркестратора (получен на preview-этапе проверки уникальности). Для новых документов — null; будет назначен Registry при создании карточки |
 | `metadata` | object | Служебные метаданные ответа (схема, дата, информация о парсере) |
 | `document` | object | Полная структура документа: источник, метаданные, контент, терминология, ссылки |
 | `validation` | object | Результаты полной валидации (структура, классификация, fingerprint, сопоставление, кросс-ссылки) |
@@ -274,8 +274,8 @@
 
 ```json
 {
-  "task_id": "task-8a3f2b",
-  "version_id": "c4b9f2d3-...",
+  "task_id": 420000,
+  "version_id": 420001,
   "raw_json": { ... }
 }
 ```
@@ -284,8 +284,8 @@
 
 ```json
 {
-  "validation_id": "val-001",
-  "document_id": "b3a8f1c2-...",
+  "validation_id": 1,
+  "document_id": 1,
   "structure_valid": true,
   "classification": {
     "mks_oks_code": "47.020",

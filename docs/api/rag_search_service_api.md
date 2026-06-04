@@ -47,7 +47,7 @@
 | Поле | Тип | Обязательность | Описание |
 |---|---|---|---|
 | `query` | string | Да | Поисковый запрос |
-| `top_k` | int | Нет | Число результатов (по умолчанию 10) |
+| `top_k` | int | Нет | Число результатов (по умолчанию 10). Диапазон: [1, 100] |
 | `filters` | object | Нет | Фильтры: `document_type`, `date_from`, `date_to` |
 | `search_type` | string | Нет | `hybrid`, `sparse`, `dense` (по умолчанию `hybrid`) |
 | `rerank` | bool | Нет | Применять реранжирование (по умолчанию true) |
@@ -60,7 +60,7 @@
   "results": [
     {
       "chunk_id": 420001,
-      "document_id": "doc-norm-001",
+      "document_id": 1,
       "document_title": "Правила РС",
       "section_id": 420001,
       "page": 42,
@@ -80,7 +80,7 @@
 | Поле | Тип | Описание |
 |---|---|---|
 | `chunk_id` | bigint | ID чанка |
-| `document_id` | string | ID документа |
+| `document_id` | bigint | ID документа |
 | `document_title` | string | Название документа |
 | `section_id` | bigint | ID секции в БД |
 | `page` | int | Номер страницы |
