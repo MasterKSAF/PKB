@@ -201,7 +201,7 @@
 ```json
 {
   "task_id": 420000,
-  "version_id": "d5e0f3a2-...",
+  "version_id": 420001,
   "metadata": {
     "schema": "raw_ocr_v4",
     "created_at": "2026-05-17T09:15:00Z",
@@ -251,7 +251,7 @@
 | `block[].number`                             | int    | Порядковый номер элемента в reading order                            |
 | `block[].type`                               | string | Тип элемента: `headerFooter`, `heading`, `paragraph`, `text_block`, `list`, `table`, `image`, `caption`, `formula` |
 | `block[].page`                               | int    | Номер страницы                                                       |
-| `block[].bbox`                               | array  | Координаты `[left, bottom, right, top]` в мм                         |
+| `block[].bbox`                               | array  | Координаты `[left, bottom, right, top]` в пикселях (сырые, px)       |
 | `block[].font`                               | object | Объект шрифта: `{ size: float, color: string, bold: bool, italic: bool, underline: bool }` |
 | `quality`                                    | object | Общая оценка качества + `per_page` — детализация по страницам        |
 | `quality.per_page[].status`                  | string | `ok`, `low_confidence`, `failed`                                     |

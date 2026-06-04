@@ -1,11 +1,11 @@
 {
   "metadata": {
     "schema": "for_rag_v1",
-    "document_id": "a1b2c3d4-...",
+    "document_id": 420000,
     "created_at": "2026-05-17T09:15:00Z"
   },
   "document": {
-    "id": "a1b2c3d4-...",
+    "id": 420000,
     "doc_code": "ГОСТ 20868-81",
     "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
     "full_title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
@@ -82,7 +82,7 @@
   "sections": [
     {
       "section_id": 0,
-      "document_id": "a1b2c3d4-...",
+      "document_id": 420000,
       "parent_id": null,
       "clause": null,
       "title": null,
@@ -97,7 +97,7 @@
     },
     {
       "section_id": 1,
-      "document_id": "a1b2c3d4-...",
+      "document_id": 420000,
       "parent_id": null,
       "clause": "1",
       "title": null,
@@ -113,7 +113,7 @@
     },
     {
       "section_id": 2,
-      "document_id": "a1b2c3d4-...",
+      "document_id": 420000,
       "parent_id": 1,
       "clause": "1",
       "title": null,
@@ -128,7 +128,7 @@
     },
     {
       "section_id": 3,
-      "document_id": "a1b2c3d4-...",
+      "document_id": 420000,
       "parent_id": null,
       "clause": "2",
       "title": null,
@@ -149,7 +149,7 @@
     },
     {
       "section_id": 4,
-      "document_id": "a1b2c3d4-...",
+      "document_id": 420000,
       "parent_id": null,
       "clause": "6",
       "title": "Допуски формы и расположения поверхностей",
@@ -165,7 +165,7 @@
     },
     {
       "section_id": 5,
-      "document_id": "a1b2c3d4-...",
+      "document_id": 420000,
       "parent_id": 4,
       "clause": "6.1",
       "title": null,
@@ -181,7 +181,7 @@
     },
     {
       "section_id": 6,
-      "document_id": "a1b2c3d4-...",
+      "document_id": 420000,
       "parent_id": 4,
       "clause": "6.1",
       "title": "Допуск соосности при степени точности",
@@ -303,7 +303,7 @@
     },
     {
       "section_id": 7,
-      "document_id": "a1b2c3d4-...",
+      "document_id": 420000,
       "parent_id": 4,
       "clause": "6.2",
       "title": null,
@@ -319,7 +319,7 @@
     },
     {
       "section_id": 8,
-      "document_id": "a1b2c3d4-...",
+      "document_id": 420000,
       "parent_id": 4,
       "clause": "6.2",
       "title": null,
@@ -339,7 +339,7 @@
     },
     {
       "section_id": 9,
-      "document_id": "a1b2c3d4-...",
+      "document_id": 420000,
       "parent_id": 4,
       "clause": "6.3",
       "title": null,
@@ -355,7 +355,7 @@
     },
     {
       "section_id": 10,
-      "document_id": "a1b2c3d4-...",
+      "document_id": 420000,
       "parent_id": 4,
       "clause": "6.4",
       "title": null,
@@ -377,7 +377,7 @@
     },
     {
       "section_id": 11,
-      "document_id": "a1b2c3d4-...",
+      "document_id": 420000,
       "parent_id": 4,
       "clause": "6.1",
       "title": "Черт. 1 – Схема допуска соосности оси отверстия Б относительно оси поверхности А",
@@ -395,7 +395,7 @@
     },
     {
       "section_id": 12,
-      "document_id": "a1b2c3d4-...",
+      "document_id": 420000,
       "parent_id": 4,
       "clause": "6.1",
       "title": "Черт. 2 – Схема допуска соосности оси отверстия Б относительно отверстия А",
@@ -413,7 +413,7 @@
     },
     {
       "section_id": 13,
-      "document_id": "a1b2c3d4-...",
+      "document_id": 420000,
       "parent_id": 4,
       "clause": "6.1",
       "title": "Формула допуска соосности",

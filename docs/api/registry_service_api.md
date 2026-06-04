@@ -672,7 +672,7 @@ GET /registry/documents/{doc_id}
 Без секций, терминологии и ссылок.
 
 Ключевые поля:
-- `id` — UUID документа
+- `id` — bigint ID документа
 - `doc_code` — код документа (ГОСТ, ОСТ и т.д.)
 - `title` — название документа
 - `title_hash_sha256` — хэш бизнес-ключа
@@ -975,8 +975,8 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
 | `mks_oks_code` | string | Нет | Код МКС/ОКС (FK) |
 | `okstu_code` | string | Нет | Код ОКСТУ (FK) |
 | `classification_status` | JSONB | Нет | Статусы извлечения кодов |
-| `successor_doc_id` | UUID | Нет | Преемник |
-| `predecessor_doc_id` | UUID | Нет | Предшественник |
+| `successor_doc_id` | bigint | Нет | Преемник |
+| `predecessor_doc_id` | bigint | Нет | Предшественник |
 | `metadata` | JSONB | Нет | Доп. данные |
 
 > *`title` обязателен при прямом создании; в режиме пайплайна берётся из структуры JSON-контейнера.
@@ -1062,7 +1062,7 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
 
 | Поле | Тип | Описание |
 |---|---|---|
-| `document.id` | string | UUID документа (единый первичный ключ) |
+| `document.id` | bigint | PK документа |
 | `document.doc_code` | string | Обозначение документа |
 | `document.title` | string | Полное название |
 | `document.normalized_title` | string | Нормализованное название |
@@ -1126,7 +1126,7 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
     }
   ],
   "footnotes": [
-    { "text": "...", "applies_to": "whole_table|cell", "bbox": [20, 130, 200, 200] }
+    { "text": "...", "applies_to": "whole_table|cell", "bbox": [0.095, 0.438, 0.952, 0.673] }
   ],
   "amendments": [
     { "amendment_id": "...", "type": "...", "source": "...", "affected_columns": [], "action": "...", "note": "..." }
@@ -1400,10 +1400,10 @@ GET /registry/enums
 
 | Поле | Тип | Ограничения |
 |------|-----|-------------|
-| `id` | uuid | PK |
+| `id` | bigint | PK |
 | `system` | varchar(20) | NOT NULL |
 | `code` | text | NOT NULL |
-| `found_in_document_id` | uuid | FK → documents, nullable |
+| `found_in_document_id` | bigint | FK → documents, nullable |
 | `status` | varchar(20) | `new`, `mapped`, `rejected` |
 | `admin_comment` | text | nullable |
 | `created_at` | timestamptz | NOT NULL |
@@ -1413,7 +1413,7 @@ GET /registry/enums
 
 | Поле | Тип | Ограничения |
 |------|-----|-------------|
-| `id` | uuid | PK |
+| `id` | bigint | PK |
 | `raw_term` | text | NOT NULL, UNIQUE |
 | `standard_term` | text | NOT NULL |
 | `normalized_value` | text | NOT NULL |
@@ -1431,7 +1431,7 @@ GET /registry/enums
 
 | Поле | Тип | Ограничения |
 |------|-----|-------------|
-| `id` | uuid | PK |
+| `id` | bigint | PK |
 | `classifier_code` | text | nullable |
 | `doc_code` | text | nullable |
 | `title` | text | NOT NULL |
@@ -1442,12 +1442,12 @@ GET /registry/enums
 | `jurisdiction` | varchar(10) | nullable |
 | `issuing_body` | text | nullable |
 | `industry_code` | text | nullable |
-| `enterprise_id` | uuid | nullable |
+| `enterprise_id` | bigint | nullable |
 | `mks_oks_code` | text | FK → classifier_registry (MKS) |
 | `okstu_code` | text | FK → classifier_registry (OKSTU) |
 | `classification_status` | jsonb | DEFAULT `{}` |
-| `successor_doc_id` | uuid | FK → self, nullable |
-| `predecessor_doc_id` | uuid | FK → self, nullable |
+| `successor_doc_id` | bigint | FK → self, nullable |
+| `predecessor_doc_id` | bigint | FK → self, nullable |
 | `metadata` | jsonb | DEFAULT `{}` |
 | `created_at` | timestamptz | NOT NULL |
 | `created_by` | text | nullable |
@@ -1460,7 +1460,7 @@ GET /registry/enums
 
 | Поле | Тип | Ограничения |
 |------|-----|-------------|
-| `id` | uuid | PK |
+| `id` | bigint | PK |
 | `format_code` | text | UNIQUE, NOT NULL — `pdf`, `png`, `jpg`, `tiff`, `docx` |
 | `mime_type` | text | NOT NULL — `application/pdf`, `image/png` и т.д. |
 | `parser_engine` | text | NOT NULL — `docling`, `tesseract`, `easyocr` |
