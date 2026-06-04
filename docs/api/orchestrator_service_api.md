@@ -27,6 +27,7 @@
 | `monitor`   | Мониторинг, метрики и health                                        |
 | `documents` | Документы: загрузка, список, статус, версии, аппрув, промотирование |
 | `tasks`     | Задачи: preview фаза и решение (работает с `task_id`)               |
+| `drafts`    | Черновики: история попыток распознавания, решение (approve/reject)  |
 | `pages`     | Просмотр страниц и текстового слоя                                  |
 
 ---
@@ -888,6 +889,306 @@
 | `total` | int | Общее количество параметров |
 
 > **Источник данных:** параметры извлекаются Converter-validator'ом на этапе полной обработки из таблиц, формул и спецификаций документа. Поле `parameters` присутствует в `registry.document_sections.content` для секций типа `formula` и `table`.
+
+---
+
+## Группа drafts
+
+Черновики — промежуточные результаты черновик-пайплайна (preview-фазы) до промотирования в Registry.
+Один документ может проходить черновик-пайплайн несколько раз (разные попытки распознавания).
+Человек (или автомат) выбирает лучший черновик для публикации.
+
+Детальная концепция и поток — см. [drafts_storage_plan.md](../plans/drafts_storage_plan.md).
+
+### GET /drafts
+
+Список черновиков по бизнес-ключу документа (история попыток).
+
+**Query-параметры:**
+
+| Параметр | Тип | Обязательный | Описание |
+|----------|-----|-------------|----------|
+| `document_key` | string | Да | Бизнес-ключ документа (SHA-256) |
+| `status` | string | Нет | Фильтр по статусу: `new`, `preview_ready`, `promoted`, `discarded` |
+
+**Ответ `200`:**
+
+```json
+{
+  "items": [
+    {
+      "draft_id": 1,
+      "task_id": 100,
+      "file_key": "f-abc123",
+      "document_key": "sha256:def456",
+      "status": "promoted",
+      "confidence": 0.92,
+      "preview_metadata": {
+        "doc_code": "ГОСТ 20868-81",
+        "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ",
+        "document_type": "normative",
+        "year": "1981",
+        "revision": null
+      },
+      "promoted_document_id": 1300,
+      "created_at": "2026-06-05T10:00:00Z",
+      "updated_at": "2026-06-05T10:05:00Z"
+    },
+    {
+      "draft_id": 2,
+      "task_id": 101,
+      "file_key": "f-abc123",
+      "document_key": "sha256:def456",
+      "status": "discarded",
+      "confidence": 0.45,
+      "preview_metadata": {
+        "doc_code": "ГОСТ 20868-81",
+        "title": "СТОЙКИ УСТАНОВОЧНЫЕ",
+        "document_type": "normative",
+        "year": "1981",
+        "revision": null
+      },
+      "error_code": "LOW_CONFIDENCE",
+      "error_message": "Confidence below threshold (0.45 < 0.7)",
+      "promoted_document_id": null,
+      "created_at": "2026-06-05T10:10:00Z",
+      "updated_at": "2026-06-05T10:12:00Z"
+    }
+  ],
+  "meta": {
+    "total": 2,
+    "page": 1,
+    "page_size": 50
+  }
+}
+```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `draft_id` | bigint | Уникальный идентификатор черновика |
+| `task_id` | bigint | Связанная задача пайплайна (`pipeline.tasks`) |
+| `file_key` | string | Ссылка на файл в MinIO |
+| `document_key` | string | Бизнес-ключ документа (SHA-256) |
+| `status` | string | Статус черновика: `new`, `preview_ready`, `promoted`, `discarded` |
+| `confidence` | float | Оценка качества распознавания (0..1) |
+| `preview_metadata` | object | Preview-метаданные: `doc_code`, `title`, `document_type`, `year`, `revision` |
+| `promoted_document_id` | bigint \| null | `document_id` после промотирования (FK → `registry.documents`) |
+| `error_code` | string \| null | Код ошибки при `discarded` |
+| `error_message` | string \| null | Описание ошибки |
+| `created_at` | string | Время создания (ISO 8601) |
+| `updated_at` | string | Время последнего изменения (ISO 8601) |
+
+---
+
+### GET /drafts/{draft_id}
+
+Получить полную информацию о черновике, включая сырые данные распознавания (`raw_data`).
+
+**Ответ `200`:**
+
+```json
+{
+  "draft_id": 1,
+  "task_id": 100,
+  "file_key": "f-abc123",
+  "document_key": "sha256:def456",
+  "status": "preview_ready",
+  "confidence": 0.92,
+  "preview_metadata": {
+    "doc_code": "ГОСТ 20868-81",
+    "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
+    "document_type": "normative",
+    "year": "1981",
+    "revision": null
+  },
+  "raw_data": {
+    "schema": "raw_ocr_v4",
+    "pages": [
+      {
+        "page": 1,
+        "width": 595.0,
+        "height": 842.0,
+        "blocks": [
+          {
+            "number": 1,
+            "type": "text",
+            "bbox": [56.7, 70.9, 481.9, 18.0],
+            "content": "ГОСТ 20868-81",
+            "confidence": 0.99
+          }
+        ]
+      }
+    ]
+  },
+  "promoted_document_id": null,
+  "error_code": null,
+  "error_message": null,
+  "created_by": "user_10",
+  "created_at": "2026-06-05T10:00:00Z",
+  "updated_at": "2026-06-05T10:02:00Z"
+}
+```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `draft_id` | bigint | Уникальный идентификатор черновика |
+| `task_id` | bigint | Связанная задача пайплайна |
+| `file_key` | string | Ссылка на файл в MinIO |
+| `document_key` | string | Бизнес-ключ документа (SHA-256) |
+| `status` | string | Статус черновика |
+| `confidence` | float | Оценка качества распознавания (0..1) |
+| `preview_metadata` | object | Извлечённые метаданные |
+| `raw_data` | object | Сырые данные распознавания (`raw_ocr_v4`) — результат Parser или OCR |
+| `promoted_document_id` | bigint \| null | `document_id` после промотирования |
+| `error_code` | string \| null | Код ошибки |
+| `error_message` | string \| null | Описание ошибки |
+| `created_by` | string | Кто создал черновик |
+| `created_at` | string | Время создания (ISO 8601) |
+| `updated_at` | string | Время последнего изменения (ISO 8601) |
+
+**Возможные ошибки:**
+
+| HTTP | Код | Описание |
+|------|-----|----------|
+| 404 | `DRAFT_NOT_FOUND` | Черновик не существует |
+
+---
+
+### GET /drafts/{draft_id}/preview
+
+Получить preview-метаданные черновика (облегчённый ответ, без `raw_data`).
+
+**Ответ `200`:**
+
+```json
+{
+  "draft_id": 1,
+  "task_id": 100,
+  "file_key": "f-abc123",
+  "document_key": "sha256:def456",
+  "status": "preview_ready",
+  "confidence": 0.92,
+  "preview_metadata": {
+    "doc_code": "ГОСТ 20868-81",
+    "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
+    "document_type": "normative",
+    "year": "1981",
+    "revision": null
+  },
+  "created_at": "2026-06-05T10:00:00Z"
+}
+```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `draft_id` | bigint | Уникальный идентификатор черновика |
+| `task_id` | bigint | Связанная задача пайплайна |
+| `file_key` | string | Ссылка на файл в MinIO |
+| `document_key` | string | Бизнес-ключ документа (SHA-256) |
+| `status` | string | Статус черновика |
+| `confidence` | float | Оценка качества распознавания (0..1) |
+| `preview_metadata` | object | Извлечённые метаданные |
+| `created_at` | string | Время создания (ISO 8601) |
+
+**Возможные ошибки:**
+
+| HTTP | Код | Описание |
+|------|-----|----------|
+| 404 | `DRAFT_NOT_FOUND` | Черновик не существует |
+
+---
+
+### PATCH /drafts/{draft_id}/decide
+
+Принять решение по черновику. Доступно только для черновиков в статусе `preview_ready`.
+
+**Тело запроса:**
+
+```json
+{
+  "action": "approve",
+  "comment": "Метаданные корректны, уверенность 0.92"
+}
+```
+
+| Поле | Тип | Обязательное | Описание |
+|------|-----|-------------|----------|
+| `action` | string | Да | Решение: `approve` — промотировать в Registry; `reject` — отклонить (`discarded`) |
+| `comment` | string | Нет | Комментарий оператора |
+
+**Ответ `200` (approve):**
+
+```json
+{
+  "draft_id": 1,
+  "status": "promoted",
+  "action": "approve",
+  "promoted_document_id": 1300,
+  "message": "Черновик промотирован в Registry. Запущен Пайплайн 2 (индексация).",
+  "decided_by": "user_10",
+  "decided_at": "2026-06-05T10:05:00Z"
+}
+```
+
+**Ответ `200` (reject):**
+
+```json
+{
+  "draft_id": 2,
+  "status": "discarded",
+  "action": "reject",
+  "promoted_document_id": null,
+  "message": "Черновик отклонён. Можно загрузить файл повторно для новой попытки.",
+  "decided_by": "user_10",
+  "decided_at": "2026-06-05T10:12:00Z"
+}
+```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `draft_id` | bigint | Идентификатор черновика |
+| `status` | string | Новый статус: `promoted` или `discarded` |
+| `action` | string | Выполненное действие: `approve` или `reject` |
+| `promoted_document_id` | bigint \| null | `document_id` после промотирования (null при reject) |
+| `message` | string | Описание результата |
+| `decided_by` | string | Кто принял решение |
+| `decided_at` | string | Время решения (ISO 8601) |
+
+**Возможные ошибки:**
+
+| HTTP | Код | Описание |
+|------|-----|----------|
+| 404 | `DRAFT_NOT_FOUND` | Черновик не существует |
+| 409 | `DRAFT_ALREADY_DECIDED` | Решение уже принято (статус не `preview_ready`) |
+| 422 | `VALIDATION_ERROR` | Некорректный `action` (допустимы: `approve`, `reject`) |
+
+---
+
+### DELETE /drafts/{draft_id}
+
+Удалить черновик вручную. Работает для любых статусов.
+
+**Ответ `200`:**
+
+```json
+{
+  "draft_id": 3,
+  "deleted_at": "2026-06-05T10:15:00Z"
+}
+```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `draft_id` | bigint | Идентификатор удалённого черновика |
+| `deleted_at` | string | Время удаления (ISO 8601) |
+
+**Возможные ошибки:**
+
+| HTTP | Код | Описание |
+|------|-----|----------|
+| 404 | `DRAFT_NOT_FOUND` | Черновик не существует |
+
+> **Примечание:** черновики со статусом `promoted` также можно удалить — это не влияет на уже созданный документ в Registry.
 
 ---
 
