@@ -298,7 +298,6 @@ CRUD для судостроительных проектов (`chat.projects`).
   "name": "Ледокол проекта 21900М2",
   "description": "Строительство ледокола для Арктики",
   "status": "active",
-  "session_count": 0,
   "created_at": "2026-06-05T10:00:00Z",
   "updated_at": "2026-06-05T10:00:00Z"
 }
@@ -320,7 +319,6 @@ CRUD для судостроительных проектов (`chat.projects`).
       "code": "21900M2",
       "name": "Ледокол проекта 21900М2",
       "status": "active",
-      "session_count": 5,
       "created_at": "2026-01-15T08:00:00Z"
     }
   ],
@@ -341,7 +339,6 @@ CRUD для судостроительных проектов (`chat.projects`).
   "name": "Ледокол проекта 21900М2",
   "description": "Строительство ледокола для Арктики",
   "status": "active",
-  "session_count": 5,
   "created_at": "2026-01-15T08:00:00Z",
   "updated_at": "2026-06-05T10:00:00Z"
 }
