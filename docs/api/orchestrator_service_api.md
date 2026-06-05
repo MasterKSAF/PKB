@@ -1,6 +1,6 @@
 ## API Orchestrator Service (orchestrator-service:8081)
 
-Координатор пайплайнов 1 и 2. Оркестрирует конвейер обработки документов: загрузка → OCR → чанкинг → валидация → промотирование в Registry.
+Координатор пайплайнов 1 и 2. Оркестрирует конвейер обработки документов: загрузка → OCR → чанкинг → валидация → запись результата в Registry.
 
 **Базовый URL (внутренний)**: `http://127.0.0.1:8081/api/v1`
 
@@ -15,20 +15,25 @@
 | Группа      | Описание                                                            |
 | ----------- | ------------------------------------------------------------------- |
 | `monitor`   | Мониторинг, метрики и health                                        |
-| `documents` | Документы: загрузка, список, статус, версии, аппрув, промотирование |
-| `tasks`     | Задачи: preview фаза и решение (работает с `task_id`)               |
-| `drafts`    | Черновики: история попыток распознавания, решение (approve/reject)  |
+| `documents` | Документы: загрузка, список, статус, версии, аппрув, завершение обработки |
+| `drafts`    | Черновики: управление загрузкой, preview, решение (approve/reject)  |
 | `pages`     | Просмотр страниц и текстового слоя                                  |
+
+> **Примечание:** Группа `tasks` — внутренняя (internal). Эндпоинты `/tasks/{task_id}/...` используются только для межсервисного взаимодействия и админского анализа. Внешние клиенты используют `/drafts/{draft_id}/...` и `/documents/{document_id}/...`.
 
 ---
 
 ## Группа documents
 
-### POST /documents
+### POST /drafts — Загрузка файла (создание черновика)
 
-Асинхронная загрузка файла. Orchestrator вычисляет SHA-256 содержимого, определяет формат, создаёт/находит логический документ по бизнес-ключу, помещает в очередь Celery. Двухфазный конвейер: **Preview** (OCR/Parser preview → Converter-validator preview → решение пользователя) → **Full** (OCR/Parser → Converter-validator → Registry → RAG Builder).
+Загрузка файла с **обязательным созданием черновика**. Без черновика загрузить документ невозможно.
+
+Orchestrator вычисляет SHA-256 содержимого, определяет формат, создаёт задачу (`task`) и черновик (`draft`) с file_key, помещает в очередь Celery. Двухфазный конвейер: **Preview** (OCR/Parser preview → Converter-validator preview → решение пользователя) → **Full** (OCR/Parser → Converter-validator → Registry → RAG Builder).
 
 `user_id` определяется из контекста аутентификации.
+
+> **Черновик — точка входа:** При загрузке всегда создаётся черновик в статусе `new`. Все последующие операции (preview, решение, конвертация, завершение черновика) привязаны к черновику. Без черновика документ не может существовать в системе.
 
 **Запрос**: `multipart/form-data`
 
@@ -51,6 +56,7 @@
 
 ```json
 {
+  "draft_id": 420000,
   "task_id": 420000,
   "version_id": 420001,
   "status": "uploaded",
@@ -63,7 +69,7 @@
 }
 ```
 
-> **Примечание:** `document_id` назначается на стадии валидации после проверки уникальности. Первичный идентификатор — `task_id`.
+> **Примечание:** `document_id` назначается Registry при завершении черновика. Первичный внешний идентификатор на этапе загрузки и preview — `draft_id`. `task_id` — внутренний сквозной ID задачи, используется только для межсервисного взаимодействия и администрирования.
 
 **Коды ошибок**:
 | HTTP | `error.code` | Когда возникает |
@@ -80,150 +86,42 @@
 | 502 | BAD_GATEWAY | Ошибка вызова внутреннего сервиса |
 | 503 | SERVICE_UNAVAILABLE | MinIO или БД недоступны |
 
-### POST /tasks/{task_id}/preview
+> **⚠️ Internal:** Эндпоинты `/tasks/{task_id}/...` — только для внутреннего использования (межсервисное взаимодействие, администрирование). Read-only: только просмотр статуса задачи. У задач нет preview и decide — эти функции доступны через `/drafts/{draft_id}/...`.
 
-Запуск фазы превью для документа. Возвращает preview-данные (метаданные, кандидаты в дубликаты).
+### GET /tasks/{task_id}/status
 
-**Путь:** `/api/v1/tasks/{task_id}/preview`
-**Метод:** `POST`
+Статус задачи по `task_id` (сквозной ID). Агрегированная информация о состоянии обработки на всех этапах: preview, full-фаза, Registry, индексация.
 
-> **Важно:** на этапе preview `document_id` ещё не назначен. Используется `task_id` — временный идентификатор (bigint), 
-  полученный при загрузке (`POST /documents`). После записи в Registry все дальнейшие вызовы 
-  используют `document_id`.
+**Путь:** `/api/v1/tasks/{task_id}/status`
+**Метод:** `GET`
 
-**Группа `tasks`** — все эндпоинты, работающие с `task_id`, выделены в отдельное пространство имён,
-  чтобы избежать конфликта с `documents/{document_id}`.
-
-**Ответ `202`:**
+**Ответ `200`:**
 
 ```json
 {
   "task_id": 420000,
+  "draft_id": 420000,
+  "document_id": null,
   "status": "previewing",
-  "estimated_completion": "2026-05-15T12:00:30Z"
+  "pipeline_stage": "preview",
+  "progress_percent": 45,
+  "created_at": "2026-06-05T10:00:00Z",
+  "updated_at": "2026-06-05T10:02:30Z"
 }
 ```
 
 | Поле | Тип | Описание |
 |---|---|---|
-| `task_id` | bigint | ID задачи превью (тот же, что при загрузке) |
-| `status` | string | Статус: `previewing` |
-| `estimated_completion` | string | Предполагаемое время завершения |
+| `task_id` | bigint | Сквозной ID задачи |
+| `draft_id` | bigint \| null | ID черновика (если создан) |
+| `document_id` | bigint \| null | ID документа в Registry (если создан) |
+| `status` | string | Текущий статус (`uploaded`, `previewing`, `awaiting_decision`, `parsing`, `validation`, `registry`, `indexing`, `indexed`, `failed`) |
+| `pipeline_stage` | string | Этап конвейера: `upload`, `preview`, `decision`, `full`, `registry`, `indexation` |
+| `progress_percent` | int | Общий прогресс (0–100) |
+| `created_at` | string | Время создания задачи (ISO 8601) |
+| `updated_at` | string | Время последнего обновления (ISO 8601) |
 
-### GET /tasks/{task_id}/preview/status
-
-Статус превью с longpoll-механизмом.
-
-**Путь:** `/api/v1/tasks/{task_id}/preview/status`
-**Метод:** `GET`
-
-**Параметры запроса:**
-
-| Параметр | Тип | По умолчанию | Описание |
-|---|---|---|---|
-| `longpoll` | int | 15 | Время ожидания в секундах |
-
-> **Полный формат данных:** [`docs/schema/schema_parser_preview.json`](../schema/schema_parser_preview.json) (схема `converter_validator_preview_v1`)
-
-**Ответ `200`**:
-
-```json
-{
-  "document_id": 1,
-  "status": "completed",
-  "ocr_parser_status": "completed",
-  "converter_validator_status": "completed",
-  "preview": {
-    "doc_code": "ГОСТ 20868-81",
-    "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
-    "document_type": "normative",
-    "year": "1981",
-    "revision": null
-  },
-  "duplicates": [],
-  "decision_required": false
-}
-
-> **Поля ответа:**
->
-> | Поле | Тип | Описание |
-> |------|-----|----------|
-| `document_id` | bigint | ID документа |
-| `status` | string | Статус превью (`pending`, `processing`, `completed`, `failed`) |
-> | `ocr_parser_status` | string | Статус выбранного сервиса распознавания (OCR или Parser) |
-> | `converter_validator_status` | string | Статус converter-validator |
-> | `preview` | object | Метаданные превью (см. ниже) |
-> | `preview.doc_code` | string | Обозначение документа (предварительное, извлекается на этапе preview) |
-> | `preview.title` | string | Название документа |
-> | `preview.document_type` | string | Тип документа (`normative`, `technical`, etc.) |
-> | `preview.year` | string | Год издания |
-> | `preview.revision` | string\|null | Номер редакции |
-> | `duplicates` | array | Массив найденных дубликатов |
-| `duplicates[].document_id` | bigint | ID найденного дубликата |
-> | `duplicates[].doc_code` | string | Обозначение документа-дубликата |
-> | `duplicates[].title` | string | Название документа-дубликата |
-> | `duplicates[].similarity` | float | Коэффициент схожести (0..1) |
-> | `decision_required` | bool | Требуется ли решение пользователя |
-
-**Пример с найденными дубликатами:**
-
-```json
-{
-  "document_id": 1,
-  "status": "completed",
-  "ocr_parser_status": "completed",
-  "converter_validator_status": "completed",
-  "preview": {
-    "doc_code": "ГОСТ 20868-81",
-    "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
-    "document_type": "normative",
-    "year": "1981",
-    "revision": null
-  },
-  "duplicates": [
-    {
-      "document_id": 2,
-      "doc_code": "ГОСТ 20868-81",
-      "title": "Стойки установочные крепежные. Технические требования",
-      "similarity": 0.97
-    }
-  ],
-  "decision_required": true
-}
-```
-
-
-### POST /tasks/{task_id}/decide
-
-Принятие решения пользователем после фазы превью.
-
-**Путь:** `/api/v1/tasks/{task_id}/decide`
-**Метод:** `POST`
-
-**Запрос:**
-
-```json
-{
-  "action": "proceed",
-  "comment": "Продолжить обработку"
-}
-```
-
-| Поле | Тип | Обязательность | Описание |
-|---|---|---|---|
-| `action` | string | Да | `proceed` / `stop_duplicate` / `force_new_version` |
-| `comment` | string | Нет | Комментарий пользователя |
-
-**Ответ `202`:**
-
-```json
-{
-  "document_id": 1,
-  "status": "proceeding",
-  "action": "proceed",
-  "message": "Запущена полная обработка документа"
-}
-```
+**Примечание:** `GET /tasks/{task_id}/status` — внутренний эндпоинт для сквозного отслеживания. Внешним клиентам для статуса загрузки следует использовать `GET /drafts/{draft_id}/preview/status`, для статуса документа — `GET /documents/{document_id}/status`.
 
 ### POST /documents/{doc_id}/versions
 
@@ -506,7 +404,7 @@
 }
 ```
 
-#### Статус: `ready_for_promotion` (готов к промотированию)
+#### Статус: `ready_for_promotion` (готов к записи в Registry)
 
 Оба пайплайна завершены, документ готов к записи в Registry.
 
@@ -697,7 +595,7 @@
 | `language` | string | Язык OCR | `rus` (по умолчанию), `eng` |
 | `pages` | string | Диапазон страниц | `"1-5"`, `"1,3,5"`, `"all"` (по умолчанию) |
 
-**Ответ `202`** — аналогичен `POST /documents`.
+**Ответ `202`** — аналогичен `POST /drafts`.
 
 ---
 
@@ -995,11 +893,15 @@
 
 ## Группа drafts
 
-Черновики — промежуточные результаты черновик-пайплайна (preview-фазы) до промотирования в Registry.
-Один документ может проходить черновик-пайплайн несколько раз (разные попытки распознавания).
-Человек (или автомат) выбирает лучший черновик для публикации.
+Черновик (draft) — **обязательная точка входа** для загрузки документа. `POST /drafts` всегда создаёт черновик; загрузить документ без черновика невозможно.
 
-Детальная концепция и поток — см. [drafts_storage_plan.md](../plans/drafts_storage_plan.md).
+Черновик содержит raw_data (результат OCR/Parser), preview_metadata и управляет жизненным циклом загрузки:
+- Из черновика данные передаются на конвертацию (Converter-validator) — см. [pipeline1-formation.md](../pipelines/pipeline1-formation.md)
+- После конвертации 
+- Один документ может проходить черновик-пайплайн несколько раз (разные попытки распознавания)
+- Человек (или автомат) выбирает лучший черновик для публикации
+
+Детальная концепция — см. [drafts_storage_plan.md](../plans/drafts_storage_plan.md).
 
 ### GET /drafts
 
@@ -1067,13 +969,13 @@
 | Поле | Тип | Описание |
 |------|-----|----------|
 | `draft_id` | bigint | Уникальный идентификатор черновика |
-| `task_id` | bigint | Связанная задача пайплайна (`pipeline.tasks`) |
+| `task_id` | bigint | Внутренний ID задачи (internal) |
 | `file_key` | string | Ссылка на файл в MinIO |
 | `document_key` | string | Бизнес-ключ документа (SHA-256) |
 | `status` | string | Статус черновика: `new`, `preview_ready`, `promoted`, `discarded` |
 | `confidence` | float | Оценка качества распознавания (0..1) |
 | `preview_metadata` | object | Preview-метаданные: `doc_code`, `title`, `document_type`, `year`, `revision` |
-| `promoted_document_id` | bigint \| null | `document_id` после промотирования (FK → `registry.documents`) |
+| `promoted_document_id` | bigint \| null | `document_id`, созданный по результатам черновика (FK → `registry.documents`) |
 | `error_code` | string \| null | Код ошибки при `discarded` |
 | `error_message` | string \| null | Описание ошибки |
 | `created_at` | string | Время создания (ISO 8601) |
@@ -1133,14 +1035,14 @@
 | Поле | Тип | Описание |
 |------|-----|----------|
 | `draft_id` | bigint | Уникальный идентификатор черновика |
-| `task_id` | bigint | Связанная задача пайплайна |
+| `task_id` | bigint | Внутренний ID задачи (internal) |
 | `file_key` | string | Ссылка на файл в MinIO |
 | `document_key` | string | Бизнес-ключ документа (SHA-256) |
 | `status` | string | Статус черновика |
 | `confidence` | float | Оценка качества распознавания (0..1) |
 | `preview_metadata` | object | Извлечённые метаданные |
 | `raw_data` | object | Сырые данные распознавания (`raw_ocr_v4`) — результат Parser или OCR |
-| `promoted_document_id` | bigint \| null | `document_id` после промотирования |
+| `promoted_document_id` | bigint \| null | `document_id`, созданный по результатам черновика |
 | `error_code` | string \| null | Код ошибки |
 | `error_message` | string \| null | Описание ошибки |
 | `created_by` | string | Кто создал черновик |
@@ -1183,7 +1085,7 @@
 | Поле | Тип | Описание |
 |------|-----|----------|
 | `draft_id` | bigint | Уникальный идентификатор черновика |
-| `task_id` | bigint | Связанная задача пайплайна |
+| `task_id` | bigint | Внутренний ID задачи (internal) |
 | `file_key` | string | Ссылка на файл в MinIO |
 | `document_key` | string | Бизнес-ключ документа (SHA-256) |
 | `status` | string | Статус черновика |
@@ -1199,9 +1101,90 @@
 
 ---
 
+### POST /drafts/{draft_id}/preview
+
+Запуск фазы превью для черновика. Возвращает preview-данные (метаданные, кандидаты в дубликаты).
+
+**Путь:** `/api/v1/drafts/{draft_id}/preview`
+**Метод:** `POST`
+
+**Ответ `202`:**
+
+```json
+{
+  "draft_id": 420000,
+  "status": "previewing",
+  "estimated_completion": "2026-06-05T12:00:30Z"
+}
+```
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `draft_id` | bigint | ID черновика |
+| `status` | string | Статус: `previewing` |
+| `estimated_completion` | string | Предполагаемое время завершения |
+
+**Возможные ошибки:**
+
+| HTTP | Код | Описание |
+|------|-----|----------|
+| 404 | `DRAFT_NOT_FOUND` | Черновик не существует |
+| 409 | `DRAFT_ALREADY_PREVIEWED` | Preview уже запущен или завершён |
+
+### GET /drafts/{draft_id}/preview/status
+
+Статус превью черновика с longpoll-механизмом.
+
+**Путь:** `/api/v1/drafts/{draft_id}/preview/status`
+**Метод:** `GET`
+
+**Параметры запроса:**
+
+| Параметр | Тип | По умолчанию | Описание |
+|---|---|---|---|
+| `longpoll` | int | 15 | Время ожидания в секундах |
+
+**Ответ `200`:**
+
+```json
+{
+  "draft_id": 420000,
+  "status": "completed",
+  "ocr_parser_status": "completed",
+  "converter_validator_status": "completed",
+  "preview": {
+    "doc_code": "ГОСТ 20868-81",
+    "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
+    "document_type": "normative",
+    "year": "1981",
+    "revision": null
+  },
+  "duplicates": [],
+  "decision_required": false
+}
+```
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `draft_id` | bigint | ID черновика |
+| `status` | string | Статус превью (`pending`, `processing`, `completed`, `failed`) |
+| `ocr_parser_status` | string | Статус выбранного сервиса распознавания |
+| `converter_validator_status` | string | Статус converter-validator |
+| `preview` | object | Метаданные превью |
+| `duplicates` | array | Массив найденных дубликатов |
+| `decision_required` | bool | Требуется ли решение пользователя |
+
+**Возможные ошибки:**
+
+| HTTP | Код | Описание |
+|------|-----|----------|
+| 404 | `DRAFT_NOT_FOUND` | Черновик не существует |
+
+---
+
 ### PATCH /drafts/{draft_id}/decide
 
-Принять решение по черновику. Доступно только для черновиков в статусе `preview_ready`.
+**Основной эндпоинт для принятия решения по загруженному документу.** Доступно только для черновиков в статусе `preview_ready`. После решения черновик либо завершается с записью в Registry (`approve`), либо отклоняется (`reject`).
 
 **Тело запроса:**
 
@@ -1214,7 +1197,7 @@
 
 | Поле | Тип | Обязательное | Описание |
 |------|-----|-------------|----------|
-| `action` | string | Да | Решение: `approve` — промотировать в Registry; `reject` — отклонить (`discarded`) |
+| `action` | string | Да | Решение: `approve` — завершить черновик, записать документ в Registry; `reject` — отклонить (`discarded`) |
 | `comment` | string | Нет | Комментарий оператора |
 
 **Ответ `200` (approve):**
@@ -1225,7 +1208,7 @@
   "status": "promoted",
   "action": "approve",
   "promoted_document_id": 1300,
-  "message": "Черновик промотирован в Registry. Запущен Пайплайн 2 (индексация).",
+  "message": "Черновик завершён, документ создан в Registry. Запущен Пайплайн 2 (индексация).",
   "decided_by": "user_10",
   "decided_at": "2026-06-05T10:05:00Z"
 }
@@ -1250,7 +1233,7 @@
 | `draft_id` | bigint | Идентификатор черновика |
 | `status` | string | Новый статус: `promoted` или `discarded` |
 | `action` | string | Выполненное действие: `approve` или `reject` |
-| `promoted_document_id` | bigint \| null | `document_id` после промотирования (null при reject) |
+| `promoted_document_id` | bigint \| null | `document_id` созданного документа (null при reject) |
 | `message` | string | Описание результата |
 | `decided_by` | string | Кто принял решение |
 | `decided_at` | string | Время решения (ISO 8601) |
@@ -1262,6 +1245,9 @@
 | 404 | `DRAFT_NOT_FOUND` | Черновик не существует |
 | 409 | `DRAFT_ALREADY_DECIDED` | Решение уже принято (статус не `preview_ready`) |
 | 400 | `VALIDATION_ERROR` | Некорректный `action` (допустимы: `approve`, `reject`) |
+| 400 | `EMPTY_DOCUMENT` | Нельзя аппрувнуть пустой черновик (0 страниц) |
+
+> **Обработка пустого документа:** Если черновик содержит 0 страниц (пустой PDF/изображение), решение `approve` недоступно. Черновик переводится в статус `discarded` с кодом ошибки `EMPTY_DOCUMENT`. Такой черновик может быть только отклонён (`reject`) или удалён. Пустой документ не может покинуть черновики.
 
 ---
 

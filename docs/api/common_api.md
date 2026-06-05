@@ -15,7 +15,7 @@
 | `Authorization: Bearer <token>` | Да (кроме `/auth/*` и `/system/health`) | JWT-токен доступа |
 | `Content-Type` | Да | `application/json` (для JSON), `multipart/form-data` (для загрузки файлов) |
 | `Accept` | Нет | `application/json` (по умолчанию) |
-| `Idempotency-Key` | Для POST /documents и POST /chat/* | UUIDv4 для идемпотентности |
+| `Idempotency-Key` | Для POST /drafts и POST /chat/* | UUIDv4 для идемпотентности |
 | `X-Request-ID` | Нет | Correlation ID для трассировки |
 
 ### Версионирование API
@@ -104,7 +104,7 @@
 
 | Идентификатор | Тип | Назначается | Используется в URL |
 |---|---|---|---|
-| `task_id` | bigint | Оркестратором при `POST /documents` | `/tasks/{task_id}/...` (до создания карточки) |
+| `task_id` | bigint | Оркестратором при `POST /drafts` | Внутренний (internal) — `/tasks/{task_id}/...` |
 | `document_id` | bigint (sequence) | Registry при создании карточки документа | `/documents/{document_id}/...` (после записи в Registry) |
 | `version_id` | bigint (sequence) | Оркестратором при создании новой версии | В ответах `POST /documents/{doc_id}/versions` |
 | `project_id` | bigint (sequence) | Query Service при создании проекта | `/chat/projects/{project_id}/...` |
@@ -116,10 +116,11 @@
 | `promotion_task_id` | bigint (sequence) | Оркестратором при создании задачи промотирования | `/promotion/tasks/{promotion_task_id}/...` |
 
 **Жизненный цикл идентификаторов:**
-1. `task_id` (bigint) — назначается Оркестратором при `POST /documents`, используется в `/tasks/{task_id}/...`
-2. `document_id` (bigint) — назначается Registry при создании карточки документа
-3. После записи в Registry все операции переключаются на `/documents/{document_id}/...`
-4. Оркестратор хранит маппинг `task_id → document_id`
+1. `draft_id` (bigint) — назначается Оркестратором при `POST /drafts`, внешний ID для preview и решения через `/drafts/{draft_id}/...`
+2. `task_id` (bigint) — внутренний сквозной ID задачи (internal), используется для межсервисного взаимодействия и администрирования
+3. `document_id` (bigint) — назначается Registry при создании карточки документа
+4. После записи в Registry все операции переключаются на `/documents/{document_id}/...`
+5. Оркестратор хранит маппинг `draft_id → task_id → document_id`
 
 Аутентификация:
   - **Эндпоинты через Gateway:** все запросы, кроме `/auth/*` и `/monitor/health`, требуют заголовок
@@ -226,7 +227,7 @@ API поддерживает две модели выполнения:
 | Модель                         | HTTP-код ответа | Описание                                                                                                         | Примеры                                                 |
 | ------------------------------ | --------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
 | **Синхронная**                 | `200` / `201`   | Результат готов в теле ответа                                                                                    | `GET /documents`, `POST /chat/sessions/{session_id}/messages`, `POST /auth/token`  |
-| **Асинхронная (longpoll)**     | `202`           | Запрос принят, сервер возвращает `task_id`. Клиент ожидает результат через longpoll-запрос с переданным таймаутом. | `POST /documents`, `POST /documents/{doc_id}/reprocess` |
+| **Асинхронная (longpoll)**     | `202`           | Запрос принят, сервер возвращает идентификатор отслеживания (для `POST /drafts` — `draft_id`, для внутренних операций — `task_id`). Клиент ожидает результат через longpoll-запрос с переданным таймаутом. | `POST /drafts`, `POST /documents/{doc_id}/reprocess` |
 
 #### Асинхронная модель (longpoll)
 
@@ -324,7 +325,7 @@ GET .../{doc_id}/status?longpoll=15
 | Группа / Эндпоинт                                          | `engineer` | `knowledge_admin` | `system_admin` |
 | ---------------------------------------------------------- | ---------- | ----------------- | -------------- |
 | `GET /auth/me`, `POST /auth/token`, `/refresh`, `/revoke`  | ✓          | ✓                 | ✓              |
-| `POST /documents`                                          | ✓          | ✓                 | ✓              |
+| `POST /drafts`                                              | ✓          | ✓                 | ✓              |
 | `GET /documents` (+ `/{doc_id}`, `/status`, `/file`, `/pages`) | ✓          | ✓                 | ✓              |
 | `DELETE /documents/{doc_id}`                                   | ✗          | ✓                 | ✓              |
 | `POST /documents/{doc_id}/reprocess`                           | ✗          | ✓                 | ✓              |
@@ -345,9 +346,14 @@ GET .../{doc_id}/status?longpoll=15
 | `GET /chat/history` (+ `/export`)                          | ✓          | ✓                 | ✓              |
 | `POST /text/search`                                        | ✓          | ✓                 | ✓              |
 
-| `POST /tasks/{task_id}/preview`                            | ✓          | ✓                 | ✓              |
-| `GET /tasks/{task_id}/preview/status`                      | ✓          | ✓                 | ✓              |
-| `POST /tasks/{task_id}/decide`                             | ✓          | ✓                 | ✓              |
+| `GET /drafts`                                                | ✓          | ✓                 | ✓              |
+| `GET /drafts/{draft_id}`                                    | ✓          | ✓                 | ✓              |
+| `GET /drafts/{draft_id}/preview`                            | ✓          | ✓                 | ✓              |
+| `POST /drafts/{draft_id}/preview`                           | ✓          | ✓                 | ✓              |
+| `GET /drafts/{draft_id}/preview/status`                     | ✓          | ✓                 | ✓              |
+| `PATCH /drafts/{draft_id}/decide`                           | ✓          | ✓                 | ✓              |
+| `DELETE /drafts/{draft_id}`                                 | ✗          | ✓                 | ✓              |
+| `GET /tasks/{task_id}/status` (internal)                    | —          | —                 | ✓              |
 
 | `POST /analyse/compare`, `GET /analyse/compare/{id}`       | ✓          | ✓                 | ✓              |
 | `POST /analyse/calculate`                                  | ✓          | ✓                 | ✓              |
@@ -381,7 +387,7 @@ GET .../{doc_id}/status?longpoll=15
 | ------------------------------------- | ------------------------- | ------------------- | ---------------------------------- |
 | `POST /auth/token`                    | 10 запросов / мин         | 5 мин               | Защита от брутфорса                |
 | `POST /auth/refresh`                  | 20 запросов / мин         | 5 мин               |                                    |
-| `POST /documents`                     | 10 запросов / мин         | 1 мин               | Загрузка документов                |
+| `POST /drafts`                        | 10 запросов / мин         | 1 мин               | Загрузка документов                |
 | `GET /documents` (+ `/{id}`, `/status`, `/file`, `/pages`) | 100 запросов / мин | 1 мин |                                    |
 | `POST /chat/sessions`, `POST /chat/sessions/{id}/messages`      | 30 запросов / мин         | 1 мин               | Чат и текстовые запросы            |
 | `POST /chat/sessions/{id}/context`, `POST /chat/sessions/{id}/export` | 30 запросов / мин | 1 мин |
@@ -415,7 +421,10 @@ GET .../{doc_id}/status?longpoll=15
 #### Пустой / нулевой документ
 - При загрузке файла размером **0 байт** возвращается `400 BAD_REQUEST` с кодом `EMPTY_FILE`.
 - При загрузке файла размером **менее 1 КБ** (нецелесообразный документ) — `400 BAD_REQUEST` с кодом `FILE_TOO_SMALL`.
-- Если документ после распознавания содержит **0 страниц** (пустой PDF/изображение) — статус `failed`, код `EMPTY_DOCUMENT`.
+- Если документ после распознавания содержит **0 страниц** (пустой PDF/изображение):
+  - Черновик переводится в статус `discarded` с кодом ошибки `EMPTY_DOCUMENT`.
+  - Такой черновик **не может быть завершён** — документ не будет создан в Registry. Решение `approve` недоступно.
+  - Пользователь может отклонить черновик (`reject`) или удалить его.
 - Лимит размера файла: строго **< 100 МБ**. При `>= 100 МБ` возвращается `413 FILE_TOO_LARGE`.
 
 #### Пустое сообщение в чате
@@ -451,7 +460,7 @@ GET .../{doc_id}/status?longpoll=15
 
 | Внешний сервис | Эндпоинт | Поведение | HTTP-код |
 |---|---|---|---|
-| MinIO | `POST /documents`, `GET /documents/{id}/file` | Ошибка загрузки/получения файла | `503 SERVICE_UNAVAILABLE` |
+| MinIO | `POST /drafts`, `GET /documents/{id}/file` | Ошибка загрузки/получения файла | `503 SERVICE_UNAVAILABLE` |
 | Redis | Все эндпоинты (кэш/очереди) | **Redis недоступен**: Rate limiting отключается, запросы проходят без ограничения. Инцидент логируется как WARN. В production Redis должен быть развёрнут в кластере (минимум 2 реплики). Временно безлимитный режим — аварийный, нештатный. | — (WARN-лог) |
 | LLM | `POST /chat/*`, `POST /text/*` | Retry 2 раза с усечением контекста; при всех неудачах — `502 BAD_GATEWAY` | `502 BAD_GATEWAY` |
 | PostgreSQL | Все эндпоинты с доступом к БД | Connection pool исчерпан — `503 SERVICE_UNAVAILABLE` | `503 SERVICE_UNAVAILABLE` |
@@ -503,7 +512,7 @@ GET .../{doc_id}/status?longpoll=15
 
 - **Лимиты загрузки:** максимальный размер файла — 100 МБ. Поддерживаемые MIME-типы: `application/pdf`, `image/png`, `image/jpeg`, `image/tiff`. При превышении лимита возвращается `413 PAYLOAD_TOO_LARGE`.
 
-- **Идемпотентность:** опциональный заголовок `Idempotency-Key` поддерживается для `POST /documents` и `POST /chat/ask`. При повторном запросе с тем же ключом в течение 1 часа возвращается сохранённый результат.
+- **Идемпотентность:** опциональный заголовок `Idempotency-Key` поддерживается для `POST /drafts` и `POST /chat/ask`. При повторном запросе с тем же ключом в течение 1 часа возвращается сохранённый результат.
 
 ---
 

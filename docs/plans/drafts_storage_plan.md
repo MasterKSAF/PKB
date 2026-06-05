@@ -14,9 +14,10 @@ preview → решение пользователя → full → Registry
 
 Но не разделяет две принципиально разные фазы:
 1. **Черновик-пайплайн** (preview) — идентификация документа, распознавание, проверка уникальности
-2. **Промотирование** — загрузка готового черновика в Registry
+2. **Завершение черновика, запись в Registry** — создание документа в Registry на основе готового черновика
 
 При этом:
+- Загрузка документа **всегда** проходит через черновик — это обязательная точка входа. Без черновика документ не может существовать в системе.
 - Один документ может проходить черновик-пайплайн несколько раз (разные попытки распознавания, разные OCR/Parser)
 - Человек (или автомат) выбирает лучший черновик для публикации
 - Нет чёткого места для хранения промежуточных состояний и истории попыток
@@ -57,7 +58,7 @@ preview → решение пользователя → full → Registry
 1. Загрузка файла → MinIO → file_key
      │
      ▼
-2. POST /documents → task.created (status=new)
+2. POST /drafts → task.created (status=new)
      │                 draft.created (status=new, file_key=key)
      ▼
 3. Черновик-пайплайн
@@ -70,10 +71,10 @@ preview → решение пользователя → full → Registry
 4. Черновик сохранён (status=preview_ready)
 
      ├─ Если аномалии → ЧЕЛОВЕК решает (UI: approve/reject)
-     └─ Если уникально и чисто → АВТОПРОМОТ
+     └─ Если уникально и чисто → АВТОЗАВЕРШЕНИЕ
      
      ▼
-5. Промотирование
+5. Завершение черновика, запись в Registry
      ├─ Converter-validator (ПОЛНЫЙ) → validated_v3
      │   (берёт draft.raw_data)
      └─ Registry: создание карточки → document_id
@@ -91,13 +92,13 @@ preview → решение пользователя → full → Registry
 | **`file_key` — у черновика** | Файл привязан к конкретной попытке распознавания |
 | **`pipeline.tasks.data` — JSONB** | Для хранения промежуточных результатов (raw_data_key и т.д.) |
 | **Черновик-пайплайн = preview-фаза** | Включает полный OCR/Parser + извлечение метаданных |
-| **Человек выбирает только при аномалиях** | Если уникально и чисто — автопромот |
+| **Человек выбирает только при аномалиях** | Если уникально и чисто — автозавершение |
 | **История хранится** | Все черновики остаются в таблице, даже discarded |
 | **Лимита нет** | Человек может удалить черновик вручную |
 
 ### 2.4. Глубина обработки — решение
 
-**Рекомендация: OCR/Parser (full) в черновике, Converter-validator при промотировании.**
+**Рекомендация: OCR/Parser (full) в черновике, Converter-validator при завершении черновика.**
 
 ```
 Черновик:
@@ -108,7 +109,7 @@ preview → решение пользователя → full → Registry
     → confidence
     Сохраняется в draft.preview_metadata
 
-Промотирование:
+Завершение черновика, запись в Registry:
   Converter-validator (full, шаги 2.1–2.6):
     берёт raw_ocr_v4 из draft.raw_data
     → validated_v3
@@ -117,7 +118,7 @@ preview → решение пользователя → full → Registry
 
 Обоснование:
 - **OCR/Parser** — самая дорогая операция. Её результат нужен и для идентификации (метаданные, confidence), и для Registry. Нет смысла делать дважды
-- **Converter-validator** — быстрее, можно запустить только при промотировании
+- **Converter-validator** — быстрее, можно запустить только при завершении черновика
 - Если черновик отклонён — Converter не запускался, вычислительные потери минимальны
 - Черновик содержит достаточно данных для информированного решения: метаданные + confidence + бизнес-ключ
 
@@ -155,7 +156,7 @@ CREATE TABLE pipeline.drafts (
     confidence        REAL,                         -- оценка качества распознавания
     error_code        TEXT,                         -- код ошибки при discard
     error_message     TEXT,                         -- описание ошибки
-    promoted_document_id BIGINT,                    -- document_id после промотирования (FK → registry.documents)
+    promoted_document_id BIGINT,                    -- document_id созданного документа (FK → registry.documents)
     created_by        TEXT,
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -168,7 +169,7 @@ CREATE INDEX idx_drafts_status ON pipeline.drafts(status);
 
 ### 3.3. Связь Registry
 
-При промотировании:
+При завершении черновика:
 - `draft.status = promoted`
 - `draft.promoted_document_id = {new document_id}`
 - В `draft.raw_data` уже лежит raw_ocr_v4, конвертер берёт его
@@ -179,25 +180,23 @@ CREATE INDEX idx_drafts_status ON pipeline.drafts(status);
 
 ```mermaid
 stateDiagram-v2
-    [*] --> upload : пользователь загружает файл
+    [*] --> new : POST /drafts
     
-    upload --> draft_new : POST /documents
+    new --> preview_ready : OCR/Parser (full) + метаданные готовы
+    new --> discarded : ошибка распознавания
     
-    draft_new --> draft_preview_ready : OCR/Parser (full) + метаданные готовы
-    draft_new --> draft_discarded : ошибка распознавания
+    preview_ready --> discarded : дубликат / пользователь отклонил
     
-    draft_preview_ready --> draft_discarded : дубликат / пользователь отклонил
+    preview_ready --> auto_complete : уникально, чисто, confidence ≥ порог
+    preview_ready --> human_decision : есть аномалия
     
-    draft_preview_ready --> auto_promote : уникально, чисто, confidence ≥ порог
-    draft_preview_ready --> human_decision : есть аномалия
+    human_decision --> promoted : approve
+    human_decision --> discarded : reject
     
-    human_decision --> draft_promoted : approve
-    human_decision --> draft_discarded : reject
+    auto_complete --> promoted : автозавершение
     
-    auto_promote --> draft_promoted : автопромот
-    
-    draft_promoted --> [*]
-    draft_discarded --> [*]
+    promoted --> [*]
+    discarded --> [*]
 ```
 
 ### Статусы
@@ -213,15 +212,15 @@ stateDiagram-v2
 
 ## 5. Сценарии
 
-### 5.1. Чистый документ — автопромот
+### 5.1. Чистый документ — автозавершение
 
 ```
-1. POST /documents → file_key=f-abc, task_id=100, draft#1 (new, f-abc)
+1. POST /drafts → file_key=f-abc, task_id=100, draft#1 (new, f-abc)
 2. OCR/Parser (full) → raw_ocr_v4 → draft.raw_data (JSONB)
 3. Converter-validator (metadata) → confidence=0.95, doc_key=X
    draft#1 (preview_ready, doc_key=X, confidence=0.95)
 4. Registry check-uniqueness: не дубликат, уникален
-5. auto_promote
+5. auto_complete
    Converter-validator (full, берёт draft.raw_data) → validated_v3 → Registry → document_id=500
    draft#1 (promoted, promoted_document_id=500)
 ```
@@ -229,7 +228,7 @@ stateDiagram-v2
 ### 5.2. Аномалия — человек решает
 
 ```
-1. POST /documents → file_key=f-def, task_id=101, draft#1
+1. POST /drafts → file_key=f-def, task_id=101, draft#1
 2. OCR/Parser (full) → raw_ocr_v4
 3. Converter-validator (metadata) → confidence=0.55 (низкий), doc_key=X
 4. human_decision
@@ -241,20 +240,20 @@ stateDiagram-v2
 ### 5.3. Повторная попытка после ошибки
 
 ```
-1. POST /documents → file_key=f-ghi, task_id=102, draft#1
+1. POST /drafts → file_key=f-ghi, task_id=102, draft#1
 2. OCR/Parser → ошибка → draft#1 (discarded, error=RECOGNITION_FAILED)
 3. Пользователь исправляет файл и загружает снова
-4. POST /documents → file_key=f-ghi-2, task_id=103, draft#2
+4. POST /drafts → file_key=f-ghi-2, task_id=103, draft#2
 5. OCR/Parser (full) → raw_ocr_v4 → draft.raw_data → draft#2 (preview_ready, doc_key=X)
-6. auto_promote → Registry: document_id=502, draft#2 (promoted)
+6. auto_complete → Registry: document_id=502, draft#2 (promoted)
 ```
 
 ### 5.4. Несколько вариантов распознавания (OCR vs Parser)
 
 ```
-1. POST /documents → file_key=f-jkl, task_id=104 (OCR), draft#1
+1. POST /drafts → file_key=f-jkl, task_id=104 (OCR), draft#1
    OCR/Parser → raw_ocr_v4 → preview_ready (confidence=0.82, doc_key=X)
-2. POST /documents → file_key=f-jkl, task_id=105 (Parser), draft#2
+2. POST /drafts → file_key=f-jkl, task_id=105 (Parser), draft#2
    OCR/Parser → raw_ocr_v4 → preview_ready (confidence=0.94, doc_key=X)
 3. Аномалия: расхождение confidence, разные метаданные
 4. UI: показывает оба черновика для сравнения
@@ -279,9 +278,9 @@ stateDiagram-v2
 
 | Эндпоинт | Изменение |
 |---|---|
-| `POST /documents` | При создании задачи создаётся draft (status=new) с file_key |
+| `POST /drafts` | При создании задачи создаётся draft (status=new) с file_key. Возвращает `draft_id` как внешний идентификатор |
 | (внутренняя операция) | Запись `draft.raw_data` после OCR/Parser (через Оркестратор) |
-| `POST /tasks/{task_id}/decide` | При `proceed` — черновик переходит в auto_promote или human_decision |
+| `PATCH /drafts/{draft_id}/decide` | Основной эндпоинт решения. При `approve` — черновик переходит в auto_complete или human_decision. `POST /tasks/{task_id}/decide` — внутренний (internal) аналог |
 
 ---
 
@@ -290,7 +289,7 @@ stateDiagram-v2
 | Входит | Не входит |
 |--------|-----------|
 | Таблица `pipeline.drafts` рядом с `pipeline.tasks` | UI сравнения черновиков (будет позже) |
-| Автопромот при уникальном + чистом | Автоматический выбор лучшего черновика (LLM) |
+| Автозавершение при уникальном + чистом | Автоматический выбор лучшего черновика (LLM) |
 | Решение человека при аномалиях | Пакетные операции |
 | Хранение истории (discarded не удаляются) | TTL/сроки жизни (удаление — вручную) |
 | DELETE для ручного удаления | RAG Search по черновикам (не участвуют) |
@@ -312,9 +311,9 @@ stateDiagram-v2
 | Шаг | Что сделать | Кто |
 |-----|-------------|-----|
 | 1 | Создать таблицы `pipeline.tasks`, `pipeline.drafts` | Разработчик Оркестратора |
-| 2 | Добавить `POST /documents` → создание task + draft | Разработчик Оркестратора |
+| 2 | Добавить `POST /drafts` → создание task + draft | Разработчик Оркестратора |
 | 3 | После OCR/Parser записать `draft.raw_data` (внутренняя операция Оркестратора) | Разработчик Оркестратора |
 | 4 | Добавить запись `preview_metadata` в черновик после метаданных | Разработчик Оркестратора |
-| 5 | Реализовать автопромот / human_decision logic | Разработчик Оркестратора |
+| 5 | Реализовать автозавершение / human_decision logic | Разработчик Оркестратора |
 | 6 | Добавить API `GET /drafts`, `PATCH /drafts/{id}/decide`, `DELETE` | Разработчик Оркестратора |
 | 7 | Актуализировать FSM и pipeline1-formation.md | Игорь Жулин |

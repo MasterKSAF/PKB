@@ -3,6 +3,8 @@
 Назначение: преобразовать исходный файл в структурированную карточку документа в БД.  
 Пайплайн состоит из двух фаз: **Preview** (быстрая проверка, метаданные, решение пользователя) и **Full** (полная обработка).
 
+**Черновик (draft) — обязательная точка входа:** `POST /drafts` всегда создаёт черновик. Без черновика загрузить документ невозможно. Из черновика данные передаются на конвертацию (Converter-validator) и после — в Registry (чистовик).
+
 ```mermaid
 sequenceDiagram
     participant UI as Web UI
@@ -14,7 +16,7 @@ sequenceDiagram
 
 
     %% Фаза Preview
-    UI->>Orch: POST /documents/{doc_id}/preview
+    UI->>Orch: POST /drafts/{draft_id}/preview
     activate Orch
     Orch->>Orch: Определение типа файла (скан/цифровой)
     alt Скан/изображение
@@ -41,9 +43,9 @@ sequenceDiagram
 
     Note over UI,Orch: Пользователь принимает решение
 
-    UI->>Orch: POST /tasks/{task_id}/decide
+    UI->>Orch: PATCH /drafts/{draft_id}/decide
     activate Orch
-    alt action = proceed
+    alt action = approve
         Orch-->>UI: 202 {status: proceeding}
 
         %% Фаза Full
@@ -79,9 +81,9 @@ sequenceDiagram
             deactivate Reg
             Orch-->>UI: status: completed
         end
-    else action = stop_duplicate
+    else action = reject (duplicate)
         Orch-->>UI: status: duplicate
-    else action = force_new_version
+    else action = reject (force_new_version)
         Orch->>Orch: Принудительное создание новой версии
         Orch-->>UI: status: new_version_created
     end
@@ -101,7 +103,7 @@ sequenceDiagram
 | P.3 | Извлечение первичных метаданных | Converter-validator (preview API) | Обозначение, наименование, тип, даты |
 | P.4 | Проверка уникальности (по метаданным + размеру) | Оркестратор → `POST /registry/documents/check-uniqueness` | Список кандидатов-дубликатов |
 | P.5 | Отображение preview пользователю | UI | Метаданные + дубликаты |
-| P.6 | Решение пользователя | UI → Оркестратор | proceed / stop_duplicate / force_new_version |
+| P.6 | Решение пользователя | UI → Оркестратор (`PATCH /drafts/{draft_id}/decide`) | approve / reject |
 
 **Параметры preview:**
 
@@ -115,7 +117,7 @@ sequenceDiagram
 
 ### Фаза Full (полная обработка)
 
-Запускается после решения пользователя `proceed`. Состоит из трёх этапов.
+Запускается после решения пользователя `approve` (через `PATCH /drafts/{draft_id}/decide`). Черновик завершается, документ записывается в Registry через конвертацию. Состоит из трёх этапов.
 
 ### Форматы входных/выходных данных Full-фазы
 
@@ -126,7 +128,7 @@ sequenceDiagram
 | 1.3 | Registry (`:8084`) — `POST /check-uniqueness` | `file_hash_sha256`, `title_hash_sha256` | `{is_unique: bool, duplicate_of: bigint/null}` |
 | 1.4 | Registry (`:8084`) — `POST /documents` | `validated_v3` + метаданные | `document_id` (bigint) |
 | 1.5 | Orchestrator → Scheduler (RAG Builder) | `document_id` | Статус `pending_index` → Pipeline 2 |
-| 1.6 | Orchestrator (очистка preview-артефактов) | `task_id` | Удаление preview-данных (preview_metadata, preview_blobs) |
+| 1.6 | Orchestrator (очистка preview-артефактов) | `draft_id` | Удаление preview-данных (preview_metadata, preview_blobs) |
 
 #### Этап 1: OCR-сервис и Parser-сервис (распознавание и извлечение сырых данных)
 
@@ -247,7 +249,7 @@ sequenceDiagram
 
 ```mermaid
 stateDiagram-v2
-    [*] --> uploaded : POST /documents
+    [*] --> uploaded : POST /drafts
     uploaded --> previewing : запуск preview
     previewing --> awaiting_decision : Preview завершён
     previewing --> failed : ошибка распознавания
@@ -269,10 +271,10 @@ stateDiagram-v2
     review_required --> failed : отклонено оператором
     review_required --> archived : таймаут 48ч
 
-    ready_for_promotion --> registry : промотирование
+    ready_for_promotion --> registry : запись в Registry
     ready_for_promotion --> failed : таймаут 24ч
 
-    approved --> registry : промотирование
+    approved --> registry : запись в Registry
 
     registry --> pending_index : запуск RAG Builder
     registry --> failed : ошибка записи в БД
@@ -316,19 +318,19 @@ stateDiagram-v2
 
 **Триггер `registry → archived`:** Документ архивируется автоматически через N дней после создания новой версии (настраиваемый параметр, по умолчанию 365 дней). Также архивация может быть инициирована вручную `system_admin`. Архивированный документ доступен только для чтения.
 
-> **Черновики (drafts):** preview-фаза выделена в отдельный **черновик-пайплайн**. `file_key` — у черновика (`pipeline.drafts.file_key`). `raw_data` — в `pipeline.drafts.raw_data` (JSONB, результат Parser или OCR). MinIO — только для бинарных файлов (PDF, изображения). OCR/Parser выполняется **полностью** уже в черновике; Converter-validator — только извлечение метаданных. Полная конвертация (validated_v3) запускается при промотировании. Детальная реализация — см. [`docs/plans/drafts_storage_plan.md`](../plans/drafts_storage_plan.md).
+> **Черновики (drafts):** Черновик — основной элемент управления загрузкой документа. `file_key` — у черновика (`pipeline.drafts.file_key`). `raw_data` — в `pipeline.drafts.raw_data` (JSONB, результат Parser или OCR). MinIO — только для бинарных файлов (PDF, изображения). OCR/Parser выполняется **полностью** уже в черновике; Converter-validator — только извлечение метаданных. Полная конвертация (validated_v3) запускается при approve, после чего документ записывается в Registry. Решение пользователя принимается через `PATCH /drafts/{draft_id}/decide`. `task_id` — внутренний сквозной ID задачи (internal). Детальная реализация — см. [`docs/plans/drafts_storage_plan.md`](../plans/drafts_storage_plan.md).
 
 **Жизненный цикл черновика (Draft FSM):**
 
 ```mermaid
 stateDiagram-v2
-    [*] --> new : POST /documents
+    [*] --> new : POST /drafts
     new --> preview_ready : preview-фаза завершена
     new --> discarded : ошибка preview
 
     preview_ready --> promoted : approve
     preview_ready --> discarded : reject
-    preview_ready --> discarded : автопромот не прошёл
+    preview_ready --> discarded : автозавершение не прошло
 
     promoted --> [*] : документ в Registry
     discarded --> [*]
@@ -339,8 +341,8 @@ stateDiagram-v2
 | Статус черновика | Статус документа | Описание |
 |---|---|---|
 | `new` | `uploaded` / `previewing` | Черновик создан при загрузке файла, выполняется preview-фаза |
-| `preview_ready` | `awaiting_decision` | Preview завершён, метаданные извлечены. Если уникально и чисто — автопромот; иначе — ожидание решения человека |
-| `promoted` | `parsing` → `validation` → `registry` | Черновик утверждён. Запускается полная конвертация (validated_v3) и промотирование в Registry |
+| `preview_ready` | `awaiting_decision` | Preview завершён, метаданные извлечены. Если уникально и чисто — автозавершение; иначе — ожидание решения человека |
+| `promoted` | `parsing` → `validation` → `registry` | Черновик утверждён. Запускается полная конвертация (validated_v3) и запись документа в Registry |
 | `discarded` | `failed` / `archived` | Черновик отклонён (человеком или автоматом). Можно загрузить файл повторно для новой попытки (новый draft) |
 
 ---
@@ -438,6 +440,6 @@ Preview-фаза обрабатывает первые N страниц доку
 
 **TTL preview-артефактов:** 7 дней с момента создания. По истечении — автоматическая очистка.
 
-**Примечание:** Повторный вызов `POST /tasks/{task_id}/decide` для документов в терминальных статусах
-(`duplicate`, `new_version`, `archived`) возвращает ошибку `400 BAD_REQUEST` с кодом `INVALID_STATE_TRANSITION`.
-Пользователь должен создать новый документ.
+> **Примечание:** Повторный вызов `PATCH /drafts/{draft_id}/decide` для черновиков в терминальных статусах
+(`promoted`, `discarded`) возвращает ошибку `409 CONFLICT` с кодом `DRAFT_ALREADY_DECIDED`.
+Пользователь должен создать новый документ (новый черновик).

@@ -20,7 +20,7 @@ Gateway — **внутренний сервис**, не имеет внешне�
 | **Аутентификация** | Проверка JWT Bearer-токена. Невалидный/отсутствующий токен → `401` для защищённых эндпоинтов; анонимный доступ только к `/auth/*` и `/system/health` |
 | **RBAC** | Проверка прав доступа на основе роли и permissions пользователя. Матрица доступа — см. [common_api.md](common_api.md#матрица-доступа-rbac) |
 | **Маршрутизация** | Проксирование запросов к внутренним сервисам: Auth, Orchestrator, Query, Registry, Integration и др. |
-| **Иденпотентность** | Кеширование ответов `POST` для `/documents*` и `/chat*` по заголовку `Idempotency-Key` (TTL: 1 час) |
+| **Иденпотентность** | Кеширование ответов `POST` для `/drafts*` и `/chat*` по заголовку `Idempotency-Key` (TTL: 1 час) |
 | **Единый формат ошибок** | Перехват и нормализация HTTP-исключений и ошибок валидации в единый формат (см. [common_api.md](common_api.md#формат-ошибок)) |
 | **CORS** | **CORS**: По умолчанию `*` для разработки. В production среде CORS ограничен списком разрешённых доменов (`CORS_ALLOWED_ORIGINS`). Значение `*` допускается только при `ENV=development`. CI-проверка отклоняет деплой с `CORS_ALLOWED_ORIGINS=*` для production. |
 | **Мониторинг** | Health-check endpoint `/system/health` с агрегированным статусом всех сервисов |
@@ -42,7 +42,7 @@ Gateway объединяет API всех внутренних сервисов 
 | `/api/v1/auth/*` | Auth Service | `8082` | [auth_service_api.md](auth_service_api.md) |
 | `/api/v1/admin/*` | Auth Service | `8082` | [auth_service_api.md](auth_service_api.md) |
 | `/api/v1/documents/*` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md) |
-| `/api/v1/tasks/*` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md) |
+| `/api/v1/tasks/*` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md)² |
 | `/api/v1/drafts/*` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md) |
 | `/api/v1/monitor/*` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md) |
 | `/api/v1/chat/*` | Query Service | `8083` | [query_service_api.md](query_service_api.md) |
@@ -56,6 +56,8 @@ Gateway объединяет API всех внутренних сервисов 
 | `/api/v1/meridian/*` | Integration Service | `8085` | [integration_service_api.md](integration_service_api.md) |
 
 > **¹ Примечание**: Маршрут `/api/v1/pages/*` — устаревший алиас. Все эндпоинты работы со страницами вложены в `/documents/{doc_id}/pages/*` и маршрутизируются через `/api/v1/documents/*`. Отдельный префикс `/pages/*` будет удалён после рефакторинга Gateway.
+>
+> **² Примечание:** Маршрут `/api/v1/tasks/*` — внутренний (internal), используется только для межсервисного взаимодействия и администрирования. Внешние клиенты используют `/api/v1/drafts/*`.
 
 В мок-режиме (см. [gateway.py](../mocks/gateway.py)) Gateway, Orchestrator и остальные сервисы объединены в единое FastAPI-приложение на порту `8081` (эмуляция nginx + gateway для разработки и тестов).
 
@@ -69,7 +71,7 @@ Request → CORS → RBAC → Idempotency → ProcessTime → Router → Respons
 
 1. **CORSMiddleware** — установка CORS-заголовков для всех origins
 2. **RBACMiddleware** — извлечение и валидация JWT, проверка прав доступа
-3. **IdempotencyMiddleware** — проверка `Idempotency-Key` для `POST /documents` и `POST /chat`
+3. **IdempotencyMiddleware** — проверка `Idempotency-Key` для `POST /drafts` и `POST /chat`
 4. **ProcessTimeMiddleware** — замер времени обработки (`X-Process-Time`)
 5. **Exception Handlers** — перехват `HTTPException`, `RequestValidationError`, `ValidationError` в единый формат
 
@@ -149,7 +151,7 @@ sequenceDiagram
 
     User->>Nginx: GET / (открыть Web UI)
     Nginx->>UI: отдать приложение
-    UI->>GW: POST /api/v1/documents (JWT + file)
+    UI->>GW: POST /api/v1/drafts (JWT + file)
     GW->>GW: RBACMiddleware: verify JWT, check permissions
     alt Invalid / missing token
         GW-->>UI: 401 UNAUTHORIZED

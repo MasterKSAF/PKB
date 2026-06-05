@@ -197,14 +197,24 @@ curl -X POST http://127.0.0.1:8080/api/v1/auth/token \
   -H "Content-Type: application/json" \
   -d '{"username": "user", "password": "pass"}'
 
-# Загрузка документа (асинхронно)
-curl -X POST http://127.0.0.1:8080/api/v1/documents \
+```bash
+# Загрузка документа (асинхронно) — возвращает draft_id
+curl -X POST http://127.0.0.1:8080/api/v1/drafts \
   -H "Authorization: Bearer <token>" \
   -F "file=@document.pdf"
+# Ответ: { "draft_id": 420000, "task_id": 420000, "status": "uploaded", ... }
 
-# Статус обработки
-curl -X GET http://127.0.0.1:8080/api/v1/documents/{doc_id}/status \
-  -H "Authorization: Bearer <token>"
+# Статус preview черновика (longpoll)
+curl -X GET http://127.0.0.1:8080/api/v1/drafts/{draft_id}/preview/status
+
+# Принять решение по черновику
+curl -X PATCH http://127.0.0.1:8080/api/v1/drafts/{draft_id}/decide \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"action": "approve"}'
+
+# Статус документа после завершения черновика
+curl -X GET http://127.0.0.1:8080/api/v1/documents/{document_id}/status
 
 # Поиск
 curl -X POST http://127.0.0.1:8080/api/v1/text/search \
@@ -270,16 +280,17 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 **Назначение:**
 Координатор пайплайнов 1 и 2. Управляет последовательностью вызовов сервисов, передаёт JSON-контейнеры между этапами, ведёт журнал обработки, реализует двухфазную схему preview → решение → full.
 
+**Ключевой принцип:** загрузка документа всегда проходит через черновик (draft) — без черновика документ не может быть загружен или завершён с записью в Registry.
+
 **Основные функции:**
-- Приём и валидация загружаемых файлов, вычисление SHA-256, сохранение в MinIO
+- Приём и валидация загружаемых файлов с обязательным созданием черновика, вычисление SHA-256, сохранение в MinIO
+- Управление черновиками (drafts): создание (точка входа), preview, решение, жизненный цикл (new → preview_ready → promoted/discarded)
 - Запуск preview-фазы (OCR/Parser → Converter-validator → проверка уникальности)
-- Оркестрация full-фазы: распознавание → конвертация → проверка уникальности → запись в Registry
+- Оркестрация full-фазы: завершение черновика → распознавание → конвертация → проверка уникальности → запись в Registry
 - Управление статусной моделью FSM документа
 - Longpoll-механизм для асинхронных операций
 - Health check и метрики (`/monitor/*`)
 - Журналирование всех этапов обработки (собственный журнал, не БД Registry)
-
----
 
 ### Сервис аутентификации (Auth Service)
 **Порт:** `8082`

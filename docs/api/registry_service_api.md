@@ -626,8 +626,7 @@ POST /registry/terminology/import
 | POST | `/registry/documents` | Создать |
 | PUT | `/registry/documents/{doc_id}` | Обновить |
 | PATCH | `/registry/documents/{doc_id}` | Частичное обновление |
-| PATCH | `/registry/documents/{doc_id}/status` | Обновить статус |
-| GET | `/registry/documents/{doc_id}/history` | История статусов |
+| PATCH | `/registry/documents/{doc_id}/status` | Обновить статус (internal — только для Оркестратора) |
 | GET | `/registry/documents/{doc_id}/succession` | Цепочка преемственности |
 | DELETE | `/registry/documents/{doc_id}` | Удалить |
 | GET | `/registry/documents/export` | Экспорт |
@@ -648,7 +647,7 @@ GET /registry/documents
 | `source_type` | string | `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `OTHER` |
 | `mks_oks_code` | string | Фильтр по коду МКС/ОКС |
 | `okstu_code` | string | Фильтр по коду ОКСТУ |
-| `status` | string | FSM-статус документа |
+| `status` | string | FSM-статус документа (управляется Оркестратором, фильтр read-only) |
 | `era` | string | `USSR`, `CIS`, `RF`, `CURRENT` |
 | `validity_status` | string | `active`, `superseded`, `cancelled`, `historical`, `draft` |
 | `jurisdiction` | string | `RU`, `EU`, `US`, `NO`, `INTL` |
@@ -726,7 +725,7 @@ GET /registry/documents/{doc_id}
 - `doc_code` — код документа (ГОСТ, ОСТ и т.д.)
 - `title` — название документа
 - `title_hash_sha256` — хэш бизнес-ключа
-- `status` — FSM-статус обработки
+- `status` — FSM-статус обработки (управляется Оркестратором, Registry — read-only)
 - `era` — эпоха (`USSR`, `CIS`, `RF`, `CURRENT`)
 - `validity_status` — юридический статус (`active`, `superseded`, `cancelled`, `historical`, `draft`)
 - `jurisdiction` — юрисдикция (`RU`, `EU`, `US`, `NO`, `INTL`)
@@ -1248,23 +1247,31 @@ PATCH /registry/documents/{doc_id}
 
 ---
 
-### 3.6. Обновить статус
+### 3.6. Обновить статус (internal)
 
 ```
 PATCH /registry/documents/{doc_id}/status
 ```
 
+> **Internal:** Вызывается только Оркестратором при завершении индексации (после Pipeline 2). Внешним клиентам недоступен.
+
+Оркестратор уведомляет Registry о финальном статусе документа после прохождения всех этапов обработки.
+
 **Тело запроса:**
 
 ```json
 {
-  "status": "archived",
-  "comment": "Документ устарел",
-  "changed_by": "ivanov_ai"
+  "status": "indexed",
+  "comment": "Индексация завершена, документ готов к поиску",
+  "changed_by": "orchestrator"
 }
 ```
 
-**Допустимые статусы (FSM)**: `draft`, `uploaded`, `validating`, `processing`, `review_required`, `ready_for_promotion`, `approved`, `failed`, `archived`.
+| Поле | Тип | Обязательность | Описание |
+|------|-----|---------------|----------|
+| `status` | string | Да | FSM-статус документа (`registry`, `indexed`, `failed`, `archived`) |
+| `comment` | string | Нет | Причина смены статуса |
+| `changed_by` | string | Нет | Инициатор (по умолчанию `orchestrator`) |
 
 **Ответ `200`:**
 
@@ -1272,45 +1279,16 @@ PATCH /registry/documents/{doc_id}/status
 {
   "data": {
     "id": 1,
-    "status": "archived",
-    "previous_status": "approved",
-    "history_id": 1,
-    "updated_at": "2026-05-15T13:00:00Z"
+    "status": "indexed",
+    "previous_status": "registry",
+    "updated_at": "2026-06-05T14:00:00Z"
   }
 }
 ```
 
 ---
 
-### 3.7. История статусов
-
-```
-GET /registry/documents/{doc_id}/history
-```
-
-Полный аудит переходов статусов документа.
-
-**Ответ `200`:**
-
-```json
-{
-  "data": [
-    {
-      "history_id": "h-001",
-      "old_status": null,
-      "new_status": "uploaded",
-      "comment": { "reason": "initial_upload" },
-      "changed_by": "system_registry_sync",
-      "changed_at": "2026-04-27T10:00:00Z"
-    }
-  ],
-  "meta": { "total": 6 }
-}
-```
-
----
-
-### 3.8. Цепочка преемственности
+### 3.7. Цепочка преемственности
 
 ```
 GET /registry/documents/{doc_id}/succession
@@ -1334,7 +1312,7 @@ GET /registry/documents/{doc_id}/succession
 
 ---
 
-### 3.9. Удалить
+### 3.10. Удалить
 
 ```
 DELETE /registry/documents/{doc_id}
@@ -1342,7 +1320,7 @@ DELETE /registry/documents/{doc_id}
 
 ---
 
-### 3.10. Экспорт
+### 3.11. Экспорт
 
 ```
 GET /registry/documents/export
@@ -1352,7 +1330,7 @@ GET /registry/documents/export
 
 ---
 
-### 3.11. Массовый импорт
+### 3.12. Массовый импорт
 
 ```
 POST /registry/documents/import
