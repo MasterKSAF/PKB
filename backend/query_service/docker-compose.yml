@@ -1,0 +1,32 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: pkb
+      POSTGRES_PASSWORD: pkb
+      POSTGRES_DB: pkb_query
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pkb -d pkb_query"]
+      interval: 5s
+      retries: 10
+
+  query-service:
+    build: .
+    ports:
+      - "8083:8083"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://pkb:pkb@postgres:5432/pkb_query
+      DEV_AUTH_MODE: "true"
+      MOCK_RAG_ENABLED: "true"
+      MOCK_REGISTRY_ENABLED: "true"
+      MOCK_LLM_ENABLED: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:

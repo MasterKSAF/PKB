@@ -22,7 +22,7 @@
     *   Удаленно: OpenAI-compatible API
 *   **Драйвер БД:** `asyncpg`
 
-## 🚀 Быстрый старт
+## Быстрый старт
 
 ### 1. Подготовка окружения
 
@@ -60,9 +60,96 @@ docker compose exec postgres psql -U rag_user -d knowledge_base -c "SELECT COUNT
 uvicorn app.main:app --reload --port 8091
 ```
 
+> **⏳ Первый запуск:** Если `EMBEDDING_API_KEY` пустой (используется локальная модель),
+> первый POST-запрос к `/api/v1/rag/search` скачает модель
+> `intfloat/multilingual-e5-large` (~2 ГБ). Загрузка может занять
+> **от 1 до 15+ минут** в зависимости от скорости соединения с HuggingFace Hub.
+> Модель кэшируется в `~/.cache/huggingface/` — последующие запуски будут быстрыми.
+
 Сервис доступен по адресу: http://127.0.0.1:8091
 Swagger UI: http://127.0.0.1:8091/docs
 Health Check: http://127.0.0.1:8091/api/v1/health
+
+## Развёртывание через Docker
+
+### Инструкция для деплоера
+
+#### 1. Структура файлов
+
+Убедитесь, что в репозитории присутствуют:
+
+```
+ваше-приложение/
+├── docker-compose.yaml
+├── .env                          # (опционально) корневые переменные
+└── rag_search/
+    ├── .env                      # dev-дефолты сервиса
+    └── Dockerfile
+```
+
+> `migrations/` в проде не участвует — схема БД и её наполнение создаются
+> отдельно. Директория используется только для локальной разработки.
+
+#### 2. Добавьте сервис в `docker-compose.yaml`
+
+```yaml
+  rag-search:
+    build: ./rag_search                    # сборка образа из Dockerfile
+    image: rag-search:latest
+    ports:
+      - "8091:8091"
+    env_file: ./rag_search/.env
+    environment:
+      POSTGRES_HOST: postgres              # имя сервиса postgres в вашем compose
+      POSTGRES_PORT: 5432
+    volumes:
+      - hf_cache:/root/.cache/huggingface
+    depends_on:
+      postgres:
+        condition: service_healthy
+```
+
+Не забудьте добавить volume:
+```yaml
+volumes:
+  hf_cache:
+```
+
+> **❗ Важно:** `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` в
+> `rag_search/.env` должны совпадать с `environment:` сервиса `postgres`
+> в вашем `docker-compose.yaml`.
+
+#### 3. Запуск
+
+```bash
+# Первый запуск — сборка + старт
+docker-compose up -d --build
+
+# Перезапуск только rag-search
+docker-compose up -d --build rag-search
+```
+
+#### 4. Проверка
+
+```bash
+# Здоровье сервиса
+curl http://127.0.0.1:8091/api/v1/health
+
+# Поисковый запрос (первый — долгий, см. п.5)
+curl -X POST http://127.0.0.1:8091/api/v1/rag/search \
+  -H "Content-Type: application/json" \
+  -d '{"query": "правила безопасности", "top_k": 3}'
+```
+
+#### 5. Первый запуск — модель эмбеддингов
+
+- Модель (`intfloat/multilingual-e5-large`, ~2.2 ГБ) скачивается с HuggingFace Hub
+  при **первом POST-запросе**, а не при старте контейнера.
+- Время загрузки: от 1 до 15+ минут в зависимости от сети.
+- Volume `hf_cache` сохраняет модель между перезапусками — задержка только при
+  первом деплое или после очистки volume.
+- Если сервер не имеет доступа к HuggingFace Hub — задайте `EMBEDDING_API_KEY`
+  в корневом `.env` или `environment:` compose, чтобы использовать внешний API.
 
 ## Тестирование сервиса
 

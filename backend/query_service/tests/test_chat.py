@@ -138,6 +138,6 @@ async def test_get_message_by_id_no_longpoll(client):
 async def test_get_message_not_found(client):
     r = await client.post("/api/v1/chat/sessions", json={"title": "s"})
     sid = r.json()["session_id"]
-    r = await client.get(f"/api/v1/chat/sessions/{sid}/messages/msg-nonexistent")
+    r = await client.get(f"/api/v1/chat/sessions/{sid}/messages/999999")
     assert r.status_code == 404
     assert r.json()["detail"]["error"]["code"] == "MESSAGE_NOT_FOUND"
