@@ -127,7 +127,7 @@ async def test_list_messages_after_takes_priority_over_before(client):
 
 @pytest.mark.asyncio
 async def test_messages_session_not_found(client):
-    r = await client.get("/api/v1/chat/sessions/nonexistent/messages/last")
+    r = await client.get("/api/v1/chat/sessions/999999/messages/last")
     assert r.status_code == 404
-    r = await client.get("/api/v1/chat/sessions/nonexistent/messages")
+    r = await client.get("/api/v1/chat/sessions/999999/messages")
     assert r.status_code == 404
