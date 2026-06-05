@@ -13,6 +13,7 @@ from app.api.router import api_router
 from app.config import get_settings
 from app.core.database import close_db_pool, init_db_pool
 from app.core.logging import setup_logging
+from app.core.middleware import add_request_logging_middleware
 from app.models.response import ErrorDetail, ErrorResponse
 
 # Инициализируем логирование первым делом
@@ -69,6 +70,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Request logging middleware — логирует каждый запрос (вход, выход, ошибки)
+add_request_logging_middleware(app)
 
 
 # --- Exception handlers (согласно common_api.md) ---

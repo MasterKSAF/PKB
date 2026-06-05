@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class SearchFilters(BaseModel):
-    """Фильтры поиска. Пока работают как заглушки — принимаются, но не применяются."""
+    """Фильтры поиска: тип документа, диапазон дат принятия."""
 
     document_type: list[str] | None = Field(
         default=None, description="Типы документов (normative, technical, ...)"
