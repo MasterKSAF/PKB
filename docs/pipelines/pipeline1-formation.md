@@ -72,7 +72,7 @@ sequenceDiagram
         Reg-->>Orch: { is_duplicate, candidates }
         deactivate Reg
         alt is_duplicate = true
-            Orch-->>UI: status: duplicate (финальная проверка)
+            Orch-->>UI: action: discard_with_duplicate
         else
             Orch->>Reg: POST /registry/documents (JSON)
             activate Reg
@@ -82,10 +82,10 @@ sequenceDiagram
             Orch-->>UI: status: completed
         end
     else action = reject (duplicate)
-        Orch-->>UI: status: duplicate
+        Orch-->>UI: action: discard_with_duplicate
     else action = reject (force_new_version)
-        Orch->>Orch: Принудительное создание новой версии
-        Orch-->>UI: status: new_version_created
+        Orch->>Orch: Создание новой версии через POST /documents/{doc_id}/versions
+        Orch-->>UI: status: version_created
     end
     deactivate Orch
 ```
@@ -249,101 +249,77 @@ sequenceDiagram
 
 ```mermaid
 stateDiagram-v2
-    [*] --> uploaded : POST /drafts
-    uploaded --> previewing : запуск preview
-    previewing --> awaiting_decision : Preview завершён
-    previewing --> failed : ошибка распознавания
-
-    awaiting_decision --> parsing : decision = proceed
-    awaiting_decision --> duplicate : decision = stop_duplicate
-    awaiting_decision --> new_version : decision = force_new_version
-    awaiting_decision --> failed : таймаут 24ч
-
-    parsing --> validation : OCR/Parser завершён
-    parsing --> failed : таймаут 15 мин
-
-    validation --> ready_for_promotion : авто-валидация пройдена
-    validation --> review_required : требует ручного подтверждения
-    validation --> failed : таймаут 30 мин
-
-    review_required --> approved : approve оператора
-    review_required --> validation : повторная валидация
-    review_required --> failed : отклонено оператором
-    review_required --> archived : таймаут 48ч
-
-    ready_for_promotion --> registry : запись в Registry
-    ready_for_promotion --> failed : таймаут 24ч
-
-    approved --> registry : запись в Registry
-
-    registry --> pending_index : запуск RAG Builder
-    registry --> failed : ошибка записи в БД
-    registry --> archived
-
-    pending_index --> indexing : запуск индексации
-    indexing --> indexed : индексация завершена
-    indexing --> failed : ошибка индексации
+    state "Пайплайн 1: Формирование" as P1 {
+        [*] --> uploaded : POST /drafts
+        uploaded --> previewing : запуск preview
+        previewing --> ready_for_approve : preview завершён
+        previewing --> discarded : ошибка preview
+        ready_for_approve --> approved : approve
+        ready_for_approve --> discarded : reject / автозавершение не прошло
+        approved --> created : запись в Registry
+        
+        created --> pending_index : запуск RAG Builder
+        created --> failed : ошибка записи
+    }
+    state "Пайплайн 2: Индексация" as P2 {
+        pending_index --> indexing : чанкинг + embeddings
+        indexing --> indexed : индексация завершена
+        indexing --> failed : ошибка индексации
+        pending_index --> failed : Scheduler timeout (1 час)
+    }
     indexed --> [*] : готов к поиску
-
     failed --> uploaded : reprocess
 ```
 
 **Описание состояний:**
 
-| Состояние | Описание |
-|---|---|
-| `uploaded` | Файл загружен в MinIO, ожидание запуска preview |
-| `previewing` | Выполняется preview-фаза (OCR/Parser preview + Converter preview) |
-| `awaiting_decision` | Preview завершён, ожидание решения пользователя |
-| `parsing` | Выполняется полный OCR/Parser |
-| `validation` | Конвертация и валидация (Converter-validator) |
-| `ready_for_promotion` | Авто-валидация пройдена, ожидание записи в Registry |
-| `review_required` | Требуется ручное подтверждение оператором |
-| `approved` | Оператор подтвердил, ожидание записи в Registry |
-| `registry` | Документ записан в реестр (registry.documents) |
-| `pending_index` | Ожидание запуска RAG Builder (Пайплайн 2) |
-| `duplicate` | Документ-дубликат, обработка завершена |
-| `new_version` | Создана новая версия существующего документа |
-| `indexing` | Выполняется чанкинг, вычисление эмбеддингов, построение индекса |
-| `indexed` | Документ проиндексирован, готов к поиску |
-| `failed` | Ошибка на одном из этапов обработки |
-| `archived` | Документ архивирован |
+| Состояние | Пайплайн | Описание |
+|---|---|---|
+| `uploaded` | Черновик | Файл загружен в MinIO, ожидание запуска preview |
+| `previewing` | Черновик | Выполняется preview-фаза |
+| `ready_for_approve` | Черновик | Preview завершён, ожидание решения |
+| `approved` | Черновик | Оператор подтвердил, документ создаётся в Registry |
+| `discarded` | Черновик | Черновик отклонён |
+| `created` | Registry | Документ записан в реестр |
+| `pending_index` | Пайплайн 2 | Ожидание запуска RAG Builder |
+| `indexing` | Пайплайн 2 | Выполняется чанкинг, эмбеддинги |
+| `indexed` | Пайплайн 2 | Документ проиндексирован |
+| `failed` | 1/2 | Ошибка на одном из этапов |
 
-**Процесс создания новой версии (`force_new_version`):**
-1. Документ в статусе `awaiting_decision` получает новый `version_number` (текущий + 1)
-2. Все поля документа (название, коды, метаданные) копируются из предыдущей версии
-3. `document_id` остаётся неизменным (логический документ тот же)
-4. Новая версия индексируется заново (Pipeline 2)
-5. Предыдущая версия доступна для просмотра через `GET /documents/{doc_id}/versions`
+**Процесс создания новой версии:**
+Версии создаются через `POST /documents/{doc_id}/versions` напрямую. При создании новой версии:
+1. Все поля документа (название, коды, метаданные) копируются из предыдущей версии
+2. `document_id` остаётся неизменным (логический документ тот же)
+3. Новая версия индексируется заново (Pipeline 2)
+4. Предыдущая версия доступна для просмотра через `GET /documents/{doc_id}/versions`
 
-**Триггер `registry → archived`:** Документ архивируется автоматически через N дней после создания новой версии (настраиваемый параметр, по умолчанию 365 дней). Также архивация может быть инициирована вручную `system_admin`. Архивированный документ доступен только для чтения.
+**Архивация документов:** Документ может быть помечен как архивный (неактивный) автоматически через N дней после создания новой версии (настраиваемый параметр, по умолчанию 365 дней). Также архивация может быть инициирована вручную `system_admin`. Архивированный документ доступен только для чтения. Архивация — административная операция, не связанная с FSM пайплайна.
 
 > **Черновики (drafts):** Черновик — основной элемент управления загрузкой документа. `file_key` — у черновика (`pipeline.drafts.file_key`). `raw_data` — в `pipeline.drafts.raw_data` (JSONB, результат Parser или OCR). MinIO — только для бинарных файлов (PDF, изображения). OCR/Parser выполняется **полностью** уже в черновике; Converter-validator — только извлечение метаданных. Полная конвертация (validated_v3) запускается при approve, после чего документ записывается в Registry. Решение пользователя принимается через `PATCH /drafts/{draft_id}/decide`. `task_id` — внутренний сквозной ID задачи (internal). Детальная реализация — см. [`docs/plans/drafts_storage_plan.md`](../plans/drafts_storage_plan.md).
 
-**Жизненный цикл черновика (Draft FSM):**
+**Новая Draft FSM:**
 
 ```mermaid
 stateDiagram-v2
-    [*] --> new : POST /drafts
-    new --> preview_ready : preview-фаза завершена
-    new --> discarded : ошибка preview
-
-    preview_ready --> promoted : approve
-    preview_ready --> discarded : reject
-    preview_ready --> discarded : автозавершение не прошло
-
-    promoted --> [*] : документ в Registry
+    [*] --> uploaded : POST /drafts
+    uploaded --> previewing : запуск preview
+    previewing --> ready_for_approve : preview завершён
+    previewing --> discarded : ошибка preview
+    ready_for_approve --> approved : approve
+    ready_for_approve --> discarded : reject / автозавершение не прошло
+    approved --> [*] : документ в Registry
     discarded --> [*]
 ```
 
-**Связь состояний черновика с состояниями документа:**
+**Статусы черновика:**
 
-| Статус черновика | Статус документа | Описание |
-|---|---|---|
-| `new` | `uploaded` / `previewing` | Черновик создан при загрузке файла, выполняется preview-фаза |
-| `preview_ready` | `awaiting_decision` | Preview завершён, метаданные извлечены. Если уникально и чисто — автозавершение; иначе — ожидание решения человека |
-| `promoted` | `parsing` → `validation` → `registry` | Черновик утверждён. Запускается полная конвертация (validated_v3) и запись документа в Registry |
-| `discarded` | `failed` / `archived` | Черновик отклонён (человеком или автоматом). Можно загрузить файл повторно для новой попытки (новый draft) |
+| Статус черновика | Описание |
+|---|---|
+| `uploaded` | Черновик создан при загрузке файла, ожидание preview |
+| `previewing` | Выполняется preview-фаза |
+| `ready_for_approve` | Preview завершён. Если уникально и чисто — автозавершение; иначе — ожидание решения человека |
+| `approved` | Черновик утверждён. Документ записывается в Registry |
+| `discarded` | Черновик отклонён (человеком или автоматом) |
 
 ---
 
@@ -352,12 +328,11 @@ stateDiagram-v2
 | Этап | Действие | При ошибке | Компенсация |
 |---|---|---|---|
 | Пре-стейдж (загрузка) | Сохранение в MinIO, создание записи в БД | Ошибка MinIO | Удалить запись из БД, вернуть ошибку UI |
-| Preview OCR/Parser | Распознавание первых N страниц | Ошибка распознавания | Статус `preview_failed` |
-| Preview Converter-validator | Извлечение метаданных | Ошибка извлечения метаданных | `awaiting_decision` с флагом ошибки |
-| Preview проверка уникальности (Оркестратор → Registry) | Проверка по метаданным через `check-uniqueness` | Ошибка Registry | `awaiting_decision` (повтор при доступности) |
+| Preview OCR/Parser | Распознавание первых N страниц | Ошибка распознавания | Статус `discarded` |
+| Preview Converter-validator | Извлечение метаданных | Ошибка извлечения метаданных | `ready_for_approve` с флагом ошибки |
+| Preview проверка уникальности (Оркестратор → Registry) | Проверка по метаданным через `check-uniqueness` | Ошибка Registry | `ready_for_approve` (повтор при доступности) |
 | Full OCR/Parser | Распознавание и парсинг | Ошибка OCR/таймаут | Повтор (до 3 раз), при превышении — статус `failed` |
-| Full Converter-validator | Конвертация, валидация | Ошибка структуры JSON | Вернуть `validation.errors`, статус `review_required` |
-| Full проверка уникальности (Оркестратор → Registry) | Финальная верификация через `check-uniqueness` | Ошибка Registry / дубликат | `duplicate` (если дубликат) / повтор (если ошибка Registry) |
+| Full Converter-validator | Конвертация, валидация | Ошибка структуры JSON | Вернуть `validation.errors`, статус `failed` |
 | Registry | Запись карточки в БД | Ошибка записи | Откат транзакции, повтор (до 2 раз) |
 
 ```mermaid
@@ -365,23 +340,17 @@ graph TD
     subgraph "Пайплайн 1: Формирование"
         Upload[Загрузка файла] -->|Ошибка MinIO| Comp1[Компенсация: удалить запись из БД]
         Upload -->|Успех| Prev[Preview]
-        Prev -->|Ошибка OCR/Parser| PrevFail[preview_failed]
-        Prev -->|Ошибка метаданных| AwaitDec[awaiting_decision с флагом ошибки]
-        Prev -->|Успех| AwaitDec
-        AwaitDec -->|proceed| Pars[OCR/Parser Full]
-        AwaitDec -->|stop| Dup[duplicate]
-        AwaitDec -->|force_new| NewVer[new_version]
+        Prev -->|Ошибка OCR/Parser| Disc[discarded]
+        Prev -->|Ошибка метаданных| RA[ready_for_approve с флагом ошибки]
+        Prev -->|Успех| RA
+        RA -->|approve| Pars[OCR/Parser Full]
+        RA -->|reject| Disc
         Pars -->|Ошибка OCR| Retry1[Повтор до 3 раз]
         Retry1 -->|Все попытки исчерпаны| Fail[failed]
-        Retry1 -->|Успех| Val[Converter-validator]
-        Pars -->|Успех| Val
-        Val -->|Ошибка структуры| Review[review_required]
-        Val -->|Успех| Uniq{Проверка уникальности}
-        Uniq -->|Ошибка Registry| RetryUniq[Повтор]
-        RetryUniq -->|Успех| Uniq
-        RetryUniq -->|Все попытки| Fail
-        Uniq -->|Дубликат| Dup
-        Uniq -->|Уникален| Reg[Registry]
+        Retry1 -->|Успех| CV[Converter-validator]
+        Pars -->|Успех| CV
+        CV -->|Ошибка структуры| Fail
+        CV -->|Успех| Reg[Registry]
         Reg -->|Ошибка записи| Retry2[Повтор до 2 раз]
         Retry2 -->|Все попытки исчерпаны| Fail
         Retry2 -->|Успех| Done[Готово]
@@ -408,16 +377,14 @@ graph TD
 #### Защита от «зависших» состояний (тупиковые таймауты)
 
 Для состояний, требующих действия человека или внешнего триггера, установлены **таймауты ожидания**,
-по истечении которых документ автоматически переводится в `failed` (или `archived`) с соответствующим кодом ошибки:
+по истечении которых черновик автоматически переводится в `discarded` (или документ в `failed`) с соответствующим кодом ошибки:
 
 | Состояние | Таймаут ожидания | Действие по истечении | Код ошибки |
 |---|---|---|---|
-| `awaiting_decision` | 24 часа | Перевод в `failed` | `DECISION_TIMEOUT` |
-| `review_required` | 48 часов | Перевод в `archived` | `REVIEW_TIMEOUT` |
+| `previewing` | 30 минут | Перевод в `discarded` | `PREVIEW_TIMEOUT` |
+| `ready_for_approve` | 24 часа | Перевод в `discarded` | `DECISION_TIMEOUT` |
 | `pending_index` | 1 час | Перевод в `failed` | `INDEX_TRIGGER_TIMEOUT` |
-| `parsing` | 15 минут | Перевод в `failed` | `PARSING_TIMEOUT` |
-| `validation` | 30 минут | Перевод в `failed` | `VALIDATION_TIMEOUT` |
-| `uploaded` | 1 час | Перевод в `failed` | `PREVIEW_TRIGGER_TIMEOUT` |
+| `uploaded` | 1 час | Перевод в `discarded` | `PREVIEW_TRIGGER_TIMEOUT` |
 
 Таймауты отсчитываются с момента входа в состояние и проверяются **Scheduler-сервисом** (или CRON-задачей),
 запускаемым каждые 5 минут. При переводе в `failed`:
@@ -432,7 +399,7 @@ Preview-фаза обрабатывает первые N страниц доку
 
 1. Результаты preview (частичный сырой JSON от OCR/Parser, метаданные от Converter-validator) **сохраняются**
    в журнале Оркестратора (`GET /documents/{doc_id}/history`) как временный артефакт.
-2. При запуске полной фазы (`proceed`) Оркестратор **передаёт preview-результаты** в full-этапы:
+2. При запуске полной фазы (`approve`) Оркестратор **передаёт preview-результаты** в full-этапы:
    - OCR/Parser full начинает обработку со страницы `max_pages + 1`, избегая повторной обработки preview-страниц.
    - Converter-validator full использует preview-метаданные как основу, дообогащая их полными данными.
 3. Если preview-результаты по какой-то причине недоступны (очищены по TTL), full-фаза запускается
@@ -441,5 +408,5 @@ Preview-фаза обрабатывает первые N страниц доку
 **TTL preview-артефактов:** 7 дней с момента создания. По истечении — автоматическая очистка.
 
 > **Примечание:** Повторный вызов `PATCH /drafts/{draft_id}/decide` для черновиков в терминальных статусах
-(`promoted`, `discarded`) возвращает ошибку `409 CONFLICT` с кодом `DRAFT_ALREADY_DECIDED`.
+(`approved`, `discarded`) возвращает ошибку `409 CONFLICT` с кодом `DRAFT_ALREADY_DECIDED`.
 Пользователь должен создать новый документ (новый черновик).

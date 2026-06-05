@@ -52,7 +52,7 @@ API черновиков и FSM документированы, но **UI сра
 | API-B1 | RAG Builder: тип секции `drawing` не существует в системе (должен быть `image`) | ⬜ открыто |
 | API-B2 | RAG Builder: в таблице полей `sections[].id`, в примере и Registry — `section_id` | ⬜ открыто |
 | API-B3 | Registry `POST /registry/documents`: два несовместимых формата тела, не описана детекция режима | ⬜ открыто |
-| API-B4 | Registry enum `document_status` не содержит статусов пайплайна (`previewing`, `parsing`, `indexing` и др.) | ⬜ открыто |
+| API-B4 | Registry enum `document_status` содержит только статусы документа (`created`, `pending_index`, `indexing`, `indexed`, `failed`), статусы черновика вынесены в `pipeline.drafts` | 🔄 исправлено |
 | API-S1 | Auth: `POST /admin/roles` → `id` (bigint), `GET /admin/roles` → `role_id` (string) | ⬜ открыто |
 | API-S2 | Common: `promotion_task_id` — bigint в таблице идентификаторов, string в Orchestrator | ⬜ открыто |
 | API-S3 | Common: упоминается `POST /chat/ask` (не существует, заменён на `/chat/sessions/{id}/messages`) | ⬜ открыто |
@@ -81,14 +81,14 @@ API черновиков и FSM документированы, но **UI сра
 | LP-C1 | Потеря бинарных объектов на страницах preview при переходе к full-фазе (начало со страницы `max_pages+1`) | ⬜ открыто |
 | LP-C2 | Противоречие в назначении `document_id`: Converter-validator vs Registry | ⬜ открыто |
 | LP-C3 | Неатомарность проверки уникальности — нет компенсации при дубликате после `approve` | ⬜ открыто |
-| LP-C4 | `discarded` (черновик) отсутствует в FSM документа — невозможно отличить от `failed` | ⬜ открыто |
+| LP-C4 | `discarded` (черновик) отсутствует в FSM документа — корректно, так как `discarded` — статус черновика, `failed` — статус документа | 🔄 исправлено |
 
 ## 🟡 Пайплайны (важные — вызовут ошибки или путаницу)
 
 | Код | Проблема | Статус |
 |-----|----------|--------|
-| LP-V1 | Тупиковое состояние `archived` без выхода в FSM | ⬜ открыто |
-| LP-V2 | `partially_indexed` упомянут в тексте, но отсутствует в FSM Пайплайна 2 | ⬜ открыто |
+| LP-V1 | Тупиковое состояние `archived` без выхода в FSM — `archived` удалён из FSM | 🔄 исправлено |
+| LP-V2 | `partially_indexed` упомянут в тексте, но отсутствует в FSM Пайплайна 2 — не входит в основную модель статусов, редкий крайний случай | ⬜ открыто |
 | LP-V3 | `indexed --> failed : Integrity check failed` — не описан механизм | ⬜ открыто |
 | LP-V4 | Нет таймаута для состояния `pending` в Пайплайне 3 | ⬜ открыто |
 | LP-V5 | Несоответствие формулы `title_hash_sha256` между пайплайном и ER-диаграммой | ⬜ открыто |
@@ -106,7 +106,7 @@ API черновиков и FSM документированы, но **UI сра
 | X1 | `document_id` назначается в разных местах (Converter vs Registry) | ⬜ открыто |
 | X2 | `title_hash_sha256` — разные формулы в пайплайне и ER-диаграмме | ⬜ открыто |
 | X3 | `partially_indexed` — есть в тексте пайплайна 2, нет в FSM и в БД | ⬜ открыто |
-| X4 | `discarded` (draft) → `failed` (document) — потеря семантики | ⬜ открыто |
+| X4 | `discarded` (draft) → `failed` (document) — решено: `discarded` — только статус черновика, `failed` — только статус документа | 🔄 исправлено |
 | X5 | Журнал Оркестратора не отображён в схеме БД | ⬜ открыто |
 | X6 | `document_versions` — нет связи `documents.current_version_id` | ⬜ открыто |
 | X7 | `terminology` есть в JSON-схемах, нет таблицы в БД | ⬜ открыто |
@@ -130,6 +130,7 @@ API черновиков и FSM документированы, но **UI сра
 
 | Дата | Решение |
 |------|---------|
+| 06.06 | **Новая модель статусов**: статусы документов и черновиков разделены. `pipeline.drafts.status`: `uploaded`, `previewing`, `ready_for_approve`, `approved`, `discarded`. `registry.documents.processing_status`: `created`, `pending_index`, `indexing`, `indexed`, `failed`. Удалены `draft`, `awaiting_decision`, `parsing`, `validation`, `ready_for_promotion`, `review_required`, `registry`, `duplicate`, `new_version`, `archived` из `registry.documents`. `registry.document_history.event_type`: `promoted` → `approved`. |
 | 07.06 | **Tasks — только read-only**: `POST /tasks/{task_id}/preview` и `POST /tasks/{task_id}/decide` удалены. `GET /tasks/{task_id}/preview/status` → `GET /tasks/{task_id}/status`. Задачи — только просмотр статуса. Всё управление через `/drafts/{draft_id}/...`. |
 | 07.06 | **Registry — статус только от Оркестратора**: `PATCH /registry/documents/{doc_id}/status` — internal, вызывается только Оркестратором при завершении индексации. Удалён публичный эндпоинт и `GET /registry/documents/{doc_id}/history` (история — в Оркестраторе). |
 | 06.06 | **Миграция task→drafts**: управление загрузкой документов переведено с `/tasks/{task_id}/...` на `/drafts/{draft_id}/...`. `task_id` — внутренний сквозной ID (internal). Внешние клиенты используют `draft_id` и `document_id`. Добавлены эндпоинты `POST /drafts/{draft_id}/preview`, `GET /drafts/{draft_id}/preview/status`. `POST /tasks/{task_id}/decide` помечен как internal. |

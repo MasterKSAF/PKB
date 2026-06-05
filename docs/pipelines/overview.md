@@ -85,8 +85,8 @@ graph LR
 
 Детальные FSM-диаграммы и описание состояний — в соответствующих документах:
 
-- **Пайплайн 1 (Формирование):** `uploaded → previewing → awaiting_decision → parsing → validation → ready_for_promotion / review_required → approved → registry` — [FSM и таблица состояний](pipeline1-formation.md#статусная-модель-fsm)
-- **Пайплайн 2 (Индексация):** `pending_index → indexing → indexed` — [FSM и таблица состояний](pipeline2-indexation.md#статусная-модель-fsm)
+- **Пайплайн 1 (Формирование):** `uploaded → previewing → ready_for_approve → approved → created` — [FSM и таблица состояний](pipeline1-formation.md#статусная-модель-fsm)
+- **Пайплайн 2 (Индексация):** `pending_index → indexing → indexed / failed` — [FSM и таблица состояний](pipeline2-indexation.md#статусная-модель-fsm)
 - **Пайплайн 3 (Поиск):** `idle → pending → enriching → searching → generating → enriching_citations → answered` — [FSM и таблица состояний](pipeline3-search.md#статусная-модель-fsm)
 
 ---
@@ -249,7 +249,7 @@ flowchart LR
 | **Двухфазный пайплайн с user decision point** | Пайплайн 1 разделён на две фазы: preview (быстрый проход OCR/Parser → Converter-validator) и commit (основной проход). После preview пользователь принимает решение — утвердить или отклонить результат. Это позволяет отсеивать ошибочные документы до записи в Registry и индексации. |
 | **Preview-данные в журнале Оркестратора**     | Результаты preview-фазы сохраняются в журнале Оркестратора (`/documents/{doc_id}/history`). При утверждении preview-данные используются как основа для основного прохода, что исключает повторное распознавание. |
 | **OCR и Parser — независимые сервисы с единым контрактом** | Разделение OCR (распознавание изображения/PDF в текст) и Parser (структурирование текста в JSON) позволяет заменять OCR-движок без влияния на парсинг. Единый JSON-контракт между сервисами обеспечивает слабую связанность. |
-| **Таймауты для «зависших» состояний (Scheduler)** | Для состояний `awaiting_decision` и `review_required` установлены таймауты (24ч и 48ч), по истечении которых документ переводится в `failed`. Scheduler проверяет зависшие документы каждые 5 минут. |
+| **Таймауты для «зависших» состояний (Scheduler)** | Для состояния `ready_for_approve` установлен таймаут (24ч), по истечении которого документ переводится в `discarded`. Для `pending_index` — таймаут 1 час, документ переводится в `failed`. Scheduler проверяет зависшие документы каждые 5 минут. |
 | **Проверка уникальности через `POST /registry/documents/check-uniqueness`** | Выделенный эндпоинт Registry для быстрой проверки уникальности по метаданным, вызываемый **Оркестратором** на preview- и full-этапах перед записью документа. Позволяет отделить логику поиска дубликатов от логики создания документа и обеспечивает единый механизм duplicate-детекции. |
 | **Rate Limiting для всех эндпоинтов через Gateway** | Единая политика ограничения запросов с разными лимитами для разных групп эндпоинтов. Redis для распределённого rate limiting. Код ошибки `429 TOO_MANY_REQUESTS`. |
 
@@ -280,38 +280,42 @@ flowchart LR
 ┌───────────────────────────────────────────────────────────────┐
 │ 3. GET /drafts/{draft_id}/preview/status (longpoll)          │
 │    Ожидание завершения preview                                │
-│    → preview_ready / duplicates / decision_required           │
+│    → ready_for_approve / ошибка                               │
 └─────────────────────────────┬─────────────────────────────────┘
                               │
                               ▼
 ┌───────────────────────────────────────────────────────────────┐
-│ 4. PATCH /drafts/{draft_id}/decide                           │
-│    → approve — завершить черновик, записать документ         │
-│    → reject  — отклонить черновик                            │
+│ 4. PATCH /drafts/{draft_id}/decide?action=approve|reject     │
+│    → action=approve — завершить черновик, запустить full-фазу│
+│    → action=reject — отклонить черновик (→ discarded)         │
 │    (пустой документ → approve недоступен)                    │
 └─────────────────────────────┬─────────────────────────────────┘
                               │ approve
                               ▼
 ┌───────────────────────────────────────────────────────────────┐
-│ 5. Full-фаза (завершение черновика)                           │
+│ 5. Full-фаза (выполнение)                                     │
 │    ┌──────────────────────────────┐                           │
 │    │ OCR/Parser full (все стр.)   │ → raw_ocr_v4              │
 │    └──────────────┬───────────────┘                           │
 │                   ▼                                           │
 │    ┌──────────────────────────────┐                           │
-│    │ Converter-validator full     │ → validated_v3            │
-│    └──────────────┬───────────────┘                           │
-│                   ▼                                           │
-│    ┌──────────────────────────────┐                           │
-│    │ Registry: создание карточки  │ → document_id             │
-│    │ документа                    │   (финальный ID)          │
+│    │ Converter-validator full     │ → validated_document       │
 │    └──────────────────────────────┘                           │
 └───────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌───────────────────────────────────────────────────────────────┐
-│ 6. Пайплайн 2: Индексация (RAG Builder)                       │
-│    → чанкинг → эмбеддинги → поисковый индекс                  │
+│ 6. Registry + запуск Пайплайна 2                              │
+│    ┌──────────────────────────────┐                           │
+│    │ Registry: создание карточки  │ → document_id             │
+│    │ документа                    │   → статус `created`      │
+│    └──────────────┬───────────────┘                           │
+│                   ▼                                           │
+│    ┌──────────────────────────────┐                           │
+│    │ Пайплайн 2: Индексация      │ → чанкинг → эмбеддинги     │
+│    │ (RAG Builder)               │ → поисковый индекс         │
+│    │                              │ → статус `indexed`/`failed`│
+│    └──────────────────────────────┘                           │
 └───────────────────────────────────────────────────────────────┘
 ```
 
@@ -353,77 +357,40 @@ stateDiagram-v2
     state "Пайплайн 1: Формирование" as P1 {
         [*] --> uploaded : POST /drafts
         uploaded --> previewing : запуск preview
-        previewing --> awaiting_decision : preview завершён
-        previewing --> failed : ошибка распознавания
-        awaiting_decision --> parsing : решение = proceed
-        awaiting_decision --> duplicate : решение = stop_duplicate
-        awaiting_decision --> new_version : решение = force_new_version
-        awaiting_decision --> failed : таймаут 24ч
-        parsing --> validation : OCR/Parser завершён
-        parsing --> failed : таймаут 15 мин
-        validation --> ready_for_promotion : авто-валидация
-        validation --> review_required : требуется подтверждение
-        validation --> failed : таймаут 30 мин
-        review_required --> approved : approve оператора
-        review_required --> validation : повторная валидация
-        review_required --> failed : отклонено оператором
-        review_required --> archived : таймаут 48ч
-        ready_for_promotion --> registry : запись в Registry
-        ready_for_promotion --> failed : таймаут 24ч
-        approved --> registry : запись в Registry
-        registry --> pending_index : запуск индексации
-        registry --> failed : ошибка записи
-        registry --> archived
+        previewing --> ready_for_approve : preview завершён
+        previewing --> discarded : ошибка распознавания
+        ready_for_approve --> approved : approve
+        ready_for_approve --> discarded : reject / таймаут 24ч
+        approved --> created : запись в Registry
+        created --> pending_index : запуск индексации
+        created --> failed : ошибка записи
     }
 
     state "Пайплайн 2: Индексация" as P2 {
         pending_index --> indexing : чанкинг + embeddings
         indexing --> indexed : индексация завершена
         indexing --> failed : ошибка индексации
+        pending_index --> failed : таймаут 1 час
     }
 
-    state "Пайплайн 3: Поиск (сообщение)" as P3 {
-        [*] --> idle
-        idle --> pending : новое сообщение
-        pending --> enriching : обогащение терминами
-        enriching --> searching : поиск чанков
-        searching --> generating : генерация LLM
-        generating --> answered : цитирование
-        pending --> failed
-        enriching --> failed
-        searching --> failed
-        generating --> failed
-    }
-
-    %% Terminal
     indexed --> [*] : готов к поиску
-    answered --> [*] : ответ отправлен
-
-    %% Дополнительно
-    indexed --> pending_index : реиндексация
     failed --> uploaded : reprocess
 ```
 
 **Карта соответствия состояний:**
 
-| Состояние             | Пайплайн | Описание                                                 |
-| --------------------- | -------- | -------------------------------------------------------- |
-| `uploaded`            | 1        | Файл загружен в MinIO, ожидание preview                  |
-| `previewing`          | 1        | Выполняется preview OCR/Parser и Converter-validator     |
-| `awaiting_decision`   | 1        | Preview завершён, ожидание решения пользователя          |
-| `parsing`             | 1        | Выполняется OCR и распознавание структуры                |
-| `validation`          | 1        | Валидация структуры, классификация, уникальность         |
-| `review_required`     | 1        | Ожидание ручного подтверждения оператором                |
-| `ready_for_promotion` | 1        | Автоматическое подтверждение, ожидание записи в Registry |
-| `approved`            | 1        | Оператор подтвердил, ожидание записи в Registry          |
-| `registry`            | 1        | Документ записан в реестр (registry.documents)                |
-| `pending_index`       | 2        | Ожидание начала индексации                               |
-| `indexing`            | 2        | Выполняется чанкинг и построение векторного индекса      |
-| `indexed`             | 2        | Документ проиндексирован, готов к поиску                 |
-| `duplicate`           | 1        | Документ-дубликат, обработка завершена                  |
-| `new_version`         | 1        | Создана новая версия существующего документа             |
-| `failed`              | 1/2/3    | Ошибка на одном из этапов                                |
-| `archived`            | 1        | Документ архивирован (неактивен)                         |
+| Состояние | Пайплайн | Описание |
+|---|---|---|
+| `uploaded` | Черновик | Файл загружен в MinIO, ожидание preview |
+| `previewing` | Черновик | Выполняется preview OCR/Parser и Converter-validator |
+| `ready_for_approve` | Черновик | Preview завершён, ожидание решения пользователя |
+| `approved` | Черновик | Оператор подтвердил, документ создаётся в Registry |
+| `discarded` | Черновик | Черновик отклонён (человеком или автоматом) |
+| `created` | 1 → 2 | Документ записан в реестр (registry.documents) |
+| `pending_index` | 2 | Ожидание начала индексации |
+| `indexing` | 2 | Выполняется чанкинг и построение векторного индекса |
+| `indexed` | 2 | Документ проиндексирован, готов к поиску |
+| `failed` | 1/2 | Ошибка на одном из этапов |
 
 ---
 

@@ -676,7 +676,7 @@ GET /registry/documents
       "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
       "file_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "file_size_bytes": 2048576,
-      "status": "approved",
+      "status": "indexed",
       "era": "USSR",
       "validity_status": "active",
       "jurisdiction": "RU",
@@ -757,7 +757,7 @@ GET /registry/documents/{doc_id}
     "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
     "document_type": "normative",
     "group": "ПО4",
-    "status": "approved",
+    "status": "indexed",
     "era": "USSR",
     "validity_status": "active",
     "jurisdiction": "RU",
@@ -899,7 +899,7 @@ POST /registry/documents/check-uniqueness
         "title": "ГОСТ 20868-81",
         "doc_code": "20868-81",
         "similarity": 0.98,
-        "status": "archived",
+        "status": "failed",
         "file_size_bytes": 1048576
       }
     ],
@@ -915,8 +915,8 @@ POST /registry/documents/check-uniqueness
 1. Pre-filter по размеру: если передан `file_size_bytes`, кандидаты с существенно отличающимся размером отфильтровываются (`|size₁ - size₂| > 0.5% max(size₁, size₂)` — false positive отличия метаданных в архиве).
 2. Поиск по `title_hash_sha256` (точное совпадение нормализованного названия).
 3. Поиск по `doc_code` + `era` (документ с тем же кодом в ту же эпоху).
-4. Если кандидат найден и имеет статус обработки `registry` или `indexed` — считается дубликатом.
-5. Если кандидат найден, но находится в `draft` или `failed` — возвращается как кандидат,
+4. Если кандидат найден и имеет статус обработки `created` или `indexed` — считается дубликатом.
+5. Если кандидат найден, но находится в `failed` — возвращается как кандидат,
    решение принимает пользователь.
 
 ---
@@ -1269,7 +1269,7 @@ PATCH /registry/documents/{doc_id}/status
 
 | Поле | Тип | Обязательность | Описание |
 |------|-----|---------------|----------|
-| `status` | string | Да | FSM-статус документа (`registry`, `indexed`, `failed`, `archived`) |
+| `status` | string | Да | FSM-статус документа (`created`, `pending_index`, `indexing`, `indexed`, `failed`) |
 | `comment` | string | Нет | Причина смены статуса |
 | `changed_by` | string | Нет | Инициатор (по умолчанию `orchestrator`) |
 
@@ -1280,7 +1280,7 @@ PATCH /registry/documents/{doc_id}/status
   "data": {
     "id": 1,
     "status": "indexed",
-    "previous_status": "registry",
+    "previous_status": "indexing",
     "updated_at": "2026-06-05T14:00:00Z"
   }
 }
@@ -1368,15 +1368,11 @@ GET /registry/stats
     "terminology_total": 1204,
     "documents_total": 56,
     "documents_by_status": {
-      "draft": 2,
-      "uploaded": 5,
-      "parsing": 3,
-      "validation": 1,
-      "review_required": 2,
-      "ready_for_promotion": 4,
-      "approved": 30,
-      "failed": 1,
-      "archived": 8
+      "created": 10,
+      "pending_index": 3,
+      "indexing": 2,
+      "indexed": 32,
+      "failed": 1
     },
     "documents_by_source_type": {
       "GOST": 20,
@@ -1414,7 +1410,7 @@ GET /registry/enums
     "classifier_status": ["active", "deprecated", "archived"],
     "source_type": ["GOST", "GOST_R", "OST", "RD", "TU", "ISO", "DNV", "ASTM", "OTHER"],
     "document_type": ["normative", "technical", "drawing", "specification", "archival_scan"],
-    "document_status": ["draft", "uploaded", "validating", "processing", "review_required", "ready_for_promotion", "approved", "failed", "archived"],
+    "document_status": ["created", "pending_index", "indexing", "indexed", "failed"],
     "era": ["USSR", "CIS", "RF", "CURRENT"],
     "validity_status": ["active", "superseded", "cancelled", "historical", "draft"],
     "jurisdiction": ["RU", "EU", "US", "NO", "INTL"],
@@ -1486,7 +1482,7 @@ GET /registry/enums
 | `doc_code` | text | nullable |
 | `title` | text | NOT NULL |
 | `title_hash_sha256` | text | UNIQUE — бизнес-ключ |
-| `status` | varchar(30) | NOT NULL |
+| `status` | varchar(30) | NOT NULL — `created`, `pending_index`, `indexing`, `indexed`, `failed` |
 | `era` | varchar(10) | nullable |
 | `validity_status` | varchar(20) | nullable |
 | `jurisdiction` | varchar(10) | nullable |

@@ -113,7 +113,6 @@
 | `session_id` | bigint | Query Service при создании сессии чата | `/chat/sessions/{session_id}/...` |
 | `message_id` | bigint | Query Service при создании сообщения | `/chat/sessions/{session_id}/messages/{message_id}` |
 | `history_id` | bigint (sequence) | Registry при записи события аудита | В ответах API аудита/истории |
-| `promotion_task_id` | bigint (sequence) | Оркестратором при создании задачи промотирования | `/promotion/tasks/{promotion_task_id}/...` |
 
 **Жизненный цикл идентификаторов:**
 1. `draft_id` (bigint) — назначается Оркестратором при `POST /drafts`, внешний ID для preview и решения через `/drafts/{draft_id}/...`
@@ -563,30 +562,25 @@ GET .../{doc_id}/status?longpoll=15
 
 ## Обзор конвейера обработки документов
 
-Orchestrator управляет **тремя независимыми пайплайнами**, каждый из которых имеет строгую изоляцию по доступу к базе данных:
-
 ### Пайплайн 1: Формирование документа (двухфазный)
 
-**Фаза Preview (проверка):**
-1. **OCR/Parser (preview)** — частичное распознавание (первые N страниц), без сохранения бинарных объектов
-2. **Converter-validator (preview API)** — извлечение первичных метаданных
-3. **Оркестратор** → **Registry** — проверка уникальности (`POST /registry/documents/check-uniqueness`) с метаданными и размером файла
-4. **Решение пользователя** — продолжить / остановить (дубликат) / принудительная новая версия
+```
+uploaded → previewing → ready_for_approve → approved → created
+```
 
-**Фаза Full (полная обработка):**
-
-**Статусная цепочка Pipeline 1:** `uploaded → previewing → awaiting_decision → parsing → validation → ready_for_promotion / review_required → approved → registry → pending_index`
-
-5. **OCR/Parser (full)** — полное распознавание всех страниц, сохранение бинарных объектов
-6. **Converter-validator (full)** — построение иерархии, LLM, метаданные, валидация
-7. **Оркестратор** → **Registry** — финальная проверка уникальности (`check-uniqueness`); если уникален — сохранение карточки документа в Registry, сегментация на секции
-
+1. **Загрузка**: пользователь загружает файл через `POST /drafts` → статус черновика `uploaded`.
+2. **Preview**: запуск предварительной обработки (OCR/Parser preview) → статус `previewing`.
+3. **Решение**: после preview черновик переходит в `ready_for_approve`. Если документ уникален и не требует ручного вмешательства — автозавершение. Иначе — решение пользователя через `PATCH /drafts/{draft_id}/decide`.
+4. **Завершение**: при `approve` выполняется полный OCR/Parser, затем Converter-validator. Результат записывается в Registry (статус документа `created`).
+5. **Отклонение**: при `reject` или ошибке черновик переводится в `discarded`.
 
 ### Пайплайн 2: Индексация документа
 
-1. **RAG Builder** (пишет БД) — чанкинг, embeddings, построение векторного индекса
+```
+created → pending_index → indexing → indexed / failed
+```
 
-**Статусная цепочка Pipeline 2:** `pending_index → indexing → indexed`
+Документ со статусом `created` передаётся в RAG Builder для чанкования и построения векторного индекса.
 
 ### Пайплайн 3: Поиск документа
 

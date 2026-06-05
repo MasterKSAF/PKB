@@ -33,7 +33,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 
 `user_id` определяется из контекста аутентификации.
 
-> **Черновик — точка входа:** При загрузке всегда создаётся черновик в статусе `new`. Все последующие операции (preview, решение, конвертация, завершение черновика) привязаны к черновику. Без черновика документ не может существовать в системе.
+> **Черновик — точка входа:** При загрузке всегда создаётся черновик в статусе `uploaded`. Все последующие операции (preview, решение, конвертация, завершение черновика) привязаны к черновику. Без черновика документ не может существовать в системе.
 
 **Запрос**: `multipart/form-data`
 
@@ -115,7 +115,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 | `task_id` | bigint | Сквозной ID задачи |
 | `draft_id` | bigint \| null | ID черновика (если создан) |
 | `document_id` | bigint \| null | ID документа в Registry (если создан) |
-| `status` | string | Текущий статус (`uploaded`, `previewing`, `awaiting_decision`, `parsing`, `validation`, `registry`, `indexing`, `indexed`, `failed`) |
+| `status` | string | Текущий статус (`uploaded`, `previewing`, `ready_for_approve`, `processing`, `created`, `indexing`, `indexed`, `failed`) |
 | `pipeline_stage` | string | Этап конвейера: `upload`, `preview`, `decision`, `full`, `registry`, `indexation` |
 | `progress_percent` | int | Общий прогресс (0–100) |
 | `created_at` | string | Время создания задачи (ISO 8601) |
@@ -214,16 +214,11 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 {
   "summary": {
     "total": 128,
-    "uploaded": 10,
-    "previewing": 0,
-    "awaiting_decision": 0,
-    "parsing": 3,
-    "validation": 2,
-    "review_required": 3,
-    "ready_for_promotion": 12,
-    "approved": 95,
-    "failed": 3,
-    "archived": 0
+    "created": 100,
+    "pending_index": 5,
+    "indexing": 3,
+    "indexed": 17,
+    "failed": 3
   },
   "items": [
     {
@@ -245,7 +240,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
       },
       "file_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "file_size_bytes": 2048576,
-      "status": "approved",
+      "status": "created",
       "latest_version": 1,
       "total_versions": 2,
       "user_id": "u-001",
@@ -274,7 +269,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
   "source_type": "GOST",
   "document_type": "normative",
   "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
-  "status": "approved",
+  "status": "created",
   "era": "USSR",
   "validity_status": "active",
   "jurisdiction": "RU",
@@ -335,109 +330,90 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 
 #### Статус: `processing` (в процессе)
 
-Пайплайн 1 выполняется, фаза preview завершена, ожидается решение пользователя.
-
 ```json
 {
-  "document_id": 1,
+  "document_id": 12345,
   "status": "processing",
-  "progress_percent": 60.0,
+  "progress_percent": 60,
   "steps": {
     "pipeline": {
       "formation": {
-        "status": "in_progress",
+        "status": "processing",
         "preview": {
           "status": "completed",
-          "ocr_parser": {
-            "status": "completed",
-            "pages_processed": 3
-          },
-          "converter_validator": {
-            "status": "completed",
-            "metadata_extracted": true
-          },
-          "decision": {
-            "status": "awaiting",
-            "action": null
-          }
+          "ocr_parser": {"status": "completed", "pages_processed": 3},
+          "converter_validator": {"status": "completed", "metadata_extracted": true}
         },
-        "parsing": { "status": "completed", "pages_processed": 12, "pages_failed": 0, "avg_confidence": 0.92 },
-        "validation": { "status": "in_progress", "errors_found": 0 },
-        "registry": { "status": "pending" }
+        "decision": {
+          "status": "completed",
+          "action": "approve"
+        }
       },
       "indexation": {
         "status": "pending",
-        "rag_indexing": { "status": "pending" }
+        "rag_indexing": {"status": "pending"}
       }
     }
   },
-  "started_at": "2026-05-15T10:00:05Z",
-  "estimated_completion": "2026-05-15T10:02:00Z"
+  "started_at": "2025-06-06T10:00:00Z",
+  "estimated_completion": "2025-06-06T10:30:00Z"
 }
 ```
 
-#### Статус: `review_required` (ждёт аппрува)
-
-Валидация выявила ошибки — требуется ручное утверждение.
+#### Статус: `approval_required` (ждёт решения по черновику)
 
 ```json
 {
-  "document_id": 1,
-  "status": "review_required",
-  "progress_percent": 80.0,
+  "document_id": 12345,
+  "status": "approval_required",
+  "progress_percent": 40,
   "steps": {
     "pipeline": {
       "formation": {
-        "status": "blocked",
-        "parsing": { "status": "completed" },
-        "validation": { "status": "invalid", "errors_found": 2, "document_id": 1, "errors": [
-          {"code": "MISSING_FIELD", "section_id": 420012}
-        ]},
-        "registry": { "status": "blocked" }
-      },
-      "indexation": {
-        "status": "pending",
-        "rag_indexing": { "status": "pending" }
+        "status": "ready_for_approve",
+        "preview": {
+          "status": "completed"
+        }
       }
     }
   }
 }
 ```
 
-#### Статус: `ready_for_promotion` (готов к записи в Registry)
-
-Оба пайплайна завершены, документ готов к записи в Registry.
+#### Статус: `completed` (готов)
 
 ```json
 {
-  "document_id": 1,
-  "status": "ready_for_promotion",
-  "progress_percent": 100.0,
+  "document_id": 12345,
+  "status": "completed",
+  "progress_percent": 100,
   "steps": {
     "pipeline": {
       "formation": {
         "status": "completed",
-        "parsing": { "status": "completed" },
-        "validation": { "status": "valid", "document_id": 1 },
-        "registry": { "status": "completed" }
+        "preview": {"status": "completed"},
+        "decision": {"status": "completed", "action": "approve"}
       },
       "indexation": {
         "status": "completed",
-        "rag_indexing": { "status": "completed", "chunks_generated": 34 }
+        "rag_indexing": {
+          "status": "completed",
+          "chunks_generated": 34
+        }
       }
     }
   },
-  "chunk_summary": { "sections": 34, "chunks": 28, "embeddings": 28 },
-  "started_at": "2026-05-15T10:00:05Z",
-  "completed_at": "2026-05-15T10:01:30Z"
+  "chunk_summary": {"sections": 12, "chunks": 34, "embeddings": 34},
+  "started_at": "2025-06-06T10:00:00Z",
+  "completed_at": "2025-06-06T10:25:00Z"
 }
 ```
 
-**Статусы Formation (Формирование документа)**: `uploaded` → `previewing` → `awaiting_decision` → `parsing` → `validation` → `registry` / `review_required` → `archived` / `failed`.
+**Статусы Formation (Формирование документа)**: `uploaded` → `previewing` → `ready_for_approve` → `processing` → `created` / `failed`.
 
 > **Таймаут `uploaded`**: Если preview не запущен в течение 1 часа после загрузки, статус автоматически меняется на `failed` с кодом `PREVIEW_TRIGGER_TIMEOUT`.
 
-**Статусы Indexation (Индексация)**: `pending` → `rag_indexing` → `indexed` / `failed`. Подробнее — [статусная модель FSM](../pipelines/pipeline2-indexation.md#статусная-модель-fsm).
+**Статусы Indexation (Индексация)**: `pending` → `indexing` → `indexed` / `failed`. Подробнее — [статусная модель FSM](../pipelines/pipeline2-indexation.md#статусная-модель-fsm).
 
 **Группировка `steps.pipeline`**: каждый пайплайн имеет свой ключ (`formation`, `indexation`) с полем `status` — агрегированный статус пайплайна, и вложенными этапами. Статусы пайплайна: `pending`, `in_progress`, `completed`, `failed`, `blocked`. Статусы этапов: `pending`, `in_progress`, `completed`, `error`, `blocked`.
 
@@ -497,7 +473,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 
 ### POST /documents/{doc_id}/approve
 
-Утверждение документа. Переводит `review_required` → `approved` и запускает запись в Registry (Пайплайн 1, Этап 3).
+Утверждение документа. Переводит черновик в статус `approved` и запускает запись в Registry (Пайплайн 1, Этап 3).
 
 **Запрос**:
 
@@ -510,7 +486,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 
 | Поле      | Тип    | Обязательность | Описание                            |
 | --------- | ------ | -------------- | ----------------------------------- |
-| `force`   | bool   | Нет (по умолч. false) | Если `true` — обойти блокирующие ошибки валидации (статус `review_required`) и перевести документ в `approved`. Все ошибки валидации сохраняются в `GET /documents/{doc_id}/errors` с пометкой `forced: true`. |
+| `force`   | bool   | Нет (по умолч. false) | Если `true` — обойти блокирующие ошибки валидации и перевести документ в статус `approved`. Все ошибки валидации сохраняются в `GET /documents/{doc_id}/errors` с пометкой `forced: true`. |
 | `comment` | string | Нет            | Комментарий                         |
 
 **Ответ `202`**:
@@ -519,7 +495,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 {
   "document_id": 1,
   "status": "approved",
-  "promotion_task_id": "promo-task-001",
+  "task_id": 420001,
   "approved_by": "ivanov_ai",
   "approved_at": "2026-05-15T12:00:00Z"
 }
@@ -555,8 +531,8 @@ Orchestrator вычисляет SHA-256 содержимого, определя
     },
     {
       "history_id": "h-002",
-      "old_status": "ready_for_promotion",
-      "new_status": "approved",
+      "old_status": "created",
+      "new_status": "indexed",
       "comment": { "reason": "manual_approve", "details": "Утверждено главным инженером" },
       "changed_by": "ivanov_ai",
       "changed_at": "2026-05-15T12:00:00Z"
@@ -661,7 +637,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 
 ### GET /documents/queue
 
-Очередь обработки документов (статусы `uploaded`, `previewing`, `awaiting_decision`, `validating`, `processing`).
+Очередь обработки документов (статусы `uploaded`, `previewing`, `ready_for_approve`, `processing`).
 
 **Query-параметры**:
 | Параметр | Тип | Обязательность | По умолчанию | Описание |
@@ -681,14 +657,13 @@ Orchestrator вычисляет SHA-256 содержимого, определя
       "source_type": "GOST",
       "status": "processing",
       "progress_percent": 60.0,
-      "current_step": "validation",
+      "current_step": "formation",
       "steps": {
         "pipeline": {
           "formation": {
-            "status": "in_progress",
-            "parsing": "completed",
-            "validation": "in_progress",
-            "registry": "pending"
+            "status": "processing",
+            "preview": "completed",
+            "decision": "pending"
           },
           "indexation": {
             "status": "pending",
@@ -912,7 +887,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 | Параметр | Тип | Обязательный | Описание |
 |----------|-----|-------------|----------|
 | `document_key` | string | Да | Бизнес-ключ документа (SHA-256) |
-| `status` | string | Нет | Фильтр по статусу: `new`, `preview_ready`, `promoted`, `discarded` |
+| `status` | string | Нет | Фильтр по статусу: `uploaded`, `previewing`, `ready_for_approve`, `approved`, `discarded` |
 
 **Ответ `200`:**
 
@@ -924,7 +899,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
       "task_id": 100,
       "file_key": "f-abc123",
       "document_key": "sha256:def456",
-      "status": "promoted",
+      "status": "approved",
       "confidence": 0.92,
       "preview_metadata": {
         "doc_code": "ГОСТ 20868-81",
@@ -933,7 +908,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
         "year": "1981",
         "revision": null
       },
-      "promoted_document_id": 1300,
+      "approved_document_id": 1300,
       "created_at": "2026-06-05T10:00:00Z",
       "updated_at": "2026-06-05T10:05:00Z"
     },
@@ -953,7 +928,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
       },
       "error_code": "LOW_CONFIDENCE",
       "error_message": "Confidence below threshold (0.45 < 0.7)",
-      "promoted_document_id": null,
+      "approved_document_id": null,
       "created_at": "2026-06-05T10:10:00Z",
       "updated_at": "2026-06-05T10:12:00Z"
     }
@@ -972,10 +947,10 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 | `task_id` | bigint | Внутренний ID задачи (internal) |
 | `file_key` | string | Ссылка на файл в MinIO |
 | `document_key` | string | Бизнес-ключ документа (SHA-256) |
-| `status` | string | Статус черновика: `new`, `preview_ready`, `promoted`, `discarded` |
+| `status` | string | Статус черновика: `uploaded`, `previewing`, `ready_for_approve`, `approved`, `discarded` |
 | `confidence` | float | Оценка качества распознавания (0..1) |
 | `preview_metadata` | object | Preview-метаданные: `doc_code`, `title`, `document_type`, `year`, `revision` |
-| `promoted_document_id` | bigint \| null | `document_id`, созданный по результатам черновика (FK → `registry.documents`) |
+| `approved_document_id` | bigint \| null | `document_id`, созданный по результатам черновика (FK → `registry.documents`) |
 | `error_code` | string \| null | Код ошибки при `discarded` |
 | `error_message` | string \| null | Описание ошибки |
 | `created_at` | string | Время создания (ISO 8601) |
@@ -995,7 +970,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
   "task_id": 100,
   "file_key": "f-abc123",
   "document_key": "sha256:def456",
-  "status": "preview_ready",
+  "status": "ready_for_approve",
   "confidence": 0.92,
   "preview_metadata": {
     "doc_code": "ГОСТ 20868-81",
@@ -1023,7 +998,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
       }
     ]
   },
-  "promoted_document_id": null,
+  "approved_document_id": null,
   "error_code": null,
   "error_message": null,
   "created_by": "user_10",
@@ -1042,7 +1017,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 | `confidence` | float | Оценка качества распознавания (0..1) |
 | `preview_metadata` | object | Извлечённые метаданные |
 | `raw_data` | object | Сырые данные распознавания (`raw_ocr_v4`) — результат Parser или OCR |
-| `promoted_document_id` | bigint \| null | `document_id`, созданный по результатам черновика |
+| `approved_document_id` | bigint \| null | `document_id`, созданный по результатам черновика |
 | `error_code` | string \| null | Код ошибки |
 | `error_message` | string \| null | Описание ошибки |
 | `created_by` | string | Кто создал черновик |
@@ -1069,7 +1044,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
   "task_id": 100,
   "file_key": "f-abc123",
   "document_key": "sha256:def456",
-  "status": "preview_ready",
+  "status": "ready_for_approve",
   "confidence": 0.92,
   "preview_metadata": {
     "doc_code": "ГОСТ 20868-81",
@@ -1184,7 +1159,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 
 ### PATCH /drafts/{draft_id}/decide
 
-**Основной эндпоинт для принятия решения по загруженному документу.** Доступно только для черновиков в статусе `preview_ready`. После решения черновик либо завершается с записью в Registry (`approve`), либо отклоняется (`reject`).
+**Основной эндпоинт для принятия решения по загруженному документу.** Доступно только для черновиков в статусе `ready_for_approve`. После решения черновик либо завершается с записью в Registry (`approve`), либо отклоняется (`reject`).
 
 **Тело запроса:**
 
@@ -1205,9 +1180,9 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 ```json
 {
   "draft_id": 1,
-  "status": "promoted",
+  "status": "approved",
   "action": "approve",
-  "promoted_document_id": 1300,
+  "approved_document_id": 1300,
   "message": "Черновик завершён, документ создан в Registry. Запущен Пайплайн 2 (индексация).",
   "decided_by": "user_10",
   "decided_at": "2026-06-05T10:05:00Z"
@@ -1221,7 +1196,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
   "draft_id": 2,
   "status": "discarded",
   "action": "reject",
-  "promoted_document_id": null,
+  "approved_document_id": null,
   "message": "Черновик отклонён. Можно загрузить файл повторно для новой попытки.",
   "decided_by": "user_10",
   "decided_at": "2026-06-05T10:12:00Z"
@@ -1231,9 +1206,9 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 | Поле | Тип | Описание |
 |------|-----|----------|
 | `draft_id` | bigint | Идентификатор черновика |
-| `status` | string | Новый статус: `promoted` или `discarded` |
+| `status` | string | Новый статус: `approved` или `discarded` |
 | `action` | string | Выполненное действие: `approve` или `reject` |
-| `promoted_document_id` | bigint \| null | `document_id` созданного документа (null при reject) |
+| `approved_document_id` | bigint \| null | `document_id` созданного документа (null при reject) |
 | `message` | string | Описание результата |
 | `decided_by` | string | Кто принял решение |
 | `decided_at` | string | Время решения (ISO 8601) |
@@ -1243,7 +1218,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 | HTTP | Код | Описание |
 |------|-----|----------|
 | 404 | `DRAFT_NOT_FOUND` | Черновик не существует |
-| 409 | `DRAFT_ALREADY_DECIDED` | Решение уже принято (статус не `preview_ready`) |
+| 409 | `DRAFT_ALREADY_DECIDED` | Решение уже принято (статус не `ready_for_approve`) |
 | 400 | `VALIDATION_ERROR` | Некорректный `action` (допустимы: `approve`, `reject`) |
 | 400 | `EMPTY_DOCUMENT` | Нельзя аппрувнуть пустой черновик (0 страниц) |
 
@@ -1275,7 +1250,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 |------|-----|----------|
 | 404 | `DRAFT_NOT_FOUND` | Черновик не существует |
 
-> **Примечание:** черновики со статусом `promoted` также можно удалить — это не влияет на уже созданный документ в Registry.
+> **Примечание:** черновики со статусом `approved` также можно удалить — это не влияет на уже созданный документ в Registry.
 
 ---
 

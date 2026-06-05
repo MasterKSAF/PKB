@@ -213,7 +213,7 @@ erDiagram
 | `doc_code` | Код документа (ГОСТ/ТУ и т.д.), если определён на момент сохранения черновика. |
 | `file_key` | Ключ в MinIO для исходного файла черновика. |
 | `raw_data` | JSONB с сырыми данными от Parser (schema: `raw_ocr_v4`) или Converter (`validated_v3`). |
-| `status` | Статус черновика: `draft`, `previewing`, `parsing`, `validation`, `ready`, `promoted`, `failed`. |
+| `status` | Статус черновика: `uploaded`, `previewing`, `ready_for_approve`, `approved`, `discarded`. |
 | `created_at` | Дата создания черновика. |
 | `updated_at` | Дата последнего обновления черновика. |
 
@@ -229,7 +229,7 @@ erDiagram
 | `jurisdiction` | Юрисдикция: `RU`, `EU`, `US`, `NO`, `INTL` |
 | `file_hash_sha256` | Хэш бинарного файла (вычисляется при загрузке) |
 | `title_hash_sha256` | Хэш `doc_code + title + era` (вычисляется в Converter) |
-| `processing_status` | FSM статус конвейера (не путать с `validity_status` — юридическим статусом документа). Возможные значения: `uploaded`, `previewing`, `awaiting_decision`, `parsing`, `validation`, `ready_for_promotion`, `review_required`, `approved`, `registry`, `pending_index`, `indexing`, `indexed`, `duplicate`, `new_version`, `archived`, `failed` |
+| `processing_status` | FSM статус конвейера (не путать с `validity_status` — юридическим статусом документа). Возможные значения: `created`, `pending_index`, `indexing`, `indexed`, `failed`. Статусы черновика (`uploaded`, `previewing`, `ready_for_approve`, `approved`, `discarded`) хранятся в `pipeline.drafts.status`, не в `registry.documents`. |
 | `chunk_count` | Обновляется RAG Builder после индексации |
 
 ### 2. Разделы документов (`registry.document_sections`)
@@ -273,7 +273,7 @@ erDiagram
 
 | Поле | Примечание |
 |------|------------|
-| `event_type` | Тип события: `created`, `preview_failed`, `decided`, `parsed`, `validated`, `promoted`, `indexed`, `failed` |
+| `event_type` | Тип события: `created`, `preview_failed`, `decided`, `parsed`, `validated`, `approved`, `indexed`, `failed` |
 | `document_snapshot` | Слепок enriched JSON на момент события |
 
 ### 6. Чанки документов (`rag.document_chunks`)
