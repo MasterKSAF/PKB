@@ -22,7 +22,7 @@ Gateway — **внутренний сервис**, не имеет внешне�
 | **Маршрутизация** | Проксирование запросов к внутренним сервисам: Auth, Orchestrator, Query, Registry, Integration и др. |
 | **Иденпотентность** | Кеширование ответов `POST` для `/documents*` и `/chat*` по заголовку `Idempotency-Key` (TTL: 1 час) |
 | **Единый формат ошибок** | Перехват и нормализация HTTP-исключений и ошибок валидации в единый формат (см. [common_api.md](common_api.md#формат-ошибок)) |
-| **CORS** | Разрешение всех origins (`*`) для разработки |
+| **CORS** | **CORS**: По умолчанию `*` для разработки. В production среде CORS ограничен списком разрешённых доменов (`CORS_ALLOWED_ORIGINS`). Значение `*` допускается только при `ENV=development`. CI-проверка отклоняет деплой с `CORS_ALLOWED_ORIGINS=*` для production. |
 | **Мониторинг** | Health-check endpoint `/system/health` с агрегированным статусом всех сервисов |
 | **X-Process-Time** | Добавление заголовка `X-Process-Time` с временем обработки запроса |
 
@@ -44,7 +44,6 @@ Gateway объединяет API всех внутренних сервисов 
 | `/api/v1/documents/*` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md) |
 | `/api/v1/tasks/*` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md) |
 | `/api/v1/drafts/*` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md) |
-| `/api/v1/pages/*` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md) |
 | `/api/v1/monitor/*` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md) |
 | `/api/v1/chat/*` | Query Service | `8083` | [query_service_api.md](query_service_api.md) |
 | `/api/v1/text/*` | Query Service | `8083` | [query_service_api.md](query_service_api.md) |
@@ -53,6 +52,10 @@ Gateway объединяет API всех внутренних сервисов 
 | `/api/v1/common/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
 | `/api/v1/registry/documents/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
 | `/api/v1/system/health` | Gateway (собственный) | `8080` | — |
+| `/api/v1/analyse/*` | Analyse Service | `8089` | [analyse_service_api.md](analyse_service_api.md) |
+| `/api/v1/meridian/*` | Integration Service | `8085` | [integration_service_api.md](integration_service_api.md) |
+
+> **¹ Примечание**: Маршрут `/api/v1/pages/*` — устаревший алиас. Все эндпоинты работы со страницами вложены в `/documents/{doc_id}/pages/*` и маршрутизируются через `/api/v1/documents/*`. Отдельный префикс `/pages/*` будет удалён после рефакторинга Gateway.
 
 В мок-режиме (см. [gateway.py](../mocks/gateway.py)) Gateway, Orchestrator и остальные сервисы объединены в единое FastAPI-приложение на порту `8081` (эмуляция nginx + gateway для разработки и тестов).
 
@@ -86,7 +89,7 @@ Request → CORS → RBAC → Idempotency → ProcessTime → Router → Respons
 | 404 | `NOT_FOUND` | Ресурс не найден |
 | 405 | `METHOD_NOT_ALLOWED` | Метод не поддерживается для данного пути |
 | 409 | `CONFLICT` | Конфликт (дубликат, неконсистентное состояние) |
-| 422 | `VALIDATION_ERROR` | Ошибка валидации входных данных |
+| 400 | `VALIDATION_ERROR` | Ошибка валидации входных данных |
 | 429 | `TOO_MANY_REQUESTS` | Превышен лимит запросов (Rate limiting) |
 | 500 | `INTERNAL_ERROR` | Внутренняя ошибка сервера |
 
@@ -101,6 +104,8 @@ Request → CORS → RBAC → Idempotency → ProcessTime → Router → Respons
 | GET | `/api/v1/system/health` | Health-check: агрегированный статус всех сервисов, версия, количество эндпоинтов |
 
 #### GET /api/v1/system/health
+
+> **Примечание**: `/api/v1/system/health` — основной health-check endpoint для внешних систем мониторинга. Orchestrator имеет дополнительный `/monitor/health` для внутреннего использования.
 
 Проверка состояния Gateway и всех подключённых сервисов.
 
@@ -173,6 +178,7 @@ sequenceDiagram
 - **Иденпотентность** реализована через in-memory кеш на Gateway. В production рекомендуется использовать Redis.
 - **RBAC** проверяется на уровне Gateway, что позволяет отсечь неавторизованные запросы до попадания во внутренние сервисы. Внутренние сервисы могут дополнительно проверять права для специфичных операций.
 - **Rate limiting** (ограничение запросов) запланирован, пока не реализован в мок-версии. В production реализуется на уровне Nginx (модуль ngx_http_limit_req_module) или Kong/Envoy.
+  - **⏳ Требует реализации в коде**: настройка Nginx `limit_req` + Redis distributed rate limiter. Не входит в объём документации.
 - **Логирование** — Gateway добавляет `X-Process-Time` заголовок для замера времени обработки. В production рекомендуется структурированное логирование всех запросов (метод, путь, статус, время, user_id).
 
 ---

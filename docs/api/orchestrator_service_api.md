@@ -8,17 +8,7 @@
 
 Формат ответа и ошибок — см. [common_api.md](../common_api.md#формат-ответа).
 
-Для эндпоинтов с пагинацией используется формат:
-```json
-{
-  "items": [...],
-  "meta": {
-    "total": 150,
-    "page": 1,
-    "page_size": 50
-  }
-}
-```
+Для эндпоинтов с пагинацией используется формат `{ items: [...], meta: { total, page, page_size } }` — см. [common_api.md](../common_api.md#пагинация).
 
 ### Группы
 
@@ -55,6 +45,8 @@
 | `issuing_body` | string | Нет            | Организация-издатель                                               |
 | `metadata`     | string | Нет            | JSON-строка с доп. данными                                         |
 
+> **Примечание**: В запросе `metadata` передаётся как JSON-строка (string). Сервер парсит её в объект, который возвращается в ответе `GET /documents/{doc_id}` как структурированный JSON. Допустимые ключи: `year`, `udc`, `tags`, `notes`.
+
 **Ответ `202`**:
 
 ```json
@@ -72,6 +64,21 @@
 ```
 
 > **Примечание:** `document_id` назначается на стадии валидации после проверки уникальности. Первичный идентификатор — `task_id`.
+
+**Коды ошибок**:
+| HTTP | `error.code` | Когда возникает |
+|------|-------------|----------------|
+| 400 | VALIDATION_ERROR | Некорректные поля запроса |
+| 400 | EMPTY_FILE | Загружен пустой файл (0 байт) |
+| 400 | FILE_TOO_SMALL | Файл менее 1 КБ |
+| 401 | UNAUTHORIZED | Отсутствует или невалидный JWT |
+| 403 | FORBIDDEN | Нет прав на операцию |
+| 409 | DUPLICATE_FILE | Файл с таким SHA-256 уже обрабатывается |
+| 413 | FILE_TOO_LARGE | Файл превышает 100 МБ |
+| 422 | UNSUPPORTED_FILE_TYPE | Неподдерживаемый тип файла |
+| 422 | VALIDATION_FAILED | Семантическая ошибка валидации |
+| 502 | BAD_GATEWAY | Ошибка вызова внутреннего сервиса |
+| 503 | SERVICE_UNAVAILABLE | MinIO или БД недоступны |
 
 ### POST /tasks/{task_id}/preview
 
@@ -249,6 +256,14 @@
 
 Список всех версий файлов логического документа.
 
+> **Примечание:** Поле `size_bytes` в ответе API соответствует полю `file_size_bytes` в таблице БД `registry.document_versions`.
+
+**Query-параметры**:
+| Параметр | Тип | Обязательность | По умолчанию | Описание |
+|----------|-----|---------------|-------------|----------|
+| `page` | int | Нет | 1 | Номер страницы |
+| `page_size` | int | Нет | 50 | Размер страницы (макс. 100) |
+
 **Ответ `200`**:
 
 ```json
@@ -269,7 +284,8 @@
   ],
   "meta": { "total": 2 }
 }
-```
+
+> **Разница между `version_id` и `version_number`**: `version_id` — внутренний идентификатор версии (bigint, sequence), `version_number` — порядковый номер версии документа (начиная с 1), видимый пользователю.
 
 ---
 
@@ -324,12 +340,10 @@
       "mks_oks_code": "31.240",
       "okstu_code": null,
       "classification_status": {
-        "mks_status": "CONFIRMED",
-        "okstu_status": "NOT_USED",
-        "udk_code": null,
-        "extracted_at": "2026-05-15T10:01:00Z",
-        "extracted_by": "purgatory_parser_v2",
-        "confidence": 0.95
+        "mks": ["31.240"],
+        "okstu": [],
+        "udk": [],
+        "subject_area": ["Электроника", "Монтажные изделия"]
       },
       "file_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "file_size_bytes": 2048576,
@@ -360,6 +374,7 @@
   "title": "Стойки установочные",
   "doc_code": "20868-81",
   "source_type": "GOST",
+  "document_type": "normative",
   "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
   "status": "approved",
   "era": "USSR",
@@ -371,12 +386,10 @@
   "mks_oks_code": "31.240",
   "okstu_code": null,
   "classification_status": {
-    "mks_status": "CONFIRMED",
-    "okstu_status": "NOT_USED",
-    "udk_code": null,
-    "extracted_at": "2026-05-15T10:01:00Z",
-    "extracted_by": "purgatory_parser_v2",
-    "confidence": 0.95
+    "mks": ["31.240"],
+    "okstu": [],
+    "udk": [],
+    "subject_area": ["Электроника", "Монтажные изделия"]
   },
   "metadata": {
     "year": "1981",
@@ -399,6 +412,16 @@
   "updated_at": "2026-04-27T14:00:00Z"
 }
 ```
+
+**Коды ошибок**:
+| HTTP | `error.code` | Когда возникает |
+|------|-------------|----------------|
+| 400 | VALIDATION_ERROR | Некорректный `doc_id` в пути |
+| 401 | UNAUTHORIZED | Отсутствует или невалидный JWT |
+| 403 | FORBIDDEN | Нет прав на просмотр документа |
+| 404 | DOCUMENT_NOT_FOUND | Документ с указанным ID не найден |
+| 502 | BAD_GATEWAY | Ошибка вызова Registry |
+| 503 | SERVICE_UNAVAILABLE | БД недоступна |
 
 ---
 
@@ -514,6 +537,8 @@
 
 **Статусы Formation (Формирование документа)**: `uploaded` → `previewing` → `awaiting_decision` → `parsing` → `validation` → `registry` / `review_required` → `archived` / `failed`.
 
+> **Таймаут `uploaded`**: Если preview не запущен в течение 1 часа после загрузки, статус автоматически меняется на `failed` с кодом `PREVIEW_TRIGGER_TIMEOUT`.
+
 **Статусы Indexation (Индексация)**: `pending` → `rag_indexing` → `indexed` / `failed`. Подробнее — [статусная модель FSM](../pipelines/pipeline2-indexation.md#статусная-модель-fsm).
 
 **Группировка `steps.pipeline`**: каждый пайплайн имеет свой ключ (`formation`, `indexation`) с полем `status` — агрегированный статус пайплайна, и вложенными этапами. Статусы пайплайна: `pending`, `in_progress`, `completed`, `failed`, `blocked`. Статусы этапов: `pending`, `in_progress`, `completed`, `error`, `blocked`.
@@ -526,16 +551,49 @@
 
 Получение полного файла документа (последняя версия).
 
-**Ответ `200`**: бинарный поток или JSON со ссылкой:
+**Query-параметры**:
+
+| Параметр | Тип   | Обязательность | Значение по умолчанию | Описание                                     |
+| -------- | ----- | -------------- | --------------------- | -------------------------------------------- |
+| `format` | string| Нет            | `json`                | Формат ответа: `json` — JSON со ссылкой на файл; `binary` — бинарный поток файла |
+
+---
+
+#### format=json (по умолчанию)
+
+Ответ возвращает JSON с метаданными и ссылкой для скачивания файла.
+
+**Ответ `200`**:
 
 ```json
 {
-  "document_id": 1,
-  "version_id": 420001,
-  "content_type": "application/pdf",
-  "file_url": "/files/b3a8f1c2/full.pdf"
+  "file_url": "/files/b3a8f1c2/full.pdf",
+  "file_size": 1048576,
+  "content_type": "application/pdf"
 }
 ```
+
+| Поле           | Тип    | Описание                                   |
+| -------------- | ------ | ------------------------------------------ |
+| `file_url`     | string | Относительный URL для скачивания файла     |
+| `file_size`    | int    | Размер файла в байтах                      |
+| `content_type` | string | MIME-тип файла (application/pdf, image/png, image/jpeg, image/tiff и т.д.) |
+
+---
+
+#### format=binary
+
+Ответ возвращает бинарное содержимое файла напрямую.
+
+**Ответ `200`**:
+
+| Заголовок             | Значение                                           |
+| --------------------- | -------------------------------------------------- |
+| `Content-Type`        | Зависит от типа файла: `application/pdf`, `image/png`, `image/jpeg`, `image/tiff` и т.д. |
+| `Content-Disposition` | `attachment; filename="<original_filename>"`       |
+| `Content-Length`      | Размер файла в байтах                              |
+
+Тело ответа — бинарный поток (сырые байты файла).
 
 ---
 
@@ -554,7 +612,7 @@
 
 | Поле      | Тип    | Обязательность | Описание                            |
 | --------- | ------ | -------------- | ----------------------------------- |
-| `force`   | bool   | Нет            | Принудительный аппрув с warning'ами |
+| `force`   | bool   | Нет (по умолч. false) | Если `true` — обойти блокирующие ошибки валидации (статус `review_required`) и перевести документ в `approved`. Все ошибки валидации сохраняются в `GET /documents/{doc_id}/errors` с пометкой `forced: true`. |
 | `comment` | string | Нет            | Комментарий                         |
 
 **Ответ `202`**:
@@ -576,6 +634,12 @@
 ### GET /documents/{doc_id}/history
 
 История переходов статусов документа (аудит).
+
+**Query-параметры**:
+| Параметр | Тип | Обязательность | По умолчанию | Описание |
+|----------|-----|---------------|-------------|----------|
+| `page` | int | Нет | 1 | Номер страницы |
+| `page_size` | int | Нет | 50 | Размер страницы (макс. 100) |
 
 **Ответ `200`**:
 
@@ -621,9 +685,17 @@
 }
 ```
 
-| Поле   | Тип    | Описание                                                          |
-| ------ | ------ | ----------------------------------------------------------------- |
+| Поле | Тип | Описание |
+|------|-----|----------|
 | `mode` | string | `full`, `ocr_only`, `chunking_only`, `validation_only`, `reindex` |
+| `options` | object | Опциональные параметры обработки (см. таблицу ниже) |
+
+**Поле `options`** (опционально):
+| Поле | Тип | Описание | Допустимые значения |
+|------|-----|----------|-------------------|
+| `engine` | string | Этап обработки | `ocr_only`, `parser_only`, `full` |
+| `language` | string | Язык OCR | `rus` (по умолчанию), `eng` |
+| `pages` | string | Диапазон страниц | `"1-5"`, `"1,3,5"`, `"all"` (по умолчанию) |
 
 **Ответ `202`** — аналогичен `POST /documents`.
 
@@ -642,13 +714,30 @@
 }
 ```
 
+**Коды ошибок**:
+| HTTP | `error.code` | Когда возникает |
+|------|-------------|----------------|
+| 400 | VALIDATION_ERROR | Некорректный `doc_id` в пути |
+| 401 | UNAUTHORIZED | Отсутствует или невалидный JWT |
+| 403 | FORBIDDEN | Нет прав на удаление документа |
+| 404 | DOCUMENT_NOT_FOUND | Документ не найден или уже удалён |
+| 409 | HAS_CHILDREN | Нельзя удалить: есть дочерние версии/секции |
+| 502 | BAD_GATEWAY | Ошибка вызова Registry |
+| 503 | SERVICE_UNAVAILABLE | БД недоступна |
+
 ---
 
 ### GET /documents/{doc_id}/errors
 
 Журнал ошибок обработки.
 
-**Query-параметры**: `stage` (`upload`, `ocr`, `parsing`, `indexing`), `severity` (`warning`, `error`), `page`, `page_size`.
+**Query-параметры**:
+| Параметр | Тип | Обязательность | По умолчанию | Описание |
+|----------|-----|---------------|-------------|----------|
+| `stage` | string | Нет | — | Фильтр по этапу: `upload`, `ocr`, `parsing`, `indexing` |
+| `severity` | string | Нет | — | Фильтр по серьёзности: `warning`, `error` |
+| `page` | int | Нет | 1 | Номер страницы |
+| `page_size` | int | Нет | 50 | Размер страницы (макс. 100) |
 
 **Ответ `200`**:
 
@@ -675,6 +764,12 @@
 ### GET /documents/queue
 
 Очередь обработки документов (статусы `uploaded`, `previewing`, `awaiting_decision`, `validating`, `processing`).
+
+**Query-параметры**:
+| Параметр | Тип | Обязательность | По умолчанию | Описание |
+|----------|-----|---------------|-------------|----------|
+| `page` | int | Нет | 1 | Номер страницы |
+| `page_size` | int | Нет | 50 | Размер страницы (макс. 100) |
 
 **Ответ `200`**:
 
@@ -710,9 +805,11 @@
       "estimated_completion": "2026-05-15T10:02:00Z"
     }
   ],
-  "meta": { "total_in_queue": 5, "page": 1, "page_size": 20 }
+  "meta": { "total": 5, "page": 1, "page_size": 20 }
 }
 ```
+
+> **Примечание**: Поле `total` — общее количество документов в очереди. Используется стандартный формат пагинации (см. common_api.md).
 
 ---
 
@@ -883,7 +980,11 @@
 | `parameters[].description` | string | Описание параметра |
 | `parameters[].unit` | string | Единица измерения |
 | `parameters[].value` | number | Числовое значение (если применимо) |
-| `parameters[].range` | object | Диапазон значений: `{ min, max, min_inclusive, max_inclusive }` |
+| `parameters[].range` | object | Диапазон значений параметра:
+  - `min`: number — минимальное значение
+  - `max`: number — максимальное значение
+  - `min_inclusive`: boolean (опционально) — включено ли минимальное значение
+  - `max_inclusive`: boolean (опционально) — включено ли максимальное значение |
 | `parameters[].source_clause` | string | Пункт документа-источника |
 | `parameters[].source_page` | int | Страница документа-источника |
 | `total` | int | Общее количество параметров |
@@ -1160,7 +1261,7 @@
 |------|-----|----------|
 | 404 | `DRAFT_NOT_FOUND` | Черновик не существует |
 | 409 | `DRAFT_ALREADY_DECIDED` | Решение уже принято (статус не `preview_ready`) |
-| 422 | `VALIDATION_ERROR` | Некорректный `action` (допустимы: `approve`, `reject`) |
+| 400 | `VALIDATION_ERROR` | Некорректный `action` (допустимы: `approve`, `reject`) |
 
 ---
 
@@ -1195,6 +1296,8 @@
 ## Группа monitor
 
 ### GET /monitor/health
+
+> **Примечание**: Этот эндпоинт — для внутреннего мониторинга сервиса. Внешним системам следует использовать `/api/v1/system/health` (Gateway).
 
 Агрегированная проверка состояния системы.
 
@@ -1243,3 +1346,21 @@ Orchestrator последовательно опрашивает `GET /health` �
   "logs": [ { "time": "12:34:02", "type": "search", "text": "...", "level": "info" } ]
 }
 ```
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `control_metrics` | object | Объект с метриками качества контроля |
+| `control_metrics.ocr_quality` | number | Качество OCR (0–1) |
+| `control_metrics.retrieval_quality` | number | Качество поиска (0–1) |
+| `control_metrics.answers_with_sources` | number | Доля ответов с источниками (0–1) |
+| `control_metrics.avg_latency_ms` | number | Средняя задержка, мс |
+| `answer_metrics` | object | Объект с метриками качества ответов |
+| `answer_metrics.useful_rate` | number | Доля полезных ответов (0–1) |
+| `answer_metrics.rated_answers` | int | Количество оценённых ответов |
+| `answer_metrics.flagged_for_review` | int | Количество отмеченных на ревью |
+| `answer_metrics.open_questions` | int | Количество открытых вопросов |
+| `logs` | array | Массив записей лога |
+| `logs[].time` | string | Время события |
+| `logs[].type` | string | Тип события |
+| `logs[].text` | string | Текст события |
+| `logs[].level` | string | Уровень логирования |

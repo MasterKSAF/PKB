@@ -29,10 +29,10 @@
 
 ### Коды ошибок
 
+Общие коды (400, 404, 500) — см. [common_api.md](../common_api.md#коды-ответов-http-и-ошибок).
+
 | HTTP | `error.code` | Описание |
 |------|-------------|----------|
-| 400 | `VALIDATION_ERROR` | Некорректные данные |
-| 404 | `NOT_FOUND` | Ресурс не найден |
 | 404 | `CLASSIFIER_NOT_FOUND` | Узел классификатора не найден |
 | 404 | `TERM_NOT_FOUND` | Термин не найден |
 | 404 | `DOCUMENT_NOT_FOUND` | Документ не найден |
@@ -42,7 +42,6 @@
 | 409 | `HAS_CHILDREN` | Нельзя удалить узел с дочерними |
 | 409 | `HAS_DOCUMENTS` | Есть документы, ссылающиеся на код |
 | 409 | `CROSS_SYSTEM_PARENT` | Родитель в другой системе классификации |
-| 500 | `INTERNAL_ERROR` | Внутренняя ошибка |
 
 ---
 
@@ -58,6 +57,21 @@
 ---
 
 ## Группа classifiers
+
+| Метод | Путь | Описание |
+|-------|------|----------|
+| GET | `/registry/classifiers` | Список (плоский) |
+| GET | `/registry/classifiers/tree` | Дерево (иерархическое) |
+| GET | `/registry/classifiers/{code}` | Один узел |
+| POST | `/registry/classifiers` | Создать |
+| PUT | `/registry/classifiers/{code}` | Обновить |
+| PATCH | `/registry/classifiers/{code}` | Частичное обновление |
+| DELETE | `/registry/classifiers/{code}` | Удалить |
+| POST | `/registry/classifiers/import` | Импорт |
+| GET | `/registry/classifiers/pending` | Неизвестные коды классификатора |
+| POST | `/registry/classifiers/pending/{pending_id}/accept` | Принять неизвестный код |
+| POST | `/registry/classifiers/pending/{pending_id}/reject` | Отклонить неизвестный код |
+| POST | `/registry/classifiers/validate` | Валидация классификации |
 
 ### 1.1. Список (плоский)
 
@@ -428,6 +442,16 @@ Registry Service — source of truth для классификаторов. Пр
 
 ## Группа terminology
 
+| Метод | Путь | Описание |
+|-------|------|----------|
+| GET | `/registry/terminology` | Список |
+| GET | `/registry/terminology/{term_id}` | Один термин |
+| POST | `/registry/terminology` | Создать |
+| PUT | `/registry/terminology/{term_id}` | Обновить |
+| DELETE | `/registry/terminology/{term_id}` | Удалить |
+| GET | `/registry/terminology/normalize` | Поиск нормализованной формы |
+| POST | `/registry/terminology/import` | Импорт |
+
 ### 2.1. Список
 
 ```
@@ -593,6 +617,22 @@ POST /registry/terminology/import
 
 ## Группа documents
 
+| Метод | Путь | Описание |
+|-------|------|----------|
+| GET | `/registry/documents` | Список |
+| GET | `/registry/documents/{doc_id}` | Один документ (описание) |
+| GET | `/registry/documents/{doc_id}/sections` | Секции документа |
+| POST | `/registry/documents/check-uniqueness` | Проверить уникальность |
+| POST | `/registry/documents` | Создать |
+| PUT | `/registry/documents/{doc_id}` | Обновить |
+| PATCH | `/registry/documents/{doc_id}` | Частичное обновление |
+| PATCH | `/registry/documents/{doc_id}/status` | Обновить статус |
+| GET | `/registry/documents/{doc_id}/history` | История статусов |
+| GET | `/registry/documents/{doc_id}/succession` | Цепочка преемственности |
+| DELETE | `/registry/documents/{doc_id}` | Удалить |
+| GET | `/registry/documents/export` | Экспорт |
+| POST | `/registry/documents/import` | Массовый импорт |
+
 ### 3.1. Список
 
 ```
@@ -613,6 +653,8 @@ GET /registry/documents
 | `validity_status` | string | `active`, `superseded`, `cancelled`, `historical`, `draft` |
 | `jurisdiction` | string | `RU`, `EU`, `US`, `NO`, `INTL` |
 | `issuing_body` | string | Организация-издатель |
+| `document_type` | string | Категория контента: `normative`, `technical`, `drawing`, `specification`, `archival_scan` |
+| `group` | string | Группа классификации (например, `ПО4`) |
 | `title_hash_sha256` | string | Точный поиск по бизнес-ключу |
 | `date_from` / `date_to` | date | Фильтр по дате создания |
 | `sort_by` | string | Поле сортировки: `title`, `doc_code`, `source_type`, `era`, `created_at`, `updated_at` (по умолчанию `created_at`) |
@@ -630,6 +672,8 @@ GET /registry/documents
       "title": "Стойки установочные",
       "doc_code": "20868-81",
       "source_type": "GOST",
+      "document_type": "normative",
+      "group": "ПО4",
       "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
       "file_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "file_size_bytes": 2048576,
@@ -643,9 +687,15 @@ GET /registry/documents
       "okstu_code": null,
       "okstu_name": null,
       "classification_status": {
-        "mks_status": "CONFIRMED",
-        "okstu_status": "NOT_USED"
+        "mks": ["31.240"],
+        "okstu": [],
+        "udk": [],
+        "subject_area": ["Электроника", "Монтажные изделия"]
       },
+      "adoption_date": "1981-07-01",
+      "effective_from": "1982-01-01",
+      "replaces": null,
+      "status_note": null,
       "successor_doc_id": null,
       "predecessor_doc_id": null,
       "total_versions": 2,
@@ -682,9 +732,15 @@ GET /registry/documents/{doc_id}
 - `jurisdiction` — юрисдикция (`RU`, `EU`, `US`, `NO`, `INTL`)
 - `issuing_body` — организация-издатель
 - `source_type` — тип источника (`GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `OTHER`)
+- `document_type` — категория контента (`normative`, `technical`, `drawing`, `specification`, `archival_scan`)
+- `group` — группа классификации (например, `ПО4`)
 - `mks_oks_code` — код МКС/ОКС
 - `okstu_code` — код ОКСТУ
-- `classification_status` — статус классификации (`{ mks_status, okstu_status }`)
+- `classification_status` — статус классификации (`{ mks: string[], okstu: string[], udk: string[], subject_area: string[] }`)
+- `adoption_date` — дата принятия документа
+- `effective_from` — дата введения в действие
+- `replaces` — сведения о заменяемом документе
+- `status_note` — примечание к статусу
 - `successor_doc_id` — ID документа-преемника
 - `predecessor_doc_id` — ID документа-предшественника
 - `metadata` — произвольные метаданные (JSONB)
@@ -700,6 +756,8 @@ GET /registry/documents/{doc_id}
     "doc_code": "ГОСТ 20868-81",
     "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
     "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+    "document_type": "normative",
+    "group": "ПО4",
     "status": "approved",
     "era": "USSR",
     "validity_status": "active",
@@ -709,9 +767,15 @@ GET /registry/documents/{doc_id}
     "mks_oks_code": "31.240",
     "okstu_code": null,
     "classification_status": {
-      "mks_status": "CONFIRMED",
-      "okstu_status": "NOT_USED"
+      "mks": ["31.240"],
+      "okstu": [],
+      "udk": [],
+      "subject_area": ["Электроника", "Монтажные изделия"]
     },
+    "adoption_date": "1981-07-01",
+    "effective_from": "1982-01-01",
+    "replaces": null,
+    "status_note": null,
     "successor_doc_id": null,
     "predecessor_doc_id": null,
     "metadata": {},
@@ -885,8 +949,10 @@ POST /registry/documents
   "mks_oks_code": "31.240",
   "okstu_code": null,
   "classification_status": {
-    "mks_status": "CONFIRMED",
-    "okstu_status": "NOT_USED"
+    "mks": ["31.240"],
+    "okstu": [],
+    "udk": [],
+    "subject_area": ["Электроника", "Монтажные изделия"]
   },
   "successor_doc_id": null,
   "predecessor_doc_id": null,
@@ -974,7 +1040,7 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
 | `issuing_body` | string | Нет | Организация-издатель |
 | `mks_oks_code` | string | Нет | Код МКС/ОКС (FK) |
 | `okstu_code` | string | Нет | Код ОКСТУ (FK) |
-| `classification_status` | JSONB | Нет | Статусы извлечения кодов |
+| `classification_status` | JSONB | Нет | Статусы классификации: `{ mks: string[], okstu: string[], udk: string[], subject_area: string[] }` |
 | `successor_doc_id` | bigint | Нет | Преемник |
 | `predecessor_doc_id` | bigint | Нет | Предшественник |
 | `metadata` | JSONB | Нет | Доп. данные |
@@ -982,7 +1048,8 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
 > *`title` обязателен при прямом создании; в режиме пайплайна берётся из структуры JSON-контейнера.
 
 Система **автоматически вычисляет** `title_hash_sha256` по формуле:  
-`SHA-256(era|source_type|mks_oks_code|okstu_code|doc_code|normalized_title)`
+`SHA-256(era | source_type | doc_code | normalized_title)`  
+где `normalized_title` — `title` в нижнем регистре с удалёнными лишними пробелами
 
 > **Полный формат данных:** [`docs/schema/schema_registry_for_rag.json`](../schema/schema_registry_for_rag.json) (схема `for_rag_v1`)
 
@@ -1297,6 +1364,11 @@ POST /registry/documents/import
 
 ## Группа common
 
+| Метод | Путь | Описание |
+|-------|------|----------|
+| GET | `/registry/stats` | Статистика |
+| GET | `/registry/enums` | Допустимые значения |
+
 ### 4.1. Статистика
 
 ```
@@ -1472,7 +1544,7 @@ GET /registry/enums
 ## Примечания
 
 1. **DB shared:** Все таблицы registry находятся в общей БД. Другие сервисы читают их напрямую.
-2. **title_hash_sha256** вычисляется автоматически, гарантирует дедупликацию. Формула: `SHA-256(era|source_type|mks|okstu|doc_code|normalized_title)`.
+2. **title_hash_sha256** вычисляется автоматически, гарантирует дедупликацию. Формула: `SHA-256(era | source_type | doc_code | normalized_title)`, где `normalized_title` — `title` в нижнем регистре с удалёнными лишними пробелами.
 3. **Параллельная классификация:** Документ может одновременно ссылаться на МКС/ОКС и ОКСТУ через разные FK.
 4. **Журнал статусов:** Все изменения `documents.status` автоматически логируются в `status_history` триггером БД.
 5. **Неизвестные коды классификатора:** Коды, не найденные в справочнике, попадают в `classifier_pending`. Администратор разбирает их через UI.

@@ -53,6 +53,7 @@ erDiagram
         varchar type
         jsonb content
         timestamptz created_at
+        timestamptz updated_at
     }
 
     registry.document_references {
@@ -67,12 +68,14 @@ erDiagram
         boolean is_resolved
         bigint resolved_document_id FK
         timestamptz created_at
+        timestamptz updated_at
     }
 
     registry.document_versions {
         bigint id PK
         bigint document_id FK
         int version_number
+        varchar(50) revision
         text file_hash_sha256
         bigint file_size_bytes
         text format_code
@@ -80,6 +83,19 @@ erDiagram
         text file_key
         text uploaded_by
         timestamptz uploaded_at
+        timestamptz updated_at
+    }
+
+    pipeline.drafts {
+        bigint id PK
+        bigint task_id FK
+        varchar doc_code
+        varchar title
+        varchar file_key
+        jsonb raw_data
+        varchar status
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     registry.document_history {
@@ -107,6 +123,7 @@ erDiagram
         jsonb bbox
         float confidence
         timestamptz created_at
+        timestamptz updated_at
     }
 
     chat.projects {
@@ -130,6 +147,7 @@ erDiagram
         timestamptz created_at
         timestamptz updated_at
     }
+    %% FK user_id -> auth.users.id (будет создана после развёртывания Auth Service)
 
     chat.messages {
         bigint id PK
@@ -143,6 +161,7 @@ erDiagram
         jsonb feedback
         int processing_time_ms
         timestamptz created_at
+        timestamptz updated_at
     }
 
     registry.documents ||--o{ registry.document_sections : has
@@ -154,9 +173,23 @@ erDiagram
     registry.documents ||--o{ rag.document_chunks : chunked_by
     chat.projects ||--o{ chat.sessions : has_sessions
     chat.sessions ||--o{ chat.messages : has_messages
+
+    pipeline.drafts }o--|| pipeline.tasks : references
 ```
 
 ---
+
+### Индексы
+
+| Таблица | Поле | Тип индекса | Назначение |
+|---------|------|------------|-----------|
+| `chat.sessions` | `user_id` | B-tree | Фильтрация сессий по пользователю |
+| `chat.sessions` | `created_at` | B-tree | Сортировка по дате |
+| `chat.messages` | `session_id` | B-tree | Поиск сообщений сессии |
+| `chat.messages` | `created_at` | B-tree | Сортировка по времени |
+| `registry.documents` | `processing_status` | B-tree | Фильтрация по статусу |
+| `registry.documents` | `created_at` | B-tree | Сортировка по дате загрузки |
+| `registry.document_sections` | `content` | GIN | Поиск по JSONB-полям (например, `content.amendments[].type`) |
 
 ## Ключевые условия и ограничения
 
@@ -171,6 +204,18 @@ erDiagram
 ---
 
 ## Примечания
+
+### 0. Черновики документов (`pipeline.drafts`)
+
+| Поле | Примечание |
+|------|------------|
+| `task_id` | FK → `pipeline.tasks(id)`. Ссылка на задачу пайплайна, в рамках которой создан черновик. |
+| `doc_code` | Код документа (ГОСТ/ТУ и т.д.), если определён на момент сохранения черновика. |
+| `file_key` | Ключ в MinIO для исходного файла черновика. |
+| `raw_data` | JSONB с сырыми данными от Parser (schema: `raw_ocr_v4`) или Converter (`validated_v3`). |
+| `status` | Статус черновика: `draft`, `previewing`, `parsing`, `validation`, `ready`, `promoted`, `failed`. |
+| `created_at` | Дата создания черновика. |
+| `updated_at` | Дата последнего обновления черновика. |
 
 ### 1. Реестр документов (`registry.documents`)
 
@@ -218,8 +263,11 @@ erDiagram
 
 | Поле | Примечание |
 |------|------------|
+| `revision` | Обозначение редакции (напр. «Изм. 1», «Изд. 2»), извлекается из preview-метаданных документа |
 | `format_code` | Формат файла: `pdf`, `doc`, `tiff`, ... |
 | `file_key` | Ссылка на MinIO |
+
+> **Примечание**: `revision` (обозначение редакции, напр. «Изм. 1», «Изд. 2») извлекается из preview-метаданных документа.
 
 ### 5. История обработки (`registry.document_history`)
 
@@ -240,6 +288,8 @@ erDiagram
 | `strategy` | Стратегия чанкинга: `semantic_512`, `fixed_256` |
 
 Связь с секциями: чанк всегда привязан к конкретной секции документа. Одна секция может порождать несколько чанков (для `type=section` с разбивкой на ≤512 токенов) или один чанк (для `type=table/image/formula`).
+
+> **Денормализация**: Поле `document_id` в `document_chunks` дублирует `document_sections.document_id` для ускорения запросов «все чанки документа». Синхронизация должна обеспечиваться на уровне приложения или триггера.
 
 ### 7. Проекты (`chat.projects`)
 

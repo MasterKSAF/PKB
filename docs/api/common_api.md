@@ -8,6 +8,16 @@
 
 - Формат данных: `application/json`, для загрузки файлов – `multipart/form-data`
 
+### HTTP-заголовки
+
+| Заголовок | Обязательность | Описание |
+|-----------|---------------|----------|
+| `Authorization: Bearer <token>` | Да (кроме `/auth/*` и `/system/health`) | JWT-токен доступа |
+| `Content-Type` | Да | `application/json` (для JSON), `multipart/form-data` (для загрузки файлов) |
+| `Accept` | Нет | `application/json` (по умолчанию) |
+| `Idempotency-Key` | Для POST /documents и POST /chat/* | UUIDv4 для идемпотентности |
+| `X-Request-ID` | Нет | Correlation ID для трассировки |
+
 ### Версионирование API
 
 - Путь: `/api/v{major}.{minor}` в URL (например, `/api/v1`).
@@ -88,6 +98,8 @@
 > обращаясь к их `/health` и возвращая сведённый результат. Для внутренних сервисов
 > эндпоинт `/health` не имеет ограничений rate limiting и не требует аутентификации.
 
+> **⚠️ Безопасность**: Health endpoint (`/system/health`) должен возвращать минимальный ответ `{"status": "ok"}` для неаутентифицированных запросов. Полная информация о версиях сервисов — только для `system_admin`.
+
 ### Идентификаторы
 
 | Идентификатор | Тип | Назначается | Используется в URL |
@@ -100,6 +112,8 @@
 | `chunk_id` | bigint | RAG Builder при индексации | В ответах RAG Search |
 | `session_id` | bigint | Query Service при создании сессии чата | `/chat/sessions/{session_id}/...` |
 | `message_id` | bigint | Query Service при создании сообщения | `/chat/sessions/{session_id}/messages/{message_id}` |
+| `history_id` | bigint (sequence) | Registry при записи события аудита | В ответах API аудита/истории |
+| `promotion_task_id` | bigint (sequence) | Оркестратором при создании задачи промотирования | `/promotion/tasks/{promotion_task_id}/...` |
 
 **Жизненный цикл идентификаторов:**
 1. `task_id` (bigint) — назначается Оркестратором при `POST /documents`, используется в `/tasks/{task_id}/...`
@@ -253,7 +267,7 @@ GET .../{doc_id}/status?longpoll=15
 | 201      | —                         | Создан ресурс                                     | все                    |
 | 202      | —                         | Запрос принят (асинхронная обработка)             | Orchestrator           |
 | 400      | `BAD_REQUEST`             | Неверные параметры запроса                        | все                    |
-| 400      | `VALIDATION_ERROR`        | Ошибка валидации полей                            | все                    |
+| 400 | `VALIDATION_ERROR` | Ошибка валидации полей запроса (некорректный JSON, неверный тип, обязательное поле отсутствует) | все                    |
 | 401      | `UNAUTHORIZED`            | Нет доступа — клиент не известен                  | все                    |
 | 401      | `INVALID_TOKEN`           | Токен недействителен или истёк                    | Auth                   |
 | 403      | `FORBIDDEN`               | Нет доступа — нет прав на ресурс                  | все                    |
@@ -265,6 +279,10 @@ GET .../{doc_id}/status?longpoll=15
 | 404      | `SESSION_NOT_FOUND`       | Сессия чата не найдена                                    | Query                  |
 | 404      | `MESSAGE_NOT_FOUND`       | Сообщение чата не найдено                                 | Query                  |
 | 404      | `FILE_NOT_FOUND`          | Файл не найден                                    | Integration            |
+| 408      | `INDEX_TRIGGER_TIMEOUT`   | Таймаут триггера индексации                       | Orchestrator           |
+| 408      | `DECISION_TIMEOUT`        | Таймаут ожидания решения по черновику             | Orchestrator           |
+| 408      | `PREVIEW_TRIGGER_TIMEOUT` | Таймаут запуска preview-фазы                      | Orchestrator           |
+| 408      | `LLM_GENERATION_TIMEOUT`  | Таймаут генерации LLM                             | Query                  |
 | 409      | `HAS_CHILDREN`            | Нельзя удалить узел с дочерними                   | Registry               |
 | 409      | `DUPLICATE_CODE`          | Код классификатора уже существует                 | Registry               |
 | 409      | `DUPLICATE_TERM`          | Термин уже существует                             | Registry               |
@@ -281,7 +299,7 @@ GET .../{doc_id}/status?longpoll=15
 | 409      | `DUPLICATE_FILE`          | Файл с таким SHA-256 уже обрабатывается           | Orchestrator           |
 | 409      | `ALREADY_PROCESSING`      | Документ уже в обработке (reprocess)              | Orchestrator           |
 | 413      | `FILE_TOO_LARGE`          | Превышение лимита размера файла (>= 100 МБ)       | Integration, OCR       |
-| 422      | `VALIDATION_FAILED`       | Ошибка семантической валидации                    | Converter-validator   |
+| 422      | `VALIDATION_FAILED`       | Ошибка семантической валидации (данные корректны по структуре, но противоречат бизнес-правилам) | Converter-validator   |
 | 429      | `TOO_MANY_REQUESTS`       | Превышен лимит запросов (rate limit)              | все                    |
 | 502      | `BAD_GATEWAY`             | Ошибка при вызове внутреннего сервиса              | Orchestrator           |
 | 502      | `LLM_GENERATION_FAILED`   | Ошибка генерации LLM (все retry исчерпаны)        | Query                  |
@@ -294,7 +312,7 @@ GET .../{doc_id}/status?longpoll=15
 | 500      | `OCR_FAILED`              | Ошибка OCR-распознавания                          | OCR, Orchestrator      |
 | 500      | `ANALYSIS_FAILED`         | Ошибка анализа/сопоставления                      | Analyse                |
 | 500      | `CONVERSION_FAILED`       | Ошибка конвертации документа                     | Converter-validator    |
-| 500      | `VALIDATION_FAILED`       | Ошибка семантической валидации                    | Converter-validator    |
+| 500      | `CONVERSION_VALIDATION_FAILED` | Ошибка семантической валидации конвертации (внутренняя, не 422) | Converter-validator    |
 | 503      | `CIRCUIT_BREAKER_OPEN`    | Этап временно отключён (Circuit Breaker)          | Orchestrator           |
 | 501      | `NOT_IMPLEMENTED`         | Метод не реализован                               | все                    |
 | 504      | `GATEWAY_TIMEOUT`         | Таймаут при вызове внутреннего сервиса            | Orchestrator           |
@@ -352,6 +370,10 @@ GET .../{doc_id}/status?longpoll=15
 ---
 
 ### Rate Limiting (ограничение запросов)
+
+> **⚠️ Статус реализации**: Лимиты, описанные ниже, вступают в силу только после настройки Nginx/Redis в production. В текущей (мок) реализации rate limiting не применяется.
+>
+> **⏳ Требует реализации в коде**: настройка Nginx `limit_req` модуль + Redis-based distributed rate limiter. Не входит в объём документации. Ответ `429 Too Many Requests` в мок-режиме не возвращается.
 
 Для защиты от перегрузок и DoS-атак на все эндпоинты через Gateway действуют следующие лимиты:
 
@@ -412,14 +434,17 @@ GET .../{doc_id}/status?longpoll=15
 
 #### Граничные значения дат
 - `date_from` должен быть раньше `date_to`. Иначе — `400 BAD_REQUEST` с кодом `INVALID_DATE_RANGE`.
-- Максимальный диапазон дат для поиска — 100 лет.
+- **Максимальный диапазон дат**: 100 лет (настраивается через `MAX_DATE_RANGE_YEARS`, по умолчанию `100`). Ограничение защищает от нецелевого использования и избыточной нагрузки на БД.
 
 #### Конкуренция (concurrent requests)
-- Одновременная загрузка одного и того же файла (одинаковый SHA-256) — первый запрос проходит,
-  второй получает `409 CONFLICT` с кодом `DUPLICATE_FILE` (если файл уже обрабатывается).
+- **Конкурентная загрузка файла**: При одновременной загрузке файла с одинаковым SHA-256:
+  - Первый завершивший транзакцию запрос проходит
+  - Остальные получают `409 CONFLICT`
+  - Механизм: уникальный индекс `UNIQUE (file_hash_sha256)` + `INSERT ... ON CONFLICT DO NOTHING`
+  - Если файл уже обрабатывается (статус `uploaded`/`previewing`/`parsing`), новый запрос с тем же SHA-256 отклоняется
 - Одновременный вызов `POST /documents/{doc_id}/reprocess` для одного документа — второй запрос
   получает `409 CONFLICT` с кодом `ALREADY_PROCESSING`.
-- Idempotency-Key: при повторном запросе с тем же ключом в течение 24 часов возвращается
+- Idempotency-Key: при повторном запросе с тем же ключом в течение 1 часа возвращается
   сохранённый результат первого запроса.
 
 #### Поведение при недоступности внешних сервисов
@@ -427,7 +452,7 @@ GET .../{doc_id}/status?longpoll=15
 | Внешний сервис | Эндпоинт | Поведение | HTTP-код |
 |---|---|---|---|
 | MinIO | `POST /documents`, `GET /documents/{id}/file` | Ошибка загрузки/получения файла | `503 SERVICE_UNAVAILABLE` |
-| Redis | Все эндпоинты (кэш/очереди) | Rate limiting отключается, запросы проходят без ограничения | — (логируется) |
+| Redis | Все эндпоинты (кэш/очереди) | **Redis недоступен**: Rate limiting отключается, запросы проходят без ограничения. Инцидент логируется как WARN. В production Redis должен быть развёрнут в кластере (минимум 2 реплики). Временно безлимитный режим — аварийный, нештатный. | — (WARN-лог) |
 | LLM | `POST /chat/*`, `POST /text/*` | Retry 2 раза с усечением контекста; при всех неудачах — `502 BAD_GATEWAY` | `502 BAD_GATEWAY` |
 | PostgreSQL | Все эндпоинты с доступом к БД | Connection pool исчерпан — `503 SERVICE_UNAVAILABLE` | `503 SERVICE_UNAVAILABLE` |
 | Меридиан | `POST /meridian/export` | Экспорт ставится в очередь, повтор раз в 10 минут; статус `deferred` | `202` |
@@ -478,7 +503,7 @@ GET .../{doc_id}/status?longpoll=15
 
 - **Лимиты загрузки:** максимальный размер файла — 100 МБ. Поддерживаемые MIME-типы: `application/pdf`, `image/png`, `image/jpeg`, `image/tiff`. При превышении лимита возвращается `413 PAYLOAD_TOO_LARGE`.
 
-- **Идемпотентность:** опциональный заголовок `Idempotency-Key` поддерживается для `POST /documents` и `POST /chat/ask`. При повторном запросе с тем же ключом в течение 24 часов возвращается сохранённый результат.
+- **Идемпотентность:** опциональный заголовок `Idempotency-Key` поддерживается для `POST /documents` и `POST /chat/ask`. При повторном запросе с тем же ключом в течение 1 часа возвращается сохранённый результат.
 
 ---
 
@@ -494,6 +519,12 @@ GET .../{doc_id}/status?longpoll=15
 | `refresh_token` | Не логировать. Хранить в БД в хэшированном виде. |
 | `access_token` | Не логировать. |
 
+**CSRF защита**: JWT передаётся только через заголовок `Authorization: Bearer <token>`, не через cookie. Это обеспечивает защиту от CSRF-атак, так как браузер не подставляет custom header автоматически.
+
+**XSS защита**: Все строковые поля, заполняемые пользователем (названия документов, сообщения чата, комментарии, feedback), должны экранироваться при отображении в UI. API возвращает `Content-Type: application/json` и `X-Content-Type-Options: nosniff`. Сервер не выполняет санитизацию контента — это ответственность UI.
+
+**Чувствительные данные в URL**: `user_id` в query-параметрах допустим, но при логировании запросов не логировать полный URL с query-параметрами, содержащими PII. Использовать маскирование или структурное логирование.
+
 #### Логирование
 
 - Поля `password`, `refresh_token`, `access_token` должны быть **отфильтрованы или замаскированы** (например, заменены на `***`) во всех логах сервисов.
@@ -506,6 +537,18 @@ GET .../{doc_id}/status?longpoll=15
 
 - **Краткосрочно:** вынести смену пароля пользователя в отдельный эндпоинт `POST /admin/users/{user_id}/reset-password` с обязательной аудит-записью.
 - **Среднесрочно:** переход с Password Grant (`POST /auth/token` с `username` + `password`) на **Authorization Code + PKCE** — пароль перестаёт передаваться API, аутентификация выполняется на стороне клиента с одноразовым code.
+
+### Защита от IDOR (Insecure Direct Object Reference)
+
+Так как все идентификаторы в системе — bigint sequence (предсказуемы), необходима проверка ownership на уровне Gateway/сервисов:
+
+| Роль | Доступ к ресурсам |
+|------|-------------------|
+| `engineer` | Только собственные ресурсы (`WHERE user_id = current_user_id`) |
+| `knowledge_admin` | Только собственные ресурсы |
+| `system_admin` | Все ресурсы (с аудит-записью) |
+
+Проверка выполняется перед каждым запросом к ресурсу (документ, сессия чата, черновик).
 
 ---
 
