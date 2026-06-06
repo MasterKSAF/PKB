@@ -3,10 +3,19 @@ Gateway Mock — unified entry point (nginx emulation).
 Combines all 5 routers on a single port 8081 with:
 - CORS (all origins)
 - RBAC (JWT validation, anonymous fallback)
-- Idempotency-Key support for POST /documents and POST /chat
+- Idempotency-Key support for POST /drafts and POST /chat
 - X-Process-Time header
 - Lifespan context manager
 - Unified error format (Registry spec)
+
+Routing map (see docs/gateway_service_api.md):
+- /api/v1/auth/*, /api/v1/admin/*      → Auth Service
+- /api/v1/documents/*, /api/v1/drafts/*,
+    /api/v1/tasks/*, /api/v1/monitor/*  → Orchestrator Service
+- /api/v1/chat/*, /api/v1/text/*        → Query Service
+- /api/v1/classifiers/*, /api/v1/terminology/*,
+    /api/v1/common/*, /api/v1/registry/documents/* → Registry Service
+- /api/v1/system/health                  → Gateway (own)
 """
 
 import json
@@ -243,12 +252,18 @@ class RBACMiddleware(BaseHTTPMiddleware):
 
 _IDEMPOTENCY_STORE: Dict[str, dict] = {}
 _IDEMPOTENCY_TTL = 3600
-_IDEMPOTENCY_PREFIXES = ("/api/v1/documents", "/api/v1/chat")
+_IDEMPOTENCY_PREFIXES = ("/api/v1/drafts", "/api/v1/chat")
 
 
 class IdempotencyMiddleware(BaseHTTPMiddleware):
-    """Caches POST responses for /api/v1/documents* and /api/v1/chat*
-    when Idempotency-Key header is provided."""
+    """Caches POST responses for /api/v1/drafts* and /api/v1/chat*
+    when Idempotency-Key header is provided.
+
+    Upload of a new document always starts with `POST /api/v1/drafts`
+    (see orchestrator_service_api.md, "Черновик — точка входа"), so the
+    idempotency window covers all draft lifecycle mutations initiated
+    from the client.
+    """
 
     async def dispatch(self, request: Request, call_next):
         if request.method != "POST":

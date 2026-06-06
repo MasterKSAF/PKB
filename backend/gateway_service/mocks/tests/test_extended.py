@@ -33,6 +33,9 @@ BASE = "/api/v1"
 AUTH = f"{BASE}/auth"
 ADMIN = f"{BASE}/admin"
 ORCH = f"{BASE}"
+
+# Валидный (>= 1 КБ) PDF-пейлоад для /drafts — иначе мок-валидатор вернёт FILE_TOO_SMALL.
+_VALID_PDF_BYTES = b"%PDF-1.4\n" + b"%PAD-" * 300 + b"\n%%EOF\n"
 QUERY = f"{BASE}"
 REG_DOCS = f"{BASE}/registry"
 REG = f"{BASE}"
@@ -254,9 +257,9 @@ class TestOrchestratorExtended:
         # Add a version
         add = client.post(
             f"{ORCH}/documents/{doc_id}/versions",
-            files={"file": ("vnew_ext.pdf", b"new version content", "application/pdf")},
+            files={"file": ("vnew_ext.pdf", b"new version content payload - " * 20, "application/pdf")},
         )
-        assert_ok(add, 201)
+        assert_ok(add, 202)
         add_data = add.json()
         assert add_data["version_number"] == before_count + 1
         assert add_data["document_id"] == doc_id
@@ -587,13 +590,13 @@ class TestGatewayExtended:
             pass
 
     def test_35_idempotency_key_cache(self):
-        """POST /documents with Idempotency-Key returns cached response on repeat."""
+        """POST /drafts with Idempotency-Key returns cached response on repeat."""
         idem_key = f"test-idem-{uuid.uuid4().hex}"
 
         # First call
         resp1 = client.post(
-            f"{ORCH}/documents",
-            files={"file": ("idem_test.pdf", b"idempotency test", "application/pdf")},
+            f"{ORCH}/drafts",
+            files={"file": ("idem_test.pdf", _VALID_PDF_BYTES, "application/pdf")},
             headers={"Idempotency-Key": idem_key},
         )
         assert_ok(resp1, 202)
@@ -601,8 +604,8 @@ class TestGatewayExtended:
 
         # Repeat with same key
         resp2 = client.post(
-            f"{ORCH}/documents",
-            files={"file": ("idem_test2.pdf", b"different content", "application/pdf")},
+            f"{ORCH}/drafts",
+            files={"file": ("idem_test2.pdf", _VALID_PDF_BYTES + b"v2", "application/pdf")},
             headers={"Idempotency-Key": idem_key},
         )
         assert_ok(resp2, 202)
@@ -650,8 +653,8 @@ class TestGatewayExtended:
         
         # Make first request to cache it
         resp1 = client.post(
-            f"{ORCH}/documents",
-            files={"file": ("ttl_test.pdf", b"ttl content", "application/pdf")},
+            f"{ORCH}/drafts",
+            files={"file": ("ttl_test.pdf", _VALID_PDF_BYTES, "application/pdf")},
             headers={"Idempotency-Key": idem_key},
         )
         assert_ok(resp1, 202)
@@ -666,8 +669,8 @@ class TestGatewayExtended:
         
         # Second request with same key — TTL expired, should NOT return cached
         resp2 = client.post(
-            f"{ORCH}/documents",
-            files={"file": ("ttl_test2.pdf", b"fresh content", "application/pdf")},
+            f"{ORCH}/drafts",
+            files={"file": ("ttl_test2.pdf", _VALID_PDF_BYTES + b"v2", "application/pdf")},
             headers={"Idempotency-Key": idem_key},
         )
         assert_ok(resp2, 202)
@@ -747,8 +750,8 @@ class TestUploadVariants:
     """Missing file 422, idempotency key repeat."""
 
     def test_44_upload_without_file_returns_422(self):
-        """POST /documents without file returns 422."""
-        resp = client.post(f"{ORCH}/documents")
+        """POST /drafts without file returns 422."""
+        resp = client.post(f"{ORCH}/drafts")
         assert resp.status_code in (400, 422)
 
     def test_45_upload_idempotency_key_repeat(self):
@@ -756,16 +759,16 @@ class TestUploadVariants:
         idem_key = f"upl-idem-{uuid.uuid4().hex}"
 
         r1 = client.post(
-            f"{ORCH}/documents",
-            files={"file": ("idem_upl.pdf", b"idem content", "application/pdf")},
+            f"{ORCH}/drafts",
+            files={"file": ("idem_upl.pdf", _VALID_PDF_BYTES, "application/pdf")},
             headers={"Idempotency-Key": idem_key},
         )
         assert_ok(r1, 202)
         r1_data = r1.json()
 
         r2 = client.post(
-            f"{ORCH}/documents",
-            files={"file": ("idem_upl2.pdf", b"other content", "application/pdf")},
+            f"{ORCH}/drafts",
+            files={"file": ("idem_upl2.pdf", _VALID_PDF_BYTES + b"v2", "application/pdf")},
             headers={"Idempotency-Key": idem_key},
         )
         assert_ok(r2, 202)

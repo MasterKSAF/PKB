@@ -34,12 +34,16 @@ def utcnow() -> str:
 
 def error_response(code: str, message: str, details: dict = None) -> JSONResponse:
     status_map = {
-        "BAD_REQUEST": 400, "VALIDATION_ERROR": 400,
+        "BAD_REQUEST": 400, "VALIDATION_ERROR": 400, "EMPTY_FILE": 400, "FILE_TOO_SMALL": 400,
+        "EMPTY_DOCUMENT": 400,
         "UNAUTHORIZED": 401, "INVALID_TOKEN": 401,
         "FORBIDDEN": 403,
         "NOT_FOUND": 404, "DOCUMENT_NOT_FOUND": 404, "FILE_NOT_FOUND": 404,
-        "DUPLICATE_DOCUMENT": 409,
-        "VALIDATION_FAILED": 422,
+        "DRAFT_NOT_FOUND": 404, "TASK_NOT_FOUND": 404,
+        "DUPLICATE_FILE": 409, "DUPLICATE_DOCUMENT": 409,
+        "DRAFT_ALREADY_DECIDED": 409, "DRAFT_ALREADY_PREVIEWED": 409,
+        "FILE_TOO_LARGE": 413,
+        "UNSUPPORTED_FILE_TYPE": 422, "VALIDATION_FAILED": 422,
         "INTERNAL_ERROR": 500, "OCR_FAILED": 500, "INDEXING_FAILED": 500,
         "NOT_IMPLEMENTED": 501, "GATEWAY_TIMEOUT": 504,
     }
@@ -99,6 +103,8 @@ _chunks: Dict[str, List[dict]] = {}
 _history: Dict[str, List[dict]] = {}
 _approvals: Dict[str, dict] = {}
 _metrics: dict = {}
+_drafts: Dict[str, dict] = {}  # draft_id -> draft record (incl. raw_data, preview_metadata)
+_tasks: Dict[str, dict] = {}  # task_id -> task record (cross-service pipeline tracking)
 
 def init_data():
     global _documents, _document_errors, _versions, _chunks, _history, _approvals, _metrics
@@ -190,6 +196,35 @@ class SearchRequest(BaseModel):
 class ReprocessRequest(BaseModel):
     mode: Optional[str] = "full"
 
+class DecideRequest(BaseModel):
+    action: str  # "approve" | "reject"
+    comment: Optional[str] = None
+
+# ── утилиты для черновиков ────────────────────────────────────────────────
+def _next_draft_id() -> int:
+    """Черновики получают bigint-идентификаторы, монотонно возрастающие."""
+    if not _drafts:
+        return 420000
+    return max(int(k) for k in _drafts.keys()) + 1
+
+def _next_task_id() -> int:
+    """task_id = draft_id для сквозной идентификации (см. common_api.md)."""
+    return _next_draft_id()
+
+def _build_title_hash(title: str) -> str:
+    if not title:
+        return ""
+    return hashlib.sha256(title.encode("utf-8")).hexdigest()
+
+def _get_draft(draft_id) -> dict:
+    draft = _drafts.get(str(draft_id))
+    if not draft:
+        raise HTTPException(
+            status_code=404,
+            detail=error_response("DRAFT_NOT_FOUND", "Черновик не существует"),
+        )
+    return draft
+
 # ── маршруты ─────────────────────────────────────────────────────────────
 @router.get("/api/v1/system/health")
 async def health():
@@ -204,6 +239,353 @@ async def monitor_health():
 @router.get("/api/v1/monitor/metrics")
 async def get_metrics():
     return _metrics
+
+
+# ===========================================================================
+# DRAFTS (черновики) — обязательная точка входа при загрузке документа.
+# Спецификация: docs/orchestrator_service_api.md, группа "drafts".
+# ===========================================================================
+
+@router.post("/api/v1/drafts", status_code=202)
+async def create_draft(
+    file: UploadFile = File(...),
+    source_type: str = "OTHER",
+    title: Optional[str] = None,
+    doc_code: Optional[str] = None,
+    mks_oks_code: Optional[str] = None,
+    okstu_code: Optional[str] = None,
+    era: Optional[str] = None,
+    jurisdiction: Optional[str] = None,
+    issuing_body: Optional[str] = None,
+    metadata: Optional[str] = None,
+    request: Request = None,
+):
+    """Загрузка файла → создание черновика. Возвращает 202 + draft_id."""
+    now = utcnow()
+    user_id = "anonymous"
+    if request and hasattr(request.state, "user"):
+        user_id = request.state.user.get("user_id", "anonymous") or "anonymous"
+
+    # 100 МБ лимит (см. common_api.md, edge-cases)
+    if file.size is not None and file.size >= 100 * 1024 * 1024:
+        return error_response("FILE_TOO_LARGE", "Файл превышает 100 МБ")
+    content = await file.read()
+    if len(content) == 0:
+        return error_response("EMPTY_FILE", "Загружен пустой файл (0 байт)")
+    if len(content) < 1024:
+        return error_response("FILE_TOO_SMALL", "Файл менее 1 КБ")
+
+    file_hash = hashlib.sha256(content).hexdigest()
+    title_value = title or (file.filename or "untitled")
+    title_hash = _build_title_hash(title_value)
+    filename = file.filename or "untitled"
+    document_key = f"sha256:{file_hash[:16]}"
+    file_key = f"f-{file_hash[:12]}"
+
+    draft_id = _next_draft_id()
+    task_id = _next_task_id()
+    version_id = task_id + 1
+
+    draft = {
+        "draft_id": draft_id,
+        "task_id": task_id,
+        "version_id": version_id,
+        "file_key": file_key,
+        "document_key": document_key,
+        "filename": filename,
+        "title": title_value,
+        "doc_code": doc_code,
+        "source_type": source_type,
+        "mks_oks_code": mks_oks_code,
+        "okstu_code": okstu_code,
+        "era": era,
+        "jurisdiction": jurisdiction,
+        "issuing_body": issuing_body,
+        "metadata_raw": metadata,
+        "metadata": {},
+        "status": "uploaded",
+        "confidence": None,
+        "preview_metadata": None,
+        "raw_data": None,
+        "error_code": None,
+        "error_message": None,
+        "approved_document_id": None,
+        "file_hash_sha256": file_hash,
+        "title_hash_sha256": title_hash,
+        "file_size_bytes": len(content),
+        "is_duplicate_file": False,
+        "is_duplicate_document": False,
+        "created_by": user_id,
+        "created_at": now,
+        "updated_at": now,
+        "deleted_at": None,
+    }
+
+    # Парсим metadata JSON-строку (если передана)
+    if metadata:
+        try:
+            import json as _json
+            draft["metadata"] = _json.loads(metadata)
+        except Exception:
+            draft["metadata"] = {}
+
+    # detect duplicate
+    for existing in _drafts.values():
+        if existing.get("file_hash_sha256") == file_hash and existing.get("status") in (
+            "uploaded", "previewing", "ready_for_approve"
+        ):
+            draft["is_duplicate_file"] = True
+            draft["status"] = "uploaded"
+            break
+
+    _drafts[str(draft_id)] = draft
+    _tasks[str(task_id)] = {
+        "task_id": task_id,
+        "draft_id": draft_id,
+        "document_id": None,
+        "status": "uploaded",
+        "pipeline_stage": "upload",
+        "progress_percent": 0,
+        "created_at": now,
+        "updated_at": now,
+    }
+
+    return {
+        "draft_id": draft_id,
+        "task_id": task_id,
+        "version_id": version_id,
+        "status": draft["status"],
+        "file_hash_sha256": file_hash,
+        "file_size_bytes": draft["file_size_bytes"],
+        "is_duplicate_file": draft["is_duplicate_file"],
+        "is_duplicate_document": False,
+        "title_hash_sha256": title_hash,
+        "created_at": now,
+    }
+
+
+@router.get("/api/v1/drafts")
+async def list_drafts(
+    document_key: str = Query(..., min_length=1),
+    status: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100),
+):
+    items = [d for d in _drafts.values() if d.get("document_key") == document_key]
+    if status:
+        items = [d for d in items if d.get("status") == status]
+    items.sort(key=lambda d: d.get("created_at", ""), reverse=True)
+    paged = paginate(items, page, page_size)
+    return {"items": paged["items"], "meta": paged["meta"]}
+
+
+@router.get("/api/v1/drafts/{draft_id}")
+async def get_draft(draft_id: str):
+    draft = _get_draft(draft_id)
+    return draft
+
+
+@router.get("/api/v1/drafts/{draft_id}/preview")
+async def get_draft_preview(draft_id: str):
+    draft = _get_draft(draft_id)
+    return {
+        "draft_id": draft["draft_id"],
+        "task_id": draft["task_id"],
+        "file_key": draft["file_key"],
+        "document_key": draft["document_key"],
+        "status": draft["status"],
+        "confidence": draft.get("confidence"),
+        "preview_metadata": draft.get("preview_metadata"),
+        "created_at": draft["created_at"],
+    }
+
+
+@router.post("/api/v1/drafts/{draft_id}/preview", status_code=202)
+async def start_draft_preview(draft_id: str):
+    draft = _get_draft(draft_id)
+    if draft["status"] in ("previewing", "ready_for_approve"):
+        return error_response(
+            "DRAFT_ALREADY_PREVIEWED",
+            "Preview уже запущен или завершён",
+        )
+    now = utcnow()
+    draft["status"] = "previewing"
+    draft["updated_at"] = now
+    task = _tasks.get(str(draft["task_id"]))
+    if task:
+        task["status"] = "previewing"
+        task["pipeline_stage"] = "preview"
+        task["updated_at"] = now
+    return {
+        "draft_id": draft["draft_id"],
+        "status": "previewing",
+        "estimated_completion": now,
+    }
+
+
+@router.get("/api/v1/drafts/{draft_id}/preview/status")
+async def draft_preview_status(draft_id: str, longpoll: int = Query(15, ge=0, le=60)):
+    """Статус preview с longpoll-механикой (см. common_api.md)."""
+    draft = _get_draft(draft_id)
+    status = draft["status"]
+    if status == "previewing":
+        # Эмулируем завершение preview после первого обращения (mock).
+        now = utcnow()
+        draft["status"] = "ready_for_approve"
+        draft["confidence"] = round(random.uniform(0.75, 0.98), 2)
+        draft["preview_metadata"] = {
+            "doc_code": draft.get("doc_code") or "—",
+            "title": draft.get("title") or "—",
+            "document_type": "normative",
+            "year": (draft.get("metadata") or {}).get("year"),
+            "revision": None,
+        }
+        draft["updated_at"] = now
+        task = _tasks.get(str(draft["task_id"]))
+        if task:
+            task["status"] = "ready_for_approve"
+            task["pipeline_stage"] = "decision"
+            task["progress_percent"] = 40
+            task["updated_at"] = now
+    return {
+        "draft_id": draft["draft_id"],
+        "status": draft["status"],
+        "ocr_parser_status": "completed",
+        "converter_validator_status": "completed",
+        "preview": draft.get("preview_metadata") or {},
+        "duplicates": [],
+        "decision_required": draft["status"] == "ready_for_approve",
+    }
+
+
+@router.patch("/api/v1/drafts/{draft_id}/decide")
+async def decide_draft(draft_id: str, req: DecideRequest):
+    """Решение по черновику: approve → создание документа, reject → discarded."""
+    draft = _get_draft(draft_id)
+    if draft["status"] != "ready_for_approve":
+        return error_response(
+            "DRAFT_ALREADY_DECIDED",
+            f"Решение уже принято (статус: {draft['status']})",
+        )
+    if req.action not in ("approve", "reject"):
+        return error_response(
+            "VALIDATION_ERROR",
+            "Некорректный action: допустимы approve|reject",
+        )
+    now = utcnow()
+    user_id = "anonymous"
+
+    if req.action == "approve":
+        # Создаём документ в реестре (мок)
+        new_doc_id = f"doc-{new_id()}"
+        new_doc = {
+            "document_id": new_doc_id, "title": draft.get("title") or f"Документ {new_doc_id}",
+            "doc_code": draft.get("doc_code"), "source_type": draft.get("source_type") or "OTHER",
+            "era": draft.get("era") or "CURRENT", "validity_status": "active",
+            "jurisdiction": draft.get("jurisdiction") or "RF",
+            "issuing_body": draft.get("issuing_body"),
+            "mks_oks_code": draft.get("mks_oks_code"),
+            "okstu_code": draft.get("okstu_code"),
+            "classification_status": {"mks_status": "unknown", "okstu_status": "unknown"},
+            "successor_doc_id": None, "predecessor_doc_id": None, "chunk_container_id": None,
+            "status": "created", "file_size": draft.get("file_size_bytes", 0),
+            "pages_total": 1, "pages_processed": 1, "pages_failed": 0,
+            "ocr_status": "completed", "index_status": "pending",
+            "user_id": user_id, "uploaded_by": user_id,
+            "metadata": draft.get("metadata") or {},
+            "created_at": now, "updated_at": now,
+            "chunk_count": 0, "chunk_validation": None,
+        }
+        _documents[new_doc_id] = new_doc
+        _versions[new_doc_id] = [{
+            "version_id": draft["version_id"], "version_number": 1,
+            "document_id": new_doc_id, "title": new_doc["title"],
+            "file_size": new_doc["file_size"],
+            "content_hash_sha256": draft["file_hash_sha256"],
+            "title_hash_sha256": draft["title_hash_sha256"],
+            "status": "completed", "created_at": now, "uploaded_by": user_id,
+        }]
+        _history[new_doc_id] = [{
+            "event_id": f"evt-{new_id()}", "document_id": new_doc_id,
+            "from_status": None, "to_status": "created", "timestamp": now,
+            "user_id": user_id,
+            "comment": f"Создано из черновика {draft['draft_id']}: {req.comment or ''}".strip(),
+        }]
+        _chunks[new_doc_id] = []
+
+        draft["status"] = "approved"
+        draft["approved_document_id"] = new_doc_id
+        draft["updated_at"] = now
+        task = _tasks.get(str(draft["task_id"]))
+        if task:
+            task["status"] = "created"
+            task["document_id"] = new_doc_id
+            task["pipeline_stage"] = "registry"
+            task["progress_percent"] = 80
+            task["updated_at"] = now
+        return {
+            "draft_id": draft["draft_id"],
+            "status": "approved",
+            "action": "approve",
+            "approved_document_id": new_doc_id,
+            "message": "Черновик завершён, документ создан в Registry. Запущен Пайплайн 2 (индексация).",
+            "decided_by": user_id,
+            "decided_at": now,
+        }
+    else:
+        draft["status"] = "discarded"
+        draft["updated_at"] = now
+        task = _tasks.get(str(draft["task_id"]))
+        if task:
+            task["status"] = "failed"
+            task["pipeline_stage"] = "decision"
+            task["updated_at"] = now
+        return {
+            "draft_id": draft["draft_id"],
+            "status": "discarded",
+            "action": "reject",
+            "approved_document_id": None,
+            "message": "Черновик отклонён. Можно загрузить файл повторно для новой попытки.",
+            "decided_by": user_id,
+            "decided_at": now,
+        }
+
+
+@router.delete("/api/v1/drafts/{draft_id}")
+async def delete_draft(draft_id: str):
+    draft = _get_draft(draft_id)
+    now = utcnow()
+    draft["deleted_at"] = now
+    draft["status"] = "discarded"
+    draft["updated_at"] = now
+    task = _tasks.get(str(draft["task_id"]))
+    if task:
+        task["status"] = "failed"
+        task["updated_at"] = now
+    return {"draft_id": draft["draft_id"], "deleted_at": now}
+
+
+# ===========================================================================
+# TASKS — внутренний (internal) сквозной ID для отслеживания пайплайна.
+# ===========================================================================
+
+@router.get("/api/v1/tasks/{task_id}/status")
+async def get_task_status(task_id: str):
+    """Сквозной статус задачи (internal). UI не должен вызывать напрямую."""
+    task = _tasks.get(str(task_id))
+    if not task:
+        return error_response("TASK_NOT_FOUND", "Задача не найдена")
+    return {
+        "task_id": task["task_id"],
+        "draft_id": task.get("draft_id"),
+        "document_id": task.get("document_id"),
+        "status": task["status"],
+        "pipeline_stage": task.get("pipeline_stage", "upload"),
+        "progress_percent": task.get("progress_percent", 0),
+        "created_at": task["created_at"],
+        "updated_at": task["updated_at"],
+    }
+
 
 # ВАЖНО: search и queue ДО {doc_id}
 @router.post("/api/v1/documents/search")
@@ -409,18 +791,22 @@ async def document_errors(doc_id: str, page: int = 1, page_size: int = 20):
     paged = paginate(errs, page, page_size)
     return {"errors": paged["items"], "meta": paged["meta"]}
 
-@router.post("/api/v1/documents/{doc_id}/versions", status_code=201)
+@router.post("/api/v1/documents/{doc_id}/versions", status_code=202)
 async def add_version(doc_id: str, file: UploadFile = File(...)):
     doc = _get_document(doc_id)
     now = utcnow()
     ver_num = doc.get("total_versions", 1) + 1
-    content_hash = hashlib.sha256(file.filename.encode()).hexdigest()
-    version_id = f"ver-{new_id()}"
+    content = await file.read()
+    content_hash = hashlib.sha256(content).hexdigest()
+    version_id = new_id()
+    task_id = new_id()
     new_ver = {
         "version_id": version_id, "version_number": ver_num, "document_id": doc_id,
-        "title": doc.get("title",""), "file_size": doc.get("file_size",0),
-        "content_hash_sha256": content_hash, "title_hash_sha256": "...",
-        "status": "uploaded", "created_at": now, "uploaded_by": "system"
+        "title": doc.get("title",""),
+        "file_size": len(content) or doc.get("file_size",0),
+        "content_hash_sha256": content_hash,
+        "title_hash_sha256": _build_title_hash(doc.get("title","")),
+        "status": "uploaded", "created_at": now, "uploaded_by": "system",
     }
     if doc_id not in _versions:
         _versions[doc_id] = []
@@ -428,15 +814,46 @@ async def add_version(doc_id: str, file: UploadFile = File(...)):
     doc["total_versions"] = ver_num
     doc["latest_version"] = ver_num
     doc["updated_at"] = now
-    return {"document_id": doc_id, "version_id": version_id, "version_number": ver_num,
-            "status": "uploaded", "task_id": f"task-{new_id()}", "content_hash_sha256": content_hash,
-            "is_duplicate_file": False, "created_at": now}
+    return {
+        "document_id": doc_id,
+        "version_id": version_id,
+        "version_number": ver_num,
+        "status": "uploaded",
+        "task_id": task_id,
+        "file_hash_sha256": content_hash,
+        "is_duplicate_file": False,
+        "created_at": now,
+    }
 
 @router.get("/api/v1/documents/{doc_id}/versions")
-async def list_versions(doc_id: str):
-    _get_document(doc_id)
-    vers = _versions.get(doc_id, [])
-    return {"document_id": doc_id, "versions": vers, "meta": {"total": len(vers)}}
+async def list_versions(
+    doc_id: str,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100),
+):
+    """Список версий файла в формате docs (format_code/format_label/file_key/size_bytes)."""
+    doc = _get_document(doc_id)
+    raw = _versions.get(doc_id, [])
+    items = []
+    for v in raw:
+        items.append({
+            "version_id": int(v["version_id"]) if str(v["version_id"]).isdigit() else v["version_id"],
+            "version_number": v.get("version_number", 1),
+            "format_code": "pdf_digital",
+            "format_label": "PDF (цифровой)",
+            "file_key": f"{doc_id}/v{v.get('version_number',1)}/{v.get('content_hash_sha256','unknown')[:32]}.pdf",
+            "file_hash_sha256": v.get("content_hash_sha256"),
+            "size_bytes": v.get("file_size", 0),
+            "uploaded_at": v.get("created_at"),
+            "uploaded_by": v.get("uploaded_by"),
+        })
+    start = (page - 1) * page_size
+    end = start + page_size
+    return {
+        "document_id": doc_id,
+        "versions": items[start:end],
+        "meta": {"total": len(items), "page": page, "page_size": page_size},
+    }
 
 @router.get("/api/v1/documents/{doc_id}/pages")
 async def list_pages(doc_id: str, page: int = 1, page_size: int = 50):

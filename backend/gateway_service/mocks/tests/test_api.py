@@ -570,15 +570,15 @@ class TestOrchestratorService:
         """POST /documents/{doc_id}/versions — add new version."""
         resp = client.post(
             f"{ORCH}/documents/doc-001/versions",
-            files={"file": ("v2.pdf", b"version 2 content", "application/pdf")},
+            files={"file": ("v2.pdf", b"version 2 content payload - " * 20, "application/pdf")},
         )
-        assert_ok(resp, 201)
+        assert_ok(resp, 202)
         data = resp.json()
         assert "version_id" in data
         assert "version_number" in data
         assert data["document_id"] == "doc-001"
         assert data["version_number"] > 1
-        assert "content_hash_sha256" in data
+        assert "file_hash_sha256" in data
         assert "status" in data
 
     def test_46_list_document_versions(self):
