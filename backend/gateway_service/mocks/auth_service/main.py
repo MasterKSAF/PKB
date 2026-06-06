@@ -4,13 +4,14 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 import uvicorn
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 app = FastAPI(title="Auth Service", version="1.0.0")
+router = APIRouter()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 _counter = 0
@@ -130,6 +131,7 @@ class UpdateUserRequest(BaseModel):
     position: Optional[str] = None
     roles: Optional[List[str]] = None
     is_active: Optional[bool] = None
+    password: Optional[str] = None
 
 class PatchUserRequest(BaseModel):
     role: Optional[str] = None
@@ -168,7 +170,7 @@ def _make_token(user_id: str) -> dict:
         "expires_in": 3600
     }
 
-@app.post("/api/v1/auth/token", status_code=200)
+@router.post("/api/v1/auth/token", status_code=200)
 async def login(req: LoginRequest, request: Request):
     ip = request.client.host if request.client else "127.0.0.1"
     now = utcnow()
@@ -197,7 +199,7 @@ async def login(req: LoginRequest, request: Request):
     _add_audit(user["user_id"], "login", "auth", ip=ip)
     return _make_token(user["user_id"])
 
-@app.post("/api/v1/auth/refresh")
+@router.post("/api/v1/auth/refresh")
 async def refresh(req: RefreshRequest):
     if req.refresh_token in _blacklist:
         raise HTTPException(status_code=401, detail=error_response("INVALID_TOKEN", "Токен отозван"))
@@ -213,14 +215,14 @@ async def refresh(req: RefreshRequest):
         raise HTTPException(status_code=401, detail=error_response("INVALID_TOKEN", "Токен недействителен или истёк"))
     return _make_token(user_id)
 
-@app.post("/api/v1/auth/revoke")
+@router.post("/api/v1/auth/revoke")
 async def revoke(req: RevokeRequest):
     _tokens.pop(req.refresh_token, None)
     _tokens_meta.pop(req.refresh_token, None)
     _blacklist[req.refresh_token] = utcnow()
     return {"message": "Токен отозван", "revoked_at": utcnow()}
 
-@app.get("/api/v1/auth/me")
+@router.get("/api/v1/auth/me")
 async def get_me(current_user: dict = Depends(get_current_user)):
     user = current_user
     return {
@@ -235,7 +237,7 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         "created_at": user.get("created_at", ""),
     }
 
-@app.get("/api/v1/admin/users")
+@router.get("/api/v1/admin/users")
 async def list_users(
     role: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
@@ -259,7 +261,7 @@ async def list_users(
         "meta": paged["meta"],
     }
 
-@app.post("/api/v1/admin/users", status_code=201)
+@router.post("/api/v1/admin/users", status_code=201)
 async def create_user(req: CreateUserRequest, current_user: dict = Depends(require_admin)):
     for u in _users.values():
         if u.get("email", "").lower() == req.email.lower():
@@ -282,7 +284,7 @@ async def create_user(req: CreateUserRequest, current_user: dict = Depends(requi
     _add_audit(current_user["user_id"], "user.create", "user", user_id, {"email": req.email})
     return new_user
 
-@app.get("/api/v1/admin/users/{user_id}")
+@router.get("/api/v1/admin/users/{user_id}")
 async def get_user(user_id: str, current_user: dict = Depends(require_admin)):
     user = _users.get(user_id)
     if not user:
@@ -295,7 +297,7 @@ async def get_user(user_id: str, current_user: dict = Depends(require_admin)):
         "created_at": user.get("created_at", ""), "updated_at": user.get("updated_at", ""),
     }
 
-@app.put("/api/v1/admin/users/{user_id}")
+@router.put("/api/v1/admin/users/{user_id}")
 async def update_user(user_id: str, req: UpdateUserRequest, current_user: dict = Depends(require_admin)):
     user = _users.get(user_id)
     if not user:
@@ -311,11 +313,27 @@ async def update_user(user_id: str, req: UpdateUserRequest, current_user: dict =
         user["role"] = req.roles[0] if req.roles else user["role"]
     if req.is_active is not None:
         user["is_active"] = req.is_active
+    if req.password is not None:
+        _password_hashes[user_id] = _hash_password(req.password)
+        # Revoke all refresh tokens for this user
+        revoked_rts = [
+            rt for rt, uid in list(_tokens.items()) if uid == user_id
+        ]
+        for rt in revoked_rts:
+            _tokens.pop(rt, None)
+            _tokens_meta.pop(rt, None)
+            _blacklist[rt] = utcnow()
+        # Revoke all access tokens for this user
+        revoked_ats = [
+            at for at, uid in list(_access_token_map.items()) if uid == user_id
+        ]
+        for at in revoked_ats:
+            _access_token_map.pop(at, None)
     user["updated_at"] = utcnow()
     _add_audit(current_user["user_id"], "user.update", "user", user_id)
     return user
 
-@app.patch("/api/v1/admin/users/{user_id}")
+@router.patch("/api/v1/admin/users/{user_id}")
 async def patch_user(user_id: str, req: PatchUserRequest, current_user: dict = Depends(require_admin)):
     user = _users.get(user_id)
     if not user:
@@ -336,7 +354,7 @@ async def patch_user(user_id: str, req: PatchUserRequest, current_user: dict = D
         "updated_at": user["updated_at"],
     }
 
-@app.delete("/api/v1/admin/users/{user_id}")
+@router.delete("/api/v1/admin/users/{user_id}")
 async def delete_user(user_id: str, current_user: dict = Depends(require_admin)):
     user = _users.get(user_id)
     if not user:
@@ -346,11 +364,11 @@ async def delete_user(user_id: str, current_user: dict = Depends(require_admin))
     _add_audit(current_user["user_id"], "user.deactivate", "user", user_id)
     return {"user_id": user["user_id"], "is_active": False, "deactivated_at": now}
 
-@app.get("/api/v1/admin/roles")
+@router.get("/api/v1/admin/roles")
 async def list_roles(current_user: dict = Depends(require_admin)):
     return {"roles": list(_roles.values())}
 
-@app.post("/api/v1/admin/roles", status_code=201)
+@router.post("/api/v1/admin/roles", status_code=201)
 async def create_role(req: CreateRoleRequest, current_user: dict = Depends(require_admin)):
     role_id = f"r-{new_id()}"
     new_role = {"role_id": role_id, "name": req.name, "permissions": req.permissions, "created_at": utcnow()}
@@ -358,7 +376,7 @@ async def create_role(req: CreateRoleRequest, current_user: dict = Depends(requi
     _add_audit(current_user["user_id"], "role.create", "role", role_id)
     return new_role
 
-@app.get("/api/v1/admin/audit")
+@router.get("/api/v1/admin/audit")
 async def list_audit(
     user_id: Optional[str] = Query(None),
     action: Optional[str] = Query(None),
@@ -380,7 +398,7 @@ async def list_audit(
     paged = paginate(items, page, page_size)
     return {"events": paged["items"], "meta": paged["meta"]}
 
-@app.post("/api/v1/internal/auth/validate")
+@router.post("/api/v1/internal/auth/validate")
 async def validate_token(req: ValidateTokenRequest):
     if not req.access_token or len(req.access_token) < 10:
         raise HTTPException(status_code=401, detail=error_response("INVALID_TOKEN", "Токен недействителен или истёк"))
@@ -397,9 +415,12 @@ async def validate_token(req: ValidateTokenRequest):
         "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
     }
 
-@app.get("/api/v1/system/health")
+@router.get("/api/v1/system/health")
 async def health():
     return {"status": "ok", "service": "auth-service", "timestamp": utcnow()}
+
+app.include_router(router)
+
 
 if __name__ == "__main__":
     import os
