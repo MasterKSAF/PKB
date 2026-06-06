@@ -1,8 +1,10 @@
 import React from 'react';
 import { Box, Chip, Container, Divider, IconButton, Paper, Tooltip, Typography } from '@mui/material';
 import { BadgeCheck, Clock3, Database, Info, ScanSearch, ShieldCheck, Terminal } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { MOCK_ENGINEER_RATINGS, MOCK_METRICS } from '../utils/mockData';
 import { useUIStore } from '../store/uiStore';
+import { metricsApi } from '../utils/http';
 
 const cardSurface = {
   borderRadius: 3,
@@ -115,7 +117,7 @@ const logRows = [
   },
   {
     time: '12:35:01',
-    text: 'Переиндексация новой партии PDF завершена без ошибок.',
+    text: 'Переиндексация новой партии документов завершена без ошибок.',
     color: 'rgba(217, 221, 229, 0.88)',
   },
   {
@@ -239,7 +241,7 @@ const MetricTile: React.FC<MetricTileProps> = ({
     <Typography sx={{ mt: 0.85, fontSize: '0.8rem', color: 'rgba(233, 237, 243, 0.9)' }}>{label}</Typography>
     <Typography sx={{ mt: 0.3, fontSize: '0.72rem', color: 'rgba(171, 183, 201, 0.72)' }}>{subline}</Typography>
 
-    <Box sx={{ pt: 1.25, display: 'flex', justifyContent: 'flex-end', mt: 'auto' }}>
+    <Box sx={{ pt: 1, pb: 0.35, display: 'flex', justifyContent: 'flex-end', mt: 'auto' }}>
       <Chip
         className={`metric-state-chip metric-state-chip-${chipTone}`}
         size="small"
@@ -257,8 +259,65 @@ const MetricTile: React.FC<MetricTileProps> = ({
 );
 
 export const Monitor: React.FC = () => {
-  const { themeMode } = useUIStore();
+  const { themeMode, workMode } = useUIStore();
   const isLight = themeMode === 'light';
+  const metricsQuery = useQuery({
+    queryKey: ['gateway-metrics-dashboard', workMode],
+    queryFn: metricsApi.dashboard,
+    staleTime: 30_000,
+  });
+
+  const dashboard = metricsQuery.data ?? {
+    control: MOCK_METRICS,
+    answers: MOCK_ENGINEER_RATINGS,
+    logs: logRows.map((row) => ({ time: row.time, text: row.text, level: 'INFO' })),
+  };
+
+  const currentControlMetrics = controlMetrics.map((metric, index) => {
+    const values = [
+      {
+        value: `${dashboard.control.ocrQuality}%`,
+        state: dashboard.control.ocrQuality >= 80 ? 'в норме' : 'ниже цели',
+        ok: dashboard.control.ocrQuality >= 80,
+      },
+      {
+        value: `${dashboard.control.retrievalQuality}%`,
+        state: dashboard.control.retrievalQuality >= 85 ? 'в норме' : 'ниже цели',
+        ok: dashboard.control.retrievalQuality >= 85,
+      },
+      {
+        value: `${dashboard.control.answersWithSources}%`,
+        state: dashboard.control.answersWithSources >= 100 ? 'в норме' : 'ниже цели',
+        ok: dashboard.control.answersWithSources >= 100,
+      },
+      {
+        value: `${dashboard.control.searchLatency} с`,
+        state: dashboard.control.searchLatency <= 30 ? 'в норме' : 'выше цели',
+        ok: dashboard.control.searchLatency <= 30,
+      },
+    ];
+
+    return { ...metric, ...values[index] };
+  });
+
+  const currentAnswerMetrics = answerMetrics.map((metric, index) => {
+    const values = [
+      { value: `${dashboard.answers.usefulRate}%` },
+      { value: `${dashboard.answers.ratedAnswers}` },
+      { value: `${dashboard.answers.flaggedForReview}` },
+      { value: `${dashboard.answers.unresolvedAfterReview}` },
+    ];
+
+    return { ...metric, ...values[index] };
+  });
+
+  const currentLogRows = dashboard.logs.length
+    ? dashboard.logs.map((row) => ({
+        time: row.time,
+        text: row.text,
+        color: row.level === 'ERROR' ? '#e39a86' : row.level === 'WARN' ? '#f0c36d' : 'rgba(217, 221, 229, 0.88)',
+      }))
+    : logRows;
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -272,7 +331,7 @@ export const Monitor: React.FC = () => {
           </Box>
 
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' }, gap: 1.15 }}>
-            {controlMetrics.map((metric) => (
+            {currentControlMetrics.map((metric) => (
               <MetricTile
                 key={metric.label}
                 icon={metric.icon}
@@ -304,7 +363,7 @@ export const Monitor: React.FC = () => {
             </Box>
 
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' }, gap: 1.15 }}>
-              {answerMetrics.map((metric) => (
+              {currentAnswerMetrics.map((metric) => (
                 <MetricTile
                   key={metric.label}
                   icon={<BadgeCheck size={18} />}
@@ -349,7 +408,7 @@ export const Monitor: React.FC = () => {
                 : 'inset 0 1px 0 rgba(255,255,255,0.035)',
             }}
           >
-            {logRows.map((row, index) => (
+            {currentLogRows.map((row, index) => (
               <Box
                 key={`${row.time}-${row.text}`}
                 sx={{
@@ -360,7 +419,7 @@ export const Monitor: React.FC = () => {
                   py: 0.95,
                   bgcolor: index % 2 === 0 ? (isLight ? 'rgba(15, 23, 42, 0.025)' : 'rgba(255,255,255,0.016)') : 'transparent',
                   borderBottom:
-                    index === logRows.length - 1
+                    index === currentLogRows.length - 1
                       ? 'none'
                       : isLight
                         ? '1px solid rgba(15, 23, 42, 0.10)'

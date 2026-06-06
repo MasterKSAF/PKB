@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import type { AppTab, UserRole } from '../utils/access';
-import { MOCK_ADMIN_USERS } from '../utils/mockData';
+import { USER_ROLE_BY_LABEL, getFallbackTab } from '../utils/access';
+import { MOCK_ADMIN_USERS, MOCK_CHATS } from '../utils/mockData';
 import type { AdminUser } from '../utils/mockData';
+import type { ChatMessage } from '../utils/mockData';
 
 export type { AppTab, UserRole };
 
@@ -15,14 +17,24 @@ export interface AdminAuditLogItem {
 }
 
 interface UIState {
+  isAuthenticated: boolean;
+  login: (userId: string) => void;
+  logout: () => void;
   activeTab: AppTab;
   setActiveTab: (tab: AppTab) => void;
   currentUserId: string;
   setCurrentUserId: (userId: string) => void;
   currentRole: UserRole;
   setCurrentRole: (role: UserRole) => void;
+  currentGatewaySessionId: string | null;
+  setCurrentGatewaySessionId: (sessionId: string | null) => void;
+  activeProjectId: string;
+  setActiveProjectId: (projectId: string) => void;
   themeMode: 'dark' | 'light';
   setThemeMode: (mode: 'dark' | 'light') => void;
+  workMode: 'demo' | 'prod';
+  setWorkMode: (mode: 'demo' | 'prod') => void;
+  toggleWorkMode: () => void;
   focusMode: boolean;
   setFocusMode: (enabled: boolean) => void;
   toggleFocusMode: () => void;
@@ -31,20 +43,61 @@ interface UIState {
   apiStatus: 'online' | 'offline' | 'demo';
   setApiStatus: (status: 'online' | 'offline' | 'demo') => void;
   adminUsers: AdminUser[];
+  setAdminUsers: (users: AdminUser[]) => void;
+  upsertAdminUser: (user: AdminUser) => void;
   updateAdminUser: (userId: string, patch: Partial<AdminUser>) => void;
   adminAuditLog: AdminAuditLogItem[];
   addAdminAuditLogItem: (item: AdminAuditLogItem) => void;
+  chatMessages: ChatMessage[];
+  setChatMessages: (messages: ChatMessage[]) => void;
+  appendChatMessages: (messages: ChatMessage[]) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
+  isAuthenticated: false,
+  login: (currentUserId) =>
+    set((state) => {
+      const user = state.adminUsers.find((item) => item.id === currentUserId) ?? state.adminUsers[0];
+      const currentRole = USER_ROLE_BY_LABEL[user.role] ?? 'user';
+
+      return {
+        isAuthenticated: true,
+        currentUserId: user.id,
+        currentRole,
+        activeTab: getFallbackTab(currentRole),
+      };
+    }),
+  logout: () => set({ isAuthenticated: false, activeTab: 'chat', focusMode: false, currentGatewaySessionId: null }),
   activeTab: 'chat',
   setActiveTab: (activeTab) => set({ activeTab }),
   currentUserId: 'u1',
   setCurrentUserId: (currentUserId) => set({ currentUserId }),
-  currentRole: 'engineer',
+  currentRole: 'user',
   setCurrentRole: (currentRole) => set({ currentRole }),
+  currentGatewaySessionId: null,
+  setCurrentGatewaySessionId: (currentGatewaySessionId) => set({ currentGatewaySessionId }),
+  activeProjectId: 'project-223m',
+  setActiveProjectId: (activeProjectId) => set({ activeProjectId }),
   themeMode: 'dark',
   setThemeMode: (themeMode) => set({ themeMode }),
+  workMode: 'demo',
+  setWorkMode: (workMode) =>
+    set({
+      workMode,
+      apiStatus: workMode === 'demo' ? 'demo' : 'offline',
+      currentGatewaySessionId: null,
+      chatMessages: workMode === 'demo' ? MOCK_CHATS : [],
+    }),
+  toggleWorkMode: () =>
+    set((state) => {
+      const workMode = state.workMode === 'demo' ? 'prod' : 'demo';
+      return {
+        workMode,
+        apiStatus: workMode === 'demo' ? 'demo' : 'offline',
+        currentGatewaySessionId: null,
+        chatMessages: workMode === 'demo' ? MOCK_CHATS : [],
+      };
+    }),
   focusMode: false,
   setFocusMode: (focusMode) => set({ focusMode }),
   toggleFocusMode: () => set((state) => ({ focusMode: !state.focusMode })),
@@ -53,6 +106,17 @@ export const useUIStore = create<UIState>((set) => ({
   apiStatus: 'demo',
   setApiStatus: (apiStatus) => set({ apiStatus }),
   adminUsers: MOCK_ADMIN_USERS,
+  setAdminUsers: (adminUsers) => set({ adminUsers }),
+  upsertAdminUser: (user) =>
+    set((state) => {
+      const exists = state.adminUsers.some((item) => item.id === user.id);
+
+      return {
+        adminUsers: exists
+          ? state.adminUsers.map((item) => (item.id === user.id ? { ...item, ...user } : item))
+          : [user, ...state.adminUsers],
+      };
+    }),
   updateAdminUser: (userId, patch) =>
     set((state) => ({
       adminUsers: state.adminUsers.map((user) => (user.id === userId ? { ...user, ...patch } : user)),
@@ -70,5 +134,11 @@ export const useUIStore = create<UIState>((set) => ({
   addAdminAuditLogItem: (item) =>
     set((state) => ({
       adminAuditLog: [item, ...state.adminAuditLog].slice(0, 20),
+    })),
+  chatMessages: MOCK_CHATS,
+  setChatMessages: (chatMessages) => set({ chatMessages }),
+  appendChatMessages: (messages) =>
+    set((state) => ({
+      chatMessages: [...state.chatMessages, ...messages],
     })),
 }));

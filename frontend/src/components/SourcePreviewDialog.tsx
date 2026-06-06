@@ -91,8 +91,8 @@ export const SourcePreviewDialog: React.FC<SourcePreviewDialogProps> = ({ open, 
           </Box>
 
           <Typography variant="body2" color="text.secondary">
-            Это demo-preview источника: здесь показывается пример документа, страницы и фрагмента, чтобы пользователь
-            понимал, как будет выглядеть переход к первоисточнику.
+            Предпросмотр источника показывает документ, страницу и найденный фрагмент, чтобы пользователь мог быстро
+            перейти к первоисточнику.
           </Typography>
         </Stack>
       </DialogContent>

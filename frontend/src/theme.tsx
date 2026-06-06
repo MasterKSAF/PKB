@@ -7,20 +7,20 @@ export const getAppTheme = (mode: AppThemeMode) =>
   palette: {
     mode,
     primary: {
-      main: '#c79b63',
-      light: '#d9b783',
-      dark: '#9f7440',
-      contrastText: '#0f1115',
+      main: mode === 'dark' ? '#c79b63' : '#38bdf8',
+      light: mode === 'dark' ? '#d9b783' : '#7dd3fc',
+      dark: mode === 'dark' ? '#9f7440' : '#075985',
+      contrastText: mode === 'dark' ? '#0f1115' : '#0f172a',
     },
     background: {
-      default: mode === 'dark' ? '#0b0c0e' : '#f3f6f8',
+      default: mode === 'dark' ? '#0b0c0e' : '#f1f5f9',
       paper: mode === 'dark' ? '#16171b' : '#ffffff',
     },
     text: {
-      primary: mode === 'dark' ? '#e1e1e1' : '#111827',
-      secondary: mode === 'dark' ? '#9ba1a6' : '#475569',
+      primary: mode === 'dark' ? '#e1e1e1' : '#1e293b',
+      secondary: mode === 'dark' ? '#9ba1a6' : '#64748b',
     },
-    divider: mode === 'dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(15, 23, 42, 0.14)',
+    divider: mode === 'dark' ? 'rgba(255, 255, 255, 0.08)' : '#e2e8f0',
   },
   typography: {
     fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
@@ -54,10 +54,10 @@ export const getAppTheme = (mode: AppThemeMode) =>
         {
           props: { variant: 'contained', color: 'primary' },
           style: {
-            color: '#0f1115',
-            backgroundColor: '#c79b63',
+            color: mode === 'dark' ? '#0f1115' : '#0f172a',
+            backgroundColor: mode === 'dark' ? '#c79b63' : '#38bdf8',
             '&:hover': {
-              backgroundColor: '#d9b783',
+              backgroundColor: mode === 'dark' ? '#d9b783' : '#7dd3fc',
             },
           },
         },
@@ -75,8 +75,8 @@ export const getAppTheme = (mode: AppThemeMode) =>
         tooltip: {
           maxWidth: 260,
           backgroundColor: mode === 'dark' ? '#1f2026' : '#ffffff',
-          border: mode === 'dark' ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(15,23,42,0.16)',
-          color: mode === 'dark' ? '#e1e1e1' : '#111827',
+          border: mode === 'dark' ? '1px solid rgba(255,255,255,0.12)' : '1px solid #e2e8f0',
+          color: mode === 'dark' ? '#e1e1e1' : '#1e293b',
           fontSize: 12,
           lineHeight: 1.45,
         },

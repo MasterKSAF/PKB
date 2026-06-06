@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   Box,
   Button,
   Checkbox,
@@ -26,26 +27,31 @@ import { ClipboardList, Save, Search, ShieldCheck, SlidersHorizontal, UserCog, U
 import { useUIStore } from '../store/uiStore';
 import { ADMIN_SECTIONS_ACCESS, ROLE_LABELS } from '../utils/access';
 import { MOCK_PROCESSING_LOGS, type AdminUser } from '../utils/mockData';
+import { adminApi } from '../utils/http';
 
 type RoleLabel = AdminUser['role'];
 type AccessKey =
   | 'chat'
   | 'search'
   | 'documents'
-  | 'checks'
   | 'history'
   | 'qa'
   | 'admin'
   | 'ocrArtifacts'
   | 'processingLogs';
 
-const ROLE_OPTIONS: RoleLabel[] = ['Инженер', 'Администратор знаний', 'Администратор системы'];
+const ROLE_OPTIONS: RoleLabel[] = ['Пользователь', 'Администратор знаний', 'Системный администратор'];
+
+const GATEWAY_ROLE_BY_LABEL: Record<RoleLabel, string> = {
+  Пользователь: 'engineer',
+  'Администратор знаний': 'knowledge_admin',
+  'Системный администратор': 'system_admin',
+};
 
 const ACCESS_OPTIONS: Array<{ key: AccessKey; label: string; description: string }> = [
   { key: 'chat', label: 'Чат', description: 'вопросы к ассистенту и просмотр ответов' },
   { key: 'search', label: 'Поиск', description: 'поиск документов и фрагментов по базе знаний' },
-  { key: 'documents', label: 'Реестр', description: 'просмотр и обслуживание базы документов' },
-  { key: 'checks', label: 'Проверка', description: 'сверка проектных решений с требованиями НСИ' },
+  { key: 'documents', label: 'База знаний', description: 'просмотр и обслуживание базы документов' },
   { key: 'history', label: 'История', description: 'журнал запросов и ответов' },
   { key: 'qa', label: 'QA', description: 'метрики качества и инженерские оценки' },
   { key: 'admin', label: 'Администрирование', description: 'пользователи, роли и права доступа' },
@@ -54,9 +60,9 @@ const ACCESS_OPTIONS: Array<{ key: AccessKey; label: string; description: string
 ];
 
 const DEFAULT_ACCESS_BY_ROLE: Record<RoleLabel, AccessKey[]> = {
-  Инженер: ['chat', 'search', 'checks', 'history'],
-  'Администратор знаний': ['chat', 'search', 'documents', 'checks', 'history', 'qa', 'admin', 'ocrArtifacts', 'processingLogs'],
-  'Администратор системы': ACCESS_OPTIONS.map((item) => item.key),
+  Пользователь: ['chat', 'search', 'history'],
+  'Администратор знаний': ['chat', 'search', 'documents', 'history', 'qa', 'ocrArtifacts', 'processingLogs'],
+  'Системный администратор': ACCESS_OPTIONS.map((item) => item.key),
 };
 
 const TABLE_SX = {
@@ -197,22 +203,79 @@ export const AdminPanel: React.FC = () => {
     addAdminAuditLogItem,
     currentRole,
     currentUserId,
+    setAdminUsers,
+    themeMode,
     updateAdminUser,
+    workMode,
   } = useUIStore();
+  const isLight = themeMode === 'light';
   const currentUser = adminUsers.find((user) => user.id === currentUserId) ?? adminUsers[0];
   const availableSections = ADMIN_SECTIONS_ACCESS[currentRole];
   const canManageUsers = availableSections.includes('users');
   const canManagePermissions = availableSections.includes('permissions');
-  const canSeeFullLogs = currentRole === 'system_admin';
+  const canSeeFullLogs = currentRole === 'systemAdmin';
+  const [gatewayProcessingLogs, setGatewayProcessingLogs] = useState<typeof MOCK_PROCESSING_LOGS>([]);
+  const processingLogs = gatewayProcessingLogs.length ? gatewayProcessingLogs : MOCK_PROCESSING_LOGS;
   const logs = canSeeFullLogs
-    ? MOCK_PROCESSING_LOGS
-    : MOCK_PROCESSING_LOGS.filter((log) => log.visibility !== 'Администратор');
+    ? processingLogs
+    : processingLogs.filter((log) => log.visibility !== 'Администратор');
+  const contentAdminCards = [
+    {
+      label: 'Документы',
+      value: 'загрузка и версии',
+      note: 'файлы, ссылки, источник хранения',
+      icon: <ClipboardList size={17} />,
+      accent: '#9fb6d8',
+    },
+    {
+      label: 'OCR',
+      value: 'повторная обработка',
+      note: 'страницы, качество распознавания',
+      icon: <SlidersHorizontal size={17} />,
+      accent: '#98d9d8',
+    },
+    {
+      label: 'Артефакты',
+      value: 'текст, чанки, индекс',
+      note: 'то, что передается в поиск и LLM',
+      icon: <ShieldCheck size={17} />,
+      accent: '#d9b783',
+    },
+    {
+      label: 'Журналы',
+      value: 'обработка и ошибки',
+      note: 'контроль pipeline и повторных попыток',
+      icon: <UserCog size={17} />,
+      accent: '#c5afff',
+    },
+  ];
 
   const [selectedUserId, setSelectedUserId] = useState(currentUser?.id ?? adminUsers[0]?.id ?? '');
   const selectedUser = adminUsers.find((user) => user.id === selectedUserId) ?? adminUsers[0];
   const [searchQuery, setSearchQuery] = useState('');
-  const [draftRole, setDraftRole] = useState<RoleLabel>(selectedUser?.role ?? 'Инженер');
+  const [adminNotice, setAdminNotice] = useState('');
+  const [draftRole, setDraftRole] = useState<RoleLabel>(selectedUser?.role ?? 'Пользователь');
   const [draftAccess, setDraftAccess] = useState<AccessKey[]>(selectedUser ? inferAccessKeys(selectedUser) : []);
+
+  useEffect(() => {
+    let alive = true;
+
+    void adminApi.users().then((users) => {
+      if (alive && users.length) {
+        setAdminUsers(users);
+      }
+    });
+
+    void adminApi.audit().then((items) => {
+      if (alive && items.length) {
+        setGatewayProcessingLogs(items);
+      }
+    });
+
+    return () => {
+      alive = false;
+    };
+  }, [setAdminUsers, workMode]);
 
   useEffect(() => {
     if (!adminUsers.some((user) => user.id === selectedUserId) && adminUsers[0]) {
@@ -238,8 +301,11 @@ export const AdminPanel: React.FC = () => {
   const savedAccess = selectedUser ? inferAccessKeys(selectedUser) : [];
   const hasChanges = Boolean(selectedUser) && (draftRole !== selectedUser.role || !sameAccess(draftAccess, savedAccess));
   const enabledUsersCount = adminUsers.filter((user) => user.status === 'Активен').length;
+  const editingOwnSystemRole = currentRole === 'systemAdmin' && selectedUser?.id === currentUserId;
 
   const handleRoleChange = (role: RoleLabel) => {
+    if (editingOwnSystemRole) return;
+
     setDraftRole(role);
     setDraftAccess(DEFAULT_ACCESS_BY_ROLE[role]);
   };
@@ -261,7 +327,7 @@ export const AdminPanel: React.FC = () => {
 
     const nextAccess = makeAccessText(draftAccess);
     updateAdminUser(selectedUser.id, {
-      role: draftRole,
+      role: editingOwnSystemRole ? selectedUser.role : draftRole,
       access: nextAccess,
       status: selectedUser.status === 'Ожидает настройки' ? 'Активен' : selectedUser.status,
     });
@@ -278,12 +344,49 @@ export const AdminPanel: React.FC = () => {
       actor: currentUser.name,
       target: selectedUser.name,
       action: 'Изменены роль и права',
-      details: `Роль: ${draftRole}. Доступ: ${nextAccess}.`,
+      details: `Роль: ${editingOwnSystemRole ? selectedUser.role : draftRole}. Доступ: ${nextAccess}.`,
     });
+
+    if (workMode === 'prod') {
+      void adminApi
+        .updateUser(selectedUser.id, {
+          role: GATEWAY_ROLE_BY_LABEL[editingOwnSystemRole ? selectedUser.role : draftRole],
+        })
+        .then(() => setAdminNotice(`Права пользователя «${selectedUser.name}» отправлены в серверную часть`))
+        .catch(() => setAdminNotice('Серверная часть не приняла изменение прав. Локально правка отображена в интерфейсе'));
+    }
   };
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Container
+      maxWidth="lg"
+      sx={{
+        py: 4,
+        ...(isLight && {
+          '& .MuiPaper-root': {
+            bgcolor: 'rgba(255,255,255,0.86) !important',
+            borderColor: 'rgba(14,116,144,0.22) !important',
+            boxShadow: '0 10px 26px rgba(15,23,42,0.055) !important',
+          },
+          '& .MuiTableContainer-root': {
+            bgcolor: 'rgba(255,255,255,0.94) !important',
+          },
+          '& .MuiTableHead-root .MuiTableCell-root': {
+            color: '#0f172a !important',
+            borderBottomColor: 'rgba(14,116,144,0.22) !important',
+          },
+          '& .MuiTableBody-root .MuiTableCell-root': {
+            color: '#1e293b !important',
+          },
+          '& .MuiTypography-root': {
+            color: '#0f172a',
+          },
+          '& .MuiTypography-caption': {
+            color: '#475569 !important',
+          },
+        }),
+      }}
+    >
       <Stack spacing={3}>
         <Paper
           variant="outlined"
@@ -305,8 +408,8 @@ export const AdminPanel: React.FC = () => {
                 {currentUser.name} · {currentUser.position}
               </Typography>
               <Typography variant="body2" sx={{ mt: 0.6, color: 'rgba(171, 183, 201, 0.78)' }}>
-                Текущая роль: {ROLE_LABELS[currentRole]}. В демо-режиме изменения сохраняются в состоянии интерфейса и
-                попадают в административный журнал. При подключении backend здесь будет сохранение в контур заказчика.
+                Текущая роль: {ROLE_LABELS[currentRole]}. В демонстрационном режиме изменения сохраняются в интерфейсе
+                и попадают в административный журнал. В рабочем режиме права передаются в контур заказчика.
               </Typography>
             </Box>
             <Chip
@@ -355,6 +458,82 @@ export const AdminPanel: React.FC = () => {
             />
           </Box>
         </Box>
+
+        <Paper
+          variant="outlined"
+          sx={{
+            p: 2.1,
+            borderRadius: 3,
+            bgcolor: 'rgba(22, 23, 27, 0.72)',
+            borderColor: 'rgba(198, 216, 240, 0.34)',
+            borderWidth: 1.5,
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045)',
+          }}
+        >
+          <Stack spacing={1.35}>
+            <Box>
+              <Typography sx={{ fontWeight: 560, color: 'rgba(233, 237, 243, 0.92)' }}>
+                Управление контентом базы знаний
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Администратор знаний видит полный цикл обработки документа: от загрузки до индексации.
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(4, 1fr)' }, gap: 1.15 }}>
+              {contentAdminCards.map((item) => (
+                <Paper
+                  key={item.label}
+                  variant="outlined"
+                  onClick={() =>
+                    setAdminNotice(
+                      `${item.label}: действие будет открывать соответствующий раздел администрирования базы знаний в рабочем режиме.`,
+                    )
+                  }
+                  sx={{
+                    p: 1.35,
+                    borderRadius: 2.2,
+                    bgcolor: 'rgba(255,255,255,0.025)',
+                    borderColor: 'rgba(198,216,240,0.22)',
+                    cursor: 'pointer',
+                    transition: 'transform 160ms ease, border-color 160ms ease',
+                    '&:hover': {
+                      transform: 'translateY(-1px)',
+                      borderColor: isLight ? 'rgba(2,132,199,0.44)' : 'rgba(152,217,216,0.42)',
+                    },
+                  }}
+                >
+                  <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
+                    <Box
+                      sx={{
+                        p: 0.8,
+                        borderRadius: 1.6,
+                        color: item.accent,
+                        bgcolor: 'rgba(255,255,255,0.035)',
+                        border: '1px solid rgba(198,216,240,0.18)',
+                      }}
+                    >
+                      {item.icon}
+                    </Box>
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography sx={{ fontSize: '0.84rem', fontWeight: 560 }}>{item.label}</Typography>
+                      <Typography variant="caption" sx={{ display: 'block', mt: 0.25, color: 'rgba(233,237,243,0.86)' }}>
+                        {item.value}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.35, lineHeight: 1.35 }}>
+                        {item.note}
+                      </Typography>
+                    </Box>
+                  </Stack>
+                </Paper>
+              ))}
+            </Box>
+            {adminNotice && (
+              <Alert severity="info" variant="outlined" onClose={() => setAdminNotice('')} sx={{ borderRadius: 2 }}>
+                {adminNotice}
+              </Alert>
+            )}
+          </Stack>
+        </Paper>
 
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 1.35fr) minmax(360px, 0.9fr)' }, gap: 2.4 }}>
           <Paper
@@ -464,7 +643,13 @@ export const AdminPanel: React.FC = () => {
                 {hasChanges && <Chip size="small" label="есть изменения" color="warning" variant="outlined" />}
               </Stack>
 
-              <FormControl size="small" fullWidth disabled={!canManagePermissions}>
+              {editingOwnSystemRole && (
+                <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
+                  Роль текущего системного администратора защищена от случайного понижения в демонстрационном режиме.
+                </Alert>
+              )}
+
+              <FormControl size="small" fullWidth disabled={!canManagePermissions || editingOwnSystemRole}>
                 <InputLabel>Роль</InputLabel>
                 <Select
                   value={draftRole}
@@ -532,62 +717,74 @@ export const AdminPanel: React.FC = () => {
           </Paper>
         </Box>
 
-        <TableContainer component={Paper} variant="outlined" sx={TABLE_SX}>
-          <Table size="small" sx={tableCellSx}>
-            <TableHead>
-              <TableRow sx={{ bgcolor: 'rgba(156, 176, 204, 0.075)' }}>
-                <TableCell>Время</TableCell>
-                <TableCell>Кто изменил</TableCell>
-                <TableCell>Объект</TableCell>
-                <TableCell>Действие</TableCell>
-                <TableCell>Детали</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {adminAuditLog.map((entry) => (
-                <TableRow key={entry.id} hover>
-                  <TableCell sx={{ whiteSpace: 'nowrap', color: '#9fd3ff' }}>{entry.time}</TableCell>
-                  <TableCell sx={{ fontWeight: 520 }}>{entry.actor}</TableCell>
-                  <TableCell>{entry.target}</TableCell>
-                  <TableCell>{entry.action}</TableCell>
-                  <TableCell sx={{ color: 'rgba(171, 183, 201, 0.86)' }}>{entry.details}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+        <Stack spacing={1.25}>
+          <Box>
+            <Typography sx={{ mb: 0.85, fontWeight: 540, color: 'rgba(233, 237, 243, 0.92)' }}>
+              Административный журнал изменений
+            </Typography>
+            <TableContainer component={Paper} variant="outlined" sx={TABLE_SX}>
+              <Table size="small" sx={tableCellSx}>
+                <TableHead>
+                  <TableRow sx={{ bgcolor: 'rgba(156, 176, 204, 0.075)' }}>
+                    <TableCell>Время</TableCell>
+                    <TableCell>Кто изменил</TableCell>
+                    <TableCell>Объект</TableCell>
+                    <TableCell>Действие</TableCell>
+                    <TableCell>Детали</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {adminAuditLog.map((entry) => (
+                    <TableRow key={entry.id} hover>
+                      <TableCell sx={{ whiteSpace: 'nowrap', color: '#9fd3ff' }}>{entry.time}</TableCell>
+                      <TableCell sx={{ fontWeight: 520 }}>{entry.actor}</TableCell>
+                      <TableCell>{entry.target}</TableCell>
+                      <TableCell>{entry.action}</TableCell>
+                      <TableCell sx={{ color: 'rgba(171, 183, 201, 0.86)' }}>{entry.details}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
 
-        <TableContainer component={Paper} variant="outlined" sx={TABLE_SX}>
-          <Table size="small" sx={tableCellSx}>
-            <TableHead>
-              <TableRow sx={{ bgcolor: 'rgba(156, 176, 204, 0.075)' }}>
-                <TableCell>Время</TableCell>
-                <TableCell>Документ</TableCell>
-                <TableCell>Этап</TableCell>
-                <TableCell>Событие</TableCell>
-                <TableCell>Повторная попытка</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {logs.map((log) => (
-                <TableRow key={log.id} hover>
-                  <TableCell sx={{ whiteSpace: 'nowrap', color: '#9fd3ff' }}>{log.time}</TableCell>
-                  <TableCell sx={{ fontWeight: 520 }}>{log.document}</TableCell>
-                  <TableCell>{log.stage}</TableCell>
-                  <TableCell sx={{ color: 'rgba(171, 183, 201, 0.86)' }}>{log.event}</TableCell>
-                  <TableCell>
-                    <Chip
-                      label={log.retryStatus}
-                      size="small"
-                      color={statusColor(log.retryStatus) as 'success' | 'warning' | 'error'}
-                      variant="outlined"
-                    />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+          <Box sx={{ mt: 0.7 }}>
+            <Typography sx={{ mb: 0.85, fontWeight: 540, color: 'rgba(233, 237, 243, 0.92)' }}>
+              Журнал обработки документов
+            </Typography>
+            <TableContainer component={Paper} variant="outlined" sx={TABLE_SX}>
+              <Table size="small" sx={tableCellSx}>
+                <TableHead>
+                  <TableRow sx={{ bgcolor: 'rgba(156, 176, 204, 0.075)' }}>
+                    <TableCell>Время</TableCell>
+                    <TableCell>Документ</TableCell>
+                    <TableCell>Этап</TableCell>
+                    <TableCell>Событие</TableCell>
+                    <TableCell>Повторная попытка</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {logs.map((log) => (
+                    <TableRow key={log.id} hover>
+                      <TableCell sx={{ whiteSpace: 'nowrap', color: '#9fd3ff' }}>{log.time}</TableCell>
+                      <TableCell sx={{ fontWeight: 520 }}>{log.document}</TableCell>
+                      <TableCell>{log.stage}</TableCell>
+                      <TableCell sx={{ color: 'rgba(171, 183, 201, 0.86)' }}>{log.event}</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={log.retryStatus}
+                          size="small"
+                          color={statusColor(log.retryStatus) as 'success' | 'warning' | 'error'}
+                          variant="outlined"
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
+        </Stack>
       </Stack>
     </Container>
   );

@@ -1,14 +1,25 @@
 export interface Citation {
   id: string;
+  documentId?: string;
   document: string;
   section: string;
   page: number;
   text: string;
   version: string;
   confidence?: number;
+  pagePreviewUrl?: string;
+  documentUrl?: string;
+  contentType?: string;
 }
 
-export type AnswerStatus = 'answered' | 'needs_clarification' | 'insufficient_data' | 'source_conflict';
+export type AnswerStatus =
+  | 'answered'
+  | 'needs_clarification'
+  | 'insufficient_data'
+  | 'source_conflict'
+  | 'out_of_scope'
+  | 'not_found'
+  | 'backend_error';
 
 export interface ChatMessage {
   id: string;
@@ -29,25 +40,6 @@ export interface Document {
   ocrStatus: 'Завершено' | 'В обработке' | 'Ошибка';
   indexStatus: 'Индексировано' | 'Ожидание';
   updatedAt: string;
-}
-
-export interface ParameterCheck {
-  id: string;
-  parameter: string;
-  projectDocument: string;
-  projectValue: string;
-  projectPage: number;
-  projectSection: string;
-  projectText: string;
-  projectVersion: string;
-  nsiDocument: string;
-  nsiRequirement: string;
-  nsiPage: number;
-  nsiSection: string;
-  nsiText: string;
-  nsiVersion: string;
-  comment: string;
-  status: 'OK' | 'WARNING' | 'ERROR';
 }
 
 export interface SystemMetrics {
@@ -72,11 +64,15 @@ export interface EngineerRatingMetrics {
 export interface QueryHistoryItem {
   id: string;
   user: string;
+  project: string;
+  topic: string;
+  session: string;
   query: string;
   answer: string;
   sources: number;
   status: AnswerStatus;
   createdAt: string;
+  messages: ChatMessage[];
 }
 
 export interface AdminUser {
@@ -84,7 +80,7 @@ export interface AdminUser {
   name: string;
   position: string;
   login: string;
-  role: 'Инженер' | 'Администратор знаний' | 'Администратор системы';
+  role: 'Пользователь' | 'Администратор знаний' | 'Системный администратор';
   access: string;
   status: 'Активен' | 'Ожидает настройки' | 'Отключен';
   lastSeen: string;
@@ -98,6 +94,23 @@ export interface ProcessingLogItem {
   event: string;
   retryStatus: 'Не требуется' | 'Запланирована' | 'Выполнена' | 'Ошибка';
   visibility: 'Инженер' | 'Администратор';
+}
+
+export interface KnowledgeSection {
+  id: string;
+  title: string;
+  description: string;
+  documents: number;
+  updatedAt: string;
+  status: 'Готово' | 'В обработке' | 'Нужна проверка';
+}
+
+export interface ProcessingQueueItem {
+  id: string;
+  document: string;
+  stage: 'OCR' | 'Индексация' | 'Разбор таблиц';
+  progress: number;
+  status: 'в очереди' | 'в работе' | 'ошибка';
 }
 
 export const MOCK_CITATIONS: Citation[] = [
@@ -142,6 +155,81 @@ export const MOCK_CHATS: ChatMessage[] = [
   },
 ];
 
+export const MOCK_CHAT_THREADS: Record<string, ChatMessage[]> = {
+  'chat-hull': MOCK_CHATS,
+  'chat-materials': [
+    {
+      id: 'materials-u1',
+      role: 'user',
+      content: 'Какие материалы нужно сверить перед применением в корпусных конструкциях?',
+      timestamp: '10:08',
+    },
+    {
+      id: 'materials-a1',
+      role: 'assistant',
+      content:
+        '1. Перед применением нужно сверить марку стали с проектной спецификацией и действующей редакцией НСИ.\n' +
+        '2. Для материалов с модификациями обозначения требуется отдельная инженерная проверка эквивалентности.\n' +
+        '3. В карточке источника нужно открыть документ и страницу, где указана применяемость материала.',
+      timestamp: '10:09',
+      status: 'answered',
+      citations: [MOCK_CITATIONS[0]],
+    },
+  ],
+  'chat-pumps': [
+    {
+      id: 'pumps-u1',
+      role: 'user',
+      content: 'Проверь требования по насосным агрегатам для проекта 22220.',
+      timestamp: '11:20',
+    },
+    {
+      id: 'pumps-a1',
+      role: 'assistant',
+      content:
+        '1. По насосным агрегатам найдены требования к вибрации и рабочему диапазону частот.\n' +
+        '2. Перед применением нужно проверить версию спецификации и фактическую комплектацию агрегата.',
+      timestamp: '11:21',
+      status: 'answered',
+      citations: [MOCK_CITATIONS[1]],
+    },
+  ],
+  'chat-cooling': [
+    {
+      id: 'cooling-u1',
+      role: 'user',
+      content: 'Что нужно уточнить по системе охлаждения?',
+      timestamp: '11:34',
+    },
+    {
+      id: 'cooling-a1',
+      role: 'assistant',
+      content:
+        'Нужно уточнить состав системы, проектную стадию и документ, по которому выполняется сверка. Без этого система не должна подставлять случайный источник.',
+      timestamp: '11:35',
+      status: 'needs_clarification',
+    },
+  ],
+  'chat-ocr': [
+    {
+      id: 'ocr-u1',
+      role: 'user',
+      content: 'Какие документы требуют повторного OCR?',
+      timestamp: '12:06',
+    },
+    {
+      id: 'ocr-a1',
+      role: 'assistant',
+      content:
+        '1. В демонстрационном наборе есть документы с незавершенным OCR и ожиданием индексации.\n' +
+        '2. Реальный список должен возвращать Gateway после обработки документов.',
+      timestamp: '12:07',
+      status: 'answered',
+      citations: [MOCK_CITATIONS[0]],
+    },
+  ],
+};
+
 export const MOCK_DOCUMENTS: Document[] = [
   {
     id: 'd1',
@@ -185,90 +273,190 @@ export const MOCK_DOCUMENTS: Document[] = [
   },
 ];
 
-export const MOCK_CHECKS: ParameterCheck[] = [
+export const MOCK_KNOWLEDGE_SECTIONS: KnowledgeSection[] = [
   {
-    id: 'ch1',
-    parameter: 'Максимальная скорость судна',
-    projectDocument: 'Проект 223-М. Основные характеристики',
-    projectValue: '32 узла',
-    projectPage: 18,
-    projectSection: 'Раздел 5. Основные характеристики',
-    projectText: 'В проектной документации для судна зафиксирована максимальная скорость 32 узла в штатном режиме эксплуатации.',
-    projectVersion: 'Проект v2.4',
-    nsiDocument: 'ТЗ-2024. Эксплуатационные требования',
-    nsiRequirement: 'Не менее 32 узлов',
-    nsiPage: 12,
-    nsiSection: 'Раздел 3. Эксплуатационные требования',
-    nsiText: 'Максимальная скорость судна должна составлять не менее 32 узлов при штатном режиме эксплуатации.',
-    nsiVersion: 'Изд. 2',
-    comment: 'Параметр проекта соответствует требованию НСИ.',
-    status: 'OK',
+    id: 'kb-hull',
+    title: 'Корпус',
+    description: 'Конструкции корпуса, прочность, обшивка, набор, водонепроницаемость.',
+    documents: 34,
+    updatedAt: '2026-05-21',
+    status: 'Готово',
   },
   {
-    id: 'ch2',
-    parameter: 'Масса двигателя',
-    projectDocument: 'Чертеж силовой установки. Лист сборки',
-    projectValue: '4750 кг',
-    projectPage: 22,
-    projectSection: 'Примечания по агрегату',
-    projectText: 'На чертеже сборки для узла указана масса двигателя 4750 кг.',
-    projectVersion: 'Проект v1.9',
-    nsiDocument: 'Каталог двигателя. Базовая комплектация',
-    nsiRequirement: '4500 кг',
-    nsiPage: 7,
-    nsiSection: 'Таблица масс',
-    nsiText: 'Масса двигателя в базовой комплектации составляет 4500 кг.',
-    nsiVersion: 'Изд. 4',
-    comment: 'Значение в проекте выше нормативно-справочного значения. Требуется проверка версии агрегата или состава комплектации.',
-    status: 'ERROR',
+    id: 'kb-machinery',
+    title: 'Энергетика',
+    description: 'Главные и вспомогательные механизмы, двигатели, насосы, агрегаты.',
+    documents: 27,
+    updatedAt: '2026-05-20',
+    status: 'В обработке',
   },
   {
-    id: 'ch3',
-    parameter: 'Марка стали для конструктивного элемента',
-    projectDocument: 'Заявка на материал для корпуса',
-    projectValue: '10ХСНД-2',
-    projectPage: 4,
-    projectSection: 'Примечание к заявке',
-    projectText: 'В заявке на закупку материала указано обозначение 10ХСНД-2.',
-    projectVersion: 'Заявка 04-2026',
-    nsiDocument: 'ГОСТ-123. Допустимые марки стали',
-    nsiRequirement: '10ХСНД',
-    nsiPage: 33,
-    nsiSection: 'Таблица 7. Марки стали',
-    nsiText: 'Для данной группы конструкций указана сталь 10ХСНД.',
-    nsiVersion: '2024.3',
-    comment: 'Обозначение в проекте похоже на модификацию марки. Нужна инженерная проверка эквивалентности.',
-    status: 'WARNING',
+    id: 'kb-electrical',
+    title: 'Электрика',
+    description: 'Электрооборудование, кабельные сети, питание, аварийные системы.',
+    documents: 22,
+    updatedAt: '2026-05-19',
+    status: 'Готово',
+  },
+  {
+    id: 'kb-piping',
+    title: 'Трубопроводы',
+    description: 'Судовые системы, трубопроводы, арматура, насосные магистрали.',
+    documents: 19,
+    updatedAt: '2026-05-18',
+    status: 'Готово',
+  },
+  {
+    id: 'kb-ventilation',
+    title: 'Вентиляция',
+    description: 'Вентиляция, кондиционирование, дымоудаление, воздуховоды.',
+    documents: 14,
+    updatedAt: '2026-05-18',
+    status: 'Готово',
+  },
+  {
+    id: 'kb-automation',
+    title: 'Автоматика',
+    description: 'АСУ, датчики, сигнализация, блокировки, дистанционное управление.',
+    documents: 16,
+    updatedAt: '2026-05-17',
+    status: 'В обработке',
+  },
+  {
+    id: 'kb-navigation',
+    title: 'Навигация и связь',
+    description: 'Радиосвязь, навигационное оборудование, мостик, сигнализация.',
+    documents: 13,
+    updatedAt: '2026-05-17',
+    status: 'Готово',
+  },
+  {
+    id: 'kb-fire',
+    title: 'Пожарная безопасность',
+    description: 'Пожаротушение, обнаружение пожара, изоляция, эвакуация.',
+    documents: 18,
+    updatedAt: '2026-05-16',
+    status: 'Готово',
+  },
+  {
+    id: 'kb-lifesaving',
+    title: 'Спасательные средства',
+    description: 'Шлюпки, плоты, индивидуальные средства, размещение и нормы.',
+    documents: 11,
+    updatedAt: '2026-05-16',
+    status: 'Готово',
+  },
+  {
+    id: 'kb-materials',
+    title: 'Материалы',
+    description: 'Стали, сплавы, покрытия, сварочные материалы, сертификаты.',
+    documents: 21,
+    updatedAt: '2026-05-15',
+    status: 'Нужна проверка',
+  },
+  {
+    id: 'kb-welding',
+    title: 'Сварка',
+    description: 'Технологии сварки, контроль швов, допуски, испытания.',
+    documents: 17,
+    updatedAt: '2026-05-15',
+    status: 'Готово',
+  },
+  {
+    id: 'kb-environment',
+    title: 'Экология',
+    description: 'Балласт, сточные воды, выбросы, предотвращение загрязнений.',
+    documents: 10,
+    updatedAt: '2026-05-14',
+    status: 'Готово',
   },
 ];
 
 export const MOCK_HISTORY: QueryHistoryItem[] = [
   {
     id: 'h1',
-    user: 'Инженер-конструктор',
+    user: 'Алексей Морозов',
+    project: 'Проект 223-М',
+    topic: 'Корпус',
+    session: 'Толщина листа корпуса',
     query: 'Какая минимальная толщина листа для корпуса?',
     answer: 'Требуется уточнить проект, тип конструкции и актуальную редакцию нормы.',
     sources: 1,
     status: 'needs_clarification',
     createdAt: '2026-04-23 10:14',
+    messages: [
+      {
+        id: 'h1-u1',
+        role: 'user',
+        content: 'Какая минимальная толщина листа для корпуса?',
+        timestamp: '10:14',
+      },
+      {
+        id: 'h1-a1',
+        role: 'assistant',
+        content: 'Уточните проект, район корпуса и тип конструкции. Без этих данных нельзя корректно выбрать требование НСИ.',
+        timestamp: '10:15',
+        status: 'needs_clarification',
+        citations: [MOCK_CITATIONS[0]],
+      },
+    ],
   },
   {
     id: 'h2',
-    user: 'Инженер-конструктор',
+    user: 'Алексей Морозов',
+    project: 'Проект 223-М',
+    topic: 'Сварка',
+    session: 'Регламент сварки',
     query: 'Найди регламент сварки Т-образных швов',
     answer: 'Найдены разделы регламента и проектной спецификации, требуется проверка версии.',
     sources: 2,
     status: 'answered',
     createdAt: '2026-04-23 10:21',
+    messages: [
+      {
+        id: 'h2-u1',
+        role: 'user',
+        content: 'Найди регламент сварки Т-образных швов',
+        timestamp: '10:21',
+      },
+      {
+        id: 'h2-a1',
+        role: 'assistant',
+        content:
+          '1. Для Т-образных швов нужно проверить актуальную редакцию регламента сварки.\n' +
+          '2. Проектная спецификация должна совпадать с версией регламента, указанной в НСИ.',
+        timestamp: '10:22',
+        status: 'answered',
+        citations: [MOCK_CITATIONS[0], MOCK_CITATIONS[1]],
+      },
+    ],
   },
   {
     id: 'h3',
-    user: 'Администратор знаний',
+    user: 'Ольга Волкова',
+    project: 'База НСИ',
+    topic: 'OCR',
+    session: 'Контроль обработки документов',
     query: 'Какие документы не прошли OCR?',
     answer: 'Найден один документ в обработке и один ожидающий индексации.',
     sources: 0,
     status: 'answered',
     createdAt: '2026-04-23 10:38',
+    messages: [
+      {
+        id: 'h3-u1',
+        role: 'user',
+        content: 'Какие документы не прошли OCR?',
+        timestamp: '10:38',
+      },
+      {
+        id: 'h3-a1',
+        role: 'assistant',
+        content: 'Найден один документ в обработке и один документ, который ожидает индексации после повторного OCR.',
+        timestamp: '10:39',
+        status: 'answered',
+      },
+    ],
   },
 ];
 
@@ -295,40 +483,40 @@ export const MOCK_ENGINEER_RATINGS: EngineerRatingMetrics = {
 export const MOCK_ADMIN_USERS: AdminUser[] = [
   {
     id: 'u1',
-    name: 'Сергей Орлов',
+    name: 'Алексей Морозов',
     position: 'Инженер-конструктор',
-    login: 's.orlov',
-    role: 'Инженер',
-    access: 'Чат, поиск, проверка, своя история',
+    login: 'a.morozov',
+    role: 'Пользователь',
+    access: 'Чат, поиск, своя история',
     status: 'Активен',
     lastSeen: '2026-04-29 10:12',
   },
   {
     id: 'u2',
-    name: 'Елена Климова',
+    name: 'Мария Соколова',
     position: 'Инженер-проектировщик',
-    login: 'e.klimova',
-    role: 'Инженер',
-    access: 'Чат, поиск, проверка, своя история',
+    login: 'm.sokolova',
+    role: 'Пользователь',
+    access: 'Чат, поиск, своя история',
     status: 'Активен',
     lastSeen: '2026-04-29 09:44',
   },
   {
     id: 'u3',
-    name: 'Анна Волкова',
+    name: 'Ольга Волкова',
     position: 'Администратор базы НСИ',
-    login: 'a.volkova',
+    login: 'o.volkova',
     role: 'Администратор знаний',
-    access: 'Реестр, OCR, индекс, журнал обработки',
+    access: 'База знаний, поиск, история, QA, OCR-артефакты, журналы обработки',
     status: 'Активен',
     lastSeen: '2026-04-29 09:20',
   },
   {
     id: 'u4',
-    name: 'Игорь Смирнов',
+    name: 'Дмитрий Смирнов',
     position: 'Системный администратор',
-    login: 'i.smirnov',
-    role: 'Администратор системы',
+    login: 'd.smirnov',
+    role: 'Системный администратор',
     access: 'Все вкладки, роли, права, полный журнал',
     status: 'Ожидает настройки',
     lastSeen: '2026-04-28 18:05',

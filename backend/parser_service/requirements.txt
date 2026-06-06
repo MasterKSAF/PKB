@@ -1,0 +1,15 @@
+aiobotocore==2.16.0
+fastapi==0.115.12
+pydantic==2.10.4
+pydantic-settings==2.7.0
+uvicorn==0.34.0
+python-magic==0.4.27
+opendataloader-pdf==2.4.7
+pypdf==6.12.2
+python-dotenv==1.2.2
+# зависимости aiohttp и botocore будут подтянуты автоматически
+
+pytest==9.0.3
+pytest-asyncio==1.4.0
+pytest-mock==3.15.1
+httpx==0.28.1

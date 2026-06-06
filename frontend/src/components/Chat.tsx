@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Box,
   Container,
@@ -13,12 +13,18 @@ import {
   Collapse,
   Alert,
   Stack,
+  Dialog,
+  Slider,
+  Tooltip,
 } from '@mui/material';
 import {
   Send,
   User,
   Anchor,
+  Ship,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ChevronUp,
   ExternalLink,
   Bookmark,
@@ -26,18 +32,27 @@ import {
   ShieldCheck,
   X,
   FileText,
+  Search,
+  Download,
+  Maximize2,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
-import { chatApi } from '../utils/http';
-import { ChatMessage, MOCK_CHATS, Citation } from '../utils/mockData';
+import { chatApi, sourceApi } from '../utils/http';
+import { ChatMessage, Citation } from '../utils/mockData';
 import { Feedback } from './Feedback';
 import { useUIStore } from '../store/uiStore';
+import { downloadPreviewFile } from '../utils/downloadPreview';
 
 const statusLabel = {
   answered: 'ответ найден',
   needs_clarification: 'нужно уточнение',
   insufficient_data: 'недостаточно данных',
   source_conflict: 'конфликт источников',
+  out_of_scope: 'вне области системы',
+  not_found: 'ничего не найдено',
+  backend_error: 'сервер недоступен',
 } as const;
 
 type ChatPreview = Citation & {
@@ -78,23 +93,147 @@ function buildAnsweredView(content: string, citations: Citation[] = []) {
   };
 }
 
+function sourceButtonSx(isLight: boolean, fontSize = '0.74rem') {
+  return {
+    px: 0.9,
+    py: 0.28,
+    minWidth: 0,
+    height: 'auto',
+    fontSize,
+    color: isLight ? '#075985' : '#b8c4d8',
+    border: isLight ? '1px solid #7dd3fc' : '1px solid rgba(184,196,216,0.20)',
+    borderRadius: 999,
+    bgcolor: isLight ? '#e0f2fe' : 'rgba(184,196,216,0.06)',
+    '&:hover': {
+      bgcolor: isLight ? '#bae6fd' : 'rgba(184,196,216,0.10)',
+      borderColor: isLight ? '#38bdf8' : 'rgba(184,196,216,0.28)',
+    },
+  } as const;
+}
+
+function countMatches(text: string, query: string) {
+  if (!query) return 0;
+
+  let count = 0;
+  let position = text.toLowerCase().indexOf(query);
+
+  while (position !== -1) {
+    count += 1;
+    position = text.toLowerCase().indexOf(query, position + query.length);
+  }
+
+  return count;
+}
+
+function highlightText(text: string, query: string, isLight: boolean, activeOccurrence = -1) {
+  if (!query) return text;
+
+  const lowerText = text.toLowerCase();
+  const parts: React.ReactNode[] = [];
+  let cursor = 0;
+  let position = lowerText.indexOf(query);
+  let index = 0;
+
+  while (position !== -1) {
+    if (position > cursor) {
+      parts.push(text.slice(cursor, position));
+    }
+
+    const isActive = index === activeOccurrence;
+
+    parts.push(
+      <Box
+        component="mark"
+        key={`${position}-${index}`}
+        sx={{
+          px: 0.35,
+          py: 0.05,
+          borderRadius: 0.7,
+          color: isLight ? '#111827' : '#f8fbff',
+          bgcolor: isActive
+            ? isLight
+              ? 'rgba(14, 165, 233, 0.34)'
+              : 'rgba(56, 189, 248, 0.38)'
+            : isLight
+              ? 'rgba(202, 138, 4, 0.28)'
+              : 'rgba(216, 176, 122, 0.36)',
+          boxShadow: isLight
+            ? '0 0 0 1px rgba(146, 64, 14, 0.16)'
+            : '0 0 0 1px rgba(216, 176, 122, 0.22)',
+        }}
+      >
+        {text.slice(position, position + query.length)}
+      </Box>,
+    );
+
+    cursor = position + query.length;
+    position = lowerText.indexOf(query, cursor);
+    index += 1;
+  }
+
+  if (cursor < text.length) {
+    parts.push(text.slice(cursor));
+  }
+
+  return parts;
+}
+
 export const Chat: React.FC = () => {
-  const { themeMode } = useUIStore();
+  const { appendChatMessages, chatMessages, themeMode } = useUIStore();
   const isLight = themeMode === 'light';
-  const [messages, setMessages] = useState<ChatMessage[]>(MOCK_CHATS);
+  const assistantAccent = isLight ? '#0284c7' : '#98d9d8';
+  const messages = chatMessages;
   const [input, setInput] = useState('');
+  const [chatSearch, setChatSearch] = useState('');
+  const [previewSearch, setPreviewSearch] = useState('');
   const [expandedCitations, setExpandedCitations] = useState<Record<string, boolean>>({});
   const [openedCitations, setOpenedCitations] = useState<ChatPreview[]>([]);
   const [activeCitationId, setActiveCitationId] = useState<string | null>(null);
   const [previewWidth, setPreviewWidth] = useState(420);
+  const [previewZoom, setPreviewZoom] = useState(1);
+  const [expandedPreviewOpen, setExpandedPreviewOpen] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
+  const [activeSearchMatch, setActiveSearchMatch] = useState(0);
+  const [activePreviewSearchMatch, setActivePreviewSearchMatch] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const activeCitation = openedCitations.find((citation) => citation.previewId === activeCitationId) ?? openedCitations[0];
-
+  const normalizedChatSearch = chatSearch.trim().toLowerCase();
+  const normalizedPreviewSearch = previewSearch.trim().toLowerCase();
+  const previewSearchMatches = activeCitation ? countMatches(activeCitation.text, normalizedPreviewSearch) : 0;
+  const searchMatches = useMemo(
+    () =>
+      normalizedChatSearch
+        ? messages.flatMap((message) =>
+            Array.from({ length: countMatches(message.content, normalizedChatSearch) }, (_, occurrence) => ({
+              messageId: message.id,
+              occurrence,
+            })),
+          )
+        : [],
+    [messages, normalizedChatSearch],
+  );
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    setActiveSearchMatch(0);
+  }, [normalizedChatSearch]);
+
+  useEffect(() => {
+    setActivePreviewSearchMatch(0);
+  }, [activeCitation?.previewId, normalizedPreviewSearch]);
+
+  useEffect(() => {
+    if (!normalizedChatSearch || searchMatches.length === 0) return;
+
+    const targetMessageId = searchMatches[activeSearchMatch]?.messageId;
+    const target = targetMessageId ? messageRefs.current[targetMessageId] : null;
+
+    target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [activeSearchMatch, normalizedChatSearch, searchMatches]);
 
   useEffect(() => {
     if (!isResizing) return;
@@ -118,7 +257,7 @@ export const Chat: React.FC = () => {
   const chatMutation = useMutation({
     mutationFn: (q: string) => chatApi.send(q),
     onSuccess: (data) => {
-      setMessages((prev) => [...prev, data]);
+      appendChatMessages([data]);
       setExpandedCitations((prev) => ({ ...prev, [data.id]: false }));
     },
   });
@@ -133,9 +272,29 @@ export const Chat: React.FC = () => {
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    appendChatMessages([userMessage]);
     chatMutation.mutate(input);
     setInput('');
+  };
+
+  const goToSearchMatch = (direction: 'prev' | 'next') => {
+    if (searchMatches.length === 0) return;
+
+    setActiveSearchMatch((current) =>
+      direction === 'next'
+        ? (current + 1) % searchMatches.length
+        : (current - 1 + searchMatches.length) % searchMatches.length,
+    );
+  };
+
+  const goToPreviewSearchMatch = (direction: 'prev' | 'next') => {
+    if (previewSearchMatches === 0) return;
+
+    setActivePreviewSearchMatch((current) =>
+      direction === 'next'
+        ? (current + 1) % previewSearchMatches
+        : (current - 1 + previewSearchMatches) % previewSearchMatches,
+    );
   };
 
   const toggleCitations = (msgId: string) => {
@@ -156,6 +315,22 @@ export const Chat: React.FC = () => {
       return [...prev, preview];
     });
     setActiveCitationId(previewId);
+
+    void sourceApi.preview(citation, previewKind).then((hydratedCitation) => {
+      setOpenedCitations((prev) =>
+        prev.map((item) =>
+          item.previewId === previewId
+            ? {
+                ...item,
+                ...hydratedCitation,
+                page: previewKind === 'document' ? 1 : hydratedCitation.page,
+                previewId,
+                previewKind,
+              }
+            : item,
+        ),
+      );
+    });
   };
 
   const closePreview = (previewId: string) => {
@@ -185,29 +360,33 @@ export const Chat: React.FC = () => {
                 return (
                   <Box
                     key={msg.id}
+                    ref={(node: HTMLDivElement | null) => {
+                      messageRefs.current[msg.id] = node;
+                    }}
                     sx={{
                       display: 'flex',
                       gap: 1.5,
                       alignItems: 'flex-start',
                       justifyContent: isAssistant ? 'flex-start' : 'flex-end',
+                      borderRadius: 3,
                     }}
                   >
                     {isAssistant && (
                       <Avatar
                         sx={{
-                          bgcolor: isLight ? '#eef7f8' : 'rgba(152, 217, 216, 0.16)',
-                          color: isLight ? '#0f5f6f' : '#98d9d8',
+                          bgcolor: isLight ? '#e0f2fe' : 'rgba(152, 217, 216, 0.16)',
+                          color: assistantAccent,
                           width: 34,
                           height: 34,
                           mt: 0.55,
                           border: '1px solid',
-                          borderColor: isLight ? 'rgba(15, 95, 111, 0.34)' : 'rgba(152, 217, 216, 0.26)',
+                          borderColor: isLight ? 'rgba(2, 132, 199, 0.36)' : 'rgba(152, 217, 216, 0.26)',
                           boxShadow: isLight
-                            ? 'inset 0 1px 0 rgba(255,255,255,0.70), 0 1px 2px rgba(15,23,42,0.08)'
+                            ? 'inset 0 1px 0 rgba(255,255,255,0.70), 0 2px 7px rgba(2,132,199,0.13)'
                             : 'inset 0 1px 0 rgba(255,255,255,0.08), 0 6px 14px rgba(0,0,0,0.16)',
                         }}
                       >
-                        <Anchor size={18} />
+                        {isLight ? <Ship size={18} /> : <Anchor size={18} />}
                       </Avatar>
                     )}
 
@@ -256,14 +435,14 @@ export const Chat: React.FC = () => {
                               border: '1px solid',
                               borderColor: isAssistant
                                 ? isLight
-                                  ? 'rgba(15, 95, 111, 0.34)'
+                                  ? 'rgba(2, 132, 199, 0.36)'
                                   : 'rgba(152, 217, 216, 0.24)'
                                 : isLight
                                   ? 'rgba(159, 116, 64, 0.34)'
                                   : 'rgba(216, 176, 122, 0.24)',
                               bgcolor: isAssistant
                                 ? isLight
-                                  ? '#eef7f8'
+                                  ? '#e0f2fe'
                                   : 'rgba(152, 217, 216, 0.07)'
                                 : isLight
                                   ? '#fff6e8'
@@ -273,7 +452,7 @@ export const Chat: React.FC = () => {
                                 : 'inset 0 1px 0 rgba(255,255,255,0.06)',
                               fontWeight: 600,
                               letterSpacing: '0.04em',
-                              color: isAssistant ? (isLight ? '#0f5f6f' : '#98d9d8') : isLight ? '#8a5f2b' : '#d8b07a',
+                              color: isAssistant ? assistantAccent : isLight ? '#8a5f2b' : '#d8b07a',
                               fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
                               fontSize: '0.79rem',
                             }}
@@ -294,7 +473,15 @@ export const Chat: React.FC = () => {
                             <Chip
                               size="small"
                               label={statusLabel[msg.status]}
-                              color={msg.status === 'answered' ? 'success' : msg.status === 'needs_clarification' ? 'warning' : 'error'}
+                              color={
+                                msg.status === 'answered'
+                                  ? 'success'
+                                  : msg.status === 'needs_clarification'
+                                    ? 'warning'
+                                    : msg.status === 'out_of_scope' || msg.status === 'not_found'
+                                      ? 'info'
+                                      : 'error'
+                              }
                               variant="outlined"
                               sx={{ height: 22, ml: 'auto' }}
                             />
@@ -327,7 +514,7 @@ export const Chat: React.FC = () => {
                                       fontSize: '0.95rem',
                                     }}
                                   >
-                                    {item.text}
+                                    {highlightText(item.text, normalizedChatSearch, isLight)}
                                   </Typography>
                                   <Stack direction="row" spacing={1.4} useFlexGap sx={{ flexWrap: 'wrap', mt: 0.6 }}>
                                     <Button
@@ -335,7 +522,7 @@ export const Chat: React.FC = () => {
                                       variant="text"
                                       startIcon={<ExternalLink size={14} />}
                                       className="source-link-button"
-                                      sx={{ px: 0.9, py: 0.28, minWidth: 0, height: 'auto', fontSize: '0.74rem', color: '#b8c4d8', border: '1px solid rgba(184,196,216,0.20)', borderRadius: 999, bgcolor: 'rgba(184,196,216,0.06)' }}
+                                      sx={sourceButtonSx(isLight)}
                                       onClick={() => openPreview(item.citation, 'source')}
                                     >
                                       Страница
@@ -345,7 +532,7 @@ export const Chat: React.FC = () => {
                                       variant="text"
                                       startIcon={<FileText size={14} />}
                                       className="source-link-button"
-                                      sx={{ px: 0.9, py: 0.28, minWidth: 0, height: 'auto', fontSize: '0.74rem', color: '#b8c4d8', border: '1px solid rgba(184,196,216,0.20)', borderRadius: 999, bgcolor: 'rgba(184,196,216,0.06)' }}
+                                      sx={sourceButtonSx(isLight)}
                                       onClick={() => openPreview(item.citation, 'document')}
                                     >
                                       Документ
@@ -355,6 +542,10 @@ export const Chat: React.FC = () => {
                               </Box>
                             ))}
                           </Box>
+                        ) : msg.status === 'not_found' || msg.status === 'out_of_scope' || msg.status === 'backend_error' ? (
+                          <Alert severity={msg.status === 'backend_error' ? 'error' : 'info'} variant="outlined" sx={{ mt: 1.4 }}>
+                            {highlightText(msg.content, normalizedChatSearch, isLight)}
+                          </Alert>
                         ) : (
                           <Typography
                             variant="body1"
@@ -368,7 +559,7 @@ export const Chat: React.FC = () => {
                               mt: 0.85,
                             }}
                           >
-                            {msg.content}
+                            {highlightText(msg.content, normalizedChatSearch, isLight)}
                           </Typography>
                         )}
 
@@ -417,7 +608,7 @@ export const Chat: React.FC = () => {
                                         variant="text"
                                         startIcon={<ExternalLink size={14} />}
                                         className="source-link-button"
-                                        sx={{ px: 0.9, py: 0.28, minWidth: 0, height: 'auto', fontSize: '0.76rem', color: '#b8c4d8', border: '1px solid rgba(184,196,216,0.20)', borderRadius: 999, bgcolor: 'rgba(184,196,216,0.06)' }}
+                                        sx={sourceButtonSx(isLight, '0.76rem')}
                                         onClick={() => openPreview(cite, 'source')}
                                       >
                                         Страница
@@ -427,7 +618,7 @@ export const Chat: React.FC = () => {
                                         variant="text"
                                         startIcon={<FileText size={14} />}
                                         className="source-link-button"
-                                        sx={{ px: 0.9, py: 0.28, minWidth: 0, height: 'auto', fontSize: '0.76rem', color: '#b8c4d8', border: '1px solid rgba(184,196,216,0.20)', borderRadius: 999, bgcolor: 'rgba(184,196,216,0.06)' }}
+                                        sx={sourceButtonSx(isLight, '0.76rem')}
                                         onClick={() => openPreview(cite, 'document')}
                                       >
                                         Документ
@@ -495,8 +686,16 @@ export const Chat: React.FC = () => {
 
               {chatMutation.isPending && (
                 <Box sx={{ display: 'flex', gap: 1.5 }}>
-                  <Avatar sx={{ bgcolor: 'rgba(152, 217, 216, 0.16)', color: '#98d9d8', width: 34, height: 34 }}>
-                    <Anchor size={18} />
+                  <Avatar
+                    sx={{
+                      bgcolor: isLight ? '#e0f2fe' : 'rgba(152, 217, 216, 0.16)',
+                      color: assistantAccent,
+                      width: 34,
+                      height: 34,
+                      border: isLight ? '1px solid rgba(2, 132, 199, 0.36)' : 'none',
+                    }}
+                  >
+                    {isLight ? <Ship size={18} /> : <Anchor size={18} />}
                   </Avatar>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <CircularProgress size={16} thickness={5} />
@@ -514,57 +713,179 @@ export const Chat: React.FC = () => {
         <Box
           sx={{
             borderTop: '1.5px solid rgba(198, 216, 240, 0.22)',
-            pb: 2.5,
-            pt: 2,
+            pb: 2.4,
+            pt: 1.8,
             bgcolor: 'transparent',
           }}
         >
-          <Container maxWidth="md">
-            <Paper
-              elevation={0}
-              sx={{
-                p: '8px 10px',
-                display: 'flex',
-                alignItems: 'center',
-                borderRadius: 3,
-                border: '1.5px solid rgba(198, 216, 240, 0.34)',
-                bgcolor: 'rgba(22, 23, 27, 0.72)',
-                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045)',
-              }}
-            >
-              <TextField
-                fullWidth
-                multiline
-                maxRows={4}
-                placeholder="Задайте вопрос ассистенту"
-                variant="standard"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSend();
-                  }
-                }}
-                sx={{ ml: 1, flex: 1 }}
-                slotProps={{
-                  input: { disableUnderline: true },
-                }}
-              />
-
-              <IconButton
-                color="primary"
-                onClick={handleSend}
-                disabled={!input.trim() || chatMutation.isPending}
+          <Container maxWidth="lg">
+            <Stack direction={{ xs: 'column', lg: 'row' }} spacing={1.1} sx={{ alignItems: 'stretch' }}>
+              <Paper
+                elevation={0}
                 sx={{
-                  bgcolor: input.trim() ? 'primary.main' : 'rgba(255,255,255,0.04)',
-                  color: input.trim() ? '#0b0c0e' : 'grey.600',
-                  '&:hover': { bgcolor: 'primary.light' },
+                  p: '10px 12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  minHeight: 58,
+                  flex: { lg: 1.65 },
+                  borderRadius: 3,
+                  border: isLight ? '1px solid rgba(15,23,42,0.18)' : '1.5px solid rgba(198, 216, 240, 0.34)',
+                  bgcolor: isLight ? 'rgba(255,255,255,0.78)' : 'rgba(22, 23, 27, 0.72)',
+                  boxShadow: isLight ? '0 6px 18px rgba(15,23,42,0.05)' : 'inset 0 1px 0 rgba(255,255,255,0.045)',
                 }}
               >
-                <Send size={20} />
-              </IconButton>
-            </Paper>
+                <TextField
+                  fullWidth
+                  multiline
+                  minRows={1}
+                  maxRows={4}
+                  placeholder="Задайте вопрос ассистенту"
+                  variant="standard"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSend();
+                    }
+                  }}
+                  sx={{ ml: 0.6, flex: 1 }}
+                  slotProps={{
+                    input: {
+                      disableUnderline: true,
+                      sx: {
+                        alignItems: 'center',
+                        fontSize: '0.96rem',
+                        lineHeight: 1.55,
+                      },
+                    },
+                  }}
+                />
+
+                <IconButton
+                  aria-label="Отправить вопрос"
+                  color="primary"
+                  onClick={handleSend}
+                  disabled={chatMutation.isPending}
+                  sx={{
+                    ml: 0.8,
+                    border: '1.5px solid',
+                    borderColor: assistantAccent,
+                    bgcolor: input.trim()
+                      ? isLight
+                        ? 'rgba(2, 132, 199, 0.13)'
+                        : 'rgba(152, 217, 216, 0.16)'
+                      : isLight
+                        ? 'rgba(2, 132, 199, 0.05)'
+                        : 'rgba(152, 217, 216, 0.06)',
+                    color: assistantAccent,
+                    '&:hover': {
+                      bgcolor: isLight ? 'rgba(2, 132, 199, 0.18)' : 'rgba(152, 217, 216, 0.22)',
+                    },
+                    '&.Mui-disabled': {
+                      color: assistantAccent,
+                      borderColor: assistantAccent,
+                      opacity: 0.55,
+                    },
+                  }}
+                >
+                  <Send size={20} />
+                </IconButton>
+              </Paper>
+
+              <Paper
+                elevation={0}
+                sx={{
+                  p: '10px 12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  minHeight: 58,
+                  flex: { lg: 0.95 },
+                  maxWidth: { lg: 430 },
+                  borderRadius: 3,
+                  border: isLight ? '1px solid rgba(15,23,42,0.18)' : '1.5px solid rgba(198, 216, 240, 0.34)',
+                  bgcolor: isLight ? 'rgba(255,255,255,0.62)' : 'rgba(22, 23, 27, 0.54)',
+                  boxShadow: isLight ? '0 6px 18px rgba(15,23,42,0.035)' : 'inset 0 1px 0 rgba(255,255,255,0.035)',
+                }}
+              >
+                <TextField
+                  fullWidth
+                  size="small"
+                  value={chatSearch}
+                  onChange={(event) => setChatSearch(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && normalizedChatSearch) {
+                      event.preventDefault();
+                      goToSearchMatch(event.shiftKey ? 'prev' : 'next');
+                    }
+                  }}
+                  placeholder="Поиск по чату"
+                  variant="standard"
+                  slotProps={{
+                    input: {
+                      disableUnderline: true,
+                      startAdornment: <Search size={16} style={{ marginRight: 10, opacity: 0.65 }} />,
+                      endAdornment: normalizedChatSearch ? (
+                        <Stack
+                          direction="row"
+                          spacing={0.25}
+                          sx={{ alignItems: 'center', ml: 0.8 }}
+                          onMouseDown={(event) => event.preventDefault()}
+                        >
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{ whiteSpace: 'nowrap', minWidth: 44, textAlign: 'right' }}
+                          >
+                            {searchMatches.length > 0 ? `${activeSearchMatch + 1}/${searchMatches.length}` : '0/0'}
+                          </Typography>
+                          <Tooltip title="Предыдущее совпадение">
+                            <span>
+                              <IconButton
+                                aria-label="Предыдущее совпадение"
+                                size="small"
+                                disabled={searchMatches.length === 0}
+                                onClick={() => goToSearchMatch('prev')}
+                                sx={{ width: 24, height: 24 }}
+                              >
+                                <ChevronLeft size={14} />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                          <Tooltip title="Следующее совпадение">
+                            <span>
+                              <IconButton
+                                aria-label="Следующее совпадение"
+                                size="small"
+                                disabled={searchMatches.length === 0}
+                                onClick={() => goToSearchMatch('next')}
+                                sx={{ width: 24, height: 24 }}
+                              >
+                                <ChevronRight size={14} />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                          <Tooltip title="Очистить поиск">
+                            <IconButton
+                              aria-label="Очистить поиск по чату"
+                              size="small"
+                              onClick={() => setChatSearch('')}
+                              sx={{ width: 24, height: 24 }}
+                            >
+                              <X size={14} />
+                            </IconButton>
+                          </Tooltip>
+                        </Stack>
+                      ) : null,
+                      sx: {
+                        fontSize: '0.9rem',
+                        lineHeight: 1.45,
+                      },
+                    },
+                  }}
+                />
+              </Paper>
+            </Stack>
           </Container>
         </Box>
       </Box>
@@ -576,8 +897,8 @@ export const Chat: React.FC = () => {
             minWidth: 320,
             maxWidth: 720,
             position: 'relative',
-            borderLeft: '1px solid rgba(255,255,255,0.10)',
-            bgcolor: '#101116',
+            borderLeft: isLight ? '2px solid rgba(14, 116, 144, 0.26)' : '2px solid rgba(198, 216, 240, 0.40)',
+            bgcolor: isLight ? '#f5f7fa' : '#101116',
             display: 'flex',
             flexDirection: 'column',
           }}
@@ -595,13 +916,13 @@ export const Chat: React.FC = () => {
             }}
           />
 
-          <Box sx={{ p: 1.5, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+          <Box sx={{ p: 1.5, borderBottom: isLight ? '1px solid rgba(15,23,42,0.12)' : '1px solid rgba(255,255,255,0.08)' }}>
             <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
               {openedCitations.map((citation) => (
                 <Chip
                   key={citation.previewId}
                   size="small"
-                  label={`${citation.previewKind === 'source' ? 'страница' : 'документ'} · стр. ${citation.page}`}
+                  label={citation.previewKind === 'source' ? `Страница ${citation.page}` : 'Документ'}
                   color={citation.previewId === activeCitation?.previewId ? 'primary' : 'default'}
                   variant={citation.previewId === activeCitation?.previewId ? 'filled' : 'outlined'}
                   onClick={() => setActiveCitationId(citation.previewId)}
@@ -613,38 +934,144 @@ export const Chat: React.FC = () => {
           </Box>
 
           {activeCitation && (
-            <Box sx={{ overflow: activeCitation.previewKind === 'document' ? 'auto' : 'hidden', flexGrow: 1 }}>
+            <Box className="preview-scroll-panel" sx={{ overflow: activeCitation.previewKind === 'document' ? 'auto' : 'hidden', flexGrow: 1 }}>
               <Box
                 sx={{
                   position: 'sticky',
                   top: 0,
                   zIndex: 2,
-                  p: 2,
-                  pb: 1.5,
-                  bgcolor: '#101116',
-                  borderBottom: '1px solid rgba(255,255,255,0.08)',
+                  px: 1.35,
+                  py: 1,
+                  bgcolor: isLight ? '#f5f7fa' : '#101116',
+                  borderBottom: isLight ? '1px solid rgba(15,23,42,0.12)' : '1px solid rgba(255,255,255,0.08)',
                 }}
               >
-                <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                  <FileText size={18} />
-                  <Typography variant="subtitle2">
-                    {activeCitation.previewKind === 'source' ? 'Страница документа' : 'Документ PDF'}
-                  </Typography>
+                <Stack spacing={1}>
+                  <Stack direction="row" spacing={0.8} sx={{ alignItems: 'center' }}>
+                    <Button
+                      variant="text"
+                      size="small"
+                      className="source-link-button"
+                      startIcon={<Download size={14} />}
+                      title={activeCitation.document}
+                      onClick={() =>
+                        downloadPreviewFile(
+                          activeCitation.document,
+                          `${activeCitation.document}\n${activeCitation.section}\nСтраница ${activeCitation.page}\n\n${activeCitation.text}`,
+                        )
+                      }
+                      sx={{
+                        ...sourceButtonSx(isLight, '0.82rem'),
+                        justifyContent: 'flex-start',
+                        textAlign: 'left',
+                        px: 0.9,
+                        flex: 1,
+                        minWidth: 0,
+                      }}
+                    >
+                      <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {activeCitation.document}
+                      </Box>
+                    </Button>
+                    <Tooltip title="Уменьшить масштаб">
+                      <IconButton size="small" onClick={() => setPreviewZoom((value) => Math.max(0.75, value - 0.1))}>
+                        <ZoomOut size={16} />
+                      </IconButton>
+                    </Tooltip>
+                    <Slider
+                      size="small"
+                      value={Math.round(previewZoom * 100)}
+                      min={75}
+                      max={160}
+                      step={5}
+                      onChange={(_, value) => setPreviewZoom(Number(value) / 100)}
+                      aria-label="Масштаб документа"
+                      sx={{ width: 82, mx: 0.5 }}
+                    />
+                    <Typography variant="caption" color="text.secondary" sx={{ minWidth: 42, textAlign: 'center' }}>
+                      {Math.round(previewZoom * 100)}%
+                    </Typography>
+                    <Tooltip title="Увеличить масштаб">
+                      <IconButton size="small" onClick={() => setPreviewZoom((value) => Math.min(1.6, value + 0.1))}>
+                        <ZoomIn size={16} />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Открыть крупнее">
+                      <IconButton size="small" onClick={() => setExpandedPreviewOpen(true)}>
+                        <Maximize2 size={16} />
+                      </IconButton>
+                    </Tooltip>
+                  </Stack>
+                  <TextField
+                    size="small"
+                    value={previewSearch}
+                    onChange={(event) => setPreviewSearch(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && normalizedPreviewSearch) {
+                        event.preventDefault();
+                        goToPreviewSearchMatch(event.shiftKey ? 'prev' : 'next');
+                      }
+                    }}
+                    placeholder="Поиск по открытому документу"
+                    variant="outlined"
+                    slotProps={{
+                      input: {
+                        startAdornment: <Search size={15} style={{ marginRight: 8, opacity: 0.62 }} />,
+                        endAdornment: normalizedPreviewSearch ? (
+                          <Stack
+                            direction="row"
+                            spacing={0.25}
+                            sx={{ alignItems: 'center', ml: 0.8 }}
+                            onMouseDown={(event) => event.preventDefault()}
+                          >
+                            <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+                              {previewSearchMatches > 0 ? `${activePreviewSearchMatch + 1}/${previewSearchMatches}` : '0/0'}
+                            </Typography>
+                            <Tooltip title="Предыдущее совпадение">
+                              <span>
+                                <IconButton
+                                  aria-label="Предыдущее совпадение в документе"
+                                  size="small"
+                                  disabled={previewSearchMatches === 0}
+                                  onClick={() => goToPreviewSearchMatch('prev')}
+                                  sx={{ width: 24, height: 24 }}
+                                >
+                                  <ChevronLeft size={14} />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                            <Tooltip title="Следующее совпадение">
+                              <span>
+                                <IconButton
+                                  aria-label="Следующее совпадение в документе"
+                                  size="small"
+                                  disabled={previewSearchMatches === 0}
+                                  onClick={() => goToPreviewSearchMatch('next')}
+                                  sx={{ width: 24, height: 24 }}
+                                >
+                                  <ChevronRight size={14} />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                            <Tooltip title="Очистить поиск">
+                              <IconButton
+                                aria-label="Очистить поиск по документу"
+                                size="small"
+                                onClick={() => setPreviewSearch('')}
+                                sx={{ width: 24, height: 24 }}
+                              >
+                                <X size={14} />
+                              </IconButton>
+                            </Tooltip>
+                          </Stack>
+                        ) : null,
+                      },
+                    }}
+                  />
                 </Stack>
-
-                <Box sx={{ mt: 1.5 }}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                    {activeCitation.document}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {activeCitation.previewKind === 'document'
-                      ? `с первой страницы · ${activeCitation.version}`
-                      : `${activeCitation.section} · стр. ${activeCitation.page} · ${activeCitation.version}`}
-                  </Typography>
-                </Box>
               </Box>
 
-              <Box sx={{ p: 2 }}>
+              <Box sx={{ p: 1.5 }}>
               <Stack spacing={1.5}>
                 <Paper
                   variant="outlined"
@@ -655,12 +1082,12 @@ export const Chat: React.FC = () => {
                     bgcolor: '#f4f1e8',
                     color: '#242424',
                     borderColor: 'rgba(255,255,255,0.12)',
+                    width: `${100 / previewZoom}%`,
+                    transform: `scale(${previewZoom})`,
                     transformOrigin: 'top left',
+                    transition: 'transform 160ms ease, width 160ms ease',
                   }}
                 >
-                  <Typography variant="caption" sx={{ color: '#666', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                    {activeCitation.previewKind === 'source' ? 'Страница / один лист' : 'PDF / полный документ'}
-                  </Typography>
                   <Typography variant="caption" sx={{ color: '#777' }}>
                     Страница {activeCitation.page}
                   </Typography>
@@ -676,13 +1103,13 @@ export const Chat: React.FC = () => {
                     sx={{
                       mt: 2,
                       p: 2,
-                      border: '2px solid rgba(112,161,255,0.55)',
-                      bgcolor: 'rgba(112,161,255,0.08)',
+                      border: '2px solid rgba(56, 189, 248, 0.55)',
+                      bgcolor: 'rgba(56, 189, 248, 0.10)',
                       borderRadius: 1,
                     }}
                   >
                     <Typography variant="body2" sx={{ lineHeight: 1.8 }}>
-                      {activeCitation.text}
+                      {highlightText(activeCitation.text, normalizedPreviewSearch, isLight, activePreviewSearchMatch)}
                     </Typography>
                   </Box>
                   {activeCitation.previewKind === 'document' && [1, 2, 3, 4].map((pageOffset) => {
@@ -706,7 +1133,7 @@ export const Chat: React.FC = () => {
                         <Typography variant="body2" sx={{ lineHeight: 1.85 }}>
                           На этой странице показана другая часть исходного документа: таблицы, пояснения,
                           ссылки на связанные разделы и порядок применения требований. При реальном подключении
-                          здесь будет отображаться оригинальная страница PDF с сохранением нумерации, масштаба
+                          здесь будет отображаться оригинальная страница документа с сохранением нумерации, масштаба
                           и вертикальной прокрутки всего документа.
                         </Typography>
                       </Box>
@@ -726,6 +1153,162 @@ export const Chat: React.FC = () => {
           )}
         </Box>
       )}
+
+      <Dialog
+        open={expandedPreviewOpen && Boolean(activeCitation)}
+        onClose={() => setExpandedPreviewOpen(false)}
+        maxWidth="lg"
+        fullWidth
+      >
+        {activeCitation && (
+          <Box
+            sx={{
+              bgcolor: isLight ? '#f8fafc' : '#101116',
+              color: 'text.primary',
+              border: isLight ? '1px solid #bae6fd' : '1px solid rgba(198, 216, 240, 0.32)',
+            }}
+          >
+            <Box
+              sx={{
+                px: 2,
+                py: 1.3,
+                borderBottom: isLight ? '1px solid #dbeafe' : '1px solid rgba(255,255,255,0.08)',
+              }}
+            >
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                <FileText size={18} color={assistantAccent} />
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography
+                    title={activeCitation.document}
+                    sx={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                  >
+                    {activeCitation.document}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {activeCitation.previewKind === 'source' ? `Страница ${activeCitation.page}` : 'Документ'} · {activeCitation.section}
+                  </Typography>
+                </Box>
+                <TextField
+                  size="small"
+                  value={previewSearch}
+                  onChange={(event) => setPreviewSearch(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && normalizedPreviewSearch) {
+                      event.preventDefault();
+                      goToPreviewSearchMatch(event.shiftKey ? 'prev' : 'next');
+                    }
+                  }}
+                  placeholder="Поиск по документу"
+                  sx={{ width: 260, display: { xs: 'none', md: 'block' } }}
+                  slotProps={{
+                    input: {
+                      startAdornment: <Search size={15} style={{ marginRight: 8, opacity: 0.62 }} />,
+                      endAdornment: normalizedPreviewSearch ? (
+                        <Stack
+                          direction="row"
+                          spacing={0.25}
+                          sx={{ alignItems: 'center', ml: 0.8 }}
+                          onMouseDown={(event) => event.preventDefault()}
+                        >
+                          <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+                            {previewSearchMatches > 0 ? `${activePreviewSearchMatch + 1}/${previewSearchMatches}` : '0/0'}
+                          </Typography>
+                          <Tooltip title="Предыдущее совпадение">
+                            <span>
+                              <IconButton
+                                aria-label="Предыдущее совпадение в документе"
+                                size="small"
+                                disabled={previewSearchMatches === 0}
+                                onClick={() => goToPreviewSearchMatch('prev')}
+                                sx={{ width: 24, height: 24 }}
+                              >
+                                <ChevronLeft size={14} />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                          <Tooltip title="Следующее совпадение">
+                            <span>
+                              <IconButton
+                                aria-label="Следующее совпадение в документе"
+                                size="small"
+                                disabled={previewSearchMatches === 0}
+                                onClick={() => goToPreviewSearchMatch('next')}
+                                sx={{ width: 24, height: 24 }}
+                              >
+                                <ChevronRight size={14} />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                        </Stack>
+                      ) : null,
+                    },
+                  }}
+                />
+                <IconButton onClick={() => setExpandedPreviewOpen(false)}>
+                  <X size={18} />
+                </IconButton>
+              </Stack>
+            </Box>
+
+            <Box className="preview-scroll-panel" sx={{ maxHeight: '76vh', overflow: 'auto', p: 2.4 }}>
+              <Paper
+                variant="outlined"
+                sx={{
+                  maxWidth: 820,
+                  minHeight: activeCitation.previewKind === 'document' ? 980 : 560,
+                  mx: 'auto',
+                  p: 3.2,
+                  borderRadius: 2,
+                  bgcolor: '#f4f1e8',
+                  color: '#242424',
+                  borderColor: '#d2cec2',
+                  boxShadow: '0 22px 70px rgba(15, 23, 42, 0.20)',
+                }}
+              >
+                <Typography variant="caption" sx={{ color: '#777' }}>
+                  Страница {activeCitation.page}
+                </Typography>
+                <Typography variant="h6" sx={{ mt: 1, mb: 1.2, color: '#1f1f1f', fontFamily: 'Georgia, serif' }}>
+                  {activeCitation.previewKind === 'document' ? 'Титульная страница документа' : activeCitation.section}
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#555', mb: 2.2 }}>
+                  {activeCitation.previewKind === 'source'
+                    ? 'Открыт фрагмент страницы, на который ссылается ответ ассистента.'
+                    : 'Открыт просмотр всего документа с вертикальной прокруткой страниц.'}
+                </Typography>
+                <Box
+                  sx={{
+                    mt: 2,
+                    p: 2.2,
+                    border: '2px solid rgba(56, 189, 248, 0.55)',
+                    bgcolor: 'rgba(56, 189, 248, 0.10)',
+                    borderRadius: 1,
+                  }}
+                >
+                  <Typography variant="body2" sx={{ lineHeight: 1.85 }}>
+                    {highlightText(activeCitation.text, normalizedPreviewSearch, isLight, activePreviewSearchMatch)}
+                  </Typography>
+                </Box>
+                {activeCitation.previewKind === 'document' &&
+                  [1, 2, 3].map((pageOffset) => (
+                    <Box key={pageOffset} sx={{ mt: 4, pt: 3, minHeight: 420, borderTop: '1px solid #d2cec2' }}>
+                      <Typography variant="caption" sx={{ color: '#777' }}>
+                        Страница {activeCitation.page + pageOffset}
+                      </Typography>
+                      <Typography variant="subtitle2" sx={{ color: '#1f1f1f', fontWeight: 700, mt: 1, mb: 1 }}>
+                        Связанный раздел документа
+                      </Typography>
+                      <Typography variant="body2" sx={{ lineHeight: 1.85 }}>
+                        Здесь показана следующая часть исходного документа. В рабочем режиме в этой области будет
+                        отображаться оригинальная страница или подготовленное превью с сохранением формата источника.
+                      </Typography>
+                    </Box>
+                  ))}
+              </Paper>
+            </Box>
+          </Box>
+        )}
+      </Dialog>
     </Box>
   );
 };
