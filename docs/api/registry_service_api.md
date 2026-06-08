@@ -1,7 +1,8 @@
 ## API Registry Service / Registry (registry-service:8084)
 
 Базовый реестр НСИ (нормативно-справочной информации).  
-Хранит классификаторы, документы и терминологию.  
+Хранит классификаторы, документы, терминологию и данные черновиков (drafts).  
+Управление данными черновиков: хранение, статусы, метаданные.  
 Соответствует этапу **«Registry» Пайплайна 1 (Формирование документа)** — **пишет** данные в БД.  
 Также участвует в этапе **«Validation»** — **читает** справочники классификаторов для проверки кодов.
 
@@ -29,20 +30,23 @@
 
 ### Коды ошибок
 
+Общие коды (400, 404, 500) — см. [common_api.md](../common_api.md#коды-ответов-http-и-ошибок).
+
 | HTTP | `error.code` | Описание |
 |------|-------------|----------|
-| 400 | `VALIDATION_ERROR` | Некорректные данные |
-| 404 | `NOT_FOUND` | Ресурс не найден |
 | 404 | `CLASSIFIER_NOT_FOUND` | Узел классификатора не найден |
 | 404 | `TERM_NOT_FOUND` | Термин не найден |
 | 404 | `DOCUMENT_NOT_FOUND` | Документ не найден |
+| 404 | `DRAFT_NOT_FOUND` | Черновик не найден |
+| 409 | `DRAFT_ALREADY_DECIDED` | Решение по черновику уже принято |
+| 409 | `DRAFT_ALREADY_PREVIEWED` | Черновик уже прошёл preview |
+| 400 | `EMPTY_DOCUMENT` | Нельзя завершить черновик с 0 страниц |
 | 409 | `DUPLICATE_CODE` | Код (в системе) уже существует |
 | 409 | `DUPLICATE_DOCUMENT` | Документ с таким бизнес-ключом уже есть |
 | 409 | `DUPLICATE_TERM` | Термин уже существует |
 | 409 | `HAS_CHILDREN` | Нельзя удалить узел с дочерними |
 | 409 | `HAS_DOCUMENTS` | Есть документы, ссылающиеся на код |
 | 409 | `CROSS_SYSTEM_PARENT` | Родитель в другой системе классификации |
-| 500 | `INTERNAL_ERROR` | Внутренняя ошибка |
 
 ---
 
@@ -53,11 +57,27 @@
 | `classifiers` | Иерархический справочник классификаторов (МКС, ОКСТУ, УДК, внешние) |
 | `terminology` | Реестр терминов, синонимов и правил нормализации |
 | `documents` | Реестр логических документов НСИ |
+| `drafts` | Управление данными черновиков (internal, доступен только Orchestrator) |
 | `common` | Статистика и справочные значения |
 
 ---
 
 ## Группа classifiers
+
+| Метод | Путь | Описание |
+|-------|------|----------|
+| GET | `/registry/classifiers` | Список (плоский) |
+| GET | `/registry/classifiers/tree` | Дерево (иерархическое) |
+| GET | `/registry/classifiers/{code}` | Один узел |
+| POST | `/registry/classifiers` | Создать |
+| PUT | `/registry/classifiers/{code}` | Обновить |
+| PATCH | `/registry/classifiers/{code}` | Частичное обновление |
+| DELETE | `/registry/classifiers/{code}` | Удалить |
+| POST | `/registry/classifiers/import` | Импорт |
+| GET | `/registry/classifiers/pending` | Неизвестные коды классификатора |
+| POST | `/registry/classifiers/pending/{pending_id}/accept` | Принять неизвестный код |
+| POST | `/registry/classifiers/pending/{pending_id}/reject` | Отклонить неизвестный код |
+| POST | `/registry/classifiers/validate` | Валидация классификации |
 
 ### 1.1. Список (плоский)
 
@@ -428,6 +448,16 @@ Registry Service — source of truth для классификаторов. Пр
 
 ## Группа terminology
 
+| Метод | Путь | Описание |
+|-------|------|----------|
+| GET | `/registry/terminology` | Список |
+| GET | `/registry/terminology/{term_id}` | Один термин |
+| POST | `/registry/terminology` | Создать |
+| PUT | `/registry/terminology/{term_id}` | Обновить |
+| DELETE | `/registry/terminology/{term_id}` | Удалить |
+| GET | `/registry/terminology/normalize` | Поиск нормализованной формы |
+| POST | `/registry/terminology/import` | Импорт |
+
 ### 2.1. Список
 
 ```
@@ -593,6 +623,21 @@ POST /registry/terminology/import
 
 ## Группа documents
 
+| Метод | Путь | Описание |
+|-------|------|----------|
+| GET | `/registry/documents` | Список |
+| GET | `/registry/documents/{doc_id}` | Один документ (описание) |
+| GET | `/registry/documents/{doc_id}/sections` | Секции документа |
+| POST | `/registry/documents/check-uniqueness` | Проверить уникальность |
+| POST | `/registry/documents` | Создать |
+| PUT | `/registry/documents/{doc_id}` | Обновить |
+| PATCH | `/registry/documents/{doc_id}` | Частичное обновление |
+| PATCH | `/registry/documents/{doc_id}/status` | Обновить статус (internal — только для Оркестратора) |
+| GET | `/registry/documents/{doc_id}/succession` | Цепочка преемственности |
+| DELETE | `/registry/documents/{doc_id}` | Удалить |
+| GET | `/registry/documents/export` | Экспорт |
+| POST | `/registry/documents/import` | Массовый импорт |
+
 ### 3.1. Список
 
 ```
@@ -608,11 +653,13 @@ GET /registry/documents
 | `source_type` | string | `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `OTHER` |
 | `mks_oks_code` | string | Фильтр по коду МКС/ОКС |
 | `okstu_code` | string | Фильтр по коду ОКСТУ |
-| `status` | string | FSM-статус документа |
+| `status` | string | FSM-статус документа (управляется Оркестратором, фильтр read-only) |
 | `era` | string | `USSR`, `CIS`, `RF`, `CURRENT` |
 | `validity_status` | string | `active`, `superseded`, `cancelled`, `historical`, `draft` |
 | `jurisdiction` | string | `RU`, `EU`, `US`, `NO`, `INTL` |
 | `issuing_body` | string | Организация-издатель |
+| `document_type` | string | Категория контента: `normative`, `technical`, `drawing`, `specification`, `archival_scan` |
+| `group` | string | Группа классификации (например, `ПО4`) |
 | `title_hash_sha256` | string | Точный поиск по бизнес-ключу |
 | `date_from` / `date_to` | date | Фильтр по дате создания |
 | `sort_by` | string | Поле сортировки: `title`, `doc_code`, `source_type`, `era`, `created_at`, `updated_at` (по умолчанию `created_at`) |
@@ -630,10 +677,12 @@ GET /registry/documents
       "title": "Стойки установочные",
       "doc_code": "20868-81",
       "source_type": "GOST",
+      "document_type": "normative",
+      "group": "ПО4",
       "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
       "file_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "file_size_bytes": 2048576,
-      "status": "approved",
+      "status": "indexed",
       "era": "USSR",
       "validity_status": "active",
       "jurisdiction": "RU",
@@ -643,9 +692,15 @@ GET /registry/documents
       "okstu_code": null,
       "okstu_name": null,
       "classification_status": {
-        "mks_status": "CONFIRMED",
-        "okstu_status": "NOT_USED"
+        "mks": ["31.240"],
+        "okstu": [],
+        "udk": [],
+        "subject_area": ["Электроника", "Монтажные изделия"]
       },
+      "adoption_date": "1981-07-01",
+      "effective_from": "1982-01-01",
+      "replaces": null,
+      "status_note": null,
       "successor_doc_id": null,
       "predecessor_doc_id": null,
       "total_versions": 2,
@@ -676,15 +731,21 @@ GET /registry/documents/{doc_id}
 - `doc_code` — код документа (ГОСТ, ОСТ и т.д.)
 - `title` — название документа
 - `title_hash_sha256` — хэш бизнес-ключа
-- `status` — FSM-статус обработки
+- `status` — FSM-статус обработки (управляется Оркестратором, Registry — read-only)
 - `era` — эпоха (`USSR`, `CIS`, `RF`, `CURRENT`)
 - `validity_status` — юридический статус (`active`, `superseded`, `cancelled`, `historical`, `draft`)
 - `jurisdiction` — юрисдикция (`RU`, `EU`, `US`, `NO`, `INTL`)
 - `issuing_body` — организация-издатель
 - `source_type` — тип источника (`GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `OTHER`)
+- `document_type` — категория контента (`normative`, `technical`, `drawing`, `specification`, `archival_scan`)
+- `group` — группа классификации (например, `ПО4`)
 - `mks_oks_code` — код МКС/ОКС
 - `okstu_code` — код ОКСТУ
-- `classification_status` — статус классификации (`{ mks_status, okstu_status }`)
+- `classification_status` — статус классификации (`{ mks: string[], okstu: string[], udk: string[], subject_area: string[] }`)
+- `adoption_date` — дата принятия документа
+- `effective_from` — дата введения в действие
+- `replaces` — сведения о заменяемом документе
+- `status_note` — примечание к статусу
 - `successor_doc_id` — ID документа-преемника
 - `predecessor_doc_id` — ID документа-предшественника
 - `metadata` — произвольные метаданные (JSONB)
@@ -700,7 +761,9 @@ GET /registry/documents/{doc_id}
     "doc_code": "ГОСТ 20868-81",
     "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
     "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
-    "status": "approved",
+    "document_type": "normative",
+    "group": "ПО4",
+    "status": "indexed",
     "era": "USSR",
     "validity_status": "active",
     "jurisdiction": "RU",
@@ -709,9 +772,15 @@ GET /registry/documents/{doc_id}
     "mks_oks_code": "31.240",
     "okstu_code": null,
     "classification_status": {
-      "mks_status": "CONFIRMED",
-      "okstu_status": "NOT_USED"
+      "mks": ["31.240"],
+      "okstu": [],
+      "udk": [],
+      "subject_area": ["Электроника", "Монтажные изделия"]
     },
+    "adoption_date": "1981-07-01",
+    "effective_from": "1982-01-01",
+    "replaces": null,
+    "status_note": null,
     "successor_doc_id": null,
     "predecessor_doc_id": null,
     "metadata": {},
@@ -836,7 +905,7 @@ POST /registry/documents/check-uniqueness
         "title": "ГОСТ 20868-81",
         "doc_code": "20868-81",
         "similarity": 0.98,
-        "status": "archived",
+        "status": "failed",
         "file_size_bytes": 1048576
       }
     ],
@@ -852,8 +921,8 @@ POST /registry/documents/check-uniqueness
 1. Pre-filter по размеру: если передан `file_size_bytes`, кандидаты с существенно отличающимся размером отфильтровываются (`|size₁ - size₂| > 0.5% max(size₁, size₂)` — false positive отличия метаданных в архиве).
 2. Поиск по `title_hash_sha256` (точное совпадение нормализованного названия).
 3. Поиск по `doc_code` + `era` (документ с тем же кодом в ту же эпоху).
-4. Если кандидат найден и имеет статус обработки `registry` или `indexed` — считается дубликатом.
-5. Если кандидат найден, но находится в `draft` или `failed` — возвращается как кандидат,
+4. Если кандидат найден и имеет статус обработки `created` или `indexed` — считается дубликатом.
+5. Если кандидат найден, но находится в `failed` — возвращается как кандидат,
    решение принимает пользователь.
 
 ---
@@ -885,8 +954,10 @@ POST /registry/documents
   "mks_oks_code": "31.240",
   "okstu_code": null,
   "classification_status": {
-    "mks_status": "CONFIRMED",
-    "okstu_status": "NOT_USED"
+    "mks": ["31.240"],
+    "okstu": [],
+    "udk": [],
+    "subject_area": ["Электроника", "Монтажные изделия"]
   },
   "successor_doc_id": null,
   "predecessor_doc_id": null,
@@ -974,7 +1045,7 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
 | `issuing_body` | string | Нет | Организация-издатель |
 | `mks_oks_code` | string | Нет | Код МКС/ОКС (FK) |
 | `okstu_code` | string | Нет | Код ОКСТУ (FK) |
-| `classification_status` | JSONB | Нет | Статусы извлечения кодов |
+| `classification_status` | JSONB | Нет | Статусы классификации: `{ mks: string[], okstu: string[], udk: string[], subject_area: string[] }` |
 | `successor_doc_id` | bigint | Нет | Преемник |
 | `predecessor_doc_id` | bigint | Нет | Предшественник |
 | `metadata` | JSONB | Нет | Доп. данные |
@@ -982,7 +1053,8 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
 > *`title` обязателен при прямом создании; в режиме пайплайна берётся из структуры JSON-контейнера.
 
 Система **автоматически вычисляет** `title_hash_sha256` по формуле:  
-`SHA-256(era|source_type|mks_oks_code|okstu_code|doc_code|normalized_title)`
+`SHA-256(era | source_type | doc_code | normalized_title)`  
+где `normalized_title` — `title` в нижнем регистре с удалёнными лишними пробелами
 
 > **Полный формат данных:** [`docs/schema/schema_registry_for_rag.json`](../schema/schema_registry_for_rag.json) (схема `for_rag_v1`)
 
@@ -1181,23 +1253,31 @@ PATCH /registry/documents/{doc_id}
 
 ---
 
-### 3.6. Обновить статус
+### 3.6. Обновить статус (internal)
 
 ```
 PATCH /registry/documents/{doc_id}/status
 ```
 
+> **Internal:** Вызывается только Оркестратором при завершении индексации (после Pipeline 2). Внешним клиентам недоступен.
+
+Оркестратор уведомляет Registry о финальном статусе документа после прохождения всех этапов обработки.
+
 **Тело запроса:**
 
 ```json
 {
-  "status": "archived",
-  "comment": "Документ устарел",
-  "changed_by": "ivanov_ai"
+  "status": "indexed",
+  "comment": "Индексация завершена, документ готов к поиску",
+  "changed_by": "orchestrator"
 }
 ```
 
-**Допустимые статусы (FSM)**: `draft`, `uploaded`, `validating`, `processing`, `review_required`, `ready_for_promotion`, `approved`, `failed`, `archived`.
+| Поле | Тип | Обязательность | Описание |
+|------|-----|---------------|----------|
+| `status` | string | Да | FSM-статус документа (`created`, `pending_index`, `indexing`, `indexed`, `failed`) |
+| `comment` | string | Нет | Причина смены статуса |
+| `changed_by` | string | Нет | Инициатор (по умолчанию `orchestrator`) |
 
 **Ответ `200`:**
 
@@ -1205,45 +1285,16 @@ PATCH /registry/documents/{doc_id}/status
 {
   "data": {
     "id": 1,
-    "status": "archived",
-    "previous_status": "approved",
-    "history_id": 1,
-    "updated_at": "2026-05-15T13:00:00Z"
+    "status": "indexed",
+    "previous_status": "indexing",
+    "updated_at": "2026-06-05T14:00:00Z"
   }
 }
 ```
 
 ---
 
-### 3.7. История статусов
-
-```
-GET /registry/documents/{doc_id}/history
-```
-
-Полный аудит переходов статусов документа.
-
-**Ответ `200`:**
-
-```json
-{
-  "data": [
-    {
-      "history_id": "h-001",
-      "old_status": null,
-      "new_status": "uploaded",
-      "comment": { "reason": "initial_upload" },
-      "changed_by": "system_registry_sync",
-      "changed_at": "2026-04-27T10:00:00Z"
-    }
-  ],
-  "meta": { "total": 6 }
-}
-```
-
----
-
-### 3.8. Цепочка преемственности
+### 3.7. Цепочка преемственности
 
 ```
 GET /registry/documents/{doc_id}/succession
@@ -1267,7 +1318,7 @@ GET /registry/documents/{doc_id}/succession
 
 ---
 
-### 3.9. Удалить
+### 3.10. Удалить
 
 ```
 DELETE /registry/documents/{doc_id}
@@ -1275,7 +1326,7 @@ DELETE /registry/documents/{doc_id}
 
 ---
 
-### 3.10. Экспорт
+### 3.11. Экспорт
 
 ```
 GET /registry/documents/export
@@ -1285,7 +1336,7 @@ GET /registry/documents/export
 
 ---
 
-### 3.11. Массовый импорт
+### 3.12. Массовый импорт
 
 ```
 POST /registry/documents/import
@@ -1295,9 +1346,220 @@ POST /registry/documents/import
 
 ---
 
+## Группа drafts (internal)
+
+Все эндпоинты — **internal**, доступны только Orchestrator.  
+Данные черновиков хранятся в `registry.drafts`. Управление жизненным циклом — через Orchestrator.
+
+| Метод | Путь | Описание |
+|-------|------|----------|
+| POST | `/registry/drafts` | Создать запись черновика |
+| GET  | `/registry/drafts` | Список черновиков |
+| GET  | `/registry/drafts/{draft_id}` | Полная информация |
+| GET  | `/registry/drafts/{draft_id}/preview` | Preview-метаданные |
+| PATCH| `/registry/drafts/{draft_id}/status` | Обновить статус |
+| DELETE| `/registry/drafts/{draft_id}` | Удалить запись |
+
+### 4.1. POST /registry/drafts — Создать запись черновика
+
+Создаёт запись черновика в `registry.drafts`.  
+Вызывается Orchestrator после `POST /drafts`.
+
+**Запрос**: `application/json`
+
+```json
+{
+  "file_key": "f-abc123",
+  "document_key": "sha256:def456",
+  "status": "uploaded",
+  "raw_data": { ... },
+  "created_by": "orchestrator"
+}
+```
+
+**Ответ `201`**:
+
+```json
+{
+  "data": {
+    "id": 1,
+    "file_key": "f-abc123",
+    "document_key": "sha256:def456",
+    "status": "uploaded",
+    "created_at": "2026-06-05T10:00:00Z"
+  }
+}
+```
+
+---
+
+### 4.2. GET /registry/drafts — Список черновиков
+
+**Query-параметры:**
+
+| Параметр | Тип | Обязательный | Описание |
+|----------|-----|-------------|----------|
+| `document_key` | string | Нет | Фильтр по бизнес-ключу |
+| `status` | string | Нет | Фильтр по статусу |
+
+**Ответ `200`**:
+
+```json
+{
+  "data": [
+    {
+      "id": 1,
+      "file_key": "f-abc123",
+      "document_key": "sha256:def456",
+      "status": "approved",
+      "confidence": 0.92,
+      "preview_metadata": {
+        "doc_code": "ГОСТ 20868-81",
+        "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ",
+        "document_type": "normative",
+        "year": "1981",
+        "revision": null
+      },
+      "created_by": "orchestrator",
+      "created_at": "2026-06-05T10:00:00Z"
+    }
+  ],
+  "meta": { "total": 1, "page": 1, "page_size": 50 }
+}
+```
+
+---
+
+### 4.3. GET /registry/drafts/{draft_id} — Полная информация
+
+**Ответ `200`**:
+
+```json
+{
+  "data": {
+    "id": 1,
+    "file_key": "f-abc123",
+    "document_key": "sha256:def456",
+    "status": "ready_for_approve",
+    "confidence": 0.92,
+    "preview_metadata": {
+      "doc_code": "ГОСТ 20868-81",
+      "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ",
+      "document_type": "normative",
+      "year": "1981",
+      "revision": null
+    },
+    "raw_data": { "schema": "raw_ocr_v4", "pages": [...] },
+    "error_code": null,
+    "error_message": null,
+    "created_by": "orchestrator",
+    "updated_by": null,
+    "created_at": "2026-06-05T10:00:00Z",
+    "updated_at": "2026-06-05T10:05:00Z"
+  }
+}
+```
+
+---
+
+### 4.4. GET /registry/drafts/{draft_id}/preview — Preview-метаданные
+
+**Ответ `200`**:
+
+```json
+{
+  "data": {
+    "id": 1,
+    "file_key": "f-abc123",
+    "status": "ready_for_approve",
+    "confidence": 0.92,
+    "preview_metadata": {
+      "doc_code": "ГОСТ 20868-81",
+      "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ",
+      "document_type": "normative",
+      "year": "1981",
+      "revision": null
+    },
+    "created_at": "2026-06-05T10:00:00Z"
+  }
+}
+```
+
+---
+
+### 4.5. PATCH /registry/drafts/{draft_id}/status — Обновить статус
+
+Обновляет статус черновика. Вызывается Orchestrator при изменении жизненного цикла.
+
+**Запрос**:
+
+```json
+{
+  "status": "ready_for_approve",
+  "confidence": 0.92,
+  "preview_metadata": {
+    "doc_code": "ГОСТ 20868-81",
+    "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ",
+    "document_type": "normative",
+    "year": "1981",
+    "revision": null
+  },
+  "error_code": null,
+  "error_message": null,
+  "updated_by": "orchestrator"
+}
+```
+
+**Ответ `200`**:
+
+```json
+{
+  "data": {
+    "id": 1,
+    "status": "ready_for_approve",
+    "previous_status": "previewing",
+    "updated_at": "2026-06-05T10:03:00Z"
+  }
+}
+```
+
+> **Примечание:** Для статуса `discarded` можно передать `error_code` и `error_message`.  
+> Для статусов `approved` и `discarded` дополнительно обновляется `updated_by`.
+
+---
+
+### 4.6. DELETE /registry/drafts/{draft_id} — Удалить запись
+
+Каскадное удаление записи черновика из `registry.drafts`.  
+Вызывается Orchestrator при `DELETE /drafts/{draft_id}`.
+
+**Ответ `200`**:
+
+```json
+{
+  "data": {
+    "id": 1,
+    "deleted_at": "2026-06-05T12:00:00Z"
+  }
+}
+```
+
+**Коды ошибок:**
+| HTTP | `error.code` | Описание |
+|------|-------------|----------|
+| 404 | `DRAFT_NOT_FOUND` | Черновик не найден |
+| 409 | `DRAFT_ALREADY_DECIDED` | Черновик уже в финальном статусе (`approved`/`discarded`) |
+
+---
+
 ## Группа common
 
-### 4.1. Статистика
+| Метод | Путь | Описание |
+|-------|------|----------|
+| GET | `/registry/stats` | Статистика |
+| GET | `/registry/enums` | Допустимые значения |
+
+### 6.1. Статистика
 
 ```
 GET /registry/stats
@@ -1318,15 +1580,11 @@ GET /registry/stats
     "terminology_total": 1204,
     "documents_total": 56,
     "documents_by_status": {
-      "draft": 2,
-      "uploaded": 5,
-      "parsing": 3,
-      "validation": 1,
-      "review_required": 2,
-      "ready_for_promotion": 4,
-      "approved": 30,
-      "failed": 1,
-      "archived": 8
+      "created": 10,
+      "pending_index": 3,
+      "indexing": 2,
+      "indexed": 32,
+      "failed": 1
     },
     "documents_by_source_type": {
       "GOST": 20,
@@ -1349,7 +1607,7 @@ GET /registry/stats
 
 ---
 
-### 4.2. Допустимые значения
+### 6.2. Допустимые значения
 
 ```
 GET /registry/enums
@@ -1364,7 +1622,7 @@ GET /registry/enums
     "classifier_status": ["active", "deprecated", "archived"],
     "source_type": ["GOST", "GOST_R", "OST", "RD", "TU", "ISO", "DNV", "ASTM", "OTHER"],
     "document_type": ["normative", "technical", "drawing", "specification", "archival_scan"],
-    "document_status": ["draft", "uploaded", "validating", "processing", "review_required", "ready_for_promotion", "approved", "failed", "archived"],
+    "document_status": ["created", "pending_index", "indexing", "indexed", "failed"],
     "era": ["USSR", "CIS", "RF", "CURRENT"],
     "validity_status": ["active", "superseded", "cancelled", "historical", "draft"],
     "jurisdiction": ["RU", "EU", "US", "NO", "INTL"],
@@ -1436,7 +1694,7 @@ GET /registry/enums
 | `doc_code` | text | nullable |
 | `title` | text | NOT NULL |
 | `title_hash_sha256` | text | UNIQUE — бизнес-ключ |
-| `status` | varchar(30) | NOT NULL |
+| `status` | varchar(30) | NOT NULL — `created`, `pending_index`, `indexing`, `indexed`, `failed` |
 | `era` | varchar(10) | nullable |
 | `validity_status` | varchar(20) | nullable |
 | `jurisdiction` | varchar(10) | nullable |
@@ -1472,7 +1730,7 @@ GET /registry/enums
 ## Примечания
 
 1. **DB shared:** Все таблицы registry находятся в общей БД. Другие сервисы читают их напрямую.
-2. **title_hash_sha256** вычисляется автоматически, гарантирует дедупликацию. Формула: `SHA-256(era|source_type|mks|okstu|doc_code|normalized_title)`.
+2. **title_hash_sha256** вычисляется автоматически, гарантирует дедупликацию. Формула: `SHA-256(era | source_type | doc_code | normalized_title)`, где `normalized_title` — `title` в нижнем регистре с удалёнными лишними пробелами.
 3. **Параллельная классификация:** Документ может одновременно ссылаться на МКС/ОКС и ОКСТУ через разные FK.
 4. **Журнал статусов:** Все изменения `documents.status` автоматически логируются в `status_history` триггером БД.
 5. **Неизвестные коды классификатора:** Коды, не найденные в справочнике, попадают в `classifier_pending`. Администратор разбирает их через UI.

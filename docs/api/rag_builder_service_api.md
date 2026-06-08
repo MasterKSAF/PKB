@@ -97,13 +97,14 @@ RAG Builder принимает JSON от Registry (через `GET /registry/doc
 ```
 
 | Поле | Тип | Обязательность | Описание |
-|---|---|---|---|
-| `document_id` | bigint | Да | ID документа |
-| `sections` | array | Да | Массив секций документа от Registry. Каждая секция содержит: `section_id`, `document_id`, `clause`, `title`, `level`, `path`, `page`, `type`, `content`, `created_at` |
-| `sections[].type` | string | Да | Тип секции: `text`, `textBlock`, `headerFooter`, `table`, `list`, `image`, `formula`. Влияет на стратегию чанкования |
-| `sections[].content` | object | Да | Объектный контент. Структура зависит от `type` |
-| `protected_spans` | array | Нет | Массив неразрывных блоков: `{section_id, start_offset, end_offset}`. Запрещает чанкование внутри указанного диапазона секции |
-| `options.strategy` | string | Нет | Стратегия разбиения → `rag_document_chunks.strategy` (`semantic_512`, `fixed_256`) |
+|------|-----|---------------|----------|
+| `document_id` | bigint | Да | ID документа в Registry |
+| `sections` | array | Да | Массив секций для индексации |
+| `sections[].id` | bigint | Да | ID секции |
+| `sections[].path` | string | Да | Путь секции (напр. "1.2.3") |
+| `sections[].type` | string | Да | Тип секции: `text`, `textBlock`, `table`, `drawing` |
+| `sections[].content` | object/jsonb | Да | Содержимое секции (JSONB, см. `registry_for_rag_v2`) |
+| `sections[].chunk_index` | int | Нет | Порядковый номер чанка (если предварительно нарезан) |
 
 **Ответ `201`:**
 ```json

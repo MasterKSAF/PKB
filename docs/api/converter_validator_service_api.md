@@ -256,7 +256,7 @@
 | `fingerprint` | object | Хэши документа (`file_hash_sha256`, `title_hash_sha256`) |
 | `matching` | object | Связи с существующими документами (`predecessor_doc_id`, `successor_doc_id`) |
 | `cross_references` | array | Список кросс-ссылок на другие документы |
-| `decision` | string | `auto` — автоматическое продвижение, `review_required` — требуется ручное подтверждение |
+| `decision` | string | `auto` — автоматическое завершение, `manual` — требуется ручное подтверждение |
 | `status` | string | Статус: `completed`, `failed` |
 
 ---
@@ -315,7 +315,7 @@
 | `classification` | object | Статусы классификационных кодов |
 | `fingerprint` | object | Хэши документа (`file_hash_sha256`, `title_hash_sha256`) |
 | `matching` | object | Связи с существующими документами |
-| `decision` | string | `auto` — автоматическое продвижение, `review_required` — требуется ручное подтверждение |
+| `decision` | string | `auto` — автоматическое завершение, `manual` — требуется ручное подтверждение |
 | `status` | string | Статус: `completed`, `failed` |
 
 > **Внутренние функции валидации:**
