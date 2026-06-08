@@ -18,7 +18,7 @@ CREATE SCHEMA IF NOT EXISTS rag;
 
 -- Таблица документов (метаданные)
 CREATE TABLE IF NOT EXISTS registry.documents (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id BIGSERIAL PRIMARY KEY,
     doc_code TEXT,
     title TEXT NOT NULL,
     document_type TEXT,
@@ -37,7 +37,7 @@ CREATE INDEX IF NOT EXISTS idx_reg_docs_validity
 -- Иерархия разделов документов
 CREATE TABLE IF NOT EXISTS registry.document_sections (
     id BIGSERIAL PRIMARY KEY,
-    document_id UUID NOT NULL REFERENCES registry.documents(id) ON DELETE CASCADE,
+    document_id BIGINT NOT NULL REFERENCES registry.documents(id) ON DELETE CASCADE,
     parent_id BIGINT REFERENCES registry.document_sections(id) ON DELETE SET NULL,
     clause TEXT NOT NULL,
     title TEXT,
@@ -65,7 +65,7 @@ CREATE INDEX IF NOT EXISTS idx_reg_sections_document
 -- Текстовые чанки с векторным и полнотекстовым поиском
 CREATE TABLE IF NOT EXISTS rag.document_chunks (
     id BIGSERIAL PRIMARY KEY,
-    document_id UUID NOT NULL REFERENCES registry.documents(id) ON DELETE CASCADE,
+    document_id BIGINT NOT NULL REFERENCES registry.documents(id) ON DELETE CASCADE,
     section_id BIGINT REFERENCES registry.document_sections(id) ON DELETE SET NULL,
     content TEXT NOT NULL,
     embedding VECTOR(1024),

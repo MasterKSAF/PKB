@@ -74,34 +74,59 @@ Health Check: http://127.0.0.1:8091/api/v1/health
 
 ### Инструкция для деплоера
 
-#### 1. Структура файлов
+#### 1. Подготовка файлов
 
-Убедитесь, что в репозитории присутствуют:
+```bash
+git clone <repo>
+cd ваше-приложение
+
+# Скопировать .env для сервиса из шаблона
+cp rag_search/.env.example rag_search/.env
+nano rag_search/.env              # при необходимости изменить dev-дефолты
+
+# Создать корневой .env с продакшен-переменными
+nano .env
+```
+
+После подготовки структура выглядит так:
 
 ```
 ваше-приложение/
+├── .env                          # создан deployer'ом, НЕ в git
 ├── docker-compose.yaml
-├── .env                          # (опционально) корневые переменные
 └── rag_search/
-    ├── .env                      # dev-дефолты сервиса
+    ├── .env                      # скопирован из .env.example
+    ├── .env.example              # шаблон (в git)
     └── Dockerfile
 ```
 
-> `migrations/` в проде не участвует — схема БД и её наполнение создаются
-> отдельно. Директория используется только для локальной разработки.
+**Корневой `.env`** для продакшена (создаётся deployer'ом):
+```env
+# --- Database (должны совпадать с postgres service) ---
+POSTGRES_USER=rag_user
+POSTGRES_PASSWORD=prod_secret
+POSTGRES_DB=knowledge_base
+
+# --- Embeddings (пусто = локальная модель) ---
+EMBEDDING_API_KEY=
+```
 
 #### 2. Добавьте сервис в `docker-compose.yaml`
 
 ```yaml
   rag-search:
-    build: ./rag_search                    # сборка образа из Dockerfile
+    build: ./rag_search
     image: rag-search:latest
     ports:
       - "8091:8091"
     env_file: ./rag_search/.env
     environment:
-      POSTGRES_HOST: postgres              # имя сервиса postgres в вашем compose
+      POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY}
     volumes:
       - hf_cache:/root/.cache/huggingface
     depends_on:
@@ -109,15 +134,15 @@ Health Check: http://127.0.0.1:8091/api/v1/health
         condition: service_healthy
 ```
 
+Docker Compose сам читает корневой `.env` и подставляет `${VAR}`.
+`env_file: ./rag_search/.env` загружает dev-дефолты, а `environment:` переопределяет
+только нужные переменные для прода.
+
 Не забудьте добавить volume:
 ```yaml
 volumes:
   hf_cache:
 ```
-
-> **❗ Важно:** `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` в
-> `rag_search/.env` должны совпадать с `environment:` сервиса `postgres`
-> в вашем `docker-compose.yaml`.
 
 #### 3. Запуск
 
@@ -165,13 +190,55 @@ pytest tests/integration/ -v
 ```
 
 ## Конфигурация
-Основные параметры в .env:
-Переменная | Описание | По умолчанию
---- | --- | ---
-POSTGRES_PORT | Порт БД (локально 5433, в проде 5432) | 5432
-EMBEDDING_API_KEY | Ключ для OpenAI API. Если пустой — используется локальная модель HF. | (пусто)
-EMBEDDING_DIM | Размерность вектора. Должна совпадать с моделью и схемой БД! | 1024
-SEARCH_RRF_K | Константа k для алгоритма RRF. | 60
+
+Все переменные окружения задаются в `.env`. Полный список:
+
+### Сервис
+
+| Переменная | Описание | По умолчанию |
+|---|---|---|
+| `SERVICE_NAME` | Имя сервиса (для логов, метрик) | `rag-search` |
+| `SERVICE_VERSION` | Версия сервиса | `0.1.0` |
+| `SERVICE_PORT` | Порт HTTP | `8091` |
+| `LOG_LEVEL` | Уровень логирования | `INFO` |
+| `LOG_PII_FIELDS` | Поля для маскировки в логах (через запятую) | `password,access_token,refresh_token` |
+
+### База данных
+
+| Переменная | Описание | По умолчанию |
+|---|---|---|
+| `POSTGRES_USER` | Пользователь БД | `rag_user` |
+| `POSTGRES_PASSWORD` | Пароль БД | `rag_password` |
+| `POSTGRES_DB` | Имя БД | `knowledge_base` |
+| `POSTGRES_HOST` | Хост БД | `127.0.0.1` |
+| `POSTGRES_PORT` | Порт БД (локально 5433, в проде 5432) | `5432` |
+| `POSTGRES_POOL_MIN` | Мин. размер пула соединений | `2` |
+| `POSTGRES_POOL_MAX` | Макс. размер пула соединений | `10` |
+
+### Провайдер эмбеддингов
+
+| Переменная | Описание | По умолчанию |
+|---|---|---|
+| `EMBEDDING_API_KEY` | API-ключ OpenAI. Пусто = локальная модель HF | `""` |
+| `EMBEDDING_BASE_URL` | Базовый URL OpenAI-compatible API | `https://api.openai.com/v1` |
+| `EMBEDDING_MODEL` | Модель эмбеддингов | `intfloat/multilingual-e5-large` |
+| `EMBEDDING_DIM` | Размерность вектора (должна совпадать с моделью и VECTOR в БД) | `1024` |
+| `EMBEDDING_TIMEOUT` | Таймаут запроса к API эмбеддингов (сек) | `30` |
+
+### Поиск
+
+| Переменная | Описание | По умолчанию |
+|---|---|---|
+| `SEARCH_DEFAULT_TOP_K` | Количество результатов по умолчанию | `10` |
+| `SEARCH_MAX_TOP_K` | Максимальное количество результатов | `100` |
+| `SEARCH_RRF_K` | Константа k для алгоритма RRF | `60` |
+| `SEARCH_FETCH_MULTIPLIER` | Множитель выборки для каждого подзапроса (dense/sparse) | `2` |
+
+### Health Check
+
+| Переменная | Описание | По умолчанию |
+|---|---|---|
+| `HEALTH_CHECK_TIMEOUT` | Таймаут проверки здоровья БД (сек) | `5` |
 
 ## API Endpoints
 POST /api/v1/rag/search
