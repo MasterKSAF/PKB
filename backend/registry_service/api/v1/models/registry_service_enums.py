@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Text, DateTime, BigInteger
+from sqlalchemy import Column, String, Text, DateTime, BigInteger, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func, text
 import uuid
@@ -7,7 +7,11 @@ from .base import Base
 
 class RegistryServiceEnums(Base):
     __tablename__ = 'rs_enums'
-    __table_args__ = {'schema': 'registry'}
+    __table_args__ = (
+        UniqueConstraint('enum_key', 'enum_value', name='uq_rs_enums_key_value'),
+        {'schema': 'registry'}
+    )
+
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     enum_key = Column(String(128), nullable=False, index=True)
