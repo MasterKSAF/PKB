@@ -572,7 +572,7 @@ uploaded → previewing → ready_for_approve → approved → created
 1. **Загрузка**: пользователь загружает файл через `POST /drafts` → статус черновика `uploaded`.
 2. **Preview**: запуск предварительной обработки (OCR/Parser preview) → статус `previewing`.
 3. **Решение**: после preview черновик переходит в `ready_for_approve`. Если документ уникален и не требует ручного вмешательства — автозавершение. Иначе — решение пользователя через `PATCH /drafts/{draft_id}/decide`.
-4. **Завершение**: при `approve` выполняется полный OCR/Parser, затем Converter-validator. Результат записывается в Registry (статус документа `created`).
+4. **Завершение**: при `approve` выполняется Converter-validator. Если на preview был частичный JSON — перед этим запускается полный OCR/Parser (`mode=full`). Если preview уже вернул полный JSON (`preview_not_supported: true`) — OCR/Parser пропускается. Результат записывается в Registry (статус документа `created`).
 5. **Отклонение**: при `reject` или ошибке черновик переводится в `discarded`.
 
 ### Пайплайн 2: Индексация документа

@@ -27,7 +27,7 @@
 
 **Выход:** doc_code, title, document_type, year, revision.
 
-> **Полный формат данных:** [`docs/schema/schema_parser_preview.json`](../schema/schema_parser_preview.json) (схема `converter_validator_preview_v1`)
+> **Полный формат данных:** [`docs/schema/schema_converter_preview.json`](../schema/schema_converter_preview.json) (схема `converter_validator_preview_v1`)
 
 **Запрос:**
 
