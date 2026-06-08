@@ -20,11 +20,43 @@ os.environ["VALIDATE_SERVICE_MOCK"] = "true"
 os.environ["INTEGRATION_SERVICE_MOCK"] = "true"
 os.environ["REGISTRY_SERVICE_MOCK"] = "true"
 
+# Use tempfile for SQLite — avoids polluting project dir with test.db.
+# File is created in system TEMP. On Windows it can't be deleted at
+# exit because the engine pool still holds connections, but TEMP
+# directories are periodically cleaned by the OS.
+import tempfile as _tf
+_tmp_db = _tf.NamedTemporaryFile(suffix=".db", delete=False)
+_tmp_db.close()
+os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{_tmp_db.name}"
+os.environ["DEBUG"] = "false"
+
+# Celery: use in-memory transport + eager mode (no Redis needed)
+os.environ["CELERY_BROKER_URL"] = "memory://"
+os.environ["CELERY_RESULT_BACKEND"] = "cache+memory://"
+
 from app.main import create_application
 
-# Use in-memory SQLite for tests
-os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test.db"
-os.environ["DEBUG"] = "false"
+# --- Celery configuration for tests ---
+#
+# 1. Use memory:// transport (no Redis needed).
+# 2. Globally mock .delay() on all Celery tasks so that
+#    API-level tests (test_drafts, etc.) don't actually execute tasks.
+#    Tests that need real task execution (test_celery_tasks) call
+#    task_function.run() directly, bypassing .delay().
+#    Tests that test the orchestrator (test_pipeline_formation)
+#    mock .delay() themselves with specific assertions.
+#
+from unittest.mock import patch
+
+from app.celery_app import celery_app
+celery_app.conf.update(
+    task_always_eager=False,  # Don't auto-execute; we mock .delay() instead
+    task_eager_propagates=False,
+)
+
+# Patch .delay() globally to be a no-op (prevents hanging on Redis)
+_delay_patcher = patch("celery.app.task.Task.delay", autospec=True, return_value=None)
+_delay_patcher.start()
 
 
 @pytest.fixture(scope="session")
@@ -56,6 +88,9 @@ def db_engine():
     """Create a fresh SQLAlchemy engine for the test session."""
     from app.db.base import engine, Base
 
+    # Ensure all models are imported/registered with Base.metadata
+    import app.models.pipeline  # noqa: F401
+
     import asyncio
 
     async def _init():
@@ -67,23 +102,44 @@ def db_engine():
 
 
 @pytest.fixture(autouse=True)
-def clean_db(db_engine):
-    """Clean all tables between tests."""
-    from app.db.base import Base
-    import asyncio
+async def clean_db(db_engine):
+    """Clean all tables between tests.
 
-    async def _clean():
-        async with db_engine.begin() as conn:
+    Fast path: checks if any rows exist before iterating all tables.
+    Also resets RegistryServiceClient in-memory storage to keep
+    tests isolated (class-level _storage persists across tests).
+    """
+    from app.db.base import Base
+    from app.services.registry_client import RegistryServiceClient
+
+    async with db_engine.begin() as conn:
+        # Quick check — skip if DB is already empty
+        has_data = False
+        for table in Base.metadata.sorted_tables:
+            result = await conn.execute(table.select().limit(1))
+            if result.first() is not None:
+                has_data = True
+                break
+        if has_data:
             for table in reversed(Base.metadata.sorted_tables):
                 await conn.execute(table.delete())
 
-    asyncio.run(_clean())
+    # Reset RegistryServiceClient in-memory storage
+    reg_storage = RegistryServiceClient._storage
+    reg_storage["drafts"].clear()
+    reg_storage["documents"].clear()
+    reg_storage["draft_seq"] = 1
+    reg_storage["doc_seq"] = 1
+
     yield
 
 
 @pytest.fixture
 async def db_session():
-    """Provide a clean async DB session per test."""
+    """Provide a clean async DB session per test.
+
+    Database is cleaned by the autouse clean_db fixture.
+    """
     from app.db.base import AsyncSessionLocal
 
     session = AsyncSessionLocal()

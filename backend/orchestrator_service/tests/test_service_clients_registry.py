@@ -1,11 +1,7 @@
 """
 Unit tests for RegistryServiceClient.
 
-Tests mock generation for all registry service endpoints:
-  - Classifiers: list, tree, CRUD, import
-  - Terminology: list, CRUD, normalize, import
-  - Registry documents: list, CRUD, status, export/import
-  - Statistics, enums
+Tests mock generation for draft endpoints.
 """
 
 import pytest
@@ -21,284 +17,108 @@ def reg_client():
 
 
 # ===========================================================================
-# Classifiers
+# Drafts
 # ===========================================================================
 
 
-class TestRegistryClassifiers:
-    """Tests for classifier management."""
+class TestRegistryDrafts:
+    """Tests for draft management methods."""
 
     @pytest.mark.asyncio
-    async def test_list_classifiers(self, reg_client):
-        result = await reg_client.list_classifiers()
-        # Registry mock returns data under "data" key
-        assert "data" in result
-        assert "meta" in result
-
-    @pytest.mark.asyncio
-    async def test_list_classifiers_with_filters(self, reg_client):
-        result = await reg_client.list_classifiers(
-            doc_type="mks",
-            page=1,
-            page_size=20,
+    async def test_create_draft(self, reg_client):
+        """create_draft returns draft_id."""
+        result = await reg_client.create_draft(
+            file_key="f-abc123",
+            document_key="doc-001",
+            created_by="user-1",
+            file_hash_sha256="abc123",
+            title_hash_sha256="def456",
         )
-        assert "data" in result
-
-    @pytest.mark.asyncio
-    async def test_get_classifier_tree(self, reg_client):
-        result = await reg_client.get_classifier_tree(root_code="31", max_depth=5)
-        # Registry mock returns data under "data" key
-        assert "data" in result
-        assert "meta" in result
-
-    @pytest.mark.asyncio
-    async def test_get_classifier(self, reg_client):
-        result = await reg_client.get_classifier(code="31.240")
-        # Registry mock wraps in data key
-        assert "data" in result
-
-    @pytest.mark.asyncio
-    async def test_create_classifier(self, reg_client):
-        result = await reg_client.create_classifier(
-            data={"code": "99.999", "title": "Тестовый классификатор", "doc_type": "mks"},
-        )
-        assert "data" in result
-
-    @pytest.mark.asyncio
-    async def test_update_classifier(self, reg_client):
-        result = await reg_client.update_classifier(
-            code="31.240",
-            data={"title": "Обновлённый заголовок"},
-        )
-        assert "data" in result
-
-    @pytest.mark.asyncio
-    async def test_patch_classifier(self, reg_client):
-        result = await reg_client.patch_classifier(
-            code="31.240",
-            data={"title": "Частичное обновление"},
-        )
-        assert "data" in result
-
-    @pytest.mark.asyncio
-    async def test_delete_classifier(self, reg_client):
-        result = await reg_client.delete_classifier(code="99.999")
-        assert "data" in result
-
-    @pytest.mark.asyncio
-    async def test_import_classifiers(self, reg_client):
-        items = [{"code": "01.010", "title": "Тест"}]
-        result = await reg_client.import_classifiers(nodes=items)
-        assert "data" in result
-
-
-# ===========================================================================
-# Terminology
-# ===========================================================================
-
-
-class TestRegistryTerminology:
-    """Tests for terminology management."""
-
-    @pytest.mark.asyncio
-    async def test_list_terminology(self, reg_client):
-        result = await reg_client.list_terminology()
-        assert "data" in result
-        assert "meta" in result
-
-    @pytest.mark.asyncio
-    async def test_list_terminology_with_filters(self, reg_client):
-        result = await reg_client.list_terminology(
-            search="обшивка",
-            page=1,
-            page_size=20,
-        )
-        assert "data" in result
-
-    @pytest.mark.asyncio
-    async def test_get_term(self, reg_client):
-        result = await reg_client.get_term(term_id="term-test-001")
-        assert "data" in result
-
-    @pytest.mark.asyncio
-    async def test_get_term_all_fields(self, reg_client):
-        result = await reg_client.get_term("term-test-001")
-        assert "data" in result
-
-    @pytest.mark.asyncio
-    async def test_create_term(self, reg_client):
-        result = await reg_client.create_term(
-            term="обшивка",
-            normalized_term="обшивка корпуса",
-            context="shipbuilding",
-        )
-        assert "data" in result
-
-    @pytest.mark.asyncio
-    async def test_create_term_with_source(self, reg_client):
-        result = await reg_client.create_term(
-            term="толщина",
-            normalized_term="толщина листа",
-            source="doc-001",
-        )
-        assert "data" in result
-
-    @pytest.mark.asyncio
-    async def test_update_term(self, reg_client):
-        result = await reg_client.update_term(
-            term_id="term-001",
-            data={"normalized_term": "обновлённый термин"},
-        )
-        assert "data" in result
-
-    @pytest.mark.asyncio
-    async def test_delete_term(self, reg_client):
-        result = await reg_client.delete_term(term_id="term-001")
-        assert "data" in result
-
-    @pytest.mark.asyncio
-    async def test_normalize_term(self, reg_client):
-        result = await reg_client.normalize_term(term="обшивка")
         assert "data" in result
         data = result["data"]
-        assert data["original"] == "обшивка"
-        assert "normalized" in data
-        assert "found" in data
+        assert "draft_id" in data
+        assert data["status"] == "uploaded"
 
     @pytest.mark.asyncio
-    async def test_normalize_term_with_unknown(self, reg_client):
-        result = await reg_client.normalize_term(term="неизвестный_термин")
+    async def test_get_draft(self, reg_client):
+        """get_draft returns full draft info."""
+        result = await reg_client.get_draft(draft_id=1)
         assert "data" in result
-        assert result["data"]["found"] is True  # Mock always returns found
+        data = result["data"]
+        assert data["draft_id"] == 1
+        assert "status" in data
+        assert "file_key" in data
 
     @pytest.mark.asyncio
-    async def test_import_terms(self, reg_client):
-        items = [{"term": "тест", "normalized_term": "тестовый термин"}]
-        result = await reg_client.import_terms(terms=items)
+    async def test_get_draft_preview(self, reg_client):
+        """get_draft_preview returns preview metadata."""
+        result = await reg_client.get_draft_preview(draft_id=1)
         assert "data" in result
-
-
-# ===========================================================================
-# Registry Documents
-# ===========================================================================
-
-
-class TestRegistryDocuments:
-    """Tests for registry document management."""
+        data = result["data"]
+        assert "draft_id" in data
+        assert "preview_not_supported" in data
 
     @pytest.mark.asyncio
-    async def test_list_registry_documents(self, reg_client):
-        result = await reg_client.list_registry_documents()
+    async def test_list_drafts(self, reg_client):
+        """list_drafts returns paginated response."""
+        result = await reg_client.list_drafts()
         assert "data" in result
         assert "meta" in result
 
     @pytest.mark.asyncio
-    async def test_list_registry_documents_with_filters(self, reg_client):
-        result = await reg_client.list_registry_documents(
-            status="approved",
-            search="норма",
-            page=1,
-            page_size=20,
+    async def test_list_drafts_with_filters(self, reg_client):
+        """list_drafts with status filter."""
+        result = await reg_client.list_drafts(
+            page=1, page_size=20, status="uploaded"
         )
         assert "data" in result
 
     @pytest.mark.asyncio
-    async def test_get_registry_document(self, reg_client):
-        result = await reg_client.get_registry_document(doc_id="doc-reg-001")
-        assert "data" in result
-
-    @pytest.mark.asyncio
-    async def test_get_registry_document_full(self, reg_client):
-        result = await reg_client.get_registry_document("doc-reg-001")
-        assert "data" in result
-
-    @pytest.mark.asyncio
-    async def test_create_registry_document(self, reg_client):
-        result = await reg_client.create_registry_document(
-            data={
-                "title": "Тестовый документ",
-                "doc_code": "ТУ 1234-567",
-                "source_type": "TU",
-            },
+    async def test_update_draft_status(self, reg_client):
+        """update_draft_status returns updated info."""
+        result = await reg_client.update_draft_status(
+            draft_id=1, status="previewing"
         )
-        assert "data" in result
-
-    @pytest.mark.asyncio
-    async def test_update_registry_document(self, reg_client):
-        result = await reg_client.update_registry_document(
-            doc_id="doc-reg-001",
-            data={"title": "Обновлённый документ"},
-        )
-        assert "data" in result
-
-    @pytest.mark.asyncio
-    async def test_update_registry_document_status(self, reg_client):
-        result = await reg_client.update_registry_document_status(
-            doc_id="doc-reg-001",
-            status="indexed",
-        )
-        assert "data" in result
-
-    @pytest.mark.asyncio
-    async def test_update_registry_document_status_transitions(self, reg_client):
-        """Test various status transitions."""
-        for status in ("draft", "uploaded", "previewing", "parsing",
-                       "validation", "approved", "registry", "indexed"):
-            result = await reg_client.update_registry_document_status(
-                doc_id="doc-reg-001",
-                status=status,
-            )
-            assert "data" in result
-
-    @pytest.mark.asyncio
-    async def test_delete_registry_document(self, reg_client):
-        result = await reg_client.delete_registry_document(doc_id="doc-reg-001")
-        assert "data" in result
-
-    @pytest.mark.asyncio
-    async def test_export_registry_documents(self, reg_client):
-        result = await reg_client.export_registry_documents(
-            format="xlsx",
-            classifier_code="31",
-        )
-        assert "data" in result
-
-    @pytest.mark.asyncio
-    async def test_import_registry_documents(self, reg_client):
-        items = [{"title": "Импорт", "doc_code": "IMP-001"}]
-        result = await reg_client.import_registry_documents(documents=items)
-        assert "data" in result
-
-
-# ===========================================================================
-# Statistics and Enums
-# ===========================================================================
-
-
-class TestRegistryInfo:
-    """Tests for statistics and enum endpoints."""
-
-    @pytest.mark.asyncio
-    async def test_get_statistics(self, reg_client):
-        result = await reg_client.get_statistics()
-        assert "data" in result
-
-    @pytest.mark.asyncio
-    async def test_get_statistics_counts(self, reg_client):
-        result = await reg_client.get_statistics()
-        assert "data" in result
-
-    @pytest.mark.asyncio
-    async def test_get_enums(self, reg_client):
-        result = await reg_client.get_enums()
-        # Enums returned under "data" key
         assert "data" in result
         data = result["data"]
-        assert "doc_type" in data
-        assert "chat_status" in data
+        assert data["status"] == "previewing"
 
     @pytest.mark.asyncio
-    async def test_get_enums_values(self, reg_client):
-        result = await reg_client.get_enums()
-        data = result.get("data", result)
-        assert len(data) > 0
+    async def test_update_draft_status_with_document_id(self, reg_client):
+        """update_draft_status with optional document_id."""
+        result = await reg_client.update_draft_status(
+            draft_id=1, status="approved", document_id=100
+        )
+        assert "data" in result
+        data = result["data"]
+        assert data["document_id"] == 100
+
+    @pytest.mark.asyncio
+    async def test_delete_draft(self, reg_client):
+        """delete_draft returns deletion confirmation."""
+        result = await reg_client.delete_draft(draft_id=1)
+        assert "data" in result
+        data = result["data"]
+        assert data["deleted"] is True
+
+    @pytest.mark.asyncio
+    async def test_check_uniqueness(self, reg_client):
+        """check_uniqueness returns duplicate detection info."""
+        result = await reg_client.check_uniqueness(
+            file_hash_sha256="abc123",
+            title_hash_sha256="def456",
+        )
+        assert "data" in result
+        data = result["data"]
+        assert "is_duplicate_file" in data
+        assert "is_duplicate_document" in data
+
+    @pytest.mark.asyncio
+    async def test_check_uniqueness_duplicate(self, reg_client):
+        """check_uniqueness returns is_duplicate flags."""
+        result = await reg_client.check_uniqueness(
+            file_hash_sha256="known-duplicate-hash",
+        )
+        assert "data" in result
+        data = result["data"]
+        assert isinstance(data.get("is_duplicate_file"), bool)
