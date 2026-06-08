@@ -13,7 +13,7 @@
 
 ```bash
 # Сборка и публикация базового образа (делается один раз)
-docker build -f Dockerfile.base -t ghcr.io/pkb/neuro-base:latest .
+docker build -f backend/service_checker/docker/Dockerfile.base -t ghcr.io/pkb/neuro-base:latest .
 docker push ghcr.io/pkb/neuro-base:latest
 ```
 
@@ -28,11 +28,11 @@ docker pull ghcr.io/pkb/neuro-base:latest
 
 ```bash
 # Просто запустить (образ уже есть в registry)
-docker compose up -d
+docker compose -f backend/service_checker/docker/docker-compose.yml up -d
 
 # Пересобрать образ локально (если нет доступа к registry)
-docker build -f Dockerfile.base -t ghcr.io/pkb/neuro-base:latest .
-docker compose up -d
+docker build -f backend/service_checker/docker/Dockerfile.base -t ghcr.io/pkb/neuro-base:latest .
+docker compose -f backend/service_checker/docker/docker-compose.yml up -d
 ```
 
 ### Как это работает
@@ -71,20 +71,20 @@ docker compose up -d
 
 ```bash
 # 1. Собрать базовый образ (или pull из registry)
-docker build -f Dockerfile.base -t ghcr.io/pkb/neuro-base:latest .
+docker build -f backend/service_checker/docker/Dockerfile.base -t ghcr.io/pkb/neuro-base:latest .
 
 # 2. Запустить всю инфраструктуру
-docker compose up -d
+docker compose -f backend/service_checker/docker/docker-compose.yml up -d
 
 # 3. Проверить статус
-docker compose ps
-docker compose exec -T app supervisorctl status
+docker compose -f backend/service_checker/docker/docker-compose.yml ps
+docker compose -f backend/service_checker/docker/docker-compose.yml exec -T app supervisorctl status
 ```
 
 ## Переменные окружения
 
 Все переменные заданы **по умолчанию** в `Dockerfile.base`.  
-Для переопределения используйте `environment:` в `docker-compose.yml`:
+Для переопределения используйте `environment:` в `backend/service_checker/docker/docker-compose.yml`:
 
 ```yaml
 app:
@@ -100,10 +100,10 @@ app:
 
 ```bash
 # PostgreSQL
-docker compose exec -T postgres pg_isready -U pkb -d pkb_neuro
+docker compose -f backend/service_checker/docker/docker-compose.yml exec -T postgres pg_isready -U pkb -d pkb_neuro
 
 # Redis
-docker compose exec -T redis redis-cli ping
+docker compose -f backend/service_checker/docker/docker-compose.yml exec -T redis redis-cli ping
 
 # MinIO
 curl http://localhost:9000/minio/health/live
@@ -122,18 +122,18 @@ python backend/service_checker/service_checker.py docker --action health
 
 ```bash
 # Просмотр логов всех Python-процессов
-docker compose logs -f app
+docker compose -f backend/service_checker/docker/docker-compose.yml logs -f app
 
 # Логи конкретного сервиса
-docker compose exec -T app tail -f /var/log/supervisor/orchestrator.log
-docker compose exec -T app tail -f /var/log/supervisor/rag_search.log
-docker compose exec -T app tail -f /var/log/supervisor/auth.log
+docker compose -f backend/service_checker/docker/docker-compose.yml exec -T app tail -f /var/log/supervisor/orchestrator.log
+docker compose -f backend/service_checker/docker/docker-compose.yml exec -T app tail -f /var/log/supervisor/rag_search.log
+docker compose -f backend/service_checker/docker/docker-compose.yml exec -T app tail -f /var/log/supervisor/auth.log
 
 # Остановка
-docker compose down
+docker compose -f backend/service_checker/docker/docker-compose.yml down
 
 # Полный сброс (удалить volume с данными)
-docker compose down -v
+docker compose -f backend/service_checker/docker/docker-compose.yml down -v
 ```
 
 ## Публикация базового образа
@@ -143,13 +143,13 @@ docker compose down -v
 docker login ghcr.io -u USERNAME
 
 # 2. Сборка базового образа
-docker build -f Dockerfile.base -t ghcr.io/pkb/neuro-base:latest .
+docker build -f backend/service_checker/docker/Dockerfile.base -t ghcr.io/pkb/neuro-base:latest .
 
 # 3. Публикация
 docker push ghcr.io/pkb/neuro-base:latest
 
 # Также можно версионировать
-docker build -f Dockerfile.base -t ghcr.io/pkb/neuro-base:1.0.0 .
+docker build -f backend/service_checker/docker/Dockerfile.base -t ghcr.io/pkb/neuro-base:1.0.0 .
 docker push ghcr.io/pkb/neuro-base:1.0.0
 ```
 
@@ -161,11 +161,11 @@ docker push ghcr.io/pkb/neuro-base:1.0.0
 **Требует фикса разработчиком.**
 
 ### Supervisorctl на Windows
-Команда `docker compose exec -T app supervisorctl status` может не работать в Git Bash из-за преобразования путей. Используйте PowerShell или:
+Команда `docker compose -f backend/service_checker/docker/docker-compose.yml exec -T app supervisorctl status` может не работать в Git Bash из-за преобразования путей. Используйте PowerShell или:
 
 ```bash
 # Через PowerShell
-docker compose exec -T app cat /var/log/supervisor/supervisord.log
+docker compose -f backend/service_checker/docker/docker-compose.yml exec -T app cat /var/log/supervisor/supervisord.log
 
 # Или service_checker (fallback на чтение лога)
 python backend/service_checker/service_checker.py docker --action health
@@ -176,7 +176,7 @@ python backend/service_checker/service_checker.py docker --action health
 Если нужно собрать монолитный образ со всем кодом (например, для деплоя):
 
 ```bash
-docker build -f Dockerfile.full -t pkb-neuro-full:latest .
+docker build -f backend/service_checker/docker/Dockerfile.full -t pkb-neuro-full:latest .
 docker run -d --name pkb-neuro pkb-neuro-full:latest
 ```
 

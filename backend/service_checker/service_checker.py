@@ -42,7 +42,7 @@ GATEWAY_DIR = PROJECT_ROOT / "backend" / "gateway_service"
 BACKEND_DIR = PROJECT_ROOT / "backend"
 
 # ── Docker deployment paths ──────────────────────────────────────
-DOCKER_DIR = PROJECT_ROOT  # docker-compose.yml в корне проекта
+DOCKER_DIR = BACKEND_DIR / "service_checker" / "docker"  # docker-compose.yml здесь
 DOCKER_COMPOSE_FILE = DOCKER_DIR / "docker-compose.yml"
 DOCKERFILE_PATH = DOCKER_DIR / "Dockerfile"
 

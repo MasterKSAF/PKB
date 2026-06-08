@@ -131,8 +131,8 @@ services:
       minio:
         condition: service_started
     volumes:
-      - ./backend:/app/backend
-      - ./backend/supervisord.conf:/etc/supervisor/conf.d/supervisord.conf
+      - ../../backend:/app/backend
+      - ../../backend/supervisord.conf:/etc/supervisor/conf.d/supervisord.conf
       - app_logs:/var/log/supervisor
     entrypoint: ["/app/backend/entrypoint.sh"]
     networks:

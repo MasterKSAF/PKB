@@ -1,0 +1,6 @@
+2026-06-08 09:01:38.654 UTC+3 | INFO | rag_builder.api.app:create_app:12 | Application startup init
+2026-06-08 09:01:38.907 UTC+3 | INFO | rag_builder.api.app:create_app:16 | Application startup ready
+2026-06-08 09:01:50.849 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/openapi.json
+2026-06-08 09:01:50.955 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/openapi.json status=200 took_ms=106.16
+2026-06-08 09:04:08.721 UTC+3 | INFO | rag_builder.api.app:create_app:12 | Application startup init
+2026-06-08 09:04:08.760 UTC+3 | INFO | rag_builder.api.app:create_app:16 | Application startup ready
