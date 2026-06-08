@@ -841,7 +841,7 @@ class ApiCoverageTester:
 
         return self.results
 
-    def generate_report(self) -> str:
+    def generate_report(self, log_report_path: Optional[str] = None) -> str:
         """Сформировать markdown-отчёт."""
         lines = []
         now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -850,12 +850,14 @@ class ApiCoverageTester:
         lines.append(f"**Generated:** {now}\n")
         lines.append(f"**Mode:** {mode_label.get(self.mode, self.mode)}\n")
         lines.append(f"**Based on:** `docs/api/*.md`\n")
+        if log_report_path:
+            lines.append(f"📋 **Logs:** [{log_report_path}]({log_report_path})\n")
         lines.append("---\n")
 
         # Сводка
         lines.append("## 📊 Summary\n")
-        lines.append("| Service | Port | Endpoints | ✅ Passed | ❌ Failed | ⏭️ Skipped | Ping |")
-        lines.append("|---------|:----:|:---------:|:---------:|:---------:|:----------:|:----:|")
+        lines.append("| Service | Ping | Port | Endpoints | ✅ Passed | ❌ Failed | ⏭️ Skipped | Status |")
+        lines.append("|---------|:----:|:----:|:---------:|:---------:|:---------:|:----------:|:------:|")
 
         total_ep = 0
         total_passed = 0
@@ -870,7 +872,7 @@ class ApiCoverageTester:
             total_skipped += result.endpoints_skipped
             if result.ping_ok:
                 services_alive += 1
-            ping_icon = "✅" if result.ping_ok else "❌"
+            ping_icon = "✓" if result.ping_ok else "✗"
             failed_str = (
                 f'<span style="color:red;font-weight:bold">{result.endpoints_failed}</span>'
                 if result.endpoints_failed > 0 else str(result.endpoints_failed)
@@ -879,10 +881,15 @@ class ApiCoverageTester:
                 f'<span style="color:red;font-weight:bold">{result.endpoints_skipped}</span>'
                 if result.endpoints_skipped > 0 else str(result.endpoints_skipped)
             )
+            # Статус: ❌ если есть ошибки/пропуски, ✅ если всё ок
+            if result.endpoints_failed > 0 or result.endpoints_skipped > 0:
+                status_icon = "❌"
+            else:
+                status_icon = "✅"
             svc_anchor = svc_key.replace("_", "-")
-            lines.append(f"| [{result.name}](#{svc_anchor}) | {result.port} | {result.endpoints_total} | "
+            lines.append(f"| [{result.name}](#{svc_anchor}) | {ping_icon} | {result.port} | {result.endpoints_total} | "
                         f"{result.endpoints_passed} | {failed_str} | "
-                        f"{skipped_str} | {ping_icon} |")
+                        f"{skipped_str} | {status_icon} |")
 
         total_failed_str = (
             f'<span style="color:red;font-weight:bold">{total_failed}</span>'
@@ -892,8 +899,12 @@ class ApiCoverageTester:
             f'<span style="color:red;font-weight:bold">{total_skipped}</span>'
             if total_skipped > 0 else str(total_skipped)
         )
-        lines.append(f"| **Total** | | **{total_ep}** | **{total_passed}** | "
-                    f"{total_failed_str} | {total_skipped_str} | **{services_alive}/{len(self.results)}** |\n")
+        if total_failed > 0 or total_skipped > 0:
+            total_status = "❌"
+        else:
+            total_status = "✅"
+        lines.append(f"| **Total** | **{services_alive}/{len(self.results)}** | | **{total_ep}** | **{total_passed}** | "
+                    f"{total_failed_str} | {total_skipped_str} | {total_status} |\n")
 
         # Детали по каждому сервису
         lines.append("## 🔍 Details by Service\n")

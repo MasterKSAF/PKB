@@ -1824,7 +1824,7 @@ def _docker_health_check(services: List[str]) -> bool:
     return all_ok
 
 
-async def _docker_collect_logs(services: List[str] = None) -> bool:
+async def _docker_collect_logs(services: List[str] = None, timestamp: str = None) -> bool:
     """Собрать все логи (info + error) из supervisor в отчёт."""
     log_header("Docker: сбор логов (info + error)")
 
@@ -1832,7 +1832,8 @@ async def _docker_collect_logs(services: List[str] = None) -> bool:
     check_result_dir.mkdir(parents=True, exist_ok=True)
 
     from datetime import datetime
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    if timestamp is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     report_path = check_result_dir / f"errors_{timestamp}.md"
 
     container_name = "pkb-neuro"
@@ -1964,8 +1965,8 @@ async def _docker_collect_logs(services: List[str] = None) -> bool:
     return True
 
 
-async def _docker_run_coverage() -> bool:
-    """Запустить API Coverage Test для Docker-окружения."""
+async def _docker_run_coverage() -> Optional[str]:
+    """Запустить API Coverage Test для Docker-окружения. Возвращает timestamp."""
     log_header("Docker: API Coverage Test")
 
     check_result_dir = BACKEND_DIR / "check_result"
@@ -1990,16 +1991,20 @@ async def _docker_run_coverage() -> bool:
     run_mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(run_mod)
 
+    # Генерируем имя для логов (с тем же timestamp, что и coverage)
+    log_path = check_result_dir / f"errors_{timestamp}.md"
+
     try:
         await run_mod.run_coverage_test(
             output_path=str(output_path),
-            mode="real"
+            mode="real",
+            log_report_path=str(log_path.name)
         )
         log_ok(f"API Coverage отчёт сохранён: {output_path}")
-        return True
+        return timestamp
     except Exception as e:
         log_err(f"Ошибка при запуске coverage test: {e}")
-        return False
+        return None
 
 
 async def cmd_docker(
@@ -2049,9 +2054,10 @@ async def cmd_docker(
 
     if action == "coverage":
         log_header("📋 Coverage + Logs")
-        await _docker_run_coverage()
-        log_info("Собираем логи ошибок...")
-        await _docker_collect_logs(target_services)
+        cov_ts = await _docker_run_coverage()
+        if cov_ts:
+            log_info("Собираем логи ошибок...")
+            await _docker_collect_logs(target_services, timestamp=cov_ts)
         return
 
     if action == "logs":

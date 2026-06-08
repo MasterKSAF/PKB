@@ -64,7 +64,7 @@ async def wait_for_mocks(processes, timeout=15):
     return all_ok
 
 
-async def run_coverage_test(output_path=None, mode: str = "mock"):
+async def run_coverage_test(output_path=None, mode: str = "mock", log_report_path: str = None):
     """Импортировать и запустить тест покрытия."""
     # Добавляем service_checker в путь
     sys.path.insert(0, str(PROJECT_ROOT / "backend"))
@@ -73,7 +73,7 @@ async def run_coverage_test(output_path=None, mode: str = "mock"):
     tester = ApiCoverageTester(mode=mode, base_host="127.0.0.1")
     try:
         await tester.run_all()
-        report = tester.generate_report()
+        report = tester.generate_report(log_report_path=log_report_path)
 
         if output_path:
             out = Path(output_path)
