@@ -43,7 +43,7 @@ docs/
 │   ├── diagrams.md                   #   Диаграммы JSON-файлов (документная модель)
 │   ├── schema_parser_result.json     #   Результат Parser (сырой)
 │   ├── schema_converter_result.json  #   Результат Converter-validator
-│   ├── schema_parser_preview.json    #   Preview от Parser
+│   ├── schema_converter_preview.json  #   Preview от Converter-validator
 │   ├── schema_registry_for_rag.json  #   JSON для Registry / RAG Builder
 │
 ├── plans/                            # Планы и дорожные карты
@@ -354,7 +354,7 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 ### Сервис конвертации и валидации (Converter-validator Service)
 **Порт:** `8086`
 **Документация:** [`docs/api/converter_validator_service_api.md`](api/converter_validator_service_api.md)
-**Описание также в:** [`pipelines/pipeline1-formation.md`](pipelines/pipeline1-formation.md), [`pipelines/pipeline1-formation_detail.md`](pipelines/pipeline1-formation_detail.md), [`schema/schema_converter_result.json`](schema/schema_converter_result.json), [`schema/schema_parser_preview.json`](schema/schema_parser_preview.json)
+**Описание также в:** [`pipelines/pipeline1-formation.md`](pipelines/pipeline1-formation.md), [`pipelines/pipeline1-formation_detail.md`](pipelines/pipeline1-formation_detail.md), [`schema/schema_converter_result.json`](schema/schema_converter_result.json), [`schema/schema_converter_preview.json`](schema/schema_converter_preview.json)
 
 **Назначение:**
 Принять сырые извлечённые данные, полученные от OCR или Parser, и превратить их в полноценный структурированный документ, полностью готовый к сохранению в базе данных. Не сохраняет данные в БД — только готовит структурированное представление.
@@ -383,7 +383,7 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 - Разбор цифровых документов с текстовым слоем
 - Извлечение плоского массива блоков (текст, таблицы, изображения, формулы)
 - Сохранение бинарных объектов в файловое хранилище (через `fileKey`)
-- Preview-режим: обработка только первых N страниц без сохранения бинарных объектов
+- Preview-режим: обработка только первых N страниц без сохранения бинарных объектов (поле `mode="preview"` в `POST /parser/process`); при недоступности постраничного парсинга возвращается полный документ с флагом `preview_not_supported: true`
 - Оценка качества распознавания (confidence)
 - Единый JSON-контракт выходных данных с OCR-сервисом
 
@@ -500,5 +500,5 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 | Структуры данных (диаграммы) | [`docs/schema/diagrams.md`](schema/diagrams.md) |
 | Результат Parser (сырой) | [`docs/schema/schema_parser_result.json`](schema/schema_parser_result.json) |
 | Результат Converter-validator | [`docs/schema/schema_converter_result.json`](schema/schema_converter_result.json) |
-| Preview от Parser | [`docs/schema/schema_parser_preview.json`](schema/schema_parser_preview.json) |
+| Preview от Converter-validator | [`docs/schema/schema_converter_preview.json`](schema/schema_converter_preview.json) |
 | JSON для Registry / RAG Builder | [`docs/schema/schema_registry_for_rag.json`](schema/schema_registry_for_rag.json) |
