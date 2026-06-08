@@ -1,0 +1,148 @@
+# =============================================================================
+# PKB Neuroassistant — Docker Compose
+#
+# Python-сервисы в одном контейнере (supervisord).
+# PostgreSQL (pgvector), Redis, MinIO — отдельные контейнеры.
+# =============================================================================
+
+x-env-common: &env-common
+  DB_HOST: postgres
+  DB_PORT: 5432
+  DB_USERNAME: pkb
+  DB_PASSWORD: pkb
+  DB_DATABASE: pkb_neuro
+  DATABASE_URL: postgresql+asyncpg://pkb:pkb@postgres:5432/pkb_neuro
+  REDIS_URL: redis://redis:6379/0
+  CELERY_BROKER_URL: redis://redis:6379/1
+  CELERY_RESULT_BACKEND: redis://redis:6379/2
+  MINIO_ENDPOINT: minio:9000
+  MINIO_ACCESS_KEY: minioadmin
+  MINIO_SECRET_KEY: minioadmin
+  MINIO_BUCKET: documents
+  MINIO_IMAGE_BUCKET: images
+  MINIO_SECURE: "false"
+  AUTH_SERVICE_MOCK: "true"
+  DEV_AUTH_MODE: "true"
+  MOCK_LLM_ENABLED: "true"
+  APP_VERSION: "1.0.0"
+  JWT_SECRET_KEY: change-me-in-production
+  JWT_ALGORITHM: HS256
+  REGISTRY_SERVICE_URL: http://registry:8084/api/v1
+  INTEGRATION_SERVICE_URL: http://integration:8085/api/v1
+  VALIDATE_SERVICE_URL: http://converter-validator:8086/api/v1
+  RAG_SERVICE_URL: http://rag-search:8091/api/v1
+  EMBEDDING_PROVIDER: mock
+  EMBEDDING_DIM: 1536
+  SEARCH_DEFAULT_TOP_K: 10
+  SEARCH_MAX_TOP_K: 100
+
+services:
+  # ============================================================================
+  # PostgreSQL + pgvector
+  # ============================================================================
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: pkb-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pkb
+      POSTGRES_PASSWORD: pkb
+      POSTGRES_DB: pkb_neuro
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pkb -d pkb_neuro"]
+      interval: 5s
+      retries: 10
+    networks:
+      - pkb-net
+
+  # ============================================================================
+  # Redis
+  # ============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: pkb-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+    networks:
+      - pkb-net
+
+  # ============================================================================
+  # MinIO
+  # ============================================================================
+  minio:
+    image: minio/minio:latest
+    container_name: pkb-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - pkb-net
+
+  # ============================================================================
+  # Backend (Python-сервисы под supervisord)
+  # ============================================================================
+  app:
+    image: ghcr.io/pkb/neuro-base:latest
+    container_name: pkb-neuro
+    restart: unless-stopped
+    cpus: 2
+    mem_limit: 2G
+    memswap_limit: 3G
+    mem_reservation: 1G
+    ports:
+      - "8000:8000"   # Orchestrator
+      - "8081:8081"   # Gateway
+      - "8082:8082"   # Auth
+      - "8083:8083"   # Query
+      - "8084:8084"   # Registry
+      - "8085:8085"   # Integration
+      - "8086:8086"   # Converter/Validator
+      - "8087:8087"   # Parser
+      - "8090:8090"   # RAG Builder
+      - "8091:8091"   # RAG Search
+    environment:
+      <<: *env-common
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    volumes:
+      - ./backend:/app/backend
+      - ./backend/supervisord.conf:/etc/supervisor/conf.d/supervisord.conf
+      - app_logs:/var/log/supervisor
+    entrypoint: ["/app/backend/entrypoint.sh"]
+    networks:
+      - pkb-net
+
+networks:
+  pkb-net:
+    driver: bridge
+
+volumes:
+  pg_data:
+  minio_data:
+  app_logs:

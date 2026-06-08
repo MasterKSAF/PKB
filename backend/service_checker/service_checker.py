@@ -41,6 +41,11 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 GATEWAY_DIR = PROJECT_ROOT / "backend" / "gateway_service"
 BACKEND_DIR = PROJECT_ROOT / "backend"
 
+# ── Docker deployment paths ──────────────────────────────────────
+DOCKER_DIR = PROJECT_ROOT  # docker-compose.yml в корне проекта
+DOCKER_COMPOSE_FILE = DOCKER_DIR / "docker-compose.yml"
+DOCKERFILE_PATH = DOCKER_DIR / "Dockerfile"
+
 # Все сервисы, которые мы умеем запускать/проверять
 SERVICE_DEFS: Dict[str, Dict[str, Any]] = {
     "gateway": {
@@ -1347,6 +1352,39 @@ def parse_args() -> argparse.Namespace:
         help="Путь для сохранения отчёта (.md или .html)",
     )
 
+    # docker — развёртывание всей системы через Docker Compose
+    p_docker = subparsers.add_parser(
+        "docker",
+        help="Развернуть всю систему через Docker Compose",
+    )
+    p_docker.add_argument(
+        "--action",
+        choices=["up", "down", "build", "restart", "logs", "ps", "health"],
+        default="up",
+        help="Действие с Docker Compose (по умолч. up — запустить все сервисы)",
+    )
+    p_docker.add_argument(
+        "--build",
+        action="store_true",
+        help="Пересобрать образы перед запуском",
+    )
+    p_docker.add_argument(
+        "--detach", "-d",
+        action="store_true",
+        help="Запустить в фоне (detach)",
+    )
+    p_docker.add_argument(
+        "--services",
+        nargs="*",
+        default=[],
+        help="Список конкретных сервисов (по умолч. все)",
+    )
+    p_docker.add_argument(
+        "--db-only",
+        action="store_true",
+        help="Запустить только PostgreSQL",
+    )
+
     # report (из сохранённых данных)
     p_report = subparsers.add_parser("report", help="Сформировать отчёт из сохранённых логов")
     p_report.add_argument(
@@ -1527,6 +1565,312 @@ async def cmd_emulate(
     return emu.report
 
 
+# ──────────────────────────────────────────────────────────────────────
+#  Docker Deployment
+# ──────────────────────────────────────────────────────────────────────
+
+
+DOCKER_SERVICE_NAMES = {
+    "postgres": "PostgreSQL + pgvector",
+    "redis": "Redis (cache + broker)",
+    "minio": "MinIO (S3-совместимое хранилище)",
+    "app": "Python-сервисы (10 процессов под supervisord)",
+}
+
+# ── Docker: HTTP health-check endpoint'ы для каждого сервиса внутри контейнера ──
+DOCKER_SUPERVISOR_SERVICES = {
+    "auth":                (8082, "/openapi.json", "Auth Service"),
+    "gateway":             (8081, "/openapi.json", "Gateway (Mock)"),
+    "orchestrator":        (8000, "/openapi.json", "Orchestrator"),
+    "query":               (8083, "/openapi.json", "Query Service"),
+    "registry":            (8084, "/openapi.json", "Registry Service"),
+    "integration":         (8085, "/openapi.json", "Integration Service"),
+    "converter-validator": (8086, "/health", "Converter-Validator"),
+    "parser":              (8087, "/health", "Parser Service"),
+    "rag-builder":         (8090, "/openapi.json", "RAG Builder"),
+    "rag-search":          (8091, "/openapi.json", "RAG Search"),
+}
+
+
+def _check_docker() -> bool:
+    """Проверить, установлен ли Docker и docker-compose."""
+    try:
+        result = subprocess.run(
+            ["docker", "--version"],
+            capture_output=True, text=True, timeout=10
+        )
+        if result.returncode != 0:
+            log_err("Docker не найден.")
+            return False
+        log_ok(f"Docker: {result.stdout.strip()}")
+
+        result2 = subprocess.run(
+            ["docker", "compose", "version"],
+            capture_output=True, text=True, timeout=10
+        )
+        if result2.returncode == 0:
+            log_ok(f"Docker Compose: {result2.stdout.strip()}")
+        else:
+            log_err("Docker Compose plugin не найден.")
+            return False
+
+        return True
+    except FileNotFoundError:
+        log_err("Docker не найден.")
+        return False
+    except subprocess.TimeoutExpired:
+        log_err("Проверка Docker завершилась по таймауту.")
+        return False
+
+
+def _docker_action(
+    action: str,
+    services: List[str],
+    build: bool = False,
+    detach: bool = False,
+) -> bool:
+    """Выполнить действие с docker compose."""
+    compose_file = DOCKER_COMPOSE_FILE
+
+    if not compose_file.exists():
+        log_err(f"Файл docker-compose.yml не найден: {compose_file}")
+        return False
+
+    cmd = ["docker", "compose", "-f", str(compose_file)]
+
+    if action == "up":
+        cmd.append("up")
+        if detach:
+            cmd.append("-d")
+        if build:
+            cmd.append("--build")
+        if services:
+            cmd.extend(services)
+    elif action == "down":
+        cmd.append("down")
+        if services:
+            cmd.extend(services)
+    elif action == "build":
+        cmd.append("build")
+        if services:
+            cmd.extend(services)
+    elif action == "restart":
+        cmd.append("restart")
+        if services:
+            cmd.extend(services)
+    elif action == "logs":
+        cmd.extend(["logs", "--tail=100", "-f"])
+        if services:
+            cmd.extend(services)
+    elif action == "ps":
+        cmd.append("ps")
+    elif action == "health":
+        return _docker_health_check(services)
+
+    log_step(f"Выполнение: {' '.join(cmd)}")
+
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            cwd=str(DOCKER_DIR),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        for line in iter(proc.stdout.readline, ""):
+            if line:
+                print(f"  {line.rstrip()}")
+        proc.wait()
+        return proc.returncode == 0
+    except KeyboardInterrupt:
+        log_info("\nПолучен Ctrl+C. Останавливаем...")
+        return True
+    except Exception as e:
+        log_err(f"Ошибка выполнения Docker Compose: {e}")
+        return False
+
+
+def _docker_health_check(services: List[str]) -> bool:
+    """Проверить состояние сервисов через Docker."""
+    compose_file = DOCKER_COMPOSE_FILE
+
+    if not compose_file.exists():
+        log_err(f"Файл docker-compose.yml не найден: {compose_file}")
+        return False
+
+    log_header("Docker Health Check: статус контейнеров")
+
+    ps_cmd = ["docker", "compose", "-f", str(compose_file), "ps", "--format", "json"]
+    try:
+        result = subprocess.run(ps_cmd, capture_output=True, text=True, timeout=15)
+
+        if result.returncode != 0:
+            log_err("Не удалось получить статус контейнеров")
+            return False
+
+        import json as _json
+        try:
+            containers = []
+            for line in result.stdout.strip().split("\n"):
+                if line.strip():
+                    containers.append(_json.loads(line))
+
+            if not containers:
+                log_info("Нет запущенных контейнеров.")
+                return False
+
+            print(f"  {'Контейнер':<30} {'Статус':<50} {'Порты':<20}")
+            print(f"  {'─'*30} {'─'*50} {'─'*20}")
+            for c in containers:
+                name = c.get("Name", c.get("Service", "?"))
+                status = c.get("Status", "?")
+                ports = c.get("Ports", "")
+                is_running = "Up" in status or "running" in status.lower()
+                icon = "✓" if is_running else "✗"
+                print(f"  {icon} {name:<29} {status:<49} {ports:<19}")
+
+        except _json.JSONDecodeError:
+            print(result.stdout)
+            return result.returncode == 0
+
+    except subprocess.TimeoutExpired:
+        log_err("Проверка контейнеров завершилась по таймауту.")
+        return False
+    except Exception as e:
+        log_err(f"Ошибка: {e}")
+        return False
+
+    # ── HTTP health check Python-сервисов ──
+    log_header("Docker Health Check: HTTP-endpoint'ы Python-сервисов")
+    all_ok = True
+    for svc_key, (port, path, display_name) in DOCKER_SUPERVISOR_SERVICES.items():
+        url = f"http://127.0.0.1:{port}{path}"
+        try:
+            resp = httpx.get(url, timeout=5)
+            if resp.status_code < 500:
+                log_ok(f"{display_name:<25} :{port} — HTTP {resp.status_code}")
+            else:
+                log_warn(f"{display_name:<25} :{port} — HTTP {resp.status_code}")
+                all_ok = False
+        except httpx.ConnectError:
+            log_err(f"{display_name:<25} :{port} — Connection refused")
+            all_ok = False
+        except httpx.TimeoutException:
+            log_err(f"{display_name:<25} :{port} — Timeout")
+            all_ok = False
+        except Exception as e:
+            log_err(f"{display_name:<25} :{port} — {e}")
+            all_ok = False
+
+    # ── Supervisorctl status ──
+    log_header("Docker Health Check: supervisord (все Python-процессы)")
+    try:
+        use_shell = sys.platform == "win32"
+        sup_cmd = [
+            "docker", "compose", "-f", str(compose_file),
+            "exec", "-T", "app", "supervisorctl", "status"
+        ]
+        sup_result = subprocess.run(
+            sup_cmd, capture_output=True, text=True, timeout=15,
+            shell=use_shell,
+        )
+        if sup_result.returncode == 0 and sup_result.stdout.strip():
+            for line in sup_result.stdout.strip().split("\n"):
+                line = line.strip()
+                if not line:
+                    continue
+                parts = line.split()
+                if len(parts) >= 2:
+                    name = parts[0]
+                    state = parts[1]
+                    icon = "✓" if state == "RUNNING" else "✗"
+                    print(f"  {icon} {name:<25} {line[len(name):]}")
+                    if state != "RUNNING":
+                        all_ok = False
+        else:
+            log_warn(f"supervisorctl вернул код {sup_result.returncode}: {sup_result.stderr.strip()[:100]}")
+            log_info("Читаем логи supervisord из контейнера...")
+            try:
+                log_cmd = ["docker", "compose", "-f", str(compose_file),
+                           "exec", "-T", "app", "cat", "/var/log/supervisor/supervisord.log"]
+                log_result = subprocess.run(
+                    log_cmd, capture_output=True, text=True, timeout=10,
+                    shell=use_shell,
+                )
+                lines = log_result.stdout.strip().split("\n")
+                for line in lines[-8:]:
+                    if line.strip():
+                        print(f"  {line.strip()}")
+            except Exception:
+                pass
+    except subprocess.TimeoutExpired:
+        log_warn("supervisorctl timeout (контейнер app не запущен?)")
+    except Exception as e:
+        log_warn(f"supervisorctl error: {e}")
+
+    print()
+    if all_ok:
+        log_ok("Все Python-сервисы работают!")
+    else:
+        log_warn("Некоторые сервисы недоступны. Смотрите логи выше.")
+
+    return all_ok
+
+
+async def cmd_docker(
+    action: str = "up",
+    build: bool = False,
+    detach: bool = False,
+    services: Optional[List[str]] = None,
+    db_only: bool = False,
+):
+    """Развернуть систему через Docker Compose."""
+    services = services or []
+
+    log_header("Развёртывание PKB Neuroassistant через Docker")
+
+    if not _check_docker():
+        return
+
+    if not DOCKER_COMPOSE_FILE.exists():
+        log_err(f"Файл {DOCKER_COMPOSE_FILE} не найден.")
+        return
+
+    log_info(f"Compose-файл: {DOCKER_COMPOSE_FILE}")
+
+    target_services = list(services)
+    if db_only:
+        target_services = ["postgres"]
+        log_info("Режим --db-only: запускаем только PostgreSQL")
+
+    if action in ("up", "restart") and target_services:
+        names = ", ".join(DOCKER_SERVICE_NAMES.get(s, s) for s in target_services)
+        log_info(f"Целевые сервисы: {names}")
+
+    if action == "health":
+        _docker_health_check(target_services)
+        return
+
+    success = _docker_action(action, target_services, build=build, detach=detach)
+
+    if success:
+        if action == "up":
+            log_ok("Все сервисы запущены!")
+            log_info("Для проверки: python service_checker.py docker --action health")
+            log_info("Для остановки: python service_checker.py docker --action down")
+        elif action == "down":
+            log_ok("Все сервисы остановлены.")
+        elif action == "build":
+            log_ok("Образы собраны.")
+        elif action == "restart":
+            log_ok("Сервисы перезапущены.")
+    else:
+        if action == "up":
+            log_err("Не удалось запустить сервисы. Проверьте логи выше.")
+        elif action == "build":
+            log_err("Не удалось собрать образы.")
+
+
 async def cmd_all(
     mocks: str,
     with_real: bool,
@@ -1667,6 +2011,16 @@ async def main():
             with_real=args.with_real,
             timeout=args.timeout,
             output=args.output,
+        )
+        return
+
+    if args.command == "docker":
+        await cmd_docker(
+            action=args.action,
+            build=args.build,
+            detach=args.detach,
+            services=args.services,
+            db_only=args.db_only,
         )
         return
 

@@ -46,3 +46,18 @@ PKB_neuroassistant_docs/
 - **План спринта**: [`docs/plans/sprint1_04_06_10_06.md`](docs/plans/sprint1_04_06_10_06.md)
 - **Сводный план реализации**: [`docs/plans/СВОДНЫЙ_ПЛАН_РЕАЛИЗАЦИИ.md`](docs/plans/СВОДНЫЙ_ПЛАН_РЕАЛИЗАЦИИ.md)
 
+## Docker (All-in-One контейнер)
+
+Всё в одном контейнере: **PostgreSQL 16 + pgvector, Redis, MinIO** и **все 8 backend-сервисов**.
+Управление процессами — supervisord. Единая установка, одна команда.
+
+```bash
+# Сборка и запуск
+docker compose up -d --build
+
+# Проверка статуса
+docker compose ps
+```
+
+Подробнее: [`backend/README.Docker.md`](backend/README.Docker.md)
+
