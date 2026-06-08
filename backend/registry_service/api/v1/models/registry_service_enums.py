@@ -2,7 +2,7 @@ from sqlalchemy import Column, String, Text, DateTime
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func, text
 import uuid
-from ..database import Base
+from .base import Base
 
 
 class RegistryServiceEnums(Base):
@@ -13,7 +13,7 @@ class RegistryServiceEnums(Base):
     enum_key = Column(String(128), nullable=False, index=True)
     enum_value = Column(String(256), nullable=False)
     description = Column(Text, nullable=True)
-    metadata = Column(JSONB, nullable=True)
+    enum_metadata = Column('metadata', JSONB, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     def __repr__(self):
@@ -34,7 +34,7 @@ class RegistryServiceEnums(Base):
         return [r[0] for r in rows]
 
     @classmethod
-    def get_all_values(cls, db_session):
+    def get_all_grouped(cls, db_session):
         """Return all enum values grouped by `enum_key` as a dict.
 
         Args:
@@ -48,3 +48,7 @@ class RegistryServiceEnums(Base):
         for k, v in rows:
             result.setdefault(k, []).append(v)
         return result
+
+    @classmethod
+    def get_all_values(cls, db_session):
+        return cls.get_all_grouped(db_session)
