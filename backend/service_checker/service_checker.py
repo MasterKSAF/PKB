@@ -1359,7 +1359,7 @@ def parse_args() -> argparse.Namespace:
     )
     p_docker.add_argument(
         "--action",
-        choices=["up", "down", "build", "restart", "logs", "ps", "health"],
+        choices=["up", "down", "build", "restart", "logs", "ps", "health", "coverage"],
         default="up",
         help="Действие с Docker Compose (по умолч. up — запустить все сервисы)",
     )
@@ -1817,6 +1817,44 @@ def _docker_health_check(services: List[str]) -> bool:
     return all_ok
 
 
+async def _docker_run_coverage() -> bool:
+    """Запустить API Coverage Test для Docker-окружения."""
+    log_header("Docker: API Coverage Test")
+
+    check_result_dir = BACKEND_DIR / "check_result"
+    check_result_dir.mkdir(parents=True, exist_ok=True)
+
+    from datetime import datetime
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_path = check_result_dir / f"api_coverage_{timestamp}.md"
+
+    log_info(f"Отчёт будет сохранён: {output_path}")
+
+    # Запускаем coverage test в режиме real (сервисы уже в Docker)
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "run_coverage",
+        BACKEND_DIR / "service_checker" / "run_coverage.py"
+    )
+    if not spec or not spec.loader:
+        log_err("Не найден run_coverage.py")
+        return False
+
+    run_mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(run_mod)
+
+    try:
+        await run_mod.run_coverage_test(
+            output_path=str(output_path),
+            mode="real"
+        )
+        log_ok(f"API Coverage отчёт сохранён: {output_path}")
+        return True
+    except Exception as e:
+        log_err(f"Ошибка при запуске coverage test: {e}")
+        return False
+
+
 async def cmd_docker(
     action: str = "up",
     build: bool = False,
@@ -1849,6 +1887,10 @@ async def cmd_docker(
 
     if action == "health":
         _docker_health_check(target_services)
+        return
+
+    if action == "coverage":
+        await _docker_run_coverage()
         return
 
     success = _docker_action(action, target_services, build=build, detach=detach)
