@@ -22,8 +22,6 @@ from app.schemas.documents import (
     ApproveRequest,
     ApproveResponse,
     ClassificationStatus,
-    DecideRequest,
-    DecideResponse,
     DocMetadata,
     DocumentCreateResponse,
     DocumentDeleteResponse,
@@ -42,7 +40,6 @@ from app.schemas.documents import (
     DocumentStatusReviewRequired,
     DocumentStatusReadyForPromotion,
     DocumentSummary,
-    DuplicateCandidate,
     HistoryComment,
     HistoryItem,
     LatestVersionInfo,
@@ -54,7 +51,6 @@ from app.schemas.documents import (
     ParameterItem,
     ParameterRange,
     PreviewBlock,
-    PreviewMetadata,
     ProcessingError,
     QueueItem,
     QueueMeta,
@@ -64,13 +60,10 @@ from app.schemas.documents import (
     ReprocessRequest,
     ReprocessResponse,
     SourceType,
-    TaskPreviewResponse,
-    TaskPreviewStatusResponse,
     VersionCreateResponse,
     VersionItem,
     VersionMeta,
     VersionsListResponse,
-    DecideAction,
     StepStatusEnum,
     PipelineStatusEnum,
     OcrParserStep,
@@ -93,7 +86,6 @@ from app.services.rag_client import RAGServiceClient
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.base import get_db
-from app.repositories.document import DocumentRepository
 from app.core.pipeline.orchestrator import PipelineOrchestrator
 
 logger = logging.getLogger(__name__)
@@ -127,280 +119,6 @@ def _compute_sha256(content: bytes) -> str:
 #  POST /documents/  — Upload file
 # ---------------------------------------------------------------------------
 
-
-@router.post(
-    "/",
-    response_model=DocumentCreateResponse,
-    status_code=status.HTTP_202_ACCEPTED,
-    responses={
-        400: {"model": ErrorResponse, "description": "Неподдерживаемый формат / размер"},
-        413: {"model": ErrorResponse, "description": "Файл превышает 100 МБ"},
-        422: {"model": ErrorResponse, "description": "Поврежденный файл"},
-    },
-)
-async def upload_document(
-    file: UploadFile = File(..., description="Бинарный файл (PDF, PNG, JPG, TIFF)"),
-    source_type: str = Form(
-        ...,
-        description="Тип источника: GOST, GOST_R, OST, RD, TU, ISO, DNV, ASTM, OTHER",
-    ),
-    title: Optional[str] = Form(None, description="Название документа"),
-    doc_code: Optional[str] = Form(None, description="Регистрационный номер"),
-    mks_oks_code: Optional[str] = Form(None, description="Код МКС/ОКС"),
-    okstu_code: Optional[str] = Form(None, description="Код ОКСТУ"),
-    era: Optional[str] = Form(None, description="Эпоха: USSR, CIS, RF, CURRENT"),
-    jurisdiction: Optional[str] = Form(None, description="Юрисдикция: RU, EU, US, NO, INTL"),
-    issuing_body: Optional[str] = Form(None, description="Организация-издатель"),
-    metadata: Optional[str] = Form(None, description="JSON-строка с доп. данными"),
-    current_user: CurrentUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> DocumentCreateResponse:
-    """Upload a new document for processing.
-
-    Returns 202 with the created document metadata.
-    """
-    # --- Validate file type ---
-    if file.content_type not in ALLOWED_MIME:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": {
-                    "code": "BAD_REQUEST",
-                    "message": "Неподдерживаемый формат файла",
-                    "details": {"allowed_types": list(ALLOWED_MIME)},
-                }
-            },
-        )
-
-    # --- Validate source_type ---
-    try:
-        SourceType(source_type)
-    except ValueError:
-        valid_types = [e.value for e in SourceType]
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": {
-                    "code": "BAD_REQUEST",
-                    "message": f"Недопустимый source_type: {source_type}",
-                    "details": {"allowed_values": valid_types},
-                }
-            },
-        )
-
-    # --- Validate file size ---
-    content_length: Optional[int] = None
-    if hasattr(file, "headers") and file.headers:
-        try:
-            cl = file.headers.get("content-length")
-            if cl:
-                content_length = int(cl)
-        except (ValueError, TypeError):
-            content_length = None
-
-    if content_length is not None and content_length > MAX_FILE_SIZE_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail={
-                "error": {
-                    "code": "FILE_TOO_LARGE",
-                    "message": "Размер файла превышает 100 МБ",
-                    "details": {
-                        "max_size_mb": 100,
-                        "actual_size_mb": round(content_length / (1024 * 1024), 1),
-                    },
-                }
-            },
-        )
-
-    # --- Read file content for hash ---
-    content = await file.read()
-    file_hash = _compute_sha256(content)
-    file_size = len(content)
-
-    # --- Upload file to integration / storage service ---
-    document_id = f"doc-{uuid.uuid4().hex[:12]}"
-    task_id = int(uuid.uuid4().int % 1000000)
-    version_id = str(uuid.uuid4())
-
-    integration_client = IntegrationServiceClient()
-    try:
-        await integration_client.upload_file(
-            file_data=content,
-            filename=file.filename or "uploaded_file",
-            related_document_id=document_id,
-        )
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "error": {
-                    "code": "UPLOAD_FAILED",
-                    "message": "Ошибка при загрузке файла в хранилище",
-                    "details": {"original_error": str(exc)},
-                }
-            },
-        )
-    finally:
-        await integration_client.close()
-
-    # Compute title hash for business key
-    title_hash = None
-    if title:
-        title_hash = _compute_sha256(title.encode("utf-8"))
-
-    # --- Create document record in database ---
-    doc_repo = DocumentRepository(db)
-    document = await doc_repo.create(
-        file_hash_sha256=file_hash,
-        original_filename=file.filename or "uploaded_file",
-        file_size_bytes=file_size,
-        mime_type=file.content_type or "application/octet-stream",
-        source_type=source_type,
-        title=title,
-        doc_code=doc_code,
-        era=era,
-        jurisdiction=jurisdiction,
-        issuing_body=issuing_body,
-        title_hash_sha256=title_hash,
-    )
-
-    # --- Start Pipeline 1 (formation) ---
-    try:
-        orchestrator = PipelineOrchestrator(db)
-        job_id = await orchestrator.start_pipeline_1(document.id)
-    except Exception as exc:
-        # If pipeline start fails, document is still created in uploaded state
-        # The cleanup_stale_jobs scheduler will handle orphaned docs
-        logger.warning(f"Pipeline 1 start failed for {document.id}: {exc}")
-
-    return DocumentCreateResponse(
-        task_id=task_id,
-        version_id=version_id,
-        status="uploaded",
-        file_hash_sha256=file_hash,
-        file_size_bytes=file_size,
-        is_duplicate_file=False,
-        is_duplicate_document=False,
-        title_hash_sha256=title_hash,
-        created_at=datetime.now(UTC),
-    )
-
-
-# ---------------------------------------------------------------------------
-#  POST /tasks/{task_id}/preview  — Start preview phase
-# ---------------------------------------------------------------------------
-
-
-@router.post(
-    "/tasks/{task_id}/preview",
-    response_model=TaskPreviewResponse,
-    status_code=status.HTTP_202_ACCEPTED,
-    responses={
-        404: {"model": ErrorResponse, "description": "Задача не найдена"},
-    },
-)
-async def start_preview(
-    task_id: int,
-    current_user: CurrentUser = Depends(get_current_user),
-) -> TaskPreviewResponse:
-    """Start the preview phase for a document."""
-    from datetime import timedelta
-
-    return TaskPreviewResponse(
-        task_id=task_id,
-        status="previewing",
-        estimated_completion=datetime.now(UTC) + timedelta(seconds=30),
-    )
-
-
-# ---------------------------------------------------------------------------
-#  GET /tasks/{task_id}/preview/status  — Preview status with longpoll
-# ---------------------------------------------------------------------------
-
-
-@router.get(
-    "/tasks/{task_id}/preview/status",
-    response_model=TaskPreviewStatusResponse,
-    responses={
-        404: {"model": ErrorResponse, "description": "Задача не найдена"},
-    },
-)
-async def get_preview_status(
-    task_id: int,
-    longpoll: int = Query(15, ge=0, le=60, description="Время ожидания (сек)"),
-    current_user: CurrentUser = Depends(get_current_user),
-) -> TaskPreviewStatusResponse:
-    """Get preview status with longpoll support."""
-    return TaskPreviewStatusResponse(
-        document_id=f"doc-{uuid.uuid4().hex[:12]}",
-        status="completed",
-        ocr_parser_status="completed",
-        converter_validator_status="completed",
-        preview=PreviewMetadata(
-            doc_code="ГОСТ 20868-81",
-            title="СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
-            document_type="normative",
-            year="1981",
-            revision=None,
-        ),
-        duplicates=[
-            DuplicateCandidate(
-                document_id=f"doc-{uuid.uuid4().hex[:12]}",
-                doc_code="ГОСТ 20868-81",
-                title="Стойки установочные крепежные. Технические требования",
-                similarity=0.97,
-            )
-        ],
-        decision_required=True,
-    )
-
-
-# ---------------------------------------------------------------------------
-#  POST /tasks/{task_id}/decide  — User decision after preview
-# ---------------------------------------------------------------------------
-
-
-@router.post(
-    "/tasks/{task_id}/decide",
-    response_model=DecideResponse,
-    status_code=status.HTTP_202_ACCEPTED,
-    responses={
-        404: {"model": ErrorResponse, "description": "Задача не найдена"},
-        409: {"model": ErrorResponse, "description": "Некорректный статус для решения"},
-    },
-)
-async def decide_task(
-    task_id: int,
-    request: DecideRequest,
-    current_user: CurrentUser = Depends(get_current_user),
-) -> DecideResponse:
-    """Submit user decision after preview phase."""
-    doc_id = f"doc-{uuid.uuid4().hex[:12]}"
-
-    messages = {
-        DecideAction.PROCEED: "Запущена полная обработка документа",
-        DecideAction.STOP_DUPLICATE: "Остановлено. Документ помечен как дубликат",
-        DecideAction.FORCE_NEW_VERSION: "Принудительное создание новой версии",
-    }
-
-    statuses = {
-        DecideAction.PROCEED: "proceeding",
-        DecideAction.STOP_DUPLICATE: "stopped",
-        DecideAction.FORCE_NEW_VERSION: "forcing",
-    }
-
-    return DecideResponse(
-        document_id=doc_id,
-        status=statuses[request.action],
-        action=request.action,
-        message=messages[request.action],
-    )
-
-
-# ---------------------------------------------------------------------------
-#  POST /documents/{doc_id}/versions  — Upload new version
-# ---------------------------------------------------------------------------
 
 
 @router.post(

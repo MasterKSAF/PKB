@@ -68,6 +68,22 @@ class ServiceConfig(BaseSettings):
         default=True, description="Use mock mode for OCR service"
     )
 
+    # Parser Service (port 8089)
+    PARSER_SERVICE_URL: Optional[str] = Field(
+        default=None, description="URL for parser service"
+    )
+    PARSER_SERVICE_MOCK: bool = Field(
+        default=True, description="Use mock mode for parser service"
+    )
+
+    # Converter-Validator Service (port 8090)
+    CONVERTER_SERVICE_URL: Optional[str] = Field(
+        default=None, description="URL for converter-validator service"
+    )
+    CONVERTER_SERVICE_MOCK: bool = Field(
+        default=True, description="Use mock mode for converter-validator service"
+    )
+
 
 class PipelineConfig(BaseSettings):
     """Pipeline execution parameters."""
@@ -122,7 +138,7 @@ class Settings(BaseSettings):
 
     # Server
     HOST: str = "0.0.0.0"
-    PORT: int = 8000
+    PORT: int = 8081
 
     # API
     API_V1_PREFIX: str = "/api/v1"

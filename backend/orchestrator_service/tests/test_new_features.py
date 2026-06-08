@@ -15,6 +15,10 @@ NOTE: These tests run against the app in mock mode. In mock mode:
   - Auth dependency returns MOCK_USER for any request (no token validation)
   - All endpoints accept any task_id / document_id (no 404)
   - See conftest.py for mock configuration
+
+WARNING: These tests target the OLD API endpoints that have been removed
+in the refactoring (POST /documents/tasks/{task_id}/preview etc.).
+They are preserved for reference only and will fail if run.
 """
 
 import io
@@ -22,6 +26,11 @@ from datetime import datetime
 
 import pytest
 from fastapi.testclient import TestClient
+
+
+pytestmark = pytest.mark.skip(
+    reason="Legacy tests for old API endpoints (removed in refactoring)"
+)
 
 
 # ---------------------------------------------------------------------------

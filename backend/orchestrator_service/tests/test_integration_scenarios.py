@@ -10,9 +10,14 @@ Tests complete business scenarios matching the pipeline documentation:
   - Cross-pipeline scenario: Full Pipeline 1 → 2 → 3
 """
 
+import pytest
 from datetime import datetime
 
 from fastapi.testclient import TestClient
+
+pytestmark = pytest.mark.skip(
+    reason="Legacy tests for old documents pipeline API — replaced by drafts API"
+)
 
 
 class TestPipeline1FormationScenario:

@@ -73,7 +73,7 @@ class TestSettings:
         assert settings.APP_VERSION == "1.0.0"
         assert settings.DEBUG is False
         assert settings.HOST == "0.0.0.0"
-        assert settings.PORT == 8000
+        assert settings.PORT == 8081
         assert settings.API_V1_PREFIX == "/api/v1"
 
     def test_default_jwt(self):

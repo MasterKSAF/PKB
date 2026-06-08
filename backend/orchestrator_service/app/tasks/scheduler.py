@@ -20,8 +20,8 @@ def _run_async(coro):
         loop.close()
 
 
-@celery_app.task(name="app.tasks.scheduler.cleanup_stale_jobs")
-def cleanup_stale_jobs():
+@celery_app.task(name="app.tasks.scheduler.cleanup_stale_tasks")
+def cleanup_stale_tasks():
     """Periodic task: detect and mark stale running jobs as dead.
 
     Runs every 5 minutes via Celery Beat.
@@ -31,7 +31,7 @@ def cleanup_stale_jobs():
     async def _cleanup():
         async with get_db_context() as db:
             orchestrator = PipelineOrchestrator(db)
-            count = await orchestrator.cleanup_stale_jobs()
+            count = await orchestrator.cleanup_stale_tasks()
             return count
 
     cleaned = _run_async(_cleanup())

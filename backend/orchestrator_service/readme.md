@@ -1,6 +1,6 @@
 # Orchestrator Service
 
-Единая точка входа для публичного API Нейроассистента ПКБ. Сервис координирует взаимодействие между микросервисами и предоставляет унифицированный REST API для клиентских приложений.
+Единая точка входа для публичного API Нейроассистента ПКБ. Сервис координирует обработку черновиков (drafts) через двухфазный pipeline (preview → decision → full), взаимодействие между микросервисами и предоставляет унифицированный REST API для клиентских приложений.
 
 ## Описание
 
@@ -10,11 +10,31 @@ Orchestrator Service реализует API, описанный в `docs/api/orc
 |--------|-----------|------|
 | **auth-service** | Аутентификация и авторизация пользователей | 8082 |
 | **query-service** | Обработка произвольного текста, чаты и сессии | 8083 |
-| **registry-service** | Классификаторы, терминология и реестр документов | 8084 |
-| **integration-service** | Интеграция с внешними системами (Meridian) | 8085 |
+| **registry-service** | Классификаторы, терминология, реестр документов и черновиков | 8084 |
+| **integration-service** | Интеграция с внешними системами (Meridian), файловое хранилище | 8085 |
 | **validation-service** | Валидация, сравнение и сопоставление проектных/нормативных данных | 8086 |
 | **rag-service** | Векторный поиск (RAG) и генерация ответов LLM | 8087 |
 | **ocr-service** | OCR распознавание документов | 8088 |
+| **parser-service** | Парсинг цифровых PDF (структура, текст без распознавания) | 8089 |
+| **converter-validator** | Конвертация и валидация результатов OCR/Parser | 8090 |
+
+## Архитектура
+
+**Ключевое архитектурное решение:** Оркестратор больше не хранит документы.
+- Черновики → `registry.drafts` (Registry)
+- Документы → `registry.documents` (Registry)
+- Оркестратор хранит только `pipeline.tasks` и `pipeline.task_steps` — задачи пайплайна и их шаги
+
+### Двухфазный pipeline
+
+1. **Preview-фаза** (сразу после загрузки):
+   - Upload → OCR/Parser (3 страницы) → Converter-validator
+   - Результат: метаданные документа, определение полноты preview
+2. **Decision** (ожидание решения пользователя или auto-approve):
+   - Если preview полный (preview_not_supported=true) — auto-approve при валидных метаданных
+   - Если preview частичный — пользователь подтверждает или отклоняет
+3. **Full-фаза** (после approve):
+   - OCR/Parser (весь документ) → Converter-validator → Registry
 
 ## Режимы работы с внешними сервисами
 
@@ -33,12 +53,13 @@ Orchestrator Service реализует API, описанный в `docs/api/orc
 ## Технический стек
 
 - **FastAPI** — веб-фреймворк
+- **SQLAlchemy (asyncio)** — ORM (SQLite / PostgreSQL)
+- **Celery + Redis** — асинхронная очередь задач
 - **Pydantic v2** — валидация схем и настроек
 - **httpx** — HTTP-клиент для внешних сервисов
 - **Uvicorn** — ASGI-сервер
 - **Pytest** — тестирование
 - **python-jose** — JWT-токены
-- **passlib** — хэширование паролей
 
 ## Установка
 
@@ -60,57 +81,76 @@ cp .env.example .env
 ```env
 AUTH_SERVICE_URL=http://auth-service:8080
 AUTH_SERVICE_MOCK=false
-
-RAG_SERVICE_URL=http://rag-service:8081
-RAG_SERVICE_MOCK=false
-
-QUERY_SERVICE_URL=http://query-service:8083
-QUERY_SERVICE_MOCK=false
+REGISTRY_SERVICE_URL=http://registry-service:8084
+REGISTRY_SERVICE_MOCK=false
+# ... остальные сервисы
 ```
 
 ### Для работы в mock-режиме (по умолчанию):
 
 ```env
 AUTH_SERVICE_MOCK=true
-RAG_SERVICE_MOCK=true
-QUERY_SERVICE_MOCK=true
-OCR_SERVICE_MOCK=true
-VALIDATE_SERVICE_MOCK=true
-INTEGRATION_SERVICE_MOCK=true
 REGISTRY_SERVICE_MOCK=true
+OCR_SERVICE_MOCK=true
+PARSER_SERVICE_MOCK=true
+CONVERTER_SERVICE_MOCK=true
+INTEGRATION_SERVICE_MOCK=true
+VALIDATE_SERVICE_MOCK=true
+QUERY_SERVICE_MOCK=true
+RAG_SERVICE_MOCK=true
 ```
 
 Основные параметры:
 - `APP_VERSION` — версия приложения (по умолчанию `1.0.0`)
 - `DEBUG` — режим отладки
 - `HOST` — хост (по умолчанию `0.0.0.0`)
-- `PORT` — порт (по умолчанию `8000`)
+- `PORT` — порт (по умолчанию `8081`)
+- `DATABASE_URL` — URL БД (по умолчанию `sqlite+aiosqlite:///./orchestrator.db`)
+- `CELERY_BROKER_URL` — Redis для Celery (по умолчанию `redis://localhost:6379/1`)
 - `JWT_SECRET_KEY` — секретный ключ для JWT
-- `JWT_ALGORITHM` — алгоритм JWT (по умолчанию `HS256`)
 
 ## Запуск
 
 ```bash
 # Development mode с hot-reload
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8081
 
 # Production mode
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+uvicorn app.main:app --host 0.0.0.0 --port 8081
 
 # Через entry point (также с reload)
 python main.py
 ```
 
-Swagger UI: `http://localhost:8000/docs`
-ReDoc: `http://localhost:8000/redoc`
+Swagger UI: `http://localhost:8081/docs`
+ReDoc: `http://localhost:8081/redoc`
 
 ## API Endpoints
+
+### Черновики (`/api/v1/drafts`)
+
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| POST | `/drafts` | Загрузка файла и создание черновика (multipart/form-data) |
+| GET | `/drafts` | Список черновиков с пагинацией |
+| GET | `/drafts/{draft_id}` | Информация о черновике |
+| GET | `/drafts/{draft_id}/preview` | Метаданные preview |
+| POST | `/drafts/{draft_id}/preview` | Запуск preview-фазы |
+| GET | `/drafts/{draft_id}/preview/status` | Статус preview (с longpoll) |
+| PATCH | `/drafts/{draft_id}/decide` | Решение: approve / reject |
+| DELETE | `/drafts/{draft_id}` | Удаление черновика |
+
+### Задачи (`/api/v1/tasks`)
+
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| GET | `/tasks/{task_id}/status` | Статус задачи с детализацией шагов |
 
 ### Документы (`/api/v1/documents`)
 
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
-| POST | `/documents` | Загрузка документа (multipart/form-data) |
+| POST | `/documents` | Загрузка версии документа |
 | GET | `/documents` | Список документов с пагинацией |
 | GET | `/documents/queue` | Очередь обработки документов |
 | GET | `/documents/{doc_id}` | Информация о документе |
@@ -171,6 +211,7 @@ orchestrator_service/
 ├── app/
 │   ├── __init__.py
 │   ├── main.py                        # FastAPI приложение
+│   ├── celery_app.py                  # Celery instance
 │   ├── api/
 │   │   ├── __init__.py
 │   │   ├── deps/
@@ -181,45 +222,76 @@ orchestrator_service/
 │   │       └── endpoints/
 │   │           ├── __init__.py
 │   │           ├── documents.py       # CRUD документов, страницы, параметры
+│   │           ├── drafts.py          # Черновики: upload, preview, decide
+│   │           ├── tasks.py           # Статус задач пайплайна
 │   │           ├── search.py          # Поиск и Ask endpoint'ы
 │   │           ├── validate.py        # Сравнение, проверки, экспорт
 │   │           ├── health.py          # Health check
 │   │           └── monitor.py         # Метрики и мониторинг
 │   ├── core/
 │   │   ├── __init__.py
-│   │   └── config.py                  # Настройки (Pydantic Settings)
+│   │   ├── config.py                  # Настройки (Pydantic Settings)
+│   │   ├── fsm.py                     # DraftState/DraftFSM, TaskStatus/TaskStage
+│   │   └── pipeline/
+│   │       ├── __init__.py
+│   │       ├── orchestrator.py        # PipelineOrchestrator — двухфазный pipeline
+│   │       └── saga.py                # SagaCoordinator — компенсации
+│   ├── db/
+│   │   ├── __init__.py
+│   │   ├── base.py                    # Engine, Session, Base, get_db()
+│   │   └── session.py                 # get_db_context() для Celery
 │   ├── models/
-│   │   └── __init__.py
+│   │   └── pipeline.py                # Task + TaskStep ORM модели
 │   ├── schemas/
 │   │   ├── __init__.py
-│   │   ├── common.py                  # Общие схемы (Error, Pagination, ListResponse)
+│   │   ├── common.py                  # Общие схемы (Error, Pagination)
 │   │   ├── documents.py               # Схемы документов
+│   │   ├── drafts.py                  # Схемы черновиков
+│   │   ├── tasks.py                   # Схемы задач пайплайна
 │   │   ├── search.py                  # Схемы поиска и Ask
-│   │   └── validation.py              # Схемы валидации (Compare, CheckRun, Health)
-│   └── services/
+│   │   └── validation.py              # Схемы валидации
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── base_client.py             # Базовый клиент с dual-mode (mock/real)
+│   │   ├── auth_client.py             # Auth Service
+│   │   ├── rag_client.py              # RAG Service (векторный поиск, генерация)
+│   │   ├── query_client.py            # Query Service (текст, чаты, сессии)
+│   │   ├── ocr_client.py              # OCR Service
+│   │   ├── parser_client.py           # Parser Service (цифровые PDF)
+│   │   ├── converter_client.py        # Converter-Validator Service
+│   │   ├── validate_client.py         # Validation Service
+│   │   ├── integration_client.py      # Integration Service (файлы, Meridian)
+│   │   └── registry_client.py         # Registry Service (drafts, документы)
+│   └── tasks/
 │       ├── __init__.py
-│       ├── base_client.py             # Базовый клиент с dual-mode (mock/real)
-│       ├── auth_client.py             # Auth Service
-│       ├── rag_client.py              # RAG Service (векторный поиск, генерация)
-│       ├── query_client.py            # Query Service (текст, чаты, сессии)
-│       ├── ocr_client.py              # OCR Service
-│       ├── validate_client.py         # Validation Service
-│       ├── integration_client.py      # Integration Service (файлы, Meridian)
-│       └── registry_client.py         # Registry Service (классификаторы, термины)
+│       ├── pipeline_formation.py      # Celery задачи: preview + full фазы
+│       ├── pipeline_indexation.py     # Celery задачи: RAG indexation
+│       ├── compensation.py            # Saga компенсации
+│       └── scheduler.py               # Планировщик задач
 ├── services/
 │   ├── __init__.py
 │   └── response.py                    # Формирование единых API-ответов
 ├── tests/
 │   ├── __init__.py
 │   ├── conftest.py                    # Фикстуры (TestClient, mock-режим)
+│   ├── test_drafts.py                 # Тесты черновиков
+│   ├── test_tasks.py                  # Тесты задач
 │   ├── test_documents.py              # Тесты документов
-│   ├── test_health.py                 # Тесты health и служебных endpoint'ов
+│   ├── test_health.py                 # Тесты health endpoint'ов
 │   ├── test_monitor.py                # Тесты метрик
 │   ├── test_search.py                 # Тесты поиска и Ask
-│   └── test_validate.py               # Тесты валидации
+│   ├── test_validate.py               # Тесты валидации
+│   ├── test_service_clients_*.py      # Тесты сервис-клиентов
+│   ├── unit/
+│   └── integration/
+│       ├── test_celery_tasks.py       # Интеграционные тесты Celery
+│       └── test_pipeline_formation.py # Интеграционные тесты pipeline
+├── main.py                            # Entry point
 ├── requirements.txt
 ├── .env.example
-└── README.md
+├── pytest.ini
+├── todo.md
+└── readme.md
 ```
 
 ## Добавление нового сервиса
@@ -259,10 +331,10 @@ pytest
 pytest --cov=app --cov-report=term-missing
 
 # Запуск конкретного тестового файла
-pytest tests/test_search.py
+pytest tests/test_drafts.py
 
 # Запуск конкретного теста
-pytest tests/test_search.py::TestSearchPost::test_search_basic -v
+pytest tests/test_drafts.py::TestCreateDraft::test_create_draft_success -v
 ```
 
 - Все тесты запускаются в mock-режиме (устанавливается в `conftest.py`)
@@ -276,6 +348,7 @@ pytest tests/test_search.py::TestSearchPost::test_search_basic -v
 - **Dual-mode**: автоматический выбор между mock и реальным HTTP-вызовом
 - **Единая обработка ошибок**: `ServiceError` с кодом и деталями
 - **Управление HTTP-клиентом**: пул соединений через `httpx.AsyncClient`
+- **Retry + Circuit Breaker**: exponential backoff через tenacity, защита от каскадных сбоев
 
 Каждый клиент наследуется от `ServiceClient` и реализует:
 - `_generate_mock()` — генерация тестовых данных для конкретного сервиса
@@ -288,10 +361,10 @@ pytest tests/test_search.py::TestSearchPost::test_search_basic -v
 ```json
 {
   "error": {
-    "code": "DOCUMENT_NOT_FOUND",
-    "message": "Документ не найден",
+    "code": "DRAFT_NOT_FOUND",
+    "message": "Черновик не найден",
     "details": {
-      "document_id": "doc-123"
+      "draft_id": 123
     }
   }
 }

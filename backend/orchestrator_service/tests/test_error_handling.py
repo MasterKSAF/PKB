@@ -8,11 +8,11 @@ Covers:
   - get_status() codes and messages
 """
 
+import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
 
 from app.schemas.common import ErrorDetail, ErrorResponse
-from app.services.base_client import ServiceError
 from services.response import APIException
 
 
@@ -161,6 +161,10 @@ class TestErrorResponseSchema:
 class TestEndpointErrorResponses:
     """Tests that API endpoints return correct error formats."""
 
+    pytestmark = pytest.mark.skip(
+        reason="Legacy endpoint tests — old documents API replaced by drafts"
+    )
+
     def test_upload_unsupported_type_returns_400(self, client: TestClient, auth_header: dict):
         response = client.post(
             "/api/v1/documents/",
@@ -243,5 +247,4 @@ class TestEndpointErrorResponses:
         assert response.status_code == 200  # Mock mode returns data for any page
 
 
-# Need to import pytest for proper test discovery
-import pytest
+
