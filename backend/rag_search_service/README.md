@@ -103,9 +103,9 @@ nano .env
 **Корневой `.env`** для продакшена (создаётся deployer'ом):
 ```env
 # --- Database (должны совпадать с postgres service) ---
-POSTGRES_USER=rag_user
-POSTGRES_PASSWORD=prod_secret
-POSTGRES_DB=knowledge_base
+DB_USERNAME=rag_user
+DB_PASSWORD=prod_secret
+DB_DATABASE=knowledge_base
 
 # --- Embeddings (пусто = локальная модель) ---
 EMBEDDING_API_KEY=
@@ -123,9 +123,9 @@ EMBEDDING_API_KEY=
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_DATABASE: ${DB_DATABASE}
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY}
     volumes:
       - hf_cache:/root/.cache/huggingface
@@ -205,15 +205,17 @@ pytest tests/integration/ -v
 
 ### База данных
 
+Имена `DB_*` — стандарт PKB. `POSTGRES_*` поддерживается для обратной совместимости.
+
 | Переменная | Описание | По умолчанию |
 |---|---|---|
-| `POSTGRES_USER` | Пользователь БД | `rag_user` |
-| `POSTGRES_PASSWORD` | Пароль БД | `rag_password` |
-| `POSTGRES_DB` | Имя БД | `knowledge_base` |
-| `POSTGRES_HOST` | Хост БД | `127.0.0.1` |
-| `POSTGRES_PORT` | Порт БД (локально 5433, в проде 5432) | `5432` |
-| `POSTGRES_POOL_MIN` | Мин. размер пула соединений | `2` |
-| `POSTGRES_POOL_MAX` | Макс. размер пула соединений | `10` |
+| `DB_USERNAME` | Пользователь БД | `rag_user` |
+| `DB_PASSWORD` | Пароль БД | `rag_password` |
+| `DB_DATABASE` | Имя БД | `knowledge_base` |
+| `DB_HOST` | Хост БД | `127.0.0.1` |
+| `DB_PORT` | Порт БД (локально 5433, в проде 5432) | `5432` |
+| `DB_POOL_MIN` | Мин. размер пула соединений | `2` |
+| `DB_POOL_MAX` | Макс. размер пула соединений | `10` |
 
 ### Провайдер эмбеддингов
 

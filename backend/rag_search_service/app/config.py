@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -29,11 +29,26 @@ class Settings(BaseSettings):
     )
 
     # --- Database ---
-    postgres_user: str = Field(default="rag_user", alias="POSTGRES_USER")
-    postgres_password: str = Field(default="rag_password", alias="POSTGRES_PASSWORD")
-    postgres_db: str = Field(default="knowledge_base", alias="POSTGRES_DB")
-    postgres_host: str = Field(default="127.0.0.1", alias="POSTGRES_HOST")
-    postgres_port: int = Field(default=5432, alias="POSTGRES_PORT")
+    postgres_user: str = Field(
+        default="rag_user",
+        validation_alias=AliasChoices("DB_USERNAME", "POSTGRES_USER"),
+    )
+    postgres_password: str = Field(
+        default="rag_password",
+        validation_alias=AliasChoices("DB_PASSWORD", "POSTGRES_PASSWORD"),
+    )
+    postgres_db: str = Field(
+        default="knowledge_base",
+        validation_alias=AliasChoices("DB_DATABASE", "POSTGRES_DB"),
+    )
+    postgres_host: str = Field(
+        default="127.0.0.1",
+        validation_alias=AliasChoices("DB_HOST", "POSTGRES_HOST"),
+    )
+    postgres_port: int = Field(
+        default=5432,
+        validation_alias=AliasChoices("DB_PORT", "POSTGRES_PORT"),
+    )
     postgres_pool_min: int = Field(default=2, alias="POSTGRES_POOL_MIN")
     postgres_pool_max: int = Field(default=10, alias="POSTGRES_POOL_MAX")
 
