@@ -1,7 +1,7 @@
 import uuid
 
 from sqlalchemy import Column, String, Text, BigInteger, Integer, Boolean, Date, DateTime
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB
 
 from .base import Base
 
@@ -35,7 +35,12 @@ class Document(Base):
     chunk_count = Column('chunk_count', Integer)
     successor_doc_id = Column('successor_doc_id', BigInteger)
     predecessor_doc_id = Column('predecessor_doc_id', BigInteger)
+    classifier_code = Column('classifier_code', Text, nullable=True)
+    industry_code = Column('industry_code', Text, nullable=True)
+    enterprise_id = Column('enterprise_id', BigInteger, nullable=True)
     created_by = Column('created_by', Text)
     updated_by = Column('updated_by', Text)
+    classification_status = Column('classification_status', JSONB, default=dict, server_default='{}')
+    doc_metadata = Column('metadata', JSONB, default=dict, server_default='{}')
     created_at = Column('created_at', DateTime)
     updated_at = Column('updated_at', DateTime)

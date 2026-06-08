@@ -28,6 +28,15 @@ def list_documents(
     title: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     mks_oks_code: Optional[str] = Query(None),
+    source_type: Optional[str] = Query(None),
+    okstu_code: Optional[str] = Query(None),
+    era: Optional[str] = Query(None),
+    validity_status: Optional[str] = Query(None),
+    jurisdiction: Optional[str] = Query(None),
+    issuing_body: Optional[str] = Query(None),
+    title_hash_sha256: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
     """
@@ -38,6 +47,21 @@ def list_documents(
     """
     log_event('INFO', '/registry/documents', None, None)
     try:
+        dt_from = None
+        if date_from:
+            try:
+                from datetime import datetime
+                dt_from = datetime.fromisoformat(date_from)
+            except ValueError:
+                pass
+        dt_to = None
+        if date_to:
+            try:
+                from datetime import datetime
+                dt_to = datetime.fromisoformat(date_to)
+            except ValueError:
+                pass
+
         documents, total = document_crud.get_documents(
             db,
             page=page,
@@ -46,6 +70,15 @@ def list_documents(
             title=title,
             status=status,
             mks_oks_code=mks_oks_code,
+            source_type=source_type,
+            okstu_code=okstu_code,
+            era=era,
+            validity_status=validity_status,
+            jurisdiction=jurisdiction,
+            issuing_body=issuing_body,
+            title_hash_sha256=title_hash_sha256,
+            date_from=dt_from,
+            date_to=dt_to,
         )
         
         data = [DocumentSchema.model_validate(doc).model_dump(mode='json', by_alias=True, exclude_none=True) for doc in documents]
@@ -230,6 +263,26 @@ def create_document(
     """
     log_event('INFO', '/registry/documents', None, log_payload(payload))
     try:
+        # Check if this is the pipeline payload format
+        if 'document' in payload:
+            try:
+                res = document_crud.create_pipeline_document(db, payload)
+                return JSONResponse(
+                    status_code=201,
+                    content=res
+                )
+            except ValueError as e:
+                err_msg = str(e)
+                if err_msg == "DUPLICATE_DOCUMENT":
+                    raise HTTPException(
+                        status_code=409,
+                        detail={'error': {'code': 'DUPLICATE_DOCUMENT', 'message': 'Document with this title hash already exists'}}
+                    )
+                raise HTTPException(
+                    status_code=422,
+                    detail={'error': {'code': 'VALIDATION_ERROR', 'message': err_msg}}
+                )
+
         title = payload.get('title')
         doc_code = payload.get('doc_code') or (title or '').strip().upper().replace(' ', '-').replace('/', '-')
         
@@ -253,6 +306,23 @@ def create_document(
             'title_hash_sha256', 'file_size_bytes', 'processing_status', 'chunk_count',
             'successor_doc_id', 'predecessor_doc_id', 'created_by', 'updated_by',
         }}
+
+        existing_hash = clean_payload.get('title_hash_sha256')
+        if not existing_hash:
+            existing_hash = document_crud.compute_title_hash_sha256(
+                clean_payload.get('era'),
+                clean_payload.get('source_type'),
+                clean_payload.get('mks_oks_code'),
+                clean_payload.get('okstu_code'),
+                doc_code,
+                clean_payload.get('normalized_title') or (title or '').strip().lower()
+            )
+        existing = db.query(Document).filter(Document.title_hash_sha256 == existing_hash).first()
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail={'error': {'code': 'DUPLICATE_DOCUMENT', 'message': 'Document already exists'}},
+            )
 
         document = document_crud.create_document(db, doc_code=doc_code, title=title, **clean_payload)
         
@@ -319,28 +389,50 @@ def patch_document_status(
     log_event('INFO', f'/registry/documents/{document_id}/status', None, log_payload(payload))
     try:
         status = payload.get('status')
+        comment = payload.get('comment')
+        changed_by = payload.get('changed_by')
+
         if status is None:
             raise HTTPException(
                 status_code=422,
                 detail={'error': {'code': 'VALIDATION_ERROR', 'message': 'Missing status'}},
             )
 
-        document = document_crud.update_document(db, document_id, status=status)
-        if not document:
+        try:
+            res = document_crud.update_document_status(
+                db, document_id, status=status, comment=comment, changed_by=changed_by
+            )
+        except ValueError as e:
+            err_msg = str(e)
+            raise HTTPException(
+                status_code=400,
+                detail={'error': {'code': 'VALIDATION_ERROR', 'message': err_msg}}
+            )
+
+        if not res:
             raise HTTPException(
                 status_code=404,
                 detail={'error': {'code': 'DOCUMENT_NOT_FOUND', 'message': 'Document not found'}},
             )
 
+        document, history, previous_status = res
+
         log_event('INFO', f'/registry/documents/{document_id}/status', None, payload, 'Document status updated')
         return {
-            'data': DocumentSchema.model_validate(document).model_dump(mode='json', by_alias=True, exclude_none=True),
+            'data': {
+                'id': str(document.id),
+                'status': document.status,
+                'previous_status': previous_status,
+                'history_id': str(history.id),
+                'updated_at': document.updated_at.isoformat() if document.updated_at else None,
+            }
         }
     except HTTPException:
         raise
     except Exception as e:
         log_event('ERROR', f'/registry/documents/{document_id}/status', None, payload, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
+
 
 
 @routes.patch('/registry/documents/{document_id}')
@@ -491,6 +583,8 @@ def create_classifier(
         parent_code = payload.get('parent_code')
         status = payload.get('status')
         description = payload.get('description')
+        effective_date = payload.get('effective_date')
+        replaced_by = payload.get('replaced_by')
 
         if not classifier_system or not code or not full_name:
             raise HTTPException(
@@ -498,11 +592,18 @@ def create_classifier(
                 detail={'error': {'code': 'VALIDATION_ERROR', 'message': 'classifier_system, code, and full_name are required'}},
             )
 
+        if effective_date and isinstance(effective_date, str):
+            from datetime import date
+            try:
+                effective_date = date.fromisoformat(effective_date.split('T')[0])
+            except ValueError:
+                effective_date = None
+
         existing = classifier_crud.get_classifier(db, classifier_system, code)
         if existing:
             raise HTTPException(
                 status_code=409,
-                detail={'error': {'code': 'DUPLICATE_CLASSIFIER', 'message': 'Classifier already exists'}},
+                detail={'error': {'code': 'DUPLICATE_CODE', 'message': 'Classifier already exists'}},
             )
 
         classifier = classifier_crud.create_classifier(
@@ -513,6 +614,8 @@ def create_classifier(
             parent_code=parent_code,
             status=status,
             description=description,
+            effective_date=effective_date,
+            replaced_by=replaced_by,
         )
 
         return JSONResponse(
@@ -571,6 +674,8 @@ def classifier_tree(
     classifier_system: str = Query(...),
     root_code: Optional[str] = None,
     search: Optional[str] = None,
+    max_depth: int = Query(10, ge=1, le=100),
+    status: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
     log_event('INFO', '/registry/classifiers/tree', None, None)
@@ -578,7 +683,9 @@ def classifier_tree(
     Docs: docs/api/registry_service_api.md §1.2 - Дерево (иерархическое)
     """
     try:
-        classifiers = classifier_crud.get_classifier_tree(db, classifier_system, root_code=root_code, search=search)
+        classifiers = classifier_crud.get_classifier_tree(
+            db, classifier_system, root_code=root_code, search=search, max_depth=max_depth, status=status
+        )
         data = [ClassifierSchema.model_validate(item).model_dump(mode='json', by_alias=True, exclude_none=True) for item in classifiers]
         return {
             'data': data,
@@ -638,6 +745,19 @@ def list_classifier_pending(
             if item.found_in_document_id:
                 doc = document_crud.get_document_by_id(db, str(item.found_in_document_id))
                 doc_title = doc.title if doc else None
+            # Calculate suggested parent
+            suggested_parent_code = None
+            suggested_parent_name = None
+            if item.code and '.' in item.code:
+                parts = item.code.split('.')
+                for i in range(len(parts) - 1, 0, -1):
+                    parent_candidate = '.'.join(parts[:i])
+                    parent_cls = classifier_crud.get_classifier(db, item.system, parent_candidate)
+                    if parent_cls:
+                        suggested_parent_code = parent_cls.code
+                        suggested_parent_name = parent_cls.full_name
+                        break
+
             data.append({
                 'id': str(item.id),
                 'system': item.system,
@@ -645,8 +765,8 @@ def list_classifier_pending(
                 'found_in_document_id': str(item.found_in_document_id) if item.found_in_document_id else None,
                 'found_in_document_title': doc_title,
                 'status': item.status,
-                'suggested_parent_code': None,
-                'suggested_parent_name': None,
+                'suggested_parent_code': suggested_parent_code,
+                'suggested_parent_name': suggested_parent_name,
                 'admin_comment': item.admin_comment,
                 'created_at': item.created_at.isoformat() if item.created_at else None,
             })
@@ -859,9 +979,12 @@ def delete_classifier(
         try:
             deleted = classifier_crud.delete_classifier(db, classifier_system, code, force=force_flag)
         except ValueError as e:
+            err_code = str(e)
+            if err_code not in ('HAS_CHILDREN', 'HAS_DOCUMENTS'):
+                err_code = 'DELETE_CONFLICT'
             raise HTTPException(
                 status_code=409,
-                detail={'error': {'code': 'DELETE_CONFLICT', 'message': str(e)}},
+                detail={'error': {'code': err_code, 'message': str(e)}},
             )
 
         if not deleted:
@@ -895,7 +1018,11 @@ def create_terminology(
         normalized_value = payload.get('normalized_value')
         term_type = payload.get('term_type')
         is_blocked = payload.get('is_blocked', False)
+        is_case_sensitive = payload.get('is_case_sensitive', False)
         definition = payload.get('definition')
+        synonyms = payload.get('synonyms', [])
+        related_docs = payload.get('related_docs', [])
+        scope = payload.get('scope', [])
 
         if not raw_term or not standard_term or not normalized_value or not term_type:
             raise HTTPException(
@@ -907,7 +1034,7 @@ def create_terminology(
         if existing:
             raise HTTPException(
                 status_code=409,
-                detail={'error': {'code': 'DUPLICATE_TERMINOLOGY', 'message': 'Terminology already exists'}},
+                detail={'error': {'code': 'DUPLICATE_TERM', 'message': 'Terminology already exists'}},
             )
 
         term = terminology_crud.create_terminology(
@@ -917,7 +1044,11 @@ def create_terminology(
             normalized_value=normalized_value,
             term_type=term_type,
             is_blocked=is_blocked,
+            is_case_sensitive=is_case_sensitive,
             definition=definition,
+            synonyms=synonyms,
+            related_docs=related_docs,
+            scope=scope,
         )
 
         return JSONResponse(
@@ -936,9 +1067,10 @@ def list_terminology(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     raw_term: Optional[str] = Query(None),
-    normalized_term: Optional[str] = Query(None),
+    standard_term: Optional[str] = Query(None),
     term_type: Optional[str] = Query(None),
     is_blocked: Optional[str] = Query(None),
+    scope: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
     log_event('INFO', '/registry/terminology', None, None)
@@ -955,9 +1087,10 @@ def list_terminology(
             page=page,
             page_size=page_size,
             raw_term=raw_term,
-            normalized_term=normalized_term,
+            standard_term=standard_term,
             term_type=term_type,
             is_blocked=blocked,
+            scope=scope,
         )
 
         data = [TerminologySchema.model_validate(item).model_dump(mode='json', by_alias=True, exclude_none=True) for item in terms]

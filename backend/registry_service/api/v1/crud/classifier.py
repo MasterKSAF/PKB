@@ -87,9 +87,22 @@ def delete_classifier(db: Session, classifier_system: str, code: str, force: boo
     if not classifier:
         return False
 
-    children = db.query(Classifier).filter(Classifier.parent_code == classifier.code).count()
+    children = db.query(Classifier).filter(
+        Classifier.classifier_system == classifier_system,
+        Classifier.parent_code == classifier.code
+    ).count()
     if children and not force:
-        raise ValueError('Classifier has dependent children and cannot be deleted without force')
+        raise ValueError('HAS_CHILDREN')
+
+    from api.v1.models.document import Document
+    doc_count = 0
+    if classifier_system == 'MKS':
+        doc_count = db.query(Document).filter(Document.mks_oks_code == code).count()
+    elif classifier_system == 'OKSTU':
+        doc_count = db.query(Document).filter(Document.okstu_code == code).count()
+    
+    if doc_count and not force:
+        raise ValueError('HAS_DOCUMENTS')
 
     db.delete(classifier)
     db.commit()
@@ -101,21 +114,89 @@ def get_classifier_tree(
     classifier_system: str,
     root_code: Optional[str] = None,
     search: Optional[str] = None,
+    max_depth: int = 10,
+    status: Optional[str] = None,
 ) -> List[Classifier]:
+    # Query all nodes for the given system
     query = db.query(Classifier).filter(Classifier.classifier_system == classifier_system)
+    if status:
+        query = query.filter(Classifier.status == status)
+    
+    all_nodes = query.all()
+    if not all_nodes:
+        return []
 
-    if root_code:
-        query = query.filter(or_(Classifier.code == root_code, Classifier.parent_code == root_code))
+    # Map nodes by code for easy access
+    nodes_by_code = {node.code: node for node in all_nodes}
+    
+    # Initialize children list on all nodes
+    for node in all_nodes:
+        node.children = []
 
+    # Determine which nodes to include in the pool
+    included_codes = set(nodes_by_code.keys())
     if search:
-        query = query.filter(
-            or_(
-                Classifier.full_name.ilike(f'%{search}%'),
-                Classifier.code.ilike(f'%{search}%'),
-            )
-        )
+        matching_codes = {
+            code for code, node in nodes_by_code.items()
+            if search.lower() in (node.full_name or "").lower() or search.lower() in (node.code or "").lower()
+        }
+        
+        pool = set()
+        for m_code in matching_codes:
+            curr = m_code
+            while curr in nodes_by_code:
+                pool.add(curr)
+                curr_node = nodes_by_code[curr]
+                curr = curr_node.parent_code
+                if curr == m_code or curr in pool:
+                    break
+            descendants = [m_code]
+            while descendants:
+                desc = descendants.pop()
+                if desc in pool:
+                    continue
+                pool.add(desc)
+                for child_code, child_node in nodes_by_code.items():
+                    if child_node.parent_code == desc:
+                        descendants.append(child_code)
+        included_codes = pool
 
-    return query.order_by(desc(Classifier.created_at)).all()
+    # Build parent-child relationship map for the pool
+    parent_to_children = {}
+    for code in included_codes:
+        node = nodes_by_code[code]
+        parent = node.parent_code
+        if parent:
+            parent_to_children.setdefault(parent, []).append(node)
+
+    # Recursive build function
+    def build_tree(node, depth):
+        if depth >= max_depth:
+            node.children = []
+            return node
+        children_nodes = parent_to_children.get(node.code, [])
+        children_nodes.sort(key=lambda x: x.code)
+        node.children = []
+        for child in children_nodes:
+            node.children.append(build_tree(child, depth + 1))
+        return node
+
+    # Find root nodes
+    roots = []
+    if root_code:
+        if root_code in nodes_by_code and root_code in included_codes:
+            roots.append(nodes_by_code[root_code])
+    else:
+        for code in sorted(included_codes):
+            node = nodes_by_code[code]
+            if not node.parent_code or node.parent_code not in included_codes:
+                roots.append(node)
+
+    tree_roots = []
+    for root in roots:
+        tree_roots.append(build_tree(root, 1))
+
+    return tree_roots
 
 
 def _classifier_lookup_status(db: Session, classifier_system: str, code: Optional[str]) -> str:

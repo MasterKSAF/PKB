@@ -33,8 +33,13 @@ class DocumentSchema(BaseModel):
     chunk_count: Optional[int] = None
     successor_doc_id: Optional[int] = None
     predecessor_doc_id: Optional[int] = None
+    classifier_code: Optional[str] = None
+    industry_code: Optional[str] = None
+    enterprise_id: Optional[int] = None
     created_by: Optional[str] = None
     updated_by: Optional[str] = None
+    classification_status: Optional[dict] = {}
+    metadata: Optional[dict] = Field(default={}, validation_alias='doc_metadata')
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
