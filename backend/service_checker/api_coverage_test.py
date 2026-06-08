@@ -856,8 +856,8 @@ class ApiCoverageTester:
 
         # Сводка
         lines.append("## 📊 Summary\n")
-        lines.append("| Service | Ping | Port | Endpoints | ✅ Passed | ❌ Failed | ⏭️ Skipped | Status |")
-        lines.append("|---------|:----:|:----:|:---------:|:---------:|:---------:|:----------:|:------:|")
+        lines.append("| Service | Port | Endpoints | Ping | ✅ Passed | ❌ Failed | ⏭️ Skipped | Status |")
+        lines.append("|---------|:----:|:---------:|:----:|:---------:|:---------:|:----------:|:------:|")
 
         total_ep = 0
         total_passed = 0
@@ -887,7 +887,7 @@ class ApiCoverageTester:
             else:
                 status_icon = "✅"
             svc_anchor = svc_key.replace("_", "-")
-            lines.append(f"| [{result.name}](#{svc_anchor}) | {ping_icon} | {result.port} | {result.endpoints_total} | "
+            lines.append(f"| [{result.name}](#{svc_anchor}) | {result.port} | {result.endpoints_total} | {ping_icon} | "
                         f"{result.endpoints_passed} | {failed_str} | "
                         f"{skipped_str} | {status_icon} |")
 
@@ -903,7 +903,7 @@ class ApiCoverageTester:
             total_status = "❌"
         else:
             total_status = "✅"
-        lines.append(f"| **Total** | **{services_alive}/{len(self.results)}** | | **{total_ep}** | **{total_passed}** | "
+        lines.append(f"| **Total** | | **{total_ep}** | **{services_alive}/{len(self.results)}** | **{total_passed}** | "
                     f"{total_failed_str} | {total_skipped_str} | {total_status} |\n")
 
         # Детали по каждому сервису
