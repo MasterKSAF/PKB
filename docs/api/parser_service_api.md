@@ -51,7 +51,6 @@
 ```json
 {
   "task_id": 420000,
-  "version_id": 420001,
   "file_key": "file-def456",
   "mode": "preview",
   "max_pages": 3,
@@ -65,7 +64,6 @@
 | Поле | Тип | По умолчанию | Обязательность | Описание |
 | ---- | --- | ------------ | -------------- | -------- |
 | `task_id` | bigint | — | Да | Идентификатор задачи (генерируется Оркестратором) |
-| `version_id` | bigint | — | Да | ID версии документа |
 | `file_key` | string | — | Да | Ключ файла в MinIO |
 | `mode` | enum | `"full"` | Нет | Режим обработки: `"preview"` / `"full"` |
 | `max_pages` | int | `3` | Нет | Количество страниц для предпросмотра (только для `mode: "preview"`) |
@@ -79,7 +77,6 @@
 {
   "task_id": 420000,
   "status": "accepted",
-  "version_id": 420001,
   "mode": "preview",
   "estimated_completion": "2026-05-15T10:02:00Z"
 }
@@ -89,7 +86,6 @@
 | ---- | --- | -------- |
 | `task_id` | bigint | Идентификатор задачи |
 | `status` | string | `"accepted"` |
-| `version_id` | bigint | ID версии документа |
 | `mode` | enum | Проброшенный режим из запроса: `"preview"` / `"full"` |
 | `estimated_completion` | datetime | Ориентировочное время завершения |
 
@@ -170,7 +166,6 @@
 ```json
 {
   "task_id": 420000,
-  "version_id": 420001,
   "metadata": {
     "schema": "raw_ocr_v4",
     "mode": "preview",
@@ -200,7 +195,6 @@
 | Поле                                         | Тип    | Описание                                                             |
 | -------------------------------------------- | ------ | -------------------------------------------------------------------- |
 | `task_id`                                    | bigint | ID задачи оркестратора                                               |
-| `version_id`                                 | bigint | ID версии                                                            |
 | `metadata`                                   | object | Метаданные обработки                                                 |
 | `metadata.schema`                            | string | Идентификатор схемы (напр. `"raw_ocr_v4"`)                          |
 | `metadata.mode`                              | enum   | Режим обработки: `"preview"` / `"full"`                              |
@@ -245,7 +239,6 @@
   "processes": [
     {
           "task_id": 420000,
-          "version_id": 420001,
           "status": "processing",
       "progress_percent": 45,
       "pages_processed": 5,
@@ -259,7 +252,6 @@
 | Поле               | Тип    | Описание                         |
 | ------------------ | ------ | -------------------------------- |
 | `task_id`          | bigint | ID задачи                        |
-| `version_id`       | bigint | ID версии документа              |
 | `status`           | string | Статус: `accepted`, `processing` |
 | `progress_percent` | int    | Процент выполнения               |
 | `pages_processed`  | int    | Обработано страниц               |
