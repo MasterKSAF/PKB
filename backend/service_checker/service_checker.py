@@ -1359,7 +1359,7 @@ def parse_args() -> argparse.Namespace:
     )
     p_docker.add_argument(
         "--action",
-        choices=["up", "down", "build", "restart", "logs", "ps", "health", "coverage"],
+        choices=["up", "down", "build", "restart", "reset", "logs", "ps", "health", "coverage"],
         default="up",
         help="Действие с Docker Compose (по умолч. up — запустить все сервисы)",
     )
@@ -1884,6 +1884,17 @@ async def cmd_docker(
     if action in ("up", "restart") and target_services:
         names = ", ".join(DOCKER_SERVICE_NAMES.get(s, s) for s in target_services)
         log_info(f"Целевые сервисы: {names}")
+
+    if action == "reset":
+        log_info("Полный сброс: останавливаем + чистим volumes + запускаем заново...")
+        _docker_action("down", target_services, build=False, detach=False)
+        # down уже включает -v? Нет, нужно добавить флаг.
+        # Делаем down -v через прямой вызов
+        down_cmd = ["docker", "compose", "-f", str(DOCKER_COMPOSE_FILE), "down", "-v"]
+        subprocess.run(down_cmd, cwd=str(DOCKER_DIR), timeout=60)
+        log_ok("Volumes очищены. Запускаем...")
+        _docker_action("up", target_services, build=False, detach=True)
+        return
 
     if action == "health":
         _docker_health_check(target_services)
