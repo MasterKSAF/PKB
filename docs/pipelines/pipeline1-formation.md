@@ -3,7 +3,33 @@
 Назначение: преобразовать исходный файл в структурированную карточку документа в БД.  
 Пайплайн состоит из двух фаз: **Preview** (быстрая проверка, метаданные, решение пользователя) и **Full** (полная обработка).
 
-**Черновик (draft) — обязательная точка входа:** `POST /drafts` всегда создаёт черновик. Без черновика загрузить документ невозможно. Из черновика данные передаются на конвертацию (Converter-validator) и после — в Registry (чистовик).
+**Черновик (draft) — обязательная точка входа:** `POST /drafts` всегда создаёт задачу (`pipeline.tasks`) и запись черновика в Registry (`POST /registry/drafts`). Без черновика загрузить документ невозможно. Из черновика данные передаются на конвертацию (Converter-validator) и после — в Registry (чистовик).  
+Данные черновиков хранятся в `registry.drafts` (БД Registry). Управление жизненным циклом — через Orchestrator. Этапы задачи с входными/выходными данными сервисов — в `pipeline.task_steps` (БД Orchestrator).
+
+**Создание черновика (POST /drafts):**
+
+```mermaid
+sequenceDiagram
+    participant UI as Web UI
+    participant Orch as Orchestrator
+    participant Reg as Registry
+
+    UI->>Orch: POST /drafts (file)
+    activate Orch
+    Orch->>Orch: SHA-256, определение формата
+    Orch->>Orch: Создание task (pipeline.tasks)
+    Orch->>Orch: Создание task_step "upload"
+    Orch->>Reg: POST /registry/drafts (file_key, document_key, status)
+    activate Reg
+    Reg-->>Orch: { id: draft_id }
+    deactivate Reg
+    Orch->>Orch: Маппинг task_id -> draft_id
+    Orch->>Orch: Завершение task_step "upload"
+    Orch-->>UI: 202 { draft_id, task_id, status: "uploaded" }
+    deactivate Orch
+```
+
+**Preview-фаза и решение (основной поток):**
 
 ```mermaid
 sequenceDiagram
@@ -14,10 +40,10 @@ sequenceDiagram
     participant Conv as Converter-validator
     participant Reg as Registry
 
-
     %% Фаза Preview
     UI->>Orch: POST /drafts/{draft_id}/preview
     activate Orch
+    Orch->>Orch: Создание task_step "preview_ocr"
     Orch->>Orch: Определение типа файла (скан/цифровой)
     alt Скан/изображение
         Orch->>OCR: POST /ocr/preview (max_pages=3)
@@ -30,13 +56,16 @@ sequenceDiagram
         Pars-->>Orch: Частичный сырой JSON (первые N стр.)
         deactivate Pars
     end
+    Orch->>Orch: Завершение task_step "preview_ocr"
+    Orch->>Orch: Создание task_step "preview_converter"
     Orch->>Conv: POST /converter/preview/metadata
     activate Conv
     Conv-->>Orch: Первичные метаданные
     deactivate Conv
-    Orch->>Reg: POST /registry/documents/check-uniqueness (метаданные + file_size_bytes)
+    Orch->>Orch: Завершение task_step "preview_converter"
+    Orch->>Reg: PATCH /registry/drafts/{draft_id}/status (status: "ready_for_approve", preview_metadata)
     activate Reg
-    Reg-->>Orch: Список кандидатов-дубликатов
+    Reg-->>Orch: { status: "ready_for_approve", updated_at }
     deactivate Reg
     Orch-->>UI: Preview-данные (метаданные, дубликаты)
     deactivate Orch
@@ -46,9 +75,14 @@ sequenceDiagram
     UI->>Orch: PATCH /drafts/{draft_id}/decide
     activate Orch
     alt action = approve
+        Orch->>Reg: PATCH /registry/drafts/{draft_id}/status (status: "approved")
+        activate Reg
+        Reg-->>Orch: { status: "approved" }
+        deactivate Reg
         Orch-->>UI: 202 {status: proceeding}
 
         %% Фаза Full
+        Orch->>Orch: Создание task_step "full_ocr"
         alt Скан/изображение
             Orch->>OCR: POST /ocr/process (full)
             activate OCR
@@ -60,28 +94,36 @@ sequenceDiagram
             Pars-->>Orch: Полный сырой JSON
             deactivate Pars
         end
-
+        Orch->>Orch: Завершение task_step "full_ocr"
+        Orch->>Orch: Создание task_step "full_converter"
         Orch->>Conv: POST /converter/convert
         activate Conv
         Conv->>Conv: Построение иерархии, LLM, метаданные
         Conv-->>Orch: Иерархический типизированный JSON
         deactivate Conv
+        Orch->>Orch: Завершение task_step "full_converter"
 
         Orch->>Reg: POST /registry/documents/check-uniqueness (метаданные + file_size_bytes)
         activate Reg
         Reg-->>Orch: { is_duplicate, candidates }
         deactivate Reg
         alt is_duplicate = true
+            Orch->>Reg: PATCH /registry/drafts/{draft_id}/status (status: "discarded", error_code: DUPLICATE)
+            Reg-->>Orch: { status: "discarded" }
             Orch-->>UI: action: discard_with_duplicate
         else
+            Orch->>Orch: Создание task_step "registry_creation"
             Orch->>Reg: POST /registry/documents (JSON)
             activate Reg
             Reg->>Reg: Сохранение карточки, сегментация на секции
             Reg-->>Orch: JSON со ссылками в БД
             deactivate Reg
+            Orch->>Orch: Завершение task_step "registry_creation"
             Orch-->>UI: status: completed
         end
     else action = reject (duplicate)
+        Orch->>Reg: PATCH /registry/drafts/{draft_id}/status (status: "discarded")
+        Reg-->>Orch: { status: "discarded" }
         Orch-->>UI: action: discard_with_duplicate
     else action = reject (force_new_version)
         Orch->>Orch: Создание новой версии через POST /documents/{doc_id}/versions
@@ -295,7 +337,7 @@ stateDiagram-v2
 
 **Архивация документов:** Документ может быть помечен как архивный (неактивный) автоматически через N дней после создания новой версии (настраиваемый параметр, по умолчанию 365 дней). Также архивация может быть инициирована вручную `system_admin`. Архивированный документ доступен только для чтения. Архивация — административная операция, не связанная с FSM пайплайна.
 
-> **Черновики (drafts):** Черновик — основной элемент управления загрузкой документа. `file_key` — у черновика (`pipeline.drafts.file_key`). `raw_data` — в `pipeline.drafts.raw_data` (JSONB, результат Parser или OCR). MinIO — только для бинарных файлов (PDF, изображения). OCR/Parser выполняется **полностью** уже в черновике; Converter-validator — только извлечение метаданных. Полная конвертация (validated_v3) запускается при approve, после чего документ записывается в Registry. Решение пользователя принимается через `PATCH /drafts/{draft_id}/decide`. `task_id` — внутренний сквозной ID задачи (internal). Детальная реализация — см. [`docs/plans/drafts_storage_plan.md`](../plans/drafts_storage_plan.md).
+> **Черновики (drafts):** Черновик — основной элемент управления загрузкой документа. Данные черновиков хранятся в `registry.drafts` (БД Registry). `file_key` — у черновика (`registry.drafts.file_key`). `raw_data` — в `registry.drafts.raw_data` (JSONB, результат Parser или OCR). MinIO — только для бинарных файлов (PDF, изображения). OCR/Parser выполняется **полностью** уже в черновике; Converter-validator — только извлечение метаданных. Полная конвертация (validated_v3) запускается при approve, после чего документ записывается в Registry. Решение пользователя принимается через `PATCH /drafts/{draft_id}/decide`. `task_id` — внутренний сквозной ID задачи (`pipeline.tasks`, БД Orchestrator). Этапы задачи с входными/выходными данными сервисов — в `pipeline.task_steps`.
 
 **Новая Draft FSM:**
 

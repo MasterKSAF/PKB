@@ -1,7 +1,6 @@
 # Specificity — аномалии и трудные моменты
 
 > Только то, что **не решено**, **не очевидно** или **требует внимания**.
-> Закрытые аномалии — в разделе «История решений».
 
 ---
 
@@ -18,6 +17,14 @@ API черновиков и FSM документированы, но **UI сра
 ### A6. Пустой документ — блокировка завершения черновика
 
 Пустой документ (0 страниц после распознавания) не может быть завершён — документ не будет создан в Registry. Черновик переводится в `discarded` с кодом `EMPTY_DOCUMENT`. UI должен показывать сообщение об ошибке и предлагать загрузить файл заново. Реализовано в API.
+
+### A23. Черновики перенесены в Registry
+
+Таблица черновиков перенесена из `pipeline.drafts` (БД Orchestrator) в `registry.drafts` (БД Registry). Добавлены новые поля. Управление — через Orchestrator, который вызывает Registry internal API. `pipeline.tasks` и `pipeline.task_steps` — новые таблицы в БД Orchestrator. `registry.documents.draft_id` — новое поле для связи документа с черновиком.
+
+### A24. `task_id` — внутренний ID задачи пайплайна
+
+`task_id` теперь ID задачи в `pipeline.tasks` (БД Orchestrator). Агрегирует этапы (`task_steps`) с входными/выходными данными сервисов. Внешние клиенты используют `draft_id`.
 
 ---
 
@@ -52,7 +59,7 @@ API черновиков и FSM документированы, но **UI сра
 | API-B1 | RAG Builder: тип секции `drawing` не существует в системе (должен быть `image`) | ⬜ открыто |
 | API-B2 | RAG Builder: в таблице полей `sections[].id`, в примере и Registry — `section_id` | ⬜ открыто |
 | API-B3 | Registry `POST /registry/documents`: два несовместимых формата тела, не описана детекция режима | ⬜ открыто |
-| API-B4 | Registry enum `document_status` содержит только статусы документа (`created`, `pending_index`, `indexing`, `indexed`, `failed`), статусы черновика вынесены в `pipeline.drafts` | 🔄 исправлено |
+| API-B4 | Registry enum `document_status` содержит только статусы документа (`created`, `pending_index`, `indexing`, `indexed`, `failed`), статусы черновика вынесены в `registry.drafts` | 🔄 исправлено |
 | API-S1 | Auth: `POST /admin/roles` → `id` (bigint), `GET /admin/roles` → `role_id` (string) | ⬜ открыто |
 | API-S2 | Common: `promotion_task_id` — bigint в таблице идентификаторов, string в Orchestrator | ⬜ открыто |
 | API-S3 | Common: упоминается `POST /chat/ask` (не существует, заменён на `/chat/sessions/{id}/messages`) | ⬜ открыто |
@@ -124,30 +131,4 @@ API черновиков и FSM документированы, но **UI сра
 - **Двухфазный пайплайн**: preview → full (от 23.05).
 - **OCR и Parser — два независимых сервиса** (от 23.05).
 
----
 
-## История решений
-
-| Дата | Решение |
-|------|---------|
-| 06.06 | **Новая модель статусов**: статусы документов и черновиков разделены. `pipeline.drafts.status`: `uploaded`, `previewing`, `ready_for_approve`, `approved`, `discarded`. `registry.documents.processing_status`: `created`, `pending_index`, `indexing`, `indexed`, `failed`. Удалены `draft`, `awaiting_decision`, `parsing`, `validation`, `ready_for_promotion`, `review_required`, `registry`, `duplicate`, `new_version`, `archived` из `registry.documents`. `registry.document_history.event_type`: `promoted` → `approved`. |
-| 07.06 | **Tasks — только read-only**: `POST /tasks/{task_id}/preview` и `POST /tasks/{task_id}/decide` удалены. `GET /tasks/{task_id}/preview/status` → `GET /tasks/{task_id}/status`. Задачи — только просмотр статуса. Всё управление через `/drafts/{draft_id}/...`. |
-| 07.06 | **Registry — статус только от Оркестратора**: `PATCH /registry/documents/{doc_id}/status` — internal, вызывается только Оркестратором при завершении индексации. Удалён публичный эндпоинт и `GET /registry/documents/{doc_id}/history` (история — в Оркестраторе). |
-| 06.06 | **Миграция task→drafts**: управление загрузкой документов переведено с `/tasks/{task_id}/...` на `/drafts/{draft_id}/...`. `task_id` — внутренний сквозной ID (internal). Внешние клиенты используют `draft_id` и `document_id`. Добавлены эндпоинты `POST /drafts/{draft_id}/preview`, `GET /drafts/{draft_id}/preview/status`. `POST /tasks/{task_id}/decide` помечен как internal. |
-| 06.06 | **Пустой документ**: пустой документ (0 страниц) не может покинуть черновики. Черновик переводится в `discarded` с кодом `EMPTY_DOCUMENT`. Решение `approve` недоступно. |
-| 06.06 | Исправлены коды ошибок: `VALIDATION_FAILED` убран с 500, `VALIDATION_ERROR` на 400 во всех сервисах |
-| 06.06 | Унифицированы коды ошибок: каждый сервис хранит только свои специфичные коды, общие — в `common_api.md` |
-| 06.06 | Исправлены все двусмысленные формулировки A23–A34 |
-| 06.06 | API-документация: Б1–Б4, С1–С11, К1–К8 — все исправлены |
-| 06.06 | Пайплайны: PL-E1, C1, L1, P2, P4, R2, L3–L7, PL-E4 — исправлены |
-| 06.06 | Security: S1, S2, S4–S9, S11, S12 — документированы; S3, S10 — code-level |
-| 06.06 | Кросс-проверка: КП1–КП4, В1–В5, В8–В10 — исправлены/согласованы |
-| 06.06 | Схема: DB-E7 (индексы), DB-E8 (денормализация), DB-E9 (updated_at) — документированы |
-| 05.06 | Документированы API черновиков, FSM, Gateway-маршрутизация |
-| 04.06 | Все ID → bigint |
-| 04.06 | Добавлены `chat.projects` и `project_id` в `chat.sessions` |
-| 04.06 | `document_type` унифицирован |
-| 29.05 | OpenAPI не делаем, Markdown достаточно |
-| 26.05 | Поиск удалён из Orchestrator |
-| 23.05 | OCR и Parser — два независимых сервиса |
-| 23.05 | Двухфазный пайплайн: preview → full |

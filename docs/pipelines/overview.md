@@ -95,13 +95,15 @@ graph LR
 
 | Операция                                       | Пайплайн | Этап              | Сервис                    | Доступ к БД  |
 | ---------------------------------------------- | -------- | ----------------- | ------------------------- | ------------ |
-| Загрузка файла, SHA-256, MinIO                 | 1        | Пре-стейдж        | **Orchestrator**          | Пишет        |
-| Preview-фаза, хранение preview-данных          | 1        | Preview           | **Orchestrator**          | Пишет        |
+| Загрузка файла, SHA-256, MinIO                 | 1        | Пре-стейдж        | **Orchestrator**          | Пишет (pipeline.tasks, pipeline.task_steps) |
+| Создание записи черновика                      | 1        | Пре-стейдж        | **Orchestrator** → **Registry** (POST /registry/drafts) | Registry: Пишет (registry.drafts) |
+| Preview-фаза, хранение preview-данных          | 1        | Preview           | **Orchestrator**          | Вызов Registry (PATCH /registry/drafts/{id}/status) |
 | Распознавание (OCR)                            | 1        | 1. OCR            | **OCR Service**           | Нет          |
 | Парсинг структуры                              | 1        | 2. Parser         | **Parser Service**        | Нет          |
 | Валидация JSON, классификация                  | 1        | 3. Converter-validator | **Converter-validator Service** | Читает |
 | Проверка кодов по справочнику                  | 1        | 3. Converter-validator | **Registry Service**      | Читает       |
 | Запись карточки документа в БД                 | 1        | 4. Registry       | **Registry Service**      | Пишет        |
+| Ведение этапов задачи (task_steps)             | 1        | Все               | **Orchestrator**          | Пишет (pipeline.task_steps) |
 | Чанкинг + Embeddings + Индекс                  | 2        | 1. RAG Builder    | **RAG Builder Service**   | Пишет
 | Приём сообщения                                | 3        | 1. Query Service  | **Query Service**         | Пишет        |
 | Обогащение терминами                           | 3        | 2. Query Service  | **Query Service**         | Читает       |

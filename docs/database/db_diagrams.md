@@ -10,6 +10,7 @@
 erDiagram
     registry.documents {
         bigint id PK
+        bigint draft_id FK
         text doc_code
         text title
         text normalized_title
@@ -86,16 +87,44 @@ erDiagram
         timestamptz updated_at
     }
 
-    pipeline.drafts {
+    registry.drafts {
         bigint id PK
-        bigint task_id FK
-        varchar doc_code
-        varchar title
         varchar file_key
+        varchar document_key
+        varchar status
+        float confidence
+        jsonb preview_metadata
         jsonb raw_data
+        varchar error_code
+        varchar error_message
+        varchar created_by
+        varchar updated_by
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    pipeline.tasks {
+        bigint id PK
+        bigint draft_id
+        bigint document_id FK
         varchar status
         timestamptz created_at
         timestamptz updated_at
+    }
+
+    pipeline.task_steps {
+        bigint id PK
+        bigint task_id FK
+        varchar step_name
+        varchar service_name
+        varchar status
+        jsonb input_data
+        jsonb output_data
+        varchar error_code
+        varchar error_message
+        timestamptz started_at
+        timestamptz completed_at
+        timestamptz created_at
     }
 
     registry.document_history {
@@ -174,7 +203,9 @@ erDiagram
     chat.projects ||--o{ chat.sessions : has_sessions
     chat.sessions ||--o{ chat.messages : has_messages
 
-    pipeline.drafts }o--|| pipeline.tasks : references
+    pipeline.tasks ||--o{ pipeline.task_steps : has
+    pipeline.tasks }o--|o registry.documents : produces  (FK document_id nullable)
+    registry.documents }o--|o registry.drafts : originates_from  (FK draft_id nullable)
 ```
 
 ---
@@ -189,6 +220,12 @@ erDiagram
 | `chat.messages` | `created_at` | B-tree | Сортировка по времени |
 | `registry.documents` | `processing_status` | B-tree | Фильтрация по статусу |
 | `registry.documents` | `created_at` | B-tree | Сортировка по дате загрузки |
+| `registry.documents` | `draft_id` | B-tree | Поиск документа по черновику |
+| `registry.drafts` | `file_key` | B-tree | Поиск по ключу MinIO |
+| `registry.drafts` | `document_key` | B-tree | Поиск по бизнес-ключу |
+| `pipeline.tasks` | `draft_id` | B-tree | Поиск задачи по черновику |
+| `pipeline.tasks` | `document_id` | B-tree | Поиск задачи по документу |
+| `pipeline.task_steps` | `task_id` | B-tree | Поиск этапов задачи |
 | `registry.document_sections` | `content` | GIN | Поиск по JSONB-полям (например, `content.amendments[].type`) |
 
 ## Ключевые условия и ограничения
@@ -205,17 +242,43 @@ erDiagram
 
 ## Примечания
 
-### 0. Черновики документов (`pipeline.drafts`)
+### 0. Черновики документов (`registry.drafts`)
 
 | Поле | Примечание |
 |------|------------|
-| `task_id` | FK → `pipeline.tasks(id)`. Ссылка на задачу пайплайна, в рамках которой создан черновик. |
-| `doc_code` | Код документа (ГОСТ/ТУ и т.д.), если определён на момент сохранения черновика. |
 | `file_key` | Ключ в MinIO для исходного файла черновика. |
-| `raw_data` | JSONB с сырыми данными от Parser (schema: `raw_ocr_v4`) или Converter (`validated_v3`). |
+| `document_key` | Бизнес-ключ документа (SHA-256). |
 | `status` | Статус черновика: `uploaded`, `previewing`, `ready_for_approve`, `approved`, `discarded`. |
+| `confidence` | Оценка качества распознавания (0..1). |
+| `preview_metadata` | JSONB с метаданными preview: `doc_code`, `title`, `document_type`, `year`, `revision`. |
+| `raw_data` | JSONB с сырыми данными от Parser (schema: `raw_ocr_v4`) или Converter (`validated_v3`). |
+| `error_code` / `error_message` | Код и описание ошибки при `discarded`. |
+| `created_by` / `updated_by` | Кто создал/обновил запись. |
 | `created_at` | Дата создания черновика. |
 | `updated_at` | Дата последнего обновления черновика. |
+
+### 0a. Задачи пайплайна (`pipeline.tasks`) и этапы (`pipeline.task_steps`)
+
+**`pipeline.tasks`** — заголовок задачи пайплайна:
+
+| Поле | Примечание |
+|------|------------|
+| `draft_id` | Plain bigint (без FK) — ID черновика в `registry.drafts`. Разные БД, FK не ставится. |
+| `document_id` | FK → `registry.documents.id`, nullable. Заполняется после approve. |
+| `status` | Статус задачи: `active`, `completed`, `failed`. |
+
+**`pipeline.task_steps`** — этапы задачи с промежуточными данными:
+
+| Поле | Примечание |
+|------|------------|
+| `task_id` | FK → `pipeline.tasks.id`. |
+| `step_name` | Название этапа: `upload`, `preview_ocr`, `preview_converter`, `full_ocr`, `full_converter`, `registry_creation`. |
+| `service_name` | Какой сервис вызывался: OCR, Parser, Converter-validator, Registry. |
+| `status` | Статус этапа: `pending`, `running`, `completed`, `failed`. |
+| `input_data` | JSONB — входные данные для этапа (JSON-контейнер). |
+| `output_data` | JSONB — выходные данные от сервиса (промежуточный JSON-контейнер). |
+| `error_code` / `error_message` | Код и описание ошибки при `failed`. |
+| `started_at` / `completed_at` | Время начала и завершения этапа. |
 
 ### 1. Реестр документов (`registry.documents`)
 
@@ -229,7 +292,7 @@ erDiagram
 | `jurisdiction` | Юрисдикция: `RU`, `EU`, `US`, `NO`, `INTL` |
 | `file_hash_sha256` | Хэш бинарного файла (вычисляется при загрузке) |
 | `title_hash_sha256` | Хэш `doc_code + title + era` (вычисляется в Converter) |
-| `processing_status` | FSM статус конвейера (не путать с `validity_status` — юридическим статусом документа). Возможные значения: `created`, `pending_index`, `indexing`, `indexed`, `failed`. Статусы черновика (`uploaded`, `previewing`, `ready_for_approve`, `approved`, `discarded`) хранятся в `pipeline.drafts.status`, не в `registry.documents`. |
+| `processing_status` | FSM статус конвейера (не путать с `validity_status` — юридическим статусом документа). Возможные значения: `created`, `pending_index`, `indexing`, `indexed`, `failed`. Статусы черновика (`uploaded`, `previewing`, `ready_for_approve`, `approved`, `discarded`) хранятся в `registry.drafts.status`, не в `registry.documents`. |
 | `chunk_count` | Обновляется RAG Builder после индексации |
 
 ### 2. Разделы документов (`registry.document_sections`)
@@ -321,5 +384,7 @@ erDiagram
 
 ### 10. Общее
 
-- **`document_id` (bigint)** назначается только в Registry при создании документа. До этого — `task_id` (bigint), который используется всеми начальными сервисами (OCR/Parser, Converter-Validator).
+- **`document_id` (bigint)** назначается только в Registry при создании документа. До этого — `draft_id` (bigint) и `task_id` (bigint) используются всеми начальными сервисами (OCR/Parser, Converter-Validator).
+- **`draft_id` (bigint)** назначается Registry при создании записи черновика. Orchestrator хранит маппинг `draft_id → task_id → document_id`.
+- **`registry.drafts` и `pipeline.tasks`** не связаны FK (разные БД), логическая связь по `draft_id`.
 - **`rag.document_chunks.content`** — унифицированное хранение. `content` — строка (plain text или Markdown). `tsv` строится через `to_tsvector('russian', content)` при вставке.

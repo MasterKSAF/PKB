@@ -1,6 +1,8 @@
 ## API Orchestrator Service (orchestrator-service:8081)
 
-Координатор пайплайнов 1 и 2. Оркестрирует конвейер обработки документов: загрузка → OCR → чанкинг → валидация → запись результата в Registry.
+Координатор пайплайнов 1 и 2. Оркестрирует конвейер обработки документов: загрузка → task → вызов Registry для создания черновика → OCR/Parser → Converter-validator → Registry.  
+Ведение этапов задачи: запись входных/выходных данных каждого сервиса (OCR/Parser, Converter-validator) в `pipeline.task_steps`.  
+Вызов Registry для CRUD операций с данными черновиков.
 
 **Базовый URL (внутренний)**: `http://127.0.0.1:8081/api/v1`
 
@@ -16,10 +18,10 @@
 | ----------- | ------------------------------------------------------------------- |
 | `monitor`   | Мониторинг, метрики и health                                        |
 | `documents` | Документы: загрузка, список, статус, версии, аппрув, завершение обработки |
-| `drafts`    | Черновики: управление загрузкой, preview, решение (approve/reject)  |
+| `drafts`    | Черновики: управление загрузкой, preview, решение (approve/reject) — единая точка входа. Вызов Registry internal API для CRUD |
 | `pages`     | Просмотр страниц и текстового слоя                                  |
 
-> **Примечание:** Группа `tasks` — внутренняя (internal). Эндпоинты `/tasks/{task_id}/...` используются только для межсервисного взаимодействия и админского анализа. Внешние клиенты используют `/drafts/{draft_id}/...` и `/documents/{document_id}/...`.
+> **Примечание:** Группа `tasks` — внутренняя (internal). Эндпоинты `/tasks/{task_id}/...` используются только для межсервисного взаимодействия и админского анализа. `task` — агрегатор этапов пайплайна, каждый этап хранит входные/выходные JSON-контейнеры сервисов. Внешние клиенты используют `/drafts/{draft_id}/...` и `/documents/{document_id}/...`.
 
 ---
 
@@ -29,7 +31,7 @@
 
 Загрузка файла с **обязательным созданием черновика**. Без черновика загрузить документ невозможно.
 
-Orchestrator вычисляет SHA-256 содержимого, определяет формат, создаёт задачу (`task`) и черновик (`draft`) с file_key, помещает в очередь Celery. Двухфазный конвейер: **Preview** (OCR/Parser preview → Converter-validator preview → решение пользователя) → **Full** (OCR/Parser → Converter-validator → Registry → RAG Builder).
+Orchestrator вычисляет SHA-256 содержимого, определяет формат, создаёт задачу (`pipeline.tasks`) и запись черновика в Registry (`POST /registry/drafts`), помещает в очередь Celery. Двухфазный конвейер: **Preview** (OCR/Parser preview → Converter-validator preview → решение пользователя) → **Full** (OCR/Parser → Converter-validator → Registry → RAG Builder).
 
 `user_id` определяется из контекста аутентификации.
 
@@ -69,7 +71,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 }
 ```
 
-> **Примечание:** `document_id` назначается Registry при завершении черновика. Первичный внешний идентификатор на этапе загрузки и preview — `draft_id`. `task_id` — внутренний сквозной ID задачи, используется только для межсервисного взаимодействия и администрирования.
+> **Примечание:** `draft_id` назначается Registry при создании записи черновика. `document_id` назначается Registry при завершении черновика. Первичный внешний идентификатор на этапе загрузки и preview — `draft_id`. `task_id` — внутренний сквозной ID задачи (`pipeline.tasks`), используется только для межсервисного взаимодействия и администрирования.
 
 **Коды ошибок**:
 | HTTP | `error.code` | Когда возникает |
@@ -105,6 +107,26 @@ Orchestrator вычисляет SHA-256 содержимого, определя
   "status": "previewing",
   "pipeline_stage": "preview",
   "progress_percent": 45,
+  "steps": [
+    {
+      "step_name": "upload",
+      "service_name": "Orchestrator",
+      "status": "completed",
+      "input_data": {"file_key": "f-abc123"},
+      "output_data": {"draft_id": 1, "task_id": 100},
+      "started_at": "2026-06-05T10:00:00Z",
+      "completed_at": "2026-06-05T10:00:05Z"
+    },
+    {
+      "step_name": "preview_ocr",
+      "service_name": "OCR Service",
+      "status": "running",
+      "input_data": {"file_key": "f-abc123", "max_pages": 3},
+      "output_data": null,
+      "started_at": "2026-06-05T10:00:05Z",
+      "completed_at": null
+    }
+  ],
   "created_at": "2026-06-05T10:00:00Z",
   "updated_at": "2026-06-05T10:02:30Z"
 }
@@ -113,15 +135,16 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 | Поле | Тип | Описание |
 |---|---|---|
 | `task_id` | bigint | Сквозной ID задачи |
-| `draft_id` | bigint \| null | ID черновика (если создан) |
+| `draft_id` | bigint \| null | ID черновика в Registry |
 | `document_id` | bigint \| null | ID документа в Registry (если создан) |
 | `status` | string | Текущий статус (`uploaded`, `previewing`, `ready_for_approve`, `processing`, `created`, `indexing`, `indexed`, `failed`) |
 | `pipeline_stage` | string | Этап конвейера: `upload`, `preview`, `decision`, `full`, `registry`, `indexation` |
 | `progress_percent` | int | Общий прогресс (0–100) |
+| `steps` | array | Массив этапов задачи с промежуточными данными (`step_name`, `service_name`, `status`, `input_data`, `output_data`, `started_at`, `completed_at`) |
 | `created_at` | string | Время создания задачи (ISO 8601) |
 | `updated_at` | string | Время последнего обновления (ISO 8601) |
 
-**Примечание:** `GET /tasks/{task_id}/status` — внутренний эндпоинт для сквозного отслеживания. Внешним клиентам для статуса загрузки следует использовать `GET /drafts/{draft_id}/preview/status`, для статуса документа — `GET /documents/{document_id}/status`.
+**Примечание:** `GET /tasks/{task_id}/status` — внутренний эндпоинт для сквозного отслеживания. `task` — агрегатор этапов пайплайна, каждый этап хранит входные/выходные JSON-контейнеры сервисов. Внешним клиентам для статуса загрузки следует использовать `GET /drafts/{draft_id}/preview/status`, для статуса документа — `GET /documents/{document_id}/status`.
 
 ### POST /documents/{doc_id}/versions
 
@@ -868,15 +891,18 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 
 ## Группа drafts
 
-Черновик (draft) — **обязательная точка входа** для загрузки документа. `POST /drafts` всегда создаёт черновик; загрузить документ без черновика невозможно.
+Orchestrator — **единая точка входа** для работы с черновиками. Все эндпоинты `/drafts` проксируют вызовы к Registry internal API (`/registry/drafts`), добавляя логику пайплайна (создание task, управление этапами).
 
-Черновик содержит raw_data (результат OCR/Parser), preview_metadata и управляет жизненным циклом загрузки:
-- Из черновика данные передаются на конвертацию (Converter-validator) — см. [pipeline1-formation.md](../pipelines/pipeline1-formation.md)
-- После конвертации 
-- Один документ может проходить черновик-пайплайн несколько раз (разные попытки распознавания)
-- Человек (или автомат) выбирает лучший черновик для публикации
+Черновик (draft) — **обязательная точка входа** для загрузки документа. `POST /drafts` всегда создаёт задачу (`pipeline.tasks`) и черновик (`POST /registry/drafts`); загрузить документ без черновика невозможно.
 
-Детальная концепция — см. [drafts_storage_plan.md](../plans/drafts_storage_plan.md).
+**Принцип работы:**
+- `POST /drafts` → создание task + вызов `POST /registry/drafts`
+- `GET /drafts` / `GET /drafts/{id}` → прокси к `GET /registry/drafts`
+- `PATCH /drafts/{id}/decide` → решение → `PATCH /registry/drafts/{id}/status` + при `approve` → `POST /registry/documents`
+- `DELETE /drafts/{id}` → вызов `DELETE /registry/drafts/{id}`
+
+Данные черновиков (raw_data, preview_metadata) хранятся в `registry.drafts` (БД Registry). Управление жизненным циклом — через Orchestrator. Этапы задачи с входными/выходными данными сервисов — в `pipeline.task_steps` (БД Orchestrator).  
+Детальная схема БД — см. [db_diagrams.md](../database/db_diagrams.md).
 
 ### GET /drafts
 
@@ -908,7 +934,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
         "year": "1981",
         "revision": null
       },
-      "approved_document_id": 1300,
+      "document_id": 1300,
       "created_at": "2026-06-05T10:00:00Z",
       "updated_at": "2026-06-05T10:05:00Z"
     },
@@ -928,7 +954,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
       },
       "error_code": "LOW_CONFIDENCE",
       "error_message": "Confidence below threshold (0.45 < 0.7)",
-      "approved_document_id": null,
+      "document_id": null,
       "created_at": "2026-06-05T10:10:00Z",
       "updated_at": "2026-06-05T10:12:00Z"
     }
@@ -950,7 +976,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 | `status` | string | Статус черновика: `uploaded`, `previewing`, `ready_for_approve`, `approved`, `discarded` |
 | `confidence` | float | Оценка качества распознавания (0..1) |
 | `preview_metadata` | object | Preview-метаданные: `doc_code`, `title`, `document_type`, `year`, `revision` |
-| `approved_document_id` | bigint \| null | `document_id`, созданный по результатам черновика (FK → `registry.documents`) |
+| `document_id` | bigint \| null | ID документа в Registry (FK → `registry.documents`), созданный по результатам черновика |
 | `error_code` | string \| null | Код ошибки при `discarded` |
 | `error_message` | string \| null | Описание ошибки |
 | `created_at` | string | Время создания (ISO 8601) |
@@ -998,7 +1024,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
       }
     ]
   },
-  "approved_document_id": null,
+  "document_id": null,
   "error_code": null,
   "error_message": null,
   "created_by": "user_10",
@@ -1017,7 +1043,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 | `confidence` | float | Оценка качества распознавания (0..1) |
 | `preview_metadata` | object | Извлечённые метаданные |
 | `raw_data` | object | Сырые данные распознавания (`raw_ocr_v4`) — результат Parser или OCR |
-| `approved_document_id` | bigint \| null | `document_id`, созданный по результатам черновика |
+| `document_id` | bigint \| null | ID документа в Registry, созданный по результатам черновика |
 | `error_code` | string \| null | Код ошибки |
 | `error_message` | string \| null | Описание ошибки |
 | `created_by` | string | Кто создал черновик |
@@ -1182,7 +1208,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
   "draft_id": 1,
   "status": "approved",
   "action": "approve",
-  "approved_document_id": 1300,
+  "document_id": 1300,
   "message": "Черновик завершён, документ создан в Registry. Запущен Пайплайн 2 (индексация).",
   "decided_by": "user_10",
   "decided_at": "2026-06-05T10:05:00Z"
@@ -1196,7 +1222,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
   "draft_id": 2,
   "status": "discarded",
   "action": "reject",
-  "approved_document_id": null,
+  "document_id": null,
   "message": "Черновик отклонён. Можно загрузить файл повторно для новой попытки.",
   "decided_by": "user_10",
   "decided_at": "2026-06-05T10:12:00Z"
@@ -1208,7 +1234,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 | `draft_id` | bigint | Идентификатор черновика |
 | `status` | string | Новый статус: `approved` или `discarded` |
 | `action` | string | Выполненное действие: `approve` или `reject` |
-| `approved_document_id` | bigint \| null | `document_id` созданного документа (null при reject) |
+| `document_id` | bigint \| null | ID документа в Registry (null при reject) |
 | `message` | string | Описание результата |
 | `decided_by` | string | Кто принял решение |
 | `decided_at` | string | Время решения (ISO 8601) |

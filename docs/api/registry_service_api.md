@@ -1,7 +1,8 @@
 ## API Registry Service / Registry (registry-service:8084)
 
 Базовый реестр НСИ (нормативно-справочной информации).  
-Хранит классификаторы, документы и терминологию.  
+Хранит классификаторы, документы, терминологию и данные черновиков (drafts).  
+Управление данными черновиков: хранение, статусы, метаданные.  
 Соответствует этапу **«Registry» Пайплайна 1 (Формирование документа)** — **пишет** данные в БД.  
 Также участвует в этапе **«Validation»** — **читает** справочники классификаторов для проверки кодов.
 
@@ -36,6 +37,10 @@
 | 404 | `CLASSIFIER_NOT_FOUND` | Узел классификатора не найден |
 | 404 | `TERM_NOT_FOUND` | Термин не найден |
 | 404 | `DOCUMENT_NOT_FOUND` | Документ не найден |
+| 404 | `DRAFT_NOT_FOUND` | Черновик не найден |
+| 409 | `DRAFT_ALREADY_DECIDED` | Решение по черновику уже принято |
+| 409 | `DRAFT_ALREADY_PREVIEWED` | Черновик уже прошёл preview |
+| 400 | `EMPTY_DOCUMENT` | Нельзя завершить черновик с 0 страниц |
 | 409 | `DUPLICATE_CODE` | Код (в системе) уже существует |
 | 409 | `DUPLICATE_DOCUMENT` | Документ с таким бизнес-ключом уже есть |
 | 409 | `DUPLICATE_TERM` | Термин уже существует |
@@ -52,6 +57,7 @@
 | `classifiers` | Иерархический справочник классификаторов (МКС, ОКСТУ, УДК, внешние) |
 | `terminology` | Реестр терминов, синонимов и правил нормализации |
 | `documents` | Реестр логических документов НСИ |
+| `drafts` | Управление данными черновиков (internal, доступен только Orchestrator) |
 | `common` | Статистика и справочные значения |
 
 ---
@@ -1340,6 +1346,212 @@ POST /registry/documents/import
 
 ---
 
+## Группа drafts (internal)
+
+Все эндпоинты — **internal**, доступны только Orchestrator.  
+Данные черновиков хранятся в `registry.drafts`. Управление жизненным циклом — через Orchestrator.
+
+| Метод | Путь | Описание |
+|-------|------|----------|
+| POST | `/registry/drafts` | Создать запись черновика |
+| GET  | `/registry/drafts` | Список черновиков |
+| GET  | `/registry/drafts/{draft_id}` | Полная информация |
+| GET  | `/registry/drafts/{draft_id}/preview` | Preview-метаданные |
+| PATCH| `/registry/drafts/{draft_id}/status` | Обновить статус |
+| DELETE| `/registry/drafts/{draft_id}` | Удалить запись |
+
+### 4.1. POST /registry/drafts — Создать запись черновика
+
+Создаёт запись черновика в `registry.drafts`.  
+Вызывается Orchestrator после `POST /drafts`.
+
+**Запрос**: `application/json`
+
+```json
+{
+  "file_key": "f-abc123",
+  "document_key": "sha256:def456",
+  "status": "uploaded",
+  "raw_data": { ... },
+  "created_by": "orchestrator"
+}
+```
+
+**Ответ `201`**:
+
+```json
+{
+  "data": {
+    "id": 1,
+    "file_key": "f-abc123",
+    "document_key": "sha256:def456",
+    "status": "uploaded",
+    "created_at": "2026-06-05T10:00:00Z"
+  }
+}
+```
+
+---
+
+### 4.2. GET /registry/drafts — Список черновиков
+
+**Query-параметры:**
+
+| Параметр | Тип | Обязательный | Описание |
+|----------|-----|-------------|----------|
+| `document_key` | string | Нет | Фильтр по бизнес-ключу |
+| `status` | string | Нет | Фильтр по статусу |
+
+**Ответ `200`**:
+
+```json
+{
+  "data": [
+    {
+      "id": 1,
+      "file_key": "f-abc123",
+      "document_key": "sha256:def456",
+      "status": "approved",
+      "confidence": 0.92,
+      "preview_metadata": {
+        "doc_code": "ГОСТ 20868-81",
+        "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ",
+        "document_type": "normative",
+        "year": "1981",
+        "revision": null
+      },
+      "created_by": "orchestrator",
+      "created_at": "2026-06-05T10:00:00Z"
+    }
+  ],
+  "meta": { "total": 1, "page": 1, "page_size": 50 }
+}
+```
+
+---
+
+### 4.3. GET /registry/drafts/{draft_id} — Полная информация
+
+**Ответ `200`**:
+
+```json
+{
+  "data": {
+    "id": 1,
+    "file_key": "f-abc123",
+    "document_key": "sha256:def456",
+    "status": "ready_for_approve",
+    "confidence": 0.92,
+    "preview_metadata": {
+      "doc_code": "ГОСТ 20868-81",
+      "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ",
+      "document_type": "normative",
+      "year": "1981",
+      "revision": null
+    },
+    "raw_data": { "schema": "raw_ocr_v4", "pages": [...] },
+    "error_code": null,
+    "error_message": null,
+    "created_by": "orchestrator",
+    "updated_by": null,
+    "created_at": "2026-06-05T10:00:00Z",
+    "updated_at": "2026-06-05T10:05:00Z"
+  }
+}
+```
+
+---
+
+### 4.4. GET /registry/drafts/{draft_id}/preview — Preview-метаданные
+
+**Ответ `200`**:
+
+```json
+{
+  "data": {
+    "id": 1,
+    "file_key": "f-abc123",
+    "status": "ready_for_approve",
+    "confidence": 0.92,
+    "preview_metadata": {
+      "doc_code": "ГОСТ 20868-81",
+      "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ",
+      "document_type": "normative",
+      "year": "1981",
+      "revision": null
+    },
+    "created_at": "2026-06-05T10:00:00Z"
+  }
+}
+```
+
+---
+
+### 4.5. PATCH /registry/drafts/{draft_id}/status — Обновить статус
+
+Обновляет статус черновика. Вызывается Orchestrator при изменении жизненного цикла.
+
+**Запрос**:
+
+```json
+{
+  "status": "ready_for_approve",
+  "confidence": 0.92,
+  "preview_metadata": {
+    "doc_code": "ГОСТ 20868-81",
+    "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ",
+    "document_type": "normative",
+    "year": "1981",
+    "revision": null
+  },
+  "error_code": null,
+  "error_message": null,
+  "updated_by": "orchestrator"
+}
+```
+
+**Ответ `200`**:
+
+```json
+{
+  "data": {
+    "id": 1,
+    "status": "ready_for_approve",
+    "previous_status": "previewing",
+    "updated_at": "2026-06-05T10:03:00Z"
+  }
+}
+```
+
+> **Примечание:** Для статуса `discarded` можно передать `error_code` и `error_message`.  
+> Для статусов `approved` и `discarded` дополнительно обновляется `updated_by`.
+
+---
+
+### 4.6. DELETE /registry/drafts/{draft_id} — Удалить запись
+
+Каскадное удаление записи черновика из `registry.drafts`.  
+Вызывается Orchestrator при `DELETE /drafts/{draft_id}`.
+
+**Ответ `200`**:
+
+```json
+{
+  "data": {
+    "id": 1,
+    "deleted_at": "2026-06-05T12:00:00Z"
+  }
+}
+```
+
+**Коды ошибок:**
+| HTTP | `error.code` | Описание |
+|------|-------------|----------|
+| 404 | `DRAFT_NOT_FOUND` | Черновик не найден |
+| 409 | `DRAFT_ALREADY_DECIDED` | Черновик уже в финальном статусе (`approved`/`discarded`) |
+
+---
+
 ## Группа common
 
 | Метод | Путь | Описание |
@@ -1347,7 +1559,7 @@ POST /registry/documents/import
 | GET | `/registry/stats` | Статистика |
 | GET | `/registry/enums` | Допустимые значения |
 
-### 4.1. Статистика
+### 6.1. Статистика
 
 ```
 GET /registry/stats
@@ -1395,7 +1607,7 @@ GET /registry/stats
 
 ---
 
-### 4.2. Допустимые значения
+### 6.2. Допустимые значения
 
 ```
 GET /registry/enums
