@@ -121,7 +121,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
       "step_name": "preview_ocr",
       "service_name": "OCR Service",
       "status": "running",
-      "input_data": {"file_key": "f-abc123", "max_pages": 3},
+      "input_data": {"file_key": "f-abc123", "mode": "preview", "max_pages": 3},
       "output_data": null,
       "started_at": "2026-06-05T10:00:05Z",
       "completed_at": null
