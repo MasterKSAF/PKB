@@ -82,8 +82,10 @@ async def run_coverage_test(output_path=None, mode: str = "mock"):
             print(f"\n  📄 Report saved: {out.resolve()}")
         else:
             from datetime import datetime
+            check_result_dir = PROJECT_ROOT / "backend" / "check_result"
+            check_result_dir.mkdir(parents=True, exist_ok=True)
             auto_name = f"api_coverage_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
-            auto_path = Path(auto_name)
+            auto_path = check_result_dir / auto_name
             auto_path.write_text(report, encoding="utf-8")
             print(f"\n  📄 Report saved: {auto_path.resolve()}")
     finally:
@@ -107,7 +109,7 @@ async def stop_mocks(processes):
 
 async def main():
     args = sys.argv[1:]
-    output = "api_coverage_report.md"
+    output = None  # без -o будет auto-name c датой: api_coverage_<timestamp>.md
     mode = "mock"
 
     # Парсим --mode и -o вручную без argparse

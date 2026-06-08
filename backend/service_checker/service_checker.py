@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
-PKB Neuroassistant — Service Launcher, Health Check & Report Generator
+PKB Neuroassistant — Service Checker & Report Generator
+
+⚠️  ВАЖНО: service_checker НЕ вмешивается в работу других сервисов.
+Его единственная задача — проверить их состояние (health check),
+выполнить тестовые API-вызовы (эмуляция) и сформировать отчёт.
+Любые изменения конфигурации, данных или кода сервисов ЗАПРЕЩЕНЫ.
 
 Утилита для:
   1. Запуска сервисов (backend/gateway_service mocks и/или реальные сервисы)
@@ -20,6 +25,7 @@ import argparse
 import asyncio
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -1818,8 +1824,8 @@ def _docker_health_check(services: List[str]) -> bool:
 
 
 async def _docker_collect_logs(services: List[str] = None) -> bool:
-    """Собрать логи ошибок из supervisor в отчёт."""
-    log_header("Docker: сбор логов ошибок")
+    """Собрать все логи (info + error) из supervisor в отчёт."""
+    log_header("Docker: сбор логов (info + error)")
 
     check_result_dir = BACKEND_DIR / "check_result"
     check_result_dir.mkdir(parents=True, exist_ok=True)
@@ -1828,64 +1834,131 @@ async def _docker_collect_logs(services: List[str] = None) -> bool:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     report_path = check_result_dir / f"errors_{timestamp}.md"
 
-    compose_file = DOCKER_COMPOSE_FILE
-    use_shell = sys.platform == "win32"
+    container_name = "pkb-neuro"
+    docker_cmd_prefix = ["docker", "exec", container_name]
 
-    # Список err-файлов в supervisor (find вместо glob — работает на Windows)
-    log_cmd = [
-        "docker", "compose", "-f", str(compose_file),
-        "exec", "-T", "app", "find", "/var/log/supervisor", "-name", "*.err"
-    ]
-    try:
-        result = subprocess.run(
-            log_cmd, capture_output=True, text=True, timeout=15,
-            shell=use_shell,
-        )
-        if result.returncode != 0 or not result.stdout.strip():
-            log_info("Нет err-файлов в /var/log/supervisor/ - ошибок нет")
-            return True
-
-        err_files = [f.strip() for f in result.stdout.strip().split("\n") if f.strip()]
-    except Exception as e:
-        log_err(f"Не удалось получить список err-файлов: {e}")
-        return False
-
-    # Собираем отчёт
     lines = []
-    lines.append("# Supervisor Error Logs\n")
+    lines.append("# Supervisor Logs\n")
     lines.append(f"**Generated:** {datetime.now(timezone.utc).isoformat()}\n")
     lines.append(f"\n---\n")
 
-    all_empty = True
-    for err_file in sorted(err_files):
-        lines.append(f"\n## {err_file}\n")
-        lines.append(f"\n```\n")
-
-        read_cmd = [
-            "docker", "compose", "-f", str(compose_file),
-            "exec", "-T", "app", "cat", err_file
-        ]
-        try:
-            r = subprocess.run(
-                read_cmd, capture_output=True, text=True, timeout=30,
-                shell=use_shell,
-            )
-            content = r.stdout.strip()
-            if content:
-                all_empty = False
-                lines.append(content)
-                lines.append("\n```\n")
-            else:
-                lines.append("(пусто)\n```\n")
-        except Exception as e:
-            lines.append(f"(ошибка чтения: {e})\n```\n")
-
-    if all_empty:
-        log_ok("Все err-файлы пусты — ошибок нет")
-    else:
+    # Проверяем, запущен ли контейнер
+    try:
+        inspect = subprocess.run(
+            ["docker", "inspect", container_name, "--format", "{{.State.Status}}"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if inspect.returncode != 0 or inspect.stdout.strip() != "running":
+            log_err(f"Контейнер {container_name} не запущен")
+            lines.append(f"_Контейнер {container_name} не запущен. Логи недоступны._\n")
+            report_text = "\n".join(lines)
+            report_path.write_text(report_text, encoding="utf-8")
+            log_ok(f"Отчёт сохранён: {report_path}")
+            return True
+    except Exception as e:
+        log_err(f"Не удалось проверить контейнер: {e}")
+        lines.append(f"_Ошибка проверки контейнера: {e}_\n")
         report_text = "\n".join(lines)
         report_path.write_text(report_text, encoding="utf-8")
-        log_ok(f"Отчёт с ошибками сохранён: {report_path}")
+        log_ok(f"Отчёт сохранён: {report_path}")
+        return True
+
+    # Ищем все файлы в /var/log/supervisor
+    find_cmd = docker_cmd_prefix + [
+        "find", "/var/log/supervisor",
+        "-type", "f", "-not", "-name", "supervisord.log"
+    ]
+    try:
+        result = subprocess.run(
+            find_cmd, capture_output=True, text=True, timeout=15,
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            log_info("Нет файлов в /var/log/supervisor/")
+            lines.append("_Нет файлов логов._\n")
+        else:
+            log_files = [f.strip() for f in result.stdout.strip().split("\n") if f.strip()]
+
+            # 1. Читаем все файлы и классифицируем
+            entries = []  # (fname, log_path, label, content, anchor)
+            has_errors = False
+
+            for log_file in sorted(log_files):
+                fname = Path(log_file).name
+                anchor = fname.replace(".", "-")
+
+                read_cmd = docker_cmd_prefix + ["cat", log_file]
+                try:
+                    r = subprocess.run(
+                        read_cmd, capture_output=True, text=True, timeout=30,
+                    )
+                    content = r.stdout.strip()
+                except Exception as e:
+                    entries.append((fname, log_file, "⚠️ ERROR", f"(ошибка чтения: {e})", anchor))
+                    has_errors = True
+                    continue
+
+                if content and re.search(r"(Traceback|Error|ERROR|except|panic|FATAL)", content, re.IGNORECASE):
+                    entries.append((fname, log_file, "❌ ERROR", content, anchor))
+                    has_errors = True
+                else:
+                    entries.append((fname, log_file, "ℹ️ INFO", content, anchor))
+
+            # 2. Навигация (TOC)
+            toc_items = [f"- [{label} — {fname}](#{anchor})" for fname, _, label, _, anchor in entries]
+            lines.append("## 📋 Быстрая навигация\n\n")
+            lines.append("\n".join(toc_items) + "\n")
+            lines.append("\n---\n")
+
+            # 3. Выводим INFO-файлы
+            lines.append("## ℹ️ Info-логи\n")
+            info_count = 0
+            for fname, log_path, label, content, anchor in entries:
+                if label != "ℹ️ INFO":
+                    continue
+                info_count += 1
+                lines.append(f"\n### {anchor}\n")
+                lines.append(f"**{label}** — `{log_path}`\n")
+                lines.append(f"\n```\n")
+                if content:
+                    lines.append(content)
+                else:
+                    lines.append("(пусто)")
+                lines.append("\n```\n")
+
+            if info_count == 0:
+                lines.append("_Нет info-файлов._\n")
+
+            # 4. Выводим ERROR-файлы только если есть ошибки
+            if has_errors:
+                lines.append("\n## ❌ Error-логи\n")
+                err_count = 0
+                for fname, log_path, label, content, anchor in entries:
+                    if label not in ("❌ ERROR", "⚠️ ERROR"):
+                        continue
+                    err_count += 1
+                    lines.append(f"\n### {anchor}\n")
+                    lines.append(f"**{label}** — `{log_path}`\n")
+                    lines.append(f"\n```\n")
+                    if content:
+                        lines.append(content)
+                    else:
+                        lines.append("(пусто)")
+                    lines.append("\n```\n")
+
+                if err_count == 0:
+                    lines.append("_Нет error-файлов._\n")
+            else:
+                lines.append("\n---\n")
+                lines.append("_✅ Ошибки не обнаружены. Все файлы содержат только info-сообщения._\n")
+
+    except Exception as e:
+        log_err(f"Не удалось получить список логов: {e}")
+        lines.append(f"_Ошибка получения логов: {e}_\n")
+
+    # Сохраняем отчёт в любом случае
+    report_text = "\n".join(lines)
+    report_path.write_text(report_text, encoding="utf-8")
+    log_ok(f"Отчёт сохранён: {report_path}")
 
     return True
 
@@ -1974,7 +2047,10 @@ async def cmd_docker(
         return
 
     if action == "coverage":
+        log_header("📋 Coverage + Logs")
         await _docker_run_coverage()
+        log_info("Собираем логи ошибок...")
+        await _docker_collect_logs(target_services)
         return
 
     if action == "logs":

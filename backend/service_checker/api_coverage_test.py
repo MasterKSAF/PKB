@@ -110,7 +110,7 @@ MODE_PORTS = {
         "converter_validator": 8086,  # нет реализации (будет пропущен)
         "parser": 8087,
         "ocr": 8088,                  # нет реализации (будет пропущен)
-        "analyse": 8089,               # нет реализации (будет пропущен)
+        # analyse — временно не тестируется (нет контейнера)
         "rag_builder": 8090,
         "rag_search": 8091,
     },
@@ -413,15 +413,17 @@ def build_endpoints() -> Dict[str, List[EndpointDef]]:
         EndpointDef("GET", f"{API_PREFIX}/ocr/process/{{task_id}}/result", "ocr", "Итоговый JSON OCR"),
     ]
 
-    # ── Analyse Service (analyse-service:8089) ──────────────────────
-    endpoints["analyse"] = [
-        EndpointDef("GET", f"{API_PREFIX}/health", "health", "Health check сервиса"),
-        EndpointDef("POST", f"{API_PREFIX}/analyse/compare", "analyse", "Сопоставление норм и проектов", body={"comparison_id": "cmp-test-001", "normative_query": "Толщина обшивки ≥ 12 мм", "project_document_id": "doc-proj-001"}),
-        EndpointDef("GET", f"{API_PREFIX}/analyse/compare/{{comparison_id}}", "analyse", "Результат сопоставления"),
-        EndpointDef("POST", f"{API_PREFIX}/analyse/compare/batch", "analyse", "Массовое сопоставление", body={"pairs": [{"normative_chunk_id": 1, "project_chunk_id": 2}]}),
-        EndpointDef("POST", f"{API_PREFIX}/analyse/calculate", "analyse", "Вычисления", body={"expression": "(1200 + 2*10) / 2"}),
-        EndpointDef("POST", f"{API_PREFIX}/analyse/recommend", "analyse", "Рекомендации", body={"failures": [{"rule": "min_thickness_12mm", "status": "fail"}], "document_type": "drawing"}),
-    ]
+    # ── Analyse Service (analyse-service:8089) — ВРЕМЕННО ПРОПУЩЕН ──
+    # Сервис не развёрнут. Раскомментировать когда появится контейнер.
+    #
+    # endpoints["analyse"] = [
+    #     EndpointDef("GET", f"{API_PREFIX}/health", "health", "Health check сервиса"),
+    #     EndpointDef("POST", f"{API_PREFIX}/analyse/compare", "analyse", "Сопоставление норм и проектов", body={...}),
+    #     EndpointDef("GET", f"{API_PREFIX}/analyse/compare/{{comparison_id}}", "analyse", "Результат сопоставления"),
+    #     EndpointDef("POST", f"{API_PREFIX}/analyse/compare/batch", "analyse", "Массовое сопоставление", body={...}),
+    #     EndpointDef("POST", f"{API_PREFIX}/analyse/calculate", "analyse", "Вычисления", body={...}),
+    #     EndpointDef("POST", f"{API_PREFIX}/analyse/recommend", "analyse", "Рекомендации", body={...}),
+    # ]
 
     # ── Converter-Validator Service (converter-validator:8086) ──────
     endpoints["converter_validator"] = [
@@ -667,7 +669,7 @@ class ApiCoverageTester:
             "integration": "Integration Service",
             "parser": "Parser Service",
             "ocr": "OCR Service",
-            "analyse": "Analyse Service",
+            # analyse — временно не тестируется
             "converter_validator": "Converter-Validator Service",
             "rag_builder": "RAG Builder Service",
             "rag_search": "RAG Search Service",
@@ -861,21 +863,48 @@ class ApiCoverageTester:
             if result.ping_ok:
                 services_alive += 1
             ping_icon = "✅" if result.ping_ok else "❌"
-            lines.append(f"| {result.name} | {result.port} | {result.endpoints_total} | "
-                        f"{result.endpoints_passed} | {result.endpoints_failed} | "
-                        f"{result.endpoints_skipped} | {ping_icon} |")
+            failed_str = (
+                f'<span style="color:red;font-weight:bold">{result.endpoints_failed}</span>'
+                if result.endpoints_failed > 0 else str(result.endpoints_failed)
+            )
+            skipped_str = (
+                f'<span style="color:red;font-weight:bold">{result.endpoints_skipped}</span>'
+                if result.endpoints_skipped > 0 else str(result.endpoints_skipped)
+            )
+            svc_anchor = svc_key.replace("_", "-")
+            lines.append(f"| [{result.name}](#{svc_anchor}) | {result.port} | {result.endpoints_total} | "
+                        f"{result.endpoints_passed} | {failed_str} | "
+                        f"{skipped_str} | {ping_icon} |")
 
+        total_failed_str = (
+            f'<span style="color:red;font-weight:bold">{total_failed}</span>'
+            if total_failed > 0 else str(total_failed)
+        )
+        total_skipped_str = (
+            f'<span style="color:red;font-weight:bold">{total_skipped}</span>'
+            if total_skipped > 0 else str(total_skipped)
+        )
         lines.append(f"| **Total** | | **{total_ep}** | **{total_passed}** | "
-                    f"**{total_failed}** | **{total_skipped}** | **{services_alive}/{len(self.results)}** |\n")
+                    f"{total_failed_str} | {total_skipped_str} | **{services_alive}/{len(self.results)}** |\n")
 
         # Детали по каждому сервису
         lines.append("## 🔍 Details by Service\n")
 
         for svc_key, result in self.results.items():
-            lines.append(f"### {result.name} (port {result.port})\n")
+            svc_anchor = svc_key.replace("_", "-")
+            lines.append(f"### {svc_anchor}\n")
+            lines.append(f"**{result.name}** (port {result.port})\n")
             lines.append(f"**Ping:** {'✅ Alive' if result.ping_ok else '❌ Unreachable'}\n")
+            failed_detail = (
+                f'<span style="color:red;font-weight:bold">{result.endpoints_failed}</span>'
+                if result.endpoints_failed > 0 else str(result.endpoints_failed)
+            )
+            skipped_detail = (
+                f'<span style="color:red;font-weight:bold">{result.endpoints_skipped}</span>'
+                if result.endpoints_skipped > 0 else str(result.endpoints_skipped)
+            )
             lines.append(f"**Total:** {result.endpoints_total} | **Passed:** {result.endpoints_passed} | "
-                        f"**Failed:** {result.endpoints_failed} | **Skipped:** {result.endpoints_skipped}\n")
+                        f"**Failed:** {failed_detail} | **Skipped:** {skipped_detail}\n")
 
             # Группируем по группам
             groups: Dict[str, List[EndpointResult]] = {}
@@ -924,6 +953,7 @@ class ApiCoverageTester:
         lines.append("- **⏭️ Skipped** — эндпоинт пропущен (сервис не отвечает, нет ID в контексте)\n")
         lines.append("- **Ping** — проверка health-эндпоинта на порту сервиса\n")
         lines.append(f"- **Mode** — `{self.mode}`: проверяются только сервисы этого режима\n")
+        lines.append("- ⏸️ **Analyse Service** — временно не тестируется (нет контейнера)\n")
         lines.append("\n---\n")
         lines.append(f"_Report generated by `api_coverage_test.py` at {now}_\n")
 
