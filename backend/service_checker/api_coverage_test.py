@@ -102,6 +102,7 @@ MODE_PORTS = {
         "registry": 8084,
     },
     "real": {
+        "gateway": 8081,
         "orchestrator": 8000,  # реальный orchestrator на порту 8000
         "auth": 8082,          # нет реальной реализации (будет пропущен)
         "query": 8083,         # нет реальной реализации (будет пропущен)
@@ -118,7 +119,7 @@ MODE_PORTS = {
 
 # Какие сервисы имеют реальную реализацию (для real-режима)
 SERVICES_WITH_REAL = {
-    "orchestrator", "registry", "integration", "parser", "rag_builder", "rag_search",
+    "gateway", "orchestrator", "registry", "integration", "parser", "rag_builder", "rag_search",
 }
 
 # Какие сервисы имеют мок-реализацию (для mock-режима)
@@ -447,6 +448,12 @@ def build_endpoints() -> Dict[str, List[EndpointDef]]:
         EndpointDef("POST", f"{API_PREFIX}/rag/search", "rag", "Гибридный поиск чанков", body={"query": "ледовый класс Arc4", "top_k": 5}),
     ]
 
+    # ── Gateway Service (gateway-mock:8081) — агрегирует auth + orchestrator + query + registry ──
+    endpoints["gateway"] = [
+        EndpointDef("GET", f"{API_PREFIX}/system/health", "health", "Gateway health check",
+            response_schema={"status": str, "version": str, "services": dict}),
+    ] + endpoints["auth"] + endpoints["orchestrator"] + endpoints["query"] + endpoints["registry"]
+
     return endpoints
 
 
@@ -662,6 +669,7 @@ class ApiCoverageTester:
 
         # Определяем имя сервиса
         svc_name = {
+            "gateway": "Gateway Service",
             "auth": "Auth Service",
             "registry": "Registry Service",
             "orchestrator": "Orchestrator Service",
