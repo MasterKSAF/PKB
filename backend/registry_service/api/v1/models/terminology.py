@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Column, Text, Boolean, DateTime
+from sqlalchemy import Column, Text, Boolean, DateTime, BigInteger
 from sqlalchemy.dialects.postgresql import UUID
 
 from .base import Base
@@ -10,7 +10,7 @@ class Terminology(Base):
     __tablename__ = 'terminology'
     __table_args__ = {'schema': 'registry'}
 
-    id = Column('id', UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column('id', BigInteger, primary_key=True, autoincrement=True)
     raw_term = Column('raw_term', Text, nullable=False)
     standard_term = Column('standard_term', Text, nullable=False)
     normalized_value = Column('normalized_value', Text, nullable=False)

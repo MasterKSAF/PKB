@@ -9,14 +9,17 @@ from sqlalchemy.orm import Session
 
 from api.v1.models import Document, DocumentHistory, DocumentReference, DocumentSection
 
-_UUID_FIELDS = ('successor_doc_id', 'predecessor_doc_id')
+_BIGINT_FIELDS = ('successor_doc_id', 'predecessor_doc_id')
 
 
-def _coerce_uuid_fields(kwargs: Dict[str, Any]) -> Dict[str, Any]:
-    for key in _UUID_FIELDS:
+def _coerce_int_fields(kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    for key in _BIGINT_FIELDS:
         value = kwargs.get(key)
         if value is not None:
-            kwargs[key] = uuid.UUID(str(value))
+            try:
+                kwargs[key] = int(str(value))
+            except (ValueError, TypeError):
+                kwargs[key] = None
     return kwargs
 
 
@@ -55,10 +58,10 @@ def get_documents(
 def get_document_by_id(db: Session, document_id: str) -> Optional[Document]:
     """Retrieve a single document by ID."""
     try:
-        document_uuid = uuid.UUID(str(document_id))
+        document_int = int(str(document_id))
     except (ValueError, TypeError):
         return None
-    return db.query(Document).filter(Document.id == document_uuid).first()
+    return db.query(Document).filter(Document.id == document_int).first()
 
 
 def create_document(db: Session, doc_code: str, title: str, **kwargs) -> Document:
@@ -66,7 +69,7 @@ def create_document(db: Session, doc_code: str, title: str, **kwargs) -> Documen
     document = Document(
         doc_code=doc_code,
         title=title,
-        **_coerce_uuid_fields(kwargs),
+        **_coerce_int_fields(kwargs),
     )
     db.add(document)
     db.commit()
@@ -80,7 +83,7 @@ def update_document(db: Session, document_id: str, **kwargs) -> Optional[Documen
     if not document:
         return None
     
-    for key, value in _coerce_uuid_fields(kwargs).items():
+    for key, value in _coerce_int_fields(kwargs).items():
         if value is not None and hasattr(document, key):
             setattr(document, key, value)
     
@@ -182,10 +185,13 @@ def check_document_uniqueness(
 
 
 def get_document_history(db: Session, document_id: str) -> List[DocumentHistory]:
-    document_uuid = uuid.UUID(str(document_id))
+    try:
+        document_int = int(str(document_id))
+    except (ValueError, TypeError):
+        return []
     return (
         db.query(DocumentHistory)
-        .filter(DocumentHistory.document_id == document_uuid)
+        .filter(DocumentHistory.document_id == document_int)
         .order_by(DocumentHistory.event_at.asc())
         .all()
     )
@@ -193,7 +199,7 @@ def get_document_history(db: Session, document_id: str) -> List[DocumentHistory]
 
 def _succession_entry(document: Document, relation: str, depth: int) -> Dict[str, Any]:
     return {
-        'id': str(document.id),
+        'id': document.id,
         'title': document.title,
         'doc_code': document.doc_code,
         'era': document.era,
@@ -231,7 +237,7 @@ def get_document_succession(db: Session, document: Document) -> Dict[str, Any]:
         current = successor
 
     return {
-        'document_id': str(document.id),
+        'document_id': document.id,
         'title': document.title,
         'chain': chain,
     }
@@ -240,7 +246,7 @@ def get_document_succession(db: Session, document: Document) -> Dict[str, Any]:
 def _section_to_rag(section: DocumentSection) -> Dict[str, Any]:
     return {
         'section_id': section.id,
-        'document_id': str(section.document_id),
+        'document_id': section.document_id,
         'parent_id': section.parent_id,
         'clause': section.clause,
         'title': section.title,
@@ -255,8 +261,8 @@ def _section_to_rag(section: DocumentSection) -> Dict[str, Any]:
 
 def _reference_to_rag(reference: DocumentReference) -> Dict[str, Any]:
     return {
-        'id': str(reference.id),
-        'source_document_id': str(reference.source_document_id),
+        'id': reference.id,
+        'source_document_id': reference.source_document_id,
         'target_doc_code': reference.target_doc_code,
         'reference_type': reference.reference_type,
         'context': reference.context,
@@ -264,7 +270,7 @@ def _reference_to_rag(reference: DocumentReference) -> Dict[str, Any]:
         'replaced_by': reference.replaced_by,
         'replacement_date': reference.replacement_date.isoformat() if reference.replacement_date else None,
         'is_resolved': reference.is_resolved,
-        'resolved_document_id': str(reference.resolved_document_id) if reference.resolved_document_id else None,
+        'resolved_document_id': reference.resolved_document_id,
         'created_at': reference.created_at.isoformat() if reference.created_at else None,
     }
 
@@ -285,7 +291,7 @@ def get_document_sections_bundle(db: Session, document: Document) -> Dict[str, A
     )
 
     document_payload = {
-        'id': str(document.id),
+        'id': document.id,
         'doc_code': document.doc_code,
         'title': document.title,
         'normalized_title': document.normalized_title,
@@ -299,8 +305,8 @@ def get_document_sections_bundle(db: Session, document: Document) -> Dict[str, A
         'mks_oks_code': document.mks_oks_code,
         'okstu_code': document.okstu_code,
         'udc': document.udc,
-        'successor_doc_id': str(document.successor_doc_id) if document.successor_doc_id else None,
-        'predecessor_doc_id': str(document.predecessor_doc_id) if document.predecessor_doc_id else None,
+        'successor_doc_id': document.successor_doc_id,
+        'predecessor_doc_id': document.predecessor_doc_id,
         'created_at': document.created_at.isoformat() if document.created_at else None,
         'updated_at': document.updated_at.isoformat() if document.updated_at else None,
     }

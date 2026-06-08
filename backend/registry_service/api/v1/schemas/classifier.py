@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 
 class ClassifierSchema(BaseModel):
-    id: Optional[UUID]
+    id: Optional[int] = None
     classifier_system: str
     code: str
     full_name: str

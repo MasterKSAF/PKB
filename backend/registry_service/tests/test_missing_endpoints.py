@@ -38,8 +38,7 @@ def test_document_history_with_rows(client, db_session):
     doc_id = create_res.json()["data"]["id"]
 
     db_session.add(DocumentHistory(
-        id=uuid.uuid4(),
-        document_id=uuid.UUID(doc_id),
+        document_id=int(doc_id),
         old_status=None,
         new_status="uploaded",
         comment='{"reason": "initial_upload"}',
@@ -100,10 +99,9 @@ def test_classifier_validate(client):
 def test_classifier_pending_accept_reject(client, db_session):
     doc_id = client.post("/api/v1/registry/documents/", json={"title": "Pending Doc"}).json()["data"]["id"]
     pending = ClassifierPending(
-        id=uuid.uuid4(),
         system="MKS",
         code="47.020.99",
-        found_in_document_id=uuid.UUID(doc_id),
+        found_in_document_id=int(doc_id),
         status="new",
     )
     db_session.add(pending)
@@ -121,7 +119,6 @@ def test_classifier_pending_accept_reject(client, db_session):
     assert accept_res.json()["data"]["status"] == "mapped"
 
     pending2 = ClassifierPending(
-        id=uuid.uuid4(),
         system="MKS",
         code="47.020.98",
         status="new",

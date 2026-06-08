@@ -37,10 +37,10 @@ def get_terminology(
 
 def get_terminology_by_id(db: Session, term_id: str) -> Optional[Terminology]:
     try:
-        term_uuid = uuid.UUID(str(term_id))
+        term_int = int(str(term_id))
     except (ValueError, TypeError):
         return None
-    return db.query(Terminology).filter(Terminology.id == term_uuid).first()
+    return db.query(Terminology).filter(Terminology.id == term_int).first()
 
 
 def get_terminology_by_raw_term(db: Session, raw_term: str) -> Optional[Terminology]:

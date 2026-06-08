@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Text, DateTime
+from sqlalchemy import Column, String, Text, DateTime, BigInteger
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func, text
 import uuid
@@ -9,7 +9,7 @@ class RegistryServiceEnums(Base):
     __tablename__ = 'rs_enums'
     __table_args__ = {'schema': 'registry'}
 
-    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text('uuid_generate_v4()'))
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
     enum_key = Column(String(128), nullable=False, index=True)
     enum_value = Column(String(256), nullable=False)
     description = Column(Text, nullable=True)

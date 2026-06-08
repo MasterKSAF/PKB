@@ -188,10 +188,10 @@ def get_classifier_pending(
 
 def get_classifier_pending_by_id(db: Session, pending_id: str) -> Optional[ClassifierPending]:
     try:
-        pending_uuid = uuid.UUID(str(pending_id))
+        pending_int = int(str(pending_id))
     except (ValueError, TypeError):
         return None
-    return db.query(ClassifierPending).filter(ClassifierPending.id == pending_uuid).first()
+    return db.query(ClassifierPending).filter(ClassifierPending.id == pending_int).first()
 
 
 def create_classifier_pending(
@@ -200,17 +200,17 @@ def create_classifier_pending(
     code: str,
     found_in_document_id: Optional[str] = None,
 ) -> ClassifierPending:
-    document_uuid = None
+    document_int = None
     if found_in_document_id:
         try:
-            document_uuid = uuid.UUID(str(found_in_document_id))
+            document_int = int(str(found_in_document_id))
         except (ValueError, TypeError):
-            document_uuid = None
+            document_int = None
 
     pending = ClassifierPending(
         system=system,
         code=code,
-        found_in_document_id=document_uuid,
+        found_in_document_id=document_int,
         status='new',
     )
     db.add(pending)

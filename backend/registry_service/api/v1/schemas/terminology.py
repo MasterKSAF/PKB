@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 
 class TerminologySchema(BaseModel):
-    id: Optional[UUID]
+    id: Optional[int] = None
     raw_term: str
     standard_term: str
     normalized_value: str
