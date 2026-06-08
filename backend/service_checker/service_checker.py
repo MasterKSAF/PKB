@@ -14,9 +14,10 @@ PKB Neuroassistant — Service Checker & Report Generator
   4. Сбора логов и формирования отчёта
 
 Использование:
-  python tools/service_checker.py --help
-  python tools/service_checker.py all --report report.md   # запустить всё + отчёт
-  python tools/service_checker.py report                   # сформировать отчёт из сохранённых логов
+  python service_checker/service_checker.py --help
+  python service_checker/service_checker.py docker --action coverage   # отчёт + логи
+  python service_checker/service_checker.py all                       # запустить всё + отчёт
+  python service_checker/service_checker.py report                    # сформировать отчёт из сохранённых логов
 """
 
 from __future__ import annotations
