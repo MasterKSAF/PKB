@@ -1961,22 +1961,24 @@ async def _docker_collect_logs(services: List[str] = None, timestamp: str = None
     report_path.write_text(report_text, encoding="utf-8")
     log_ok(f"Отчёт сохранён: {report_path}")
 
-    # Очищаем supervisor-логи — чтобы следующий сбор не дублировал
-    log_info("Очистка supervisor-логов в контейнере...")
-    try:
-        subprocess.run(
-            docker_cmd_prefix + ["bash", "-c", "truncate -s 0 /var/log/supervisor/*.log /var/log/supervisor/*.err"],
-            capture_output=True, timeout=15,
-        )
-    except Exception as e:
-        log_err(f"Не удалось очистить supervisor-логи: {e}")
-
     return True
 
 
 async def _docker_run_coverage() -> Optional[str]:
     """Запустить API Coverage Test для Docker-окружения. Возвращает timestamp."""
     log_header("Docker: API Coverage Test")
+
+    # Очищаем supervisor-логи перед запуском тестов — чтобы в отчёт
+    # попали только логи текущего запуска, а не накопленные за дни
+    log_info("Очистка supervisor-логов в контейнере...")
+    try:
+        subprocess.run(
+            ["docker", "exec", "pkb-neuro", "bash", "-c",
+             "truncate -s 0 /var/log/supervisor/*.log /var/log/supervisor/*.err 2>/dev/null || true"],
+            capture_output=True, timeout=15,
+        )
+    except Exception:
+        pass  # если контейнер не запущен — не критично
 
     check_result_dir = BACKEND_DIR / "check_result"
     check_result_dir.mkdir(parents=True, exist_ok=True)
