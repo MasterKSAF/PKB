@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Request
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.schemas.schemas import RefreshRequest, RevokeRequest, RevokeResponse, TokenRequest, TokenResponse
@@ -10,20 +10,20 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/token", response_model=TokenResponse)
-def token(payload: TokenRequest, request: Request, db: Session = Depends(get_db)):
-    user = authenticate(db, payload.username, payload.password)
-    tokens = issue_tokens(db, user)
-    create_audit_event(db, "auth.login", user.user_id, "auth", user.user_id, ip_address=request.client.host if request.client else None)
+async def token(payload: TokenRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    user = await authenticate(db, payload.username, payload.password)
+    tokens = await issue_tokens(db, user)
+    await create_audit_event(db, "auth.login", user.user_id, "auth", user.user_id, ip_address=request.client.host if request.client else None)
     return tokens
 
 
 @router.post("/refresh", response_model=TokenResponse)
-def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
-    return refresh_access_token(db, payload.refresh_token)
+async def refresh(payload: RefreshRequest, db: AsyncSession = Depends(get_db)):
+    return await refresh_access_token(db, payload.refresh_token)
 
 
 @router.post("/revoke", response_model=RevokeResponse)
-def revoke(payload: RevokeRequest, request: Request, db: Session = Depends(get_db)):
-    db_token = revoke_refresh_token(db, payload.refresh_token)
-    create_audit_event(db, "auth.revoke", db_token.user_id, "auth", db_token.token_id, ip_address=request.client.host if request.client else None)
+async def revoke(payload: RevokeRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    db_token = await revoke_refresh_token(db, payload.refresh_token)
+    await create_audit_event(db, "auth.revoke", db_token.user_id, "auth", db_token.token_id, ip_address=request.client.host if request.client else None)
     return {"message": "Токен отозван", "revoked_at": db_token.revoked_at}

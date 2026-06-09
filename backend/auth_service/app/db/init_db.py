@@ -1,5 +1,5 @@
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.security import hash_password
@@ -14,21 +14,25 @@ DEFAULT_ROLES = {
 }
 
 
-def init_db(db: Session) -> None:
-    Base.metadata.create_all(bind=engine)
+async def init_db(db: AsyncSession) -> None:
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
 
     for name, permissions in DEFAULT_ROLES.items():
-        role = db.execute(select(Role).where(Role.name == name)).scalar_one_or_none()
+        result = await db.execute(select(Role).where(Role.name == name))
+        role = result.scalar_one_or_none()
         if not role:
             role = Role(name=name)
             role.permissions = [RolePermission(permission=p) for p in permissions]
             db.add(role)
 
-    db.commit()
+    await db.commit()
 
-    admin = db.execute(select(User).where(User.email == settings.default_admin_email)).scalar_one_or_none()
+    result = await db.execute(select(User).where(User.email == settings.default_admin_email))
+    admin = result.scalar_one_or_none()
     if not admin:
-        admin_role = db.execute(select(Role).where(Role.name == "system_admin")).scalar_one()
+        role_result = await db.execute(select(Role).where(Role.name == "system_admin"))
+        admin_role = role_result.scalar_one()
         admin = User(
             email=settings.default_admin_email,
             full_name="System Administrator",
@@ -36,4 +40,4 @@ def init_db(db: Session) -> None:
             roles=[admin_role],
         )
         db.add(admin)
-        db.commit()
+        await db.commit()

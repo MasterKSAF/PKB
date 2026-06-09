@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import require_permission
 from app.db.session import get_db
@@ -20,16 +20,17 @@ def to_public(role) -> RolePublic:
 
 
 @router.get("", response_model=RoleListResponse)
-def roles(db: Session = Depends(get_db), current_user = Depends(require_permission("roles:manage"))):
-    return {"roles": [to_public(r) for r in list_roles(db)]}
+async def roles(db: AsyncSession = Depends(get_db), current_user = Depends(require_permission("roles:manage"))):
+    roles_list = await list_roles(db)
+    return {"roles": [to_public(r) for r in roles_list]}
 
 
 @router.post("", response_model=RolePublic, status_code=status.HTTP_201_CREATED)
-def create(payload: RoleCreate, request: Request, db: Session = Depends(get_db), current_user = Depends(require_permission("roles:manage"))):
+async def create(payload: RoleCreate, request: Request, db: AsyncSession = Depends(get_db), current_user = Depends(require_permission("roles:manage"))):
     try:
-        role = create_role(db, payload.name, payload.permissions)
+        role = await create_role(db, payload.name, payload.permissions)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    create_audit_event(db, "role.create", current_user.user_id, "role", role.role_id, {"name": role.name}, request.client.host if request.client else None)
+    await create_audit_event(db, "role.create", current_user.user_id, "role", role.role_id, {"name": role.name}, request.client.host if request.client else None)
     return to_public(role)

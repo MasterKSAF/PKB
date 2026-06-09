@@ -1,12 +1,12 @@
 from fastapi import Depends, Header, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import decode_token
 from app.db.session import get_db
 from app.services.user_service import get_user_by_id, get_permissions, role_names
 
 
-def get_current_user(authorization: str | None = Header(default=None), db: Session = Depends(get_db)):
+async def get_current_user(authorization: str | None = Header(default=None), db: AsyncSession = Depends(get_db)):
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Нет access token")
 
@@ -19,14 +19,14 @@ def get_current_user(authorization: str | None = Header(default=None), db: Sessi
     if payload.get("type") != "access":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверный тип токена")
 
-    user = get_user_by_id(db, payload.get("sub"))
+    user = await get_user_by_id(db, payload.get("sub"))
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Пользователь недоступен")
     return user
 
 
 def require_permission(permission: str):
-    def checker(user = Depends(get_current_user)):
+    async def checker(user = Depends(get_current_user)):
         if permission not in get_permissions(user):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Недостаточно прав")
         return user
@@ -34,7 +34,7 @@ def require_permission(permission: str):
 
 
 def require_any_permission(permissions: list[str]):
-    def checker(user = Depends(get_current_user)):
+    async def checker(user = Depends(get_current_user)):
         user_permissions = set(get_permissions(user))
         if not any(p in user_permissions for p in permissions):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Недостаточно прав")

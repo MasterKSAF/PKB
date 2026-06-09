@@ -2,7 +2,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import require_permission
 from app.db.session import get_db
@@ -13,14 +13,14 @@ router = APIRouter(prefix="/audit", tags=["audit"])
 
 
 @router.get("", response_model=AuditListResponse)
-def audit(
+async def audit(
     user_id: str | None = None,
     action: str | None = None,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user = Depends(require_permission("audit:read")),
 ):
     query = select(AuditEvent)
@@ -39,6 +39,8 @@ def audit(
         query = query.where(AuditEvent.timestamp <= date_to)
         count_query = count_query.where(AuditEvent.timestamp <= date_to)
 
-    total = db.execute(count_query).scalar_one()
-    events = list(db.execute(query.order_by(AuditEvent.timestamp.desc()).limit(limit).offset(offset)).scalars().all())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar_one()
+    result = await db.execute(query.order_by(AuditEvent.timestamp.desc()).limit(limit).offset(offset))
+    events = list(result.scalars().all())
     return {"events": events, "total": total}

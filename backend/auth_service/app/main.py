@@ -1,10 +1,9 @@
 from fastapi import FastAPI
-from sqlalchemy.orm import Session
 
 from app.api.v1 import audit, auth, internal, roles, users
 from app.core.config import settings
 from app.db.init_db import init_db
-from app.db.session import SessionLocal
+from app.db.session import AsyncSessionLocal
 
 app = FastAPI(
     title=settings.app_name,
@@ -20,12 +19,9 @@ app.include_router(internal.router)
 
 
 @app.on_event("startup")
-def on_startup():
-    db: Session = SessionLocal()
-    try:
-        init_db(db)
-    finally:
-        db.close()
+async def on_startup():
+    async with AsyncSessionLocal() as db:
+        await init_db(db)
 
 
 @app.get("/health")

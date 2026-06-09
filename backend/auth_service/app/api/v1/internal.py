@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import decode_token
 from app.db.session import get_db
@@ -10,7 +10,7 @@ router = APIRouter(prefix="/internal/auth", tags=["internal"])
 
 
 @router.post("/validate", response_model=InternalValidateResponse)
-def validate(payload: InternalValidateRequest, db: Session = Depends(get_db)):
+async def validate(payload: InternalValidateRequest, db: AsyncSession = Depends(get_db)):
     try:
         decoded = decode_token(payload.access_token)
     except Exception:
@@ -19,7 +19,7 @@ def validate(payload: InternalValidateRequest, db: Session = Depends(get_db)):
     if decoded.get("type") != "access":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверный тип токена")
 
-    user = get_user_by_id(db, decoded.get("sub"))
+    user = await get_user_by_id(db, decoded.get("sub"))
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Пользователь недоступен")
 

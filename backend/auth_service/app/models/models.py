@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+﻿from datetime import datetime, timezone
 from uuid import uuid4
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint
@@ -73,6 +73,11 @@ class AuditEvent(Base):
     action: Mapped[str] = mapped_column(String(100), index=True)
     resource_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     resource_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    details: Mapped[dict | None] = mapped_column(JSONB().with_variant(Text, "sqlite"), nullable=True)
+    details: Mapped[dict | None] = mapped_column(JSONB(), nullable=True)
     ip_address: Mapped[str | None] = mapped_column(String(100), nullable=True)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+
+
+

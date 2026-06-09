@@ -1,13 +1,13 @@
 import json
 from typing import Any
 
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.models import AuditEvent
 
 
-def create_audit_event(
-    db: Session,
+async def create_audit_event(
+    db: AsyncSession,
     action: str,
     user_id: str | None = None,
     resource_type: str | None = None,
@@ -27,6 +27,6 @@ def create_audit_event(
         ip_address=ip_address,
     )
     db.add(event)
-    db.commit()
-    db.refresh(event)
+    await db.commit()
+    await db.refresh(event)
     return event
