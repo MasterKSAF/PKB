@@ -12,44 +12,12 @@ from pydantic_settings import BaseSettings
 class ServiceConfig(BaseSettings):
     """Configuration for external services."""
 
-    # Auth Service (port 8082)
-    AUTH_SERVICE_URL: Optional[str] = Field(
-        default=None, description="URL for auth service"
-    )
-    AUTH_SERVICE_MOCK: bool = Field(
-        default=True, description="Use mock mode for auth service"
-    )
-
-    # Query Service (port 8083)
-    QUERY_SERVICE_URL: Optional[str] = Field(
-        default=None, description="URL for query service"
-    )
-    QUERY_SERVICE_MOCK: bool = Field(
-        default=True, description="Use mock mode for query service"
-    )
-
     # Registry Service (port 8084)
     REGISTRY_SERVICE_URL: Optional[str] = Field(
         default=None, description="URL for registry service"
     )
     REGISTRY_SERVICE_MOCK: bool = Field(
         default=True, description="Use mock mode for registry service"
-    )
-
-    # Integration Service (port 8085)
-    INTEGRATION_SERVICE_URL: Optional[str] = Field(
-        default=None, description="URL for integration service"
-    )
-    INTEGRATION_SERVICE_MOCK: bool = Field(
-        default=True, description="Use mock mode for integration service"
-    )
-
-    # Validation Service (port 8086)
-    VALIDATE_SERVICE_URL: Optional[str] = Field(
-        default=None, description="URL for validation service"
-    )
-    VALIDATE_SERVICE_MOCK: bool = Field(
-        default=True, description="Use mock mode for validation service"
     )
 
     # RAG Service (port 8087)
@@ -66,6 +34,22 @@ class ServiceConfig(BaseSettings):
     )
     OCR_SERVICE_MOCK: bool = Field(
         default=True, description="Use mock mode for OCR service"
+    )
+
+    # Parser Service (port 8089)
+    PARSER_SERVICE_URL: Optional[str] = Field(
+        default=None, description="URL for parser service"
+    )
+    PARSER_SERVICE_MOCK: bool = Field(
+        default=True, description="Use mock mode for parser service"
+    )
+
+    # Converter-Validator Service (port 8090)
+    CONVERTER_SERVICE_URL: Optional[str] = Field(
+        default=None, description="URL for converter-validator service"
+    )
+    CONVERTER_SERVICE_MOCK: bool = Field(
+        default=True, description="Use mock mode for converter-validator service"
     )
 
 
@@ -122,7 +106,7 @@ class Settings(BaseSettings):
 
     # Server
     HOST: str = "0.0.0.0"
-    PORT: int = 8000
+    PORT: int = 8081
 
     # API
     API_V1_PREFIX: str = "/api/v1"
@@ -153,15 +137,22 @@ class Settings(BaseSettings):
     )
 
     # External Services Configuration
-    services: ServiceConfig = ServiceConfig()
+    services: ServiceConfig = Field(
+        default_factory=ServiceConfig,
+        description="External services configuration (URL, mock mode)",
+    )
 
     # Pipeline Configuration
-    pipeline: PipelineConfig = PipelineConfig()
+    pipeline: PipelineConfig = Field(
+        default_factory=PipelineConfig,
+        description="Pipeline execution parameters",
+    )
 
     model_config = ConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         env_nested_delimiter="__",
+        extra="ignore",
     )
 
 

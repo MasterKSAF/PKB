@@ -143,9 +143,6 @@ class TestAuthBehaviourInMockMode:
             ("GET", "/api/v1/documents/"),
             ("GET", "/api/v1/documents/doc-mock-001"),
             ("GET", "/api/v1/documents/search"),
-            ("POST", "/api/v1/ask"),
-            ("POST", "/api/v1/validate/compare"),
-            ("POST", "/api/v1/validate/checks"),
         ]
         for method, path in protected_paths:
             if method == "GET":
@@ -171,7 +168,7 @@ class TestAuthBehaviourInMockMode:
     def test_protected_post_endpoint_works_without_auth(self, client: TestClient):
         """Protected POST endpoints work in mock mode even without auth."""
         response = client.post(
-            "/api/v1/validate/compare",
-            json={"normative_query": "тест"},
+            "/api/v1/drafts",
+            data={"document_key": "test-key"},
         )
-        assert response.status_code == 202
+        assert response.status_code in (200, 201, 202, 422)

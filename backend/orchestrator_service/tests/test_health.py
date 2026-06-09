@@ -117,5 +117,4 @@ class TestOpenAPIEndpoints:
         assert "/api/v1/system/health" in paths
         assert "/api/v1/documents/" in paths
         assert "/api/v1/documents/search" in paths
-        assert "/api/v1/ask" in paths
-        assert "/api/v1/validate/compare" in paths
+

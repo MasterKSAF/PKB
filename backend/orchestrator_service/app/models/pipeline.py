@@ -1,43 +1,44 @@
 """
-Pipeline job and step log ORM models.
+Task and TaskStep ORM models.
 
-Tracks execution of pipeline steps, retries, and compensation actions.
+Tracks execution of pipeline tasks and their steps.
 """
 
-import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
 
-class PipelineJob(Base):
-    """A run of a pipeline (formation or indexation) for a document."""
+class Task(Base):
+    """A pipeline task (formation) for a draft/document."""
 
-    __tablename__ = "pipeline_jobs"
+    __tablename__ = "tasks"
 
-    id: Mapped[str] = mapped_column(
-        String(36),
-        primary_key=True,
-        default=lambda: str(uuid.uuid4()),
+    id: Mapped[int] = mapped_column(
+        Integer, primary_key=True, autoincrement=True
     )
-    document_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("documents.id"), nullable=False, index=True
+    draft_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, index=True
+    )
+    document_id: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True, index=True
     )
     pipeline_type: Mapped[str] = mapped_column(
         String(16), nullable=False, index=True
     )  # "formation" | "indexation" | "reprocess"
 
-    # FSM for job itself
+    # Task status and stage
     status: Mapped[str] = mapped_column(
-        String(16),
-        default="queued",
-        nullable=False,
-        index=True,
-    )  # "queued" | "running" | "completed" | "failed" | "compensating" | "dead"
+        String(16), default="active", nullable=False, index=True
+    )  # "active" | "completed" | "failed"
+    pipeline_stage: Mapped[str] = mapped_column(
+        String(16), default="upload", nullable=False
+    )  # "upload" | "preview" | "decision" | "full" | "registry" | "indexation"
+    progress_percent: Mapped[int] = mapped_column(Integer, default=0)
 
     priority: Mapped[int] = mapped_column(Integer, default=5)
 
@@ -46,6 +47,9 @@ class PipelineJob(Base):
     )
     current_step_index: Mapped[int] = mapped_column(Integer, default=0)
     total_steps: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Preview result tracking
+    full_completed: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Error tracking
     error_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
@@ -62,6 +66,9 @@ class PipelineJob(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
     started_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -70,41 +77,41 @@ class PipelineJob(Base):
     )
 
     # Relationships
-    document: Mapped["Document"] = relationship(back_populates="pipeline_jobs")
-    step_logs: Mapped[list["PipelineStepLog"]] = relationship(
-        back_populates="job", cascade="all, delete-orphan"
+    steps: Mapped[list["TaskStep"]] = relationship(
+        back_populates="task", cascade="all, delete-orphan"
     )
 
     def __repr__(self) -> str:
         return (
-            f"<PipelineJob id={self.id} doc={self.document_id} "
+            f"<Task id={self.id} draft={self.draft_id} "
             f"type={self.pipeline_type} status={self.status}>"
         )
 
 
-class PipelineStepLog(Base):
-    """Log of a single step execution within a pipeline job."""
+class TaskStep(Base):
+    """Log of a single step execution within a pipeline task."""
 
-    __tablename__ = "pipeline_step_logs"
+    __tablename__ = "task_steps"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    job_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("pipeline_jobs.id"), nullable=False, index=True
-    )
-    document_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("documents.id"), nullable=False, index=True
+    task_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tasks.id"), nullable=False, index=True
     )
     step_name: Mapped[str] = mapped_column(
         String(64), nullable=False
-    )  # "ocr", "parser", "converter", "registry", "rag_index"
+    )  # "upload", "preview_ocr", "preview_converter", "full_ocr", "full_converter", "registry_creation"
     step_index: Mapped[int] = mapped_column(Integer, default=0)
+    service_name: Mapped[str] = mapped_column(
+        String(64), default="", nullable=False
+    )  # "Orchestrator", "OCR Service", "Parser Service", "Converter-validator", "Registry"
 
-    # "pending" | "running" | "success" | "failed" | "compensated"
+    # "pending" | "running" | "completed" | "failed" | "compensated"
     status: Mapped[str] = mapped_column(String(16), default="pending", nullable=False)
 
-    # Payload references (refs to stored JSON, not the JSON itself)
-    input_ref: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
-    output_ref: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    # JSON data containers (use JSONB on PostgreSQL for production)
+    # Note: For PostgreSQL production, use sqlalchemy.dialects.postgresql.JSONB
+    input_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    output_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # Error details
     error_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
@@ -122,11 +129,10 @@ class PipelineStepLog(Base):
     )
 
     # Relationships
-    job: Mapped["PipelineJob"] = relationship(back_populates="step_logs")
-    document: Mapped["Document"] = relationship(back_populates="step_logs")
+    task: Mapped["Task"] = relationship(back_populates="steps")
 
     def __repr__(self) -> str:
         return (
-            f"<PipelineStepLog id={self.id} job={self.job_id} "
+            f"<TaskStep id={self.id} task={self.task_id} "
             f"step={self.step_name} status={self.status}>"
         )

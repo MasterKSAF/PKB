@@ -1,250 +1,249 @@
 """
-Pipeline repository — CRUD operations for PipelineJob and PipelineStepLog.
+Task repository — CRUD operations for Task and TaskStep.
 
-Manages the lifecycle of pipeline execution records.
+Manages the lifecycle of pipeline task execution records.
 """
 
-import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import select, update, and_
+from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.pipeline import PipelineJob, PipelineStepLog
+from app.models.pipeline import Task, TaskStep
+from app.core.fsm import TaskStage
 
 
-class PipelineRepository:
-    """Repository for PipelineJob and PipelineStepLog entities."""
+class TaskRepository:
+    """Repository for Task and TaskStep entities."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
 
     # ------------------------------------------------------------------
-    # PipelineJob
+    # Task
     # ------------------------------------------------------------------
 
-    async def create_job(
+    async def create_task(
         self,
-        document_id: str,
+        draft_id: int,
         pipeline_type: str,
         total_steps: int,
         priority: int = 5,
-    ) -> PipelineJob:
-        """Create a new pipeline job."""
-        job = PipelineJob(
-            id=str(uuid.uuid4()),
-            document_id=document_id,
+    ) -> Task:
+        """Create a new pipeline task."""
+        task = Task(
+            draft_id=draft_id,
             pipeline_type=pipeline_type,
-            status="queued",
+            status="active",
+            pipeline_stage=TaskStage.UPLOAD.value,
             priority=priority,
             total_steps=total_steps,
             current_step_index=0,
+            progress_percent=0,
         )
-        self.db.add(job)
+        self.db.add(task)
         await self.db.flush()
-        return job
+        return task
 
-    async def get_job(self, job_id: str) -> Optional[PipelineJob]:
-        """Get job by ID."""
+    async def get_task(self, task_id: int) -> Optional[Task]:
+        """Get task by ID."""
         result = await self.db.execute(
-            select(PipelineJob).where(PipelineJob.id == job_id)
+            select(Task).where(Task.id == task_id)
         )
         return result.scalar_one_or_none()
 
-    async def get_job_for_update(self, job_id: str) -> Optional[PipelineJob]:
-        """Get job with FOR UPDATE lock."""
+    async def get_task_for_update(self, task_id: int) -> Optional[Task]:
+        """Get task with FOR UPDATE lock."""
         result = await self.db.execute(
-            select(PipelineJob)
-            .where(PipelineJob.id == job_id)
+            select(Task)
+            .where(Task.id == task_id)
             .with_for_update()
         )
         return result.scalar_one_or_none()
 
-    async def update_job_status(
+    async def update_task_status(
         self,
-        job_id: str,
-        status: str,
+        task_id: int,
+        status: Optional[str] = None,
+        stage: Optional[str] = None,
         step_name: Optional[str] = None,
         step_index: Optional[int] = None,
-    ) -> Optional[PipelineJob]:
-        """Update job status and optionally current step info."""
-        job = await self.get_job_for_update(job_id)
-        if job is None:
+        progress_percent: Optional[int] = None,
+    ) -> Optional[Task]:
+        """Update task status and optionally current step info."""
+        task = await self.get_task_for_update(task_id)
+        if task is None:
             return None
-        job.status = status
+        if status is not None:
+            task.status = status
+        if stage is not None:
+            task.pipeline_stage = stage
         if step_name is not None:
-            job.current_step_name = step_name
+            task.current_step_name = step_name
         if step_index is not None:
-            job.current_step_index = step_index
-        if status == "running" and job.started_at is None:
-            job.started_at = datetime.now(timezone.utc)
-        if status in ("completed", "failed", "dead"):
-            job.completed_at = datetime.now(timezone.utc)
+            task.current_step_index = step_index
+        if progress_percent is not None:
+            task.progress_percent = progress_percent
+        if status == "active" and task.started_at is None:
+            task.started_at = datetime.now(timezone.utc)
+        if status in ("completed", "failed"):
+            task.completed_at = datetime.now(timezone.utc)
         await self.db.flush()
-        return job
+        return task
 
-    async def lock_job(self, job_id: str, worker_id: str) -> Optional[PipelineJob]:
-        """Lock a job for exclusive processing by a worker."""
-        job = await self.get_job_for_update(job_id)
-        if job is None:
+    async def lock_task(self, task_id: int, worker_id: str) -> Optional[Task]:
+        """Lock a task for exclusive processing by a worker."""
+        task = await self.get_task_for_update(task_id)
+        if task is None:
             return None
-        job.locked_by = worker_id
-        job.locked_at = datetime.now(timezone.utc)
+        task.locked_by = worker_id
+        task.locked_at = datetime.now(timezone.utc)
         await self.db.flush()
-        return job
+        return task
 
-    async def unlock_job(self, job_id: str) -> Optional[PipelineJob]:
-        """Release lock on a job."""
-        job = await self.get_job_for_update(job_id)
-        if job is None:
+    async def unlock_task(self, task_id: int) -> Optional[Task]:
+        """Release lock on a task."""
+        task = await self.get_task_for_update(task_id)
+        if task is None:
             return None
-        job.locked_by = None
-        job.locked_at = None
+        task.locked_by = None
+        task.locked_at = None
         await self.db.flush()
-        return job
+        return task
 
-    async def get_queued_jobs(
-        self, pipeline_type: Optional[str] = None, limit: int = 10
-    ) -> list[PipelineJob]:
-        """Get next queued jobs, ordered by priority (highest first)."""
-        query = select(PipelineJob).where(PipelineJob.status == "queued")
-        if pipeline_type:
-            query = query.where(PipelineJob.pipeline_type == pipeline_type)
-        query = query.order_by(PipelineJob.priority.desc(), PipelineJob.created_at.asc())
-        query = query.limit(limit)
-        result = await self.db.execute(query)
-        return list(result.scalars().all())
-
-    async def get_stale_running_jobs(
+    async def get_stale_running_tasks(
         self, max_running_seconds: int = 3600
-    ) -> list[PipelineJob]:
-        """Find jobs that have been running too long (dead jobs)."""
+    ) -> list[Task]:
+        """Find tasks that have been running too long."""
         from datetime import timedelta
+
         threshold = datetime.now(timezone.utc) - timedelta(seconds=max_running_seconds)
         result = await self.db.execute(
-            select(PipelineJob).where(
+            select(Task).where(
                 and_(
-                    PipelineJob.status == "running",
-                    PipelineJob.started_at < threshold,
+                    Task.status == "active",
+                    Task.started_at < threshold,
                 )
             )
         )
         return list(result.scalars().all())
 
-    async def set_job_error(
-        self, job_id: str, error_code: str, error_message: str
-    ) -> Optional[PipelineJob]:
-        """Record an error on a job."""
-        job = await self.get_job_for_update(job_id)
-        if job is None:
+    async def set_task_error(
+        self, task_id: int, error_code: str, error_message: str
+    ) -> Optional[Task]:
+        """Record an error on a task."""
+        task = await self.get_task_for_update(task_id)
+        if task is None:
             return None
-        job.error_code = error_code
-        job.error_message = error_message
-        job.retry_count = job.retry_count + 1
+        task.error_code = error_code
+        task.error_message = error_message
+        task.retry_count = task.retry_count + 1
         await self.db.flush()
-        return job
+        return task
 
     # ------------------------------------------------------------------
-    # PipelineStepLog
+    # TaskStep
     # ------------------------------------------------------------------
 
-    async def create_step_log(
+    async def create_task_step(
         self,
-        job_id: str,
-        document_id: str,
+        task_id: int,
         step_name: str,
         step_index: int,
-    ) -> PipelineStepLog:
-        """Create a step log entry (status: pending)."""
-        log = PipelineStepLog(
-            job_id=job_id,
-            document_id=document_id,
+        service_name: str,
+        input_data: Optional[dict] = None,
+    ) -> TaskStep:
+        """Create a task step entry (status: pending)."""
+        step = TaskStep(
+            task_id=task_id,
             step_name=step_name,
             step_index=step_index,
+            service_name=service_name,
             status="pending",
+            input_data=input_data,
         )
-        self.db.add(log)
+        self.db.add(step)
         await self.db.flush()
-        return log
+        return step
 
-    async def start_step_log(self, log_id: int) -> Optional[PipelineStepLog]:
+    async def start_task_step(self, step_id: int) -> Optional[TaskStep]:
         """Mark step as running."""
         result = await self.db.execute(
-            select(PipelineStepLog)
-            .where(PipelineStepLog.id == log_id)
+            select(TaskStep)
+            .where(TaskStep.id == step_id)
             .with_for_update()
         )
-        log = result.scalar_one_or_none()
-        if log is None:
+        step = result.scalar_one_or_none()
+        if step is None:
             return None
-        log.status = "running"
-        log.started_at = datetime.now(timezone.utc)
+        step.status = "running"
+        step.started_at = datetime.now(timezone.utc)
         await self.db.flush()
-        return log
+        return step
 
-    async def complete_step_log(
+    async def complete_task_step(
         self,
-        log_id: int,
-        output_ref: Optional[str] = None,
-    ) -> Optional[PipelineStepLog]:
+        step_id: int,
+        output_data: Optional[dict] = None,
+    ) -> Optional[TaskStep]:
         """Mark step as completed successfully."""
         result = await self.db.execute(
-            select(PipelineStepLog)
-            .where(PipelineStepLog.id == log_id)
+            select(TaskStep)
+            .where(TaskStep.id == step_id)
             .with_for_update()
         )
-        log = result.scalar_one_or_none()
-        if log is None:
+        step = result.scalar_one_or_none()
+        if step is None:
             return None
-        log.status = "success"
-        log.completed_at = datetime.now(timezone.utc)
-        if output_ref:
-            log.output_ref = output_ref
+        step.status = "completed"
+        step.completed_at = datetime.now(timezone.utc)
+        if output_data is not None:
+            step.output_data = output_data
         await self.db.flush()
-        return log
+        return step
 
-    async def fail_step_log(
+    async def fail_task_step(
         self,
-        log_id: int,
+        step_id: int,
         error_code: str,
         error_message: str,
-    ) -> Optional[PipelineStepLog]:
+    ) -> Optional[TaskStep]:
         """Mark step as failed."""
         result = await self.db.execute(
-            select(PipelineStepLog)
-            .where(PipelineStepLog.id == log_id)
+            select(TaskStep)
+            .where(TaskStep.id == step_id)
             .with_for_update()
         )
-        log = result.scalar_one_or_none()
-        if log is None:
+        step = result.scalar_one_or_none()
+        if step is None:
             return None
-        log.status = "failed"
-        log.completed_at = datetime.now(timezone.utc)
-        log.error_code = error_code
-        log.error_message = error_message
+        step.status = "failed"
+        step.completed_at = datetime.now(timezone.utc)
+        step.error_code = error_code
+        step.error_message = error_message
         await self.db.flush()
-        return log
+        return step
 
-    async def compensate_step_log(self, log_id: int) -> Optional[PipelineStepLog]:
+    async def compensate_task_step(self, step_id: int) -> Optional[TaskStep]:
         """Mark step as compensated."""
         result = await self.db.execute(
-            select(PipelineStepLog)
-            .where(PipelineStepLog.id == log_id)
+            select(TaskStep)
+            .where(TaskStep.id == step_id)
             .with_for_update()
         )
-        log = result.scalar_one_or_none()
-        if log is None:
+        step = result.scalar_one_or_none()
+        if step is None:
             return None
-        log.status = "compensated"
+        step.status = "compensated"
         await self.db.flush()
-        return log
+        return step
 
-    async def get_step_logs_for_job(self, job_id: str) -> list[PipelineStepLog]:
-        """Get all step logs for a job, ordered by step index."""
+    async def get_task_steps(self, task_id: int) -> list[TaskStep]:
+        """Get all steps for a task, ordered by step index."""
         result = await self.db.execute(
-            select(PipelineStepLog)
-            .where(PipelineStepLog.job_id == job_id)
-            .order_by(PipelineStepLog.step_index)
+            select(TaskStep)
+            .where(TaskStep.task_id == task_id)
+            .order_by(TaskStep.step_index)
         )
         return list(result.scalars().all())

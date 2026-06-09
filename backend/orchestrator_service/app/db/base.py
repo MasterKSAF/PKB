@@ -8,17 +8,47 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
 
 # Build async engine
-engine = create_async_engine(
-    settings.DATABASE_URL,
-    echo=settings.DEBUG,
-    pool_size=10,
-    max_overflow=20,
-    pool_pre_ping=True,
+_is_sqlite = settings.DATABASE_URL.startswith("sqlite")
+_is_memory_sqlite = _is_sqlite and (
+    ":memory:" in settings.DATABASE_URL
+    or settings.DATABASE_URL == "sqlite+aiosqlite://"
 )
+_connect_args = {}
+if _is_sqlite:
+    # Allow multiple connections to share the same database
+    _connect_args["check_same_thread"] = False
+
+if _is_memory_sqlite:
+    # In-memory SQLite: each connection must be the only one,
+    # otherwise each pooled connection gets a separate DB.
+    engine = create_async_engine(
+        settings.DATABASE_URL,
+        echo=settings.DEBUG,
+        connect_args=_connect_args,
+        poolclass=NullPool,
+    )
+elif _is_sqlite:
+    engine = create_async_engine(
+        settings.DATABASE_URL,
+        echo=settings.DEBUG,
+        connect_args=_connect_args,
+        pool_size=5,
+        max_overflow=10,
+        pool_pre_ping=False,
+    )
+else:
+    engine = create_async_engine(
+        settings.DATABASE_URL,
+        echo=settings.DEBUG,
+        pool_size=10,
+        max_overflow=20,
+        pool_pre_ping=True,
+    )
 
 # Session factory for FastAPI dependencies
 AsyncSessionLocal = async_sessionmaker(

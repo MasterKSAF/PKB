@@ -1,14 +1,15 @@
 """
 Pipeline 1 (Formation) Celery tasks.
 
-Each function represents one step in Pipeline 1:
-1. OCR — process document with OCR service
-2. Parser — parse OCR output into structured data
-3. Converter — convert/validate parsed data
-4. Registry — store in document registry
+Preview phase (triggered immediately after upload):
+1. upload — file registered (handled by orchestrator directly)
+2. preview_ocr (or preview_parser) — OCR or Parser processes first pages
+3. preview_converter — Converter-validator validates preview
 
-In production, each task calls the appropriate microservice client.
-For development, tasks run in mock mode (simulating success).
+Full phase (triggered after user approve, or auto-approve):
+1. full_ocr (or full_parser) — full OCR/Parser processing
+2. full_converter — full conversion and validation
+3. registry_creation — persist in Registry
 """
 
 import asyncio
@@ -17,10 +18,11 @@ from typing import Any, Dict, Optional
 
 from app.celery_app import celery_app
 from app.core.config import settings
-from app.core.fsm import PIPELINE_1_STEPS
 from app.core.pipeline.orchestrator import PipelineOrchestrator
 from app.db.session import get_db_context
 from app.services.ocr_client import OCRServiceClient
+from app.services.parser_client import ParserServiceClient
+from app.services.converter_client import ConverterValidatorClient
 from app.services.registry_client import RegistryServiceClient
 
 logger = logging.getLogger("tasks.pipeline_1")
@@ -35,139 +37,257 @@ def _run_async(coro):
         loop.close()
 
 
-@celery_app.task(bind=True, max_retries=3, default_retry_delay=60, name="tasks.pipeline.run_ocr_step")
-def run_ocr_step(self, job_id: str, document_id: str):
-    """
-    Step 1: OCR Service — recognize text from document.
+# ------------------------------------------------------------------
+#  Preview steps
+# ------------------------------------------------------------------
 
-    In production: calls OCRServiceClient.process_document().
-    In mock: simulates success after short delay.
+
+@celery_app.task(
+    bind=True, max_retries=3, default_retry_delay=60,
+    name="tasks.pipeline.run_ocr_preview_step"
+)
+def run_ocr_preview_step(
+    self, task_id: int, draft_id: int, file_key: str, max_pages: int = 3
+):
+    """
+    Preview OCR step — recognize text from first pages.
     """
     try:
-        logger.info(f"OCR step started: job={job_id} doc={document_id}")
+        logger.info(f"OCR preview started: task={task_id} draft={draft_id}")
 
-        # In production, call actual OCR service
-        # result = asyncio.run(_ocr_service_call(document_id))
+        # Call OCR service (mock in dev)
+        client = OCRServiceClient()
+        result = _run_async(client.process_preview(file_key, max_pages=max_pages))
+        _run_async(client.close())
 
-        # Mock: simulate OCR completion
-        mock_result = {
-            "document_id": document_id,
-            "pages": [{"page": 1, "text": "Mocked OCR text", "confidence": 0.95}],
-            "total_pages": 1,
+        input_data = {"file_key": file_key, "mode": "preview", "max_pages": max_pages}
+        output_data = {
+            "preview_not_supported": result.get("data", {}).get("preview_not_supported", False),
+            "pages_processed": result.get("data", {}).get("pages_processed", 0),
+            "metadata": result.get("data", {}).get("metadata", {}),
         }
 
-        # Notify orchestrator of completion
-        _run_async(_notify_step_completed(job_id, "ocr", mock_result))
+        _run_async(_notify_step_completed(task_id, "preview_ocr", input_data, output_data))
 
-        logger.info(f"OCR step completed: job={job_id}")
-        return {"status": "completed", "step": "ocr", "job_id": job_id}
+        logger.info(f"OCR preview completed: task={task_id}")
+        return {"status": "completed", "step": "preview_ocr", "task_id": task_id}
 
     except Exception as exc:
-        logger.error(f"OCR step failed: {exc}")
-        _run_async(
-            _notify_step_failed(job_id, "ocr", "OCR_ERROR", str(exc))
-        )
+        logger.error(f"OCR preview failed: {exc}")
+        _run_async(_notify_step_failed(task_id, "preview_ocr", "OCR_ERROR", str(exc)))
         raise self.retry(exc=exc)
 
 
-@celery_app.task(bind=True, max_retries=3, default_retry_delay=60, name="tasks.pipeline.run_parser_step")
-def run_parser_step(self, job_id: str, document_id: str):
+@celery_app.task(
+    bind=True, max_retries=3, default_retry_delay=60,
+    name="tasks.pipeline.run_parser_preview_step"
+)
+def run_parser_preview_step(
+    self, task_id: int, draft_id: int, file_key: str, max_pages: int = 3
+):
     """
-    Step 2: Parser Service — extract structured sections from OCR output.
-
-    In production: calls Parser Service (separate microservice).
+    Preview Parser step — extract structure from digital PDF first pages.
     """
     try:
-        logger.info(f"Parser step started: job={job_id} doc={document_id}")
+        logger.info(f"Parser preview started: task={task_id} draft={draft_id}")
 
-        mock_result = {
-            "document_id": document_id,
-            "sections": [{"type": "text", "content": "Parsed section 1"}],
+        client = ParserServiceClient()
+        result = _run_async(client.process_preview(file_key, max_pages=max_pages))
+        _run_async(client.close())
+
+        input_data = {"file_key": file_key, "mode": "preview", "max_pages": max_pages}
+        output_data = {
+            "preview_not_supported": result.get("data", {}).get("preview_not_supported", False),
+            "pages_processed": result.get("data", {}).get("pages_processed", 0),
+            "metadata": result.get("data", {}).get("metadata", {}),
         }
 
-        _run_async(_notify_step_completed(job_id, "parser", mock_result))
+        # The orchestrator uses "preview_ocr" as the step name for both OCR and Parser
+        _run_async(_notify_step_completed(task_id, "preview_ocr", input_data, output_data))
 
-        logger.info(f"Parser step completed: job={job_id}")
-        return {"status": "completed", "step": "parser", "job_id": job_id}
+        logger.info(f"Parser preview completed: task={task_id}")
+        return {"status": "completed", "step": "preview_ocr", "task_id": task_id}
 
     except Exception as exc:
-        logger.error(f"Parser step failed: {exc}")
-        _run_async(
-            _notify_step_failed(job_id, "parser", "PARSER_ERROR", str(exc))
-        )
+        logger.error(f"Parser preview failed: {exc}")
+        _run_async(_notify_step_failed(task_id, "preview_ocr", "PARSER_ERROR", str(exc)))
         raise self.retry(exc=exc)
 
 
-@celery_app.task(bind=True, max_retries=3, default_retry_delay=60, name="tasks.pipeline.run_converter_step")
-def run_converter_step(self, job_id: str, document_id: str):
+@celery_app.task(
+    bind=True, max_retries=3, default_retry_delay=60,
+    name="tasks.pipeline.run_converter_preview_step"
+)
+def run_converter_preview_step(
+    self, task_id: int, draft_id: int, file_key: str
+):
     """
-    Step 3: Converter-validator — validate and transform parsed data.
-
-    In production: calls Converter-validator Service.
+    Preview Converter step — validate and transform preview data.
     """
     try:
-        logger.info(f"Converter step started: job={job_id} doc={document_id}")
+        logger.info(f"Converter preview started: task={task_id} draft={draft_id}")
 
-        mock_result = {
-            "document_id": document_id,
-            "validated": True,
-            "parameters": {"thickness": "12mm"},
+        client = ConverterValidatorClient()
+        result = _run_async(client.convert_preview({"file_key": file_key}))
+        _run_async(client.close())
+
+        input_data = {"file_key": file_key, "mode": "preview"}
+        output_data = {
+            "validated": result.get("data", {}).get("validated", True),
+            "metadata": result.get("data", {}).get("metadata", {}),
         }
 
-        _run_async(_notify_step_completed(job_id, "converter", mock_result))
+        _run_async(_notify_step_completed(task_id, "preview_converter", input_data, output_data))
 
-        logger.info(f"Converter step completed: job={job_id}")
-        return {"status": "completed", "step": "converter", "job_id": job_id}
+        logger.info(f"Converter preview completed: task={task_id}")
+        return {"status": "completed", "step": "preview_converter", "task_id": task_id}
 
     except Exception as exc:
-        logger.error(f"Converter step failed: {exc}")
-        _run_async(
-            _notify_step_failed(job_id, "converter", "CONVERTER_ERROR", str(exc))
-        )
+        logger.error(f"Converter preview failed: {exc}")
+        _run_async(_notify_step_failed(task_id, "preview_converter", "CONVERTER_ERROR", str(exc)))
         raise self.retry(exc=exc)
 
 
-@celery_app.task(bind=True, max_retries=2, default_retry_delay=30, name="tasks.pipeline.run_registry_step")
-def run_registry_step(self, job_id: str, document_id: str):
-    """
-    Step 4: Registry — persist document in the registry database.
+# ------------------------------------------------------------------
+#  Full processing steps
+# ------------------------------------------------------------------
 
-    Has side-effects (creates DB records), so Saga compensation needed.
-    """
+
+@celery_app.task(
+    bind=True, max_retries=3, default_retry_delay=60,
+    name="tasks.pipeline.run_ocr_full_step"
+)
+def run_ocr_full_step(self, task_id: int, draft_id: int, file_key: str):
+    """Full OCR step — process entire document."""
     try:
-        logger.info(f"Registry step started: job={job_id} doc={document_id}")
+        logger.info(f"OCR full started: task={task_id}")
 
-        mock_result = {
-            "document_id": document_id,
-            "registry_id": f"reg-{document_id[:8]}",
+        client = OCRServiceClient()
+        result = _run_async(client.process_full(file_key))
+        _run_async(client.close())
+
+        input_data = {"file_key": file_key, "mode": "full"}
+        output_data = {
+            "pages_processed": result.get("data", {}).get("pages_processed", 0),
+            "status": "completed",
+        }
+
+        _run_async(_notify_step_completed(task_id, "full_ocr", input_data, output_data))
+
+        return {"status": "completed", "step": "full_ocr", "task_id": task_id}
+
+    except Exception as exc:
+        logger.error(f"OCR full failed: {exc}")
+        _run_async(_notify_step_failed(task_id, "full_ocr", "OCR_ERROR", str(exc)))
+        raise self.retry(exc=exc)
+
+
+@celery_app.task(
+    bind=True, max_retries=3, default_retry_delay=60,
+    name="tasks.pipeline.run_parser_full_step"
+)
+def run_parser_full_step(self, task_id: int, draft_id: int, file_key: str):
+    """Full Parser step — parse entire document."""
+    try:
+        logger.info(f"Parser full started: task={task_id}")
+
+        client = ParserServiceClient()
+        result = _run_async(client.process_full(file_key))
+        _run_async(client.close())
+
+        input_data = {"file_key": file_key, "mode": "full"}
+        output_data = {
+            "sections": result.get("data", {}).get("sections", []),
+            "status": "completed",
+        }
+
+        # The orchestrator uses "full_ocr" as the step name for full processing
+        _run_async(_notify_step_completed(task_id, "full_ocr", input_data, output_data))
+
+        return {"status": "completed", "step": "full_ocr", "task_id": task_id}
+
+    except Exception as exc:
+        logger.error(f"Parser full failed: {exc}")
+        _run_async(_notify_step_failed(task_id, "full_ocr", "PARSER_ERROR", str(exc)))
+        raise self.retry(exc=exc)
+
+
+@celery_app.task(
+    bind=True, max_retries=3, default_retry_delay=60,
+    name="tasks.pipeline.run_converter_full_step"
+)
+def run_converter_full_step(self, task_id: int, draft_id: int, file_key: str):
+    """Full Converter step — convert and validate full document."""
+    try:
+        logger.info(f"Converter full started: task={task_id}")
+
+        client = ConverterValidatorClient()
+        result = _run_async(client.convert_full({"file_key": file_key}))
+        _run_async(client.close())
+
+        input_data = {"file_key": file_key, "mode": "full"}
+        output_data = {
+            "validated": result.get("data", {}).get("validated", True),
+            "parameters": result.get("data", {}).get("parameters", {}),
+        }
+
+        _run_async(_notify_step_completed(task_id, "full_converter", input_data, output_data))
+
+        return {"status": "completed", "step": "full_converter", "task_id": task_id}
+
+    except Exception as exc:
+        logger.error(f"Converter full failed: {exc}")
+        _run_async(_notify_step_failed(task_id, "full_converter", "CONVERTER_ERROR", str(exc)))
+        raise self.retry(exc=exc)
+
+
+@celery_app.task(
+    bind=True, max_retries=2, default_retry_delay=30,
+    name="tasks.pipeline.run_registry_step"
+)
+def run_registry_step(self, task_id: int, draft_id: int):
+    """Registry step — persist document in the registry."""
+    try:
+        logger.info(f"Registry step started: task={task_id} draft={draft_id}")
+
+        client = RegistryServiceClient()
+        result = _run_async(client.create_document({"draft_id": draft_id}))
+        _run_async(client.close())
+
+        input_data = {"draft_id": draft_id}
+        output_data = {
+            "registry_id": result.get("data", {}).get("document_id", draft_id),
             "status": "registered",
         }
 
-        _run_async(_notify_step_completed(job_id, "registry", mock_result))
+        _run_async(_notify_step_completed(task_id, "registry_creation", input_data, output_data))
 
-        logger.info(f"Registry step completed: job={job_id}")
-        return {"status": "completed", "step": "registry", "job_id": job_id}
+        return {"status": "completed", "step": "registry_creation", "task_id": task_id}
 
     except Exception as exc:
         logger.error(f"Registry step failed: {exc}")
-        _run_async(
-            _notify_step_failed(job_id, "registry", "REGISTRY_ERROR", str(exc))
-        )
-        # Registry has side-effects, will trigger Saga compensation
+        _run_async(_notify_step_failed(task_id, "registry_creation", "REGISTRY_ERROR", str(exc)))
         raise self.retry(exc=exc)
 
 
-async def _notify_step_completed(job_id: str, step_name: str, result: Dict[str, Any]):
+# ------------------------------------------------------------------
+#  Notify orchestrator
+# ------------------------------------------------------------------
+
+
+async def _notify_step_completed(
+    task_id: int, step_name: str, input_data: Dict[str, Any], output_data: Dict[str, Any]
+):
     """Notify the orchestrator that a step completed successfully."""
     async with get_db_context() as db:
         orchestrator = PipelineOrchestrator(db)
-        await orchestrator.on_step_completed(job_id, step_name, result)
+        await orchestrator.on_step_completed(task_id, step_name, input_data, output_data)
 
 
 async def _notify_step_failed(
-    job_id: str, step_name: str, error_code: str, error_message: str
+    task_id: int, step_name: str, error_code: str, error_message: str
 ):
     """Notify the orchestrator that a step failed."""
     async with get_db_context() as db:
         orchestrator = PipelineOrchestrator(db)
-        await orchestrator.on_step_failed(job_id, step_name, error_code, error_message)
+        await orchestrator.on_step_failed(task_id, step_name, error_code, error_message)
