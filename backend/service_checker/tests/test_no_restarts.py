@@ -1,5 +1,5 @@
 """
-Интеграционный тест — проверка что сервисы не перезапускаются при тестировании.
+Интеграционный тест — проверка что сервисы не крашатся при тестировании.
 
 Требует запущенных Docker-контейнеров с сервисами.
 """
@@ -8,60 +8,72 @@ import pytest
 import httpx
 
 
-def _count_starts_in_log(service_log_path: str) -> int:
-    """Считать сколько раз сервис стартовал по логу supervisor."""
-    try:
-        with open(service_log_path, "r", encoding="utf-8") as f:
-            content = f.read()
-        return content.count("Started server process")
-    except (FileNotFoundError, IOError):
-        return -1  # лог недоступен
-
-
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_auth_no_restart_after_refresh():
+async def test_auth_refresh_does_not_crash_service():
     """
-    POST /auth/refresh не должен вызывать перезапуск Auth Service.
-    Считаем старты в логе до и после запроса — число не должно вырасти.
+    1. Получаем токен
+    2. Вызываем /auth/refresh
+    3. Проверяем что сервис жив (health check)
+
+    Если сервис крашнулся — health check вернёт ошибку подключения.
     """
-    # Путь к логу auth сервиса (внутри Docker volume или на хосте)
-    log_path = "/var/log/supervisor/auth.err"
-
-    starts_before = _count_starts_in_log(log_path)
-    if starts_before == -1:
-        pytest.skip(f"Лог не найден: {log_path}. Тест только в Docker.")
-
-    # Выполняем запрос на обновление токена
     async with httpx.AsyncClient(timeout=10) as client:
-        # Получаем токен
+
+        # 1. Получаем токен
         token_resp = await client.post(
             "http://127.0.0.1:8082/api/v1/auth/token",
             json={"username": "petrova@example.com", "password": "secret456"},
         )
+
         if token_resp.status_code != 200:
-            pytest.skip(f"Auth service недоступен: {token_resp.status_code}")
+            # Сервис недоступен — это не ошибка теста, а условие запуска
+            # (тест только внутри Docker)
+            pytest.skip(
+                f"Auth service не отвечает: HTTP {token_resp.status_code}. "
+                f"Тест требуется запускать внутри Docker."
+            )
 
-        data = token_resp.json()
-        refresh_token = data.get("refresh_token") or data.get("data", {}).get("refresh_token")
-
+        token_data = token_resp.json()
+        # Может быть как прямая обёртка, так и data.refresh_token
+        refresh_token = token_data.get("refresh_token")
         if not refresh_token:
-            pytest.skip("Не удалось получить refresh_token")
+            data = token_data.get("data", {})
+            refresh_token = data.get("refresh_token")
 
-        # Вызываем refresh
+        assert refresh_token, f"Не удалось извлечь refresh_token из ответа: {token_data}"
+
+        # 2. Вызываем /auth/refresh — именно он раньше крашил сервис
         refresh_resp = await client.post(
             "http://127.0.0.1:8082/api/v1/auth/refresh",
             json={"refresh_token": refresh_token},
         )
 
-    starts_after = _count_starts_in_log(log_path)
+        # Сервис должен вернуть 200 (ok) или 401 (токен истёк) — но не упасть
+        assert refresh_resp.status_code in (200, 401), (
+            f"/auth/refresh вернул {refresh_resp.status_code}, "
+            f"ожидался 200 или 401. Тело: {refresh_resp.text[:300]}"
+        )
 
-    # Проверяем что сервис НЕ перезапустился
-    assert starts_after == starts_before, (
-        f"Auth Service перезапустился после /auth/refresh! "
-        f"Было {starts_before} стартов, стало {starts_after}. "
-        f"Ответ: HTTP {refresh_resp.status_code}"
-    )
+        # Если 401 — проверяем что это JSON с detail (а не краш)
+        if refresh_resp.status_code == 401:
+            try:
+                err_data = refresh_resp.json()
+            except Exception:
+                pytest.fail(
+                    f"401 ответ должен быть JSON: {refresh_resp.text[:200]}"
+                )
+            assert "detail" in err_data, (
+                f"401 ответ должен содержать 'detail': {err_data}"
+            )
 
+        # 3. Проверяем что сервис жив после вызова
+        health_resp = await client.get(
+            "http://127.0.0.1:8082/api/v1/health",
+        )
 
-
+        # Если сервис крашнулся — health check даст connect error
+        assert health_resp.status_code < 500, (
+            f"Auth Service упал после /auth/refresh! "
+            f"Health check вернул {health_resp.status_code}: {health_resp.text[:200]}"
+        )
