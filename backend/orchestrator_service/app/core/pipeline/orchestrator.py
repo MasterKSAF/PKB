@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.fsm import DraftFSM, DraftState, TaskStage, TaskStatus
 from app.core.pipeline.saga import SagaCoordinator
+from app.core.trace import get_trace_id, set_trace_id
 from app.repositories.pipeline import TaskRepository
 from app.services.registry_client import RegistryServiceClient
 
@@ -45,7 +46,17 @@ class PipelineOrchestrator:
         """
         task = await self.task_repo.get_task(task_id)
         if not task:
+            logger.error(
+                "start_pipeline: task not found",
+                extra={"task_id": task_id, "draft_id": draft_id},
+            )
             raise ValueError(f"Task not found: {task_id}")
+
+        # Set trace_id on the task for propagation to Celery workers
+        trace_id = get_trace_id()
+        if trace_id and not task.trace_id:
+            task.trace_id = trace_id
+            await self.db.flush()
 
         # Update task stage to preview
         await self.task_repo.update_task_status(
@@ -106,12 +117,13 @@ class PipelineOrchestrator:
             run_converter_preview_step,
         )
 
+        trace_id = get_trace_id() or ""
         if is_scanned:
-            run_ocr_preview_step.delay(task_id, draft_id, file_key, max_pages=3)
+            run_ocr_preview_step.delay(task_id, draft_id, file_key, max_pages=3, trace_id=trace_id)
         else:
-            run_parser_preview_step.delay(task_id, draft_id, file_key, max_pages=3)
+            run_parser_preview_step.delay(task_id, draft_id, file_key, max_pages=3, trace_id=trace_id)
 
-        run_converter_preview_step.delay(task_id, draft_id, file_key)
+        run_converter_preview_step.delay(task_id, draft_id, file_key, trace_id=trace_id)
 
         # Update progress
         await self.task_repo.update_task_status(
@@ -137,10 +149,18 @@ class PipelineOrchestrator:
         2. If preview phase complete, handle decision
         3. If full phase complete, advance to next step
         """
+        logger.info(
+            f"Step completed: {step_name}",
+            extra={"task_id": task_id, "step": step_name},
+        )
         task = await self.task_repo.get_task(task_id)
         if not task:
             logger.error(f"Task {task_id} not found on step completion")
             return
+
+        # Restore trace_id from task for logging context
+        if task.trace_id:
+            set_trace_id(task.trace_id)
 
         # Guard: skip if task is already in a terminal state
         if task.status in (TaskStatus.COMPLETED.value, TaskStatus.FAILED.value):
@@ -166,6 +186,10 @@ class PipelineOrchestrator:
                     break
 
         if current_step:
+            logger.debug(
+                f"Completing step {step_name} (id={current_step.id})",
+                extra={"task_id": task_id, "step": step_name},
+            )
             await self.task_repo.complete_task_step(
                 step_id=current_step.id,
                 output_data=output_data,
@@ -195,6 +219,10 @@ class PipelineOrchestrator:
         self, task, steps, converter_output: Optional[dict]
     ) -> None:
         """Handle completion of the preview phase."""
+        logger.info(
+            "Preview phase completed",
+            extra={"task_id": task.id, "draft_id": task.draft_id},
+        )
         # Find the OCR/Parser step output
         preview_step = None
         for step in steps:
@@ -209,6 +237,11 @@ class PipelineOrchestrator:
             )
 
         if preview_not_supported:
+            logger.info(
+                "Preview returned full document (preview_not_supported=True), "
+                "skipping full OCR/Parser phase",
+                extra={"task_id": task.id, "draft_id": task.draft_id},
+            )
             # Engine returned full document — mark as full_completed
             await self.task_repo.update_task_status(
                 task_id=task.id,
@@ -263,6 +296,8 @@ class PipelineOrchestrator:
         self, task, step_name: str, steps
     ) -> None:
         """Handle completion of a full processing step."""
+        trace_id = task.trace_id or ""
+
         if step_name == "full_ocr":
             await self.task_repo.update_task_status(
                 task_id=task.id,
@@ -271,7 +306,7 @@ class PipelineOrchestrator:
             # Converter should already be enqueued or will run next
 
             from app.tasks.pipeline_formation import run_converter_full_step
-            run_converter_full_step.delay(task.id, task.draft_id)
+            run_converter_full_step.delay(task.id, task.draft_id, trace_id=trace_id)
 
         elif step_name == "full_converter":
             await self.task_repo.update_task_status(
@@ -280,7 +315,7 @@ class PipelineOrchestrator:
             )
 
             from app.tasks.pipeline_formation import run_registry_step
-            run_registry_step.delay(task.id, task.draft_id)
+            run_registry_step.delay(task.id, task.draft_id, trace_id=trace_id)
 
         elif step_name == "registry_creation":
             # Full pipeline complete
@@ -318,7 +353,20 @@ class PipelineOrchestrator:
         """
         task = await self.task_repo.get_task(task_id)
         if not task:
+            logger.error(
+                "approve_draft: task not found",
+                extra={"task_id": task_id, "draft_id": draft_id},
+            )
             raise ValueError(f"Task not found: {task_id}")
+
+        # Restore trace_id for logging context
+        if task.trace_id:
+            set_trace_id(task.trace_id)
+
+        logger.info(
+            "Approving draft",
+            extra={"draft_id": draft_id, "task_id": task_id},
+        )
 
         await self.task_repo.update_task_status(
             task_id=task_id,
@@ -340,6 +388,8 @@ class PipelineOrchestrator:
         if upload_step and upload_step.output_data:
             file_key = upload_step.output_data.get("file_key")
 
+        trace_id = task.trace_id or ""
+
         if not task.full_completed:
             # Partial preview — need full OCR/Parser
             # Create full_ocr step
@@ -350,7 +400,7 @@ class PipelineOrchestrator:
                 service_name="OCR Service",
                 input_data={"file_key": file_key, "mode": "full"},
             )
-            run_ocr_full_step.delay(task_id, draft_id, file_key)
+            run_ocr_full_step.delay(task_id, draft_id, file_key, trace_id=trace_id)
 
         # Create full_converter step (always)
         await self.task_repo.create_task_step(
@@ -383,12 +433,34 @@ class PipelineOrchestrator:
             )
             if full_ocr:
                 await self.task_repo.start_task_step(full_ocr.id)
+                logger.info(
+                    "Enqueued full OCR step",
+                    extra={"task_id": task_id, "draft_id": draft_id},
+                )
+            else:
+                logger.warning(
+                    "No pending full_ocr step found after approve",
+                    extra={"task_id": task_id, "draft_id": draft_id},
+                )
 
     async def reject_draft(self, draft_id: int, task_id: int) -> None:
         """Handle user reject decision."""
         task = await self.task_repo.get_task(task_id)
         if not task:
+            logger.error(
+                "reject_draft: task not found",
+                extra={"task_id": task_id, "draft_id": draft_id},
+            )
             raise ValueError(f"Task not found: {task_id}")
+
+        # Restore trace_id for logging context
+        if task.trace_id:
+            set_trace_id(task.trace_id)
+
+        logger.info(
+            "Rejecting draft",
+            extra={"draft_id": draft_id, "task_id": task_id},
+        )
 
         await self.task_repo.update_task_status(
             task_id=task_id,
@@ -428,6 +500,19 @@ class PipelineOrchestrator:
         if not task:
             logger.error(f"Task {task_id} not found on step failure")
             return
+
+        # Restore trace_id for logging context
+        if task.trace_id:
+            set_trace_id(task.trace_id)
+
+        logger.warning(
+            f"Step failed: {step_name} ({error_code})",
+            extra={
+                "task_id": task_id,
+                "step": step_name,
+                "error_code": error_code,
+            },
+        )
 
         if task.status in (TaskStatus.COMPLETED.value, TaskStatus.FAILED.value):
             logger.warning(

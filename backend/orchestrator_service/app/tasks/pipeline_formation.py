@@ -19,6 +19,7 @@ from typing import Any, Dict, Optional
 from app.celery_app import celery_app
 from app.core.config import settings
 from app.core.pipeline.orchestrator import PipelineOrchestrator
+from app.core.trace import set_trace_id
 from app.db.session import get_db_context
 from app.services.ocr_client import OCRServiceClient
 from app.services.parser_client import ParserServiceClient
@@ -47,11 +48,14 @@ def _run_async(coro):
     name="tasks.pipeline.run_ocr_preview_step"
 )
 def run_ocr_preview_step(
-    self, task_id: int, draft_id: int, file_key: str, max_pages: int = 3
+    self, task_id: int, draft_id: int, file_key: str, max_pages: int = 3,
+    trace_id: str = "",
 ):
     """
     Preview OCR step — recognize text from first pages.
     """
+    if trace_id:
+        set_trace_id(trace_id)
     try:
         logger.info(f"OCR preview started: task={task_id} draft={draft_id}")
 
@@ -83,11 +87,14 @@ def run_ocr_preview_step(
     name="tasks.pipeline.run_parser_preview_step"
 )
 def run_parser_preview_step(
-    self, task_id: int, draft_id: int, file_key: str, max_pages: int = 3
+    self, task_id: int, draft_id: int, file_key: str, max_pages: int = 3,
+    trace_id: str = "",
 ):
     """
     Preview Parser step — extract structure from digital PDF first pages.
     """
+    if trace_id:
+        set_trace_id(trace_id)
     try:
         logger.info(f"Parser preview started: task={task_id} draft={draft_id}")
 
@@ -119,11 +126,14 @@ def run_parser_preview_step(
     name="tasks.pipeline.run_converter_preview_step"
 )
 def run_converter_preview_step(
-    self, task_id: int, draft_id: int, file_key: str
+    self, task_id: int, draft_id: int, file_key: str,
+    trace_id: str = "",
 ):
     """
     Preview Converter step — validate and transform preview data.
     """
+    if trace_id:
+        set_trace_id(trace_id)
     try:
         logger.info(f"Converter preview started: task={task_id} draft={draft_id}")
 
@@ -157,8 +167,13 @@ def run_converter_preview_step(
     bind=True, max_retries=3, default_retry_delay=60,
     name="tasks.pipeline.run_ocr_full_step"
 )
-def run_ocr_full_step(self, task_id: int, draft_id: int, file_key: str):
+def run_ocr_full_step(
+    self, task_id: int, draft_id: int, file_key: str,
+    trace_id: str = "",
+):
     """Full OCR step — process entire document."""
+    if trace_id:
+        set_trace_id(trace_id)
     try:
         logger.info(f"OCR full started: task={task_id}")
 
@@ -186,8 +201,13 @@ def run_ocr_full_step(self, task_id: int, draft_id: int, file_key: str):
     bind=True, max_retries=3, default_retry_delay=60,
     name="tasks.pipeline.run_parser_full_step"
 )
-def run_parser_full_step(self, task_id: int, draft_id: int, file_key: str):
+def run_parser_full_step(
+    self, task_id: int, draft_id: int, file_key: str,
+    trace_id: str = "",
+):
     """Full Parser step — parse entire document."""
+    if trace_id:
+        set_trace_id(trace_id)
     try:
         logger.info(f"Parser full started: task={task_id}")
 
@@ -216,8 +236,13 @@ def run_parser_full_step(self, task_id: int, draft_id: int, file_key: str):
     bind=True, max_retries=3, default_retry_delay=60,
     name="tasks.pipeline.run_converter_full_step"
 )
-def run_converter_full_step(self, task_id: int, draft_id: int, file_key: str):
+def run_converter_full_step(
+    self, task_id: int, draft_id: int, file_key: str,
+    trace_id: str = "",
+):
     """Full Converter step — convert and validate full document."""
+    if trace_id:
+        set_trace_id(trace_id)
     try:
         logger.info(f"Converter full started: task={task_id}")
 
@@ -245,8 +270,13 @@ def run_converter_full_step(self, task_id: int, draft_id: int, file_key: str):
     bind=True, max_retries=2, default_retry_delay=30,
     name="tasks.pipeline.run_registry_step"
 )
-def run_registry_step(self, task_id: int, draft_id: int):
+def run_registry_step(
+    self, task_id: int, draft_id: int,
+    trace_id: str = "",
+):
     """Registry step — persist document in the registry."""
+    if trace_id:
+        set_trace_id(trace_id)
     try:
         logger.info(f"Registry step started: task={task_id} draft={draft_id}")
 

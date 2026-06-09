@@ -44,6 +44,10 @@ class SagaCoordinator:
 
     async def compensate(self, task_id: int, failed_step: str) -> None:
         """Run compensation for all completed steps before the failed one."""
+        logger.info(
+            f"Starting compensation for task after {failed_step} failure",
+            extra={"task_id": task_id, "failed_step": failed_step},
+        )
         steps = await self.task_repo.get_task_steps(task_id)
 
         # Find the index of the failed step
