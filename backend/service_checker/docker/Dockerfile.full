@@ -36,7 +36,7 @@ WORKDIR /app
 COPY backend/ ./backend/
 
 # ---- 5. Порты (только Python-сервисы) ----
-EXPOSE 8000 8081 8082 8083 8084 8085 8086 8087 8090 8091
+EXPOSE 8000 8081 8082 8083 8084 8085 8086 8087 8090 8091 8092
 
 # ---- 6. ENV по умолчанию ----
 ENV PYTHONDONTWRITEBYTECODE=1 \

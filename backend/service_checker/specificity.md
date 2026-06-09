@@ -79,3 +79,38 @@ if expires_at is None:
 
 ### Статус
 🟢 **Исправлено (auth_service, 2026-06-09)**
+
+---
+
+## 3. Добавлен Hugging Face TEI эмбеддинг сервер
+
+**Дата:** 2026-06-09
+
+### Что сделано
+1. **docker-compose.yml** — добавлен сервис `tei`:
+   - Образ: `ghcr.io/huggingface/text-embeddings-inference:cpu-latest`
+   - Модель: `Xenova/rubert-tiny2` (312 dim, ONNX, русский)
+   - Порт: `8092:80`
+   - Health check: `GET /health`
+   - Volume: `tei_cache:/data` для кэша модели
+2. **docker-compose.yml (env-common)** — изменены переменные эмбеддинга:
+   - `EMBEDDING_PROVIDER`: `mock` → `tei`
+   - `EMBEDDING_BASE_URL`: добавлен `http://tei:80`
+   - `EMBEDDING_MODEL`: `Xenova/rubert-tiny2`
+   - `EMBEDDING_DIM`: `1536` → `312`
+3. **supervisord.conf** — RAG Builder и RAG Search:
+   - Убрана зависимость от OpenAI API (`EMBEDDING_BASE_URL` → `http://127.0.0.1:8092`)
+   - Добавлены `EMBEDDING_PROVIDER`, `EMBEDDING_MODEL`, `EMBEDDING_DIM`
+4. **api_coverage_test.py** — добавлен сервис `tei` (порт 8092) с эндпоинтами `/health` и `/embed`
+5. **Dockerfile.full** — добавлен EXPOSE 8092
+6. **pipelines/base.py** — добавлен порт `tei: 8092` в `_get_service_port`
+
+### Мотивация
+- Замена cloud-провайдера эмбеддингов (OpenAI) на локальный TEI
+- ONNX-оптимизация модели rubert-tiny2 даёт быстрый инференс на CPU
+- Модель Xenova/rubert-tiny2 — русскоязычная, trained on RuBERT
+- Размер эмбеддинга: 312 — компактнее OpenAI
+- TEI работает CPU-only (не требует GPU)
+
+### Статус
+🟢 **Реализовано (checker/infra, 2026-06-09)**

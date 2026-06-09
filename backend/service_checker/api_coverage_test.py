@@ -107,10 +107,11 @@ MODE_PORTS = {
     # analyse — временно не тестируется (нет контейнера)
     "rag_builder": 8090,
     "rag_search": 8091,
+    "tei": 8092,
 }
 SERVICES_WITH_REAL = {
     "gateway", "auth", "orchestrator", "query", "registry",
-    "converter_validator", "parser", "ocr", "rag_builder", "rag_search",
+    "converter_validator", "parser", "ocr", "rag_builder", "rag_search", "tei",
 }
 
 # Зависимости между сервисами: если сервис не отвечает, зависящие от него
@@ -433,6 +434,13 @@ def build_endpoints() -> Dict[str, List[EndpointDef]]:
     endpoints["rag_search"] = [
         EndpointDef("GET", f"{API_PREFIX}/health", "health", "Health check сервиса"),
         EndpointDef("POST", f"{API_PREFIX}/rag/search", "rag", "Гибридный поиск чанков", body={"query": "ледовый класс Arc4", "top_k": 5}),
+    ]
+
+    # ── Text Embeddings Inference (tei:8092) ───────────────────────
+    endpoints["tei"] = [
+        EndpointDef("GET", "/health", "health", "Health check TEI сервера"),
+        EndpointDef("POST", "/embed", "embed", "Получить эмбеддинги",
+            body={"inputs": "Тестовый запрос для эмбеддинга"}),
     ]
 
     # ── Gateway Service (gateway-mock:8081) — агрегирует auth + orchestrator + query + registry ──
