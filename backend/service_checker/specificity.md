@@ -89,14 +89,14 @@ if expires_at is None:
 ### Что сделано
 1. **docker-compose.yml** — добавлен сервис `tei`:
    - Образ: `ghcr.io/huggingface/text-embeddings-inference:cpu-latest`
-   - Модель: `Xenova/rubert-tiny2` (312 dim, ONNX, русский)
+   - Модель: `TrendHD/rubert-tiny2-int8` (312 dim, ONNX int8, русский)
    - Порт: `8092:80`
    - Health check: `GET /health`
-   - Volume: `tei_cache:/data` для кэша модели
+   - Volume: `./tei_model:/data` (bind mount локальной модели)
 2. **docker-compose.yml (env-common)** — изменены переменные эмбеддинга:
    - `EMBEDDING_PROVIDER`: `mock` → `tei`
    - `EMBEDDING_BASE_URL`: добавлен `http://tei:80`
-   - `EMBEDDING_MODEL`: `Xenova/rubert-tiny2`
+   - `EMBEDDING_MODEL`: `Vuy/rubert-tiny2-onnx`
    - `EMBEDDING_DIM`: `1536` → `312`
 3. **supervisord.conf** — RAG Builder и RAG Search:
    - Убрана зависимость от OpenAI API (`EMBEDDING_BASE_URL` → `http://127.0.0.1:8092`)
@@ -104,13 +104,47 @@ if expires_at is None:
 4. **api_coverage_test.py** — добавлен сервис `tei` (порт 8092) с эндпоинтами `/health` и `/embed`
 5. **Dockerfile.full** — добавлен EXPOSE 8092
 6. **pipelines/base.py** — добавлен порт `tei: 8092` в `_get_service_port`
+7. **docker/prepare_tei_model.py** — скрипт подготовки локальной модели из `cointegrated/rubert-tiny2` (конфиги) и `TrendHD/rubert-tiny2-int8` (ONNX)
 
 ### Мотивация
 - Замена cloud-провайдера эмбеддингов (OpenAI) на локальный TEI
 - ONNX-оптимизация модели rubert-tiny2 даёт быстрый инференс на CPU
-- Модель Xenova/rubert-tiny2 — русскоязычная, trained on RuBERT
-- Размер эмбеддинга: 312 — компактнее OpenAI
+- Модель rubert-tiny2 — русскоязычная, 312 dim
 - TEI работает CPU-only (не требует GPU)
 
 ### Статус
 🟢 **Реализовано (checker/infra, 2026-06-09)**
+
+---
+
+## 4. Фикс запуска TEI контейнера
+
+**Дата:** 2026-06-09
+
+### Симптом
+TEI контейнер падал при старте с ошибкой:
+```
+Error: `config.json` not found
+Caused by: No such file or directory (os error 2)
+```
+
+### Диагностика
+Две причины:
+1. **Неверная директория модели** — `prepare_tei_model.py` создавал `tei_model/` в корне `service_checker/`, а docker-compose ожидает `docker/tei_model/` (относительный путь `./tei_model` резолвится от расположения `docker-compose.yml`)
+2. **Неверное имя ONNX-файла** — скрипт называл файл `model_quantized.onnx`, а TEI на CPU-бэкенде ожидает `model.onnx`
+
+### Что исправлено
+1. **`docker/prepare_tei_model.py`** — `ONNX_TARGET` изменён с `model_quantized.onnx` на `model.onnx`; обновлён docstring
+2. **Файлы модели** — перенесены из `service_checker/tei_model/` в `service_checker/docker/tei_model/`
+
+### Важно
+- Относительный путь `./tei_model:/data` в `docker-compose.yml` работает корректно на Windows через Docker Desktop
+- При запуске из Git Bash на Windows может потребоваться `MSYS_NO_PATHCONV=1` для команд `docker run` с volume
+
+### Проверка
+- `curl http://127.0.0.1:8092/health` → 200 OK
+- `curl -X POST http://127.0.0.1:8092/embed -d '{"inputs":"test"}'` → возвращает 312-мерный вектор
+- `docker inspect pkb-tei` → Health: healthy
+
+### Статус
+🟢 **Исправлено (checker/infra, 2026-06-09)**

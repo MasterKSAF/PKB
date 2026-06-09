@@ -6,6 +6,8 @@
 
 ```
 service_checker/
+├── setup.py                 # One-command setup: модель TEI + Docker Compose
+├── Makefile                 # Альтернативный setup (Linux/macOS/Git Bash)
 ├── api_coverage_test.py     # API Coverage Test (real-режим, Docker)
 ├── service_checker.py       # Запуск/остановка сервисов, health check, эмуляция UI
 ├── setup_db.py              # Инициализация БД
@@ -21,6 +23,7 @@ service_checker/
 │   ├── supervisord.conf                 # Управление Python-сервисами
 │   ├── Dockerfile.base / .full          # Образы
 │   ├── entrypoint.sh                    # Точка входа
+│   ├── prepare_tei_model.py             # Скачивание и подготовка модели TEI
 │   └── requirements.txt                 # Python-зависимости всех сервисов
 ├── tests/
 │   ├── conftest.py                        # Общие фикстуры
@@ -33,10 +36,23 @@ service_checker/
 └── readme.md                # Точка входа (этот файл)
 ```
 
-## Запуск
+## Быстрый старт (с нуля)
 
 ```bash
-# Все тесты
+# Полный setup: подготовка модели TEI + запуск Docker Compose
+python setup.py
+
+# Или по шагам:
+python setup.py --model     # Только подготовка модели TEI
+python setup.py --up         # Только запуск Docker Compose
+python setup.py --down       # Остановка Docker Compose
+python setup.py --ps         # Статус контейнеров
+```
+
+## Запуск тестов
+
+```bash
+# Unit-тесты
 python -m pytest tests/ -v
 
 # По файлам
@@ -46,7 +62,7 @@ python -m pytest tests/test_report_generation.py -v
 python -m pytest tests/test_pipeline_base.py -v
 python -m pytest tests/test_pipeline_steps.py -v
 
-# Pipeline Testing (требует Docker с real-сервисами)
+# Pipeline Testing (требует Docker с реальными сервисами)
 python pipeline_test.py list                        # Список пайплайнов
 python pipeline_test.py run-all                     # Все пайплайны
 python pipeline_test.py run document_processing     # Конкретный пайплайн
@@ -90,4 +106,4 @@ python api_coverage_test.py run-all
 - **4xx/5xx без JSON** — fail
 - **Статус-колонка отчёта** — X если ping_ok=False
 - **Пайплайны** — сквозные сценарии в отдельных файлах `pipelines/*.py`, запуск через `pipeline_test.py`
-- **Эмбеддинги через TEI** — локальный сервер эмбеддингов Hugging Face TEI с моделью MiniLM-L6-v2-int8 на порту 8092
+- **Эмбеддинги через TEI** — локальный сервер эмбеддингов Hugging Face TEI с моделью `TrendHD/rubert-tiny2-int8` (312 dim, ONNX int8) на порту 8092

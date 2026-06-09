@@ -21,7 +21,7 @@ echo ""
 # =============================================================================
 # 1. Создание директорий для сервисов
 # =============================================================================
-echo "[1/3] Создание директорий..."
+echo "[1/5] Создание директорий..."
 mkdir -p /app/backend/integration_service/files1 \
          /app/backend/integration_service/files2 \
          /app/backend/registry_service/files1 \
@@ -31,17 +31,29 @@ echo "   ✓ Директории созданы"
 # =============================================================================
 # 2. Настройка PYTHONPATH
 # =============================================================================
-echo "[2/4] Настройка PYTHONPATH..."
+echo "[2/5] Настройка PYTHONPATH..."
 export PYTHONPATH="/app/backend:/app/backend/shared:/app/backend/rag_builder_service/src:${PYTHONPATH:-}"
 echo "   ✓ PYTHONPATH=$PYTHONPATH"
 
 # =============================================================================
-# 3. Автоустановка зависимостей (чтобы не ждать пересборки образа)
+# 3. Установка Java (требуется для opendataloader-pdf)
 # =============================================================================
-echo "[3/4] Проверка Python-зависимостей..."
+echo "[3/5] Проверка Java..."
+if ! command -v java &>/dev/null; then
+    echo "   → Java не найдена, устанавливаем..."
+    apt-get update -qq && apt-get install -y --no-install-recommends -qq default-jre 2>&1 | tail -3
+    echo "   ✓ Java установлена"
+else
+    echo "   ✓ Java: bash: java: command not found"
+fi
+
+# =============================================================================
+# 4. Автоустановка Python-зависимостей
+# =============================================================================
+echo "[4/5] Проверка Python-зависимостей..."
 if [ -f /app/backend/service_checker/docker/requirements.txt ]; then
     pip install --no-cache-dir -r /app/backend/service_checker/docker/requirements.txt 2>&1 | tail -1
-    echo "   ✓ Зависимости актуальны"
+    echo "   ✓ Python-зависимости актуальны"
 else
     echo "   ⚠ requirements.txt не найден, пропускаем"
 fi
@@ -49,7 +61,7 @@ fi
 # =============================================================================
 # 4. Запуск supervisord
 # =============================================================================
-echo "[4/4] Запуск supervisord..."
+echo "[5/5] Запуск supervisord..."
 echo ""
 
 mkdir -p /var/log/supervisor /var/run/supervisor

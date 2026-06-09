@@ -4,16 +4,16 @@ PKB Neuroassistant — Prepare TEI model locally.
 
 Скачивает конфигурационные файлы из cointegrated/rubert-tiny2
 и ONNX-файл из TrendHD/rubert-tiny2-int8, переименовывает его
-в model_quantized.onnx, чтобы TEI мог загрузить модель из локальной папки.
+в model.onnx, чтобы TEI мог загрузить модель из локальной папки.
 
 Структура на выходе:
-  tei_model/
+  docker/tei_model/
   ├── config.json
   ├── tokenizer.json
   ├── tokenizer_config.json
   ├── special_tokens_map.json
   ├── vocab.txt
-  └── model_quantized.onnx   (переименованный rubert-tiny2-int8.onnx)
+  └── model.onnx             (переименованный rubert-tiny2-int8.onnx)
 """
 
 from __future__ import annotations
@@ -37,11 +37,21 @@ CONFIG_FILES = [
 ]
 
 ONNX_SOURCE = "onnx/rubert-tiny2-int8.onnx"
-ONNX_TARGET = "model_quantized.onnx"
+ONNX_TARGET = "model.onnx"
 
 
-def prepare_model(target_dir: str = "tei_model") -> None:
-    """Скачать и подготовить модель для TEI."""
+def prepare_model(target_dir: str | None = None) -> None:
+    """Скачать и подготовить модель для TEI.
+
+    Args:
+        target_dir: Путь к директории для модели.
+            По умолчанию: docker/tei_model/ относительно директории скрипта.
+    """
+    if target_dir is None:
+        # По умолчанию — docker/tei_model/ рядом со скриптом
+        script_dir = Path(__file__).resolve().parent
+        target_dir = str(script_dir / "tei_model")
+
     target = Path(target_dir).resolve()
     target.mkdir(parents=True, exist_ok=True)
 
@@ -73,13 +83,14 @@ def prepare_model(target_dir: str = "tei_model") -> None:
     else:
         print(f"\nDownloading ONNX model: {ONNX_SOURCE}...", end=" ", flush=True)
         try:
+            import shutil
+
             downloaded = hf_hub_download(
                 repo_id=ONNX_REPO,
                 filename=ONNX_SOURCE,
                 local_dir_use_symlinks=False,
             )
-            # Переименовываем в ожидаемое TEI имя (shutil.move для кроссплатформенности)
-            import shutil
+            # Переименовываем в ожидаемое TEI имя
             shutil.move(downloaded, str(dest_onnx))
             print("OK")
             print(f"  → Renamed to {ONNX_TARGET}")
@@ -98,5 +109,5 @@ def prepare_model(target_dir: str = "tei_model") -> None:
 
 
 if __name__ == "__main__":
-    target = sys.argv[1] if len(sys.argv) > 1 else "tei_model"
+    target = sys.argv[1] if len(sys.argv) > 1 else None
     prepare_model(target)

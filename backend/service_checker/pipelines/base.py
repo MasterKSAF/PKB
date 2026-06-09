@@ -35,9 +35,13 @@ class PipelineStep:
     :param path: Путь эндпоинта (например /api/v1/parser/process)
     :param port: Порт сервиса
     :param body: Тело запроса (опционально)
+    :param content: Бинарное содержимое (опционально, заменяет body)
     :param params: Query-параметры (опционально)
-    :param expected_status: Ожидаемый HTTP-статус (или диапазон)
-    :param check: Функция проверки ответа (response_body, context) → (ok, message)
+    :param expected_status: Ожидаемый HTTP-статус (int или set[int])
+    :param retry_on: Статусы для автоматического повтора (напр. {409})
+    :param retry_delay: Секунд между повторами
+    :param retry_max: Максимум повторов
+    :param check: Функция проверки ответа (response_body, context) -> (ok, message)
     :param extract_keys: Ключи для извлечения из ответа в контекст
     :param needs_auth: Нужен ли Bearer-токен
     """
@@ -48,8 +52,12 @@ class PipelineStep:
     path: str
     port: int
     body: Optional[Dict[str, Any]] = None
+    content: Optional[bytes] = None
     params: Optional[Dict[str, Any]] = None
-    expected_status: int = 200
+    expected_status: int | set[int] = 200
+    retry_on: Optional[set[int]] = None
+    retry_delay: float = 3.0
+    retry_max: int = 10
     check: Optional[Callable[[Optional[str], PipelineContext], Tuple[bool, str]]] = None
     extract_keys: Optional[List[str]] = None
     needs_auth: bool = False
@@ -200,15 +208,19 @@ class PipelineRunner:
         body = self._resolve_body(step.body, ctx)
 
         # Заголовки
-        headers = {"Content-Type": "application/json", "Accept": "application/json"}
+        headers = {"Accept": "application/json"}
         if step.needs_auth and auth_token:
             headers["Authorization"] = f"Bearer {auth_token}"
 
         # Выполнение запроса
         try:
             kwargs: Dict[str, Any] = {"headers": headers}
-            if body is not None:
+            if step.content is not None:
+                kwargs["content"] = step.content
+                headers.setdefault("Content-Type", "application/octet-stream")
+            elif body is not None:
                 kwargs["json"] = body
+                headers.setdefault("Content-Type", "application/json")
             if step.params:
                 kwargs["params"] = step.params
 
@@ -217,8 +229,32 @@ class PipelineRunner:
             step.actual_status = resp.status_code
             step.response_body = resp.text if resp.content else None
 
-            # Проверка статуса
-            status_ok = resp.status_code == step.expected_status
+            # Проверка статуса (int или set[int])
+            if isinstance(step.expected_status, set):
+                status_ok = resp.status_code in step.expected_status
+            else:
+                status_ok = resp.status_code == step.expected_status
+            
+            # Retry если статус в retry_on
+            if not status_ok and step.retry_on and resp.status_code in step.retry_on:
+                import asyncio
+                for attempt in range(step.retry_max):
+                    await asyncio.sleep(step.retry_delay)
+                    resp = await getattr(self.client, step.method.lower())(url, **kwargs)
+                    step.elapsed_ms = int((time.time() - start) * 1000)
+                    step.actual_status = resp.status_code
+                    step.response_body = resp.text if resp.content else None
+                    if isinstance(step.expected_status, set):
+                        status_ok = resp.status_code in step.expected_status
+                    else:
+                        status_ok = resp.status_code == step.expected_status
+                    if status_ok:
+                        break
+                else:
+                    step.error = f"Expected HTTP {step.expected_status}, got {resp.status_code} after {step.retry_max} retries"
+                    step.status = StepStatus.FAILED
+                    return step
+            
             if not status_ok:
                 step.error = f"Expected HTTP {step.expected_status}, got {resp.status_code}"
                 step.status = StepStatus.FAILED
