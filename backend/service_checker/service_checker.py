@@ -1900,6 +1900,12 @@ async def _docker_collect_logs(services: List[str] = None, timestamp: str = None
                     continue
 
                 if content and re.search(r"(Traceback|Error|ERROR|except|panic|FATAL)", content, re.IGNORECASE):
+                    # Обрезаем error-логи до последних 50 строк —
+                    # полные трейсбеки раздувают отчёт до сотен КБ
+                    error_lines = content.split("\n")
+                    if len(error_lines) > 50:
+                        content = "\n".join(error_lines[-50:])
+                        content = f"(обрезано, было {len(error_lines)} строк, показаны последние 50)\n\n" + content
                     entries.append((fname, log_file, "❌ ERROR", content, anchor))
                     has_errors = True
                 else:
@@ -1922,6 +1928,11 @@ async def _docker_collect_logs(services: List[str] = None, timestamp: str = None
                 lines.append(f"**{label}** — `{log_path}`\n")
                 lines.append(f"\n```\n")
                 if content:
+                    # Обрезаем info-логи до последних 100 строк
+                    info_lines = content.split("\n")
+                    if len(info_lines) > 100:
+                        content = "\n".join(info_lines[-100:])
+                        content = f"(обрезано, было {len(info_lines)} строк, показаны последние 100)\n\n" + content
                     lines.append(content)
                 else:
                     lines.append("(пусто)")
