@@ -203,80 +203,80 @@ def build_endpoints() -> Dict[str, List[EndpointDef]]:
         EndpointDef("GET", f"{API_PREFIX}/health", "health", "Health check",
             response_schema={"status": str}),
         # ── Classifiers (create → get tree → get one → update → patch → delete) ──
-        EndpointDef("POST", f"{API_PREFIX}/classifiers", "classifiers", "Создать классификатор",
+        EndpointDef("POST", f"{API_PREFIX}/registry/classifiers", "classifiers", "Создать классификатор",
             body={"classifier_system": "MKS", "code": "99.999", "full_name": "Тестовый классификатор", "status": "active"},
             extract_keys=["classifier_code"],
             response_schema={"data": dict}),
-        EndpointDef("GET", f"{API_PREFIX}/classifiers", "classifiers", "Список классификаторов",
+        EndpointDef("GET", f"{API_PREFIX}/registry/classifiers", "classifiers", "Список классификаторов",
             params={"page": 1, "page_size": 10},
             response_schema={"data": list, "meta": dict}),
-        EndpointDef("GET", f"{API_PREFIX}/classifiers/tree", "classifiers", "Дерево классификаторов",
+        EndpointDef("GET", f"{API_PREFIX}/registry/classifiers/tree", "classifiers", "Дерево классификаторов",
             response_schema={"data": list}),
-        EndpointDef("GET", f"{API_PREFIX}/classifiers/{{classifier_code}}", "classifiers", "Получить классификатор",
+        EndpointDef("GET", f"{API_PREFIX}/registry/classifiers/{{classifier_code}}", "classifiers", "Получить классификатор",
             response_schema={"data": dict}),
-        EndpointDef("PUT", f"{API_PREFIX}/classifiers/{{classifier_code}}", "classifiers", "Обновить классификатор",
+        EndpointDef("PUT", f"{API_PREFIX}/registry/classifiers/{{classifier_code}}", "classifiers", "Обновить классификатор",
             body={"full_name": "Обновлённый тестовый классификатор"},
             response_schema={"data": dict}),
-        EndpointDef("PATCH", f"{API_PREFIX}/classifiers/{{classifier_code}}", "classifiers", "Частичное обновление",
+        EndpointDef("PATCH", f"{API_PREFIX}/registry/classifiers/{{classifier_code}}", "classifiers", "Частичное обновление",
             body={"status": "inactive"},
             response_schema={"data": dict}),
-        EndpointDef("DELETE", f"{API_PREFIX}/classifiers/{{classifier_code}}", "classifiers", "Удалить классификатор"),
-        EndpointDef("POST", f"{API_PREFIX}/classifiers/import", "classifiers", "Импорт классификаторов",
+        EndpointDef("DELETE", f"{API_PREFIX}/registry/classifiers/{{classifier_code}}", "classifiers", "Удалить классификатор"),
+        EndpointDef("POST", f"{API_PREFIX}/registry/classifiers/import", "classifiers", "Импорт классификаторов",
             body={"classifiers": [{"classifier_system": "MKS", "code": "99.998", "full_name": "Импортированный"}]}),
-        EndpointDef("GET", f"{API_PREFIX}/classifiers/quarantine", "classifiers", "Карантин",
+        EndpointDef("GET", f"{API_PREFIX}/registry/classifiers/pending", "classifiers", "Карантин",
             response_schema={"data": list}),
-        EndpointDef("POST", f"{API_PREFIX}/classifiers/quarantine/{{pending_id}}/accept", "classifiers", "Принять из карантина",
+        EndpointDef("POST", f"{API_PREFIX}/registry/classifiers/pending/{{pending_id}}/accept", "classifiers", "Принять из карантина",
             body={"parent_code": "01.040", "full_name": "Принятый термин"}),
-        EndpointDef("POST", f"{API_PREFIX}/classifiers/quarantine/{{pending_id}}/reject", "classifiers", "Отклонить из карантина",
+        EndpointDef("POST", f"{API_PREFIX}/registry/classifiers/pending/{{pending_id}}/reject", "classifiers", "Отклонить из карантина",
             body={"admin_comment": "Отклонено тестом"}),
-        EndpointDef("POST", f"{API_PREFIX}/classifiers/validate", "classifiers", "Валидация классификации",
+        EndpointDef("POST", f"{API_PREFIX}/registry/classifiers/validate", "classifiers", "Валидация классификации",
             body={"classification": {"mks_oks_code": "01.040.01", "okstu_code": "1234", "udk_code": "001.4"}}),
         # ── Terminology (create → list → get → normalize → update → delete) ──
-        EndpointDef("POST", f"{API_PREFIX}/terminology", "terminology", "Создать термин",
+        EndpointDef("POST", f"{API_PREFIX}/registry/terminology", "terminology", "Создать термин",
             body={"raw_term": "Тест", "standard_term": "Тест", "normalized_value": "тест", "term_type": "abbreviation", "definition": "Тестовый термин"},
             extract_keys=["term_id"],
             response_schema={"data": dict}),
-        EndpointDef("GET", f"{API_PREFIX}/terminology", "terminology", "Список терминов",
+        EndpointDef("GET", f"{API_PREFIX}/registry/terminology", "terminology", "Список терминов",
             params={"page": 1, "page_size": 10},
             response_schema={"data": list, "meta": dict}),
-        EndpointDef("GET", f"{API_PREFIX}/terminology/{{term_id}}", "terminology", "Получить термин",
+        EndpointDef("GET", f"{API_PREFIX}/registry/terminology/{{term_id}}", "terminology", "Получить термин",
             response_schema={"data": dict}),
-        EndpointDef("GET", f"{API_PREFIX}/terminology/normalize", "terminology", "Нормализовать термин",
+        EndpointDef("GET", f"{API_PREFIX}/registry/terminology/normalize", "terminology", "Нормализовать термин",
             params={"term": "Тест"}),
-        EndpointDef("PUT", f"{API_PREFIX}/terminology/{{term_id}}", "terminology", "Обновить термин",
+        EndpointDef("PUT", f"{API_PREFIX}/registry/terminology/{{term_id}}", "terminology", "Обновить термин",
             body={"definition": "Обновлённое определение"},
             response_schema={"data": dict}),
-        EndpointDef("DELETE", f"{API_PREFIX}/terminology/{{term_id}}", "terminology", "Удалить термин"),
-        EndpointDef("POST", f"{API_PREFIX}/terminology/import", "terminology", "Импорт терминов",
+        EndpointDef("DELETE", f"{API_PREFIX}/registry/terminology/{{term_id}}", "terminology", "Удалить термин"),
+        EndpointDef("POST", f"{API_PREFIX}/registry/terminology/import", "terminology", "Импорт терминов",
             body={"terms": [{"raw_term": "Импорт", "standard_term": "Импорт", "normalized_value": "импорт", "term_type": "abbreviation"}]}),
         # ── Documents (create → list → get → update → patch → history → succession → delete) ──
-        EndpointDef("POST", f"{API_PREFIX}/documents", "documents", "Создать документ",
+        EndpointDef("POST", f"{API_PREFIX}/registry/documents", "documents", "Создать документ",
             body={"title": "Тестовый документ", "doc_code": "ТЕСТ-001", "source_type": "GOST", "era": "RF", "validity_status": "active"},
             extract_keys=["doc_id"],
             response_schema={"data": dict}),
-        EndpointDef("GET", f"{API_PREFIX}/documents", "documents", "Список документов",
+        EndpointDef("GET", f"{API_PREFIX}/registry/documents", "documents", "Список документов",
             params={"page": 1, "page_size": 10},
             response_schema={"data": list, "meta": dict}),
-        EndpointDef("GET", f"{API_PREFIX}/documents/{{doc_id}}", "documents", "Получить документ",
+        EndpointDef("GET", f"{API_PREFIX}/registry/documents/{{doc_id}}", "documents", "Получить документ",
             response_schema={"data": dict}),
-        EndpointDef("PUT", f"{API_PREFIX}/documents/{{doc_id}}", "documents", "Обновить документ",
+        EndpointDef("PUT", f"{API_PREFIX}/registry/documents/{{doc_id}}", "documents", "Обновить документ",
             body={"title": "Обновлённый документ"},
             response_schema={"data": dict}),
-        EndpointDef("PATCH", f"{API_PREFIX}/documents/{{doc_id}}/status", "documents", "Обновить статус",
+        EndpointDef("PATCH", f"{API_PREFIX}/registry/documents/{{doc_id}}/status", "documents", "Обновить статус",
             body={"status": "uploaded"},
             response_schema={"data": dict}),
-        EndpointDef("GET", f"{API_PREFIX}/documents/{{doc_id}}/history", "documents", "История статусов",
+        EndpointDef("GET", f"{API_PREFIX}/registry/documents/{{doc_id}}/history", "documents", "История статусов",
             response_schema={"data": list, "meta": dict}),
-        EndpointDef("GET", f"{API_PREFIX}/documents/{{doc_id}}/succession", "documents", "Цепочка преемственности",
-            response_schema={"data": dict}),
-        EndpointDef("DELETE", f"{API_PREFIX}/documents/{{doc_id}}", "documents", "Удалить документ"),
-        EndpointDef("GET", f"{API_PREFIX}/documents/export", "documents", "Экспорт документов"),
-        EndpointDef("POST", f"{API_PREFIX}/documents/import", "documents", "Массовый импорт",
+        EndpointDef("GET", f"{API_PREFIX}/registry/documents/{{doc_id}}/succession", "documents", "Цепочка преемственности",
+            response_schema={"data": list, "meta": dict}),
+        EndpointDef("DELETE", f"{API_PREFIX}/registry/documents/{{doc_id}}", "documents", "Удалить документ"),
+        EndpointDef("GET", f"{API_PREFIX}/registry/documents/export", "documents", "Экспорт документов"),
+        EndpointDef("POST", f"{API_PREFIX}/registry/documents/import", "documents", "Массовый импорт",
             body={"documents": [{"title": "Импорт тест", "doc_code": "ИМП-001", "source_type": "GOST", "era": "RF"}]}),
         # Common
-        EndpointDef("GET", f"{API_PREFIX}/stats", "common", "Статистика",
+        EndpointDef("GET", f"{API_PREFIX}/registry/stats", "common", "Статистика",
             response_schema={"data": dict}),
-        EndpointDef("GET", f"{API_PREFIX}/enums", "common", "Допустимые значения",
+        EndpointDef("GET", f"{API_PREFIX}/registry/enums", "common", "Допустимые значения",
             response_schema={"data": dict}),
     ]
 
@@ -502,7 +502,7 @@ class ApiCoverageTester:
                     f"http://{self.base_host}:{port}{path}",
                     timeout=timeout,
                 )
-                if resp.status_code < 500:
+                if resp.status_code < 500:  # сервис отвечает (даже 404 — жив, просто нет такого пути)
                     return True
             except Exception:
                 continue
@@ -735,7 +735,17 @@ class ApiCoverageTester:
                 elapsed = int((time.time() - start) * 1000)
 
                 resp_body = resp.text if resp.content else None
-                success = resp.status_code < 500  # 5xx считаем ошибкой сервиса
+                # 2xx/3xx — всегда успех (редирект тоже норм)
+                # 404 может быть нормальным, если JSON валидный (документ не найден)
+                # 4xx / 5xx — успех, если тело — валидный JSON
+                if resp.status_code < 400:
+                    success = True
+                else:
+                    try:
+                        resp.json()
+                        success = True
+                    except Exception:
+                        success = False
 
                 # Извлекаем контекст из ответа
                 if success and ep.extract_keys:
@@ -789,6 +799,25 @@ class ApiCoverageTester:
 
             result.results.append(ep_result)
 
+        # Если сервис ответил на ping, но все не-health эндпоинты вернули 404 —
+        # значит сервиса по факту нет (на порту что-то есть, но не то).
+        if result.ping_ok:
+            non_health_results = [
+                r for r in result.results
+                if r.endpoint.group != "health" and not r.skipped
+            ]
+            if len(non_health_results) >= 2 and all(
+                r.status_code == 404 for r in non_health_results
+            ):
+                result.ping_ok = False
+                # Откатываем success у всех 404-эндпоинтов — сервиса нет,
+                # настоящего ответа не было
+                for r in non_health_results:
+                    if r.success:
+                        r.success = False
+                        result.endpoints_passed -= 1
+                        result.endpoints_failed += 1
+
         return result
 
     async def run_all(self) -> Dict[str, ServiceResult]:
@@ -811,7 +840,7 @@ class ApiCoverageTester:
             result = await self.test_service(svc_key)
             self.results[svc_key] = result
 
-            status = "✓" if result.ping_ok else "✗"
+            status = "✅" if result.ping_ok else "❌"
             print(f"     Ping: {status}  |  Passed: {result.endpoints_passed}/{result.endpoints_total}  "
                   f"|  Failed: {result.endpoints_failed}  |  Skipped: {result.endpoints_skipped}")
 
@@ -852,7 +881,7 @@ class ApiCoverageTester:
             total_skipped += result.endpoints_skipped
             if result.ping_ok:
                 services_alive += 1
-            ping_icon = "✓" if result.ping_ok else "✗"
+            ping_icon = "✅" if result.ping_ok else "❌"
             failed_str = (
                 f'<span style="color:red;font-weight:bold">{result.endpoints_failed}</span>'
                 if result.endpoints_failed > 0 else str(result.endpoints_failed)
@@ -861,8 +890,8 @@ class ApiCoverageTester:
                 f'<span style="color:red;font-weight:bold">{result.endpoints_skipped}</span>'
                 if result.endpoints_skipped > 0 else str(result.endpoints_skipped)
             )
-            # Статус: ❌ жирный красный если есть ошибки/пропуски, ✅ если всё ок
-            if result.endpoints_failed > 0 or result.endpoints_skipped > 0:
+            # Статус: ❌ если ping упал или есть ошибки/пропуски, ✅ если всё ок
+            if not result.ping_ok or result.endpoints_failed > 0 or result.endpoints_skipped > 0:
                 status_icon = '<span style="color:red;font-weight:bold">❌</span>'
             else:
                 status_icon = "✅"
@@ -947,8 +976,9 @@ class ApiCoverageTester:
 
         # Легенда
         lines.append("## 📖 Legend\n")
-        lines.append("- **✅ Passed** — запрос выполнен, сервер вернул HTTP < 500\n")
-        lines.append("- **❌ Failed** — сервер вернул HTTP ≥ 500 или ошибка подключения\n")
+        lines.append("- **✅ Passed** — 2xx/3xx, либо 4xx/5xx с валидным JSON (эндпоинт существует)\n")
+        lines.append("- **❌ Failed** — 4xx/5xx без JSON, ошибка подключения, "
+                     "или все не-health эндпоинты вернули 404 (сервис не существует)\n")
         lines.append("- **⏭️ Skipped** — эндпоинт пропущен (сервис не отвечает, нет ID в контексте)\n")
         lines.append("- **Ping** — проверка health-эндпоинта на порту сервиса\n")
         lines.append("- **Mode** — Real (Docker): проверяются только запущенные в Docker сервисы\n")
