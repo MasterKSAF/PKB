@@ -167,6 +167,53 @@ class TestSearchPost:
         )
         assert response.status_code == 422
 
+    def test_search_top_k_above_100(self, client: TestClient, auth_header: dict):
+        """top_k = 101 violates le=100 constraint and returns 422."""
+        response = client.post(
+            self.SEARCH_URL,
+            json={"query": "тест", "top_k": 101},
+            headers=auth_header,
+        )
+        assert response.status_code == 422
+
+    def test_search_top_k_equal_100(self, client: TestClient, auth_header: dict):
+        """top_k = 100 is the upper boundary and returns 200."""
+        response = client.post(
+            self.SEARCH_URL,
+            json={"query": "тест", "top_k": 100},
+            headers=auth_header,
+        )
+        assert response.status_code == 200
+
+    def test_search_top_k_equal_1(self, client: TestClient, auth_header: dict):
+        """top_k = 1 is the lower boundary and returns 200."""
+        response = client.post(
+            self.SEARCH_URL,
+            json={"query": "тест", "top_k": 1},
+            headers=auth_header,
+        )
+        assert response.status_code == 200
+
+    def test_search_top_k_negative(self, client: TestClient, auth_header: dict):
+        """Negative top_k returns 422."""
+        response = client.post(
+            self.SEARCH_URL,
+            json={"query": "тест", "top_k": -5},
+            headers=auth_header,
+        )
+        assert response.status_code == 422
+
+    def test_search_top_k_default(self, client: TestClient, auth_header: dict):
+        """Default top_k should be 5 if not provided."""
+        response = client.post(
+            self.SEARCH_URL,
+            json={"query": "тест"},
+            headers=auth_header,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "items" in data
+
     def test_search_without_auth(self, client: TestClient):
         """Search without auth should work (mock mode bypasses auth)."""
         response = client.post(
@@ -262,140 +309,4 @@ class TestSearchGet:
         assert response.status_code == 200
 
 
-class TestAsk:
-    """Tests for POST /api/v1/ask"""
 
-    ASK_URL = "/api/v1/ask"
-
-    def test_ask_basic(self, client: TestClient, auth_header: dict):
-        """Basic ask returns 200 with answer and sources."""
-        response = client.post(
-            self.ASK_URL,
-            json={"question": "Какая минимальная толщина обшивки?"},
-            headers=auth_header,
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["question"] == "Какая минимальная толщина обшивки?"
-        assert "answer" in data
-        assert "sources" in data
-        assert "processing_time_ms" in data
-        assert "model_used" in data
-
-    def test_ask_with_document_ids(self, client: TestClient, auth_header: dict):
-        """Ask with specific document IDs (mock doesn't filter)."""
-        response = client.post(
-            self.ASK_URL,
-            json={
-                "question": "Требования к ледовому поясу?",
-                "document_ids": ["doc-norm-001"],
-            },
-            headers=auth_header,
-        )
-        assert response.status_code == 200
-
-    def test_ask_with_options(self, client: TestClient, auth_header: dict):
-        """Ask with temperature option."""
-        response = client.post(
-            self.ASK_URL,
-            json={
-                "question": "Тестовый вопрос",
-                "options": {"temperature": 0.3},
-            },
-            headers=auth_header,
-        )
-        assert response.status_code == 200
-
-    def test_ask_source_item_structure(self, client: TestClient, auth_header: dict):
-        """Each source item should have required fields."""
-        response = client.post(
-            self.ASK_URL,
-            json={"question": "Тестовый вопрос"},
-            headers=auth_header,
-        )
-        data = response.json()
-        if data["sources"]:
-            source = data["sources"][0]
-            for field in (
-                "document_id",
-                "document_title",
-                "page_number",
-                "fragment_id",
-                "text",
-                "score",
-            ):
-                assert field in source, f"Missing field: {field}"
-
-    def test_ask_source_score_range(self, client: TestClient, auth_header: dict):
-        """Source scores should be in [0, 1]."""
-        response = client.post(
-            self.ASK_URL,
-            json={"question": "Тестовый вопрос"},
-            headers=auth_header,
-        )
-        data = response.json()
-        for source in data["sources"]:
-            assert 0.0 <= source["score"] <= 1.0
-
-    def test_ask_model_used_not_empty(self, client: TestClient, auth_header: dict):
-        """Model used should be a non-empty string."""
-        response = client.post(
-            self.ASK_URL,
-            json={"question": "Тестовый вопрос"},
-            headers=auth_header,
-        )
-        data = response.json()
-        assert isinstance(data["model_used"], str)
-        assert len(data["model_used"]) > 0
-
-    def test_ask_processing_time_non_negative(
-        self, client: TestClient, auth_header: dict
-    ):
-        """Processing time should be >= 0."""
-        response = client.post(
-            self.ASK_URL,
-            json={"question": "Тестовый вопрос"},
-            headers=auth_header,
-        )
-        data = response.json()
-        assert data["processing_time_ms"] >= 0
-
-    def test_ask_answer_not_empty(self, client: TestClient, auth_header: dict):
-        """Answer should be a non-empty string."""
-        response = client.post(
-            self.ASK_URL,
-            json={"question": "Тестовый вопрос"},
-            headers=auth_header,
-        )
-        data = response.json()
-        assert isinstance(data["answer"], str)
-        assert len(data["answer"]) > 0
-
-    def test_ask_empty_question(self, client: TestClient, auth_header: dict):
-        """Empty question string is accepted (field is present, value is empty string)."""
-        response = client.post(
-            self.ASK_URL,
-            json={"question": ""},
-            headers=auth_header,
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["question"] == ""
-        assert "answer" in data
-
-    def test_ask_missing_question(self, client: TestClient, auth_header: dict):
-        """Missing question field should fail."""
-        response = client.post(
-            self.ASK_URL,
-            json={},
-            headers=auth_header,
-        )
-        assert response.status_code == 422
-
-    def test_ask_without_auth(self, client: TestClient):
-        """Ask without auth should work (mock mode bypasses auth)."""
-        response = client.post(
-            self.ASK_URL,
-            json={"question": "Тестовый вопрос"},
-        )
-        assert response.status_code == 200

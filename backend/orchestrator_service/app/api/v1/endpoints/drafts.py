@@ -33,7 +33,6 @@ from app.schemas.drafts import (
     DraftPreviewStatusResponse,
     PreviewMetadata,
 )
-from app.services.integration_client import IntegrationServiceClient
 from app.services.registry_client import RegistryServiceClient
 
 logger = logging.getLogger(__name__)
@@ -141,27 +140,8 @@ async def create_draft(
     file_hash = _compute_sha256(content)
     title_hash = _compute_sha256(title.encode("utf-8")) if title else None
 
-    # --- Upload file to Integration Service ---
-    integration_client = IntegrationServiceClient()
-    try:
-        file_result = await integration_client.upload_file(
-            file_data=content,
-            filename=file.filename or "uploaded_file",
-        )
-        file_key = file_result.get("data", {}).get("file_key", f"f-{file_hash[:12]}")
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "error": {
-                    "code": "UPLOAD_FAILED",
-                    "message": "Ошибка при загрузке файла в хранилище",
-                    "details": {"original_error": str(exc)},
-                }
-            },
-        )
-    finally:
-        await integration_client.close()
+    # --- Generate file key (no external storage) ---
+    file_key = f"f-{file_hash[:12]}"
 
     # --- Check duplicates via Registry ---
     registry = RegistryServiceClient()

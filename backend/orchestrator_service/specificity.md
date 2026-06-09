@@ -68,6 +68,22 @@ SQLite не поддерживает JSONB нативно. Текущая реа
 эндпоинт возвращает 404, а не 200.
 
 ### 3.6. Longpoll в тестах — дефолт 15с
-В эндпоинте `GET /drafts/{id}/preview/status` параметр `longpoll` по
-умолчанию равен 15 секундам. Тесты без явного `longpoll=0` ждут таймаута.
-Исправлено в `test_drafts.py` через `params={"longpoll": 0}`.
+	В эндпоинте `GET /drafts/{id}/preview/status` параметр `longpoll` по
+	умолчанию равен 15 секундам. Тесты без явного `longpoll=0` ждут таймаута.
+	Исправлено в `test_drafts.py` через `params={"longpoll": 0}`.
+
+### 3.7. Функции Document API документированы в `docs/api/orchestrator_service_api.md`
+		Эндпоинты групп **documents** и **pages** (`/api/v1/documents/...`) описаны
+		в `docs/api/orchestrator_service_api.md` и являются частью актуального API.
+		Они не имеют аналогов в Draft/Task API, т.к. относятся к разным группам.
+
+		| Функция | Эндпоинт(ы) | Группа в спецификации |
+		|---------|------------|----------------------|
+		| **Pages** | `GET /documents/{id}/pages`, `.../pages/{num}`, `.../text`, `.../preview` | pages |
+		| **File** | `GET /documents/{id}/file` | documents |
+		| **Errors** | `GET /documents/{id}/errors` | documents |
+		| **Parameters** | `GET /documents/{id}/parameters` | pages |
+		| **Queue** | `GET /documents/queue` | documents |
+		| **Reprocess** | `POST /documents/{id}/reprocess` | documents |
+		| **Versions** | `POST/GET /documents/{id}/versions` | documents |
+		| **History** | `GET /documents/{id}/history` | documents |

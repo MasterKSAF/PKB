@@ -12,44 +12,12 @@ from pydantic_settings import BaseSettings
 class ServiceConfig(BaseSettings):
     """Configuration for external services."""
 
-    # Auth Service (port 8082)
-    AUTH_SERVICE_URL: Optional[str] = Field(
-        default=None, description="URL for auth service"
-    )
-    AUTH_SERVICE_MOCK: bool = Field(
-        default=True, description="Use mock mode for auth service"
-    )
-
-    # Query Service (port 8083)
-    QUERY_SERVICE_URL: Optional[str] = Field(
-        default=None, description="URL for query service"
-    )
-    QUERY_SERVICE_MOCK: bool = Field(
-        default=True, description="Use mock mode for query service"
-    )
-
     # Registry Service (port 8084)
     REGISTRY_SERVICE_URL: Optional[str] = Field(
         default=None, description="URL for registry service"
     )
     REGISTRY_SERVICE_MOCK: bool = Field(
         default=True, description="Use mock mode for registry service"
-    )
-
-    # Integration Service (port 8085)
-    INTEGRATION_SERVICE_URL: Optional[str] = Field(
-        default=None, description="URL for integration service"
-    )
-    INTEGRATION_SERVICE_MOCK: bool = Field(
-        default=True, description="Use mock mode for integration service"
-    )
-
-    # Validation Service (port 8086)
-    VALIDATE_SERVICE_URL: Optional[str] = Field(
-        default=None, description="URL for validation service"
-    )
-    VALIDATE_SERVICE_MOCK: bool = Field(
-        default=True, description="Use mock mode for validation service"
     )
 
     # RAG Service (port 8087)

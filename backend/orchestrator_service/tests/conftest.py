@@ -12,12 +12,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 # Force mock mode for all external services before any imports
-os.environ["AUTH_SERVICE_MOCK"] = "true"
 os.environ["RAG_SERVICE_MOCK"] = "true"
-os.environ["QUERY_SERVICE_MOCK"] = "true"
 os.environ["OCR_SERVICE_MOCK"] = "true"
-os.environ["VALIDATE_SERVICE_MOCK"] = "true"
-os.environ["INTEGRATION_SERVICE_MOCK"] = "true"
 os.environ["REGISTRY_SERVICE_MOCK"] = "true"
 
 # Use tempfile for SQLite — avoids polluting project dir with test.db.

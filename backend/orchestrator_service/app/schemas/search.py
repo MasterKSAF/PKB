@@ -62,38 +62,3 @@ class SearchQueryParams(BaseModel):
     document_id: Optional[str] = None
     page: int = 1
     limit: int = 10
-
-
-class AskOptions(BaseModel):
-    """Ask options."""
-
-    temperature: Optional[float] = 0.2
-
-
-class AskRequest(BaseModel):
-    """Ask request."""
-
-    question: str
-    document_ids: Optional[List[str]] = None
-    options: Optional[AskOptions] = None
-
-
-class AskSource(BaseModel):
-    """Ask response source."""
-
-    document_id: str
-    document_title: str
-    page_number: int
-    fragment_id: str
-    text: str
-    score: float
-
-
-class AskResponse(BaseModel):
-    """Ask response."""
-
-    question: str
-    answer: str
-    sources: List[AskSource]
-    processing_time_ms: int
-    model_used: str

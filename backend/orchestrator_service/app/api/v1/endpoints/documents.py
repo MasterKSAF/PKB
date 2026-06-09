@@ -81,8 +81,7 @@ from app.schemas.documents import (
     PipelinesField,
     ChunkSummary,
 )
-from app.services.integration_client import IntegrationServiceClient
-from app.services.rag_client import RAGServiceClient
+
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.base import get_db
@@ -865,14 +864,6 @@ async def delete_document(
     is preserved. Related entities (sections, versions, history,
     chunks) are marked as unavailable.
     """
-    rag_client = RAGServiceClient()
-    try:
-        await rag_client.delete_index(doc_id)
-    except Exception:
-        pass  # non-indexed documents are fine
-    finally:
-        await rag_client.close()
-
     return DocumentDeleteResponse(
         document_id=doc_id,
         deleted_at=datetime.now(UTC),

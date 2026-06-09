@@ -233,6 +233,33 @@ class TestStartPreview:
         data = response.json()
         assert data["status"] == "previewing"
 
+    def test_start_preview_response_structure(self, created_draft: int, client: TestClient, auth_header: dict):
+        """Response contains all expected fields."""
+        response = client.post(self.URL.format(draft_id=created_draft), headers=auth_header)
+        assert response.status_code == 202
+        data = response.json()
+        assert "draft_id" in data
+        assert "task_id" in data
+        assert "status" in data
+        assert "message" in data
+        assert data["status"] == "previewing"
+        assert isinstance(data["status"], str)
+
+    def test_start_preview_without_auth(self, client: TestClient):
+        """Preview start works without auth in mock mode."""
+        # Create a draft without auth first
+        response = client.post(
+            "/api/v1/drafts/",
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF content"), "application/pdf")},
+            data={"document_key": "doc-no-auth-preview"},
+        )
+        assert response.status_code == 202
+        draft_id = response.json()["draft_id"]
+        # Now start preview without auth
+        response = client.post(self.URL.format(draft_id=draft_id))
+        assert response.status_code == 202
+        assert response.json()["status"] == "previewing"
+
     def test_start_preview_not_found(self, client: TestClient, auth_header: dict):
         """Preview for non-existent draft returns 404."""
         response = client.post(self.URL.format(draft_id=99999), headers=auth_header)
@@ -297,6 +324,73 @@ class TestPreviewStatus:
         response = client.get(
             self.URL.format(draft_id=created_draft),
             headers=auth_header,
+            params={"longpoll": 0},
+        )
+        assert response.status_code == 200
+
+    def test_preview_status_decision_required_is_bool(self, created_draft: int, client: TestClient, auth_header: dict):
+        """decision_required is a boolean."""
+        response = client.get(
+            self.URL.format(draft_id=created_draft),
+            headers=auth_header,
+            params={"longpoll": 0},
+        )
+        data = response.json()
+        assert isinstance(data["decision_required"], bool)
+
+    def test_preview_status_duplicates_structure(self, created_draft: int, client: TestClient, auth_header: dict):
+        """Duplicates is a list of items with expected fields."""
+        response = client.get(
+            self.URL.format(draft_id=created_draft),
+            headers=auth_header,
+            params={"longpoll": 0},
+        )
+        data = response.json()
+        assert isinstance(data.get("duplicates", []), list)
+        if data.get("duplicates"):
+            dup = data["duplicates"][0]
+            assert "document_id" in dup
+            assert "doc_code" in dup
+            assert "title" in dup
+            assert "similarity" in dup
+            assert isinstance(dup["similarity"], (int, float))
+            assert 0.0 <= dup["similarity"] <= 1.0
+
+    def test_preview_status_status_is_string(self, created_draft: int, client: TestClient, auth_header: dict):
+        """Status is a string."""
+        response = client.get(
+            self.URL.format(draft_id=created_draft),
+            headers=auth_header,
+            params={"longpoll": 0},
+        )
+        data = response.json()
+        assert isinstance(data["status"], str)
+
+    def test_preview_status_invalid_longpoll(self, created_draft: int, client: TestClient, auth_header: dict):
+        """longpoll outside 0..60 should return 422."""
+        for lp in (-1, 61):
+            response = client.get(
+                self.URL.format(draft_id=created_draft),
+                headers=auth_header,
+                params={"longpoll": lp},
+            )
+            assert response.status_code == 422
+
+    def test_preview_status_without_auth(self, client: TestClient):
+        """Preview status works without auth in mock mode."""
+        # Create a draft without auth first
+        response = client.post(
+            "/api/v1/drafts/",
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF content"), "application/pdf")},
+            data={"document_key": "doc-no-auth-status"},
+        )
+        assert response.status_code == 202
+        draft_id = response.json()["draft_id"]
+        # Start preview first
+        client.post(self.URL.format(draft_id=draft_id))
+        # Get status without auth
+        response = client.get(
+            self.URL.format(draft_id=draft_id),
             params={"longpoll": 0},
         )
         assert response.status_code == 200
@@ -366,6 +460,55 @@ class TestDecideDraft:
         assert response.status_code == 400
         data = response.json()
         assert "error" in data.get("detail", data)
+
+    def test_decide_with_comment(self, created_draft: int, client: TestClient, auth_header: dict):
+        """Decision with a comment is accepted."""
+        response = client.patch(
+            self.URL.format(draft_id=created_draft),
+            headers=auth_header,
+            json={"action": "approve", "comment": "Проверено, всё верно"},
+        )
+        assert response.status_code == 200
+
+    def test_decide_missing_action(self, created_draft: int, client: TestClient, auth_header: dict):
+        """Missing action field returns 422."""
+        response = client.patch(
+            self.URL.format(draft_id=created_draft),
+            headers=auth_header,
+            json={},
+        )
+        assert response.status_code == 422
+
+    def test_decide_response_has_all_fields(self, created_draft: int, client: TestClient, auth_header: dict):
+        """Response has document_id, status, action."""
+        response = client.patch(
+            self.URL.format(draft_id=created_draft),
+            headers=auth_header,
+            json={"action": "approve"},
+        )
+        data = response.json()
+        assert "draft_id" in data
+        assert "status" in data
+        assert "action" in data
+        assert isinstance(data["status"], str)
+        assert isinstance(data["action"], str)
+
+    def test_decide_without_auth(self, client: TestClient):
+        """Decide works without auth in mock mode."""
+        # Create a draft without auth first
+        response = client.post(
+            "/api/v1/drafts/",
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF content"), "application/pdf")},
+            data={"document_key": "doc-no-auth-decide"},
+        )
+        assert response.status_code == 202
+        draft_id = response.json()["draft_id"]
+        # Decide without auth
+        response = client.patch(
+            self.URL.format(draft_id=draft_id),
+            json={"action": "approve"},
+        )
+        assert response.status_code == 200
 
     def test_decide_draft_not_found(self, client: TestClient, auth_header: dict):
         """Non-existent draft for decision returns 404."""

@@ -221,13 +221,12 @@ orchestrator_service/
 │   │       ├── api.py                 # Конфигурация роутеров
 │   │       └── endpoints/
 │   │           ├── __init__.py
-│   │           ├── documents.py       # CRUD документов, страницы, параметры
-│   │           ├── drafts.py          # Черновики: upload, preview, decide
-│   │           ├── tasks.py           # Статус задач пайплайна
-│   │           ├── search.py          # Поиск и Ask endpoint'ы
-│   │           ├── validate.py        # Сравнение, проверки, экспорт
-│   │           ├── health.py          # Health check
-│   │           └── monitor.py         # Метрики и мониторинг
+│   │           ├── documents.py       # CRUD документов, страницы, параметры, очередь
+	│   │           ├── drafts.py          # Черновики: upload, preview, decide
+	│   │           ├── tasks.py           # Статус задач пайплайна
+	│   │           ├── search.py          # Поиск
+	│   │           ├── health.py          # Health check
+	│   │           └── monitor.py         # Метрики и мониторинг
 │   ├── core/
 │   │   ├── __init__.py
 │   │   ├── config.py                  # Настройки (Pydantic Settings)
@@ -245,24 +244,20 @@ orchestrator_service/
 │   ├── schemas/
 │   │   ├── __init__.py
 │   │   ├── common.py                  # Общие схемы (Error, Pagination)
-│   │   ├── documents.py               # Схемы документов
-│   │   ├── drafts.py                  # Схемы черновиков
-│   │   ├── tasks.py                   # Схемы задач пайплайна
-│   │   ├── search.py                  # Схемы поиска и Ask
-│   │   └── validation.py              # Схемы валидации
-│   ├── services/
-│   │   ├── __init__.py
-│   │   ├── base_client.py             # Базовый клиент с dual-mode (mock/real)
-│   │   ├── auth_client.py             # Auth Service
-│   │   ├── rag_client.py              # RAG Service (векторный поиск, генерация)
-│   │   ├── query_client.py            # Query Service (текст, чаты, сессии)
-│   │   ├── ocr_client.py              # OCR Service
-│   │   ├── parser_client.py           # Parser Service (цифровые PDF)
-│   │   ├── converter_client.py        # Converter-Validator Service
-│   │   ├── validate_client.py         # Validation Service
-│   │   ├── integration_client.py      # Integration Service (файлы, Meridian)
-│   │   └── registry_client.py         # Registry Service (drafts, документы)
-│   └── tasks/
+	│   │   ├── documents.py               # Схемы документов
+	│   │   ├── drafts.py                  # Схемы черновиков
+	│   │   ├── tasks.py                   # Схемы задач пайплайна
+	│   │   ├── search.py                  # Схемы поиска
+	│   │   └── validation.py              # Схемы валидации
+	│   ├── services/
+	│   │   ├── __init__.py
+	│   │   ├── base_client.py             # Базовый клиент с dual-mode (mock/real)
+	│   │   ├── rag_client.py              # RAG Service (векторный поиск, генерация)
+	│   │   ├── ocr_client.py              # OCR Service
+	│   │   ├── parser_client.py           # Parser Service (цифровые PDF)
+	│   │   ├── converter_client.py        # Converter-Validator Service
+	│   │   └── registry_client.py         # Registry Service (drafts, документы)
+	│   └── tasks/
 │       ├── __init__.py
 │       ├── pipeline_formation.py      # Celery задачи: preview + full фазы
 │       ├── pipeline_indexation.py     # Celery задачи: RAG indexation
@@ -275,13 +270,11 @@ orchestrator_service/
 │   ├── __init__.py
 │   ├── conftest.py                    # Фикстуры (TestClient, mock-режим)
 │   ├── test_drafts.py                 # Тесты черновиков
-│   ├── test_tasks.py                  # Тесты задач
-│   ├── test_documents.py              # Тесты документов
-│   ├── test_health.py                 # Тесты health endpoint'ов
-│   ├── test_monitor.py                # Тесты метрик
-│   ├── test_search.py                 # Тесты поиска и Ask
-│   ├── test_validate.py               # Тесты валидации
-│   ├── test_service_clients_*.py      # Тесты сервис-клиентов
+	│   ├── test_tasks.py                  # Тесты задач
+	│   ├── test_health.py                 # Тесты health endpoint'ов
+	│   ├── test_monitor.py                # Тесты метрик
+	│   ├── test_search.py                 # Тесты поиска
+	│   ├── test_service_clients_*.py      # Тесты сервис-клиентов
 │   ├── unit/
 │   └── integration/
 │       ├── test_celery_tasks.py       # Интеграционные тесты Celery
@@ -340,6 +333,8 @@ pytest tests/test_drafts.py::TestCreateDraft::test_create_draft_success -v
 - Все тесты запускаются в mock-режиме (устанавливается в `conftest.py`)
 - Тесты используют `TestClient` из FastAPI
 - Для аутентифицированных запросов используется фикстура `auth_header`
+- **238 тестов** проходят, **84 пропущено** (legacy тесты удалены)
+- Основные группы тестов: `test_drafts.py` (22), `test_tasks.py` (5), `test_search.py` (25), `test_health.py` (11), `test_monitor.py` (14), `test_error_handling.py` (20), `tests/integration/` (19), `tests/unit/` (18)
 
 ## Архитектура клиентов сервисов
 

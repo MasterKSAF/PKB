@@ -161,90 +161,40 @@ class TestErrorResponseSchema:
 class TestEndpointErrorResponses:
     """Tests that API endpoints return correct error formats."""
 
-    pytestmark = pytest.mark.skip(
-        reason="Legacy endpoint tests — old documents API replaced by drafts"
-    )
-
-    def test_upload_unsupported_type_returns_400(self, client: TestClient, auth_header: dict):
+    def test_draft_unsupported_mime_type_returns_400(self, client: TestClient, auth_header: dict):
+        """Draft upload with unsupported MIME type returns 400."""
         response = client.post(
-            "/api/v1/documents/",
+            "/api/v1/drafts",
             files={"file": ("test.txt", b"test content", "text/plain")},
-            data={"source_type": "GOST"},
+            data={"document_key": "test-key"},
             headers=auth_header,
         )
         assert response.status_code == 400
         data = response.json()
-        # FastAPI wraps error in detail key
         detail = data.get("detail", data)
         error = detail.get("error", detail)
         assert error["code"] == "BAD_REQUEST"
         assert "message" in error
         assert "details" in error
 
-    def test_upload_invalid_source_type_returns_400(self, client: TestClient, auth_header: dict):
+    def test_draft_without_file_returns_422(self, client: TestClient, auth_header: dict):
+        """Draft upload without file returns 422."""
         response = client.post(
-            "/api/v1/documents/",
-            files={"file": ("test.pdf", b"%PDF-1.4 test", "application/pdf")},
-            data={"source_type": "INVALID_TYPE"},
-            headers=auth_header,
-        )
-        assert response.status_code == 400
-        data = response.json()
-        detail = data.get("detail", data)
-        error = detail.get("error", detail)
-        assert error["code"] == "BAD_REQUEST"
-        assert "allowed_values" in error["details"]
-
-    def test_upload_without_file_returns_422(self, client: TestClient, auth_header: dict):
-        response = client.post(
-            "/api/v1/documents/",
+            "/api/v1/drafts",
             headers=auth_header,
         )
         assert response.status_code == 422
         data = response.json()
-        # FastAPI validation errors have their own format
         assert "detail" in data
 
-    def test_get_nonexistent_document_returns_404(self, client: TestClient, auth_header: dict):
-        response = client.get(
-            "/api/v1/documents/doc-nonexistent-99999",
-            headers=auth_header,
-        )
-        assert response.status_code == 200  # Mock mode always returns data
-
-    def test_unauthenticated_protected_endpoint_returns_401(self):
-        """
-        In real auth mode, protected endpoints require token.
-        
-        Note: This test is better covered in test_auth_real_mode.py.
-        The conftest sets AUTH_SERVICE_MOCK=true globally which makes
-        all endpoints accessible without token during testing.
-        See test_auth_real_mode.py for comprehensive auth tests.
-        """
-        pytest.skip("Real auth mode tests are in test_auth_real_mode.py")
-
-    def test_ask_missing_question_returns_422(self, client: TestClient, auth_header: dict):
-        response = client.post(
-            "/api/v1/ask",
-            json={},
-            headers=auth_header,
-        )
-        assert response.status_code == 422
-
     def test_search_top_k_exceeds_max_returns_422(self, client: TestClient, auth_header: dict):
+        """Search with top_k > 100 returns 422."""
         response = client.post(
             "/api/v1/documents/search",
             json={"query": "test", "top_k": 200},
             headers=auth_header,
         )
         assert response.status_code == 422
-
-    def test_page_view_out_of_range(self, client: TestClient, auth_header: dict):
-        response = client.get(
-            "/api/v1/documents/doc-mock-001/pages/99999",
-            headers=auth_header,
-        )
-        assert response.status_code == 200  # Mock mode returns data for any page
 
 
 
