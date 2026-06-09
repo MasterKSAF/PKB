@@ -9,7 +9,16 @@ service_checker/
 ├── setup.py                 # One-command setup: модель TEI + Docker Compose
 ├── Makefile                 # Альтернативный setup (Linux/macOS/Git Bash)
 ├── api_coverage_test.py     # API Coverage Test (real-режим, Docker)
-├── service_checker.py       # Запуск/остановка сервисов, health check, эмуляция UI
+├── service_checker.py       # Точка входа (делегирует в core/)
+├── core/                    # Основные модули
+│   ├── __init__.py
+│   ├── config.py             # Конфигурация (пути, сервисы, credentials)
+│   ├── models.py             # Модели данных (Report, ServiceProcess, HealthResult...)
+│   ├── utils.py              # Утилиты (логирование, конвертация Markdown→HTML)
+│   ├── services.py           # Запуск/остановка сервисов, health check, эмуляция UI
+│   ├── docker.py             # Docker Compose управление
+│   ├── reports.py            # Генерация full-отчёта (coverage + pipeline)
+│   └── cli.py                # CLI-парсер и команды
 ├── setup_db.py              # Инициализация БД
 ├── pipeline_test.py         # Pipeline Testing (сквозные сценарии)
 ├── pipelines/               # Модули пайплайнов

@@ -7,7 +7,6 @@ REM ============================================================================
 cd /d "%~dp0..\.."
 
 set COMPOSE_FILE=service_checker\docker\docker-compose.yml
-set SERVICE_CHECKER=service_checker\service_checker.py
 
 docker inspect pkb-neuro > nul 2>&1
 if %ERRORLEVEL% neq 0 (
@@ -23,11 +22,11 @@ echo [2/3] Waiting 10 seconds...
 ping -n 11 127.0.0.1 > nul
 
 echo.
-echo [3/3] Running coverage check...
-python %SERVICE_CHECKER% docker --action coverage
+echo [3/3] Running full report (coverage + pipelines)...
+python -m service_checker docker --action full-report
 
 echo.
-echo Done. Reports saved to check_result/
+echo Done. Reports saved to check_result/ (api_coverage, full_report)
 echo.
 
 pause

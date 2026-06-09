@@ -113,12 +113,19 @@ async def cmd_run(
             print_report_table(results)
 
             # Сохраняем отчёт
+            report = generate_report(results)
             if output:
-                report = generate_report(results)
                 out_path = Path(output)
                 out_path.parent.mkdir(parents=True, exist_ok=True)
                 out_path.write_text(report, encoding="utf-8")
                 print(f"\n  📄 Отчёт сохранён: {out_path.resolve()}")
+            else:
+                # Автосохранение в backend/check_result/ (рядом с service_checker/)
+                check_dir = Path(__file__).resolve().parent.parent / "check_result"
+                check_dir.mkdir(parents=True, exist_ok=True)
+                report_path = check_dir / f"pipeline_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+                report_path.write_text(report, encoding="utf-8")
+                print(f"\n  📄 Отчёт сохранён: {report_path.resolve()}")
 
     finally:
         await runner.close()

@@ -148,3 +148,28 @@ Caused by: No such file or directory (os error 2)
 
 ### Статус
 🟢 **Исправлено (checker/infra, 2026-06-09)**
+
+---
+
+## 5. Рефакторинг `service_checker.py` — выделение пакета `core/`
+
+**Дата:** 2026-06-10
+
+### Что сделано
+Исходный монолитный `service_checker.py` разделён на модули в пакете `core/`:
+
+- **`core/config.py`** — конфигурация (пути, SERVICE_DEFS, TEST_CREDENTIALS, HEADERS_JSON, DOCKER_SERVICE_NAMES, PIPELINE_SERVICE_MAP, SERVICE_DISPLAY_NAMES)
+- **`core/models.py`** — модели данных (ServiceProcess, HealthResult, ApiCallLog, ServiceLog, Report) и хелперы (utcnow, md_to_html)
+- **`core/utils.py`** — утилиты логирования (log, log_ok, log_warn, log_err, log_info, log_step, log_header, find_available_python)
+- **`core/services.py`** — управление сервисами (start_service, stop_service, wait_for_service, check_service_health, check_service_health_for_key, _collect_logs, WebEmulator)
+- **`core/docker.py`** — Docker Compose операции (_check_docker, _docker_action, _docker_health_check, _docker_collect_logs, _docker_run_coverage, _docker_run_pipeline)
+- **`core/reports.py`** — генерация full-отчёта (_generate_full_report)
+- **`core/cli.py`** — CLI-парсер и команды (parse_args, cmd_start, cmd_health, cmd_emulate, cmd_docker, cmd_all, main)
+
+### Изменения в импортах
+- `HEADERS_JSON` перенесён из `utils.py` в `config.py` (единый источник конфигурации)
+- Имена конфигов `_PIPELINE_SERVICE_MAP`, `_SERVICE_DISPLAY_NAMES` приведены к публичным `PIPELINE_SERVICE_MAP`, `SERVICE_DISPLAY_NAMES` (без префикса `_`)
+- Удалены неиспользуемые импорты (`signal`, `os`, `DOCKERFILE_PATH`)
+
+### Статус
+🟢 **Реализовано (service_checker, 2026-06-10)**

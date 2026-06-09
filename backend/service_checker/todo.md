@@ -1,36 +1,31 @@
-# Todo: Починить запуск TEI контейнера + работа с нуля ✅
+# Рефакторинг: service_checker.py разбит на модули ✅
 
-## Проблема
-TEI контейнер падал с "config.json not found". После починки нужно было обеспечить работу "с нуля".
+## Что сделано
+`service_checker.py` (2579 строк) разбит на 7 модулей в `core/`:
 
-## Корневая причина (две проблемы)
-1. **Неверная директория модели** — `prepare_tei_model.py` создавал `tei_model/` в корне `service_checker/`, docker-compose ожидал `docker/tei_model/`
-2. **Неверное имя ONNX-файла** — скрипт называл файл `model_quantized.onnx`, TEI ожидает `model.onnx`
+```
+service_checker/
+├── __init__.py                  # метка пакета
+├── __main__.py                  # entry point (python -m service_checker)
+├── service_checker.py           # entry point (25 строк, python service_checker.py)
+├── core/
+│   ├── __init__.py
+│   ├── config.py                # константы, SERVICE_DEFS, пути
+│   ├── models.py                # ServiceProcess, Report, ApiCallLog, md_to_html
+│   ├── utils.py                 # log_*, log_header, find_available_python
+│   ├── services.py              # start/stop/wait/check, WebEmulator, _collect_logs
+│   ├── reports.py               # _generate_full_report (сводная таблица)
+│   ├── docker.py                # _check_docker, _docker_action, health, coverage, pipeline
+│   └── cli.py                   # parse_args, cmd_*, main()
+├── pipeline_test.py
+├── api_coverage_test.py
+├── pipelines/
+└── tests/
+```
 
-Volume path `./tei_model:/data` рабочий, не требует замены на абсолютный.
-
-## Выполнено
-
-### 1. Фикс `docker/prepare_tei_model.py`
-- Default target_dir изменён на `docker/tei_model/` (относительно расположения скрипта)
-- `ONNX_TARGET`: `model_quantized.onnx` → `model.onnx`
-- Docstring обновлён
-
-### 2. Создан `setup.py` — one-command setup
-- `python setup.py` — полный цикл: deps → модель TEI → Docker Compose
-- `python setup.py --model` — только модель
-- `python setup.py --up` / `--down` / `--ps`
-
-### 3. Создан `Makefile` — альтернативный setup (Linux/macOS/Git Bash)
-- `make setup` / `make model` / `make up` / `make down` / `make test`
-
-### 4. Документация
-- `readme.md` — добавлен раздел "Быстрый старт (с нуля)", исправлена модель (MiniLM → rubert-tiny2)
-- `specificity.md` — исправлена #3, добавлена #4
-- `prepare_tei_model.py` — docstring обновлён
-
-### 5. Проверка
-- TEI контейнер: health → 200 OK, embed → 312-dim вектор
-- Docker healthcheck: healthy
-- 71/71 unit-тестов пройдено
-- Целостность связанных данных подтверждена
+## Проверка
+- **84/84 тестов** пройдено
+- `python service_checker/service_checker.py` — работает
+- `python -m service_checker` — работает (из `backend/`)
+- `recheck.bat` — обновлён на `python -m service_checker`
+- Docker full-report — создаёт все отчёты (coverage + pipeline + full_report + errors)
