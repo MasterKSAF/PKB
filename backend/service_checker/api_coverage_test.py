@@ -810,10 +810,10 @@ class ApiCoverageTester:
                 r.status_code == 404 for r in non_health_results
             ):
                 result.ping_ok = False
-                # Откатываем success у всех 404-эндпоинтов — сервиса нет,
-                # настоящего ответа не было
-                for r in non_health_results:
-                    if r.success:
+                # Откатываем success у всех результатов — сервиса нет,
+                # на порту что-то другое, настоящего ответа не было
+                for r in result.results:
+                    if not r.skipped and r.success:
                         r.success = False
                         result.endpoints_passed -= 1
                         result.endpoints_failed += 1

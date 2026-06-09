@@ -79,17 +79,15 @@ async def test_all_404_overrides_ping(tester, make_endpoint):
 
 
 @pytest.mark.asyncio
-async def test_health_not_affected_by_all_404_override(tester, make_endpoint):
+async def test_all_404_rolls_back_all_results_including_health(tester, make_endpoint):
     """
-    Health-эндпоинт с 404 и JSON — success, и не откатывается оверрайдом.
-    Симулирует реальный OCR: health прошёл, 4 OCR-эндпоинта откачены.
+    Если all_404 оверрайд сработал — откатываются ВСЕ результаты, включая health.
+    Симулирует реальный OCR: сервиса нет, health ответил 404 от чужого сервиса.
     """
     eps = [
         make_endpoint("/api/v1/health", "health"),
         make_endpoint("/api/v1/ocr/process", "ocr", method="POST"),
         make_endpoint("/api/v1/ocr/preview", "ocr", method="POST"),
-        make_endpoint("/api/v1/ocr/process/{task_id}/status", "ocr", method="GET"),
-        make_endpoint("/api/v1/ocr/process/{task_id}/result", "ocr", method="GET"),
     ]
     mock_404 = MagicMock(spec=httpx.Response)
     mock_404.status_code = 404
@@ -106,22 +104,15 @@ async def test_health_not_affected_by_all_404_override(tester, make_endpoint):
 
                 result = await tester.test_service("test")
 
-    # Health — success (404 + JSON, не попадает под оверрайд)
+    # Все эндпоинты — False (сервиса нет)
     for r in result.results:
-        if r.endpoint.group == "health":
-            assert r.success is True, (
-                f"Health с 404+JSON должен быть success, но success={r.success}"
-            )
-        elif r.endpoint.group == "ocr":
-            assert r.success is False, (
-                f"OCR с 404+JSON при all_404 должен быть откачен, но success={r.success}"
-            )
+        assert r.success is False, (
+            f"{r.endpoint.group} должен быть False при all_404, но success={r.success}"
+        )
 
-    # ping_ok=False (оверрайд сработал)
     assert result.ping_ok is False
-    # Счётчики: 1 health passed, 4 ocr failed
-    assert result.endpoints_passed == 1
-    assert result.endpoints_failed == 4
+    assert result.endpoints_passed == 0
+    assert result.endpoints_failed == len(eps)
     assert result.endpoints_skipped == 0
 
 
