@@ -51,8 +51,14 @@ async def refresh_access_token(db: AsyncSession, refresh_token: str):
     )
     db_token = result.scalar_one_or_none()
 
-    expires_at = db_token.expires_at.replace(tzinfo=timezone.utc) if db_token and db_token.expires_at.tzinfo is None else db_token.expires_at
-    if not db_token or db_token.revoked_at is not None or expires_at < utcnow():
+    if not db_token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Токен истек или отозван")
+
+    expires_at = db_token.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+    if db_token.revoked_at is not None or expires_at < utcnow():
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="РўРѕРєРµРЅ РёСЃС‚РµРє РёР»Рё РѕС‚РѕР·РІР°РЅ")
 
     user = await get_user_by_id(db, db_token.user_id)
