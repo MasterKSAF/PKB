@@ -1,0 +1,27 @@
+services:
+  auth-service:
+    build: .
+    container_name: auth-service
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    container_name: auth-service-db
+    environment:
+      POSTGRES_DB: auth_db
+      POSTGRES_USER: auth_user
+      POSTGRES_PASSWORD: auth_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - auth_pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  auth_pgdata:

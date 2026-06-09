@@ -16,7 +16,7 @@ graph LR
         D -->|JSON| E[Registry]
         E -->|JSON со ссылками| F[(PostgreSQL)]
 
-        A -.->|preview ref| PB[OCR/Parser preview]
+        A -.->|preview ref| PB[OCR/Parser process (mode=preview)]
         PB -.->|preview JSON| PC[Converter-validator preview]
         PC -.->|preview result| UI{UI Decision}
         UI -.->|approve| D
@@ -70,7 +70,7 @@ graph LR
 | Формирование | 1. OCR / Parser (альтернативно) | **Нет** (изоляция)        | Вход: ссылка MinIO → Выход: JSON                                   |
 | Формирование | 2. Converter-validator    | **Читает**                    | Вход: JSON → Выход: JSON с решением                                |
 | Формирование | 3. Registry               | **Пишет**                     | Вход: JSON → Выход: JSON со ссылками                               |
-| Формирование | Preview OCR/Parser        | **Нет** (изоляция)            | Вход: preview ref MinIO → Выход: preview JSON                      |
+| Формирование | Preview OCR/Parser (mode=preview) | **Нет** (изоляция)       | Вход: file_key + mode=preview → Выход: JSON (preview или full + preview_not_supported) |
 | Формирование | Preview Converter-validator | **Читает** (Registry)       | Вход: preview JSON → Выход: preview результат                      |
 | Индексация   | 1. RAG Builder            | **Пишет**                     | Вход: обогащённый JSON → Выход: статус                             |
 | Поиск        | 1. Приём сообщения        | **Пишет** (история чата)      | Вход: content → Выход: 202 + message_id                            |
@@ -149,8 +149,8 @@ flowchart LR
         Reg -->|"JSON со ссылками"| DB[(PostgreSQL Registry)]
 
         MinIO -.->|"preview ref"| Preview{Preview}
-        Preview -.->|"скан"| P_OCR[OCR preview]
-        Preview -.->|"цифровой"| P_Pars[Parser preview]
+        Preview -.->|"скан"| P_OCR[OCR process (mode=preview)]
+        Preview -.->|"цифровой"| P_Pars[Parser process (mode=preview)]
         P_OCR -.->|"preview JSON"| P_CV[Converter-validator preview]
         P_Pars -.->|"preview JSON"| P_CV
         P_CV -.->|"preview result"| UID{UI Decision}
@@ -200,8 +200,8 @@ flowchart LR
 | Registry → Orchestrator              | **Обогащённый JSON (структура + ссылки в БД)** | JSON via HTTP | —                                               |
 | Orchestrator → RAG Builder          | **Обогащённый JSON от Registry**               | JSON via HTTP | —                                               |
 | RAG Builder → Orchestrator          | Статус завершения                              | JSON via HTTP | —                                               |
-| Orchestrator → OCR/Parser preview    | `preview ref` (ссылка MinIO)                   | JSON via HTTP | Preview-фаза                                    |
-| OCR/Parser preview → Orchestrator    | **preview JSON**                               | JSON via HTTP | Непрозрачен для Orchestrator                    |
+| Orchestrator → OCR/Parser process (mode=preview) | `file_key` + `mode=preview`            | JSON via HTTP | Preview-фаза; если движок не умеет постранично — `preview_not_supported: true` |
+| OCR/Parser process (mode=preview) → Orchestrator | **JSON** (preview или full)            | JSON via HTTP | Непрозрачен для Orchestrator                    |
 | Orchestrator → Converter-validator preview | **preview JSON**                         | JSON via HTTP | Preview-фаза                                    |
 | Converter-validator preview → Orchestrator | **preview результат**                    | JSON via HTTP | Содержит решение для UI                         |
 | UI → Orchestrator (decision)         | **approve / reject**                           | JSON via HTTP | User decision point                             |
