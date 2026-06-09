@@ -196,3 +196,65 @@ def test_get_classifiers_with_parent_filter(client):
     assert response.status_code == 200
     data = response.json()
     assert all(item["parent_code"] == "PARENT_FILTER" for item in data["data"])
+
+
+def test_classifier_tree_hierarchical(client):
+    client.post("/api/v1/registry/classifiers/", json={"classifier_system": "MKS", "code": "H_ROOT", "full_name": "Hierarchical Root"})
+    client.post("/api/v1/registry/classifiers/", json={"classifier_system": "MKS", "code": "H_ROOT.CHILD1", "full_name": "Child 1", "parent_code": "H_ROOT"})
+    client.post("/api/v1/registry/classifiers/", json={"classifier_system": "MKS", "code": "H_ROOT.CHILD1.GRANDCHILD", "full_name": "Grandchild", "parent_code": "H_ROOT.CHILD1"})
+    
+    # Test max_depth = 1 (should not include grandchild)
+    response = client.get("/api/v1/registry/classifiers/tree?classifier_system=MKS&max_depth=2&root_code=H_ROOT")
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert len(data) == 1
+    assert data[0]["code"] == "H_ROOT"
+    assert len(data[0]["children"]) == 1
+    assert data[0]["children"][0]["code"] == "H_ROOT.CHILD1"
+    # depth limit reached
+    assert len(data[0]["children"][0]["children"]) == 0
+
+
+def test_create_classifier_with_effective_date(client):
+    payload = {
+        "classifier_system": "MKS",
+        "code": "EFF_01",
+        "full_name": "Effective Date Test",
+        "effective_date": "2026-06-08T00:00:00"
+    }
+    response = client.post("/api/v1/registry/classifiers/", json=payload)
+    assert response.status_code == 201
+    data = response.json()
+    assert data["data"]["effective_date"] == "2026-06-08"
+
+
+def test_delete_classifier_has_documents(client):
+    client.post("/api/v1/registry/classifiers/", json={"classifier_system": "MKS", "code": "MKS_REF", "full_name": "Referenced Classifier"})
+    # Create document referencing it
+    client.post("/api/v1/registry/documents/", json={
+        "title": "Document Ref Test",
+        "doc_code": "DOC_REF_01",
+        "mks_oks_code": "MKS_REF"
+    })
+    
+    # Delete should fail with HAS_DOCUMENTS
+    response = client.delete("/api/v1/registry/classifiers/MKS_REF?classifier_system=MKS")
+    assert response.status_code == 409
+    assert response.json()["detail"]["error"]["code"] == "HAS_DOCUMENTS"
+
+
+def test_pending_suggested_parent(client, db_session):
+    # Setup parent classifier
+    client.post("/api/v1/registry/classifiers/", json={"classifier_system": "MKS", "code": "47.020", "full_name": "Parent Section"})
+    
+    # Add pending quarantine item
+    from api.v1.crud.classifier import create_classifier_pending
+    create_classifier_pending(db_session, system="MKS", code="47.020.99")
+        
+    response = client.get("/api/v1/registry/classifiers/pending")
+    assert response.status_code == 200
+    data = response.json()["data"]
+    item = next(x for x in data if x["code"] == "47.020.99")
+    assert item["suggested_parent_code"] == "47.020"
+    assert item["suggested_parent_name"] == "Parent Section"
+

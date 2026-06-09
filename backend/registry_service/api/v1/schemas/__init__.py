@@ -7,6 +7,7 @@ from .document_history import DocumentHistorySchema
 from .file import FileSchema
 from .export import ExportSchema
 from .terminology import TerminologySchema
+from .format_registry import FormatRegistrySchema
 
 __all__ = [
     'ClassifierSchema',
@@ -18,5 +19,6 @@ __all__ = [
     'FileSchema',
     'ExportSchema',
     'TerminologySchema',
+    'FormatRegistrySchema',
 ]
 

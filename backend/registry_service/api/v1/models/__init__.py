@@ -9,6 +9,7 @@ from .document_versions import DocumentVersion
 from .exports import Export
 from .files import File
 from .terminology import Terminology
+from .format_registry import FormatRegistry
 
 __all__ = [
     'Base',
@@ -22,5 +23,6 @@ __all__ = [
     'Export',
     'File',
     'Terminology',
+    'FormatRegistry',
 ]
 

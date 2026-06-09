@@ -118,12 +118,25 @@ def test_delete_document_not_found(client):
     assert response.status_code == 404
 
 def test_patch_document_status(client):
-    create_res = client.post("/api/v1/registry/documents/", json={"title": "Doc Patch Status", "classifier_system": "MKS"})
+    create_res = client.post("/api/v1/registry/documents/", json={"title": "Doc Patch Status", "classifier_system": "MKS", "status": "draft"})
     doc_id = create_res.json()["data"]["id"]
     
-    response = client.patch(f"/api/v1/registry/documents/{doc_id}/status", json={"status": "approved"})
+    # Valid transition: draft -> uploaded
+    response = client.patch(f"/api/v1/registry/documents/{doc_id}/status", json={"status": "uploaded", "comment": "moving to uploaded", "changed_by": "test_user"})
     assert response.status_code == 200
-    assert response.json()["data"]["status"] == "approved"
+    data = response.json()["data"]
+    assert data["status"] == "uploaded"
+    assert data["previous_status"] == "draft"
+    assert "history_id" in data
+    
+    # Invalid transition: uploaded -> approved
+    response_invalid = client.patch(f"/api/v1/registry/documents/{doc_id}/status", json={"status": "approved"})
+    assert response_invalid.status_code == 400
+    
+    # Invalid status
+    response_bad_status = client.patch(f"/api/v1/registry/documents/{doc_id}/status", json={"status": "unknown_status"})
+    assert response_bad_status.status_code == 400
+
 
 def test_patch_document_status_not_found(client):
     response = client.patch("/api/v1/registry/documents/00000000-0000-0000-0000-000000000000/status", json={"status": "approved"})
@@ -157,3 +170,77 @@ def test_get_document_succession(client):
     assert response.status_code == 200
     data = response.json()
     assert "data" in data
+
+
+def test_create_pipeline_document(client):
+    payload = {
+        "document": {
+            "metadata": {
+                "title": "Pipeline Test Doc",
+                "doc_code": "PL-001",
+                "source_type": "GOST",
+                "mks_oks_code": "01.01.01",
+                "era": "RF",
+                "status": "uploaded"
+            },
+            "source": {
+                "file_hash_sha256": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+            },
+            "content": [
+                {
+                    "clause": "1",
+                    "title": "Introduction",
+                    "level": 1,
+                    "type": "text",
+                    "content": "This is a pipeline section"
+                }
+            ],
+            "terminology": [
+                {
+                    "term": "PipelineTerm",
+                    "normalized_term": "pipelineterm",
+                    "definition": "A term created via pipeline"
+                }
+            ],
+            "references": [
+                {
+                    "target_doc_code": "REF-001",
+                    "type": "replaces",
+                    "context": "replaces some older doc",
+                    "current_status": "active"
+                }
+            ]
+        }
+    }
+    
+    response = client.post("/api/v1/registry/documents/", json=payload)
+    assert response.status_code == 201
+    data = response.json()
+    assert "document_id" in data
+    assert data["registry"]["sections_count"] == 1
+    assert data["registry"]["references_count"] == 1
+    
+    # Test duplicate detection
+    dup_response = client.post("/api/v1/registry/documents/", json=payload)
+    assert dup_response.status_code == 409
+
+
+def test_get_documents_with_additional_filters(client):
+    # Create doc
+    client.post("/api/v1/registry/documents/", json={
+        "title": "Filtered Doc Alpha",
+        "doc_code": "FDA-01",
+        "classifier_system": "MKS",
+        "era": "USSR",
+        "source_type": "GOST_R",
+        "validity_status": "superseded",
+        "jurisdiction": "RU"
+    })
+    
+    # Query with filters
+    response = client.get("/api/v1/registry/documents/?era=USSR&source_type=GOST_R&validity_status=superseded&jurisdiction=RU")
+    assert response.status_code == 200
+    res_data = response.json()
+    assert len(res_data["data"]) >= 1
+    assert any(doc["doc_code"] == "FDA-01" for doc in res_data["data"])
+

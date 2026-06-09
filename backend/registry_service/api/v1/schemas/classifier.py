@@ -1,20 +1,21 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
-from uuid import UUID
 
 from pydantic import BaseModel
 
 
 class ClassifierSchema(BaseModel):
-    id: Optional[UUID]
     classifier_system: str
     code: str
     full_name: str
     description: Optional[str] = None
     status: Optional[str] = None
     parent_code: Optional[str] = None
+    effective_date: Optional[date] = None
+    replaced_by: Optional[str] = None
+    children: Optional[list[ClassifierSchema]] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

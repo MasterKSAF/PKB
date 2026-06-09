@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 
 class DocumentSchema(BaseModel):
-    id: UUID
+    id: int
     doc_code: str
     title: str
     normalized_title: Optional[str] = None
@@ -31,10 +31,15 @@ class DocumentSchema(BaseModel):
     file_size_bytes: Optional[int] = None
     processing_status: Optional[str] = None
     chunk_count: Optional[int] = None
-    successor_doc_id: Optional[UUID] = None
-    predecessor_doc_id: Optional[UUID] = None
+    successor_doc_id: Optional[int] = None
+    predecessor_doc_id: Optional[int] = None
+    classifier_code: Optional[str] = None
+    industry_code: Optional[str] = None
+    enterprise_id: Optional[int] = None
     created_by: Optional[str] = None
     updated_by: Optional[str] = None
+    classification_status: Optional[dict] = {}
+    metadata: Optional[dict] = Field(default={}, validation_alias='doc_metadata')
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

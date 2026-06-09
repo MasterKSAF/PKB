@@ -86,19 +86,37 @@ def test_get_terminology_with_search(client):
     assert len(data["data"]) >= 1
     assert "Machine" in data["data"][0]["raw_term"]
 
-def test_get_terminology_with_normalized_filter(client):
+def test_get_terminology_with_standard_filter(client):
     client.post("/api/v1/registry/terminology/", json={
-        "raw_term": "ML", "standard_term": "ML", "normalized_value": "ml", "term_type": "acronym"
+        "raw_term": "ML", "standard_term": "Machine Learning Acronym", "normalized_value": "ml", "term_type": "acronym"
     })
     client.post("/api/v1/registry/terminology/", json={
-        "raw_term": "AI", "standard_term": "AI", "normalized_value": "ai", "term_type": "acronym"
+        "raw_term": "AI", "standard_term": "Artificial Intelligence", "normalized_value": "ai", "term_type": "acronym"
     })
     
-    response = client.get("/api/v1/registry/terminology/?normalized_term=ml")
+    response = client.get("/api/v1/registry/terminology/?standard_term=Machine")
     assert response.status_code == 200
     data = response.json()
     assert len(data["data"]) >= 1
-    assert data["data"][0]["normalized_value"] == "ml"
+    assert "Machine Learning" in data["data"][0]["standard_term"]
+
+
+def test_create_and_filter_terminology_by_scope(client):
+    client.post("/api/v1/registry/terminology/", json={
+        "raw_term": "ГОСТ",
+        "standard_term": "ГОСТ",
+        "normalized_value": "гост",
+        "term_type": "standard_code",
+        "scope": ["Стандартизация", "Судостроение"],
+        "synonyms": ["GOST"]
+    })
+    
+    response = client.get("/api/v1/registry/terminology/?scope=Судостроение")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["data"]) >= 1
+    assert "ГОСТ" in data["data"][0]["raw_term"]
+    assert "GOST" in data["data"][0]["synonyms"]
 
 def test_get_terminology_with_is_blocked_filter(client):
     client.post("/api/v1/registry/terminology/", json={

@@ -30,14 +30,16 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapper
 import uuid
 
+from sqlalchemy import BigInteger
+
 @compiles(JSONB, "sqlite")
 def compile_jsonb_sqlite(type_, compiler, **kw):
     return "JSON"
 
-@event.listens_for(Mapper, "before_insert")
-def set_uuid_default(mapper, connection, target):
-    if hasattr(target, 'id') and target.id is None:
-        target.id = uuid.uuid4()
+@compiles(BigInteger, "sqlite")
+def compile_bigint_sqlite(type_, compiler, **kw):
+    return "INTEGER"
+
 
 @event.listens_for(Table, "before_create")
 def sqlite_postgres_fix(target, connection, **kw):
