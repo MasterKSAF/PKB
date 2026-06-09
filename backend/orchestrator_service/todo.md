@@ -1,22 +1,24 @@
-# Тесты для Document API — ВЫПОЛНЕНО
+# План исправления ошибки ValidationError в Settings — ВЫПОЛНЕНО
+
+## Проблема
+В Docker окружении передаются env-переменные:
+- `AUTH_SERVICE_URL=http://127.0.0.1:8082`
+- `AUTH_SERVICE_MOCK=True`
+- `REGISTRY_SERVICE_URL=http://127.0.0.1:8084`
+- `REGISTRY_SERVICE_MOCK=True`
+
+Pydantic `Settings` класс содержит вложенную модель `services: ServiceConfig`, и использует `env_nested_delimiter="__"`. 
+Плоские env-переменные (без префикса `SERVICES__`) не маппятся на поля `Settings` и отбрасываются как "extra inputs".
+
+`AUTH_SERVICE_*` не добавлены в модель — оркестратор не использует Auth Service напрямую
+(всегда mock в `app/api/deps/__init__.py`), с `extra='ignore'` они просто игнорируются.
 
 ## Что сделано
-Все endpoint'ы Document API покрыты тестами.
 
-| Endpoint | Класс | Тестов | Статус |
-|----------|-------|:------:|--------|
-| `GET /api/v1/documents/` | TestListDocuments | 17 | ✅ |
-| `GET /api/v1/documents/queue` | TestDocumentQueue | 6 | ✅ |
-| `GET /api/v1/documents/{doc_id}` | TestGetDocument | 4 | ✅ |
-| `GET /api/v1/documents/{doc_id}/status` | TestDocumentStatus | 6 | ✅ |
-| `GET /api/v1/documents/{doc_id}/file` | TestDocumentFile | 4 | ✅ |
-| `GET /api/v1/documents/{doc_id}/pages` | TestDocumentPages | 4 | ✅ |
-| `GET /api/v1/documents/{doc_id}/pages/{num}` | TestDocumentPageView | 3 | ✅ |
-| `GET /api/v1/documents/{doc_id}/pages/{num}/text` | TestDocumentPageText | 5 | ✅ |
-| `GET /api/v1/documents/{doc_id}/pages/{num}/preview` | TestDocumentPagePreview | 3 | ✅ |
-| `GET /api/v1/documents/{doc_id}/errors` | TestDocumentErrors | 5 | ✅ |
-| `GET /api/v1/documents/{doc_id}/parameters` | TestDocumentParameters | 5 | ✅ |
-| `POST /api/v1/documents/{doc_id}/reprocess` | TestDocumentReprocess | 5 | ✅ |
-| (ранее добавленные Versions + Approve + History) | | 26 | ✅ |
-
-**Итого: 348 passed, 0 failed, 0 skipped**
+| Шаг | Файл | Статус |
+|-----|------|--------|
+| 1. Добавлен `extra='ignore'` в `Settings.model_config` | `app/core/config.py` | ✅ |
+| 2. `services` и `pipeline` переведены на `default_factory=` | `app/core/config.py` | ✅ |
+| 3. Обновлены тесты (flat env vars) | `tests/test_config.py` | ✅ |
+| 4. Аномалия зафиксирована в `specificity.md` | `specificity.md` | ✅ |
+| 5. Тесты пройдены (349 passed, 0 failed) | - | ✅ |

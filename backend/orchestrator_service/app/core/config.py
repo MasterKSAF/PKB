@@ -137,15 +137,22 @@ class Settings(BaseSettings):
     )
 
     # External Services Configuration
-    services: ServiceConfig = ServiceConfig()
+    services: ServiceConfig = Field(
+        default_factory=ServiceConfig,
+        description="External services configuration (URL, mock mode)",
+    )
 
     # Pipeline Configuration
-    pipeline: PipelineConfig = PipelineConfig()
+    pipeline: PipelineConfig = Field(
+        default_factory=PipelineConfig,
+        description="Pipeline execution parameters",
+    )
 
     model_config = ConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         env_nested_delimiter="__",
+        extra="ignore",
     )
 
 

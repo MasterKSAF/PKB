@@ -72,7 +72,24 @@ SQLite не поддерживает JSONB нативно. Текущая реа
 	умолчанию равен 15 секундам. Тесты без явного `longpoll=0` ждут таймаута.
 	Исправлено в `test_drafts.py` через `params={"longpoll": 0}`.
 
-### 3.7. Функции Document API документированы в `docs/api/orchestrator_service_api.md`
+### 3.7. nested BaseSettings не читали flat env vars
+
+При использовании `env_nested_delimiter="__"` плоские env-переменные
+(например `REGISTRY_SERVICE_URL`) не маппятся на вложенную модель и вызывали
+`ValidationError: extra_forbidden` в Docker-окружении.
+
+**Исправлено:**
+- `services` и `pipeline` используют `default_factory=` вместо прямого вызова
+  конструктора, чтобы дочерний `BaseSettings` перечитывал env-переменные
+  при каждом создании `Settings()`
+- В `Settings.model_config` добавлено `extra='ignore'`, чтобы плоские env-переменные
+  не вызывали ошибок валидации (они игнорируются на уровне `Settings`,
+  но читаются вложенным `ServiceConfig`)
+- `AUTH_SERVICE_URL` / `AUTH_SERVICE_MOCK` не добавлены в `ServiceConfig` —
+  оркестратор не взаимодействует с Auth Service напрямую
+  (всегда mock-режим в `app/api/deps/__init__.py`)
+
+### 3.8. Функции Document API документированы в `docs/api/orchestrator_service_api.md`
 		Эндпоинты групп **documents** и **pages** (`/api/v1/documents/...`) описаны
 		в `docs/api/orchestrator_service_api.md` и являются частью актуального API.
 		Они не имеют аналогов в Draft/Task API, т.к. относятся к разным группам.
