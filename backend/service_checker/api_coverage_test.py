@@ -93,38 +93,35 @@ class ServiceResult:
 #  API Specification from docs/api/*.md
 # ──────────────────────────────────────────────────────────────────────
 
-# Порты для каждого режима
+# Порты сервисов (только реальные, запуск через Docker)
 MODE_PORTS = {
-    "mock": {
-        "orchestrator": 8081,
-        "auth": 8082,
-        "query": 8083,
-        "registry": 8084,
-    },
-    "real": {
-        "gateway": 8081,
-        "orchestrator": 8000,  # реальный orchestrator на порту 8000
-        "auth": 8082,          # нет реальной реализации (будет пропущен)
-        "query": 8083,         # нет реальной реализации (будет пропущен)
-        "registry": 8084,
-        "integration": 8085,
-        "converter_validator": 8086,  # нет реализации (будет пропущен)
-        "parser": 8087,
-        "ocr": 8088,                  # нет реализации (будет пропущен)
-        # analyse — временно не тестируется (нет контейнера)
-        "rag_builder": 8090,
-        "rag_search": 8091,
-    },
+    "gateway": 8081,
+    "orchestrator": 8000,
+    "auth": 8082,
+    "query": 8083,
+    "registry": 8084,
+    # integration — временно не разрабатывается
+    "converter_validator": 8086,
+    "parser": 8087,
+    "ocr": 8088,
+    # analyse — временно не тестируется (нет контейнера)
+    "rag_builder": 8090,
+    "rag_search": 8091,
 }
-
-# Какие сервисы имеют реальную реализацию (для real-режима)
 SERVICES_WITH_REAL = {
-    "gateway", "orchestrator", "registry", "integration", "parser", "rag_builder", "rag_search",
+    "gateway", "auth", "orchestrator", "query", "registry",
+    "converter_validator", "parser", "ocr", "rag_builder", "rag_search",
 }
 
-# Какие сервисы имеют мок-реализацию (для mock-режима)
-SERVICES_WITH_MOCK = {
-    "orchestrator", "auth", "query", "registry",
+# Зависимости между сервисами: если сервис не отвечает, зависящие от него
+# могут работать неполноценно (валидация, обогащение запросов и т.д.)
+SERVICE_DEPENDENCIES = {
+    "converter_validator": ["registry"],          # валидация классификаторов через Registry
+    "query":                ["registry"],          # нормализация терминов через Registry
+    "orchestrator":         ["auth", "registry", "query", "converter_validator", "parser", "ocr", "rag_search"],
+    "rag_builder":          ["registry"],          # чтение документов из Registry
+    "rag_search":           ["registry"],          # чтение документов из Registry
+    "gateway":              ["auth", "orchestrator", "query", "registry"],  # агрегация всех API
 }
 
 API_PREFIX = "/api/v1"
@@ -384,18 +381,6 @@ def build_endpoints() -> Dict[str, List[EndpointDef]]:
             body={"text": "Какая толщина обшивки?", "document_ids": []}),
     ]
 
-    # ── Integration Service (integration-service:8085) ──────────────
-    endpoints["integration"] = [
-        EndpointDef("GET", f"{API_PREFIX}/health", "health", "Health check сервиса"),
-        EndpointDef("GET", f"{API_PREFIX}/external/status", "external", "Статус внешних систем"),
-        # Files — multipart, сложно тестировать без реального файла, но проверим метаданные
-        EndpointDef("POST", f"{API_PREFIX}/files/upload", "files", "Загрузка файла (проверка без файла — ожидается 422)"),
-        EndpointDef("GET", f"{API_PREFIX}/files/{{file_key}}", "files", "Получить файл"),
-        EndpointDef("GET", f"{API_PREFIX}/files/{{file_key}}/info", "files", "Метаданные файла"),
-        EndpointDef("DELETE", f"{API_PREFIX}/files/{{file_key}}", "files", "Удалить файл"),
-        EndpointDef("POST", f"{API_PREFIX}/meridian/export", "meridian", "Экспорт в Меридиан", body={"document_id": "test-doc-id", "data": {"designation": "ТЕСТ.001", "title": "Тестовый экспорт"}}),
-    ]
-
     # ── Parser Service (parser-service:8087) ────────────────────────
     endpoints["parser"] = [
         EndpointDef("GET", f"{API_PREFIX}/health", "health", "Health check сервиса"),
@@ -405,11 +390,13 @@ def build_endpoints() -> Dict[str, List[EndpointDef]]:
         EndpointDef("GET", f"{API_PREFIX}/parser/process/{{task_id}}/result", "parser", "Итоговый JSON обработки"),
     ]
 
-    # ── OCR Service (ocr-service:8088) ────────────────────────────
+    # ── OCR Service (ocr-service:8088) — идентичное API с Parser ──
     endpoints["ocr"] = [
         EndpointDef("GET", f"{API_PREFIX}/health", "health", "Health check сервиса"),
-        EndpointDef("POST", f"{API_PREFIX}/ocr/process", "ocr", "Запуск OCR обработки", body={"task_id": "test-task", "version_id": "test-version", "file_key": "test-file-key"}),
-        EndpointDef("POST", f"{API_PREFIX}/ocr/preview", "ocr", "Быстрый OCR предпросмотр", body={"task_id": "test-task", "version_id": "test-version", "file_key": "test-file-key", "max_pages": 1}),
+        EndpointDef("POST", f"{API_PREFIX}/ocr/process", "ocr", "Запуск OCR обработки",
+            body={"task_id": "test-task", "version_id": "test-version", "file_key": "test-file-key"}),
+        EndpointDef("POST", f"{API_PREFIX}/ocr/preview", "ocr", "Быстрый OCR предпросмотр",
+            body={"task_id": "test-task", "version_id": "test-version", "file_key": "test-file-key", "max_pages": 1}),
         EndpointDef("GET", f"{API_PREFIX}/ocr/process/{{task_id}}/status", "ocr", "Статус OCR обработки"),
         EndpointDef("GET", f"{API_PREFIX}/ocr/process/{{task_id}}/result", "ocr", "Итоговый JSON OCR"),
     ]
@@ -470,29 +457,19 @@ class ApiCoverageTester:
     Для каждого сервиса вызывает все эндпоинты из документации,
     собирает результаты и формирует отчёт.
 
-    Режимы:
-      - mock: только мок-сервисы (auth, registry mock, orchestrator mock, query mock)
-      - real: только реальные сервисы с БД (registry, integration, rag_builder, ...)
+    Запуск только в Docker (real-режим).
     """
 
     def __init__(
         self,
-        mode: str = "mock",
         services: Optional[List[str]] = None,
         base_host: str = "127.0.0.1",
     ):
-        self.mode = mode
         self.base_host = base_host
         self.endpoints = build_endpoints()
 
-        # Определяем какие сервисы доступны в этом режиме
-        available_ports = MODE_PORTS.get(mode, MODE_PORTS["mock"])
-        available_services = set(available_ports.keys())
-
-        if mode == "mock":
-            self.services_with_impl = SERVICES_WITH_MOCK
-        else:
-            self.services_with_impl = SERVICES_WITH_REAL
+        available_services = set(MODE_PORTS.keys())
+        self.services_with_impl = SERVICES_WITH_REAL
 
         if services:
             self.services_to_test = [s for s in services if s in available_services]
@@ -664,7 +641,7 @@ class ApiCoverageTester:
     async def test_service(self, service_key: str) -> ServiceResult:
         """Протестировать все эндпоинты сервиса."""
         svc_endpoints = self.endpoints.get(service_key, [])
-        ports = MODE_PORTS.get(self.mode, MODE_PORTS["mock"])
+        ports = MODE_PORTS
         port = ports.get(service_key, 0)
 
         # Определяем имя сервиса
@@ -816,10 +793,9 @@ class ApiCoverageTester:
 
     async def run_all(self) -> Dict[str, ServiceResult]:
         """Запустить тестирование всех сервисов."""
-        mode_label = {"mock": "🧪 Mock mode (быстрый)", "real": "🔬 Real mode (полный)"}
         print("=" * 70)
         print(f"  PKB Neuroassistant — API Coverage Test")
-        print(f"  {mode_label.get(self.mode, self.mode)}")
+        print(f"  🔬 Real mode (Docker)")
         print(f"  Основано на docs/api/*.md")
         print("=" * 70)
 
@@ -839,16 +815,20 @@ class ApiCoverageTester:
             print(f"     Ping: {status}  |  Passed: {result.endpoints_passed}/{result.endpoints_total}  "
                   f"|  Failed: {result.endpoints_failed}  |  Skipped: {result.endpoints_skipped}")
 
+            # Если сервис не отвечает — показать, кто от него зависит
+            deps = SERVICE_DEPENDENCIES.get(svc_key, [])
+            if not result.ping_ok and deps:
+                print(f"     🔗 Зависит от: {', '.join(deps)}")
+
         return self.results
 
     def generate_report(self, log_report_path: Optional[str] = None) -> str:
         """Сформировать markdown-отчёт."""
         lines = []
         now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-        mode_label = {"mock": "🧪 Mock (быстрый)", "real": "🔬 Real (полный)"}
         lines.append(f"# API Coverage Report\n")
         lines.append(f"**Generated:** {now}\n")
-        lines.append(f"**Mode:** {mode_label.get(self.mode, self.mode)}\n")
+        lines.append(f"**Mode:** 🔬 Real (Docker)\n")
         lines.append(f"**Based on:** `docs/api/*.md`\n")
         if log_report_path:
             lines.append(f"📋 **Logs:** [{log_report_path}]({log_report_path})\n")
@@ -971,8 +951,38 @@ class ApiCoverageTester:
         lines.append("- **❌ Failed** — сервер вернул HTTP ≥ 500 или ошибка подключения\n")
         lines.append("- **⏭️ Skipped** — эндпоинт пропущен (сервис не отвечает, нет ID в контексте)\n")
         lines.append("- **Ping** — проверка health-эндпоинта на порту сервиса\n")
-        lines.append(f"- **Mode** — `{self.mode}`: проверяются только сервисы этого режима\n")
+        lines.append("- **Mode** — Real (Docker): проверяются только запущенные в Docker сервисы\n")
         lines.append("- ⏸️ **Analyse Service** — временно не тестируется (нет контейнера)\n")
+
+        # Секция зависимостей
+        lines.append("\n## 🔗 Dependency Map\n")
+        lines.append("| Сервис | Зависит от |")
+        lines.append("|--------|-----------|")
+        for svc, deps in sorted(SERVICE_DEPENDENCIES.items()):
+            deps_str = ", ".join(deps) if deps else "—"
+            lines.append(f"| `{svc}` | {deps_str} |")
+
+        # Обратные зависимости (кто пострадал от недоступных сервисов)
+        down_services = [k for k, r in self.results.items() if not r.ping_ok]
+        if down_services:
+            reverse_deps = {}
+            for svc, deps in SERVICE_DEPENDENCIES.items():
+                for dep in deps:
+                    reverse_deps.setdefault(dep, []).append(svc)
+            lines.append("\n### ⚠️ Каскадные проблемы\n")
+            lines.append("Недоступный сервис → страдают:")
+            lines.append("")
+            for svc in down_services:
+                affected = reverse_deps.get(svc, [])
+                affected_ok = [s for s in affected if s in self.results and self.results[s].ping_ok]
+                if affected_ok:
+                    lines.append(f"- ❌ **{svc}** → ⚠️ {' '.join(affected_ok)}")
+                elif affected:
+                    lines.append(f"- ❌ **{svc}** → 🔴 {' '.join(affected)}")
+                else:
+                    lines.append(f"- ❌ **{svc}** — от него никто не зависит")
+            lines.append("")
+
         lines.append("\n---\n")
         lines.append(f"_Report generated by `api_coverage_test.py` at {now}_\n")
 
@@ -991,9 +1001,8 @@ def parse_args() -> argparse.Namespace:
         epilog=(
             "Примеры:\n"
             "  python backend/service_checker/api_coverage_test.py\n"
-            "  python backend/service_checker/api_coverage_test.py --services auth,registry\n"
-            "  python backend/service_checker/api_coverage_test.py --ping-only\n"
-            "  python backend/service_checker/api_coverage_test.py -o coverage_report.md\n"
+                    "  python backend/service_checker/api_coverage_test.py --ping-only\n"
+                    "  python backend/service_checker/api_coverage_test.py -o coverage_report.md\n"
         ),
     )
     parser.add_argument(
@@ -1001,12 +1010,7 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Список сервисов через запятую (по умолч. все)",
     )
-    parser.add_argument(
-        "--mode",
-        choices=["mock", "real"],
-        default="mock",
-        help="Режим: mock (быстрый, только моки) или real (полный, реальные сервисы)",
-    )
+
     parser.add_argument(
         "--ping-only",
         action="store_true",
@@ -1027,8 +1031,8 @@ def parse_args() -> argparse.Namespace:
 
 async def ping_all(tester: ApiCoverageTester) -> None:
     """Проверить какие сервисы отвечают (конкурентно)."""
-    ports = MODE_PORTS.get(tester.mode, MODE_PORTS["mock"])
-    print(f"\n  Mode: {tester.mode.upper()}")
+    ports = MODE_PORTS
+    print(f"\n  Mode: REAL")
     print(f"  {'Service':30s} Port  Status")
     print(f"  {'─'*50}")
 
@@ -1057,7 +1061,6 @@ async def main():
         services_list = [s.strip() for s in args.services.split(",")]
 
     tester = ApiCoverageTester(
-        mode=args.mode,
         services=services_list,
         base_host=args.host,
     )
@@ -1089,6 +1092,23 @@ async def main():
         print(f"  TOTAL: {total_passed}/{total_ep} passed, "
               f"{total_failed} failed, {total_skipped} skipped\n")
 
+        # Сводка по недоступным сервисам и их зависимостям
+        down_services = [k for k, r in tester.results.items() if not r.ping_ok]
+        if down_services:
+            print("  🔗 Сервис недоступен → кто от него зависит:")
+            # Построим обратный словарь зависимостей
+            reverse_deps = {}
+            for svc, deps in SERVICE_DEPENDENCIES.items():
+                for dep in deps:
+                    reverse_deps.setdefault(dep, []).append(svc)
+            for svc in down_services:
+                affected = reverse_deps.get(svc, [])
+                affected_ok = [s for s in affected if s in tester.results and tester.results[s].ping_ok]
+                if affected_ok:
+                    print(f"    ❌ {svc:25s} → ⚠️  {' '.join(affected_ok)}")
+                elif affected:
+                    print(f"    ❌ {svc:25s} → 🔴 {' '.join(affected)}")
+
         # Сохраняем отчёт
         report = tester.generate_report()
         if args.output:
@@ -1097,9 +1117,10 @@ async def main():
             output_path.write_text(report, encoding="utf-8")
             print(f"  📄 Report saved: {output_path.resolve()}")
         else:
-            # Сохраняем с автоименем (с префиксом режима)
-            prefix = "mock_" if args.mode == "mock" else "real_"
-            report_path = Path(f"api_coverage_{prefix}{datetime.now().strftime('%Y%m%d_%H%M%S')}.md")
+            # Сохраняем в check_result с автоименем
+            check_dir = Path("check_result")
+            check_dir.mkdir(parents=True, exist_ok=True)
+            report_path = check_dir / f"api_coverage_real_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
             report_path.write_text(report, encoding="utf-8")
             print(f"  📄 Report saved: {report_path.resolve()}")
 

@@ -18,7 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ---- 2. Python-зависимости (всех backend-сервисов) ----
-COPY backend/requirements.txt /tmp/
+COPY requirements.txt /tmp/
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r /tmp/requirements.txt \
     && rm -rf /root/.cache

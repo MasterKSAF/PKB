@@ -1978,28 +1978,18 @@ async def _docker_run_coverage() -> Optional[str]:
 
     log_info(f"Отчёт будет сохранён: {output_path}")
 
-    # Запускаем coverage test в режиме real (сервисы уже в Docker)
-    import importlib.util
-    spec = importlib.util.spec_from_file_location(
-        "run_coverage",
-        BACKEND_DIR / "service_checker" / "run_coverage.py"
-    )
-    if not spec or not spec.loader:
-        log_err("Не найден run_coverage.py")
-        return False
+    # Импортируем напрямую ApiCoverageTester
+    sys.path.insert(0, str(BACKEND_DIR))
+    from service_checker.api_coverage_test import ApiCoverageTester
 
-    run_mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(run_mod)
-
-    # Генерируем имя для логов (с тем же timestamp, что и coverage)
     log_path = check_result_dir / f"errors_{timestamp}.md"
 
     try:
-        await run_mod.run_coverage_test(
-            output_path=str(output_path),
-            mode="real",
-            log_report_path=str(log_path.name)
-        )
+        tester = ApiCoverageTester(base_host="127.0.0.1")
+        await tester.run_all()
+        report = tester.generate_report(log_report_path=str(log_path.name))
+        output_path.write_text(report, encoding="utf-8")
+        await tester.close()
         log_ok(f"API Coverage отчёт сохранён: {output_path}")
         return timestamp
     except Exception as e:

@@ -27,10 +27,10 @@ x-env-common: &env-common
   APP_VERSION: "1.0.0"
   JWT_SECRET_KEY: change-me-in-production
   JWT_ALGORITHM: HS256
-  REGISTRY_SERVICE_URL: http://registry:8084/api/v1
-  INTEGRATION_SERVICE_URL: http://integration:8085/api/v1
-  VALIDATE_SERVICE_URL: http://converter-validator:8086/api/v1
-  RAG_SERVICE_URL: http://rag-search:8091/api/v1
+  REGISTRY_SERVICE_URL: http://127.0.0.1:8084/api/v1
+  INTEGRATION_SERVICE_URL: http://127.0.0.1:8085/api/v1
+  VALIDATE_SERVICE_URL: http://127.0.0.1:8086/api/v1
+  RAG_SERVICE_URL: http://127.0.0.1:8091/api/v1
   EMBEDDING_PROVIDER: mock
   EMBEDDING_DIM: 1536
   SEARCH_DEFAULT_TOP_K: 10
@@ -119,6 +119,7 @@ services:
       - "8085:8085"   # Integration
       - "8086:8086"   # Converter/Validator
       - "8087:8087"   # Parser
+      - "8088:8088"   # OCR
       - "8090:8090"   # RAG Builder
       - "8091:8091"   # RAG Search
     environment:
@@ -131,10 +132,10 @@ services:
       minio:
         condition: service_started
     volumes:
-      - ../../backend:/app/backend
-      - ../../backend/supervisord.conf:/etc/supervisor/conf.d/supervisord.conf
+      - ../..:/app/backend
+      - ./supervisord.conf:/etc/supervisor/conf.d/supervisord.conf
       - app_logs:/var/log/supervisor
-    entrypoint: ["/app/backend/entrypoint.sh"]
+    entrypoint: ["/app/backend/service_checker/docker/entrypoint.sh"]
     networks:
       - pkb-net
 

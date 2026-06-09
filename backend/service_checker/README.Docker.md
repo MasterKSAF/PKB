@@ -96,7 +96,29 @@ app:
 
 ## Проверка работоспособности
 
-После запуска (~15–30 секунд на инициализацию):
+### Быстрый запуск и проверка
+
+```bash
+# Запустить все сервисы
+docker compose -f backend/service_checker/docker/docker-compose.yml up -d
+
+# Подождать 10 секунд и проверить
+sleep 10
+python backend/service_checker/service_checker.py docker --action health
+```
+
+### Если меняли код сервисов
+
+После изменений в `backend/*/` (новые файлы, правки импортов) нужно
+перезапустить контейнер, чтобы новый код подхватился через volume:
+
+```bash
+docker compose -f backend/service_checker/docker/docker-compose.yml restart app
+sleep 10
+python backend/service_checker/service_checker.py docker --action health
+```
+
+После запуска (~10 секунд на инициализацию):
 
 ```bash
 # PostgreSQL
@@ -108,13 +130,13 @@ docker compose -f backend/service_checker/docker/docker-compose.yml exec -T redi
 # MinIO
 curl http://localhost:9000/minio/health/live
 
-# Backend API (9 из 10 сервисов, registry упал — проблема кода)
+# Backend API (6 из 10 работают, 4 падают — см. специфичные проблемы ниже)
 curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/   # Orchestrator
 curl -s -o /dev/null -w "%{http_code}" http://localhost:8082/   # Auth
 curl -s -o /dev/null -w "%{http_code}" http://localhost:8086/health  # Converter-Validator
 curl -s -o /dev/null -w "%{http_code}" http://localhost:8087/health  # Parser
 
-# Через service_checker
+# Через service_checker (полный отчёт)
 python backend/service_checker/service_checker.py docker --action health
 ```
 
@@ -155,10 +177,39 @@ docker push ghcr.io/pkb/neuro-base:1.0.0
 
 ## Известные проблемы
 
-### Registry Service (8084)
-Падает с `ModuleNotFoundError: No module named 'api.v1.database'`.  
-В файле `registry_service/api/v1/models/registry_service_enums.py` импорт `from ..database import Base`, но файл `database.py` отсутствует.  
-**Требует фикса разработчиком.**
+> ⛔ service_checker НЕ исправляет проблемы сервисов.
+> Всё, что он делает — диагностирует и отчитывается.
+> Код сервисов — зона ответственности их разработчиков.
+
+### CRLF на Windows — entrypoint.sh не выполняется
+После `git clone` на Windows файл `backend/service_checker/docker/entrypoint.sh`
+получает CRLF-окончания. Шебанг `#!/bin/bash\r` не распознаётся Linux:
+```
+exec entrypoint.sh: no such file or directory
+```
+Контейнер входит в restart loop.
+
+**Исправление:**
+```bash
+sed -i 's/\r$//' backend/service_checker/docker/entrypoint.sh
+```
+Или настроить Git перед клонированием:
+```bash
+git config core.autocrlf input
+```
+
+### 4 из 10 Python-сервисов падают (требуют фикса разработчиками)
+
+| Сервис | Порт | Ошибка |
+|--------|------|-------|
+| Auth Service | 8082 | `ImportError: email-validator is not installed` |
+| Gateway Mock | 8081 | `ImportError: cannot import name 'router'` |
+| Registry Service | 8084 | `ModuleNotFoundError: No module named 'env'` |
+| ~~Orchestrator~~ | ~~8000~~ | ✅ исправлено (`extra="ignore"`) |
+
+Подробное описание каждой ошибки и способа исправления — в
+[`backend/orchestrator_service/specificity.md`](../orchestrator_service/specificity.md#4-проблемы-запуска-docker)
+(раздел 4 «Проблемы запуска Docker»).
 
 ### Supervisorctl на Windows
 Команда `docker compose -f backend/service_checker/docker/docker-compose.yml exec -T app supervisorctl status` может не работать в Git Bash из-за преобразования путей. Используйте PowerShell или:
