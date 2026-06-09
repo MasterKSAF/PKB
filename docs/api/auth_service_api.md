@@ -1,571 +1,325 @@
-## API Auth Service (auth-service:8082)
+﻿# Auth Service API
 
-Сервис аутентификации и управления пользователями.
+Этот документ синхронизирован с текущей реализацией FastAPI в `backend/auth_service`.
 
-**Базовый URL (внутренний)**: `http://127.0.0.1:8082/api/v1`
-**Базовый URL (через Gateway)**: `http://127.0.0.1:8080/api/v1`
+Базовый URL:
+- внутренний: `http://127.0.0.1:8082/api/v1`
+- через gateway: `http://127.0.0.1:8080/api/v1`
 
-### Группы
-
-| Группа | Описание |
-|--------|----------|
-| `auth` | Аутентификация и профиль текущего пользователя |
-| `admin` | Управление пользователями, ролями и аудит |
-
-### Формат ответа
-
-Формат ответа и ошибок — см. [common_api.md](../common_api.md#формат-ответа).
-
-**Специфичные коды ошибок Auth-сервиса:** общие коды (401, 403, 500) — см. [common_api.md](../common_api.md#коды-ответов-http-и-ошибок).
-
-### Коды ошибок
-
-| HTTP-код | Код ошибки (`error.code`) | Описание |
-|----------|--------------------------|----------|
-| 401 | `INVALID_TOKEN` | Токен недействителен или истёк |
-| 404 | `USER_NOT_FOUND` | Пользователь не найден |
-| 409 | `DUPLICATE_EMAIL` | Email уже используется |
-
-### Содержание
+## Сводка эндпоинтов
 
 | Метод | Путь | Описание |
-|-------|------|----------|
-| POST | `/auth/token` | username, password — получить JWT-токены доступа |
-| POST | `/auth/refresh` | refresh_token — обновить access-токен |
-| POST | `/auth/revoke` | refresh_token — отозвать refresh-токен |
-| GET | `/auth/me` | Профиль текущего пользователя (формат: snake_case) |
-| GET | `/admin/users` | ?role, search, page, page_size — список пользователей |
-| POST | `/admin/users` | email, full_name, password, roles — создать пользователя |
-| GET | `/admin/users/{user_id}` | Информация о пользователе |
-| PUT | `/admin/users/{user_id}` | обновляемые поля — обновить пользователя |
-| PATCH | `/admin/users/{user_id}` | обновляемые поля — частичное обновление (например, только role) |
-| DELETE | `/admin/users/{user_id}` | Деактивировать пользователя |
-| GET | `/admin/roles` | Список ролей |
-| POST | `/admin/roles` | name, permissions — создать роль |
-| GET | `/admin/audit` | ?user_id, action, date_from, date_to, page, page_size — журнал действий (аудит) |
+|---|---|---|
+| POST | `/auth/token` | Получить access/refresh токены |
+| POST | `/auth/refresh` | Обновить access-токен |
+| POST | `/auth/revoke` | Отозвать refresh-токен |
+| GET | `/users/me` | Профиль текущего пользователя |
+| GET | `/users` | Список пользователей (админ) |
+| POST | `/users` | Создать пользователя (админ) |
+| GET | `/users/{user_id}` | Информация о пользователе |
+| PUT | `/users/{user_id}` | Обновить пользователя |
+| DELETE | `/users/{user_id}` | Деактивировать пользователя |
+| GET | `/roles` | Список ролей |
+| POST | `/roles` | Создать роль |
+| GET | `/audit` | Журнал аудита |
+| POST | `/internal/auth/validate` | Проверить access-токен внутри сервиса |
+
+## Общие правила
+
+- Все ответы в формате JSON.
+- Аутентификация для защищённых маршрутов выполняется через `Authorization: Bearer <access_token>`.
+- Для обновления токенов и работы с пользователями используются реальные пути из текущего OpenAPI сервиса.
+- Этот документ не описывает устаревшие маршруты и поля из предыдущих версий.
 
 ---
 
-## Группа auth
+## POST /auth/token
 
-### POST /auth/token
+Получить JWT-токены.
 
-Получение пары JWT‑токенов (access + refresh).
-
-**Запрос**:
+Запрос:
 
 ```json
 {
-  "username": "ivanov",
-  "password": "secret123"
+  "username": "admin@example.com",
+  "password": "Admin1234!"
 }
 ```
 
-| Поле | Тип | Обязательность | Описание |
-|------|-----|----------------|----------|
-| `username` | string | Да | Имя пользователя |
-| `password` | string | Да | Пароль |
-
-**Ответ `200`**:
+Ответ `200`:
 
 ```json
 {
-  "access_token": "eyJhbGciOi...",
-  "refresh_token": "dGhpcyBpcyB...",
+  "access_token": "<jwt>",
+  "refresh_token": "<jwt>",
   "token_type": "bearer",
   "expires_in": 3600
 }
 ```
 
-| Поле | Тип | Описание |
-|------|-----|----------|
-| `access_token` | string | JWT access токен |
-| `refresh_token` | string | JWT refresh токен |
-| `token_type` | string | Тип токена (bearer) |
-| `expires_in` | int | Время жизни токена в секундах |
+---
 
-**Ошибки**: `401` — неверные учётные данные, `400` — отсутствует тело.
+## POST /auth/refresh
 
-**Защита от брутфорса**: После 5 неудачных попыток входа в течение 15 минут — блокировка аккаунта на 30 минут. Событие логируется и отправляется администратору. Rate limiting 10 запросов/мин на `/auth/token`.
+Обновить access-токен по refresh-токену.
 
-#### POST /auth/refresh
-
-Обновление access-токена по действующему refresh-токену.
-
-**Запрос**:
+Запрос:
 
 ```json
 {
-  "refresh_token": "dGhpcyBpcyB..."
+  "refresh_token": "<refresh-token>"
 }
 ```
 
-| Поле | Тип | Обязательность | Описание |
-|------|-----|----------------|----------|
-| `refresh_token` | string | Да | Действующий refresh токен |
+Ответ `200` — тот же формат, что и у `/auth/token`.
 
-**Ответ `200`** — аналогичен `/auth/token`.
+---
 
-**Ошибки**: `401` — токен истёк / отозван.
+## POST /auth/revoke
 
-#### POST /auth/revoke
+Отозвать refresh-токен.
 
-Отзыв refresh-токена (выход).
-
-**Запрос**:
+Запрос:
 
 ```json
 {
-  "refresh_token": "..."
+  "refresh_token": "<refresh-token>"
 }
 ```
 
-| Поле | Тип | Обязательность | Описание |
-|------|-----|----------------|----------|
-| `refresh_token` | string | Да | Refresh токен для отзыва |
-
-**Ответ `200`**:
+Ответ `200`:
 
 ```json
 {
   "message": "Токен отозван",
-  "revoked_at": "2026-04-27T10:15:30Z"
+  "revoked_at": "2026-06-09T12:00:00"
 }
 ```
-
-#### Жизненный цикл токенов
-
-- **Access token**: живёт 1 час (значение `expires_in` в ответе `/auth/token`).
-- **Refresh token**: живёт 30 дней, можно отозвать через `POST /auth/revoke`.
-- При смене пароля все refresh-токены пользователя отзываются.
-Rate limit: не более 10 запросов в минуту на `/auth/token` с одного IP (согласно глобальной политике Rate Limiting).
-- Blacklist: отозванные refresh-токены хранятся в blacklist до истечения их исходного срока жизни.
-
-> **⚠️ Компрометация токена**: Access token невозможно отозвать досрочно без blacklist. Для экстренной блокировки — смена пароля пользователя (отзыв всех refresh-токенов). В текущей реализации compromised access-токен действителен до истечения TTL.
-
-#### GET /auth/me
-
-Профиль текущего пользователя в формате frontend. Поля `available_tabs` и `permissions` как объект boolean.
-
-**Ответ `200`**:
-
-```json
-{
-  "user_id": "u-001",
-  "full_name": "Иванов Сергей Петрович",
-  "position": "Инженер-конструктор",
-  "role": "engineer",
-  "role_title": "Инженер",
-  "available_tabs": ["chat", "search", "checks", "history"],
-  "permissions": {
-    "can_upload_documents": false,
-    "can_run_ocr": false,
-    "can_manage_users": false,
-    "can_manage_classifiers": false,
-    "can_manage_terminology": false,
-    "can_manage_registry": false
-  },
-  "last_login_at": "2026-05-01T08:20:00Z",
-  "created_at": "2025-12-01T08:00:00Z"
-}
-```
-
-| Поле | Тип | Описание |
-|------|-----|----------|
-| `user_id` | string | ID пользователя |
-| `full_name` | string | Полное имя |
-| `position` | string | Должность |
-| `role` | string | Роль: `engineer`, `knowledge_admin`, `system_admin` |
-| `role_title` | string | Отображаемое название роли |
-| `available_tabs` | string[] | Доступные вкладки UI |
-| `permissions` | object | Права доступа (boolean) |
-| `last_login_at` | string | Дата последнего входа (ISO 8601) |
-| `created_at` | string | Дата создания (ISO 8601) |
 
 ---
 
-## Группа admin
+## GET /users/me
 
-### GET /admin/users
+Вернуть текущего пользователя.
 
-Список пользователей (только администратор).
+Требует `Authorization: Bearer <access_token>`.
 
-**Параметры query**: `role`, `search` (по имени/email), `page`, `page_size`.
+Ответ `200`:
 
-**Ответ `200`**:
+```json
+{
+  "user_id": "<uuid>",
+  "email": "user@example.com",
+  "full_name": "User Name",
+  "roles": ["system_admin"],
+  "permissions": ["users:manage", "roles:manage"],
+  "is_active": true,
+  "created_at": "2026-06-09T12:00:00",
+  "updated_at": null
+}
+```
+
+---
+
+## GET /users
+
+Список пользователей.
+
+Параметры query:
+- `role` — фильтр по роли
+- `search` — поиск по email / full_name
+- `limit` — размер страницы, по умолчанию 20
+- `offset` — смещение, по умолчанию 0
+
+Ответ `200`:
 
 ```json
 {
   "users": [
     {
-      "user_id": "u-001",
-      "email": "ivanov@example.com",
-      "full_name": "Иванов И.И.",
-      "position": "Инженер-конструктор",
+      "user_id": "<uuid>",
+      "email": "user@example.com",
+      "full_name": "User Name",
       "roles": ["engineer"],
       "is_active": true,
-      "last_login_at": "2026-05-01T08:20:00Z",
-      "created_at": "2025-12-01T08:00:00Z"
+      "created_at": "2026-06-09T12:00:00"
     }
   ],
-  "meta": { "total": 42, "page": 1, "page_size": 20 }
+  "total": 1,
+  "limit": 20,
+  "offset": 0
 }
 ```
 
-### POST /admin/users
+---
 
-Создание пользователя (админ).
+## POST /users
 
-**Запрос**:
+Создать пользователя.
+
+Запрос:
 
 ```json
 {
-  "email": "petrov@example.com",
-  "full_name": "Петров П.П.",
-  "password": "Temp1234!",
+  "email": "new@example.com",
+  "full_name": "New User",
+  "password": "StrongPass123!",
   "roles": ["engineer"]
 }
 ```
 
-| Поле | Тип | Обязательность | Описание |
-|------|-----|----------------|----------|
-| `email` | string | Да | Email пользователя |
-| `full_name` | string | Да | Полное имя |
-| `password` | string | Да | Длина ≥ 8, минимум 1 заглавная буква, 1 цифра, 1 спецсимвол |
-| `roles` | string[] | Да | Роли пользователя |
+Ответ `201` — тот же формат, что и у `GET /users/me`.
 
-**Ответ `201`**:
+---
+
+## GET /users/{user_id}
+
+Получить пользователя по ID.
+
+Ответ `200` — тот же формат, что и у `GET /users/me`.
+
+---
+
+## PUT /users/{user_id}
+
+Обновить пользователя.
+
+Запрос:
 
 ```json
 {
-  "id": 1,
-  "email": "ivanov@example.com",
-  "full_name": "Иванов Иван",
+  "email": "updated@example.com",
+  "full_name": "Updated User",
   "roles": ["engineer"],
-  "is_active": true,
-  "created_at": "2026-04-27T10:15:30Z"
-}
-```
-
-| Поле | Тип | Описание |
-|------|-----|----------|
-| `id` | bigint | Уникальный идентификатор пользователя |
-| `email` | string | Email пользователя |
-| `full_name` | string | Полное имя |
-| `roles` | string[] | Список ролей |
-| `is_active` | boolean | Активен ли пользователь |
-| `created_at` | datetime | Дата и время создания |
-
-### GET /admin/users/{user_id}
-
-Детали пользователя.
-
-**Ответ `200`**:
-
-```json
-{
-  "user_id": "u-001",
-  "email": "ivanov@example.com",
-  "full_name": "Иванов И.И.",
-  "position": "Инженер-конструктор",
-  "roles": ["engineer"],
-  "permissions": {
-    "can_upload_documents": false,
-    "can_run_ocr": false,
-    "can_manage_users": false,
-    "can_manage_classifiers": false,
-    "can_manage_terminology": false,
-    "can_manage_registry": false
-  },
-  "is_active": true,
-  "last_login_at": "2026-05-01T08:20:00Z",
-  "created_at": "2025-12-01T08:00:00Z",
-  "updated_at": "2026-04-27T10:00:00Z"
-}
-```
-
-### PUT /admin/users/{user_id}
-
-Обновление данных пользователя (админ). Поля в теле опциональны.
-
-**Запрос**:
-
-```json
-{
-  "email": "newemail@example.com",
-  "full_name": "Иванов И.П.",
-  "position": "Ведущий инженер",
-  "roles": ["engineer", "admin"],
   "is_active": true
 }
 ```
 
-**Ответ `200`**:
+Ответ `200` — тот же формат, что и у `GET /users/me`.
+
+---
+
+## DELETE /users/{user_id}
+
+Деактивировать пользователя (soft delete).
+
+Ответ `200`:
 
 ```json
 {
-  "id": 1,
-  "email": "ivanov@example.com",
-  "full_name": "Иванов Иван",
-  "roles": ["engineer"],
-  "is_active": true,
-  "created_at": "2026-04-27T10:15:30Z"
-}
-```
-
-| Поле | Тип | Описание |
-|------|-----|----------|
-| `id` | bigint | Уникальный идентификатор пользователя |
-| `email` | string | Email пользователя |
-| `full_name` | string | Полное имя |
-| `roles` | string[] | Список ролей |
-| `is_active` | boolean | Активен ли пользователь |
-| `created_at` | datetime | Дата и время создания |
-
-### PATCH /admin/users/{user_id}
-
-Частичное обновление пользователя (админ). Отличается от PUT тем, что обновляются только переданные поля.
-
-**Запрос** (изменение только роли):
-
-```json
-{
-  "roles": ["knowledge_admin"]
-}
-```
-
-`roles` — массив строк (`string[]`). Принимается в том же формате, что и в `POST /admin/users` и `PUT /admin/users/{user_id}`.
-
-**Ответ `200`**:
-
-```json
-{
-  "user_id": "u-001",
-  "roles": ["knowledge_admin"],
-  "audit_log_id": "audit-001",
-  "updated_at": "2026-04-27T11:00:00Z"
-}
-```
-
-### DELETE /admin/users/{user_id}
-
-**Soft-delete:** пользователь деактивируется (`is_active=false`), запись в БД сохраняется. Повторная активация возможна через `PUT /admin/users/{user_id}` (`is_active=true`). Физическое удаление не производится.
-
-**Ответ `200`**:
-
-```json
-{
-  "user_id": "u-001",
+  "user_id": "<uuid>",
   "is_active": false,
-  "deactivated_at": "2026-04-27T11:00:00Z"
+  "deactivated_at": "2026-06-09T12:00:00"
 }
 ```
 
-### GET /admin/roles
+---
+
+## GET /roles
 
 Список ролей.
 
-**Ответ `200`**:
+Ответ `200`:
 
 ```json
 {
   "roles": [
     {
-      "role_id": "r-admin",
-      "name": "Администратор",
-      "permissions": ["users:manage", "audit:read"],
-      "created_at": "2025-12-01T08:00:00Z"
+      "role_id": "<uuid>",
+      "name": "system_admin",
+      "permissions": ["users:manage", "roles:manage"],
+      "created_at": "2026-06-09T12:00:00"
     }
   ]
 }
 ```
 
-### POST /admin/roles
+---
 
-Создание роли (админ).
+## POST /roles
 
-**Запрос**:
+Создать роль.
 
-```json
-{
-  "name": "Инженер",
-  "permissions": ["documents:read", "search"]
-}
-```
-
-| Поле | Тип | Обязательность | Описание |
-|------|-----|----------------|----------|
-| `name` | string | Да | Название роли |
-| `permissions` | string[] | Да | Список разрешений |
-
-**Ответ `201`**:
+Запрос:
 
 ```json
 {
-  "id": 1,
   "name": "knowledge_admin",
-  "permissions": ["documents.read", "documents.write", "chat.read"],
-  "created_at": "2026-04-27T10:15:30Z"
+  "permissions": ["documents:read", "documents:write"]
 }
 ```
 
-| Поле | Тип | Описание |
-|------|-----|----------|
-| `id` | bigint | Уникальный идентификатор роли |
-| `name` | string | Название роли |
-| `permissions` | string[] | Список разрешений |
-| `created_at` | datetime | Дата и время создания |
+Ответ `201` — объект роли из `GET /roles`.
 
-### GET /admin/audit
+---
 
-Журнал аудита (администратор/аудитор).
+## GET /audit
 
-**Параметры query**: `user_id`, `action` (например, `document.upload`, `role.change`), `date_from`, `date_to`, `page`, `page_size`.
+Журнал аудита.
 
-**Ответ `200`**:
+Параметры query:
+- `user_id`
+- `action`
+- `date_from`
+- `date_to`
+- `limit`
+- `offset`
+
+Ответ `200`:
 
 ```json
 {
   "events": [
     {
-      "event_id": "evt-123",
-      "user_id": "u-001",
-      "action": "document.upload",
-      "resource_type": "document",
-      "resource_id": "doc-456",
-      "details": {"filename": "spec.pdf"},
-      "ip_address": "192.168.1.25",
-      "timestamp": "2026-04-27T09:30:00Z"
+      "event_id": "<uuid>",
+      "user_id": "<uuid>",
+      "action": "auth.login",
+      "resource_type": "auth",
+      "resource_id": "<uuid>",
+      "details": null,
+      "ip_address": "127.0.0.1",
+      "timestamp": "2026-06-09T12:00:00"
     }
   ],
-  "meta": { "total": 150, "page": 1, "page_size": 50 }
+  "total": 1
 }
 ```
-
-> **Маскировка PII**: IP-адрес в audit-логе маскируется (последний октет заменён на `xxx`, например `192.168.1.xxx`). Audit-логи хранятся 90 дней, после чего удаляются.
 
 ---
 
-## Internal Auth Service 
-### POST /internal/auth/validate
+## POST /internal/auth/validate
 
-> **⏳ Требует реализации в коде**: необходима сетевая изоляция (mTLS или network policy) для `/internal/*` эндпоинтов. Альтернатива — локальная JWT-верификация без вызова validate. Не входит в объём документации.
+Проверить access-токен внутри сервиса.
 
-Проверка access‑токена (внутренний).
-
-**Запрос**:
+Запрос:
 
 ```json
 {
-  "access_token": "eyJhbGciOi..."
+  "access_token": "<access-token>"
 }
 ```
 
-**Ответ `200`** (токен действителен):
+Ответ `200`:
 
 ```json
 {
   "valid": true,
-  "user_id": "u-001",
-  "email": "ivanov@example.com",
-  "roles": ["engineer"],
-  "permissions": {
-    "can_upload_documents": false,
-    "can_run_ocr": false,
-    "can_manage_users": false,
-    "can_manage_classifiers": false,
-    "can_manage_terminology": false,
-    "can_manage_registry": false
-  },
-  "exp": 1714234567
-}
-```
-
-**Ответ `401`** (токен недействителен):
-
-```json
-{
-  "error": {
-    "code": "INVALID_TOKEN",
-    "message": "Токен недействителен или истёк",
-    "details": {}
-  }
+  "user_id": "<uuid>",
+  "email": "user@example.com",
+  "roles": ["system_admin"],
+  "permissions": ["users:manage", "roles:manage"],
+  "exp": 1718000000
 }
 ```
 
 ---
 
-## Политика безопасности паролей
+## Примечание по сверке с текущим API
 
-**Минимальные требования к паролю**: длина ≥ 8 символов, минимум 1 заглавная буква (A-Z), 1 цифра (0-9), 1 спецсимвол. Проверка выполняется при создании/смене пароля.
+Если требуется полная генерация документации из кода, источник истины — OpenAPI FastAPI:
 
-### Хранение
-
-- Пароли хранятся только в хэшированном виде (bcrypt, cost factor ≥ 12).
-- Пароли **никогда** не возвращаются в ответах API.
-- Refresh-токены хранятся в БД в хэшированном виде.
-- Поле `password` исключено из логирования на всех уровнях (см. `common_api.md`).
-
-### Передача
-
-- Пароль передаётся только при создании пользователя (`POST /admin/users`) и получении токена (`POST /auth/token`).
-- Все эндпоинты, принимающие пароль, доступны только через **HTTPS** (через Nginx → Web UI, внутренние вызовы между сервисами — HTTP).
-- Внутренние вызовы между сервисами (Orchestrator → Auth Service) не содержат пароль в теле после первичного обмена — используется JWT-токен.
-
-### Жизненный цикл
-
-| Событие | Действие |
-|---------|----------|
-| Создание пользователя | Пароль хэшируется, сохраняется в БД, plaintext отбрасывается |
-| Вход (`/auth/token`) | Пароль проверяется против хэша, при успехе выдаются JWT |
-| Смена пароля (админ) | Выдаётся новый refresh-токен, старые refresh-токены пользователя отзываются |
-| Отзыв токена (`/auth/revoke`) | Refresh-токен помещается в blacklist до истечения срока |
-
----
-
-## Планы развития
-
-### 1. Отдельный эндпоинт смены пароля
-
-Вместо включения `password` в `PUT /admin/users/{user_id}` планируется выделенный endpoint:
-
-```
-POST /admin/users/{user_id}/reset-password
+```bash
+PYTHONPATH=backend/auth_service python -c "from app.main import app; import json; print(json.dumps(app.openapi(), indent=2))"
 ```
 
-```json
-{
-  "password": "NewStr0ng!Pass"
-}
-```
-
-**Преимущества:**
-- Явная семантика — смена пароля, а не «обновление пользователя с полем password»
-- Обязательная аудит-запись с типом `password.change`
-- Возможность добавить подтверждение (второй администратор) без изменения основного API
-- Пароль не появляется в общем теле обновления пользователя
-
-### 2. Переход на Authorization Code + PKCE
-
-Текущий flow (`POST /auth/token` с `username` + `password`) является упрощённым (OAuth2 Resource Owner Password Credentials Grant).
-В следующих релизах планируется переход на **Authorization Code + PKCE**, где пароль вводится только на стороне клиента и не передаётся API:
-
-```
-Фронтенд                          Бэкенд
-    |                                |
-    |  GET /auth/authorize           |
-    |  <-- code_challenge, state     |
-    |                                |
-    |  (ввод логина/пароля           |
-    |   локально на клиенте)         |
-    |                                |
-    |  POST /auth/token              |
-    |  { code, code_verifier }       |
-    |  --> access_token,             |
-    |       refresh_token            |
-```
-
-**Преимущества:**
-- Пароль не покидает браузер пользователя
-- API не видит и не может скомпрометировать пароль
-- Одноразовый code бесполезен без code_verifier (даже при перехвате)
+Этот файл следует обновлять при каждом изменении маршрутов, схем или статусов ответа в `backend/auth_service/app/`.
