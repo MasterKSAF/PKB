@@ -6,17 +6,38 @@
 -- User Creation
 -- ============================================================================
 
--- Create the user (replace 'pkb_user' and 'password123' with actual credentials)
+-- Create the user if it does not exist (replace 'pkb_user' and 'password123' with actual credentials)
 -- Note: Ensure strong password in production
-CREATE USER pkb_user WITH PASSWORD 'password123';
+DO
+$$
+BEGIN
+   IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'pkb_user') THEN
+      CREATE USER pkb_user WITH PASSWORD 'password123';
+   END IF;
+END
+$$;
 
--- Alternative: To create user without password (uses peer authentication on Unix domain socket):
--- CREATE USER pkb_user;
+-- ============================================================================
+-- Database Privileges
+-- ============================================================================
+
+-- Grant connect and temporary tables access on target databases if they exist
+DO
+$$
+BEGIN
+   IF EXISTS (SELECT FROM pg_catalog.pg_database WHERE datname = 'PKB') THEN
+      EXECUTE 'GRANT CONNECT, TEMPORARY ON DATABASE "PKB" TO pkb_user';
+   END IF;
+END
+$$;
 
 
 -- ============================================================================
 -- Grant Privileges on Schemas
 -- ============================================================================
+
+-- Ensure schemas exist
+CREATE SCHEMA IF NOT EXISTS registry;
 
 -- Grant usage and create on both schemas
 GRANT USAGE, CREATE ON SCHEMA registry TO pkb_user;
@@ -40,6 +61,25 @@ GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA registry TO pkb_user;
 ALTER DEFAULT PRIVILEGES IN SCHEMA registry GRANT ALL PRIVILEGES ON TABLES TO pkb_user;
 ALTER DEFAULT PRIVILEGES IN SCHEMA registry GRANT ALL PRIVILEGES ON SEQUENCES TO pkb_user;
 ALTER DEFAULT PRIVILEGES IN SCHEMA registry GRANT ALL PRIVILEGES ON FUNCTIONS TO pkb_user;
+
+
+-- ============================================================================
+-- Public Schema - Full Rights
+-- ============================================================================
+
+-- Grant all privileges on all tables in public schema
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO pkb_user;
+
+-- Grant all privileges on all sequences in public schema
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO pkb_user;
+
+-- Grant all privileges on all functions in public schema
+GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public TO pkb_user;
+
+-- Set default privileges for future objects in public schema
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON TABLES TO pkb_user;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON SEQUENCES TO pkb_user;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON FUNCTIONS TO pkb_user;
 
 
 -- ============================================================================
