@@ -19,8 +19,8 @@ MarkupSafe==3.0.3
 more-itertools==11.0.2
 packaging==26.2
 pluggy==1.6.0
-psycopg2==2.9.12
-psycopg2-binary==2.9.12
+psycopg==3.3.4
+psycopg-binary==3.3.4
 pydantic==2.13.3
 pydantic-settings==2.14.0
 pydantic_core==2.46.3
@@ -36,4 +36,5 @@ starlette==1.0.0
 typeguard==4.5.1
 typing-inspection==0.4.2
 typing_extensions==4.15.0
+tzdata==2026.2
 uvicorn==0.46.0
