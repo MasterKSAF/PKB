@@ -31,8 +31,10 @@ x-env-common: &env-common
   INTEGRATION_SERVICE_URL: http://127.0.0.1:8085/api/v1
   VALIDATE_SERVICE_URL: http://127.0.0.1:8086/api/v1
   RAG_SERVICE_URL: http://127.0.0.1:8091/api/v1
-  EMBEDDING_PROVIDER: mock
-  EMBEDDING_DIM: 1536
+  EMBEDDING_PROVIDER: tei
+  EMBEDDING_BASE_URL: http://tei:80
+  EMBEDDING_MODEL: Vuy/rubert-tiny2-onnx
+  EMBEDDING_DIM: 312
   SEARCH_DEFAULT_TOP_K: 10
   SEARCH_MAX_TOP_K: 100
 
@@ -100,6 +102,26 @@ services:
       - pkb-net
 
   # ============================================================================
+  # Hugging Face Text Embeddings Inference (TEI) — CPU-only, локальная модель
+  # ============================================================================
+  tei:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-latest
+    container_name: pkb-tei
+    restart: unless-stopped
+    entrypoint: ["text-embeddings-router", "--model-id", "/data"]
+    ports:
+      - "8092:80"
+    volumes:
+      - ./tei_model:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - pkb-net
+
+  # ============================================================================
   # Backend (Python-сервисы под supervisord)
   # ============================================================================
   app:
@@ -147,3 +169,4 @@ volumes:
   pg_data:
   minio_data:
   app_logs:
+  tei_cache:

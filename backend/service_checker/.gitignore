@@ -1,0 +1,10 @@
+# Регенерируемые отчёты и логи
+check_result/
+__pycache__/
+**/__pycache__/
+*.pyc
+
+# Скачиваемые модели (TEI, эмбеддинги)
+docker/tei_model/
+.nul
+nul

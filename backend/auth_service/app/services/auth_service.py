@@ -55,6 +55,8 @@ async def refresh_access_token(db: AsyncSession, refresh_token: str):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Токен истек или отозван")
 
     expires_at = db_token.expires_at
+    if expires_at is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Token has no expiry')
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
 

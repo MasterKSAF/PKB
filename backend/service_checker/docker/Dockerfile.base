@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     supervisor \
     libpq5 \
     libmagic1 \
+    default-jre \
     && rm -rf /var/lib/apt/lists/*
 
 # ---- 2. Python-зависимости (всех backend-сервисов) ----
