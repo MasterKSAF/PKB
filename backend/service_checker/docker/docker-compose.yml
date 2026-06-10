@@ -5,6 +5,8 @@
 # PostgreSQL (pgvector), Redis, MinIO — отдельные контейнеры.
 # =============================================================================
 
+name: pkb
+
 x-env-common: &env-common
   DB_HOST: postgres
   DB_PORT: 5432

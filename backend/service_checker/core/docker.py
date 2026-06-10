@@ -24,7 +24,7 @@ from service_checker.core.config import (
     DOCKER_COMPOSE_FILE,
     DOCKER_SERVICE_NAMES,
 )
-from service_checker.core.utils import log, log_ok, log_warn, log_err, log_info, log_header
+from service_checker.core.utils import log, log_ok, log_warn, log_err, log_info, log_header, log_step
 
 
 # ── Docker: HTTP health-check endpoint'ы для каждого сервиса внутри контейнера ──
@@ -73,6 +73,83 @@ def _check_docker() -> bool:
         return False
 
 
+# ── Маппинг старых имён volumes → новые (миграция project name docker→pkb) ──
+_OLD_VOLUMES = {
+    "docker_pg_data": "pkb_pg_data",
+    "docker_minio_data": "pkb_minio_data",
+    "docker_app_logs": "pkb_app_logs",
+    "docker_tei_cache": "pkb_tei_cache",
+}
+
+
+def _migrate_volumes() -> None:
+    """Проверить и перенести данные из старых volumes (docker_*) в новые (pkb_*).
+
+    Вызывается перед каждым up/reset для плавной миграции при смене имени проекта.
+    Если старый volume используется контейнерами — сначала удаляет их (docker rm -f).
+    """
+    for old_name, new_name in _OLD_VOLUMES.items():
+        # Проверяем существование старого volume
+        inspect = subprocess.run(
+            ["docker", "volume", "inspect", old_name],
+            capture_output=True, text=True, timeout=10,
+        )
+        if inspect.returncode != 0:
+            continue  # старого volume нет — пропускаем
+
+        # Новый volume уже существует? Если нет — создаём
+        new_inspect = subprocess.run(
+            ["docker", "volume", "inspect", new_name],
+            capture_output=True, text=True, timeout=10,
+        )
+        if new_inspect.returncode != 0:
+            subprocess.run(
+                ["docker", "volume", "create", new_name],
+                capture_output=True, timeout=10,
+            )
+            log_info(f"  📦 Создан новый volume: {new_name}")
+
+        # Копируем данные из старого volume в новый
+        log_info(f"  🔄 Миграция {old_name} → {new_name}...")
+        copy = subprocess.run(
+            ["docker", "run", "--rm",
+             "-v", f"{old_name}:/from",
+             "-v", f"{new_name}:/to",
+             "alpine", "cp", "-a", "/from/.", "/to/"],
+            capture_output=True, text=True, timeout=120,
+        )
+        if copy.returncode != 0:
+            log_warn(f"    ⚠️  Не удалось скопировать данные: {copy.stderr.strip()}")
+            # Продолжаем — старый volume не удаляем, раз копия не удалась
+            continue
+
+        # Принудительно удаляем контейнеры, использующие старый volume
+        containers = subprocess.run(
+            ["docker", "ps", "-a", "--filter", f"volume={old_name}",
+             "--format", "{{.Names}}"],
+            capture_output=True, text=True, timeout=10,
+        )
+        for cname in containers.stdout.strip().split("\n"):
+            cname = cname.strip()
+            if not cname:
+                continue
+            log_info(f"    ⏹️  Удаление контейнера {cname} (использует {old_name})...")
+            subprocess.run(
+                ["docker", "rm", "-f", cname],
+                capture_output=True, timeout=10,
+            )
+
+        # Удаляем старый volume
+        rm_result = subprocess.run(
+            ["docker", "volume", "rm", old_name],
+            capture_output=True, text=True, timeout=10,
+        )
+        if rm_result.returncode != 0:
+            log_warn(f"    ⚠️  Не удалось удалить {old_name}: {rm_result.stderr.strip()}")
+        else:
+            log_ok(f"  ✅ {old_name} → {new_name} (старый удалён)")
+
+
 def _docker_action(
     action: str,
     services: List[str],
@@ -89,6 +166,7 @@ def _docker_action(
     cmd = ["docker", "compose", "-f", str(compose_file)]
 
     if action == "up":
+        _migrate_volumes()
         cmd.append("up")
         if detach:
             cmd.append("-d")

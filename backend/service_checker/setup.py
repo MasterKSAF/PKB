@@ -73,6 +73,22 @@ def prepare_model() -> None:
     run([sys.executable, "docker/prepare_tei_model.py"])
 
 
+def migrate_volumes() -> None:
+    """Migrate old docker_* volumes to new pkb_* ones."""
+    print("\n[3.5/4] Migrating old volumes (docker_* → pkb_*)...")
+    migrate_script = ROOT / "docker" / "migrate_volumes.py"
+    if migrate_script.exists():
+        run([sys.executable, str(migrate_script)])
+    else:
+        try:
+            from service_checker.core.docker import _migrate_volumes
+            _migrate_volumes()
+        except ImportError:
+            print("  ⚠️  Cannot migrate volumes — script not found")
+        except Exception as e:
+            print(f"  ⚠️  Migration failed: {e}")
+
+
 def docker_up() -> None:
     """Start Docker Compose services."""
     print("\n[4/4] Starting Docker Compose...")
@@ -106,21 +122,27 @@ def main() -> None:
         prepare_model()
         if not image_exists():
             build_image()
+        migrate_volumes()
         docker_up()
     elif args[0] == "--build":
         build_image()
     elif args[0] == "--model":
         prepare_model()
     elif args[0] == "--up":
+        migrate_volumes()
         docker_up()
     elif args[0] == "--down":
         docker_down()
     elif args[0] == "--ps":
         docker_ps()
     elif args[0] == "--prepare":
-        # Полный цикл как в prepare.bat: build + down -v + up
+        # Полный цикл как в prepare.bat: build + down + чистка volumes + up
         build_image()
-        run([*DOCKER_COMPOSE, "down", "-v"])
+        run([*DOCKER_COMPOSE, "down"])
+        # Явно удаляем только известные volumes
+        for vol_name in ["pkb_pg_data", "pkb_minio_data", "pkb_app_logs"]:
+            subprocess.run(["docker", "volume", "rm", "-f", vol_name], capture_output=True, timeout=10)
+        migrate_volumes()
         docker_up()
     else:
         help()

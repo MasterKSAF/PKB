@@ -569,7 +569,30 @@ Checker не должен вмешиваться в работу сервисо�
   a) Реализовать `create_all()` в сервисах
   б) Либо вручную выполнять SQL-скрипт инициализации
 
-## 13. Все id — только int (архитектурное решение)
+## 13. Все id — только int (архитектурное решение) [L572-581]
+
+## 14. Миграция volumes при смене project name docker→pkb
+
+### Суть
+Имя проекта Docker Compose по умолчанию бралось из имени директории `docker/`, что давало volumes с префиксом `docker_`. Слишком общее имя — при наличии другого проекта с compose-файлом в папке `docker/` возможно пересечение.
+
+### Решение
+В `docker-compose.yml` добавлено `name: pkb`. Все volumes теперь именуются `pkb_pg_data`, `pkb_minio_data` и т.д.
+
+### Миграция существующих данных
+При каждом запуске (`up`, `reset`) проверяется наличие старых volumes (`docker_pg_data` и т.д.) и, если они есть, данные копируются в новый volume через временный alpine-контейнер, после чего старый volume удаляется.
+
+### Затронутые файлы
+- `service_checker/docker/docker-compose.yml` — `name: pkb`
+- `service_checker/docker/migrate_volumes.py` — отдельный скрипт миграции
+- `service_checker/core/docker.py` — `_migrate_volumes()` + вызов перед `up`
+- `service_checker/setup.py` — вызов `docker/migrate_volumes.py` перед всеми `docker_up()`
+- `service_checker/docker/recheck.bat` — вызов `migrate_volumes.py` перед `down`
+- `service_checker/docker/prepare.bat` — вызов `migrate_volumes.py` перед `down`
+- `service_checker/core/cli.py` — `reset`: явное `docker volume rm` для известных volumes
+
+### Важно
+Удаление volumes при recheck/prepare делается **явно по именам** (`docker volume rm -f pkb_pg_data pkb_minio_data pkb_app_logs`), а не через `docker compose down -v`, чтобы не задеть чужие volumes.
 
 Все идентификаторы в API сервисов (`task_id`, `document_id`, `version_id`, `session_id`,
 `message_id`, `draft_id`, `validation_id`, `user_id`, `role_id`, `id`) — только `int`.

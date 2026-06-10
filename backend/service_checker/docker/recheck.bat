@@ -50,14 +50,22 @@ REM ── 3. Пересоздание контейнеров с чистой Б
 cd /d "%~dp0..\.."
 set COMPOSE_FILE=service_checker\docker\docker-compose.yml
 
-echo [3/5] Stopping containers and removing volumes (clean DB)...
-docker compose -f %COMPOSE_FILE% down -v
+REM Сначала мигрируем старые volumes (docker_* -> pkb_*), если они есть
+echo [3/6] Migrating old volumes (docker_* -> pkb_*)...
+python service_checker\docker\migrate_volumes.py
+
+echo [4/6] Stopping containers...
+docker compose -f %COMPOSE_FILE% down
 if %ERRORLEVEL% neq 0 (
     echo.
-    echo WARNING: down -v failed, continuing...
+    echo WARNING: down failed, continuing...
 )
 
-echo [3/5] Starting containers with fresh database...
+echo [4/6] Removing known data volumes (DB, MinIO, logs)...
+docker volume rm -f pkb_pg_data pkb_minio_data pkb_app_logs 2>nul
+echo.
+
+echo [4/6] Starting containers with fresh database...
 docker compose -f %COMPOSE_FILE% up -d
 if %ERRORLEVEL% neq 0 (
     echo.
@@ -68,11 +76,11 @@ if %ERRORLEVEL% neq 0 (
 echo     Containers are starting with clean database.
 echo.
 
-echo [4/5] Waiting 5 seconds for database initialization and service startup...
+echo [5/6] Waiting 5 seconds for database initialization and service startup...
 ping -n 6 127.0.0.1 > nul
 echo.
 
-echo [5/5] Running full report (coverage + pipelines + db-check)...
+echo [6/6] Running full report (coverage + pipelines + db-check)...
 python -m service_checker docker --action full-report
 if %ERRORLEVEL% neq 0 (
     echo.

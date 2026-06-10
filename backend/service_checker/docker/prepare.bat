@@ -17,7 +17,7 @@ cd /d "%~dp0"
 echo === PKB Neuroassistant: Full setup from scratch ===
 echo.
 
-echo [1/6] Preparing TEI model (if not already cached)...
+echo [1/7] Preparing TEI model (if not already cached)...
 echo.
 python prepare_tei_model.py
 if %ERRORLEVEL% neq 0 (
@@ -28,7 +28,7 @@ if %ERRORLEVEL% neq 0 (
 )
 echo.
 
-echo [2/6] Building base image (Python + dependencies)...
+echo [2/7] Building base image (Python + dependencies)...
 echo.
 set DOCKER_SCOUT_SUPPRESS_ANALYSIS=1
 docker build -f Dockerfile.base -t ghcr.io/pkb/neuro-base:latest .
@@ -38,11 +38,20 @@ if errorlevel 1 (
 )
 echo.
 
-echo [3/6] Cleaning old volumes (PostgreSQL, MinIO, logs)...
-docker compose -f docker-compose.yml down -v
+REM Сначала мигрируем старые volumes (docker_* -> pkb_*), если они есть
+echo [3/7] Migrating old volumes (docker_* -> pkb_*)...
+python migrate_volumes.py
 echo.
 
-echo [4/6] Starting all containers (PostgreSQL, Redis, MinIO, TEI, App)...
+echo [4/7] Stopping containers...
+docker compose -f docker-compose.yml down
+echo.
+
+echo [4/7] Removing known data volumes (DB, MinIO, logs)...
+docker volume rm -f pkb_pg_data pkb_minio_data pkb_app_logs 2>nul
+echo.
+
+echo [5/7] Starting all containers (PostgreSQL, Redis, MinIO, TEI, App)...
 docker compose -f docker-compose.yml up -d
 if %ERRORLEVEL% neq 0 (
     echo.
@@ -52,11 +61,11 @@ if %ERRORLEVEL% neq 0 (
 )
 echo.
 
-echo [5/6] Waiting 10 seconds for services to initialize...
+echo [6/7] Waiting 10 seconds for services to initialize...
 ping -n 11 127.0.0.1 > nul
 echo.
 
-echo [6/6] Running full report (coverage + pipelines)...
+echo [7/7] Running full report (coverage + pipelines)...
 cd /d "%~dp0..\.."
 python -m service_checker docker --action full-report
 if %ERRORLEVEL% neq 0 (

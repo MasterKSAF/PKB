@@ -50,6 +50,17 @@
 - `api_coverage_test.py`: добавлена колонка CheckDb в отчёт
 - `cli.py`: db_check выполняется до coverage (чтобы CheckDb заполнялся)
 
+## 8. Миграция volumes при смене project name (docker → pkb)
+- В `docker-compose.yml` добавлен `name: pkb` — volumes называются `pkb_pg_data` и т.д.
+- Создан отдельный скрипт `docker/migrate_volumes.py` для переноса данных из `docker_*` → `pkb_*`
+- Написана `_migrate_volumes()` в `core/docker.py` (используется из Python-кода)
+- Вызов миграции добавлен в:
+  - `core/docker.py` — перед `up`
+  - `setup.py` — перед всеми `docker_up()`
+  - `docker/recheck.bat` — перед `down`
+  - `docker/prepare.bat` — перед `down`
+- Удаление volumes при recheck/prepare — **явно по именам** (`docker volume rm pkb_pg_data pkb_minio_data pkb_app_logs`), не через `-v`
+
 ## Остаётся
 - Registry и RAG Builder не имеют `create_all()` в startup — без этого их таблицы не создаются
 - `db-check` будет показывать ❌ для Registry и RAG таблиц, пока сервисы не реализуют `create_all()`

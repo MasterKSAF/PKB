@@ -378,10 +378,12 @@ async def cmd_docker(
     if action == "reset":
         log_info("Полный сброс: останавливаем + чистим volumes + запускаем заново...")
         _docker_action("down", target_services, build=False, detach=False)
-        # down уже включает -v? Нет, нужно добавить флаг.
-        # Делаем down -v через прямой вызов
-        down_cmd = ["docker", "compose", "-f", str(DOCKER_COMPOSE_FILE), "down", "-v"]
-        subprocess.run(down_cmd, cwd=str(DOCKER_DIR), timeout=60)
+        # Явно удаляем только известные volumes (не через -v, чтобы не задеть чужие)
+        for vol_name in ["pkb_pg_data", "pkb_minio_data", "pkb_app_logs"]:
+            subprocess.run(
+                ["docker", "volume", "rm", "-f", vol_name],
+                capture_output=True, timeout=10,
+            )
         log_ok("Volumes очищены. Запускаем...")
         _docker_action("up", target_services, build=False, detach=True)
         return
