@@ -111,4 +111,3 @@ def test_get_db_logs_on_failure(monkeypatch):
     assert logged_events[0][1] == "database_connection"
     assert "Simulated database error" in logged_events[0][2]
 
-
