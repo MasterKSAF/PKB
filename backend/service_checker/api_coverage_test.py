@@ -587,7 +587,6 @@ class ApiCoverageTester:
             if total_skipped > 0 else str(total_skipped)
         )
         # Total — CheckDb
-        from service_checker.core.config import PIPELINE_SERVICE_MAP
         COVERAGE_TO_STARTUP_KEY = {
             "auth": "auth_service",
             "query": "query_service",

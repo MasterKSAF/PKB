@@ -421,7 +421,23 @@ async def cmd_docker(
         check_result_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        # 1. Coverage
+        # 1. DB Health check (нужен для CheckDb в coverage и сводном отчёте)
+        db_result = None
+        try:
+            from service_checker.core.db_check import run_db_check
+
+            log_info("Проверка состояния БД...")
+            db_result = run_db_check()
+            if db_result.healthy:
+                log_ok("БД инициализирована корректно")
+            elif db_result.error:
+                log_warn(f"PostgreSQL недоступен: {db_result.error}")
+            else:
+                log_warn("БД инициализирована не полностью")
+        except Exception as e:
+            log_err(f"Ошибка проверки БД: {e}")
+
+        # 2. Coverage
         cov_results: Optional[Dict[str, Any]] = None
         tester = None
         try:
@@ -441,7 +457,7 @@ async def cmd_docker(
             log_info("Запуск API Coverage Test...")
             tester = ApiCoverageTester(base_host="127.0.0.1")
             cov_results = await tester.run_all()
-            cov_report = tester.generate_report()
+            cov_report = tester.generate_report(db_result=db_result)
             cov_path = check_result_dir / f"api_coverage_{timestamp}.md"
             cov_path.write_text(cov_report, encoding="utf-8")
             log_ok(f"API Coverage отчёт сохранён: {cov_path}")
@@ -451,7 +467,7 @@ async def cmd_docker(
             if tester:
                 await tester.close()
 
-        # 2. Pipeline
+        # 3. Pipeline
         pipe_results: Dict[str, Any] = {}
         runner = None
         try:
@@ -473,24 +489,8 @@ async def cmd_docker(
             if runner:
                 await runner.close()
 
-        # 3. DB Health check
-        db_result = None
-        try:
-            from service_checker.core.db_check import run_db_check
-
-            log_info("Проверка состояния БД...")
-            db_result = run_db_check()
-            if db_result.healthy:
-                log_ok("БД инициализирована корректно")
-            elif db_result.error:
-                log_warn(f"PostgreSQL недоступен: {db_result.error}")
-            else:
-                log_warn("БД инициализирована не полностью")
-        except Exception as e:
-            log_err(f"Ошибка проверки БД: {e}")
-
         # 4. Full report
-        if cov_results or pipe_results or db_result:
+        if cov_results or pipe_results:
             if cov_results is None:
                 cov_results = {}
             full_report = _generate_full_report(cov_results, pipe_results, timestamp, db_result=db_result)
