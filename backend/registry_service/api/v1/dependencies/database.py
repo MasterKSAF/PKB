@@ -1,6 +1,7 @@
 import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
+from services.logger import log_event
 
 username = os.getenv('DB_USERNAME')
 password = os.getenv('DB_PASSWORD')
@@ -18,5 +19,9 @@ def get_db() -> Session:
     db = SessionLocal()
     try:
         yield db
+    except Exception as e:
+        log_event('ERROR', 'database_connection', error=f"Database connection or operation failed: {str(e)}")
+        raise
     finally:
         db.close()
+
