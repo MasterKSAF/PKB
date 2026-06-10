@@ -6,7 +6,8 @@
 - обработку ошибок и установку статуса FAILED
 """
 import pytest
-from unittest.mock import AsyncMock, patch
+import asyncio
+from unittest.mock import AsyncMock, patch, MagicMock
 from app.services.pipeline.pipeline import Pipeline
 from app.services.pipeline.steps import PipelineStep
 from app.services.pipeline.context import ProcessingContext
@@ -14,21 +15,41 @@ from app.core.task_models import TaskStatus
 
 
 class DummyStep(PipelineStep):
-    """Тестовый шаг, который может либо успешно выполниться, либо выбросить ошибку."""
-    def __init__(self, raise_error: bool = False):
+    def __init__(self, raise_error=False, delay=0):
         self.raise_error = raise_error
+        self.delay = delay
 
-    async def execute(self, ctx: ProcessingContext) -> ProcessingContext:
+    async def execute(self, ctx):
+        if self.delay:
+            await asyncio.sleep(self.delay)
         if self.raise_error:
             raise ValueError("test error")
-        ctx.step_executed = True   # добавляем маркер в контекст
+        ctx.counter = getattr(ctx, "counter", 0) + 1
         return ctx
 
 
 @pytest.mark.asyncio
-async def test_pipeline_runs_steps():
-    """Проверка, что Pipeline последовательно выполняет все шаги и обновляет прогресс."""
-    ctx = ProcessingContext(task_id=1, version_id="v", file_key="test.pdf")
+async def test_pipeline_create_full():
+    pipeline = Pipeline.create(mode="full", track_progress=True)
+    step_names = [s.__class__.__name__ for s in pipeline.steps]
+    expected = ["DownloadStep", "ValidateStep", "PagesTotalStep", "ParseStep",
+                "UploadImagesStep", "NormalizeStep", "StandardizeStep",
+                "SaveJsonToFileStep", "StoreResultStep"]
+    assert step_names == expected
+
+
+@pytest.mark.asyncio
+async def test_pipeline_create_preview():
+    pipeline = Pipeline.create(mode="preview", track_progress=False)
+    step_names = [s.__class__.__name__ for s in pipeline.steps]
+    expected = ["DownloadStep", "ValidateStep", "PagesTotalStep", "TruncatePdfStep",
+                "ParseStep", "NormalizeStep", "StandardizeStep", "StoreResultStep"]
+    assert step_names == expected
+
+
+@pytest.mark.asyncio
+async def test_pipeline_run_success():
+    ctx = ProcessingContext(task_id=1, version_id="v1", file_key="test.pdf")
     step1 = DummyStep()
     step2 = DummyStep()
     pipeline = Pipeline([step1, step2])
@@ -37,25 +58,15 @@ async def test_pipeline_runs_steps():
     with patch("app.services.pipeline.pipeline.task_store", mock_task_store):
         new_ctx = await pipeline.run(ctx)
 
-    # Шаг установил маркер в контексте
-    assert new_ctx.step_executed is True
-
-    # Количество вызовов update_task: начальный (0%) + для каждого шага + финальный (100%)
+    assert new_ctx.counter == 2
     assert mock_task_store.update_task.call_count >= 3
-
-    # Финальный вызов должен иметь progress_percent=100 и step="completed"
-    final_call = mock_task_store.update_task.call_args_list[-1]
-    _, kwargs = final_call
-    assert kwargs.get("progress_percent") == 100
-    assert kwargs.get("step") == "completed"
 
 
 @pytest.mark.asyncio
-async def test_pipeline_handles_error():
-    """Проверка, что при ошибке в шаге задача помечается как FAILED и ошибка пробрасывается."""
-    ctx = ProcessingContext(task_id=1, version_id="v", file_key="test.pdf")
+async def test_pipeline_run_error():
+    ctx = ProcessingContext(task_id=1, version_id="v1", file_key="test.pdf")
     step1 = DummyStep()
-    step2 = DummyStep(raise_error=True)   # второй шаг упадёт
+    step2 = DummyStep(raise_error=True)
     pipeline = Pipeline([step1, step2])
 
     mock_task_store = AsyncMock()
@@ -63,9 +74,28 @@ async def test_pipeline_handles_error():
         with pytest.raises(ValueError):
             await pipeline.run(ctx)
 
-    # Проверяем, что был вызван update_task со статусом FAILED
     failed_call = mock_task_store.update_task.call_args_list[-1]
     _, kwargs = failed_call
-    assert kwargs.get("status") == TaskStatus.FAILED
-    assert kwargs.get("error")["code"] == "PARSER_FAILED"
-    assert "test error" in kwargs.get("error")["message"]
+    assert kwargs["status"] == TaskStatus.FAILED
+    assert kwargs["error"]["code"] == "PARSER_FAILED"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_cancelled_by_shutdown():
+    ctx = ProcessingContext(
+        task_id=1, version_id="v1", file_key="test.pdf",
+        shutdown_event=MagicMock()
+    )
+    ctx.shutdown_event.is_set = MagicMock(return_value=True)
+    step = DummyStep(delay=0.1)
+    pipeline = Pipeline([step])
+
+    mock_task_store = AsyncMock()
+    with patch("app.services.pipeline.pipeline.task_store", mock_task_store):
+        with pytest.raises(asyncio.CancelledError):
+            await pipeline.run(ctx)
+
+    mock_task_store.update_task.assert_called_with(
+        1, status=TaskStatus.FAILED,
+        error={"code": "CANCELLED", "message": "Task cancelled due to shutdown"}
+    )

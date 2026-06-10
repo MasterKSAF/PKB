@@ -1,8 +1,8 @@
 """
-Компонент TaskEventNotifier: управляет подписками и уведомлениями об изменении задач.
+Уведомления об изменениях задач (через asyncio.Condition).
 
-Использует asyncio.Condition для каждого task_id, что позволяет ожидать изменения
-конкретной задачи без активного ожидания (longpoll).
+Используется для long polling в эндпоинтах статуса.
+Каждая задача имеет отдельную Condition и счётчик версий.
 """
 import asyncio
 from typing import Dict
@@ -10,56 +10,76 @@ from typing import Dict
 
 class TaskEventNotifier:
     """
-    Реализует механизм notify/wait для изменений задач.
+    Менеджер уведомлений для задач.
 
-    Для каждого task_id хранится своё asyncio.Condition.
-    При вызове notify_task_changed пробуждаются все ожидающие корутины.
+    Хранит Condition для каждой задачи и версию для отслеживания изменений.
     """
 
     def __init__(self):
         self._conditions: Dict[int, asyncio.Condition] = {}
+        self._versions: Dict[int, int] = {}
         self._lock = asyncio.Lock()
 
     async def get_condition(self, task_id: int) -> asyncio.Condition:
         """
-        Возвращает Condition для заданного task_id (создаёт при необходимости).
+        Возвращает Condition для задачи, создаёт при необходимости.
+
+        Args:
+            task_id: Идентификатор задачи.
+
+        Returns:
+            asyncio.Condition для ожидания изменений.
         """
         async with self._lock:
             if task_id not in self._conditions:
                 self._conditions[task_id] = asyncio.Condition()
+                self._versions[task_id] = 0
             return self._conditions[task_id]
 
     async def notify_task_changed(self, task_id: int) -> None:
         """
-        Уведомляет всех ожидающих изменения задачи с данным ID.
+        Уведомляет всех ожидающих об изменении задачи.
+        Увеличивает внутреннюю версию.
+
+        Args:
+            task_id: Идентификатор задачи.
         """
         async with self._lock:
             cond = self._conditions.get(task_id)
+            if cond:
+                self._versions[task_id] = self._versions.get(task_id, 0) + 1
         if cond:
             async with cond:
                 cond.notify_all()
 
     async def wait_for_task_change(self, task_id: int, current_version: int, timeout: float) -> bool:
         """
-        Ожидает изменения задачи (сигнала notify).
+        Ожидает изменения версии задачи.
 
-        :param task_id: ID задачи
-        :param current_version: текущая версия (не используется в проверке,
-                                 оставлен для совместимости с интерфейсом)
-        :param timeout: максимальное время ожидания в секундах
-        :return: True, если получен сигнал; False при таймауте
+        Args:
+            task_id: Идентификатор задачи.
+            current_version: Текущая известная версия.
+            timeout: Максимальное время ожидания в секундах.
+
+        Returns:
+            True, если изменение произошло, False по таймауту.
         """
         cond = await self.get_condition(task_id)
         async with cond:
-            try:
-                await asyncio.wait_for(cond.wait(), timeout=timeout)
-                return True
-            except asyncio.TimeoutError:
-                return False
+            while self._versions.get(task_id, 0) == current_version:
+                try:
+                    await asyncio.wait_for(cond.wait(), timeout=timeout)
+                except asyncio.TimeoutError:
+                    return False
+            return True
 
     async def cleanup_task(self, task_id: int) -> None:
         """
-        Удаляет Condition для задачи (вызывается после удаления задачи из хранилища).
+        Удаляет все данные задачи при её завершении.
+
+        Args:
+            task_id: Идентификатор задачи.
         """
         async with self._lock:
             self._conditions.pop(task_id, None)
+            self._versions.pop(task_id, None)
