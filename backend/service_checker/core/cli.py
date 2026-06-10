@@ -145,7 +145,7 @@ def parse_args() -> argparse.Namespace:
     )
     p_docker.add_argument(
         "--action",
-        choices=["up", "down", "build", "restart", "reset", "logs", "ps", "health", "coverage", "full-report"],
+        choices=["up", "down", "build", "restart", "reset", "logs", "ps", "health", "coverage", "full-report", "db-check"],
         default="up",
         help="Действие с Docker Compose (по умолч. up — запустить все сервисы)",
     )
@@ -390,6 +390,23 @@ async def cmd_docker(
         _docker_health_check(target_services)
         return
 
+    if action == "db-check":
+        log_header("🗄️ Проверка состояния БД")
+        from service_checker.core.db_check import run_db_check, format_db_report
+
+        result = run_db_check()
+        report = format_db_report(result)
+        print()
+        print(report)
+        print()
+        if result.error:
+            log_warn(f"PostgreSQL недоступен: {result.error}")
+        elif result.healthy:
+            log_ok("БД инициализирована корректно")
+        else:
+            log_warn("БД инициализирована не полностью")
+        return
+
     if action == "coverage":
         log_header("📋 Coverage + Logs")
         cov_ts = await _docker_run_coverage()
@@ -456,11 +473,27 @@ async def cmd_docker(
             if runner:
                 await runner.close()
 
-        # 3. Full report
-        if cov_results or pipe_results:
+        # 3. DB Health check
+        db_result = None
+        try:
+            from service_checker.core.db_check import run_db_check
+
+            log_info("Проверка состояния БД...")
+            db_result = run_db_check()
+            if db_result.healthy:
+                log_ok("БД инициализирована корректно")
+            elif db_result.error:
+                log_warn(f"PostgreSQL недоступен: {db_result.error}")
+            else:
+                log_warn("БД инициализирована не полностью")
+        except Exception as e:
+            log_err(f"Ошибка проверки БД: {e}")
+
+        # 4. Full report
+        if cov_results or pipe_results or db_result:
             if cov_results is None:
                 cov_results = {}
-            full_report = _generate_full_report(cov_results, pipe_results, timestamp)
+            full_report = _generate_full_report(cov_results, pipe_results, timestamp, db_result=db_result)
             full_path = check_result_dir / f"full_report_{timestamp}.md"
             full_path.write_text(full_report, encoding="utf-8")
             log_ok(f"Сводный отчёт сохранён: {full_path}")

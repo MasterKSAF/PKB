@@ -10,6 +10,7 @@ x-env-common: &env-common
   DB_PORT: 5432
   DB_USERNAME: pkb
   DB_PASSWORD: pkb
+  DB_SUPERUSER: pkb
   DB_DATABASE: pkb_neuro
   DATABASE_URL: postgresql+asyncpg://pkb:pkb@postgres:5432/pkb_neuro
   REDIS_URL: redis://redis:6379/0

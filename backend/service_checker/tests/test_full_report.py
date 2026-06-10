@@ -216,12 +216,12 @@ class TestGenerateFullReport:
         reg_ok = [l for l in lines_ok if "Registry" in l][0]
         reg_fail = [l for l in lines_fail if "Registry" in l][0]
 
-        # Столбцы: Service(1) | Port(2) | Ping(3) | ✅ Passed(4) | Documents(5) | Query(6) | Status(7)
+        # Столбцы: Service(1) | Port(2) | Ping(3) | CheckDb(4) | ✅ Passed(5) | Documents(6) | Query(7) | Status(8)
         parts_ok = [p.strip() for p in reg_ok.split("|")]
         parts_fail = [p.strip() for p in reg_fail.split("|")]
 
-        assert parts_ok[5] == "✅", f"Expected ✅, got {parts_ok[5]}"
-        assert parts_fail[5] == "❌", f"Expected ❌, got {parts_fail[5]}"
+        assert parts_ok[6] == "✅", f"Expected ✅, got {parts_ok[6]}"
+        assert parts_fail[6] == "❌", f"Expected ❌, got {parts_fail[6]}"
 
     def test_full_report_query_column(self):
         """Проверяем колонку Query: ✅ если pipeline пройден, ❌ если нет."""
@@ -246,12 +246,12 @@ class TestGenerateFullReport:
         auth_ok = [l for l in lines_ok if "Auth" in l][0]
         auth_fail = [l for l in lines_fail if "Auth" in l][0]
 
-        # Столбцы: Service(1) | Port(2) | Ping(3) | ✅ Passed(4) | Documents(5) | Query(6) | Status(7)
+        # Столбцы: Service(1) | Port(2) | Ping(3) | CheckDb(4) | ✅ Passed(5) | Documents(6) | Query(7) | Status(8)
         parts_ok = [p.strip() for p in auth_ok.split("|")]
         parts_fail = [p.strip() for p in auth_fail.split("|")]
 
-        assert parts_ok[6] == "✅", f"Expected ✅, got {parts_ok[6]}"
-        assert parts_fail[6] == "❌", f"Expected ❌, got {parts_fail[6]}"
+        assert parts_ok[7] == "✅", f"Expected ✅, got {parts_ok[7]}"
+        assert parts_fail[7] == "❌", f"Expected ❌, got {parts_fail[7]}"
 
     def test_full_report_non_participating_service(self):
         """Сервис не участвующий в пайплайне получает '—'."""
@@ -269,9 +269,10 @@ class TestGenerateFullReport:
         lines = report.split("\n")
         gw_line = [l for l in lines if "Gateway" in l][0]
         parts = [p.strip() for p in gw_line.split("|")]
-        # Столбцы: Service(1) | Port(2) | Ping(3) | ✅ Passed(4) | Documents(5) | Query(6) | Status(7)
-        assert parts[5] == "—", f"Expected '—', got {parts[5]}"
+        # Столбцы: Service(1) | Port(2) | Ping(3) | CheckDb(4) | ✅ Passed(5) | Documents(6) | Query(7) | Status(8)
+        # Gateway не участвует в пайплайнах → Documents и Query = —
         assert parts[6] == "—", f"Expected '—', got {parts[6]}"
+        assert parts[7] == "—", f"Expected '—', got {parts[7]}"
 
 
 # ── Тесты: автосохранение pipeline_test.py ────────────────────────

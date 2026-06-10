@@ -1,33 +1,45 @@
-# ✅ Выполнено: проверка инициализации БД сервисами
+# ✅ Выполнено: проверка создания БД встроена в service_checker
 
 ## Что сделано
 
-### 1. Исправлена инициализация БД в Docker (service_checker)
-- `entrypoint.sh` → шаг 5/6: `setup_db.py --docker`
-- `setup_db.py` → читает env, ищет SQL-файл по маске, --docker режим
-- `docker/.env` → создан с DEFAULT_ADMIN_* и всеми переменными
-- `Dockerfile.base`/`.full` → добавлен postgresql-client
+### 1. Создан `core/db_check.py`
+- Модуль проверки состояния PostgreSQL в Docker
+- `run_db_check()` — выполняет 12 проверок: БД, расширения, схемы, Registry, RAG
+- `format_db_report()` — формирует Markdown-отчёт с таблицей
+- `DbCheckResult` — data class со свойствами `healthy`, `summary_icon`
 
-### 2. Проверка: какой сервис создаёт свои таблицы
+### 2. Добавлен `docker --action db-check`
+- Отдельная команда: `python service_checker.py docker --action db-check`
+- Выводит таблицу с детальным состоянием БД
 
-| Сервис | Статус | Детали |
-|--------|:------:|--------|
-| Auth Service | ✅ | `on_event startup` → `init_db()` → create_all |
-| Query Service | ✅ | `lifespan` → `init_db()` → create_all |
-| Orchestrator | ✅ | `lifespan` → create_all |
-| Integration | ✅ | create_all при импорте модуля |
-| **Registry** | **❌** | **Нет create_all() в main.py** |
-| **RAG Builder** | **❌** | **Нет create_all() в create_app()** |
-| RAG Search | ✅ | Consumer, не должен создавать |
+### 3. Колонка `CheckDb` в full-report
+- В сводную таблицу full-report добавлена колонка `CheckDb` после `Ping`
+- Показывает ✅/❌/⚠️ в зависимости от состояния БД
+- Детальный блок "🗄️ БД PostgreSQL" добавлен после Pipeline детализации
+- `recheck.bat` теперь явно упоминает db-check в шаге 5/5
 
-### 3. Документация
-- `docs/database/db_init_requirements.md` — результаты проверки + таблица ответственных
-- `specificity.md` (раздел 11) — зафиксировано
-- `tests/test_db_setup.py` — 31 тест на SQL-генерацию
+### 4. Удалён `tests/test_docker_db_check.py`
+- Перенесено из юнит-тестов в основной чекер
+- Больше не в pytest, а в `service_checker docker --action db-check`
+- `readme.md` очищен от упоминаний удалённого файла
 
-## Что остаётся (не checker)
+### 5. Проверка целостности
+- 121 unit-тест пройдено (2 pre-existing: Registry, RAG Builder)
+- Все тесты отчёта обновлены под новую колонку CheckDb
+- `service_checker.py docker --action db-check` работает и выводит отчёт
 
-| Сервис | Проблема |
-|--------|----------|
-| Registry | `registry_service/main.py` — нет create_all, ~18 таблиц схемы `registry` не создаются |
-| RAG Builder | `rag_builder_service/src/rag_builder/api/app.py` — нет create_all, таблица `rag.document_chunks` не создаётся |
+## Использование
+```bash
+# Только проверка БД
+python service_checker.py docker --action db-check
+
+# Полный отчёт (включает проверку БД)
+python service_checker.py docker --action full-report
+
+# recheck.bat (включает full-report с БД)
+docker\recheck.bat
+```
+
+## Остаётся
+- Registry и RAG Builder не имеют `create_all()` в startup (известная проблема)
+- При полном запуске Docker `db-check` покажет ✅

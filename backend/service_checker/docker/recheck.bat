@@ -71,7 +71,7 @@ echo [4/5] Waiting 10 seconds for services to initialize...
 ping -n 11 127.0.0.1 > nul
 echo.
 
-echo [5/5] Running full report (coverage + pipelines)...
+echo [5/5] Running full report (coverage + pipelines + db-check)...
 python -m service_checker docker --action full-report
 if %ERRORLEVEL% neq 0 (
     echo.
@@ -81,6 +81,7 @@ if %ERRORLEVEL% neq 0 (
 echo.
 echo === Done ===
 echo Reports: check_result/
+echo For DB only check: python -m service_checker docker --action db-check
 echo For full reset (wipe volumes): docker\prepare.bat
 echo.
 

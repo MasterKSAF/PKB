@@ -109,6 +109,10 @@ python -m pytest tests/test_override_logic.py -v
 python -m pytest tests/test_report_generation.py -v
 python -m pytest tests/test_pipeline_base.py -v
 python -m pytest tests/test_pipeline_steps.py -v
+python -m pytest tests/test_db_setup.py -v          # Статический анализ SQL (без Docker)
+
+# Integration-тест (требует Docker)
+python -m pytest tests/test_no_restarts.py -v         # Проверка restart-циклов
 
 # Pipeline Testing (требует Docker с реальными сервисами)
 python pipeline_test.py list                        # Список пайплайнов
@@ -118,6 +122,9 @@ python pipeline_test.py run-all -o report.md        # С сохранением 
 
 # Coverage test в Docker
 python api_coverage_test.py run-all
+
+# Database health check
+python service_checker.py docker --action db-check   # Проверка БД: таблицы Registry и RAG
 ```
 
 ## Docker Compose (5 контейнеров)
