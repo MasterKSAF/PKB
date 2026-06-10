@@ -19,6 +19,20 @@ service_checker/
 │   ├── docker.py             # Docker Compose управление
 │   ├── reports.py            # Генерация full-отчёта (coverage + pipeline)
 │   └── cli.py                # CLI-парсер и команды
+├── services/                # Описания API сервисов (эндпоинты + prepare-шаги)
+│   ├── __init__.py           # Реестр SERVICE_REGISTRY, MODE_PORTS
+│   ├── base.py               # ServiceDef, EndpointDef, константы
+│   ├── auth.py               # Auth Service (16 endpoints + 2 prepare)
+│   ├── registry.py           # Registry Service (32 endpoints + 3 prepare)
+│   ├── orchestrator.py       # Orchestrator Service (23 endpoints + 1 prepare)
+│   ├── query.py              # Query Service (18 endpoints + 2 prepare)
+│   ├── parser.py             # Parser Service (5 endpoints + 1 prepare)
+│   ├── ocr.py                # OCR Service (5 endpoints + 1 prepare)
+│   ├── converter_validator.py# Converter-Validator (4 endpoints)
+│   ├── rag_builder.py        # RAG Builder (4 endpoints + 1 prepare)
+│   ├── rag_search.py         # RAG Search (2 endpoints)
+│   ├── tei.py                # TEI Embeddings (2 endpoints)
+│   └── gateway.py            # Gateway (агрегирует auth+orchestrator+query+registry)
 ├── setup_db.py              # Инициализация БД
 ├── pipeline_test.py         # Pipeline Testing (сквозные сценарии)
 ├── pipelines/               # Модули пайплайнов

@@ -31,7 +31,7 @@ async def test_all_404_with_json_still_overrides_ping(tester, make_endpoint):
 
     with patch.object(tester, 'ping_service', new=AsyncMock(return_value=True)):
         with patch.object(tester.client, 'post', new=AsyncMock(return_value=mock_404)):
-            tester.endpoints = {"test": eps}
+            tester._test_endpoints = {"test": eps}
             tester.context = {}
             tester.base_host = "localhost"
 
@@ -69,7 +69,7 @@ async def test_all_404_overrides_ping(tester, make_endpoint):
 
     with patch.object(tester, 'ping_service', new=AsyncMock(return_value=True)):
         with patch.object(tester.client, 'post', new=AsyncMock(return_value=mock_404)):
-            tester.endpoints = {"test": eps}
+            tester._test_endpoints = {"test": eps}
             tester.context = {}
             tester.base_host = "localhost"
 
@@ -98,7 +98,7 @@ async def test_all_404_rolls_back_all_results_including_health(tester, make_endp
     with patch.object(tester, 'ping_service', new=AsyncMock(return_value=True)):
         with patch.object(tester.client, 'get', new=AsyncMock(return_value=mock_404)):
             with patch.object(tester.client, 'post', new=AsyncMock(return_value=mock_404)):
-                tester.endpoints = {"test": eps}
+                tester._test_endpoints = {"test": eps}
                 tester.context = {}
                 tester.base_host = "localhost"
 
@@ -141,7 +141,7 @@ async def test_mixed_responses_keeps_ping(tester, make_endpoint):
 
     with patch.object(tester, 'ping_service', new=AsyncMock(return_value=True)):
         with patch.object(tester.client, 'post', new=mock_post):
-            tester.endpoints = {"test": eps}
+            tester._test_endpoints = {"test": eps}
             tester.context = {}
             tester.base_host = "localhost"
 

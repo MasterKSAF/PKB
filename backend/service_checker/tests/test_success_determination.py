@@ -25,7 +25,7 @@ async def test_health_404_empty_body_failed(tester, make_endpoint):
 
     with patch.object(tester, 'ping_service', new=AsyncMock(return_value=True)):
         with patch.object(tester.client, 'get', new=AsyncMock(return_value=mock_response)):
-            tester.endpoints = {"test": [ep]}
+            tester._test_endpoints = {"test": [ep]}
             tester.context = {}
             tester.base_host = "localhost"
 
@@ -47,7 +47,7 @@ async def test_non_health_404_empty_body_failed(tester, make_endpoint):
 
     with patch.object(tester, 'ping_service', new=AsyncMock(return_value=True)):
         with patch.object(tester.client, 'post', new=AsyncMock(return_value=mock_response)):
-            tester.endpoints = {"test": [ep]}
+            tester._test_endpoints = {"test": [ep]}
             tester.context = {}
             tester.base_host = "localhost"
 
@@ -68,7 +68,7 @@ async def test_200_is_success(tester, make_endpoint):
 
     with patch.object(tester, 'ping_service', new=AsyncMock(return_value=True)):
         with patch.object(tester.client, 'post', new=AsyncMock(return_value=mock_response)):
-            tester.endpoints = {"test": [ep]}
+            tester._test_endpoints = {"test": [ep]}
             tester.context = {}
             tester.base_host = "localhost"
 
@@ -90,7 +90,7 @@ async def test_500_is_failure(tester, make_endpoint):
 
     with patch.object(tester, 'ping_service', new=AsyncMock(return_value=True)):
         with patch.object(tester.client, 'post', new=AsyncMock(return_value=mock_response)):
-            tester.endpoints = {"test": [ep]}
+            tester._test_endpoints = {"test": [ep]}
             tester.context = {}
             tester.base_host = "localhost"
 
@@ -112,7 +112,7 @@ async def test_500_with_json_is_success(tester, make_endpoint):
 
     with patch.object(tester, 'ping_service', new=AsyncMock(return_value=True)):
         with patch.object(tester.client, 'post', new=AsyncMock(return_value=mock_response)):
-            tester.endpoints = {"test": [ep]}
+            tester._test_endpoints = {"test": [ep]}
             tester.context = {}
             tester.base_host = "localhost"
 
@@ -137,7 +137,7 @@ async def test_404_with_json_is_success(tester, make_endpoint):
 
     with patch.object(tester, 'ping_service', new=AsyncMock(return_value=True)):
         with patch.object(tester.client, 'get', new=AsyncMock(return_value=mock_response)):
-            tester.endpoints = {"test": [ep]}
+            tester._test_endpoints = {"test": [ep]}
             tester.context = {}
             tester.base_host = "localhost"
 

@@ -173,3 +173,47 @@ Caused by: No such file or directory (os error 2)
 
 ### Статус
 🟢 **Реализовано (service_checker, 2026-06-10)**
+
+---
+
+## 6. Вынос описаний API в отдельный пакет `services/`
+
+**Дата:** 2026-06-10
+
+### Мотивация
+- `build_endpoints()` в `api_coverage_test.py` (400+ строк) — монолитный список эндпоинтов всех сервисов
+- При добавлении prepare-шагов данных становится больше, нужно разделение по файлам
+- Каждый сервис теперь описывает не только эндпоинты, но и prepare-шаги для создания данных
+
+### Что сделано
+1. Создан пакет `services/` с отдельным файлом на каждый сервис (11 файлов)
+2. `ServiceDef` — датакласс, объединяющий эндпоинты, prepare-шаги, базовые данные
+3. `EndpointDef.is_preparation` — флаг для prepare-эндпоинтов (создают данные)
+4. `SERVICE_REGISTRY` — реестр сервисов: service_key → get_service_def()
+5. `MODE_PORTS` и `SERVICE_DEPENDENCIES` — вынесены из `api_coverage_test.py` в `services/__init__.py`
+
+### Prepare-шаги
+- **auth**: POST /auth/token → access_token + refresh_token, GET /auth/me
+- **registry**: POST /classifiers → classifier_code, POST /documents → doc_id, POST /terminology → term_id
+- **query**: POST /chat/sessions → session_id, POST /chat/sessions/{id}/messages → message_id
+- **orchestrator**: POST /documents → task_id
+- **parser**: POST /parser/process → task_id
+- **ocr**: POST /ocr/process → task_id
+- **rag_builder**: POST /rag/build
+- **gateway**: наследует prepare от auth + orchestrator + query + registry
+
+### Изменения в `api_coverage_test.py`
+- `build_endpoints()` удалён (заменён на `SERVICE_REGISTRY`)
+- `EndpointDef`, `EndpointResult`, `ServiceResult` импортируются из `services.base`
+- `HEADERS_JSON`, `MODE_PORTS`, `SERVICE_DEPENDENCIES` — из `services/`
+- Добавлен `_execute_endpoint()` — выделенная логика выполнения одного эндпоинта
+- В `test_service()` сначала выполняются prepare-эндпоинты, затем основные
+- Добавлен `_test_endpoints` для совместимости с unit-тестами
+- Добавлен CLI-флаг `--skip-prepare`
+
+### Изменения в тестах
+- `tester.endpoints` → `tester._test_endpoints` во всех unit-тестах
+- Импорт `MODE_PORTS` из `services` вместо `api_coverage_test`
+
+### Статус
+🟢 **Реализовано (service_checker, 2026-06-10)**
