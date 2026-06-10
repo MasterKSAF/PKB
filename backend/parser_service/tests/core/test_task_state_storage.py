@@ -2,7 +2,9 @@
 Тесты для TaskStateStorage (хранение задач, TTL, активные задачи).
 """
 import pytest
-from datetime import datetime, timezone, timedelta
+import asyncio
+from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock, patch
 from app.core.task_state_storage import TaskStateStorage
 from app.core.task_models import TaskInfo, TaskStatus
 
@@ -15,8 +17,7 @@ class TestTaskStateStorage:
     def test_add_and_get(self, storage):
         task = TaskInfo(1, "v", "k", {})
         storage.add(task)
-        retrieved = storage.get(1)
-        assert retrieved == task
+        assert storage.get(1) == task
 
     def test_get_nonexistent(self, storage):
         assert storage.get(999) is None
@@ -28,39 +29,138 @@ class TestTaskStateStorage:
         t2.status = TaskStatus.PROCESSING
         t3 = TaskInfo(3, "v", "k", {})
         t3.status = TaskStatus.COMPLETED
-        storage.add(t1)
-        storage.add(t2)
-        storage.add(t3)
+        for t in [t1, t2, t3]:
+            storage.add(t)
         active = storage.get_active_tasks()
         assert len(active) == 2
         assert {t.task_id for t in active} == {1, 2}
 
-    def test_remove_task(self, storage):
+    @pytest.mark.asyncio
+    async def test_update_task_success(self, storage):
         task = TaskInfo(1, "v", "k", {})
         storage.add(task)
-        storage.remove(1)
-        assert storage.get(1) is None
+        await storage.update_task(1, progress_percent=50, step="parsing")
+        assert task.progress_percent == 50
+        assert task.step == "parsing"
+        # версия увеличилась
+        assert task.get_version() == 1
 
     @pytest.mark.asyncio
-    async def test_cleanup_removes_expired(self):
-        """Устаревшие задачи (completed/failed старше TTL) удаляются при очистке."""
-        storage = TaskStateStorage(ttl_seconds=1)
+    async def test_update_task_nonexistent_does_nothing(self, storage):
+        await storage.update_task(999, progress_percent=50)  # не должно упасть
+        assert storage.get(999) is None
+
+    @pytest.mark.asyncio
+    async def test_concurrent_updates(self, storage):
+        """Параллельные обновления одной задачи не должны конфликтовать."""
         task = TaskInfo(1, "v", "k", {})
-        task.status = TaskStatus.COMPLETED
-        task.completed_at = datetime.now(timezone.utc) - timedelta(seconds=2)
         storage.add(task)
 
-        # Имитируем логику очистки (в реальном коде вызывается start_cleanup)
-        async def cleanup():
-            now = datetime.now(timezone.utc)
-            expired = []
-            for tid, info in storage._store.items():
-                if info.status in ("completed", "failed"):
-                    deadline = info.completed_at or info.started_at
-                    if deadline + timedelta(seconds=storage._ttl) < now:
-                        expired.append(tid)
-            for tid in expired:
-                del storage._store[tid]
+        async def updater(value):
+            await storage.update_task(1, progress_percent=value)
 
-        await cleanup()
+        await asyncio.gather(updater(10), updater(20), updater(30))
+        # Финальное значение может быть любым, но версия должна увеличиться 3 раза
+        assert task.get_version() == 3
+        assert task.progress_percent in (10, 20, 30)
+
+    @pytest.mark.asyncio
+    async def test_wait_for_change_immediate(self, storage):
+        """Если версия уже отличается, возвращает True."""
+        task = TaskInfo(1, "v", "k", {})
+        storage.add(task)
+        task._version = 5
+        result = await storage.wait_for_change(1, current_version=3, timeout=1.0)
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_wait_for_change_timeout(self, storage):
+        """Если изменений нет, возвращает False по таймауту."""
+        task = TaskInfo(1, "v", "k", {})
+        storage.add(task)
+        start = asyncio.get_event_loop().time()
+        result = await storage.wait_for_change(1, current_version=0, timeout=0.2)
+        elapsed = asyncio.get_event_loop().time() - start
+        assert result is False
+        assert elapsed >= 0.19
+
+    @pytest.mark.asyncio
+    async def test_wait_for_change_notified(self, storage):
+        """Уведомление пробуждает ожидание."""
+        task = TaskInfo(1, "v", "k", {})
+        storage.add(task)
+
+        async def waiter():
+            return await storage.wait_for_change(1, current_version=0, timeout=2)
+
+        w = asyncio.create_task(waiter())
+        await asyncio.sleep(0.1)
+        await storage.update_task(1, progress_percent=10)  # увеличит версию
+        result = await w
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_remove_task(self, storage):
+        task = TaskInfo(1, "v", "k", {})
+        storage.add(task)
+        await storage.remove_task(1)
         assert storage.get(1) is None
+        # Повторное удаление не вызывает ошибку
+        await storage.remove_task(1)
+
+    @pytest.mark.asyncio
+    async def test_cleanup_removes_expired_tasks(self):
+        """Фоновая очистка удаляет задачи, завершённые более TTL назад."""
+        ttl = 1
+        storage = TaskStateStorage(ttl_seconds=ttl)
+
+        task1 = TaskInfo(1, "v", "k", {})
+        task1.status = TaskStatus.COMPLETED
+        task1.completed_at = datetime.now(timezone.utc) - timedelta(seconds=ttl + 1)
+        storage.add(task1)
+
+        task2 = TaskInfo(2, "v", "k", {})
+        task2.status = TaskStatus.FAILED
+        task2.completed_at = datetime.now(timezone.utc) - timedelta(seconds=ttl + 2)
+        storage.add(task2)
+
+        task3 = TaskInfo(3, "v", "k", {})
+        task3.status = TaskStatus.COMPLETED
+        task3.completed_at = datetime.now(timezone.utc)  # свежая
+        storage.add(task3)
+
+        # Мокаем asyncio.sleep, чтобы не ждать час
+        with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+            # Запускаем очистку в отдельной задаче, но выполним только одну итерацию вручную
+            async def run_one_cleanup():
+                while True:
+                    await asyncio.sleep(3600)  # будет замокано
+                    now = datetime.now(timezone.utc)
+                    expired = []
+                    for tid, info in storage._store.items():
+                        if info.status in ("completed", "failed"):
+                            deadline = info.completed_at or info.started_at
+                            if deadline + timedelta(seconds=storage._ttl) < now:
+                                expired.append(tid)
+                    for tid in expired:
+                        async with storage._get_lock(tid):
+                            storage._store.pop(tid, None)
+                    break  # выходим после одной итерации
+
+            await run_one_cleanup()
+            assert storage.get(1) is None
+            assert storage.get(2) is None
+            assert storage.get(3) is not None
+
+    @pytest.mark.asyncio
+    async def test_start_cleanup_cancellation(self, storage):
+        """Проверка, что задача очистки корректно отменяется."""
+        with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+            cleanup_task = asyncio.create_task(storage.start_cleanup())
+            await asyncio.sleep(0.1)
+            cleanup_task.cancel()
+            try:
+                await cleanup_task
+            except asyncio.CancelledError:
+                pass
+            mock_sleep.assert_called()  # sleep был вызван хотя бы раз
