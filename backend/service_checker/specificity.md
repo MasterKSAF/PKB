@@ -8,38 +8,36 @@
 
 ---
 
-## 1. Аномалия: OCR Service не существует — в supervisord запущен Parser Service вместо OCR
+## 1. Аномалия: OCR Service не существует — отдельного кода OCR нет
 
-**Обнаружено:** 2026-06-09
+**Обнаружено:** 2026-06-09  
+**Уточнение:** 2026-06-10
 
 ### Симптом
-В отчётах `check_result/` OCR Service (порт 8088) показывал статус ✅, хотя все OCR-эндпоинты возвращают 404.
+В отчётах `check_result/` OCR Service (порт 8088) показывает ❌ 0/6 — все OCR-эндпоинты возвращают 404.
 
 ### Диагностика
-В `service_checker/docker/supervisord.conf`:
+Отдельного сервиса `backend/ocr_service/` не существует. В `supervisord.conf`:
 ```ini
 [program:ocr]
 command=uvicorn app.main:app --host 0.0.0.0 --port 8088 --no-access-log
 directory=/app/backend/parser_service
 ```
-Отдельного сервиса `backend/ocr_service/` не существует. На порт 8088 запущен Parser Service.
+На порт 8088 запущен `parser_service/app/main.py`. 
+
+- `/health` → 200 — это `@app.get("/health")` из parser_service/main.py
+- `/api/v1/health` → 404 — parser_service не знает такого пути
+- `POST /api/v1/ocr/process` → 404 — OCR-маршрутов не существует
+- `POST /api/v1/parser/process` → 422 — parser endpoint жив (метод POST, тело невалидно)
+
+OCR — это отдельная концепция, которая **не реализована** в коде. Определение API в `services/ocr.py` основано на `docs/api/ocr_service_api.md`, но код не написан.
 
 ### Что исправлено (checker, 2026-06-09)
-1. **`api_coverage_test.py:test_service`** — 4xx/5xx с валидным JSON → success, без JSON → fail
-2. **`api_coverage_test.py`** — защита all_404: если ≥2 не-health эндпоинтов вернули 404, ping_ok=False, success откатывается у **всех** результатов включая health
-3. **`api_coverage_test.py:generate_report`** — статус-колонка учитывает ping_ok (❌ если ping упал)
-4. **`api_coverage_test.py`** — обновлена легенда отчёта
-5. **Иконки ping** — `✓/✗` заменены на `✅/❌` для единого стиля
-
-### Тесты
-Тесты разбиты на 3 файла в `tests/` (13 тестов):
-- `test_success_determination.py` — 6 тестов (200, 404 с/без JSON, 500 с/без JSON)
-- `test_override_logic.py` — 4 теста (all_404 с JSON, all_404 без JSON, all_404 с health, mixed)
-- `test_report_generation.py` — 3 теста (статус-колонка, иконки в отчёте, иконки в консоли)
+1. **all_404 оверрайд** — если ≥2 не-health эндпоинтов вернули 404, ping_ok=False, все success откатываются
+2. **Health-иконки** — учитывают ping_ok
 
 ### Статус
-🟡 **Частично исправлено (checker)**
-🔴 **Открыто** — OCR Service физически не существует. Требуется создать `backend/ocr_service/` и исправить `supervisord.conf`.
+🔴 **OCR Service не реализован.** Checker честно показывает ❌ 0/6.
 
 ---
 
@@ -329,17 +327,82 @@ else:
 - Исключение: prepare-шаги с `expected_status={201, 409}` — 409 считается success (данные уже существуют)
 - Schema validation не применяется к prepare-шагам (чтобы не блокировать извлечение контекста)
 
-### Требование
-**Основная проблема — инфраструктура Docker.** Сервисы backend настроены на подключение к БД по `127.0.0.1:5432`. Внутри Docker-контейнера `127.0.0.1` — это сам контейнер, а не хост-машина. Нужно:
-- Либо добавить `network_mode: host` (Linux)
-- Либо использовать `host.docker.internal` (Windows/Mac)
-- Либо запускать PostgreSQL в отдельном контейнере и указывать имя сервиса (`postgres`)
+## 8. Аномалия: Pipeline тесты падают на повторных запусках — конфликт данных и неверные параметры
 
-### Тесты
-- `python pipeline_test.py run registry_lifecycle` — проверка trailing slashes и auth
-- `python pipeline_test.py run document_processing` — проверка converter (string task_id) и auth
-- `python api_coverage_test.py` — проверка, что 500+ не считается success
+**Обнаружено:** 2026-06-10
+
+### Симптом
+- `registry_lifecycle`: 3/13 — 409 конфликты, 422 на CRUD классификаторов, 307 редиректы
+- `chat_inference`: 3/6 — check на `text` в ответе где нет `text`, Profile 404
+- `document_processing`: 7/9 — 409 на create document в Registry
+
+### Диагностика
+
+#### 1. Уникальность тестовых данных
+При повторном запуске pipeline в рамках одной Docker-сессии данные уже существуют в БД:
+- Классификатор `code=99.999` → `409 DUPLICATE_CODE`
+- Документ `doc_code=PIPELINE-TEST-001` → `409 DUPLICATE_DOCUMENT`
+- Термин `raw_term=Pipeline тест` → `409 DUPLICATE_TERM`
+
+**Решение:** timestamp-суффикс ко всем тестовым данным (`f"99.{ts[-6:]}"`, `f"Pipeline тест {ts}"`).
+
+#### 2. Обязательный query-параметр `classifier_system`
+Все CRUD-эндпоинты классификаторов (GET/PUT/PATCH/DELETE `/registry/classifiers/{code}`) требуют query-параметр `classifier_system=MKS`. Без него — 422.
+
+**Зафиксировано в docs:** «**Query-параметр**: `classifier_system` (обязательный, для составного PK)»
+
+#### 3. Trailing slashes для /import и /normalize
+В отличие от остальных registry-эндпоинтов, `/import` и `/normalize` редиректят **С trailing slash НА без** (а не наоборот):
+- `/classifiers/import/` → 307 → `/classifiers/import`
+- `/terminology/normalize/` → 307 → `/terminology/normalize`
+- `/terminology/import/` → 307 → `/terminology/import`
+
+**Причина:** эндпоинты определены в сервисе без trailing slash.
+
+#### 4. Import endpoints — file upload (multipart)
+`/classifiers/import` и `/terminology/import` принимают `multipart/form-data` (файл `.xlsx/.csv` + query params). Не тестируются JSON body — удалены из pipeline.
+
+#### 5. Auth /auth/me = 404
+`GET /api/v1/auth/me` возвращает 404 — auth работает в mock-режиме (`AUTH_SERVICE_MOCK=true`, `DEV_AUTH_MODE=true`). Не fixable checker'ом. Шаг удалён из chat_inference.
+
+#### 6. Send message response: поле `message_id`, не `text`
+`POST /chat/sessions/{id}/messages` возвращает 202 с `{"message_id": int, "session_id": int, "role": str, "status": "pending", "content": str, "timestamp": str}`.
+
+Pipeline проверял `check_json_fields({"text": str})`, но поля `text` в ответе нет.
+
+#### 7. Registry create document — плоский ответ
+`POST /registry/documents` возвращает плоский JSON без обёртки `data`:
+```json
+{"document_id": 1, "version_id": 420001, "sections": [...], "registry": {...}}
+```
+Но в `services/registry.py` response_schema ожидает `data.document_id`. Работает только потому, что prepare-шаги пропускают schema validation.
+
+### Что исправлено (checker, 2026-06-10)
+
+#### `pipelines/registry_lifecycle.py`
+- Уникальные timestamp-данные для classifier code и term text
+- `params={"classifier_system": "MKS"}` для GET/PUT/PATCH/DELETE классификатора
+- `/import` и `/normalize` без trailing slash (соответствует сервису)
+- `expected_status={201, 409}` для create term
+- Импорты удалены (file upload, не тестируется)
+- Стало: **10/11** (Profile 404 — не fixable)
+
+#### `pipelines/chat_inference.py`
+- Шаг Profile удалён (404 в mock-режиме)
+- `check_json_fields({"text": str})` → `check_json_field("message_id", (int, str))`
+- Уникальный title сессии с timestamp
+- Стало: **4/5** (RAG Search 500 — баг сервиса)
+
+#### `pipelines/document_processing.py`
+- `expected_status=201` → `expected_status={201, 409}`
+- Уникальный `doc_code` с timestamp
+- Нумерация шагов исправлена (1-9)
+- Стало: **8/9** (RAG Search 500 — баг сервиса)
+
+#### `services/registry.py`
+- `params={"classifier_system": "MKS"}` для GET/PUT/PATCH/DELETE классификатора
+- `/import` и `/normalize` без trailing slash
 
 ### Статус
-🟡 **Частично исправлено (checker)**
-🔴 **Открыто** — Docker-инфраструктура (подключение к БД) требует правки `docker-compose.yml` или `.env` сервисов.
+✅ **Исправлено (checker)**
+🔴 **Открыто:** RAG Search 500, Auth /me 404 — баги сервисов
