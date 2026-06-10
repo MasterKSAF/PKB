@@ -94,14 +94,16 @@ API_PREFIX = "/api/v1"
 
 # ── Test credentials (единый источник) ─────────────────────────────────
 
+# Используем admin credentials — т.к. auth-сервис создаёт admin при старте
+# из DEFAULT_ADMIN_EMAIL / DEFAULT_ADMIN_PASSWORD (см. docker/.env)
 TEST_CREDENTIALS: Dict[str, str] = {
-    "username": "petrova@example.com",
-    "password": "secret456",
+    "username": "admin@example.com",
+    "password": "Admin1234!",
 }
 
 TEST_ADMIN_CREDENTIALS: Dict[str, str] = {
     "username": "admin@example.com",
-    "password": "admin123",
+    "password": "Admin1234!",
 }
 
 HEADERS_JSON: Dict[str, str] = {

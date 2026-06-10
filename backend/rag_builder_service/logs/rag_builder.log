@@ -131,3 +131,479 @@
 2026-06-09 14:30:42.052 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.49
 2026-06-09 14:30:42.054 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
 2026-06-09 14:30:42.063 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=8.70
+2026-06-09 21:42:09.349 UTC+3 | INFO | rag_builder.api.app:create_app:12 | Application startup init
+2026-06-09 21:42:09.361 UTC+3 | INFO | rag_builder.api.app:create_app:16 | Application startup ready
+2026-06-09 21:43:05.619 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-09 21:43:05.631 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=11.92
+2026-06-09 21:44:17.348 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-09 21:44:17.350 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.51
+2026-06-09 21:47:15.570 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-09 21:47:15.572 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.44
+2026-06-09 21:52:06.423 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/health
+2026-06-09 21:52:06.424 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/health status=404 took_ms=1.17
+2026-06-09 21:52:12.134 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/health
+2026-06-09 21:52:12.135 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/health status=404 took_ms=0.70
+2026-06-09 21:52:12.213 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-09 21:52:12.214 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.57
+2026-06-09 21:56:15.721 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-09 21:56:15.722 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.60
+2026-06-09 21:56:15.842 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-09 21:56:15.843 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.23
+2026-06-09 21:56:25.026 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-09 21:56:25.028 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.12
+2026-06-09 21:57:06.137 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-09 21:57:06.138 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.07
+2026-06-09 21:57:51.254 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-09 21:57:51.255 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.57
+2026-06-09 21:57:51.730 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-09 21:57:51.733 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=3.15
+2026-06-09 21:57:59.576 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-09 21:57:59.578 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.46
+2026-06-09 21:58:13.041 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-09 21:58:13.042 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=1.12
+2026-06-09 21:58:13.230 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-09 21:58:13.232 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:110 | POST /rag/build document_id=00000000-0000-0000-0000-000000000001 sections=1
+2026-06-09 21:58:13.232 UTC+3 | INFO | rag_builder.services.indexing_service:build:39 | Indexing start document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 21:58:13.232 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:15 | Chunking start document_id=00000000-0000-0000-0000-000000000001 sections=1 strategy=semantic_512
+2026-06-09 21:58:13.232 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:24 | Chunking section start section_id=1 type=section path=1
+2026-06-09 21:58:13.232 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:42 | Chunking section done section_id=1 chunks=1
+2026-06-09 21:58:13.232 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:43 | Chunking done document_id=00000000-0000-0000-0000-000000000001 total_chunks=1
+2026-06-09 21:58:13.233 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:18 | Embeddings start count=1 dim=1536 provider=tei
+2026-06-09 21:58:13.233 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:28 | Embeddings done count=1 dim=1536
+2026-06-09 21:58:13.233 UTC+3 | DEBUG | rag_builder.repositories.chunk_repository:delete_by_document:35 | Repository.delete_by_document start document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 21:58:13.297 UTC+3 | ERROR | rag_builder.services.indexing_service:build:62 | Indexing failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 21:58:13.322 UTC+3 | ERROR | rag_builder.api.v1.rag_routes:build:114 | POST /rag/build failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 21:58:43.857 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-09 21:58:43.858 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=1.08
+2026-06-09 21:58:43.961 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-09 21:58:43.963 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:110 | POST /rag/build document_id=00000000-0000-0000-0000-000000000001 sections=1
+2026-06-09 21:58:43.963 UTC+3 | INFO | rag_builder.services.indexing_service:build:39 | Indexing start document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 21:58:43.963 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:15 | Chunking start document_id=00000000-0000-0000-0000-000000000001 sections=1 strategy=semantic_512
+2026-06-09 21:58:43.963 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:24 | Chunking section start section_id=1 type=section path=1
+2026-06-09 21:58:43.963 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:42 | Chunking section done section_id=1 chunks=1
+2026-06-09 21:58:43.963 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:43 | Chunking done document_id=00000000-0000-0000-0000-000000000001 total_chunks=1
+2026-06-09 21:58:43.964 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:18 | Embeddings start count=1 dim=1536 provider=tei
+2026-06-09 21:58:43.964 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:28 | Embeddings done count=1 dim=1536
+2026-06-09 21:58:43.964 UTC+3 | DEBUG | rag_builder.repositories.chunk_repository:delete_by_document:35 | Repository.delete_by_document start document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 21:58:43.967 UTC+3 | ERROR | rag_builder.services.indexing_service:build:62 | Indexing failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 21:58:43.968 UTC+3 | ERROR | rag_builder.api.v1.rag_routes:build:114 | POST /rag/build failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:09:53.136 UTC+3 | INFO | rag_builder.api.app:create_app:12 | Application startup init
+2026-06-09 22:09:53.143 UTC+3 | INFO | rag_builder.api.app:create_app:16 | Application startup ready
+2026-06-09 22:10:24.756 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-09 22:10:24.758 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=1.87
+2026-06-09 22:10:25.156 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-09 22:10:25.168 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:110 | POST /rag/build document_id=00000000-0000-0000-0000-000000000001 sections=1
+2026-06-09 22:10:25.169 UTC+3 | INFO | rag_builder.services.indexing_service:build:39 | Indexing start document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:10:25.169 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:15 | Chunking start document_id=00000000-0000-0000-0000-000000000001 sections=1 strategy=semantic_512
+2026-06-09 22:10:25.169 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:24 | Chunking section start section_id=1 type=section path=1
+2026-06-09 22:10:25.169 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:42 | Chunking section done section_id=1 chunks=1
+2026-06-09 22:10:25.182 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:43 | Chunking done document_id=00000000-0000-0000-0000-000000000001 total_chunks=1
+2026-06-09 22:10:25.182 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:18 | Embeddings start count=1 dim=1536 provider=tei
+2026-06-09 22:10:25.183 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:28 | Embeddings done count=1 dim=1536
+2026-06-09 22:10:25.183 UTC+3 | DEBUG | rag_builder.repositories.chunk_repository:delete_by_document:35 | Repository.delete_by_document start document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:10:25.273 UTC+3 | ERROR | rag_builder.services.indexing_service:build:62 | Indexing failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:10:25.373 UTC+3 | ERROR | rag_builder.api.v1.rag_routes:build:114 | POST /rag/build failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:11:04.245 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-09 22:11:04.246 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.74
+2026-06-09 22:11:04.344 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-09 22:11:04.345 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:110 | POST /rag/build document_id=00000000-0000-0000-0000-000000000001 sections=1
+2026-06-09 22:11:04.345 UTC+3 | INFO | rag_builder.services.indexing_service:build:39 | Indexing start document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:11:04.345 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:15 | Chunking start document_id=00000000-0000-0000-0000-000000000001 sections=1 strategy=semantic_512
+2026-06-09 22:11:04.345 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:24 | Chunking section start section_id=1 type=section path=1
+2026-06-09 22:11:04.345 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:42 | Chunking section done section_id=1 chunks=1
+2026-06-09 22:11:04.345 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:43 | Chunking done document_id=00000000-0000-0000-0000-000000000001 total_chunks=1
+2026-06-09 22:11:04.345 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:18 | Embeddings start count=1 dim=1536 provider=tei
+2026-06-09 22:11:04.346 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:28 | Embeddings done count=1 dim=1536
+2026-06-09 22:11:04.346 UTC+3 | DEBUG | rag_builder.repositories.chunk_repository:delete_by_document:35 | Repository.delete_by_document start document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:11:04.348 UTC+3 | ERROR | rag_builder.services.indexing_service:build:62 | Indexing failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:11:04.350 UTC+3 | ERROR | rag_builder.api.v1.rag_routes:build:114 | POST /rag/build failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:12:13.065 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-09 22:12:13.066 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.54
+2026-06-09 22:12:15.189 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-09 22:12:15.190 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:110 | POST /rag/build document_id=00000000-0000-0000-0000-000000000001 sections=1
+2026-06-09 22:12:15.190 UTC+3 | INFO | rag_builder.services.indexing_service:build:39 | Indexing start document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:12:15.190 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:15 | Chunking start document_id=00000000-0000-0000-0000-000000000001 sections=1 strategy=semantic_512
+2026-06-09 22:12:15.191 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:24 | Chunking section start section_id=1 type=section path=1
+2026-06-09 22:12:15.191 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:42 | Chunking section done section_id=1 chunks=1
+2026-06-09 22:12:15.191 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:43 | Chunking done document_id=00000000-0000-0000-0000-000000000001 total_chunks=1
+2026-06-09 22:12:15.191 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:18 | Embeddings start count=1 dim=1536 provider=tei
+2026-06-09 22:12:15.191 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:28 | Embeddings done count=1 dim=1536
+2026-06-09 22:12:15.192 UTC+3 | DEBUG | rag_builder.repositories.chunk_repository:delete_by_document:35 | Repository.delete_by_document start document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:12:15.195 UTC+3 | ERROR | rag_builder.services.indexing_service:build:62 | Indexing failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:12:15.197 UTC+3 | ERROR | rag_builder.api.v1.rag_routes:build:114 | POST /rag/build failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:15:11.222 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-09 22:15:11.223 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:110 | POST /rag/build document_id=00000000-0000-0000-0000-000000000001 sections=1
+2026-06-09 22:15:11.223 UTC+3 | INFO | rag_builder.services.indexing_service:build:39 | Indexing start document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:15:11.223 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:15 | Chunking start document_id=00000000-0000-0000-0000-000000000001 sections=1 strategy=semantic_512
+2026-06-09 22:15:11.223 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:24 | Chunking section start section_id=1 type=section path=1
+2026-06-09 22:15:11.224 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:42 | Chunking section done section_id=1 chunks=1
+2026-06-09 22:15:11.224 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:43 | Chunking done document_id=00000000-0000-0000-0000-000000000001 total_chunks=1
+2026-06-09 22:15:11.224 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:18 | Embeddings start count=1 dim=1536 provider=tei
+2026-06-09 22:15:11.224 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:28 | Embeddings done count=1 dim=1536
+2026-06-09 22:15:11.225 UTC+3 | DEBUG | rag_builder.repositories.chunk_repository:delete_by_document:35 | Repository.delete_by_document start document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:15:11.228 UTC+3 | ERROR | rag_builder.services.indexing_service:build:62 | Indexing failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:15:11.230 UTC+3 | ERROR | rag_builder.api.v1.rag_routes:build:114 | POST /rag/build failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:15:19.750 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-09 22:15:19.751 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:110 | POST /rag/build document_id=00000000-0000-0000-0000-000000000001 sections=0
+2026-06-09 22:15:19.751 UTC+3 | INFO | rag_builder.services.indexing_service:build:39 | Indexing start document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:15:19.751 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:15 | Chunking start document_id=00000000-0000-0000-0000-000000000001 sections=0 strategy=semantic_512
+2026-06-09 22:15:19.751 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:43 | Chunking done document_id=00000000-0000-0000-0000-000000000001 total_chunks=0
+2026-06-09 22:15:19.751 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:18 | Embeddings start count=0 dim=1536 provider=tei
+2026-06-09 22:15:19.751 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:28 | Embeddings done count=0 dim=1536
+2026-06-09 22:15:19.752 UTC+3 | DEBUG | rag_builder.repositories.chunk_repository:delete_by_document:35 | Repository.delete_by_document start document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:15:19.755 UTC+3 | ERROR | rag_builder.services.indexing_service:build:62 | Indexing failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:15:19.757 UTC+3 | ERROR | rag_builder.api.v1.rag_routes:build:114 | POST /rag/build failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:20:35.480 UTC+3 | INFO | rag_builder.api.app:create_app:12 | Application startup init
+2026-06-09 22:20:35.515 UTC+3 | INFO | rag_builder.api.app:create_app:16 | Application startup ready
+2026-06-09 22:20:38.406 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-09 22:20:38.407 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=1.28
+2026-06-09 22:20:38.411 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-09 22:20:38.412 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.98
+2026-06-09 22:20:38.421 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-09 22:20:38.456 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=35.24
+2026-06-09 22:22:03.797 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-09 22:22:03.798 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.96
+2026-06-09 22:22:03.802 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-09 22:22:03.803 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.55
+2026-06-09 22:22:03.806 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-09 22:22:03.807 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.84
+2026-06-09 22:23:32.715 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-09 22:23:32.716 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:110 | POST /rag/build document_id=00000000-0000-0000-0000-000000000001 sections=1
+2026-06-09 22:23:32.717 UTC+3 | INFO | rag_builder.services.indexing_service:build:39 | Indexing start document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:23:32.717 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:15 | Chunking start document_id=00000000-0000-0000-0000-000000000001 sections=1 strategy=semantic_512
+2026-06-09 22:23:32.717 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:24 | Chunking section start section_id=1 type=section path=1
+2026-06-09 22:23:32.717 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:42 | Chunking section done section_id=1 chunks=1
+2026-06-09 22:23:32.717 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:43 | Chunking done document_id=00000000-0000-0000-0000-000000000001 total_chunks=1
+2026-06-09 22:23:32.718 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:18 | Embeddings start count=1 dim=1536 provider=tei
+2026-06-09 22:23:32.718 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:28 | Embeddings done count=1 dim=1536
+2026-06-09 22:23:32.718 UTC+3 | DEBUG | rag_builder.repositories.chunk_repository:delete_by_document:35 | Repository.delete_by_document start document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:23:32.769 UTC+3 | ERROR | rag_builder.services.indexing_service:build:62 | Indexing failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:23:32.792 UTC+3 | ERROR | rag_builder.api.v1.rag_routes:build:114 | POST /rag/build failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:29:43.834 UTC+3 | INFO | rag_builder.api.app:create_app:12 | Application startup init
+2026-06-09 22:29:43.844 UTC+3 | INFO | rag_builder.api.app:create_app:16 | Application startup ready
+2026-06-09 22:29:47.380 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-09 22:29:47.381 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.61
+2026-06-09 22:29:47.384 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-09 22:29:47.385 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.78
+2026-06-09 22:29:47.388 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-09 22:29:47.398 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=10.80
+2026-06-09 22:38:18.528 UTC+3 | INFO | rag_builder.api.app:create_app:12 | Application startup init
+2026-06-09 22:38:18.556 UTC+3 | INFO | rag_builder.api.app:create_app:16 | Application startup ready
+2026-06-09 22:39:36.619 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-09 22:39:36.620 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.95
+2026-06-09 22:39:36.623 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-09 22:39:36.624 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.58
+2026-06-09 22:39:36.627 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-09 22:39:36.639 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=12.36
+2026-06-09 22:39:37.622 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-09 22:39:37.623 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.94
+2026-06-09 22:39:41.839 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-09 22:39:41.840 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:110 | POST /rag/build document_id=00000000-0000-0000-0000-000000000001 sections=1
+2026-06-09 22:39:41.840 UTC+3 | INFO | rag_builder.services.indexing_service:build:39 | Indexing start document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:39:41.840 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:15 | Chunking start document_id=00000000-0000-0000-0000-000000000001 sections=1 strategy=semantic_512
+2026-06-09 22:39:41.840 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:24 | Chunking section start section_id=1 type=section path=1
+2026-06-09 22:39:41.841 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:42 | Chunking section done section_id=1 chunks=1
+2026-06-09 22:39:41.841 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:43 | Chunking done document_id=00000000-0000-0000-0000-000000000001 total_chunks=1
+2026-06-09 22:39:41.841 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:18 | Embeddings start count=1 dim=1536 provider=tei
+2026-06-09 22:39:41.841 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:28 | Embeddings done count=1 dim=1536
+2026-06-09 22:39:41.842 UTC+3 | DEBUG | rag_builder.repositories.chunk_repository:delete_by_document:35 | Repository.delete_by_document start document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:39:41.895 UTC+3 | ERROR | rag_builder.services.indexing_service:build:62 | Indexing failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:39:41.917 UTC+3 | ERROR | rag_builder.api.v1.rag_routes:build:114 | POST /rag/build failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:42:32.271 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-09 22:42:32.271 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.65
+2026-06-09 22:42:32.273 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-09 22:42:32.274 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.41
+2026-06-09 22:42:32.277 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-09 22:42:32.282 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=5.14
+2026-06-09 22:42:33.062 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-09 22:42:33.062 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.59
+2026-06-09 22:42:35.175 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-09 22:42:35.176 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:110 | POST /rag/build document_id=00000000-0000-0000-0000-000000000001 sections=1
+2026-06-09 22:42:35.177 UTC+3 | INFO | rag_builder.services.indexing_service:build:39 | Indexing start document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:42:35.177 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:15 | Chunking start document_id=00000000-0000-0000-0000-000000000001 sections=1 strategy=semantic_512
+2026-06-09 22:42:35.177 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:24 | Chunking section start section_id=1 type=section path=1
+2026-06-09 22:42:35.177 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:42 | Chunking section done section_id=1 chunks=1
+2026-06-09 22:42:35.177 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:43 | Chunking done document_id=00000000-0000-0000-0000-000000000001 total_chunks=1
+2026-06-09 22:42:35.177 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:18 | Embeddings start count=1 dim=1536 provider=tei
+2026-06-09 22:42:35.178 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:28 | Embeddings done count=1 dim=1536
+2026-06-09 22:42:35.178 UTC+3 | DEBUG | rag_builder.repositories.chunk_repository:delete_by_document:35 | Repository.delete_by_document start document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:42:35.180 UTC+3 | ERROR | rag_builder.services.indexing_service:build:62 | Indexing failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:42:35.182 UTC+3 | ERROR | rag_builder.api.v1.rag_routes:build:114 | POST /rag/build failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:47:04.557 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-09 22:47:04.558 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=1.35
+2026-06-09 22:47:04.562 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-09 22:47:04.563 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.70
+2026-06-09 22:47:04.566 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-09 22:47:04.567 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.28
+2026-06-09 22:47:05.462 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-09 22:47:05.462 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.62
+2026-06-09 22:47:09.619 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-09 22:47:09.621 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:110 | POST /rag/build document_id=00000000-0000-0000-0000-000000000001 sections=1
+2026-06-09 22:47:09.621 UTC+3 | INFO | rag_builder.services.indexing_service:build:39 | Indexing start document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:47:09.622 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:15 | Chunking start document_id=00000000-0000-0000-0000-000000000001 sections=1 strategy=semantic_512
+2026-06-09 22:47:09.622 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:24 | Chunking section start section_id=1 type=section path=1
+2026-06-09 22:47:09.622 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:42 | Chunking section done section_id=1 chunks=1
+2026-06-09 22:47:09.622 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:43 | Chunking done document_id=00000000-0000-0000-0000-000000000001 total_chunks=1
+2026-06-09 22:47:09.622 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:18 | Embeddings start count=1 dim=1536 provider=tei
+2026-06-09 22:47:09.623 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:28 | Embeddings done count=1 dim=1536
+2026-06-09 22:47:09.623 UTC+3 | DEBUG | rag_builder.repositories.chunk_repository:delete_by_document:35 | Repository.delete_by_document start document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:47:09.627 UTC+3 | ERROR | rag_builder.services.indexing_service:build:62 | Indexing failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:47:09.629 UTC+3 | ERROR | rag_builder.api.v1.rag_routes:build:114 | POST /rag/build failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:49:02.233 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-09 22:49:02.234 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=1.67
+2026-06-09 22:49:02.240 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-09 22:49:02.241 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=1.13
+2026-06-09 22:49:02.247 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-09 22:49:02.250 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=3.36
+2026-06-09 22:49:03.179 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-09 22:49:03.180 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.65
+2026-06-09 22:49:07.316 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-09 22:49:07.318 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:110 | POST /rag/build document_id=00000000-0000-0000-0000-000000000001 sections=1
+2026-06-09 22:49:07.319 UTC+3 | INFO | rag_builder.services.indexing_service:build:39 | Indexing start document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:49:07.319 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:15 | Chunking start document_id=00000000-0000-0000-0000-000000000001 sections=1 strategy=semantic_512
+2026-06-09 22:49:07.319 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:24 | Chunking section start section_id=1 type=section path=1
+2026-06-09 22:49:07.319 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:42 | Chunking section done section_id=1 chunks=1
+2026-06-09 22:49:07.319 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:43 | Chunking done document_id=00000000-0000-0000-0000-000000000001 total_chunks=1
+2026-06-09 22:49:07.319 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:18 | Embeddings start count=1 dim=1536 provider=tei
+2026-06-09 22:49:07.320 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:28 | Embeddings done count=1 dim=1536
+2026-06-09 22:49:07.320 UTC+3 | DEBUG | rag_builder.repositories.chunk_repository:delete_by_document:35 | Repository.delete_by_document start document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:49:07.324 UTC+3 | ERROR | rag_builder.services.indexing_service:build:62 | Indexing failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:49:07.327 UTC+3 | ERROR | rag_builder.api.v1.rag_routes:build:114 | POST /rag/build failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 22:58:25.908 UTC+3 | INFO | rag_builder.api.app:create_app:12 | Application startup init
+2026-06-09 22:58:25.913 UTC+3 | INFO | rag_builder.api.app:create_app:16 | Application startup ready
+2026-06-09 23:07:32.420 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-09 23:07:32.420 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.59
+2026-06-09 23:07:32.422 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-09 23:07:32.423 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=1.07
+2026-06-09 23:07:32.429 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-09 23:07:32.442 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=12.80
+2026-06-09 23:07:33.251 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-09 23:07:33.252 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.52
+2026-06-09 23:07:37.689 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-09 23:07:37.691 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:110 | POST /rag/build document_id=00000000-0000-0000-0000-000000000001 sections=1
+2026-06-09 23:07:37.691 UTC+3 | INFO | rag_builder.services.indexing_service:build:39 | Indexing start document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 23:07:37.691 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:15 | Chunking start document_id=00000000-0000-0000-0000-000000000001 sections=1 strategy=semantic_512
+2026-06-09 23:07:37.691 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:24 | Chunking section start section_id=1 type=section path=1
+2026-06-09 23:07:37.691 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:42 | Chunking section done section_id=1 chunks=1
+2026-06-09 23:07:37.691 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:43 | Chunking done document_id=00000000-0000-0000-0000-000000000001 total_chunks=1
+2026-06-09 23:07:37.691 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:18 | Embeddings start count=1 dim=1536 provider=tei
+2026-06-09 23:07:37.692 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:28 | Embeddings done count=1 dim=1536
+2026-06-09 23:07:37.692 UTC+3 | DEBUG | rag_builder.repositories.chunk_repository:delete_by_document:35 | Repository.delete_by_document start document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 23:07:37.745 UTC+3 | ERROR | rag_builder.services.indexing_service:build:62 | Indexing failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-09 23:07:37.770 UTC+3 | ERROR | rag_builder.api.v1.rag_routes:build:114 | POST /rag/build failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-10 10:58:31.591 UTC+3 | INFO | rag_builder.api.app:create_app:12 | Application startup init
+2026-06-10 10:58:31.602 UTC+3 | INFO | rag_builder.api.app:create_app:16 | Application startup ready
+2026-06-10 10:58:46.613 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-10 10:58:46.614 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.72
+2026-06-10 10:59:07.700 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-10 10:59:07.701 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.84
+2026-06-10 10:59:07.703 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 10:59:07.713 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=10.86
+2026-06-10 10:59:07.716 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-10 10:59:07.716 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.55
+2026-06-10 10:59:07.719 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 10:59:07.720 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.40
+2026-06-10 11:01:26.453 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-10 11:01:26.454 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.90
+2026-06-10 11:01:26.456 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 11:01:26.458 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.33
+2026-06-10 11:01:26.460 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-10 11:01:26.460 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.47
+2026-06-10 11:01:26.462 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 11:01:26.463 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.40
+2026-06-10 11:04:04.747 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-10 11:04:04.747 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.45
+2026-06-10 11:04:04.749 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 11:04:04.751 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.33
+2026-06-10 11:04:04.753 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-10 11:04:04.753 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.45
+2026-06-10 11:04:04.755 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 11:04:04.757 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.49
+2026-06-10 11:06:32.789 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-10 11:06:32.790 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.82
+2026-06-10 11:06:32.793 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 11:06:32.794 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.36
+2026-06-10 11:06:32.797 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-10 11:06:32.797 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.52
+2026-06-10 11:06:32.800 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 11:06:32.801 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.53
+2026-06-10 11:06:47.570 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-10 11:06:47.571 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.74
+2026-06-10 11:06:47.574 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 11:06:47.575 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.37
+2026-06-10 11:06:47.578 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-10 11:06:47.578 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.50
+2026-06-10 11:06:47.580 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 11:06:47.582 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.38
+2026-06-10 11:15:04.931 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-10 11:15:04.932 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.55
+2026-06-10 11:15:04.934 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 11:15:04.935 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.51
+2026-06-10 11:15:04.937 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-10 11:15:04.938 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.45
+2026-06-10 11:15:04.939 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 11:15:04.941 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.19
+2026-06-10 11:15:27.505 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-10 11:15:27.506 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.51
+2026-06-10 11:15:27.508 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 11:15:27.509 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.25
+2026-06-10 11:15:27.511 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-10 11:15:27.512 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.43
+2026-06-10 11:15:27.513 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 11:15:27.515 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.74
+2026-06-10 11:15:58.041 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-10 11:15:58.041 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.51
+2026-06-10 11:15:58.043 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 11:15:58.044 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.24
+2026-06-10 11:15:58.046 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-10 11:15:58.047 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.38
+2026-06-10 11:15:58.048 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 11:15:58.050 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.13
+2026-06-10 11:16:25.071 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-10 11:16:25.072 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.52
+2026-06-10 11:16:25.075 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 11:16:25.076 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.33
+2026-06-10 11:16:25.079 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-10 11:16:25.080 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.68
+2026-06-10 11:16:25.082 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 11:16:25.083 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.28
+2026-06-10 11:18:03.787 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-10 11:18:03.788 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.56
+2026-06-10 11:18:08.208 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 11:18:08.209 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:110 | POST /rag/build document_id=00000000-0000-0000-0000-000000000001 sections=1
+2026-06-10 11:18:08.209 UTC+3 | INFO | rag_builder.services.indexing_service:build:39 | Indexing start document_id=00000000-0000-0000-0000-000000000001
+2026-06-10 11:18:08.209 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:15 | Chunking start document_id=00000000-0000-0000-0000-000000000001 sections=1 strategy=semantic_512
+2026-06-10 11:18:08.209 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:24 | Chunking section start section_id=1 type=section path=1
+2026-06-10 11:18:08.210 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:42 | Chunking section done section_id=1 chunks=1
+2026-06-10 11:18:08.210 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:43 | Chunking done document_id=00000000-0000-0000-0000-000000000001 total_chunks=1
+2026-06-10 11:18:08.210 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:18 | Embeddings start count=1 dim=1536 provider=tei
+2026-06-10 11:18:08.210 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:28 | Embeddings done count=1 dim=1536
+2026-06-10 11:18:08.210 UTC+3 | DEBUG | rag_builder.repositories.chunk_repository:delete_by_document:35 | Repository.delete_by_document start document_id=00000000-0000-0000-0000-000000000001
+2026-06-10 11:18:08.259 UTC+3 | ERROR | rag_builder.services.indexing_service:build:62 | Indexing failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-10 11:18:08.288 UTC+3 | ERROR | rag_builder.api.v1.rag_routes:build:114 | POST /rag/build failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-10 11:31:21.033 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-10 11:31:21.034 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.55
+2026-06-10 11:31:23.152 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 11:31:23.154 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:110 | POST /rag/build document_id=00000000-0000-0000-0000-000000000001 sections=1
+2026-06-10 11:31:23.155 UTC+3 | INFO | rag_builder.services.indexing_service:build:39 | Indexing start document_id=00000000-0000-0000-0000-000000000001
+2026-06-10 11:31:23.155 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:15 | Chunking start document_id=00000000-0000-0000-0000-000000000001 sections=1 strategy=semantic_512
+2026-06-10 11:31:23.155 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:24 | Chunking section start section_id=1 type=section path=1
+2026-06-10 11:31:23.155 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:42 | Chunking section done section_id=1 chunks=1
+2026-06-10 11:31:23.155 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:43 | Chunking done document_id=00000000-0000-0000-0000-000000000001 total_chunks=1
+2026-06-10 11:31:23.155 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:18 | Embeddings start count=1 dim=1536 provider=tei
+2026-06-10 11:31:23.156 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:28 | Embeddings done count=1 dim=1536
+2026-06-10 11:31:23.156 UTC+3 | DEBUG | rag_builder.repositories.chunk_repository:delete_by_document:35 | Repository.delete_by_document start document_id=00000000-0000-0000-0000-000000000001
+2026-06-10 11:31:23.161 UTC+3 | ERROR | rag_builder.services.indexing_service:build:62 | Indexing failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-10 11:31:23.165 UTC+3 | ERROR | rag_builder.api.v1.rag_routes:build:114 | POST /rag/build failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-10 11:31:33.348 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 11:31:33.349 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:110 | POST /rag/build document_id=00000000-0000-0000-0000-000000000001 sections=1
+2026-06-10 11:31:33.350 UTC+3 | INFO | rag_builder.services.indexing_service:build:39 | Indexing start document_id=00000000-0000-0000-0000-000000000001
+2026-06-10 11:31:33.350 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:15 | Chunking start document_id=00000000-0000-0000-0000-000000000001 sections=1 strategy=semantic_512
+2026-06-10 11:31:33.350 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:24 | Chunking section start section_id=1 type=section path=1
+2026-06-10 11:31:33.350 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:42 | Chunking section done section_id=1 chunks=1
+2026-06-10 11:31:33.350 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:43 | Chunking done document_id=00000000-0000-0000-0000-000000000001 total_chunks=1
+2026-06-10 11:31:33.350 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:18 | Embeddings start count=1 dim=1536 provider=tei
+2026-06-10 11:31:33.351 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:28 | Embeddings done count=1 dim=1536
+2026-06-10 11:31:33.351 UTC+3 | DEBUG | rag_builder.repositories.chunk_repository:delete_by_document:35 | Repository.delete_by_document start document_id=00000000-0000-0000-0000-000000000001
+2026-06-10 11:31:33.355 UTC+3 | ERROR | rag_builder.services.indexing_service:build:62 | Indexing failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-10 11:31:33.358 UTC+3 | ERROR | rag_builder.api.v1.rag_routes:build:114 | POST /rag/build failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-10 11:34:40.511 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-10 11:34:40.511 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.51
+2026-06-10 11:34:42.667 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 11:34:42.668 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:110 | POST /rag/build document_id=00000000-0000-0000-0000-000000000001 sections=1
+2026-06-10 11:34:42.668 UTC+3 | INFO | rag_builder.services.indexing_service:build:39 | Indexing start document_id=00000000-0000-0000-0000-000000000001
+2026-06-10 11:34:42.668 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:15 | Chunking start document_id=00000000-0000-0000-0000-000000000001 sections=1 strategy=semantic_512
+2026-06-10 11:34:42.668 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:24 | Chunking section start section_id=1 type=section path=1
+2026-06-10 11:34:42.668 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:42 | Chunking section done section_id=1 chunks=1
+2026-06-10 11:34:42.669 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:43 | Chunking done document_id=00000000-0000-0000-0000-000000000001 total_chunks=1
+2026-06-10 11:34:42.669 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:18 | Embeddings start count=1 dim=1536 provider=tei
+2026-06-10 11:34:42.669 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:28 | Embeddings done count=1 dim=1536
+2026-06-10 11:34:42.669 UTC+3 | DEBUG | rag_builder.repositories.chunk_repository:delete_by_document:35 | Repository.delete_by_document start document_id=00000000-0000-0000-0000-000000000001
+2026-06-10 11:34:42.674 UTC+3 | ERROR | rag_builder.services.indexing_service:build:62 | Indexing failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-10 11:34:42.676 UTC+3 | ERROR | rag_builder.api.v1.rag_routes:build:114 | POST /rag/build failed document_id=00000000-0000-0000-0000-000000000001
+2026-06-10 11:48:05.533 UTC+3 | INFO | rag_builder.api.app:create_app:12 | Application startup init
+2026-06-10 11:48:05.560 UTC+3 | INFO | rag_builder.api.app:create_app:16 | Application startup ready
+2026-06-10 11:49:30.014 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 11:49:30.025 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=11.84
+2026-06-10 11:50:47.488 UTC+3 | INFO | rag_builder.api.app:create_app:12 | Application startup init
+2026-06-10 11:50:47.493 UTC+3 | INFO | rag_builder.api.app:create_app:16 | Application startup ready
+2026-06-10 11:53:48.727 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 11:53:48.741 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=13.51
+2026-06-10 11:54:51.665 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 11:54:51.666 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:110 | POST /rag/build document_id=81c71b1e-5761-48e2-b56f-f72b49d96581 sections=1
+2026-06-10 11:54:51.666 UTC+3 | INFO | rag_builder.services.indexing_service:build:39 | Indexing start document_id=81c71b1e-5761-48e2-b56f-f72b49d96581
+2026-06-10 11:54:51.666 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:15 | Chunking start document_id=81c71b1e-5761-48e2-b56f-f72b49d96581 sections=1 strategy=semantic_512
+2026-06-10 11:54:51.666 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:24 | Chunking section start section_id=1 type=section path=1
+2026-06-10 11:54:51.666 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:42 | Chunking section done section_id=1 chunks=1
+2026-06-10 11:54:51.666 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:43 | Chunking done document_id=81c71b1e-5761-48e2-b56f-f72b49d96581 total_chunks=1
+2026-06-10 11:54:51.667 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:18 | Embeddings start count=1 dim=1536 provider=tei
+2026-06-10 11:54:51.667 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:28 | Embeddings done count=1 dim=1536
+2026-06-10 11:54:51.668 UTC+3 | DEBUG | rag_builder.repositories.chunk_repository:delete_by_document:35 | Repository.delete_by_document start document_id=81c71b1e-5761-48e2-b56f-f72b49d96581
+2026-06-10 11:54:51.714 UTC+3 | INFO | rag_builder.repositories.chunk_repository:delete_by_document:39 | Repository.delete_by_document done document_id=81c71b1e-5761-48e2-b56f-f72b49d96581 deleted=0
+2026-06-10 11:54:51.715 UTC+3 | DEBUG | rag_builder.repositories.chunk_repository:insert_chunks:16 | Repository.insert_chunks start chunks=1 embeddings=1
+2026-06-10 11:54:51.731 UTC+3 | INFO | rag_builder.repositories.chunk_repository:insert_chunks:31 | Repository.insert_chunks done inserted=1
+2026-06-10 11:54:51.736 UTC+3 | INFO | rag_builder.services.indexing_service:build:52 | Indexing completed document_id=81c71b1e-5761-48e2-b56f-f72b49d96581 chunks=1
+2026-06-10 11:54:51.737 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=201 took_ms=72.44
+2026-06-10 11:55:17.184 UTC+3 | INFO | rag_builder.api.app:create_app:12 | Application startup init
+2026-06-10 11:55:17.189 UTC+3 | INFO | rag_builder.api.app:create_app:16 | Application startup ready
+2026-06-10 11:59:39.293 UTC+3 | INFO | rag_builder.api.app:create_app:12 | Application startup init
+2026-06-10 11:59:39.298 UTC+3 | INFO | rag_builder.api.app:create_app:16 | Application startup ready
+2026-06-10 12:05:21.998 UTC+3 | INFO | rag_builder.api.app:create_app:12 | Application startup init
+2026-06-10 12:05:22.029 UTC+3 | INFO | rag_builder.api.app:create_app:16 | Application startup ready
+2026-06-10 12:05:31.039 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/rag/health/live
+2026-06-10 12:05:31.061 UTC+3 | DEBUG | rag_builder.api.v1.rag_routes:health_live:23 | GET /rag/health/live
+2026-06-10 12:05:31.063 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/rag/health/live status=200 took_ms=24.16
+2026-06-10 12:07:00.568 UTC+3 | INFO | rag_builder.api.app:create_app:12 | Application startup init
+2026-06-10 12:07:00.573 UTC+3 | INFO | rag_builder.api.app:create_app:16 | Application startup ready
+2026-06-10 12:07:13.026 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/rag/health/live
+2026-06-10 12:07:13.036 UTC+3 | DEBUG | rag_builder.api.v1.rag_routes:health_live:23 | GET /rag/health/live
+2026-06-10 12:07:13.036 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/rag/health/live status=200 took_ms=9.94
+2026-06-10 12:08:32.101 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-10 12:08:32.102 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.79
+2026-06-10 12:08:32.105 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 12:08:32.109 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=3.94
+2026-06-10 12:08:32.114 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-10 12:08:32.116 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=1.50
+2026-06-10 12:08:32.120 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 12:08:32.121 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.33
+2026-06-10 12:08:44.849 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-10 12:08:44.850 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.57
+2026-06-10 12:08:47.373 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 12:08:47.374 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:110 | POST /rag/build document_id=00000000-0000-0000-0000-000000000001 sections=1
+2026-06-10 12:08:47.375 UTC+3 | INFO | rag_builder.services.indexing_service:build:39 | Indexing start document_id=00000000-0000-0000-0000-000000000001
+2026-06-10 12:08:47.375 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:15 | Chunking start document_id=00000000-0000-0000-0000-000000000001 sections=1 strategy=semantic_512
+2026-06-10 12:08:47.375 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:24 | Chunking section start section_id=1 type=section path=1
+2026-06-10 12:08:47.376 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:42 | Chunking section done section_id=1 chunks=1
+2026-06-10 12:08:47.376 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:43 | Chunking done document_id=00000000-0000-0000-0000-000000000001 total_chunks=1
+2026-06-10 12:08:47.376 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:18 | Embeddings start count=1 dim=1536 provider=tei
+2026-06-10 12:08:47.377 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:28 | Embeddings done count=1 dim=1536
+2026-06-10 12:08:47.377 UTC+3 | DEBUG | rag_builder.repositories.chunk_repository:delete_by_document:35 | Repository.delete_by_document start document_id=00000000-0000-0000-0000-000000000001
+2026-06-10 12:08:47.426 UTC+3 | INFO | rag_builder.repositories.chunk_repository:delete_by_document:39 | Repository.delete_by_document done document_id=00000000-0000-0000-0000-000000000001 deleted=0
+2026-06-10 12:08:47.426 UTC+3 | DEBUG | rag_builder.repositories.chunk_repository:insert_chunks:16 | Repository.insert_chunks start chunks=1 embeddings=1
+2026-06-10 12:08:47.444 UTC+3 | INFO | rag_builder.repositories.chunk_repository:insert_chunks:31 | Repository.insert_chunks done inserted=1
+2026-06-10 12:08:47.450 UTC+3 | INFO | rag_builder.services.indexing_service:build:52 | Indexing completed document_id=00000000-0000-0000-0000-000000000001 chunks=1
+2026-06-10 12:08:47.450 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=201 took_ms=77.27
+2026-06-10 12:11:58.714 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-10 12:11:58.714 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.79
+2026-06-10 12:11:58.717 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 12:11:58.719 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.73
+2026-06-10 12:11:58.722 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-10 12:11:58.723 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.60
+2026-06-10 12:11:58.725 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 12:11:58.726 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.19
+2026-06-10 12:12:58.974 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-10 12:12:58.975 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.97
+2026-06-10 12:12:58.980 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 12:12:58.983 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=2.64
+2026-06-10 12:12:58.985 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-10 12:12:58.986 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=0.46
+2026-06-10 12:12:58.988 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 12:12:58.990 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.67
+2026-06-10 12:14:24.303 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-10 12:14:24.307 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=3.87
+2026-06-10 12:14:24.317 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 12:14:24.320 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=3.24
+2026-06-10 12:14:24.325 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-10 12:14:24.326 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=404 took_ms=1.10
+2026-06-10 12:14:24.330 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-10 12:14:24.331 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.80

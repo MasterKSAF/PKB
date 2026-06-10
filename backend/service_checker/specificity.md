@@ -217,3 +217,129 @@ Caused by: No such file or directory (os error 2)
 
 ### Статус
 🟢 **Реализовано (service_checker, 2026-06-10)**
+
+---
+
+## 7. Аномалия: `pipeline_test.py` падает с ошибками БД, хотя `api_coverage_test.py` показывает 114/114 passed
+
+**Обнаружено:** 2026-06-10
+
+### Симптом
+- `api_coverage_test.py` — 114/114 passed, все сервисы "✅"
+- `pipeline_test.py` — 0/13 passed для `registry_lifecycle`, 4/8 для `document_processing`
+- Шаги Registry / RAG Builder / RAG Search возвращают 500
+
+### Диагностика
+
+#### 1. `api_coverage_test.py` — ложные positives
+В `_execute_endpoint` (строки 318–325):
+```python
+if resp.status_code < 400:
+    success = True
+else:
+    try:
+        resp.json()
+        success = True
+    except Exception:
+        success = False
+```
+Любой 4xx/5xx с JSON считается `success=True`. В отчёте:
+- Auth: 401 → ✅
+- Registry: 307, 422, 500 → ✅
+- `Context Variables: No context variables extracted` — prepare-шаги не создали данные
+
+Это **НЕ** означает, что сервисы работают. Это означает только "эндпоинт существует и отвечает JSON".
+
+#### 2. `document_processing` pipeline
+- Шаг 5 (Converter): 422 — `task_id` передаётся как `int` (12345), сервис ожидает `string`
+- Шаг 6 (Registry): 500 — `psycopg2.OperationalError: connection to server at "127.0.0.1", port 5432 failed: Connection refused`
+- Шаг 7 (RAG Builder): 500 — та же БД-проблема
+- Шаг 8 (RAG Search): 500 — `Database pool is not initialized`
+- **Корень:** сервисы в Docker настроены на `127.0.0.1:5432`, но внутри контейнера `localhost` — это сам контейнер, а не хост-машина. PostgreSQL должен быть доступен через `host.docker.internal` или имя контейнера.
+
+#### 3. `registry_lifecycle` pipeline
+- Шаг 1 (Auth): 401 — пользователя `petrova@example.com` нет в БД auth-сервиса
+- Шаг 3 (Создать классификатор): 307 — путь без trailing slash (`/api/v1/registry/classifiers`), FastAPI делает redirect
+- Шаг 5 (Получить классификатор): 422 — `{classifier_code}` не подставлен в путь (из-за failed prepare)
+- Шаг 11 (Нормализация): 500 — БД-ошибка
+- Шаг 12 (Обновить термин): 404 — `{term_id}` не подставлен
+
+### Что исправлено (checker)
+1. **`docker/entrypoint.sh`** — Java удалена из оперативной установки (должна быть в базовом образе)
+2. **`docker/entrypoint.sh`** — добавлена перезапись `.env` файлов сервисов (`DB_HOST=postgres`, `DATABASE_URL`, `EMBEDDING_API_KEY`) перед стартом supervisord
+3. **`docker/docker-compose.yml`** — добавлен `env_file: ./.env`, `EMBEDDING_API_KEY=sk-noop` в `x-env-common`
+4. **`docker/supervisord.conf`** — `environment=` использует `%(ENV_VAR)s` для наследования переменных из Docker; добавлены `DB_HOST`, `DATABASE_URL`, `PYTHONPATH`, `EMBEDDING_*` для registry, rag-builder, rag-search
+5. **`docker/.env`** — создан единый `.env` с `DEFAULT_ADMIN_EMAIL`, `DEFAULT_ADMIN_PASSWORD`, `EMBEDDING_API_KEY` и всеми DB-параметрами
+6. **`setup_db.py`** — `DB_NAME` изменён с `pkb_neuroassistant` на `pkb_neuro` (соответствует docker-compose)
+7. **`services/base.py`** — `TEST_CREDENTIALS` и `TEST_ADMIN_CREDENTIALS` обновлены на `admin@example.com` / `Admin1234!` (admin создаётся auth-сервисом при старте)
+8. **`services/registry.py`** — добавлены trailing slashes ко всем путям, `expected_status={201, 409}` для prepare-шагов
+9. **`pipelines/document_processing.py`** — `TEST_TASK_ID` изменён на строку, добавлен шаг Auth, `expected_status=201` для RAG Builder
+10. **`pipelines/registry_lifecycle.py`** — trailing slashes, `expected_status={201, 409}` для создания классификатора
+11. **`pipelines/chat_inference.py`** — `expected_status={200, 202}` для отправки сообщения, `check_json_field("session_id", (int, str))` (сервис возвращает int)
+12. **`api_coverage_test.py`** — success = только 2xx/3xx (4xx/5xx = fail); для prepare-шагов success по `expected_status`; schema validation не применяется к prepare
+13. **`core/config.py`** — `TEST_CREDENTIALS` обновлены на admin
+14. **Таблицы БД** — созданы через `Base.metadata.create_all()` внутри контейнера (схемы `registry`, `rag`, 12 таблиц)
+
+### Ключевые архитектурные находки
+
+#### 1. Сервисы читают `.env`, а не окружение Docker
+- `registry_service/env.py`: `load_dotenv(dotenv_path=.env, override=True)` — игнорирует Docker-переменные
+- RAG Search `config.py`: `SettingsConfigDict(env_file=".env")` — читает `.env`
+- **Решение:** `entrypoint.sh` перезаписывает `.env` файлы перед запуском supervisord
+
+#### 2. supervisord `environment=` перезаписывает наследуемое окружение
+- Если в `supervisord.conf` указано `environment=`, дочерний процесс получает **только** перечисленные переменные
+- **Решение:** использовать `%(ENV_VAR_NAME)s` для наследования переменных из окружения supervisord
+- При этом все `%(ENV_*)s` переменные **должны** существовать в окружении, иначе supervisord не стартует
+
+#### 3. Все id — int, а не UUID
+- Registry возвращает `id` как int (1, 2, 3), не UUID
+- RAG Builder ожидает UUID для `document_id` (pydantic `UUID` тип)
+- Converter возвращает UUID при конвертации
+- **Inconsistency между сервисами** — не исправлено (чужие сервисы)
+
+#### 4. Converter ожидает `task_id` как string, остальные — int или принимают оба
+- Converter: `422 Input should be a valid string` для int
+- Parser: принимает и int, и string
+- **Решение:** в checker везде используем string для совместимости с converter
+
+#### 5. Auth-сервис создаёт admin при старте из env
+- `DEFAULT_ADMIN_EMAIL=admin@example.com` / `DEFAULT_ADMIN_PASSWORD=Admin1234!`
+- `petrova@example.com` не существует — нельзя логиниться
+- **Решение:** используем admin credentials везде
+
+#### 6. Admin endpoints auth-сервиса — 404 (mock)
+- `GET /auth/me`, `POST /admin/users`, `GET /admin/roles` и т.д. возвращают 404
+- Auth-сервис работает в mock-режиме (`AUTH_SERVICE_MOCK=true`, `DEV_AUTH_MODE=true`)
+- Работает только `POST /auth/token`
+
+#### 7. RAG Search не имеет настроек эмбеддингов
+- В `config.py` RAG Search нет `EMBEDDING_PROVIDER` — он не поддерживает TEI
+- Если `EMBEDDING_API_KEY` пуст → использует `HuggingFaceLocalProvider` (требует `sentence_transformers`, не установлен)
+- Если `EMBEDDING_API_KEY` не пуст → использует `OpenAICompatibleProvider` (по `EMBEDDING_BASE_URL`)
+- **Решение:** `EMBEDDING_API_KEY=sk-noop` — использует TEI через OpenAI-совместимый API
+
+#### 8. FastAPI 307 redirect при отсутствии trailing slash
+- Запрос `POST /api/v1/registry/classifiers` (без /) → FastAPI redirects to `/api/v1/registry/classifiers/`
+- PVT redirect теряет body → сервис получает пустой запрос
+- **Решение:** всегда использовать trailing slash в путях
+
+#### 9. Success = только 2xx/3xx
+- Любой 4xx/5xx = fail (включая 401, 404, 409, 422, 500)
+- Исключение: prepare-шаги с `expected_status={201, 409}` — 409 считается success (данные уже существуют)
+- Schema validation не применяется к prepare-шагам (чтобы не блокировать извлечение контекста)
+
+### Требование
+**Основная проблема — инфраструктура Docker.** Сервисы backend настроены на подключение к БД по `127.0.0.1:5432`. Внутри Docker-контейнера `127.0.0.1` — это сам контейнер, а не хост-машина. Нужно:
+- Либо добавить `network_mode: host` (Linux)
+- Либо использовать `host.docker.internal` (Windows/Mac)
+- Либо запускать PostgreSQL в отдельном контейнере и указывать имя сервиса (`postgres`)
+
+### Тесты
+- `python pipeline_test.py run registry_lifecycle` — проверка trailing slashes и auth
+- `python pipeline_test.py run document_processing` — проверка converter (string task_id) и auth
+- `python api_coverage_test.py` — проверка, что 500+ не считается success
+
+### Статус
+🟡 **Частично исправлено (checker)**
+🔴 **Открыто** — Docker-инфраструктура (подключение к БД) требует правки `docker-compose.yml` или `.env` сервисов.

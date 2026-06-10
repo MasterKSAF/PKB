@@ -28,7 +28,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 #  Config
 # ──────────────────────────────────────────────────────────────────────
 
-DB_NAME = "pkb_neuroassistant"
+DB_NAME = "pkb_neuro"
 DB_HOST = "127.0.0.1"
 DB_PORT = 5432
 DB_SUPERUSER = "postgres"

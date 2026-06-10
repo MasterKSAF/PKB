@@ -27,9 +27,15 @@ TEST_PDF_KEY = "test-document.pdf"
 TEST_PDF_PATH = "pdf/7bd97d737317a8a272bb18a405ab2d04.pdf"
 
 # Константы для пайплайна
-TEST_TASK_ID = 12345
+TEST_TASK_ID = "12345"
 TEST_DOC_ID = 1
 TEST_VERSION_ID = "pipeline-test-version"
+
+# Тестовые учётные данные (admin — создаётся auth-сервисом при старте)
+TEST_CREDENTIALS = {
+    "username": "admin@example.com",
+    "password": "Admin1234!",
+}
 
 
 def _check_minio_upload(body: Optional[str], ctx: PipelineContext) -> Tuple[bool, str]:
@@ -59,7 +65,7 @@ class DocumentProcessingPipeline(PipelineDef):
 
     name = "document_processing"
     description = "Полный цикл обработки документа"
-    services = ["minio", "parser", "converter_validator", "registry", "rag_builder", "rag_search"]
+    services = ["auth", "minio", "parser", "converter_validator", "registry", "rag_builder", "rag_search"]
     TEST_PDF_KEY = TEST_PDF_KEY
     TEST_PDF_PATH = TEST_PDF_PATH
     TEST_TASK_ID = TEST_TASK_ID
@@ -71,7 +77,20 @@ class DocumentProcessingPipeline(PipelineDef):
         pdf_path = Path(self.TEST_PDF_PATH)
         pdf_bytes = pdf_path.read_bytes()
 
-        # -- Шаг 1: Загрузка PDF в MinIO --
+        # -- Шаг 1: Аутентификация (получаем токен для Registry) --
+        steps.append(PipelineStep(
+            name="Аутентификация",
+            service="auth",
+            method="POST",
+            path="/api/v1/auth/token",
+            port=8082,
+            body=TEST_CREDENTIALS,
+            expected_status=200,
+            extract_keys=["access_token", "refresh_token"],
+            check=check_json_field("access_token", str),
+        ))
+
+        # -- Шаг 2: Загрузка PDF в MinIO --
         steps.append(PipelineStep(
             name="Загрузка PDF в MinIO",
             service="minio",
@@ -181,7 +200,7 @@ class DocumentProcessingPipeline(PipelineDef):
                     "content": {"text": "Содержимое тестового документа"},
                 }],
             },
-            expected_status=200,
+            expected_status=201,
         ))
 
         # -- Шаг 8: Поиск по индексу RAG Search --

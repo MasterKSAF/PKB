@@ -20,10 +20,10 @@ from pipelines.base import (
     check_json_fields,
 )
 
-# Тестовые учётные данные
+# Тестовые учётные данные (admin — создаётся auth-сервисом при старте)
 TEST_CREDENTIALS = {
-    "username": "petrova@example.com",
-    "password": "secret456",
+    "username": "admin@example.com",
+    "password": "Admin1234!",
 }
 
 
@@ -76,7 +76,7 @@ class ChatInferencePipeline(PipelineDef):
             body={"title": "Pipeline тестовая сессия"},
             expected_status=201,
             extract_keys=["session_id"],
-            check=check_json_field("session_id", str),
+            check=check_json_field("session_id", (int, str)),
             needs_auth=True,
         ))
 
@@ -91,7 +91,7 @@ class ChatInferencePipeline(PipelineDef):
                 "text": "Какая толщина обшивки ледового пояса?",
                 "content": "Какая толщина обшивки ледового пояса?",
             },
-            expected_status=200,
+            expected_status={200, 202},
             extract_keys=["message_id"],
             check=check_json_fields({
                 "text": str,

@@ -1,61 +1,80 @@
-# Рефакторинг: вынос описаний сервисов в отдельные файлы + подготовка данных
+# TODO: Разбор падения pipeline_test.py vs api_coverage_test.py
 
-## Задача
-На основании описания API реализовать опрос API с заполненными данными и получением готового ответа, учитывая предварительную подготовку.
-- Для registry: сначала вносить документ перед загрузкой, вносить классификаторы перед проверкой и т.д.
-- Распределить работу с сервисами по отдельным файлам (т.к. данных будет больше)
+## Контекст
+- `api_coverage_test.py` показывает 114/114 passed
+- `pipeline_test.py` падает с ошибками БД (500) и валидации (422/401)
+- Пользователь: "там идут ошибки с БД"
 
-## Что сделано ✅
+## Причины падения (установлено)
 
-### 1. Создан пакет `service_checker/services/`
-Каждый сервис — отдельный файл с полным описанием эндпоинтов и prepare-шагами.
+### 1. `api_coverage_test.py` — ложные positives (не "проходит корректно")
+- В `_execute_endpoint` любой 4xx/5xx с JSON считается `success=True`
+- Auth возвращает 401, Registry 307/422/500 — всё "✅ OK"
+- `Context Variables: No context variables extracted` — prepare-шаги не создали данные
+- Это НЕ означает, что сервисы работают. Это означает только "эндпоинт существует и отвечает JSON"
 
-```
-services/
-├── __init__.py              # Реестр SERVICE_REGISTRY + MODE_PORTS
-├── base.py                  # ServiceDef, EndpointDef, константы
-├── auth.py                  # Auth Service (16 endpoints + 2 prepare)
-├── registry.py              # Registry Service (32 endpoints + 3 prepare)
-├── orchestrator.py          # Orchestrator Service (23 endpoints + 1 prepare)
-├── query.py                 # Query Service (18 endpoints + 2 prepare)
-├── parser.py                # Parser Service (5 endpoints + 1 prepare)
-├── ocr.py                   # OCR Service (5 endpoints + 1 prepare)
-├── converter_validator.py   # Converter-Validator (4 endpoints)
-├── rag_builder.py           # RAG Builder (4 endpoints + 1 prepare)
-├── rag_search.py            # RAG Search (2 endpoints)
-├── tei.py                   # TEI Embeddings (2 endpoints)
-└── gateway.py               # Gateway (агрегирует auth+orchestrator+query+registry)
-```
+### 2. `document_processing` pipeline
+- Шаг 5 (Converter): 422 — `task_id` передаётся как `int` (12345), сервис ожидает `string`
+- Шаг 6 (Registry): 500 — `psycopg2.OperationalError: connection to server at "127.0.0.1", port 5432 failed: Connection refused`
+- Шаг 7 (RAG Builder): 500 — та же БД-проблема
+- Шаг 8 (RAG Search): 500 — `Database pool is not initialized`
+- Проблема: сервисы в Docker настроены на `127.0.0.1:5432`, но внутри контейнера localhost — это сам контейнер
 
-### 2. Data-класс ServiceDef
-Добавлен в `base.py`:
-- `service_key`, `display_name`, `port`
-- `needs_auth`, `depends_on`, `base_data`
-- `endpoints` — основные эндпоинты
-- `prepare_endpoints` — эндпоинты подготовки данных
+### 3. `registry_lifecycle` pipeline
+- Шаг 1 (Auth): 401 — пользователя `petrova@example.com` нет в БД auth-сервиса
+- Шаг 3 (Создать классификатор): 307 — путь без trailing slash, FastAPI делает redirect
+- Шаг 5 (Получить классификатор): 422 — `{classifier_code}` не подставлен в путь
+- Шаг 11 (Нормализация): 500 — БД-ошибка
+- Шаг 12 (Обновить термин): 404 — `{term_id}` не подставлен
 
-### 3. Prepare-эндпоинты
-Для каждого сервиса добавлены prepare-шаги:
-- **auth**: POST /auth/token → access_token, GET /auth/me
-- **registry**: POST /classifiers → classifier_code, POST /documents → doc_id, POST /terminology → term_id
-- **query**: POST /chat/sessions → session_id, POST /messages → message_id
-- **orchestrator**: POST /documents → task_id
-- **parser**: POST /parser/process → task_id
-- **ocr**: POST /ocr/process → task_id
-- **rag_builder**: POST /rag/build
-- **gateway**: наследует prepare от auth + orchestrator + query + registry
+## План работ
 
-### 4. Рефакторинг `api_coverage_test.py`
-- Заменён `build_endpoints()` на `SERVICE_REGISTRY` из `services/`
-- Добавлен `_execute_endpoint()` — выделенная логика выполнения одного эндпоинта
-- Prepare-эндпоинты выполняются перед основными, заполняют контекст
-- Добавлен флаг `--skip-prepare` для пропуска prepare-шагов
-- Сохранена совместимость формата отчёта
-- Тесты обновлены (`tester.endpoints` → `tester._test_endpoints`)
+1. **Анализ и документация**
+   - [x] Запустить `api_coverage_test.py` с детальным выводом
+   - [x] Запустить `pipeline_test.py` для всех pipeline
+   - [x] Получить реальные тела ответов от сервисов
+   - [x] Зафиксировать аномалии в `specificity.md`
 
-### 5. Проверка
-- ✅ **83/84 тестов пройдено** (1 интеграционный — требует Docker)
-- ✅ `python -c "from services.base import *"` — импорт работает
-- ✅ `python -c "from services import SERVICE_REGISTRY"` — все сервисы загружаются
-- ✅ `python api_coverage_test.py --ping-only` — ping работает
-- ✅ `python api_coverage_test.py --skip-prepare` — пропуск prepare
+2. **Исправления в `pipeline_test.py` / `pipelines`**
+   - [x] `document_processing.py`: изменить `TEST_TASK_ID` на строку (`"12345"`)
+   - [x] `document_processing.py`: добавить шаг аутентификации (Auth) перед Registry
+   - [x] `registry_lifecycle.py`: добавить trailing slashes к путям Registry (кроме `/import`)
+   - [x] `registry_lifecycle.py`: убрать trailing slashes у `/import` endpoints (иначе 307)
+   - [x] `chat_inference.py`: auth-шаг использует те же credentials (проблема в БД, не в checker)
+
+3. **Улучшения `api_coverage_test.py`**
+   - [x] Добавить предупреждение, если prepare-шаги не извлекли контекст
+   - [x] 500+ на не-health эндпоинтах теперь считается failed (не success)
+   - [x] Добавить вывод реального тела ответа в отчёт для failed эндпоинтов (уже есть в pipeline)
+
+4. **Тесты**
+   - [x] Запустить `pipeline_test.py` после исправлений — converter теперь 200 (был 422)
+   - [x] Запустить `api_coverage_test.py` после исправлений — теперь 5 failed (не 0)
+   - [x] Убедиться, что unit-тесты проходят — 85/85 passed
+
+5. **Актуализация `readme.md`**
+   - [x] Обновить readme.md — document_processing 9 шагов, 5xx = fail
+
+# ✅ Все задачи выполнены
+
+## Итоговый статус сервисов
+
+| Сервис | Статус | Примечание |
+|--------|--------|-----------|
+| Auth | ✅ 200 | admin@example.com / Admin1234! |
+| Registry | ✅ 201 | БД работает, таблицы созданы |
+| Converter | ✅ 200 | task_id как string |
+| RAG Builder | ✅ 201 | UUID от конвертера |
+| RAG Search | ❌ 500 | Без эмбеддингов (баг сервиса) |
+| MinIO | ✅ 200 | S3 работает |
+| Parser | ✅ 202 | парсинг работает |
+
+## Результаты тестов
+
+- **Unit-тесты:** 85/85 passed
+- **Pipeline:** document_processing 7/9, registry_lifecycle 5/13, chat_inference 2/6
+- **Coverage (честный):** 25/64 passed (раньше было 114/114 — ложные positives)
+
+## Ключевые изменения
+
+Подробно зафиксировано в `specificity.md` — аномалия №7

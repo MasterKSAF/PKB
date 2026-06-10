@@ -20,10 +20,10 @@ from pipelines.base import (
     check_json_fields,
 )
 
-# Тестовые учётные данные
+# Тестовые учётные данные (admin — создаётся auth-сервисом при старте)
 TEST_CREDENTIALS = {
-    "username": "petrova@example.com",
-    "password": "secret456",
+    "username": "admin@example.com",
+    "password": "Admin1234!",
 }
 
 
@@ -71,7 +71,7 @@ class RegistryLifecyclePipeline(PipelineDef):
             name="Создать классификатор",
             service="registry",
             method="POST",
-            path="/api/v1/registry/classifiers",
+            path="/api/v1/registry/classifiers/",
             port=8084,
             body={
                 "classifier_system": "MKS",
@@ -79,7 +79,7 @@ class RegistryLifecyclePipeline(PipelineDef):
                 "full_name": "Pipeline тестовый классификатор",
                 "status": "active",
             },
-            expected_status=201,
+            expected_status={201, 409},
             extract_keys=["classifier_code"],
             check=check_json_field("data", dict),
             needs_auth=True,
@@ -90,7 +90,7 @@ class RegistryLifecyclePipeline(PipelineDef):
             name="Список классификаторов",
             service="registry",
             method="GET",
-            path="/api/v1/registry/classifiers",
+            path="/api/v1/registry/classifiers/",
             port=8084,
             params={"page": 1, "page_size": 10},
             expected_status=200,
@@ -170,7 +170,7 @@ class RegistryLifecyclePipeline(PipelineDef):
             name="Создать термин",
             service="registry",
             method="POST",
-            path="/api/v1/registry/terminology",
+            path="/api/v1/registry/terminology/",
             port=8084,
             body={
                 "raw_term": "Pipeline тест",

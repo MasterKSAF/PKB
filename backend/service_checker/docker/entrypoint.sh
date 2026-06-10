@@ -36,16 +36,24 @@ export PYTHONPATH="/app/backend:/app/backend/shared:/app/backend/rag_builder_ser
 echo "   ✓ PYTHONPATH=$PYTHONPATH"
 
 # =============================================================================
-# 3. Установка Java (требуется для opendataloader-pdf)
+# 3. Перезапись .env файлов сервисов (сервисы загружают env из .env, а не из Docker)
 # =============================================================================
-echo "[3/5] Проверка Java..."
-if ! command -v java &>/dev/null; then
-    echo "   → Java не найдена, устанавливаем..."
-    apt-get update -qq && apt-get install -y --no-install-recommends -qq default-jre 2>&1 | tail -3
-    echo "   ✓ Java установлена"
-else
-    echo "   ✓ Java: bash: java: command not found"
-fi
+echo "[3/5] Перезапись .env файлов сервисов..."
+for env_path in /app/backend/registry_service/.env /app/backend/rag_builder_service/.env /app/backend/rag_search_service/.env; do
+    if [ -f "$env_path" ]; then
+        cat > "$env_path" <<-EOF
+	DB_HOST=$DB_HOST
+	DB_PORT=$DB_PORT
+	DB_USERNAME=$DB_USERNAME
+	DB_PASSWORD=$DB_PASSWORD
+	DB_DATABASE=$DB_DATABASE
+	DATABASE_URL=$DATABASE_URL
+	EMBEDDING_API_KEY=$EMBEDDING_API_KEY
+	EOF
+        echo "   ✓ $env_path"
+    fi
+done
+echo "   ✓ .env файлы обновлены"
 
 # =============================================================================
 # 4. Автоустановка Python-зависимостей
@@ -59,7 +67,7 @@ else
 fi
 
 # =============================================================================
-# 4. Запуск supervisord
+# 5. Запуск supervisord
 # =============================================================================
 echo "[5/5] Запуск supervisord..."
 echo ""

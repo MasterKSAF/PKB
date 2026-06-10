@@ -43,6 +43,7 @@ from services.base import (
     API_PREFIX,
     EndpointDef,
     EndpointResult,
+    ServiceDef,
     ServiceResult,
     HEADERS_JSON,
 )
@@ -313,25 +314,24 @@ class ApiCoverageTester:
             elapsed = int((time.time() - start) * 1000)
 
             resp_body = resp.text if resp.content else None
-            # 2xx/3xx — всегда успех
-            # 4xx / 5xx — успех, если тело — валидный JSON
-            if resp.status_code < 400:
-                success = True
+            # Для prepare-шагов: success по expected_status (201 или 409 — данные созданы)
+            # Для основных endpoints: только 2xx/3xx
+            if ep.is_preparation and ep.expected_status:
+                if isinstance(ep.expected_status, set):
+                    success = resp.status_code in ep.expected_status
+                else:
+                    success = resp.status_code == ep.expected_status
             else:
-                try:
-                    resp.json()
-                    success = True
-                except Exception:
-                    success = False
+                success = resp.status_code < 400
 
             # Извлекаем контекст из ответа
             if success and ep.extract_keys:
                 self._extract_context(resp_body, ep.extract_keys)
 
-            # Валидация схемы ответа (только для 2xx)
+            # Валидация схемы ответа (только для 2xx, не для prepare)
             schema_valid = True
             schema_errors = []
-            if resp.status_code < 300 and ep.response_schema:
+            if not ep.is_preparation and resp.status_code < 300 and ep.response_schema:
                 schema_valid, schema_errors = self._validate_response(
                     resp_body, ep.response_schema
                 )
@@ -383,6 +383,7 @@ class ApiCoverageTester:
         (для совместимости с тестами, которые подставляют свои эндпоинты).
         """
         # Если есть тестовые endpoint'ы — используем их (для совместимости)
+        svc_def: Optional[ServiceDef] = None
         if service_key in self._test_endpoints:
             svc_endpoints = self._test_endpoints[service_key]
             svc_prepare = []
@@ -424,6 +425,18 @@ class ApiCoverageTester:
         if not self.skip_prepare and alive and svc_prepare:
             for ep in svc_prepare:
                 await self._execute_endpoint(ep, port, result, alive)
+            # Проверяем, что prepare-шаги извлекли контекст
+            if svc_def and svc_def.base_data:
+                missing = [k for k in svc_def.base_data if k not in self.context]
+                if missing:
+                    print(f"     ⚠️  Prepare не извлёк контекст: {', '.join(missing)}")
+            # Эвристика: если prepare-эндпоинты указали extract_keys, но контекст пуст — warning
+            expected_keys = set()
+            for ep in svc_prepare:
+                if ep.extract_keys:
+                    expected_keys.update(ep.extract_keys)
+            if expected_keys and not any(k in self.context for k in expected_keys):
+                print(f"     ⚠️  Все prepare-шаги вернули ошибки — контекст не создан (будут пропуски)")
 
         # ── 2. Основные эндпоинты ────────────────────────────────────
         for ep in svc_endpoints:

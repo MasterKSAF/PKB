@@ -118,15 +118,15 @@ python api_coverage_test.py run-all
 
 | Пайплайн | Описание | Сервисы | Шагов |
 |----------|----------|---------|:-----:|
-| `document_processing` | Полный цикл обработки документа | MinIO → Parser → Converter → Registry → RAG Builder → RAG Search | 8 |
+| `document_processing` | Полный цикл обработки документа | Auth → MinIO → Parser → Converter → Registry → RAG Builder → RAG Search | 9 |
 | `chat_inference` | Чат-сессия с поиском по документам | Auth → Query (Chat) → Query (Text Search) → RAG Search | 6 |
 | `registry_lifecycle` | CRUD + импорт классификаторов и терминов | Auth → Registry | 13 |
 
 ## Ключевые решения
 
-- **404 с валидным JSON** — success (эндпоинт существует, ресурс не найден)
+- **2xx/3xx** — success
+- **4xx/5xx** — fail (любая ошибка сервиса)
 - **all_404 оверрайд** — если >=2 не-health эндпоинтов вернули 404, сервис помечается мёртвым (ping_ok=False, success откатывается)
-- **4xx/5xx без JSON** — fail
-- **Статус-колонка отчёта** — X если ping_ok=False
+- **Статус-колонка отчёта** — ❌ если ping_ok=False или есть failed эндпоинты
 - **Пайплайны** — сквозные сценарии в отдельных файлах `pipelines/*.py`, запуск через `pipeline_test.py`
 - **Эмбеддинги через TEI** — локальный сервер эмбеддингов Hugging Face TEI с моделью `TrendHD/rubert-tiny2-int8` (312 dim, ONNX int8) на порту 8092
