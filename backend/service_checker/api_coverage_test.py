@@ -61,7 +61,7 @@ from service_checker.services import (
 # Сервисы, имеющие реальную реализацию
 SERVICES_WITH_REAL = {
     "gateway", "auth", "orchestrator", "query", "registry",
-    "converter_validator", "parser", "ocr", "rag_builder", "rag_search", "tei",
+    "converter_validator", "parser", "ocr", "rag_builder", "rag_search",
 }
 
 
@@ -101,8 +101,7 @@ class ApiCoverageTester:
                 "query": 6,
                 "rag_builder": 7,
                 "rag_search": 8,
-                "tei": 9,
-                "gateway": 10,
+                "gateway": 9,
             }
             self.services_to_test = sorted(available_services, key=lambda s: _ORDER.get(s, 99))
 
