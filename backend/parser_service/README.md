@@ -6,7 +6,7 @@ Python 3.10+ (для запуска сервиса)
 pip, virtualenv (рекомендуется)
 Git (опционально)
 
-2. Установка и запуск MinIO
+**2. Установка, запуск и настройка MinIO (если его нет)**
 2.1 Docker Compose для MinIO
 Создайте файл docker-compose-minio.yml:
 
@@ -91,8 +91,29 @@ mc admin policy attach local parser-policy --user parser_user
 ```
 Запомните логин parser_user и его пароль – они понадобятся для .env файла сервиса.
 
+2.3. Конфигурация окружения
+Создайте файл .env в корне проекта на основе .env.example с учетом установки MinIO. 
+Важно: Замените <ваш_пароль_от_parser_user> на реальный пароль.
 
-3. Установка Parser Service
+2.4. Загрузка файлов в MinIO
+Поместите PDF‑файлы, которые хотите обработать, в локальную папку ./input.
+
+Способ 1: через mc
+```text
+bash
+mc cp --recursive ./input/ local/parser-bucket/
+```
+
+2.5. Дополнительно. Остановка и очистка
+Остановить MinIO:
+```text
+bash
+docker-compose -f docker-compose-minio.yml down
+```
+
+
+
+**3. Установка Parser Service (самому локально)**
 3.1 Клонирование репозитория (или создание папки)
 ```text
 bash
@@ -109,6 +130,12 @@ source venv/bin/activate   # Linux/Mac
 # или .\venv\Scripts\activate (Windows)
 ```
 
+Дополнительно нужно установить  Java 11 (OpenJDK) - для работы  opendataloader.
+```text
+bash
+sudo apt install -y openjdk-11-jre-headless 
+```
+
 3.3 Установка зависимостей
 Убедитесь, что в корне проекта есть файл requirements.txt (пример ниже). Установите зависимости:
 ```text
@@ -118,36 +145,8 @@ pip install -r requirements.txt
 ```
 
 3.4 Конфигурация окружения
-Создайте файл .env в корне проекта на основе .env.example. Пример .env.example:
-
-```text
-# FastAPI
-HOST=0.0.0.0
-PORT=8087
-API_PREFIX=/api/v1
-
-# MinIO
-MINIO_ENDPOINT=localhost:9000
-MINIO_ACCESS_KEY=parser_user
-MINIO_SECRET_KEY=<ваш_пароль_от_parser_user>
-MINIO_BUCKET=parser-bucket
-MINIO_IMAGE_BUCKET=parser-images
-MINIO_SECURE=false
-
-# Лимиты
-MAX_FILE_SIZE_MB=500
-MAX_PAGES=2000
-TASK_TTL_DAYS=7
-
-# Настройки парсинга
-DEFAULT_EXTRACT_TABLES=true
-DEFAULT_EXTRACT_IMAGES=true
-
-# Сохранение JSON результатов (опционально)
-SAVE_JSON_TO_DIR=false
-JSON_OUTPUT_DIR=./output
+Создайте файл .env в корне проекта на основе .env.example с учетом установки MinIO. 
 Важно: Замените <ваш_пароль_от_parser_user> на реальный пароль.
-```
 
 3.5 Загрузка файлов в MinIO
 Поместите PDF‑файлы, которые хотите обработать, в локальную папку ./input.
@@ -185,7 +184,7 @@ asyncio.run(main())
 ```
 После загрузки файлы будут доступны по ключу (имени файла), например document.pdf.
 
-4. Запуск Parser Service
+3.6. Запуск Parser Service
 ```text
 bash
 uvicorn app.main:app --host 0.0.0.0 --port 8087 --reload
@@ -200,7 +199,18 @@ curl http://127.0.0.1:8087/health
 # {"status":"ok"}
 ```
 
-5. Использование API
+Для остановки сервиса нажмите Ctrl+C в терминале с uvicorn.
+
+**4. Установка Parser Service (через Dockerfile)**
+
+Запустить команду
+```text
+bash
+docker build -t parser-service:latest .
+```
+Для полноценной работы сервиса необходимо подключение к MinIO. Смотрите пункт 2.
+
+**5. Использование API**
 5.1 Предпросмотр (синхронный)
 Получить информацию о файле без полной обработки:
 
@@ -218,7 +228,23 @@ curl -X POST http://127.0.0.1:8087/api/v1/parser/preview \
       "extract_images": false
     }
   }'
-  ```
+```
+ИЛИ 
+```text
+bash
+curl -X POST http://127.0.0.1:8087/api/v2/parser/process \
+  -H "Content-Type: application/json" \
+  -d '{
+    "task_id": 420000,
+    "file_key": "document.pdf",
+    "mode": "preview",
+    "max_pages": 3,
+    "options": {
+      "extract_tables": false,
+      "extract_images": false  
+    }
+  }'
+```
 
 Ответ (содержит имя файла и общее количество страниц):
 
@@ -242,6 +268,7 @@ json
 }
 ```
 
+  
 5.2 Асинхронная обработка
 ```text
 bash
@@ -257,7 +284,20 @@ curl -X POST http://127.0.0.1:8087/api/v1/parser/process \
     }
   }'
   ```
-
+ИЛИ
+```text
+bash
+curl -X POST http://127.0.0.1:8087/api/v2/parser/process \
+  -H "Content-Type: application/json" \
+  -d '{"task_id": 420000,
+    "file_key": "document.pdf",
+    "mode": "full",
+    "options": {
+      "extract_tables": true,
+      "extract_images": true   
+    } 
+  }'
+  ```  
 Ответ:
 
 ```text
@@ -274,6 +314,8 @@ json
 ```text
 bash
 curl "http://127.0.0.1:8087/api/v1/parser/process/420000/status?timeout=15"
+или 
+curl "http://127.0.0.1:8087/api/v2/parser/process/420000/status?timeout=15"
 ```
 При завершении обработки вернётся:
 
@@ -297,6 +339,8 @@ json
 ```text
 bash
 curl http://127.0.0.1:8087/api/v1/parser/process/420000/result
+или 
+curl http://127.0.0.1:8087/api/v2/parser/process/420000/result
 ```
 
 В ответе – JSON‑контейнер с текстом, таблицами, ссылками на изображения в MinIO.
@@ -305,6 +349,8 @@ curl http://127.0.0.1:8087/api/v1/parser/process/420000/result
 ```text
 bash
 curl http://127.0.0.1:8087/api/v1/parser/processes
+или 
+curl http://127.0.0.1:8087/api/v2/parser/processes
 ```
 
 6. Тестирование 
@@ -314,11 +360,3 @@ curl http://127.0.0.1:8087/api/v1/parser/processes
 bash
 pytest tests/ -v
 ```
-
-7. Остановка и очистка
-Остановить MinIO:
-```text
-bash
-docker-compose -f docker-compose-minio.yml down
-```
-Остановить сервис: нажмите Ctrl+C в терминале с uvicorn.

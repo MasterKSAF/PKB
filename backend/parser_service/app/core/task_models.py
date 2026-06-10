@@ -19,10 +19,10 @@ class TaskStatus(str, Enum):
 
 class TaskInfo:
     """
-    Информация о задаче.
+    Информация о задаче парсинга.
 
-    В отличие от предыдущих версий, не содержит asyncio.Event.
-    Вместо этого используется версионирование (_version) для longpoll.
+    Хранит метаданные, статус, прогресс, результат и версию для long polling.
+    Все изменения должны производиться через метод update(), который увеличивает версию.
     """
 
     def __init__(self, task_id: int, version_id: str, file_key: str, options: dict):
@@ -42,24 +42,25 @@ class TaskInfo:
         self.started_at = datetime.now(timezone.utc)
         self.completed_at = None
 
-        self.error = None          # словарь с code, message, details
-        self.result = None         # итоговый JSON-контейнер
-
-        # Поле html_content удалено, так как больше не используется в API
-        # Версия увеличивается при каждом обновлении (для longpoll)
+        self.error = None
+        self.result = None
         self._version = 0
 
     def update(self, **kwargs) -> None:
         """
         Обновляет атрибуты задачи и увеличивает версию.
 
-        :param kwargs: любые атрибуты, существующие в экземпляре
+        Args:
+            **kwargs: Пары (имя_атрибута, значение) для обновления.
         """
+        updated = False
         for key, value in kwargs.items():
             if hasattr(self, key):
                 setattr(self, key, value)
-        self._version += 1
+                updated = True
+        if updated:
+            self._version += 1
 
     def get_version(self) -> int:
-        """Возвращает текущую версию задачи (монотонно возрастает)."""
+        """Возвращает текущую версию задачи (монотонно возрастает при каждом обновлении)."""
         return self._version

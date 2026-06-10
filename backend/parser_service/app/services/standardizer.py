@@ -4,25 +4,31 @@
 import copy
 import re
 from typing import Dict, Any
+from app.config import settings
 
 
 class JsonStandardizer:
-    """Класс-утилита для приведения JSON к стандартному виду (см. json_result.txt)."""
+    """
+    Преобразует сырой JSON от парсера в стандартизированную структуру документа.
+    """
 
     @staticmethod
     def transform(data: Dict[str, Any], file_name: str = "") -> Dict[str, Any]:
         """
-        Преобразует входные данные.
-        Если передан контейнер от Normalizer (с ключами 'content' и 'document_info'),
-        то стандартизируется только поле 'content', а остальное сохраняется.
-        Иначе обрабатывается как сырой JSON парсера.
+        Преобразует входной JSON в единый формат документа.
+
+        Args:
+            data: Исходный JSON от парсера (может быть контейнером или сырым).
+            file_name: Имя файла (для подстановки в источник).
+
+        Returns:
+            Стандартизированный JSON с полями document, quality, errors, status.
         """
         if "content" in data and "document_info" in data:
             container = copy.deepcopy(data)
             raw_content = container["content"]
             standardized_content = JsonStandardizer._transform_raw(raw_content, file_name)
             container["content"] = standardized_content
-            # Обновляем метаданные контейнера
             if "metadata" not in container:
                 container["metadata"] = {}
             container["metadata"]["total_pages"] = standardized_content.get("document", {}).get("source", {}).get("page_count", 1)
@@ -36,36 +42,36 @@ class JsonStandardizer:
 
     @staticmethod
     def _transform_raw(raw_json: Dict[str, Any], file_name: str = "") -> Dict[str, Any]:
-        """Преобразует сырой JSON (структура opendataloader_pdf) в целевой формат."""
+        """
+        Внутренний метод преобразования сырого JSON (без контейнера).
+
+        Args:
+            raw_json: Сырой JSON парсера.
+            file_name: Имя файла.
+
+        Returns:
+            Стандартизированный документ.
+        """
         result = copy.deepcopy(raw_json)
-
-        # Извлечение метаданных документа
         doc_meta = {}
-        if "author" in result:
-            doc_meta["author"] = result.pop("author")
-        if "title" in result:
-            doc_meta["title"] = result.pop("title")
-        if "creation date" in result:
-            doc_meta["creation_date"] = result.pop("creation date")
-        if "modification date" in result:
-            doc_meta["modification_date"] = result.pop("modification date")
-        if "file name" in result:
-            doc_meta["file_name"] = result.pop("file name")
-
+        for key in ["author", "title", "creation date", "modification date", "file name"]:
+            if key in result:
+                doc_meta[key.replace(" ", "_")] = result.pop(key)
         total_pages = result.pop("number of pages", 1)
 
-        # Построение списка страниц
         elements = result.get("kids", [])
         page_numbers = set()
         for el in elements:
             page_num = el.get("page number")
             if page_num:
                 page_numbers.add(page_num)
-        pages = [{"page": p, "width": 210.0, "height": 297.0} for p in sorted(page_numbers)]
+        dpi = settings.pdf_dpi
+        width_px = int(210 * dpi / 25.4)
+        height_px = int(297 * dpi / 25.4)
+        pages = [{"page": p, "width": width_px, "height": height_px} for p in sorted(page_numbers)]
         if not pages:
-            pages = [{"page": 1, "width": 210.0, "height": 297.0}]
+            pages = [{"page": 1, "width": width_px, "height": height_px}]
 
-        # Преобразование элементов в блоки
         block = []
         for idx, el in enumerate(elements, start=1):
             block_item = {
@@ -74,7 +80,6 @@ class JsonStandardizer:
                 "page": el.get("page number", 1),
                 "bbox": el.get("bounding box", [0, 0, 0, 0]),
             }
-            # Информация о шрифте
             if any(k in el for k in ("font", "font size", "text color")):
                 block_item["font"] = {
                     "size": el.get("font size", 12.0),
@@ -83,11 +88,11 @@ class JsonStandardizer:
                     "italic": "Italic" in el.get("font", ""),
                     "underline": False
                 }
-
             t = block_item["type"]
-            if t in ("paragraph", "heading", "headerFooter", "caption"):
+            if t in ("paragraph", "headerFooter", "caption"):
                 block_item["content"] = el.get("content", "")
             elif t == "heading":
+                block_item["content"] = el.get("content", "")
                 block_item["heading_level"] = el.get("heading level", 1)
             elif t == "list":
                 block_item["numbering_style"] = el.get("numbering style", "unknown")
@@ -102,7 +107,7 @@ class JsonStandardizer:
                         "font": block_item.get("font", {})
                     })
             elif t == "image":
-                block_item["image_key"] = el.get("source", "").replace("1d_images/", "")
+                block_item["image_key"] = el.get("image_key", el.get("source", "").replace("1d_images/", ""))
                 if "width" in el:
                     block_item["width"] = el["width"]
                 if "height" in el:
@@ -140,14 +145,7 @@ class JsonStandardizer:
                 block_item["meaning"] = ""
             block.append(block_item)
 
-        # Показатели качества (заглушка)
-        quality = {
-            "confidence": 0.94,
-            "pages_processed": total_pages,
-            "pages_failed": 0
-        }
-
-        # Итоговая структура
+        quality = {"confidence": 0.94, "pages_processed": total_pages, "pages_failed": 0}
         target = {
             "document": {
                 "source": {
@@ -164,13 +162,25 @@ class JsonStandardizer:
             },
             "quality": quality,
             "errors": [],
-            "status": "completed"
+            "status": "completed",
+            "metadata": {
+                "total_pages": total_pages,
+                "has_tables": any(b.get("type") == "table" for b in block)
+            }
         }
         return target
 
     @staticmethod
     def _map_type(original_type: str) -> str:
-        """Приводит тип элемента к стандартному значению."""
+        """
+        Маппинг типов элементов из исходного JSON в стандартные типы.
+
+        Args:
+            original_type: Исходный тип (например, 'paragraph', 'heading').
+
+        Returns:
+            Стандартизированный тип.
+        """
         mapping = {
             "paragraph": "paragraph",
             "heading": "heading",
@@ -185,13 +195,27 @@ class JsonStandardizer:
 
     @staticmethod
     def _color_to_hex(color_str: str) -> str:
-        """Преобразует строку цвета из формата "[0.0]" или "[1.0 0.0 0.0]" в hex."""
+        """
+        Преобразует строку цвета из формата "[R,G,B]" в HEX.
+
+        Args:
+            color_str: Строка вида "[0.5,0.2,0.8]".
+
+        Returns:
+            HEX-код цвета (например, "#7f33cc") или "#000000" при ошибке.
+        """
         if not color_str or color_str == "[0.0]":
             return "#000000"
-        numbers = re.findall(r"[-+]?\d*\.\d+|\d+", color_str)
+        numbers = re.findall(r"[-+]?\d*\.?\d+", color_str)
         if len(numbers) >= 3:
-            r = int(float(numbers[0]) * 255)
-            g = int(float(numbers[1]) * 255)
-            b = int(float(numbers[2]) * 255)
-            return f"#{r:02x}{g:02x}{b:02x}"
+            try:
+                r = int(round(float(numbers[0]) * 255))
+                g = int(round(float(numbers[1]) * 255))
+                b = int(round(float(numbers[2]) * 255))
+                r = max(0, min(255, r))
+                g = max(0, min(255, g))
+                b = max(0, min(255, b))
+                return f"#{r:02x}{g:02x}{b:02x}"
+            except (ValueError, IndexError):
+                return "#000000"
         return "#000000"
