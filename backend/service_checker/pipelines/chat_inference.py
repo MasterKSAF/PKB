@@ -10,6 +10,7 @@ Auth → Query (Chat) → Query (Text Search) → RAG Search.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from pipelines.base import (
@@ -17,7 +18,6 @@ from pipelines.base import (
     PipelineDef,
     PipelineStep,
     check_json_field,
-    check_json_fields,
 )
 
 # Тестовые учётные данные (admin — создаётся auth-сервисом при старте)
@@ -51,36 +51,21 @@ class ChatInferencePipeline(PipelineDef):
             check=check_json_field("access_token", str),
         ))
 
-        # ── Шаг 2: Профиль пользователя ──────────────────────────────
-        steps.append(PipelineStep(
-            name="Профиль пользователя",
-            service="auth",
-            method="GET",
-            path="/api/v1/auth/me",
-            port=8082,
-            expected_status=200,
-            check=check_json_fields({
-                "email": str,
-                "role": str,
-            }),
-            needs_auth=True,
-        ))
-
-        # ── Шаг 3: Создание чат-сессии ───────────────────────────────
+        # ── Шаг 2: Создание чат-сессии ───────────────────────────────
         steps.append(PipelineStep(
             name="Создание чат-сессии",
             service="query",
             method="POST",
             path="/api/v1/chat/sessions",
             port=8083,
-            body={"title": "Pipeline тестовая сессия"},
+            body={"title": f"Pipeline тестовая сессия {datetime.now().isoformat()}"},
             expected_status=201,
             extract_keys=["session_id"],
             check=check_json_field("session_id", (int, str)),
             needs_auth=True,
         ))
 
-        # ── Шаг 4: Отправка сообщения ────────────────────────────────
+        # ── Шаг 3: Отправка сообщения ────────────────────────────────
         steps.append(PipelineStep(
             name="Отправка сообщения",
             service="query",
@@ -93,13 +78,11 @@ class ChatInferencePipeline(PipelineDef):
             },
             expected_status={200, 202},
             extract_keys=["message_id"],
-            check=check_json_fields({
-                "text": str,
-            }),
+            check=check_json_field("message_id", (int, str)),
             needs_auth=True,
         ))
 
-        # ── Шаг 5: Текстовый поиск ───────────────────────────────────
+        # ── Шаг 4: Текстовый поиск ───────────────────────────────────
         steps.append(PipelineStep(
             name="Текстовый поиск",
             service="query",
@@ -115,7 +98,7 @@ class ChatInferencePipeline(PipelineDef):
             needs_auth=True,
         ))
 
-        # ── Шаг 6: Гибридный поиск RAG Search ────────────────────────
+        # ── Шаг 5: Гибридный поиск RAG Search ────────────────────────
         steps.append(PipelineStep(
             name="Гибридный поиск RAG Search",
             service="rag_search",

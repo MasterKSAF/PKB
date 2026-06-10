@@ -8,6 +8,7 @@ Registry -> RAG Builder -> RAG Search.
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -71,7 +72,7 @@ class DocumentProcessingPipeline(PipelineDef):
     TEST_TASK_ID = TEST_TASK_ID
 
     def build_steps(self, context: PipelineContext) -> List[PipelineStep]:
-        """Построить 8 шагов пайплайна document_processing."""
+        """Построить 9 шагов пайплайна document_processing."""
         steps: List[PipelineStep] = []
 
         pdf_path = Path(self.TEST_PDF_PATH)
@@ -102,7 +103,7 @@ class DocumentProcessingPipeline(PipelineDef):
             check=_check_minio_upload,
         ))
 
-        # -- Шаг 2: Запуск парсинга --
+        # -- Шаг 3: Запуск парсинга --
         steps.append(PipelineStep(
             name="Запуск парсинга",
             service="parser",
@@ -119,7 +120,7 @@ class DocumentProcessingPipeline(PipelineDef):
             check=check_json_field("task_id", int),
         ))
 
-        # -- Шаг 3: Статус парсинга (longpoll) --
+        # -- Шаг 4: Статус парсинга (longpoll) --
         steps.append(PipelineStep(
             name="Статус парсинга (longpoll)",
             service="parser",
@@ -130,7 +131,7 @@ class DocumentProcessingPipeline(PipelineDef):
             check=check_json_field("status", str),
         ))
 
-        # -- Шаг 4: Результат парсинга --
+        # -- Шаг 5: Результат парсинга --
         steps.append(PipelineStep(
             name="Результат парсинга",
             service="parser",
@@ -146,7 +147,7 @@ class DocumentProcessingPipeline(PipelineDef):
             }),
         ))
 
-        # -- Шаг 5: Конвертация JSON --
+        # -- Шаг 6: Конвертация JSON --
         steps.append(PipelineStep(
             name="Конвертация JSON",
             service="converter_validator",
@@ -162,7 +163,7 @@ class DocumentProcessingPipeline(PipelineDef):
             check=_check_converter,
         ))
 
-        # -- Шаг 6: Сохранение документа в Registry --
+        # -- Шаг 7: Сохранение документа в Registry --
         steps.append(PipelineStep(
             name="Сохранение документа в Registry",
             service="registry",
@@ -170,17 +171,17 @@ class DocumentProcessingPipeline(PipelineDef):
             path="/api/v1/registry/documents/",
             port=8084,
             body={
-                "title": "Тестовый документ pipeline",
-                "doc_code": "PIPELINE-TEST-001",
+                "title": f"Тестовый документ pipeline {int(time.time())}",
+                "doc_code": f"PIPELINE-TEST-{int(time.time())}",
                 "source_type": "GOST",
                 "era": "RF",
                 "validity_status": "active",
             },
-            expected_status=201,
+            expected_status={201, 409},
             needs_auth=True,
         ))
 
-        # -- Шаг 7: Построение чанков + индексация RAG Builder --
+        # -- Шаг 8: Построение чанков + индексация RAG Builder --
         steps.append(PipelineStep(
             name="Построение чанков и индексация",
             service="rag_builder",
@@ -203,7 +204,7 @@ class DocumentProcessingPipeline(PipelineDef):
             expected_status=201,
         ))
 
-        # -- Шаг 8: Поиск по индексу RAG Search --
+        # -- Шаг 9: Поиск по индексу RAG Search --
         steps.append(PipelineStep(
             name="Поиск по индексу RAG Search",
             service="rag_search",

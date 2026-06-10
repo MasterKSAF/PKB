@@ -119,8 +119,8 @@ python api_coverage_test.py run-all
 | Пайплайн | Описание | Сервисы | Шагов |
 |----------|----------|---------|:-----:|
 | `document_processing` | Полный цикл обработки документа | Auth → MinIO → Parser → Converter → Registry → RAG Builder → RAG Search | 9 |
-| `chat_inference` | Чат-сессия с поиском по документам | Auth → Query (Chat) → Query (Text Search) → RAG Search | 6 |
-| `registry_lifecycle` | CRUD + импорт классификаторов и терминов | Auth → Registry | 13 |
+| `chat_inference` | Чат-сессия с поиском по документам | Auth → Query (Chat) → Query (Text Search) → RAG Search | 5 |
+| `registry_lifecycle` | CRUD + импорт классификаторов и терминов | Auth → Registry | 11 |
 
 ## Ключевые решения
 
