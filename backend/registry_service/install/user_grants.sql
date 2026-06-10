@@ -18,8 +18,9 @@ CREATE USER pkb_user WITH PASSWORD 'password123';
 -- Grant Privileges on Schemas
 -- ============================================================================
 
--- Grant usage on both schemas
-GRANT USAGE ON SCHEMA registry TO pkb_user;
+-- Grant usage and create on both schemas
+GRANT USAGE, CREATE ON SCHEMA registry TO pkb_user;
+GRANT USAGE, CREATE ON SCHEMA public TO pkb_user;
 
 
 -- ============================================================================
