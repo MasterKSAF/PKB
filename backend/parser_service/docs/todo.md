@@ -1,5 +1,6 @@
 todo на 14.06.2026:
-
+- правильно настроить подключение к MinIO из другого сервиса 
+  
 
 
 10.06.2026 реализована 2v parser_service 
@@ -15,7 +16,9 @@ todo на 14.06.2026:
   * Изменение обработки изображений  
     – Парсеры (`PdfParser`) больше не загружают изображения в MinIO, а сохраняют их во временные файлы и возвращают пути (`ParseResult.images` → список `(page_num, file_path, ext)`).  
     – Добавлен шаг `UploadImagesStep`: загружает файлы в MinIO, заменяет пути в JSON на `image_key`, удаляет временные файлы.  
-    – `Normalizer` упрощён (только обёртка JSON), логика загрузки вынесена.  
+    – `Normalizer` упрощён (только обёртка JSON), логика загрузки вынесена.
+    – Файлы теперь сохраняютс по пути task_id/{task_id}_{num_image}_{hash}.png в бакете MinIO parser-image.
+    – Значения высоты и ширины в итоговом json переведены в значения пикселей. 
   * Новая утилита `file_loader.py`  
     – Единая функция `fetch_and_validate` для скачивания и валидации файла (используется в preview и v2 preview).  
   * Graceful shutdown  
@@ -44,7 +47,8 @@ todo на 14.06.2026:
     – В `result.py` (v1) и v2 `get_task_result` возвращает `JSONResponse` вместо `raise HTTPException` для единообразия.  
   * Удалены неиспользуемые компоненты  
     – `task_result_cache.py` удалён.  
-    – `image_uploader.py` и `MinIOImageUploader` удалены (заменены `UploadImagesStep`).  
+    – `image_uploader.py` и `MinIOImageUploader` удалены (заменены `UploadImagesStep`).
+  * Замена подписи схемы на raw_ocr_v4.
   
 
 
