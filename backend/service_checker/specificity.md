@@ -533,11 +533,43 @@ app = FastAPI(lifespan=lifespan)
 Аналогичное исправление: добавить `Base.metadata.create_all(bind=engine)` в `create_app()`.
 
 ### Статус
-✅ **Service Checker — исправлено** (БД инициализируется в Docker через entrypoint.sh)
 🔴 **Registry — открыто** (не создаёт таблицы при старте)
 🟡 **RAG Builder — открыто** (не создаёт таблицы при старте)
 
-## 12. Все id — только int (архитектурное решение)
+## 12. Checker больше не создаёт схемы и таблицы сервисов
+
+**Решение принято:** 2026-06-10
+
+### Суть
+`setup_db.py` больше не создаёт схемы (`registry`, `rag`) и таблицы (`rag.document_chunks`)
+сервисов. Это зона ответственности самих сервисов через `create_all()` при старте.
+
+### Что делает setup_db.py теперь
+1. Создаёт базу `pkb_neuro` (если нет)
+2. Устанавливает расширения PostgreSQL (uuid-ossp, pgcrypto, ltree, pg_trgm, vector)
+3. Настраивает права на `public`
+4. Создаёт пользователей (вне Docker-режима)
+
+### Что больше не делает
+- ❌ Не создаёт схему `registry`
+- ❌ Не создаёт схему `rag`
+- ❌ Не создаёт таблицу `rag.document_chunks`
+- ❌ Не ищет и не подключает SQL-дамп из `registry_service/install/`
+
+### Мотивация
+Checker не должен вмешиваться в работу сервисов. Создание схем и таблиц —
+обязанность сервисов через `Base.metadata.create_all()` в startup.
+
+### Последствия
+- `entrypoint.sh` по-прежнему вызывает `setup_db.py --docker`, но только для
+  базы, расширений и .env файлов
+- `db-check` будет показывать ❌ для Registry и RAG таблиц, пока сервисы
+  не реализуют `create_all()` при старте
+- Для тестирования в Docker нужно либо:
+  a) Реализовать `create_all()` в сервисах
+  б) Либо вручную выполнять SQL-скрипт инициализации
+
+## 13. Все id — только int (архитектурное решение)
 
 Все идентификаторы в API сервисов (`task_id`, `document_id`, `version_id`, `session_id`,
 `message_id`, `draft_id`, `validation_id`, `user_id`, `role_id`, `id`) — только `int`.

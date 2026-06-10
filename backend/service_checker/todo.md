@@ -32,6 +32,17 @@
 - `api_coverage_test.py` — проверка `isinstance(value, expected_type)` теперь корректна
 - 116 тестов проходят
 
+## 5. Checker больше не создаёт схемы и таблицы сервисов
+- Удалён `sql_create_rag_tables()` — RAG Builder должен сам создавать `rag.document_chunks` через `create_all()`
+- Удалён `get_full_sql_path()` и поиск дампа Registry — Registry сервис должен сам создавать свои таблицы
+- Из `sql_setup_extensions_and_schemas()` убрано создание схем `registry` и `rag`
+- Обновлены тесты `test_db_setup.py` (18 passed)
+- Обновлён `specificity.md` (п.12 — новое решение)
+
+## 6. recheck.bat — очистка БД при каждом запуске
+- Заменён `restart app` на `down -v + up -d` — каждый запуск начинается с чистой БД
+- Удалён комментарий "БЕЗ очистки volumes"
+
 ## Остаётся
-- Registry и RAG Builder не имеют `create_all()` в startup (известная проблема)
-- При полном запуске Docker `db-check` покажет ❌ для RAG таблиц
+- Registry и RAG Builder не имеют `create_all()` в startup — без этого их таблицы не создаются
+- `db-check` будет показывать ❌ для Registry и RAG таблиц, пока сервисы не реализуют `create_all()`

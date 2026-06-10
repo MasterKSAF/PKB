@@ -23,6 +23,7 @@ data_raw/
 data_processed/
 data_artifacts/
 artifacts/
+check_result/
 
 *.pdf
 *.dwg

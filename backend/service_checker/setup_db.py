@@ -43,28 +43,7 @@ SERVICE_USERS = {
 }
 
 
-def get_full_sql_path() -> Optional[Path]:
-    """Путь к SQL-файлу registry схемы.
 
-    Ищет любой .sql файл в директории install/ (pg_dump, full_schema и т.п.)
-    по приоритету: 0. full_schema.sql > 1. db_dump.sql > *.sql
-    """
-    install_dir = PROJECT_ROOT / "backend" / "registry_service" / "install"
-    if not install_dir.is_dir():
-        return None
-
-    # Приоритет: точное имя > первый .sql файл
-    for name in ["0. full_schema.sql", "1. db_dump.sql"]:
-        p = install_dir / name
-        if p.exists():
-            return p
-
-    # Любой .sql файл
-    sql_files = sorted(install_dir.glob("*.sql"))
-    if sql_files:
-        return sql_files[0]
-
-    return None
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -87,21 +66,16 @@ def sql_create_database(drop_first: bool = False) -> str:
     return sql
 
 
-def sql_setup_extensions_and_schemas(registry_schema_by_dump: bool = False) -> str:
+def sql_setup_extensions_and_schemas() -> str:
     """
-    SQL для расширений и схем.
+    SQL для расширений.
 
-    Если registry_schema_by_dump=True — schema registry НЕ создаётся,
-    потому что она будет создана через \\i из дампа Registry.
+    Создаёт только расширения PostgreSQL.
+    Схемы и таблицы сервисов — зона ответственности самих сервисов.
     """
-    registry_schema = "" if registry_schema_by_dump else """
-    -- Схема registry (если дамп Registry не создаёт её сам)
-    CREATE SCHEMA IF NOT EXISTS registry;
-    GRANT ALL ON SCHEMA registry TO PUBLIC;
-"""
 
     return textwrap.dedent(f"""\
-    \\c {DB_NAME}
+    \c {DB_NAME}
 
     -- Расширения (основные — всегда доступны)
     CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -115,11 +89,6 @@ def sql_setup_extensions_and_schemas(registry_schema_by_dump: bool = False) -> s
     EXCEPTION WHEN OTHERS THEN
         RAISE WARNING 'pgvector extension not available — RAG services will not work';
     END $$;
-
-    -- Схемы{registry_schema}
-    -- Схема rag (всегда создаётся setup_db)
-    CREATE SCHEMA IF NOT EXISTS rag;
-    GRANT ALL ON SCHEMA rag TO PUBLIC;
 
     -- Права на public
     GRANT ALL ON SCHEMA public TO PUBLIC;
@@ -152,65 +121,8 @@ def sql_create_users(skip: bool = False) -> str:
     return "\n".join(lines)
 
 
-def sql_create_rag_tables() -> str:
-    """Таблица rag.document_chunks для RAG Builder (port 8090) и RAG Search (port 8091)."""
-    return textwrap.dedent(f"""\
-    -- RAG: создаём только если расширение vector доступно
-    DO $$
-    DECLARE
-        has_vector bool;
-    BEGIN
-        SELECT count(*) > 0 INTO has_vector
-        FROM pg_extension WHERE extname = 'vector';
-
-        IF has_vector THEN
-            CREATE TABLE IF NOT EXISTS rag.document_chunks (
-                id          SERIAL PRIMARY KEY,
-                section_id  INTEGER NOT NULL,
-                document_id UUID NOT NULL,
-                chunk_index INTEGER NOT NULL,
-                content     TEXT NOT NULL,
-                embedding   vector(1536),
-                strategy    VARCHAR(32) NOT NULL,
-                page        INTEGER,
-                bbox        JSONB,
-                confidence  FLOAT,
-                created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-            );
-
-            CREATE INDEX IF NOT EXISTS ix_rag_chunks_doc_id
-                ON rag.document_chunks (document_id);
-
-            -- HNSW-индекс для векторного поиска
-            CREATE INDEX IF NOT EXISTS idx_chunks_embedding
-                ON rag.document_chunks
-                USING hnsw (embedding vector_cosine_ops)
-                WITH (m = 16, ef_construction = 64);
-
-            -- GIN-индекс для полнотекстового поиска
-            ALTER TABLE rag.document_chunks ADD COLUMN IF NOT EXISTS tsv tsvector;
-            CREATE INDEX IF NOT EXISTS idx_chunks_tsv
-                ON rag.document_chunks USING gin (tsv);
-
-            -- Триггер авто-обновления tsv (русская конфигурация)
-            CREATE OR REPLACE FUNCTION rag.update_tsv() RETURNS trigger AS $func$
-            BEGIN
-                NEW.tsv := to_tsvector('russian', COALESCE(NEW.content, ''));
-                RETURN NEW;
-            END;
-            $func$ LANGUAGE plpgsql;
-
-            DROP TRIGGER IF EXISTS trg_chunks_tsv ON rag.document_chunks;
-            CREATE TRIGGER trg_chunks_tsv
-                BEFORE INSERT OR UPDATE OF content ON rag.document_chunks
-                FOR EACH ROW EXECUTE FUNCTION rag.update_tsv();
-
-            RAISE NOTICE 'RAG table created successfully';
-        ELSE
-            RAISE WARNING 'vector extension not found — skipping RAG tables';
-        END IF;
-    END $$;
-    """)
+# sql_create_rag_tables removed — checker не создаёт таблицы сервисов.
+# RAG Builder должен сам создавать rag.document_chunks через create_all() при старте.
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -219,31 +131,23 @@ def sql_create_rag_tables() -> str:
 
 
 def build_full_sql(drop_first: bool = False, skip_users: bool = False) -> str:
-    """Собирает полный SQL-скрипт инициализации БД."""
-    full_schema = get_full_sql_path()
-    registry_by_dump = full_schema is not None
+    """Собирает SQL-скрипт инициализации БД.
+
+    Создаёт только базу данных, расширения PostgreSQL и настройки прав.
+    Схемы и таблицы сервисов — зона ответственности самих сервисов.
+    """
 
     parts: List[str] = [
         "-- ============================================================",
-        "-- PKB Neuroassistant — Full Database Setup",
+        "-- PKB Neuroassistant — Database Setup (service_checker)",
         "-- ============================================================",
+        "-- Внимание: checker создаёт ТОЛЬКО базу и расширения.",
+        "-- Схемы и таблицы сервисов (registry, rag, auth, ...)",
+        "-- создаются самими сервисами через create_all() при старте.",
         "",
         sql_create_database(drop_first),
-        sql_setup_extensions_and_schemas(registry_schema_by_dump=registry_by_dump),
+        sql_setup_extensions_and_schemas(),
     ]
-
-    # Registry schema (из дампа)
-    if full_schema:
-        parts.append(f"-- Registry tables (from {full_schema.name})")
-        # psql на Windows требует forward slashes
-        path_str = str(full_schema.as_posix())
-        parts.append(f"\\i '{path_str}'")
-    else:
-        parts.append("-- WARNING: registry schema SQL not found, skipping")
-        parts.append("-- Expected at: backend/registry_service/install/")
-
-    # RAG tables
-    parts.append(sql_create_rag_tables())
 
     # Users (в Docker не создаём — используем 'pkb' owner'а БД)
     parts.append(sql_create_users(skip=skip_users))
@@ -482,14 +386,11 @@ def main():
         print(f"  │  👤 Без создания пользователей (Docker)                 │")
     print(f"  └──────────────────────────────────────────────────────────┘\n")
 
-    # Проверка
-    full_schema = get_full_sql_path()
-    if not full_schema:
-        print("  ⚠ Внимание: не найден registry schema SQL-файл")
-        print("    Ожидается: backend/registry_service/install/")
-        print("    Registry таблицы не будут созданы!\n")
+    # Информация (больше не ищем дамп — схемы создают сервисы)
+    print("  ℹ Схемы и таблицы сервисов (registry, rag, auth, ...)")
+    print("    создаются самими сервисами через create_all() при старте.")
 
-    # Генерация SQL
+    # Генерация SQL (только БД + расширения, без схем и таблиц сервисов)
     sql = build_full_sql(drop_first=args.drop_first, skip_users=skip_users)
 
     # Выполнение

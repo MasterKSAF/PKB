@@ -40,7 +40,7 @@ def _get_service_checkdb_icon(db_result: Any, svc_key: str) -> str:
     """
     Per-service статус CheckDb: есть ли у сервиса create_all().
 
-    Берёт данные из статического анализа services_create_all (Dict[str, bool]).
+    Consumer-сервисы (rag_search) не должны создавать таблицы — для них "—".
     """
     if db_result is None:
         return "—"
@@ -51,6 +51,11 @@ def _get_service_checkdb_icon(db_result: Any, svc_key: str) -> str:
     has_it = create_all_map.get(startup_key)
     if has_it is None:
         return "—"
+    # Проверка: consumer-сервисы не должны иметь create_all
+    from service_checker.core.db_check import SERVICE_STARTUP_CHECKS
+    svc_info = SERVICE_STARTUP_CHECKS.get(startup_key, {})
+    if svc_info.get("must_not_have_create_all", False):
+        return "—"  # consumer, не создаёт таблицы
     return "✅" if has_it else "❌"
 
 
@@ -71,8 +76,8 @@ def _generate_full_report(
 
     # ── 1. Итоговая сводная таблица ─────────────────────────────────
     lines.append("## 📊 Итоговая сводная таблица\n")
-    lines.append("| Service | Port | Ping | CheckDb | ✅ Passed | Documents | Query | Status |")
-    lines.append("|---------|:----:|:----:|:-------:|:---------:|:---------:|:-----:|:------:|")
+    lines.append("| Service | Port | Ping | CheckDb | API | Documents | Query | Status |")
+    lines.append("|---------|:----:|:----:|:-------:|:---:|:---------:|:-----:|:------:|")
 
     # Собираем per-service per-pipeline статус шагов
     # service_key -> {pipeline_name -> passed/all_count}
@@ -139,30 +144,58 @@ def _generate_full_report(
         svc_checkdb = _get_service_checkdb_icon(db_result, svc_key)
         lines.append(f"| {display_name} | {port} | {ping_icon} | {svc_checkdb} | {passed_icon} | {doc_icon} | {query_icon} | {status_icon} |")
 
-    # Итоговая строка
+    # Итоговая строка — количества по всем столбцам
     total_services = len(coverage_results)
     cov_alive = sum(1 for r in coverage_results.values() if r.ping_ok)
-    total_ok = sum(r.endpoints_passed for r in coverage_results.values())
-    total_eps = sum(r.endpoints_total for r in coverage_results.values())
-    pipe_ok = sum(1 for p in pipeline_passed.values() if p)
-    pipe_total = len(pipeline_passed)
-    # Все сервисы покрытия ping OK и без ошибок
-    all_cov_ok = all(
-        r.ping_ok and r.endpoints_failed == 0 and r.endpoints_skipped == 0
-        for r in coverage_results.values()
-    ) if coverage_results else True
-    overall_ok = all_cov_ok and all(pipeline_passed.values())
-    overall_status = "✅" if overall_ok else "❌"
-    # ✅ Passed — true/false вместо суммы
-    cov_passed_icon = "✅" if all_cov_ok else "❌"
-    pipe_passed_icon = "✅" if all(pipeline_passed.values()) else "❌"
-    # Итоговая строка — CheckDb: ✅ если все сервисы с БД имеют create_all
-    all_db_ok = all(
-        _get_service_checkdb_icon(db_result, k) == "✅"
-        for k in coverage_results if k in COVERAGE_TO_STARTUP_KEY
-    ) if db_result else False
-    all_db_icon = "✅" if all_db_ok else _get_db_icon(db_result)
-    lines.append(f"| **Total** | | **{cov_alive}/{total_services}** | {all_db_icon} | {cov_passed_icon} | {pipe_passed_icon} | {pipe_passed_icon} | {overall_status} |\n")
+
+    # ✅ Passed: кол-во сервисов без ошибок (endpoints)
+    cov_ok_count = sum(
+        1 for r in coverage_results.values()
+        if r.ping_ok and r.endpoints_failed == 0 and r.endpoints_skipped == 0
+    )
+
+    # CheckDb: кол-во сервисов у которых есть create_all (или consumer)
+    svcs_with_db = [k for k in coverage_results if k in COVERAGE_TO_STARTUP_KEY]
+    svcs_checkdb_ok = sum(
+        1 for k in svcs_with_db
+        if _get_service_checkdb_icon(db_result, k) in ("✅", "—")
+    )
+    svcs_checkdb_total = len(svcs_with_db)
+
+    # Documents: кол-во успешно пройденных шагов document_processing
+    doc_passed_total = 0
+    doc_steps_total = 0
+    for svc_key, svc_status in pipe_service_status.items():
+        if "document_processing" in svc_status:
+            passed, total = svc_status["document_processing"]
+            doc_passed_total += passed
+            doc_steps_total += total
+
+    # Query: кол-во успешно пройденных шагов chat_inference
+    query_passed_total = 0
+    query_steps_total = 0
+    for svc_key, svc_status in pipe_service_status.items():
+        if "chat_inference" in svc_status:
+            passed, total = svc_status["chat_inference"]
+            query_passed_total += passed
+            query_steps_total += total
+
+    all_cov_ok = cov_ok_count == total_services
+    all_pipe_ok = all(pipeline_passed.values()) if pipeline_passed else True
+    pipe_ok_count = sum(1 for p in pipeline_passed.values() if p) if pipeline_passed else 0
+    pipe_total = len(pipeline_passed) if pipeline_passed else 0
+    overall_ok_count = (1 if all_cov_ok else 0) + (1 if all_pipe_ok else 0)
+    overall_total = 2
+    overall_status = "✅" if overall_ok_count == overall_total else "❌"
+
+    lines.append(
+        f"| **Total** | | **{cov_alive}/{total_services}** "
+        f"| **{svcs_checkdb_ok}/{svcs_checkdb_total}** "
+        f"| **{cov_ok_count}/{total_services}** "
+        f"| **{doc_passed_total}/{doc_steps_total}** "
+        f"| **{query_passed_total}/{query_steps_total}** "
+        f"| {overall_status} **{overall_ok_count}/{overall_total}** |\n"
+    )
 
     # ── 2. Детали API Coverage ─────────────────────────────────────
     lines.append("---\n")
@@ -185,7 +218,8 @@ def _generate_full_report(
     all_failed = sum(r.endpoints_failed for r in coverage_results.values())
     all_skipped = sum(r.endpoints_skipped for r in coverage_results.values())
     cov_ok = all_failed == 0 and all_skipped == 0
-    lines.append(f"| **Total** | | **{all_alive}/{len(coverage_results)}** | {all_db_icon} | **{all_total_ep}** | **{all_total_ok}** | **{all_failed}** | **{all_skipped}** | {'✅' if cov_ok else '❌'} |\n")
+    cov_checkdb_total_icon = "✅" if svcs_checkdb_ok == svcs_checkdb_total else "❌" if db_result is not None else "—"
+    lines.append(f"| **Total** | | **{all_alive}/{len(coverage_results)}** | {cov_checkdb_total_icon} | **{all_total_ep}** | **{all_total_ok}** | **{all_failed}** | **{all_skipped}** | {'✅' if cov_ok else '❌'} |\n")
 
     # ── 3. Детали Pipeline Testing ─────────────────────────────────
     lines.append("---\n")

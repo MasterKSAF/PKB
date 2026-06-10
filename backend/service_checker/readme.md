@@ -33,7 +33,7 @@ service_checker/
 │   ├── rag_search.py         # RAG Search (2 endpoints)
 │   ├── tei.py                # TEI Embeddings (2 endpoints)
 │   └── gateway.py            # Gateway (агрегирует auth+orchestrator+query+registry)
-├── setup_db.py              # Инициализация БД
+- `setup_db.py`              # Инициализация БД (только база + расширения, схемы/таблицы — создают сами сервисы)
 ├── pipeline_test.py         # Pipeline Testing (сквозные сценарии)
 ├── pipelines/               # Модули пайплайнов
 │   ├── __init__.py                      # Реестр пайплайнов
@@ -127,15 +127,7 @@ python api_coverage_test.py run-all
 python service_checker.py docker --action db-check   # Проверка БД: таблицы Registry и RAG
 ```
 
-## Docker Compose (5 контейнеров)
 
-| Контейнер | Назначение | Порты |
-|-----------|-----------|-------|
-| `postgres` | PostgreSQL 16 + pgvector | 5432 |
-| `redis` | Redis 7 (брокер Celery + кэш) | 6379 |
-| `minio` | S3-хранилище для файлов | 9000, 9001 |
-| `tei` | Hugging Face TEI (эмбеддинги) | 8092 |
-| `app` | 10 Python-сервисов под supervisord | 8000, 8081-8091 |
 
 ### TEI (Text Embeddings Inference)
 

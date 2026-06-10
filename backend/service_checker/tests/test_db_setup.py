@@ -191,37 +191,17 @@ class TestSqlSyntax:
 
 
 class TestSchemas:
-    """Проверка создания схем."""
+    """Схемы сервисов НЕ создаются setup_db — это ответственность самих сервисов."""
 
-    def test_registry_schema_created_or_included(self, full_sql, setup_db_module):
-        """Registry schema: created by setup_db or inside dump file."""
-        # When dump is found — registry schema inside dump, not in SQL itself
-        dump = setup_db_module.get_full_sql_path()
-        if dump is not None:
-            # Verify the dump file contains CREATE SCHEMA registry
-            dump_content = dump.read_text(encoding="utf-8")
-            assert "CREATE SCHEMA registry" in dump_content, \
-                "Registry dump should contain CREATE SCHEMA registry"
-        else:
-            # Without dump — registry is created by setup_db
-            schemas = extract_schemas_from_sql(sql_lines)
-            assert "registry" in schemas, (
-                f"registry schema not created. Found schemas: {schemas}"
-            )
-
-    def test_rag_schema_created(self, sql_lines):
-        """Схема rag создаётся."""
+    def test_no_service_schemas_in_setup(self, sql_lines):
+        """setup_db не создаёт схемы сервисов (registry, rag)."""
         schemas = extract_schemas_from_sql(sql_lines)
-        assert "rag" in schemas, (
-            f"rag schema not created. Found schemas: {schemas}"
+        service_schemas = {"registry", "rag"}
+        found = schemas & service_schemas
+        assert not found, (
+            f"setup_db больше не должен создавать схемы сервисов. "
+            f"Найдены: {found}. Схемы создают сами сервисы через create_all()."
         )
-
-    def test_no_extra_schemas(self, sql_lines):
-        """Нет лишних схем."""
-        schemas = extract_schemas_from_sql(sql_lines)
-        known = {"registry", "rag"}
-        extra = schemas - known
-        assert not extra, f"Unexpected schemas: {extra}"
 
 
 # ────────────────────────────────────────────────────────────────
@@ -252,80 +232,12 @@ class TestExtensions:
 
 
 class TestRagTables:
-    """Проверка создания RAG-таблиц."""
+    """RAG таблицы больше не создаются setup_db — это делает RAG Builder при старте."""
 
-    def test_rag_document_chunks_exists(self, sql_lines):
-        """Таблица rag.document_chunks создаётся."""
-        tables = extract_table_names(sql_lines)
-        assert "rag.document_chunks" in tables, (
-            f"rag.document_chunks not found. Tables: {tables}"
-        )
-
-    def test_rag_has_embedding_column(self, full_sql):
-        """Таблица rag.document_chunks имеет колонку embedding vector(1536)."""
-        assert "embedding   vector(1536)" in full_sql, \
-            "embedding column not found in rag.document_chunks"
-
-    def test_rag_has_hnsw_index(self, full_sql):
-        """Есть HNSW-индекс для векторного поиска."""
-        assert "USING hnsw (embedding vector_cosine_ops)" in full_sql, \
-            "HNSW index on embedding not found"
-
-    def test_rag_has_gin_index(self, full_sql):
-        """Есть GIN-индекс для полнотекстового поиска."""
-        assert "USING gin (tsv)" in full_sql, \
-            "GIN index on tsv not found"
-
-    def test_rag_has_update_tsv_trigger(self, full_sql):
-        """Есть триггер авто-обновления tsv."""
-        assert "CREATE TRIGGER trg_chunks_tsv" in full_sql, \
-            "tsv auto-update trigger not found"
-
-    def test_rag_index_count(self, sql_lines):
-        """Минимум 2 индекса на RAG таблицу."""
-        assert count_create_index(sql_lines) >= 2
-
-    def test_rag_trigger_count(self, sql_lines):
-        """Минимум 1 триггер."""
-        assert count_create_trigger(sql_lines) >= 1
-
-    def test_rag_has_created_at(self, full_sql):
-        """Есть колонка created_at с now() по умолчанию."""
-        assert "created_at" in full_sql and "now()" in full_sql, \
-            "created_at with default now() not found"
-
-
-# ────────────────────────────────────────────────────────────────
-#  Тесты Registry таблиц (из дампа)
-# ────────────────────────────────────────────────────────────────
-
-
-class TestRegistryTables:
-    """Проверка, что Registry SQL-дамп включён в скрипт."""
-
-    def test_registry_dump_included(self, full_sql):
-        """Дамп registry подключён через \\i."""
-        assert "\\i '" in full_sql, \
-            "Registry dump (\\i) not included in SQL"
-        assert "Registry tables (from" in full_sql, \
-            "Registry dump comment not found"
-
-    def test_registry_referenced_in_grants(self, full_sql):
-        """Хотя бы одна ссылка на schema registry (grants или дамп)."""
-        has_registry_ref = "registry." in full_sql or "\\i '" in full_sql
-        assert has_registry_ref, \
-            "No registry schema references found in SQL"
-
-    def test_registry_sql_file_exists(self, setup_db_module):
-        """Проверка, что путь к дампу существует."""
-        path = setup_db_module.get_full_sql_path()
-        assert path is not None, "Registry SQL dump not found!"
-        assert path.exists(), f"Registry SQL dump not found at {path}"
-
-    def test_dump_file_name(self, setup_db_module):
-        """Проверка имени файла дампа (любой .sql в install/)."""
-        path = setup_db_module.get_full_sql_path()
-        assert path.suffix == ".sql", f"Not a SQL file: {path}"
+    def test_no_rag_tables_in_setup(self, full_sql):
+        """setup_db не содержит CREATE TABLE для RAG."""
+        assert "rag.document_chunks" not in full_sql, \
+            "setup_db больше не должен создавать RAG таблицы. Это делает RAG Builder."
 
 
 # ────────────────────────────────────────────────────────────────

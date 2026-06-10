@@ -1,15 +1,14 @@
 @echo off
 REM =============================================================================
-REM PKB Neuroassistant — re-check: prepare missing deps + restart + full report
+REM PKB Neuroassistant — re-check: clean DB + restart + full report
 REM
 REM Автоматически:
 REM   1. Проверяет наличие base-образа — если нет, собирает
 REM   2. Проверяет наличие модели TEI — если нет, скачивает
-REM   3. Запускает / перезапускает контейнеры
+REM   3. Пересоздаёт контейнеры с чистой БД (down -v + up)
 REM   4. Ждёт и запускает full-report
 REM
-REM БЕЗ очистки volumes (данные сохраняются).
-REM Для полной переустановки с нуля: docker\prepare.bat
+REM Каждый запуск начинается с чистой БД — удаляются все volumes.
 REM =============================================================================
 
 cd /d "%~dp0"
@@ -47,28 +46,30 @@ if not exist "tei_model\model.onnx" (
 )
 echo.
 
-REM ── 3. Запуск / перезапуск контейнеров ────────────────────────────────────
+REM ── 3. Пересоздание контейнеров с чистой БД ──────────────────────────────
 cd /d "%~dp0..\.."
 set COMPOSE_FILE=service_checker\docker\docker-compose.yml
 
-docker inspect pkb-neuro > nul 2>&1
+echo [3/5] Stopping containers and removing volumes (clean DB)...
+docker compose -f %COMPOSE_FILE% down -v
 if %ERRORLEVEL% neq 0 (
-    echo [3/5] Containers not found — starting all...
-    docker compose -f %COMPOSE_FILE% up -d
-) else (
-    echo [3/5] Restarting app container...
-    docker compose -f %COMPOSE_FILE% restart app
+    echo.
+    echo WARNING: down -v failed, continuing...
 )
+
+echo [3/5] Starting containers with fresh database...
+docker compose -f %COMPOSE_FILE% up -d
 if %ERRORLEVEL% neq 0 (
     echo.
     echo ERROR: Failed to start containers!
     pause
     exit /b 1
 )
+echo     Containers are starting with clean database.
 echo.
 
-echo [4/5] Waiting 10 seconds for services to initialize...
-ping -n 11 127.0.0.1 > nul
+echo [4/5] Waiting 5 seconds for database initialization and service startup...
+ping -n 6 127.0.0.1 > nul
 echo.
 
 echo [5/5] Running full report (coverage + pipelines + db-check)...
@@ -81,8 +82,4 @@ if %ERRORLEVEL% neq 0 (
 echo.
 echo === Done ===
 echo Reports: check_result/
-echo For DB only check: python -m service_checker docker --action db-check
-echo For full reset (wipe volumes): docker\prepare.bat
 echo.
-
-pause
