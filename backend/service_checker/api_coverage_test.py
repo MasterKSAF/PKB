@@ -524,7 +524,8 @@ class ApiCoverageTester:
 
         return self.results
 
-    def generate_report(self, log_report_path: Optional[str] = None) -> str:
+    def generate_report(self, log_report_path: Optional[str] = None,
+                         db_result: Any = None) -> str:
         """Сформировать markdown-отчёт."""
         lines = []
         now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -538,8 +539,11 @@ class ApiCoverageTester:
 
         # Сводка
         lines.append("## 📊 Summary\n")
-        lines.append("| Service | Port | Ping | Endpoints | ✅ Passed | ❌ Failed | ⏭️ Skipped | Status |")
-        lines.append("|---------|:----:|:----:|:---------:|:---------:|:---------:|:----------:|:------:|")
+        lines.append("| Service | Port | Ping | CheckDb | Endpoints | ✅ Passed | ❌ Failed | ⏭️ Skipped | Status |")
+        lines.append("|---------|:----:|:----:|:-------:|:---------:|:---------:|:---------:|:----------:|:------:|")
+
+        # Импорт для CheckDb
+        from service_checker.core.reports import _get_service_checkdb_icon
 
         total_ep = 0
         total_passed = 0
@@ -569,7 +573,8 @@ class ApiCoverageTester:
             else:
                 status_icon = "✅"
             svc_anchor = svc_key.replace("_", "-")
-            lines.append(f"| [{result.name}](#{svc_anchor}) | {result.port} | {ping_icon} | {result.endpoints_total} | "
+            svc_checkdb = _get_service_checkdb_icon(db_result, svc_key)
+            lines.append(f"| [{result.name}](#{svc_anchor}) | {result.port} | {ping_icon} | {svc_checkdb} | {result.endpoints_total} | "
                         f"{result.endpoints_passed} | {failed_str} | "
                         f"{skipped_str} | {status_icon} |")
 
@@ -581,11 +586,29 @@ class ApiCoverageTester:
             f'<span style="color:red;font-weight:bold">{total_skipped}</span>'
             if total_skipped > 0 else str(total_skipped)
         )
+        # Total — CheckDb
+        from service_checker.core.config import PIPELINE_SERVICE_MAP
+        COVERAGE_TO_STARTUP_KEY = {
+            "auth": "auth_service",
+            "query": "query_service",
+            "orchestrator": "orchestrator_service",
+            "integration": "integration_service",
+            "registry": "registry_service",
+            "rag_builder": "rag_builder_service",
+            "rag_search": "rag_search_service",
+        }
+        svcs_with_db = [k for k in self.results if k in COVERAGE_TO_STARTUP_KEY]
+        svcs_checkdb_ok = sum(
+            1 for k in svcs_with_db
+            if _get_service_checkdb_icon(db_result, k) in ("✅", "—")
+        )
+        svcs_checkdb_total = len(svcs_with_db)
+
         if total_failed > 0 or total_skipped > 0:
             total_status = '<span style="color:red;font-weight:bold">❌</span>'
         else:
             total_status = "✅"
-        lines.append(f"| **Total** | | **{services_alive}/{len(self.results)}** | **{total_ep}** | **{total_passed}** | "
+        lines.append(f"| **Total** | | **{services_alive}/{len(self.results)}** | **{svcs_checkdb_ok}/{svcs_checkdb_total}** | **{total_ep}** | **{total_passed}** | "
                     f"{total_failed_str} | {total_skipped_str} | {total_status} |\n")
 
         # Детали по каждому сервису
