@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from pipelines.base import (
+from .base import (
     PipelineContext,
     PipelineDef,
     PipelineStep,

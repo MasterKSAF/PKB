@@ -13,7 +13,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pipelines.base import (
+from .base import (
     PipelineContext,
     PipelineDef,
     PipelineStep,

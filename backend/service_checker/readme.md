@@ -61,15 +61,40 @@ service_checker/
 
 ## Быстрый старт (с нуля)
 
+### Вариант A — `setup.py` (рекомендуется)
+
 ```bash
-# Полный setup: подготовка модели TEI + запуск Docker Compose
+# Полный setup: модель TEI + сборка образа (если нет) + Docker Compose
 python setup.py
 
 # Или по шагам:
-python setup.py --model     # Только подготовка модели TEI
+python setup.py --build      # Принудительная пересборка base-образа
+python setup.py --model      # Только подготовка модели TEI
 python setup.py --up         # Только запуск Docker Compose
 python setup.py --down       # Остановка Docker Compose
 python setup.py --ps         # Статус контейнеров
+python setup.py --prepare    # Полный цикл: build + down -v + up (как prepare.bat)
+```
+
+> **Важно:** `setup.py` автоматически собирает образ `ghcr.io/pkb/neuro-base:latest`
+> из `Dockerfile.base`, если его нет локально. Принудительная пересборка:
+> `python setup.py --build`.
+
+### Вариант B — `prepare.bat` (Windows, полный цикл)
+
+```bash
+docker/prepare.bat
+```
+Сборка образа + очистка volumes + запуск + проверка coverage.
+
+### Вариант C — вручную
+
+```bash
+# 1. Собрать образ (если нет)
+docker build -f docker/Dockerfile.base -t ghcr.io/pkb/neuro-base:latest docker/
+
+# 2. Запустить
+python setup.py
 ```
 
 ## Запуск тестов

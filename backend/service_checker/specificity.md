@@ -406,3 +406,59 @@ Pipeline проверял `check_json_fields({"text": str})`, но поля `tex
 ### Статус
 ✅ **Исправлено (checker)**
 🔴 **Открыто:** RAG Search 500, Auth /me 404 — баги сервисов
+
+## 9. Аномалия запуска: `setup.py` не собирает образ `neuro-base`, а `prepare.bat` — собирает
+
+### Симптом
+После полной очистки Docker (`docker system prune -a`) `python setup.py` падает на шаге `[3/3] Starting Docker Compose`:
+```
+Error response from daemon: Head "https://ghcr.io/v2/pkb/neuro-base/manifests/latest": denied
+```
+
+### Причина
+Образ `ghcr.io/pkb/neuro-base:latest` — приватный, в registry нет доступа.
+Файл `setup.py` вызывает только `docker compose up -d`, но не собирает образ.
+Сборка образа выполняется отдельно — через `docker/build.bat` или вручную:
+```bash
+docker build -f docker/Dockerfile.base -t ghcr.io/pkb/neuro-base:latest docker/
+```
+
+### Файл `prepare.bat`
+Сценарий в `docker/prepare.bat` содержит полный цикл:
+1. `docker build -f Dockerfile.base -t ghcr.io/pkb/neuro-base:latest .` — сборка образа
+2. `docker compose -f docker-compose.yml down -v` — очистка старых данных
+3. `docker compose -f docker-compose.yml up -d` — запуск
+4. `python service_checker.py docker --action coverage` — проверка
+
+### Что исправлено (2026-06-10)
+
+**`setup.py`:**
+- Добавлена функция `image_exists()` — проверяет наличие образа локально
+- Добавлена функция `build_image()` — сборка из `Dockerfile.base`
+- При `python setup.py` (без аргументов) образ собирается автоматически, если его нет
+- Добавлены флаги: `--build` (принудительная сборка), `--prepare` (build + down -v + up)
+
+**`docker/prepare.bat`:**
+- Добавлен шаг подготовки модели TEI (раньше не вызывался)
+- Замена `coverage` → `full-report` (более полная проверка)
+- Обновлена нумерация (1/6 → 6/6)
+- Теперь это **полный сценарий с нуля** (TEI → build → down -v → up → full-report)
+
+**`docker/recheck.bat`:**
+- Добавлена проверка наличия образа — если нет, собирает
+- Добавлена проверка наличия модели TEI — если нет, скачивает
+- Может инициализироваться с нуля (но без очистки volumes)
+- Обновлена нумерация (1/5 → 5/5)
+
+### Текущая схема запуска
+
+| Сценарий | Команда | Очистка volumes | Сборка образа | TEI модель |
+|----------|---------|:---:|:---:|:---:|
+| Полная установка с нуля | `docker\prepare.bat` | ✅ | ✅ | ✅ |
+| Быстрый старт | `python setup.py` | ❌ | ✅ (если нет) | ✅ |
+| Перезапуск | `docker\recheck.bat` | ❌ | ✅ (если нет) | ✅ (если нет) |
+| Принудительная сборка | `python setup.py --build` | ❌ | ✅ | ❌ |
+| Сброс + запуск | `python setup.py --prepare` | ✅ | ✅ | ❌ |
+
+### Статус
+✅ **Исправлено**

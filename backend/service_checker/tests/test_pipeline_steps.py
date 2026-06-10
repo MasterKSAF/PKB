@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import pytest
 
-from pipelines.base import PipelineContext, StepStatus
-from pipelines.document_processing import DocumentProcessingPipeline
-from pipelines.chat_inference import ChatInferencePipeline
-from pipelines.registry_lifecycle import RegistryLifecyclePipeline
+from service_checker.pipelines.base import PipelineContext, StepStatus
+from service_checker.pipelines.document_processing import DocumentProcessingPipeline
+from service_checker.pipelines.chat_inference import ChatInferencePipeline
+from service_checker.pipelines.registry_lifecycle import RegistryLifecyclePipeline
 
 
 class TestDocumentProcessingPipeline:

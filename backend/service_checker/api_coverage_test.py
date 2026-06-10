@@ -39,7 +39,7 @@ from urllib.parse import urljoin
 
 import httpx
 
-from services.base import (
+from service_checker.services.base import (
     API_PREFIX,
     EndpointDef,
     EndpointResult,
@@ -47,7 +47,7 @@ from services.base import (
     ServiceResult,
     HEADERS_JSON,
 )
-from services import (
+from service_checker.services import (
     MODE_PORTS,
     SERVICE_DEPENDENCIES,
     SERVICE_REGISTRY,

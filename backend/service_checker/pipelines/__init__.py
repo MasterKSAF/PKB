@@ -7,7 +7,7 @@ PKB Neuroassistant — Pipeline Testing (Сквозные сценарии)
 
 from __future__ import annotations
 
-from pipelines.base import (
+from .base import (
     PipelineContext,
     PipelineResult,
     PipelineStep,
@@ -16,9 +16,9 @@ from pipelines.base import (
     PipelineDef,
 )
 
-from pipelines.document_processing import DocumentProcessingPipeline
-from pipelines.chat_inference import ChatInferencePipeline
-from pipelines.registry_lifecycle import RegistryLifecyclePipeline
+from .document_processing import DocumentProcessingPipeline
+from .chat_inference import ChatInferencePipeline
+from .registry_lifecycle import RegistryLifecyclePipeline
 
 # Реестр доступных пайплайнов: имя → класс
 PIPELINE_REGISTRY: dict[str, type[PipelineDef]] = {

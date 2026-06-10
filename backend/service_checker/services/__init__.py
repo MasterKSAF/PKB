@@ -14,8 +14,8 @@ from __future__ import annotations
 
 from typing import Dict, Any, Callable
 
-from services.base import ServiceDef
-from services import (
+from .base import ServiceDef
+from . import (
     auth,
     registry,
     orchestrator,

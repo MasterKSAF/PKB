@@ -6,15 +6,15 @@ Gateway агрегирует API сервисов: auth + orchestrator + query +
 
 from __future__ import annotations
 
-from services.base import (
+from .base import (
     EndpointDef,
     ServiceDef,
     API_PREFIX,
 )
-from services.auth import get_service_def as get_auth_def
-from services.orchestrator import get_service_def as get_orchestrator_def
-from services.query import get_service_def as get_query_def
-from services.registry import get_service_def as get_registry_def
+from .auth import get_service_def as get_auth_def
+from .orchestrator import get_service_def as get_orchestrator_def
+from .query import get_service_def as get_query_def
+from .registry import get_service_def as get_registry_def
 
 SERVICE_KEY = "gateway"
 PORT = 8081

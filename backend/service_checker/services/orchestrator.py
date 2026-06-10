@@ -6,7 +6,7 @@ PKB Neuroassistant — Orchestrator Service API Definitions.
 
 from __future__ import annotations
 
-from services.base import (
+from .base import (
     EndpointDef,
     ServiceDef,
     API_PREFIX,

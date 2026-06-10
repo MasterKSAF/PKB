@@ -6,7 +6,7 @@ PKB Neuroassistant — TEI (Text Embeddings Inference) API Definitions.
 
 from __future__ import annotations
 
-from services.base import (
+from .base import (
     EndpointDef,
     ServiceDef,
 )
@@ -24,7 +24,9 @@ def get_service_def() -> ServiceDef:
             response_schema={"status": str}),
         EndpointDef("POST", "/embed", "embed", "Получить эмбеддинги",
             body={"inputs": "Тестовый запрос для эмбеддинга"},
-            response_schema={"embedding": list}),
+            # TEI возвращает чистый массив [[float]], а не объект с ключом
+            # response_schema={"embedding": list}
+        ),
     ]
 
     return ServiceDef(
