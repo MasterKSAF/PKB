@@ -145,7 +145,7 @@ def parse_args() -> argparse.Namespace:
     )
     p_docker.add_argument(
         "--action",
-        choices=["up", "down", "build", "restart", "reset", "logs", "ps", "health", "coverage", "full-report"],
+        choices=["up", "down", "build", "restart", "reset", "logs", "ps", "health", "coverage", "full-report", "db-check"],
         default="up",
         help="Действие с Docker Compose (по умолч. up — запустить все сервисы)",
     )
@@ -378,16 +378,35 @@ async def cmd_docker(
     if action == "reset":
         log_info("Полный сброс: останавливаем + чистим volumes + запускаем заново...")
         _docker_action("down", target_services, build=False, detach=False)
-        # down уже включает -v? Нет, нужно добавить флаг.
-        # Делаем down -v через прямой вызов
-        down_cmd = ["docker", "compose", "-f", str(DOCKER_COMPOSE_FILE), "down", "-v"]
-        subprocess.run(down_cmd, cwd=str(DOCKER_DIR), timeout=60)
+        # Явно удаляем только известные volumes (не через -v, чтобы не задеть чужие)
+        for vol_name in ["pkb_pg_data", "pkb_minio_data", "pkb_app_logs"]:
+            subprocess.run(
+                ["docker", "volume", "rm", "-f", vol_name],
+                capture_output=True, timeout=10,
+            )
         log_ok("Volumes очищены. Запускаем...")
         _docker_action("up", target_services, build=False, detach=True)
         return
 
     if action == "health":
         _docker_health_check(target_services)
+        return
+
+    if action == "db-check":
+        log_header("🗄️ Проверка состояния БД")
+        from service_checker.core.db_check import run_db_check, format_db_report
+
+        result = run_db_check()
+        report = format_db_report(result)
+        print()
+        print(report)
+        print()
+        if result.error:
+            log_warn(f"PostgreSQL недоступен: {result.error}")
+        elif result.healthy:
+            log_ok("БД инициализирована корректно")
+        else:
+            log_warn("БД инициализирована не полностью")
         return
 
     if action == "coverage":
@@ -404,7 +423,23 @@ async def cmd_docker(
         check_result_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        # 1. Coverage
+        # 1. DB Health check (нужен для CheckDb в coverage и сводном отчёте)
+        db_result = None
+        try:
+            from service_checker.core.db_check import run_db_check
+
+            log_info("Проверка состояния БД...")
+            db_result = run_db_check()
+            if db_result.healthy:
+                log_ok("БД инициализирована корректно")
+            elif db_result.error:
+                log_warn(f"PostgreSQL недоступен: {db_result.error}")
+            else:
+                log_warn("БД инициализирована не полностью")
+        except Exception as e:
+            log_err(f"Ошибка проверки БД: {e}")
+
+        # 2. Coverage
         cov_results: Optional[Dict[str, Any]] = None
         tester = None
         try:
@@ -424,7 +459,7 @@ async def cmd_docker(
             log_info("Запуск API Coverage Test...")
             tester = ApiCoverageTester(base_host="127.0.0.1")
             cov_results = await tester.run_all()
-            cov_report = tester.generate_report()
+            cov_report = tester.generate_report(db_result=db_result)
             cov_path = check_result_dir / f"api_coverage_{timestamp}.md"
             cov_path.write_text(cov_report, encoding="utf-8")
             log_ok(f"API Coverage отчёт сохранён: {cov_path}")
@@ -434,7 +469,7 @@ async def cmd_docker(
             if tester:
                 await tester.close()
 
-        # 2. Pipeline
+        # 3. Pipeline
         pipe_results: Dict[str, Any] = {}
         runner = None
         try:
@@ -456,11 +491,11 @@ async def cmd_docker(
             if runner:
                 await runner.close()
 
-        # 3. Full report
+        # 4. Full report
         if cov_results or pipe_results:
             if cov_results is None:
                 cov_results = {}
-            full_report = _generate_full_report(cov_results, pipe_results, timestamp)
+            full_report = _generate_full_report(cov_results, pipe_results, timestamp, db_result=db_result)
             full_path = check_result_dir / f"full_report_{timestamp}.md"
             full_path.write_text(full_report, encoding="utf-8")
             log_ok(f"Сводный отчёт сохранён: {full_path}")

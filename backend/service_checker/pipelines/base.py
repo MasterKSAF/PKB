@@ -7,13 +7,95 @@ PKB Neuroassistant — Base classes for Pipeline Testing.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import httpx
+
+
+# ──────────────────────────────────────────────────────────────
+#  S3 / MinIO helpers
+# ──────────────────────────────────────────────────────────────
+
+
+def s3_sign_headers(
+    method: str,
+    url: str,
+    access_key: str,
+    secret_key: str,
+    body: bytes = b"",
+    content_type: str = "application/octet-stream",
+    region: str = "us-east-1",
+    service: str = "s3",
+) -> Dict[str, str]:
+    """Вычислить заголовки AWS4-HMAC-SHA256 для S3-запроса."""
+    amz_date = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    date_stamp = amz_date[:8]
+
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    canonical_uri = parsed.path or "/"
+    canonical_qs = parsed.query
+    host = parsed.hostname or "localhost"
+    if parsed.port:
+        host = f"{host}:{parsed.port}"
+
+    body_hash = hashlib.sha256(body).hexdigest()
+
+    canonical_headers = (
+        f"content-type:{content_type}\n"
+        f"host:{host}\n"
+        f"x-amz-content-sha256:{body_hash}\n"
+        f"x-amz-date:{amz_date}\n"
+    )
+    signed_headers = "content-type;host;x-amz-content-sha256;x-amz-date"
+
+    payload_hash = body_hash
+    canonical_request = (
+        f"{method}\n"
+        f"{canonical_uri}\n"
+        f"{canonical_qs}\n"
+        f"{canonical_headers}\n"
+        f"{signed_headers}\n"
+        f"{payload_hash}"
+    )
+
+    algorithm = "AWS4-HMAC-SHA256"
+    credential_scope = f"{date_stamp}/{region}/{service}/aws4_request"
+    string_to_sign = (
+        f"{algorithm}\n"
+        f"{amz_date}\n"
+        f"{credential_scope}\n"
+        f"{hashlib.sha256(canonical_request.encode('utf-8')).hexdigest()}"
+    )
+
+    def _sign(key: bytes, msg: str) -> bytes:
+        return hmac.new(key, msg.encode("utf-8"), hashlib.sha256).digest()
+
+    k_date = _sign(f"AWS4{secret_key}".encode("utf-8"), date_stamp)
+    k_region = _sign(k_date, region)
+    k_service = _sign(k_region, service)
+    k_signing = _sign(k_service, "aws4_request")
+    signature = hmac.new(k_signing, string_to_sign.encode("utf-8"), hashlib.sha256).hexdigest()
+
+    authorization = (
+        f"{algorithm} Credential={access_key}/{credential_scope}, "
+        f"SignedHeaders={signed_headers}, Signature={signature}"
+    )
+
+    return {
+        "Authorization": authorization,
+        "X-Amz-Date": amz_date,
+        "X-Amz-Content-SHA256": body_hash,
+        "Content-Type": content_type,
+        "Host": host,
+    }
 
 
 class StepStatus(Enum):
@@ -44,6 +126,7 @@ class PipelineStep:
     :param check: Функция проверки ответа (response_body, context) -> (ok, message)
     :param extract_keys: Ключи для извлечения из ответа в контекст
     :param needs_auth: Нужен ли Bearer-токен
+    :param extra_headers: Дополнительные HTTP-заголовки (для S3-подписи и т.п.)
     """
 
     name: str
@@ -61,6 +144,7 @@ class PipelineStep:
     check: Optional[Callable[[Optional[str], PipelineContext], Tuple[bool, str]]] = None
     extract_keys: Optional[List[str]] = None
     needs_auth: bool = False
+    extra_headers: Optional[Dict[str, str]] = None
 
     # Заполняется во время выполнения
     actual_status: int = 0
@@ -211,6 +295,8 @@ class PipelineRunner:
         headers = {"Accept": "application/json"}
         if step.needs_auth and auth_token:
             headers["Authorization"] = f"Bearer {auth_token}"
+        if step.extra_headers:
+            headers.update(step.extra_headers)
 
         # Выполнение запроса
         try:

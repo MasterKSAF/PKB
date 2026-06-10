@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import pytest
 
-from pipelines.base import PipelineContext, StepStatus
-from pipelines.document_processing import DocumentProcessingPipeline
-from pipelines.chat_inference import ChatInferencePipeline
-from pipelines.registry_lifecycle import RegistryLifecyclePipeline
+from service_checker.pipelines.base import PipelineContext, StepStatus
+from service_checker.pipelines.document_processing import DocumentProcessingPipeline
+from service_checker.pipelines.chat_inference import ChatInferencePipeline
+from service_checker.pipelines.registry_lifecycle import RegistryLifecyclePipeline
 
 
 class TestDocumentProcessingPipeline:
@@ -16,13 +16,13 @@ class TestDocumentProcessingPipeline:
         p = DocumentProcessingPipeline()
         assert p.name == "document_processing"
         assert p.description == "Полный цикл обработки документа"
-        assert len(p.services) == 6
+        assert len(p.services) == 7
 
     def test_build_steps_count(self):
         p = DocumentProcessingPipeline()
         steps = p.build_steps(PipelineContext())
-        assert len(steps) == 8, (
-            f"Ожидалось 8 шагов, получено {len(steps)}\n"
+        assert len(steps) == 10, (
+            f"Ожидалось 10 шагов, получено {len(steps)}\n"
             f"Шаги: {[s.name for s in steps]}"
         )
 
@@ -30,6 +30,8 @@ class TestDocumentProcessingPipeline:
         p = DocumentProcessingPipeline()
         steps = p.build_steps(PipelineContext())
         expected_names = [
+            "Аутентификация",
+            "Создание bucket documents",
             "Загрузка PDF в MinIO",
             "Запуск парсинга",
             "Статус парсинга (longpoll)",
@@ -46,6 +48,7 @@ class TestDocumentProcessingPipeline:
         p = DocumentProcessingPipeline()
         steps = p.build_steps(PipelineContext())
         services = [s.service for s in steps]
+        assert "auth" in services
         assert "minio" in services
         assert "parser" in services
         assert "converter_validator" in services
@@ -64,7 +67,7 @@ class TestDocumentProcessingPipeline:
     def test_step_expected_status(self):
         p = DocumentProcessingPipeline()
         steps = p.build_steps(PipelineContext())
-        expected = [200, 202, 200, 200, 200, 201, 200, 200]
+        expected = [200, {200, 409}, 200, 202, 200, 200, 200, {201, 409}, 201, 200]
         actual = [s.expected_status for s in steps]
         assert actual == expected, f"Ожидаемые статусы не совпадают:\n{actual}"
 
@@ -77,7 +80,7 @@ class TestDocumentProcessingPipeline:
 
 
 class TestChatInferencePipeline:
-    """Пайплайн chat_inference — 6 шагов."""
+    """Пайплайн chat_inference — 5 шагов (шаг профиля удалён — mock-режим auth)."""
 
     def test_pipeline_attributes(self):
         p = ChatInferencePipeline()
@@ -88,8 +91,8 @@ class TestChatInferencePipeline:
     def test_build_steps_count(self):
         p = ChatInferencePipeline()
         steps = p.build_steps(PipelineContext())
-        assert len(steps) == 6, (
-            f"Ожидалось 6 шагов, получено {len(steps)}\n"
+        assert len(steps) == 5, (
+            f"Ожидалось 5 шагов, получено {len(steps)}\n"
             f"Шаги: {[s.name for s in steps]}"
         )
 
@@ -98,7 +101,6 @@ class TestChatInferencePipeline:
         steps = p.build_steps(PipelineContext())
         expected_names = [
             "Аутентификация",
-            "Профиль пользователя",
             "Создание чат-сессии",
             "Отправка сообщения",
             "Текстовый поиск",
@@ -110,23 +112,22 @@ class TestChatInferencePipeline:
     def test_auth_steps_first(self):
         p = ChatInferencePipeline()
         steps = p.build_steps(PipelineContext())
-        # Первые два шага — аутентификация
+        # Первый шаг — аутентификация
         assert steps[0].service == "auth"
-        assert steps[1].service == "auth"
 
     def test_needs_auth_after_auth(self):
         p = ChatInferencePipeline()
         steps = p.build_steps(PipelineContext())
         # Шаги после аутентификации требуют токен
-        for step in steps[2:]:
+        for step in steps[1:]:
             assert step.needs_auth, f"Шаг '{step.name}' должен требовать auth"
 
     def test_extract_keys(self):
         p = ChatInferencePipeline()
         steps = p.build_steps(PipelineContext())
         assert steps[0].extract_keys == ["access_token", "refresh_token"]
-        assert steps[2].extract_keys == ["session_id"]
-        assert steps[3].extract_keys == ["message_id"]
+        assert steps[1].extract_keys == ["session_id"]
+        assert steps[2].extract_keys == ["message_id"]
 
 
 class TestRegistryLifecyclePipeline:
@@ -141,8 +142,8 @@ class TestRegistryLifecyclePipeline:
     def test_build_steps_count(self):
         p = RegistryLifecyclePipeline()
         steps = p.build_steps(PipelineContext())
-        assert len(steps) == 13, (
-            f"Ожидалось 13 шагов, получено {len(steps)}\n"
+        assert len(steps) == 11, (
+            f"Ожидалось 11 шагов, получено {len(steps)}\n"
             f"Шаги: {[s.name for s in steps]}"
         )
 
@@ -158,11 +159,9 @@ class TestRegistryLifecyclePipeline:
             "Обновить классификатор",
             "Частичное обновление классификатора",
             "Удалить классификатор",
-            "Импорт классификаторов",
             "Создать термин",
             "Нормализация термина",
             "Обновить термин",
-            "Импорт терминов",
         ]
         actual_names = [s.name for s in steps]
         assert actual_names == expected_names, f"Порядок шагов не совпадает:\n{actual_names}"
@@ -172,18 +171,18 @@ class TestRegistryLifecyclePipeline:
         steps = p.build_steps(PipelineContext())
         # Проверка CRUD-последовательности для классификаторов
         classifier_steps = [s for s in steps if "классификатор" in s.name.lower()]
-        assert len(classifier_steps) == 7
+        assert len(classifier_steps) == 6
         methods = [s.method for s in classifier_steps]
-        assert methods == ["POST", "GET", "GET", "PUT", "PATCH", "DELETE", "POST"], \
+        assert methods == ["POST", "GET", "GET", "PUT", "PATCH", "DELETE"], \
             f"CRUD-последовательность классификаторов: {methods}"
 
     def test_terminology_sequence(self):
         p = RegistryLifecyclePipeline()
         steps = p.build_steps(PipelineContext())
         term_steps = [s for s in steps if "термин" in s.name.lower()]
-        assert len(term_steps) == 4
+        assert len(term_steps) == 3
         methods = [s.method for s in term_steps]
-        assert methods == ["POST", "GET", "PUT", "POST"], \
+        assert methods == ["POST", "GET", "PUT"], \
             f"Последовательность терминов: {methods}"
 
     def test_all_auth_required(self):

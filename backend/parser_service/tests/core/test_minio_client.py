@@ -1,19 +1,16 @@
 """
 Тесты для MinIO клиента.
-Проверяют скачивание файлов, загрузку изображений и обработку ошибок.
 """
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+from botocore.exceptions import ClientError
 from app.core.minio_client import MinIOClient
-from app.core.exceptions import StorageError
+from app.core.exceptions import StorageError, FileNotFoundError
 
 
 class TestMinIOClient:
-    """Все тесты используют мок S3-клиента, реальное подключение не требуется."""
-
     @pytest.fixture
     def client(self):
-        """Фикстура: создаёт MinIOClient с подменённой сессией aiobotocore."""
         with patch("app.core.minio_client.aiobotocore.session.get_session") as mock_session:
             mock_client = AsyncMock()
             mock_session.return_value.create_client.return_value.__aenter__.return_value = mock_client
@@ -23,7 +20,6 @@ class TestMinIOClient:
 
     @pytest.mark.asyncio
     async def test_download_file_success(self, client):
-        """Успешное скачивание: возвращаются байты файла."""
         mock_s3 = client._session.create_client.return_value.__aenter__.return_value
         mock_stream = AsyncMock()
         mock_stream.read = AsyncMock(return_value=b"data")
@@ -38,7 +34,6 @@ class TestMinIOClient:
 
     @pytest.mark.asyncio
     async def test_download_file_failure_raises_storage_error(self, client):
-        """Ошибка при скачивании → StorageError."""
         mock_s3 = client._session.create_client.return_value.__aenter__.return_value
         mock_s3.get_object.side_effect = Exception("network error")
         with pytest.raises(StorageError) as exc:
@@ -46,15 +41,64 @@ class TestMinIOClient:
         assert "download missing.pdf" in str(exc.value)
 
     @pytest.mark.asyncio
+    async def test_ensure_bucket_exists(self, client):
+        mock_s3 = client._session.create_client.return_value.__aenter__.return_value
+        mock_s3.head_bucket = AsyncMock()
+        await client._ensure_bucket("existing_bucket")
+        mock_s3.head_bucket.assert_called_once_with(Bucket="existing_bucket")
+        mock_s3.create_bucket.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_ensure_bucket_creates_missing(self, client):
+        """Проверка: если бакет не найден, он создаётся."""
+        mock_s3 = client._session.create_client.return_value.__aenter__.return_value
+        # Создаём ClientError с кодом NoSuchBucket
+        error_response = {"Error": {"Code": "NoSuchBucket"}}
+        mock_s3.head_bucket.side_effect = ClientError(error_response, "HeadBucket")
+        mock_s3.create_bucket = AsyncMock()
+        
+        await client._ensure_bucket("new_bucket")
+        mock_s3.create_bucket.assert_called_once_with(Bucket="new_bucket")
+
+    @pytest.mark.asyncio
+    async def test_ensure_bucket_other_error_raises_storage_error(self, client):
+        mock_s3 = client._session.create_client.return_value.__aenter__.return_value
+        error_response = {"Error": {"Code": "AccessDenied"}}
+        mock_s3.head_bucket.side_effect = ClientError(error_response, "HeadBucket")
+        with pytest.raises(StorageError):
+            await client._ensure_bucket("problem_bucket")
+
+    @pytest.mark.asyncio
     async def test_upload_image(self, client):
-        """Загрузка изображения: формируется правильный ключ и вызывается put_object."""
         mock_s3 = client._session.create_client.return_value.__aenter__.return_value
         mock_s3.put_object = AsyncMock()
         key = await client.upload_image(b"img", task_id=42, page_num=1, ext=".png")
         assert key.startswith("task_42/page_1_")
         assert key.endswith(".png")
         mock_s3.put_object.assert_called_once()
-        call_args = mock_s3.put_object.call_args[1]
-        assert call_args["Bucket"] == client.image_bucket
-        assert call_args["Key"] == key
-        assert call_args["ContentType"] == "image/png"
+        call_kwargs = mock_s3.put_object.call_args[1]
+        assert call_kwargs["Bucket"] == client.image_bucket
+        assert call_kwargs["Key"] == key
+        assert call_kwargs["ContentType"] == "image/png"
+
+    @pytest.mark.asyncio
+    async def test_upload_image_custom_key(self, client):
+        mock_s3 = client._session.create_client.return_value.__aenter__.return_value
+        mock_s3.put_object = AsyncMock()
+        custom_key = "custom/path.png"
+        key = await client.upload_image(b"img", task_id=1, page_num=1, ext=".png", custom_key=custom_key)
+        assert key == custom_key
+
+    @pytest.mark.asyncio
+    async def test_upload_image_failure_raises_storage_error(self, client):
+        mock_s3 = client._session.create_client.return_value.__aenter__.return_value
+        mock_s3.put_object.side_effect = Exception("upload failed")
+        with pytest.raises(StorageError):
+            await client.upload_image(b"img", task_id=1, page_num=1)
+
+    @pytest.mark.asyncio
+    async def test_get_presigned_url(self, client):
+        mock_s3 = client._session.create_client.return_value.__aenter__.return_value
+        mock_s3.generate_presigned_url = AsyncMock(return_value="http://presigned.url")
+        url = await client.get_presigned_url("file.pdf", expires_in=60)
+        assert url == "http://presigned.url"

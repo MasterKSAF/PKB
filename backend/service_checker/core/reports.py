@@ -11,22 +11,73 @@ from typing import Any, Dict, List, Optional, Tuple
 from service_checker.core.config import PIPELINE_SERVICE_MAP, SERVICE_DISPLAY_NAMES
 
 
+# Тип для опционального результата проверки БД
+DbCheckResult = Any  # runtime import to avoid circular
+
+# Маппинг ключей coverage → ключи startup check
+COVERAGE_TO_STARTUP_KEY = {
+    "auth": "auth_service",
+    "query": "query_service",
+    "orchestrator": "orchestrator_service",
+    "integration": "integration_service",
+    "registry": "registry_service",
+    "rag_builder": "rag_builder_service",
+    "rag_search": "rag_search_service",
+}
+
+
+def _get_db_icon(db_result: Any) -> str:
+    if db_result is None:
+        return "—"
+    if hasattr(db_result, "error") and db_result.error:
+        return "⚠️"
+    if hasattr(db_result, "healthy"):
+        return "✅" if db_result.healthy else "❌"
+    return "—"
+
+
+def _get_service_checkdb_icon(db_result: Any, svc_key: str) -> str:
+    """
+    Per-service статус CheckDb: есть ли у сервиса create_all().
+
+    Consumer-сервисы (rag_search) не должны создавать таблицы — для них "—".
+    """
+    if db_result is None:
+        return "—"
+    startup_key = COVERAGE_TO_STARTUP_KEY.get(svc_key)
+    if startup_key is None:
+        return "—"  # сервис без БД (gateway, parser, tei...)
+    create_all_map = getattr(db_result, "services_create_all", {})
+    has_it = create_all_map.get(startup_key)
+    if has_it is None:
+        return "—"
+    # Проверка: consumer-сервисы не должны иметь create_all
+    from service_checker.core.db_check import SERVICE_STARTUP_CHECKS
+    svc_info = SERVICE_STARTUP_CHECKS.get(startup_key, {})
+    if svc_info.get("must_not_have_create_all", False):
+        return "—"  # consumer, не создаёт таблицы
+    return "✅" if has_it else "❌"
+
+
 def _generate_full_report(
     coverage_results: Dict[str, Any],
     pipeline_results: Dict[str, Any],
     timestamp: str,
+    db_result: Any = None,
 ) -> str:
-    """Сформировать итоговый отчёт: сводная таблица + детали coverage + детали pipeline."""
+    """Сформировать итоговый отчёт: сводная таблица + детали coverage + детали pipeline + БД."""
     lines: List[str] = []
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     lines.append("# Full Report — API Coverage + Pipeline Testing\n")
     lines.append(f"**Generated:** {now}\n")
     lines.append("---\n")
 
+    db_icon = _get_db_icon(db_result)
+
     # ── 1. Итоговая сводная таблица ─────────────────────────────────
     lines.append("## 📊 Итоговая сводная таблица\n")
-    lines.append("| Service | Port | Ping | ✅ Passed | Documents | Query | Status |")
-    lines.append("|---------|:----:|:----:|:---------:|:---------:|:-----:|:------:|")
+    lines.append("| Service | Port | Ping | CheckDb | API | Documents | Query | Status |")
+    lines.append("|---------|:----:|:----:|:-------:|:---:|:---------:|:-----:|:------:|")
 
     # Собираем per-service per-pipeline статус шагов
     # service_key -> {pipeline_name -> passed/all_count}
@@ -87,29 +138,70 @@ def _generate_full_report(
         )
         status_icon = "✅" if all_green else "❌"
 
-        lines.append(f"| {display_name} | {port} | {ping_icon} | {passed_ratio} | {doc_icon} | {query_icon} | {status_icon} |")
+        # ✅ Passed column — true/false вместо 10/10
+        passed_icon = "✅" if not has_failures else "❌"
 
-    # Итоговая строка
+        svc_checkdb = _get_service_checkdb_icon(db_result, svc_key)
+        lines.append(f"| {display_name} | {port} | {ping_icon} | {svc_checkdb} | {passed_icon} | {doc_icon} | {query_icon} | {status_icon} |")
+
+    # Итоговая строка — количества по всем столбцам
     total_services = len(coverage_results)
     cov_alive = sum(1 for r in coverage_results.values() if r.ping_ok)
-    total_ok = sum(r.endpoints_passed for r in coverage_results.values())
-    total_eps = sum(r.endpoints_total for r in coverage_results.values())
-    pipe_ok = sum(1 for p in pipeline_passed.values() if p)
-    pipe_total = len(pipeline_passed)
-    # Все сервисы покрытия ping OK и без ошибок
-    all_cov_ok = all(
-        r.ping_ok and r.endpoints_failed == 0 and r.endpoints_skipped == 0
-        for r in coverage_results.values()
-    ) if coverage_results else True
-    overall_ok = all_cov_ok and all(pipeline_passed.values())
-    overall_status = "✅" if overall_ok else "❌"
-    lines.append(f"| **Total** | | **{cov_alive}/{total_services}** | **{total_ok}/{total_eps}** | **{pipe_ok}/{pipe_total}** | **{pipe_ok}/{pipe_total}** | {overall_status} |\n")
+
+    # ✅ Passed: кол-во сервисов без ошибок (endpoints)
+    cov_ok_count = sum(
+        1 for r in coverage_results.values()
+        if r.ping_ok and r.endpoints_failed == 0 and r.endpoints_skipped == 0
+    )
+
+    # CheckDb: кол-во сервисов у которых есть create_all (или consumer)
+    svcs_with_db = [k for k in coverage_results if k in COVERAGE_TO_STARTUP_KEY]
+    svcs_checkdb_ok = sum(
+        1 for k in svcs_with_db
+        if _get_service_checkdb_icon(db_result, k) in ("✅", "—")
+    )
+    svcs_checkdb_total = len(svcs_with_db)
+
+    # Documents: кол-во успешно пройденных шагов document_processing
+    doc_passed_total = 0
+    doc_steps_total = 0
+    for svc_key, svc_status in pipe_service_status.items():
+        if "document_processing" in svc_status:
+            passed, total = svc_status["document_processing"]
+            doc_passed_total += passed
+            doc_steps_total += total
+
+    # Query: кол-во успешно пройденных шагов chat_inference
+    query_passed_total = 0
+    query_steps_total = 0
+    for svc_key, svc_status in pipe_service_status.items():
+        if "chat_inference" in svc_status:
+            passed, total = svc_status["chat_inference"]
+            query_passed_total += passed
+            query_steps_total += total
+
+    all_cov_ok = cov_ok_count == total_services
+    all_pipe_ok = all(pipeline_passed.values()) if pipeline_passed else True
+    pipe_ok_count = sum(1 for p in pipeline_passed.values() if p) if pipeline_passed else 0
+    pipe_total = len(pipeline_passed) if pipeline_passed else 0
+    overall_ok_count = (1 if all_cov_ok else 0) + (1 if all_pipe_ok else 0)
+    overall_total = 2
+    overall_status = "✅" if overall_ok_count == overall_total else "❌"
+
+    lines.append(
+        f"| **Total** | | **{cov_alive}/{total_services}** "
+        f"| **{svcs_checkdb_ok}/{svcs_checkdb_total}** "
+        f"| **{cov_ok_count}/{total_services}** "
+        f"| **{doc_passed_total}/{doc_steps_total}** "
+        f"| **{query_passed_total}/{query_steps_total}** "
+        f"| {overall_status} **{overall_ok_count}/{overall_total}** |\n"
+    )
 
     # ── 2. Детали API Coverage ─────────────────────────────────────
     lines.append("---\n")
     lines.append("## 🔬 API Coverage — Детализация\n")
-    lines.append("| Service | Port | Ping | Endpoints | ✅ Passed | ❌ Failed | ⏭️ Skipped | Status |")
-    lines.append("|---------|:----:|:----:|:---------:|:---------:|:---------:|:----------:|:------:|")
+    lines.append("| Service | Port | Ping | CheckDb | Endpoints | ✅ Passed | ❌ Failed | ⏭️ Skipped | Status |")
+    lines.append("|---------|:----:|:----:|:-------:|:---------:|:---------:|:---------:|:----------:|:------:|")
 
     for svc_key, result in sorted(coverage_results.items()):
         display_name = SERVICE_DISPLAY_NAMES.get(svc_key, svc_key)
@@ -117,7 +209,8 @@ def _generate_full_report(
         failed_str = str(result.endpoints_failed) if result.endpoints_failed == 0 else f'**{result.endpoints_failed}**'
         skipped_str = str(result.endpoints_skipped) if result.endpoints_skipped == 0 else f'**{result.endpoints_skipped}**'
         status_icon = "✅" if result.ping_ok and result.endpoints_failed == 0 and result.endpoints_skipped == 0 else "❌"
-        lines.append(f"| {display_name} | {result.port} | {ping_icon} | {result.endpoints_total} | {result.endpoints_passed} | {failed_str} | {skipped_str} | {status_icon} |")
+        svc_checkdb = _get_service_checkdb_icon(db_result, svc_key)
+        lines.append(f"| {display_name} | {result.port} | {ping_icon} | {svc_checkdb} | {result.endpoints_total} | {result.endpoints_passed} | {failed_str} | {skipped_str} | {status_icon} |")
 
     all_alive = sum(1 for r in coverage_results.values() if r.ping_ok)
     all_total_ok = sum(r.endpoints_passed for r in coverage_results.values())
@@ -125,7 +218,8 @@ def _generate_full_report(
     all_failed = sum(r.endpoints_failed for r in coverage_results.values())
     all_skipped = sum(r.endpoints_skipped for r in coverage_results.values())
     cov_ok = all_failed == 0 and all_skipped == 0
-    lines.append(f"| **Total** | | **{all_alive}/{len(coverage_results)}** | **{all_total_ep}** | **{all_total_ok}** | **{all_failed}** | **{all_skipped}** | {'✅' if cov_ok else '❌'} |\n")
+    cov_checkdb_total_icon = "✅" if svcs_checkdb_ok == svcs_checkdb_total else "❌" if db_result is not None else "—"
+    lines.append(f"| **Total** | | **{all_alive}/{len(coverage_results)}** | {cov_checkdb_total_icon} | **{all_total_ep}** | **{all_total_ok}** | **{all_failed}** | **{all_skipped}** | {'✅' if cov_ok else '❌'} |\n")
 
     # ── 3. Детали Pipeline Testing ─────────────────────────────────
     lines.append("---\n")
@@ -143,7 +237,14 @@ def _generate_full_report(
         status_icon = "✅" if ok else "❌"
         lines.append(f"| `{pipe_name}` | {desc} | {ping_icon} | {total} | {passed} | {failed} | {status_icon} |")
 
-    # ── 4. Детальные шаги каждого пайплайна ──────────────────────────
+    # ── 4. Детали проверки БД ────────────────────────────────────────
+    if db_result is not None:
+        lines.append("---\n")
+        from service_checker.core.db_check import format_db_report
+        db_section = format_db_report(db_result)
+        lines.append(db_section)
+
+    # ── 5. Детальные шаги каждого пайплайна ──────────────────────────
     lines.append("\n---\n")
     lines.append("## 📋 Pipeline Testing — Пошаговая детализация\n")
     for pipe_name, result in sorted(pipeline_results.items()):

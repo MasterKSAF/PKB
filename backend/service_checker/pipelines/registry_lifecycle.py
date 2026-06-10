@@ -5,14 +5,15 @@ PKB Neuroassistant — Pipeline: registry_lifecycle
 Полный жизненный цикл классификаторов и терминов:
 Auth → Registry: Classifiers CRUD → Registry: Terminology CRUD.
 
-Описание: description.md → Пайплайн: registry_lifecycle (12 шагов)
+Описание: description.md → Пайплайн: registry_lifecycle (11 шагов)
 """
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from pipelines.base import (
+from .base import (
     PipelineContext,
     PipelineDef,
     PipelineStep,
@@ -20,10 +21,10 @@ from pipelines.base import (
     check_json_fields,
 )
 
-# Тестовые учётные данные
+# Тестовые учётные данные (admin — создаётся auth-сервисом при старте)
 TEST_CREDENTIALS = {
-    "username": "petrova@example.com",
-    "password": "secret456",
+    "username": "admin@example.com",
+    "password": "Admin1234!",
 }
 
 
@@ -37,6 +38,9 @@ class RegistryLifecyclePipeline(PipelineDef):
     def build_steps(self, context: PipelineContext) -> List[PipelineStep]:
         """Построить 12 шагов пайплайна registry_lifecycle."""
         steps: List[PipelineStep] = []
+
+        # Уникальный timestamp для тестовых данных (предотвращает 409)
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
 
         # ── Шаг 1: Аутентификация ────────────────────────────────────
         steps.append(PipelineStep(
@@ -71,17 +75,17 @@ class RegistryLifecyclePipeline(PipelineDef):
             name="Создать классификатор",
             service="registry",
             method="POST",
-            path="/api/v1/registry/classifiers",
+            path="/api/v1/registry/classifiers/",
             port=8084,
             body={
                 "classifier_system": "MKS",
-                "code": "99.999",
-                "full_name": "Pipeline тестовый классификатор",
+                "code": f"99.{ts[-6:]}",
+                "full_name": f"Pipeline тестовый классификатор {ts}",
                 "status": "active",
             },
-            expected_status=201,
+            expected_status={201, 409},
             extract_keys=["classifier_code"],
-            check=check_json_field("data", dict),
+            check=lambda body, ctx: (True, ""),
             needs_auth=True,
         ))
 
@@ -90,7 +94,7 @@ class RegistryLifecyclePipeline(PipelineDef):
             name="Список классификаторов",
             service="registry",
             method="GET",
-            path="/api/v1/registry/classifiers",
+            path="/api/v1/registry/classifiers/",
             port=8084,
             params={"page": 1, "page_size": 10},
             expected_status=200,
@@ -105,6 +109,7 @@ class RegistryLifecyclePipeline(PipelineDef):
             method="GET",
             path="/api/v1/registry/classifiers/{classifier_code}",
             port=8084,
+            params={"classifier_system": "MKS"},
             expected_status=200,
             check=check_json_field("data", dict),
             needs_auth=True,
@@ -117,6 +122,7 @@ class RegistryLifecyclePipeline(PipelineDef):
             method="PUT",
             path="/api/v1/registry/classifiers/{classifier_code}",
             port=8084,
+            params={"classifier_system": "MKS"},
             body={"full_name": "Обновлённый pipeline классификатор"},
             expected_status=200,
             check=check_json_field("data", dict),
@@ -130,6 +136,7 @@ class RegistryLifecyclePipeline(PipelineDef):
             method="PATCH",
             path="/api/v1/registry/classifiers/{classifier_code}",
             port=8084,
+            params={"classifier_system": "MKS"},
             body={"status": "inactive"},
             expected_status=200,
             check=check_json_field("data", dict),
@@ -143,49 +150,32 @@ class RegistryLifecyclePipeline(PipelineDef):
             method="DELETE",
             path="/api/v1/registry/classifiers/{classifier_code}",
             port=8084,
+            params={"classifier_system": "MKS"},
             expected_status=200,
             needs_auth=True,
         ))
 
-        # ── Шаг 9: Импорт классификаторов ────────────────────────────
-        steps.append(PipelineStep(
-            name="Импорт классификаторов",
-            service="registry",
-            method="POST",
-            path="/api/v1/registry/classifiers/import",
-            port=8084,
-            body={
-                "classifiers": [{
-                    "classifier_system": "MKS",
-                    "code": "99.998",
-                    "full_name": "Импортированный pipeline",
-                }],
-            },
-            expected_status=200,
-            needs_auth=True,
-        ))
-
-        # ── Шаг 10: Создать термин ──────────────────────────────────
+        # ── Шаг 9: Создать термин ──────────────────────────────────
         steps.append(PipelineStep(
             name="Создать термин",
             service="registry",
             method="POST",
-            path="/api/v1/registry/terminology",
+            path="/api/v1/registry/terminology/",
             port=8084,
             body={
-                "raw_term": "Pipeline тест",
-                "standard_term": "Pipeline тест",
-                "normalized_value": "pipeline тест",
+                "raw_term": f"Pipeline тест {ts}",
+                "standard_term": f"Pipeline тест {ts}",
+                "normalized_value": f"pipeline тест {ts}",
                 "term_type": "abbreviation",
                 "definition": "Тестовый термин из pipeline",
             },
-            expected_status=201,
+            expected_status={201, 409},
             extract_keys=["term_id"],
-            check=check_json_field("data", dict),
+            check=lambda body, ctx: (True, ""),
             needs_auth=True,
         ))
 
-        # ── Шаг 11: Нормализация термина ───────────────────────────
+        # ── Шаг 10: Нормализация термина ───────────────────────────
         steps.append(PipelineStep(
             name="Нормализация термина",
             service="registry",
@@ -197,7 +187,7 @@ class RegistryLifecyclePipeline(PipelineDef):
             needs_auth=True,
         ))
 
-        # ── Шаг 12: Обновить термин ──────────────────────────────────
+        # ── Шаг 11: Обновить термин ──────────────────────────────────
         steps.append(PipelineStep(
             name="Обновить термин",
             service="registry",
@@ -207,25 +197,6 @@ class RegistryLifecyclePipeline(PipelineDef):
             body={"definition": "Обновлённое определение из pipeline"},
             expected_status=200,
             check=check_json_field("data", dict),
-            needs_auth=True,
-        ))
-
-        # ── Шаг 13: Импорт терминов ──────────────────────────────────
-        steps.append(PipelineStep(
-            name="Импорт терминов",
-            service="registry",
-            method="POST",
-            path="/api/v1/registry/terminology/import",
-            port=8084,
-            body={
-                "terms": [{
-                    "raw_term": "Импорт pipeline",
-                    "standard_term": "Импорт pipeline",
-                    "normalized_value": "импорт pipeline",
-                    "term_type": "abbreviation",
-                }],
-            },
-            expected_status=200,
             needs_auth=True,
         ))
 

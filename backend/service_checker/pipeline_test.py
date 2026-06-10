@@ -27,7 +27,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from pipelines import PIPELINE_REGISTRY, PipelineRunner, PipelineDef, PipelineResult, PipelineContext
+from service_checker.pipelines import PIPELINE_REGISTRY, PipelineRunner, PipelineDef, PipelineResult, PipelineContext
 
 
 # ──────────────────────────────────────────────────────────────────────

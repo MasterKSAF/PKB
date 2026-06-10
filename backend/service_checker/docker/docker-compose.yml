@@ -5,11 +5,14 @@
 # PostgreSQL (pgvector), Redis, MinIO — отдельные контейнеры.
 # =============================================================================
 
+name: pkb
+
 x-env-common: &env-common
   DB_HOST: postgres
   DB_PORT: 5432
   DB_USERNAME: pkb
   DB_PASSWORD: pkb
+  DB_SUPERUSER: pkb
   DB_DATABASE: pkb_neuro
   DATABASE_URL: postgresql+asyncpg://pkb:pkb@postgres:5432/pkb_neuro
   REDIS_URL: redis://redis:6379/0
@@ -35,6 +38,7 @@ x-env-common: &env-common
   EMBEDDING_BASE_URL: http://tei:80
   EMBEDDING_MODEL: Vuy/rubert-tiny2-onnx
   EMBEDDING_DIM: 312
+  EMBEDDING_API_KEY: sk-noop
   SEARCH_DEFAULT_TOP_K: 10
   SEARCH_MAX_TOP_K: 100
 
@@ -144,6 +148,8 @@ services:
       - "8088:8088"   # OCR
       - "8090:8090"   # RAG Builder
       - "8091:8091"   # RAG Search
+    env_file:
+      - ./.env
     environment:
       <<: *env-common
     depends_on:

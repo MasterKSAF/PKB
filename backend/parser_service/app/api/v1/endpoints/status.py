@@ -1,55 +1,77 @@
 """
-Эндпоинт GET /parser/process/{task_id}/status – longpoll до 15 секунд.
-Возвращает текущий статус задачи, прогресс, количество обработанных страниц и т.д.
+Эндпоинт GET /parser/process/{task_id}/status – получение статуса задачи (v1).
+
+Поддерживает long polling через параметр timeout.
 """
 from fastapi import APIRouter
 from app.core.task_store import task_store, TaskStatus
 from app.core.exceptions import TaskNotFoundError
 from app.api.v1.schemas import StatusResponse
+import logging
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 
 @router.get("/process/{task_id}/status", response_model=StatusResponse)
 async def get_task_status(task_id: int, timeout: int = 15):
     """
-    Longpoll-метод:
-    - Если задача завершена или провалена – возвращает статус немедленно.
-    - Иначе ожидает изменения версии задачи (через task_store.wait_for_change) до `timeout` секунд.
-    - По таймауту возвращает текущий статус (без ошибки).
+    Возвращает текущий статус задачи с поддержкой long polling.
+
+    Если задача завершена или провалена – возвращает сразу.
+    Иначе ожидает изменения статуса до timeout секунд.
+
+    Args:
+        task_id: ID задачи.
+        timeout: Максимальное время ожидания в секундах (по умолчанию 15).
+
+    Returns:
+        StatusResponse: Объект со статусом, прогрессом и деталями.
+
+    Raises:
+        TaskNotFoundError: Если задача не найдена.
     """
+    logger.debug(f"Status request for task {task_id}, timeout={timeout}")
     task_info = task_store.get(task_id)
     if task_info is None:
+        logger.warning(f"Task {task_id} not found")
         raise TaskNotFoundError(task_id)
 
-    # Терминальные состояния возвращаем сразу
+    # Если задача завершена или провалена – сразу возвращаем
     if task_info.status in (TaskStatus.COMPLETED, TaskStatus.FAILED):
+        logger.debug(f"Task {task_id} already terminal, returning status")
         return _build_status_response(task_info)
 
-    # Ожидаем изменения
     current_version = task_info.get_version()
     try:
+        logger.debug(f"Waiting for change of task {task_id}, version={current_version}")
         await task_store.wait_for_change(task_id, current_version, timeout)
     except Exception:
-        # При любой ошибке просто возвращаем текущий статус
+        # Таймаут или другая ошибка – продолжаем
         pass
 
     task_info = task_store.get(task_id)
     if task_info is None:
+        logger.warning(f"Task {task_id} disappeared during wait")
         raise TaskNotFoundError(task_id)
-
+    logger.info(f"Returning status for task {task_id}: {task_info.status}")
     return _build_status_response(task_info)
 
 
 def _build_status_response(task_info):
     """
-    Преобразует TaskInfo в объект StatusResponse.
-    Если задача завершена, pages_processed приравнивается к pages_total.
+    Формирует объект StatusResponse из TaskInfo.
+
+    Args:
+        task_info: Объект TaskInfo.
+
+    Returns:
+        StatusResponse: Структурированный ответ со статусом и прогрессом.
     """
     pages_processed = task_info.pages_processed
     if task_info.status == TaskStatus.COMPLETED:
         pages_processed = task_info.pages_total
-
     return StatusResponse(
         task_id=task_info.task_id,
         status=task_info.status,

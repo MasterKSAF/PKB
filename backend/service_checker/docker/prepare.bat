@@ -1,30 +1,57 @@
 @echo off
 REM =============================================================================
-REM PKB Neuroassistant — initial setup (one time after git clone)
-REM Builds base image, cleans volumes, starts all containers, runs coverage.
+REM PKB Neuroassistant — initial setup from scratch (one time after git clone)
+REM
+REM Полный цикл: подготовка модели TEI + сборка образа + очистка volumes +
+REM              запуск контейнеров + full-report проверка.
+REM
+REM Используйте когда нужно поднять всё с нуля:
+REM   docker\prepare.bat
+REM
+REM Для повторного запуска (без сброса volumes) используйте:
+REM   docker\recheck.bat
 REM =============================================================================
 
 cd /d "%~dp0"
 
-echo === PKB Neuroassistant: Initial setup ===
+echo === PKB Neuroassistant: Full setup from scratch ===
 echo.
 
-echo [1/5] Building base image (Python + dependencies)...
+echo [1/7] Preparing TEI model (if not already cached)...
 echo.
-docker build -f Dockerfile.base -t ghcr.io/pkb/neuro-base:latest .
+python prepare_tei_model.py
 if %ERRORLEVEL% neq 0 (
     echo.
-    echo ERROR: Base image build failed!
+    echo ERROR: TEI model preparation failed!
     pause
     exit /b 1
 )
 echo.
 
-echo [2/5] Cleaning old volumes...
-docker compose -f docker-compose.yml down -v
+echo [2/7] Building base image (Python + dependencies)...
+echo.
+set DOCKER_SCOUT_SUPPRESS_ANALYSIS=1
+docker build -f Dockerfile.base -t ghcr.io/pkb/neuro-base:latest .
+if errorlevel 1 (
+    echo.
+    echo WARNING: Build completed with warnings, but image was created.
+)
 echo.
 
-echo [3/5] Starting all containers (PostgreSQL, Redis, MinIO, Supervisord)...
+REM Сначала мигрируем старые volumes (docker_* -> pkb_*), если они есть
+echo [3/7] Migrating old volumes (docker_* -> pkb_*)...
+python migrate_volumes.py
+echo.
+
+echo [4/7] Stopping containers...
+docker compose -f docker-compose.yml down
+echo.
+
+echo [4/7] Removing known data volumes (DB, MinIO, logs)...
+docker volume rm -f pkb_pg_data pkb_minio_data pkb_app_logs 2>nul
+echo.
+
+echo [5/7] Starting all containers (PostgreSQL, Redis, MinIO, TEI, App)...
 docker compose -f docker-compose.yml up -d
 if %ERRORLEVEL% neq 0 (
     echo.
@@ -34,18 +61,22 @@ if %ERRORLEVEL% neq 0 (
 )
 echo.
 
-echo [4/5] Waiting 10 seconds...
+echo [6/7] Waiting 10 seconds for services to initialize...
 ping -n 11 127.0.0.1 > nul
 echo.
 
-echo [5/5] Running initial coverage check...
+echo [7/7] Running full report (coverage + pipelines)...
 cd /d "%~dp0..\.."
-python service_checker\service_checker.py docker --action coverage
+python -m service_checker docker --action full-report
+if %ERRORLEVEL% neq 0 (
+    echo.
+    echo WARNING: Some checks failed, check the report above.
+)
 
 echo.
 echo === Ready! ===
 echo Reports: check_result/
-echo For re-check: check.bat
+echo For quick re-check (no volume wipe): docker\recheck.bat
 echo.
 
 pause

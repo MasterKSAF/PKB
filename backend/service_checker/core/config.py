@@ -137,8 +137,8 @@ SERVICE_DEFS: Dict[str, Dict[str, Any]] = {
 # ── Test data ────────────────────────────────────────────────────────
 
 TEST_CREDENTIALS = {
-    "username": "petrova@example.com",
-    "password": "secret456",
+    "username": "admin@example.com",
+    "password": "Admin1234!",
 }
 
 HEADERS_JSON = {"Content-Type": "application/json", "Accept": "application/json"}
