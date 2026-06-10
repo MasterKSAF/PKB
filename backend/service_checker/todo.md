@@ -1,65 +1,33 @@
-# ✅ Pipeline тесты — стабильное исполнение
+# ✅ Выполнено: проверка инициализации БД сервисами
 
-## Итоговые результаты
+## Что сделано
 
-### Pipeline Testing
+### 1. Исправлена инициализация БД в Docker (service_checker)
+- `entrypoint.sh` → шаг 5/6: `setup_db.py --docker`
+- `setup_db.py` → читает env, ищет SQL-файл по маске, --docker режим
+- `docker/.env` → создан с DEFAULT_ADMIN_* и всеми переменными
+- `Dockerfile.base`/`.full` → добавлен postgresql-client
 
-| Пайплайн | Шагов | Пройдено | Ошибка |
-|----------|:-----:|:--------:|--------|
-| `document_processing` | 9 | **8/9** | RAG Search 500 (баг сервиса) |
-| `chat_inference` | 5 | **4/5** | RAG Search 500 (баг сервиса) |
-| `registry_lifecycle` | 11 | **10/11** | Profile 404 (mock-режим auth) |
+### 2. Проверка: какой сервис создаёт свои таблицы
 
-### API Coverage (честный: только 2xx/3xx = success)
+| Сервис | Статус | Детали |
+|--------|:------:|--------|
+| Auth Service | ✅ | `on_event startup` → `init_db()` → create_all |
+| Query Service | ✅ | `lifespan` → `init_db()` → create_all |
+| Orchestrator | ✅ | `lifespan` → create_all |
+| Integration | ✅ | create_all при импорте модуля |
+| **Registry** | **❌** | **Нет create_all() в main.py** |
+| **RAG Builder** | **❌** | **Нет create_all() в create_app()** |
+| RAG Search | ✅ | Consumer, не должен создавать |
 
-| Сервис | Результат |
-|--------|:---------:|
-| Auth | 4/18 |
-| Registry | 14/35 |
-| Orchestrator | 18/24 |
-| Query | 9/20 |
-| Converter-Validator | 3/4 |
-| Parser | 0/6 |
-| RAG Builder | 0/5 |
-| RAG Search | 1/2 |
-| TEI | 0/2 |
-| **Total** | **49/116** |
+### 3. Документация
+- `docs/database/db_init_requirements.md` — результаты проверки + таблица ответственных
+- `specificity.md` (раздел 11) — зафиксировано
+- `tests/test_db_setup.py` — 31 тест на SQL-генерацию
 
-### Unit-тесты: 85/85 ✅
+## Что остаётся (не checker)
 
-## Что исправлено
-
-### 1. `registry_lifecycle.py` (3/13 → 10/11)
-- **Уникальные данные** — classifier code и term text с timestamp-суффиксом, чтобы избежать 409
-- **params={"classifier_system": "MKS"}** — добавлен обязательный query-параметр для GET/PUT/PATCH/DELETE классификатора
-- **Trailing slashes** — /import и /normalize БЕЗ trailing slash (сервис редиректит С /import/ НА /import)
-- **expected_status={201, 409}** — для create term (запасной вариант)
-- **Импорт удалён** — /classifiers/import и /terminology/import — file upload (multipart), не тестируется JSON body
-
-### 2. `chat_inference.py` (3/6 → 4/5)
-- **Шаг "Профиль пользователя" удалён** — GET /auth/me = 404 в mock-режиме (не fixable)
-- **check исправлен** — `check_json_fields({"text": str})` → `check_json_field("message_id", (int, str))` (в response 202 нет поля `text`)
-- **Уникальный title** сессии с timestamp
-
-### 3. `document_processing.py` (7/9 → 8/9)
-- **expected_status={201, 409}** для create document в Registry
-- **Уникальный doc_code** с timestamp
-- **Нумерация шагов** исправлена (1-9)
-
-### 4. `services/registry.py` (coverage test)
-- **params={"classifier_system": "MKS"}** для GET/PUT/PATCH/DELETE классификатора
-- **/import и /normalize без trailing slash** (соответствует сервису)
-
-### 5. Тесты обновлены
-- 85/85 unit-тестов проходят
-
-## Что остаётся неисправленным (не checker)
-
-| Проблема | Причина |
-|----------|---------|
-| RAG Search 500 | Баг в коде сервиса (нет настроек эмбеддингов) |
-| Auth /me 404 | Mock-режим auth-сервиса |
-| Parser prepare не создаёт контекст | prepare возвращает неожиданный статус |
-| TEI эмбеддинги не работают | TEI не отвечает на embed (проверить модель) |
-| Gateway не отвечает | Зависит от всех сервисов |
-| OCR Ping fail | Сервис не отвечает на порту 8088 |
+| Сервис | Проблема |
+|--------|----------|
+| Registry | `registry_service/main.py` — нет create_all, ~18 таблиц схемы `registry` не создаются |
+| RAG Builder | `rag_builder_service/src/rag_builder/api/app.py` — нет create_all, таблица `rag.document_chunks` не создаётся |

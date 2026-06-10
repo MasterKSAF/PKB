@@ -485,3 +485,54 @@ POST /api/v1/registry/documents/ → 500
 
 ### Статус
 🔴 **Открыто (баг сервиса)**
+
+## 11. Аномалия: БД не инициализируется в Docker — 5 связанных проблем
+
+**Обнаружено:** 2026-06-10
+
+### Симптом
+- `api_coverage_test.py` / `pipeline_test.py` в Docker: Registry → 500 (`relation "registry.documents" does not exist`)
+- RAG Search → 500 (`Database pool is not initialized`)
+- RAG Builder → 500 (БД ошибки)
+- Auth → может не создать admin (`DEFAULT_ADMIN_EMAIL` не передан)
+
+### Диагностика: 5 проблем
+
+### Исправлено checker'ом
+
+| № | Проблема | Статус |
+|:-:|----------|:------:|
+| 11.1 | Нет шага инициализации БД в entrypoint.sh | ✅ добавлен шаг 5/6: `setup_db.py --docker` |
+| 11.3 | setup_db.py ищет несуществующий `0. full_schema.sql` | ✅ ищет `1. db_dump.sql` → любой `.sql` файл |
+| 11.4 | Отсутствует `docker/.env` | ✅ создан с DEFAULT_ADMIN_* и всеми переменными |
+| 11.5 | Путаница пользователей БД (pkb/pkb_user/rag_user) | ✅ `--docker` → все сервисы используют `pkb` (owner БД) |
+
+### Остаётся разработчикам сервисов
+
+#### 🔴 Registry Service: нет `Base.metadata.create_all()` в startup
+
+Файл: `registry_service/main.py` — нет lifespan, нет startup. 
+В Docker таблицы создаёт `setup_db.py` через дамп, но при standalone-запуске — таблиц нет.
+
+Необходимо добавить (аналогично auth/query/orchestrator):
+```python
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    Base.metadata.create_all(bind=db_engine)
+    yield
+
+app = FastAPI(lifespan=lifespan)
+```
+
+#### 🟡 RAG Builder: тоже не создаёт таблицы при старте
+
+Файл: `rag_builder_service/src/rag_builder/api/app.py` — `create_app()` без `create_all()`.
+Есть `Base`, `engine`, модели `RagDocumentChunk`, но `create_all()` не вызывается.
+В тестах (`conftest.py`) create_all есть — значит в production его нет.
+
+Аналогичное исправление: добавить `Base.metadata.create_all(bind=engine)` в `create_app()`.
+
+### Статус
+✅ **Service Checker — исправлено** (БД инициализируется в Docker через entrypoint.sh)
+🔴 **Registry — открыто** (не создаёт таблицы при старте)
+🟡 **RAG Builder — открыто** (не создаёт таблицы при старте)

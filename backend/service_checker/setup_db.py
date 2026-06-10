@@ -25,13 +25,13 @@ from typing import List, Optional
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 # ──────────────────────────────────────────────────────────────────────
-#  Config
+#  Config (from env with fallback to hardcoded defaults)
 # ──────────────────────────────────────────────────────────────────────
 
-DB_NAME = "pkb_neuro"
-DB_HOST = "127.0.0.1"
-DB_PORT = 5432
-DB_SUPERUSER = "postgres"
+DB_NAME = os.getenv("DB_DATABASE", "pkb_neuro")
+DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
+DB_PORT = int(os.getenv("DB_PORT", "5432"))
+DB_SUPERUSER = os.getenv("DB_SUPERUSER", "postgres")
 
 # Пользователи сервисов (каждый сервис может иметь своего)
 SERVICE_USERS = {
@@ -44,9 +44,27 @@ SERVICE_USERS = {
 
 
 def get_full_sql_path() -> Optional[Path]:
-    """Путь к SQL-файлу registry схемы."""
-    p = PROJECT_ROOT / "backend" / "registry_service" / "install" / "0. full_schema.sql"
-    return p if p.exists() else None
+    """Путь к SQL-файлу registry схемы.
+
+    Ищет любой .sql файл в директории install/ (pg_dump, full_schema и т.п.)
+    по приоритету: 0. full_schema.sql > 1. db_dump.sql > *.sql
+    """
+    install_dir = PROJECT_ROOT / "backend" / "registry_service" / "install"
+    if not install_dir.is_dir():
+        return None
+
+    # Приоритет: точное имя > первый .sql файл
+    for name in ["0. full_schema.sql", "1. db_dump.sql"]:
+        p = install_dir / name
+        if p.exists():
+            return p
+
+    # Любой .sql файл
+    sql_files = sorted(install_dir.glob("*.sql"))
+    if sql_files:
+        return sql_files[0]
+
+    return None
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -69,7 +87,19 @@ def sql_create_database(drop_first: bool = False) -> str:
     return sql
 
 
-def sql_setup_extensions_and_schemas() -> str:
+def sql_setup_extensions_and_schemas(registry_schema_by_dump: bool = False) -> str:
+    """
+    SQL для расширений и схем.
+
+    Если registry_schema_by_dump=True — schema registry НЕ создаётся,
+    потому что она будет создана через \\i из дампа Registry.
+    """
+    registry_schema = "" if registry_schema_by_dump else """
+    -- Схема registry (если дамп Registry не создаёт её сам)
+    CREATE SCHEMA IF NOT EXISTS registry;
+    GRANT ALL ON SCHEMA registry TO PUBLIC;
+"""
+
     return textwrap.dedent(f"""\
     \\c {DB_NAME}
 
@@ -86,18 +116,20 @@ def sql_setup_extensions_and_schemas() -> str:
         RAISE WARNING 'pgvector extension not available — RAG services will not work';
     END $$;
 
-    -- Схемы
-    CREATE SCHEMA IF NOT EXISTS registry;
+    -- Схемы{registry_schema}
+    -- Схема rag (всегда создаётся setup_db)
     CREATE SCHEMA IF NOT EXISTS rag;
-
-    -- Права
-    GRANT ALL ON SCHEMA registry TO PUBLIC;
     GRANT ALL ON SCHEMA rag TO PUBLIC;
+
+    -- Права на public
     GRANT ALL ON SCHEMA public TO PUBLIC;
     """)
 
 
-def sql_create_users() -> str:
+def sql_create_users(skip: bool = False) -> str:
+    if skip:
+        return """-- Пользователи не создаются: в Docker используем 'pkb' (owner БД)"""
+
     lines: List[str] = []
     for svc, info in SERVICE_USERS.items():
         user = info["user"]
@@ -186,19 +218,21 @@ def sql_create_rag_tables() -> str:
 # ──────────────────────────────────────────────────────────────────────
 
 
-def build_full_sql(drop_first: bool = False) -> str:
+def build_full_sql(drop_first: bool = False, skip_users: bool = False) -> str:
     """Собирает полный SQL-скрипт инициализации БД."""
+    full_schema = get_full_sql_path()
+    registry_by_dump = full_schema is not None
+
     parts: List[str] = [
         "-- ============================================================",
         "-- PKB Neuroassistant — Full Database Setup",
         "-- ============================================================",
         "",
         sql_create_database(drop_first),
-        sql_setup_extensions_and_schemas(),
+        sql_setup_extensions_and_schemas(registry_schema_by_dump=registry_by_dump),
     ]
 
-    # Registry schema
-    full_schema = get_full_sql_path()
+    # Registry schema (из дампа)
     if full_schema:
         parts.append(f"-- Registry tables (from {full_schema.name})")
         # psql на Windows требует forward slashes
@@ -206,13 +240,13 @@ def build_full_sql(drop_first: bool = False) -> str:
         parts.append(f"\\i '{path_str}'")
     else:
         parts.append("-- WARNING: registry schema SQL not found, skipping")
-        parts.append("-- Expected at: backend/registry_service/install/0. full_schema.sql")
+        parts.append("-- Expected at: backend/registry_service/install/")
 
     # RAG tables
     parts.append(sql_create_rag_tables())
 
-    # Users
-    parts.append(sql_create_users())
+    # Users (в Docker не создаём — используем 'pkb' owner'а БД)
+    parts.append(sql_create_users(skip=skip_users))
 
     parts.append("")
     parts.append("-- ============================================================")
@@ -404,16 +438,32 @@ def main():
         description="PKB Neuroassistant — Database Setup",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--password", default="", help="Пароль postgres")
+    parser.add_argument("--password", default="", help="Пароль postgres (по умолчанию: из PGPASSWORD env или 'pkb' в Docker)")
     parser.add_argument("--dry-run", action="store_true", help="Только показать SQL")
     parser.add_argument("--drop-first", action="store_true", help="Пересоздать БД с нуля")
     parser.add_argument("--only-env", action="store_true", help="Только создать .env файлы")
+    parser.add_argument("--docker", action="store_true", help="Режим Docker: без создания пользователей, пароль 'pkb'")
     args = parser.parse_args()
 
     password = args.password
-    if not password and not args.dry_run and not args.only_env:
-        import getpass
-        password = getpass.getpass(f"  Пароль для postgres@{DB_HOST}:{DB_PORT}: ")
+    if args.docker:
+        # Docker-режим: пароль pkb, не создаём пользователей
+        password = "pkb"
+        skip_users = True
+        print("  🐳 Docker-режим: ")
+        print(f"    пароль: '{password}', пользователи БД: 'pkb' (owner)")
+    elif not password and not args.dry_run and not args.only_env:
+        password = os.environ.get("PGPASSWORD", "")
+        if not password:
+            if DB_HOST == "postgres" or DB_HOST == "127.0.0.1":
+                password = "pkb"
+                print(f"  Использую пароль по умолчанию: '{password}'")
+            else:
+                import getpass
+                password = getpass.getpass(f"  Пароль для postgres@{DB_HOST}:{DB_PORT}: ")
+        skip_users = False
+    else:
+        skip_users = False
 
     if args.only_env:
         print("\n  Создание .env файлов...")
@@ -428,17 +478,19 @@ def main():
     print(f"  │  Пользователь: {DB_SUPERUSER}                             │")
     if args.drop_first:
         print(f"  │  ⚠ Режим: пересоздать БД с нуля                        │")
+    if skip_users:
+        print(f"  │  👤 Без создания пользователей (Docker)                 │")
     print(f"  └──────────────────────────────────────────────────────────┘\n")
 
     # Проверка
     full_schema = get_full_sql_path()
     if not full_schema:
         print("  ⚠ Внимание: не найден registry schema SQL-файл")
-        print(f"    Ожидается: backend/registry_service/install/0. full_schema.sql")
-        print(f"    Registry таблицы не будут созданы!\n")
+        print("    Ожидается: backend/registry_service/install/")
+        print("    Registry таблицы не будут созданы!\n")
 
     # Генерация SQL
-    sql = build_full_sql(drop_first=args.drop_first)
+    sql = build_full_sql(drop_first=args.drop_first, skip_users=skip_users)
 
     # Выполнение
     if not run_psql(sql, password, dry_run=args.dry_run):
