@@ -89,7 +89,22 @@ class ApiCoverageTester:
         if services:
             self.services_to_test = [s for s in services if s in available_services]
         else:
-            self.services_to_test = sorted(available_services)
+            # Сортируем так, чтобы сервисы-зависимости шли до зависимых от них
+            # (контекст prepare-шагов накапливается для downstream сервисов)
+            _ORDER = {
+                "auth": 0,
+                "registry": 1,      # создаёт doc_id, classifier_code, term_id
+                "converter_validator": 2,
+                "parser": 3,
+                "ocr": 4,
+                "orchestrator": 5,   # использует doc_id из Registry
+                "query": 6,
+                "rag_builder": 7,
+                "rag_search": 8,
+                "tei": 9,
+                "gateway": 10,
+            }
+            self.services_to_test = sorted(available_services, key=lambda s: _ORDER.get(s, 99))
 
         self.context: Dict[str, Any] = {}  # shared context между вызовами
         self.results: Dict[str, ServiceResult] = {}

@@ -462,3 +462,26 @@ docker build -f docker/Dockerfile.base -t ghcr.io/pkb/neuro-base:latest docker/
 
 ### Статус
 ✅ **Исправлено**
+
+## 10. Аномалия: Registry — таблица `registry.documents` не создана
+
+### Симптом
+```
+POST /api/v1/registry/documents/ → 500
+(psycopg2.errors.UndefinedTable) relation "registry.documents" does not exist
+```
+
+### Последствия для checker'а
+1. Registry не может создать документ (`POST /registry/documents/` → 500)
+2. `doc_id` не сохраняется в контекст coverage test'а
+3. Orchestrator не получает `doc_id` из контекста → 22 эндпоинта с `{doc_id}` пропущены
+4. Orchestrator показывает `Passed: 7/30` (только health, monitor, list, search)
+
+### Причина
+В БД PostgreSQL не выполнены миграции для Registry service. Таблица `registry.documents` (и, вероятно, другие) не создана.
+
+### Зона ответственности
+Разработчики Registry сервиса — исправление миграций БД.
+
+### Статус
+🔴 **Открыто (баг сервиса)**
