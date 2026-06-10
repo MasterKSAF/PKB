@@ -65,14 +65,14 @@ def get_service_def() -> ServiceDef:
         EndpointDef("POST", f"{API_PREFIX}/admin/users", "admin", "Создать пользователя",
             body={"email": "test@test.com", "full_name": "Test User", "password": "test123", "roles": ["engineer"]},
             extract_keys=["user_id"],
-            response_schema={"id": (int, str), "email": str}),
+            response_schema={"id": int, "email": str}),
         EndpointDef("GET", f"{API_PREFIX}/admin/users/{{user_id}}", "admin", "Получить пользователя",
             # docs: { user_id, email, full_name, position, roles, permissions{}, is_active }
             response_schema={"user_id": str, "email": str, "is_active": bool}),
         EndpointDef("PUT", f"{API_PREFIX}/admin/users/{{user_id}}", "admin", "Обновить пользователя",
             body={"email": "updated@test.com", "full_name": "Updated User", "position": "Engineer", "roles": ["engineer"], "is_active": True},
             # docs: { id, email, full_name, roles, is_active, created_at }
-            response_schema={"id": (int, str), "email": str, "is_active": bool}),
+            response_schema={"id": int, "email": str, "is_active": bool}),
         EndpointDef("PATCH", f"{API_PREFIX}/admin/users/{{user_id}}", "admin", "Изменить роль",
             body={"role": "admin"},
             # docs: { user_id, roles, audit_log_id, updated_at }
@@ -84,7 +84,7 @@ def get_service_def() -> ServiceDef:
             response_schema={"roles": list}),
         EndpointDef("POST", f"{API_PREFIX}/admin/roles", "admin", "Создать роль",
             body={"name": "viewer", "permissions": {"can_view_documents": True}},
-            response_schema={"id": (int, str), "name": str}),
+            response_schema={"id": int, "name": str}),
         EndpointDef("GET", f"{API_PREFIX}/admin/audit", "admin", "Журнал аудита",
             params={"page": 1, "page_size": 10},
             # docs: { events[], meta{total, page, page_size} }

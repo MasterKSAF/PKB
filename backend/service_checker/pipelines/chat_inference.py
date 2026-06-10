@@ -61,7 +61,7 @@ class ChatInferencePipeline(PipelineDef):
             body={"title": f"Pipeline тестовая сессия {datetime.now().isoformat()}"},
             expected_status=201,
             extract_keys=["session_id"],
-            check=check_json_field("session_id", (int, str)),
+            check=check_json_field("session_id", int),
             needs_auth=True,
         ))
 
@@ -78,7 +78,7 @@ class ChatInferencePipeline(PipelineDef):
             },
             expected_status={200, 202},
             extract_keys=["message_id"],
-            check=check_json_field("message_id", (int, str)),
+            check=check_json_field("message_id", int),
             needs_auth=True,
         ))
 

@@ -1,7 +1,12 @@
 """
 PKB Neuroassistant — Database Health Check.
 
-Проверяет состояние БД и статический анализ сервисов:
+⚠️ ВНИМАНИЕ: Read-only модуль.
+Этот модуль ТОЛЬКО проверяет состояние БД через SELECT-запросы.
+НИКАКИХ изменений БД (CREATE, ALTER, INSERT, DROP) он не производит.
+Создание таблиц — зона ответственности самих сервисов (create_all в startup).
+
+Проверяет:
 - База данных pkb_neuro существует
 - Расширения (uuid-ossp, pgcrypto, ltree, pg_trgm, vector) установлены
 - Схемы (public, registry, rag) созданы

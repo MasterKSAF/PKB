@@ -21,8 +21,8 @@ class TestDocumentProcessingPipeline:
     def test_build_steps_count(self):
         p = DocumentProcessingPipeline()
         steps = p.build_steps(PipelineContext())
-        assert len(steps) == 9, (
-            f"Ожидалось 9 шагов, получено {len(steps)}\n"
+        assert len(steps) == 10, (
+            f"Ожидалось 10 шагов, получено {len(steps)}\n"
             f"Шаги: {[s.name for s in steps]}"
         )
 
@@ -31,6 +31,7 @@ class TestDocumentProcessingPipeline:
         steps = p.build_steps(PipelineContext())
         expected_names = [
             "Аутентификация",
+            "Создание bucket documents",
             "Загрузка PDF в MinIO",
             "Запуск парсинга",
             "Статус парсинга (longpoll)",
@@ -66,7 +67,7 @@ class TestDocumentProcessingPipeline:
     def test_step_expected_status(self):
         p = DocumentProcessingPipeline()
         steps = p.build_steps(PipelineContext())
-        expected = [200, 200, 202, 200, 200, 200, {201, 409}, 201, 200]
+        expected = [200, {200, 409}, 200, 202, 200, 200, 200, {201, 409}, 201, 200]
         actual = [s.expected_status for s in steps]
         assert actual == expected, f"Ожидаемые статусы не совпадают:\n{actual}"
 

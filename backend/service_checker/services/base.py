@@ -18,7 +18,8 @@ class EndpointDef:
     path: str  # /api/v1/...
     group: str  # группа эндпоинтов (classifiers, documents, ...)
     description: str  # краткое описание
-    body: Optional[Dict[str, Any]] = None  # тело запроса (для POST/PUT/PATCH)
+    body: Optional[Dict[str, Any]] = None  # тело запроса JSON (для POST/PUT/PATCH)
+    form_body: Optional[Dict[str, Any]] = None  # multipart/form-data (вместо body)
     params: Optional[Dict[str, Any]] = None  # query-параметры
     # Если эндпоинт требует ID из предыдущего ответа — шаблон подстановки
     # {doc_id}, {session_id}, {user_id}, {version_id}, {task_id},

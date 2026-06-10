@@ -20,8 +20,7 @@ def get_service_def() -> ServiceDef:
     """Вернуть полное описание TEI сервиса."""
 
     endpoints = [
-        EndpointDef("GET", "/health", "health", "Health check TEI сервера",
-            response_schema={"status": str}),
+        EndpointDef("GET", "/", "health", "Health check TEI сервера"),
         EndpointDef("POST", "/embed", "embed", "Получить эмбеддинги",
             body={"inputs": "Тестовый запрос для эмбеддинга"},
             # TEI возвращает чистый массив [[float]], а не объект с ключом

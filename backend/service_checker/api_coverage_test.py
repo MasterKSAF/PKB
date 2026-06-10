@@ -320,7 +320,21 @@ class ApiCoverageTester:
         start = time.time()
         try:
             kwargs: Dict[str, Any] = {"headers": headers}
-            if body is not None:
+            if ep.form_body is not None:
+                # multipart/form-data — убираем JSON content-type
+                headers.pop("Content-Type", None)
+                kwargs["data"] = self._resolve_body(ep.form_body)
+                # Минимальный валидный PDF (заголовок + 1 страница)
+                pdf_bytes = (b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
+                             b"2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n"
+                             b"3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 50]"
+                             b"/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>>endobj\n"
+                             b"4 0 obj<</Length 44>>stream\nBT /F1 12 Tf 10 20 Td(test)Tj ET\nendstream\nendobj\n"
+                             b"5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj\n"
+                             b"xref\n0 6\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \n0000000266 00000 n \n0000000355 00000 n \n"
+                             b"trailer<</Size 6/Root 1 0 R>>\nstartxref\n424\n%%EOF")
+                kwargs["files"] = {"file": ("test.pdf", pdf_bytes, "application/pdf")}
+            elif body is not None:
                 kwargs["json"] = body
             if ep.params:
                 kwargs["params"] = ep.params
@@ -501,10 +515,12 @@ class ApiCoverageTester:
             print(f"     Ping: {status}  |  Passed: {result.endpoints_passed}/{result.endpoints_total}  "
                   f"|  Failed: {result.endpoints_failed}  |  Skipped: {result.endpoints_skipped}")
 
-            # Если сервис не отвечает — показать, кто от него зависит
+            # Если сервис не отвечает — уточняем причину (без ввода в заблуждение)
             deps = svc_def.depends_on
+            if not result.ping_ok:
+                print(f"     ❌ Сервис не отвечает на порту {svc_def.port}")
             if not result.ping_ok and deps:
-                print(f"     🔗 Зависит от: {', '.join(deps)}")
+                print(f"     📎 Включает эндпоинты: {', '.join(deps)}")
 
         return self.results
 

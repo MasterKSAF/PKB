@@ -536,3 +536,13 @@ app = FastAPI(lifespan=lifespan)
 ✅ **Service Checker — исправлено** (БД инициализируется в Docker через entrypoint.sh)
 🔴 **Registry — открыто** (не создаёт таблицы при старте)
 🟡 **RAG Builder — открыто** (не создаёт таблицы при старте)
+
+## 12. Все id — только int (архитектурное решение)
+
+Все идентификаторы в API сервисов (`task_id`, `document_id`, `version_id`, `session_id`,
+`message_id`, `draft_id`, `validation_id`, `user_id`, `role_id`, `id`) — только `int`.
+
+- **Запрещены:** `str`, `UUID`, `(int, str)`
+- **Почему:** единообразие, производительность индексов, отсутствие проблем с сериализацией
+- **Где зафиксировано:** `response_schema` в `services/*.py`, body тестовых запросов, pipelines
+- **Когда введено:** 2026-06-10 (убраны все `(int, str)` из чекера)

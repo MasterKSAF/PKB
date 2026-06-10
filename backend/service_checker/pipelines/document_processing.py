@@ -18,19 +18,21 @@ from .base import (
     PipelineStep,
     check_json_field,
     check_json_fields,
+    s3_sign_headers,
 )
 
 # Порт MinIO S3 API (обычно 9000)
 MINIO_PORT = 9000
 
-# Тестовый PDF-файл из каталога pdf/
+# Тестовый PDF-файл из каталога service_checker/pdf/ (путь относительно этого файла, а не CWD)
+_HERE = Path(__file__).resolve().parent.parent
 TEST_PDF_KEY = "test-document.pdf"
-TEST_PDF_PATH = "pdf/7bd97d737317a8a272bb18a405ab2d04.pdf"
+TEST_PDF_PATH = str(_HERE / "pdf" / "7bd97d737317a8a272bb18a405ab2d04.pdf")
 
 # Константы для пайплайна
-TEST_TASK_ID = "12345"
+TEST_TASK_ID = 12345
 TEST_DOC_ID = 1
-TEST_VERSION_ID = "pipeline-test-version"
+TEST_VERSION_ID = 1
 
 # Тестовые учётные данные (admin — создаётся auth-сервисом при старте)
 TEST_CREDENTIALS = {
@@ -91,7 +93,33 @@ class DocumentProcessingPipeline(PipelineDef):
             check=check_json_field("access_token", str),
         ))
 
-        # -- Шаг 2: Загрузка PDF в MinIO --
+        # -- Шаг 2: Создание bucket в MinIO --
+        bucket_url = f"http://127.0.0.1:{MINIO_PORT}/documents"
+        bucket_headers = s3_sign_headers(
+            method="PUT",
+            url=bucket_url,
+            access_key="minioadmin",
+            secret_key="minioadmin",
+        )
+        steps.append(PipelineStep(
+            name="Создание bucket documents",
+            service="minio",
+            method="PUT",
+            path="/documents",
+            port=MINIO_PORT,
+            expected_status={200, 409},
+            extra_headers=bucket_headers,
+        ))
+
+        # -- Шаг 3: Загрузка PDF в MinIO (S3 via AWS4-HMAC-SHA256) --
+        minio_url = f"http://127.0.0.1:{MINIO_PORT}/documents/{self.TEST_PDF_KEY}"
+        s3_headers = s3_sign_headers(
+            method="PUT",
+            url=minio_url,
+            access_key="minioadmin",
+            secret_key="minioadmin",
+            body=pdf_bytes,
+        )
         steps.append(PipelineStep(
             name="Загрузка PDF в MinIO",
             service="minio",
@@ -100,6 +128,7 @@ class DocumentProcessingPipeline(PipelineDef):
             port=MINIO_PORT,
             content=pdf_bytes,
             expected_status=200,
+            extra_headers=s3_headers,
             check=_check_minio_upload,
         ))
 
@@ -189,10 +218,10 @@ class DocumentProcessingPipeline(PipelineDef):
             path="/api/v1/rag/build",
             port=8090,
             body={
-                "document_id": "00000000-0000-0000-0000-000000000001",
+                "document_id": 1,
                 "sections": [{
                     "section_id": 1,
-                    "document_id": "00000000-0000-0000-0000-000000000001",
+                    "document_id": 1,
                     "clause": "1",
                     "level": 1,
                     "path": "1",

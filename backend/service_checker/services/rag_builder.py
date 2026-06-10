@@ -24,9 +24,9 @@ def get_service_def() -> ServiceDef:
         EndpointDef("POST", f"{API_PREFIX}/rag/build", "rag",
             "Построение чанков и индексация (prepare)",
             body={
-                "document_id": "test-doc-001",
+                "document_id": 1,
                 "sections": [{
-                    "section_id": 1, "document_id": "test-doc-001",
+                    "section_id": 1, "document_id": 1,
                     "clause": "1", "level": 1, "path": "1", "page": 1,
                     "type": "text",
                     "content": {"text": "Тестовое содержимое"},
@@ -43,15 +43,15 @@ def get_service_def() -> ServiceDef:
         EndpointDef("POST", f"{API_PREFIX}/rag/build", "rag",
             "Построение чанков и индексация",
             body={
-                "document_id": "test-doc-001",
+                "document_id": 1,
                 "sections": [{
-                    "section_id": 1, "document_id": "test-doc-001",
+                    "section_id": 1, "document_id": 1,
                     "clause": "1", "level": 1, "path": "1", "page": 1,
                     "type": "text",
                     "content": {"text": "Тестовое содержимое"},
                 }],
             },
-            response_schema={"status": str, "document_id": (int, str)}),
+            response_schema={"status": str, "document_id": int}),
         EndpointDef("DELETE", f"{API_PREFIX}/rag/build/{{doc_id}}", "rag",
             "Удаление чанков из индекса",
             response_schema={"status": str}),

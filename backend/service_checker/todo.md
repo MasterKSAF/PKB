@@ -1,45 +1,37 @@
-# ✅ Выполнено: проверка создания БД встроена в service_checker
+# ✅ Выполнено: правки чекера (2026-06-10)
 
-## Что сделано
+## 1. `core/db_check.py` — предупреждение read-only
+- Добавлено в docstring: модуль только проверяет БД (SELECT), не изменяет её
 
-### 1. Создан `core/db_check.py`
-- Модуль проверки состояния PostgreSQL в Docker
-- `run_db_check()` — выполняет 12 проверок: БД, расширения, схемы, Registry, RAG
-- `format_db_report()` — формирует Markdown-отчёт с таблицей
-- `DbCheckResult` — data class со свойствами `healthy`, `summary_icon`
+## 2. `pipelines/document_processing.py` — починка пути к PDF
+- Путь `pdf/7bd97d737317a8a272bb18a405ab2d04.pdf` был относительным от CWD
+- При запуске из `recheck.bat` (CWD = `backend/`) файл не находился
+- Исправлен на абсолютный через `Path(__file__).resolve().parent.parent / "pdf" / ...`
 
-### 2. Добавлен `docker --action db-check`
-- Отдельная команда: `python service_checker.py docker --action db-check`
-- Выводит таблицу с детальным состоянием БД
+## 3. Все id — только int (убраны `(int, str)`)
 
-### 3. Колонка `CheckDb` в full-report
-- В сводную таблицу full-report добавлена колонка `CheckDb` после `Ping`
-- Показывает ✅/❌/⚠️ в зависимости от состояния БД
-- Детальный блок "🗄️ БД PostgreSQL" добавлен после Pipeline детализации
-- `recheck.bat` теперь явно упоминает db-check в шаге 5/5
+### response_schema (int вместо (int, str)):
+- `services/auth.py` — `id`
+- `services/converter_validator.py` — `task_id`, `version_id`, `document_id`, `validation_id`
+- `services/orchestrator.py` — `task_id`, `document_id`, `draft_id`
+- `services/parser.py` — `task_id`
+- `services/ocr.py` — `task_id`
+- `services/rag_builder.py` — `document_id`
+- `services/registry.py` — `document_id`, `version_id`, `id`
 
-### 4. Удалён `tests/test_docker_db_check.py`
-- Перенесено из юнит-тестов в основной чекер
-- Больше не в pytest, а в `service_checker docker --action db-check`
-- `readme.md` очищен от упоминаний удалённого файла
+### body (строки → int):
+- `services/converter_validator.py`, `parser.py`, `ocr.py` — `task_id: 12345`
+- `services/rag_builder.py` — `document_id: 1`
 
-### 5. Проверка целостности
-- 121 unit-тест пройдено (2 pre-existing: Registry, RAG Builder)
-- Все тесты отчёта обновлены под новую колонку CheckDb
-- `service_checker.py docker --action db-check` работает и выводит отчёт
+### pipelines (строки → int):
+- `pipelines/chat_inference.py` — `session_id`, `message_id`: `int` (check)
+- `pipelines/document_processing.py` — `TEST_TASK_ID: 12345`, `document_id: 1`
 
-## Использование
-```bash
-# Только проверка БД
-python service_checker.py docker --action db-check
-
-# Полный отчёт (включает проверку БД)
-python service_checker.py docker --action full-report
-
-# recheck.bat (включает full-report с БД)
-docker\recheck.bat
-```
+## 4. Проверка целостности
+- `(int, str)` полностью удалён из всех `.py` файлов
+- `api_coverage_test.py` — проверка `isinstance(value, expected_type)` теперь корректна
+- 116 тестов проходят
 
 ## Остаётся
 - Registry и RAG Builder не имеют `create_all()` в startup (известная проблема)
-- При полном запуске Docker `db-check` покажет ✅
+- При полном запуске Docker `db-check` покажет ❌ для RAG таблиц

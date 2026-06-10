@@ -72,7 +72,7 @@ def get_service_def() -> ServiceDef:
             "Создать документ (prepare)",
             body=PREPARE_DOCUMENT,
             extract_keys=["doc_id"],
-            response_schema={"data": dict, "data.document_id": (int, str), "data.version_id": (int, str)},
+            response_schema={"data": dict, "data.document_id": int, "data.version_id": int},
             is_preparation=True,
             expected_status={201, 409}),
         # Создать термин → context.term_id
@@ -164,7 +164,7 @@ def get_service_def() -> ServiceDef:
         EndpointDef("PUT", f"{API_PREFIX}/registry/terminology/{{term_id}}",
             "terminology", "Обновить термин",
             body={"definition": "Обновлённое определение"},
-            response_schema={"data": dict, "data.raw_term": str, "data.id": (int, str)}),
+            response_schema={"data": dict, "data.raw_term": str, "data.id": int}),
         EndpointDef("DELETE", f"{API_PREFIX}/registry/terminology/{{term_id}}",
             "terminology", "Удалить термин",
             response_schema={"data": dict}),
@@ -179,7 +179,7 @@ def get_service_def() -> ServiceDef:
             body=PREPARE_DOCUMENT,
             extract_keys=["doc_id"],
             # docs: document_id, version_id, sections[], registry{...}
-            response_schema={"data": dict, "data.document_id": (int, str), "data.version_id": (int, str)}),
+            response_schema={"data": dict, "data.document_id": int, "data.version_id": int}),
         EndpointDef("GET", f"{API_PREFIX}/registry/documents/", "documents",
             "Список документов",
             params={"page": 1, "page_size": 10},
@@ -187,7 +187,7 @@ def get_service_def() -> ServiceDef:
         EndpointDef("GET", f"{API_PREFIX}/registry/documents/{{doc_id}}",
             "documents", "Получить документ",
             # docs: data.id, data.title, data.doc_code, data.status, data.source_type, data.era
-            response_schema={"data": dict, "data.id": (int, str), "data.title": str, "data.doc_code": str}),
+            response_schema={"data": dict, "data.id": int, "data.title": str, "data.doc_code": str}),
         EndpointDef("PUT", f"{API_PREFIX}/registry/documents/{{doc_id}}",
             "documents", "Обновить документ",
             body={"title": "Обновлённый документ"},

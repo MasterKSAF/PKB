@@ -25,23 +25,23 @@ def get_service_def() -> ServiceDef:
             response_schema={"status": str}),
         EndpointDef("POST", f"{API_PREFIX}/converter/preview/metadata", "converter",
             "Предпросмотр метаданных",
-            body={"task_id": "test-task", "version_id": "test-version",
+            body={"task_id": 12345, "version_id": 1,
                   "raw_json": {"test": True}},
             # docs: { doc_code, title, document_type, year, revision }
             response_schema={"doc_code": str, "title": str, "document_type": str}),
         EndpointDef("POST", f"{API_PREFIX}/converter/convert", "converter",
             "Конвертация документа",
-            body={"task_id": "test-task", "version_id": "test-version",
+            body={"task_id": 12345, "version_id": 1,
                   "raw_json": {"test": True}},
             # docs: { task_id, version_id, document_id, metadata{}, document{}, validation{} }
-            response_schema={"task_id": (int, str), "version_id": (int, str),
-                             "document_id": (int, str), "validation": dict}),
+            response_schema={"task_id": int, "version_id": int,
+                             "document_id": int, "validation": dict}),
         EndpointDef("POST", f"{API_PREFIX}/validate/document", "validate",
             "Валидация документа",
-            body={"task_id": "test-task", "version_id": "test-version",
+            body={"task_id": 12345, "version_id": 1,
                   "raw_json": {"test": True}},
             # docs: { validation_id, document_id, structure_valid, classification{}, status }
-            response_schema={"validation_id": (int, str), "document_id": (int, str),
+            response_schema={"validation_id": int, "document_id": int,
                              "structure_valid": bool, "status": str}),
     ]
 
