@@ -43,6 +43,13 @@
 - Заменён `restart app` на `down -v + up -d` — каждый запуск начинается с чистой БД
 - Удалён комментарий "БЕЗ очистки volumes"
 
+## 7. Отчёты — CheckDb для consumer, Total с количествами, API Coverage
+- `reports.py`: RAG Search (consumer) показывает `—` в CheckDb вместо ✅
+- `reports.py`: Total строка — количества по всем столбцам (X/Y), а не иконки
+- `reports.py`: колонка ✅ Passed переименована в API
+- `api_coverage_test.py`: добавлена колонка CheckDb в отчёт
+- `cli.py`: db_check выполняется до coverage (чтобы CheckDb заполнялся)
+
 ## Остаётся
 - Registry и RAG Builder не имеют `create_all()` в startup — без этого их таблицы не создаются
 - `db-check` будет показывать ❌ для Registry и RAG таблиц, пока сервисы не реализуют `create_all()`
