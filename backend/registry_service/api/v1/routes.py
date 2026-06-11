@@ -45,7 +45,7 @@ def list_documents(
 
     Docs: docs/api/registry_service_api.md §3.1 - Список
     """
-    log_event('INFO', '/registry/documents', None, None)
+    log_event('INFO', '/registry/documents/', None, None)
     try:
         dt_from = None
         if date_from:
@@ -92,23 +92,23 @@ def list_documents(
             }
         }
     except Exception as e:
-        log_event('ERROR', '/registry/documents', None, None, str(e))
+        log_event('ERROR', '/registry/documents/', None, None, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.get('/registry/documents/export')
+@routes.get('/registry/documents/export/')
 def export_documents(
     page: int = Query(1, ge=1),
     page_size: int = Query(1000, ge=1, le=10000),
     db: Session = Depends(get_db),
 ):
     """
-    GET /registry/documents/export
+    GET /registry/documents/export/
     Export documents as CSV.
 
     Docs: docs/api/registry_service_api.md §3.10 - Экспорт
     """
-    log_event('INFO', '/registry/documents/export', None, None)
+    log_event('INFO', '/registry/documents/export/', None, None)
     try:
         documents, _ = document_crud.get_documents(db, page=page, page_size=page_size)
         rows = ['id,doc_code,title,status,mks_oks_code']
@@ -125,23 +125,23 @@ def export_documents(
         csv_data = '\n'.join(rows)
         return Response(content=csv_data, media_type='text/csv')
     except Exception as e:
-        log_event('ERROR', '/registry/documents/export', None, None, str(e))
+        log_event('ERROR', '/registry/documents/export/', None, None, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.post('/registry/documents/import')
+@routes.post('/registry/documents/import/')
 def import_documents(
     mapping: str = Query(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
     """
-    POST /registry/documents/import
+    POST /registry/documents/import/
     Import documents from a file.
 
     Docs: docs/api/registry_service_api.md §3.11 - Массовый импорт
     """
-    log_event('INFO', '/registry/documents/import', None, None)
+    log_event('INFO', '/registry/documents/import/', None, None)
     try:
         if not file:
             raise HTTPException(
@@ -155,20 +155,20 @@ def import_documents(
     except HTTPException:
         raise
     except Exception as e:
-        log_event('ERROR', '/registry/documents/import', None, None, str(e))
+        log_event('ERROR', '/registry/documents/import/', None, None, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.post('/registry/documents/check-uniqueness')
+@routes.post('/registry/documents/check-uniqueness/')
 def check_documents_uniqueness(
     payload: dict,
     db: Session = Depends(get_db),
 ):
-    """POST /registry/documents/check-uniqueness — duplicate check by metadata.
+    """POST /registry/documents/check-uniqueness/ — duplicate check by metadata.
 
     Docs: docs/api/registry_service_api.md §3.2.5 - Проверить уникальность документа
     """
-    log_event('INFO', '/registry/documents/check-uniqueness', None, log_payload(payload))
+    log_event('INFO', '/registry/documents/check-uniqueness/', None, log_payload(payload))
     try:
         title = payload.get('title')
         if not title:
@@ -189,27 +189,27 @@ def check_documents_uniqueness(
     except HTTPException:
         raise
     except Exception as e:
-        log_event('ERROR', '/registry/documents/check-uniqueness', None, log_payload(payload), str(e))
+        log_event('ERROR', '/registry/documents/check-uniqueness/', None, log_payload(payload), str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.get('/registry/documents/{document_id}')
+@routes.get('/registry/documents/{document_id}/')
 def get_document(
     document_id: str,
     db: Session = Depends(get_db),
 ):
     """
-    GET /registry/documents/{document_id}
+    GET /registry/documents/{document_id}/
     Retrieve a single document by ID.
 
     Docs: docs/api/registry_service_api.md §3.2 - Один документ (описание)
     """
-    log_event('INFO', f'/registry/documents/{document_id}', None, None)
+    log_event('INFO', f'/registry/documents/{document_id}/', None, None)
     try:
         document = document_crud.get_document_by_id(db, document_id)
         
         if not document:
-            log_event('WARNING', f'/registry/documents/{document_id}', None, None, 'Document not found')
+            log_event('WARNING', f'/registry/documents/{document_id}/', None, None, 'Document not found')
             raise HTTPException(
                 status_code=404,
                 detail={'error': {'code': 'DOCUMENT_NOT_FOUND', 'message': 'Document not found'}},
@@ -221,20 +221,20 @@ def get_document(
     except HTTPException:
         raise
     except Exception as e:
-        log_event('ERROR', f'/registry/documents/{document_id}', None, None, str(e))
+        log_event('ERROR', f'/registry/documents/{document_id}/', None, None, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.get('/registry/documents/{document_id}/sections')
+@routes.get('/registry/documents/{document_id}/sections/')
 def document_sections(
     document_id: str,
     db: Session = Depends(get_db),
 ):
-    """GET /registry/documents/{document_id}/sections — full document for RAG Builder.
+    """GET /registry/documents/{document_id}/sections/ — full document for RAG Builder.
 
     Docs: docs/api/registry_service_api.md §3.2.1 - Секции документа (полный объект для RAG Builder)
     """
-    log_event('INFO', f'/registry/documents/{document_id}/sections', None, None)
+    log_event('INFO', f'/registry/documents/{document_id}/sections/', None, None)
     try:
         document = document_crud.get_document_by_id(db, document_id)
         if not document:
@@ -246,7 +246,7 @@ def document_sections(
     except HTTPException:
         raise
     except Exception as e:
-        log_event('ERROR', f'/registry/documents/{document_id}/sections', None, None, str(e))
+        log_event('ERROR', f'/registry/documents/{document_id}/sections/', None, None, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
@@ -261,7 +261,7 @@ def create_document(
 
     Docs: docs/api/registry_service_api.md §3.3 - Создать (основной / из Пайплайна 1)
     """
-    log_event('INFO', '/registry/documents', None, log_payload(payload))
+    log_event('INFO', '/registry/documents/', None, log_payload(payload))
     try:
         # Check if this is the pipeline payload format
         if 'document' in payload:
@@ -287,13 +287,13 @@ def create_document(
         doc_code = payload.get('doc_code') or (title or '').strip().upper().replace(' ', '-').replace('/', '-')
         
         if not title:
-            log_event('WARNING', '/registry/documents', None, payload, 'Missing required fields')
+            log_event('WARNING', '/registry/documents/', None, payload, 'Missing required fields')
             raise HTTPException(
                 status_code=422,
                 detail={'error': {'code': 'VALIDATION_ERROR', 'message': 'Missing title'}},
             )
         if not doc_code:
-            log_event('WARNING', '/registry/documents', None, payload, 'Missing document code')
+            log_event('WARNING', '/registry/documents/', None, payload, 'Missing document code')
             raise HTTPException(
                 status_code=422,
                 detail={'error': {'code': 'VALIDATION_ERROR', 'message': 'Missing doc_code'}},
@@ -326,7 +326,7 @@ def create_document(
 
         document = document_crud.create_document(db, doc_code=doc_code, title=title, **clean_payload)
         
-        log_event('INFO', '/registry/documents', None, {'doc_code': doc_code}, 'Document created')
+        log_event('INFO', '/registry/documents/', None, {'doc_code': doc_code}, 'Document created')
         
         return JSONResponse(
             status_code=201,
@@ -335,34 +335,34 @@ def create_document(
     except HTTPException:
         raise
     except Exception as e:
-        log_event('ERROR', '/registry/documents', None, payload, str(e))
+        log_event('ERROR', '/registry/documents/', None, payload, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.put('/registry/documents/{document_id}')
+@routes.put('/registry/documents/{document_id}/')
 def update_document(
     document_id: str,
     payload: dict,
     db: Session = Depends(get_db),
 ):
     """
-    PUT /registry/documents/{document_id}
+    PUT /registry/documents/{document_id}/
     Update an entire document.
 
     Docs: docs/api/registry_service_api.md §3.4 - Обновить
     """
-    log_event('INFO', f'/registry/documents/{document_id}', None, log_payload(payload))
+    log_event('INFO', f'/registry/documents/{document_id}/', None, log_payload(payload))
     try:
         document = document_crud.update_document(db, document_id, **payload)
         
         if not document:
-            log_event('WARNING', f'/registry/documents/{document_id}', None, None, 'Document not found')
+            log_event('WARNING', f'/registry/documents/{document_id}/', None, None, 'Document not found')
             raise HTTPException(
                 status_code=404,
                 detail={'error': {'code': 'DOCUMENT_NOT_FOUND', 'message': 'Document not found'}},
             )
         
-        log_event('INFO', f'/registry/documents/{document_id}', None, payload, 'Document updated')
+        log_event('INFO', f'/registry/documents/{document_id}/', None, payload, 'Document updated')
         
         return {
             'data': DocumentSchema.model_validate(document).model_dump(mode='json', by_alias=True, exclude_none=True),
@@ -370,23 +370,23 @@ def update_document(
     except HTTPException:
         raise
     except Exception as e:
-        log_event('ERROR', f'/registry/documents/{document_id}', None, payload, str(e))
+        log_event('ERROR', f'/registry/documents/{document_id}/', None, payload, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.patch('/registry/documents/{document_id}/status')
+@routes.patch('/registry/documents/{document_id}/status/')
 def patch_document_status(
     document_id: str,
     payload: dict,
     db: Session = Depends(get_db),
 ):
     """
-    PATCH /registry/documents/{document_id}/status
+    PATCH /registry/documents/{document_id}/status/
     Update the status of a document.
 
     Docs: docs/api/registry_service_api.md §3.6 - Обновить статус
     """
-    log_event('INFO', f'/registry/documents/{document_id}/status', None, log_payload(payload))
+    log_event('INFO', f'/registry/documents/{document_id}/status/', None, log_payload(payload))
     try:
         status = payload.get('status')
         comment = payload.get('comment')
@@ -417,7 +417,7 @@ def patch_document_status(
 
         document, history, previous_status = res
 
-        log_event('INFO', f'/registry/documents/{document_id}/status', None, payload, 'Document status updated')
+        log_event('INFO', f'/registry/documents/{document_id}/status/', None, payload, 'Document status updated')
         return {
             'data': {
                 'id': str(document.id),
@@ -430,35 +430,35 @@ def patch_document_status(
     except HTTPException:
         raise
     except Exception as e:
-        log_event('ERROR', f'/registry/documents/{document_id}/status', None, payload, str(e))
+        log_event('ERROR', f'/registry/documents/{document_id}/status/', None, payload, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
 
-@routes.patch('/registry/documents/{document_id}')
+@routes.patch('/registry/documents/{document_id}/')
 def patch_document(
     document_id: str,
     payload: dict,
     db: Session = Depends(get_db),
 ):
     """
-    PATCH /registry/documents/{document_id}
+    PATCH /registry/documents/{document_id}/
     Partially update a document.
 
     Docs: docs/api/registry_service_api.md §3.5 - Частичное обновление
     """
-    log_event('INFO', f'/registry/documents/{document_id}', None, log_payload(payload))
+    log_event('INFO', f'/registry/documents/{document_id}/', None, log_payload(payload))
     try:
         document = document_crud.update_document(db, document_id, **payload)
         
         if not document:
-            log_event('WARNING', f'/registry/documents/{document_id}', None, None, 'Document not found')
+            log_event('WARNING', f'/registry/documents/{document_id}/', None, None, 'Document not found')
             raise HTTPException(
                 status_code=404,
                 detail={'error': {'code': 'DOCUMENT_NOT_FOUND', 'message': 'Document not found'}},
             )
         
-        log_event('INFO', f'/registry/documents/{document_id}', None, payload, 'Document patched')
+        log_event('INFO', f'/registry/documents/{document_id}/', None, payload, 'Document patched')
         
         return {
             'data': DocumentSchema.model_validate(document).model_dump(mode='json', by_alias=True, exclude_none=True),
@@ -466,31 +466,31 @@ def patch_document(
     except HTTPException:
         raise
     except Exception as e:
-        log_event('ERROR', f'/registry/documents/{document_id}', None, payload, str(e))
+        log_event('ERROR', f'/registry/documents/{document_id}/', None, payload, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.delete('/registry/documents/{document_id}')
+@routes.delete('/registry/documents/{document_id}/')
 def delete_document(
     document_id: str,
     db: Session = Depends(get_db),
 ):
     """
-    DELETE /registry/documents/{document_id}
+    DELETE /registry/documents/{document_id}/
     Delete a document.
 
     Docs: docs/api/registry_service_api.md §3.9 - Удалить
     """
-    log_event('INFO', f'/registry/documents/{document_id}', None, None)
+    log_event('INFO', f'/registry/documents/{document_id}/', None, None)
     try:
         if not document_crud.delete_document(db, document_id):
-            log_event('WARNING', f'/registry/documents/{document_id}', None, None, 'Document not found')
+            log_event('WARNING', f'/registry/documents/{document_id}/', None, None, 'Document not found')
             raise HTTPException(
                 status_code=404,
                 detail={'error': {'code': 'DOCUMENT_NOT_FOUND', 'message': 'Document not found'}},
             )
         
-        log_event('INFO', f'/registry/documents/{document_id}', None, None, 'Document deleted')
+        log_event('INFO', f'/registry/documents/{document_id}/', None, None, 'Document deleted')
         
         return {
             'data': {'message': 'Document deleted'},
@@ -498,22 +498,22 @@ def delete_document(
     except HTTPException:
         raise
     except Exception as e:
-        log_event('ERROR', f'/registry/documents/{document_id}', None, None, str(e))
+        log_event('ERROR', f'/registry/documents/{document_id}/', None, None, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.get('/registry/documents/{document_id}/history')
+@routes.get('/registry/documents/{document_id}/history/')
 def document_history(
     document_id: str,
     db: Session = Depends(get_db),
 ):
     """
-    GET /registry/documents/{document_id}/history
+    GET /registry/documents/{document_id}/history/
     Return document history.
 
     Docs: docs/api/registry_service_api.md §3.7 - История статусов
     """
-    log_event('INFO', f'/registry/documents/{document_id}/history', None, None)
+    log_event('INFO', f'/registry/documents/{document_id}/history/', None, None)
     try:
         document = document_crud.get_document_by_id(db, document_id)
         if not document:
@@ -538,22 +538,22 @@ def document_history(
     except HTTPException:
         raise
     except Exception as e:
-        log_event('ERROR', f'/registry/documents/{document_id}/history', None, None, str(e))
+        log_event('ERROR', f'/registry/documents/{document_id}/history/', None, None, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.get('/registry/documents/{document_id}/succession')
+@routes.get('/registry/documents/{document_id}/succession/')
 def document_succession(
     document_id: str,
     db: Session = Depends(get_db),
 ):
     """
-    GET /registry/documents/{document_id}/succession
+    GET /registry/documents/{document_id}/succession/
     Return document succession.
 
     Docs: docs/api/registry_service_api.md §3.8 - Цепочка преемственности
     """
-    log_event('INFO', f'/registry/documents/{document_id}/succession', None, None)
+    log_event('INFO', f'/registry/documents/{document_id}/succession/', None, None)
     try:
         document = document_crud.get_document_by_id(db, document_id)
         if not document:
@@ -566,7 +566,7 @@ def document_succession(
     except HTTPException:
         raise
     except Exception as e:
-        log_event('ERROR', f'/registry/documents/{document_id}/succession', None, None, str(e))
+        log_event('ERROR', f'/registry/documents/{document_id}/succession/', None, None, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
@@ -625,7 +625,7 @@ def create_classifier(
     except HTTPException:
         raise
     except Exception as e:
-        log_event('ERROR', '/registry/classifiers', None, payload, str(e))
+        log_event('ERROR', '/registry/classifiers/', None, payload, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
@@ -639,7 +639,7 @@ def list_classifiers(
     parent_code: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
-    log_event('INFO', '/registry/classifiers', None, None)
+    log_event('INFO', '/registry/classifiers/', None, None)
     """
     Docs: docs/api/registry_service_api.md §1.4 - Список (плоский)
     """
@@ -665,20 +665,20 @@ def list_classifiers(
             },
         }
     except Exception as e:
-        log_event('ERROR', '/registry/classifiers', None, None, str(e))
+        log_event('ERROR', '/registry/classifiers/', None, None, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.get('/registry/classifiers/tree')
+@routes.get('/registry/classifiers/tree/')
 def classifier_tree(
     classifier_system: str = Query(...),
     root_code: Optional[str] = None,
-    search: Optional[str] = None,
     max_depth: int = Query(10, ge=1, le=100),
+    search: Optional[str] = None,
     status: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
-    log_event('INFO', '/registry/classifiers/tree', None, None)
+    log_event('INFO', '/registry/classifiers/tree/', None, None)
     """
     Docs: docs/api/registry_service_api.md §1.2 - Дерево (иерархическое)
     """
@@ -691,18 +691,18 @@ def classifier_tree(
             'data': data,
         }
     except Exception as e:
-        log_event('ERROR', '/registry/classifiers/tree', None, None, str(e))
+        log_event('ERROR', '/registry/classifiers/tree/', None, None, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.post('/registry/classifiers/import')
+@routes.post('/registry/classifiers/import/')
 def import_classifiers(
     classifier_system: str = Query(...),
     mapping: str = Query(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
-    log_event('INFO', '/registry/classifiers/import', None, None)
+    log_event('INFO', '/registry/classifiers/import/', None, None)
     """
     Docs: docs/api/registry_service_api.md §1.8 - Импорт
     """
@@ -719,11 +719,11 @@ def import_classifiers(
     except HTTPException:
         raise
     except Exception as e:
-        log_event('ERROR', '/registry/classifiers/import', None, None, str(e))
+        log_event('ERROR', '/registry/classifiers/import/', None, None, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.get('/registry/classifiers/pending')
+@routes.get('/registry/classifiers/pending/')
 def list_classifier_pending(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
@@ -731,7 +731,7 @@ def list_classifier_pending(
     status: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
-    log_event('INFO', '/registry/classifiers/pending', None, None)
+    log_event('INFO', '/registry/classifiers/pending/', None, None)
     """
     Docs: docs/api/registry_service_api.md §1.9 - Список карантина
     """
@@ -772,17 +772,17 @@ def list_classifier_pending(
             })
         return {'data': data, 'meta': {'total': total, 'page': page, 'page_size': page_size}}
     except Exception as e:
-        log_event('ERROR', '/registry/classifiers/pending', None, None, str(e))
+        log_event('ERROR', '/registry/classifiers/pending/', None, None, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.post('/registry/classifiers/pending/{pending_id}/accept')
+@routes.post('/registry/classifiers/pending/{pending_id}/accept/')
 def accept_classifier_pending(
     pending_id: str,
     payload: dict,
     db: Session = Depends(get_db),
 ):
-    log_event('INFO', f'/registry/classifiers/pending/{pending_id}/accept', None, log_payload(payload))
+    log_event('INFO', f'/registry/classifiers/pending/{pending_id}/accept/', None, log_payload(payload))
     """
     Docs: docs/api/registry_service_api.md §1.10 - Принять код из карантина
     """
@@ -820,17 +820,17 @@ def accept_classifier_pending(
     except HTTPException:
         raise
     except Exception as e:
-        log_event('ERROR', f'/registry/classifiers/pending/{pending_id}/accept', None, log_payload(payload), str(e))
+        log_event('ERROR', f'/registry/classifiers/pending/{pending_id}/accept/', None, log_payload(payload), str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.post('/registry/classifiers/pending/{pending_id}/reject')
+@routes.post('/registry/classifiers/pending/{pending_id}/reject/')
 def reject_classifier_pending(
     pending_id: str,
     payload: dict,
     db: Session = Depends(get_db),
 ):
-    log_event('INFO', f'/registry/classifiers/pending/{pending_id}/reject', None, log_payload(payload))
+    log_event('INFO', f'/registry/classifiers/pending/{pending_id}/reject/', None, log_payload(payload))
     """
     Docs: docs/api/registry_service_api.md §1.11 - Отклонить код из карантина
     """
@@ -849,16 +849,16 @@ def reject_classifier_pending(
     except HTTPException:
         raise
     except Exception as e:
-        log_event('ERROR', f'/registry/classifiers/pending/{pending_id}/reject', None, log_payload(payload), str(e))
+        log_event('ERROR', f'/registry/classifiers/pending/{pending_id}/reject/', None, log_payload(payload), str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.post('/registry/classifiers/validate')
+@routes.post('/registry/classifiers/validate/')
 def validate_classifiers(
     payload: dict,
     db: Session = Depends(get_db),
 ):
-    log_event('INFO', '/registry/classifiers/validate', None, log_payload(payload))
+    log_event('INFO', '/registry/classifiers/validate/', None, log_payload(payload))
     """
     Docs: docs/api/registry_service_api.md §1.12 - Валидация классификации
     """
@@ -873,17 +873,17 @@ def validate_classifiers(
     except HTTPException:
         raise
     except Exception as e:
-        log_event('ERROR', '/registry/classifiers/validate', None, log_payload(payload), str(e))
+        log_event('ERROR', '/registry/classifiers/validate/', None, log_payload(payload), str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.get('/registry/classifiers/{code}')
+@routes.get('/registry/classifiers/{code}/')
 def get_classifier(
     code: str,
     classifier_system: str = Query(...),
     db: Session = Depends(get_db),
 ):
-    log_event('INFO', f'/registry/classifiers/{code}', None, None)
+    log_event('INFO', f'/registry/classifiers/{code}/', None, None)
     """
     Docs: docs/api/registry_service_api.md §1.3 - Один узел
     """
@@ -901,18 +901,18 @@ def get_classifier(
     except HTTPException:
         raise
     except Exception as e:
-        log_event('ERROR', f'/registry/classifiers/{code}', None, None, str(e))
+        log_event('ERROR', f'/registry/classifiers/{code}/', None, None, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.put('/registry/classifiers/{code}')
+@routes.put('/registry/classifiers/{code}/')
 def update_classifier(
     code: str,
     payload: dict,
     classifier_system: str = Query(...),
     db: Session = Depends(get_db),
 ):
-    log_event('INFO', f'/registry/classifiers/{code}', None, log_payload(payload))
+    log_event('INFO', f'/registry/classifiers/{code}/', None, log_payload(payload))
     """
     Docs: docs/api/registry_service_api.md §1.5 - Обновить
     """
@@ -930,18 +930,18 @@ def update_classifier(
     except HTTPException:
         raise
     except Exception as e:
-        log_event('ERROR', f'/registry/classifiers/{code}', None, payload, str(e))
+        log_event('ERROR', f'/registry/classifiers/{code}/', None, payload, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.patch('/registry/classifiers/{code}')
+@routes.patch('/registry/classifiers/{code}/')
 def patch_classifier(
     code: str,
     payload: dict,
     classifier_system: str = Query(...),
     db: Session = Depends(get_db),
 ):
-    log_event('INFO', f'/registry/classifiers/{code}', None, log_payload(payload))
+    log_event('INFO', f'/registry/classifiers/{code}/', None, log_payload(payload))
     """
     Docs: docs/api/registry_service_api.md §1.6 - Частичное обновление
     """
@@ -959,18 +959,18 @@ def patch_classifier(
     except HTTPException:
         raise
     except Exception as e:
-        log_event('ERROR', f'/registry/classifiers/{code}', None, payload, str(e))
+        log_event('ERROR', f'/registry/classifiers/{code}/', None, payload, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.delete('/registry/classifiers/{code}')
+@routes.delete('/registry/classifiers/{code}/')
 def delete_classifier(
     code: str,
     classifier_system: str = Query(...),
     force: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
-    log_event('INFO', f'/registry/classifiers/{code}', None, None)
+    log_event('INFO', f'/registry/classifiers/{code}/', None, None)
     """
     Docs: docs/api/registry_service_api.md §1.7 - Удалить
     """
@@ -999,7 +999,7 @@ def delete_classifier(
     except HTTPException:
         raise
     except Exception as e:
-        log_event('ERROR', f'/registry/classifiers/{code}', None, None, str(e))
+        log_event('ERROR', f'/registry/classifiers/{code}/', None, None, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
@@ -1008,7 +1008,7 @@ def create_terminology(
     payload: dict,
     db: Session = Depends(get_db),
 ):
-    log_event('INFO', '/registry/terminology', None, log_payload(payload))
+    log_event('INFO', '/registry/terminology/', None, log_payload(payload))
     """
     Docs: docs/api/registry_service_api.md §2.3 - Создать
     """
@@ -1058,7 +1058,7 @@ def create_terminology(
     except HTTPException:
         raise
     except Exception as e:
-        log_event('ERROR', '/registry/terminology', None, payload, str(e))
+        log_event('ERROR', '/registry/terminology/', None, payload, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
@@ -1073,7 +1073,7 @@ def list_terminology(
     scope: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
-    log_event('INFO', '/registry/terminology', None, None)
+    log_event('INFO', '/registry/terminology/', None, None)
     """
     Docs: docs/api/registry_service_api.md §2.1 - Список
     """
@@ -1103,16 +1103,16 @@ def list_terminology(
             },
         }
     except Exception as e:
-        log_event('ERROR', '/registry/terminology', None, None, str(e))
+        log_event('ERROR', '/registry/terminology/', None, None, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.get('/registry/terminology/normalize')
+@routes.get('/registry/terminology/normalize/')
 def normalize_terminology(
     term: str = Query(...),
     db: Session = Depends(get_db),
 ):
-    log_event('INFO', '/registry/terminology/normalize', None, None)
+    log_event('INFO', '/registry/terminology/normalize/', None, None)
     """
     Docs: docs/api/registry_service_api.md §2.6 - Поиск нормализованной формы
     """
@@ -1132,17 +1132,17 @@ def normalize_terminology(
             }
         }
     except Exception as e:
-        log_event('ERROR', '/registry/terminology/normalize', None, {'term': term}, str(e))
+        log_event('ERROR', '/registry/terminology/normalize/', None, {'term': term}, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.post('/registry/terminology/import')
+@routes.post('/registry/terminology/import/')
 def import_terminology(
     mapping: str = Query(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
-    log_event('INFO', '/registry/terminology/import', None, None)
+    log_event('INFO', '/registry/terminology/import/', None, None)
     """
     Docs: docs/api/registry_service_api.md §2.7 - Импорт
     """
@@ -1159,16 +1159,16 @@ def import_terminology(
     except HTTPException:
         raise
     except Exception as e:
-        log_event('ERROR', '/registry/terminology/import', None, None, str(e))
+        log_event('ERROR', '/registry/terminology/import/', None, None, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.get('/registry/terminology/{term_id}')
+@routes.get('/registry/terminology/{term_id}/')
 def get_terminology(
     term_id: str,
     db: Session = Depends(get_db),
 ):
-    log_event('INFO', f'/registry/terminology/{term_id}', None, None)
+    log_event('INFO', f'/registry/terminology/{term_id}/', None, None)
     """
     Docs: docs/api/registry_service_api.md §2.2 - Один термин
     """
@@ -1186,17 +1186,17 @@ def get_terminology(
     except HTTPException:
         raise
     except Exception as e:
-        log_event('ERROR', f'/registry/terminology/{term_id}', None, None, str(e))
+        log_event('ERROR', f'/registry/terminology/{term_id}/', None, None, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.put('/registry/terminology/{term_id}')
+@routes.put('/registry/terminology/{term_id}/')
 def update_terminology(
     term_id: str,
     payload: dict,
     db: Session = Depends(get_db),
 ):
-    log_event('INFO', f'/registry/terminology/{term_id}', None, log_payload(payload))
+    log_event('INFO', f'/registry/terminology/{term_id}/', None, log_payload(payload))
     """
     Docs: docs/api/registry_service_api.md §2.4 - Обновить
     """
@@ -1214,17 +1214,17 @@ def update_terminology(
     except HTTPException:
         raise
     except Exception as e:
-        log_event('ERROR', f'/registry/terminology/{term_id}', None, payload, str(e))
+        log_event('ERROR', f'/registry/terminology/{term_id}/', None, payload, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.patch('/registry/terminology/{term_id}')
+@routes.patch('/registry/terminology/{term_id}/')
 def patch_terminology(
     term_id: str,
     payload: dict,
     db: Session = Depends(get_db),
 ):
-    log_event('INFO', f'/registry/terminology/{term_id}', None, log_payload(payload))
+    log_event('INFO', f'/registry/terminology/{term_id}/', None, log_payload(payload))
     """
     Docs: docs/api/registry_service_api.md §2.4 - Обновить
     """
@@ -1242,16 +1242,16 @@ def patch_terminology(
     except HTTPException:
         raise
     except Exception as e:
-        log_event('ERROR', f'/registry/terminology/{term_id}', None, payload, str(e))
+        log_event('ERROR', f'/registry/terminology/{term_id}/', None, payload, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.delete('/registry/terminology/{term_id}')
+@routes.delete('/registry/terminology/{term_id}/')
 def delete_terminology(
     term_id: str,
     db: Session = Depends(get_db),
 ):
-    log_event('INFO', f'/registry/terminology/{term_id}', None, None)
+    log_event('INFO', f'/registry/terminology/{term_id}/', None, None)
     """
     Docs: docs/api/registry_service_api.md §2.5 - Удалить
     """
@@ -1268,31 +1268,31 @@ def delete_terminology(
     except HTTPException:
         raise
     except Exception as e:
-        log_event('ERROR', f'/registry/terminology/{term_id}', None, None, str(e))
+        log_event('ERROR', f'/registry/terminology/{term_id}/', None, None, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.get('/registry/enums')
+@routes.get('/registry/enums/')
 def get_enums(db: Session = Depends(get_db)):
     """
-    Docs: docs/api/registry_service_api.md — GET /registry/enums (Enums / reference values)
+    Docs: docs/api/registry_service_api.md — GET /registry/enums/ (Enums / reference values)
     """
-    log_event('INFO', '/registry/enums', None, None)
+    log_event('INFO', '/registry/enums/', None, None)
     try:
         data = RegistryServiceEnums.get_all_grouped(db)
     except Exception as e:
-        log_event('ERROR', '/registry/enums', None, None, str(e))
+        log_event('ERROR', '/registry/enums/', None, None, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
     return {'data': data}
 
 
-@routes.get('/registry/stats')
+@routes.get('/registry/stats/')
 def get_stats(db: Session = Depends(get_db)):
     """
-    Docs: docs/api/registry_service_api.md — GET /registry/stats (Statistics)
+    Docs: docs/api/registry_service_api.md — GET /registry/stats/ (Statistics)
     """
-    log_event('INFO', '/registry/stats', None, None)
+    log_event('INFO', '/registry/stats/', None, None)
     try:
         classifiers_by_system = dict(
             db.query(Classifier.classifier_system, func.count())
@@ -1348,11 +1348,11 @@ def get_stats(db: Session = Depends(get_db)):
     }
 
 
-@routes.get('/health')
+@routes.get('/health/')
 def health_check():
     """Health check endpoint.
 
-    Docs: docs/api/registry_service_api.md — GET /health (Health check)
+    Docs: docs/api/registry_service_api.md — GET /health/ (Health check)
     """
-    log_event('INFO', '/health', None, None)
+    log_event('INFO', '/health/', None, None)
     return {'status': 'ok'}

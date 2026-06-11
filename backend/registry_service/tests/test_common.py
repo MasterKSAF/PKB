@@ -1,7 +1,7 @@
 import pytest
 
 def test_get_enums(client):
-    response = client.get("/api/v1/registry/enums")
+    response = client.get("/api/v1/registry/enums/")
     assert response.status_code == 200
     data = response.json()
     assert "data" in data
@@ -11,7 +11,7 @@ def test_get_enums(client):
     assert "era" in data["data"]
 
 def test_get_enums_structure(client):
-    response = client.get("/api/v1/registry/enums")
+    response = client.get("/api/v1/registry/enums/")
     assert response.status_code == 200
     data = response.json()
 
@@ -22,7 +22,7 @@ def test_get_enums_structure(client):
     assert "draft" in data["data"]["document_status"]
 
 def test_get_stats_empty(client):
-    response = client.get("/api/v1/registry/stats")
+    response = client.get("/api/v1/registry/stats/")
     assert response.status_code == 200
     data = response.json()
     assert "data" in data
@@ -65,7 +65,7 @@ def test_get_stats_with_data(client):
         "classifier_system": "MKS"
     })
 
-    response = client.get("/api/v1/registry/stats")
+    response = client.get("/api/v1/registry/stats/")
     assert response.status_code == 200
     data = response.json()
 
@@ -80,7 +80,7 @@ def test_get_stats_status_breakdown(client):
     client.post("/api/v1/registry/documents/", json={"title": "Approved Doc Status", "status": "approved", "classifier_system": "MKS"})
     client.post("/api/v1/registry/documents/", json={"title": "Processing Doc Status", "status": "processing", "classifier_system": "MKS"})
 
-    response = client.get("/api/v1/registry/stats")
+    response = client.get("/api/v1/registry/stats/")
     assert response.status_code == 200
     data = response.json()
 

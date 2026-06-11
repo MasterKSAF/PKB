@@ -152,13 +152,13 @@ def test_get_terminology_by_id(client):
     })
     term_id = create_response.json()["data"]["id"]
     
-    response = client.get(f"/api/v1/registry/terminology/{term_id}")
+    response = client.get(f"/api/v1/registry/terminology/{term_id}/")
     assert response.status_code == 200
     data = response.json()
     assert data["data"]["raw_term"] == "Specific Term"
 
 def test_get_terminology_not_found(client):
-    response = client.get("/api/v1/registry/terminology/00000000-0000-0000-0000-000000000000")
+    response = client.get("/api/v1/registry/terminology/00000000-0000-0000-0000-000000000000/")
     assert response.status_code == 404
 
 def test_update_terminology(client):
@@ -168,14 +168,14 @@ def test_update_terminology(client):
     term_id = create_response.json()["data"]["id"]
     
     update_payload = {"standard_term": "Updated Term"}
-    response = client.put(f"/api/v1/registry/terminology/{term_id}", json=update_payload)
+    response = client.put(f"/api/v1/registry/terminology/{term_id}/", json=update_payload)
     assert response.status_code == 200
     data = response.json()
     assert data["data"]["standard_term"] == "Updated Term"
 
 def test_update_terminology_not_found(client):
     update_payload = {"standard_term": "Updated Term"}
-    response = client.put("/api/v1/registry/terminology/00000000-0000-0000-0000-000000000000", json=update_payload)
+    response = client.put("/api/v1/registry/terminology/00000000-0000-0000-0000-000000000000/", json=update_payload)
     assert response.status_code == 404
 
 def test_delete_terminology(client):
@@ -184,15 +184,15 @@ def test_delete_terminology(client):
     })
     term_id = create_response.json()["data"]["id"]
     
-    response = client.delete(f"/api/v1/registry/terminology/{term_id}")
+    response = client.delete(f"/api/v1/registry/terminology/{term_id}/")
     assert response.status_code == 200
     
     # Verify it's gone
-    get_response = client.get(f"/api/v1/registry/terminology/{term_id}")
+    get_response = client.get(f"/api/v1/registry/terminology/{term_id}/")
     assert get_response.status_code == 404
 
 def test_delete_terminology_not_found(client):
-    response = client.delete("/api/v1/registry/terminology/00000000-0000-0000-0000-000000000000")
+    response = client.delete("/api/v1/registry/terminology/00000000-0000-0000-0000-000000000000/")
     assert response.status_code == 404
 
 def test_normalize_terminology(client):
@@ -200,7 +200,7 @@ def test_normalize_terminology(client):
         "raw_term": "CPU", "standard_term": "CPU", "normalized_value": "cpu", "term_type": "acronym"
     })
     
-    response = client.get("/api/v1/registry/terminology/normalize?term=CPU")
+    response = client.get("/api/v1/registry/terminology/normalize/?term=CPU")
     assert response.status_code == 200
     data = response.json()
     assert data["data"]["raw_term"] == "CPU"
@@ -208,7 +208,7 @@ def test_normalize_terminology(client):
     assert data["data"]["term_type"] == "acronym"
 
 def test_normalize_terminology_not_found(client):
-    response = client.get("/api/v1/registry/terminology/normalize?term=NonExistent")
+    response = client.get("/api/v1/registry/terminology/normalize/?term=NonExistent")
     assert response.status_code == 200
     data = response.json()
     assert data["data"]["raw_term"] == "NonExistent"
@@ -220,12 +220,12 @@ def test_patch_terminology(client):
     })
     term_id = create_response.json()["data"]["id"]
     
-    response = client.patch(f"/api/v1/registry/terminology/{term_id}", json={"definition": "This is a patch test"})
+    response = client.patch(f"/api/v1/registry/terminology/{term_id}/", json={"definition": "This is a patch test"})
     assert response.status_code == 200
     data = response.json()
     assert data["data"]["definition"] == "This is a patch test"
 
 def test_import_terminology(client):
     # Dummy file upload test
-    response = client.post("/api/v1/registry/terminology/import?mapping=some_mapping", files={"file": ("test.csv", b"dummy content", "text/csv")})
+    response = client.post("/api/v1/registry/terminology/import/?mapping=some_mapping", files={"file": ("test.csv", b"dummy content", "text/csv")})
     assert response.status_code in [200, 201]
