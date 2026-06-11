@@ -17,9 +17,7 @@
 *   **Язык:** Python 3.11+
 *   **Фреймворк:** FastAPI (async)
 *   **БД:** PostgreSQL 16 + `pgvector` + `ltree` + `pg_trgm`
-*   **Эмбеддинги:**
-    *   Локально: `sentence-transformers` (модель `intfloat/multilingual-e5-large`, dim=1024)
-    *   Удаленно: OpenAI-compatible API
+*   **Эмбеддинги:** OpenAI-compatible API (Infinity или другой совместимый сервис)
 *   **Драйвер БД:** `asyncpg`
 
 ## Быстрый старт
@@ -59,12 +57,6 @@ docker compose exec postgres psql -U rag_user -d knowledge_base -c "SELECT COUNT
 # Запустить сервис
 uvicorn app.main:app --reload --port 8091
 ```
-
-> **⏳ Первый запуск:** Если `EMBEDDING_API_KEY` пустой (используется локальная модель),
-> первый POST-запрос к `/api/v1/rag/search` скачает модель
-> `intfloat/multilingual-e5-large` (~2 ГБ). Загрузка может занять
-> **от 1 до 15+ минут** в зависимости от скорости соединения с HuggingFace Hub.
-> Модель кэшируется в `~/.cache/huggingface/` — последующие запуски будут быстрыми.
 
 Сервис доступен по адресу: http://127.0.0.1:8091
 Swagger UI: http://127.0.0.1:8091/docs
@@ -107,8 +99,10 @@ DB_USERNAME=rag_user
 DB_PASSWORD=prod_secret
 DB_DATABASE=knowledge_base
 
-# --- Embeddings (пусто = локальная модель) ---
+# --- Embeddings (обязательно) ---
+EMBEDDING_BASE_URL=http://infinity:7997
 EMBEDDING_API_KEY=
+EMBEDDING_MODEL=Qwen/Qwen3-Embedding-0.6B
 ```
 
 #### 2. Добавьте сервис в `docker-compose.yaml`
@@ -126,9 +120,9 @@ EMBEDDING_API_KEY=
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_DATABASE: ${DB_DATABASE}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL}
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY}
-    volumes:
-      - hf_cache:/root/.cache/huggingface
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL}
     depends_on:
       postgres:
         condition: service_healthy
@@ -137,12 +131,6 @@ EMBEDDING_API_KEY=
 Docker Compose сам читает корневой `.env` и подставляет `${VAR}`.
 `env_file: ./rag_search/.env` загружает dev-дефолты, а `environment:` переопределяет
 только нужные переменные для прода.
-
-Не забудьте добавить volume:
-```yaml
-volumes:
-  hf_cache:
-```
 
 #### 3. Запуск
 
@@ -160,21 +148,11 @@ docker-compose up -d --build rag-search
 # Здоровье сервиса
 curl http://127.0.0.1:8091/api/v1/health
 
-# Поисковый запрос (первый — долгий, см. п.5)
+# Поисковый запрос
 curl -X POST http://127.0.0.1:8091/api/v1/rag/search \
   -H "Content-Type: application/json" \
   -d '{"query": "правила безопасности", "top_k": 3}'
 ```
-
-#### 5. Первый запуск — модель эмбеддингов
-
-- Модель (`intfloat/multilingual-e5-large`, ~2.2 ГБ) скачивается с HuggingFace Hub
-  при **первом POST-запросе**, а не при старте контейнера.
-- Время загрузки: от 1 до 15+ минут в зависимости от сети.
-- Volume `hf_cache` сохраняет модель между перезапусками — задержка только при
-  первом деплое или после очистки volume.
-- Если сервер не имеет доступа к HuggingFace Hub — задайте `EMBEDDING_API_KEY`
-  в корневом `.env` или `environment:` compose, чтобы использовать внешний API.
 
 ## Тестирование сервиса
 
@@ -221,11 +199,12 @@ pytest tests/integration/ -v
 
 | Переменная | Описание | По умолчанию |
 |---|---|---|
-| `EMBEDDING_API_KEY` | API-ключ OpenAI. Пусто = локальная модель HF | `""` |
+| `EMBEDDING_API_KEY` | API-ключ (опционален для Infinity) | `""` |
 | `EMBEDDING_BASE_URL` | Базовый URL OpenAI-compatible API | `https://api.openai.com/v1` |
-| `EMBEDDING_MODEL` | Модель эмбеддингов | `intfloat/multilingual-e5-large` |
+| `EMBEDDING_MODEL` | Модель эмбеддингов | `Qwen/Qwen3-Embedding-0.6B` |
 | `EMBEDDING_DIM` | Размерность вектора (должна совпадать с моделью и VECTOR в БД) | `1024` |
 | `EMBEDDING_TIMEOUT` | Таймаут запроса к API эмбеддингов (сек) | `30` |
+| `EMBEDDING_INSTRUCTION` | Инструкция для query-запросов (Qwen3-Embedding). Пусто — без промпта | `""` |
 
 ### Поиск
 
@@ -286,7 +265,7 @@ app/
 ├── api/v1/          # Эндпоинты (health, search)
 ├── core/
 │   ├── database.py  # Пул asyncpg
-│   ├── embeddings/  # Провайдеры эмбеддингов (HF / OpenAI)
+│   ├── embeddings/  # Провайдер эмбеддингов (OpenAI-compatible)
 │   ├── search/      # Логика поиска (dense, sparse, rrf, hybrid)
 │   └── logging.py   # PII-фильтр
 ├── models/          # Pydantic схемы

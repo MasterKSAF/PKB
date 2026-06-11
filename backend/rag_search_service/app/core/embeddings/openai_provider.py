@@ -1,53 +1,39 @@
-"""OpenAI-compatible провайдер эмбеддингов."""
+"""OpenAI-compatible провайдер эмбеддингов через библиотеку openai."""
 
 from __future__ import annotations
 
-import httpx
+from openai import AsyncOpenAI
 
 from app.config import get_settings
 from app.core.embeddings.base import EmbeddingError, EmbeddingProvider
-from app.core.logging import get_logger
-
-logger = get_logger("embeddings.openai")
 
 
 class OpenAICompatibleProvider(EmbeddingProvider):
     """
-    Провайдер эмбеддингов через OpenAI-compatible API.
+    Провайдер эмбеддингов через OpenAI-compatible API (Infinity, vLLM, etc.).
 
-    Поддерживает:
-    - OpenAI API (api.openai.com)
-    - Локальные LLM-серверы (Ollama, vLLM, LocalAI)
-    - Облачные провайдеры (Anthropic, Cohere через прокси)
+    Использует официальную библиотеку openai для совместимости и retry-логики.
+    Поддерживает инструкции (instruction) для моделей Qwen3-Embedding.
     """
 
-    def __init__(self):
+    def __init__(self, instruction: str | None = None):
         self.settings = get_settings()
-        self._client = httpx.AsyncClient(
+        self._instruction = instruction if instruction is not None else self.settings.embedding_instruction
+        self._client = AsyncOpenAI(
             base_url=self.settings.embedding_base_url,
-            headers={
-                "Authorization": f"Bearer {self.settings.embedding_api_key}",
-                "Content-Type": "application/json",
-            },
+            api_key=self.settings.embedding_api_key or "not-needed",
             timeout=self.settings.embedding_timeout,
+            max_retries=2,
         )
         self._dimension = self.settings.embedding_dim
         self._model = self.settings.embedding_model
-        logger.info(
-            "OpenAI-compatible provider initialized: base_url=%s, model=%s",
-            self.settings.embedding_base_url,
-            self._model,
-        )
 
     async def encode(self, text: str) -> list[float]:
         """
         Получить эмбеддинг через OpenAI-compatible API.
 
-        Args:
-            text: Текст для кодирования
-
-        Returns:
-            Вектор размерности EMBEDDING_DIM
+        Если задана instruction, она добавляется перед текстом в формате
+        Qwen3-Embedding: ``{instruction}\n\n{text}``.
 
         Raises:
             EmbeddingError: При ошибке API
@@ -55,46 +41,27 @@ class OpenAICompatibleProvider(EmbeddingProvider):
         if not text.strip():
             raise EmbeddingError("Empty text provided for embedding")
 
+        input_text = f"{self._instruction}\n\n{text}" if self._instruction else text
+
         try:
-            # Формируем запрос в формате OpenAI Embeddings API
-            payload = {
-                "input": text,
-                "model": self._model,
-            }
+            response = await self._client.embeddings.create(
+                input=[input_text],
+                model=self._model,
+            )
 
-            response = await self._client.post("/embeddings", json=payload)
-            response.raise_for_status()
+            embedding = response.data[0].embedding
 
-            data = response.json()
-
-            # Проверяем структуру ответа
-            if "data" not in data or not data["data"]:
-                raise EmbeddingError("Invalid response structure: missing 'data' field")
-
-            embedding = data["data"][0].get("embedding")
-            if embedding is None:
-                raise EmbeddingError("Invalid response structure: missing 'embedding' field")
-
-            # Проверяем размерность
             if len(embedding) != self._dimension:
                 raise EmbeddingError(
                     f"Dimension mismatch: expected {self._dimension}, got {len(embedding)}"
                 )
 
-            logger.debug("Generated embedding via OpenAI API, dim=%d", len(embedding))
-            return embedding
+            return list(embedding)
 
-        except httpx.TimeoutException as e:
-            logger.error("OpenAI API timeout: %s", e)
-            raise EmbeddingError(f"API timeout: {e}") from e
-        except httpx.HTTPStatusError as e:
-            logger.error("OpenAI API error: %s (status=%d)", e, e.response.status_code)
-            raise EmbeddingError(
-                f"API error (status={e.response.status_code}): {e.response.text}"
-            ) from e
+        except EmbeddingError:
+            raise
         except Exception as e:
-            logger.exception("Unexpected error in OpenAI provider: %s", e)
-            raise EmbeddingError(f"Unexpected error: {e}") from e
+            raise EmbeddingError(f"Embedding API error: {e}") from e
 
     def get_dimension(self) -> int:
         return self._dimension
@@ -103,6 +70,4 @@ class OpenAICompatibleProvider(EmbeddingProvider):
         return f"openai-compatible:{self._model}"
 
     async def close(self) -> None:
-        """Закрыть HTTP-клиент."""
-        await self._client.aclose()
-        logger.info("OpenAI provider closed")
+        await self._client.close()

@@ -49,9 +49,6 @@ def setup_logging() -> logging.Logger:
         "httpx",
         "httpcore",
         "urllib3",
-        "sentence_transformers",
-        "transformers",
-        "huggingface_hub",
     ]:
         logging.getLogger(noisy).setLevel(logging.WARNING)
 

@@ -2,18 +2,26 @@
 """
 Генератор seed_data.sql с 20 чанками из 3 ГОСТов и реальными эмбеддингами.
 
+Эмбеддинги генерятся через Infinity (OpenAI-compatible API).
+Требует запущенный сервис Infinity.
+
 Запуск:
     cd rag_search
     python scripts/generate_full_seed.py
+    # или с явным URL:
+    python scripts/generate_full_seed.py --base-url http://localhost:7997
 
 Результат: обновлённый migrations/seed_data.sql
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from pathlib import Path
+
+import httpx
 
 # ──────────────────────────────────────────────────────────────────────
 # Конфигурация: пути
@@ -21,6 +29,20 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Генератор seed_data.sql с реальными эмбеддингами через Infinity")
+    parser.add_argument("--base-url", default="http://localhost:7997", help="Infinity base URL")
+    parser.add_argument("--api-key", default="", help="API key (если требуется)")
+    return parser.parse_args()
+
+
+ARGS = parse_args()
+BASE_URL = ARGS.base_url
+API_KEY = ARGS.api_key
+MODEL_NAME = "Qwen/Qwen3-Embedding-0.6B"
+EMBEDDING_DIM = 1024
 
 # ──────────────────────────────────────────────────────────────────────
 # ДАННЫЕ: 3 документа (id = bigint), 14 секций (id = bigint), 20 чанков (id = bigint)
@@ -84,32 +106,32 @@ CHUNKS = [
         "page": 2, "chunk_index": 0, "confidence": 0.95,
     },
     {
-        "id": 2, "doc_id": "11111111-1111-1111-1111-111111111111", "section_id": 2,
+        "id": 2, "doc_id": 1, "section_id": 2,
         "content": "Оборудование должно быть безопасным при монтаже, эксплуатации и ремонте. Конструкция должна исключать возможность травмирования работающего при выполнении технологических операций.",
         "page": 3, "chunk_index": 0, "confidence": 0.94,
     },
     {
-        "id": 3, "doc_id": "11111111-1111-1111-1111-111111111111", "section_id": 3,
+        "id": 3, "doc_id": 1, "section_id": 3,
         "content": "Движущиеся части оборудования, являющиеся возможным источником травмирования, должны быть ограждены или расположены так, чтобы исключалась возможность прикасания к ним работающего.",
         "page": 5, "chunk_index": 0, "confidence": 0.96,
     },
     {
-        "id": 4, "doc_id": "11111111-1111-1111-1111-111111111111", "section_id": 4,
+        "id": 4, "doc_id": 1, "section_id": 4,
         "content": "Ограждения должны быть сблокированы с пусковыми устройствами, обеспечивающими остановку оборудования при снятии ограждения. Цвет ограждений должен соответствовать требованиям сигнальных цветов.",
         "page": 6, "chunk_index": 0, "confidence": 0.93,
     },
     {
-        "id": 5, "doc_id": "11111111-1111-1111-1111-111111111111", "section_id": 4,
+        "id": 5, "doc_id": 1, "section_id": 4,
         "content": "Сигнальные цвета и знаки безопасности должны применяться для предупреждения об опасности. Красный сигнальный цвет применяется для запрещающих знаков и обозначения отключенного состояния оборудования.",
         "page": 7, "chunk_index": 1, "confidence": 0.92,
     },
     {
-        "id": 6, "doc_id": "11111111-1111-1111-1111-111111111111", "section_id": 5,
+        "id": 6, "doc_id": 1, "section_id": 5,
         "content": "Защитные ограждения должны быть прочными, устойчивыми к внешним воздействиям и не создавать дополнительных опасностей. Конструкция ограждений должна обеспечивать возможность осмотра и смазки механизмов.",
         "page": 9, "chunk_index": 0, "confidence": 0.94,
     },
     {
-        "id": 7, "doc_id": "11111111-1111-1111-1111-111111111111", "section_id": 5,
+        "id": 7, "doc_id": 1, "section_id": 5,
         "content": "Расстояние от ограждения до движущихся частей должно быть не менее 100 мм. Материал ограждений должен выбираться с учетом прочности и коррозионной стойкости в условиях эксплуатации.",
         "page": 10, "chunk_index": 1, "confidence": 0.91,
     },
@@ -188,17 +210,27 @@ CHUNKS = [
 # ──────────────────────────────────────────────────────────────────────
 
 def generate_embedding(text: str) -> list[float]:
-    """Сгенерировать эмбеддинг через sentence-transformers (E5)."""
-    try:
-        from sentence_transformers import SentenceTransformer
-    except ImportError:
-        print("ERROR: Установите sentence-transformers: pip install sentence-transformers")
-        sys.exit(1)
+    """Сгенерировать эмбеддинг через Infinity (OpenAI-compatible API)."""
 
-    model = SentenceTransformer("intfloat/multilingual-e5-large")
-    prefixed = f"passage: {text}"
-    embedding = model.encode(prefixed)
-    return embedding.tolist()
+    headers = {"Content-Type": "application/json"}
+    if API_KEY:
+        headers["Authorization"] = f"Bearer {API_KEY}"
+
+    payload = {
+        "input": text,
+        "model": MODEL_NAME,
+    }
+
+    with httpx.Client(timeout=30) as client:
+        response = client.post(f"{BASE_URL}/embeddings", json=payload, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+
+    embedding = data["data"][0]["embedding"]
+    if len(embedding) != EMBEDDING_DIM:
+        print(f"  WARNING: Размерность ответа ({len(embedding)}) != ожидаемой ({EMBEDDING_DIM})")
+
+    return list(embedding)
 
 
 def format_vector(embedding: list[float]) -> str:
@@ -280,7 +312,16 @@ def generate_sql() -> str:
 def main():
     print("=" * 60)
     print("Генерация seed_data.sql: 3 ГОСТа, 20 чанков, реальные эмбеддинги")
+    print(f"Infinity: {BASE_URL}")
     print("=" * 60)
+
+    # Проверяем доступность Infinity
+    try:
+        with httpx.Client(timeout=5) as client:
+            resp = client.get(f"{BASE_URL}/health", headers={"Content-Type": "application/json"})
+            print(f"  Health check: {resp.status_code}")
+    except Exception as e:
+        print(f"WARNING: Infinity не отвечает ({e}), продолжаем...")
 
     seed_file = PROJECT_ROOT / "migrations" / "seed_data.sql"
     print(f"\nГенерация эмбеддингов для {len(CHUNKS)} чанков...\n")

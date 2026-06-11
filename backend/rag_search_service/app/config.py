@@ -58,10 +58,11 @@ class Settings(BaseSettings):
         default="https://api.openai.com/v1", alias="EMBEDDING_BASE_URL"
     )
     embedding_model: str = Field(
-        default="intfloat/multilingual-e5-large", alias="EMBEDDING_MODEL"
+        default="Qwen/Qwen3-Embedding-0.6B", alias="EMBEDDING_MODEL"
     )
     embedding_dim: int = Field(default=1024, alias="EMBEDDING_DIM")
     embedding_timeout: int = Field(default=30, alias="EMBEDDING_TIMEOUT")
+    embedding_instruction: str = Field(default="", alias="EMBEDDING_INSTRUCTION")
 
     # --- Search ---
     search_default_top_k: int = Field(default=10, alias="SEARCH_DEFAULT_TOP_K")
@@ -87,10 +88,6 @@ class Settings(BaseSettings):
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
 
-    @property
-    def use_local_embedding(self) -> bool:
-        """Если API-ключ не задан — используем локальную модель."""
-        return not bool(self.embedding_api_key.strip())
 
 
 @lru_cache
