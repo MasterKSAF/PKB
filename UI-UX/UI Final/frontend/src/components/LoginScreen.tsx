@@ -1,65 +1,63 @@
-import React, { useMemo, useState } from 'react';
-import { Box, Button, IconButton, Paper, Stack, TextField, Typography } from '@mui/material';
-import { Anchor, Database, Eye, EyeOff, KeyRound, LogIn, Moon, Settings, Ship, Sun, UserRound, Waves } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Alert, Box, Button, IconButton, Paper, Stack, TextField, Typography } from '@mui/material';
+import { Eye, EyeOff, KeyRound, LogIn, Moon, Ship, Sun, UserRound } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
+import { authApi } from '../utils/http';
 
-const ROLE_ORDER = ['Пользователь', 'Администратор знаний', 'Системный администратор'] as const;
-const ROLE_FALLBACK_USER_ID: Record<(typeof ROLE_ORDER)[number], string> = {
-  Пользователь: 'u1',
-  'Администратор знаний': 'u3',
-  'Системный администратор': 'u4',
-};
 const DEMO_PASSWORD = 'demo';
 const LOGIN_LIMITS = { min: 3, max: 64 };
 const PASSWORD_LIMITS = { min: 4, max: 64 };
 
 export const LoginScreen: React.FC = () => {
-  const { adminUsers, login, setThemeMode, themeMode } = useUIStore();
+  const { adminUsers, login, setThemeMode, themeMode, workMode } = useUIStore();
   const isLight = themeMode === 'light';
   const lightShipBlue = '#0284c7';
-
-  const roleProfiles = useMemo(
-    () =>
-      ROLE_ORDER
-        .map((role) => ({
-          role,
-          user: adminUsers.find((item) => item.role === role) ?? adminUsers.find((item) => item.id === ROLE_FALLBACK_USER_ID[role]),
-        }))
-        .filter((profile) => Boolean(profile.user)),
-    [adminUsers],
-  );
-  const [selectedUserId, setSelectedUserId] = useState(roleProfiles[2]?.user?.id ?? roleProfiles[0]?.user?.id ?? '');
-  const selectedUser = adminUsers.find((user) => user.id === selectedUserId) ?? roleProfiles[0]?.user;
-  const [loginValue, setLoginValue] = useState(selectedUser?.login ?? '');
+  const loginHint = workMode === 'demo' ? adminUsers[0]?.login ?? 'demo@example.com' : 'admin@example.com';
+  const [loginValue, setLoginValue] = useState('');
   const [passwordValue, setPasswordValue] = useState(DEMO_PASSWORD);
   const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [authError, setAuthError] = useState('');
+
+  useEffect(() => {
+    setPasswordValue(workMode === 'demo' ? DEMO_PASSWORD : '');
+    setAuthError('');
+  }, [workMode]);
+
   const trimmedLogin = loginValue.trim();
   const trimmedPassword = passwordValue.trim();
   const loginError = Boolean(trimmedLogin) && (trimmedLogin.length < LOGIN_LIMITS.min || trimmedLogin.length > LOGIN_LIMITS.max);
   const passwordError =
     Boolean(trimmedPassword) && (trimmedPassword.length < PASSWORD_LIMITS.min || trimmedPassword.length > PASSWORD_LIMITS.max);
-  const canSubmit = Boolean(trimmedLogin && trimmedPassword) && !loginError && !passwordError;
+  const canSubmit = Boolean(trimmedLogin && trimmedPassword) && !loginError && !passwordError && !isSubmitting;
 
-  const handleProfileSelect = (userId: string) => {
-    const user = adminUsers.find((item) => item.id === userId);
-    if (!user) return;
-
-    setSelectedUserId(user.id);
-    setLoginValue(user.login);
-    setPasswordValue(DEMO_PASSWORD);
-  };
-
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!canSubmit) return;
+    setAuthError('');
+    setIsSubmitting(true);
 
-    const userByLogin = adminUsers.find((user) => user.login === trimmedLogin);
-    login(userByLogin?.id ?? selectedUserId);
-  };
+    try {
+      if (workMode === 'demo') {
+        if (trimmedPassword !== DEMO_PASSWORD) {
+          throw new Error('Неверный demo-пароль.');
+        }
 
-  const getRoleIcon = (role: string) => {
-    if (role === 'Системный администратор') return <Settings size={19} />;
-    if (role === 'Администратор знаний') return <Database size={19} />;
-    return <UserRound size={19} />;
+        const userByLogin = adminUsers.find((user) => user.login === trimmedLogin);
+        if (!userByLogin) {
+          throw new Error('Не найден demo-профиль с таким логином.');
+        }
+
+        login(userByLogin.id);
+        return;
+      }
+
+      const profile = await authApi.login(trimmedLogin, trimmedPassword);
+      login(profile.id);
+    } catch (error: any) {
+      setAuthError(error?.response?.data?.detail ?? error?.message ?? 'Не удалось выполнить вход.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -108,22 +106,15 @@ export const LoginScreen: React.FC = () => {
                   : 'none',
               }}
             >
-              {isLight ? (
-                <Ship
-                  size={30}
-                  style={{
-                    position: 'relative',
-                    zIndex: 1,
-                    color: lightShipBlue,
-                    filter: 'drop-shadow(0 2px 5px rgba(2, 132, 199, 0.28))',
-                  }}
-                />
-              ) : (
-                <>
-                  <Waves size={32} style={{ position: 'absolute', bottom: 6, opacity: 0.45, color: '#78c1c1' }} />
-                  <Anchor size={25} style={{ position: 'relative', zIndex: 1, color: '#98d9d8' }} />
-                </>
-              )}
+              <Ship
+                size={30}
+                style={{
+                  position: 'relative',
+                  zIndex: 1,
+                  color: isLight ? lightShipBlue : '#98d9d8',
+                  filter: isLight ? 'drop-shadow(0 2px 5px rgba(2, 132, 199, 0.28))' : 'none',
+                }}
+              />
             </Box>
             <Box>
               <Typography
@@ -138,7 +129,7 @@ export const LoginScreen: React.FC = () => {
                 AI ассистент
               </Typography>
               <Typography sx={{ mt: 0.45, color: isLight ? '#0f4f5c' : 'rgba(209, 225, 225, 0.72)' }}>
-                сверка с НСИ
+                Вход по логину и паролю. Роль подтягивается после авторизации.
               </Typography>
             </Box>
           </Stack>
@@ -149,8 +140,15 @@ export const LoginScreen: React.FC = () => {
               label="Логин"
               value={loginValue}
               error={loginError}
-              helperText={`Логин: ${LOGIN_LIMITS.min}-${LOGIN_LIMITS.max} символа`}
-              onChange={(event) => setLoginValue(event.target.value)}
+              helperText={
+                loginError
+                  ? `Логин: ${LOGIN_LIMITS.min}-${LOGIN_LIMITS.max} символа`
+                  : `Например: ${loginHint}. Роль подтягивается после входа.`
+              }
+              onChange={(event) => {
+                setLoginValue(event.target.value);
+                setAuthError('');
+              }}
               slotProps={{
                 input: {
                   inputProps: { minLength: LOGIN_LIMITS.min, maxLength: LOGIN_LIMITS.max },
@@ -164,8 +162,17 @@ export const LoginScreen: React.FC = () => {
               type={showPassword ? 'text' : 'password'}
               value={passwordValue}
               error={passwordError}
-              helperText={`Пароль: ${PASSWORD_LIMITS.min}-${PASSWORD_LIMITS.max} символа`}
-              onChange={(event) => setPasswordValue(event.target.value)}
+              helperText={
+                passwordError
+                  ? `Пароль: ${PASSWORD_LIMITS.min}-${PASSWORD_LIMITS.max} символа`
+                  : workMode === 'demo'
+                    ? 'Для demo-профилей используйте пароль demo.'
+                    : 'Пароль передается в Gateway.'
+              }
+              onChange={(event) => {
+                setPasswordValue(event.target.value);
+                setAuthError('');
+              }}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && canSubmit) {
                   handleLogin();
@@ -191,75 +198,17 @@ export const LoginScreen: React.FC = () => {
             />
           </Stack>
 
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 1 }}>
-            {roleProfiles.map((profile) => {
-              const user = profile.user;
-              if (!user) return null;
+          <Typography variant="caption" color="text.secondary" sx={{ mt: -0.15 }}>
+            {workMode === 'demo'
+              ? 'Demo-режим использует локальные учётные записи.'
+              : 'Gateway-режим читает текущего пользователя и роль через /auth/me.'}
+          </Typography>
 
-              const selected = user.id === selectedUserId;
-
-              return (
-                <Paper
-                  key={user.id}
-                  variant="outlined"
-                  onClick={() => handleProfileSelect(user.id)}
-                  sx={{
-                    p: 1.3,
-                    borderRadius: 2.6,
-                    cursor: 'pointer',
-                    bgcolor: selected
-                      ? isLight
-                        ? 'rgba(15, 95, 111, 0.10)'
-                        : 'rgba(152, 217, 216, 0.08)'
-                      : isLight
-                        ? 'rgba(255,255,255,0.76)'
-                        : 'rgba(255,255,255,0.035)',
-                    borderColor: selected
-                      ? isLight
-                        ? 'rgba(15, 95, 111, 0.34)'
-                        : 'rgba(152, 217, 216, 0.38)'
-                      : isLight
-                        ? 'rgba(15,23,42,0.12)'
-                        : 'rgba(198,216,240,0.18)',
-                    '&:hover': {
-                      borderColor: isLight ? 'rgba(2, 132, 199, 0.62)' : 'rgba(152, 217, 216, 0.38)',
-                      boxShadow: isLight
-                        ? '0 10px 24px rgba(2, 132, 199, 0.14), inset 0 1px 0 rgba(255,255,255,0.82)'
-                        : '0 10px 24px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.08)',
-                      transform: 'translateY(-1px)',
-                    },
-                    '&:focus-within': {
-                      borderColor: isLight ? '#0284c7' : '#98d9d8',
-                    },
-                    transition: 'border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease',
-                  }}
-                >
-                  <Stack spacing={0.85}>
-                    <Box
-                      sx={{
-                        width: 34,
-                        height: 34,
-                        borderRadius: 1.7,
-                        display: 'grid',
-                        placeItems: 'center',
-                        color: isLight ? '#0f5f6f' : '#98d9d8',
-                        bgcolor: isLight ? '#eef7f8' : 'rgba(152,217,216,0.08)',
-                        border: isLight ? '1px solid rgba(15,95,111,0.18)' : '1px solid rgba(152,217,216,0.18)',
-                      }}
-                    >
-                      {getRoleIcon(profile.role)}
-                    </Box>
-                    <Box>
-                      <Typography sx={{ fontSize: '0.88rem', fontWeight: 600, lineHeight: 1.2 }}>{profile.role}</Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {user.login}
-                      </Typography>
-                    </Box>
-                  </Stack>
-                </Paper>
-              );
-            })}
-          </Box>
+          {authError && (
+            <Alert severity="error" variant="outlined" sx={{ borderRadius: 2 }}>
+              {authError}
+            </Alert>
+          )}
 
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.2}>
             <Button
@@ -270,7 +219,7 @@ export const LoginScreen: React.FC = () => {
               onClick={handleLogin}
               disabled={!canSubmit}
             >
-              Войти
+              {isSubmitting ? 'Вход...' : 'Войти'}
             </Button>
             <Button
               variant="outlined"
@@ -281,6 +230,14 @@ export const LoginScreen: React.FC = () => {
               {themeMode === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
             </Button>
           </Stack>
+
+          <Button
+            variant="text"
+            href="mailto:admin@example.com?subject=Доступ%20к%20AI%20ассистенту"
+            sx={{ alignSelf: 'flex-start', px: 0, textTransform: 'none' }}
+          >
+            Забыли пароль или нет доступа? Связаться с администратором
+          </Button>
         </Stack>
       </Paper>
     </Box>

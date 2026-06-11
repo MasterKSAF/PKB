@@ -41,9 +41,9 @@ import {
 } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUIStore } from '../store/uiStore';
-import { documentsApi } from '../utils/http';
+import { adminApi, draftsApi, documentsApi } from '../utils/http';
 import { downloadPreviewFile } from '../utils/downloadPreview';
-import { MOCK_PROCESSING_LOGS, MOCK_PROCESSING_QUEUE } from '../utils/mockData';
+import { MOCK_DOCUMENTS, MOCK_PROCESSING_LOGS, MOCK_PROCESSING_QUEUE } from '../utils/mockData';
 
 type DraftStatus = 'uploaded' | 'previewing' | 'ready_for_approve' | 'approved' | 'discarded' | 'failed';
 
@@ -67,6 +67,7 @@ type DraftDuplicate = {
 };
 
 type DraftSort = 'updated_desc' | 'name_asc' | 'status';
+type MetadataReviewStatus = 'manual' | 'extracted' | 'review' | 'empty';
 
 type DraftItem = {
   id: string;
@@ -90,6 +91,14 @@ type DraftItem = {
   note?: string;
   gatewayTaskId?: string;
   gatewayVersionId?: string;
+  gatewayDraftId?: string;
+  gatewayDocumentKey?: string;
+  gatewayFileHashSha256?: string;
+  gatewayTitleHashSha256?: string;
+  gatewayPromotedDocumentId?: string | null;
+  gatewayErrorCode?: string | null;
+  gatewayErrorMessage?: string | null;
+  gatewayRawData?: unknown;
 };
 
 type DraftForm = {
@@ -106,6 +115,7 @@ type DraftForm = {
 const SOURCE_TYPE_OPTIONS = ['GOST', 'GOST_R', 'OST', 'RD', 'TU', 'ISO', 'DNV', 'ASTM', 'OTHER'];
 const ERA_OPTIONS = ['USSR', 'CIS', 'RF', 'CURRENT'];
 const JURISDICTION_OPTIONS = ['RU', 'EU', 'US', 'NO', 'INTL'];
+const DRAFT_DOCUMENT_KEYS_STORAGE = 'pkb_gateway_draft_document_keys_v1';
 
 const PANEL_SX = {
   bgcolor: 'rgba(22, 23, 27, 0.72)',
@@ -313,6 +323,57 @@ const buildDocumentPreviewText = (draft: DraftItem) =>
     .filter(Boolean)
     .join('\n');
 
+const getMetadataStatusLabel = (status: MetadataReviewStatus) => {
+  if (status === 'review') return 'требует проверки';
+  if (status === 'extracted') return 'извлечено системой';
+  if (status === 'manual') return 'указано вручную';
+  return 'не заполнено';
+};
+
+const getMetadataStatusColor = (status: MetadataReviewStatus) => {
+  if (status === 'review') return 'warning';
+  if (status === 'extracted') return 'success';
+  if (status === 'manual') return 'info';
+  return 'default';
+};
+
+const resolveMetadataStatus = (manual?: string | null, extracted?: string | null): MetadataReviewStatus => {
+  const manualValue = String(manual ?? '').trim();
+  const extractedValue = String(extracted ?? '').trim();
+
+  if (manualValue && extractedValue && manualValue.toLowerCase() !== extractedValue.toLowerCase()) return 'review';
+  if (extractedValue) return 'extracted';
+  if (manualValue) return 'manual';
+  return 'empty';
+};
+
+const buildMetadataReviewRows = (draft: DraftItem) => [
+  {
+    label: 'Название',
+    manual: draft.title,
+    extracted: draft.preview?.title,
+    status: resolveMetadataStatus(draft.title, draft.preview?.title),
+  },
+  {
+    label: 'Код документа',
+    manual: draft.docCode,
+    extracted: draft.preview?.docCode,
+    status: resolveMetadataStatus(draft.docCode, draft.preview?.docCode),
+  },
+  {
+    label: 'Тип источника',
+    manual: draft.sourceType,
+    extracted: draft.preview?.documentType,
+    status: resolveMetadataStatus(draft.sourceType, draft.preview?.documentType),
+  },
+  {
+    label: 'Год',
+    manual: draft.era,
+    extracted: draft.preview?.year,
+    status: resolveMetadataStatus(draft.era, draft.preview?.year),
+  },
+];
+
 const sortDrafts = (items: DraftItem[], sort: DraftSort) => {
   const statusRank: Record<DraftStatus, number> = {
     ready_for_approve: 0,
@@ -342,6 +403,146 @@ const sortDrafts = (items: DraftItem[], sort: DraftSort) => {
 
 const nextClock = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+const createIdempotencyKey = () =>
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `draft-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+const readStoredDraftDocumentKeys = () => {
+  if (typeof window === 'undefined') return [];
+
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(DRAFT_DOCUMENT_KEYS_STORAGE) ?? '[]');
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string' && Boolean(item)) : [];
+  } catch {
+    return [];
+  }
+};
+
+const writeStoredDraftDocumentKeys = (keys: string[]) => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(DRAFT_DOCUMENT_KEYS_STORAGE, JSON.stringify(Array.from(new Set(keys)).slice(0, 80)));
+};
+
+const draftProgressByStatus: Record<DraftStatus, number> = {
+  uploaded: 14,
+  previewing: 38,
+  ready_for_approve: 72,
+  approved: 100,
+  discarded: 100,
+  failed: 100,
+};
+
+const normalizeDraftStatusFromGateway = (status?: string): DraftStatus => {
+  const normalized = String(status ?? '').toLowerCase();
+  if (normalized === 'preview_ready' || normalized === 'ready_for_approve') return 'ready_for_approve';
+  if (normalized === 'previewing' || normalized === 'uploaded') return normalized as DraftStatus;
+  if (normalized === 'new') return 'uploaded';
+  if (normalized === 'promoted') return 'approved';
+  if (normalized === 'approved') return 'approved';
+  if (normalized === 'discarded') return 'discarded';
+  if (normalized === 'failed' || normalized === 'error') return 'failed';
+  return 'uploaded';
+};
+
+const mapGatewayPreviewMetadata = (payload: any): DraftPreview | null => {
+  const preview = payload?.preview_metadata ?? payload?.preview ?? null;
+  if (!preview) return null;
+
+  return {
+    docCode: String(preview.doc_code ?? preview.docCode ?? payload?.doc_code ?? payload?.docCode ?? ''),
+    title: String(preview.title ?? payload?.title ?? ''),
+    documentType: String(preview.document_type ?? preview.documentType ?? 'normative'),
+    year: String(preview.year ?? payload?.year ?? ''),
+    revision: preview.revision ?? payload?.revision ?? null,
+  };
+};
+
+const mapGatewayDuplicates = (payload: any): DraftDuplicate[] => {
+  const duplicates = Array.isArray(payload?.duplicates) ? payload.duplicates : [];
+  return duplicates.map((duplicate: any) => ({
+    title: String(duplicate.title ?? duplicate.document_title ?? duplicate.document_id ?? 'Похожий документ'),
+    reason: String(duplicate.reason ?? duplicate.message ?? 'Похожее содержание'),
+    similarity: typeof duplicate.similarity === 'number' ? duplicate.similarity : Number(duplicate.score ?? 0),
+  }));
+};
+
+const mapGatewayDraftRecordToUi = (payload: any, fallback?: Partial<DraftItem>): DraftItem => {
+  const status = normalizeDraftStatusFromGateway(payload?.status ?? fallback?.status);
+  const preview = mapGatewayPreviewMetadata(payload) ?? fallback?.preview ?? null;
+  const duplicates = mapGatewayDuplicates(payload);
+  const progress = draftProgressByStatus[status] ?? fallback?.progress ?? 0;
+  const confidence = payload?.confidence ?? fallback?.confidence ?? 0;
+  const createdAt = payload?.created_at ?? payload?.createdAt ?? fallback?.createdAt ?? nextClock();
+  const updatedAt = payload?.updated_at ?? payload?.updatedAt ?? fallback?.updatedAt ?? createdAt;
+
+  return {
+    id: String(fallback?.id ?? payload?.draft_id ?? payload?.id ?? `draft-${Date.now()}`),
+    fileName: fallback?.fileName ?? payload?.filename ?? payload?.file_name ?? payload?.title ?? 'Документ',
+    sourceUrl: fallback?.sourceUrl ?? undefined,
+    title: fallback?.title ?? payload?.title ?? payload?.preview_metadata?.title ?? payload?.filename ?? 'Документ',
+    sourceType: fallback?.sourceType ?? payload?.source_type ?? 'OTHER',
+    docCode: fallback?.docCode ?? payload?.doc_code ?? payload?.preview_metadata?.doc_code ?? '',
+    mksOksCode: fallback?.mksOksCode ?? payload?.mks_oks_code ?? '',
+    okstuCode: fallback?.okstuCode ?? payload?.okstu_code ?? '',
+    era: fallback?.era ?? payload?.era ?? 'CURRENT',
+    jurisdiction: fallback?.jurisdiction ?? payload?.jurisdiction ?? 'RU',
+    issuingBody: fallback?.issuingBody ?? payload?.issuing_body ?? '',
+    status,
+    progress,
+    confidence: Number(confidence ?? 0),
+    preview,
+    duplicates: duplicates.length ? duplicates : fallback?.duplicates ?? [],
+    createdAt,
+    updatedAt,
+    note: fallback?.note ?? payload?.message ?? '',
+    gatewayTaskId: String(payload?.task_id ?? payload?.taskId ?? fallback?.gatewayTaskId ?? ''),
+    gatewayVersionId: String(payload?.version_id ?? payload?.versionId ?? fallback?.gatewayVersionId ?? ''),
+    gatewayDraftId: String(payload?.draft_id ?? payload?.draftId ?? fallback?.gatewayDraftId ?? ''),
+    gatewayDocumentKey: String(payload?.document_key ?? payload?.documentKey ?? fallback?.gatewayDocumentKey ?? ''),
+    gatewayFileHashSha256: String(payload?.file_hash_sha256 ?? payload?.fileHashSha256 ?? fallback?.gatewayFileHashSha256 ?? ''),
+    gatewayTitleHashSha256: String(payload?.title_hash_sha256 ?? payload?.titleHashSha256 ?? fallback?.gatewayTitleHashSha256 ?? ''),
+    gatewayPromotedDocumentId:
+      payload?.promoted_document_id ?? payload?.document_id ?? fallback?.gatewayPromotedDocumentId ?? null,
+    gatewayErrorCode: payload?.error_code ?? fallback?.gatewayErrorCode ?? null,
+    gatewayErrorMessage: payload?.error_message ?? fallback?.gatewayErrorMessage ?? null,
+    gatewayRawData: payload?.raw_data ?? fallback?.gatewayRawData ?? null,
+  };
+};
+
+const draftPatchFromGateway = (payload: any, fallback?: Partial<DraftItem>): Partial<DraftItem> => {
+  const normalized = mapGatewayDraftRecordToUi(payload, fallback);
+
+  return {
+    fileName: normalized.fileName,
+    sourceUrl: normalized.sourceUrl,
+    title: normalized.title,
+    sourceType: normalized.sourceType,
+    docCode: normalized.docCode,
+    mksOksCode: normalized.mksOksCode,
+    okstuCode: normalized.okstuCode,
+    era: normalized.era,
+    jurisdiction: normalized.jurisdiction,
+    issuingBody: normalized.issuingBody,
+    status: normalized.status,
+    progress: normalized.progress,
+    confidence: normalized.confidence,
+    preview: normalized.preview,
+    duplicates: normalized.duplicates,
+    note: normalized.note,
+    gatewayTaskId: normalized.gatewayTaskId,
+    gatewayVersionId: normalized.gatewayVersionId,
+    gatewayDraftId: normalized.gatewayDraftId,
+    gatewayDocumentKey: normalized.gatewayDocumentKey,
+    gatewayFileHashSha256: normalized.gatewayFileHashSha256,
+    gatewayTitleHashSha256: normalized.gatewayTitleHashSha256,
+    gatewayPromotedDocumentId: normalized.gatewayPromotedDocumentId,
+    gatewayErrorCode: normalized.gatewayErrorCode,
+    gatewayErrorMessage: normalized.gatewayErrorMessage,
+    gatewayRawData: normalized.gatewayRawData,
+  };
+};
+
 export const KnowledgeProcessing: React.FC = () => {
   const { themeMode, workMode, activeTab, setActiveTab } = useUIStore();
   const queryClient = useQueryClient();
@@ -363,6 +564,10 @@ export const KnowledgeProcessing: React.FC = () => {
   const [metadataOpen, setMetadataOpen] = useState(false);
   const [draftSort, setDraftSort] = useState<DraftSort>('updated_desc');
   const [drafts, setDrafts] = useState<DraftItem[]>(() => (workMode === 'demo' ? createDemoDrafts() : []));
+  const [draftDocumentKeys, setDraftDocumentKeys] = useState<string[]>(() =>
+    workMode === 'prod' ? readStoredDraftDocumentKeys() : [],
+  );
+  const [deletedGatewayDraftIds, setDeletedGatewayDraftIds] = useState<string[]>([]);
   const [form, setForm] = useState<DraftForm>({
     title: '',
     sourceType: 'GOST',
@@ -384,6 +589,20 @@ export const KnowledgeProcessing: React.FC = () => {
     queryFn: documentsApi.queue,
     staleTime: 20_000,
   });
+  const processingAuditQuery = useQuery({
+    queryKey: ['gateway-processing-audit', workMode],
+    queryFn: adminApi.audit,
+    staleTime: 20_000,
+  });
+  const gatewayDraftsQuery = useQuery({
+    queryKey: ['gateway-drafts', workMode, draftDocumentKeys],
+    queryFn: async () => {
+      const batches = await Promise.all(draftDocumentKeys.map((documentKey) => draftsApi.list({ documentKey })));
+      return batches.flat();
+    },
+    enabled: workMode === 'prod' && draftDocumentKeys.length > 0,
+    staleTime: 20_000,
+  });
 
   useEffect(() => {
     previewTimersRef.current.forEach((timer) => window.clearTimeout(timer));
@@ -401,6 +620,8 @@ export const KnowledgeProcessing: React.FC = () => {
     setSourceUrlDialogOpen(false);
     setMetadataOpen(false);
     setDraftSort('updated_desc');
+    setDraftDocumentKeys(workMode === 'prod' ? readStoredDraftDocumentKeys() : []);
+    setDeletedGatewayDraftIds([]);
     setForm({
       title: '',
       sourceType: 'GOST',
@@ -412,6 +633,28 @@ export const KnowledgeProcessing: React.FC = () => {
       issuingBody: '',
     });
   }, [workMode]);
+
+  useEffect(() => {
+    if (workMode !== 'prod' || !gatewayDraftsQuery.data) return;
+
+    setDrafts((current) => {
+      const deletedIds = new Set(deletedGatewayDraftIds);
+      const mapped = gatewayDraftsQuery.data
+        .filter((item: any) => !item?.deleted_at && !item?.deletedAt)
+        .map((item: any) => mapGatewayDraftRecordToUi(item))
+        .filter((draft) => !deletedIds.has(draft.gatewayDraftId || draft.id));
+      const byId = new Map(current.map((draft) => [draft.gatewayDraftId || draft.id, draft]));
+
+      mapped.forEach((draft) => {
+        byId.set(draft.gatewayDraftId || draft.id, {
+          ...byId.get(draft.gatewayDraftId || draft.id),
+          ...draft,
+        });
+      });
+
+      return Array.from(byId.values());
+    });
+  }, [deletedGatewayDraftIds, gatewayDraftsQuery.data, workMode]);
 
   useEffect(() => {
     if (selectedDraftId && !drafts.some((draft) => draft.id === selectedDraftId)) {
@@ -431,12 +674,25 @@ export const KnowledgeProcessing: React.FC = () => {
     setMetadataOpen(false);
   }, [activeTab]);
 
-  const publishedDocuments = publishedDocumentsQuery.data ?? [];
-  const gatewayQueue = gatewayQueueQuery.data?.length ? gatewayQueueQuery.data : MOCK_PROCESSING_QUEUE;
+  const publishedDocuments = workMode === 'demo' ? publishedDocumentsQuery.data ?? MOCK_DOCUMENTS : publishedDocumentsQuery.data ?? [];
+  const gatewayQueue =
+    workMode === 'demo'
+      ? gatewayQueueQuery.data?.length
+        ? gatewayQueueQuery.data
+        : MOCK_PROCESSING_QUEUE
+      : gatewayQueueQuery.data ?? [];
+  const gatewayProcessingLogs =
+    workMode === 'demo'
+      ? processingAuditQuery.data?.length
+        ? processingAuditQuery.data
+        : MOCK_PROCESSING_LOGS
+      : processingAuditQuery.data ?? [];
   const sortedDrafts = useMemo(() => sortDrafts(drafts, draftSort), [drafts, draftSort]);
   const selectedDraft = drafts.find((draft) => draft.id === selectedDraftId) ?? null;
   const readyCount = drafts.filter((draft) => draft.status === 'ready_for_approve').length;
   const queueAttentionCount = gatewayQueue.filter((item) => item.status === 'ошибка').length;
+  const queueHasError = workMode === 'prod' && gatewayQueueQuery.isError;
+  const journalHasError = workMode === 'prod' && processingAuditQuery.isError;
 
   const stats = [
     {
@@ -545,15 +801,41 @@ export const KnowledgeProcessing: React.FC = () => {
   };
 
   const uploadDraftFile = async (draftId: string, file: File, sourceLabel: string) => {
-    const response = await documentsApi.upload(file);
-    updateDraft(draftId, {
-      gatewayTaskId: response?.task_id ? String(response.task_id) : undefined,
-      gatewayVersionId: response?.version_id ? String(response.version_id) : undefined,
-      note: `Сервис принял ${sourceLabel}. Предпросмотр можно запускать отсюда.`,
+    const response = await draftsApi.create(file, {
+      sourceType: form.sourceType,
+      title: form.title.trim() || sourceLabel.replace(/\.[^.]+$/, ''),
+      docCode: form.docCode.trim() || undefined,
+      mksOksCode: form.mksOksCode.trim() || undefined,
+      okstuCode: form.okstuCode.trim() || undefined,
+      era: form.era,
+      jurisdiction: form.jurisdiction,
+      issuingBody: form.issuingBody.trim() || undefined,
+      metadata: {
+        manual: true,
+        source_type: form.sourceType,
+        title: form.title.trim() || undefined,
+        doc_code: form.docCode.trim() || undefined,
+        mks_oks_code: form.mksOksCode.trim() || undefined,
+        okstu_code: form.okstuCode.trim() || undefined,
+        era: form.era,
+        jurisdiction: form.jurisdiction,
+        issuing_body: form.issuingBody.trim() || undefined,
+      },
+      idempotencyKey: createIdempotencyKey(),
     });
+
+    updateDraft(draftId, draftPatchFromGateway(response, getSelectedDraft(draftId) ?? undefined));
+    if (response.document_key) {
+      setDraftDocumentKeys((current) => {
+        const next = Array.from(new Set([response.document_key, ...current]));
+        writeStoredDraftDocumentKeys(next);
+        return next;
+      });
+      await queryClient.invalidateQueries({ queryKey: ['gateway-drafts', workMode] });
+    }
     await queryClient.invalidateQueries({ queryKey: ['gateway-documents', workMode] });
     await queryClient.invalidateQueries({ queryKey: ['gateway-documents-queue', workMode] });
-    setNotice(`Файл «${sourceLabel}» отправлен в обработку.`);
+    return response;
   };
 
   const handleCreateDraftFromFile = async () => {
@@ -567,8 +849,15 @@ export const KnowledgeProcessing: React.FC = () => {
     if (workMode === 'prod') {
       try {
         await uploadDraftFile(id, selectedFile, selectedFile.name);
-      } catch {
-        setNotice(`Черновик «${title}» создан локально, но сервис пока не принял файл.`);
+        setNotice(`Файл «${selectedFile.name}» отправлен в Gateway на обработку.`);
+      } catch (error: any) {
+        updateDraft(id, {
+          status: 'failed',
+          progress: 100,
+          note: 'Gateway не принял файл. Черновик помечен как failed.',
+          gatewayErrorMessage: error?.message ?? 'Не удалось отправить файл в Gateway.',
+        });
+        setNotice(`Черновик «${title}» не удалось отправить в Gateway.`);
       }
     }
 
@@ -595,9 +884,9 @@ export const KnowledgeProcessing: React.FC = () => {
     }
 
     const sourceName = resolveFileNameFromUrl(urlValue);
-    const { id, title } = createLocalDraft(sourceName, urlValue);
 
     if (workMode === 'demo') {
+      const { title } = createLocalDraft(sourceName, urlValue);
       clearSourceInputs();
       setNotice(`Черновик «${title}» создан по ссылке.`);
       return true;
@@ -615,12 +904,21 @@ export const KnowledgeProcessing: React.FC = () => {
         type: blob.type || 'application/octet-stream',
       });
 
-      await uploadDraftFile(id, sourceFile, sourceName);
+      const { id, title } = createLocalDraft(sourceName, urlValue);
+      try {
+        await uploadDraftFile(id, sourceFile, sourceName);
+        setNotice(`Файл по ссылке «${sourceName}» отправлен в Gateway на обработку.`);
+      } catch (error: any) {
+        updateDraft(id, {
+          status: 'failed',
+          progress: 100,
+          note: 'Gateway не принял файл, скачанный по ссылке.',
+          gatewayErrorMessage: error?.message ?? 'Не удалось отправить файл в Gateway.',
+        });
+        setNotice(`Черновик «${title}» не удалось отправить в Gateway.`);
+      }
     } catch {
-      updateDraft(id, {
-        note: 'Ссылка сохранена локально. Файл не удалось скачать напрямую.',
-      });
-      setNotice(`Черновик «${title}» создан локально, но файл по ссылке не удалось скачать.`);
+      setNotice('Не удалось скачать файл по ссылке.');
     } finally {
       setIsUploadingByUrl(false);
       clearSourceInputs();
@@ -649,43 +947,103 @@ export const KnowledgeProcessing: React.FC = () => {
     });
     setNotice(`Предпросмотр для «${draft.title}» запущен.`);
 
-    const timer = window.setTimeout(() => {
-      const draftAfterPreview = getSelectedDraft(draftId);
-      if (!draftAfterPreview) return;
+    if (workMode === 'demo') {
+      const timer = window.setTimeout(() => {
+        const draftAfterPreview = getSelectedDraft(draftId);
+        if (!draftAfterPreview) return;
 
-      const preview: DraftPreview = {
-        docCode: draftAfterPreview.docCode || draftAfterPreview.title,
-        title: draftAfterPreview.title,
-        documentType: draftAfterPreview.sourceType.toLowerCase(),
-        year: draftAfterPreview.era === 'CURRENT' ? String(new Date().getFullYear()) : '1981',
-        revision: draftAfterPreview.sourceType === 'GOST' ? '1' : null,
-      };
+        const preview: DraftPreview = {
+          docCode: draftAfterPreview.docCode || draftAfterPreview.title,
+          title: draftAfterPreview.title,
+          documentType: draftAfterPreview.sourceType.toLowerCase(),
+          year: draftAfterPreview.era === 'CURRENT' ? String(new Date().getFullYear()) : '1981',
+          revision: draftAfterPreview.sourceType === 'GOST' ? '1' : null,
+        };
 
-      const duplicates: DraftDuplicate[] =
-      draftAfterPreview.docCode || draftAfterPreview.title
-          ? [
-              {
-                title: draftAfterPreview.title,
-                reason: 'Похожее наименование и близкий код документа',
-                similarity: 0.84,
-              },
-            ]
+        const duplicates: DraftDuplicate[] =
+          draftAfterPreview.docCode || draftAfterPreview.title
+            ? [
+                {
+                  title: draftAfterPreview.title,
+                  reason: 'Похожее наименование и близкий код документа',
+                  similarity: 0.84,
+                },
+              ]
+            : [];
+
+        updateDraft(draftId, {
+          status: 'ready_for_approve',
+          progress: 72,
+          confidence: 0.92,
+          preview,
+          duplicates,
+          note: duplicates.length
+            ? 'Предпросмотр готов. Есть кандидаты на дубликаты.'
+            : 'Предпросмотр готов. Можно принимать документ.',
+        });
+        setNotice(`Предпросмотр для «${draftAfterPreview.title}» завершён.`);
+      }, 1100);
+
+      previewTimersRef.current.push(timer);
+      return;
+    }
+
+    const gatewayDraftId = draft.gatewayDraftId;
+    if (!gatewayDraftId) {
+      updateDraft(draftId, {
+        status: 'failed',
+        progress: 100,
+        note: 'У черновика нет gateway id для запуска предпросмотра.',
+      });
+      setNotice(`Предпросмотр для «${draft.title}» не удалось запустить.`);
+      return;
+    }
+
+    void (async () => {
+      try {
+        await draftsApi.startPreview(gatewayDraftId);
+        const previewResponse = await draftsApi.waitPreview(gatewayDraftId, 15);
+        const draftAfterPreview = getSelectedDraft(draftId);
+        if (!draftAfterPreview) return;
+
+        const duplicates: DraftDuplicate[] = Array.isArray(previewResponse?.duplicates)
+          ? previewResponse.duplicates.map((duplicate: any) => ({
+              title: String(duplicate.title ?? duplicate.document_title ?? duplicate.document_id ?? 'Похожий документ'),
+              reason: String(duplicate.reason ?? duplicate.message ?? 'Похожее содержание'),
+              similarity: typeof duplicate.similarity === 'number' ? duplicate.similarity : Number(duplicate.score ?? 0),
+            }))
           : [];
 
-      updateDraft(draftId, {
-        status: 'ready_for_approve',
-        progress: 72,
-        confidence: 0.92,
-        preview,
-        duplicates,
-        note: duplicates.length
-          ? 'Предпросмотр готов. Есть кандидаты на дубликаты.'
-          : 'Предпросмотр готов. Можно принимать документ.',
-      });
-      setNotice(`Предпросмотр для «${draftAfterPreview.title}» завершён.`);
-    }, 1100);
-
-    previewTimersRef.current.push(timer);
+        updateDraft(draftId, {
+          ...draftPatchFromGateway(previewResponse, draftAfterPreview),
+          status: normalizeDraftStatusFromGateway(previewResponse?.status) === 'previewing' ? 'previewing' : 'ready_for_approve',
+          progress: normalizeDraftStatusFromGateway(previewResponse?.status) === 'previewing' ? 38 : 72,
+          confidence: Number(previewResponse?.confidence ?? draftAfterPreview.confidence ?? 0),
+          preview:
+            mapGatewayPreviewMetadata(previewResponse) ??
+            draftAfterPreview.preview ?? {
+              docCode: draftAfterPreview.docCode || draftAfterPreview.title,
+              title: draftAfterPreview.title,
+              documentType: draftAfterPreview.sourceType.toLowerCase(),
+              year: draftAfterPreview.era === 'CURRENT' ? String(new Date().getFullYear()) : '1981',
+              revision: draftAfterPreview.sourceType === 'GOST' ? '1' : null,
+            },
+          duplicates,
+          note: previewResponse?.decision_required
+            ? 'Предпросмотр готов. Требуется решение.'
+            : 'Предпросмотр готов. Можно принимать документ.',
+        });
+        setNotice(`Предпросмотр для «${draftAfterPreview.title}» завершён.`);
+      } catch (error: any) {
+        updateDraft(draftId, {
+          status: 'failed',
+          progress: 100,
+          note: 'Gateway не завершил предпросмотр.',
+          gatewayErrorMessage: error?.message ?? 'Не удалось получить статус предпросмотра.',
+        });
+        setNotice(`Предпросмотр для «${draft.title}» завершить не удалось.`);
+      }
+    })();
   };
 
   const handleDecision = async (draftId: string, action: 'approve' | 'reject') => {
@@ -701,23 +1059,65 @@ export const KnowledgeProcessing: React.FC = () => {
       return;
     }
 
-    updateDraft(draftId, {
-      status: action === 'approve' ? 'approved' : 'discarded',
-      progress: 100,
-      note:
+    if (workMode === 'demo') {
+      updateDraft(draftId, {
+        status: action === 'approve' ? 'approved' : 'discarded',
+        progress: 100,
+        note:
+          action === 'approve'
+            ? 'Черновик принят и готов перейти в базу знаний.'
+            : 'Черновик отклонён и может быть загружен повторно.',
+      });
+      setNotice(
         action === 'approve'
-          ? 'Черновик принят и готов перейти в базу знаний.'
-          : 'Черновик отклонён и может быть загружен повторно.',
-    });
-    setNotice(
-      action === 'approve'
-        ? `Документ «${draft.title}» принят в базу знаний.`
-        : `Документ «${draft.title}» отклонён.`,
-    );
+          ? `Документ «${draft.title}» принят в базу знаний.`
+          : `Документ «${draft.title}» отклонён.`,
+      );
+      return;
+    }
 
-    if (action === 'approve') {
-      await queryClient.invalidateQueries({ queryKey: ['gateway-documents', workMode] });
-      await queryClient.invalidateQueries({ queryKey: ['gateway-documents-queue', workMode] });
+    const gatewayDraftId = draft.gatewayDraftId;
+    if (!gatewayDraftId) {
+      updateDraft(draftId, {
+        status: 'failed',
+        progress: 100,
+        note: 'У черновика нет gateway id для принятия решения.',
+      });
+      setNotice(`Решение по «${draft.title}» не удалось отправить в Gateway.`);
+      return;
+    }
+
+    try {
+      const response = await draftsApi.decide(gatewayDraftId, action, form.title.trim() || undefined);
+      updateDraft(draftId, {
+        ...draftPatchFromGateway(response, draft),
+        status: action === 'approve' ? 'approved' : 'discarded',
+        progress: 100,
+        note:
+          response?.message ??
+          (action === 'approve'
+            ? 'Черновик принят и готов перейти в базу знаний.'
+            : 'Черновик отклонён и может быть загружен повторно.'),
+      });
+      setNotice(
+        action === 'approve'
+          ? `Документ «${draft.title}» принят в базу знаний.`
+          : `Документ «${draft.title}» отклонён.`,
+      );
+      if (action === 'approve') {
+        await queryClient.invalidateQueries({ queryKey: ['gateway-documents', workMode] });
+        await queryClient.invalidateQueries({ queryKey: ['gateway-documents-queue', workMode] });
+        await queryClient.invalidateQueries({ queryKey: ['gateway-knowledge-sections', workMode] });
+        await queryClient.invalidateQueries({ queryKey: ['gateway-drafts', workMode] });
+      }
+    } catch (error: any) {
+      updateDraft(draftId, {
+        status: 'failed',
+        progress: 100,
+        note: 'Gateway не принял решение по черновику.',
+        gatewayErrorMessage: error?.message ?? 'Не удалось отправить решение в Gateway.',
+      });
+      setNotice(`Не удалось отправить решение по «${draft.title}» в Gateway.`);
     }
   };
 
@@ -725,8 +1125,48 @@ export const KnowledgeProcessing: React.FC = () => {
     const draft = getSelectedDraft(draftId);
     if (!draft) return;
 
-    setDrafts((current) => current.filter((item) => item.id !== draftId));
-    setNotice(`Черновик «${draft.title}» удалён из локальной очереди.`);
+    if (workMode === 'demo') {
+      setDrafts((current) => current.filter((item) => item.id !== draftId));
+      setNotice(`Черновик «${draft.title}» удалён из локальной очереди.`);
+      return;
+    }
+
+    const gatewayDraftId = draft.gatewayDraftId;
+    if (!gatewayDraftId) {
+      setNotice(`Черновик «${draft.title}» не удалось удалить: нет gateway id.`);
+      return;
+    }
+
+    void draftsApi
+      .delete(gatewayDraftId)
+      .then(async () => {
+        setDeletedGatewayDraftIds((current) => Array.from(new Set([gatewayDraftId, ...current])));
+        if (draft.gatewayDocumentKey) {
+          setDraftDocumentKeys((current) => {
+            const hasOtherDraftWithSameKey = drafts.some(
+              (item) => item.id !== draftId && item.gatewayDocumentKey === draft.gatewayDocumentKey,
+            );
+            if (hasOtherDraftWithSameKey) return current;
+
+            const next = current.filter((key) => key !== draft.gatewayDocumentKey);
+            writeStoredDraftDocumentKeys(next);
+            return next;
+          });
+        }
+        setDrafts((current) => current.filter((item) => item.id !== draftId));
+        await queryClient.invalidateQueries({ queryKey: ['gateway-drafts', workMode] });
+        await queryClient.invalidateQueries({ queryKey: ['gateway-documents-queue', workMode] });
+        setNotice(`Черновик «${draft.title}» удалён из Gateway.`);
+      })
+      .catch((error: any) => {
+        updateDraft(draftId, {
+          status: 'failed',
+          progress: 100,
+          note: 'Gateway не удалил черновик.',
+          gatewayErrorMessage: error?.message ?? 'Не удалось удалить черновик в Gateway.',
+        });
+        setNotice(`Черновик «${draft.title}» не удалось удалить из Gateway.`);
+      });
   };
 
   const handleOpenPreviewDialog = (draftId: string) => {
@@ -966,10 +1406,10 @@ export const KnowledgeProcessing: React.FC = () => {
             <Stack spacing={1.4}>
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
                 <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
-                  <RotateCw size={18} color={isLight ? '#0284c7' : '#98d9d8'} />
+                    <RotateCw size={18} color={isLight ? '#0284c7' : '#98d9d8'} />
                   <Box sx={{ minWidth: 0 }}>
                     <Typography sx={{ fontWeight: 560, color: isLight ? '#0f172a' : 'rgba(233, 237, 243, 0.92)' }}>
-                      Локальные черновики
+                      Черновики обработки
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
                       Отсортируйте список и выберите черновик для просмотра.
@@ -990,6 +1430,19 @@ export const KnowledgeProcessing: React.FC = () => {
                   <MenuItem value="status">По статусу</MenuItem>
                 </TextField>
               </Stack>
+
+              {workMode === 'prod' && draftDocumentKeys.length === 0 && (
+                <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
+                  Gateway возвращает список черновиков по `document_key`. После загрузки через этот экран здесь появятся черновики,
+                  которые можно повторно запросить из Gateway.
+                </Alert>
+              )}
+
+              {workMode === 'prod' && gatewayDraftsQuery.isError && (
+                <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2 }}>
+                  Не удалось загрузить черновики из Gateway по сохраненным `document_key`.
+                </Alert>
+              )}
 
               <Paper variant="outlined" sx={{ borderRadius: 2.4, overflow: 'hidden', ...tableSx }}>
                 <Stack divider={<Divider flexItem sx={{ borderColor: 'rgba(198, 214, 236, 0.18)' }} />} sx={{ maxHeight: 560, overflow: 'auto' }}>
@@ -1037,7 +1490,7 @@ export const KnowledgeProcessing: React.FC = () => {
                   {sortedDrafts.length === 0 && (
                     <Box sx={{ p: 2 }}>
                       <Alert severity="info" variant="outlined">
-                        Пока нет локальных черновиков. Создайте первый файл сверху.
+                        Пока нет черновиков. Создайте первый файл сверху.
                       </Alert>
                     </Box>
                   )}
@@ -1143,8 +1596,50 @@ export const KnowledgeProcessing: React.FC = () => {
                     </Stack>
                   </Paper>
 
+                  <Paper variant="outlined" sx={{ p: 1.25, borderRadius: 2.2, ...panelSx }}>
+                    <Stack spacing={1}>
+                      <Typography sx={{ fontWeight: 560 }}>Сверка метаданных</Typography>
+                      <Stack spacing={0.8}>
+                        {buildMetadataReviewRows(selectedDraft).map((row) => (
+                          <Box
+                            key={row.label}
+                            sx={{
+                              display: 'grid',
+                              gridTemplateColumns: { xs: '1fr', md: '0.8fr 1fr 1fr auto' },
+                              gap: 1,
+                              alignItems: 'center',
+                              p: 0.8,
+                              borderRadius: 1.6,
+                              bgcolor: isLight ? 'rgba(248,250,252,0.68)' : 'rgba(255,255,255,0.025)',
+                              border: isLight ? '1px solid rgba(14,116,144,0.14)' : '1px solid rgba(198,216,240,0.14)',
+                            }}
+                          >
+                            <Typography variant="caption" color="text.secondary">
+                              {row.label}
+                            </Typography>
+                            <Typography variant="caption" sx={{ overflowWrap: 'anywhere' }}>
+                              Ручное: {row.manual || 'не указано'}
+                            </Typography>
+                            <Typography variant="caption" sx={{ overflowWrap: 'anywhere' }}>
+                              Gateway: {row.extracted || 'не извлечено'}
+                            </Typography>
+                            <Chip
+                              size="small"
+                              label={getMetadataStatusLabel(row.status)}
+                              color={getMetadataStatusColor(row.status) as 'default' | 'info' | 'success' | 'warning'}
+                              variant="outlined"
+                            />
+                          </Box>
+                        ))}
+                      </Stack>
+                    </Stack>
+                  </Paper>
+
                   <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-                    {selectedDraft.status !== 'previewing' && selectedDraft.status !== 'approved' && selectedDraft.status !== 'discarded' && (
+                    {selectedDraft.status !== 'previewing' &&
+                      selectedDraft.status !== 'ready_for_approve' &&
+                      selectedDraft.status !== 'approved' &&
+                      selectedDraft.status !== 'discarded' && (
                       <Button
                         className="app-action-button"
                         variant="contained"
@@ -1237,58 +1732,70 @@ export const KnowledgeProcessing: React.FC = () => {
               </Box>
             </Stack>
 
-            <Paper variant="outlined" sx={{ overflow: 'hidden', borderRadius: 2.4, ...tableSx }}>
-              <Box
-                sx={{
-                  display: 'grid',
-                  gridTemplateColumns: { xs: '1.6fr 0.9fr 0.6fr 0.7fr' },
-                  gap: 0,
-                  alignItems: 'center',
-                  px: 1.4,
-                  py: 1,
-                  borderBottom: '1px solid rgba(198, 214, 236, 0.16)',
-                }}
-              >
-                <Typography variant="caption" color="text.secondary">
-                  Документ
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Этап
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Прогресс
-                </Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'right' }}>
-                  Статус
-                </Typography>
-              </Box>
-              <Stack divider={<Divider flexItem sx={{ borderColor: 'rgba(198, 214, 236, 0.12)' }} />}>
-                {gatewayQueue.map((item) => (
-                  <Box
-                    key={item.id}
-                    sx={{
-                      display: 'grid',
-                      gridTemplateColumns: { xs: '1.6fr 0.9fr 0.6fr 0.7fr' },
-                      gap: 0,
-                      alignItems: 'center',
-                      px: 1.4,
-                      py: 1.05,
-                    }}
-                  >
-                    <Typography sx={{ fontSize: '0.84rem', pr: 1 }}>{item.document}</Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {item.stage}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {item.progress}%
-                    </Typography>
-                    <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                      <Chip label={item.status} size="small" color={getQueueColor(item.status)} variant="outlined" />
+            {queueHasError && (
+              <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2, mb: 1.2 }}>
+                Не удалось загрузить очередь обработки из Gateway.
+              </Alert>
+            )}
+            {!queueHasError && gatewayQueue.length === 0 && (
+              <Alert severity="info" variant="outlined" sx={{ borderRadius: 2, mb: 1.2 }}>
+                Очередь обработки пуста.
+              </Alert>
+            )}
+            {gatewayQueue.length > 0 && (
+              <Paper variant="outlined" sx={{ overflow: 'hidden', borderRadius: 2.4, ...tableSx }}>
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: { xs: '1.6fr 0.9fr 0.6fr 0.7fr' },
+                    gap: 0,
+                    alignItems: 'center',
+                    px: 1.4,
+                    py: 1,
+                    borderBottom: '1px solid rgba(198, 214, 236, 0.16)',
+                  }}
+                >
+                  <Typography variant="caption" color="text.secondary">
+                    Документ
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Этап
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Прогресс
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'right' }}>
+                    Статус
+                  </Typography>
+                </Box>
+                <Stack divider={<Divider flexItem sx={{ borderColor: 'rgba(198, 214, 236, 0.12)' }} />}>
+                  {gatewayQueue.map((item) => (
+                    <Box
+                      key={item.id}
+                      sx={{
+                        display: 'grid',
+                        gridTemplateColumns: { xs: '1.6fr 0.9fr 0.6fr 0.7fr' },
+                        gap: 0,
+                        alignItems: 'center',
+                        px: 1.4,
+                        py: 1.05,
+                      }}
+                    >
+                      <Typography sx={{ fontSize: '0.84rem', pr: 1 }}>{item.document}</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {item.stage}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {item.progress}%
+                      </Typography>
+                      <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                        <Chip label={item.status} size="small" color={getQueueColor(item.status)} variant="outlined" />
+                      </Box>
                     </Box>
-                  </Box>
-                ))}
-              </Stack>
-            </Paper>
+                  ))}
+                </Stack>
+              </Paper>
+            )}
           </Paper>
 
           <Paper variant="outlined" sx={{ p: 1.9, borderRadius: 3, ...panelSx }}>
@@ -1304,24 +1811,36 @@ export const KnowledgeProcessing: React.FC = () => {
               </Box>
             </Stack>
 
-            <Stack spacing={1.1} sx={{ maxHeight: 320, overflow: 'auto', pr: 0.4 }}>
-              {MOCK_PROCESSING_LOGS.map((log) => (
-                <Paper key={log.id} variant="outlined" sx={{ p: 1.25, borderRadius: 2, ...panelSx }}>
-                  <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                    <Box sx={{ minWidth: 0 }}>
-                      <Typography sx={{ fontWeight: 560, lineHeight: 1.35 }}>{log.document}</Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {log.time} · {log.stage}
-                      </Typography>
-                    </Box>
-                    <Chip label={log.retryStatus} size="small" variant="outlined" />
-                  </Stack>
-                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.6, lineHeight: 1.4 }}>
-                    {log.event}
-                  </Typography>
-                </Paper>
-              ))}
-            </Stack>
+            {journalHasError && (
+              <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2 }}>
+                Не удалось загрузить журнал обработки из Gateway.
+              </Alert>
+            )}
+            {!journalHasError && gatewayProcessingLogs.length === 0 && (
+              <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
+                Журнал обработки пуст.
+              </Alert>
+            )}
+            {gatewayProcessingLogs.length > 0 && (
+              <Stack spacing={1.1} sx={{ maxHeight: 320, overflow: 'auto', pr: 0.4 }}>
+                {gatewayProcessingLogs.map((log) => (
+                  <Paper key={log.id} variant="outlined" sx={{ p: 1.25, borderRadius: 2, ...panelSx }}>
+                    <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                      <Box sx={{ minWidth: 0 }}>
+                        <Typography sx={{ fontWeight: 560, lineHeight: 1.35 }}>{log.document}</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {log.time} · {log.stage}
+                        </Typography>
+                      </Box>
+                      <Chip label={log.retryStatus} size="small" variant="outlined" />
+                    </Stack>
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.6, lineHeight: 1.4 }}>
+                      {log.event}
+                    </Typography>
+                  </Paper>
+                ))}
+              </Stack>
+            )}
           </Paper>
         </Box>
 

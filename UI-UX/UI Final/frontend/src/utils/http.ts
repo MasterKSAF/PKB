@@ -18,6 +18,7 @@ import {
   type QueryHistoryItem,
   type SystemMetrics,
 } from './mockData';
+import { USER_ROLE_BY_LABEL } from './access';
 import { useUIStore } from '../store/uiStore';
 
 const DEFAULT_GATEWAY_URL = 'http://127.0.0.1:8081/api/v1';
@@ -65,6 +66,133 @@ export type GatewayHealth = {
   timestamp?: string;
   raw?: unknown;
 };
+
+type DraftCreateInput = {
+  sourceType?: string;
+  title?: string;
+  docCode?: string;
+  mksOksCode?: string;
+  okstuCode?: string;
+  era?: string;
+  jurisdiction?: string;
+  issuingBody?: string;
+  metadata?: Record<string, unknown> | string;
+  idempotencyKey?: string;
+};
+
+type DraftPreviewMetadata = {
+  doc_code?: string;
+  title?: string;
+  document_type?: string;
+  year?: string | number | null;
+  revision?: string | number | null;
+};
+
+type GatewayDocumentDetail = {
+  document_id?: string;
+  id?: string;
+  title?: string;
+  doc_code?: string;
+  source_type?: string;
+  status?: string;
+  era?: string;
+  validity_status?: string;
+  jurisdiction?: string;
+  issuing_body?: string;
+  mks_oks_code?: string | null;
+  okstu_code?: string | null;
+  classification_status?: Record<string, unknown>;
+  successor_doc_id?: string | null;
+  predecessor_doc_id?: string | null;
+  chunk_container_id?: string | null;
+  metadata?: Record<string, unknown>;
+  latest_version?: Record<string, unknown> | null;
+  total_versions?: number;
+  user_id?: string;
+  uploaded_by?: string;
+  created_by?: string;
+  updated_by?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+type GatewayDocumentStatus = {
+  document_id?: string;
+  status?: string;
+  progress_percent?: number;
+  pipeline?: Record<string, unknown>;
+  started_at?: string;
+  completed_at?: string | null;
+};
+
+type GatewayDocumentErrors = {
+  errors?: Array<Record<string, unknown>>;
+  meta?: Record<string, unknown>;
+};
+
+type GatewayDocumentParameters = {
+  document_id?: string;
+  parameters?: Record<string, unknown>;
+  extraction_confidence?: number;
+  unconfirmed_fields?: string[];
+  updated_at?: string;
+};
+
+type GatewayDocumentPages = {
+  document_id?: string;
+  pages_total?: number;
+  pages?: Array<Record<string, unknown>>;
+  meta?: Record<string, unknown>;
+};
+
+const EMPTY_SYSTEM_METRICS: SystemMetrics = {
+  ocrQuality: 0,
+  retrievalQuality: 0,
+  answersWithSources: 0,
+  manualReviewQueue: 0,
+  searchLatency: 0,
+};
+
+const EMPTY_ENGINEER_RATINGS: EngineerRatingMetrics = {
+  ratedAnswers: 0,
+  usefulRate: 0,
+  flaggedForReview: 0,
+  unresolvedAfterReview: 0,
+  commonSignals: [],
+};
+
+function appendFormValue(form: FormData, key: string, value: unknown) {
+  if (value === undefined || value === null || value === '') return;
+  form.append(key, typeof value === 'string' ? value : String(value));
+}
+
+function deriveDocumentKey(fileHashSha256?: string) {
+  if (!fileHashSha256) return '';
+  return `sha256:${fileHashSha256.slice(0, 16)}`;
+}
+
+function normalizeDraftStatus(status?: string) {
+  const normalized = String(status ?? '').toLowerCase();
+  if (['preview_ready', 'ready_for_approve', 'previewing', 'uploaded', 'new'].includes(normalized)) {
+    return normalized === 'preview_ready' ? 'ready_for_approve' : normalized;
+  }
+  if (['promoted', 'approved'].includes(normalized)) return 'approved';
+  if (normalized === 'discarded') return 'discarded';
+  if (normalized === 'failed' || normalized === 'error') return 'failed';
+  return normalized || 'uploaded';
+}
+
+function normalizePreviewMetadata(payload?: DraftPreviewMetadata | null) {
+  if (!payload) return null;
+
+  return {
+    doc_code: payload.doc_code ?? '',
+    title: payload.title ?? '',
+    document_type: payload.document_type ?? 'normative',
+    year: payload.year ?? null,
+    revision: payload.revision ?? null,
+  };
+}
 
 function isDemoMode() {
   return useUIStore.getState().workMode === 'demo';
@@ -114,6 +242,7 @@ async function syncGatewayCurrentUser(accessToken?: string) {
 
   store.upsertAdminUser(profile);
   store.setCurrentUserId(profile.id);
+  store.setCurrentRole(USER_ROLE_BY_LABEL[profile.role] ?? 'user');
 
   return profile;
 }
@@ -198,12 +327,13 @@ function shouldShowOutOfScopeResult(query: string) {
 function mapGatewayStatus(status?: string, scenario?: string): ChatMessage['status'] {
   const normalized = String(status ?? '').toLowerCase();
 
-  if (scenario === 'needs_clarification' || normalized === 'needs_clarification') return 'needs_clarification';
-  if (scenario === 'conflict' || normalized === 'source_conflict') return 'source_conflict';
-  if (scenario === 'out_of_scope' || normalized === 'out_of_scope') return 'out_of_scope';
-  if (normalized === 'not_found') return 'not_found';
-  if (scenario === 'failed' || normalized === 'failed' || normalized === 'error') return 'backend_error';
-  if (normalized === 'insufficient_data') return 'insufficient_data';
+  if (normalized === 'pending') return 'pending';
+  if (normalized === 'enriching') return 'enriching';
+  if (normalized === 'searching') return 'searching';
+  if (normalized === 'generating') return 'generating';
+  if (normalized === 'enriching_citations') return 'enriching_citations';
+  if (normalized === 'completed' || normalized === 'answered') return 'answered';
+  if (scenario === 'failed' || normalized === 'failed' || normalized === 'error') return 'failed';
 
   return 'answered';
 }
@@ -225,46 +355,87 @@ function mapGatewaySource(source: any, index = 0): Citation {
 }
 
 function mapGatewayChatResponse(payload: any, query: string): ChatMessage {
-  const answerItems = Array.isArray(payload.answer_items) ? payload.answer_items : [];
-  const directSources = Array.isArray(payload.sources) ? payload.sources : [];
+  const messagePayload = payload?.message ?? payload;
+  const answerItems = Array.isArray(messagePayload.answer_items) ? messagePayload.answer_items : [];
+  const directSources = Array.isArray(messagePayload.sources) ? messagePayload.sources : [];
   const itemSources = answerItems.flatMap((item: any) =>
     Array.isArray(item.sources) ? item.sources.map((source: any, index: number) => mapGatewaySource(source, index)) : [],
   );
   const citations = itemSources.length ? itemSources : directSources.map((source: any, index: number) => mapGatewaySource(source, index));
 
-  if (payload.scenario === 'needs_clarification') {
+  if (messagePayload.scenario === 'needs_clarification') {
     return {
-      id: payload.answer_id ?? payload.message_id ?? Math.random().toString(36).slice(2),
+      id: messagePayload.answer_id ?? messagePayload.message_id ?? Math.random().toString(36).slice(2),
       role: 'assistant',
-      content: `Система просит уточнить запрос: ${(payload.missing_fields ?? []).join(', ') || 'недостаточно контекста'}.`,
-      status: 'needs_clarification',
-      timestamp: toUiTimestamp(payload.timestamp),
+      content: `Система просит уточнить запрос: ${(messagePayload.missing_fields ?? []).join(', ') || 'недостаточно контекста'}.`,
+      status: 'answered',
+      limitation: 'Gateway вернул сценарий needs_clarification; статус сообщения оставлен в документированной FSM.',
+      timestamp: toUiTimestamp(messagePayload.timestamp),
     };
   }
 
-  if (payload.scenario === 'conflict') {
+  if (messagePayload.scenario === 'conflict') {
     return {
-      id: payload.answer_id ?? payload.message_id ?? Math.random().toString(36).slice(2),
+      id: messagePayload.answer_id ?? messagePayload.message_id ?? Math.random().toString(36).slice(2),
       role: 'assistant',
-      content: payload.message ?? 'Система обнаружила конфликт источников.',
-      status: 'source_conflict',
-      timestamp: toUiTimestamp(payload.timestamp),
+      content: messagePayload.message ?? 'Система обнаружила конфликт источников.',
+      status: 'answered',
+      limitation: 'Gateway вернул сценарий conflict; статус сообщения оставлен в документированной FSM.',
+      timestamp: toUiTimestamp(messagePayload.timestamp),
     };
   }
 
   const content =
     answerItems.length > 0
       ? answerItems.map((item: any, index: number) => `${item.number ?? index + 1}. ${item.text ?? ''}`.trim()).join('\n')
-      : payload.content ?? payload.answer ?? payload.message ?? `Система приняла запрос: ${query}`;
+      : messagePayload.content ?? messagePayload.answer ?? messagePayload.message ?? `Система приняла запрос: ${query}`;
 
   return {
-    id: payload.answer_id ?? payload.message_id ?? Math.random().toString(36).slice(2),
+    id: messagePayload.answer_id ?? messagePayload.message_id ?? Math.random().toString(36).slice(2),
     role: 'assistant',
     content,
-    status: mapGatewayStatus(payload.status, payload.scenario),
+    status: mapGatewayStatus(messagePayload.status, messagePayload.scenario),
     citations: citations.length ? citations : undefined,
-    timestamp: toUiTimestamp(payload.timestamp),
+    timestamp: toUiTimestamp(messagePayload.timestamp),
   };
+}
+
+function isFinalChatStatus(status?: string) {
+  const normalized = String(status ?? '').toLowerCase();
+  return normalized === 'answered' || normalized === 'failed';
+}
+
+function chatLongpollIncompleteMessage(messageId?: string): ChatMessage {
+  return {
+    id: messageId ?? Math.random().toString(36).slice(2),
+    role: 'assistant',
+    content:
+      'Gateway принял сообщение, но не вернул финальный ответ за время ожидания. Повторите запрос позже или обновите историю чата.',
+    status: 'failed',
+    timestamp: toUiTimestamp(),
+  };
+}
+
+async function waitForGatewayChatMessage(sessionId: string, messageId: string, longpoll = 15, maxAttempts = 4) {
+  let lastResponse: any = null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const response = await gatewayRequest<any>(() =>
+      apiClient.get(`/chat/sessions/${sessionId}/messages/${messageId}`, {
+        params: { longpoll },
+      }),
+    );
+
+    lastResponse = response.data;
+    const messagePayload = response.data?.message ?? response.data;
+
+    if (isFinalChatStatus(messagePayload?.status)) {
+      return response.data;
+    }
+  }
+
+  const lastStatus = lastResponse?.message?.status ?? lastResponse?.status ?? 'unknown';
+  throw new Error(`Longpoll did not reach final status: ${lastStatus}`);
 }
 
 function mapGatewaySessionMessages(session: any): ChatMessage[] {
@@ -304,16 +475,72 @@ function mapGatewaySearchResponse(payload: any) {
 function mapGatewayDocumentsResponse(payload: any): Document[] {
   const documents = Array.isArray(payload) ? payload : payload.documents ?? payload.items ?? [];
 
-  return documents.map((doc: any, index: number) => ({
-    id: doc.document_id ?? doc.id ?? `gateway-document-${index}`,
-    name: doc.title ?? doc.filename ?? doc.name ?? 'Документ базы знаний',
-    type: (doc.document_type ?? doc.source_type ?? doc.type ?? 'PDF').toUpperCase(),
-    version: `v${doc.latest_version ?? doc.version ?? 1}`,
-    source: doc.source ?? doc.uploaded_by ?? 'База знаний',
-    ocrStatus: doc.status === 'failed' ? 'Ошибка' : doc.status === 'uploaded' || doc.status === 'parsing' ? 'В обработке' : 'Завершено',
-    indexStatus: doc.status === 'completed' || doc.status === 'approved' || doc.status === 'ready_for_promotion' ? 'Индексировано' : 'Ожидание',
-    updatedAt: doc.updated_at ?? doc.created_at ?? '',
-  }));
+  return documents.map((doc: any, index: number) => {
+    const classificationStatus = doc.classification_status ?? {};
+    const mksOksCode =
+      doc.mks_oks_code ??
+      doc.mks_oks ??
+      doc.oks_code ??
+      (Array.isArray(classificationStatus.mks) ? classificationStatus.mks[0] : undefined) ??
+      '';
+    const okstuCode =
+      doc.okstu_code ??
+      (Array.isArray(classificationStatus.okstu) ? classificationStatus.okstu[0] : undefined) ??
+      '';
+    const classifierCode = doc.classifier_code ?? doc.section_code ?? mksOksCode ?? okstuCode ?? '';
+    const group = doc.group ?? doc.classification_group ?? doc.classifier_group ?? classifierCode ?? '';
+
+    return {
+      id: doc.document_id ?? doc.id ?? `gateway-document-${index}`,
+      name: doc.title ?? doc.filename ?? doc.name ?? 'Документ базы знаний',
+      type: (doc.document_type ?? doc.source_type ?? doc.type ?? 'PDF').toUpperCase(),
+      version: `v${doc.latest_version ?? doc.version ?? 1}`,
+      source: doc.source ?? doc.uploaded_by ?? 'База знаний',
+      ocrStatus: doc.status === 'failed' ? 'Ошибка' : doc.status === 'uploaded' || doc.status === 'parsing' ? 'В обработке' : 'Завершено',
+      indexStatus: doc.status === 'completed' || doc.status === 'approved' || doc.status === 'ready_for_promotion' ? 'Индексировано' : 'Ожидание',
+      updatedAt: doc.updated_at ?? doc.created_at ?? '',
+      sectionId: doc.section_id ?? group,
+      group,
+      sourceType: doc.source_type ?? doc.document_type ?? doc.type ?? '',
+      documentKey: doc.document_key ?? doc.file_hash_sha256 ?? '',
+      classifierCode,
+      classifierSystem: doc.classifier_system ?? (mksOksCode ? 'MKS' : okstuCode ? 'OKSTU' : ''),
+      mksOksCode,
+      okstuCode,
+    };
+  });
+}
+
+function mapGatewayDocumentDetailResponse(payload: any): GatewayDocumentDetail {
+  const data = payload?.data ?? payload ?? {};
+
+  return {
+    document_id: data.document_id ?? data.id ?? '',
+    id: data.document_id ?? data.id ?? '',
+    title: data.title ?? '',
+    doc_code: data.doc_code ?? '',
+    source_type: data.source_type ?? '',
+    status: data.status ?? '',
+    era: data.era ?? '',
+    validity_status: data.validity_status ?? '',
+    jurisdiction: data.jurisdiction ?? '',
+    issuing_body: data.issuing_body ?? '',
+    mks_oks_code: data.mks_oks_code ?? null,
+    okstu_code: data.okstu_code ?? null,
+    classification_status: data.classification_status ?? {},
+    successor_doc_id: data.successor_doc_id ?? null,
+    predecessor_doc_id: data.predecessor_doc_id ?? null,
+    chunk_container_id: data.chunk_container_id ?? null,
+    metadata: data.metadata ?? {},
+    latest_version: data.latest_version ?? null,
+    total_versions: Number(data.total_versions ?? 0),
+    user_id: data.user_id ?? '',
+    uploaded_by: data.uploaded_by ?? '',
+    created_by: data.created_by ?? '',
+    updated_by: data.updated_by ?? '',
+    created_at: data.created_at ?? '',
+    updated_at: data.updated_at ?? '',
+  };
 }
 
 function mapGatewayHistoryResponse(payload: any): QueryHistoryItem[] {
@@ -407,24 +634,29 @@ function mapGatewayMetricsResponse(payload: any): SystemMetrics {
   };
 
   return {
-    ocrQuality: toPercent(control.ocr_quality, MOCK_METRICS.ocrQuality),
-    retrievalQuality: toPercent(control.retrieval_quality, MOCK_METRICS.retrievalQuality),
-    answersWithSources: toPercent(control.answers_with_sources, MOCK_METRICS.answersWithSources),
-    manualReviewQueue: Number(control.manual_review_queue ?? MOCK_METRICS.manualReviewQueue),
-    searchLatency: Number(control.avg_latency_ms ? control.avg_latency_ms / 1000 : MOCK_METRICS.searchLatency),
+    ocrQuality: toPercent(control.ocr_quality, 0),
+    retrievalQuality: toPercent(control.retrieval_quality, 0),
+    answersWithSources: toPercent(control.answers_with_sources, 0),
+    manualReviewQueue: Number(control.manual_review_queue ?? 0),
+    searchLatency: Number(control.avg_latency_ms ? control.avg_latency_ms / 1000 : 0),
   };
 }
 
 function mapGatewayAnswerMetrics(payload: any): EngineerRatingMetrics {
   const answer = payload.answer_metrics ?? payload;
-  const useful = Number(answer.useful_rate ?? MOCK_ENGINEER_RATINGS.usefulRate);
+  const useful = Number(answer.useful_rate ?? 0);
 
   return {
-    ratedAnswers: Number(answer.rated_answers ?? MOCK_ENGINEER_RATINGS.ratedAnswers),
+    ratedAnswers: Number(answer.rated_answers ?? 0),
     usefulRate: useful <= 1 ? Math.round(useful * 100) : Math.round(useful),
-    flaggedForReview: Number(answer.flagged_for_review ?? MOCK_ENGINEER_RATINGS.flaggedForReview),
-    unresolvedAfterReview: Number(answer.open_questions ?? MOCK_ENGINEER_RATINGS.unresolvedAfterReview),
-    commonSignals: MOCK_ENGINEER_RATINGS.commonSignals,
+    flaggedForReview: Number(answer.flagged_for_review ?? 0),
+    unresolvedAfterReview: Number(answer.open_questions ?? 0),
+    commonSignals: Array.isArray(answer.common_signals)
+      ? answer.common_signals.map((item: any, index: number) => ({
+          label: item.label ?? item.name ?? `Сигнал ${index + 1}`,
+          count: Number(item.count ?? item.value ?? 0),
+        }))
+      : [],
   };
 }
 
@@ -432,7 +664,7 @@ function mapGatewayMonitorLogs(payload: any): MonitorLogRow[] {
   const logs = Array.isArray(payload.logs) ? payload.logs : [];
 
   if (!logs.length) {
-    return [{ time: toUiTimestamp(), text: 'Журнал проверки пока не получен.', level: 'INFO' }];
+    return [];
   }
 
   return logs.map((row: any, index: number) => ({
@@ -459,15 +691,28 @@ function countClassifierChildren(node: any): number {
   return children.length + children.reduce((sum: number, child: any) => sum + countClassifierChildren(child), 0);
 }
 
+function flattenClassifierNodes(nodes: any[], depth = 0): any[] {
+  return nodes.flatMap((node) => {
+    const children = Array.isArray(node.children) ? node.children : [];
+    return [
+      { ...node, depth, childrenCount: children.length },
+      ...flattenClassifierNodes(children, depth + 1),
+    ];
+  });
+}
+
 function mapGatewayKnowledgeSections(payload: any): KnowledgeSection[] {
-  const nodes = Array.isArray(payload) ? payload : payload.data ?? payload.items ?? payload.children ?? [];
-  if (!nodes.length) return MOCK_KNOWLEDGE_SECTIONS;
+  const rootNodes = Array.isArray(payload) ? payload : payload.data ?? payload.items ?? payload.children ?? [];
+  const nodes = flattenClassifierNodes(rootNodes);
+  if (!nodes.length) return [];
 
   return nodes.map((node: any, index: number) => ({
     id: node.code ?? node.id ?? `gateway-section-${index}`,
     title: node.full_name ?? node.name ?? node.code ?? 'Раздел НСИ',
-    description: `${node.classifier_system ?? 'Классификатор'}${node.effective_date ? `, действует с ${node.effective_date}` : ''}`,
-    documents: Math.max(1, Number(node.documents_count ?? countClassifierChildren(node))),
+    description:
+      `${node.classifier_system ?? 'Классификатор'}${node.parent_code ? ` · родитель ${node.parent_code}` : ''}` +
+      `${node.childrenCount ? ` · ${node.childrenCount} подразделов` : ''}`,
+    documents: Number(node.documents_count ?? node.document_count ?? node.linked_documents_count ?? 0),
     updatedAt: node.effective_date ?? node.updated_at ?? '',
     status: node.status === 'active' || node.status === 'Готово' ? 'Готово' : 'Нужна проверка',
   }));
@@ -539,12 +784,36 @@ function mapGatewayAuditResponse(payload: any): ProcessingLogItem[] {
   }));
 }
 
+function mapGatewayDraftRecord(payload: any) {
+  const previewMetadata = normalizePreviewMetadata(payload.preview_metadata ?? payload.preview ?? null);
+
+  return {
+    ...payload,
+    draft_id: payload.draft_id ?? payload.id,
+    task_id: payload.task_id ?? payload.taskId,
+    version_id: payload.version_id ?? payload.versionId,
+    file_key: payload.file_key ?? payload.fileKey,
+    document_key: payload.document_key ?? payload.documentKey ?? deriveDocumentKey(payload.file_hash_sha256 ?? payload.fileHashSha256),
+    file_hash_sha256: payload.file_hash_sha256 ?? payload.fileHashSha256,
+    title_hash_sha256: payload.title_hash_sha256 ?? payload.titleHashSha256,
+    status: normalizeDraftStatus(payload.status),
+    confidence: payload.confidence ?? null,
+    preview_metadata: previewMetadata,
+    promoted_document_id: payload.promoted_document_id ?? payload.document_id ?? null,
+    error_code: payload.error_code ?? null,
+    error_message: payload.error_message ?? null,
+    raw_data: payload.raw_data ?? null,
+    created_at: payload.created_at ?? payload.createdAt ?? '',
+    updated_at: payload.updated_at ?? payload.updatedAt ?? '',
+  };
+}
+
 function backendUnavailableMessage(): ChatMessage {
   return {
     id: Math.random().toString(36).slice(2),
     role: 'assistant',
     content: 'Серверная часть недоступна. Повторите запрос позже или переключитесь в демонстрационный режим.',
-    status: 'backend_error',
+    status: 'failed',
     timestamp: toUiTimestamp(),
   };
 }
@@ -554,7 +823,8 @@ function notFoundMessage(query: string): ChatMessage {
     id: Math.random().toString(36).slice(2),
     role: 'assistant',
     content: `В базе знаний не найдено подтвержденных фрагментов по запросу «${query}». Попробуйте уточнить формулировку, проект, раздел или документ.`,
-    status: 'not_found',
+    status: 'answered',
+    limitation: 'По запросу не найдено подтвержденных источников в базе знаний.',
     timestamp: toUiTimestamp(),
   };
 }
@@ -564,7 +834,8 @@ function outOfScopeMessage(query: string): ChatMessage {
     id: Math.random().toString(36).slice(2),
     role: 'assistant',
     content: `Запрос «${query}» не относится к инженерным документам, НСИ или проектной проверке. Задайте вопрос в рамках базы знаний проекта.`,
-    status: 'out_of_scope',
+    status: 'answered',
+    limitation: 'Запрос вне области инженерной базы знаний.',
     timestamp: toUiTimestamp(),
   };
 }
@@ -578,7 +849,7 @@ async function demoChatMessage(query: string): Promise<ChatMessage> {
       role: 'assistant',
       content:
         'Нужно уточнить контекст, чтобы не дать слишком общий ответ. Укажите проект, тип конструкции, версию НСИ или конкретный документ.',
-      status: 'needs_clarification',
+      status: 'answered',
       limitation: 'По ТЗ ассистент не должен угадывать недостающие параметры.',
       timestamp: toUiTimestamp(),
     };
@@ -621,7 +892,14 @@ export const authApi = {
   },
   me: async (): Promise<AdminUser> => {
     const response = await gatewayRequest<any>(() => apiClient.get('/auth/me'));
-    return mapGatewayProfileToAdminUser(response.data);
+    const profile = mapGatewayProfileToAdminUser(response.data);
+    const store = useUIStore.getState();
+
+    store.upsertAdminUser(profile);
+    store.setCurrentUserId(profile.id);
+    store.setCurrentRole(USER_ROLE_BY_LABEL[profile.role] ?? 'user');
+
+    return profile;
   },
   refresh: async () => {
     const refreshToken = getRefreshToken();
@@ -755,11 +1033,22 @@ export const chatApi = {
         response = await sendToSession(activeSessionId);
       }
 
-      const session = await chatApi.getSession(activeSessionId);
-      const latestAssistant = [...session.messages].reverse().find((message) => message.role === 'assistant');
+      const messageId = response.data?.message_id ?? response.data?.answer_id;
+      if (!messageId) {
+        useUIStore.getState().setApiStatus('offline');
+        return chatLongpollIncompleteMessage();
+      }
+
+      let finalResponse;
+      try {
+        finalResponse = await waitForGatewayChatMessage(activeSessionId, String(messageId), 15, 4);
+      } catch {
+        useUIStore.getState().setApiStatus('offline');
+        return chatLongpollIncompleteMessage(String(messageId));
+      }
 
       useUIStore.getState().setApiStatus('online');
-      return latestAssistant ?? mapGatewayChatResponse({ ...response.data, session_id: activeSessionId }, query);
+      return mapGatewayChatResponse(finalResponse ?? { ...response.data, session_id: activeSessionId }, query);
     } catch {
       useUIStore.getState().setApiStatus('offline');
 
@@ -801,36 +1090,144 @@ export const searchApi = {
   },
 };
 
+export const draftsApi = {
+  create: async (file: File, input: DraftCreateInput = {}) => {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('source_type', input.sourceType?.trim() || 'OTHER');
+    appendFormValue(form, 'title', input.title?.trim());
+    appendFormValue(form, 'doc_code', input.docCode?.trim());
+    appendFormValue(form, 'mks_oks_code', input.mksOksCode?.trim());
+    appendFormValue(form, 'okstu_code', input.okstuCode?.trim());
+    appendFormValue(form, 'era', input.era?.trim());
+    appendFormValue(form, 'jurisdiction', input.jurisdiction?.trim());
+    appendFormValue(form, 'issuing_body', input.issuingBody?.trim());
+    if (input.metadata !== undefined && input.metadata !== null && input.metadata !== '') {
+      form.append('metadata', typeof input.metadata === 'string' ? input.metadata : JSON.stringify(input.metadata));
+    }
+
+    const response = await gatewayRequest<any>(() =>
+      apiClient.post('/drafts', form, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          ...(input.idempotencyKey ? { 'Idempotency-Key': input.idempotencyKey } : {}),
+        },
+      }),
+    );
+
+    return mapGatewayDraftRecord(response.data);
+  },
+  list: async (params: { documentKey?: string; status?: string; page?: number; pageSize?: number } = {}) => {
+    if (!params.documentKey) return [];
+
+    const response = await gatewayRequest<any>(() =>
+      apiClient.get('/drafts', {
+        params: {
+          document_key: params.documentKey,
+          status: params.status,
+          page: params.page ?? 1,
+          page_size: params.pageSize ?? 50,
+        },
+      }),
+    );
+
+    const items = Array.isArray(response.data?.items) ? response.data.items : [];
+    return items.map((item: any) => mapGatewayDraftRecord(item));
+  },
+  get: async (draftId: string) => {
+    const response = await gatewayRequest<any>(() => apiClient.get(`/drafts/${draftId}`));
+    return mapGatewayDraftRecord(response.data);
+  },
+  getPreview: async (draftId: string) => {
+    const response = await gatewayRequest<any>(() => apiClient.get(`/drafts/${draftId}/preview`));
+    return mapGatewayDraftRecord(response.data);
+  },
+  startPreview: async (draftId: string) => {
+    const response = await gatewayRequest<any>(() => apiClient.post(`/drafts/${draftId}/preview`));
+    return response.data;
+  },
+  waitPreview: async (draftId: string, longpoll = 15) => {
+    const response = await gatewayRequest<any>(() =>
+      apiClient.get(`/drafts/${draftId}/preview/status`, {
+        params: { longpoll },
+      }),
+    );
+    return response.data;
+  },
+  decide: async (draftId: string, action: 'approve' | 'reject', comment?: string) => {
+    const response = await gatewayRequest<any>(() =>
+      apiClient.patch(`/drafts/${draftId}/decide`, {
+        action,
+        comment,
+      }),
+    );
+    return response.data;
+  },
+  delete: async (draftId: string) => {
+    const response = await gatewayRequest<any>(() => apiClient.delete(`/drafts/${draftId}`));
+    return response.data;
+  },
+};
+
 export const documentsApi = {
   list: async () => {
     if (isDemoMode()) return MOCK_DOCUMENTS;
 
-    try {
-      const response = await gatewayRequest<any>(() => apiClient.get('/documents'));
-      return mapGatewayDocumentsResponse(response.data);
-    } catch {
-      return MOCK_DOCUMENTS;
-    }
+    const response = await gatewayRequest<any>(() => apiClient.get('/documents'));
+    return mapGatewayDocumentsResponse(response.data);
+  },
+  get: async (documentId: string) => {
+    const response = await gatewayRequest<any>(() => apiClient.get(`/documents/${documentId}`));
+    return mapGatewayDocumentDetailResponse(response.data);
+  },
+  status: async (documentId: string) => {
+    const response = await gatewayRequest<any>(() => apiClient.get(`/documents/${documentId}/status`));
+    return response.data as GatewayDocumentStatus;
+  },
+  history: async (documentId: string) => {
+    const response = await gatewayRequest<any>(() => apiClient.get(`/documents/${documentId}/history`));
+    return Array.isArray(response.data?.history) ? response.data.history : [];
+  },
+  errors: async (documentId: string) => {
+    const response = await gatewayRequest<any>(() => apiClient.get(`/documents/${documentId}/errors`));
+    const payload = response.data as GatewayDocumentErrors;
+    return Array.isArray(payload?.errors) ? payload.errors : [];
+  },
+  parameters: async (documentId: string) => {
+    const response = await gatewayRequest<any>(() => apiClient.get(`/documents/${documentId}/parameters`));
+    return response.data as GatewayDocumentParameters;
+  },
+  pages: async (documentId: string) => {
+    const response = await gatewayRequest<any>(() => apiClient.get(`/documents/${documentId}/pages`));
+    const payload = response.data as GatewayDocumentPages;
+    return Array.isArray(payload?.pages) ? payload.pages : [];
+  },
+  pagePreview: async (documentId: string, pageNumber: number) => {
+    const response = await gatewayRequest<any>(() => apiClient.get(`/documents/${documentId}/pages/${pageNumber}/preview`));
+    return response.data;
+  },
+  file: async (documentId: string) => {
+    const response = await gatewayRequest<any>(() => apiClient.get(`/documents/${documentId}/file`));
+    return response.data;
   },
   queue: async () => {
     if (isDemoMode()) return [];
 
-    try {
-      const response = await gatewayRequest<any>(() => apiClient.get('/documents/queue'));
-      return mapGatewayQueueResponse(response.data);
-    } catch {
-      return [];
-    }
+    const response = await gatewayRequest<any>(() => apiClient.get('/documents/queue'));
+    return mapGatewayQueueResponse(response.data);
   },
   knowledgeSections: async () => {
     if (isDemoMode()) return MOCK_KNOWLEDGE_SECTIONS;
 
-    try {
-      const response = await gatewayRequest<any>(() => apiClient.get('/classifiers/tree'));
-      return mapGatewayKnowledgeSections(response.data);
-    } catch {
-      return MOCK_KNOWLEDGE_SECTIONS;
-    }
+    const response = await gatewayRequest<any>(() =>
+      apiClient.get('/classifiers/tree', {
+        params: {
+          classifier_system: 'MKS',
+          max_depth: 10,
+        },
+      }),
+    );
+    return mapGatewayKnowledgeSections(response.data);
   },
   upload: async (file: File) => {
     const form = new FormData();
@@ -882,7 +1279,7 @@ export const historyApi = {
         return mapGatewayHistoryResponse(response.data);
       } catch {
         useUIStore.getState().setApiStatus('offline');
-        return MOCK_HISTORY;
+        return [];
       }
     }
   },
@@ -902,7 +1299,7 @@ export const metricsApi = {
       return mapGatewayMetricsResponse(response.data);
     } catch {
       useUIStore.getState().setApiStatus('offline');
-      return MOCK_METRICS;
+      return EMPTY_SYSTEM_METRICS;
     }
   },
   dashboard: async (): Promise<MetricsDashboard> => {
@@ -925,9 +1322,9 @@ export const metricsApi = {
     } catch {
       useUIStore.getState().setApiStatus('offline');
       return {
-        control: MOCK_METRICS,
-        answers: MOCK_ENGINEER_RATINGS,
-        logs: [{ time: toUiTimestamp(), text: 'Серверная часть недоступна, показаны демонстрационные метрики.', level: 'WARN' }],
+        control: EMPTY_SYSTEM_METRICS,
+        answers: EMPTY_ENGINEER_RATINGS,
+        logs: [],
       };
     }
   },
@@ -945,7 +1342,7 @@ export const adminApi = {
       return users;
     } catch {
       useUIStore.getState().setApiStatus('offline');
-      return useUIStore.getState().adminUsers;
+      throw new Error('Не удалось загрузить пользователей из Gateway');
     }
   },
   audit: async () => {
@@ -955,7 +1352,7 @@ export const adminApi = {
       const response = await gatewayRequest<any>(() => apiClient.get('/admin/audit'));
       return mapGatewayAuditResponse(response.data);
     } catch {
-      return [];
+      throw new Error('Не удалось загрузить журнал аудита из Gateway');
     }
   },
   updateUser: async (userId: string, payload: { role?: string; roles?: string[]; email?: string; fullName?: string; position?: string }) => {
@@ -976,41 +1373,43 @@ export const sourceApi = {
   preview: async (citation: Citation, previewKind: 'source' | 'document') => {
     if (!citation.documentId) return citation;
 
-    try {
-      if (previewKind === 'document') {
-        const response = await gatewayRequest<any>(() => apiClient.get(`/documents/${citation.documentId}/file`));
-
-        return {
-          ...citation,
-          text: response.data?.text ?? response.data?.content ?? citation.text,
-          documentUrl: response.data?.file_url ?? response.data?.document_url ?? citation.documentUrl,
-          contentType: response.data?.content_type ?? citation.contentType,
-        };
-      }
-
-      const [previewResponse, textResponse] = await Promise.allSettled([
-        gatewayRequest<any>(() => apiClient.get(`/documents/${citation.documentId}/pages/${citation.page}/preview`)),
-        gatewayRequest<any>(() => apiClient.get(`/documents/${citation.documentId}/pages/${citation.page}/text`)),
-      ]);
-
-      const previewData = previewResponse.status === 'fulfilled' ? previewResponse.value.data : {};
-      const textData = textResponse.status === 'fulfilled' ? textResponse.value.data : {};
+    if (previewKind === 'document') {
+      const response = await gatewayRequest<any>(() => apiClient.get(`/documents/${citation.documentId}/file`));
 
       return {
         ...citation,
-        text: textData?.full_text ?? textData?.text ?? previewData?.text ?? previewData?.content ?? citation.text,
-        pagePreviewUrl: previewData?.preview_url ?? previewData?.image_url ?? citation.pagePreviewUrl,
-        documentUrl: previewData?.file_url ?? previewData?.document_url ?? citation.documentUrl,
-        contentType: previewData?.content_type ?? textData?.content_type ?? citation.contentType,
+        text: response.data?.text ?? response.data?.content ?? citation.text,
+        documentUrl: response.data?.file_url ?? response.data?.document_url ?? citation.documentUrl,
+        contentType: response.data?.content_type ?? citation.contentType,
       };
-    } catch {
-      return citation;
     }
+
+    const [previewResponse, textResponse] = await Promise.allSettled([
+      gatewayRequest<any>(() => apiClient.get(`/documents/${citation.documentId}/pages/${citation.page}/preview`)),
+      gatewayRequest<any>(() => apiClient.get(`/documents/${citation.documentId}/pages/${citation.page}/text`)),
+    ]);
+
+    if (previewResponse.status !== 'fulfilled' && textResponse.status !== 'fulfilled') {
+      throw new Error('Gateway preview is unavailable');
+    }
+
+    const previewData = previewResponse.status === 'fulfilled' ? previewResponse.value.data : {};
+    const textData = textResponse.status === 'fulfilled' ? textResponse.value.data : {};
+
+    return {
+      ...citation,
+      text: textData?.full_text ?? textData?.text ?? previewData?.text ?? previewData?.content ?? citation.text,
+      pagePreviewUrl: previewData?.preview_url ?? previewData?.image_url ?? citation.pagePreviewUrl,
+      documentUrl: previewData?.file_url ?? previewData?.document_url ?? citation.documentUrl,
+      contentType: previewData?.content_type ?? textData?.content_type ?? citation.contentType,
+    };
   },
 };
 
 export const feedbackApi = {
   send: async (payload: { useful: boolean; comment: string; sessionId?: string; messageId?: string }) => {
+    if (isDemoMode()) return { ok: true, demo: true };
+
     try {
       await gatewayRequest<any>(() =>
         apiClient.post('/chat/feedback', {
@@ -1021,9 +1420,11 @@ export const feedbackApi = {
           comment: payload.comment,
         }),
       );
+      useUIStore.getState().setApiStatus('online');
       return { ok: true };
     } catch {
-      return { ok: true, demo: true };
+      useUIStore.getState().setApiStatus('offline');
+      throw new Error('Не удалось отправить отзыв в Gateway');
     }
   },
 };

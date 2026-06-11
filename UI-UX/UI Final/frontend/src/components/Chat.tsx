@@ -45,15 +45,27 @@ import { Feedback } from './Feedback';
 import { useUIStore } from '../store/uiStore';
 import { downloadPreviewFile } from '../utils/downloadPreview';
 
-const statusLabel = {
+type ChatStatus = NonNullable<ChatMessage['status']>;
+
+const statusLabel: Record<ChatStatus, string> = {
+  pending: 'ожидание',
+  enriching: 'обогащение запроса',
+  searching: 'поиск источников',
+  generating: 'генерация ответа',
+  enriching_citations: 'обогащение цитат',
   answered: 'ответ найден',
-  needs_clarification: 'нужно уточнение',
-  insufficient_data: 'недостаточно данных',
-  source_conflict: 'конфликт источников',
-  out_of_scope: 'вне области системы',
-  not_found: 'ничего не найдено',
-  backend_error: 'сервер недоступен',
+  failed: 'ошибка',
 } as const;
+
+const statusTone: Record<ChatStatus, 'success' | 'warning' | 'error' | 'info'> = {
+  pending: 'warning',
+  enriching: 'warning',
+  searching: 'warning',
+  generating: 'warning',
+  enriching_citations: 'info',
+  answered: 'success',
+  failed: 'error',
+};
 
 type ChatPreview = Citation & {
   previewId: string;
@@ -316,21 +328,24 @@ export const Chat: React.FC = () => {
     });
     setActiveCitationId(previewId);
 
-    void sourceApi.preview(citation, previewKind).then((hydratedCitation) => {
-      setOpenedCitations((prev) =>
-        prev.map((item) =>
-          item.previewId === previewId
-            ? {
-                ...item,
-                ...hydratedCitation,
-                page: previewKind === 'document' ? 1 : hydratedCitation.page,
-                previewId,
-                previewKind,
-              }
-            : item,
-        ),
-      );
-    });
+    void sourceApi
+      .preview(citation, previewKind)
+      .then((hydratedCitation) => {
+        setOpenedCitations((prev) =>
+          prev.map((item) =>
+            item.previewId === previewId
+              ? {
+                  ...item,
+                  ...hydratedCitation,
+                  page: previewKind === 'document' ? 1 : hydratedCitation.page,
+                  previewId,
+                  previewKind,
+                }
+              : item,
+          ),
+        );
+      })
+      .catch(() => undefined);
   };
 
   const closePreview = (previewId: string) => {
@@ -473,15 +488,7 @@ export const Chat: React.FC = () => {
                             <Chip
                               size="small"
                               label={statusLabel[msg.status]}
-                              color={
-                                msg.status === 'answered'
-                                  ? 'success'
-                                  : msg.status === 'needs_clarification'
-                                    ? 'warning'
-                                    : msg.status === 'out_of_scope' || msg.status === 'not_found'
-                                      ? 'info'
-                                      : 'error'
-                              }
+                              color={statusTone[msg.status]}
                               variant="outlined"
                               sx={{ height: 22, ml: 'auto' }}
                             />
@@ -542,8 +549,8 @@ export const Chat: React.FC = () => {
                               </Box>
                             ))}
                           </Box>
-                        ) : msg.status === 'not_found' || msg.status === 'out_of_scope' || msg.status === 'backend_error' ? (
-                          <Alert severity={msg.status === 'backend_error' ? 'error' : 'info'} variant="outlined" sx={{ mt: 1.4 }}>
+                        ) : msg.status === 'failed' ? (
+                          <Alert severity="error" variant="outlined" sx={{ mt: 1.4 }}>
                             {highlightText(msg.content, normalizedChatSearch, isLight)}
                           </Alert>
                         ) : (
@@ -563,7 +570,7 @@ export const Chat: React.FC = () => {
                           </Typography>
                         )}
 
-                        {msg.limitation && msg.status !== 'answered' && (
+                        {msg.limitation && (
                           <Alert severity="warning" variant="outlined" sx={{ mt: 2 }}>
                             {msg.limitation}
                           </Alert>

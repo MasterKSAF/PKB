@@ -27,15 +27,21 @@ import {
   FileText,
   Maximize2,
   RefreshCw,
+  Search,
   X,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useUIStore } from '../store/uiStore';
 import { MOCK_DOCUMENTS, MOCK_KNOWLEDGE_SECTIONS, type Citation, type Document, type KnowledgeSection } from '../utils/mockData';
-import { documentsApi, sourceApi } from '../utils/http';
+import { documentsApi, searchApi, sourceApi } from '../utils/http';
 import { downloadPreviewFile } from '../utils/downloadPreview';
 
-type SectionDocument = Document & { sectionId?: string };
+type SectionDocument = Document & {
+  sectionId?: string;
+  classifierCode?: string;
+  mksOksCode?: string;
+  okstuCode?: string;
+};
 type DocumentSort = 'updated_desc' | 'name_asc' | 'status';
 type PreviewPage = { title: string; lines: string[] };
 
@@ -45,17 +51,6 @@ const PANEL_SX = {
   borderWidth: 1.5,
   boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045)',
 } as const;
-
-const SECTION_DOCUMENT_ASSIGNMENTS: Record<string, string[]> = {
-  'kb-hull': ['d1'],
-  'kb-machinery': ['d2'],
-  'kb-electrical': ['d4'],
-  'kb-materials': ['d4'],
-  'kb-piping': ['d2'],
-  'kb-environment': ['d3'],
-  'kb-fire': ['d3'],
-  'kb-welding': ['d1'],
-};
 
 const createDocumentCitation = (doc: Document): Citation => ({
   id: `registry-${doc.id}`,
@@ -159,10 +154,25 @@ const sortDocuments = (documents: SectionDocument[], sort: DocumentSort) => {
   });
 };
 
-const matchSectionDocuments = (sectionId: string, documents: SectionDocument[]) => {
-  const assignedIds = SECTION_DOCUMENT_ASSIGNMENTS[sectionId] ?? [];
-  const matched = documents.filter((doc) => doc.sectionId === sectionId || assignedIds.includes(doc.id));
-  return matched.length > 0 ? matched : documents;
+const normalizeClassifierToken = (value?: string | null) => String(value ?? '').trim().toLowerCase();
+
+const classifierTokenMatches = (documentToken: string, sectionToken: string) => {
+  if (!documentToken || !sectionToken) return false;
+  return documentToken === sectionToken || documentToken.startsWith(`${sectionToken}.`);
+};
+
+const matchSectionDocuments = (section: KnowledgeSection, documents: SectionDocument[]) => {
+  const sectionTokens = [section.id, section.title].map(normalizeClassifierToken).filter(Boolean);
+
+  return documents.filter((doc) => {
+    const documentTokens = [doc.sectionId, doc.group, doc.classifierCode, doc.mksOksCode, doc.okstuCode]
+      .map(normalizeClassifierToken)
+      .filter(Boolean);
+
+    return sectionTokens.some((sectionToken) =>
+      documentTokens.some((documentToken) => classifierTokenMatches(documentToken, sectionToken)),
+    );
+  });
 };
 
 export const KnowledgeBase: React.FC = () => {
@@ -176,6 +186,7 @@ export const KnowledgeBase: React.FC = () => {
   const [previewError, setPreviewError] = useState('');
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
   const [previewPageIndex, setPreviewPageIndex] = useState(0);
+  const [knowledgeSearch, setKnowledgeSearch] = useState('');
 
   const documentsQuery = useQuery({
     queryKey: ['gateway-documents', workMode],
@@ -187,9 +198,55 @@ export const KnowledgeBase: React.FC = () => {
     queryFn: documentsApi.knowledgeSections,
     staleTime: 60_000,
   });
+  const documentDetailQuery = useQuery({
+    queryKey: ['gateway-document-detail', workMode, selectedDocument?.id],
+    queryFn: () => documentsApi.get(selectedDocument!.id),
+    enabled: Boolean(selectedDocument) && workMode === 'prod',
+    staleTime: 30_000,
+  });
+  const documentStatusQuery = useQuery({
+    queryKey: ['gateway-document-status', workMode, selectedDocument?.id],
+    queryFn: () => documentsApi.status(selectedDocument!.id),
+    enabled: Boolean(selectedDocument) && workMode === 'prod',
+    staleTime: 30_000,
+  });
+  const documentHistoryQuery = useQuery({
+    queryKey: ['gateway-document-history', workMode, selectedDocument?.id],
+    queryFn: () => documentsApi.history(selectedDocument!.id),
+    enabled: Boolean(selectedDocument) && workMode === 'prod',
+    staleTime: 30_000,
+  });
+  const documentErrorsQuery = useQuery({
+    queryKey: ['gateway-document-errors', workMode, selectedDocument?.id],
+    queryFn: () => documentsApi.errors(selectedDocument!.id),
+    enabled: Boolean(selectedDocument) && workMode === 'prod',
+    staleTime: 30_000,
+  });
+  const documentParametersQuery = useQuery({
+    queryKey: ['gateway-document-parameters', workMode, selectedDocument?.id],
+    queryFn: () => documentsApi.parameters(selectedDocument!.id),
+    enabled: Boolean(selectedDocument) && workMode === 'prod',
+    staleTime: 30_000,
+  });
+  const documentPagesQuery = useQuery({
+    queryKey: ['gateway-document-pages', workMode, selectedDocument?.id],
+    queryFn: () => documentsApi.pages(selectedDocument!.id),
+    enabled: Boolean(selectedDocument) && workMode === 'prod',
+    staleTime: 30_000,
+  });
+  const normalizedKnowledgeSearch = knowledgeSearch.trim();
+  const knowledgeSearchQuery = useQuery({
+    queryKey: ['knowledge-base-search', workMode, normalizedKnowledgeSearch],
+    queryFn: () => searchApi.query(normalizedKnowledgeSearch),
+    enabled: normalizedKnowledgeSearch.length >= 3,
+    staleTime: 15_000,
+  });
 
-  const rawDocuments = (documentsQuery.data ?? MOCK_DOCUMENTS) as SectionDocument[];
-  const knowledgeSections = knowledgeSectionsQuery.data ?? MOCK_KNOWLEDGE_SECTIONS;
+  const rawDocuments =
+    workMode === 'demo'
+      ? ((documentsQuery.data ?? MOCK_DOCUMENTS) as SectionDocument[])
+      : ((documentsQuery.data ?? []) as SectionDocument[]);
+  const knowledgeSections = workMode === 'demo' ? knowledgeSectionsQuery.data ?? MOCK_KNOWLEDGE_SECTIONS : knowledgeSectionsQuery.data ?? [];
 
   useEffect(() => {
     if (selectedSectionId && !knowledgeSections.some((section) => section.id === selectedSectionId)) {
@@ -213,8 +270,27 @@ export const KnowledgeBase: React.FC = () => {
 
   const sectionDocuments = useMemo(() => {
     if (!selectedSection) return [];
-    return sortDocuments(matchSectionDocuments(selectedSection.id, rawDocuments), documentSort);
+    return sortDocuments(matchSectionDocuments(selectedSection, rawDocuments), documentSort);
   }, [documentSort, rawDocuments, selectedSection]);
+  const visibleSectionDocuments = useMemo(() => {
+    if (!normalizedKnowledgeSearch) return sectionDocuments;
+    const normalized = normalizedKnowledgeSearch.toLowerCase();
+
+    return sectionDocuments.filter((document) =>
+      [
+        document.name,
+        document.type,
+        document.source,
+        document.version,
+        document.group ?? '',
+        document.sectionId ?? '',
+        document.classifierCode ?? '',
+        document.mksOksCode ?? '',
+        document.okstuCode ?? '',
+      ].some((value) => String(value).toLowerCase().includes(normalized)),
+    );
+  }, [normalizedKnowledgeSearch, sectionDocuments]);
+  const knowledgeSearchResults = Array.isArray(knowledgeSearchQuery.data) ? knowledgeSearchQuery.data : [];
 
   const handleOpenSection = (sectionId: string) => {
     setSelectedSectionId(sectionId);
@@ -244,14 +320,14 @@ export const KnowledgeBase: React.FC = () => {
       return;
     }
 
-    if (selectedDocument && !sectionDocuments.some((doc) => doc.id === selectedDocument.id)) {
+    if (selectedDocument && !visibleSectionDocuments.some((doc) => doc.id === selectedDocument.id)) {
       setSelectedDocument(null);
       setPreviewCitation(null);
       setPreviewError('');
       setPreviewDialogOpen(false);
       setPreviewPageIndex(0);
     }
-  }, [selectedDocument, sectionDocuments, selectedSection]);
+  }, [selectedDocument, selectedSection, visibleSectionDocuments]);
 
   const handleOpenPreview = useCallback(async (document: SectionDocument) => {
     const baseCitation = createDocumentCitation(document);
@@ -276,6 +352,20 @@ export const KnowledgeBase: React.FC = () => {
       setPreviewLoading(false);
     }
   }, [workMode]);
+
+  const handleOpenSearchResult = (item: any) => {
+    const documentId = String(item.documentId ?? item.document_id ?? item.id ?? '');
+    const document = rawDocuments.find((doc) => doc.id === documentId || doc.name === item.name);
+
+    if (!document) return;
+
+    const sectionId = document.sectionId ?? document.group;
+    if (sectionId && knowledgeSections.some((section) => section.id === sectionId)) {
+      setSelectedSectionId(sectionId);
+    }
+
+    void handleOpenPreview(document);
+  };
 
   const completedOcrCount = rawDocuments.filter((doc) => doc.ocrStatus === 'Завершено').length;
   const indexedCount = rawDocuments.filter((doc) => doc.indexStatus === 'Индексировано').length;
@@ -317,6 +407,12 @@ export const KnowledgeBase: React.FC = () => {
     [previewCitation, selectedDocument],
   );
   const currentPreviewPage = previewPages[Math.min(previewPageIndex, Math.max(previewPages.length - 1, 0))] ?? null;
+  const gatewayDocumentDetail = documentDetailQuery.data;
+  const gatewayDocumentStatus = documentStatusQuery.data;
+  const gatewayDocumentHistory = documentHistoryQuery.data ?? [];
+  const gatewayDocumentErrors = documentErrorsQuery.data ?? [];
+  const gatewayDocumentParameters = documentParametersQuery.data;
+  const gatewayDocumentPages = documentPagesQuery.data ?? [];
 
   const panelSx = {
     ...PANEL_SX,
@@ -379,6 +475,17 @@ export const KnowledgeBase: React.FC = () => {
           ))}
         </Box>
 
+        {(documentsQuery.isError || knowledgeSectionsQuery.isError) && (
+          <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2 }}>
+            {documentsQuery.isError && knowledgeSectionsQuery.isError
+              ? 'Gateway не вернул список документов и дерево разделов.'
+              : documentsQuery.isError
+                ? 'Gateway не вернул список документов.'
+                : 'Gateway не вернул дерево разделов.'}
+          </Alert>
+        )}
+
+        {!selectedSection && (
         <Paper variant="outlined" sx={{ p: 1.8, borderRadius: 3, ...panelSx }}>
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.2} sx={{ alignItems: { md: 'center' }, mb: 1.4 }}>
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flex: 1 }}>
@@ -393,6 +500,71 @@ export const KnowledgeBase: React.FC = () => {
               </Box>
             </Stack>
             <Chip size="small" label={`${knowledgeSections.length} разделов`} variant="outlined" />
+          </Stack>
+
+          <Stack spacing={1.2} sx={{ mb: 1.4 }}>
+            <TextField
+              size="small"
+              label="Поиск по базе знаний"
+              value={knowledgeSearch}
+              onChange={(event) => setKnowledgeSearch(event.target.value)}
+              placeholder="Введите документ, код, раздел или фрагмент"
+              slotProps={{
+                input: {
+                  startAdornment: <Search size={16} style={{ marginRight: 8, opacity: 0.72 }} />,
+                },
+              }}
+            />
+            {normalizedKnowledgeSearch.length > 0 && normalizedKnowledgeSearch.length < 3 && (
+              <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
+                Для поиска через Gateway нужно минимум 3 символа. Внутри открытого раздела список фильтруется сразу.
+              </Alert>
+            )}
+            {knowledgeSearchQuery.isError && (
+              <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2 }}>
+                Gateway не вернул результаты поиска по базе знаний.
+              </Alert>
+            )}
+            {normalizedKnowledgeSearch.length >= 3 && knowledgeSearchResults.length > 0 && (
+              <Paper variant="outlined" sx={{ p: 1.2, borderRadius: 2.2, ...panelSx }}>
+                <Stack spacing={1}>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Typography sx={{ fontWeight: 560 }}>Результаты поиска</Typography>
+                    <Chip size="small" label={`${knowledgeSearchResults.length}`} variant="outlined" />
+                  </Stack>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' }, gap: 1 }}>
+                    {knowledgeSearchResults.slice(0, 6).map((item: any, index: number) => {
+                      const documentId = String(item.documentId ?? item.document_id ?? item.id ?? '');
+                      const canOpen = rawDocuments.some((doc) => doc.id === documentId || doc.name === item.name);
+
+                      return (
+                        <Paper
+                          key={item.id ?? `${documentId}-${index}`}
+                          variant="outlined"
+                          onClick={() => {
+                            if (canOpen) handleOpenSearchResult(item);
+                          }}
+                          sx={{
+                            p: 1,
+                            borderRadius: 1.8,
+                            cursor: canOpen ? 'pointer' : 'default',
+                            bgcolor: isLight ? 'rgba(248,250,252,0.72)' : 'rgba(255,255,255,0.025)',
+                            borderColor: isLight ? 'rgba(14,116,144,0.18)' : 'rgba(198,216,240,0.20)',
+                          }}
+                        >
+                          <Typography sx={{ fontSize: '0.84rem', fontWeight: 560, lineHeight: 1.3 }}>
+                            {item.name ?? item.document ?? 'Документ базы знаний'}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.35, lineHeight: 1.35 }}>
+                            {item.fragment ?? item.section ?? 'Фрагмент найден Gateway-поиском.'}
+                          </Typography>
+                        </Paper>
+                      );
+                    })}
+                  </Box>
+                </Stack>
+              </Paper>
+            )}
           </Stack>
 
           <Box
@@ -460,6 +632,7 @@ export const KnowledgeBase: React.FC = () => {
             })}
           </Box>
         </Paper>
+        )}
 
         {selectedSection && (
         <Paper variant="outlined" sx={{ p: 1.8, borderRadius: 3, ...panelSx }}>
@@ -468,7 +641,7 @@ export const KnowledgeBase: React.FC = () => {
               <Button variant="outlined" startIcon={<ChevronLeft size={16} />} onClick={handleBackToSections}>
                 К разделам
               </Button>
-              <Chip size="small" label={`${selectedSection.documents} док.`} variant="outlined" />
+              <Chip size="small" label={`${sectionDocuments.length} док.`} variant="outlined" />
             </Stack>
 
             <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.2} sx={{ alignItems: { md: 'center' } }}>
@@ -503,11 +676,11 @@ export const KnowledgeBase: React.FC = () => {
                 <Stack spacing={1}>
                   <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
                     <Typography sx={{ fontWeight: 560 }}>Документы</Typography>
-                    <Chip size="small" label={`${sectionDocuments.length}`} variant="outlined" />
+                    <Chip size="small" label={`${visibleSectionDocuments.length}`} variant="outlined" />
                   </Stack>
 
                   <Stack divider={<Divider flexItem sx={{ borderColor: 'rgba(198, 214, 236, 0.14)' }} />}>
-                    {sectionDocuments.map((document) => {
+                    {visibleSectionDocuments.map((document) => {
                       const isSelected = selectedDocument?.id === document.id;
 
                       return (
@@ -557,9 +730,9 @@ export const KnowledgeBase: React.FC = () => {
                       );
                     })}
 
-                    {sectionDocuments.length === 0 && (
+                    {visibleSectionDocuments.length === 0 && (
                       <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
-                        Для этого раздела пока нет документов.
+                        {normalizedKnowledgeSearch ? 'По этому запросу в разделе ничего не найдено.' : 'Для этого раздела пока нет документов.'}
                       </Alert>
                     )}
                   </Stack>
@@ -657,6 +830,120 @@ export const KnowledgeBase: React.FC = () => {
                             </Stack>
                           </Stack>
                         )}
+                      </Paper>
+
+                      <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2.2, ...documentListSx }}>
+                        <Stack spacing={1.25}>
+                          <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                            <Typography sx={{ fontWeight: 560 }}>Сведения Gateway</Typography>
+                            <Chip
+                              size="small"
+                              variant="outlined"
+                              label={
+                                workMode === 'prod'
+                                  ? documentStatusQuery.isFetching
+                                    ? 'Обновляем'
+                                    : gatewayDocumentStatus?.status ?? gatewayDocumentDetail?.status ?? 'Статус не получен'
+                                  : 'Демо-данные'
+                              }
+                            />
+                          </Stack>
+
+                          {workMode === 'prod' && documentDetailQuery.isLoading ? (
+                            <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
+                              Получаем документ, его статус и историю из Gateway...
+                            </Alert>
+                          ) : workMode === 'prod' ? (
+                            <Stack spacing={1.2}>
+                              <Stack direction="row" spacing={0.8} useFlexGap sx={{ flexWrap: 'wrap' }}>
+                                <Chip label={`Версий: ${gatewayDocumentDetail?.total_versions ?? 0}`} size="small" variant="outlined" />
+                                <Chip
+                                  label={`Страниц: ${gatewayDocumentPages.length || 0}`}
+                                  size="small"
+                                  variant="outlined"
+                                />
+                                <Chip
+                                  label={`Ошибок: ${gatewayDocumentErrors.length || 0}`}
+                                  size="small"
+                                  variant="outlined"
+                                />
+                                <Chip
+                                  label={`История: ${gatewayDocumentHistory.length || 0}`}
+                                  size="small"
+                                  variant="outlined"
+                                />
+                              </Stack>
+
+                              <Box
+                                sx={{
+                                  display: 'grid',
+                                  gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' },
+                                  gap: 1,
+                                }}
+                              >
+                                <Paper variant="outlined" sx={{ p: 1.1, borderRadius: 2 }}>
+                                  <Typography variant="caption" color="text.secondary">
+                                    Метаданные
+                                  </Typography>
+                                  <Typography sx={{ fontWeight: 560, mt: 0.35 }}>{gatewayDocumentDetail?.title ?? selectedDocument.name}</Typography>
+                                  <Typography variant="body2" color="text.secondary">
+                                    {[
+                                      gatewayDocumentDetail?.doc_code ? `Код: ${gatewayDocumentDetail.doc_code}` : '',
+                                      gatewayDocumentDetail?.source_type ? `Тип: ${gatewayDocumentDetail.source_type}` : '',
+                                      gatewayDocumentDetail?.era ? `Эпоха: ${gatewayDocumentDetail.era}` : '',
+                                      gatewayDocumentDetail?.validity_status ? `Статус: ${gatewayDocumentDetail.validity_status}` : '',
+                                      gatewayDocumentDetail?.jurisdiction ? `Юрисдикция: ${gatewayDocumentDetail.jurisdiction}` : '',
+                                    ]
+                                      .filter(Boolean)
+                                      .join(' · ') || 'Gateway не вернул метаданные документа.'}
+                                  </Typography>
+                                </Paper>
+
+                                <Paper variant="outlined" sx={{ p: 1.1, borderRadius: 2 }}>
+                                  <Typography variant="caption" color="text.secondary">
+                                    Параметры и контроль
+                                  </Typography>
+                                  <Typography sx={{ fontWeight: 560, mt: 0.35 }}>
+                                    {typeof gatewayDocumentParameters?.extraction_confidence === 'number'
+                                      ? `Точность извлечения: ${Math.round(gatewayDocumentParameters.extraction_confidence * 100)}%`
+                                      : 'Точность извлечения не указана'}
+                                  </Typography>
+                                  <Typography variant="body2" color="text.secondary">
+                                    {gatewayDocumentParameters?.unconfirmed_fields?.length
+                                      ? `Неподтвержденные поля: ${gatewayDocumentParameters.unconfirmed_fields.join(', ')}`
+                                      : 'Неподтвержденные поля не переданы.'}
+                                  </Typography>
+                                </Paper>
+                              </Box>
+
+                              <Stack direction="row" spacing={0.8} useFlexGap sx={{ flexWrap: 'wrap' }}>
+                                {(gatewayDocumentParameters?.parameters && Object.keys(gatewayDocumentParameters.parameters).length
+                                  ? Object.entries(gatewayDocumentParameters.parameters)
+                                  : []
+                                )
+                                  .slice(0, 6)
+                                  .map(([key, value]) => (
+                                    <Chip
+                                      key={key}
+                                      size="small"
+                                      variant="outlined"
+                                      label={`${key}: ${Array.isArray(value) ? value.join(', ') : String(value)}`}
+                                    />
+                                  ))}
+                              </Stack>
+
+                              {gatewayDocumentErrors.length > 0 && (
+                                <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2 }}>
+                                  Последняя ошибка: {(gatewayDocumentErrors[0] as any)?.error_message ?? 'Gateway вернул список ошибок'}.
+                                </Alert>
+                              )}
+                            </Stack>
+                          ) : (
+                            <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
+                              В демо-режиме сведения о документе показываются из локальных карточек.
+                            </Alert>
+                          )}
+                        </Stack>
                       </Paper>
                     </>
                   ) : (

@@ -34,10 +34,9 @@ import {
   ZoomOut,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { searchApi } from '../utils/http';
+import { documentsApi, searchApi } from '../utils/http';
 import { useUIStore } from '../store/uiStore';
 import { downloadPreviewFile } from '../utils/downloadPreview';
-import { MOCK_KNOWLEDGE_SECTIONS } from '../utils/mockData';
 
 type DocumentPreview = {
   id: string;
@@ -135,6 +134,7 @@ function highlightPreviewText(text: string, query: string, isLight: boolean, act
 
 export const Search: React.FC = () => {
   const themeMode = useUIStore((state) => state.themeMode);
+  const workMode = useUIStore((state) => state.workMode);
   const isLight = themeMode === 'light';
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState({ type: 'all', version: 'all' });
@@ -148,7 +148,12 @@ export const Search: React.FC = () => {
   const [activePreviewSearchMatch, setActivePreviewSearchMatch] = useState(0);
   const [expandedPreviewOpen, setExpandedPreviewOpen] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
-  const knowledgeSections = MOCK_KNOWLEDGE_SECTIONS;
+  const knowledgeSectionsQuery = useQuery({
+    queryKey: ['gateway-knowledge-sections', workMode],
+    queryFn: documentsApi.knowledgeSections,
+    staleTime: 60_000,
+  });
+  const knowledgeSections = knowledgeSectionsQuery.data ?? [];
 
   const activeDocument = openedDocuments.find((doc) => doc.id === activeDocumentId) ?? openedDocuments[0];
   const normalizedPreviewSearch = previewSearch.trim().toLowerCase();
@@ -417,6 +422,12 @@ export const Search: React.FC = () => {
               </Collapse>
             </Box>
           </Paper>
+
+          {knowledgeSectionsQuery.isError && (
+            <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2.5, mb: 2 }}>
+              Gateway не вернул дерево разделов базы знаний. Фильтрация по разделам временно недоступна.
+            </Alert>
+          )}
 
           <Box sx={{ mb: 2, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
             <Typography variant="body2" color="text.secondary">
