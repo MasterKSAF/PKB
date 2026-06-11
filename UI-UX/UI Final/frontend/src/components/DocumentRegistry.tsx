@@ -36,7 +36,6 @@ import {
   ExternalLink,
   Eye,
   FileText,
-  FolderInput,
   History as HistoryIcon,
   Link2,
   MoreVertical,
@@ -74,7 +73,6 @@ const DOCUMENT_MENU_ACTIONS = [
   { label: 'Перезапустить OCR', icon: <RefreshCw size={15} /> },
   { label: 'Изменить метаданные', icon: <Edit3 size={15} /> },
   { label: 'История версий', icon: <HistoryIcon size={15} /> },
-  { label: 'Назначить раздел', icon: <FolderInput size={15} /> },
   { label: 'Архивировать', icon: <Archive size={15} /> },
 ] as const;
 
@@ -145,7 +143,6 @@ export const DocumentRegistry: React.FC = () => {
   const [menuAnchorEl, setMenuAnchorEl] = useState<HTMLElement | null>(null);
   const [menuDocument, setMenuDocument] = useState<Document | null>(null);
   const [documentOverrides, setDocumentOverrides] = useState<Record<string, Partial<Document>>>({});
-  const [documentSections, setDocumentSections] = useState<Record<string, string>>({});
   const [archivedDocumentIds, setArchivedDocumentIds] = useState<string[]>([]);
   const [previewDocument, setPreviewDocument] = useState<Document | null>(null);
   const [previewCitation, setPreviewCitation] = useState<Citation | null>(null);
@@ -156,7 +153,6 @@ export const DocumentRegistry: React.FC = () => {
   const [versionsDocument, setVersionsDocument] = useState<Document | null>(null);
   const [versions, setVersions] = useState<DocumentVersion[]>([]);
   const [versionsLoading, setVersionsLoading] = useState(false);
-  const [sectionDocument, setSectionDocument] = useState<Document | null>(null);
   const [archiveDocument, setArchiveDocument] = useState<Document | null>(null);
 
   const documentsQuery = useQuery({
@@ -169,9 +165,45 @@ export const DocumentRegistry: React.FC = () => {
     queryFn: documentsApi.knowledgeSections,
     staleTime: 60_000,
   });
+  const previewDocumentDetailQuery = useQuery({
+    queryKey: ['gateway-document-detail', workMode, previewDocument?.id],
+    queryFn: () => documentsApi.get(previewDocument!.id),
+    enabled: Boolean(previewDocument) && workMode === 'prod',
+    staleTime: 30_000,
+  });
+  const previewDocumentStatusQuery = useQuery({
+    queryKey: ['gateway-document-status', workMode, previewDocument?.id],
+    queryFn: () => documentsApi.status(previewDocument!.id),
+    enabled: Boolean(previewDocument) && workMode === 'prod',
+    staleTime: 30_000,
+  });
+  const previewDocumentHistoryQuery = useQuery({
+    queryKey: ['gateway-document-history', workMode, previewDocument?.id],
+    queryFn: () => documentsApi.history(previewDocument!.id),
+    enabled: Boolean(previewDocument) && workMode === 'prod',
+    staleTime: 30_000,
+  });
+  const previewDocumentErrorsQuery = useQuery({
+    queryKey: ['gateway-document-errors', workMode, previewDocument?.id],
+    queryFn: () => documentsApi.errors(previewDocument!.id),
+    enabled: Boolean(previewDocument) && workMode === 'prod',
+    staleTime: 30_000,
+  });
+  const previewDocumentParametersQuery = useQuery({
+    queryKey: ['gateway-document-parameters', workMode, previewDocument?.id],
+    queryFn: () => documentsApi.parameters(previewDocument!.id),
+    enabled: Boolean(previewDocument) && workMode === 'prod',
+    staleTime: 30_000,
+  });
+  const previewDocumentPagesQuery = useQuery({
+    queryKey: ['gateway-document-pages', workMode, previewDocument?.id],
+    queryFn: () => documentsApi.pages(previewDocument!.id),
+    enabled: Boolean(previewDocument) && workMode === 'prod',
+    staleTime: 30_000,
+  });
 
-  const rawDocuments = documentsQuery.data ?? MOCK_DOCUMENTS;
-  const knowledgeSections = knowledgeSectionsQuery.data ?? MOCK_KNOWLEDGE_SECTIONS;
+  const rawDocuments = workMode === 'demo' ? documentsQuery.data ?? MOCK_DOCUMENTS : documentsQuery.data ?? [];
+  const knowledgeSections = workMode === 'demo' ? knowledgeSectionsQuery.data ?? MOCK_KNOWLEDGE_SECTIONS : knowledgeSectionsQuery.data ?? [];
   const documents = rawDocuments
     .map((doc) => ({ ...doc, ...documentOverrides[doc.id] }))
     .filter((doc) => !archivedDocumentIds.includes(doc.id));
@@ -311,7 +343,16 @@ export const DocumentRegistry: React.FC = () => {
     setNotice(`Подготовка документа «${document.name}» к скачиванию`);
 
     const baseCitation = citationFromPreview ?? createDocumentCitation(document);
-    const citation = workMode === 'prod' ? await sourceApi.preview(baseCitation, 'document') : baseCitation;
+    let citation = baseCitation;
+
+    if (workMode === 'prod') {
+      try {
+        citation = await sourceApi.preview(baseCitation, 'document');
+      } catch {
+        setNotice(`Gateway не вернул предпросмотр для «${document.name}», скачиваем карточку документа.`);
+      }
+    }
+
     const fileUrl = resolveGatewayFileUrl(citation.documentUrl);
 
     if (fileUrl) {
@@ -388,15 +429,6 @@ export const DocumentRegistry: React.FC = () => {
     }
   };
 
-  const handleAssignSection = (sectionId: string) => {
-    if (!sectionDocument) return;
-
-    const section = knowledgeSections.find((item) => item.id === sectionId);
-    setDocumentSections((current) => ({ ...current, [sectionDocument.id]: sectionId }));
-    setNotice(`Документ «${sectionDocument.name}» назначен в раздел «${section?.title ?? sectionId}»`);
-    setSectionDocument(null);
-  };
-
   const handleConfirmArchive = () => {
     if (!archiveDocument) return;
     const document = archiveDocument;
@@ -440,20 +472,12 @@ export const DocumentRegistry: React.FC = () => {
       case 'История версий':
         void handleOpenVersions(document);
         break;
-      case 'Назначить раздел':
-        setSectionDocument(document);
-        break;
       case 'Архивировать':
         setArchiveDocument(document);
         break;
       default:
         break;
     }
-  };
-
-  const getAssignedSection = (documentId: string) => {
-    const sectionId = documentSections[documentId];
-    return knowledgeSections.find((section) => section.id === sectionId);
   };
 
   const panelSx = {
@@ -473,6 +497,12 @@ export const DocumentRegistry: React.FC = () => {
       boxShadow: '0 0 0 1px rgba(14, 116, 144, 0.14), 0 14px 34px rgba(15,23,42,0.06)',
     }),
   };
+  const previewGatewayDetail = previewDocumentDetailQuery.data;
+  const previewGatewayStatus = previewDocumentStatusQuery.data;
+  const previewGatewayHistory = previewDocumentHistoryQuery.data ?? [];
+  const previewGatewayErrors = previewDocumentErrorsQuery.data ?? [];
+  const previewGatewayParameters = previewDocumentParametersQuery.data;
+  const previewGatewayPages = previewDocumentPagesQuery.data ?? [];
 
   return (
     <Container maxWidth="xl" sx={{ py: 3 }}>
@@ -560,6 +590,16 @@ export const DocumentRegistry: React.FC = () => {
             </Box>
           ))}
         </Box>
+
+        {(documentsQuery.isError || knowledgeSectionsQuery.isError) && (
+          <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2 }}>
+            {documentsQuery.isError && knowledgeSectionsQuery.isError
+              ? 'Gateway не вернул список документов и дерево разделов.'
+              : documentsQuery.isError
+                ? 'Gateway не вернул список документов.'
+                : 'Gateway не вернул дерево разделов.'}
+          </Alert>
+        )}
 
         <Paper
           variant="outlined"
@@ -696,7 +736,8 @@ export const DocumentRegistry: React.FC = () => {
             </TableHead>
             <TableBody>
               {documents.map((doc) => {
-                const assignedSection = getAssignedSection(doc.id);
+                const assignedSection = knowledgeSections.find((section) => section.id === (doc.group ?? doc.sectionId));
+                const documentSectionLabel = assignedSection?.title ?? doc.group ?? doc.sectionId;
 
                 return (
                   <TableRow
@@ -708,9 +749,9 @@ export const DocumentRegistry: React.FC = () => {
                     <TableCell sx={{ fontWeight: 500 }}>
                       <Stack spacing={0.6}>
                         <Typography sx={{ fontSize: '0.83rem', fontWeight: 560, lineHeight: 1.35 }}>{doc.name}</Typography>
-                        {assignedSection && (
+                        {documentSectionLabel && (
                           <Chip
-                            label={`Раздел: ${assignedSection.title}`}
+                            label={`Раздел: ${documentSectionLabel}`}
                             size="small"
                             variant="outlined"
                             sx={{ alignSelf: 'flex-start', height: 20, fontSize: '0.68rem' }}
@@ -843,6 +884,107 @@ export const DocumentRegistry: React.FC = () => {
                   {previewDocument ? buildDocumentFallbackContent(previewDocument, previewCitation) : ''}
                 </Typography>
               </Paper>
+
+              <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2.4, ...PANEL_SX }}>
+                <Stack spacing={1.2}>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                    <Typography sx={{ fontWeight: 560 }}>Данные Gateway</Typography>
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      label={
+                        workMode === 'prod'
+                          ? previewDocumentStatusQuery.isFetching
+                            ? 'Обновляем'
+                            : previewGatewayStatus?.status ?? previewGatewayDetail?.status ?? 'Статус не получен'
+                          : 'Демо-данные'
+                      }
+                    />
+                  </Stack>
+
+                  {workMode === 'prod' && previewDocumentDetailQuery.isLoading ? (
+                    <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
+                      Получаем сведения документа, его статус и историю из Gateway...
+                    </Alert>
+                  ) : workMode === 'prod' ? (
+                    <>
+                      <Stack direction="row" spacing={0.8} useFlexGap sx={{ flexWrap: 'wrap' }}>
+                        <Chip label={`Версий: ${previewGatewayDetail?.total_versions ?? 0}`} size="small" variant="outlined" />
+                        <Chip label={`Страниц: ${previewGatewayPages.length || 0}`} size="small" variant="outlined" />
+                        <Chip label={`Ошибок: ${previewGatewayErrors.length || 0}`} size="small" variant="outlined" />
+                        <Chip label={`История: ${previewGatewayHistory.length || 0}`} size="small" variant="outlined" />
+                      </Stack>
+
+                      <Box
+                        sx={{
+                          display: 'grid',
+                          gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' },
+                          gap: 1,
+                        }}
+                      >
+                        <Paper variant="outlined" sx={{ p: 1.1, borderRadius: 2 }}>
+                          <Typography variant="caption" color="text.secondary">
+                            Метаданные
+                          </Typography>
+                          <Typography sx={{ fontWeight: 560, mt: 0.35 }}>{previewGatewayDetail?.title ?? previewDocument?.name}</Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            {[
+                              previewGatewayDetail?.doc_code ? `Код: ${previewGatewayDetail.doc_code}` : '',
+                              previewGatewayDetail?.source_type ? `Тип: ${previewGatewayDetail.source_type}` : '',
+                              previewGatewayDetail?.era ? `Эпоха: ${previewGatewayDetail.era}` : '',
+                              previewGatewayDetail?.validity_status ? `Статус: ${previewGatewayDetail.validity_status}` : '',
+                            ]
+                              .filter(Boolean)
+                              .join(' · ') || 'Gateway не вернул метаданные документа.'}
+                          </Typography>
+                        </Paper>
+
+                        <Paper variant="outlined" sx={{ p: 1.1, borderRadius: 2 }}>
+                          <Typography variant="caption" color="text.secondary">
+                            Параметры
+                          </Typography>
+                          <Typography sx={{ fontWeight: 560, mt: 0.35 }}>
+                            {typeof previewGatewayParameters?.extraction_confidence === 'number'
+                              ? `Точность извлечения: ${Math.round(previewGatewayParameters.extraction_confidence * 100)}%`
+                              : 'Точность извлечения не указана'}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            {previewGatewayParameters?.unconfirmed_fields?.length
+                              ? `Неподтвержденные поля: ${previewGatewayParameters.unconfirmed_fields.join(', ')}`
+                              : 'Неподтвержденные поля не переданы.'}
+                          </Typography>
+                        </Paper>
+                      </Box>
+
+                      <Stack direction="row" spacing={0.8} useFlexGap sx={{ flexWrap: 'wrap' }}>
+                        {(previewGatewayParameters?.parameters && Object.keys(previewGatewayParameters.parameters).length
+                          ? Object.entries(previewGatewayParameters.parameters)
+                          : []
+                        )
+                          .slice(0, 6)
+                          .map(([key, value]) => (
+                            <Chip
+                              key={key}
+                              size="small"
+                              variant="outlined"
+                              label={`${key}: ${Array.isArray(value) ? value.join(', ') : String(value)}`}
+                            />
+                          ))}
+                      </Stack>
+
+                      {previewGatewayErrors.length > 0 && (
+                        <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2 }}>
+                          Последняя ошибка: {(previewGatewayErrors[0] as any)?.error_message ?? 'Gateway вернул список ошибок'}.
+                        </Alert>
+                      )}
+                    </>
+                  ) : (
+                    <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
+                      В демо-режиме сведения о документе показываются из локальных карточек.
+                    </Alert>
+                  )}
+                </Stack>
+              </Paper>
             </Stack>
           )}
         </DialogContent>
@@ -938,28 +1080,6 @@ export const DocumentRegistry: React.FC = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setVersionsDocument(null)}>Закрыть</Button>
-        </DialogActions>
-      </Dialog>
-
-      <Dialog open={Boolean(sectionDocument)} onClose={() => setSectionDocument(null)} maxWidth="sm" fullWidth>
-        <DialogTitle>Назначить раздел</DialogTitle>
-        <DialogContent dividers>
-          <Stack spacing={1.2}>
-            <Typography color="text.secondary">Выберите раздел базы знаний для документа «{sectionDocument?.name}».</Typography>
-            {knowledgeSections.map((section) => (
-              <Button key={section.id} variant="outlined" onClick={() => handleAssignSection(section.id)} sx={{ justifyContent: 'flex-start', textAlign: 'left' }}>
-                <Stack spacing={0.2} sx={{ alignItems: 'flex-start' }}>
-                  <Typography sx={{ fontWeight: 560 }}>{section.title}</Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {section.description}
-                  </Typography>
-                </Stack>
-              </Button>
-            ))}
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setSectionDocument(null)}>Отмена</Button>
         </DialogActions>
       </Dialog>
 

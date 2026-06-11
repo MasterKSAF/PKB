@@ -37,23 +37,23 @@ type HistoryPreview = Citation & {
 };
 
 const statusLabel: Record<AnswerStatus, string> = {
+  pending: 'ожидание',
+  enriching: 'обогащение запроса',
+  searching: 'поиск источников',
+  generating: 'генерация ответа',
+  enriching_citations: 'обогащение цитат',
   answered: 'ответ найден',
-  needs_clarification: 'нужно уточнение',
-  insufficient_data: 'недостаточно данных',
-  source_conflict: 'конфликт источников',
-  out_of_scope: 'вне области системы',
-  not_found: 'ничего не найдено',
-  backend_error: 'сервер недоступен',
+  failed: 'ошибка',
 };
 
 const statusColor: Record<AnswerStatus, 'success' | 'warning' | 'error' | 'info'> = {
+  pending: 'warning',
+  enriching: 'warning',
+  searching: 'warning',
+  generating: 'warning',
+  enriching_citations: 'info',
   answered: 'success',
-  needs_clarification: 'warning',
-  insufficient_data: 'error',
-  source_conflict: 'info',
-  out_of_scope: 'info',
-  not_found: 'info',
-  backend_error: 'error',
+  failed: 'error',
 };
 
 const tableShellSx = {
@@ -238,14 +238,17 @@ export const History: React.FC = () => {
 
     setActivePreview(nextPreview);
 
-    void sourceApi.preview(citation, previewKind).then((hydratedCitation) => {
-      setActivePreview({
-        ...nextPreview,
-        ...hydratedCitation,
-        page: previewKind === 'document' ? 1 : hydratedCitation.page,
-        previewKind,
-      });
-    });
+    void sourceApi
+      .preview(citation, previewKind)
+      .then((hydratedCitation) => {
+        setActivePreview({
+          ...nextPreview,
+          ...hydratedCitation,
+          page: previewKind === 'document' ? 1 : hydratedCitation.page,
+          previewKind,
+        });
+      })
+      .catch(() => undefined);
   };
 
   return (

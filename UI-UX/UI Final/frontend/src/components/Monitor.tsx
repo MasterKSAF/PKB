@@ -2,7 +2,6 @@ import React from 'react';
 import { Box, Chip, Container, Divider, IconButton, Paper, Tooltip, Typography } from '@mui/material';
 import { BadgeCheck, Clock3, Database, Info, ScanSearch, ShieldCheck, Terminal } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { MOCK_ENGINEER_RATINGS, MOCK_METRICS } from '../utils/mockData';
 import { useUIStore } from '../store/uiStore';
 import { metricsApi } from '../utils/http';
 
@@ -16,10 +15,7 @@ const cardSurface = {
 const controlMetrics = [
   {
     label: 'Качество OCR',
-    value: `${MOCK_METRICS.ocrQuality}%`,
     target: 'цель не ниже 80%',
-    state: MOCK_METRICS.ocrQuality >= 80 ? 'в норме' : 'ниже цели',
-    ok: MOCK_METRICS.ocrQuality >= 80,
     icon: <Database size={18} />,
     accent: '#7edfa6',
     helper:
@@ -27,10 +23,7 @@ const controlMetrics = [
   },
   {
     label: 'Качество поиска',
-    value: `${MOCK_METRICS.retrievalQuality}%`,
     target: 'цель не ниже 85%',
-    state: MOCK_METRICS.retrievalQuality >= 85 ? 'в норме' : 'ниже цели',
-    ok: MOCK_METRICS.retrievalQuality >= 85,
     icon: <ScanSearch size={18} />,
     accent: '#89c3ff',
     helper:
@@ -38,10 +31,7 @@ const controlMetrics = [
   },
   {
     label: 'Ответы с указанием страницы',
-    value: `${MOCK_METRICS.answersWithSources}%`,
     target: 'цель 100%',
-    state: MOCK_METRICS.answersWithSources >= 100 ? 'в норме' : 'ниже цели',
-    ok: MOCK_METRICS.answersWithSources >= 100,
     icon: <ShieldCheck size={18} />,
     accent: '#d6c07f',
     helper:
@@ -49,10 +39,7 @@ const controlMetrics = [
   },
   {
     label: 'Среднее время поиска',
-    value: `${MOCK_METRICS.searchLatency} с`,
     target: 'цель не более 30 с',
-    state: MOCK_METRICS.searchLatency <= 30 ? 'в норме' : 'выше цели',
-    ok: MOCK_METRICS.searchLatency <= 30,
     icon: <Clock3 size={18} />,
     accent: '#a58cff',
     helper:
@@ -63,7 +50,6 @@ const controlMetrics = [
 const answerMetrics = [
   {
     label: 'Полезные ответы',
-    value: `${MOCK_ENGINEER_RATINGS.usefulRate}%`,
     note: 'по оценке инженеров',
     accent: '#a58cff',
     state: 'основная метрика',
@@ -72,7 +58,6 @@ const answerMetrics = [
   },
   {
     label: 'Оценено ответов',
-    value: `${MOCK_ENGINEER_RATINGS.ratedAnswers}`,
     note: 'уже попали в статистику',
     accent: '#8ec5ff',
     state: 'есть база оценки',
@@ -81,7 +66,6 @@ const answerMetrics = [
   },
   {
     label: 'На ручную проверку',
-    value: `${MOCK_ENGINEER_RATINGS.flaggedForReview}`,
     note: 'кейсов отправлено на разбор',
     accent: '#d6c07f',
     state: 'нужен разбор',
@@ -90,50 +74,11 @@ const answerMetrics = [
   },
   {
     label: 'Спорные после разбора',
-    value: `${MOCK_ENGINEER_RATINGS.unresolvedAfterReview}`,
     note: 'кейса требуют повторного решения',
     accent: '#e39a86',
     state: 'открытые вопросы',
     helper:
       'Количество кейсов, которые остаются проблемными даже после первичной ручной проверки.',
-  },
-];
-
-const logRows = [
-  {
-    time: '12:34:02',
-    text: 'Поиск по запросу "сталь корпуса" завершен. Подобрано 5 документов.',
-    color: '#9fd3ff',
-  },
-  {
-    time: '12:34:05',
-    text: 'Страница 45 документа "Спецификация-2" помечена как требующая проверки.',
-    color: '#f0c36d',
-  },
-  {
-    time: '12:34:10',
-    text: 'Получена инженерная оценка: ответ полезен, замечаний нет.',
-    color: 'rgba(217, 221, 229, 0.88)',
-  },
-  {
-    time: '12:35:01',
-    text: 'Переиндексация новой партии документов завершена без ошибок.',
-    color: 'rgba(217, 221, 229, 0.88)',
-  },
-  {
-    time: '12:35:26',
-    text: 'Среднее время поиска за час: 1.4 с. Отклонений не обнаружено.',
-    color: '#c5afff',
-  },
-  {
-    time: '12:35:43',
-    text: 'Кейс 18 направлен на ручную проверку из-за расхождения версии документа.',
-    color: '#f0c36d',
-  },
-  {
-    time: '12:36:11',
-    text: 'Ответ с источником подтвержден инженером и включен в контрольную выборку.',
-    color: '#8fd4aa',
   },
 ];
 
@@ -268,9 +213,21 @@ export const Monitor: React.FC = () => {
   });
 
   const dashboard = metricsQuery.data ?? {
-    control: MOCK_METRICS,
-    answers: MOCK_ENGINEER_RATINGS,
-    logs: logRows.map((row) => ({ time: row.time, text: row.text, level: 'INFO' })),
+    control: {
+      ocrQuality: 0,
+      retrievalQuality: 0,
+      answersWithSources: 0,
+      manualReviewQueue: 0,
+      searchLatency: 0,
+    },
+    answers: {
+      ratedAnswers: 0,
+      usefulRate: 0,
+      flaggedForReview: 0,
+      unresolvedAfterReview: 0,
+      commonSignals: [],
+    },
+    logs: [],
   };
 
   const currentControlMetrics = controlMetrics.map((metric, index) => {
@@ -311,13 +268,11 @@ export const Monitor: React.FC = () => {
     return { ...metric, ...values[index] };
   });
 
-  const currentLogRows = dashboard.logs.length
-    ? dashboard.logs.map((row) => ({
-        time: row.time,
-        text: row.text,
-        color: row.level === 'ERROR' ? '#e39a86' : row.level === 'WARN' ? '#f0c36d' : 'rgba(217, 221, 229, 0.88)',
-      }))
-    : logRows;
+  const currentLogRows = dashboard.logs.map((row) => ({
+    time: row.time,
+    text: row.text,
+    color: row.level === 'ERROR' ? '#e39a86' : row.level === 'WARN' ? '#f0c36d' : 'rgba(217, 221, 229, 0.88)',
+  }));
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -439,6 +394,19 @@ export const Monitor: React.FC = () => {
                 <Box component="span">{row.text}</Box>
               </Box>
             ))}
+            {!currentLogRows.length && (
+              <Box
+                sx={{
+                  px: 1.35,
+                  py: 1.15,
+                  color: 'rgba(171, 183, 201, 0.72)',
+                  fontStyle: 'italic',
+                  bgcolor: isLight ? 'rgba(15, 23, 42, 0.02)' : 'rgba(255,255,255,0.016)',
+                }}
+              >
+                Журнал проверки пуст.
+              </Box>
+            )}
           </Box>
         </Paper>
       </Box>

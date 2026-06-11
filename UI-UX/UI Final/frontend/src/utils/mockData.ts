@@ -13,13 +13,13 @@ export interface Citation {
 }
 
 export type AnswerStatus =
+  | 'pending'
+  | 'enriching'
+  | 'searching'
+  | 'generating'
+  | 'enriching_citations'
   | 'answered'
-  | 'needs_clarification'
-  | 'insufficient_data'
-  | 'source_conflict'
-  | 'out_of_scope'
-  | 'not_found'
-  | 'backend_error';
+  | 'failed';
 
 export interface ChatMessage {
   id: string;
@@ -40,6 +40,10 @@ export interface Document {
   ocrStatus: 'Завершено' | 'В обработке' | 'Ошибка';
   indexStatus: 'Индексировано' | 'Ожидание';
   updatedAt: string;
+  sectionId?: string;
+  group?: string;
+  sourceType?: string;
+  documentKey?: string;
 }
 
 export interface SystemMetrics {
@@ -207,7 +211,8 @@ export const MOCK_CHAT_THREADS: Record<string, ChatMessage[]> = {
       content:
         'Нужно уточнить состав системы, проектную стадию и документ, по которому выполняется сверка. Без этого система не должна подставлять случайный источник.',
       timestamp: '11:35',
-      status: 'needs_clarification',
+      status: 'answered',
+      limitation: 'Нужно уточнение: не хватает проектного контекста.',
     },
   ],
   'chat-ocr': [
@@ -240,6 +245,9 @@ export const MOCK_DOCUMENTS: Document[] = [
     ocrStatus: 'Завершено',
     indexStatus: 'Индексировано',
     updatedAt: '2026-04-20',
+    sectionId: 'kb-hull',
+    group: 'kb-hull',
+    sourceType: 'DWG',
   },
   {
     id: 'd2',
@@ -250,6 +258,9 @@ export const MOCK_DOCUMENTS: Document[] = [
     ocrStatus: 'Завершено',
     indexStatus: 'Индексировано',
     updatedAt: '2026-04-18',
+    sectionId: 'kb-machinery',
+    group: 'kb-machinery',
+    sourceType: 'PDF',
   },
   {
     id: 'd3',
@@ -260,6 +271,9 @@ export const MOCK_DOCUMENTS: Document[] = [
     ocrStatus: 'В обработке',
     indexStatus: 'Ожидание',
     updatedAt: '2026-04-21',
+    sectionId: 'kb-fire',
+    group: 'kb-fire',
+    sourceType: 'PDF',
   },
   {
     id: 'd4',
@@ -270,6 +284,9 @@ export const MOCK_DOCUMENTS: Document[] = [
     ocrStatus: 'Завершено',
     indexStatus: 'Индексировано',
     updatedAt: '2026-04-19',
+    sectionId: 'kb-materials',
+    group: 'kb-materials',
+    sourceType: 'XLSX',
   },
 ];
 
@@ -382,7 +399,7 @@ export const MOCK_HISTORY: QueryHistoryItem[] = [
     query: 'Какая минимальная толщина листа для корпуса?',
     answer: 'Требуется уточнить проект, тип конструкции и актуальную редакцию нормы.',
     sources: 1,
-    status: 'needs_clarification',
+    status: 'answered',
     createdAt: '2026-04-23 10:14',
     messages: [
       {
@@ -396,7 +413,8 @@ export const MOCK_HISTORY: QueryHistoryItem[] = [
         role: 'assistant',
         content: 'Уточните проект, район корпуса и тип конструкции. Без этих данных нельзя корректно выбрать требование НСИ.',
         timestamp: '10:15',
-        status: 'needs_clarification',
+        status: 'answered',
+        limitation: 'Нужно уточнение: не хватает проектного контекста.',
         citations: [MOCK_CITATIONS[0]],
       },
     ],

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Typography, Button, TextField, IconButton, Tooltip } from '@mui/material';
+import { Alert, Box, Typography, Button, TextField, IconButton, Tooltip } from '@mui/material';
 import { ThumbsUp, ThumbsDown, Send } from 'lucide-react';
 import { feedbackApi } from '../utils/http';
 
@@ -7,21 +7,30 @@ export const Feedback: React.FC = () => {
   const [useful, setUseful] = useState<boolean | null>(null);
   const [comment, setComment] = useState('');
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState('');
 
   const toggleUseful = (nextValue: boolean) => {
     if (useful === nextValue) {
       setUseful(null);
       setComment('');
+      setError('');
       return;
     }
 
     setUseful(nextValue);
+    setError('');
   };
 
   const handleSend = async () => {
     if (useful === null) return;
-    await feedbackApi.send({ useful, comment });
-    setSent(true);
+    setError('');
+
+    try {
+      await feedbackApi.send({ useful, comment });
+      setSent(true);
+    } catch (sendError: any) {
+      setError(sendError?.message ?? 'Не удалось отправить отзыв.');
+    }
   };
 
   if (sent) {
@@ -72,29 +81,36 @@ export const Feedback: React.FC = () => {
         </Box>
 
         {useful !== null && (
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <TextField
-              fullWidth
-              size="small"
-              placeholder="Что можно улучшить?"
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  bgcolor: 'rgba(255, 255, 255, 0.03)',
-                  fontSize: '0.8rem',
-                },
-              }}
-            />
-            <Button
-              variant="outlined"
-              size="small"
-              onClick={handleSend}
-              startIcon={<Send size={14} />}
-            >
-              Отправить
-            </Button>
-          </Box>
+          <>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <TextField
+                fullWidth
+                size="small"
+                placeholder="Что можно улучшить?"
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    bgcolor: 'rgba(255, 255, 255, 0.03)',
+                    fontSize: '0.8rem',
+                  },
+                }}
+              />
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={handleSend}
+                startIcon={<Send size={14} />}
+              >
+                Отправить
+              </Button>
+            </Box>
+            {error && (
+              <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2 }}>
+                {error}
+              </Alert>
+            )}
+          </>
         )}
       </Box>
     </Box>

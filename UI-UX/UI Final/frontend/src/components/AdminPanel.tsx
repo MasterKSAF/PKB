@@ -32,13 +32,11 @@ import { adminApi } from '../utils/http';
 type RoleLabel = AdminUser['role'];
 type AccessKey =
   | 'chat'
-  | 'search'
   | 'documents'
   | 'knowledgeProcessing'
   | 'history'
   | 'qa'
   | 'admin'
-  | 'ocrArtifacts'
   | 'processingLogs';
 
 const ROLE_OPTIONS: RoleLabel[] = ['Пользователь', 'Администратор знаний', 'Системный администратор'];
@@ -51,7 +49,6 @@ const GATEWAY_ROLE_BY_LABEL: Record<RoleLabel, string> = {
 
 const ACCESS_OPTIONS: Array<{ key: AccessKey; label: string; description: string }> = [
   { key: 'chat', label: 'Чат', description: 'вопросы к ассистенту и просмотр ответов' },
-  { key: 'search', label: 'Поиск', description: 'поиск документов и фрагментов по базе знаний' },
   { key: 'documents', label: 'База знаний', description: 'просмотр и обслуживание базы документов' },
   {
     key: 'knowledgeProcessing',
@@ -61,13 +58,12 @@ const ACCESS_OPTIONS: Array<{ key: AccessKey; label: string; description: string
   { key: 'history', label: 'История', description: 'журнал запросов и ответов' },
   { key: 'qa', label: 'QA', description: 'метрики качества и инженерские оценки' },
   { key: 'admin', label: 'Администрирование', description: 'пользователи, роли и права доступа' },
-  { key: 'ocrArtifacts', label: 'OCR-артефакты', description: 'исходные тексты OCR и промежуточные результаты' },
   { key: 'processingLogs', label: 'Журналы', description: 'журналы обработки документов и действий' },
 ];
 
 const DEFAULT_ACCESS_BY_ROLE: Record<RoleLabel, AccessKey[]> = {
-  Пользователь: ['chat', 'search', 'history'],
-  'Администратор знаний': ['chat', 'search', 'documents', 'knowledgeProcessing', 'history', 'qa', 'ocrArtifacts', 'processingLogs'],
+  Пользователь: ['chat', 'documents', 'history'],
+  'Администратор знаний': ['chat', 'documents', 'knowledgeProcessing', 'history', 'processingLogs'],
   'Системный администратор': ACCESS_OPTIONS.map((item) => item.key),
 };
 
@@ -133,7 +129,6 @@ function inferAccessKeys(user: AdminUser) {
   if (normalizedAccess.includes('все вкладки')) return ACCESS_OPTIONS.map((item) => item.key);
 
   const matched = ACCESS_OPTIONS.filter((item) => normalizedAccess.includes(item.label.toLowerCase())).map((item) => item.key);
-  if (normalizedAccess.includes('ocr')) matched.push('ocrArtifacts');
   if (normalizedAccess.includes('журнал')) matched.push('processingLogs');
 
   return Array.from(new Set(matched.length > 0 ? matched : DEFAULT_ACCESS_BY_ROLE[user.role]));
@@ -223,25 +218,16 @@ export const AdminPanel: React.FC = () => {
   const canManagePermissions = availableSections.includes('permissions');
   const canSeeFullLogs = currentRole === 'systemAdmin';
   const [gatewayProcessingLogs, setGatewayProcessingLogs] = useState<typeof MOCK_PROCESSING_LOGS>([]);
-  const processingLogs = gatewayProcessingLogs.length ? gatewayProcessingLogs : MOCK_PROCESSING_LOGS;
+  const processingLogs =
+    workMode === 'demo'
+      ? gatewayProcessingLogs.length
+        ? gatewayProcessingLogs
+        : MOCK_PROCESSING_LOGS
+      : gatewayProcessingLogs;
   const logs = canSeeFullLogs
     ? processingLogs
     : processingLogs.filter((log) => log.visibility !== 'Администратор');
   const contentAdminCards = [
-    {
-      label: 'Документы',
-      value: 'загрузка и версии',
-      note: 'файлы, ссылки, источник хранения',
-      icon: <ClipboardList size={17} />,
-      accent: '#9fb6d8',
-    },
-    {
-      label: 'OCR',
-      value: 'повторная обработка',
-      note: 'страницы, качество распознавания',
-      icon: <SlidersHorizontal size={17} />,
-      accent: '#98d9d8',
-    },
     {
       label: 'Артефакты',
       value: 'текст, чанки, индекс',
@@ -268,17 +254,32 @@ export const AdminPanel: React.FC = () => {
   useEffect(() => {
     let alive = true;
 
-    void adminApi.users().then((users) => {
-      if (alive && users.length) {
-        setAdminUsers(users);
-      }
-    });
+    void adminApi
+      .users()
+      .then((users) => {
+        if (alive && users.length) {
+          setAdminUsers(users);
+        }
+      })
+      .catch(() => {
+        if (alive && workMode === 'prod') {
+          setAdminNotice('Не удалось загрузить пользователей из Gateway.');
+        }
+      });
 
-    void adminApi.audit().then((items) => {
-      if (alive && items.length) {
-        setGatewayProcessingLogs(items);
-      }
-    });
+    void adminApi
+      .audit()
+      .then((items) => {
+        if (alive) {
+          setGatewayProcessingLogs(items);
+        }
+      })
+      .catch(() => {
+        if (alive && workMode === 'prod') {
+          setGatewayProcessingLogs([]);
+          setAdminNotice('Не удалось загрузить административный журнал из Gateway.');
+        }
+      });
 
     return () => {
       alive = false;
