@@ -122,6 +122,7 @@ def create_document(db: Session, doc_code: str, title: str, **kwargs) -> Documen
     db.add(document)
     db.commit()
     db.refresh(document)
+    check_and_quarantine_classifiers(db, document)
     return document
 
 
@@ -148,6 +149,7 @@ def update_document(db: Session, document_id: str, **kwargs) -> Optional[Documen
     
     db.commit()
     db.refresh(document)
+    check_and_quarantine_classifiers(db, document)
     return document
 
 
@@ -573,5 +575,45 @@ def update_document_status(
     db.refresh(history)
 
     return document, history, old_status
+
+
+def check_and_quarantine_classifiers(db: Session, document: Document):
+    """Check classification codes on the document and add them to pending quarantine if missing."""
+    from api.v1.crud.classifier import get_classifier, create_classifier_pending
+    from api.v1.models import ClassifierPending
+
+    # 1. Check mks_oks_code
+    if document.mks_oks_code:
+        exists = get_classifier(db, 'MKS', document.mks_oks_code)
+        if not exists:
+            already_pending = db.query(ClassifierPending).filter(
+                ClassifierPending.system == 'MKS',
+                ClassifierPending.code == document.mks_oks_code
+            ).first()
+            if not already_pending:
+                create_classifier_pending(db, system='MKS', code=document.mks_oks_code, found_in_document_id=str(document.id))
+
+    # 2. Check okstu_code
+    if document.okstu_code:
+        exists = get_classifier(db, 'OKSTU', document.okstu_code)
+        if not exists:
+            already_pending = db.query(ClassifierPending).filter(
+                ClassifierPending.system == 'OKSTU',
+                ClassifierPending.code == document.okstu_code
+            ).first()
+            if not already_pending:
+                create_classifier_pending(db, system='OKSTU', code=document.okstu_code, found_in_document_id=str(document.id))
+
+    # 3. Check udc
+    if document.udc:
+        exists = get_classifier(db, 'UDC', document.udc)
+        if not exists:
+            already_pending = db.query(ClassifierPending).filter(
+                ClassifierPending.system == 'UDC',
+                ClassifierPending.code == document.udc
+            ).first()
+            if not already_pending:
+                create_classifier_pending(db, system='UDC', code=document.udc, found_in_document_id=str(document.id))
+
 
 
