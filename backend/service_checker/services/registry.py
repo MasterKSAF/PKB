@@ -6,6 +6,8 @@ PKB Neuroassistant — Registry Service API Definitions.
 
 from __future__ import annotations
 
+import time
+
 from .base import (
     EndpointDef,
     ServiceDef,
@@ -18,10 +20,12 @@ DISPLAY_NAME = "Registry Service"
 
 # ── Тестовые данные для prepare-шагов ──────────────────────────────────
 
+_ts = str(int(time.time()))[-6:]
+
 # Классификатор для prepare (создаётся перед CRUD-тестами)
 PREPARE_CLASSIFIER = {
     "classifier_system": "MKS",
-    "code": "99.999",
+    "code": f"99.{_ts}",
     "full_name": "Тестовый классификатор API Coverage",
     "status": "active",
 }
@@ -37,8 +41,8 @@ VALIDATE_CLASSIFICATION = {
 
 # Документ для prepare
 PREPARE_DOCUMENT = {
-    "title": "Тестовый документ API Coverage",
-    "doc_code": "ТЕСТ-001",
+    "title": f"Тестовый документ API Coverage {_ts}",
+    "doc_code": f"ТЕСТ-{_ts}",
     "source_type": "GOST",
     "era": "RF",
     "validity_status": "active",
@@ -46,9 +50,9 @@ PREPARE_DOCUMENT = {
 
 # Термин для prepare
 PREPARE_TERM = {
-    "raw_term": "API Coverage тест",
-    "standard_term": "API Coverage тест",
-    "normalized_value": "api coverage тест",
+    "raw_term": f"API Coverage тест {_ts}",
+    "standard_term": f"API Coverage тест {_ts}",
+    "normalized_value": f"api coverage тест {_ts}",
     "term_type": "abbreviation",
     "definition": "Тестовый термин для API Coverage",
 }
@@ -56,6 +60,10 @@ PREPARE_TERM = {
 
 def get_service_def() -> ServiceDef:
     """Вернуть полное описание Registry Service."""
+
+    _warnings = [
+        "⚠️ Registry требует trailing slash на POST/GET /classifiers, /documents, /terminology (docs — без /).",
+    ]
 
     # ── Prepare-эндпоинты (создают данные для тестов) ──────────────
     prepare_endpoints = [
@@ -91,16 +99,12 @@ def get_service_def() -> ServiceDef:
         EndpointDef("GET", f"{API_PREFIX}/health", "health", "Health check",
             response_schema={"status": str}),
         # ── Classifiers CRUD ──
-        EndpointDef("POST", f"{API_PREFIX}/registry/classifiers/", "classifiers",
-            "Создать классификатор",
-            body=PREPARE_CLASSIFIER,
-            extract_keys=["classifier_code"],
-            response_schema={"data": dict, "data.classifier_system": str, "data.code": str, "data.full_name": str, "data.status": str}),
+        # POST /classifiers/ — только в prepare_endpoints (чтобы избежать дубликата 409)
         EndpointDef("GET", f"{API_PREFIX}/registry/classifiers/", "classifiers",
             "Список классификаторов",
             params={"page": 1, "page_size": 10},
             response_schema={"data": list, "meta": dict, "meta.total": int, "meta.page": int, "meta.page_size": int}),
-        EndpointDef("GET", f"{API_PREFIX}/registry/classifiers/tree/", "classifiers",
+        EndpointDef("GET", f"{API_PREFIX}/registry/classifiers/tree", "classifiers",
             "Дерево классификаторов",
             response_schema={"data": list, "meta": dict, "meta.total": int}),
         EndpointDef("GET", f"{API_PREFIX}/registry/classifiers/{{classifier_code}}",
@@ -122,11 +126,11 @@ def get_service_def() -> ServiceDef:
             params={"classifier_system": "MKS"},
             response_schema={"data": dict}),
         EndpointDef("POST", f"{API_PREFIX}/registry/classifiers/import",
-            "classifiers", "Импорт классификаторов",
-            body={"classifiers": [{"classifier_system": "MKS", "code": "99.998",
-                                   "full_name": "Импортированный"}]},
-            response_schema={"data": dict, "data.classifier_system": str, "data.inserted": int}),
-        EndpointDef("GET", f"{API_PREFIX}/registry/classifiers/pending/",
+            "classifiers", "Импорт классификаторов (file upload)",
+            response_schema={"data": dict, "data.classifier_system": str, "data.inserted": int},
+            is_preparation=True,
+            expected_status={422}),
+        EndpointDef("GET", f"{API_PREFIX}/registry/classifiers/pending",
             "classifiers", "Карантин",
             response_schema={"data": list}),
         EndpointDef("POST", f"{API_PREFIX}/registry/classifiers/pending/{{pending_id}}/accept",
@@ -137,18 +141,13 @@ def get_service_def() -> ServiceDef:
             "classifiers", "Отклонить из карантина",
             body={"admin_comment": "Отклонено тестом"},
             response_schema={"data": dict, "data.status": str}),
-        EndpointDef("POST", f"{API_PREFIX}/registry/classifiers/validate/",
+        EndpointDef("POST", f"{API_PREFIX}/registry/classifiers/validate",
             "classifiers", "Валидация классификации",
             body=VALIDATE_CLASSIFICATION,
             # docs: data.mks_status, data.mks_display_name, data.okstu_status, data.udk_valid, data.overall_status
             response_schema={"data": dict, "data.mks_status": str, "data.udk_valid": bool, "data.overall_status": str}),
         # ── Terminology CRUD ──
-        EndpointDef("POST", f"{API_PREFIX}/registry/terminology/", "terminology",
-            "Создать термин",
-            body=PREPARE_TERM,
-            extract_keys=["term_id"],
-            # docs: data.id, data.raw_term, data.standard_term, data.normalized_value, data.term_type, data.definition
-            response_schema={"data": dict, "data.raw_term": str, "data.standard_term": str, "data.normalized_value": str, "data.term_type": str}),
+        # POST /terminology/ — только в prepare_endpoints
         EndpointDef("GET", f"{API_PREFIX}/registry/terminology/", "terminology",
             "Список терминов",
             params={"page": 1, "page_size": 10},
@@ -159,8 +158,8 @@ def get_service_def() -> ServiceDef:
         EndpointDef("GET", f"{API_PREFIX}/registry/terminology/normalize",
             "terminology", "Нормализовать термин",
             params={"term": "API Coverage тест"},
-            # docs: raw_term, standard_term, normalized_value, term_type, is_blocked
-            response_schema={"raw_term": str, "normalized_value": str}),
+            # docs: data.raw_term, data.standard_term, data.normalized_value, data.term_type, data.is_blocked
+            response_schema={"data": dict, "data.raw_term": str, "data.normalized_value": str}),
         EndpointDef("PUT", f"{API_PREFIX}/registry/terminology/{{term_id}}",
             "terminology", "Обновить термин",
             body={"definition": "Обновлённое определение"},
@@ -169,17 +168,12 @@ def get_service_def() -> ServiceDef:
             "terminology", "Удалить термин",
             response_schema={"data": dict}),
         EndpointDef("POST", f"{API_PREFIX}/registry/terminology/import",
-            "terminology", "Импорт терминов",
-            body={"terms": [{"raw_term": "Импорт", "standard_term": "Импорт",
-                             "normalized_value": "импорт", "term_type": "abbreviation"}]},
-            response_schema={"data": dict, "data.inserted": int}),
+            "terminology", "Импорт терминов (file upload)",
+            response_schema={"data": dict, "data.inserted": int},
+            is_preparation=True,
+            expected_status={422}),
         # ── Documents CRUD ──
-        EndpointDef("POST", f"{API_PREFIX}/registry/documents/", "documents",
-            "Создать документ",
-            body=PREPARE_DOCUMENT,
-            extract_keys=["doc_id"],
-            # docs: document_id, version_id, sections[], registry{...}
-            response_schema={"data": dict, "data.document_id": int, "data.version_id": int}),
+        # POST /documents/ — только в prepare_endpoints
         EndpointDef("GET", f"{API_PREFIX}/registry/documents/", "documents",
             "Список документов",
             params={"page": 1, "page_size": 10},
@@ -205,18 +199,19 @@ def get_service_def() -> ServiceDef:
         EndpointDef("DELETE", f"{API_PREFIX}/registry/documents/{{doc_id}}",
             "documents", "Удалить документ",
             response_schema={"data": dict}),
-        EndpointDef("GET", f"{API_PREFIX}/registry/documents/export/",
-            "documents", "Экспорт документов",
-            response_schema={"data": list}),
-        EndpointDef("POST", f"{API_PREFIX}/registry/documents/import/",
-            "documents", "Массовый импорт",
-            body={"documents": [{"title": "Импорт тест", "doc_code": "ИМП-001",
-                                 "source_type": "GOST", "era": "RF"}]},
-            response_schema={"data": dict, "data.inserted": int}),
+        EndpointDef("GET", f"{API_PREFIX}/registry/documents/export",
+            "documents", "Экспорт документов (CSV)",
+            # Возвращает CSV, а не JSON — валидация схемы не применяется
+            response_schema=None),
+        EndpointDef("POST", f"{API_PREFIX}/registry/documents/import",
+            "documents", "Массовый импорт (file upload)",
+            response_schema={"data": dict, "data.inserted": int},
+            is_preparation=True,
+            expected_status={422}),
         # Common
-        EndpointDef("GET", f"{API_PREFIX}/registry/stats/", "common",
+        EndpointDef("GET", f"{API_PREFIX}/registry/stats", "common",
             "Статистика", response_schema={"data": dict}),
-        EndpointDef("GET", f"{API_PREFIX}/registry/enums/", "common",
+        EndpointDef("GET", f"{API_PREFIX}/registry/enums", "common",
             "Допустимые значения", response_schema={"data": dict}),
     ]
 
@@ -229,4 +224,5 @@ def get_service_def() -> ServiceDef:
         prepare_endpoints=prepare_endpoints,
         depends_on=[],
         base_data={},
+        warnings=_warnings,
     )

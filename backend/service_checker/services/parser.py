@@ -20,10 +20,16 @@ DISPLAY_NAME = "Parser Service"
 def get_service_def() -> ServiceDef:
     """Вернуть полное описание Parser Service."""
 
+    _warnings = [
+        "⚠️ Parser требует version_id (нет в docs API). Убрать после синхронизации документации и реализации.",
+        "⚠️ Health Parser на /health, а не /api/v1/health — сервис не использует префикс.",
+    ]
+
     prepare_endpoints = [
         EndpointDef("POST", f"{API_PREFIX}/parser/process", "parser",
             "Запуск обработки (prepare)",
-            body={"task_id": 12345, "version_id": 1,
+            body={"task_id": 12345,
+                  "version_id": "1",
                   "file_key": "test-file-key"},
             extract_keys=["task_id"],
             response_schema={"task_id": int, "status": str},
@@ -32,16 +38,19 @@ def get_service_def() -> ServiceDef:
     ]
 
     endpoints = [
-        EndpointDef("GET", f"{API_PREFIX}/health", "health", "Health check сервиса",
+        # ⚠️ WORKAROUND: health на /health, а не /api/v1/health (сервис не использует префикс).
+        EndpointDef("GET", "/health", "health", "Health check сервиса",
             response_schema={"status": str}),
         EndpointDef("POST", f"{API_PREFIX}/parser/process", "parser",
             "Запуск обработки",
-            body={"task_id": 12345, "version_id": 1,
+            body={"task_id": 12345,
+                  "version_id": "1",
                   "file_key": "test-file-key"},
             response_schema={"task_id": int, "status": str}),
         EndpointDef("POST", f"{API_PREFIX}/parser/preview", "parser",
             "Быстрый предпросмотр",
-            body={"task_id": 12345, "version_id": 1,
+            body={"task_id": 12345,
+                  "version_id": "1",
                   "file_key": "test-file-key", "max_pages": 1},
             response_schema={"task_id": int, "status": str}),
         EndpointDef("GET", f"{API_PREFIX}/parser/process/{{task_id}}/status",
@@ -61,4 +70,5 @@ def get_service_def() -> ServiceDef:
         prepare_endpoints=prepare_endpoints,
         depends_on=[],
         base_data={},
+        warnings=_warnings,
     )

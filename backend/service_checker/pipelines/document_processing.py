@@ -32,7 +32,6 @@ TEST_PDF_PATH = str(_HERE / "pdf" / "7bd97d737317a8a272bb18a405ab2d04.pdf")
 # Константы для пайплайна
 TEST_TASK_ID = 12345
 TEST_DOC_ID = 1
-TEST_VERSION_ID = 1
 
 # Тестовые учётные данные (admin — создаётся auth-сервисом при старте)
 TEST_CREDENTIALS = {
@@ -141,7 +140,6 @@ class DocumentProcessingPipeline(PipelineDef):
             port=8087,
             body={
                 "task_id": self.TEST_TASK_ID,
-                "version_id": TEST_VERSION_ID,
                 "file_key": self.TEST_PDF_KEY,
             },
             expected_status=202,
@@ -185,7 +183,7 @@ class DocumentProcessingPipeline(PipelineDef):
             port=8086,
             body={
                 "task_id": self.TEST_TASK_ID,
-                "version_id": TEST_VERSION_ID,
+                "version_id": "1",
                 "raw_json": {"pages": [], "blocks": [], "text": "тестовый текст"},
             },
             expected_status=200,

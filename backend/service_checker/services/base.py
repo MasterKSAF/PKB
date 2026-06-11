@@ -87,6 +87,7 @@ class ServiceDef:
     prepare_endpoints: List[EndpointDef] = field(default_factory=list)
     depends_on: List[str] = field(default_factory=list)
     base_data: Dict[str, Any] = field(default_factory=dict)
+    warnings: List[str] = field(default_factory=list)  # ⚠️ workaround-предупреждения для отчёта
 
 
 # ── API prefix ─────────────────────────────────────────────────────────

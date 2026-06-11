@@ -61,7 +61,8 @@ from service_checker.services import (
 # Сервисы, имеющие реальную реализацию
 SERVICES_WITH_REAL = {
     "gateway", "auth", "orchestrator", "query", "registry",
-    "converter_validator", "parser", "ocr", "rag_builder", "rag_search",
+    "converter_validator", "parser", "rag_builder", "rag_search",
+    "tei",
 }
 
 
@@ -104,6 +105,8 @@ class ApiCoverageTester:
                 "gateway": 9,
             }
             self.services_to_test = sorted(available_services, key=lambda s: _ORDER.get(s, 99))
+            # Исключаем сервисы без реальной реализации (в глубокой разработке)
+            self.services_to_test = [s for s in self.services_to_test if s in self.services_with_impl]
 
         self.context: Dict[str, Any] = {}  # shared context между вызовами
         self.results: Dict[str, ServiceResult] = {}
@@ -123,9 +126,11 @@ class ApiCoverageTester:
             f"{API_PREFIX}/health",
             f"{API_PREFIX}/system/health",
             f"{API_PREFIX}/monitor/health",
+            "/health",
         ]
         if fast:
-            health_paths = health_paths[:1]
+            # fast: пробуем 2 самых популярных пути
+            health_paths = [f"{API_PREFIX}/health", "/health"]
         timeout = 1.5 if fast else 2
         for path in health_paths:
             try:
@@ -140,10 +145,13 @@ class ApiCoverageTester:
         return False
 
     def _resolve_path(self, path: str) -> str:
-        """Подставить контекстные переменные в путь."""
+        """Подставить контекстные переменные в путь.
+
+        Ищет {var} (одинарные скобки) — т.к. path уже обработан f-string.
+        """
         resolved = path
         for key, value in self.context.items():
-            placeholder = "{{" + key + "}}"
+            placeholder = "{" + key + "}"
             resolved = resolved.replace(placeholder, str(value))
         return resolved
 
@@ -506,6 +514,8 @@ class ApiCoverageTester:
             ep_count = len(svc_def.endpoints)
             prep_count = len(svc_def.prepare_endpoints)
             print(f"\n  ── [{svc_key.upper()}] ({ep_count} эндпоинтов + {prep_count} prepare) ──")
+            for warn in svc_def.warnings:
+                print(f"     ⚠️ {warn}")
 
             result = await self.test_service(svc_key)
             self.results[svc_key] = result
@@ -617,6 +627,12 @@ class ApiCoverageTester:
             lines.append(f"### {svc_anchor}\n")
             lines.append(f"**{result.name}** (port {result.port})\n")
             lines.append(f"**Ping:** {'✅ Alive' if result.ping_ok else '❌ Unreachable'}\n")
+
+            # ⚠️ Workaround-предупреждения
+            svc_def = SERVICE_REGISTRY[svc_key]()
+            for warn in svc_def.warnings:
+                lines.append(f"> ⚠️ {warn}\n")
+
             failed_detail = (
                 f'<span style="color:red;font-weight:bold">{result.endpoints_failed}</span>'
                 if result.endpoints_failed > 0 else str(result.endpoints_failed)
