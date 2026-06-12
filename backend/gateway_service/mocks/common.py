@@ -17,14 +17,14 @@ from typing import Any, Dict, List, Optional, TypeVar
 # ---------------------------------------------------------------------------
 
 T = TypeVar("T")
-_counter = 0
+_id_counter = 10
 
 
-def new_id(prefix: str = "") -> str:
-    """Генерация уникального ID (int для bigint, str с префиксом если нужно)."""
-    global _counter
-    _counter += 1
-    return _counter
+def new_id(prefix: str = "") -> int:
+    """Генерация ID — возрастающий счётчик (старт 10, чтобы не пересекаться со статикой seed-данных)."""
+    global _id_counter
+    _id_counter += 1
+    return _id_counter
 
 
 def new_str_id(prefix: str = "") -> str:
@@ -306,7 +306,6 @@ _tasks: Dict[int, dict] = {}
 _sessions: Dict[int, dict] = {}
 _chat_history: list = []
 _projects: Dict[int, dict] = {}
-_projects_id_seq: int = 0
 _feedback_store: list = []
 _export_store: Dict[int, dict] = {}
 
@@ -324,7 +323,7 @@ def init_all_data():
     """Инициализация всех seed-данных."""
     global _users, _roles, _audit, _tokens, _tokens_meta, _password_hashes, _rate_limits, _access_token_map
     global _documents, _document_errors, _versions, _chunks, _history, _approvals, _metrics
-    global _sessions, _chat_history, _projects, _projects_id_seq
+    global _sessions, _chat_history, _projects
     global _classifiers, _terminology, _registry_docs, _pending_classifiers, _registry_drafts, _doc_history, _categories
 
     # Auth
@@ -382,7 +381,6 @@ def init_all_data():
     _sessions = {s["session_id"]: copy.deepcopy(s) for s in SEED_SESSIONS}
     _chat_history = copy.deepcopy(SEED_HISTORY)
     _projects = {p["project_id"]: copy.deepcopy(p) for p in SEED_PROJECTS}
-    _projects_id_seq = max((p["project_id"] for p in SEED_PROJECTS), default=0)
     _feedback_store = []
     _export_store = {}
 

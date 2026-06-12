@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from mocks.common import (
-    _sessions, _chat_history, _projects, _projects_id_seq,
+    _sessions, _chat_history, _projects,
     _feedback_store, _export_store,
     new_id, utcnow, error_response, paginate,
 )
@@ -194,9 +194,7 @@ async def delete_session(session_id: int):
 
 @router.post("/api/v1/chat/projects", status_code=201)
 async def create_project(req: CreateProjectRequest):
-    global _projects_id_seq
-    _projects_id_seq += 1
-    project_id = _projects_id_seq
+    project_id = new_id()
     now = utcnow()
     project = {
         "project_id": project_id,
