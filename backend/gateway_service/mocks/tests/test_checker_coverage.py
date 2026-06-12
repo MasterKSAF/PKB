@@ -5,6 +5,7 @@ Checker-coverage tests — эмулирует запросы внешнего ch
 Каждый тест — один эндпоинт из списка 47 failures.
 """
 
+import json as _json
 import os
 import sys
 
@@ -238,9 +239,10 @@ class TestRegistryImportUnique:
 
     def test_import_docs(self, admin_token):
         """POST /registry/documents/import → 200."""
+        payload = _json.dumps([{"title": "Test Doc", "doc_code": "TEST-001"}])
         resp = client.post(
             f"{REG}/documents/import",
-            json=[{"title": "Test Doc", "doc_code": "TEST-001"}],
+            files={"file": ("data.json", payload, "application/json")},
             headers=auth_h(admin_token),
         )
         assert_200(resp, "import_docs")

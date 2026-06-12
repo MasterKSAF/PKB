@@ -8,6 +8,7 @@ Gateway Mock — тесты на 43 падающих эндпоинта (checker
 Используется TestClient напрямую, ALLOW_ANONYMOUS=True для упрощения.
 """
 
+import json as _json
 import os
 import sys
 
@@ -332,12 +333,13 @@ class TestRegistryClassifiersImport:
     """POST /registry/classifiers/import → 200."""
 
     def test_import_classifiers(self):
-        """POST /registry/classifiers/import с массивом → 200."""
+        """POST /registry/classifiers/import с файлом → 200."""
+        payload = _json.dumps([
+            {"classifier_system": "MKS", "code": "IMP.TEST", "full_name": "Import Test"}
+        ])
         resp = client.post(
             f"{REG}/classifiers/import",
-            json=[
-                {"classifier_system": "MKS", "code": "IMP.TEST", "full_name": "Import Test"}
-            ],
+            files={"file": ("data.json", payload, "application/json")},
         )
         assert resp.status_code == 200, (
             f"Expected 200, got {resp.status_code}: {resp.text[:200]}"
@@ -422,12 +424,13 @@ class TestRegistryDocImportUniqueness:
     """POST /registry/documents/import и /check-uniqueness → 200."""
 
     def test_1_import_docs(self):
-        """POST /registry/documents/import с массивом → 200."""
+        """POST /registry/documents/import с файлом → 200."""
+        payload = _json.dumps([
+            {"title": "Imported Doc", "doc_code": "IMP-DOC"}
+        ])
         resp = client.post(
             f"{REG}/documents/import",
-            json=[
-                {"title": "Imported Doc", "doc_code": "IMP-DOC"}
-            ],
+            files={"file": ("data.json", payload, "application/json")},
         )
         assert resp.status_code == 200, (
             f"Expected 200, got {resp.status_code}: {resp.text[:200]}"
@@ -531,12 +534,13 @@ class TestTerminologyImport:
     """POST /registry/terminology/import → 200."""
 
     def test_import_terms(self):
-        """POST /registry/terminology/import с массивом → 200."""
+        """POST /registry/terminology/import с файлом → 200."""
+        payload = _json.dumps([
+            {"raw_term": "Test Term", "definition": "Test definition", "term_type": "preferred"}
+        ])
         resp = client.post(
             f"{REG}/terminology/import",
-            json=[
-                {"raw_term": "Test Term", "definition": "Test definition", "term_type": "preferred"}
-            ],
+            files={"file": ("data.json", payload, "application/json")},
         )
         assert resp.status_code == 200, (
             f"Expected 200, got {resp.status_code}: {resp.text[:200]}"
@@ -832,8 +836,8 @@ class TestOrchestratorGetDocument:
             f"Expected 200, got {resp.status_code}: {resp.text[:200]}"
         )
         body = resp.json()
-        # Поле 'id' или 'document_id' обязательно
-        assert "id" in body or "document_id" in body, (
+        # Поле 'id' обязательно (checker ждёт именно id)
+        assert "id" in body, (
             f"Missing 'id' field in response: {body}"
         )
 

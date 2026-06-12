@@ -7,6 +7,8 @@ Updated for new API specifications — seed data, models, endpoints.
 import os
 import sys
 
+import json as _json
+
 sys.path.insert(
     0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 )
@@ -943,17 +945,18 @@ class TestRegistryService:
         assert resp.status_code == 409
 
     def test_78_import_classifiers(self):
+        payload = _json.dumps([
+            {
+                "classifier_system": "MKS",
+                "code": "IMP.001",
+                "full_name": "Imported 1",
+                "status": "active",
+                "effective_date": "2024-06-01",
+            }
+        ])
         resp = client.post(
             f"{REG}/classifiers/import",
-            json=[
-                {
-                    "classifier_system": "MKS",
-                    "code": "IMP.001",
-                    "full_name": "Imported 1",
-                    "status": "active",
-                    "effective_date": "2024-06-01",
-                }
-            ],
+            files={"file": ("data.json", payload, "application/json")},
         )
         assert_ok(resp)
         assert resp.json()["data"]["inserted"] >= 1
@@ -1048,18 +1051,19 @@ class TestRegistryService:
         assert "is_blocked" in data
 
     def test_87_import_terminology(self):
+        payload = _json.dumps([
+            {
+                "raw_term": "Imported",
+                "term_type": "preferred",
+                "is_case_sensitive": False,
+                "is_blocked": False,
+                "synonyms": [],
+                "related_docs": [],
+            }
+        ])
         resp = client.post(
             f"{REG}/terminology/import",
-            json=[
-                {
-                    "raw_term": "Imported",
-                    "term_type": "preferred",
-                    "is_case_sensitive": False,
-                    "is_blocked": False,
-                    "synonyms": [],
-                    "related_docs": [],
-                }
-            ],
+            files={"file": ("data.json", payload, "application/json")},
         )
         assert_ok(resp)
 
@@ -1164,18 +1168,19 @@ class TestRegistryService:
         assert resp.json()["data"]["format"] == "json"
 
     def test_94_import_registry_docs(self):
+        payload = _json.dumps([
+            {
+                "title": "Imported",
+                "doc_code": "IMP-001",
+                "source_type": "GOST",
+                "status": "draft",
+                "era": "CURRENT",
+                "validity_status": "active",
+            }
+        ])
         resp = client.post(
             f"{REG_DOCS}/documents/import",
-            json=[
-                {
-                    "title": "Imported",
-                    "doc_code": "IMP-001",
-                    "source_type": "GOST",
-                    "status": "draft",
-                    "era": "CURRENT",
-                    "validity_status": "active",
-                }
-            ],
+            files={"file": ("data.json", payload, "application/json")},
         )
         assert_ok(resp)
 

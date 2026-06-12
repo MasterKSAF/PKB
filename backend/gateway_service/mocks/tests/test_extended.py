@@ -9,6 +9,7 @@ Covers edge cases, negative scenarios, and missing coverage gaps.
 5.  Gateway: CORS, Idempotency-Key, route non-conflict, X-Process-Time
 """
 
+import json as _json
 import os
 import sys
 import uuid
@@ -991,16 +992,17 @@ class TestFixes:
         """
         unique_term = f"Тест-термин-{uuid.uuid4().hex[:6]}"
 
-        # Первый импорт (эндпоинт ожидает список напрямую, а не {"items": [...]})
+        # Первый импорт
+        payload1 = _json.dumps([
+            {
+                "raw_term": unique_term,
+                "standard_term": unique_term.lower(),
+                "term_type": "preferred",
+            }
+        ])
         resp1 = client.post(
             f"{REG}/terminology/import",
-            json=[
-                {
-                    "raw_term": unique_term,
-                    "standard_term": unique_term.lower(),
-                    "term_type": "preferred",
-                }
-            ],
+            files={"file": ("data.json", payload1, "application/json")},
         )
         assert_ok(resp1)
         result1 = resp1.json()["data"]
@@ -1008,15 +1010,16 @@ class TestFixes:
         assert result1["updated"] == 0
 
         # Второй импорт того же raw_term — должен быть update, не insert
+        payload2 = _json.dumps([
+            {
+                "raw_term": unique_term,
+                "standard_term": unique_term.lower(),
+                "term_type": "deprecated",
+            }
+        ])
         resp2 = client.post(
             f"{REG}/terminology/import",
-            json=[
-                {
-                    "raw_term": unique_term,
-                    "standard_term": unique_term.lower(),
-                    "term_type": "deprecated",
-                }
-            ],
+            files={"file": ("data.json", payload2, "application/json")},
         )
         assert_ok(resp2)
         result2 = resp2.json()["data"]

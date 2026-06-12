@@ -6,11 +6,12 @@ All paths are relative (prefix /api/v1/registry is applied at mount time in gate
 
 import copy
 import hashlib
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Union
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -168,13 +169,15 @@ async def get_tree():
 
 
 @router.post("/classifiers/import")
-async def import_classifiers(req: Union[List[ClassifierCreate], dict]):
+async def import_classifiers(file: UploadFile = File(...)):
+    content = await file.read()
+    raw_data = json.loads(content)
+    if isinstance(raw_data, dict):
+        raw_data = raw_data.get("data") or raw_data.get("classifiers") or []
+    rows = [ClassifierCreate(**r) if isinstance(r, dict) else r for r in raw_data]
     inserted = updated = 0
     errors = []
-    if isinstance(req, dict):
-        raw = req.get("data") or req.get("classifiers") or []
-        req = [ClassifierCreate(**r) if isinstance(r, dict) else r for r in raw]
-    for row in req:
+    for row in rows:
         try:
             if row.code in _classifiers:
                 node = _classifiers[row.code]
@@ -324,13 +327,15 @@ async def normalize_term(term: str = Query(...)):
 
 
 @router.post("/terminology/import")
-async def import_terms(req: Union[List[TermCreate], dict]):
+async def import_terms(file: UploadFile = File(...)):
+    content = await file.read()
+    raw_data = json.loads(content)
+    if isinstance(raw_data, dict):
+        raw_data = raw_data.get("data") or raw_data.get("terms") or []
+    rows = [TermCreate(**r) if isinstance(r, dict) else r for r in raw_data]
     inserted = updated = 0
     errors = []
-    if isinstance(req, dict):
-        raw = req.get("data") or req.get("terms") or []
-        req = [TermCreate(**r) if isinstance(r, dict) else r for r in raw]
-    for row in req:
+    for row in rows:
         try:
             existing = next((t for t in _terminology.values() if t.get("raw_term", "").lower() == row.raw_term.lower()), None)
             if existing:
@@ -421,13 +426,15 @@ async def export_docs(format: str = "json"):
 
 
 @router.post("/documents/import")
-async def import_docs(req: Union[List[RegistryDocCreate], dict]):
+async def import_docs(file: UploadFile = File(...)):
+    content = await file.read()
+    raw_data = json.loads(content)
+    if isinstance(raw_data, dict):
+        raw_data = raw_data.get("data") or raw_data.get("documents") or []
+    rows = [RegistryDocCreate(**r) if isinstance(r, dict) else r for r in raw_data]
     inserted = updated = 0
     errors = []
-    if isinstance(req, dict):
-        raw = req.get("data") or req.get("documents") or []
-        req = [RegistryDocCreate(**r) if isinstance(r, dict) else r for r in raw]
-    for item in req:
+    for item in rows:
         try:
             existing = next((d for d in _registry_docs.values() if d.get("doc_code") == item.doc_code), None)
             if existing:
