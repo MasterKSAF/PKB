@@ -22,3 +22,8 @@ class Chunk:
     content: str
 
     metadata: dict[str, Any]
+
+@dataclass(frozen=True)
+class EmbeddedChunk:
+    chunk: Chunk
+    embedding: list[float]

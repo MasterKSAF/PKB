@@ -26,3 +26,26 @@
 
 - # TODO:
 # поддержать разбиение секции на несколько чанков
+
+# MVP-0
+
+- [x] Контракт контейнера
+- [x] Domain Model
+- [x] Chunking Service
+- [x] Embedding Service (stub)
+- [x] Unit tests
+
+Текущее покрытие:
+- test_contracts.py
+- test_chunking.py
+- test_embeddings.py
+
+# MVP-1 completed
+
+[x] BuildRequest
+[x] Chunk
+[x] ChunkingService
+[x] EmbeddingService (stub)
+[x] IndexingService
+[x] Unit tests
+[x] Example container
