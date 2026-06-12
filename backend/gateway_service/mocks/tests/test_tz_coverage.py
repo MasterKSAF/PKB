@@ -619,8 +619,9 @@ class TestEdgeCases:
 
     def test_search_without_query(self):
         resp = orch_client.get(f"{BASE}/documents/search")
-        # FastAPI возвращает 422 при отсутствии обязательного query-параметра q
-        assert resp.status_code == 422
+        # q стал необязательным → 200 с пустым результатом
+        assert resp.status_code == 200
+        assert resp.json()["items"] == []
 
     def test_registry_doc_not_found(self):
         resp = reg_client.get(f"{REG_BASE}/classifiers/nonexistent")
@@ -715,8 +716,10 @@ class TestDrafts:
 
     def test_list_drafts_requires_document_key(self):
         resp = orch_client.get(f"{BASE}/drafts")
-        # Orchestrator mock использует 400 для VALIDATION_ERROR; gateway транслирует в 422.
-        assert resp.status_code in (400, 422)
+        # document_key стал необязательным → 200 (пустой список)
+        assert resp.status_code == 200
+        assert "items" in resp.json()
+        assert "meta" in resp.json()
 
     def test_list_drafts_returns_paginated(self):
         """GET /drafts?document_key=... возвращает paginated items + meta."""

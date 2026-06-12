@@ -8,7 +8,7 @@ import copy
 import hashlib
 import logging
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 from mocks.common import (
     _classifiers, _terminology, _registry_docs,
-    _pending_classifiers, _registry_drafts, _doc_history,
+    _pending_classifiers, _registry_drafts, _doc_history, _categories,
     new_id, utcnow, error_response, paginate_registry,
 )
 
@@ -168,9 +168,12 @@ async def get_tree():
 
 
 @router.post("/classifiers/import")
-async def import_classifiers(req: List[ClassifierCreate]):
+async def import_classifiers(req: Union[List[ClassifierCreate], dict]):
     inserted = updated = 0
     errors = []
+    if isinstance(req, dict):
+        raw = req.get("data") or req.get("classifiers") or []
+        req = [ClassifierCreate(**r) if isinstance(r, dict) else r for r in raw]
     for row in req:
         try:
             if row.code in _classifiers:
@@ -321,9 +324,12 @@ async def normalize_term(term: str = Query(...)):
 
 
 @router.post("/terminology/import")
-async def import_terms(req: List[TermCreate]):
+async def import_terms(req: Union[List[TermCreate], dict]):
     inserted = updated = 0
     errors = []
+    if isinstance(req, dict):
+        raw = req.get("data") or req.get("terms") or []
+        req = [TermCreate(**r) if isinstance(r, dict) else r for r in raw]
     for row in req:
         try:
             existing = next((t for t in _terminology.values() if t.get("raw_term", "").lower() == row.raw_term.lower()), None)
@@ -415,9 +421,12 @@ async def export_docs(format: str = "json"):
 
 
 @router.post("/documents/import")
-async def import_docs(req: List[RegistryDocCreate]):
+async def import_docs(req: Union[List[RegistryDocCreate], dict]):
     inserted = updated = 0
     errors = []
+    if isinstance(req, dict):
+        raw = req.get("data") or req.get("documents") or []
+        req = [RegistryDocCreate(**r) if isinstance(r, dict) else r for r in raw]
     for item in req:
         try:
             existing = next((d for d in _registry_docs.values() if d.get("doc_code") == item.doc_code), None)
@@ -713,6 +722,84 @@ async def delete_draft(draft_id: int):
         raise HTTPException(404, detail=error_response("DRAFT_NOT_FOUND", "Черновик не найден"))
     del _registry_drafts[draft_id]
     return {"data": {"id": draft_id, "deleted_at": utcnow()}}
+
+
+# ── 6. Categories ──
+
+class CategoryCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    color: Optional[str] = None
+
+
+class CategoryUpdate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    color: Optional[str] = None
+
+
+@router.get("/categories")
+async def list_categories(page: int = 1, page_size: int = 50):
+    items = sorted(_categories.values(), key=lambda c: c.get("name", ""))
+    return paginate_registry(items, page, page_size)
+
+
+@router.get("/categories/{category_id}")
+async def get_category(category_id: int):
+    cat = _categories.get(category_id)
+    if not cat:
+        raise HTTPException(404, detail=error_response("CATEGORY_NOT_FOUND", "Категория не найдена"))
+    return {"data": cat}
+
+
+@router.post("/categories", status_code=201)
+async def create_category(req: CategoryCreate):
+    # Check duplicate name
+    for cat in _categories.values():
+        if cat["name"].lower() == req.name.lower():
+            raise HTTPException(409, detail=error_response("DUPLICATE_CATEGORY_NAME", "Категория с таким именем уже существует"))
+    cat_id = new_id()
+    now = utcnow()
+    new_cat = {
+        "id": cat_id,
+        "name": req.name,
+        "description": req.description or "",
+        "color": req.color or "#9E9E9E",
+        "document_count": 0,
+        "created_at": now,
+        "updated_at": now,
+    }
+    _categories[cat_id] = new_cat
+    return {"data": new_cat}
+
+
+@router.put("/categories/{category_id}")
+async def update_category(category_id: int, req: CategoryUpdate):
+    cat = _categories.get(category_id)
+    if not cat:
+        raise HTTPException(404, detail=error_response("CATEGORY_NOT_FOUND", "Категория не найдена"))
+    # Check duplicate name (exclude self)
+    for cid, c in _categories.items():
+        if cid != category_id and c["name"].lower() == req.name.lower():
+            raise HTTPException(409, detail=error_response("DUPLICATE_CATEGORY_NAME", "Категория с таким именем уже существует"))
+    cat["name"] = req.name
+    if req.description is not None:
+        cat["description"] = req.description
+    if req.color is not None:
+        cat["color"] = req.color
+    cat["updated_at"] = utcnow()
+    return {"data": cat}
+
+
+@router.delete("/categories/{category_id}")
+async def delete_category(category_id: int):
+    cat = _categories.get(category_id)
+    if not cat:
+        raise HTTPException(404, detail=error_response("CATEGORY_NOT_FOUND", "Категория не найдена"))
+    if cat.get("document_count", 0) > 0:
+        raise HTTPException(409, detail=error_response("CATEGORY_HAS_DOCUMENTS", "Нельзя удалить категорию, к которой привязаны документы"))
+    del _categories[category_id]
+    return {"data": {"id": category_id, "deleted_at": utcnow(), "message": "Категория удалена"}}
 
 
 # ── 5. Common ────────────────────────────────────────────────────────────────

@@ -10,7 +10,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -39,7 +39,8 @@ class ReprocessRequest(BaseModel):
 
 
 class DecideRequest(BaseModel):
-    action: str  # "approve" | "reject"
+    action: str = ""
+    decision: str = ""
     comment: Optional[str] = None
 
 
@@ -219,6 +220,7 @@ async def create_draft(request: Request):
         file_key = body.get("file_key", f"json-{new_id()}")
         document_key = body.get("document_key", f"json-doc-{new_id()}")
         title = body.get("title", document_key)
+        doc_code = body.get("doc_code")
         source_type = body.get("source_type", "OTHER")
 
         draft_id = _next_draft_id()
@@ -398,13 +400,15 @@ async def create_draft(request: Request):
 
 @router.get("/api/v1/drafts")
 async def list_drafts(
-    document_key: str = Query(..., min_length=1),
+    document_key: str = Query(default="", description="Фильтр по document_key"),
     status: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
 ):
     logger.info("list_drafts: document_key=%s status=%s", document_key, status)
-    items = [d for d in _drafts.values() if d.get("document_key") == document_key]
+    items = list(_drafts.values())
+    if document_key:
+        items = [d for d in items if d.get("document_key") == document_key]
     if status:
         items = [d for d in items if d.get("status") == status]
     items.sort(key=lambda d: d.get("created_at", ""), reverse=True)
@@ -497,7 +501,8 @@ async def decide_draft(draft_id: int, req: DecideRequest):
             "DRAFT_ALREADY_DECIDED",
             f"Решение уже принято (статус: {draft['status']})",
         ))
-    if req.action not in ("approve", "reject"):
+    action = req.action or req.decision
+    if action not in ("approve", "reject"):
         raise HTTPException(status_code=400, detail=error_response(
             "VALIDATION_ERROR",
             "Некорректный action: допустимы approve|reject",
@@ -505,7 +510,7 @@ async def decide_draft(draft_id: int, req: DecideRequest):
     now = utcnow()
     user_id = "anonymous"
 
-    if req.action == "approve":
+    if action == "approve":
         new_doc_id = new_id()
         new_doc = {
             "document_id": new_doc_id, "title": draft.get("title") or f"Документ {new_doc_id}",
@@ -644,9 +649,12 @@ async def search_post(req: SearchRequest):
 
 
 @router.get("/api/v1/documents/search")
-async def search_get(q: str = Query(...), document_ids: Optional[str] = None,
+async def search_get(q: str = Query(default="", description="Поисковый запрос"),
+                     document_ids: Optional[str] = None,
                      top_k: int = 10, page: int = 1, page_size: int = 50):
     logger.info("search_get: q=%s top_k=%d document_ids=%s", q, top_k, document_ids)
+    if not q:
+        return {"query": "", "items": [], "total_found": 0, "processing_time_ms": 0}
     req = SearchRequest(query=q, document_ids=document_ids.split(",") if document_ids else None, top_k=top_k)
     return await search_post(req)
 
@@ -970,22 +978,40 @@ async def document_errors(doc_id: int, page: int = 1, page_size: int = 20):
 
 
 @router.post("/api/v1/documents/{doc_id}/versions", status_code=202)
-async def add_version(doc_id: int, file: UploadFile = File(...)):
+async def add_version(doc_id: int, request: Request):
     doc = _get_document(doc_id)
     now = utcnow()
     ver_num = doc.get("total_versions", 1) + 1
-    content = await file.read()
-    content_hash = hashlib.sha256(content).hexdigest()
     version_id = new_id()
     task_id = new_id()
-    new_ver = {
-        "version_id": version_id, "version_number": ver_num, "document_id": doc_id,
-        "title": doc.get("title", ""),
-        "file_size": len(content) or doc.get("file_size", 0),
-        "content_hash_sha256": content_hash,
-        "title_hash_sha256": _build_title_hash(doc.get("title", "")),
-        "status": "uploaded", "created_at": now, "uploaded_by": "system",
-    }
+    content_type = request.headers.get("content-type", "")
+    if "application/json" in content_type:
+        body = await request.json()
+        file_key = body.get("file_key", f"v{ver_num}-{new_id()}")
+        content_hash = hashlib.sha256(file_key.encode()).hexdigest()
+        new_ver = {
+            "version_id": version_id, "version_number": ver_num, "document_id": doc_id,
+            "title": doc.get("title", ""),
+            "file_size": doc.get("file_size", 0),
+            "content_hash_sha256": content_hash,
+            "title_hash_sha256": _build_title_hash(doc.get("title", "")),
+            "status": "uploaded", "created_at": now, "uploaded_by": "system",
+        }
+    else:
+        form = await request.form()
+        file = form.get("file")
+        if file is None or not hasattr(file, "read"):
+            raise HTTPException(status_code=400, detail=error_response("VALIDATION_ERROR", "Файл не передан"))
+        content = await file.read()
+        content_hash = hashlib.sha256(content).hexdigest()
+        new_ver = {
+            "version_id": version_id, "version_number": ver_num, "document_id": doc_id,
+            "title": doc.get("title", ""),
+            "file_size": len(content) or doc.get("file_size", 0),
+            "content_hash_sha256": content_hash,
+            "title_hash_sha256": _build_title_hash(doc.get("title", "")),
+            "status": "uploaded", "created_at": now, "uploaded_by": "system",
+        }
     if doc_id not in _versions:
         _versions[doc_id] = []
     _versions[doc_id].insert(0, new_ver)

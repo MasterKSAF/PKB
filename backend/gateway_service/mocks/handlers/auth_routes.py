@@ -54,7 +54,8 @@ class RefreshRequest(BaseModel):
 
 
 class RevokeRequest(BaseModel):
-    refresh_token: str
+    refresh_token: str = ""
+    token: str = ""
 
 
 class CreateUserRequest(BaseModel):
@@ -169,9 +170,10 @@ async def refresh(req: RefreshRequest):
 
 @router.post("/api/v1/auth/revoke")
 async def revoke(req: RevokeRequest):
-    _tokens.pop(req.refresh_token, None)
-    _tokens_meta.pop(req.refresh_token, None)
-    _blacklist[req.refresh_token] = utcnow()
+    token = req.refresh_token or req.token
+    _tokens.pop(token, None)
+    _tokens_meta.pop(token, None)
+    _blacklist[token] = utcnow()
     return {"message": "Токен отозван", "revoked_at": utcnow()}
 
 
