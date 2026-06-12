@@ -43,7 +43,7 @@ API: http://localhost:9000
 2.2 Создание бакетов и пользователя
 Вариант А: через Web консоль
 Зайдите в http://localhost:9001
-Создайте бакеты: parser-bucket, parser-images
+Создайте бакеты: documents, images
 Перейдите в Identity → Users → создайте пользователя parser_user (придумайте пароль)
 Назначьте права: readwrite на оба бакета
 
@@ -59,8 +59,8 @@ sudo mv mc /usr/local/bin/
 mc alias set local http://localhost:9000 minioadmin minioadmin
 
 # Создаём бакеты
-mc mb local/parser-bucket
-mc mb local/parser-images
+mc mb local/documents
+mc mb local/images
 
 # Создаём пользователя
 mc admin user add local parser_user <ваш_пароль>
@@ -73,12 +73,12 @@ cat > policy.json <<EOF
     {
       "Effect": "Allow",
       "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
-      "Resource": ["arn:aws:s3:::parser-bucket/*"]
+      "Resource": ["arn:aws:s3:::documents/*"]
     },
     {
       "Effect": "Allow",
       "Action": ["s3:PutObject", "s3:GetObject"],
-      "Resource": ["arn:aws:s3:::parser-images/*"]
+      "Resource": ["arn:aws:s3:::images/*"]
     }
   ]
 }
@@ -101,7 +101,7 @@ mc admin policy attach local parser-policy --user parser_user
 Способ 1: через mc
 ```text
 bash
-mc cp --recursive ./input/ local/parser-bucket/
+mc cp --recursive ./input/ local/documents/
 ```
 
 2.5. Дополнительно. Остановка и очистка
@@ -154,7 +154,7 @@ pip install -r requirements.txt
 Способ 1: через mc
 ```text
 bash
-mc cp --recursive ./input/ local/parser-bucket/
+mc cp --recursive ./input/ local/documents/
 ```
 
 Способ 2: через Python скрипт
@@ -179,7 +179,7 @@ async def upload_file(file_path, bucket, object_name):
 async def main():
     for f in os.listdir('./input'):
         if f.lower().endswith('.pdf'):
-            await upload_file(f'./input/{f}', 'parser-bucket', f)
+            await upload_file(f'./input/{f}', 'documents', f)
 asyncio.run(main())
 ```
 После загрузки файлы будут доступны по ключу (имени файла), например document.pdf.

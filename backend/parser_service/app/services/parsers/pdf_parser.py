@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pypdf import PdfReader
 from app.services.parsers.base import BaseParser, ParseResult
 from app.config import settings
+import opendataloader_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +43,7 @@ class PdfParser(BaseParser):
         Raises:
             TimeoutError: Если парсинг превысил таймаут.
         """
-        logger.info("Parsing PDF for task %d, options=%s", task_id, options)
-        import opendataloader_pdf
+        logger.info("Parsing PDF for task %d, options=%s", task_id, options)        
 
         if total_pages is None:
             try:

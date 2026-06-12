@@ -11,6 +11,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # - openjdk-11-jre-headless: для работы opendataloader-pdf
 RUN apt-get update && apt-get install -y --no-install-recommends \
     default-jre \
+    libmagic1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Установка Java 11 в PATH (обычно уже прописан)
