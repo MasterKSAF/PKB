@@ -394,6 +394,7 @@ app = FastAPI(
         "Маршрутизирует запросы от Web UI к Auth, Orchestrator, Query, Registry."
     ),
     lifespan=lifespan,
+    redirect_slashes=False,
 )
 
 
