@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     app_name: str = "Auth Service"
     env: str = "dev"
 
-    database_url: str = "sqlite:///./auth.db"
+    database_url: str
 
     jwt_secret_key: str = "change_me_in_production"
     jwt_algorithm: str = "HS256"
