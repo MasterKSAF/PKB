@@ -503,7 +503,11 @@ const mapGatewayDraftRecordToUi = (payload: any, fallback?: Partial<DraftItem>):
     gatewayFileHashSha256: String(payload?.file_hash_sha256 ?? payload?.fileHashSha256 ?? fallback?.gatewayFileHashSha256 ?? ''),
     gatewayTitleHashSha256: String(payload?.title_hash_sha256 ?? payload?.titleHashSha256 ?? fallback?.gatewayTitleHashSha256 ?? ''),
     gatewayPromotedDocumentId:
-      payload?.promoted_document_id ?? payload?.document_id ?? fallback?.gatewayPromotedDocumentId ?? null,
+      payload?.promoted_document_id ??
+      payload?.approved_document_id ??
+      payload?.document_id ??
+      fallback?.gatewayPromotedDocumentId ??
+      null,
     gatewayErrorCode: payload?.error_code ?? fallback?.gatewayErrorCode ?? null,
     gatewayErrorMessage: payload?.error_message ?? fallback?.gatewayErrorMessage ?? null,
     gatewayRawData: payload?.raw_data ?? fallback?.gatewayRawData ?? null,

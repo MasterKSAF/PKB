@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
+  Alert,
   Box,
   Button,
   Chip,
@@ -27,7 +28,7 @@ import {
 } from '@mui/material';
 import { Download, ExternalLink, FileText, MessageSquarePlus, Search, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { historyApi, sourceApi } from '../utils/http';
+import { apiClient, historyApi, sourceApi } from '../utils/http';
 import type { AnswerStatus, Citation, QueryHistoryItem } from '../utils/mockData';
 import { useUIStore } from '../store/uiStore';
 import { downloadPreviewFile } from '../utils/downloadPreview';
@@ -106,6 +107,40 @@ function csvEscape(value: string | number) {
   return `"${String(value).replaceAll('"', '""')}"`;
 }
 
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+async function downloadGatewayExport(url: string, filename: string) {
+  const response = await apiClient.get(url, { responseType: 'blob' });
+  downloadBlob(response.data, filename);
+}
+
+function buildHistoryCsvBlob(items: QueryHistoryItem[]) {
+  const rows = [
+    ['Дата', 'Пользователь', 'Проект', 'Тема', 'Сессия', 'Запрос', 'Ответ', 'Источники', 'Статус'],
+    ...items.map((item) => [
+      item.createdAt,
+      item.user,
+      item.project,
+      item.topic,
+      item.session,
+      item.query,
+      item.answer,
+      item.sources,
+      statusLabel[item.status],
+    ]),
+  ];
+  const csv = rows.map((row) => row.map(csvEscape).join(';')).join('\n');
+
+  return new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' });
+}
+
 function citationButtonSx(themeMode: 'dark' | 'light') {
   const isLight = themeMode === 'light';
 
@@ -123,7 +158,7 @@ function citationButtonSx(themeMode: 'dark' | 'light') {
 }
 
 export const History: React.FC = () => {
-  const { adminUsers, currentRole, currentUserId, setActiveTab, setChatMessages, themeMode } = useUIStore();
+  const { adminUsers, currentRole, currentUserId, setActiveTab, setChatMessages, themeMode, workMode } = useUIStore();
   const isLight = themeMode === 'light';
   const [queryFilter, setQueryFilter] = useState('');
   const [userFilter, setUserFilter] = useState('all');
@@ -133,6 +168,8 @@ export const History: React.FC = () => {
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
   const [activePreview, setActivePreview] = useState<HistoryPreview | null>(null);
   const [pendingContinueItem, setPendingContinueItem] = useState<QueryHistoryItem | null>(null);
+  const [exportLoading, setExportLoading] = useState(false);
+  const [exportError, setExportError] = useState('');
 
   const { data = [] } = useQuery<QueryHistoryItem[]>({
     queryKey: ['history'],
@@ -191,30 +228,38 @@ export const History: React.FC = () => {
     },
   ];
 
-  const handleExport = () => {
-    const rows = [
-      ['Дата', 'Пользователь', 'Проект', 'Тема', 'Сессия', 'Запрос', 'Ответ', 'Источники', 'Статус'],
-      ...filteredData.map((item) => [
-        item.createdAt,
-        item.user,
-        item.project,
-        item.topic,
-        item.session,
-        item.query,
-        item.answer,
-        item.sources,
-        statusLabel[item.status],
-      ]),
-    ];
+  const handleExport = async () => {
+    setExportError('');
 
-    const csv = rows.map((row) => row.map(csvEscape).join(';')).join('\n');
-    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'pkb_history_filtered.csv';
-    link.click();
-    URL.revokeObjectURL(url);
+    if (workMode !== 'demo') {
+      setExportLoading(true);
+
+      try {
+        const exportResult = await historyApi.export('csv');
+        const format = String(exportResult?.format ?? 'csv').replace(/^\./, '') || 'csv';
+        const filename = `pkb_history_gateway.${format}`;
+
+        if (exportResult?.url) {
+          try {
+            await downloadGatewayExport(String(exportResult.url), filename);
+            return;
+          } catch {
+            // Gateway пока возвращает только дескриптор экспорта; если файл не раздается,
+            // сохраняем CSV из текущих данных без лишнего шума для пользователя.
+          }
+        }
+
+        downloadBlob(buildHistoryCsvBlob(filteredData), 'pkb_history_gateway.csv');
+      } catch (error: any) {
+        setExportError(error?.message ?? 'Не удалось экспортировать историю через Gateway.');
+      } finally {
+        setExportLoading(false);
+      }
+
+      return;
+    }
+
+    downloadBlob(buildHistoryCsvBlob(filteredData), 'pkb_history_filtered.csv');
   };
 
   const confirmContinueChat = () => {
@@ -314,12 +359,19 @@ export const History: React.FC = () => {
                     variant="contained"
                     startIcon={<Download size={16} />}
                     onClick={handleExport}
+                    disabled={exportLoading}
                     disableElevation
                     sx={{ whiteSpace: 'nowrap', minWidth: 128 }}
                   >
-                    Экспорт
+                    {exportLoading ? 'Экспорт...' : 'Экспорт'}
                   </Button>
                 </Stack>
+
+                {exportError && (
+                  <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2 }}>
+                    {exportError}
+                  </Alert>
+                )}
 
                 <Stack
                   direction="row"

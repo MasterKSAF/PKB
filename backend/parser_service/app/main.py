@@ -1,14 +1,20 @@
-# app/main.py
 """
 Главный модуль FastAPI приложения.
+
 Подключает роутеры, глобальные обработчики ошибок, lifespan менеджер.
 """
 import asyncio
 from contextlib import asynccontextmanager
 
-# === НАСТРОЙКА ЛОГГЕРА В ПЕРВУЮ ОЧЕРЕДЬ ===
-from app.core.logging import setup_logging
-logger = setup_logging("parser_service")   # теперь до всех остальных импортов
+# === НАСТРОЙКА OBSERVABILITY В ПЕРВУЮ ОЧЕРЕДЬ ===
+from app.core.telemetry import setup_observability, instrument_fastapi
+from app.config import settings
+
+# Настраиваем OpenTelemetry
+tracer_provider, meter_provider, logger = setup_observability(
+    service_name="parser_service",
+    otlp_endpoint=settings.otel_endpoint
+)
 
 # === ОСТАЛЬНЫЕ ИМПОРТЫ ===
 from fastapi import FastAPI, Request
@@ -79,6 +85,10 @@ app = FastAPI(
     version="2.0.0",
     lifespan=lifespan
 )
+
+# Инструментирование FastAPI для сбора трейсов
+instrument_fastapi(app, tracer_provider)
+
 
 # Подключение роутеров API версий
 app.include_router(v1_router, prefix=settings.api_prefix)
