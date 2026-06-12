@@ -3,6 +3,7 @@ import sys
 
 
 def setup_logging() -> None:
+    """Configure root logger to stdout at INFO level. No-op if handlers already registered."""
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(logging.Formatter(
         fmt="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
