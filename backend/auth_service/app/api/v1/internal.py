@@ -1,12 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.logger import get_logger
 from app.core.security import decode_token
 from app.db.session import get_db
 from app.schemas.schemas import InternalValidateRequest, InternalValidateResponse
 from app.services.user_service import get_permissions, get_user_by_id, role_names
 
 router = APIRouter(prefix="/internal/auth", tags=["internal"])
+logger = get_logger(__name__)
 
 
 @router.post("/validate", response_model=InternalValidateResponse)
@@ -14,13 +16,16 @@ async def validate(payload: InternalValidateRequest, db: AsyncSession = Depends(
     try:
         decoded = decode_token(payload.access_token)
     except Exception:
+        logger.warning("Invalid access token presented to /internal/auth/validate")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Токен недействителен")
 
     if decoded.get("type") != "access":
+        logger.warning("Wrong token type at /internal/auth/validate: %s", decoded.get("type"))
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверный тип токена")
 
     user = await get_user_by_id(db, decoded.get("sub"))
     if not user or not user.is_active:
+        logger.warning("User unavailable during token validation: %s", decoded.get("sub"))
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Пользователь недоступен")
 
     return {

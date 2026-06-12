@@ -2,8 +2,11 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.logger import get_logger
 from app.core.security import hash_password
 from app.models.models import Role, RolePermission, User
+
+logger = get_logger(__name__)
 
 
 def get_permissions(user: User) -> list[str]:
@@ -40,10 +43,12 @@ async def get_roles_by_names(db: AsyncSession, names: list[str]) -> list[Role]:
 async def create_user(db: AsyncSession, email: str, full_name: str, password: str, roles: list[str]) -> User:
     existing = await get_user_by_email(db, email)
     if existing:
+        logger.warning("Attempt to create duplicate user: %s", email)
         raise ValueError("Пользователь с таким email уже существует")
 
     role_objects = await get_roles_by_names(db, roles)
     if len(role_objects) != len(set(roles)):
+        logger.warning("Unknown roles requested during user creation: %s", roles)
         raise ValueError("Одна или несколько ролей не найдены")
 
     user = User(
@@ -55,6 +60,7 @@ async def create_user(db: AsyncSession, email: str, full_name: str, password: st
     db.add(user)
     await db.commit()
     await db.refresh(user)
+    logger.info("User created: %s", email)
     return await get_user_by_id(db, user.user_id)
 
 
@@ -67,11 +73,13 @@ async def update_user(db: AsyncSession, user: User, **kwargs) -> User:
     if roles is not None:
         role_objects = await get_roles_by_names(db, roles)
         if len(role_objects) != len(set(roles)):
+            logger.warning("Unknown roles during user update for %s: %s", user.user_id, roles)
             raise ValueError("Одна или несколько ролей не найдены")
         user.roles = role_objects
 
     await db.commit()
     await db.refresh(user)
+    logger.info("User updated: %s", user.user_id)
     return await get_user_by_id(db, user.user_id)
 
 
@@ -79,6 +87,7 @@ async def create_role(db: AsyncSession, name: str, permissions: list[str]) -> Ro
     result = await db.execute(select(Role).where(Role.name == name))
     existing = result.scalar_one_or_none()
     if existing:
+        logger.warning("Attempt to create duplicate role: %s", name)
         raise ValueError("Роль уже существует")
 
     role = Role(name=name)
@@ -86,6 +95,7 @@ async def create_role(db: AsyncSession, name: str, permissions: list[str]) -> Ro
     db.add(role)
     await db.commit()
     await db.refresh(role)
+    logger.info("Role created: %s", name)
     return role
 
 
