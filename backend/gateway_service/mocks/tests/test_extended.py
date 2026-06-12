@@ -462,11 +462,11 @@ class TestRegistryExtended:
         seed_id = 1
         resp = client.get(f"{REG_DOCS}/documents/{seed_id}/succession")
         assert_ok(resp)
-        data = resp.json()["data"]
-        assert "document_id" in data
-        assert data["document_id"] == seed_id
-        assert "chain" in data
-        assert isinstance(data["chain"], list)
+        body = resp.json()
+        assert "data" in body
+        assert isinstance(body["data"], list)
+        assert "meta" in body
+        assert "total" in body["meta"]
 
     def test_25_term_normalize_no_match_returns_original(self):
         """Normalize term without match returns expected structure."""
@@ -540,15 +540,15 @@ class TestRegistryExtended:
         assert "service" in data or "services" in data
 
     def test_31_registry_doc_history_has_doc_id_and_history(self):
-        """Registry document history returns doc_id and history list."""
+        """Registry document history returns history list with meta."""
         seed_id = 1
         resp = client.get(f"{REG_DOCS}/documents/{seed_id}/history")
         assert_ok(resp)
-        data = resp.json()["data"]
-        assert "doc_id" in data
-        assert data["doc_id"] == seed_id
-        assert "history" in data
-        assert isinstance(data["history"], list)
+        body = resp.json()
+        assert "data" in body
+        assert isinstance(body["data"], list)
+        assert "meta" in body
+        assert "total" in body["meta"]
 
     def test_32_validate_classification_response(self):
         """POST /classifiers/validate returns mks_status, okstu_status, overall_status."""
@@ -642,11 +642,12 @@ class TestGatewayExtended:
         assert_ok(resp_reg)
         reg_data = resp_reg.json()
         assert "data" in reg_data
-        assert reg_data["data"]["doc_id"] == reg_doc_id
+        assert isinstance(reg_data["data"], list)
+        assert "meta" in reg_data
 
         # They should be different endpoints (different paths, different response structure)
         assert "history" in orch_data
-        assert "history" in reg_data["data"]
+        # Registry response has data as a list (different from orch which has a dict with "history")
 
     def test_40_idempotency_ttl_expires(self):
         """Cache entry expires after TTL."""

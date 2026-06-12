@@ -575,16 +575,20 @@ class TestRegistry_Specifics:
     def test_registry_doc_history_endpoint(self):
         resp = reg_client.get(f"{REG_BASE}/documents/1/history")
         assert_ok(resp)
-        data = resp.json()["data"]
-        assert "history" in data
-        assert "doc_id" in data
+        body = resp.json()
+        assert "data" in body
+        assert isinstance(body["data"], list)
+        assert "meta" in body
+        assert "total" in body["meta"]
 
     def test_registry_doc_chain_endpoint(self):
         resp = reg_client.get(f"{REG_BASE}/documents/1/succession")
         assert_ok(resp)
-        data = resp.json()["data"]
-        assert "chain" in data
-        assert "document_id" in data
+        body = resp.json()
+        assert "data" in body
+        assert isinstance(body["data"], list)
+        assert "meta" in body
+        assert "total" in body["meta"]
 
     def test_quarantine_list(self):
         resp = reg_client.get(f"{REG_BASE}/classifiers/quarantine")

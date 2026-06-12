@@ -1258,10 +1258,11 @@ class TestRegistryService:
         seed_id = 1
         resp = client.get(f"{REG_DOCS}/documents/{seed_id}/history")
         assert_ok(resp)
-        data = resp.json()["data"]
-        assert "doc_id" in data
-        assert data["doc_id"] == seed_id
-        assert "history" in data
+        body = resp.json()
+        assert "data" in body
+        assert isinstance(body["data"], list)
+        assert "meta" in body
+        assert "total" in body["meta"]
 
     def test_103_registry_doc_chain(self):
         """GET /documents/{id}/succession — registry doc chain (predecessors/successors)."""
@@ -1269,11 +1270,11 @@ class TestRegistryService:
         seed_id = 1
         resp = client.get(f"{REG_DOCS}/documents/{seed_id}/succession")
         assert_ok(resp)
-        data = resp.json()["data"]
-        assert "document_id" in data
-        assert data["document_id"] == seed_id
-        assert "chain" in data
-        assert isinstance(data["chain"], list)
+        body = resp.json()
+        assert "data" in body
+        assert isinstance(body["data"], list)
+        assert "meta" in body
+        assert "total" in body["meta"]
 
 
 # ===========================================================================

@@ -269,7 +269,7 @@ async def create_user(req: CreateUserRequest, current_user: dict = Depends(requi
     user_id = new_id()
     now = utcnow()
     new_user = {
-        "user_id": user_id, "email": req.email, "full_name": req.full_name, "position": "",
+        "user_id": user_id, "id": user_id, "email": req.email, "full_name": req.full_name, "position": "",
         "roles": req.roles, "role": req.roles[0] if req.roles else "engineer",
         "role_title": req.roles[0] if req.roles else "Инженер",
         "is_active": True, "available_tabs": ["chat","search","checks","history"],
@@ -331,6 +331,7 @@ async def update_user(user_id: int, req: UpdateUserRequest, current_user: dict =
             _access_token_map.pop(at, None)
     user["updated_at"] = utcnow()
     _add_audit(current_user["user_id"], "user.update", "user", user_id)
+    user["id"] = user["user_id"]
     return user
 
 @router.patch("/api/v1/admin/users/{user_id}")
@@ -350,6 +351,7 @@ async def patch_user(user_id: int, req: PatchUserRequest, current_user: dict = D
     return {
         "user_id": user["user_id"],
         "role": user.get("role", user["roles"][0] if user["roles"] else ""),
+        "roles": user.get("roles", []),
         "audit_log_id": audit_log_id,
         "updated_at": user["updated_at"],
     }
