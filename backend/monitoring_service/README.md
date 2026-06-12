@@ -139,8 +139,9 @@ sudo ls -la /home/user/monitoring_demo/
      
    в файле  всех остальных модулей где будет логирование:  
    добавить строки в начало каждого файла:
-   ```text  
-   python  
+   
+```text  
+python  
 import logging
 logger = logging.getLogger(__name__)
 ```
