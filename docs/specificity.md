@@ -102,12 +102,12 @@ API черновиков и FSM документированы, но **UI сра
 |-----|----------|--------|
 | A15 (DB-E4) | Нет UNIQUE-ограничений для 6 бизнес-ключей | 🔄 DDL |
 | A16 (DB-E5) | Нет ON DELETE (NO ACTION по умолч.) | 🔄 DDL |
-| A17 | Нет таблиц `auth.users`, `registry.terminology` | 🔄 разработка |
+| A17 | Нет таблиц `auth.users`, `registry.terminology` | 🔄 исправлено: таблицы есть, но не были описаны в db_diagrams.md. Добавлены в ER-диаграмму и примечания |
 | A18 (DB-E10) | Нет soft-delete и `updated_at` | 🔄 решение |
 | A19 (DB-E1) | VARCHAR для ENUM без CHECK | 🔄 DDL |
 | A20 (DB-E8) | `document_chunks.document_id` денормализация без синхронизации | 🟡 открыто |
 | A21 (DB-E2) | `file_hash_sha256` как `text` вместо `CHAR(64)` | 🟡 открыто |
-| A22 | `sessions.message_count` без триггера синхронизации | 🟡 открыто |
+| A22 | `sessions.message_count` без триггера синхронизации | 🔄 исправлено: поле удалено из схемы БД и API. Количество сообщений вычисляется по факту через COUNT |
 
 ---
 
@@ -178,14 +178,14 @@ API черновиков и FSM документированы, но **UI сра
 
 | Код | Проблема | Статус |
 |-----|----------|--------|
-| X1 | `document_id` назначается в разных местах (Converter vs Registry) | ⬜ открыто |
-| X2 | `title_hash_sha256` — разные формулы в пайплайне и ER-диаграмме | ⬜ открыто |
-| X3 | `partially_indexed` — есть в тексте пайплайна 2, нет в FSM и в БД | ⬜ открыто |
+| X1 | `document_id` назначается в разных местах (Converter vs Registry) | 🔄 исправлено: зафиксировано — `document_id` назначает Registry. overview.md актуализирован |
+| X2 | `title_hash_sha256` — разные формулы в пайплайне и ER-диаграмме | 🔄 исправлено: формула приведена к `doc_code + title + era`. overview.md и db_diagrams.md синхронизированы |
+| X3 | `partially_indexed` — есть в тексте пайплайна 2, нет в FSM и в БД | 🔄 решено: удалено из текста пайплайна 2 как нестатус — редкий крайний случай, не требующий отдельного статуса |
 | X4 | `discarded` (draft) → `failed` (document) — решено: `discarded` — только статус черновика, `failed` — только статус документа | 🔄 исправлено |
 | X5 | Журнал Оркестратора не отображён в схеме БД | ⬜ открыто |
-| X6 | `document_versions` — нет связи `documents.current_version_id` | ⬜ открыто |
-| X7 | `terminology` есть в JSON-схемах, нет таблицы в БД | ⬜ открыто |
-| X8 | `amendments` — в JSON вложены, в БД нет отдельной таблицы | ⬜ открыто |
+| X6 | `document_versions` — нет связи `documents.current_version_id` | 🔄 решено: поле `current_version_id` добавлено в `registry.documents` (FK → `registry.document_versions.id`, nullable). Актуализировано в `db_diagrams.md` |
+| X7 | `terminology` есть в JSON-схемах, нет таблицы в БД | 🔄 исправлено: таблица `registry.terminology` добавлена в ER-диаграмму и примечания db_diagrams.md |
+| X8 | `amendments` — в JSON вложены, в БД нет отдельной таблицы | 🔄 решено: осознанное решение — поправки хранятся в JSONB внутри `document_sections.content`. Отдельная таблица не требуется до появления бизнес-требования на поиск/фильтрацию по поправкам |
 
 ---
 

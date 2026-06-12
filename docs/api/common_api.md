@@ -353,7 +353,7 @@ GET .../{doc_id}/status?longpoll=15
 | `GET /drafts/{draft_id}/preview/status`                     | ✓          | ✓                 | ✓              |
 | `PATCH /drafts/{draft_id}/decide`                           | ✓          | ✓                 | ✓              |
 | `DELETE /drafts/{draft_id}`                                 | ✗          | ✓                 | ✓              |
-| `GET /tasks/{task_id}/status` (internal)                    | —          | —                 | ✓              |
+| `GET /tasks/{task_id}/status`                              | ✗          | ✗                 | ✓              |
 
 | `POST /analyse/compare`, `GET /analyse/compare/{id}`       | ✓          | ✓                 | ✓              |
 | `POST /analyse/calculate`                                  | ✓          | ✓                 | ✓              |
@@ -365,7 +365,7 @@ GET .../{doc_id}/status?longpoll=15
 | `GET /admin/audit` | ✗ | ✗ | ✓ |
 | `GET /monitor/health` | ✓ (без аутентификации) | ✓ | ✓ |
 | `GET /monitor/metrics` | ✗ | ✓ | ✓ |
-| `GET /tasks/{task_id}/status` | ✗ | ✓ | ✓ |
+| `GET /tasks/{task_id}/status` | ✗ | ✗ | ✓ |
 | `GET /tasks/{task_id}/steps` | ✗ | ✗ | ✓ |
 | `GET /drafts/{draft_id}/tasks` | ✗ | ✓ | ✓ |
 | `GET /registry/classifiers/*` | ✓ | ✓ | ✓ |

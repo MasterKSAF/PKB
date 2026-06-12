@@ -399,7 +399,6 @@ CRUD для судостроительных проектов (`chat.projects`).
   "project_id": 42,
   "document_ids": [1, 2, 3],
   "options": {},
-  "message_count": 0,
   "created_at": "2026-04-27T14:00:00Z",
   "updated_at": "2026-04-27T14:00:00Z"
 }
@@ -421,7 +420,6 @@ CRUD для судостроительных проектов (`chat.projects`).
       "title": "Проверка требований Arc4",
       "project_id": 42,
       "document_ids": [1],
-      "message_count": 12,
       "last_message_preview": "Согласно Правилам РС, толщина обшивки...",
       "created_at": "2026-04-27T14:00:00Z",
       "updated_at": "2026-04-27T14:30:00Z"
