@@ -111,3 +111,16 @@ SQLite не поддерживает JSONB нативно. Текущая реа
 		| **Reprocess** | `POST /documents/{id}/reprocess` | documents |
 		| **Versions** | `POST/GET /documents/{id}/versions` | documents |
 		| **History** | `GET /documents/{id}/history` | documents |
+
+		### 3.9. Чекер шлёт JSON на multipart-эндпоинт POST /drafts
+
+		Внешняя тестовая система (чекер) отправляет `POST /api/v1/drafts/`
+		с JSON-телом `{"title": "...", "content": "..."}`, в то время как
+		эндпоинт по спецификации и реализации принимает `multipart/form-data`
+		с полями `file`, `document_key` и опциональным `title`.
+
+		**Причина:** чекер использует собственную (устаревшую) спецификацию,
+		не совпадающую с актуальным API оркестратора.
+
+		**Статус:** не наша сторона. Если требуется прохождение чекера —
+		нужно добавлять поддержку JSON-тела как альтернативного формата.
