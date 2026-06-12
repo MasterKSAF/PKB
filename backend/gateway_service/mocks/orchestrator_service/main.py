@@ -189,7 +189,7 @@ def _get_queue_from_documents():
 # ── Pydantic модели ───────────────────────────────────────────────────────
 class SearchRequest(BaseModel):
     query: str
-    document_ids: Optional[List[str]] = None
+    document_ids: Optional[List[int]] = None
     top_k: Optional[int] = 10
     filters: Optional[Dict[str, Any]] = None
 
@@ -603,14 +603,14 @@ async def get_task_status(task_id: int):
 @router.post("/api/v1/documents/search")
 async def search_post(req: SearchRequest):
     mock_results = [
-        {"section_id": "sec-001", "document_id": "doc-001", "document_title": "Спецификация по ГОСТ 2.109",
+        {"section_id": 1, "document_id": 1, "document_title": "Спецификация по ГОСТ 2.109",
          "document_type": "specification", "clause": "Основные требования", "page": 3,
          "content": "Толщина стенки корпуса: 5 мм, материал: Сталь 45", "score": 0.95,
-         "page_preview_url": "/documents/doc-001/pages/3/preview", "document_url": "/documents/doc-001/file"},
-        {"section_id": "sec-002", "document_id": "rd-001", "document_title": "ГОСТ 2.109-73",
+         "page_preview_url": "/documents/1/pages/3/preview", "document_url": "/documents/1/file"},
+        {"section_id": 2, "document_id": 2, "document_title": "ГОСТ 2.109-73",
          "document_type": "normative", "clause": "Раздел 3", "page": 5,
          "content": "Толщина стенки не менее 4 мм", "score": 0.92,
-         "page_preview_url": "/documents/rd-001/pages/5/preview", "document_url": "/documents/rd-001/file"},
+         "page_preview_url": "/documents/2/pages/5/preview", "document_url": "/documents/2/file"},
     ]
     if req.document_ids:
         mock_results = [r for r in mock_results if r["document_id"] in req.document_ids]

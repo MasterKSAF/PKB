@@ -477,9 +477,9 @@ def _extract_message(detail: any) -> str:
 # Middleware stack
 # ---------------------------------------------------------------------------
 
-# StripTrailingSlash — ПЕРВЫМ, чтобы все последующие middleware
-# и роутер видели уже нормализованный путь (без trailing slash).
-app.add_middleware(StripTrailingSlashMiddleware)
+# StripTrailingSlash — САМЫМ ВНЕШНИМ (добавлен последним),
+# чтобы все остальные middleware (RBAC, CORS) видели
+# уже нормализованный путь без trailing slash.
 app.add_middleware(ProcessTimeMiddleware)
 app.add_middleware(IdempotencyMiddleware)
 app.add_middleware(RBACMiddleware)
@@ -490,6 +490,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(StripTrailingSlashMiddleware)
 
 # ---------------------------------------------------------------------------
 # Router includes
