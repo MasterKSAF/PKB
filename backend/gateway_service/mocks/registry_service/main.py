@@ -781,7 +781,8 @@ async def enums():
 
 # NOTE: /api/v1/system/health зарегистрирован только в gateway.py (единая точка).
 # Для внутреннего мониторинга каждый сервис использует /api/v1/health.
-@main_router.get("/health")
+# health endpoint — на уровне app, чтобы не получить префикс /api/v1/registry
+@app.get("/api/v1/health")
 async def health():
     return {"status": "ok", "service": "registry-service", "version": "1.0.0", "uptime_seconds": 86400}
 
