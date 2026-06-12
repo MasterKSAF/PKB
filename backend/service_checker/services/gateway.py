@@ -78,10 +78,11 @@ def get_service_def() -> ServiceDef:
             body={"code": "TEST-PRJ", "name": "Тестовый проект", "status": "active"}, extract_keys=["project_id"],
             is_preparation=True, expected_status={201, 409}),
 
-        # Admin: create user (prepare user_id)
+        # Admin: create user (prepare user_id — через seed user_id=1)
         EndpointDef("POST", f"{API_PREFIX}/admin/users", "admin",
             "Создать пользователя (prepare)",
-            body={"email": "gateway@test.com", "full_name": "Gateway User",
+            body={"email": f"gw_{int(time.time()*100)%100000}@test.com",
+                  "full_name": "Gateway User",
                   "password": "test123", "roles": ["engineer"]},
             extract_keys=["user_id"],
             is_preparation=True, expected_status={201, 409}),
@@ -301,7 +302,7 @@ def get_service_def() -> ServiceDef:
         endpoints=endpoints,
         prepare_endpoints=prepare_endpoints,
         depends_on=[],
-        base_data={"page_num": 1, "task_id": 1, "pending_id": 1, "project_id": 1, "user_id": 1},
+        base_data={"page_num": 1, "pending_id": 1, "user_id": 1},
         warnings=[
             "Gateway — отдельный mock-сервис, тестируется независимо от других сервисов.",
             "Эндпоинты и prepare определены строго по openapi.json mock'а.",
