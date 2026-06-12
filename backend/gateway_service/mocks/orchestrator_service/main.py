@@ -5,6 +5,7 @@ Orchestrator Service — автономный шлюз API для докумен
 
 import copy
 import hashlib
+import logging
 import random
 import time
 from datetime import datetime, timezone
@@ -12,6 +13,8 @@ from typing import Any, Dict, List, Optional
 
 import uvicorn
 from fastapi import APIRouter, FastAPI, File, HTTPException, Query, Request, UploadFile
+
+logger = logging.getLogger("orchestrator_service")
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -148,7 +151,9 @@ init_data()
 def _get_document(doc_id: int) -> dict:
     doc = _documents.get(doc_id)
     if not doc:
+        logger.warning("get_document: doc_id=%s NOT FOUND", doc_id)
         raise HTTPException(status_code=404, detail=error_response("DOCUMENT_NOT_FOUND", "Документ не найден"))
+    logger.info("get_document: doc_id=%s FOUND", doc_id)
     return doc
 
 def _get_page_block(doc_id: int, page_num: int) -> dict:
@@ -189,7 +194,7 @@ def _get_queue_from_documents():
 # ── Pydantic модели ───────────────────────────────────────────────────────
 class SearchRequest(BaseModel):
     query: str
-    document_ids: Optional[List[str]] = None
+    document_ids: Optional[List[int]] = None
     top_k: Optional[int] = 10
     filters: Optional[Dict[str, Any]] = None
 
@@ -275,6 +280,7 @@ async def create_draft(
     """Загрузка файла → создание черновика. Возвращает 202 + draft_id."""
     now = utcnow()
     user_id = "anonymous"
+    logger.info("create_draft: file=%s source_type=%s title=%s", file.filename if file else None, source_type, title)
     if request and hasattr(request.state, "user"):
         user_id = request.state.user.get("user_id", "anonymous") or "anonymous"
 
@@ -383,6 +389,7 @@ async def list_drafts(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
 ):
+    logger.info("list_drafts: document_key=%s status=%s", document_key, status)
     items = [d for d in _drafts.values() if d.get("document_key") == document_key]
     if status:
         items = [d for d in items if d.get("status") == status]
@@ -603,14 +610,14 @@ async def get_task_status(task_id: int):
 @router.post("/api/v1/documents/search")
 async def search_post(req: SearchRequest):
     mock_results = [
-        {"section_id": "sec-001", "document_id": "doc-001", "document_title": "Спецификация по ГОСТ 2.109",
+        {"section_id": 1, "document_id": 1, "document_title": "Спецификация по ГОСТ 2.109",
          "document_type": "specification", "clause": "Основные требования", "page": 3,
          "content": "Толщина стенки корпуса: 5 мм, материал: Сталь 45", "score": 0.95,
-         "page_preview_url": "/documents/doc-001/pages/3/preview", "document_url": "/documents/doc-001/file"},
-        {"section_id": "sec-002", "document_id": "rd-001", "document_title": "ГОСТ 2.109-73",
+         "page_preview_url": "/documents/1/pages/3/preview", "document_url": "/documents/1/file"},
+        {"section_id": 2, "document_id": 2, "document_title": "ГОСТ 2.109-73",
          "document_type": "normative", "clause": "Раздел 3", "page": 5,
          "content": "Толщина стенки не менее 4 мм", "score": 0.92,
-         "page_preview_url": "/documents/rd-001/pages/5/preview", "document_url": "/documents/rd-001/file"},
+         "page_preview_url": "/documents/2/pages/5/preview", "document_url": "/documents/2/file"},
     ]
     if req.document_ids:
         mock_results = [r for r in mock_results if r["document_id"] in req.document_ids]
@@ -628,6 +635,7 @@ async def search_post(req: SearchRequest):
 @router.get("/api/v1/documents/search")
 async def search_get(q: str = Query(...), document_ids: Optional[str] = None,
                      top_k: int = 10, page: int = 1, page_size: int = 50):
+    logger.info("search_get: q=%s top_k=%d document_ids=%s", q, top_k, document_ids)
     req = SearchRequest(query=q, document_ids=document_ids.split(",") if document_ids else None, top_k=top_k)
     return await search_post(req)
 

@@ -252,7 +252,10 @@ class TestAuthService:
             headers=auth_header(),
         )
         assert_ok(resp, 201)
-        assert resp.json()["email"] == "new@test.com"
+        data = resp.json()
+        assert data["email"] == "new@test.com"
+        assert "id" in data
+        assert data["id"] == data["user_id"]
 
     def test_10_create_user_duplicate(self):
         resp = client.post(
@@ -283,13 +286,19 @@ class TestAuthService:
             headers=auth_header(),
         )
         assert_ok(resp)
-        assert resp.json()["position"] == "Lead Engineer"
+        data = resp.json()
+        assert data["position"] == "Lead Engineer"
+        assert "id" in data
+        assert data["id"] == 1
 
     def test_14_patch_user_role(self):
         resp = client.patch(
             f"{ADMIN}/users/2", json={"role": "system_admin"}, headers=auth_header()
         )
         assert_ok(resp)
+        data = resp.json()
+        assert "roles" in data
+        assert isinstance(data["roles"], list)
 
     def test_15_deactivate_user(self):
         create = client.post(
@@ -694,7 +703,10 @@ class TestQueryService:
             },
         )
         assert_ok(resp)
-        assert resp.json()["saved"] is True
+        data = resp.json()
+        assert data["saved"] is True
+        assert "status" in data
+        assert data["status"] == "completed"
 
     def test_61_chat_history(self):
         resp = client.get(f"{QUERY}/chat/history")
@@ -1199,6 +1211,22 @@ class TestRegistryService:
         assert "documents_by_source_type" in data
         assert "documents_by_era" in data
 
+    def test_97a_get_stats_shortcut(self):
+        """GET /registry/stats — shortcut path without /common/."""
+        resp = client.get(f"{REG}/stats")
+        assert_ok(resp)
+        data = resp.json()["data"]
+        assert "classifiers_total" in data
+        assert "documents_total" in data
+
+    def test_97b_get_enums_shortcut(self):
+        """GET /registry/enums — shortcut path without /common/."""
+        resp = client.get(f"{REG}/enums")
+        assert_ok(resp)
+        data = resp.json()["data"]
+        assert "classifier_system" in data
+        assert "document_status" in data
+
     def test_97_get_enums(self):
         """Expanded enums with more values."""
         resp = client.get(f"{COMMON}/enums")
@@ -1241,6 +1269,29 @@ class TestRegistryService:
         data = resp.json()["data"]
         assert data["status"] == "rejected"
 
+    def test_100b_list_pending(self):
+        """GET /classifiers/pending — alias for quarantine."""
+        resp = client.get(f"{REG}/classifiers/pending")
+        assert_ok(resp)
+        data = resp.json()
+        assert "data" in data
+        assert_paginated(data)
+
+    def test_100c_accept_pending(self):
+        """POST /classifiers/pending/{id}/accept — alias for quarantine accept."""
+        resp = client.post(f"{REG}/classifiers/pending/1/accept")
+        assert_ok(resp)
+        data = resp.json()["data"]
+        assert data["status"] == "accepted"
+        assert "classifier_code" in data
+
+    def test_100d_reject_pending(self):
+        """POST /classifiers/pending/{id}/reject — alias for quarantine reject."""
+        resp = client.post(f"{REG}/classifiers/pending/1/reject")
+        assert_ok(resp)
+        data = resp.json()["data"]
+        assert data["status"] == "rejected"
+
     def test_101_validate_classification(self):
         """POST /classifiers/validate — validate classification code."""
         resp = client.post(
@@ -1252,16 +1303,19 @@ class TestRegistryService:
         assert "mks_status" in data
         assert "okstu_status" in data
         assert "overall_status" in data
+        assert "udk_valid" in data
+        assert isinstance(data["udk_valid"], bool)
 
     def test_102_registry_doc_history(self):
         """GET /documents/{id}/history — registry doc history."""
         seed_id = 1
         resp = client.get(f"{REG_DOCS}/documents/{seed_id}/history")
         assert_ok(resp)
-        data = resp.json()["data"]
-        assert "doc_id" in data
-        assert data["doc_id"] == seed_id
-        assert "history" in data
+        body = resp.json()
+        assert "data" in body
+        assert isinstance(body["data"], list)
+        assert "meta" in body
+        assert "total" in body["meta"]
 
     def test_103_registry_doc_chain(self):
         """GET /documents/{id}/succession — registry doc chain (predecessors/successors)."""
@@ -1269,11 +1323,11 @@ class TestRegistryService:
         seed_id = 1
         resp = client.get(f"{REG_DOCS}/documents/{seed_id}/succession")
         assert_ok(resp)
-        data = resp.json()["data"]
-        assert "document_id" in data
-        assert data["document_id"] == seed_id
-        assert "chain" in data
-        assert isinstance(data["chain"], list)
+        body = resp.json()
+        assert "data" in body
+        assert isinstance(body["data"], list)
+        assert "meta" in body
+        assert "total" in body["meta"]
 
 
 # ===========================================================================

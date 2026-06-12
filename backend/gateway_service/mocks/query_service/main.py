@@ -446,7 +446,7 @@ async def submit_feedback(req: FeedbackRequest):
         "answer_id": req.answer_id, "useful": req.useful,
         "opened_citation_ids": req.opened_citation_ids or [], "created_at": utcnow(),
     })
-    return {"feedback_id": fb_id, "saved": True,
+    return {"feedback_id": fb_id, "saved": True, "status": "completed",
             "metrics_changed": {"rated_answers": len(_feedback_store), "useful_rate": 0.78, "flagged_for_review": 0}}
 
 @router.get("/api/v1/chat/history")

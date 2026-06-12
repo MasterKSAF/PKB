@@ -5,11 +5,14 @@ Registry Service — автономный сервис реестра НСИ (in
 
 import copy
 import hashlib
+import logging
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 import uvicorn
 from fastapi import APIRouter, FastAPI, HTTPException, Query
+
+logger = logging.getLogger("registry_service")
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -281,13 +284,37 @@ async def reject_quarantine(pending_id: int):
     pending["status"] = "rejected"
     return {"data": {"id": pending_id, "status": "rejected"}}
 
+
+# ── псевдонимы /classifiers/pending — checker использует этот путь ──────────
+
+@main_router.get("/classifiers/pending")
+async def list_pending(status: str = None, page: int = 1, page_size: int = 50):
+    """Псевдоним /classifiers/quarantine."""
+    logger.info("list_pending: status=%s page=%d", status, page)
+    return await list_quarantine(status, page, page_size)
+
+
+@main_router.post("/classifiers/pending/{pending_id}/accept")
+async def accept_pending(pending_id: int):
+    """Псевдоним /classifiers/quarantine/{id}/accept."""
+    logger.info("accept_pending: id=%d", pending_id)
+    return await accept_quarantine(pending_id)
+
+
+@main_router.post("/classifiers/pending/{pending_id}/reject")
+async def reject_pending(pending_id: int):
+    """Псевдоним /classifiers/quarantine/{id}/reject."""
+    logger.info("reject_pending: id=%d", pending_id)
+    return await reject_quarantine(pending_id)
+
+
 @main_router.post("/classifiers/validate")
 async def validate_classification(req: dict):
     code = req.get("mks_oks_code", req.get("code"))
     node = _classifiers.get(code) if code else None
     valid = node is not None
     status = "CONFIRMED" if valid else "NOT_FOUND"
-    return {"data": {"mks_status": status, "okstu_status": "NOT_USED", "overall_status": "valid" if valid else "pending"}}
+    return {"data": {"mks_status": status, "okstu_status": "NOT_USED", "overall_status": "valid" if valid else "pending", "udk_valid": valid}}
 
 @main_router.get("/classifiers/{code}")
 async def get_classifier(code: str):
@@ -522,7 +549,8 @@ async def patch_status(doc_id: int, req: RegistryDocStatusUpdate):
 async def doc_history(doc_id: int):
     if doc_id not in _registry_docs:
         raise HTTPException(404, detail=error_response("DOCUMENT_NOT_FOUND", "Документ не найден"))
-    return {"data": {"doc_id": doc_id, "history": _doc_history.get(doc_id, [])}}
+    history = _doc_history.get(doc_id, [])
+    return {"data": history, "meta": {"total": len(history)}}
 
 @registry_docs_router.get("/documents/{doc_id}/succession")
 async def doc_succession(doc_id: int):
@@ -547,11 +575,12 @@ async def doc_succession(doc_id: int):
             cur = s.get("successor_doc_id")
         else:
             break
-    return {"data": {"document_id": doc_id, "chain": [
+    chain = [
         *[{"id": p["id"], "title": p["title"], "doc_code": p["doc_code"], "era": p.get("era"), "relation": "predecessor", "depth": -(i+1)} for i, p in enumerate(preds)],
         {"id": doc["id"], "title": doc["title"], "doc_code": doc["doc_code"], "era": doc.get("era"), "relation": "self", "depth": 0},
         *[{"id": s["id"], "title": s["title"], "doc_code": s["doc_code"], "era": s.get("era"), "relation": "successor", "depth": i+1} for i, s in enumerate(succs)]
-    ]}}
+    ]
+    return {"data": chain, "meta": {"total": len(chain)}}
 
 @registry_docs_router.delete("/documents/{doc_id}")
 async def delete_registry_doc(doc_id: int):
@@ -762,6 +791,10 @@ async def stats():
         "documents_by_era": docs_by_era
     }}
 
+@registry_docs_router.get("/stats")
+async def stats_shortcut():
+    return await stats()
+
 @main_router.get("/common/enums")
 async def enums():
     return {"data": {
@@ -778,6 +811,10 @@ async def enums():
         "validation_status": ["pending", "valid", "invalid"],
         "chunk_type": ["text", "table", "image", "formula"]
     }}
+
+@registry_docs_router.get("/enums")
+async def enums_shortcut():
+    return await enums()
 
 # NOTE: /api/v1/system/health зарегистрирован только в gateway.py (единая точка).
 # Для внутреннего мониторинга каждый сервис использует /api/v1/health.
