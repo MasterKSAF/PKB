@@ -26,7 +26,7 @@ app.include_router(internal.router, prefix="/api/v1")
 async def on_startup():
     async with AsyncSessionLocal() as db:
         await init_db(db)
-    logger.info("Auth Service started on %s", settings.database_url.split("@")[-1])
+    logger.info("Auth Service started (env=%s)", settings.env)
 
 
 @app.get("/health")
