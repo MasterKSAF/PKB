@@ -965,5 +965,195 @@ class TestRegistryCategories:
         assert "Материалы" in names
 
 
+# =====================================================================
+# Checker-style integration tests: create → read → update → delete
+# =====================================================================
+
+class TestCheckerChatFlow:
+    """Полный цикл чата как checker: session → messages → context → export."""
+
+    def test_chat_full_flow(self):
+        """Create session → send message → list → last → by_id → context → export."""
+        # Create session
+        r = client.post(f"{BASE}/chat/sessions", json={"title": "Checker", "project_id": 1})
+        assert r.status_code == 201, f"Create session: {r.text[:200]}"
+        sid = r.json()["session_id"]
+        assert sid is not None
+
+        # Send message #1
+        r = client.post(f"{BASE}/chat/sessions/{sid}/messages", json={"content": "Hello"})
+        assert r.status_code == 200, f"Send msg 1: {r.text[:200]}"
+        msg1_id = r.json()["message_id"]
+
+        # Send message #2
+        r = client.post(f"{BASE}/chat/sessions/{sid}/messages", json={"content": "World"})
+        assert r.status_code == 200, f"Send msg 2: {r.text[:200]}"
+
+        # List messages
+        r = client.get(f"{BASE}/chat/sessions/{sid}/messages")
+        assert r.status_code == 200, f"List messages: {r.text[:200]}"
+        body = r.json()
+        assert "messages" in body
+        assert len(body["messages"]) >= 2
+
+        # Last messages
+        r = client.get(f"{BASE}/chat/sessions/{sid}/messages/last")
+        assert r.status_code == 200, f"Last messages: {r.text[:200]}"
+        assert "messages" in r.json()
+
+        # Get message by id
+        r = client.get(f"{BASE}/chat/sessions/{sid}/messages/{msg1_id}")
+        assert r.status_code == 200, f"Get msg by id: {r.text[:200]}"
+        assert r.json()["message"]["message_id"] == msg1_id
+
+        # Context
+        r = client.post(f"{BASE}/chat/sessions/{sid}/context", json={"action": "add", "params": {"document_ids": [1]}})
+        assert r.status_code == 200, f"Context: {r.text[:200]}"
+
+        # Export
+        r = client.post(f"{BASE}/chat/sessions/{sid}/export", json={"format": "json"})
+        assert r.status_code == 200, f"Export: {r.text[:200]}"
+
+
+class TestCheckerRegistryDocFlow:
+    """Полный цикл registry документа: create → status → history → succession → sections."""
+
+    def test_registry_doc_full_flow(self):
+        """Create registry doc → patch status → history → succession → sections."""
+        # Create
+        r = client.post(f"{REG}/documents", json={
+            "title": "Checker Doc", "doc_code": f"CHK-{uuid.uuid4().hex[:4]}"
+        })
+        assert r.status_code == 201, f"Create: {r.text[:200]}"
+        doc_id = r.json().get("data", {}).get("id") or r.json().get("data", {}).get("document_id")
+        assert doc_id is not None
+
+        # Patch status
+        r = client.patch(f"{REG}/documents/{doc_id}/status", json={"status": "archived"})
+        assert r.status_code == 200, f"Patch status: {r.text[:200]}"
+
+        # History
+        r = client.get(f"{REG}/documents/{doc_id}/history")
+        assert r.status_code == 200, f"History: {r.text[:200]}"
+        assert "data" in r.json()
+
+        # Succession
+        r = client.get(f"{REG}/documents/{doc_id}/succession")
+        assert r.status_code == 200, f"Succession: {r.text[:200]}"
+
+        # Sections
+        r = client.get(f"{REG}/documents/{doc_id}/sections")
+        assert r.status_code == 200, f"Sections: {r.text[:200]}"
+
+
+class TestCheckerRegistryDraftFlow:
+    """Полный цикл registry draft: create → get → preview → patch status → delete."""
+
+    def test_registry_draft_full_flow(self):
+        """Registry draft create → get → preview → status → delete."""
+        # Create
+        r = client.post(f"{REG}/drafts", json={
+            "file_key": "chk.pdf", "document_key": f"chk-{uuid.uuid4().hex[:4]}"
+        })
+        assert r.status_code == 201, f"Create: {r.text[:200]}"
+        draft_id = r.json().get("data", {}).get("id")
+        assert draft_id is not None
+
+        # Get
+        r = client.get(f"{REG}/drafts/{draft_id}")
+        assert r.status_code == 200, f"Get: {r.text[:200]}"
+
+        # Preview
+        r = client.get(f"{REG}/drafts/{draft_id}/preview")
+        assert r.status_code == 200, f"Preview: {r.text[:200]}"
+
+        # Patch status
+        r = client.patch(f"{REG}/drafts/{draft_id}/status", json={"status": "uploaded", "confidence": None})
+        assert r.status_code == 200, f"Patch status: {r.text[:200]}"
+
+        # Delete
+        r = client.delete(f"{REG}/drafts/{draft_id}")
+        assert r.status_code in (200, 204), f"Delete: {r.text[:200]}"
+
+
+class TestCheckerImportFlow:
+    """Import endpoints с JSON-телом (как checker)."""
+
+    def test_import_classifiers_json(self):
+        """POST /classifiers/import с JSON-массивом."""
+        r = client.post(f"{REG}/classifiers/import",
+            json=[{"classifier_system": "MKS", "code": "CHK.IMP", "full_name": "Checker Import"}])
+        assert r.status_code == 200, f"Import classifiers: {r.text[:200]}"
+        assert r.json()["data"]["inserted"] >= 1
+
+    def test_import_terminology_json(self):
+        """POST /terminology/import с JSON-массивом."""
+        r = client.post(f"{REG}/terminology/import",
+            json=[{"raw_term": "checker.test", "term_type": "preferred", "definition": "Test"}])
+        assert r.status_code == 200, f"Import terms: {r.text[:200]}"
+
+    def test_import_documents_json(self):
+        """POST /documents/import с JSON-массивом."""
+        r = client.post(f"{REG}/documents/import",
+            json=[{"title": "Checker Import", "doc_code": "CHK-IMP"}])
+        assert r.status_code == 200, f"Import docs: {r.text[:200]}"
+        assert "data" in r.json()
+
+
+class TestCheckerTaskFlow:
+    """Task status через создание draft."""
+
+    def test_task_status_flow(self):
+        """Create draft → get task status."""
+        r = client.post(f"{BASE}/drafts", json={"file_key": "task.pdf", "document_key": "task-doc"})
+        assert r.status_code == 202, f"Create draft: {r.text[:200]}"
+        task_id = r.json().get("task_id")
+        assert task_id is not None
+
+        r = client.get(f"{BASE}/tasks/{task_id}/status")
+        assert r.status_code == 200, f"Task status: {r.text[:200]}"
+        assert r.json()["task_id"] == task_id
+        assert "status" in r.json()
+
+
+class TestCheckerOrchestratorDraftFlow:
+    """Полный цикл orchestrator draft: create → get → preview → decide → delete."""
+
+    def test_orchestrator_draft_full_flow(self):
+        """Create draft → get → preview start → preview status → get preview → decide → delete."""
+        # Create
+        r = client.post(f"{BASE}/drafts", json={"file_key": "full.pdf", "document_key": "full-doc"})
+        assert r.status_code == 202, f"Create: {r.text[:200]}"
+        draft_id = r.json().get("draft_id")
+        assert draft_id is not None
+
+        # Get
+        r = client.get(f"{BASE}/drafts/{draft_id}")
+        assert r.status_code == 200, f"Get: {r.text[:200]}"
+
+        # Start preview
+        r = client.post(f"{BASE}/drafts/{draft_id}/preview")
+        assert r.status_code == 202, f"Start preview: {r.text[:200]}"
+        assert r.json()["status"] == "previewing"
+
+        # Preview status
+        r = client.get(f"{BASE}/drafts/{draft_id}/preview/status")
+        assert r.status_code == 200, f"Preview status: {r.text[:200]}"
+        assert r.json()["status"] == "ready_for_approve"
+
+        # Get preview
+        r = client.get(f"{BASE}/drafts/{draft_id}/preview")
+        assert r.status_code == 200, f"Get preview: {r.text[:200]}"
+
+        # Decide
+        r = client.patch(f"{BASE}/drafts/{draft_id}/decide", json={"action": "approve"})
+        assert r.status_code == 200, f"Decide: {r.text[:200]}"
+        assert r.json()["status"] == "approved"
+
+        # Delete
+        r = client.delete(f"{BASE}/drafts/{draft_id}")
+        assert r.status_code in (200, 204), f"Delete: {r.text[:200]}"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
