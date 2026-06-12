@@ -47,13 +47,11 @@ class DecideRequest(BaseModel):
 # ── утилиты ──────────────────────────────────────────────────────────────────
 
 def _next_draft_id() -> int:
-    if not _drafts:
-        return 420000
-    return max(int(k) for k in _drafts.keys()) + 1
+    return new_id()
 
 
 def _next_task_id() -> int:
-    return _next_draft_id()
+    return new_id()
 
 
 def _build_title_hash(title: str) -> str:
