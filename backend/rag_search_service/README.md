@@ -7,18 +7,19 @@
 
 Сервис реализует **гибридный поиск** с объединением результатов через алгоритм **Reciprocal Rank Fusion (RRF)**:
 
-1.  **Dense Search (Векторный):** Семантический поиск через `pgvector` (HNSW индекс, cosine distance).
-2.  **Sparse Search (Полнотекстовый):** Лексический поиск через `tsvector` (GIN индекс, `ts_rank`, русский язык).
-3.  **Reciprocal Rank Fusion (RRF):** Объединение двух ранжированных списков в единый скор без необходимости нормализации метрик.
-4.  **Metadata Enrichment:** JOIN с таблицами `registry.documents` и `registry.document_sections` для получения названий документов, разделов и кодов.
-5.  **Retry / Fallback:** При ошибке dense или sparse поиска — 2 retry (exponential backoff 500ms → 1s). Если dense упал — fallback на sparse, если sparse упал — fallback на dense. Если оба упали — ошибка пробрасывается.
+1. **Dense Search (Векторный):** Семантический поиск через `pgvector` (HNSW индекс, cosine distance).
+2. **Sparse Search (Полнотекстовый):** Лексический поиск через `tsvector` (GIN индекс, `ts_rank`, русский язык).
+3. **Reciprocal Rank Fusion (RRF):** Объединение двух ранжированных списков в единый скор без необходимости нормализации метрик.
+4. **Metadata Enrichment:** JOIN с таблицами `registry.documents` и `registry.document_sections` для получения названий документов, разделов и кодов.
+5. **Retry / Fallback:** При ошибке dense или sparse поиска — 2 retry (exponential backoff 500ms → 1s). Если dense упал — fallback на sparse, если sparse упал — fallback на dense. Если оба упали — ошибка пробрасывается.
 
 ### Стек технологий
-*   **Язык:** Python 3.11+
-*   **Фреймворк:** FastAPI (async)
-*   **БД:** PostgreSQL 16 + `pgvector` + `ltree` + `pg_trgm`
-*   **Эмбеддинги:** OpenAI-compatible API (Infinity или другой совместимый сервис)
-*   **Драйвер БД:** `asyncpg`
+
+- **Язык:** Python 3.11+
+- **Фреймворк:** FastAPI (async)
+- **БД:** PostgreSQL 16 + `pgvector` + `ltree`
+- **Эмбеддинги:** Infinity (OpenAI-compatible API, модель Qwen3-Embedding-0.6B)
+- **Драйвер БД:** `asyncpg`
 
 ## Быстрый старт
 
@@ -39,28 +40,29 @@ pip install -e ".[dev]"
 # Скопировать конфиг
 cp .env.example .env
 ```
+
 ### 2. Запуск базы данных для тестирования
 
 Сервис использует PostgreSQL с расширением pgvector. Для локальной разработки используется Docker Compose.
 
 ```bash
 # Поднять контейнер с БД (порт 5433, чтобы не конфликтовать с локальным Postgres)
-docker compose up -d
+docker-compose up -d
 
 # Проверить, что БД готова и данные инициализированы
-docker compose exec postgres psql -U rag_user -d knowledge_base -c "SELECT COUNT(*) FROM rag.document_chunks;"
-# Ожидается: 20 (тестовые данные)
+docker-compose exec postgres psql -U rag_user -d knowledge_base -c "SELECT COUNT(*) FROM rag.document_chunks;"
 ```
 
 ### 3. Запуск сервиса
+
 ```bash
 # Запустить сервис
 uvicorn app.main:app --reload --port 8091
 ```
 
-Сервис доступен по адресу: http://127.0.0.1:8091
-Swagger UI: http://127.0.0.1:8091/docs
-Health Check: http://127.0.0.1:8091/api/v1/health
+Сервис доступен по адресу: <http://127.0.0.1:8091>
+Swagger UI: <http://127.0.0.1:8091/docs>
+Health Check: <http://127.0.0.1:8091/api/v1/health>
 
 ## Развёртывание через Docker
 
@@ -92,7 +94,8 @@ nano .env
     └── Dockerfile
 ```
 
-**Корневой `.env`** для продакшена (создаётся deployer'ом):
+**Корневой** **`.env`** для продакшена (создаётся deployer'ом):
+
 ```env
 # --- Database (должны совпадать с postgres service) ---
 DB_USERNAME=rag_user
@@ -173,75 +176,79 @@ pytest tests/integration/ -v
 
 ### Сервис
 
-| Переменная | Описание | По умолчанию |
-|---|---|---|
-| `SERVICE_NAME` | Имя сервиса (для логов, метрик) | `rag-search` |
-| `SERVICE_VERSION` | Версия сервиса | `0.1.0` |
-| `SERVICE_PORT` | Порт HTTP | `8091` |
-| `LOG_LEVEL` | Уровень логирования | `INFO` |
-| `LOG_PII_FIELDS` | Поля для маскировки в логах (через запятую) | `password,access_token,refresh_token` |
+| Переменная        | Описание                                    | По умолчанию                          |
+| ----------------- | ------------------------------------------- | ------------------------------------- |
+| `SERVICE_NAME`    | Имя сервиса (для логов, метрик)             | `rag-search`                          |
+| `SERVICE_VERSION` | Версия сервиса                              | `0.1.0`                               |
+| `SERVICE_PORT`    | Порт HTTP                                   | `8091`                                |
+| `LOG_LEVEL`       | Уровень логирования                         | `INFO`                                |
+| `LOG_PII_FIELDS`  | Поля для маскировки в логах (через запятую) | `password,access_token,refresh_token` |
 
 ### База данных
 
 Имена `DB_*` — стандарт PKB. `POSTGRES_*` поддерживается для обратной совместимости.
 
-| Переменная | Описание | По умолчанию |
-|---|---|---|
-| `DB_USERNAME` | Пользователь БД | `rag_user` |
-| `DB_PASSWORD` | Пароль БД | `rag_password` |
-| `DB_DATABASE` | Имя БД | `knowledge_base` |
-| `DB_HOST` | Хост БД | `127.0.0.1` |
-| `DB_PORT` | Порт БД (локально 5433, в проде 5432) | `5432` |
-| `DB_POOL_MIN` | Мин. размер пула соединений | `2` |
-| `DB_POOL_MAX` | Макс. размер пула соединений | `10` |
+| Переменная    | Описание                              | По умолчанию     |
+| ------------- | ------------------------------------- | ---------------- |
+| `DB_USERNAME` | Пользователь БД                       | `rag_user`       |
+| `DB_PASSWORD` | Пароль БД                             | `rag_password`   |
+| `DB_DATABASE` | Имя БД                                | `knowledge_base` |
+| `DB_HOST`     | Хост БД                               | `127.0.0.1`      |
+| `DB_PORT`     | Порт БД (локально 5433, в проде 5432) | `5432`           |
+| `DB_POOL_MIN` | Мин. размер пула соединений           | `2`              |
+| `DB_POOL_MAX` | Макс. размер пула соединений          | `10`             |
 
 ### Провайдер эмбеддингов
 
-| Переменная | Описание | По умолчанию |
-|---|---|---|
-| `EMBEDDING_API_KEY` | API-ключ (опционален для Infinity) | `""` |
-| `EMBEDDING_BASE_URL` | Базовый URL OpenAI-compatible API | `https://api.openai.com/v1` |
-| `EMBEDDING_MODEL` | Модель эмбеддингов | `Qwen/Qwen3-Embedding-0.6B` |
-| `EMBEDDING_DIM` | Размерность вектора (должна совпадать с моделью и VECTOR в БД) | `1024` |
-| `EMBEDDING_TIMEOUT` | Таймаут запроса к API эмбеддингов (сек) | `30` |
-| `EMBEDDING_INSTRUCTION` | Инструкция для query-запросов (Qwen3-Embedding). Пусто — без промпта | `""` |
+| Переменная              | Описание                                                             | По умолчанию                |
+| ----------------------- | -------------------------------------------------------------------- | --------------------------- |
+| `EMBEDDING_API_KEY`     | API-ключ (опционален для Infinity)                                   | `""`                        |
+| `EMBEDDING_BASE_URL`    | Базовый URL Infinity API (в Docker)                                  | `http://infinity:7997`      |
+| `EMBEDDING_MODEL`       | Модель эмбеддингов                                                   | `Qwen/Qwen3-Embedding-0.6B` |
+| `EMBEDDING_DIM`         | Размерность вектора (должна совпадать с моделью и VECTOR в БД)       | `1024`                      |
+| `EMBEDDING_TIMEOUT`     | Таймаут запроса к API эмбеддингов (сек)                              | `60`                        |
+| `EMBEDDING_INSTRUCTION` | Инструкция для query-запросов (Qwen3-Embedding). Пусто — без промпта | `""`                        |
 
 ### Поиск
 
-| Переменная | Описание | По умолчанию |
-|---|---|---|
-| `SEARCH_DEFAULT_TOP_K` | Количество результатов по умолчанию | `10` |
-| `SEARCH_MAX_TOP_K` | Максимальное количество результатов | `100` |
-| `SEARCH_RRF_K` | Константа k для алгоритма RRF | `60` |
-| `SEARCH_FETCH_MULTIPLIER` | Множитель выборки для каждого подзапроса (dense/sparse) | `2` |
+| Переменная                | Описание                                                | По умолчанию |
+| ------------------------- | ------------------------------------------------------- | ------------ |
+| `SEARCH_DEFAULT_TOP_K`    | Количество результатов по умолчанию                     | `10`         |
+| `SEARCH_MAX_TOP_K`        | Максимальное количество результатов                     | `100`        |
+| `SEARCH_RRF_K`            | Константа k для алгоритма RRF                           | `60`         |
+| `SEARCH_FETCH_MULTIPLIER` | Множитель выборки для каждого подзапроса (dense/sparse) | `2`          |
 
 ### Health Check
 
-| Переменная | Описание | По умолчанию |
-|---|---|---|
-| `HEALTH_CHECK_TIMEOUT` | Таймаут проверки здоровья БД (сек) | `5` |
+| Переменная             | Описание                           | По умолчанию |
+| ---------------------- | ---------------------------------- | ------------ |
+| `HEALTH_CHECK_TIMEOUT` | Таймаут проверки здоровья БД (сек) | `5`          |
 
 ## API Endpoints
+
 POST /api/v1/rag/search
 Гибридный поиск чанков.
 
 Запрос:
+
 ```json
 {
-  "query": "ледовый класс Arc4",
+  "query": "правила безопасности",
   "top_k": 5,
   "search_type": "hybrid",
   "rerank": true
 }
 ```
+
 Ответ:
+
 ```json
 {
-  "query": "безопасность оборудования",
+  "query": "правила безопасности",
   "results": [
     {
       "chunk_id": 1,
-      "document_id": "11111111-1111-1111-1111-111111111111",
+      "document_id": 1,
       "document_title": "ССБТ. Оборудование производственное. Общие требования безопасности",
       "doc_code": "ГОСТ 12.2.003-91",
       "section_id": 1,
@@ -255,11 +262,12 @@ POST /api/v1/rag/search
   ],
   "search_type_used": "hybrid",
   "processing_time_ms": 245,
-  "total_found": 10
+  "total_found": 6
 }
 ```
 
 ## Структура проекта
+
 ```
 app/
 ├── api/v1/          # Эндпоинты (health, search)
@@ -276,7 +284,8 @@ tests/               # Unit и Integration тесты
 
 ## Известные ограничения
 
-### Нечёткий поиск по title / doc_code
+### Нечёткий поиск по title / doc\_code
+
 Не реализован. В текущей схеме БД нет отдельного индекса для нечёткого поиска по
 `registry.documents.title` или `registry.documents.doc_code`. Кроме того, не определён
 порядок взаимодействия с найденными документами: если пользователь ввёл название
@@ -285,10 +294,12 @@ tests/               # Unit и Integration тесты
 Query Service или Orchestrator.
 
 ### Размерность embedding (1024 vs 1536)
+
 В текущей реализации используется размерность `VECTOR(1024)` (модель
-`intfloat/multilingual-e5-large`). В ТЗ (`db_diagrams.md`) указана размерность
+`Qwen/Qwen3-Embedding-0.6B`). В ТЗ (`db_diagrams.md`) указана размерность
 `VECTOR(1536)`. При интеграции с RAG Builder необходимо обеспечить согласованность
 размерности.
 
-### pg_trgm
+### pg\_trgm
+
 Упомянут в ТЗ как часть гибридного поиска, но в текущей реализации не используется.
