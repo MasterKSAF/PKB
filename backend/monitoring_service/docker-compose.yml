@@ -1,0 +1,91 @@
+services:
+  service_a:
+    build:
+      context: ./services
+      dockerfile: service_a/Dockerfile
+    container_name: service_a
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: "signoz-otel-collector:4317"
+      OTEL_EXPORTER_OTLP_INSECURE: "true"
+    ports:
+      - "8000:8000"
+    networks:
+      - signoz-net
+
+  service_b:
+    build:
+      context: ./services
+      dockerfile: service_b/Dockerfile
+    container_name: service_b
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: "signoz-otel-collector:4317"
+      OTEL_EXPORTER_OTLP_INSECURE: "true"
+    ports:
+      - "8001:8001"
+    networks:
+      - signoz-net
+
+  service_c:
+    build:
+      context: ./services
+      dockerfile: service_c/Dockerfile
+    container_name: service_c
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: "signoz-otel-collector:4317"
+      OTEL_EXPORTER_OTLP_INSECURE: "true"
+      SERVICE_A_URL: "http://service_a:8000"
+      SERVICE_B_URL: "http://service_b:8001"
+    ports:
+      - "8002:8002"
+    networks:
+      - signoz-net
+    depends_on:
+      - service_a
+      - service_b
+
+  # ----- ДОБАВЛЕН СЕРВИС ПАРСИНГА -----
+
+  minio:
+    image: minio/minio:RELEASE.2024-12-18T13-15-44Z  # фиксированная стабильная версия
+    container_name: minio-server
+    restart: unless-stopped
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web консоль
+    environment:
+      MINIO_ROOT_USER: minioadmin           # измените на свой
+      MINIO_ROOT_PASSWORD: minioadmin  # измените на свой
+    volumes:
+      - ./minio_data:/data                  # данные сохранятся на хосте
+    command: server /data --console-address ":9001"
+    networks:
+      - signoz-net
+
+  parser_service:
+    build:
+      context: ./services/parser_service
+      dockerfile: Dockerfile   # предполагается, что папка называется parser_service
+    container_name: parser_service
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: "signoz-otel-collector:4317"
+      OTEL_EXPORTER_OTLP_INSECURE: "true"
+      OTEL_SERVICE_NAME: "parser_service"
+      # Минимальные обязательные переменные для MinIO (замените на свои)
+      MINIO_ENDPOINT: "minio:9000"
+      MINIO_ACCESS_KEY: "minioadmin"
+      MINIO_SECRET_KEY: "minioadmin"
+      MINIO_BUCKET: "documents"
+      MINIO_IMAGE_BUCKET: "images"
+      MINIO_SECURE: "false"
+    ports:
+      - "8087:8087"               # порт сервиса (из config.py)
+    networks:
+      - signoz-net
+    depends_on:
+      - minio
+
+
+networks:
+  signoz-net:
+    external: true
+    name: signoz-net

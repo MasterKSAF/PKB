@@ -51,6 +51,13 @@ class Settings(BaseSettings):
     pipeline_timeout: int = Field(300, alias="PIPELINE_TIMEOUT", description="Таймаут всего пайплайна (сек)")
     parser_timeout: int = Field(300, alias="PARSER_TIMEOUT", description="Таймаут работы конкретного парсера (сек)")
 
+    # OpenTelemetry
+    otel_endpoint: str = Field(
+        "localhost:4317",
+        alias="OTEL_EXPORTER_OTLP_ENDPOINT",
+        description="gRPC эндпоинт для OTLP экспортера (например, signoz-otel-collector:4317)"
+    )
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
