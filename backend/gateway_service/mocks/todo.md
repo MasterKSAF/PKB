@@ -1,38 +1,36 @@
-# Plan of work
+# Todo — Добавление mock-данных для стартового вывода
 
-1. **auth_routes.py** — POST /auth/revoke
-   - Add `token: str = ""` to `RevokeRequest`
-   - Use `req.refresh_token or req.token` in `revoke`
+## Задача
+Расширить начальные seed-данные в `common.py`, чтобы при старте сервиса было больше
+реалистичных данных для демонстрации/разработки UI.
 
-2. **registry_routes.py** — Import endpoints (classifiers, documents, terminology)
-   - Add `Union` import
-   - POST /classifiers/import: accept `Union[List[ClassifierCreate], dict]`, extract from `data`/`classifiers` keys
-   - POST /documents/import: accept `Union[List[RegistryDocCreate], dict]`, extract from `data`/`documents` keys
-   - POST /terminology/import: accept `Union[List[TermCreate], dict]`, extract from `data`/`terms` keys
+## План
 
-3. **orch_routes.py** — PATCH /drafts/{id}/decide
-   - Add `decision: str = ""` to `DecideRequest`
-   - Use `req.action or req.decision` in `decide_draft`
+### 1. Анализ текущих seed-данных
+- [x] Прочитаны все handler-файлы и common.py
+- [x] Выявлены области с недостаточным количеством seed-данных
 
-4. **orch_routes.py** — POST /documents/{id}/versions
-   - Accept JSON body with `file_key` or multipart with UploadFile
+### 2. Расширение seed-данных в common.py
+- [x] **SEED_DOCUMENTS** +2 (разные статусы: review_required, failed)
+- [x] **SEED_DOCUMENT_ERRORS** +3 (для новых документов)
+- [x] **SEED_REGISTRY_DOCUMENTS** +2 (разные source_type, eras)
+- [x] **SEED_CLASSIFIERS** +5 (MKS и OKSTU)
+- [x] **SEED_TERMINOLOGY** +3 (разные term_type)
+- [x] **SEED_SESSIONS** +2 (с разными сообщениями)
+- [x] **SEED_HISTORY** +3 (для разных сессий)
+- [x] **SEED_PROJECTS** — новый seed (3 проекта)
+- [x] **SEED_AUDIT** +3 (разные действия)
+- [x] **SEED_CATEGORIES** +2
+- [x] **SEED_REGISTRY_DRAFTS** — новый seed (2 черновика)
 
-5. **orch_routes.py** — GET /drafts
-   - Make `document_key` optional with default `""`
-   - If empty, return all drafts
+### 3. Обновление init_all_data()
+- [x] Добавить инициализацию `_projects` из `SEED_PROJECTS`
+- [x] Добавить инициализацию `_registry_drafts` из `SEED_REGISTRY_DRAFTS`
+- [x] Установить `_projects_id_seq` равным максимальному ID проекта
 
-6. **orch_routes.py** — GET /documents/search
-   - Make `q` optional with default `""`
-   - Handle empty `q` with empty results
+### 4. Исправление тестов (выявлено при валидации)
+- [x] `test_24_list_documents_filter_type` — исправлен параметр запроса `document_type` → `source_type`
+- [x] `test_35_document_queue` — исправлен путь проверки `pipeline` → `item["steps"]["pipeline"]`
 
-7. **orch_routes.py** — POST /drafts
-   - Accept `title`, `doc_code`, `source_type` from JSON body directly
-
-✅ All 7 changes implemented.
-✅ 453 tests passed.
-
-Note on #7: `create_draft` JSON branch already accepted `title`, `doc_code`, `source_type` from body — no change needed.
-
-Test updates:
-- `test_gateway_fails.py`: updated `test_revoke_missing_token` and `test_search_without_q` (behaviour changed from 422→200)
-- `test_tz_coverage.py`: updated `test_search_without_query` and `test_list_drafts_requires_document_key` (behaviour changed from 422→200)
+### 5. Проверка
+- [x] Запущены все 462 теста — **все проходят** ✅

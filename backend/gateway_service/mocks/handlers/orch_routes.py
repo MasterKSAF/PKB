@@ -795,6 +795,7 @@ async def list_documents(
 async def get_document(doc_id: int):
     doc = _get_document(doc_id)
     return {
+        "id": doc["document_id"],
         "document_id": doc["document_id"], "title": doc.get("title", ""), "doc_code": doc.get("doc_code"),
         "source_type": doc.get("source_type", ""), "title_hash_sha256": hashlib.sha256(doc.get("title", "").encode()).hexdigest(),
         "status": doc.get("status", ""), "era": doc.get("era", ""), "validity_status": doc.get("validity_status", ""),

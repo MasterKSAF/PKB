@@ -31,7 +31,16 @@
 - Падающие эндпоинты (43 из checker coverage) покрыты тестами
 - 8 skipped — отсутствуют из-за особенностей lifecycle (не фатально)
 
-## Обнаруженные проблемы Gateway Mock
-1. **POST /documents** возвращает random task_id, но не создаёт задачу в `_tasks`
-2. **validation_exception_handler** (gateway.py:386) падает с TypeError: Object of type bytes в Docker
-3. Registry sub-endpoints (history, succession, sections) не были имплементированы в mock, но работают после добавления маршрутизации
+## Обнаруженные проблемы Gateway Mock (история)
+1. **POST /documents** возвращает random task_id, но не создаёт задачу в `_tasks` — ✅ исправлено
+2. **validation_exception_handler** (gateway.py:386) падает с TypeError: Object of type bytes в Docker — ✅ исправлено
+3. Registry sub-endpoints (history, succession, sections) не были имплементированы в mock, но работают после добавления маршрутизации — ✅ исправлено
+
+## Оставшиеся особенности
+— нет, все решены.
+
+## Статус (2026-06-12)
+- 30 из 30 reported failures **исправлены и подтверждены тестами**
+- Import endpoints переделаны на `UploadFile` (multipart) ✅
+- `GET /documents/{id}` возвращает `id` ✅
+- Все 462 теста проходят
