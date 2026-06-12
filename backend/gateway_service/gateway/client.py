@@ -158,8 +158,10 @@ async def proxy_request(request: Request, service_name: str) -> Response:
             ),
         )
 
-    # Целевой URL
-    path = request.url.path
+    # Целевой URL — обрезаем trailing slash, чтобы downstream сервисы
+    # не возвращали 307 redirect (redirect_slashes нормализация).
+    # Путь / остаётся как есть.
+    path = request.url.path.rstrip("/") if request.url.path != "/" else "/"
     query = request.url.query
     target_url = f"{base_url}{path}"
     if query:

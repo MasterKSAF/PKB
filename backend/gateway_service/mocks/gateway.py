@@ -347,7 +347,11 @@ app = FastAPI(
     version="1.0.0",
     description="Mock gateway combining all services on a single port",
     lifespan=lifespan,
-    redirect_slashes=False,
+    # True — чтобы запросы с trailing slash (/registry/classifiers/) корректно
+    # редиректились на роуты без слеша (/registry/classifiers).
+    # 307 возникает ТОЛЬКО когда есть соответствующий роут (без слеша).
+    # Несуществующие пути (без /registry/) получают 404, а не 307.
+    redirect_slashes=True,
 )
 
 
