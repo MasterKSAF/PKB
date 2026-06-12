@@ -22,10 +22,10 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 # ── вспомогательные функции ──────────────────────────────────────────────
 _counter = 0
-def new_id() -> str:
+def new_id() -> int:
     global _counter
     _counter += 1
-    return str(_counter)
+    return _counter
 
 def utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -64,23 +64,23 @@ SEED_CLASSIFIERS = [
     {"classifier_system": "OKSTU", "code": "05.010", "parent_code": "05", "full_name": "Документы конструкторские", "status": "active", "effective_date": "1980-01-01", "replaced_by": None, "created_at": "2025-11-15T10:30:00Z", "updated_at": "2025-11-15T10:30:00Z"},
 ]
 SEED_TERMINOLOGY = [
-    {"id": "t-001", "raw_term": "ГОСТ", "standard_term": "ГОСТ", "normalized_value": "гост", "term_type": "standard_code", "is_case_sensitive": False, "definition": "Государственный стандарт", "synonyms": ["GOST", "gost"], "related_docs": [], "scope": "Стандартизация", "is_blocked": False, "created_at": "2025-12-01T08:00:00Z", "updated_at": "2026-01-15T12:00:00Z"},
-    {"id": "t-002", "raw_term": "DNV", "standard_term": "DNV", "normalized_value": "dnv", "term_type": "acronym", "is_case_sensitive": True, "definition": "Det Norske Veritas", "synonyms": ["DNV GL"], "related_docs": [], "scope": "Судостроение", "is_blocked": False, "created_at": "2026-01-20T14:00:00Z", "updated_at": "2026-01-20T14:00:00Z"},
+    {"id": 1, "raw_term": "ГОСТ", "standard_term": "ГОСТ", "normalized_value": "гост", "term_type": "standard_code", "is_case_sensitive": False, "definition": "Государственный стандарт", "synonyms": ["GOST", "gost"], "related_docs": [], "scope": "Стандартизация", "is_blocked": False, "created_at": "2025-12-01T08:00:00Z", "updated_at": "2026-01-15T12:00:00Z"},
+    {"id": 2, "raw_term": "DNV", "standard_term": "DNV", "normalized_value": "dnv", "term_type": "acronym", "is_case_sensitive": True, "definition": "Det Norske Veritas", "synonyms": ["DNV GL"], "related_docs": [], "scope": "Судостроение", "is_blocked": False, "created_at": "2026-01-20T14:00:00Z", "updated_at": "2026-01-20T14:00:00Z"},
 ]
 SEED_REGISTRY_DOCUMENTS = [
-    {"id": "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c", "title": "Стойки установочные", "doc_code": "20868-81", "source_type": "GOST", "title_hash_sha256": None, "status": "approved", "era": "USSR", "validity_status": "active", "jurisdiction": "RU", "issuing_body": "Госстандарт СССР", "mks_oks_code": "31.240", "mks_name": "Электроника", "okstu_code": None, "okstu_name": None, "classification_status": {"mks_status": "CONFIRMED", "okstu_status": "NOT_USED"}, "successor_doc_id": None, "predecessor_doc_id": None, "total_versions": 2, "chunk_count": 34, "created_by": "system", "updated_by": "ivanov_ai", "created_at": "2026-04-27T10:00:00Z", "updated_at": "2026-04-27T14:00:00Z"}
+    {"id": 1, "title": "Стойки установочные", "doc_code": "20868-81", "source_type": "GOST", "title_hash_sha256": None, "status": "approved", "era": "USSR", "validity_status": "active", "jurisdiction": "RU", "issuing_body": "Госстандарт СССР", "mks_oks_code": "31.240", "mks_name": "Электроника", "okstu_code": None, "okstu_name": None, "classification_status": {"mks_status": "CONFIRMED", "okstu_status": "NOT_USED"}, "successor_doc_id": None, "predecessor_doc_id": None, "total_versions": 2, "chunk_count": 34, "created_by": "system", "updated_by": "ivanov_ai", "created_at": "2026-04-27T10:00:00Z", "updated_at": "2026-04-27T14:00:00Z"}
 ]
 SEED_CLASSIFIER_PENDING = [
-    {"id": "p-001", "system": "MKS", "code": "47.020.99", "found_in_document_id": "b3a8f1c2-...", "found_in_document_title": "Стойки установочные", "status": "new", "suggested_parent_code": "47.020", "suggested_parent_name": "Конструкция корпуса", "admin_comment": None, "created_at": "2026-05-15T10:01:00Z"}
+    {"id": 1, "system": "MKS", "code": "47.020.99", "found_in_document_id": 1, "found_in_document_title": "Стойки установочные", "status": "new", "suggested_parent_code": "47.020", "suggested_parent_name": "Конструкция корпуса", "admin_comment": None, "created_at": "2026-05-15T10:01:00Z"}
 ]
 
 # ── in‑memory хранилища ───────────────────────────────────────────────────
 _classifiers: Dict[str, dict] = {}
-_terminology: Dict[str, dict] = {}
-_registry_docs: Dict[str, dict] = {}
-_pending_classifiers: Dict[str, dict] = {}
-_registry_drafts: Dict[str, dict] = {}  # NOTE: Хранилище черновиков (internal). Доступно только для межсервисного взаимодействия.
-_doc_history: Dict[str, list] = {}
+_terminology: Dict[int, dict] = {}
+_registry_docs: Dict[int, dict] = {}
+_pending_classifiers: Dict[int, dict] = {}
+_registry_drafts: Dict[int, dict] = {}  # NOTE: Хранилище черновиков (internal). Доступно только для межсервисного взаимодействия.
+_doc_history: Dict[int, list] = {}
 
 def init_data():
     global _classifiers, _terminology, _registry_docs, _pending_classifiers, _doc_history
@@ -91,7 +91,7 @@ def init_data():
     _doc_history = {}
     for d in SEED_REGISTRY_DOCUMENTS:
         _doc_history[d["id"]] = [
-            {"history_id": f"hist-{new_id()}", "doc_id": d["id"], "previous_status": None,
+            {"history_id": new_id(), "doc_id": d["id"], "previous_status": None,
              "new_status": d.get("status", "draft"), "comment": "Initial state",
              "changed_by": d.get("created_by", "system"), "changed_at": d.get("created_at", utcnow())}
         ]
@@ -161,8 +161,8 @@ class RegistryDocUpdate(BaseModel):
     issuing_body: Optional[str] = None
     mks_oks_code: Optional[str] = None
     okstu_code: Optional[str] = None
-    successor_doc_id: Optional[str] = None
-    predecessor_doc_id: Optional[str] = None
+    successor_doc_id: Optional[int] = None
+    predecessor_doc_id: Optional[int] = None
 
 class RegistryDocStatusUpdate(BaseModel):
     status: str
@@ -261,7 +261,7 @@ async def list_quarantine(status: str = None, page: int = 1, page_size: int = 50
     return paginate_registry(items, page, page_size)
 
 @main_router.post("/classifiers/quarantine/{pending_id}/accept")
-async def accept_quarantine(pending_id: str):
+async def accept_quarantine(pending_id: int):
     pending = _pending_classifiers.get(pending_id)
     if not pending:
         raise HTTPException(404, detail=error_response("CLASSIFIER_NOT_FOUND", "Элемент карантина не найден"))
@@ -274,7 +274,7 @@ async def accept_quarantine(pending_id: str):
     return {"data": {"id": pending_id, "status": "accepted", "classifier_code": code}}
 
 @main_router.post("/classifiers/quarantine/{pending_id}/reject")
-async def reject_quarantine(pending_id: str):
+async def reject_quarantine(pending_id: int):
     pending = _pending_classifiers.get(pending_id)
     if not pending:
         raise HTTPException(404, detail=error_response("CLASSIFIER_NOT_FOUND", "Элемент карантина не найден"))
@@ -369,7 +369,7 @@ async def import_terms(req: List[TermCreate]):
                                  "is_blocked": row.is_blocked, "updated_at": utcnow()})
                 updated += 1
             else:
-                tid = f"t-{new_id()}"
+                tid = new_id()
                 _terminology[tid] = {"id": tid, "raw_term": row.raw_term,
                                      "standard_term": row.standard_term or row.raw_term.lower(),
                                      "normalized_value": row.normalized_value or row.raw_term.lower(),
@@ -383,7 +383,7 @@ async def import_terms(req: List[TermCreate]):
     return {"data": {"inserted": inserted, "updated": updated, "errors": errors}}
 
 @main_router.get("/terminology/{term_id}")
-async def get_term(term_id: str):
+async def get_term(term_id: int):
     t = _terminology.get(term_id)
     if not t:
         raise HTTPException(404, detail=error_response("TERM_NOT_FOUND", "Термин не найден"))
@@ -391,7 +391,7 @@ async def get_term(term_id: str):
 
 @main_router.post("/terminology", status_code=201)
 async def create_term(req: TermCreate):
-    tid = f"t-{new_id()}"
+    tid = new_id()
     new_term = {"id": tid, "raw_term": req.raw_term, "standard_term": req.standard_term or req.raw_term.lower(),
                 "normalized_value": req.normalized_value or req.raw_term.lower(), "term_type": req.term_type,
                 "is_case_sensitive": req.is_case_sensitive, "definition": req.definition,
@@ -401,7 +401,7 @@ async def create_term(req: TermCreate):
     return {"data": new_term}
 
 @main_router.put("/terminology/{term_id}")
-async def update_term(term_id: str, req: TermUpdate):
+async def update_term(term_id: int, req: TermUpdate):
     t = _terminology.get(term_id)
     if not t:
         raise HTTPException(404, detail=error_response("TERM_NOT_FOUND", "Термин не найден"))
@@ -413,7 +413,7 @@ async def update_term(term_id: str, req: TermUpdate):
     return {"data": t}
 
 @main_router.delete("/terminology/{term_id}")
-async def delete_term(term_id: str):
+async def delete_term(term_id: int):
     if term_id not in _terminology:
         raise HTTPException(404, detail=error_response("TERM_NOT_FOUND", "Термин не найден"))
     del _terminology[term_id]
@@ -454,7 +454,7 @@ async def import_docs(req: List[RegistryDocCreate]):
                                  "updated_at": utcnow()})
                 updated += 1
             else:
-                doc_id = f"rd-{new_id()}"
+                doc_id = new_id()
                 new_doc = {"id": doc_id, "title": item.title, "doc_code": item.doc_code, "source_type": item.source_type,
                            "status": item.status, "era": item.era, "validity_status": item.validity_status,
                            "jurisdiction": item.jurisdiction, "issuing_body": item.issuing_body,
@@ -463,7 +463,7 @@ async def import_docs(req: List[RegistryDocCreate]):
                            "predecessor_doc_id": None, "total_versions": 1, "chunk_count": 0,
                            "created_by": "system", "updated_by": "system", "created_at": utcnow(), "updated_at": utcnow()}
                 _registry_docs[doc_id] = new_doc
-                _doc_history[doc_id] = [{"history_id": f"hist-{new_id()}", "doc_id": doc_id, "previous_status": None,
+                _doc_history[doc_id] = [{"history_id": new_id(), "doc_id": doc_id, "previous_status": None,
                                         "new_status": item.status, "comment": "Created", "changed_by": "system", "changed_at": utcnow()}]
                 inserted += 1
         except Exception as e:
@@ -471,7 +471,7 @@ async def import_docs(req: List[RegistryDocCreate]):
     return {"data": {"inserted": inserted, "updated": updated, "errors": errors}}
 
 @registry_docs_router.get("/documents/{doc_id}")
-async def get_registry_doc(doc_id: str):
+async def get_registry_doc(doc_id: int):
     doc = _registry_docs.get(doc_id)
     if not doc:
         raise HTTPException(404, detail=error_response("DOCUMENT_NOT_FOUND", "Документ не найден"))
@@ -479,7 +479,7 @@ async def get_registry_doc(doc_id: str):
 
 @registry_docs_router.post("/documents", status_code=201)
 async def create_registry_doc(req: RegistryDocCreate):
-    doc_id = f"rd-{new_id()}"
+    doc_id = new_id()
     new_doc = {"id": doc_id, "title": req.title, "doc_code": req.doc_code, "source_type": req.source_type,
                "status": req.status, "era": req.era, "validity_status": req.validity_status,
                "jurisdiction": req.jurisdiction, "issuing_body": req.issuing_body,
@@ -488,12 +488,12 @@ async def create_registry_doc(req: RegistryDocCreate):
                "predecessor_doc_id": None, "total_versions": 1, "chunk_count": 0,
                "created_by": "system", "updated_by": "system", "created_at": utcnow(), "updated_at": utcnow()}
     _registry_docs[doc_id] = new_doc
-    _doc_history[doc_id] = [{"history_id": f"hist-{new_id()}", "doc_id": doc_id, "previous_status": None,
+    _doc_history[doc_id] = [{"history_id": new_id(), "doc_id": doc_id, "previous_status": None,
                              "new_status": req.status, "comment": "Created", "changed_by": "system", "changed_at": utcnow()}]
     return {"data": new_doc}
 
 @registry_docs_router.put("/documents/{doc_id}")
-async def update_registry_doc(doc_id: str, req: RegistryDocUpdate):
+async def update_registry_doc(doc_id: int, req: RegistryDocUpdate):
     doc = _registry_docs.get(doc_id)
     if not doc:
         raise HTTPException(404, detail=error_response("DOCUMENT_NOT_FOUND", "Документ не найден"))
@@ -505,27 +505,27 @@ async def update_registry_doc(doc_id: str, req: RegistryDocUpdate):
     return {"data": doc}
 
 @registry_docs_router.patch("/documents/{doc_id}/status")
-async def patch_status(doc_id: str, req: RegistryDocStatusUpdate):
+async def patch_status(doc_id: int, req: RegistryDocStatusUpdate):
     doc = _registry_docs.get(doc_id)
     if not doc:
         raise HTTPException(404, detail=error_response("DOCUMENT_NOT_FOUND", "Документ не найден"))
     prev = doc["status"]
     doc["status"] = req.status
     doc["updated_at"] = utcnow()
-    entry = {"history_id": f"hist-{new_id()}", "doc_id": doc_id, "previous_status": prev,
+    entry = {"history_id": new_id(), "doc_id": doc_id, "previous_status": prev,
              "new_status": req.status, "comment": req.comment or "Updated", "changed_by": req.changed_by or "system",
              "changed_at": utcnow()}
     _doc_history.setdefault(doc_id, []).append(entry)
     return {"data": {"id": doc_id, "status": req.status, "previous_status": prev, "history_id": entry["history_id"], "updated_at": utcnow()}}
 
 @registry_docs_router.get("/documents/{doc_id}/history")
-async def doc_history(doc_id: str):
+async def doc_history(doc_id: int):
     if doc_id not in _registry_docs:
         raise HTTPException(404, detail=error_response("DOCUMENT_NOT_FOUND", "Документ не найден"))
     return {"data": {"doc_id": doc_id, "history": _doc_history.get(doc_id, [])}}
 
 @registry_docs_router.get("/documents/{doc_id}/succession")
-async def doc_succession(doc_id: str):
+async def doc_succession(doc_id: int):
     doc = _registry_docs.get(doc_id)
     if not doc:
         raise HTTPException(404, detail=error_response("DOCUMENT_NOT_FOUND", "Документ не найден"))
@@ -554,7 +554,7 @@ async def doc_succession(doc_id: str):
     ]}}
 
 @registry_docs_router.delete("/documents/{doc_id}")
-async def delete_registry_doc(doc_id: str):
+async def delete_registry_doc(doc_id: int):
     if doc_id not in _registry_docs:
         raise HTTPException(404, detail=error_response("DOCUMENT_NOT_FOUND", "Документ не найден"))
     del _registry_docs[doc_id]
@@ -564,7 +564,7 @@ async def delete_registry_doc(doc_id: str):
 # NOTE: Mock-заглушка, возвращает минимальный набор данных.
 # В реальном сервисе возвращает document + sections + terminology + references.
 @registry_docs_router.get("/documents/{doc_id}/sections")
-async def get_doc_sections(doc_id: str):
+async def get_doc_sections(doc_id: int):
     doc = _registry_docs.get(doc_id)
     if not doc:
         raise HTTPException(404, detail=error_response("DOCUMENT_NOT_FOUND", "Документ не найден"))
@@ -620,7 +620,7 @@ async def check_uniqueness(req: CheckUniquenessRequest):
 @registry_docs_router.post("/drafts", status_code=201)
 async def create_draft(req: DraftCreate):
     # NOTE: Создаёт запись черновика в registry.drafts. Вызывается Orchestrator после POST /drafts.
-    draft_id = f"draft-{new_id()}"
+    draft_id = new_id()
     now = utcnow()
     draft = {
         "id": draft_id,
@@ -676,7 +676,7 @@ async def list_drafts(
     return paginate_registry(result, page, page_size)
 
 @registry_docs_router.get("/drafts/{draft_id}")
-async def get_draft(draft_id: str):
+async def get_draft(draft_id: int):
     # NOTE: Полная информация о черновике, включая raw_data.
     draft = _registry_drafts.get(draft_id)
     if not draft:
@@ -684,7 +684,7 @@ async def get_draft(draft_id: str):
     return {"data": draft}
 
 @registry_docs_router.get("/drafts/{draft_id}/preview")
-async def get_draft_preview(draft_id: str):
+async def get_draft_preview(draft_id: int):
     # NOTE: Preview-метаданные черновика (без raw_data).
     draft = _registry_drafts.get(draft_id)
     if not draft:
@@ -701,7 +701,7 @@ async def get_draft_preview(draft_id: str):
     }
 
 @registry_docs_router.patch("/drafts/{draft_id}/status")
-async def update_draft_status(draft_id: str, req: DraftStatusUpdate):
+async def update_draft_status(draft_id: int, req: DraftStatusUpdate):
     # NOTE: Обновляет статус черновика. Вызывается Orchestrator при изменении жизненного цикла.
     draft = _registry_drafts.get(draft_id)
     if not draft:
@@ -729,7 +729,7 @@ async def update_draft_status(draft_id: str, req: DraftStatusUpdate):
     }
 
 @registry_docs_router.delete("/drafts/{draft_id}")
-async def delete_draft(draft_id: str):
+async def delete_draft(draft_id: int):
     # NOTE: Удаляет запись черновика из registry.drafts.
     if draft_id not in _registry_drafts:
         raise HTTPException(404, detail=error_response("DRAFT_NOT_FOUND", "Черновик не найден"))

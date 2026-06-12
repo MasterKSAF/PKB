@@ -102,7 +102,7 @@ class TestAuthService:
         resp = auth_client.get(f"{BASE}/auth/me", headers=auth_header_engineer())
         assert_ok(resp)
         data = resp.json()
-        assert data["user_id"] == "u-001"
+        assert data["user_id"] == 1
         assert "full_name" in data
         assert "permissions" in data
 
@@ -147,17 +147,17 @@ class TestAuthService:
         assert resp.status_code == 409
 
     def test_11_get_user(self):
-        resp = auth_client.get(f"{BASE}/admin/users/u-001", headers=auth_header_admin())
+        resp = auth_client.get(f"{BASE}/admin/users/1", headers=auth_header_admin())
         assert_ok(resp)
-        assert resp.json()["user_id"] == "u-001"
+        assert resp.json()["user_id"] == 1
 
     def test_12_get_user_not_found(self):
-        resp = auth_client.get(f"{BASE}/admin/users/nonexistent", headers=auth_header_admin())
+        resp = auth_client.get(f"{BASE}/admin/users/999", headers=auth_header_admin())
         assert resp.status_code == 404
 
     def test_13_update_user(self):
         resp = auth_client.put(
-            f"{BASE}/admin/users/u-001",
+            f"{BASE}/admin/users/1",
             json={"position": "Lead Engineer"},
             headers=auth_header_admin(),
         )
@@ -166,7 +166,7 @@ class TestAuthService:
 
     def test_14_patch_user_role(self):
         resp = auth_client.patch(
-            f"{BASE}/admin/users/u-002", json={"role": "system_admin"}, headers=auth_header_admin()
+            f"{BASE}/admin/users/2", json={"role": "system_admin"}, headers=auth_header_admin()
         )
         assert_ok(resp)
 
@@ -239,20 +239,20 @@ class TestOrchestratorService:
         assert_paginated(data)
 
     def test_23_get_document(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001")
+        resp = orch_client.get(f"{BASE}/documents/1")
         assert_ok(resp)
         data = resp.json()
-        assert data["document_id"] == "doc-001"
+        assert data["document_id"] == 1
         assert "source_type" in data
 
     def test_24_get_document_not_found(self):
-        resp = orch_client.get(f"{BASE}/documents/nonexistent")
+        resp = orch_client.get(f"{BASE}/documents/999")
         assert resp.status_code == 404
         assert "error" in resp.json()
 
     def test_25_document_status(self):
         # NOTE: Формат ответа приведён к спецификации orchestrator_service_api.md — pipeline вложен в steps.
-        resp = orch_client.get(f"{BASE}/documents/doc-001/status")
+        resp = orch_client.get(f"{BASE}/documents/1/status")
         assert_ok(resp)
         data = resp.json()
         assert "steps" in data
@@ -260,32 +260,32 @@ class TestOrchestratorService:
         assert "formation" in data["steps"]["pipeline"]
 
     def test_26_document_file(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/file")
+        resp = orch_client.get(f"{BASE}/documents/1/file")
         assert_ok(resp)
         assert "file_url" in resp.json()
 
     def test_27_document_pages(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/pages")
+        resp = orch_client.get(f"{BASE}/documents/1/pages")
         assert_ok(resp)
         assert "pages" in resp.json()
 
     def test_28_page_detail(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/pages/1")
+        resp = orch_client.get(f"{BASE}/documents/1/pages/1")
         assert_ok(resp)
         assert "blocks" in resp.json()
 
     def test_29_page_preview(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/pages/1/preview")
+        resp = orch_client.get(f"{BASE}/documents/1/pages/1/preview")
         assert_ok(resp)
         assert "preview_url" in resp.json()
 
     def test_30_page_text(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/pages/1/text")
+        resp = orch_client.get(f"{BASE}/documents/1/pages/1/text")
         assert_ok(resp)
         assert "full_text" in resp.json()
 
     def test_31_document_parameters(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/parameters")
+        resp = orch_client.get(f"{BASE}/documents/1/parameters")
         assert_ok(resp)
         assert "parameters" in resp.json()
 
@@ -310,7 +310,7 @@ class TestOrchestratorService:
         assert len(resp.json()["items"]) > 0
 
     def test_35_document_errors(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/errors")
+        resp = orch_client.get(f"{BASE}/documents/1/errors")
         assert_ok(resp)
         assert "errors" in resp.json()
 
@@ -321,7 +321,7 @@ class TestOrchestratorService:
         assert "control_metrics" in data
 
     def test_37_reprocess_document(self):
-        resp = orch_client.post(f"{BASE}/documents/doc-001/reprocess", json={"mode": "full"})
+        resp = orch_client.post(f"{BASE}/documents/1/reprocess", json={"mode": "full"})
         assert_ok(resp, 202)
         assert resp.json()["status"] == "parsing"
 
@@ -336,13 +336,13 @@ class TestOrchestratorService:
 
     def test_39_delete_document(self):
         # Удаляем doc-001 напрямую
-        resp = orch_client.delete(f"{BASE}/documents/doc-001")
+        resp = orch_client.delete(f"{BASE}/documents/1")
         assert_ok(resp)
-        assert resp.json()["document_id"] == "doc-001"
+        assert resp.json()["document_id"] == 1
 
     def test_40_add_document_version(self):
         resp = orch_client.post(
-            f"{BASE}/documents/doc-001/versions",
+            f"{BASE}/documents/1/versions",
             files={"file": ("v2.pdf", b"version 2", "application/pdf")},
         )
         assert_ok(resp, 201)
@@ -350,17 +350,17 @@ class TestOrchestratorService:
         assert "version_id" in data
 
     def test_41_list_document_versions(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/versions")
+        resp = orch_client.get(f"{BASE}/documents/1/versions")
         assert_ok(resp)
         assert "versions" in resp.json()
 
     def test_42_approve_document(self):
-        resp = orch_client.post(f"{BASE}/documents/doc-001/approve")
+        resp = orch_client.post(f"{BASE}/documents/1/approve")
         assert_ok(resp, 202)
         assert resp.json()["status"] == "approved"
 
     def test_43_document_history(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/history")
+        resp = orch_client.get(f"{BASE}/documents/1/history")
         assert_ok(resp)
         assert "history" in resp.json()
 
@@ -381,7 +381,7 @@ class TestQueryService:
     def test_45_create_session(self):
         resp = query_client.post(
             f"{BASE}/chat/sessions",
-            json={"title": "Test Session", "document_ids": ["doc-001"]},
+            json={"title": "Test Session", "document_ids": [1]},
         )
         assert_ok(resp, 201)
         assert "session_id" in resp.json()
@@ -394,24 +394,24 @@ class TestQueryService:
         assert_paginated(data)
 
     def test_47_get_session(self):
-        resp = query_client.get(f"{BASE}/chat/sessions/sess-001")
+        resp = query_client.get(f"{BASE}/chat/sessions/1")
         assert_ok(resp)
-        assert resp.json()["session_id"] == "sess-001"
+        assert resp.json()["session_id"] == 1
 
     def test_48_get_session_not_found(self):
-        resp = query_client.get(f"{BASE}/chat/sessions/nonexistent")
+        resp = query_client.get(f"{BASE}/chat/sessions/999")
         assert resp.status_code == 404
 
     def test_49_update_session(self):
         resp = query_client.put(
-            f"{BASE}/chat/sessions/sess-001", json={"title": "Updated"}
+            f"{BASE}/chat/sessions/1", json={"title": "Updated"}
         )
         assert_ok(resp)
         assert resp.json()["title"] == "Updated"
 
     def test_50_send_message(self):
         resp = query_client.post(
-            f"{BASE}/chat/sessions/sess-001/messages",
+            f"{BASE}/chat/sessions/1/messages",
             json={"content": "What is the wall thickness?"},
         )
         assert_ok(resp)
@@ -421,7 +421,7 @@ class TestQueryService:
 
     def test_51_manage_context(self):
         resp = query_client.post(
-            f"{BASE}/chat/sessions/sess-001/context",
+            f"{BASE}/chat/sessions/1/context",
             json={"action": "clear_history"},
         )
         assert_ok(resp)
@@ -429,7 +429,7 @@ class TestQueryService:
 
     def test_52_export_session(self):
         resp = query_client.post(
-            f"{BASE}/chat/sessions/sess-001/export", json={"format": "pdf"}
+            f"{BASE}/chat/sessions/1/export", json={"format": "pdf"}
         )
         assert_ok(resp)
         assert "export_id" in resp.json()
@@ -438,10 +438,10 @@ class TestQueryService:
         resp = query_client.post(
             f"{BASE}/chat/feedback",
             json={
-                "session_id": "sess-001",
-                "message_id": "msg-001",
+                "session_id": 1,
+                "message_id": 1,
                 "rating": 5,
-                "answer_id": "ans-001",
+                "answer_id": 1,
                 "useful": True,
                 "opened_citation_ids": ["cit-001"],
             },
@@ -494,7 +494,7 @@ class TestQueryService:
     def test_58_text_search_filtered(self):
         resp = query_client.post(
             f"{BASE}/text/search",
-            json={"text": "steel", "document_ids": ["doc-001"]},
+            json={"text": "steel", "document_ids": [1]},
         )
         assert_ok(resp)
 
@@ -603,12 +603,12 @@ class TestRegistryService:
         assert_paginated(data)
 
     def test_72_get_term(self):
-        resp = reg_client.get(f"{BASE}/terminology/t-001")
+        resp = reg_client.get(f"{BASE}/terminology/1")
         assert_ok(resp)
         assert "raw_term" in resp.json()["data"]
 
     def test_73_get_term_not_found(self):
-        resp = reg_client.get(f"{BASE}/terminology/nonexistent")
+        resp = reg_client.get(f"{BASE}/terminology/999")
         assert resp.status_code == 404
 
     def test_74_create_term(self):
@@ -628,7 +628,7 @@ class TestRegistryService:
 
     def test_75_update_term(self):
         resp = reg_client.put(
-            f"{BASE}/terminology/t-001", json={"definition": "Updated"}
+            f"{BASE}/terminology/1", json={"definition": "Updated"}
         )
         assert_ok(resp)
 
@@ -678,7 +678,7 @@ class TestRegistryService:
         assert_paginated(data)
 
     def test_80_get_registry_doc(self):
-        resp = reg_client.get(f"{BASE}/documents/b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c")
+        resp = reg_client.get(f"{BASE}/documents/1")
         assert_ok(resp)
         assert resp.json()["data"]["title"] == "Стойки установочные"
 
@@ -699,14 +699,14 @@ class TestRegistryService:
 
     def test_82_update_registry_doc(self):
         resp = reg_client.put(
-            f"{BASE}/documents/b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+            f"{BASE}/documents/1",
             json={"jurisdiction": "RF"},
         )
         assert_ok(resp)
 
     def test_83_update_doc_status(self):
         resp = reg_client.patch(
-            f"{BASE}/documents/b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c/status",
+            f"{BASE}/documents/1/status",
             json={"status": "archived", "comment": "Test"},
         )
         assert_ok(resp)
@@ -768,12 +768,12 @@ class TestRegistryService:
         assert "data" in resp.json()
 
     def test_90_accept_quarantine(self):
-        resp = reg_client.post(f"{BASE}/classifiers/quarantine/p-001/accept")
+        resp = reg_client.post(f"{BASE}/classifiers/quarantine/1/accept")
         assert_ok(resp)
         assert resp.json()["data"]["status"] == "accepted"
 
     def test_91_reject_quarantine(self):
-        resp = reg_client.post(f"{BASE}/classifiers/quarantine/p-001/reject")
+        resp = reg_client.post(f"{BASE}/classifiers/quarantine/1/reject")
         assert_ok(resp)
         assert resp.json()["data"]["status"] == "rejected"
 
@@ -787,12 +787,12 @@ class TestRegistryService:
         assert "mks_status" in data
 
     def test_93_registry_doc_history(self):
-        resp = reg_client.get(f"{BASE}/documents/b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c/history")
+        resp = reg_client.get(f"{BASE}/documents/1/history")
         assert_ok(resp)
         assert "history" in resp.json()["data"]
 
     def test_94_registry_doc_chain(self):
-        resp = reg_client.get(f"{BASE}/documents/b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c/succession")
+        resp = reg_client.get(f"{BASE}/documents/1/succession")
         assert_ok(resp)
         data = resp.json()["data"]
         assert "chain" in data
@@ -812,7 +812,7 @@ class TestAuthMeBinding:
         resp = auth_client.get(f"{BASE}/auth/me", headers={"Authorization": f"Bearer {token}"})
         assert_ok(resp)
         data = resp.json()
-        assert data["user_id"] == "u-004"
+        assert data["user_id"] == 4
         assert data["full_name"] == "Кузнецов Дмитрий Олегович"
 
     def test_96_me_returns_admin_user(self):
@@ -856,10 +856,10 @@ class TestRBAC:
         for method, path in [
             ("GET", f"{BASE}/admin/users"),
             ("POST", f"{BASE}/admin/users"),
-            ("GET", f"{BASE}/admin/users/u-001"),
-            ("PUT", f"{BASE}/admin/users/u-001"),
-            ("PATCH", f"{BASE}/admin/users/u-001"),
-            ("DELETE", f"{BASE}/admin/users/u-001"),
+            ("GET", f"{BASE}/admin/users/1"),
+            ("PUT", f"{BASE}/admin/users/1"),
+            ("PATCH", f"{BASE}/admin/users/1"),
+            ("DELETE", f"{BASE}/admin/users/1"),
             ("GET", f"{BASE}/admin/roles"),
             ("POST", f"{BASE}/admin/roles"),
             ("GET", f"{BASE}/admin/audit"),
@@ -881,12 +881,12 @@ class TestErrorFormat:
         assert "error" in resp.json()
 
     def test_104_orchestrator_error_format(self):
-        resp = orch_client.get(f"{BASE}/documents/nonexistent")
+        resp = orch_client.get(f"{BASE}/documents/999")
         assert resp.status_code == 404
         assert "error" in resp.json()
 
     def test_105_query_error_format(self):
-        resp = query_client.get(f"{BASE}/chat/sessions/nonexistent")
+        resp = query_client.get(f"{BASE}/chat/sessions/999")
         assert resp.status_code == 404
         assert "error" in resp.json()
 

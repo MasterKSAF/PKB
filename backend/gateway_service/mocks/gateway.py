@@ -46,8 +46,8 @@ from mocks.query_service.main import router as query_router
 from mocks.registry_service.main import main_router as registry_router
 from mocks.registry_service.main import registry_docs_router
 
-_ACCESS_TOKEN_USER: Dict[str, str] = {}  # access_token -> user_id
-_MOCK_USERS: Dict[str, dict] = {u["user_id"]: u for u in SEED_USERS}
+_ACCESS_TOKEN_USER: Dict[str, int] = {}  # access_token -> user_id
+_MOCK_USERS: Dict[int, dict] = {u["user_id"]: u for u in SEED_USERS}
 
 # ---------------------------------------------------------------------------
 # Test mode flag — при True анонимные запросы пропускаются
@@ -58,7 +58,7 @@ ALLOW_ANONYMOUS = False
 _orig_make_token = auth_mod._make_token
 
 
-def _patched_make_token(user_id: str) -> dict:
+def _patched_make_token(user_id: int) -> dict:
     result = _orig_make_token(user_id)
     _ACCESS_TOKEN_USER[result["access_token"]] = user_id
     return result

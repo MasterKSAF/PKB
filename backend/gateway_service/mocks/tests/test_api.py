@@ -268,17 +268,17 @@ class TestAuthService:
         assert resp.status_code == 409
 
     def test_11_get_user(self):
-        resp = client.get(f"{ADMIN}/users/u-001", headers=auth_header())
+        resp = client.get(f"{ADMIN}/users/1", headers=auth_header())
         assert_ok(resp)
-        assert resp.json()["user_id"] == "u-001"
+        assert resp.json()["user_id"] == 1
 
     def test_12_get_user_not_found(self):
-        resp = client.get(f"{ADMIN}/users/nonexistent", headers=auth_header())
+        resp = client.get(f"{ADMIN}/users/999", headers=auth_header())
         assert resp.status_code == 404
 
     def test_13_update_user(self):
         resp = client.put(
-            f"{ADMIN}/users/u-001",
+            f"{ADMIN}/users/1",
             json={"position": "Lead Engineer"},
             headers=auth_header(),
         )
@@ -287,7 +287,7 @@ class TestAuthService:
 
     def test_14_patch_user_role(self):
         resp = client.patch(
-            f"{ADMIN}/users/u-002", json={"role": "system_admin"}, headers=auth_header()
+            f"{ADMIN}/users/2", json={"role": "system_admin"}, headers=auth_header()
         )
         assert_ok(resp)
 
@@ -330,7 +330,7 @@ class TestAuthService:
 
     def test_19_audit_filters(self):
         resp = client.get(
-            f"{ADMIN}/audit", params={"user_id": "u-001"}, headers=auth_header()
+            f"{ADMIN}/audit", params={"user_id": 1}, headers=auth_header()
         )
         assert_ok(resp)
 
@@ -353,7 +353,7 @@ class TestAuthService:
         assert resp.status_code == 401
 
     def test_22_error_format(self):
-        resp = client.get(f"{ADMIN}/users/nonexistent", headers=auth_header())
+        resp = client.get(f"{ADMIN}/users/999", headers=auth_header())
         assert resp.status_code == 404
 
 
@@ -396,10 +396,10 @@ class TestOrchestratorService:
         assert_ok(resp)
 
     def test_26_get_document(self):
-        resp = client.get(f"{ORCH}/documents/doc-001")
+        resp = client.get(f"{ORCH}/documents/1")
         assert_ok(resp)
         data = resp.json()
-        assert data["document_id"] == "doc-001"
+        assert data["document_id"] == 1
         # New fields in DocumentDetailResponse
         assert "doc_code" in data
         assert "source_type" in data
@@ -418,11 +418,11 @@ class TestOrchestratorService:
         assert "total_versions" in data
 
     def test_27_get_document_not_found(self):
-        resp = client.get(f"{ORCH}/documents/nonexistent")
+        resp = client.get(f"{ORCH}/documents/999")
         assert resp.status_code == 404
 
     def test_28_document_status(self):
-        resp = client.get(f"{ORCH}/documents/doc-001/status")
+        resp = client.get(f"{ORCH}/documents/1/status")
         assert_ok(resp)
         data = resp.json()
         assert data["status"] == "completed"
@@ -438,32 +438,32 @@ class TestOrchestratorService:
         assert "chunk_summary" in data
 
     def test_29_document_file(self):
-        resp = client.get(f"{ORCH}/documents/doc-001/file")
+        resp = client.get(f"{ORCH}/documents/1/file")
         assert_ok(resp)
         assert "file_url" in resp.json()
 
     def test_30_document_pages(self):
-        resp = client.get(f"{ORCH}/documents/doc-001/pages")
+        resp = client.get(f"{ORCH}/documents/1/pages")
         assert_ok(resp)
         assert len(resp.json()["pages"]) > 0
 
     def test_31_page_detail(self):
-        resp = client.get(f"{ORCH}/documents/doc-001/pages/1")
+        resp = client.get(f"{ORCH}/documents/1/pages/1")
         assert_ok(resp)
         assert "blocks" in resp.json()
 
     def test_32_page_preview(self):
-        resp = client.get(f"{ORCH}/documents/doc-001/pages/1/preview")
+        resp = client.get(f"{ORCH}/documents/1/pages/1/preview")
         assert_ok(resp)
         assert "preview_url" in resp.json()
 
     def test_33_page_text(self):
-        resp = client.get(f"{ORCH}/documents/doc-001/pages/1/text")
+        resp = client.get(f"{ORCH}/documents/1/pages/1/text")
         assert_ok(resp)
         assert "full_text" in resp.json()
 
     def test_34_document_parameters(self):
-        resp = client.get(f"{ORCH}/documents/doc-001/parameters")
+        resp = client.get(f"{ORCH}/documents/1/parameters")
         assert_ok(resp)
         assert "parameters" in resp.json()
         assert "extraction_confidence" in resp.json()
@@ -510,7 +510,7 @@ class TestOrchestratorService:
         assert_ok(resp)
 
     def test_39_document_errors(self):
-        resp = client.get(f"{ORCH}/documents/doc-001/errors")
+        resp = client.get(f"{ORCH}/documents/1/errors")
         assert_ok(resp)
         assert "errors" in resp.json()
 
@@ -524,7 +524,7 @@ class TestOrchestratorService:
         assert "logs" in data
 
     def test_41_reprocess_document(self):
-        resp = client.post(f"{ORCH}/documents/doc-001/reprocess", json={"mode": "full"})
+        resp = client.post(f"{ORCH}/documents/1/reprocess", json={"mode": "full"})
         assert_ok(resp, 202)
         assert resp.json()["status"] == "parsing"
 
@@ -571,21 +571,21 @@ class TestOrchestratorService:
     def test_45_add_document_version(self):
         """POST /documents/{doc_id}/versions — add new version."""
         resp = client.post(
-            f"{ORCH}/documents/doc-001/versions",
+            f"{ORCH}/documents/1/versions",
             files={"file": ("v2.pdf", b"version 2 content payload - " * 20, "application/pdf")},
         )
         assert_ok(resp, 202)
         data = resp.json()
         assert "version_id" in data
         assert "version_number" in data
-        assert data["document_id"] == "doc-001"
+        assert data["document_id"] == 1
         assert data["version_number"] > 1
         assert "file_hash_sha256" in data
         assert "status" in data
 
     def test_46_list_document_versions(self):
         """GET /documents/{doc_id}/versions — list versions."""
-        resp = client.get(f"{ORCH}/documents/doc-001/versions")
+        resp = client.get(f"{ORCH}/documents/1/versions")
         assert_ok(resp)
         data = resp.json()
         assert "versions" in data
@@ -594,20 +594,20 @@ class TestOrchestratorService:
 
     def test_47_approve_document(self):
         """POST /documents/{doc_id}/approve — approve document."""
-        resp = client.post(f"{ORCH}/documents/doc-001/approve")
+        resp = client.post(f"{ORCH}/documents/1/approve")
         assert_ok(resp, 202)
         data = resp.json()
-        assert data["document_id"] == "doc-001"
+        assert data["document_id"] == 1
         assert data["status"] == "approved"
         assert "approved_at" in data
         assert "promotion_task_id" in data
 
     def test_50_get_document_history(self):
         """GET /documents/{doc_id}/history — status history."""
-        resp = client.get(f"{ORCH}/documents/doc-001/history")
+        resp = client.get(f"{ORCH}/documents/1/history")
         assert_ok(resp)
         data = resp.json()
-        assert data["document_id"] == "doc-001"
+        assert data["document_id"] == 1
         assert "history" in data
         assert "meta" in data
         assert data["meta"]["total"] > 0
@@ -625,7 +625,7 @@ class TestQueryService:
     def test_52_create_session(self):
         resp = client.post(
             f"{QUERY}/chat/sessions",
-            json={"title": "Test Session", "document_ids": ["doc-001"]},
+            json={"title": "Test Session", "document_ids": [1]},
         )
         assert_ok(resp, 201)
         assert "session_id" in resp.json()
@@ -638,23 +638,23 @@ class TestQueryService:
         assert_paginated(data)
 
     def test_54_get_session(self):
-        resp = client.get(f"{QUERY}/chat/sessions/sess-001")
+        resp = client.get(f"{QUERY}/chat/sessions/1")
         assert_ok(resp)
-        assert resp.json()["session_id"] == "sess-001"
+        assert resp.json()["session_id"] == 1
 
     def test_55_get_session_not_found(self):
-        resp = client.get(f"{QUERY}/chat/sessions/nonexistent")
+        resp = client.get(f"{QUERY}/chat/sessions/999")
         assert resp.status_code == 404
 
     def test_56_update_session(self):
-        resp = client.put(f"{QUERY}/chat/sessions/sess-001", json={"title": "Updated"})
+        resp = client.put(f"{QUERY}/chat/sessions/1", json={"title": "Updated"})
         assert_ok(resp)
         assert resp.json()["title"] == "Updated"
 
     def test_57_send_message(self):
         """POST /chat/sessions/{id}/messages — simplified response (no sources)."""
         resp = client.post(
-            f"{QUERY}/chat/sessions/sess-001/messages",
+            f"{QUERY}/chat/sessions/1/messages",
             json={"content": "What is the wall thickness?"},
         )
         assert_ok(resp)
@@ -668,14 +668,14 @@ class TestQueryService:
 
     def test_58_manage_context(self):
         resp = client.post(
-            f"{QUERY}/chat/sessions/sess-001/context", json={"action": "clear_history"}
+            f"{QUERY}/chat/sessions/1/context", json={"action": "clear_history"}
         )
         assert_ok(resp)
         assert resp.json()["status"] == "completed"
 
     def test_59_export_session(self):
         resp = client.post(
-            f"{QUERY}/chat/sessions/sess-001/export", json={"format": "pdf"}
+            f"{QUERY}/chat/sessions/1/export", json={"format": "pdf"}
         )
         assert_ok(resp)
         assert "export_id" in resp.json()
@@ -685,10 +685,10 @@ class TestQueryService:
         resp = client.post(
             f"{QUERY}/chat/feedback",
             json={
-                "session_id": "sess-001",
-                "message_id": "msg-001",
+                "session_id": 1,
+                "message_id": 1,
                 "rating": 5,
-                "answer_id": "ans-001",
+                "answer_id": 1,
                 "useful": True,
                 "opened_citation_ids": ["cit-001", "cit-002"],
             },
@@ -752,7 +752,7 @@ class TestQueryService:
             f"{QUERY}/chat",
             json={
                 "question": "Check dimensions",
-                "context": {"document_ids": ["doc-001"]},
+                "context": {"document_ids": [1]},
             },
         )
         assert_ok(resp)
@@ -776,7 +776,7 @@ class TestQueryService:
             f"{QUERY}/text/search",
             json={
                 "text": "steel",
-                "document_ids": ["doc-001"],
+                "document_ids": [1],
                 "filters": {"document_type": "specification"},
             },
         )
@@ -968,7 +968,7 @@ class TestRegistryService:
         assert_ok(resp)
 
     def test_81_get_term(self):
-        resp = client.get(f"{REG}/terminology/t-001")
+        resp = client.get(f"{REG}/terminology/1")
         assert_ok(resp)
         data = resp.json()["data"]
         assert "raw_term" in data
@@ -977,7 +977,7 @@ class TestRegistryService:
         assert "term_type" in data
 
     def test_82_get_term_not_found(self):
-        resp = client.get(f"{REG}/terminology/nonexistent")
+        resp = client.get(f"{REG}/terminology/999")
         assert resp.status_code == 404
 
     def test_83_create_term(self):
@@ -998,7 +998,7 @@ class TestRegistryService:
 
     def test_84_update_term(self):
         resp = client.put(
-            f"{REG}/terminology/t-001",
+            f"{REG}/terminology/1",
             json={"definition": "Updated definition"},
         )
         assert_ok(resp)
@@ -1080,8 +1080,8 @@ class TestRegistryService:
             assert "updated_by" in doc
 
     def test_89_get_registry_doc(self):
-        # Use seed doc UUID
-        seed_id = "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c"
+        # Use seed doc
+        seed_id = 1
         resp = client.get(f"{REG_DOCS}/documents/{seed_id}")
         assert_ok(resp)
         doc = resp.json()["data"]
@@ -1110,8 +1110,8 @@ class TestRegistryService:
         assert "id" in data
 
     def test_91_update_registry_doc(self):
-        # Use seed doc UUID
-        seed_id = "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c"
+        # Use seed doc
+        seed_id = 1
         resp = client.put(
             f"{REG_DOCS}/documents/{seed_id}",
             json={"jurisdiction": "RF"},
@@ -1228,7 +1228,7 @@ class TestRegistryService:
 
     def test_99_accept_quarantine(self):
         """POST /classifiers/quarantine/{id}/accept — accept pending classifier."""
-        resp = client.post(f"{REG}/classifiers/quarantine/p-001/accept")
+        resp = client.post(f"{REG}/classifiers/quarantine/1/accept")
         assert_ok(resp)
         data = resp.json()["data"]
         assert data["status"] == "accepted"
@@ -1236,7 +1236,7 @@ class TestRegistryService:
 
     def test_100_reject_quarantine(self):
         """POST /classifiers/quarantine/{id}/reject — reject pending classifier."""
-        resp = client.post(f"{REG}/classifiers/quarantine/p-001/reject")
+        resp = client.post(f"{REG}/classifiers/quarantine/1/reject")
         assert_ok(resp)
         data = resp.json()["data"]
         assert data["status"] == "rejected"
@@ -1255,7 +1255,7 @@ class TestRegistryService:
 
     def test_102_registry_doc_history(self):
         """GET /documents/{id}/history — registry doc history."""
-        seed_id = "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c"
+        seed_id = 1
         resp = client.get(f"{REG_DOCS}/documents/{seed_id}/history")
         assert_ok(resp)
         data = resp.json()["data"]
@@ -1265,7 +1265,8 @@ class TestRegistryService:
 
     def test_103_registry_doc_chain(self):
         """GET /documents/{id}/succession — registry doc chain (predecessors/successors)."""
-        seed_id = "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c"
+        # Use seed doc
+        seed_id = 1
         resp = client.get(f"{REG_DOCS}/documents/{seed_id}/succession")
         assert_ok(resp)
         data = resp.json()["data"]
@@ -1353,8 +1354,7 @@ class TestAuthMeBinding:
         resp = client.get(f"{AUTH}/me", headers={"Authorization": f"Bearer {token}"})
         assert_ok(resp)
         data = resp.json()
-        assert data["user_id"] == "u-004"
-        assert data["full_name"] == "Кузнецов Дмитрий Олегович"
+        assert data["user_id"] == 4
         assert data["role"] == "engineer"
 
     def test_115_me_returns_admin_user(self):
@@ -1364,7 +1364,7 @@ class TestAuthMeBinding:
         resp = client.get(f"{AUTH}/me", headers={"Authorization": f"Bearer {token}"})
         assert_ok(resp)
         data = resp.json()
-        assert data["user_id"] == "u-003"
+        assert data["user_id"] == 3
         assert data["role"] == "system_admin"
         assert "admin" in data.get("available_tabs", [])
 
@@ -1476,10 +1476,10 @@ class TestRBAC:
         for method, path in [
             ("GET", f"{ADMIN}/users"),
             ("POST", f"{ADMIN}/users"),
-            ("GET", f"{ADMIN}/users/u-001"),
-            ("PUT", f"{ADMIN}/users/u-001"),
-            ("PATCH", f"{ADMIN}/users/u-001"),
-            ("DELETE", f"{ADMIN}/users/u-001"),
+            ("GET", f"{ADMIN}/users/1"),
+            ("PUT", f"{ADMIN}/users/1"),
+            ("PATCH", f"{ADMIN}/users/1"),
+            ("DELETE", f"{ADMIN}/users/1"),
             ("GET", f"{ADMIN}/roles"),
             ("POST", f"{ADMIN}/roles"),
             ("GET", f"{ADMIN}/audit"),
@@ -1511,7 +1511,7 @@ class TestErrorFormat:
 
     def test_125_error_format_404(self):
         """404 error should use {error: {code, message, details}} format."""
-        resp = client.get(f"{ORCH}/documents/nonexistent_doc_xxx")
+        resp = client.get(f"{ORCH}/documents/999")
         assert resp.status_code == 404
         data = resp.json()
         assert "error" in data, f"Missing 'error' wrapper: {data}"
@@ -1732,14 +1732,14 @@ class TestDocumentRegistryLink:
 
     def test_145_document_detail_has_source_type(self):
         """GET /documents/{id} should contain source_type."""
-        resp = client.get(f"{ORCH}/documents/doc-001")
+        resp = client.get(f"{ORCH}/documents/1")
         data = resp.json()
         assert "source_type" in data
         assert "doc_code" in data
 
     def test_146_doc_code_links_to_registry(self):
         """doc_code from documents should match registry doc_code."""
-        resp = client.get(f"{ORCH}/documents/doc-001")
+        resp = client.get(f"{ORCH}/documents/1")
         doc_data = resp.json()
         doc_code = doc_data.get("doc_code")
         if doc_code:

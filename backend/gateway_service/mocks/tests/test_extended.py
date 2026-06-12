@@ -237,7 +237,7 @@ class TestOrchestratorExtended:
     def test_7_approve_document(self):
         """Approve document returns status=approved and previous_status."""
         # Re-approve doc-001 (list endpoint shows latest)
-        doc_id = "doc-001"
+        doc_id = 1
         resp = client.post(f"{ORCH}/documents/{doc_id}/approve")
         assert_ok(resp, 202)
         data = resp.json()
@@ -248,7 +248,7 @@ class TestOrchestratorExtended:
 
     def test_9_version_number_increments(self):
         """Adding a version increments version_number."""
-        doc_id = "doc-001"
+        doc_id = 1
 
         # Get current version count
         before = client.get(f"{ORCH}/documents/{doc_id}/versions").json()
@@ -282,7 +282,7 @@ class TestOrchestratorExtended:
 
     def test_11_document_detail_has_metadata_fields(self):
         """Document detail contains metadata object."""
-        resp = client.get(f"{ORCH}/documents/doc-001")
+        resp = client.get(f"{ORCH}/documents/1")
         assert_ok(resp)
         data = resp.json()
         assert "metadata" in data
@@ -317,7 +317,7 @@ class TestQueryExtended:
 
     def test_14_chat_with_attachments(self):
         """Send message with attachments — simplified response format."""
-        sess_id = "sess-001"
+        sess_id = 1
         resp = client.post(
             f"{QUERY}/chat/sessions/{sess_id}/messages",
             json={
@@ -382,10 +382,10 @@ class TestQueryExtended:
         resp = client.post(
             f"{QUERY}/chat/feedback",
             json={
-                "session_id": "sess-001",
-                "message_id": "msg-001",
+                "session_id": 1,
+                "message_id": 1,
                 "rating": 5,
-                "answer_id": "ans-002",
+                "answer_id": 2,
                 "useful": True,
                 "opened_citation_ids": ["cit-001"],
             },
@@ -402,7 +402,7 @@ class TestQueryExtended:
     def test_19_404_for_nonexistent_session_messages(self):
         """Send message to non-existent session returns 404."""
         resp = client.post(
-            f"{QUERY}/chat/sessions/nonexistent_session_xxx/messages",
+            f"{QUERY}/chat/sessions/999/messages",
             json={"content": "Test message"},
         )
         assert resp.status_code == 404
@@ -433,14 +433,14 @@ class TestRegistryExtended:
 
     def test_21_quarantine_accept_nonexistent_returns_404(self):
         """Accept non-existent quarantine item returns 404."""
-        resp = client.post(f"{REG}/classifiers/quarantine/nonexistent/accept")
+        resp = client.post(f"{REG}/classifiers/quarantine/999/accept")
         assert resp.status_code == 404
         data = resp.json()
         assert "error" in data
 
     def test_22_quarantine_reject_nonexistent_returns_404(self):
         """Reject non-existent quarantine item returns 404."""
-        resp = client.post(f"{REG}/classifiers/quarantine/nonexistent/reject")
+        resp = client.post(f"{REG}/classifiers/quarantine/999/reject")
         assert resp.status_code == 404
         data = resp.json()
         assert "error" in data
@@ -458,11 +458,12 @@ class TestRegistryExtended:
 
     def test_24_registry_doc_chain_has_predecessors_successors(self):
         """Document chain returns expected structure (may be empty)."""
-        # Use seed doc UUID
-        seed_id = "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c"
+        # Use seed doc
+        seed_id = 1
         resp = client.get(f"{REG_DOCS}/documents/{seed_id}/succession")
         assert_ok(resp)
         data = resp.json()["data"]
+        assert "document_id" in data
         assert data["document_id"] == seed_id
         assert "chain" in data
         assert isinstance(data["chain"], list)
@@ -506,7 +507,7 @@ class TestRegistryExtended:
 
     def test_28_get_registry_doc_not_found(self):
         """GET non-existent registry document returns 404 with error wrapper."""
-        resp = client.get(f"{REG_DOCS}/documents/nonexistent_rdoc_xxx")
+        resp = client.get(f"{REG_DOCS}/documents/999")
         assert resp.status_code == 404
         data = resp.json()
         assert "error" in data
@@ -540,7 +541,7 @@ class TestRegistryExtended:
 
     def test_31_registry_doc_history_has_doc_id_and_history(self):
         """Registry document history returns doc_id and history list."""
-        seed_id = "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c"
+        seed_id = 1
         resp = client.get(f"{REG_DOCS}/documents/{seed_id}/history")
         assert_ok(resp)
         data = resp.json()["data"]
@@ -563,7 +564,7 @@ class TestRegistryExtended:
 
     def test_33_registry_doc_delete_nonexistent(self):
         """Delete non-existent registry document returns 404."""
-        resp = client.delete(f"{REG_DOCS}/documents/nonexistent_rdoc_xxx")
+        resp = client.delete(f"{REG_DOCS}/documents/999")
         assert resp.status_code == 404
 
 
@@ -621,7 +622,7 @@ class TestGatewayExtended:
 
     def test_36_x_process_time_header(self):
         """Responses include X-Process-Time header."""
-        resp = client.get(f"{ORCH}/documents/doc-001")
+        resp = client.get(f"{ORCH}/documents/1")
         assert_ok(resp)
         assert "x-process-time" in resp.headers, (
             f"Missing X-Process-Time header: {resp.headers}"
@@ -630,13 +631,13 @@ class TestGatewayExtended:
     def test_37_no_route_conflict_between_orch_and_registry_histories(self):
         """Orchestrator /documents/{id}/history != Registry /registry/documents/{id}/history."""
         # Orch document history
-        resp_orch = client.get(f"{ORCH}/documents/doc-001/history")
+        resp_orch = client.get(f"{ORCH}/documents/1/history")
         assert_ok(resp_orch)
         orch_data = resp_orch.json()
         assert "history" in orch_data
 
         # Registry doc history — use seed document ID
-        reg_doc_id = "b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c"
+        reg_doc_id = 1
         resp_reg = client.get(f"{REG_DOCS}/documents/{reg_doc_id}/history")
         assert_ok(resp_reg)
         reg_data = resp_reg.json()
@@ -887,7 +888,7 @@ class TestFixes:
         doc = docs[0]
 
         # user_id не должен быть хардкодным "u-001"
-        assert doc["user_id"] != "u-001", (
+        assert doc["user_id"] != 1, (
             f"user_id всё ещё хардкодный: {doc['user_id']}"
         )
         # uploaded_by не должен быть хардкодным "Иванов С.П."
