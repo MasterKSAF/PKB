@@ -18,6 +18,7 @@ query_client = TestClient(query_app)
 reg_client = TestClient(reg_app)
 
 BASE = "/api/v1"
+REG_BASE = "/api/v1/registry"
 
 def reset_rate_limiter():
     auth_rate_limits.clear()
@@ -527,29 +528,29 @@ class TestRegistry_Specifics:
 
     def test_classifier_unique_code(self):
         resp = reg_client.post(
-            f"{BASE}/classifiers",
+            f"{REG_BASE}/classifiers",
             json={"classifier_system": "MKS", "code": "47", "full_name": "Dup", "status": "active"},
         )
         assert resp.status_code == 409
 
     def test_classifier_tree_hierarchy(self):
-        resp = reg_client.get(f"{BASE}/classifiers/tree")
+        resp = reg_client.get(f"{REG_BASE}/classifiers/tree")
         assert_ok(resp)
         for root in resp.json()["data"]:
             assert "code" in root
 
     def test_term_normalization(self):
-        resp = reg_client.get(f"{BASE}/terminology/normalize", params={"term": "Толщина стенки"})
+        resp = reg_client.get(f"{REG_BASE}/terminology/normalize", params={"term": "Толщина стенки"})
         assert_ok(resp)
         data = resp.json()
         assert "data" in data
 
     def test_term_normalization_no_match(self):
-        resp = reg_client.get(f"{BASE}/terminology/normalize", params={"term": "xyznonexistent"})
+        resp = reg_client.get(f"{REG_BASE}/terminology/normalize", params={"term": "xyznonexistent"})
         assert_ok(resp)
 
     def test_registry_doc_statuses(self):
-        resp = reg_client.get(f"{BASE}/registry/documents")
+        resp = reg_client.get(f"{REG_BASE}/documents")
         assert_ok(resp)
         valid = ("draft", "uploaded", "parsing", "validation", "review_required", "ready_for_promotion", "approved", "failed", "archived")
         for doc in resp.json().get("data", []):
@@ -557,7 +558,7 @@ class TestRegistry_Specifics:
 
     def test_common_enums(self):
         # NOTE: Путь изменён на /api/v1/common/enums (routing table gateway_service_api.md).
-        resp = reg_client.get(f"{BASE}/common/enums")
+        resp = reg_client.get(f"{REG_BASE}/common/enums")
         assert_ok(resp)
         enums = resp.json()["data"]
         for key in ["classifier_system", "classifier_status", "source_type", "document_status", "era", "validity_status", "term_type",
@@ -565,28 +566,28 @@ class TestRegistry_Specifics:
             assert key in enums
 
     def test_registry_stats_new_format(self):
-        resp = reg_client.get(f"{BASE}/common/stats")
+        resp = reg_client.get(f"{REG_BASE}/common/stats")
         assert_ok(resp)
         data = resp.json()["data"]
         assert isinstance(data["classifiers_total"], dict)
         assert "MKS" in data["classifiers_total"]
 
     def test_registry_doc_history_endpoint(self):
-        resp = reg_client.get(f"{BASE}/registry/documents/b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c/history")
+        resp = reg_client.get(f"{REG_BASE}/documents/b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c/history")
         assert_ok(resp)
         data = resp.json()["data"]
         assert "history" in data
         assert "doc_id" in data
 
     def test_registry_doc_chain_endpoint(self):
-        resp = reg_client.get(f"{BASE}/registry/documents/b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c/succession")
+        resp = reg_client.get(f"{REG_BASE}/documents/b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c/succession")
         assert_ok(resp)
         data = resp.json()["data"]
         assert "chain" in data
         assert "document_id" in data
 
     def test_quarantine_list(self):
-        resp = reg_client.get(f"{BASE}/classifiers/quarantine")
+        resp = reg_client.get(f"{REG_BASE}/classifiers/quarantine")
         assert_ok(resp)
         assert "data" in resp.json()
 
@@ -606,7 +607,7 @@ class TestEdgeCases:
         assert resp.status_code == 404
 
     def test_404_registry_doc(self):
-        resp = reg_client.delete(f"{BASE}/documents/no-such-doc")
+        resp = reg_client.delete(f"{REG_BASE}/documents/no-such-doc")
         assert resp.status_code == 404
 
     def test_search_without_query(self):
@@ -614,11 +615,11 @@ class TestEdgeCases:
         assert resp.status_code == 400
 
     def test_registry_doc_not_found(self):
-        resp = reg_client.get(f"{BASE}/classifiers/nonexistent")
+        resp = reg_client.get(f"{REG_BASE}/classifiers/nonexistent")
         assert resp.status_code == 404
 
     def test_delete_classifier_with_children(self):
-        resp = reg_client.delete(f"{BASE}/classifiers/47")
+        resp = reg_client.delete(f"{REG_BASE}/classifiers/47")
         assert resp.status_code == 409
 
     def test_validate_endpoints_removed(self):

@@ -171,9 +171,8 @@ class RBACMiddleware(BaseHTTPMiddleware):
                     )
 
             # POST/PUT/DELETE /classifiers — can_manage_classifiers
-            if request.method in ("POST", "PUT", "PATCH", "DELETE") and path.startswith(
-                "/api/v1/classifiers"
-            ):
+            _classifier_path = path.startswith("/api/v1/classifiers") or path.startswith("/api/v1/registry/classifiers")
+            if request.method in ("POST", "PUT", "PATCH", "DELETE") and _classifier_path:
                 if not permissions.get("can_manage_classifiers", False):
                     return JSONResponse(
                         status_code=403,
@@ -184,9 +183,8 @@ class RBACMiddleware(BaseHTTPMiddleware):
                     )
 
             # POST/PUT/DELETE /terminology — can_manage_terminology
-            if request.method in ("POST", "PUT", "PATCH", "DELETE") and path.startswith(
-                "/api/v1/terminology"
-            ):
+            _term_path = path.startswith("/api/v1/terminology") or path.startswith("/api/v1/registry/terminology")
+            if request.method in ("POST", "PUT", "PATCH", "DELETE") and _term_path:
                 if not permissions.get("can_manage_terminology", False):
                     return JSONResponse(
                         status_code=403,
@@ -349,6 +347,7 @@ app = FastAPI(
     version="1.0.0",
     description="Mock gateway combining all services on a single port",
     lifespan=lifespan,
+    redirect_slashes=False,
 )
 
 
@@ -474,7 +473,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(orch_router)
 app.include_router(query_router)
-app.include_router(registry_router)
+app.include_router(registry_router, prefix="/api/v1/registry")
 app.include_router(registry_docs_router, prefix="/api/v1/registry")
 
 

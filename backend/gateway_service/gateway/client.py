@@ -44,9 +44,6 @@ SERVICE_ROUTES: Dict[str, str] = {
     "/api/v1/chat/": "query",
     "/api/v1/text/": "query",
     # Registry Service (:8084)
-    "/api/v1/classifiers/": "registry",
-    "/api/v1/terminology/": "registry",
-    "/api/v1/common/": "registry",
     "/api/v1/registry/": "registry",
     # Integration Service (:8085) — зарезервировано
     "/api/v1/meridian/": "integration",

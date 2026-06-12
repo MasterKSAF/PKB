@@ -197,7 +197,7 @@ class CheckUniquenessRequest(BaseModel):
 # ── эндпоинты ─────────────────────────────────────────────────────────────
 
 # 1. classifiers
-@main_router.get("/api/v1/classifiers")
+@main_router.get("/classifiers")
 async def list_classifiers(search: str = None, classifier_system: str = None,
                            status: str = None, page: int = 1, page_size: int = 50):
     items = list(_classifiers.values())
@@ -214,7 +214,7 @@ async def list_classifiers(search: str = None, classifier_system: str = None,
               for c in items]
     return paginate_registry(result, page, page_size)
 
-@main_router.get("/api/v1/classifiers/tree")
+@main_router.get("/classifiers/tree")
 async def get_tree():
     def build(nodes, parent_code=None, system=None):
         tree = []
@@ -231,7 +231,7 @@ async def get_tree():
         return tree
     return {"data": build(_classifiers), "meta": {"total": len(_classifiers), "max_depth_reached": 5}}
 
-@main_router.post("/api/v1/classifiers/import")
+@main_router.post("/classifiers/import")
 async def import_classifiers(req: List[ClassifierCreate]):
     inserted = updated = 0
     errors = []
@@ -253,14 +253,14 @@ async def import_classifiers(req: List[ClassifierCreate]):
             errors.append({"row": row.code, "message": str(e)})
     return {"data": {"inserted": inserted, "updated": updated, "errors": errors}}
 
-@main_router.get("/api/v1/classifiers/quarantine")
+@main_router.get("/classifiers/quarantine")
 async def list_quarantine(status: str = None, page: int = 1, page_size: int = 50):
     items = list(_pending_classifiers.values())
     if status:
         items = [p for p in items if p.get("status") == status]
     return paginate_registry(items, page, page_size)
 
-@main_router.post("/api/v1/classifiers/quarantine/{pending_id}/accept")
+@main_router.post("/classifiers/quarantine/{pending_id}/accept")
 async def accept_quarantine(pending_id: str):
     pending = _pending_classifiers.get(pending_id)
     if not pending:
@@ -273,7 +273,7 @@ async def accept_quarantine(pending_id: str):
     pending["status"] = "accepted"
     return {"data": {"id": pending_id, "status": "accepted", "classifier_code": code}}
 
-@main_router.post("/api/v1/classifiers/quarantine/{pending_id}/reject")
+@main_router.post("/classifiers/quarantine/{pending_id}/reject")
 async def reject_quarantine(pending_id: str):
     pending = _pending_classifiers.get(pending_id)
     if not pending:
@@ -281,7 +281,7 @@ async def reject_quarantine(pending_id: str):
     pending["status"] = "rejected"
     return {"data": {"id": pending_id, "status": "rejected"}}
 
-@main_router.post("/api/v1/classifiers/validate")
+@main_router.post("/classifiers/validate")
 async def validate_classification(req: dict):
     code = req.get("mks_oks_code", req.get("code"))
     node = _classifiers.get(code) if code else None
@@ -289,14 +289,14 @@ async def validate_classification(req: dict):
     status = "CONFIRMED" if valid else "NOT_FOUND"
     return {"data": {"mks_status": status, "okstu_status": "NOT_USED", "overall_status": "valid" if valid else "pending"}}
 
-@main_router.get("/api/v1/classifiers/{code}")
+@main_router.get("/classifiers/{code}")
 async def get_classifier(code: str):
     node = _classifiers.get(code)
     if not node:
         raise HTTPException(404, detail=error_response("CLASSIFIER_NOT_FOUND", "Узел классификатора не найден"))
     return {"data": node}
 
-@main_router.post("/api/v1/classifiers", status_code=201)
+@main_router.post("/classifiers", status_code=201)
 async def create_classifier(req: ClassifierCreate):
     if req.code in _classifiers:
         raise HTTPException(409, detail=error_response("DUPLICATE_CODE", "Код уже существует"))
@@ -306,7 +306,7 @@ async def create_classifier(req: ClassifierCreate):
     _classifiers[req.code] = new_node
     return {"data": new_node}
 
-@main_router.put("/api/v1/classifiers/{code}")
+@main_router.put("/classifiers/{code}")
 async def update_classifier(code: str, req: ClassifierUpdate):
     node = _classifiers.get(code)
     if not node:
@@ -318,11 +318,11 @@ async def update_classifier(code: str, req: ClassifierUpdate):
     node["updated_at"] = utcnow()
     return {"data": node}
 
-@main_router.patch("/api/v1/classifiers/{code}")
+@main_router.patch("/classifiers/{code}")
 async def patch_classifier(code: str, req: ClassifierUpdate):
     return await update_classifier(code, req)
 
-@main_router.delete("/api/v1/classifiers/{code}")
+@main_router.delete("/classifiers/{code}")
 async def delete_classifier(code: str):
     node = _classifiers.get(code)
     if not node:
@@ -334,7 +334,7 @@ async def delete_classifier(code: str):
     return {"data": {"code": code, "deleted": True}}
 
 # 2. terminology
-@main_router.get("/api/v1/terminology")
+@main_router.get("/terminology")
 async def list_terms(search: str = None, term_type: str = None, page: int = 1, page_size: int = 50):
     items = list(_terminology.values())
     if search:
@@ -344,7 +344,7 @@ async def list_terms(search: str = None, term_type: str = None, page: int = 1, p
         items = [t for t in items if t.get("term_type") == term_type]
     return paginate_registry(items, page, page_size)
 
-@main_router.get("/api/v1/terminology/normalize")
+@main_router.get("/terminology/normalize")
 async def normalize_term(term: str = Query(...)):
     q = term.lower()
     for t in _terminology.values():
@@ -353,7 +353,7 @@ async def normalize_term(term: str = Query(...)):
                              "normalized_value": t.get("normalized_value", t["raw_term"]), "term_type": t.get("term_type"), "is_blocked": t.get("is_blocked", False)}}
     return {"data": {"raw_term": term, "standard_term": term.lower(), "normalized_value": term.lower(), "term_type": "preferred", "is_blocked": False}}
 
-@main_router.post("/api/v1/terminology/import")
+@main_router.post("/terminology/import")
 async def import_terms(req: List[TermCreate]):
     inserted = updated = 0
     errors = []
@@ -382,14 +382,14 @@ async def import_terms(req: List[TermCreate]):
             errors.append({"row": row.raw_term, "message": str(e)})
     return {"data": {"inserted": inserted, "updated": updated, "errors": errors}}
 
-@main_router.get("/api/v1/terminology/{term_id}")
+@main_router.get("/terminology/{term_id}")
 async def get_term(term_id: str):
     t = _terminology.get(term_id)
     if not t:
         raise HTTPException(404, detail=error_response("TERM_NOT_FOUND", "Термин не найден"))
     return {"data": t}
 
-@main_router.post("/api/v1/terminology", status_code=201)
+@main_router.post("/terminology", status_code=201)
 async def create_term(req: TermCreate):
     tid = f"t-{new_id()}"
     new_term = {"id": tid, "raw_term": req.raw_term, "standard_term": req.standard_term or req.raw_term.lower(),
@@ -400,7 +400,7 @@ async def create_term(req: TermCreate):
     _terminology[tid] = new_term
     return {"data": new_term}
 
-@main_router.put("/api/v1/terminology/{term_id}")
+@main_router.put("/terminology/{term_id}")
 async def update_term(term_id: str, req: TermUpdate):
     t = _terminology.get(term_id)
     if not t:
@@ -412,7 +412,7 @@ async def update_term(term_id: str, req: TermUpdate):
     t["updated_at"] = utcnow()
     return {"data": t}
 
-@main_router.delete("/api/v1/terminology/{term_id}")
+@main_router.delete("/terminology/{term_id}")
 async def delete_term(term_id: str):
     if term_id not in _terminology:
         raise HTTPException(404, detail=error_response("TERM_NOT_FOUND", "Термин не найден"))
@@ -739,7 +739,7 @@ async def delete_draft(draft_id: str):
 # 4. common
 # NOTE: Путь /api/v1/common/stats соответствует routing table gateway_service_api.md
 # (префикс /api/v1/common/* → Registry Service).
-@main_router.get("/api/v1/common/stats")
+@main_router.get("/common/stats")
 async def stats():
     docs_by_status = {}
     docs_by_source = {}
@@ -762,7 +762,7 @@ async def stats():
         "documents_by_era": docs_by_era
     }}
 
-@main_router.get("/api/v1/common/enums")
+@main_router.get("/common/enums")
 async def enums():
     return {"data": {
         "classifier_system": ["MKS", "OKSTU", "UDC", "EXTERNAL"],
@@ -781,11 +781,11 @@ async def enums():
 
 # NOTE: /api/v1/system/health зарегистрирован только в gateway.py (единая точка).
 # Для внутреннего мониторинга каждый сервис использует /api/v1/health.
-@main_router.get("/api/v1/health")
+@main_router.get("/health")
 async def health():
     return {"status": "ok", "service": "registry-service", "version": "1.0.0", "uptime_seconds": 86400}
 
-app.include_router(main_router)
+app.include_router(main_router, prefix="/api/v1/registry")
 app.include_router(registry_docs_router, prefix="/api/v1/registry")
 
 
