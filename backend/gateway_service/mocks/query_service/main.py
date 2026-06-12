@@ -20,10 +20,10 @@ router = APIRouter()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 _counter = 0
-def new_id() -> str:
+def new_id() -> int:
     global _counter
     _counter += 1
-    return str(_counter)
+    return _counter
 
 def utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -56,28 +56,28 @@ def paginate(items: list, page: int, page_size: int) -> dict:
     return {"items": items[start:end], "meta": {"total": total, "page": page, "page_size": page_size}}
 
 SEED_SESSIONS = [
-    {"session_id": "sess-001", "title": "Тестовая сессия", "user_id": "u-001",
-     "document_ids": ["doc-001"], "options": {},
+    {"session_id": 1, "title": "Тестовая сессия", "user_id": 1,
+     "document_ids": [1], "options": {},
      "message_count": 2, "messages": [
-         {"message_id":"msg-001","role":"user","content":"Привет","timestamp":"2026-04-27T10:00:00Z","status":"completed"},
-         {"message_id":"msg-002","role":"assistant","status":"completed",
+         {"message_id": 1, "role":"user","content":"Привет","timestamp":"2026-04-27T10:00:00Z","status":"completed"},
+         {"message_id": 2, "role":"assistant","status":"completed",
           "content":"Здравствуйте! Чем могу помочь?","sources":[],"model_used":"gpt-4","processing_time_ms":500,
           "timestamp":"2026-04-27T10:00:01Z","feedback":None}
      ], "has_more": False, "last_message_preview": "Здравствуйте!",
      "created_at": "2026-04-27T10:00:00Z", "updated_at": "2026-04-27T10:00:01Z"}
 ]
 SEED_HISTORY = [
-    {"history_id":"hist-001","session_id":"sess-001","created_at":"2026-04-27T10:00:01Z",
-     "user_id":"u-001","user_name":"Иванов И.И.","question":"Привет","answer_preview":"Здравствуйте!",
-     "status":"completed","source_count":0,"answer_id":"ans-001"}
+    {"history_id": 1, "session_id": 1, "created_at":"2026-04-27T10:00:01Z",
+     "user_id": 1, "user_name":"Иванов И.И.","question":"Привет","answer_preview":"Здравствуйте!",
+     "status":"completed","source_count":0,"answer_id": 1}
 ]
 
-_sessions: Dict[str, dict] = {}
+_sessions: Dict[int, dict] = {}
 _history: List[dict] = []
-_projects: Dict[str, dict] = {}  # NOTE: InMemoryStore для проектов чата — отдельное хранилище, чтобы не смешивать с сессиями
+_projects: Dict[int, dict] = {}  # NOTE: InMemoryStore для проектов чата — отдельное хранилище, чтобы не смешивать с сессиями
 _projects_id_seq: int = 0  # NOTE: Счётчик для генерации project_id; не используем new_id(), т.к. project_id — числовой bigint
 _feedback_store: List[dict] = []
-_export_store: Dict[str, dict] = {}
+_export_store: Dict[int, dict] = {}
 
 def init_data():
     global _sessions, _history
@@ -96,14 +96,14 @@ _MOCK_ANSWERS = [
 
 def _generate_sources() -> list:
     return [
-        {"document_id":"doc-001","document_title":"Спецификация по ГОСТ 2.109","page":3,
-         "section_id":f"sect-{new_id()}","excerpt":"Толщина стенки корпуса: 5 мм","score":0.95,
-         "clause":"Основные требования","page_preview_url":"/documents/doc-001/pages/3/preview",
-         "document_url":"/documents/doc-001/file"},
-        {"document_id":"rd-001","document_title":"ГОСТ 2.109-73","page":5,
-         "section_id":f"sect-{new_id()}","excerpt":"Толщина стенки не менее 4 мм","score":0.92,
-         "clause":"п. 3.2","page_preview_url":"/documents/rd-001/pages/5/preview",
-         "document_url":"/documents/rd-001/file"},
+        {"document_id": 1, "document_title":"Спецификация по ГОСТ 2.109","page":3,
+         "section_id": new_id(), "excerpt":"Толщина стенки корпуса: 5 мм","score":0.95,
+         "clause":"Основные требования","page_preview_url":"/documents/1/pages/3/preview",
+         "document_url":"/documents/1/file"},
+        {"document_id": 2, "document_title":"ГОСТ 2.109-73","page":5,
+         "section_id": new_id(), "excerpt":"Толщина стенки не менее 4 мм","score":0.92,
+         "clause":"п. 3.2","page_preview_url":"/documents/2/pages/5/preview",
+         "document_url":"/documents/2/file"},
     ]
 
 def _generate_answer(question: str) -> dict:
@@ -118,7 +118,7 @@ def _generate_answer(question: str) -> dict:
 # Модели
 class CreateSessionRequest(BaseModel):
     title: Optional[str] = None
-    document_ids: Optional[List[str]] = None
+    document_ids: Optional[List[int]] = None
     options: Optional[Dict[str, Any]] = None
 class UpdateSessionRequest(BaseModel):
     title: Optional[str] = None
@@ -134,12 +134,12 @@ class ExportSessionRequest(BaseModel):
     format: str = "pdf"
     options: Optional[Dict[str, Any]] = None
 class FeedbackRequest(BaseModel):
-    session_id: str
-    message_id: str
+    session_id: int
+    message_id: int
     rating: Optional[int] = None
     comment: Optional[str] = None
     aspects: Optional[List[Dict[str, Any]]] = None
-    answer_id: Optional[str] = None
+    answer_id: Optional[int] = None
     useful: Optional[bool] = None
     opened_citation_ids: Optional[List[str]] = None
 class CreateProjectRequest(BaseModel):
@@ -156,23 +156,23 @@ class UpdateProjectRequest(BaseModel):
 
 class ChatRequest(BaseModel):
     question: str
-    session_id: Optional[str] = None
+    session_id: Optional[int] = None
     context: Optional[Dict[str, Any]] = None
 class TextSearchRequest(BaseModel):
     text: str
-    document_ids: Optional[List[str]] = None
+    document_ids: Optional[List[int]] = None
     top_k: Optional[int] = 5
     filters: Optional[Dict[str, Any]] = None
     options: Optional[Dict[str, Any]] = None
 class TextAskRequest(BaseModel):
     text: str
-    document_ids: Optional[List[str]] = None
+    document_ids: Optional[List[int]] = None
     options: Optional[Dict[str, Any]] = None
 
 # Маршруты
 @router.post("/api/v1/chat/sessions", status_code=201)
 async def create_session(req: CreateSessionRequest):
-    session_id = f"sess-{new_id()}"
+    session_id = new_id()
     now = utcnow()
     new_session = {
         "session_id": session_id, "title": req.title or f"Сессия {session_id}",
@@ -197,7 +197,7 @@ async def list_sessions(page: int = Query(1, ge=1), page_size: int = Query(50, g
     return {"sessions": paged["items"], "meta": paged["meta"]}
 
 @router.get("/api/v1/chat/sessions/{session_id}")
-async def get_session(session_id: str):
+async def get_session(session_id: int):
     session = _sessions.get(session_id)
     if not session:
         raise HTTPException(status_code=404, detail=error_response("SESSION_NOT_FOUND", "Сессия не найдена"))
@@ -208,7 +208,7 @@ async def get_session(session_id: str):
     }
 
 @router.put("/api/v1/chat/sessions/{session_id}")
-async def update_session(session_id: str, req: UpdateSessionRequest):
+async def update_session(session_id: int, req: UpdateSessionRequest):
     session = _sessions.get(session_id)
     if not session:
         raise HTTPException(status_code=404, detail=error_response("SESSION_NOT_FOUND", "Сессия не найдена"))
@@ -220,7 +220,7 @@ async def update_session(session_id: str, req: UpdateSessionRequest):
     return session
 
 @router.delete("/api/v1/chat/sessions/{session_id}")
-async def delete_session(session_id: str):
+async def delete_session(session_id: int):
     if session_id not in _sessions:
         raise HTTPException(status_code=404, detail=error_response("SESSION_NOT_FOUND", "Сессия не найдена"))
     del _sessions[session_id]
@@ -235,7 +235,7 @@ async def create_project(req: CreateProjectRequest):
     # NOTE: project_id — числовой autoincrement (bigint), как в спецификации.
     global _projects_id_seq
     _projects_id_seq += 1
-    project_id = str(_projects_id_seq)
+    project_id = _projects_id_seq
     now = utcnow()
     project = {
         "project_id": project_id,
@@ -264,14 +264,14 @@ async def list_projects(
     return {"items": paged["items"], "meta": paged["meta"]}
 
 @router.get("/api/v1/chat/projects/{project_id}")
-async def get_project(project_id: str):
+async def get_project(project_id: int):
     project = _projects.get(project_id)
     if not project:
         raise HTTPException(status_code=404, detail=error_response("NOT_FOUND", "Проект не найден"))
     return project
 
 @router.put("/api/v1/chat/projects/{project_id}")
-async def update_project(project_id: str, req: UpdateProjectRequest):
+async def update_project(project_id: int, req: UpdateProjectRequest):
     project = _projects.get(project_id)
     if not project:
         raise HTTPException(status_code=404, detail=error_response("NOT_FOUND", "Проект не найден"))
@@ -283,7 +283,7 @@ async def update_project(project_id: str, req: UpdateProjectRequest):
     return project
 
 @router.delete("/api/v1/chat/projects/{project_id}", status_code=204)
-async def delete_project(project_id: str):
+async def delete_project(project_id: int):
     # NOTE: DELETE возвращает 204 No Content, тело ответа не требуется.
     if project_id not in _projects:
         raise HTTPException(status_code=404, detail=error_response("NOT_FOUND", "Проект не найден"))
@@ -293,12 +293,12 @@ async def delete_project(project_id: str):
 # ── Chat Messages ───────────────────────────────────────────────────────────
 
 @router.post("/api/v1/chat/sessions/{session_id}/messages")
-async def send_message(session_id: str, req: SendMessageRequest):
+async def send_message(session_id: int, req: SendMessageRequest):
     session = _sessions.get(session_id)
     if not session:
         raise HTTPException(status_code=404, detail=error_response("SESSION_NOT_FOUND", "Сессия не найдена"))
     now = utcnow()
-    user_msg = {"message_id": f"msg-{new_id()}", "role": "user", "content": req.content,
+    user_msg = {"message_id": new_id(), "role": "user", "content": req.content,
                 "timestamp": now, "status": "completed"}
     session.setdefault("messages", []).append(user_msg)
 
@@ -316,7 +316,7 @@ async def send_message(session_id: str, req: SendMessageRequest):
         asst_content = answer["content"]
 
     asst_msg = {
-        "message_id": f"msg-{new_id()}", "role": "assistant", "status": status,
+        "message_id": new_id(), "role": "assistant", "status": status,
         "content": asst_content,
         "sources": answer.get("sources", []) if status == "completed" else [],
         "model_used": "gpt-4", "processing_time_ms": answer.get("processing_time_ms", 0),
@@ -328,11 +328,11 @@ async def send_message(session_id: str, req: SendMessageRequest):
     session["updated_at"] = utcnow()
 
     _history.append({
-        "history_id": f"hist-{new_id()}", "session_id": session_id, "created_at": utcnow(),
+        "history_id": new_id(), "session_id": session_id, "created_at": utcnow(),
         "user_id": "anonymous", "user_name": "Аноним",
         "question": req.content, "answer_preview": asst_content[:80] + "...",
         "status": status, "source_count": len(asst_msg.get("sources", [])),
-        "answer_id": f"ans-{new_id()}",
+        "answer_id": new_id(),
     })
     return {
         "message_id": asst_msg["message_id"], "session_id": session_id,
@@ -342,9 +342,9 @@ async def send_message(session_id: str, req: SendMessageRequest):
 
 @router.get("/api/v1/chat/sessions/{session_id}/messages")
 async def list_messages(
-    session_id: str,
-    after: Optional[str] = Query(None, description="ID сообщения, после которого вернуть"),
-    before: Optional[str] = Query(None, description="ID сообщения, до которого вернуть"),
+    session_id: int,
+    after: Optional[int] = Query(None, description="ID сообщения, после которого вернуть"),
+    before: Optional[int] = Query(None, description="ID сообщения, до которого вернуть"),
     limit: int = Query(50, ge=1, le=100, description="Максимум записей"),
 ):
     # NOTE: after и before взаимоисключающие; если указаны оба — 400.
@@ -380,7 +380,7 @@ async def list_messages(
 
 @router.get("/api/v1/chat/sessions/{session_id}/messages/last")
 async def last_messages(
-    session_id: str,
+    session_id: int,
     limit: int = Query(20, ge=1, le=100, description="Количество последних сообщений"),
 ):
     # NOTE: Возвращает последние N сообщений сессии. Используется при стартовой загрузке чата.
@@ -400,8 +400,8 @@ async def last_messages(
 
 @router.get("/api/v1/chat/sessions/{session_id}/messages/{message_id}")
 async def get_message(
-    session_id: str,
-    message_id: str,
+    session_id: int,
+    message_id: int,
     longpoll: Optional[int] = Query(None, ge=0, le=60, description="Longpoll-ожидание (сек)"),
 ):
     # NOTE: Longpoll — mock-заглушка, сразу возвращает сообщение.
@@ -421,17 +421,17 @@ async def get_message(
     }
 
 @router.post("/api/v1/chat/sessions/{session_id}/context")
-async def manage_context(session_id: str, req: ContextActionRequest):
+async def manage_context(session_id: int, req: ContextActionRequest):
     if session_id not in _sessions:
         raise HTTPException(status_code=404, detail=error_response("SESSION_NOT_FOUND", "Сессия не найдена"))
     return {"session_id": session_id, "action": req.action, "status": "completed",
             "message": f"Контекст обновлён: {req.action}", "timestamp": utcnow()}
 
 @router.post("/api/v1/chat/sessions/{session_id}/export")
-async def export_session(session_id: str, req: ExportSessionRequest):
+async def export_session(session_id: int, req: ExportSessionRequest):
     if session_id not in _sessions:
         raise HTTPException(status_code=404, detail=error_response("SESSION_NOT_FOUND", "Сессия не найдена"))
-    export_id = f"export-{new_id()}"
+    export_id = new_id()
     _export_store[export_id] = {"export_id": export_id, "session_id": session_id, "format": req.format,
                                 "status": "completed", "url": f"/exports/{export_id}.{req.format}",
                                 "expires_at": utcnow(), "created_at": utcnow()}
@@ -439,7 +439,7 @@ async def export_session(session_id: str, req: ExportSessionRequest):
 
 @router.post("/api/v1/chat/feedback")
 async def submit_feedback(req: FeedbackRequest):
-    fb_id = f"fb-{new_id()}"
+    fb_id = new_id()
     _feedback_store.append({
         "feedback_id": fb_id, "session_id": req.session_id, "message_id": req.message_id,
         "rating": req.rating, "comment": req.comment, "aspects": req.aspects or [],
@@ -460,7 +460,7 @@ async def chat_history(page: int = Query(1, ge=1), page_size: int = Query(50, ge
 
 @router.get("/api/v1/chat/history/export")
 async def export_history(format: str = Query("csv")):
-    export_id = f"export-{new_id()}"
+    export_id = new_id()
     _export_store[export_id] = {"export_id": export_id, "format": format,
                                 "url": f"/exports/history_{export_id}.{format}", "created_at": utcnow()}
     return _export_store[export_id]
@@ -473,15 +473,15 @@ async def chat_ask(req: ChatRequest):
     if "конфликт" in query_lower or "conflict" in query_lower:
         return {"scenario": "conflict", "conflicts": [{"type":"normative_conflict","sources":[]}]}
     if "сбой" in query_lower or "fail" in query_lower:
-        return {"scenario": "failed", "answer_id": f"ans-{new_id()}", "status":"failed", "message":"Внутренняя ошибка"}
+        return {"scenario": "failed", "answer_id": new_id(), "status":"failed", "message":"Внутренняя ошибка"}
     if "долго" in query_lower or "pending" in query_lower:
-        return {"scenario": "pending", "answer_id": f"ans-{new_id()}", "status":"pending", "message":"Запрос обрабатывается"}
+        return {"scenario": "pending", "answer_id": new_id(), "status":"pending", "message":"Запрос обрабатывается"}
     # default completed
     answer = _generate_answer(req.question)
     return {
         "scenario": "completed",
-        "answer_id": f"ans-{new_id()}",
-        "session_id": req.session_id or f"sess-{new_id()}",
+        "answer_id": new_id(),
+        "session_id": req.session_id or new_id(),
         "status": "completed",
         "message": "Ответ сгенерирован",
         "answer_items": [{
@@ -500,9 +500,9 @@ async def chat_ask(req: ChatRequest):
 @router.post("/api/v1/text/search")
 async def text_search(req: TextSearchRequest):
     all_results = [
-        {"section_id":"sect-001","document_id":"doc-001","document_title":"Спецификация",
+        {"section_id":"sect-001","document_id": 1, "document_title":"Спецификация",
          "page":3,"content":"Толщина стенки: 5 мм","score":0.95,"document_type":"specification"},
-        {"section_id":"sect-002","document_id":"rd-001","document_title":"ГОСТ 2.109-73",
+        {"section_id":"sect-002","document_id": 2, "document_title":"ГОСТ 2.109-73",
          "page":5,"content":"Не менее 4 мм","score":0.92,"document_type":"normative"},
     ]
     if req.document_ids:

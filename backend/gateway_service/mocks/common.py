@@ -83,7 +83,7 @@ class InMemoryStore(dict):
 
 SEED_USERS: List[Dict[str, Any]] = [
     {
-        "user_id": "u-001",
+        "user_id": 1,
         "email": "ivanov@example.com",
         "full_name": "Иванов Сергей Петрович",
         "position": "Инженер-конструктор",
@@ -106,7 +106,7 @@ SEED_USERS: List[Dict[str, Any]] = [
         "updated_at": "2026-04-27T10:00:00Z",
     },
     {
-        "user_id": "u-002",
+        "user_id": 2,
         "email": "petrova@example.com",
         "full_name": "Петрова Анна Викторовна",
         "position": "Администратор НСИ",
@@ -136,7 +136,7 @@ SEED_USERS: List[Dict[str, Any]] = [
         "updated_at": "2026-03-20T12:00:00Z",
     },
     {
-        "user_id": "u-003",
+        "user_id": 3,
         "email": "admin@example.com",
         "full_name": "Сидоров Павел Алексеевич",
         "position": "Системный администратор",
@@ -168,7 +168,7 @@ SEED_USERS: List[Dict[str, Any]] = [
         "updated_at": "2026-04-30T16:00:00Z",
     },
     {
-        "user_id": "u-004",
+        "user_id": 4,
         "email": "kuznetsov@example.com",
         "full_name": "Кузнецов Дмитрий Олегович",
         "position": "Инженер-технолог",
@@ -191,7 +191,7 @@ SEED_USERS: List[Dict[str, Any]] = [
         "updated_at": "2026-01-10T09:00:00Z",
     },
     {
-        "user_id": "u-005",
+        "user_id": 5,
         "email": "smirnova@example.com",
         "full_name": "Смирнова Елена Игоревна",
         "position": "Ведущий инженер",

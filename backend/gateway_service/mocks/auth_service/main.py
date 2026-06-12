@@ -15,10 +15,10 @@ router = APIRouter()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 _counter = 0
-def new_id() -> str:
+def new_id() -> int:
     global _counter
     _counter += 1
-    return str(_counter)
+    return _counter
 
 def utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -51,29 +51,29 @@ def paginate(items: list, page: int, page_size: int) -> dict:
     return {"items": items[start:end], "meta": {"total": total, "page": page, "page_size": page_size}}
 
 SEED_USERS = [
-    {"user_id":"u-001","email":"ivanov@example.com","full_name":"Иванов Иван Иванович","password":"secret123","position":"Инженер-конструктор","roles":["engineer"],"is_active":True,"available_tabs":["chat","search","checks","history"],"permissions":{"can_upload_documents":False,"can_run_ocr":False,"can_manage_users":False,"can_manage_classifiers":False,"can_manage_terminology":False,"can_manage_registry":False},"last_login_at":"","created_at":"2025-12-01T08:00:00Z"},
-    {"user_id":"u-002","email":"petrova@example.com","full_name":"Петрова Анна Викторовна","password":"secret456","position":"Администратор НСИ","roles":["knowledge_admin"],"is_active":True,"available_tabs":["chat","search","checks","history","registry","documents"],"permissions":{"can_upload_documents":True,"can_run_ocr":True,"can_manage_users":False,"can_manage_classifiers":True,"can_manage_terminology":True,"can_manage_registry":True},"last_login_at":"","created_at":"2025-11-15T10:00:00Z"},
-    {"user_id":"u-003","email":"admin@example.com","full_name":"Сидоров Павел Алексеевич","password":"admin123","position":"Системный администратор","roles":["system_admin"],"is_active":True,"available_tabs":["chat","search","checks","history","registry","documents","admin","monitor"],"permissions":{"can_upload_documents":True,"can_run_ocr":True,"can_manage_users":True,"can_manage_classifiers":True,"can_manage_terminology":True,"can_manage_registry":True},"last_login_at":"","created_at":"2025-10-01T08:00:00Z"},
-    {"user_id":"u-004","email":"kuznetsov@example.com","full_name":"Кузнецов Дмитрий Олегович","password":"secret789","position":"Инженер-технолог","roles":["engineer"],"is_active":True,"available_tabs":["chat","search","checks","history"],"permissions":{"can_upload_documents":False,"can_run_ocr":False,"can_manage_users":False,"can_manage_classifiers":False,"can_manage_terminology":False,"can_manage_registry":False},"last_login_at":"","created_at":"2026-01-10T09:00:00Z"},
-    {"user_id":"u-005","email":"smirnova@example.com","full_name":"Смирнова Елена Игоревна","password":"secret000","position":"Ведущий инженер","roles":["engineer"],"is_active":False,"available_tabs":["chat","search","checks","history"],"permissions":{"can_upload_documents":True,"can_run_ocr":True,"can_manage_users":False,"can_manage_classifiers":False,"can_manage_terminology":False,"can_manage_registry":False},"last_login_at":"","created_at":"2025-12-20T08:00:00Z"},
+    {"user_id":1,"email":"ivanov@example.com","full_name":"Иванов Иван Иванович","password":"secret123","position":"Инженер-конструктор","roles":["engineer"],"is_active":True,"available_tabs":["chat","search","checks","history"],"permissions":{"can_upload_documents":False,"can_run_ocr":False,"can_manage_users":False,"can_manage_classifiers":False,"can_manage_terminology":False,"can_manage_registry":False},"last_login_at":"","created_at":"2025-12-01T08:00:00Z"},
+    {"user_id":2,"email":"petrova@example.com","full_name":"Петрова Анна Викторовна","password":"secret456","position":"Администратор НСИ","roles":["knowledge_admin"],"is_active":True,"available_tabs":["chat","search","checks","history","registry","documents"],"permissions":{"can_upload_documents":True,"can_run_ocr":True,"can_manage_users":False,"can_manage_classifiers":True,"can_manage_terminology":True,"can_manage_registry":True},"last_login_at":"","created_at":"2025-11-15T10:00:00Z"},
+    {"user_id":3,"email":"admin@example.com","full_name":"Сидоров Павел Алексеевич","password":"admin123","position":"Системный администратор","roles":["system_admin"],"is_active":True,"available_tabs":["chat","search","checks","history","registry","documents","admin","monitor"],"permissions":{"can_upload_documents":True,"can_run_ocr":True,"can_manage_users":True,"can_manage_classifiers":True,"can_manage_terminology":True,"can_manage_registry":True},"last_login_at":"","created_at":"2025-10-01T08:00:00Z"},
+    {"user_id":4,"email":"kuznetsov@example.com","full_name":"Кузнецов Дмитрий Олегович","password":"secret789","position":"Инженер-технолог","roles":["engineer"],"is_active":True,"available_tabs":["chat","search","checks","history"],"permissions":{"can_upload_documents":False,"can_run_ocr":False,"can_manage_users":False,"can_manage_classifiers":False,"can_manage_terminology":False,"can_manage_registry":False},"last_login_at":"","created_at":"2026-01-10T09:00:00Z"},
+    {"user_id":5,"email":"smirnova@example.com","full_name":"Смирнова Елена Игоревна","password":"secret000","position":"Ведущий инженер","roles":["engineer"],"is_active":False,"available_tabs":["chat","search","checks","history"],"permissions":{"can_upload_documents":True,"can_run_ocr":True,"can_manage_users":False,"can_manage_classifiers":False,"can_manage_terminology":False,"can_manage_registry":False},"last_login_at":"","created_at":"2025-12-20T08:00:00Z"},
 ]
 SEED_ROLES = [
-    {"role_id":"r-engineer","name":"Инженер","permissions":["documents:read","search"],"created_at":"2025-12-01T08:00:00Z"},
-    {"role_id":"r-knowledge-admin","name":"Администратор НСИ","permissions":["documents:read","documents:write","search","classifiers:manage","terminology:manage","registry:manage"],"created_at":"2025-12-01T08:00:00Z"},
-    {"role_id":"r-system-admin","name":"Системный администратор","permissions":["documents:read","documents:write","documents:delete","search","classifiers:manage","terminology:manage","registry:manage","users:manage","roles:manage","audit:read"],"created_at":"2025-12-01T08:00:00Z"},
+    {"role_id":1,"name":"Инженер","permissions":["documents:read","search"],"created_at":"2025-12-01T08:00:00Z"},
+    {"role_id":2,"name":"Администратор НСИ","permissions":["documents:read","documents:write","search","classifiers:manage","terminology:manage","registry:manage"],"created_at":"2025-12-01T08:00:00Z"},
+    {"role_id":3,"name":"Системный администратор","permissions":["documents:read","documents:write","documents:delete","search","classifiers:manage","terminology:manage","registry:manage","users:manage","roles:manage","audit:read"],"created_at":"2025-12-01T08:00:00Z"},
 ]
 SEED_AUDIT = [
-    {"event_id":"evt-001","user_id":"u-001","action":"document.upload","resource_type":"document","resource_id":"doc-001","details":{"filename":"spec_ГОСТ_2.109.pdf"},"ip_address":"192.168.1.25","timestamp":"2026-04-27T09:30:00Z"},
+    {"event_id":1,"user_id":1,"action":"document.upload","resource_type":"document","resource_id":1,"details":{"filename":"spec_ГОСТ_2.109.pdf"},"ip_address":"192.168.1.25","timestamp":"2026-04-27T09:30:00Z"},
 ]
 
-_users: Dict[str, dict] = {}
-_roles: Dict[str, dict] = {}
+_users: Dict[int, dict] = {}
+_roles: Dict[int, dict] = {}
 _audit: list = []
-_tokens: Dict[str, str] = {}
+_tokens: Dict[str, int] = {}
 _tokens_meta: Dict[str, dict] = {}
-_access_token_map: Dict[str, str] = {}
+_access_token_map: Dict[str, int] = {}
 _blacklist: Dict[str, str] = {}
-_password_hashes: Dict[str, str] = {}
+_password_hashes: Dict[int, str] = {}
 _rate_limits: Dict[str, dict] = {}
 
 def init_data():
@@ -147,15 +147,15 @@ class ValidateTokenRequest(BaseModel):
 def _hash_password(pw: str) -> str:
     return hashlib.sha256(pw.encode()).hexdigest()
 
-def _add_audit(user_id: str, action: str, resource_type: str, resource_id: str = "",
+def _add_audit(user_id: int, action: str, resource_type: str, resource_id: int = None,
                details: dict = None, ip: str = "127.0.0.1"):
     _audit.append({
-        "event_id": f"evt-{new_id()}", "user_id": user_id, "action": action,
+        "event_id": new_id(), "user_id": user_id, "action": action,
         "resource_type": resource_type, "resource_id": resource_id,
         "details": details or {}, "ip_address": ip, "timestamp": utcnow()
     })
 
-def _make_token(user_id: str) -> dict:
+def _make_token(user_id: int) -> dict:
     access_token = f"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.mock.{new_id()}"
     refresh_token = f"rt-mock-{new_id()}"
     now = utcnow()
@@ -266,7 +266,7 @@ async def create_user(req: CreateUserRequest, current_user: dict = Depends(requi
     for u in _users.values():
         if u.get("email", "").lower() == req.email.lower():
             raise HTTPException(status_code=409, detail=error_response("DUPLICATE_EMAIL", "Email уже используется"))
-    user_id = f"u-{new_id()}"
+    user_id = new_id()
     now = utcnow()
     new_user = {
         "user_id": user_id, "email": req.email, "full_name": req.full_name, "position": "",
@@ -285,7 +285,7 @@ async def create_user(req: CreateUserRequest, current_user: dict = Depends(requi
     return new_user
 
 @router.get("/api/v1/admin/users/{user_id}")
-async def get_user(user_id: str, current_user: dict = Depends(require_admin)):
+async def get_user(user_id: int, current_user: dict = Depends(require_admin)):
     user = _users.get(user_id)
     if not user:
         raise HTTPException(status_code=404, detail=error_response("USER_NOT_FOUND", "Пользователь не найден"))
@@ -298,7 +298,7 @@ async def get_user(user_id: str, current_user: dict = Depends(require_admin)):
     }
 
 @router.put("/api/v1/admin/users/{user_id}")
-async def update_user(user_id: str, req: UpdateUserRequest, current_user: dict = Depends(require_admin)):
+async def update_user(user_id: int, req: UpdateUserRequest, current_user: dict = Depends(require_admin)):
     user = _users.get(user_id)
     if not user:
         raise HTTPException(status_code=404, detail=error_response("USER_NOT_FOUND", "Пользователь не найден"))
@@ -334,11 +334,11 @@ async def update_user(user_id: str, req: UpdateUserRequest, current_user: dict =
     return user
 
 @router.patch("/api/v1/admin/users/{user_id}")
-async def patch_user(user_id: str, req: PatchUserRequest, current_user: dict = Depends(require_admin)):
+async def patch_user(user_id: int, req: PatchUserRequest, current_user: dict = Depends(require_admin)):
     user = _users.get(user_id)
     if not user:
         raise HTTPException(status_code=404, detail=error_response("USER_NOT_FOUND", "Пользователь не найден"))
-    audit_log_id = f"audit-{new_id()}"
+    audit_log_id = new_id()
     if req.role is not None:
         user["role"] = req.role
         user["roles"] = [req.role]
@@ -355,7 +355,7 @@ async def patch_user(user_id: str, req: PatchUserRequest, current_user: dict = D
     }
 
 @router.delete("/api/v1/admin/users/{user_id}")
-async def delete_user(user_id: str, current_user: dict = Depends(require_admin)):
+async def delete_user(user_id: int, current_user: dict = Depends(require_admin)):
     user = _users.get(user_id)
     if not user:
         raise HTTPException(status_code=404, detail=error_response("USER_NOT_FOUND", "Пользователь не найден"))
@@ -370,7 +370,7 @@ async def list_roles(current_user: dict = Depends(require_admin)):
 
 @router.post("/api/v1/admin/roles", status_code=201)
 async def create_role(req: CreateRoleRequest, current_user: dict = Depends(require_admin)):
-    role_id = f"r-{new_id()}"
+    role_id = new_id()
     new_role = {"role_id": role_id, "name": req.name, "permissions": req.permissions, "created_at": utcnow()}
     _roles[role_id] = new_role
     _add_audit(current_user["user_id"], "role.create", "role", role_id)
@@ -378,7 +378,7 @@ async def create_role(req: CreateRoleRequest, current_user: dict = Depends(requi
 
 @router.get("/api/v1/admin/audit")
 async def list_audit(
-    user_id: Optional[str] = Query(None),
+    user_id: Optional[int] = Query(None),
     action: Optional[str] = Query(None),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),

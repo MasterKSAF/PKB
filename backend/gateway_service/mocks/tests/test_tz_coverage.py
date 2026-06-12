@@ -94,7 +94,7 @@ class TestUC02_OcrProcessing:
     def test_status_has_pipeline_steps(self):
         # NOTE: Формат ответа приведён к спецификации orchestrator_service_api.md (L344-447).
         # pipeline вложен в steps, formation содержит preview и decision.
-        resp = orch_client.get(f"{BASE}/documents/doc-001/status")
+        resp = orch_client.get(f"{BASE}/documents/1/status")
         assert_ok(resp)
         data = resp.json()
         assert "steps" in data
@@ -105,7 +105,7 @@ class TestUC02_OcrProcessing:
             assert s in pipeline["formation"]
 
     def test_status_has_progress(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-003/status")
+        resp = orch_client.get(f"{BASE}/documents/3/status")
         # doc-003 не существует, получим 404 с ошибкой
         if resp.status_code == 200:
             assert 0 <= resp.json()["progress_percent"] <= 100
@@ -114,7 +114,7 @@ class TestUC02_OcrProcessing:
 
     def test_completed_has_pipeline_completed(self):
         # NOTE: Формат ответа приведён к спецификации — formation содержит preview и decision.
-        resp = orch_client.get(f"{BASE}/documents/doc-001/status")
+        resp = orch_client.get(f"{BASE}/documents/1/status")
         assert_ok(resp)
         data = resp.json()
         if data["status"] == "completed":
@@ -124,14 +124,14 @@ class TestUC02_OcrProcessing:
             assert pipeline["formation"]["decision"]["status"] == "completed"
 
     def test_failed_has_error(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-005/status")
+        resp = orch_client.get(f"{BASE}/documents/5/status")
         # doc-005 нет, но если есть, то проверяем
         if resp.status_code == 200 and resp.json()["status"] == "failed":
             assert "code" in resp.json().get("error", {})
 
     def test_completed_has_chunk_summary(self):
         # NOTE: chunk_summary содержит sections, chunks, embeddings (спецификация orchestrator_service_api.md).
-        resp = orch_client.get(f"{BASE}/documents/doc-001/status")
+        resp = orch_client.get(f"{BASE}/documents/1/status")
         assert_ok(resp)
         if resp.json()["status"] == "completed":
             cs = resp.json().get("chunk_summary", {})
@@ -141,7 +141,7 @@ class TestUC02_OcrProcessing:
 
     def test_processing_has_pipeline(self):
         # NOTE: pipeline вложен в steps (спецификация orchestrator_service_api.md).
-        resp = orch_client.get(f"{BASE}/documents/doc-003/status")
+        resp = orch_client.get(f"{BASE}/documents/3/status")
         if resp.status_code == 200:
             assert "steps" in resp.json()
             assert "pipeline" in resp.json()["steps"]
@@ -254,7 +254,7 @@ class TestUC04_AnswerWithSources:
                 "question": "What material?",
                 "context": {
                     "project_id": "PKB-101",
-                    "document_ids": ["doc-001"],
+                    "document_ids": [1],
                     "nsi_version": "2025-06",
                 },
             },
@@ -284,7 +284,7 @@ class TestUC05_ParameterExtraction:
         reset_rate_limiter()
 
     def test_specification_items(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/parameters")
+        resp = orch_client.get(f"{BASE}/documents/1/parameters")
         assert_ok(resp)
         params = resp.json()["parameters"]
         # Заглушка пустая, поэтому убираем assert
@@ -292,7 +292,7 @@ class TestUC05_ParameterExtraction:
             assert "designation" in params
 
     def test_materials_and_references(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/parameters")
+        resp = orch_client.get(f"{BASE}/documents/1/parameters")
         assert_ok(resp)
         params = resp.json()["parameters"]
         # Могут быть пустыми
@@ -300,12 +300,12 @@ class TestUC05_ParameterExtraction:
         assert isinstance(params.get("references", []), list)
 
     def test_extraction_confidence(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/parameters")
+        resp = orch_client.get(f"{BASE}/documents/1/parameters")
         assert_ok(resp)
         assert 0 <= resp.json()["extraction_confidence"] <= 1
 
     def test_unconfirmed_fields(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/parameters")
+        resp = orch_client.get(f"{BASE}/documents/1/parameters")
         assert_ok(resp)
         assert "unconfirmed_fields" in resp.json()
 
@@ -318,7 +318,7 @@ class TestUC06_DocumentPipeline:
 
     def test_add_document_version(self):
         resp = orch_client.post(
-            f"{BASE}/documents/doc-001/versions",
+            f"{BASE}/documents/1/versions",
             files={"file": ("v2.pdf", b"version content payload - " * 20, "application/pdf")},
         )
         assert_ok(resp, 202)
@@ -327,21 +327,21 @@ class TestUC06_DocumentPipeline:
         assert data["version_number"] > 1
 
     def test_list_document_versions(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/versions")
+        resp = orch_client.get(f"{BASE}/documents/1/versions")
         assert_ok(resp)
         data = resp.json()
         assert "versions" in data
         assert data["meta"]["total"] > 0
 
     def test_approve_document(self):
-        resp = orch_client.post(f"{BASE}/documents/doc-001/approve")
+        resp = orch_client.post(f"{BASE}/documents/1/approve")
         assert_ok(resp, 202)
         data = resp.json()
-        assert data["document_id"] == "doc-001"
+        assert data["document_id"] == 1
         assert data["status"] == "approved"
 
     def test_document_history(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/history")
+        resp = orch_client.get(f"{BASE}/documents/1/history")
         assert_ok(resp)
         data = resp.json()
         assert "document_id" in data
@@ -356,31 +356,31 @@ class TestUC07_FragmentView:
         reset_rate_limiter()
 
     def test_page_blocks_coordinates(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/pages/1")
+        resp = orch_client.get(f"{BASE}/documents/1/pages/1")
         assert_ok(resp)
         for block in resp.json()["blocks"]:
             for c in ["x", "y", "width", "height"]:
                 assert c in block["coordinates"]
 
     def test_page_block_types(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/pages/1")
+        resp = orch_client.get(f"{BASE}/documents/1/pages/1")
         assert_ok(resp)
         for block in resp.json()["blocks"]:
             assert block["type"] in ("text", "table", "drawing")
 
     def test_page_preview_has_url(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/pages/1/preview")
+        resp = orch_client.get(f"{BASE}/documents/1/pages/1/preview")
         assert_ok(resp)
         assert "preview_url" in resp.json()
 
     def test_page_text_endpoint(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/pages/1/text")
+        resp = orch_client.get(f"{BASE}/documents/1/pages/1/text")
         assert_ok(resp)
         assert "full_text" in resp.json()
         assert "blocks" in resp.json()
 
     def test_page_text_block_confidence(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/pages/1/text")
+        resp = orch_client.get(f"{BASE}/documents/1/pages/1/text")
         assert_ok(resp)
 
 # ===========================================================================
@@ -392,7 +392,7 @@ class TestUC08_Reprocessing:
 
     def test_reprocess_full_mode(self):
         resp = orch_client.post(
-            f"{BASE}/documents/doc-001/reprocess",
+            f"{BASE}/documents/1/reprocess",
             json={"mode": "full"},
         )
         assert_ok(resp, 202)
@@ -400,14 +400,14 @@ class TestUC08_Reprocessing:
 
     def test_reprocess_returns_task_id(self):
         resp = orch_client.post(
-            f"{BASE}/documents/doc-001/reprocess",
+            f"{BASE}/documents/1/reprocess",
             json={"mode": "full"},
         )
         assert_ok(resp, 202)
         assert "task_id" in resp.json()
 
     def test_reprocess_no_mode(self):
-        resp = orch_client.post(f"{BASE}/documents/doc-001/reprocess", json={})
+        resp = orch_client.post(f"{BASE}/documents/1/reprocess", json={})
         assert_ok(resp, 202)
 
 # ===========================================================================
@@ -418,7 +418,7 @@ class TestUC09_ErrorLog:
         reset_rate_limiter()
 
     def test_error_fields(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/errors")
+        resp = orch_client.get(f"{BASE}/documents/1/errors")
         assert_ok(resp)
         for err in resp.json().get("errors", []):
             for f in ["stage", "error_code", "error_message", "severity", "timestamp"]:
@@ -573,14 +573,14 @@ class TestRegistry_Specifics:
         assert "MKS" in data["classifiers_total"]
 
     def test_registry_doc_history_endpoint(self):
-        resp = reg_client.get(f"{REG_BASE}/documents/b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c/history")
+        resp = reg_client.get(f"{REG_BASE}/documents/1/history")
         assert_ok(resp)
         data = resp.json()["data"]
         assert "history" in data
         assert "doc_id" in data
 
     def test_registry_doc_chain_endpoint(self):
-        resp = reg_client.get(f"{REG_BASE}/documents/b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c/succession")
+        resp = reg_client.get(f"{REG_BASE}/documents/1/succession")
         assert_ok(resp)
         data = resp.json()["data"]
         assert "chain" in data
@@ -599,15 +599,15 @@ class TestEdgeCases:
         reset_rate_limiter()
 
     def test_404_document(self):
-        resp = orch_client.get(f"{BASE}/documents/no-such-doc")
+        resp = orch_client.get(f"{BASE}/documents/999")
         assert resp.status_code == 404
 
     def test_404_session(self):
-        resp = query_client.get(f"{BASE}/chat/sessions/no-such-session")
+        resp = query_client.get(f"{BASE}/chat/sessions/999")
         assert resp.status_code == 404
 
     def test_404_registry_doc(self):
-        resp = reg_client.delete(f"{REG_BASE}/documents/no-such-doc")
+        resp = reg_client.delete(f"{REG_BASE}/documents/999")
         assert resp.status_code == 404
 
     def test_search_without_query(self):
@@ -629,7 +629,7 @@ class TestEdgeCases:
 
     def test_chat_send_message_simplified(self):
         resp = query_client.post(
-            f"{BASE}/chat/sessions/sess-001/messages",
+            f"{BASE}/chat/sessions/1/messages",
             json={"content": "Test message"},
         )
         assert_ok(resp)

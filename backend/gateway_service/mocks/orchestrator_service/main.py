@@ -24,10 +24,10 @@ router = APIRouter()
 
 # ── вспомогательные функции ──────────────────────────────────────────────
 _counter = 0
-def new_id() -> str:
+def new_id() -> int:
     global _counter
     _counter += 1
-    return str(_counter)
+    return _counter
 
 def utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -71,7 +71,7 @@ def paginate(items: list, page: int, page_size: int) -> dict:
 # ── сиды ──────────────────────────────────────────────────────────────────
 SEED_DOCUMENTS = [
     {
-        "document_id": "doc-001", "title": "Спецификация по ГОСТ 2.109", "doc_code": "2.109-73",
+        "document_id": 1, "title": "Спецификация по ГОСТ 2.109", "doc_code": "2.109-73",
         "source_type": "GOST", "era": "CURRENT", "validity_status": "active",
         "jurisdiction": "RU", "issuing_body": "Госстандарт",
         "mks_oks_code": "01.100", "okstu_code": None,
@@ -79,14 +79,14 @@ SEED_DOCUMENTS = [
         "successor_doc_id": None, "predecessor_doc_id": None, "chunk_container_id": None,
         "status": "completed", "file_size": 1024000, "pages_total": 12, "pages_processed": 12,
         "pages_failed": 0, "ocr_status": "completed", "index_status": "completed",
-        "user_id": "u-001", "uploaded_by": "Иванов И.И.",
+        "user_id": 1, "uploaded_by": "Иванов И.И.",
         "created_at": "2026-04-27T10:00:00Z", "updated_at": "2026-04-27T14:00:00Z",
         "chunk_count": 34, "chunk_validation": None,
         "metadata": {"year": 1981, "udc": "629.5.021", "tags": ["судостроение"]},
     }
 ]
 SEED_DOCUMENT_ERRORS = [
-    {"error_id": "err-001", "document_id": "doc-001", "stage": "ocr", "page": 5,
+    {"error_id": 1, "document_id": 1, "stage": "ocr", "page": 5,
      "error_code": "LOW_CONFIDENCE", "error_message": "Качество распознавания ниже порога",
      "severity": "warning", "timestamp": "2026-04-27T10:01:00Z"}
 ]
@@ -96,15 +96,15 @@ SEED_METRICS = {
     "logs": [{"time": "12:34:02", "type": "search", "text": "Поиск 'ледовый класс'", "level": "info"}],
 }
 
-_documents: Dict[str, dict] = {}
+_documents: Dict[int, dict] = {}
 _document_errors: List[dict] = []
-_versions: Dict[str, List[dict]] = {}
-_chunks: Dict[str, List[dict]] = {}
-_history: Dict[str, List[dict]] = {}
-_approvals: Dict[str, dict] = {}
+_versions: Dict[int, List[dict]] = {}
+_chunks: Dict[int, List[dict]] = {}
+_history: Dict[int, List[dict]] = {}
+_approvals: Dict[int, dict] = {}
 _metrics: dict = {}
-_drafts: Dict[str, dict] = {}  # draft_id -> draft record (incl. raw_data, preview_metadata)
-_tasks: Dict[str, dict] = {}  # task_id -> task record (cross-service pipeline tracking)
+_drafts: Dict[int, dict] = {}  # draft_id -> draft record (incl. raw_data, preview_metadata)
+_tasks: Dict[int, dict] = {}  # task_id -> task record (cross-service pipeline tracking)
 
 def init_data():
     global _documents, _document_errors, _versions, _chunks, _history, _approvals, _metrics
@@ -116,7 +116,7 @@ def init_data():
         _versions[doc_id] = []
         for v in range(ver):
             _versions[doc_id].append({
-                "version_id": f"ver-{new_id()}", "version_number": v+1, "document_id": doc_id,
+                "version_id": new_id(), "version_number": v+1, "document_id": doc_id,
                 "title": doc.get("title",""), "file_size": doc.get("file_size",0),
                 "content_hash_sha256": hashlib.sha256(f"{doc_id}-v{v+1}".encode()).hexdigest(),
                 "title_hash_sha256": hashlib.sha256(doc.get("title","").encode()).hexdigest(),
@@ -125,16 +125,16 @@ def init_data():
             })
         _versions[doc_id].reverse()
         _history[doc_id] = [
-            {"event_id": f"evt-{new_id()}", "document_id": doc_id, "from_status": None,
+            {"event_id": new_id(), "document_id": doc_id, "from_status": None,
              "to_status": doc.get("status","uploaded"), "timestamp": doc.get("created_at", utcnow()),
-             "user_id": doc.get("user_id","u-001"), "comment": "Документ создан"},
-            {"event_id": f"evt-{new_id()}", "document_id": doc_id, "from_status": "uploaded",
+             "user_id": doc.get("user_id", 1), "comment": "Документ создан"},
+            {"event_id": new_id(), "document_id": doc_id, "from_status": "uploaded",
              "to_status": doc.get("status","completed"), "timestamp": doc.get("updated_at", utcnow()),
-             "user_id": doc.get("user_id","u-001"), "comment": "Обработка завершена"}
+             "user_id": doc.get("user_id", 1), "comment": "Обработка завершена"}
         ]
         cnt = doc.get("chunk_count", 0)
         _chunks[doc_id] = [
-            {"chunk_id": f"chunk-{new_id()}", "chunk_number": i+1, "document_id": doc_id,
+            {"chunk_id": new_id(), "chunk_number": i+1, "document_id": doc_id,
              "content": f"Фрагмент {i+1} документа {doc.get('title','')}",
              "page": (i % max(doc.get("pages_total",1),1)) + 1,
              "score": round(random.uniform(0.7, 0.99), 2),
@@ -145,20 +145,20 @@ def init_data():
 
 init_data()
 
-def _get_document(doc_id: str) -> dict:
+def _get_document(doc_id: int) -> dict:
     doc = _documents.get(doc_id)
     if not doc:
         raise HTTPException(status_code=404, detail=error_response("DOCUMENT_NOT_FOUND", "Документ не найден"))
     return doc
 
-def _get_page_block(doc_id: str, page_num: int) -> dict:
+def _get_page_block(doc_id: int, page_num: int) -> dict:
     return {
         "image_url": f"/api/v1/documents/{doc_id}/pages/{page_num}/image",
         "page": page_num, "width": 2480, "height": 3508,
         "blocks": [
-            {"block_id": f"blk-{new_id()}", "type": "text", "coordinates": {"x":100,"y":200,"width":800,"height":50},
+            {"block_id": new_id(), "type": "text", "coordinates": {"x":100,"y":200,"width":800,"height":50},
              "text": f"Текст на странице {page_num} документа {doc_id}.", "highlighted": False},
-            {"block_id": f"blk-{new_id()}", "type": "table", "coordinates": {"x":100,"y":300,"width":800,"height":200},
+            {"block_id": new_id(), "type": "table", "coordinates": {"x":100,"y":300,"width":800,"height":200},
              "text": "Таблица спецификации (mock)", "highlighted": False},
         ]
     }
@@ -216,8 +216,8 @@ def _build_title_hash(title: str) -> str:
         return ""
     return hashlib.sha256(title.encode("utf-8")).hexdigest()
 
-def _get_draft(draft_id) -> dict:
-    draft = _drafts.get(str(draft_id))
+def _get_draft(draft_id: int) -> dict:
+    draft = _drafts.get(draft_id)
     if not draft:
         raise HTTPException(
             status_code=404,
@@ -350,8 +350,8 @@ async def create_draft(
             draft["status"] = "uploaded"
             break
 
-    _drafts[str(draft_id)] = draft
-    _tasks[str(task_id)] = {
+    _drafts[draft_id] = draft
+    _tasks[task_id] = {
         "task_id": task_id,
         "draft_id": draft_id,
         "document_id": None,
@@ -392,13 +392,13 @@ async def list_drafts(
 
 
 @router.get("/api/v1/drafts/{draft_id}")
-async def get_draft(draft_id: str):
+async def get_draft(draft_id: int):
     draft = _get_draft(draft_id)
     return draft
 
 
 @router.get("/api/v1/drafts/{draft_id}/preview")
-async def get_draft_preview(draft_id: str):
+async def get_draft_preview(draft_id: int):
     draft = _get_draft(draft_id)
     return {
         "draft_id": draft["draft_id"],
@@ -413,7 +413,7 @@ async def get_draft_preview(draft_id: str):
 
 
 @router.post("/api/v1/drafts/{draft_id}/preview", status_code=202)
-async def start_draft_preview(draft_id: str):
+async def start_draft_preview(draft_id: int):
     draft = _get_draft(draft_id)
     if draft["status"] in ("previewing", "ready_for_approve"):
         return error_response(
@@ -423,7 +423,7 @@ async def start_draft_preview(draft_id: str):
     now = utcnow()
     draft["status"] = "previewing"
     draft["updated_at"] = now
-    task = _tasks.get(str(draft["task_id"]))
+    task = _tasks.get(draft["task_id"])
     if task:
         task["status"] = "previewing"
         task["pipeline_stage"] = "preview"
@@ -436,7 +436,7 @@ async def start_draft_preview(draft_id: str):
 
 
 @router.get("/api/v1/drafts/{draft_id}/preview/status")
-async def draft_preview_status(draft_id: str, longpoll: int = Query(15, ge=0, le=60)):
+async def draft_preview_status(draft_id: int, longpoll: int = Query(15, ge=0, le=60)):
     """Статус preview с longpoll-механикой (см. common_api.md)."""
     draft = _get_draft(draft_id)
     status = draft["status"]
@@ -453,7 +453,7 @@ async def draft_preview_status(draft_id: str, longpoll: int = Query(15, ge=0, le
             "revision": None,
         }
         draft["updated_at"] = now
-        task = _tasks.get(str(draft["task_id"]))
+        task = _tasks.get(draft["task_id"])
         if task:
             task["status"] = "ready_for_approve"
             task["pipeline_stage"] = "decision"
@@ -471,7 +471,7 @@ async def draft_preview_status(draft_id: str, longpoll: int = Query(15, ge=0, le
 
 
 @router.patch("/api/v1/drafts/{draft_id}/decide")
-async def decide_draft(draft_id: str, req: DecideRequest):
+async def decide_draft(draft_id: int, req: DecideRequest):
     """Решение по черновику: approve → создание документа, reject → discarded."""
     draft = _get_draft(draft_id)
     if draft["status"] != "ready_for_approve":
@@ -489,7 +489,7 @@ async def decide_draft(draft_id: str, req: DecideRequest):
 
     if req.action == "approve":
         # Создаём документ в реестре (мок)
-        new_doc_id = f"doc-{new_id()}"
+        new_doc_id = new_id()
         new_doc = {
             "document_id": new_doc_id, "title": draft.get("title") or f"Документ {new_doc_id}",
             "doc_code": draft.get("doc_code"), "source_type": draft.get("source_type") or "OTHER",
@@ -518,7 +518,7 @@ async def decide_draft(draft_id: str, req: DecideRequest):
             "status": "completed", "created_at": now, "uploaded_by": user_id,
         }]
         _history[new_doc_id] = [{
-            "event_id": f"evt-{new_id()}", "document_id": new_doc_id,
+            "event_id": new_id(), "document_id": new_doc_id,
             "from_status": None, "to_status": "created", "timestamp": now,
             "user_id": user_id,
             "comment": f"Создано из черновика {draft['draft_id']}: {req.comment or ''}".strip(),
@@ -528,7 +528,7 @@ async def decide_draft(draft_id: str, req: DecideRequest):
         draft["status"] = "approved"
         draft["approved_document_id"] = new_doc_id
         draft["updated_at"] = now
-        task = _tasks.get(str(draft["task_id"]))
+        task = _tasks.get(draft["task_id"])
         if task:
             task["status"] = "created"
             task["document_id"] = new_doc_id
@@ -547,7 +547,7 @@ async def decide_draft(draft_id: str, req: DecideRequest):
     else:
         draft["status"] = "discarded"
         draft["updated_at"] = now
-        task = _tasks.get(str(draft["task_id"]))
+        task = _tasks.get(draft["task_id"])
         if task:
             task["status"] = "failed"
             task["pipeline_stage"] = "decision"
@@ -564,13 +564,13 @@ async def decide_draft(draft_id: str, req: DecideRequest):
 
 
 @router.delete("/api/v1/drafts/{draft_id}")
-async def delete_draft(draft_id: str):
+async def delete_draft(draft_id: int):
     draft = _get_draft(draft_id)
     now = utcnow()
     draft["deleted_at"] = now
     draft["status"] = "discarded"
     draft["updated_at"] = now
-    task = _tasks.get(str(draft["task_id"]))
+    task = _tasks.get(draft["task_id"])
     if task:
         task["status"] = "failed"
         task["updated_at"] = now
@@ -582,9 +582,9 @@ async def delete_draft(draft_id: str):
 # ===========================================================================
 
 @router.get("/api/v1/tasks/{task_id}/status")
-async def get_task_status(task_id: str):
+async def get_task_status(task_id: int):
     """Сквозной статус задачи (internal). UI не должен вызывать напрямую."""
-    task = _tasks.get(str(task_id))
+    task = _tasks.get(task_id)
     if not task:
         return error_response("TASK_NOT_FOUND", "Задача не найдена")
     return {
@@ -639,7 +639,7 @@ async def document_queue(page: int = Query(1, ge=1), page_size: int = Query(50, 
 
 @router.post("/api/v1/documents", status_code=202)
 async def upload_document(file: UploadFile = File(...), request: Request = None):
-    doc_id = f"doc-{new_id()}"
+    doc_id = new_id()
     now = utcnow()
     user_id = "anonymous"
     if request and hasattr(request.state, "user"):
@@ -647,7 +647,7 @@ async def upload_document(file: UploadFile = File(...), request: Request = None)
     content_bytes = (file.filename or f"document_{doc_id}").encode()
     content_hash = hashlib.sha256(content_bytes).hexdigest()
     title_hash = hashlib.sha256((file.filename or "untitled").encode()).hexdigest()
-    version_id = f"ver-{new_id()}"
+    version_id = new_id()
     new_doc = {
         "document_id": doc_id, "filename": file.filename, "title": file.filename or f"Документ {doc_id}",
         "doc_code": None, "source_type": "GOST", "era": "CURRENT", "validity_status": "active",
@@ -667,10 +667,10 @@ async def upload_document(file: UploadFile = File(...), request: Request = None)
                           "title": new_doc["title"], "file_size": new_doc["file_size"],
                           "content_hash_sha256": content_hash, "title_hash_sha256": title_hash,
                           "status": "uploaded", "created_at": now, "uploaded_by": user_id}]
-    _history[doc_id] = [{"event_id": f"evt-{new_id()}", "document_id": doc_id, "from_status": None,
+    _history[doc_id] = [{"event_id": new_id(), "document_id": doc_id, "from_status": None,
                          "to_status": "uploaded", "timestamp": now, "user_id": user_id, "comment": "Документ загружен"}]
     _chunks[doc_id] = []
-    return {"task_id": f"task-{new_id()}", "version_id": version_id, "status": "uploaded",
+    return {"task_id": new_id(), "version_id": version_id, "status": "uploaded",
             "content_hash_sha256": content_hash, "is_duplicate_file": False,
             "is_duplicate_document": False, "title_hash_sha256": title_hash, "created_at": now}
 
@@ -719,7 +719,7 @@ async def list_documents(
     return {"summary": summary, "items": paged["items"], "meta": paged["meta"]}
 
 @router.get("/api/v1/documents/{doc_id}")
-async def get_document(doc_id: str):
+async def get_document(doc_id: int):
     doc = _get_document(doc_id)
     return {
         "document_id": doc["document_id"], "title": doc.get("title",""), "doc_code": doc.get("doc_code"),
@@ -740,7 +740,7 @@ async def get_document(doc_id: str):
     }
 
 @router.get("/api/v1/documents/{doc_id}/status")
-async def document_status(doc_id: str, longpoll: int = 15):
+async def document_status(doc_id: int, longpoll: int = 15):
     # NOTE: Формат ответа приведён к спецификации orchestrator_service_api.md (L344-447).
     # Статусы: processing → pipeline.formation.preview + decision + indexation;
     # approval_required → pipeline.formation.preview;
@@ -861,50 +861,50 @@ async def document_status(doc_id: str, longpoll: int = 15):
         }
 
 @router.get("/api/v1/documents/{doc_id}/file")
-async def get_file(doc_id: str):
+async def get_file(doc_id: int):
     doc = _get_document(doc_id)
     return {"document_id": doc_id, "version_id": _versions.get(doc_id, [{}])[0].get("version_id",""),
             "content_type": "application/pdf", "file_url": f"/files/{doc_id}/full.pdf"}
 
 @router.post("/api/v1/documents/{doc_id}/approve", status_code=202)
-async def approve_document(doc_id: str, request: Request = None):
+async def approve_document(doc_id: int, request: Request = None):
     doc = _get_document(doc_id)
     doc["status"] = "approved"
     doc["updated_at"] = utcnow()
-    return {"document_id": doc_id, "status": "approved", "promotion_task_id": f"promo-{new_id()}",
+    return {"document_id": doc_id, "status": "approved", "promotion_task_id": new_id(),
             "approved_by": "system", "approved_at": utcnow()}
 
 @router.get("/api/v1/documents/{doc_id}/history")
-async def document_history(doc_id: str):
+async def document_history(doc_id: int):
     _get_document(doc_id)
     hist = _history.get(doc_id, [])
     return {"document_id": doc_id, "history": hist, "meta": {"total": len(hist)}}
 
 @router.post("/api/v1/documents/{doc_id}/reprocess", status_code=202)
-async def reprocess(doc_id: str, req: Optional[ReprocessRequest] = None):
+async def reprocess(doc_id: int, req: Optional[ReprocessRequest] = None):
     doc = _get_document(doc_id)
     doc["status"] = "parsing"
     doc["updated_at"] = utcnow()
-    return {"task_id": f"task-{new_id()}", "version_id": _versions[doc_id][0]["version_id"],
+    return {"task_id": new_id(), "version_id": _versions[doc_id][0]["version_id"],
             "status": "parsing", "content_hash_sha256": "...", "is_duplicate_file": False,
             "is_duplicate_document": False, "title_hash_sha256": "...", "created_at": utcnow()}
 
 @router.delete("/api/v1/documents/{doc_id}")
-async def delete_document(doc_id: str):
+async def delete_document(doc_id: int):
     _get_document(doc_id)
     del _documents[doc_id]
     _versions.pop(doc_id, None); _chunks.pop(doc_id, None); _history.pop(doc_id, None)
     return {"document_id": doc_id, "deleted_at": utcnow()}
 
 @router.get("/api/v1/documents/{doc_id}/errors")
-async def document_errors(doc_id: str, page: int = 1, page_size: int = 20):
+async def document_errors(doc_id: int, page: int = 1, page_size: int = 20):
     _get_document(doc_id)
     errs = [e for e in _document_errors if e["document_id"] == doc_id]
     paged = paginate(errs, page, page_size)
     return {"errors": paged["items"], "meta": paged["meta"]}
 
 @router.post("/api/v1/documents/{doc_id}/versions", status_code=202)
-async def add_version(doc_id: str, file: UploadFile = File(...)):
+async def add_version(doc_id: int, file: UploadFile = File(...)):
     doc = _get_document(doc_id)
     now = utcnow()
     ver_num = doc.get("total_versions", 1) + 1
@@ -939,7 +939,7 @@ async def add_version(doc_id: str, file: UploadFile = File(...)):
 
 @router.get("/api/v1/documents/{doc_id}/versions")
 async def list_versions(
-    doc_id: str,
+    doc_id: int,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
 ):
@@ -949,7 +949,7 @@ async def list_versions(
     items = []
     for v in raw:
         items.append({
-            "version_id": int(v["version_id"]) if str(v["version_id"]).isdigit() else v["version_id"],
+            "version_id": v["version_id"],
             "version_number": v.get("version_number", 1),
             "format_code": "pdf_digital",
             "format_label": "PDF (цифровой)",
@@ -968,7 +968,7 @@ async def list_versions(
     }
 
 @router.get("/api/v1/documents/{doc_id}/pages")
-async def list_pages(doc_id: str, page: int = 1, page_size: int = 50):
+async def list_pages(doc_id: int, page: int = 1, page_size: int = 50):
     doc = _get_document(doc_id)
     pages = doc.get("pages", [])
     if not pages and doc.get("pages_total",0) > 0:
@@ -980,23 +980,23 @@ async def list_pages(doc_id: str, page: int = 1, page_size: int = 50):
             "pages": paged["items"], "meta": paged["meta"]}
 
 @router.get("/api/v1/documents/{doc_id}/pages/{page_num}")
-async def get_page(doc_id: str, page_num: int, highlight: Optional[str] = None):
+async def get_page(doc_id: int, page_num: int, highlight: Optional[str] = None):
     _get_document(doc_id)
     return _get_page_block(doc_id, page_num)
 
 @router.get("/api/v1/documents/{doc_id}/pages/{page_num}/text")
-async def page_text(doc_id: str, page_num: int):
+async def page_text(doc_id: int, page_num: int):
     _get_document(doc_id)
     blocks = _get_page_block(doc_id, page_num)["blocks"]
     return {"page": page_num, "full_text": " ".join(b["text"] for b in blocks), "blocks": blocks}
 
 @router.get("/api/v1/documents/{doc_id}/pages/{page_num}/preview")
-async def page_preview(doc_id: str, page_num: int):
+async def page_preview(doc_id: int, page_num: int):
     doc = _get_document(doc_id)
     return {"document_id": doc_id, "page": page_num, "preview_url": f"/preview/{doc_id}/{page_num}"}
 
 @router.get("/api/v1/documents/{doc_id}/parameters")
-async def parameters(doc_id: str):
+async def parameters(doc_id: int):
     doc = _get_document(doc_id)
     return {"document_id": doc_id, "parameters": doc.get("parameters", {}),
             "extraction_confidence": doc.get("extraction_confidence",0.0),
