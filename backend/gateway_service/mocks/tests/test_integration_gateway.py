@@ -146,33 +146,35 @@ class TestOldPathsReturn404:
 # Trailing slash — проверяем, что нет 307 redirect
 # ===========================================================================
 
-class TestNo307OnNonExistentPaths:
-    """redirect_slashes=True — 307 бывает ТОЛЬКО когда роут существует.
-    Неизвестные пути (старые /api/v1/classifiers/) получают 404, а не 307.
+class TestNo307AnyPath:
+    """StripTrailingSlashMiddleware — ни один запрос с trailing slash
+    не вернёт 307, middleware обрезает / до роутинга.
     """
 
-    def test_redirect_slashes_is_true(self):
-        assert app.router.redirect_slashes is True
+    def test_redirect_slashes_is_false(self):
+        assert app.router.redirect_slashes is False
 
-    REGISTRY_PATHS = [
-        "/api/v1/registry/classifiers",
-        "/api/v1/registry/terminology",
-        "/api/v1/registry/documents",
-        "/api/v1/registry/common/stats",
-        "/api/v1/registry/common/enums",
-        "/api/v1/registry/drafts",
-        "/api/v1/documents",
-        "/api/v1/drafts",
-    ]
-
-    @pytest.mark.parametrize("path", REGISTRY_PATHS)
-    def test_no_307_on_any_path(self, path: str):
-        """Ни один из этих путей не должен возвращать 307."""
+    @pytest.mark.parametrize("path", [
+        "/api/v1/registry/classifiers/",
+        "/api/v1/registry/terminology/",
+        "/api/v1/registry/documents/",
+        "/api/v1/registry/common/stats/",
+        "/api/v1/registry/common/enums/",
+        "/api/v1/registry/drafts/",
+        "/api/v1/documents/",
+        "/api/v1/drafts/",
+    ])
+    def test_no_307_with_trailing_slash(self, path: str):
+        """Запросы С trailing slash — 307 нет, middleware обрезал."""
         resp = client.get(path, follow_redirects=False)
         assert resp.status_code != 307, (
-            f"Path {path} returned 307 redirect! "
-            f"Location: {resp.headers.get('location', 'N/A')}"
+            f"Path {path} returned 307! Location: {resp.headers.get('location', 'N/A')}"
         )
+
+    def test_registry_with_slash_returns_200(self):
+        """/api/v1/registry/classifiers/ → 200 напрямую, без 307."""
+        resp = client.get("/api/v1/registry/classifiers/", follow_redirects=False)
+        assert resp.status_code == 200
 
 
 # ===========================================================================
