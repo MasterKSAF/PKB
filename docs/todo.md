@@ -1,20 +1,30 @@
-# План: Схлопывание `/parser/preview` и `/parser/process` в единый эндпоинт
+# План работ: оценка и исправление документации — ВЫПОЛНЕНО
 
-## Цель
-Объединить `POST /parser/preview` и `POST /parser/process` в единый эндпоинт с полем `mode`. Если движок не поддерживает постраничный парсинг — full с отметкой `preview_not_supported: true`. Auto-approve только при успешном извлечении метаданных и отсутствии дубликатов.
+## Задачи
 
----
+### 1. Удалить/добавить ссылки из структуры README.md ✅
+- [x] 1.1 Убрать `plans/` из структуры (директория не существует)
+- [x] 1.2 Убрать `database/db_audit_report.md` из структуры (файл не существует)
+- [x] 1.3 Добавить `audit/` в структуру (директория существует, но не отражена)
 
-## Выполнено
+### 2. Исправить конфликт RBAC в common_api.md ✅
+- [x] Строки 356 и 368 — `GET /tasks/{task_id}/status` приведён к `system_admin only`
 
-### Изменённые файлы
-- `docs/api/parser_service_api.md` — схлопнут preview в process, добавлены `mode`, `max_pages`, `preview_not_supported`
-- `docs/api/ocr_service_api.md` — зеркальное изменение
-- `docs/schema/schema_converter_preview.json` (бывш. schema_parser_preview) — добавлены `mode`, `preview_not_supported`
-- `docs/specifications/parsing_specifications.md` — обновлён контракт preview
-- `docs/pipelines/pipeline1-formation.md` — sequence-диаграмма, таблица шагов, параметры
-- `docs/pipelines/pipeline1-formation_detail.md` — секция режимов работы
-- `docs/pipelines/overview.md` — flowchart, таблицы, data flow
-- `docs/api/orchestrator_service_api.md` — input_data в step preview_ocr
-- `docs/README.md` — описание Parser Service
-- `docs/specificity.md` — закрыты LP-C1, PL-E3, добавлена запись решения
+### 3. Унификация формулы title_hash_sha256 (X2) ✅
+- [x] Формула: `doc_code + title + era`
+- [x] overview.md и db_diagrams.md синхронизированы
+
+### 4. X1 — document_id назначается Registry ✅
+- [x] overview.md исправлен, specificity.md — X1 закрыт
+
+### 5. Закрыть вопросы из specificity.md ✅
+- [x] X3 — `partially_indexed` удалён (нестатус)
+- [x] X6 — `current_version_id` добавлен в `registry.documents`
+- [x] X8 — `amendments` оставлены в JSONB (осознанное)
+- [x] A17 — таблицы `auth.users`, `registry.terminology` добавлены в ER-диаграмму
+
+### 6. Исправить README.md строка 151 — битый путь ✅
+- [x] Удалена битая ссылка
+
+### 7. Исправить README.md строка 198 — блок curl ✅
+- [x] Закрывающие backticks добавлены

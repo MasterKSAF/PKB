@@ -27,6 +27,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+# Добавляем backend/ в sys.path (нужно для импорта service_checker как пакета)
+_backend = Path(__file__).resolve().parent.parent
+if str(_backend) not in sys.path:
+    sys.path.insert(0, str(_backend))
+
 from service_checker.pipelines import PIPELINE_REGISTRY, PipelineRunner, PipelineDef, PipelineResult, PipelineContext
 
 
@@ -264,9 +269,17 @@ def generate_report(results: Dict[str, PipelineResult]) -> str:
                     "running": "🔄",
                 }
                 icon = icon_map.get(step.status.value, "❓")
-                detail = step.error or ""
-                if not detail and step.response_body:
-                    detail = step.response_body[:100]
+                if step.status.value == "failed":
+                    # Для ошибок: показываем error + (response_body если есть)
+                    detail = step.error or ""
+                    if step.response_body:
+                        resp_snippet = step.response_body[:300].replace("\n", " ").replace("|", "\\|")
+                        detail = f"{detail} | body: {resp_snippet}"
+                else:
+                    # Для успешных: message (если есть), иначе response_body
+                    detail = step.message or ""
+                    if not detail and step.response_body:
+                        detail = step.response_body[:300]
                 lines.append(
                     f"| {i} | {step.name} | {step.service} | {icon} | "
                     f"{step.actual_status} | {step.elapsed_ms}ms | {detail} |"

@@ -28,6 +28,7 @@ asyncpg>=0.29.0,<1.0.0
 aiosqlite>=0.20.0
 alembic>=1.13.0
 psycopg2-binary>=2.9.0
+psycopg[binary]>=3.2.0
 pgvector>=0.3.6
 greenlet>=3.0.0
 
@@ -52,6 +53,7 @@ h11>=0.14.0
 anyio>=4.4.0
 colorama>=0.4.6
 loguru>=0.7.2
+python-json-logger>=2.0.0
 python-magic>=0.4.27
 pypdf>=6.0.0
 numpy>=2.0.0

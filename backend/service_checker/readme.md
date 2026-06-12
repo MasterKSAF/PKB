@@ -114,17 +114,18 @@ python -m pytest tests/test_db_setup.py -v          # Статический а�
 # Integration-тест (требует Docker)
 python -m pytest tests/test_no_restarts.py -v         # Проверка restart-циклов
 
-# Pipeline Testing (требует Docker с реальными сервисами)
-python pipeline_test.py list                        # Список пайплайнов
-python pipeline_test.py run-all                     # Все пайплайны
-python pipeline_test.py run document_processing     # Конкретный пайплайн
-python pipeline_test.py run-all -o report.md        # С сохранением отчёта
+# ⚠️ Pipeline Testing — только через модуль (см. 15-ю аномалию в specificity.md):
+#    прямой запуск python pipeline_test.py не работает из-за конфликта имён
+python -m service_checker docker --action full-report  # Coverage + все пайплайны + сводка
 
 # Coverage test в Docker
-python api_coverage_test.py run-all
+python -m service_checker docker --action coverage     # Только coverage
 
 # Database health check
-python service_checker.py docker --action db-check   # Проверка БД: таблицы Registry и RAG
+python -m service_checker docker --action db-check     # Проверка БД: таблицы Registry и RAG
+
+# Сохранение отчёта пайплайнов отдельно (если нужен только pipeline без coverage):
+python -m service_checker docker --action full-report  # full-report включает всё
 ```
 
 

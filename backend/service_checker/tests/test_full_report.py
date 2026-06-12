@@ -259,7 +259,7 @@ class TestGenerateFullReport:
 
         # Gateway не участвует ни в document_processing, ни в chat_inference
         cov_results = {
-            "gateway": MockCoverageResult("Gateway", 8081, ping_ok=True),
+            "gateway": MockCoverageResult("Gateway", 8080, ping_ok=True),
         }
         pipe_results = {
             "doc": make_mock_pipeline_result(name="doc", passed=True, services=["parser"]),

@@ -30,8 +30,8 @@ from service_checker.core.utils import log, log_ok, log_warn, log_err, log_info,
 # ── Docker: HTTP health-check endpoint'ы для каждого сервиса внутри контейнера ──
 DOCKER_SUPERVISOR_SERVICES = {
     "auth":                (8082, "/openapi.json", "Auth Service"),
-    "gateway":             (8081, "/openapi.json", "Gateway (Mock)"),
-    "orchestrator":        (8000, "/openapi.json", "Orchestrator"),
+    "gateway":             (8080, "/openapi.json", "Gateway (Mock)"),
+    "orchestrator":        (8081, "/openapi.json", "Orchestrator"),
     "query":               (8083, "/openapi.json", "Query Service"),
     "registry":            (8084, "/openapi.json", "Registry Service"),
     "integration":         (8085, "/openapi.json", "Integration Service"),
@@ -39,6 +39,7 @@ DOCKER_SUPERVISOR_SERVICES = {
     "parser":              (8087, "/health", "Parser Service"),
     "rag-builder":         (8090, "/openapi.json", "RAG Builder"),
     "rag-search":          (8091, "/openapi.json", "RAG Search"),
+    "tei":                 (8092, "/health", "TEI (Embeddings)"),
 }
 
 

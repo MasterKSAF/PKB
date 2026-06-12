@@ -46,8 +46,8 @@ SERVICE_KEYS = {
 
 # Порты сервисов (единый источник)
 MODE_PORTS: Dict[str, int] = {
-    "gateway": 8081,
-    "orchestrator": 8000,
+    "gateway": 8080,
+    "orchestrator": 8081,
     "auth": 8082,
     "query": 8083,
     "registry": 8084,

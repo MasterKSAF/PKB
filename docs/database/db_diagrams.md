@@ -35,6 +35,7 @@ erDiagram
         int chunk_count
         bigint successor_doc_id FK
         bigint predecessor_doc_id FK
+        bigint current_version_id FK
         text created_by
         text updated_by
         timestamptz created_at
@@ -103,6 +104,20 @@ erDiagram
         timestamptz updated_at
     }
 
+    registry.categories {
+        bigint id PK
+        varchar name
+        text description
+        varchar color
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    registry.document_categories {
+        bigint document_id PK, FK
+        bigint category_id PK, FK
+    }
+
     pipeline.tasks {
         bigint id PK
         bigint draft_id
@@ -155,6 +170,35 @@ erDiagram
         timestamptz updated_at
     }
 
+    auth.users {
+        bigint id PK
+        varchar email
+        text full_name
+        text password_hash
+        jsonb roles
+        text position
+        boolean is_active
+        timestamptz last_login_at
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    registry.terminology {
+        bigint id PK
+        text raw_term
+        text standard_term
+        text normalized_value
+        varchar term_type
+        boolean is_case_sensitive
+        text definition
+        jsonb synonyms
+        text[] related_docs
+        text[] scope
+        boolean is_blocked
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
     chat.projects {
         bigint id PK
         text code
@@ -172,11 +216,10 @@ erDiagram
         bigint project_id FK
         bigint[] document_ids
         jsonb options
-        int message_count
         timestamptz created_at
         timestamptz updated_at
     }
-    %% FK user_id -> auth.users.id (будет создана после развёртывания Auth Service)
+    %% FK user_id -> auth.users.id
 
     chat.messages {
         bigint id PK
@@ -203,6 +246,9 @@ erDiagram
     chat.projects ||--o{ chat.sessions : has_sessions
     chat.sessions ||--o{ chat.messages : has_messages
 
+    registry.categories ||--o{ registry.document_categories : has_documents
+    registry.documents ||--o{ registry.document_categories : categorized_by
+
     pipeline.tasks ||--o{ pipeline.task_steps : has
     pipeline.tasks }o--|o registry.documents : produces  (FK document_id nullable)
     registry.documents }o--|o registry.drafts : originates_from  (FK draft_id nullable)
@@ -226,6 +272,7 @@ erDiagram
 | `pipeline.tasks` | `draft_id` | B-tree | Поиск задачи по черновику |
 | `pipeline.tasks` | `document_id` | B-tree | Поиск задачи по документу |
 | `pipeline.task_steps` | `task_id` | B-tree | Поиск этапов задачи |
+| `registry.document_categories` | `category_id` | B-tree | Поиск категорий документа (обратная сторона many-to-many) |
 | `registry.document_sections` | `content` | GIN | Поиск по JSONB-полям (например, `content.amendments[].type`) |
 
 ## Ключевые условия и ограничения
@@ -332,6 +379,8 @@ erDiagram
 
 > **Примечание**: `revision` (обозначение редакции, напр. «Изм. 1», «Изд. 2») извлекается из preview-метаданных документа.
 
+**Связь с `registry.documents`:** поле `current_version_id` в `registry.documents` (FK → `registry.document_versions.id`, nullable) указывает на текущую активную версию документа. Если не задано — текущая версия определяется как последняя по `uploaded_at`.
+
 ### 5. История обработки (`registry.document_history`)
 
 | Поле | Примечание |
@@ -382,9 +431,62 @@ erDiagram
 
 Таблицы `chat.sessions` и `chat.messages` не относятся к реестру документов, выделены в отдельную схему `chat`.
 
-### 10. Общее
+### 10. Пользователи (`auth.users`)
+
+| Поле | Примечание |
+|------|------------|
+| `email` | Уникальный email пользователя |
+| `full_name` | Полное имя |
+| `password_hash` | Хэш пароля (bcrypt, cost factor ≥ 12). Не логируется, не возвращается в API |
+| `roles` | JSONB-массив ролей: `["engineer"]`, `["knowledge_admin"]`, `["system_admin"]` |
+| `position` | Должность пользователя |
+| `is_active` | Флаг активности. При `false` пользователь не может аутентифицироваться |
+| `last_login_at` | Время последнего входа |
+
+> **Связь:** `chat.sessions.user_id` → `auth.users.id` (FK).
+
+### 11. Терминология (`registry.terminology`)
+
+| Поле | Примечание |
+|------|------------|
+| `raw_term` | Исходный термин (как встретился в документе) |
+| `standard_term` | Эталонное написание термина |
+| `normalized_value` | Приведённая форма для поиска (нижний регистр) |
+| `term_type` | Тип термина: `acronym`, `foreign_term`, `standard_code`, `avatar`, `symbol` |
+| `is_case_sensitive` | Чувствительность к регистру |
+| `definition` | Определение/описание термина |
+| `synonyms` | JSONB-массив синонимов |
+| `related_docs` | Связанные документы (обозначения) |
+| `scope` | Области применения |
+| `is_blocked` | Блокировка устаревшего термина |
+
+### 12. Общее
 
 - **`document_id` (bigint)** назначается только в Registry при создании документа. До этого — `draft_id` (bigint) и `task_id` (bigint) используются всеми начальными сервисами (OCR/Parser, Converter-Validator).
 - **`draft_id` (bigint)** назначается Registry при создании записи черновика. Orchestrator хранит маппинг `draft_id → task_id → document_id`.
 - **`registry.drafts` и `pipeline.tasks`** не связаны FK (разные БД), логическая связь по `draft_id`.
 - **`rag.document_chunks.content`** — унифицированное хранение. `content` — строка (plain text или Markdown). `tsv` строится через `to_tsvector('russian', content)` при вставке.
+
+### 13. Категории документов (`registry.categories`, `registry.document_categories`)
+
+Пользовательские категории для группировки документов в разделы «Базы знаний». Many-to-many: один документ может относиться к нескольким категориям, одна категория — к нескольким документам.
+
+**`registry.categories`** — справочник категорий:
+
+| Поле | Тип | Ограничения |
+|------|-----|-------------|
+| `id` | bigint | PK, sequence |
+| `name` | varchar(255) | NOT NULL, UNIQUE |
+| `description` | text | nullable |
+| `color` | varchar(7) | nullable, hex-код (#RRGGBB) |
+| `created_at` | timestamptz | NOT NULL |
+| `updated_at` | timestamptz | NOT NULL |
+
+**`registry.document_categories`** — связь документа с категориями:
+
+| Поле | Тип | Ограничения |
+|------|-----|-------------|
+| `document_id` | bigint | PK (составной), FK → `registry.documents.id` ON DELETE CASCADE |
+| `category_id` | bigint | PK (составной), FK → `registry.categories.id` ON DELETE CASCADE |
+
+> **Каскадное удаление:** при удалении категории или документа связанные записи в `document_categories` удаляются автоматически.

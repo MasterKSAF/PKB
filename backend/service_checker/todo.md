@@ -1,64 +1,45 @@
-# ✅ Итоги: приведение checker'а в соответствие с документацией API
+# План исправлений: проверка Gateway в Docker через recheck.bat
 
-## Что сделано
+## Выполнено
 
-### 1. Parser — убрал `version_id`
-- [x] `services/parser.py`: убрал `version_id` из body prepare и endpoints
-- [x] `pipelines/document_processing.py`: убрал `version_id` из запроса парсинга
+### Проблема 1: Неверные порты Gateway (8081→8080) и Orchestrator (8000→8081)
+Неверные порты были разбросаны по 9 файлам.
 
-### 2. Registry — trailing slashes
-- [x] `services/registry.py`: убрал `/` в конце у всех путей (17 эндпоинтов)
+**Исправлено:**
+- [x] `docker/wait_for_services.py` — Gateway 8081→8080, Orchestrator 8000→8081
+- [x] `docker/entrypoint.sh` — табличка портов
+- [x] `services/orchestrator.py` — PORT = 8000 → 8081
+- [x] `core/docker.py` — DOCKER_SUPERVISOR_SERVICES
+- [x] `core/cli.py` — --gateway-url default
+- [x] `pipelines/base.py` — _get_service_port
+- [x] `tests/test_full_report.py` — MockCoverageResult
+- [x] `description.md` — таблица портов
+- [x] `README.Docker.md` — curl health port
 
-### 3. Registry — `/normalize` response_schema
-- [x] `services/registry.py`: `response_schema={"data": dict, "data.raw_term": str, "data.normalized_value": str}`
+### Проблема 2: Gateway auth credentials
+Gateway Mock использует пароль `admin123`, а checker в auth-эндпоинтах использовал `Admin1234!`.
 
-### 4. Registry — `/export` не JSON
-- [x] `services/registry.py`: `response_schema=None` (возвращает CSV)
+- [x] `services/gateway.py` — переопределён body для POST /auth/token на GATEWAY_CREDENTIALS
 
-### 5. Registry — `/import` исключить из coverage
-- [x] `services/registry.py`: 3 `/import` эндпоинта помечены `is_preparation=True, expected_status={422}`
+### Проблема 3: Trailing slash → 307 Redirect
+Gateway Mock определяет маршруты без слеша (`/documents`), checker стучится со слешем (`/documents/`) → 307.
 
-### 6. Registry — prepare 409 (дубликаты)
-- [x] `services/registry.py`: timestamp-суффиксы к тестовым данным (code, doc_code, raw_term)
+- [x] `api_coverage_test.py` — включён `follow_redirects=True` в httpx.AsyncClient
 
-### 7. Converter — временный workaround
-- [x] `services/converter_validator.py`: `task_id`/`version_id` как str (сервис ожидает str, docs — int)
-- [x] Помечено `# ⚠️ WORKAROUND` — убрать, когда сервис приведут к документации
+## Результаты проверки Gateway
 
-### 8. Проверка
-- [x] Unit-тесты: 87/90 passed (3 упали — не связаны с правками: pipelines import)
-- [x] Coverage: Registry 16/35 (+2), Converter 1/4 (+1)
-- [x] Pipeline registry_lifecycle: 10/11 (стабильно)
+**Было:** Ping ✅ | Passed 45/101 | Failed 34 | Skipped 22
+**Стало:** Ping ✅ | **Passed 56/101** | **Failed 35** | **Skipped 10** (+11 passed, -12 skipped)
 
-## Итог после всех workaround
+### Что изменилось
+- AUTH: 5/6 → **6/6** ✅ (исправлены credentials)
+- Skipped: 22 → **10** (prepare registry проходит, doc_id извлекается)
+- Passed: 45 → **56** (за счёт prepare + registry endpoints)
 
-| Сервис | Passed | Статус | Причина проблем |
-|--------|:------:|:------:|-----------------|
-| Converter-Validator | **4/4** | ✅ | workaround сработал |
-| Parser | **3/6** | 🟡 | 3 failed: status/result (prepare не создал task_id) |
-| Registry | **16/35** | 🟡 | 19 failed: /{code} 404 (prepare не подставил ID), /tree 422, /pending/ 404 |
-| Orchestrator | **16/30** | 🟡 | 5 failed + 9 skipped |
-| TEI | **2/2** | ✅ | — |
-| Auth | **4/18** | ❌ | admin/me/health — 404 (mock-режим) |
-| Query | **9/20** | ❌ | session_id 422 |
-| RAG Builder | **0/5** | ❌ | нет create_all() |
-| RAG Search | **1/2** | ❌ | 500 — пул БД |
-| Gateway | **0/104** | ❌ | не отвечает |
+### Остаётся (не проблема checker'а)
+- Gateway Mock возвращает ID как **строки** ("rd-4", "sess-85"), документация API — int
+- Gateway Mock не реализует часть registry endpoints (/api/v1/registry/...)
+- RAG Search не отвечает (известная проблема)
 
-## Что остаётся (баги сервисов)
-
-- **Auth** — admin endpoints 404 (mock-режим)
-- **Parser** — health ок, но `/{task_id}/status|result` — 422 (prepare не создал task_id)
-- **Registry** — `/tree` 422, `/pending/*` 404, `/{code}`/`{doc_id}`/`{term_id}` 404 (prepare 307→теряет body)
-- **Query** — `/chat/sessions/{session_id}/*` 422
-- **RAG Builder** — нет `create_all()` в startup
-- **RAG Search** — 500 (пул БД)
-- **Gateway** — не отвечает
-
-## Workaround-предупреждения (надо убрать после фикса сервисов)
-
-- **Parser** `version_id` — когда сервис добавит в документацию или сделает опциональным
-- **Parser/Converter health** — когда сервисы добавят `/api/v1/health` или подтвердят `/health` в документации
-- **Converter `task_id`/`version_id` как str** — когда сервис перейдёт на int по документации
-- **Converter `document_id`/`validation_id` как str** — когда сервис вернёт int
-- **Registry trailing slash** — когда документация и сервис согласуют пути
+### Аномалия
+- [x] Аномалия №18 зафиксирована в `specificity.md`

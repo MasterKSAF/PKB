@@ -88,7 +88,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 | 502 | BAD_GATEWAY | Ошибка вызова внутреннего сервиса |
 | 503 | SERVICE_UNAVAILABLE | MinIO или БД недоступны |
 
-> **⚠️ Internal:** Эндпоинты `/tasks/{task_id}/...` — только для внутреннего использования (межсервисное взаимодействие, администрирование). Read-only: только просмотр статуса задачи. У задач нет preview и decide — эти функции доступны через `/drafts/{draft_id}/...`.
+> **📐 Доступ:** Эндпоинты `/tasks/{task_id}/...` — read-only для `system_admin` (и `knowledge_admin` для привязки к черновикам). Используются для мониторинга процессов и просмотра данных, передаваемых между сервисами. У задач нет preview и decide — эти функции доступны через `/drafts/{draft_id}/...`.
 
 ### GET /tasks/{task_id}/status
 
@@ -144,7 +144,79 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 | `created_at` | string | Время создания задачи (ISO 8601) |
 | `updated_at` | string | Время последнего обновления (ISO 8601) |
 
-**Примечание:** `GET /tasks/{task_id}/status` — внутренний эндпоинт для сквозного отслеживания. `task` — агрегатор этапов пайплайна, каждый этап хранит входные/выходные JSON-контейнеры сервисов. Внешним клиентам для статуса загрузки следует использовать `GET /drafts/{draft_id}/preview/status`, для статуса документа — `GET /documents/{document_id}/status`.
+**Примечание:** `GET /tasks/{task_id}/status` — эндпоинт для сквозного отслеживания задачи админом. `task` — агрегатор этапов пайплайна, каждый этап хранит входные/выходные JSON-контейнеры сервисов. Внешним клиентам для статуса загрузки следует использовать `GET /drafts/{draft_id}/preview/status`, для статуса документа — `GET /documents/{document_id}/status`.
+
+### GET /tasks/{task_id}/steps
+
+Шаги задачи (без общей обёртки статуса). Возвращает только массив `steps[]`, аналогичный вложенному в `GET /tasks/{task_id}/status`.
+
+**Путь:** `/api/v1/tasks/{task_id}/steps`
+**Метод:** `GET`
+**Доступ:** `system_admin`
+
+**Ответ `200`:**
+
+```json
+{
+  "task_id": 420000,
+  "steps": [
+    {
+      "step_name": "upload",
+      "service_name": "Orchestrator",
+      "status": "completed",
+      "input_data": {"file_key": "f-abc123"},
+      "output_data": {"draft_id": 1, "task_id": 100},
+      "started_at": "2026-06-05T10:00:00Z",
+      "completed_at": "2026-06-05T10:00:05Z"
+    },
+    {
+      "step_name": "preview_ocr",
+      "service_name": "OCR Service",
+      "status": "completed",
+      "input_data": {"file_key": "f-abc123", "mode": "preview", "max_pages": 3},
+      "output_data": {"task_id": 420000, "pages": 3, "confidence": 0.92},
+      "started_at": "2026-06-05T10:00:05Z",
+      "completed_at": "2026-06-05T10:01:30Z"
+    }
+  ]
+}
+```
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `task_id` | bigint | Сквозной ID задачи |
+| `steps` | array | Массив этапов задачи (схема — см. `GET /tasks/{task_id}/status`) |
+
+### GET /drafts/{draft_id}/tasks
+
+Список задач для черновика. У черновика может быть несколько задач при повторных обработках (reprocess).
+
+**Путь:** `/api/v1/drafts/{draft_id}/tasks`
+**Метод:** `GET`
+**Доступ:** `system_admin`, `knowledge_admin`
+
+**Ответ `200`:**
+
+```json
+{
+  "draft_id": 420000,
+  "tasks": [
+    {
+      "task_id": 420000,
+      "status": "created",
+      "pipeline_stage": "full",
+      "initiated_by": "ivanov_ai",
+      "created_at": "2026-06-05T10:00:00Z",
+      "updated_at": "2026-06-05T12:30:00Z"
+    }
+  ]
+}
+```
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `draft_id` | bigint | ID черновика |
+| `tasks` | array | Массив задач: `task_id`, `status`, `pipeline_stage`, `initiated_by`, `created_at`, `updated_at` |
 
 ### POST /documents/{doc_id}/versions
 
@@ -571,30 +643,43 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 
 ### POST /documents/{doc_id}/reprocess
 
-Асинхронная переобработка документа. `user_id` из контекста аутентификации.
+Асинхронная переобработка документа без создания нового черновика. `user_id` из контекста аутентификации.
+Перезапускает указанный этап обработки для существующего документа. Новый `draft_id` **не создаётся**.
 
 **Запрос**:
 
 ```json
 {
   "mode": "full",
-  "options": { "engine": "paddleocr", "language": "ru", "pages": "1-5" }
+  "options": { "ocr_engine": "paddleocr", "language": "ru", "pages": "1-5" }
 }
 ```
 
 | Поле | Тип | Описание |
 |------|-----|----------|
-| `mode` | string | `full`, `ocr_only`, `chunking_only`, `validation_only`, `reindex` |
+| `mode` | string | Режим переобработки: `full`, `ocr_only`, `chunking_only`, `validation_only`, `reindex` |
 | `options` | object | Опциональные параметры обработки (см. таблицу ниже) |
 
 **Поле `options`** (опционально):
 | Поле | Тип | Описание | Допустимые значения |
 |------|-----|----------|-------------------|
-| `engine` | string | Этап обработки | `ocr_only`, `parser_only`, `full` |
+| `ocr_engine` | string | Движок OCR | `paddleocr`, `tesseract` |
+| `parser_engine` | string | Движок парсинга | `docling` |
 | `language` | string | Язык OCR | `rus` (по умолчанию), `eng` |
 | `pages` | string | Диапазон страниц | `"1-5"`, `"1,3,5"`, `"all"` (по умолчанию) |
 
-**Ответ `202`** — аналогичен `POST /drafts`.
+**Ответ `202`**:
+```json
+{
+  "task_id": 420002,
+  "document_id": 1,
+  "mode": "full",
+  "status": "processing",
+  "message": "Переобработка запущена. Новый черновик не создаётся — используется существующий документ."
+}
+```
+
+**Ошибки**: `404` — документ не найден, `409` — документ в обработке.
 
 ---
 

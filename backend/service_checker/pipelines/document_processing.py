@@ -43,7 +43,7 @@ TEST_CREDENTIALS = {
 def _check_minio_upload(body: Optional[str], ctx: PipelineContext) -> Tuple[bool, str]:
     """Проверка загрузки в MinIO: сохраняем file_key в контекст."""
     ctx.set("file_key", TEST_PDF_KEY)
-    return True, ""
+    return True, f"file_key = {TEST_PDF_KEY}"
 
 
 def _check_converter(body: Optional[str], ctx: PipelineContext) -> Tuple[bool, str]:
@@ -59,7 +59,7 @@ def _check_converter(body: Optional[str], ctx: PipelineContext) -> Tuple[bool, s
     if not doc_id:
         return False, f"нет поля document_id в ответе"
     ctx.set("doc_id", doc_id)
-    return True, ""
+    return True, f"document_id = {doc_id}"
 
 
 class DocumentProcessingPipeline(PipelineDef):
@@ -141,6 +141,7 @@ class DocumentProcessingPipeline(PipelineDef):
             body={
                 "task_id": self.TEST_TASK_ID,
                 "file_key": self.TEST_PDF_KEY,
+                "version_id": "1",  # ⚠️ WORKAROUND: сервис требует version_id, docs API — нет
             },
             expected_status=202,
             extract_keys=["task_id"],
@@ -182,8 +183,8 @@ class DocumentProcessingPipeline(PipelineDef):
             path="/api/v1/converter/convert",
             port=8086,
             body={
-                "task_id": self.TEST_TASK_ID,
-                "version_id": "1",
+                "task_id": str(self.TEST_TASK_ID),  # ⚠️ WORKAROUND: сервис ожидает str, docs API — int
+                "version_id": "1",                   # ⚠️ WORKAROUND: сервис ожидает str, docs API — int
                 "raw_json": {"pages": [], "blocks": [], "text": "тестовый текст"},
             },
             expected_status=200,

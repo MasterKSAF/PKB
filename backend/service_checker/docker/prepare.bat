@@ -66,7 +66,7 @@ ping -n 11 127.0.0.1 > nul
 echo.
 
 echo [7/7] Running full report (coverage + pipelines)...
-cd /d "%~dp0..\.."
+for %%I in ("%~dp0..\..") do cd /d "%%~fI"
 python -m service_checker docker --action full-report
 if %ERRORLEVEL% neq 0 (
     echo.

@@ -123,8 +123,8 @@ def parse_args() -> argparse.Namespace:
     p_emulate = subparsers.add_parser("emulate", help="Эмуляция веб-интерфейса")
     p_emulate.add_argument(
         "--gateway-url",
-        default="http://127.0.0.1:8081",
-        help="URL gateway (по умолч. http://127.0.0.1:8081)",
+        default="http://127.0.0.1:8080",
+        help="URL gateway (по умолч. http://127.0.0.1:8080)",
     )
     p_emulate.add_argument(
         "--mode",

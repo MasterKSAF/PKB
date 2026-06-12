@@ -151,6 +151,7 @@ class PipelineStep:
     elapsed_ms: int = 0
     response_body: Optional[str] = None
     error: Optional[str] = None
+    message: str = ""  # Сообщение от check-функции (даже при успехе)
     status: StepStatus = StepStatus.PENDING
 
 
@@ -353,6 +354,7 @@ class PipelineRunner:
             # Пользовательская проверка
             if step.check:
                 check_ok, check_msg = step.check(step.response_body, ctx)
+                step.message = check_msg or ""  # Сохраняем сообщение даже при успехе
                 if not check_ok:
                     step.error = check_msg
                     step.status = StepStatus.FAILED
@@ -525,8 +527,8 @@ class PipelineRunner:
     def _get_service_port(self, service_key: str) -> Optional[int]:
         """Получить порт сервиса по ключу."""
         ports = {
-            "gateway": 8081,
-            "orchestrator": 8000,
+            "gateway": 8080,
+            "orchestrator": 8081,
             "auth": 8082,
             "query": 8083,
             "registry": 8084,

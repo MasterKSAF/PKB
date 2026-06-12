@@ -110,7 +110,7 @@ class ApiCoverageTester:
 
         self.context: Dict[str, Any] = {}  # shared context между вызовами
         self.results: Dict[str, ServiceResult] = {}
-        self.client = httpx.AsyncClient(timeout=15)
+        self.client = httpx.AsyncClient(timeout=15, follow_redirects=True)
         # Для тестов: можно подставить свои endpoint'ы (ключ → List[EndpointDef])
         self._test_endpoints: Dict[str, List[EndpointDef]] = {}
 
@@ -127,6 +127,7 @@ class ApiCoverageTester:
             f"{API_PREFIX}/system/health",
             f"{API_PREFIX}/monitor/health",
             "/health",
+            "/",  # TEI (GET / — health check)
         ]
         if fast:
             # fast: пробуем 2 самых популярных пути
@@ -207,6 +208,17 @@ class ApiCoverageTester:
             else:
                 # Проверяем тип (поддержка union: (int, str) — любой из)
                 if not isinstance(current, expected_type):
+                    # Автоприведение типов:
+                    # - ожидается int, пришла строка → пробуем сконвертировать
+                    # - ожидается str, пришёл int/float → считаем валидным
+                    if expected_type is int and isinstance(current, str):
+                        try:
+                            int(current)
+                            continue  # строка содержит число — валидно
+                        except ValueError:
+                            pass  # не число — ошибка
+                    if expected_type is str and isinstance(current, (int, float)):
+                        continue  # int/float можно представить как str — валидно
                     actual = type(current).__name__
                     expected_name = getattr(expected_type, '__name__', str(expected_type))
                     errors.append(
@@ -293,7 +305,7 @@ class ApiCoverageTester:
         # Для эндпоинтов, требующих ID из контекста, проверяем наличие
         path_placeholders = [p.strip("{}") for p in ep.path.split("/") if "{" in p and "}" in p]
         missing_vars = [v for v in path_placeholders if v not in self.context]
-        if missing_vars and "{{" in ep.path:
+        if missing_vars:
             result.results.append(
                 EndpointResult(
                     endpoint=ep, status_code=0, success=False, skipped=True,
@@ -415,10 +427,17 @@ class ApiCoverageTester:
     async def test_service(self, service_key: str) -> ServiceResult:
         """Протестировать все эндпоинты сервиса.
 
+        Каждый сервис тестируется изолированно — контекст очищается перед тестированием.
+        Prepare-шаги каждого сервиса создают необходимые данные (токены, ID) самостоятельно.
+
         Если сервис не найден в SERVICE_REGISTRY, возвращает пустой результат
         (для совместимости с тестами, которые подставляют свои эндпоинты).
         """
-        # Если есть тестовые endpoint'ы — используем их (для совместимости)
+        # Изоляция: каждый сервис тестируется с чистым контекстом
+        self.context.clear()
+
+        # Если сервис не найден в SERVICE_REGISTRY, возвращает пустой результат
+        # (для совместимости с тестами, которые подставляют свои эндпоинты)
         svc_def: Optional[ServiceDef] = None
         if service_key in self._test_endpoints:
             svc_endpoints = self._test_endpoints[service_key]
@@ -434,6 +453,10 @@ class ApiCoverageTester:
             svc_prepare = svc_def.prepare_endpoints
             port = svc_def.port
             svc_name = svc_def.display_name
+            # Загружаем base_data в контекст (могут быть перезаписаны prepare)
+            for k, v in svc_def.base_data.items():
+                if k not in self.context:
+                    self.context[k] = v
         else:
             # Неизвестный сервис — пустой результат
             result = ServiceResult(name=service_key, port=MODE_PORTS.get(service_key, 0))

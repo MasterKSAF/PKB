@@ -83,9 +83,19 @@ else
 fi
 
 # =============================================================================
-# 6. Запуск supervisord
+# 6. Инициализация MinIO bucket'ов
 # =============================================================================
-echo "[6/6] Запуск supervisord..."
+echo "[6/7] Инициализация MinIO bucket'ов..."
+python /app/backend/service_checker/docker/init_minio.py 2>&1 || {
+    echo "   ⚠ Не удалось создать bucket'ы MinIO"
+}
+
+echo ""
+
+# =============================================================================
+# 7. Запуск supervisord
+# =============================================================================
+echo "[7/7] Запуск supervisord..."
 echo ""
 
 mkdir -p /var/log/supervisor /var/run/supervisor
@@ -95,11 +105,12 @@ if [ ! -f /etc/supervisor/conf.d/supervisord.conf ]; then
     exit 1
 fi
 
+echo ""
 echo "   Процессы под управлением:"
 echo "   ┌──────────────────┬────────┬──────────────────────────┐"
 echo "   │ Auth Service     │ 8082   │ Аутентификация           │"
-echo "   │ Gateway          │ 8081   │ Mock-шлюз                │"
-echo "   │ Orchestrator     │ 8000   │ Главное API              │"
+echo "   │ Gateway          │ 8080   │ Mock-шлюз                │"
+echo "   │ Orchestrator     │ 8081   │ Главное API              │"
 echo "   │ Query            │ 8083   │ Чаты / сессии            │"
 echo "   │ Registry         │ 8084   │ Классификаторы / реестр  │"
 echo "   │ Integration      │ 8085   │ Внешние интеграции       │"
@@ -111,4 +122,5 @@ echo "   │ RAG Search       │ 8091   │ Гибридный поиск      
 echo "   └──────────────────┴────────┴──────────────────────────┘"
 echo ""
 
+echo ""
 exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf -n

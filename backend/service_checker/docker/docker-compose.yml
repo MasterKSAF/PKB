@@ -137,8 +137,8 @@ services:
     memswap_limit: 3G
     mem_reservation: 1G
     ports:
-      - "8000:8000"   # Orchestrator
-      - "8081:8081"   # Gateway
+      - "8081:8081"   # Orchestrator
+      - "8080:8080"   # Gateway
       - "8082:8082"   # Auth
       - "8083:8083"   # Query
       - "8084:8084"   # Registry

@@ -52,17 +52,17 @@ SERVICE_USERS = {
 
 
 def sql_create_database(drop_first: bool = False) -> str:
+    """Создание БД — только если drop_first.
+    
+    В Docker БД уже создаётся через POSTGRES_DB в docker-compose.
+    """
     sql = ""
     if drop_first:
         sql += f"-- Отключаем всех и удаляем БД\n"
         sql += f"SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
         sql += f"WHERE datname = '{DB_NAME}' AND pid <> pg_backend_pid();\n"
-        sql += f"DROP DATABASE IF EXISTS {DB_NAME};\n\n"
-    sql += f"CREATE DATABASE {DB_NAME}\n"
-    sql += f"  WITH ENCODING 'UTF8'\n"
-    sql += f"       LC_COLLATE = 'ru_RU.UTF-8'\n"
-    sql += f"       LC_CTYPE  = 'ru_RU.UTF-8'\n"
-    sql += f"       TEMPLATE template0;\n"
+        sql += f"DROP DATABASE IF EXISTS {DB_NAME};\n"
+        sql += f"CREATE DATABASE {DB_NAME} ENCODING 'UTF8' LC_COLLATE 'en_US.UTF-8' LC_CTYPE 'en_US.UTF-8' TEMPLATE template0;\n"
     return sql
 
 
@@ -75,8 +75,6 @@ def sql_setup_extensions_and_schemas() -> str:
     """
 
     return textwrap.dedent(f"""\
-    \c {DB_NAME}
-
     -- Расширения (основные — всегда доступны)
     CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
     CREATE EXTENSION IF NOT EXISTS "pgcrypto";
@@ -141,13 +139,16 @@ def build_full_sql(drop_first: bool = False, skip_users: bool = False) -> str:
         "-- ============================================================",
         "-- PKB Neuroassistant — Database Setup (service_checker)",
         "-- ============================================================",
-        "-- Внимание: checker создаёт ТОЛЬКО базу и расширения.",
+        "-- Внимание: checker создаёт ТОЛЬКО расширения.",
         "-- Схемы и таблицы сервисов (registry, rag, auth, ...)",
         "-- создаются самими сервисами через create_all() при старте.",
         "",
-        sql_create_database(drop_first),
         sql_setup_extensions_and_schemas(),
     ]
+
+    # CREATE DATABASE только при drop_first (пересоздание)
+    if drop_first:
+        parts.insert(1, sql_create_database(drop_first))
 
     # Users (в Docker не создаём — используем 'pkb' owner'а БД)
     parts.append(sql_create_users(skip=skip_users))
@@ -278,7 +279,7 @@ def run_psql(sql: str, password: str, dry_run: bool = False) -> bool:
     psql_path = find_psql()
     if not psql_path:
         print("  ✗ psql не найден. Установите PostgreSQL Client или добавьте в PATH.")
-        print("    Попробуйте: set PATH=%PATH%;C:\\Program Files\\PostgreSQL\\15\\bin")
+        print("    Попробуйте: set PATH=%PATH%;C:\Program Files\PostgreSQL\15\bin")
         return False
 
     # Пишем SQL во временный файл с BOM для Windows
@@ -293,12 +294,15 @@ def run_psql(sql: str, password: str, dry_run: bool = False) -> bool:
         # Принудительно UTF-8 для вывода
         env["PGCLIENTENCODING"] = "UTF8"
 
+        # В Docker-режиме подключаемся напрямую к целевой БД (она уже создана через POSTGRES_DB)
+        # В обычном режиме — к postgres (БД может ещё не существовать)
+        target_db = DB_NAME if os.environ.get("DOCKER_MODE") else "postgres"
         cmd = [
             str(psql_path),
             "-h", DB_HOST,
             "-p", str(DB_PORT),
             "-U", DB_SUPERUSER,
-            "-d", "postgres",
+            "-d", target_db,
             "-f", str(tmp),
             "-v", "ON_ERROR_STOP=1",
         ]
@@ -354,6 +358,7 @@ def main():
         # Docker-режим: пароль pkb, не создаём пользователей
         password = "pkb"
         skip_users = True
+        os.environ["DOCKER_MODE"] = "1"
         print("  🐳 Docker-режим: ")
         print(f"    пароль: '{password}', пользователи БД: 'pkb' (owner)")
     elif not password and not args.dry_run and not args.only_env:

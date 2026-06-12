@@ -6,6 +6,65 @@
 
 ## 🟡 Открытые вопросы
 
+### A25. `project_id` в `POST /chat/sessions` — mock не принимает
+
+В `query_service_api.md` поле `project_id` есть в запросе `POST /chat/sessions` (обязательное, bigint), но свежий mock Gateway `CreateSessionRequest` его не принимает. UI отправляет `project_id`, но mock не связывает сессию с проектом. См. подробный разбор в `docs/audit/ui_gateway_sync_analysis.md` (2.1).
+
+**Решение:** `project_id` объявлено обязательным полем в документации. Ожидается синхронизация mock Gateway.
+
+### A26. `GET /chat/projects` возвращает пустой список
+
+Без seed/project data дерево проектов в UI показывает только fallback «Рабочие диалоги». Проекты создаются через `POST /chat/projects` (UI). См. `docs/audit/ui_gateway_sync_analysis.md` (2.2).
+
+**Решение:** уточнено в документации. Ожидается seed-данные или создание проектов через UI.
+
+### A27. `POST /chat/feedback` — рассогласование типа `rating`
+
+Документация описывает `rating: "positive" | "negative" | "neutral"`, mock Gateway принимает числовой `rating`. UI оставлен на числовом варианте.
+
+**Решение:** контракт приведён к двум полям: `rating` (int, 1–5) + `rating_status` (string: positive/negative/neutral). Добавлен код ответа 422 для невалидных значений. См. `query_service_api.md`.
+
+### A28. `GET /chat/history/export` — URL возвращает 404
+
+Gateway возвращал объект с `url`, но GET по этому URL возвращал 404. UI сделал локальный CSV-fallback.
+
+**Решение:** контракт изменён — файл возвращается потоком (stream) напрямую, без промежуточного URL. См. `query_service_api.md`.
+
+### A29. Канонический Gateway-путь для классификаторов не зафиксирован
+
+В Gateway routing table есть `/classifiers/*`, в registry docs — `/registry/classifiers/tree`. UI пробовал сначала `/classifiers/tree`, затем fallback `/registry/classifiers/tree`.
+
+**Решение:** зафиксирован единый принцип: все пути Registry содержат префикс `/registry/` (`/registry/classifiers/*`, `/registry/terminology/*` и т.д.). Gateway маршрутизирует `/api/v1/registry/*` в Registry Service. Добавлен принцип категоризации путей в Gateway. См. `gateway_service_api.md`, `registry_service_api.md`.
+
+### A30. Mock-данные Registry и Classifiers не синхронизированы
+
+Классификатор MKS «47 / Судостроение», а у seed-документа `mks_oks_code: 31.240`. Из-за этого в разделе «Судостроение» документов 0. UI корректен, но проверить полный UX невозможно. См. `docs/audit/ui_gateway_sync_analysis.md` (2.7).
+
+**Решение:** добавить второй seed-документ с реальным кодом `mks_oks_code: 47.020` (Судостроение → Конструкция корпуса). Классификатор не изменять — он системный, коды извлекаются из документов.
+
+### A31. Server-side upload-by-url — нет endpoint
+
+Сейчас `POST /drafts` только для файла (multipart). Для загрузки по ссылке UI использует client-side сценарий. См. `docs/audit/ui_gateway_sync_analysis.md` (2.8).
+
+**Решение:** не в MVP. Загрузка только с ПК пользователя через `POST /drafts`. Server-side upload-by-url отложен.
+
+### A32. Публичный контракт для pipeline artifacts/logs не определён
+
+Маршрут `/api/v1/tasks/*` помечен как internal, но UI использует его для админ-мониторинга. Фактически endpoint работает и возвращает данные, передаваемые между сервисами. См. `docs/audit/ui_gateway_sync_analysis.md` (2.9).
+
+**Решение:** зафиксирован публичный контракт:
+- `GET /tasks/{task_id}/status` — статус и метаданные пайплайна
+- `GET /tasks/{task_id}/steps` — поэтапный лог шагов
+- `GET /drafts/{draft_id}/tasks` — список задач для черновика
+
+Доступ: `system_admin` (steps, status) / `knowledge_admin` (drafts). См. `orchestrator_service_api.md`, `gateway_service_api.md`, `common_api.md`.
+
+### A33. Auth/Admin namespace — двойные пути в документации
+
+Сейчас UI использует `/admin/users`, `/admin/roles`, `/admin/audit`. В части документации встречались также `/users/*`, `/roles`, `/audit`.
+
+**Решение:** все пути приведены к единому `/admin/*` namespace. RBAC-матрица в `common_api.md` обновлена. Добавлен принцип категоризации путей.
+
 ### A11. Analyse Service заморожен
 
 Analyse Service (`analyse_service_api.md`) спроектирован, но **не разрабатывается** в текущих спринтах. Старт — после стабилизации Пайплайна 1. Документация сохранена как проектная. `comparison_id` и `batch_id` отложены до старта разработки Analyse.
@@ -26,6 +85,15 @@ API черновиков и FSM документированы, но **UI сра
 
 `task_id` теперь ID задачи в `pipeline.tasks` (БД Orchestrator). Агрегирует этапы (`task_steps`) с входными/выходными данными сервисов. Внешние клиенты используют `draft_id`.
 
+### A34. Битый путь к sprint-плану в README.md + отсутствие документации пользовательских категорий
+
+В `docs/README.md` строка 151 ссылалась на `plans/sprint1_04_06_10_06.md` — файл не существовал по указанному пути (фактически находился в `docs_plans/features/`). Пользовательские категории документов (many-to-many) были спроектированы в вопросе 4.5 спринт-плана, но не были отражены в основной документации (`registry_service_api.md`, `db_diagrams.md`).
+
+**Решение:**
+- Путь в README исправлен
+- Добавлены API и модель данных для категорий в `registry_service_api.md` (группа categories) и `db_diagrams.md` (раздел 11)
+- Реализация — приоритет Спринта 3
+
 ---
 
 ## 🔴 Схема данных (требуют DDL)
@@ -34,12 +102,12 @@ API черновиков и FSM документированы, но **UI сра
 |-----|----------|--------|
 | A15 (DB-E4) | Нет UNIQUE-ограничений для 6 бизнес-ключей | 🔄 DDL |
 | A16 (DB-E5) | Нет ON DELETE (NO ACTION по умолч.) | 🔄 DDL |
-| A17 | Нет таблиц `auth.users`, `registry.terminology` | 🔄 разработка |
+| A17 | Нет таблиц `auth.users`, `registry.terminology` | 🔄 исправлено: таблицы есть, но не были описаны в db_diagrams.md. Добавлены в ER-диаграмму и примечания |
 | A18 (DB-E10) | Нет soft-delete и `updated_at` | 🔄 решение |
 | A19 (DB-E1) | VARCHAR для ENUM без CHECK | 🔄 DDL |
 | A20 (DB-E8) | `document_chunks.document_id` денормализация без синхронизации | 🟡 открыто |
 | A21 (DB-E2) | `file_hash_sha256` как `text` вместо `CHAR(64)` | 🟡 открыто |
-| A22 | `sessions.message_count` без триггера синхронизации | 🟡 открыто |
+| A22 | `sessions.message_count` без триггера синхронизации | 🔄 исправлено: поле удалено из схемы БД и API. Количество сообщений вычисляется по факту через COUNT |
 
 ---
 
@@ -56,30 +124,30 @@ API черновиков и FSM документированы, но **UI сра
 
 | Код | Проблема | Статус |
 |-----|----------|--------|
-| API-B1 | RAG Builder: тип секции `drawing` не существует в системе (должен быть `image`) | ⬜ открыто |
-| API-B2 | RAG Builder: в таблице полей `sections[].id`, в примере и Registry — `section_id` | ⬜ открыто |
-| API-B3 | Registry `POST /registry/documents`: два несовместимых формата тела, не описана детекция режима | ⬜ открыто |
+| API-B1 | RAG Builder: тип секции `drawing` не существует в системе (должен быть `image`) | 🔄 исправлено |
+| API-B2 | RAG Builder: в таблице полей `sections[].id`, в примере и Registry — `section_id` | 🔄 исправлено |
+| API-B3 | Registry `POST /registry/documents`: два несовместимых формата тела, не описана детекция режима | 🔄 исправлено |
 | API-B4 | Registry enum `document_status` содержит только статусы документа (`created`, `pending_index`, `indexing`, `indexed`, `failed`), статусы черновика вынесены в `registry.drafts` | 🔄 исправлено |
-| API-S1 | Auth: `POST /admin/roles` → `id` (bigint), `GET /admin/roles` → `role_id` (string) | ⬜ открыто |
-| API-S2 | Common: `promotion_task_id` — bigint в таблице идентификаторов, string в Orchestrator | ⬜ открыто |
-| API-S3 | Common: упоминается `POST /chat/ask` (не существует, заменён на `/chat/sessions/{id}/messages`) | ⬜ открыто |
-| API-S4 | Gateway: `/api/v1/tasks/*` маршрутизируется, но объявлен internal — нет RBAC-ограничения | ⬜ открыто |
-| API-S5 | OCR/Parser: `document.pages[].width/height` — "в мм", но в `raw_ocr_v4` единицы пиксели | ⬜ открыто |
-| API-S6 | OCR/Parser → Registry: множества `block[].type` и `section.type` не сопоставлены | ⬜ открыто |
-| API-S7 | Orchestrator `reprocess`: дублирование `mode` и `options.engine` (могут противоречить) | ⬜ открыто |
-| API-S8 | Orchestrator `reprocess`: ответ "аналогичен POST /drafts" — неясно, создаётся ли draft | ⬜ открыто |
-| API-S9 | Query: статусы `processing`, `needs_clarification`, `source_conflict` отсутствуют в longpoll-логике | ⬜ открыто |
-| API-S10 | Query `POST /chat/feedback`: два формата не разграничены (взаимоисключение?) | ⬜ открыто |
-| API-S11 | Query `GET /chat/sessions/{id}`: longpoll устарел, но нет плана депрекации | ⬜ открыто |
-| API-S12 | Analyse Service: отсутствуют специфичные коды ошибок | ⬜ открыто |
-| API-S13 | Converter-Validator: отсутствуют специфичные коды ошибок | ⬜ открыто |
+| API-S1 | Auth: `POST /admin/roles` → `id` (bigint), `GET /admin/roles` → `role_id` (string) | 🔄 исправлено |
+| API-S2 | Common: `promotion_task_id` — bigint в таблице идентификаторов, string в Orchestrator | 🔄 исправлено — поле не используется |
+| API-S3 | Common: упоминается `POST /chat/ask` (не существует, заменён на `/chat/sessions/{id}/messages`) | 🔄 исправлено |
+| API-S4 | Gateway: `/api/v1/tasks/*` маршрутизируется, но объявлен internal — нет RBAC-ограничения | 🔄 исправлено — Gateway разруливает internal-маршруты |
+| API-S5 | OCR/Parser: `document.pages[].width/height` — "в мм", но в `raw_ocr_v4` единицы пиксели | 🔄 исправлено |
+| API-S6 | OCR/Parser → Registry: множества `block[].type` и `section.type` не сопоставлены | 🔄 исправлено |
+| API-S7 | Orchestrator `reprocess`: дублирование `mode` и `options.engine` (могут противоречить) | 🔄 исправлено |
+| API-S8 | Orchestrator `reprocess`: ответ "аналогичен POST /drafts" — неясно, создаётся ли draft | 🔄 исправлено |
+| API-S9 | Query: статусы `processing`, `needs_clarification`, `source_conflict` отсутствуют в longpoll-логике | 🔄 исправлено — текущий FSM полный, эти статусы не используются |
+| API-S10 | Query `POST /chat/feedback`: два формата не разграничены (взаимоисключение?) | 🔄 исправлено |
+| API-S11 | Query `GET /chat/sessions/{id}`: longpoll устарел, но нет плана депрекации | 🔄 исправлено — longpoll удалён |
+| API-S12 | Analyse Service: отсутствуют специфичные коды ошибок | ⬜ открыто — сервис заморожен |
+| API-S13 | Converter-Validator: отсутствуют специфичные коды ошибок | 🔄 исправлено |
 | API-S14 | Gateway: Rate limiting задокументирован (429), но не реализован | 🔄 код |
-| API-S15 | RAG Search: только 200/500, нет 400/422 для невалидных параметров | ⬜ открыто |
-| API-S16 | Registry: PUT/PATCH/DELETE/Export/Import документов — без примеров запросов/ответов | ⬜ открыто |
-| API-S17 | Registry `PATCH /registry/documents/{id}/status`: internal, но не описана защита | ⬜ открыто |
-| API-S18 | Common: bbox описан как нормализованный [0,1] на всех этапах, но OCR/Parser — пиксели | ⬜ открыто |
-| API-S19 | Integration `POST /meridian/export`: `document_id` тип string вместо bigint | ⬜ открыто |
-| API-S20 | Все internal-сервисы: не описана аутентификация service-to-service | ⬜ открыто |
+| API-S15 | RAG Search: только 200/500, нет 400/422 для невалидных параметров | 🔄 исправлено |
+| API-S16 | Registry: PUT/PATCH/DELETE/Export/Import документов — без примеров запросов/ответов | 🔄 исправлено |
+| API-S17 | Registry `PATCH /registry/documents/{id}/status`: internal, но не описана защита | 🔄 исправлено — Gateway разруливает internal |
+| API-S18 | Common: bbox описан как нормализованный [0,1] на всех этапах, но OCR/Parser — пиксели | 🔄 исправлено |
+| API-S19 | Integration `POST /meridian/export`: `document_id` тип string вместо bigint | ⬜ заморожено — интеграции не в MVP |
+| API-S20 | Все internal-сервисы: не описана аутентификация service-to-service | 🔄 исправлено — внутренние вызовы изолированы Gateway |
 
 ## 🔴 Пайплайны (критичные — блокируют корректную реализацию)
 
@@ -110,14 +178,14 @@ API черновиков и FSM документированы, но **UI сра
 
 | Код | Проблема | Статус |
 |-----|----------|--------|
-| X1 | `document_id` назначается в разных местах (Converter vs Registry) | ⬜ открыто |
-| X2 | `title_hash_sha256` — разные формулы в пайплайне и ER-диаграмме | ⬜ открыто |
-| X3 | `partially_indexed` — есть в тексте пайплайна 2, нет в FSM и в БД | ⬜ открыто |
+| X1 | `document_id` назначается в разных местах (Converter vs Registry) | 🔄 исправлено: зафиксировано — `document_id` назначает Registry. overview.md актуализирован |
+| X2 | `title_hash_sha256` — разные формулы в пайплайне и ER-диаграмме | 🔄 исправлено: формула приведена к `doc_code + title + era`. overview.md и db_diagrams.md синхронизированы |
+| X3 | `partially_indexed` — есть в тексте пайплайна 2, нет в FSM и в БД | 🔄 решено: удалено из текста пайплайна 2 как нестатус — редкий крайний случай, не требующий отдельного статуса |
 | X4 | `discarded` (draft) → `failed` (document) — решено: `discarded` — только статус черновика, `failed` — только статус документа | 🔄 исправлено |
 | X5 | Журнал Оркестратора не отображён в схеме БД | ⬜ открыто |
-| X6 | `document_versions` — нет связи `documents.current_version_id` | ⬜ открыто |
-| X7 | `terminology` есть в JSON-схемах, нет таблицы в БД | ⬜ открыто |
-| X8 | `amendments` — в JSON вложены, в БД нет отдельной таблицы | ⬜ открыто |
+| X6 | `document_versions` — нет связи `documents.current_version_id` | 🔄 решено: поле `current_version_id` добавлено в `registry.documents` (FK → `registry.document_versions.id`, nullable). Актуализировано в `db_diagrams.md` |
+| X7 | `terminology` есть в JSON-схемах, нет таблицы в БД | 🔄 исправлено: таблица `registry.terminology` добавлена в ER-диаграмму и примечания db_diagrams.md |
+| X8 | `amendments` — в JSON вложены, в БД нет отдельной таблицы | 🔄 решено: осознанное решение — поправки хранятся в JSONB внутри `document_sections.content`. Отдельная таблица не требуется до появления бизнес-требования на поиск/фильтрацию по поправкам |
 
 ---
 

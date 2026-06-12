@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from service_checker.core.config import PIPELINE_SERVICE_MAP, SERVICE_DISPLAY_NAMES
+from service_checker.services import MODE_PORTS, SERVICE_REGISTRY
 
 
 # Тип для опционального результата проверки БД
@@ -144,6 +145,12 @@ def _generate_full_report(
         svc_checkdb = _get_service_checkdb_icon(db_result, svc_key)
         lines.append(f"| {display_name} | {port} | {ping_icon} | {svc_checkdb} | {passed_icon} | {doc_icon} | {query_icon} | {status_icon} |")
 
+    # Сервисы в глубокой разработке (не тестируются, с прочерками)
+    for svc_key, display_name in SERVICE_DISPLAY_NAMES.items():
+        if svc_key not in coverage_results and svc_key in MODE_PORTS:
+            port = MODE_PORTS[svc_key]
+            lines.append(f"| {display_name} | {port} | — | — | — | — | — | 🟡 dev |")
+
     # Итоговая строка — количества по всем столбцам
     total_services = len(coverage_results)
     cov_alive = sum(1 for r in coverage_results.values() if r.ping_ok)
@@ -184,9 +191,12 @@ def _generate_full_report(
     all_pipe_ok = all(pipeline_passed.values()) if pipeline_passed else True
     pipe_ok_count = sum(1 for p in pipeline_passed.values() if p) if pipeline_passed else 0
     pipe_total = len(pipeline_passed) if pipeline_passed else 0
-    overall_ok_count = (1 if all_cov_ok else 0) + (1 if all_pipe_ok else 0)
-    overall_total = 2
-    overall_status = "✅" if overall_ok_count == overall_total else "❌"
+
+    # Общий статус: ❌ если есть проблемы
+    overall_status = "✅" if (
+        cov_ok_count == total_services 
+        and all(pipeline_passed.values()) if pipeline_passed else True
+    ) else "❌"
 
     lines.append(
         f"| **Total** | | **{cov_alive}/{total_services}** "
@@ -194,7 +204,7 @@ def _generate_full_report(
         f"| **{cov_ok_count}/{total_services}** "
         f"| **{doc_passed_total}/{doc_steps_total}** "
         f"| **{query_passed_total}/{query_steps_total}** "
-        f"| {overall_status} **{overall_ok_count}/{overall_total}** |\n"
+        f"| {overall_status} |\n"
     )
 
     # ── 2. Детали API Coverage ─────────────────────────────────────
@@ -220,6 +230,23 @@ def _generate_full_report(
     cov_ok = all_failed == 0 and all_skipped == 0
     cov_checkdb_total_icon = "✅" if svcs_checkdb_ok == svcs_checkdb_total else "❌" if db_result is not None else "—"
     lines.append(f"| **Total** | | **{all_alive}/{len(coverage_results)}** | {cov_checkdb_total_icon} | **{all_total_ep}** | **{all_total_ok}** | **{all_failed}** | **{all_skipped}** | {'✅' if cov_ok else '❌'} |\n")
+
+    # ⚠️ Workaround-предупреждения (заглушки)
+    lines.append("### ⚠️ Workaround-предупреждения по сервисам\n")
+    has_warnings = False
+    for svc_key in sorted(coverage_results.keys()):
+        try:
+            svc_def = SERVICE_REGISTRY[svc_key]()
+            if svc_def.warnings:
+                has_warnings = True
+                display_name = SERVICE_DISPLAY_NAMES.get(svc_key, svc_key)
+                for warn in svc_def.warnings:
+                    lines.append(f"- **{display_name}**: {warn}\n")
+        except (KeyError, Exception):
+            pass  # Сервис не в реестре — пропускаем
+    if not has_warnings:
+        lines.append("_Нет предупреждений_\n")
+    lines.append("")
 
     # ── 3. Детали Pipeline Testing ─────────────────────────────────
     lines.append("---\n")
@@ -271,11 +298,21 @@ def _generate_full_report(
             for i, step in enumerate(steps, 1):
                 step_status = getattr(step, "status", None)
                 icon = icon_map.get(step_status.value if step_status else "", "❓")
-                detail = getattr(step, "error", "") or ""
-                if not detail:
-                    resp = getattr(step, "response_body", None)
-                    if resp:
-                        detail = resp[:100]
+                step_error = getattr(step, "error", "") or ""
+                step_msg = getattr(step, "message", "") or ""
+                step_resp = getattr(step, "response_body", None)
+                
+                if step_status and step_status.value == "failed":
+                    # Для ошибок: показываем error + (response_body если есть)
+                    detail = step_error
+                    if step_resp:
+                        resp_snippet = step_resp[:300].replace("\n", " ").replace("|", "\\|")
+                        detail = f"{detail} | body: {resp_snippet}"
+                else:
+                    # Для успешных: message (если есть), иначе response_body
+                    detail = step_msg
+                    if not detail and step_resp:
+                        detail = step_resp[:300]
                 lines.append(
                     f"| {i} | {getattr(step, 'name', '')} | {getattr(step, 'service', '')} | {icon} | "
                     f"{getattr(step, 'actual_status', 0)} | {getattr(step, 'elapsed_ms', 0)}ms | {detail} |"

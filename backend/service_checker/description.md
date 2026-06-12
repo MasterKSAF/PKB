@@ -49,9 +49,9 @@
 
 | Ключ | Тип | Порт | Имя |
 |------|-----|------|-----|
-| gateway | mock | 8081 | Gateway (Mock All-in-One) |
+| gateway | mock | 8080 | Gateway (Mock All-in-One) |
 | auth | mock | 8082 | Auth Service |
-| orchestrator | mock | 8000/8081 | Orchestrator Service |
+| orchestrator | mock | 8081 | Orchestrator Service |
 | query | mock | 8083 | Query Service |
 | registry | mock | 8084 | Registry Service |
 | integration | real | 8085 | Integration Service |

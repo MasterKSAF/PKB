@@ -131,7 +131,7 @@ docker compose -f backend/service_checker/docker/docker-compose.yml exec -T redi
 curl http://localhost:9000/minio/health/live
 
 # Backend API (6 из 10 работают, 4 падают — см. специфичные проблемы ниже)
-curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/   # Orchestrator
+curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/   # Orchestrator
 curl -s -o /dev/null -w "%{http_code}" http://localhost:8082/   # Auth
 curl -s -o /dev/null -w "%{http_code}" http://localhost:8086/health  # Converter-Validator
 curl -s -o /dev/null -w "%{http_code}" http://localhost:8087/health  # Parser

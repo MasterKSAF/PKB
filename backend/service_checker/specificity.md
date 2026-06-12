@@ -486,7 +486,7 @@ POST /api/v1/registry/documents/ → 500
 ### Статус
 🔴 **Открыто (баг сервиса)**
 
-## 11. Аномалия: БД не инициализируется в Docker — 5 связанных проблем
+## 11. Аномалия: setup_db.py падает при старте — БД не инициализируется
 
 **Обнаружено:** 2026-06-10
 
@@ -506,6 +506,13 @@ POST /api/v1/registry/documents/ → 500
 | 11.3 | setup_db.py ищет несуществующий `0. full_schema.sql` | ✅ ищет `1. db_dump.sql` → любой `.sql` файл |
 | 11.4 | Отсутствует `docker/.env` | ✅ создан с DEFAULT_ADMIN_* и всеми переменными |
 | 11.5 | Путаница пользователей БД (pkb/pkb_user/rag_user) | ✅ `--docker` → все сервисы используют `pkb` (owner БД) |
+
+### Временный workaround (checker, 2026-06-12)
+
+Пока setup_db.py не исправлен, checker создаёт расширения и схемы БД самостоятельно:
+
+1. **`docker/wait_for_services.py`** — `init_db_schemas()` выполняет `CREATE EXTENSION IF NOT EXISTS` и `CREATE SCHEMA IF NOT EXISTS` через psql
+2. Когда `setup_db.py` починят — убрать `init_db_schemas()` из `wait_for_services.py`
 
 ### Остаётся разработчикам сервисов
 
@@ -601,3 +608,119 @@ Checker не должен вмешиваться в работу сервисо�
 - **Почему:** единообразие, производительность индексов, отсутствие проблем с сериализацией
 - **Где зафиксировано:** `response_schema` в `services/*.py`, body тестовых запросов, pipelines
 - **Когда введено:** 2026-06-10 (убраны все `(int, str)` из чекера)
+
+## 15. Аномалия: `service_checker.py` (файл) конфликтует с `service_checker/` (пакет)
+
+### Симптом
+Прямой запуск скриптов изнутри `service_checker/` каталога:
+```bash
+cd service_checker/
+python pipeline_test.py run document_processing
+```
+падает с `ModuleNotFoundError: No module named 'service_checker.core'`.
+
+### Причина
+В корне `service_checker/` лежит **файл** `service_checker.py`. Когда Python выполняет `python pipeline_test.py` из этого каталога, он добавляет `service_checker/` в `sys.path`. При встрече импорта `from service_checker.pipelines import ...` Python находит **файл** `service_checker.py` (модуль), а не **пакет** `service_checker/` (директорию). Файл `service_checker.py` делает `from service_checker.core.cli import main`, но `service_checker.core` не существует — это уже файл, не пакет.
+
+### Что исправлено (checker, 2026-06-11)
+- `pipeline_test.py`: добавлен `sys.path.insert(0, backend/)` перед импортом `service_checker.pipelines`
+- `readme.md`: все команды запуска заменены на модульный вызов `python -m service_checker docker --action <action>`
+
+### Правильный запуск
+```bash
+# Из любого места:
+python -m service_checker docker --action full-report
+python -m service_checker docker --action coverage
+python -m service_checker docker --action db-check
+```
+Или через скрипты:
+```bash
+docker\recheck.bat     # Windows — полный цикл
+docker\prepare.bat     # Windows — первоначальный setup
+```
+
+### Статус
+- [x] `readme.md` обновлён
+- [x] `pipeline_test.py` — фикс импорта
+- [x] `__main__.py` — уже содержал корректный путь (эталон)
+
+## 16. Аномалия: TEI не проверяется health check'ами и wait_for_services
+
+### Симптом
+- `wait_for_services.py` не ждёт TEI — full-report стартует до готовности TEI
+- `_docker_health_check` (`core/docker.py`) не проверяет TEI через HTTP — health check не видит TEI
+- `ping_service` в `api_coverage_test.py` не находит TEI, т.к. health endpoint TEI — `GET /`, а `health_paths` включал только `/api/v1/health`, `/api/v1/system/health`, `/api/v1/monitor/health`, `/health`
+- В итоге coverage test пропускает все эндпоинты TEI (skip), хотя TEI может быть жив
+- **`recheck.bat`** проверял только **файл модели** (`tei_model/model.onnx`), но **не проверял, запущен ли контейнер TEI**. Если TEI не был запущен — он оставался незапущенным, а скрипт писал "TEI model found" (про файл), вводя в заблуждение
+
+### Что исправлено (checker, 2026-06-12)
+
+1. **`api_coverage_test.py`** — `ping_service`: добавлен `"/"` в `health_paths` для TEI
+2. **`wait_for_services.py`** — TEI добавлен в `INFRA_SERVICES` (ожидание Docker healthcheck)
+3. **`core/docker.py`** — TEI добавлен в `DOCKER_SUPERVISOR_SERVICES` для HTTP health check
+4. **`core/config.py`** — TEI добавлен в `DOCKER_SERVICE_NAMES` для отображения
+5. **`recheck.bat`** — добавлен шаг [3/7] проверки контейнера TEI: если не running — запускает
+
+### Статус
+- [x] Исправлено в checker (2026-06-12)
+
+## 17. Архитектурное решение: Gateway — отдельный сервис, изолированное тестирование
+
+### Суть
+Gateway (mock на порту 8080) тестируется как **полностью изолированный автономный сервис**.
+
+Каждый сервис тестируется **с чистым контекстом** — prepare-шаги каждого сервиса создают
+необходимые данные (токены, ID) самостоятельно, независимо от других сервисов.
+
+### Почему изоляция
+- У Gateway своя собственная авторизация (пароль `admin123`), отличная от Auth Service (`Admin1234!`)
+- Shared context (один `context` на все сервисы) приводил к тому, что access_token от Auth Service
+  не работал на Gateway, refresh_token оставался от Auth Service, и т.д.
+- Из-за этого Gateway изолированно показывал **39/101**, а в полном прогоне — только **6/101**
+
+### Что сделано (checker, 2026-06-12)
+1. **`services/gateway.py`** — prepare-шаги Gateway используют свои credentials (`admin123`)
+2. **`api_coverage_test.py`** — `test_service()` теперь очищает `self.context` перед каждым сервисом
+   (каждый сервис тестируется изолированно)
+3. Добавлены `warnings` с описанием
+
+### Статус
+- [x] Реализовано в checker (2026-06-12)
+
+## 18. Аномалия: несоответствие портов Gateway (8081→8080) и Orchestrator (8000→8081)
+
+### Симптом
+Неверные порты были разбросаны по 7 файлам:
+- `wait_for_services.py`: Gateway **8081** (надо 8080), Orchestrator **8000** (надо 8081)
+- `entrypoint.sh`: табличка вывода — Gateway **8081**, Orchestrator **8000**
+- `services/orchestrator.py`: `PORT = 8000` — coverage test искал сервис на 8000, не находил
+- `core/docker.py`: `DOCKER_SUPERVISOR_SERVICES` — Gateway **8081**, Orchestrator **8000**
+- `core/cli.py`: `--gateway-url` default **8081**
+- `pipelines/base.py`: `_get_service_port` — Gateway **8081**, Orchestrator **8000**
+- `tests/test_full_report.py`: MockCoverageResult Gateway **8081**
+- `description.md`: таблица портов — Gateway **8081**, Orchestrator **8000/8081**
+- `README.Docker.md`: curl health — Orchestrator **8000**
+
+### Последствия
+- Coverage test показывал Orchestrator не отвечающим (Ping ❌ на порту 8000)
+- Gateway (агрегирует эндпоинты Orchestrator) терял часть проходных эндпоинтов
+- Pipeline runner (`pipelines/base.py`) стучался на неверные порты при health check
+- Docker health check (`core/docker.py`) проверял не те порты
+- CLI эмуляции gateway (`core/cli.py`) по умолчанию шёл на 8081
+
+### Что исправлено (checker, 2026-06-12)
+1. **`docker/wait_for_services.py`** — Gateway 8081→8080, Orchestrator 8000→8081
+2. **`docker/entrypoint.sh`** — табличка вывода: Gateway 8081→8080, Orchestrator 8000→8081
+3. **`services/orchestrator.py`** — `PORT = 8000` → `PORT = 8081`
+4. **`core/docker.py`** — `DOCKER_SUPERVISOR_SERVICES`: Gateway 8081→8080, Orchestrator 8000→8081
+5. **`core/cli.py`** — `--gateway-url` default 8081→8080
+6. **`pipelines/base.py`** — `_get_service_port`: Gateway 8081→8080, Orchestrator 8000→8081
+7. **`tests/test_full_report.py`** — MockCoverageResult Gateway 8081→8080
+8. **`description.md`** — таблица портов: Gateway 8081→8080, Orchestrator 8000/8081→8081
+9. **`README.Docker.md`** — curl health: Orchestrator 8000→8081
+
+### Статус
+- [x] Исправлено в checker (2026-06-12)
+
+
+

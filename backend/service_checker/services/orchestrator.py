@@ -15,7 +15,7 @@ from .base import (
 )
 
 SERVICE_KEY = "orchestrator"
-PORT = 8000
+PORT = 8081
 DISPLAY_NAME = "Orchestrator Service"
 
 # Вспомогательные константы для путей с path-параметрами

@@ -25,8 +25,8 @@ SERVICE_DEFS: Dict[str, Dict[str, Any]] = {
     "gateway": {
         "name": "Gateway (Mock All-in-One)",
         "type": "mock",
-        "port": 8081,
-        "health_url": "http://127.0.0.1:8081/api/v1/system/health",
+        "port": 8080,
+        "health_url": "http://127.0.0.1:8080/api/v1/system/health",
         "cwd": GATEWAY_DIR,
         "run_cmd": lambda: [
             sys.executable, "-m", "uvicorn", "mocks.gateway:app",
@@ -149,6 +149,7 @@ DOCKER_SERVICE_NAMES = {
     "postgres": "PostgreSQL + pgvector",
     "redis": "Redis (cache + broker)",
     "minio": "MinIO (S3-совместимое хранилище)",
+    "tei": "TEI (Text Embeddings Inference)",
     "app": "Python-сервисы (10 процессов под supervisord)",
 }
 
