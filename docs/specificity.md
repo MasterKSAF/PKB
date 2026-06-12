@@ -34,7 +34,7 @@ Gateway возвращал объект с `url`, но GET по этому URL �
 
 В Gateway routing table есть `/classifiers/*`, в registry docs — `/registry/classifiers/tree`. UI пробовал сначала `/classifiers/tree`, затем fallback `/registry/classifiers/tree`.
 
-**Решение:** зафиксирован единый путь `/classifiers/*` (через Gateway). Префикс `/registry/` убран из всех путей Registry Service docs. Добавлен принцип категоризации путей в Gateway. См. `gateway_service_api.md`, `registry_service_api.md`.
+**Решение:** зафиксирован единый принцип: все пути Registry содержат префикс `/registry/` (`/registry/classifiers/*`, `/registry/terminology/*` и т.д.). Gateway маршрутизирует `/api/v1/registry/*` в Registry Service. Добавлен принцип категоризации путей в Gateway. См. `gateway_service_api.md`, `registry_service_api.md`.
 
 ### A30. Mock-данные Registry и Classifiers не синхронизированы
 
@@ -52,10 +52,12 @@ Gateway возвращал объект с `url`, но GET по этому URL �
 
 Маршрут `/api/v1/tasks/*` помечен как internal, но UI использует его для админ-мониторинга. Фактически endpoint работает и возвращает данные, передаваемые между сервисами. См. `docs/audit/ui_gateway_sync_analysis.md` (2.9).
 
-**Предложение:** зафиксировать публичный контракт:
-- `GET /tasks/{task_id}` — статус и метаданные пайплайна
+**Решение:** зафиксирован публичный контракт:
+- `GET /tasks/{task_id}/status` — статус и метаданные пайплайна
 - `GET /tasks/{task_id}/steps` — поэтапный лог шагов
 - `GET /drafts/{draft_id}/tasks` — список задач для черновика
+
+Доступ: `system_admin` (steps, status) / `knowledge_admin` (drafts). См. `orchestrator_service_api.md`, `gateway_service_api.md`, `common_api.md`.
 
 ### A33. Auth/Admin namespace — двойные пути в документации
 

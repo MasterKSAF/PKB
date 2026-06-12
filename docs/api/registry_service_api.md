@@ -70,23 +70,23 @@
 
 | Метод | Путь | Описание |
 |-------|------|----------|
-| GET | `/classifiers` | Список (плоский) |
-| GET | `/classifiers/tree` | Дерево (иерархическое) |
-| GET | `/classifiers/{code}` | Один узел |
-| POST | `/classifiers` | Создать |
-| PUT | `/classifiers/{code}` | Обновить |
-| PATCH | `/classifiers/{code}` | Частичное обновление |
-| DELETE | `/classifiers/{code}` | Удалить |
-| POST | `/classifiers/import` | Импорт |
-| GET | `/classifiers/pending` | Неизвестные коды классификатора |
-| POST | `/classifiers/pending/{pending_id}/accept` | Принять неизвестный код |
-| POST | `/classifiers/pending/{pending_id}/reject` | Отклонить неизвестный код |
-| POST | `/classifiers/validate` | Валидация классификации |
+| GET | `/registry/classifiers` | Список (плоский) |
+| GET | `/registry/classifiers/tree` | Дерево (иерархическое) |
+| GET | `/registry/classifiers/{code}` | Один узел |
+| POST | `/registry/classifiers` | Создать |
+| PUT | `/registry/classifiers/{code}` | Обновить |
+| PATCH | `/registry/classifiers/{code}` | Частичное обновление |
+| DELETE | `/registry/classifiers/{code}` | Удалить |
+| POST | `/registry/classifiers/import` | Импорт |
+| GET | `/registry/classifiers/pending` | Неизвестные коды классификатора |
+| POST | `/registry/classifiers/pending/{pending_id}/accept` | Принять неизвестный код |
+| POST | `/registry/classifiers/pending/{pending_id}/reject` | Отклонить неизвестный код |
+| POST | `/registry/classifiers/validate` | Валидация классификации |
 
 ### 1.1. Список (плоский)
 
 ```
-GET /classifiers
+GET /registry/classifiers
 ```
 
 **Query-параметры:**
@@ -138,7 +138,7 @@ GET /classifiers
 ### 1.2. Дерево (иерархическое)
 
 ```
-GET /classifiers/tree
+GET /registry/classifiers/tree
 ```
 
 **Query-параметры:**
@@ -194,7 +194,7 @@ GET /classifiers/tree
 ### 1.3. Один узел
 
 ```
-GET /classifiers/{code}
+GET /registry/classifiers/{code}
 ```
 
 **Query-параметр**: `classifier_system` (обязательный, для составного PK).  
@@ -205,7 +205,7 @@ GET /classifiers/{code}
 ### 1.4. Создать
 
 ```
-POST /classifiers
+POST /registry/classifiers
 ```
 
 **Тело запроса:**
@@ -239,7 +239,7 @@ POST /classifiers
 ### 1.5. Обновить
 
 ```
-PUT /classifiers/{code}
+PUT /registry/classifiers/{code}
 ```
 
 **Query-параметр**: `classifier_system` (обязательный).  
@@ -252,7 +252,7 @@ PUT /classifiers/{code}
 ### 1.6. Частичное обновление
 
 ```
-PATCH /classifiers/{code}
+PATCH /registry/classifiers/{code}
 ```
 
 **Query-параметр**: `classifier_system`.  
@@ -263,7 +263,7 @@ PATCH /classifiers/{code}
 ### 1.7. Удалить
 
 ```
-DELETE /classifiers/{code}
+DELETE /registry/classifiers/{code}
 ```
 
 **Query-параметр**: `classifier_system`.  
@@ -274,7 +274,7 @@ DELETE /classifiers/{code}
 ### 1.8. Импорт
 
 ```
-POST /classifiers/import
+POST /registry/classifiers/import
 ```
 
 **Запрос**: `multipart/form-data`
@@ -305,7 +305,7 @@ POST /classifiers/import
 ### 1.9. Неизвестные коды классификатора
 
 ```
-GET /classifiers/pending
+GET /registry/classifiers/pending
 ```
 
 Коды классификатора (МКС, ОКСТУ, УДК), найденные в документах при распознавании, но отсутствующие в справочнике. Требуют административного разбора.
@@ -339,7 +339,7 @@ GET /classifiers/pending
 ### 1.10. Принять неизвестный код
 
 ```
-POST /classifiers/pending/{pending_id}/accept
+POST /registry/classifiers/pending/{pending_id}/accept
 ```
 
 Переносит код в `classifier_registry`.
@@ -373,7 +373,7 @@ POST /classifiers/pending/{pending_id}/accept
 ### 1.11. Отклонить неизвестный код
 
 ```
-POST /classifiers/pending/{pending_id}/reject
+POST /registry/classifiers/pending/{pending_id}/reject
 ```
 
 **Тело запроса:**
@@ -397,7 +397,7 @@ POST /classifiers/pending/{pending_id}/reject
 ### 1.12. Валидация классификации
 
 ```
-POST /classifiers/validate
+POST /registry/classifiers/validate
 ```
 
 Проверка и подтверждение извлечённых классификационных кодов (МКС/ОКС, ОКСТУ, УДК) по справочнику Registry.  
@@ -454,18 +454,18 @@ Registry Service — source of truth для классификаторов. Пр
 
 | Метод | Путь | Описание |
 |-------|------|----------|
-| GET | `/terminology` | Список |
-| GET | `/terminology/{term_id}` | Один термин |
-| POST | `/terminology` | Создать |
-| PUT | `/terminology/{term_id}` | Обновить |
-| DELETE | `/terminology/{term_id}` | Удалить |
-| GET | `/terminology/normalize` | Поиск нормализованной формы |
-| POST | `/terminology/import` | Импорт |
+| GET | `/registry/terminology` | Список |
+| GET | `/registry/terminology/{term_id}` | Один термин |
+| POST | `/registry/terminology` | Создать |
+| PUT | `/registry/terminology/{term_id}` | Обновить |
+| DELETE | `/registry/terminology/{term_id}` | Удалить |
+| GET | `/registry/terminology/normalize` | Поиск нормализованной формы |
+| POST | `/registry/terminology/import` | Импорт |
 
 ### 2.1. Список
 
 ```
-GET /terminology
+GET /registry/terminology
 ```
 
 **Query-параметры:**
@@ -525,7 +525,7 @@ GET /terminology
 ### 2.2. Один термин
 
 ```
-GET /terminology/{term_id}
+GET /registry/terminology/{term_id}
 ```
 
 **Ответ `200`**: объект термина.
@@ -535,7 +535,7 @@ GET /terminology/{term_id}
 ### 2.3. Создать
 
 ```
-POST /terminology
+POST /registry/terminology
 ```
 
 **Тело запроса:**
@@ -574,7 +574,7 @@ POST /terminology
 ### 2.4. Обновить
 
 ```
-PUT /terminology/{term_id}
+PUT /registry/terminology/{term_id}
 ```
 
 ---
@@ -582,7 +582,7 @@ PUT /terminology/{term_id}
 ### 2.5. Удалить
 
 ```
-DELETE /terminology/{term_id}
+DELETE /registry/terminology/{term_id}
 ```
 
 ---
@@ -590,7 +590,7 @@ DELETE /terminology/{term_id}
 ### 2.6. Поиск нормализованной формы
 
 ```
-GET /terminology/normalize
+GET /registry/terminology/normalize
 ```
 
 **Query-параметры:**
@@ -618,7 +618,7 @@ GET /terminology/normalize
 ### 2.7. Импорт
 
 ```
-POST /terminology/import
+POST /registry/terminology/import
 ```
 
 **Запрос**: `multipart/form-data` (файл + mapping). Аналогично импорту классификаторов.
@@ -1594,8 +1594,8 @@ POST /registry/documents/import
 
 | Метод | Путь | Описание |
 |-------|------|----------|
-| GET | `/stats` | Статистика |
-| GET | `/enums` | Допустимые значения |
+| GET | `/registry/stats` | Статистика |
+| GET | `/registry/enums` | Допустимые значения |
 
 ### 6.1. Статистика
 

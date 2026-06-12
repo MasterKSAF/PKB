@@ -368,13 +368,15 @@ GET .../{doc_id}/status?longpoll=15
 | `GET /tasks/{task_id}/status` | ✗ | ✓ | ✓ |
 | `GET /tasks/{task_id}/steps` | ✗ | ✗ | ✓ |
 | `GET /drafts/{draft_id}/tasks` | ✗ | ✓ | ✓ |
-| `GET /classifiers/*` | ✓ | ✓ | ✓ |
-| `POST /PUT /PATCH /DELETE /classifiers/*` | ✗ | ✓ | ✓ |
-| `GET /terminology/*` | ✓ | ✓ | ✓ |
-| `POST /PUT /PATCH /DELETE /terminology/*` | ✗ | ✓ | ✓ |
+| `GET /registry/classifiers/*` | ✓ | ✓ | ✓ |
+| `POST /PUT /PATCH /DELETE /registry/classifiers/*` | ✗ | ✓ | ✓ |
+| `GET /registry/terminology/*` | ✓ | ✓ | ✓ |
+| `POST /PUT /PATCH /DELETE /registry/terminology/*` | ✗ | ✓ | ✓ |
 | `GET /registry/documents/*` | ✓ | ✓ | ✓ |
 | `POST /PUT /PATCH /DELETE /registry/documents/*` | ✗ | ✓ | ✓ |
-| `GET /common/*` | ✓ | ✓ | ✓ |
+| `GET /registry/common/*` | ✓ | ✓ | ✓ |
+| `GET /registry/categories/*` | ✓ | ✓ | ✓ |
+| `POST /PUT /DELETE /registry/categories/*` | ✗ | ✓ | ✓ |
 
 > **Примечания:**
 > - Роли: `engineer` — инженер-конструктор; `knowledge_admin` — администратор НСИ; `system_admin` — системный администратор.

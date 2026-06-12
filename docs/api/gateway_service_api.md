@@ -47,10 +47,11 @@ Gateway объединяет API всех внутренних сервисов 
 | `/api/v1/monitor/*` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md) |
 | `/api/v1/chat/*` | Query Service | `8083` | [query_service_api.md](query_service_api.md) |
 | `/api/v1/text/*` | Query Service | `8083` | [query_service_api.md](query_service_api.md) |
-| `/api/v1/classifiers/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
-| `/api/v1/terminology/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
-| `/api/v1/common/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
+| `/api/v1/registry/classifiers/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
+| `/api/v1/registry/terminology/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
+| `/api/v1/registry/common/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
 | `/api/v1/registry/documents/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
+| `/api/v1/registry/categories/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
 | `/api/v1/system/health` | Gateway (собственный) | `8080` | — |
 | `/api/v1/analyse/*` | Analyse Service | `8089` | [analyse_service_api.md](analyse_service_api.md) |
 | `/api/v1/meridian/*` | Integration Service | `8085` | [integration_service_api.md](integration_service_api.md) |
@@ -59,7 +60,7 @@ Gateway объединяет API всех внутренних сервисов 
 >
 > **² Примечание:** Маршрут `/api/v1/tasks/*` — read-only для admin-ролей (`system_admin`, `knowledge_admin`). Используется для мониторинга процессов и просмотра данных, передаваемых между сервисами на этапах пайплайна. Внешние клиенты для статуса загрузки используют `/api/v1/drafts/*`.
 
-> **📐 Принцип категоризации путей:** Все пути Gateway организованы по категориям сервисов. Каждый префикс (`auth`, `admin`, `chat`, `classifiers`, `drafts` и т.д.) соответствует логической группе эндпоинтов внутри целевого сервиса. Пути без категории (например, устаревший `/pages/*`) не должны добавляться.
+> **📐 Принцип категоризации путей:** Все пути Gateway организованы по категориям сервисов. Префикс пути включает имя сервиса (например, `/api/v1/registry/*` для Registry Service, `/api/v1/chat/*` для Query Service), за которым следует логическая группа эндпоинтов. Пути без категории сервиса (например, устаревший `/pages/*`) не должны добавляться.
 
 В мок-режиме (см. [gateway.py](../mocks/gateway.py)) Gateway, Orchestrator и остальные сервисы объединены в единое FastAPI-приложение на порту `8081` (эмуляция nginx + gateway для разработки и тестов).
 
@@ -91,7 +92,7 @@ Registry drafts — только internal, доступ к ним через Gat
 2. **Иденпотентность `POST /drafts`.** Клиент **должен** передавать заголовок `Idempotency-Key: <uuid>` при загрузке файла. Gateway сохраняет ответ первого запроса в in-memory кеш на 1 час. Повторный запрос с тем же ключом возвращает кешированный ответ с дополнительным заголовком `Idempotency-Key-Repeated: true`. Это защищает от двойной загрузки при сетевых сбоях UI. Запросы без `Idempotency-Key` обрабатываются без кеширования.
 3. **Маппинг идентификаторов.** Gateway прозрачно проксирует `draft_id`, `task_id` и `document_id` между UI и Orchestrator. Внешние клиенты оперируют `draft_id` (назначается Registry при создании черновика); `task_id` — внутренний идентификатор для межсервисного взаимодействия.
 4. **Долгие операции.** `POST /drafts`, `POST /drafts/{id}/preview` и `PATCH /drafts/{id}/decide` могут возвращать `202 Accepted` (асинхронная обработка). Клиент отслеживает прогресс через `GET /drafts/{id}/preview/status?longpoll=15`.
-5. **Связь с `/documents/*`.** После успешного `PATCH /decide` (`action: "approve"`) Orchestrator создаёт документ в Registry и возвращает `document_id` в ответе. Дальнейшие операции над документом выполняются через `/api/v1/documents/{document_id}/*`. Маршрут `/api/v1/tasks/*` — внутренний (internal) и не должен использоваться UI напрямую.
+5. **Связь с `/documents/*`.** После успешного `PATCH /decide` (`action: "approve"`) Orchestrator создаёт документ в Registry и возвращает `document_id` в ответе. Дальнейшие операции над документом выполняются через `/api/v1/documents/{document_id}/*`. Маршрут `/api/v1/tasks/*` — read-only для admin-ролей, используется для мониторинга процессов.
 
 **Заголовки, ожидаемые Gateway на draft-эндпоинтах:**
 
