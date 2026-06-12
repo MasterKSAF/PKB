@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, Box, Button, IconButton, Paper, Stack, TextField, Typography } from '@mui/material';
-import { Eye, EyeOff, KeyRound, LogIn, Moon, Ship, Sun, UserRound } from 'lucide-react';
+import { Eye, EyeOff, KeyRound, LogIn, Ship, UserRound } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
 import { authApi } from '../utils/http';
 
@@ -9,10 +9,10 @@ const LOGIN_LIMITS = { min: 3, max: 64 };
 const PASSWORD_LIMITS = { min: 4, max: 64 };
 
 export const LoginScreen: React.FC = () => {
-  const { adminUsers, login, setThemeMode, themeMode, workMode } = useUIStore();
+  const { adminUsers, login, setWorkMode, themeMode, workMode } = useUIStore();
   const isLight = themeMode === 'light';
-  const lightShipBlue = '#0284c7';
-  const loginHint = workMode === 'demo' ? adminUsers[0]?.login ?? 'demo@example.com' : 'admin@example.com';
+  const lightLogoBlue = '#0284c7';
+  const isDemoMode = workMode === 'demo';
   const [loginValue, setLoginValue] = useState('');
   const [passwordValue, setPasswordValue] = useState(DEMO_PASSWORD);
   const [showPassword, setShowPassword] = useState(false);
@@ -30,6 +30,15 @@ export const LoginScreen: React.FC = () => {
   const passwordError =
     Boolean(trimmedPassword) && (trimmedPassword.length < PASSWORD_LIMITS.min || trimmedPassword.length > PASSWORD_LIMITS.max);
   const canSubmit = Boolean(trimmedLogin && trimmedPassword) && !loginError && !passwordError && !isSubmitting;
+
+  const handleWorkModeChange = (mode: 'demo' | 'prod') => {
+    if (mode === workMode) return;
+
+    setWorkMode(mode);
+    setLoginValue('');
+    setPasswordValue(mode === 'demo' ? DEMO_PASSWORD : '');
+    setAuthError('');
+  };
 
   const handleLogin = async () => {
     if (!canSubmit) return;
@@ -62,6 +71,7 @@ export const LoginScreen: React.FC = () => {
 
   return (
     <Box
+      className="login-screen"
       sx={{
         minHeight: '100vh',
         display: 'grid',
@@ -86,52 +96,83 @@ export const LoginScreen: React.FC = () => {
         }}
       >
         <Stack spacing={2.4}>
-          <Stack direction="row" spacing={1.7} sx={{ alignItems: 'center' }}>
-            <Box
-              sx={{
-                width: 58,
-                height: 58,
-                borderRadius: '19px',
-                display: 'grid',
-                placeItems: 'center',
-                color: '#dfeeff',
-                background: isLight
-                  ? 'linear-gradient(145deg, #f8fbff 0%, #e0f2fe 100%)'
-                  : 'linear-gradient(145deg, rgba(18, 67, 75, 0.95), rgba(11, 28, 34, 0.92) 74%, rgba(165, 140, 255, 0.20))',
-                border: isLight ? '1px solid rgba(2, 132, 199, 0.26)' : '1px solid rgba(132, 210, 213, 0.22)',
-                position: 'relative',
-                overflow: 'hidden',
-                boxShadow: isLight
-                  ? 'inset 0 1px 0 rgba(255,255,255,0.86), 0 10px 22px rgba(2,132,199,0.12)'
-                  : 'none',
-              }}
-            >
-              <Ship
-                size={30}
-                style={{
-                  position: 'relative',
-                  zIndex: 1,
-                  color: isLight ? lightShipBlue : '#98d9d8',
-                  filter: isLight ? 'drop-shadow(0 2px 5px rgba(2, 132, 199, 0.28))' : 'none',
-                }}
-              />
-            </Box>
-            <Box>
-              <Typography
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={1.6}
+            sx={{ alignItems: { xs: 'flex-start', sm: 'center' }, justifyContent: 'space-between' }}
+          >
+            <Stack direction="row" spacing={1.7} sx={{ alignItems: 'center' }}>
+              <Box
                 sx={{
-                  color: isLight ? lightShipBlue : '#98d9d8',
-                  fontSize: '1.5rem',
-                  lineHeight: 1.05,
-                  fontWeight: 700,
-                  fontFamily: '"Trebuchet MS", "Segoe UI", sans-serif',
+                  width: 58,
+                  height: 58,
+                  borderRadius: '19px',
+                  display: 'grid',
+                  placeItems: 'center',
+                  color: '#dfeeff',
+                  background: isLight
+                    ? 'linear-gradient(145deg, #f8fbff 0%, #e0f2fe 100%)'
+                    : 'linear-gradient(145deg, rgba(18, 67, 75, 0.95), rgba(11, 28, 34, 0.92) 74%, rgba(165, 140, 255, 0.20))',
+                  border: isLight ? '1px solid rgba(2, 132, 199, 0.26)' : '1px solid rgba(132, 210, 213, 0.22)',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  boxShadow: isLight
+                    ? 'inset 0 1px 0 rgba(255,255,255,0.86), 0 10px 22px rgba(2,132,199,0.12)'
+                    : 'none',
                 }}
               >
-                AI ассистент
-              </Typography>
-              <Typography sx={{ mt: 0.45, color: isLight ? '#0f4f5c' : 'rgba(209, 225, 225, 0.72)' }}>
-                Вход по логину и паролю. Роль подтягивается после авторизации.
-              </Typography>
-            </Box>
+                <Ship
+                  size={30}
+                  style={{
+                    position: 'relative',
+                    zIndex: 1,
+                    color: isLight ? lightLogoBlue : '#98d9d8',
+                    filter: isLight ? 'drop-shadow(0 2px 5px rgba(2, 132, 199, 0.28))' : 'none',
+                  }}
+                />
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', minHeight: 58 }}>
+                <Typography
+                  sx={{
+                    color: isLight ? lightLogoBlue : '#98d9d8',
+                    fontSize: '1.5rem',
+                    lineHeight: 1.05,
+                    fontWeight: 700,
+                    fontFamily: '"Trebuchet MS", "Segoe UI", sans-serif',
+                  }}
+                >
+                  AI ассистент
+                </Typography>
+              </Box>
+            </Stack>
+
+            <Stack
+              direction="row"
+              spacing={0.7}
+              sx={{
+                p: 0.35,
+                borderRadius: 2,
+                border: isLight ? '1px solid rgba(15, 23, 42, 0.12)' : '1px solid rgba(198, 216, 240, 0.18)',
+                bgcolor: isLight ? 'rgba(248, 250, 252, 0.92)' : 'rgba(8, 12, 18, 0.34)',
+              }}
+            >
+              <Button
+                size="small"
+                variant={!isDemoMode ? 'contained' : 'text'}
+                onClick={() => handleWorkModeChange('prod')}
+                sx={{ minWidth: 88, textTransform: 'none' }}
+              >
+                Gateway
+              </Button>
+              <Button
+                size="small"
+                variant={isDemoMode ? 'contained' : 'text'}
+                onClick={() => handleWorkModeChange('demo')}
+                sx={{ minWidth: 72, textTransform: 'none' }}
+              >
+                Demo
+              </Button>
+            </Stack>
           </Stack>
 
           <Stack spacing={1.2}>
@@ -140,11 +181,7 @@ export const LoginScreen: React.FC = () => {
               label="Логин"
               value={loginValue}
               error={loginError}
-              helperText={
-                loginError
-                  ? `Логин: ${LOGIN_LIMITS.min}-${LOGIN_LIMITS.max} символа`
-                  : `Например: ${loginHint}. Роль подтягивается после входа.`
-              }
+              helperText={loginError ? `Логин: ${LOGIN_LIMITS.min}-${LOGIN_LIMITS.max} символа` : undefined}
               onChange={(event) => {
                 setLoginValue(event.target.value);
                 setAuthError('');
@@ -162,13 +199,7 @@ export const LoginScreen: React.FC = () => {
               type={showPassword ? 'text' : 'password'}
               value={passwordValue}
               error={passwordError}
-              helperText={
-                passwordError
-                  ? `Пароль: ${PASSWORD_LIMITS.min}-${PASSWORD_LIMITS.max} символа`
-                  : workMode === 'demo'
-                    ? 'Для demo-профилей используйте пароль demo.'
-                    : 'Пароль передается в Gateway.'
-              }
+              helperText={passwordError ? `Пароль: ${PASSWORD_LIMITS.min}-${PASSWORD_LIMITS.max} символа` : undefined}
               onChange={(event) => {
                 setPasswordValue(event.target.value);
                 setAuthError('');
@@ -198,12 +229,6 @@ export const LoginScreen: React.FC = () => {
             />
           </Stack>
 
-          <Typography variant="caption" color="text.secondary" sx={{ mt: -0.15 }}>
-            {workMode === 'demo'
-              ? 'Demo-режим использует локальные учётные записи.'
-              : 'Gateway-режим читает текущего пользователя и роль через /auth/me.'}
-          </Typography>
-
           {authError && (
             <Alert severity="error" variant="outlined" sx={{ borderRadius: 2 }}>
               {authError}
@@ -220,14 +245,6 @@ export const LoginScreen: React.FC = () => {
               disabled={!canSubmit}
             >
               {isSubmitting ? 'Вход...' : 'Войти'}
-            </Button>
-            <Button
-              variant="outlined"
-              startIcon={themeMode === 'dark' ? <Moon size={16} /> : <Sun size={16} />}
-              onClick={() => setThemeMode(themeMode === 'dark' ? 'light' : 'dark')}
-              sx={{ minWidth: 132 }}
-            >
-              {themeMode === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
             </Button>
           </Stack>
 

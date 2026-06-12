@@ -16,9 +16,7 @@ import {
   MenuItem,
 } from '@mui/material';
 import {
-  Anchor,
   Ship,
-  Waves,
   MessageSquare,
   Search,
   FileText,
@@ -519,29 +517,35 @@ export const ModeSwitcher: React.FC = () => {
                 : 'inset 0 1px 0 rgba(255,255,255,0.12), 0 8px 22px rgba(0,0,0,0.24)',
             }}
           >
-            {isLight ? (
-              <Ship
-                size={30}
-                style={{
-                  position: 'relative',
-                  zIndex: 1,
-                  color: lightShipBlue,
-                  filter: 'drop-shadow(0 2px 5px rgba(2, 132, 199, 0.28))',
-                }}
-              />
-            ) : (
-              <>
-                <Waves size={34} style={{ position: 'absolute', bottom: 6, opacity: 0.45, color: '#78c1c1' }} />
-                <Anchor size={26} style={{ position: 'relative', zIndex: 1, color: '#98d9d8' }} />
-              </>
-            )}
+            <Ship
+              size={30}
+              style={{
+                position: 'relative',
+                zIndex: 1,
+                color: isLight ? lightShipBlue : '#98d9d8',
+                filter: isLight ? 'drop-shadow(0 2px 5px rgba(2, 132, 199, 0.28))' : 'none',
+              }}
+            />
           </Box>
 
-          <Box sx={{ minWidth: 0, flex: '1 1 auto', pt: 0.35, overflow: 'hidden' }}>
+          <Box
+            sx={{
+              minWidth: 0,
+              maxWidth: 'calc(100% - 70px)',
+              flex: '0 1 auto',
+              height: 54,
+              overflow: 'hidden',
+              display: 'inline-flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}
+          >
             <Box
               sx={{
                 display: 'inline-flex',
                 alignItems: 'center',
+                justifyContent: 'center',
                 maxWidth: '100%',
                 px: 1.15,
                 py: 0.55,
@@ -573,19 +577,21 @@ export const ModeSwitcher: React.FC = () => {
             </Box>
 
             <Typography
-              variant="caption"
+              variant="overline"
               sx={{
                 display: 'block',
-                mt: 0.8,
-                color: isLight ? '#075985' : 'rgba(209, 225, 225, 0.72)',
-                fontWeight: isLight ? 650 : 400,
+                color: isLight ? '#475569' : 'rgba(198, 208, 222, 0.84)',
+                letterSpacing: '0.16em',
+                fontSize: '0.68rem',
+                lineHeight: 1,
+                fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
                 textAlign: 'center',
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
               }}
             >
-              сверка с НСИ
+              СВЕРКА С НСИ
             </Typography>
           </Box>
         </Stack>
@@ -600,6 +606,7 @@ export const ModeSwitcher: React.FC = () => {
             color: isLight ? '#475569' : 'rgba(198, 208, 222, 0.84)',
             letterSpacing: '0.16em',
             fontSize: '0.68rem',
+            lineHeight: 1,
             fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
             textAlign: 'center',
           }}

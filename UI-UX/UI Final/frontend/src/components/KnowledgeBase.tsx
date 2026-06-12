@@ -18,15 +18,11 @@ import {
   Typography,
 } from '@mui/material';
 import {
-  AlertTriangle,
-  CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  Database,
   Download,
   FileText,
   Maximize2,
-  RefreshCw,
   Search,
   X,
 } from 'lucide-react';
@@ -42,7 +38,8 @@ type SectionDocument = Document & {
   mksOksCode?: string;
   okstuCode?: string;
 };
-type DocumentSort = 'updated_desc' | 'name_asc' | 'status';
+type DocumentSort = 'updated_desc' | 'name_asc' | 'type_asc';
+type SearchScope = 'all' | 'current' | `section:${string}`;
 type PreviewPage = { title: string; lines: string[] };
 
 const PANEL_SX = {
@@ -113,43 +110,18 @@ const buildPreviewPages = (doc: Document, citation?: Citation | null): PreviewPa
   },
 ];
 
-const getOcrStatusColor = (status: string) => {
-  switch (status) {
-    case 'Завершено':
-      return 'success';
-    case 'В обработке':
-      return 'warning';
-    case 'Ошибка':
-      return 'error';
-    default:
-      return 'default';
-  }
-};
-
-const getIndexStatusColor = (status: string) => (status === 'Индексировано' ? 'success' : 'warning');
-
 const sortDocuments = (documents: SectionDocument[], sort: DocumentSort) => {
-  const statusRank: Record<string, number> = {
-    'Завершено': 0,
-    'В обработке': 1,
-    'Ошибка': 2,
-    'Индексировано': 0,
-    'Ожидание': 1,
-  };
-
   const compareDate = (left: SectionDocument, right: SectionDocument) =>
     new Date(right.updatedAt || 0).getTime() - new Date(left.updatedAt || 0).getTime();
 
   const compareName = (left: SectionDocument, right: SectionDocument) => left.name.localeCompare(right.name, 'ru');
 
-  const compareStatus = (left: SectionDocument, right: SectionDocument) =>
-    (statusRank[left.ocrStatus] ?? 99) - (statusRank[right.ocrStatus] ?? 99) ||
-    (statusRank[left.indexStatus] ?? 99) - (statusRank[right.indexStatus] ?? 99) ||
-    compareName(left, right);
+  const compareType = (left: SectionDocument, right: SectionDocument) =>
+    left.type.localeCompare(right.type, 'ru') || compareName(left, right);
 
   return [...documents].sort((left, right) => {
     if (sort === 'name_asc') return compareName(left, right);
-    if (sort === 'status') return compareStatus(left, right);
+    if (sort === 'type_asc') return compareType(left, right);
     return compareDate(left, right);
   });
 };
@@ -159,6 +131,39 @@ const normalizeClassifierToken = (value?: string | null) => String(value ?? '').
 const classifierTokenMatches = (documentToken: string, sectionToken: string) => {
   if (!documentToken || !sectionToken) return false;
   return documentToken === sectionToken || documentToken.startsWith(`${sectionToken}.`);
+};
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const countTextMatches = (text: string, query: string) => {
+  const normalized = query.trim();
+  if (!normalized) return 0;
+  return text.match(new RegExp(escapeRegExp(normalized), 'gi'))?.length ?? 0;
+};
+
+const renderHighlightedText = (text: string, query: string, isLight: boolean) => {
+  const normalized = query.trim();
+  if (!normalized) return text;
+
+  const parts = text.split(new RegExp(`(${escapeRegExp(normalized)})`, 'gi'));
+  return parts.map((part, index) =>
+    part.toLowerCase() === normalized.toLowerCase() ? (
+      <Box
+        key={`${part}-${index}`}
+        component="mark"
+        sx={{
+          px: 0.25,
+          borderRadius: 0.4,
+          bgcolor: isLight ? 'rgba(250, 204, 21, 0.45)' : 'rgba(250, 204, 21, 0.35)',
+          color: 'inherit',
+        }}
+      >
+        {part}
+      </Box>
+    ) : (
+      part
+    ),
+  );
 };
 
 const matchSectionDocuments = (section: KnowledgeSection, documents: SectionDocument[]) => {
@@ -187,6 +192,8 @@ export const KnowledgeBase: React.FC = () => {
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
   const [previewPageIndex, setPreviewPageIndex] = useState(0);
   const [knowledgeSearch, setKnowledgeSearch] = useState('');
+  const [knowledgeSearchScope, setKnowledgeSearchScope] = useState<SearchScope>('all');
+  const [previewDocumentSearch, setPreviewDocumentSearch] = useState('');
 
   const documentsQuery = useQuery({
     queryKey: ['gateway-documents', workMode],
@@ -255,6 +262,20 @@ export const KnowledgeBase: React.FC = () => {
   }, [knowledgeSections, selectedSectionId]);
 
   useEffect(() => {
+    if (knowledgeSearchScope === 'current' && !selectedSectionId) {
+      setKnowledgeSearchScope('all');
+      return;
+    }
+
+    if (
+      knowledgeSearchScope.startsWith('section:') &&
+      !knowledgeSections.some((section) => `section:${section.id}` === knowledgeSearchScope)
+    ) {
+      setKnowledgeSearchScope('all');
+    }
+  }, [knowledgeSearchScope, knowledgeSections, selectedSectionId]);
+
+  useEffect(() => {
     if (activeTab === 'documents') return;
 
     setSelectedSectionId(null);
@@ -267,6 +288,14 @@ export const KnowledgeBase: React.FC = () => {
 
   const selectedSection: KnowledgeSection | null =
     knowledgeSections.find((section) => section.id === selectedSectionId) ?? null;
+  const searchScopeSectionId =
+    knowledgeSearchScope === 'current'
+      ? selectedSectionId
+      : knowledgeSearchScope.startsWith('section:')
+        ? knowledgeSearchScope.replace('section:', '')
+        : null;
+  const searchScopeSection =
+    searchScopeSectionId ? knowledgeSections.find((section) => section.id === searchScopeSectionId) ?? null : null;
 
   const sectionDocuments = useMemo(() => {
     if (!selectedSection) return [];
@@ -290,24 +319,76 @@ export const KnowledgeBase: React.FC = () => {
       ].some((value) => String(value).toLowerCase().includes(normalized)),
     );
   }, [normalizedKnowledgeSearch, sectionDocuments]);
-  const knowledgeSearchResults = Array.isArray(knowledgeSearchQuery.data) ? knowledgeSearchQuery.data : [];
+  const displayedSectionDocuments = useMemo(() => {
+    if (!selectedDocument || visibleSectionDocuments.some((doc) => doc.id === selectedDocument.id)) {
+      return visibleSectionDocuments;
+    }
 
-  const handleOpenSection = (sectionId: string) => {
+    return [selectedDocument, ...visibleSectionDocuments];
+  }, [selectedDocument, visibleSectionDocuments]);
+  const knowledgeSearchResults = Array.isArray(knowledgeSearchQuery.data) ? knowledgeSearchQuery.data : [];
+  const scopedKnowledgeSearchResults = useMemo(() => {
+    if (!searchScopeSection) return knowledgeSearchResults;
+
+    const scopedDocuments = matchSectionDocuments(searchScopeSection, rawDocuments);
+    const scopedDocumentIds = new Set(scopedDocuments.map((document) => document.id));
+    const sectionTokens = [searchScopeSection.id, searchScopeSection.title].map(normalizeClassifierToken).filter(Boolean);
+
+    return knowledgeSearchResults.filter((item: any) => {
+      const documentId = String(item.documentId ?? item.document_id ?? item.id ?? '');
+      if (scopedDocumentIds.has(documentId)) return true;
+
+      const itemTokens = [
+        item.sectionId,
+        item.section_id,
+        item.group,
+        item.classifierCode,
+        item.classifier_code,
+        item.mksOksCode,
+        item.mks_oks_code,
+        item.okstuCode,
+        item.okstu_code,
+      ]
+        .map(normalizeClassifierToken)
+        .filter(Boolean);
+
+      return sectionTokens.some((sectionToken) =>
+        itemTokens.some((itemToken) => classifierTokenMatches(itemToken, sectionToken)),
+      );
+    });
+  }, [knowledgeSearchResults, rawDocuments, searchScopeSection]);
+
+  const handleOpenSection = (sectionId: string, scope: SearchScope = 'current') => {
     setSelectedSectionId(sectionId);
+    setKnowledgeSearchScope(scope);
     setSelectedDocument(null);
     setPreviewCitation(null);
     setPreviewError('');
     setPreviewDialogOpen(false);
     setPreviewPageIndex(0);
+    setPreviewDocumentSearch('');
   };
 
   const handleBackToSections = () => {
     setSelectedSectionId(null);
+    setKnowledgeSearchScope('all');
     setSelectedDocument(null);
     setPreviewCitation(null);
     setPreviewError('');
     setPreviewDialogOpen(false);
     setPreviewPageIndex(0);
+    setPreviewDocumentSearch('');
+  };
+
+  const handleSearchScopeChange = (scope: SearchScope) => {
+    setKnowledgeSearchScope(scope);
+
+    if (scope.startsWith('section:')) {
+      const sectionId = scope.replace('section:', '');
+      if (sectionId !== selectedSectionId) {
+        handleOpenSection(sectionId, scope);
+      }
+    }
   };
 
   useEffect(() => {
@@ -320,28 +401,35 @@ export const KnowledgeBase: React.FC = () => {
       return;
     }
 
-    if (selectedDocument && !visibleSectionDocuments.some((doc) => doc.id === selectedDocument.id)) {
+    if (selectedDocument && !displayedSectionDocuments.some((doc) => doc.id === selectedDocument.id)) {
       setSelectedDocument(null);
       setPreviewCitation(null);
       setPreviewError('');
       setPreviewDialogOpen(false);
       setPreviewPageIndex(0);
     }
-  }, [selectedDocument, selectedSection, visibleSectionDocuments]);
+  }, [displayedSectionDocuments, selectedDocument, selectedSection]);
 
-  const handleOpenPreview = useCallback(async (document: SectionDocument) => {
-    const baseCitation = createDocumentCitation(document);
+  const handleOpenPreview = useCallback(async (document: SectionDocument, initialCitation?: Citation) => {
+    const baseCitation = initialCitation ?? createDocumentCitation(document);
 
     setSelectedDocument(document);
     setPreviewCitation(baseCitation);
     setPreviewError('');
     setPreviewLoading(workMode === 'prod');
+    setPreviewDocumentSearch('');
 
     if (workMode !== 'prod') return;
 
     try {
       const citation = await sourceApi.preview(baseCitation, 'document');
-      setPreviewCitation(citation);
+      setPreviewCitation({
+        ...citation,
+        text:
+          initialCitation?.text && !citation.text.includes(initialCitation.text)
+            ? `${initialCitation.text}\n\n${citation.text}`
+            : citation.text,
+      });
 
       if (!citation.documentUrl) {
         setPreviewError('Источник не вернул ссылку на файл. Показываем карточку документа из UI.');
@@ -359,54 +447,39 @@ export const KnowledgeBase: React.FC = () => {
 
     if (!document) return;
 
-    const sectionId = document.sectionId ?? document.group;
-    if (sectionId && knowledgeSections.some((section) => section.id === sectionId)) {
-      setSelectedSectionId(sectionId);
+    const matchingSection =
+      knowledgeSections.find((section) => matchSectionDocuments(section, [document]).some((doc) => doc.id === document.id)) ??
+      searchScopeSection ??
+      selectedSection ??
+      knowledgeSections[0] ??
+      null;
+
+    if (matchingSection) {
+      setSelectedSectionId(matchingSection.id);
+      setKnowledgeSearchScope(`section:${matchingSection.id}`);
     }
 
-    void handleOpenPreview(document);
+    const resultText = item.fragment ?? item.content ?? item.excerpt ?? item.text;
+    const resultCitation: Citation = {
+      ...createDocumentCitation(document),
+      id: `search-${document.id}`,
+      section: item.section ?? item.clause ?? 'Найденный фрагмент',
+      page: Number(item.page ?? 1),
+      text: resultText ? String(resultText) : createDocumentCitation(document).text,
+      pagePreviewUrl: item.pagePreviewUrl ?? item.page_preview_url,
+      documentUrl: item.documentUrl ?? item.document_url,
+    };
+
+    void handleOpenPreview(document, resultCitation);
   };
-
-  const completedOcrCount = rawDocuments.filter((doc) => doc.ocrStatus === 'Завершено').length;
-  const indexedCount = rawDocuments.filter((doc) => doc.indexStatus === 'Индексировано').length;
-  const problemCount = rawDocuments.filter((doc) => doc.ocrStatus !== 'Завершено' || doc.indexStatus !== 'Индексировано').length;
-
-  const stats = [
-    {
-      label: 'Документов',
-      value: `${rawDocuments.length}`,
-      note: 'в реестре',
-      icon: <FileText size={18} />,
-      color: '#d9b783',
-    },
-    {
-      label: 'OCR завершен',
-      value: `${completedOcrCount}`,
-      note: 'готово к просмотру',
-      icon: <CheckCircle2 size={18} />,
-      color: '#79c58b',
-    },
-    {
-      label: 'Индексировано',
-      value: `${indexedCount}`,
-      note: 'для поиска',
-      icon: <RefreshCw size={18} />,
-      color: '#9fb6d8',
-    },
-    {
-      label: 'Требуют внимания',
-      value: `${problemCount}`,
-      note: 'нужна проверка',
-      icon: <AlertTriangle size={18} />,
-      color: '#e08c74',
-    },
-  ];
 
   const previewPages = useMemo(
     () => (selectedDocument ? buildPreviewPages(selectedDocument, previewCitation) : []),
     [previewCitation, selectedDocument],
   );
   const currentPreviewPage = previewPages[Math.min(previewPageIndex, Math.max(previewPages.length - 1, 0))] ?? null;
+  const selectedDocumentPreviewText = selectedDocument ? buildDocumentPreviewText(selectedDocument, previewCitation) : '';
+  const previewSearchMatchCount = countTextMatches(selectedDocumentPreviewText, previewDocumentSearch);
   const gatewayDocumentDetail = documentDetailQuery.data;
   const gatewayDocumentStatus = documentStatusQuery.data;
   const gatewayDocumentHistory = documentHistoryQuery.data ?? [];
@@ -433,47 +506,92 @@ export const KnowledgeBase: React.FC = () => {
   return (
     <Container maxWidth="xl" sx={{ py: 3 }}>
       <Stack spacing={2.4}>
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-          {stats.map((stat) => (
-            <Box key={stat.label} sx={{ flex: '1 1 180px' }}>
-              <Paper
-                variant="outlined"
+        <Paper variant="outlined" sx={{ p: 1.35, borderRadius: 2.4, ...panelSx }}>
+          <Stack spacing={1.2}>
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.2} sx={{ alignItems: { md: 'center' } }}>
+              <TextField
+                fullWidth
+                size="small"
+                label="Поиск по базе знаний"
+                value={knowledgeSearch}
+                onChange={(event) => setKnowledgeSearch(event.target.value)}
+                placeholder="Название документа, код, раздел или фраза"
+                slotProps={{
+                  input: {
+                    startAdornment: <Search size={16} style={{ marginRight: 8, opacity: 0.72 }} />,
+                  },
+                }}
+              />
+              <TextField
+                select
+                size="small"
+                label="Где искать"
+                value={knowledgeSearchScope}
+                onChange={(event) => handleSearchScopeChange(event.target.value as SearchScope)}
+                sx={{ minWidth: { xs: '100%', md: 240 } }}
+              >
+                <MenuItem value="all">Везде</MenuItem>
+                {selectedSection && <MenuItem value="current">Текущий раздел</MenuItem>}
+                {knowledgeSections.map((section) => (
+                  <MenuItem key={section.id} value={`section:${section.id}`}>
+                    {section.title}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Stack>
+
+            {normalizedKnowledgeSearch.length > 0 && normalizedKnowledgeSearch.length < 3 && (
+              <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
+                Для поиска через Gateway нужно минимум 3 символа.
+              </Alert>
+            )}
+
+            {knowledgeSearchQuery.isError && (
+              <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2 }}>
+                Gateway не вернул результаты поиска по базе знаний.
+              </Alert>
+            )}
+
+            {normalizedKnowledgeSearch.length >= 3 && scopedKnowledgeSearchResults.length > 0 && (
+              <Box
                 sx={{
-                  p: 1.6,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1.4,
-                  minHeight: 92,
-                  borderRadius: 2.2,
-                  ...panelSx,
+                  display: 'grid',
+                  gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)', xl: 'repeat(3, 1fr)' },
+                  gap: 0.9,
                 }}
               >
-                <Box
-                  sx={{
-                    p: 0.9,
-                    borderRadius: 1.6,
-                    bgcolor: 'rgba(255,255,255,0.03)',
-                    color: stat.color,
-                    border: '1.5px solid rgba(198, 216, 240, 0.22)',
-                  }}
-                >
-                  {stat.icon}
-                </Box>
-                <Box sx={{ minWidth: 0 }}>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.25 }}>
-                    {stat.label}
-                  </Typography>
-                  <Typography variant="h6" sx={{ lineHeight: 1.05, fontWeight: 600 }}>
-                    {stat.value}
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: isLight ? 'rgba(71, 85, 105, 0.80)' : 'rgba(171, 183, 201, 0.72)' }}>
-                    {stat.note}
-                  </Typography>
-                </Box>
-              </Paper>
-            </Box>
-          ))}
-        </Box>
+                {scopedKnowledgeSearchResults.slice(0, 6).map((item: any, index: number) => {
+                  const documentId = String(item.documentId ?? item.document_id ?? item.id ?? '');
+                  const canOpen = rawDocuments.some((doc) => doc.id === documentId || doc.name === item.name);
+
+                  return (
+                    <Paper
+                      key={item.id ?? `${documentId}-${index}`}
+                      variant="outlined"
+                      onClick={() => {
+                        if (canOpen) handleOpenSearchResult(item);
+                      }}
+                      sx={{
+                        p: 1,
+                        borderRadius: 1.6,
+                        cursor: canOpen ? 'pointer' : 'default',
+                        bgcolor: isLight ? 'rgba(248,250,252,0.72)' : 'rgba(255,255,255,0.025)',
+                        borderColor: isLight ? 'rgba(14,116,144,0.18)' : 'rgba(198,216,240,0.18)',
+                      }}
+                    >
+                      <Typography sx={{ fontSize: '0.84rem', fontWeight: 560, lineHeight: 1.3 }}>
+                        {item.name ?? item.document ?? item.document_title ?? 'Документ базы знаний'}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.35, lineHeight: 1.35 }}>
+                        {item.fragment ?? item.content ?? item.section ?? 'Фрагмент найден Gateway-поиском.'}
+                      </Typography>
+                    </Paper>
+                  );
+                })}
+              </Box>
+            )}
+          </Stack>
+        </Paper>
 
         {(documentsQuery.isError || knowledgeSectionsQuery.isError) && (
           <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2 }}>
@@ -486,92 +604,12 @@ export const KnowledgeBase: React.FC = () => {
         )}
 
         {!selectedSection && (
-        <Paper variant="outlined" sx={{ p: 1.8, borderRadius: 3, ...panelSx }}>
-          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.2} sx={{ alignItems: { md: 'center' }, mb: 1.4 }}>
-            <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flex: 1 }}>
-              <Database size={18} color={isLight ? '#0284c7' : '#98d9d8'} />
-              <Box>
-                <Typography sx={{ fontWeight: 560, color: isLight ? '#0f172a' : 'rgba(233, 237, 243, 0.92)' }}>
-                  База знаний по разделам
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Нажмите на раздел, чтобы открыть его документы и предпросмотр.
-                </Typography>
-              </Box>
-            </Stack>
-            <Chip size="small" label={`${knowledgeSections.length} разделов`} variant="outlined" />
-          </Stack>
-
-          <Stack spacing={1.2} sx={{ mb: 1.4 }}>
-            <TextField
-              size="small"
-              label="Поиск по базе знаний"
-              value={knowledgeSearch}
-              onChange={(event) => setKnowledgeSearch(event.target.value)}
-              placeholder="Введите документ, код, раздел или фрагмент"
-              slotProps={{
-                input: {
-                  startAdornment: <Search size={16} style={{ marginRight: 8, opacity: 0.72 }} />,
-                },
-              }}
-            />
-            {normalizedKnowledgeSearch.length > 0 && normalizedKnowledgeSearch.length < 3 && (
-              <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
-                Для поиска через Gateway нужно минимум 3 символа. Внутри открытого раздела список фильтруется сразу.
-              </Alert>
-            )}
-            {knowledgeSearchQuery.isError && (
-              <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2 }}>
-                Gateway не вернул результаты поиска по базе знаний.
-              </Alert>
-            )}
-            {normalizedKnowledgeSearch.length >= 3 && knowledgeSearchResults.length > 0 && (
-              <Paper variant="outlined" sx={{ p: 1.2, borderRadius: 2.2, ...panelSx }}>
-                <Stack spacing={1}>
-                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Typography sx={{ fontWeight: 560 }}>Результаты поиска</Typography>
-                    <Chip size="small" label={`${knowledgeSearchResults.length}`} variant="outlined" />
-                  </Stack>
-                  <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' }, gap: 1 }}>
-                    {knowledgeSearchResults.slice(0, 6).map((item: any, index: number) => {
-                      const documentId = String(item.documentId ?? item.document_id ?? item.id ?? '');
-                      const canOpen = rawDocuments.some((doc) => doc.id === documentId || doc.name === item.name);
-
-                      return (
-                        <Paper
-                          key={item.id ?? `${documentId}-${index}`}
-                          variant="outlined"
-                          onClick={() => {
-                            if (canOpen) handleOpenSearchResult(item);
-                          }}
-                          sx={{
-                            p: 1,
-                            borderRadius: 1.8,
-                            cursor: canOpen ? 'pointer' : 'default',
-                            bgcolor: isLight ? 'rgba(248,250,252,0.72)' : 'rgba(255,255,255,0.025)',
-                            borderColor: isLight ? 'rgba(14,116,144,0.18)' : 'rgba(198,216,240,0.20)',
-                          }}
-                        >
-                          <Typography sx={{ fontSize: '0.84rem', fontWeight: 560, lineHeight: 1.3 }}>
-                            {item.name ?? item.document ?? 'Документ базы знаний'}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.35, lineHeight: 1.35 }}>
-                            {item.fragment ?? item.section ?? 'Фрагмент найден Gateway-поиском.'}
-                          </Typography>
-                        </Paper>
-                      );
-                    })}
-                  </Box>
-                </Stack>
-              </Paper>
-            )}
-          </Stack>
-
+        <Paper variant="outlined" sx={{ p: 1.6, borderRadius: 3, ...panelSx }}>
           <Box
             sx={{
               display: 'grid',
               gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)', xl: 'repeat(6, 1fr)' },
-              gap: 1,
+              gap: 1.45,
             }}
           >
             {knowledgeSections.map((section) => {
@@ -582,9 +620,17 @@ export const KnowledgeBase: React.FC = () => {
                   key={section.id}
                   variant="outlined"
                   onClick={() => handleOpenSection(section.id)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      handleOpenSection(section.id);
+                    }
+                  }}
                   sx={{
-                    p: 1.1,
-                    minHeight: 92,
+                    p: 1.3,
+                    minHeight: 104,
                     borderRadius: 2.1,
                     cursor: 'pointer',
                     bgcolor: isLight ? 'rgba(248, 250, 252, 0.76)' : 'rgba(255,255,255,0.028)',
@@ -610,22 +656,30 @@ export const KnowledgeBase: React.FC = () => {
                   <Stack spacing={0.7} sx={{ height: '100%' }}>
                     <Stack direction="row" spacing={0.7} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
                       <Stack direction="row" spacing={0.7} sx={{ alignItems: 'center', minWidth: 0 }}>
-                        <FileText size={15} color="#d9b783" />
-                        <Typography sx={{ fontSize: '0.8rem', fontWeight: 560, lineHeight: 1.2, minWidth: 0 }}>
+                        <FileText size={15} color={isLight ? '#0284c7' : '#98d9d8'} />
+                        <Typography
+                          sx={{
+                            fontSize: '0.86rem',
+                            fontWeight: 650,
+                            lineHeight: 1.2,
+                            minWidth: 0,
+                            color: isLight ? '#075985' : '#98d9d8',
+                          }}
+                        >
                           {section.title}
                         </Typography>
                       </Stack>
                       {isSelected && <Chip size="small" label="Открыт" variant="outlined" />}
                     </Stack>
-                    <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.32 }}>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        lineHeight: 1.38,
+                        color: isLight ? 'rgba(71, 85, 105, 0.68)' : 'rgba(203, 213, 225, 0.58)',
+                      }}
+                    >
                       {section.description}
                     </Typography>
-                    <Chip
-                      size="small"
-                      label={`${section.documents} док.`}
-                      variant="outlined"
-                      sx={{ mt: 'auto', alignSelf: 'flex-start', height: 20, fontSize: '0.66rem' }}
-                    />
                   </Stack>
                 </Paper>
               );
@@ -641,18 +695,14 @@ export const KnowledgeBase: React.FC = () => {
               <Button variant="outlined" startIcon={<ChevronLeft size={16} />} onClick={handleBackToSections}>
                 К разделам
               </Button>
-              <Chip size="small" label={`${sectionDocuments.length} док.`} variant="outlined" />
             </Stack>
 
             <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.2} sx={{ alignItems: { md: 'center' } }}>
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flex: 1, minWidth: 0 }}>
                 <FileText size={18} color={isLight ? '#0284c7' : '#98d9d8'} />
                 <Box sx={{ minWidth: 0 }}>
-                  <Typography sx={{ fontWeight: 560, color: isLight ? '#0f172a' : 'rgba(233, 237, 243, 0.92)' }}>
+                  <Typography sx={{ fontWeight: 650, color: isLight ? '#075985' : '#98d9d8' }}>
                     {selectedSection?.title ?? 'Раздел'}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Список документов раздела, отсортированный так, как удобно смотреть.
                   </Typography>
                 </Box>
               </Stack>
@@ -667,30 +717,41 @@ export const KnowledgeBase: React.FC = () => {
               >
                 <MenuItem value="updated_desc">По обновлению</MenuItem>
                 <MenuItem value="name_asc">По названию</MenuItem>
-                <MenuItem value="status">По статусу</MenuItem>
+                <MenuItem value="type_asc">По типу</MenuItem>
               </TextField>
             </Stack>
 
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: '0.9fr 1.1fr' }, gap: 2.4 }}>
-              <Paper variant="outlined" sx={{ p: 1.25, borderRadius: 2.2, ...documentListSx }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: 'minmax(260px, 360px) minmax(0, 1fr)' }, gap: 2 }}>
+              <Paper variant="outlined" sx={{ p: 1, borderRadius: 2.2, ...documentListSx }}>
                 <Stack spacing={1}>
                   <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
                     <Typography sx={{ fontWeight: 560 }}>Документы</Typography>
-                    <Chip size="small" label={`${visibleSectionDocuments.length}`} variant="outlined" />
+                    <Chip size="small" label={`${displayedSectionDocuments.length}`} variant="outlined" />
                   </Stack>
 
-                  <Stack divider={<Divider flexItem sx={{ borderColor: 'rgba(198, 214, 236, 0.14)' }} />}>
-                    {visibleSectionDocuments.map((document) => {
+                  <Stack
+                    divider={<Divider flexItem sx={{ borderColor: 'rgba(198, 214, 236, 0.14)' }} />}
+                    sx={{ maxHeight: { xs: 320, lg: 560 }, overflowY: 'auto', pr: 0.4 }}
+                  >
+                    {displayedSectionDocuments.map((document) => {
                       const isSelected = selectedDocument?.id === document.id;
 
                       return (
                         <Box
                           key={document.id}
                           onClick={() => void handleOpenPreview(document)}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              void handleOpenPreview(document);
+                            }
+                          }}
                           sx={{
-                            p: 1.15,
+                            p: 0.8,
                             cursor: 'pointer',
-                            borderRadius: 1.8,
+                            borderRadius: 1.4,
                             bgcolor: isSelected ? 'rgba(123, 166, 227, 0.12)' : 'transparent',
                             transition: 'background-color 160ms ease, transform 160ms ease',
                             '&:hover': {
@@ -699,38 +760,25 @@ export const KnowledgeBase: React.FC = () => {
                             },
                           }}
                         >
-                          <Stack spacing={0.95}>
-                            <Stack direction="row" spacing={1} sx={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                              <Box sx={{ minWidth: 0 }}>
-                                <Typography sx={{ fontWeight: 560, lineHeight: 1.35 }}>{document.name}</Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                  {document.updatedAt || 'не указано'}
-                                </Typography>
-                              </Box>
-                              <Chip label={document.version} size="small" variant="outlined" />
-                            </Stack>
-
-                            <Stack direction="row" spacing={0.6} useFlexGap sx={{ flexWrap: 'wrap' }}>
-                              <Chip label={document.type} size="small" variant="outlined" />
-                              <Chip
-                                label={document.ocrStatus}
-                                size="small"
-                                color={getOcrStatusColor(document.ocrStatus) as 'success' | 'warning' | 'error' | 'default'}
-                                variant="outlined"
-                              />
-                              <Chip
-                                label={document.indexStatus}
-                                size="small"
-                                color={getIndexStatusColor(document.indexStatus) as 'success' | 'warning'}
-                                variant="outlined"
-                              />
-                            </Stack>
-                          </Stack>
+                          <Typography sx={{ fontSize: '0.88rem', fontWeight: 560, lineHeight: 1.35 }}>
+                            {document.name}
+                          </Typography>
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              display: 'block',
+                              mt: 0.25,
+                              color: isLight ? 'rgba(71, 85, 105, 0.58)' : 'rgba(203, 213, 225, 0.48)',
+                              lineHeight: 1.25,
+                            }}
+                          >
+                            {document.type || document.source || document.id}
+                          </Typography>
                         </Box>
                       );
                     })}
 
-                    {visibleSectionDocuments.length === 0 && (
+                    {displayedSectionDocuments.length === 0 && (
                       <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
                         {normalizedKnowledgeSearch ? 'По этому запросу в разделе ничего не найдено.' : 'Для этого раздела пока нет документов.'}
                       </Alert>
@@ -747,7 +795,7 @@ export const KnowledgeBase: React.FC = () => {
                         {selectedDocument?.name ?? 'Предпросмотр'}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        {selectedDocument ? 'Карточка документа и быстрые действия.' : 'Выберите документ слева.'}
+                        {selectedDocument ? 'Предпросмотр и быстрые действия.' : 'Выберите документ слева.'}
                       </Typography>
                     </Box>
                     {selectedDocument && (
@@ -782,11 +830,28 @@ export const KnowledgeBase: React.FC = () => {
 
                   {selectedDocument ? (
                     <>
-                      <Stack direction="row" spacing={0.6} useFlexGap sx={{ flexWrap: 'wrap' }}>
-                        <Chip label={`ID: ${selectedDocument.id}`} variant="outlined" />
-                        <Chip label={`Версия: ${selectedDocument.version}`} variant="outlined" />
-                        <Chip label={`OCR: ${selectedDocument.ocrStatus}`} variant="outlined" />
-                        <Chip label={`Индекс: ${selectedDocument.indexStatus}`} variant="outlined" />
+                      <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} sx={{ alignItems: { md: 'center' } }}>
+                        <TextField
+                          fullWidth
+                          size="small"
+                          label="Поиск по открытому документу"
+                          value={previewDocumentSearch}
+                          onChange={(event) => setPreviewDocumentSearch(event.target.value)}
+                          placeholder="Слово или фраза"
+                          slotProps={{
+                            input: {
+                              startAdornment: <Search size={16} style={{ marginRight: 8, opacity: 0.72 }} />,
+                            },
+                          }}
+                        />
+                        {previewDocumentSearch.trim() && (
+                          <Chip
+                            size="small"
+                            variant="outlined"
+                            label={previewSearchMatchCount ? `${previewSearchMatchCount} совп.` : 'Нет совпадений'}
+                            sx={{ minWidth: 120 }}
+                          />
+                        )}
                       </Stack>
 
                       {previewError && (
@@ -820,7 +885,7 @@ export const KnowledgeBase: React.FC = () => {
                             </Typography>
 
                             <Typography component="pre" sx={{ m: 0, whiteSpace: 'pre-wrap', lineHeight: 1.75, fontFamily: 'inherit' }}>
-                              {buildDocumentPreviewText(selectedDocument, previewCitation)}
+                              {renderHighlightedText(selectedDocumentPreviewText, previewDocumentSearch, isLight)}
                             </Typography>
 
                             <Stack direction="row" sx={{ justifyContent: 'center', pt: 0.6 }}>
@@ -986,6 +1051,30 @@ export const KnowledgeBase: React.FC = () => {
                 </Alert>
               )}
 
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} sx={{ alignItems: { md: 'center' } }}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  label="Поиск по открытому документу"
+                  value={previewDocumentSearch}
+                  onChange={(event) => setPreviewDocumentSearch(event.target.value)}
+                  placeholder="Слово или фраза"
+                  slotProps={{
+                    input: {
+                      startAdornment: <Search size={16} style={{ marginRight: 8, opacity: 0.72 }} />,
+                    },
+                  }}
+                />
+                {previewDocumentSearch.trim() && (
+                  <Chip
+                    size="small"
+                    variant="outlined"
+                    label={previewSearchMatchCount ? `${previewSearchMatchCount} совп.` : 'Нет совпадений'}
+                    sx={{ minWidth: 120 }}
+                  />
+                )}
+              </Stack>
+
               <Paper
                 variant="outlined"
                 sx={{
@@ -1008,7 +1097,7 @@ export const KnowledgeBase: React.FC = () => {
                       </Typography>
                     </Box>
                     <Typography component="pre" sx={{ m: 0, whiteSpace: 'pre-wrap', lineHeight: 1.75, fontFamily: 'inherit' }}>
-                      {currentPreviewPage.lines.join('\n')}
+                      {renderHighlightedText(currentPreviewPage.lines.join('\n'), previewDocumentSearch, isLight)}
                     </Typography>
                   </Stack>
                 )}

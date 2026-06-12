@@ -7,6 +7,14 @@ import type { ChatMessage } from '../utils/mockData';
 
 export type { AppTab, UserRole };
 
+const getInitialThemeMode = (): 'dark' | 'light' => {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return 'dark';
+  }
+
+  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+};
+
 export interface AdminAuditLogItem {
   id: string;
   time: string;
@@ -78,9 +86,9 @@ export const useUIStore = create<UIState>((set) => ({
   setCurrentGatewaySessionId: (currentGatewaySessionId) => set({ currentGatewaySessionId }),
   activeProjectId: 'project-223m',
   setActiveProjectId: (activeProjectId) => set({ activeProjectId }),
-  themeMode: 'dark',
+  themeMode: getInitialThemeMode(),
   setThemeMode: (themeMode) => set({ themeMode }),
-  workMode: 'demo',
+  workMode: 'prod',
   setWorkMode: (workMode) =>
     set({
       workMode,

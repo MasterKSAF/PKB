@@ -20,7 +20,6 @@ import {
 import {
   Send,
   User,
-  Anchor,
   Ship,
   ChevronDown,
   ChevronLeft,
@@ -401,7 +400,7 @@ export const Chat: React.FC = () => {
                             : 'inset 0 1px 0 rgba(255,255,255,0.08), 0 6px 14px rgba(0,0,0,0.16)',
                         }}
                       >
-                        {isLight ? <Ship size={18} /> : <Anchor size={18} />}
+                        <Ship size={18} />
                       </Avatar>
                     )}
 
@@ -702,7 +701,7 @@ export const Chat: React.FC = () => {
                       border: isLight ? '1px solid rgba(2, 132, 199, 0.36)' : 'none',
                     }}
                   >
-                    {isLight ? <Ship size={18} /> : <Anchor size={18} />}
+                    <Ship size={18} />
                   </Avatar>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <CircularProgress size={16} thickness={5} />

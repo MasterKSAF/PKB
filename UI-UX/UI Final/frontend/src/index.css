@@ -1,7 +1,46 @@
 @import "tailwindcss";
 
+:root {
+  --pkb-scrollbar-thumb: rgba(112, 128, 150, 0.42);
+  --pkb-scrollbar-track: rgba(8, 12, 18, 0.28);
+}
+
 body[data-pkb-theme='light'] {
+  --pkb-scrollbar-thumb: rgba(71, 85, 105, 0.34);
+  --pkb-scrollbar-track: rgba(15, 23, 42, 0.07);
   background: #f1f5f9;
+}
+
+body[data-pkb-theme='dark'] {
+  --pkb-scrollbar-thumb: rgba(112, 128, 150, 0.42);
+  --pkb-scrollbar-track: rgba(8, 12, 18, 0.28);
+}
+
+body,
+body * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--pkb-scrollbar-thumb) var(--pkb-scrollbar-track);
+}
+
+body::-webkit-scrollbar,
+body *::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+body::-webkit-scrollbar-track,
+body *::-webkit-scrollbar-track {
+  margin: 8px;
+  background: var(--pkb-scrollbar-track);
+  border-radius: 999px;
+}
+
+body::-webkit-scrollbar-thumb,
+body *::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: var(--pkb-scrollbar-thumb);
+  border: 2px solid transparent;
+  background-clip: content-box;
 }
 
 body[data-pkb-theme='light'] .MuiPaper-root {
@@ -44,6 +83,45 @@ body[data-pkb-theme='light'] .MuiTypography-colorTextSecondary {
 
 body[data-pkb-theme='light'] .MuiOutlinedInput-root {
   background-color: #f8fafc;
+}
+
+body[data-pkb-theme='light'] .login-screen .MuiOutlinedInput-root,
+body[data-pkb-theme='light'] .login-screen .MuiOutlinedInput-root.Mui-focused,
+body[data-pkb-theme='light'] .login-screen .MuiOutlinedInput-root:hover {
+  background-color: transparent !important;
+}
+
+body[data-pkb-theme='dark'] .login-screen .MuiOutlinedInput-root,
+body[data-pkb-theme='dark'] .login-screen .MuiOutlinedInput-root.Mui-focused,
+body[data-pkb-theme='dark'] .login-screen .MuiOutlinedInput-root:hover {
+  background-color: transparent !important;
+}
+
+body .login-screen input:-webkit-autofill,
+body .login-screen input:-webkit-autofill:hover,
+body .login-screen input:-webkit-autofill:focus,
+body .login-screen input:-webkit-autofill:active {
+  transition: background-color 9999s ease-in-out 0s !important;
+}
+
+body[data-pkb-theme='light'] .login-screen input:-webkit-autofill,
+body[data-pkb-theme='light'] .login-screen input:-webkit-autofill:hover,
+body[data-pkb-theme='light'] .login-screen input:-webkit-autofill:focus,
+body[data-pkb-theme='light'] .login-screen input:-webkit-autofill:active {
+  box-shadow: 0 0 0 1000px transparent inset !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: #1e293b !important;
+  caret-color: #1e293b !important;
+}
+
+body[data-pkb-theme='dark'] .login-screen input:-webkit-autofill,
+body[data-pkb-theme='dark'] .login-screen input:-webkit-autofill:hover,
+body[data-pkb-theme='dark'] .login-screen input:-webkit-autofill:focus,
+body[data-pkb-theme='dark'] .login-screen input:-webkit-autofill:active {
+  box-shadow: 0 0 0 1000px transparent inset !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: #e5eef8 !important;
+  caret-color: #e5eef8 !important;
 }
 
 body[data-pkb-theme='light'] .MuiOutlinedInput-notchedOutline {
@@ -248,56 +326,6 @@ body[data-pkb-theme='light'] .app-action-button.Mui-disabled {
 .app-action-button {
   min-height: 40px !important;
   border-radius: 8px !important;
-}
-
-.app-navigation-panel,
-.MuiTableContainer-root,
-.preview-scroll-panel {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(112, 128, 150, 0.42) rgba(8, 12, 18, 0.28);
-}
-
-body[data-pkb-theme='light'] .app-navigation-panel,
-body[data-pkb-theme='light'] .MuiTableContainer-root,
-body[data-pkb-theme='light'] .preview-scroll-panel {
-  scrollbar-color: rgba(71, 85, 105, 0.34) rgba(15, 23, 42, 0.07);
-}
-
-.app-navigation-panel::-webkit-scrollbar,
-.MuiTableContainer-root::-webkit-scrollbar,
-.preview-scroll-panel::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-.app-navigation-panel::-webkit-scrollbar-track,
-.MuiTableContainer-root::-webkit-scrollbar-track,
-.preview-scroll-panel::-webkit-scrollbar-track {
-  margin: 8px;
-  background: rgba(8, 12, 18, 0.28);
-  border-radius: 999px;
-}
-
-.app-navigation-panel::-webkit-scrollbar-thumb,
-.MuiTableContainer-root::-webkit-scrollbar-thumb,
-.preview-scroll-panel::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: rgba(112, 128, 150, 0.42);
-  border: 2px solid transparent;
-  background-clip: content-box;
-}
-
-body[data-pkb-theme='light'] .app-navigation-panel::-webkit-scrollbar-track,
-body[data-pkb-theme='light'] .MuiTableContainer-root::-webkit-scrollbar-track,
-body[data-pkb-theme='light'] .preview-scroll-panel::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.06);
-}
-
-body[data-pkb-theme='light'] .app-navigation-panel::-webkit-scrollbar-thumb,
-body[data-pkb-theme='light'] .MuiTableContainer-root::-webkit-scrollbar-thumb,
-body[data-pkb-theme='light'] .preview-scroll-panel::-webkit-scrollbar-thumb {
-  background: rgba(71, 85, 105, 0.34);
-  background-clip: content-box;
 }
 
 body[data-pkb-theme='light'] .metric-state-chip {
