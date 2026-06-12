@@ -1,7 +1,11 @@
 import copy
 import hashlib
+import json
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
+
+logger = logging.getLogger("auth_service")
 
 import uvicorn
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request
@@ -373,6 +377,7 @@ async def list_roles(current_user: dict = Depends(require_admin)):
 @router.post("/api/v1/admin/roles", status_code=201)
 async def create_role(req: CreateRoleRequest, current_user: dict = Depends(require_admin)):
     role_id = new_id()
+    logger.info("create_role: user=%s body=%s", current_user.get("user_id"), req.model_dump_json())
     new_role = {"role_id": role_id, "name": req.name, "permissions": req.permissions, "created_at": utcnow()}
     _roles[role_id] = new_role
     _add_audit(current_user["user_id"], "role.create", "role", role_id)

@@ -1269,6 +1269,29 @@ class TestRegistryService:
         data = resp.json()["data"]
         assert data["status"] == "rejected"
 
+    def test_100b_list_pending(self):
+        """GET /classifiers/pending — alias for quarantine."""
+        resp = client.get(f"{REG}/classifiers/pending")
+        assert_ok(resp)
+        data = resp.json()
+        assert "data" in data
+        assert_paginated(data)
+
+    def test_100c_accept_pending(self):
+        """POST /classifiers/pending/{id}/accept — alias for quarantine accept."""
+        resp = client.post(f"{REG}/classifiers/pending/1/accept")
+        assert_ok(resp)
+        data = resp.json()["data"]
+        assert data["status"] == "accepted"
+        assert "classifier_code" in data
+
+    def test_100d_reject_pending(self):
+        """POST /classifiers/pending/{id}/reject — alias for quarantine reject."""
+        resp = client.post(f"{REG}/classifiers/pending/1/reject")
+        assert_ok(resp)
+        data = resp.json()["data"]
+        assert data["status"] == "rejected"
+
     def test_101_validate_classification(self):
         """POST /classifiers/validate — validate classification code."""
         resp = client.post(

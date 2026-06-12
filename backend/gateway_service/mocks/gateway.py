@@ -19,6 +19,7 @@ Routing map (see docs/gateway_service_api.md):
 """
 
 import json
+import logging
 import os
 import sys
 import time
@@ -70,6 +71,28 @@ auth_mod._make_token = _patched_make_token
 # ---------------------------------------------------------------------------
 # RBAC middleware
 # ---------------------------------------------------------------------------
+
+
+logger = logging.getLogger("gateway")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
+
+
+class RequestLogMiddleware(BaseHTTPMiddleware):
+    """Логгирует все входящие запросы и статус ответа."""
+
+    async def dispatch(self, request: Request, call_next):
+        method = request.method
+        path = request.url.path
+        qs = request.url.query
+        full_path = f"{path}?{qs}" if qs else path
+        logger.info(">>> %s %s", method, full_path)
+        response = await call_next(request)
+        logger.info("<<< %s %s → %s", method, full_path, response.status_code)
+        return response
 
 
 class StripTrailingSlashMiddleware(BaseHTTPMiddleware):
@@ -491,6 +514,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(StripTrailingSlashMiddleware)
+app.add_middleware(RequestLogMiddleware)
+
 
 # ---------------------------------------------------------------------------
 # Router includes

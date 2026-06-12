@@ -5,11 +5,14 @@ Registry Service — автономный сервис реестра НСИ (in
 
 import copy
 import hashlib
+import logging
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 import uvicorn
 from fastapi import APIRouter, FastAPI, HTTPException, Query
+
+logger = logging.getLogger("registry_service")
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -280,6 +283,30 @@ async def reject_quarantine(pending_id: int):
         raise HTTPException(404, detail=error_response("CLASSIFIER_NOT_FOUND", "Элемент карантина не найден"))
     pending["status"] = "rejected"
     return {"data": {"id": pending_id, "status": "rejected"}}
+
+
+# ── псевдонимы /classifiers/pending — checker использует этот путь ──────────
+
+@main_router.get("/classifiers/pending")
+async def list_pending(status: str = None, page: int = 1, page_size: int = 50):
+    """Псевдоним /classifiers/quarantine."""
+    logger.info("list_pending: status=%s page=%d", status, page)
+    return await list_quarantine(status, page, page_size)
+
+
+@main_router.post("/classifiers/pending/{pending_id}/accept")
+async def accept_pending(pending_id: int):
+    """Псевдоним /classifiers/quarantine/{id}/accept."""
+    logger.info("accept_pending: id=%d", pending_id)
+    return await accept_quarantine(pending_id)
+
+
+@main_router.post("/classifiers/pending/{pending_id}/reject")
+async def reject_pending(pending_id: int):
+    """Псевдоним /classifiers/quarantine/{id}/reject."""
+    logger.info("reject_pending: id=%d", pending_id)
+    return await reject_quarantine(pending_id)
+
 
 @main_router.post("/classifiers/validate")
 async def validate_classification(req: dict):
