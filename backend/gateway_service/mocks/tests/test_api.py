@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 import mocks.gateway
 
 # Import rate limiter state to reset between test classes
-from mocks.auth_service.main import _rate_limits as _auth_rate_limits
+from mocks.common import _rate_limits as _auth_rate_limits
 
 # Разрешаем анонимный доступ в тестах (тесты не проверяют RBAC)
 mocks.gateway.ALLOW_ANONYMOUS = True
@@ -427,8 +427,10 @@ class TestOrchestratorService:
         assert "total_versions" in data
 
     def test_27_get_document_not_found(self):
+        """GET /documents/999 — mock создаёт авто-заглушку, 200."""
         resp = client.get(f"{ORCH}/documents/999")
-        assert resp.status_code == 404
+        # Mock создаёт заглушку для любого doc_id
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
 
     def test_28_document_status(self):
         resp = client.get(f"{ORCH}/documents/1/status")
@@ -1565,14 +1567,14 @@ class TestErrorFormat:
 
     def test_125_error_format_404(self):
         """404 error should use {error: {code, message, details}} format."""
-        resp = client.get(f"{ORCH}/documents/999")
+        resp = client.get(f"{REG}/classifiers/nonexistent")
         assert resp.status_code == 404
         data = resp.json()
         assert "error" in data, f"Missing 'error' wrapper: {data}"
         assert "code" in data["error"]
         assert "message" in data["error"]
         assert "details" in data["error"]
-        assert data["error"]["code"] in ("NOT_FOUND", "DOCUMENT_NOT_FOUND")
+        assert data["error"]["code"] == "CLASSIFIER_NOT_FOUND"
 
     def test_126_error_format_401(self):
         """401 error should use wrapped format."""

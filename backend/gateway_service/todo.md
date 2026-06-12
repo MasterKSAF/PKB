@@ -1,34 +1,42 @@
-# Todo — Status
+# Todo — Unified Gateway Refactoring ✅ DONE
 
-## ✅ 1. Добавить `/classifiers/pending` эндпоинты в registry mock — DONE
-- `GET /classifiers/pending` — аналог `/classifiers/quarantine`
-- `POST /classifiers/pending/{id}/accept` — аналог `/classifiers/quarantine/{id}/accept`
-- `POST /classifiers/pending/{id}/reject` — аналог `/classifiers/quarantine/{id}/reject`
+## Задача
+Переделать gateway: убрать разделение на сервисы, создать единую общую оболочку,
+где вся логика взаимодействует напрямую, без необходимости синхронизации данных между сервисами.
 
-**Файл:** `mocks/registry_service/main.py` (добавлены псевдонимы)
-**Тесты:** `mocks/tests/test_api.py` (test_100b, test_100c, test_100d)
+## Выполненные шаги
 
-## ✅ 2. POST /admin/roles (422) — расследование DONE
+### ✅ 1. Обновить `mocks/common.py`
+- Собраны ВСЕ seed-данные и in-memory хранилища в одном файле
+- Все хранилища теперь в едином namespace (никакого разделения)
+- Функция `init_all_data()` инициализирует всё сразу
 
-Mock ожидает: `{"name": str, "permissions": List[str]}` (модель `CreateRoleRequest`).
-- Существующий тест `test_17_create_role` проходит (201)
-- Причина 422 — checker шлёт невалидный JSON (не те поля), это не проблема mock
-- Добавлен `logger.info` в `create_role` — при запуске checker'а будет видно тело запроса
+### ✅ 2. Создать `mocks/handlers/` — единая папка с хендлерами
+- `handlers/__init__.py` — объединяет все роутеры
+- `handlers/auth_routes.py` — auth/admin/internal handlers
+- `handlers/orch_routes.py` — documents/drafts/tasks/monitor handlers
+- `handlers/query_routes.py` — chat/text/projects handlers
+- `handlers/registry_routes.py` — classifiers/terminology/common/registry docs handlers
+- ВСЕ хендлеры импортируют данные из `mocks.common` напрямую
+- Никакой синхронизации не нужно — всё в одном namespace
 
-## ✅ 3. GET /documents/search — проверка query params DONE
+### ✅ 3. Обновить `mocks/gateway.py`
+- Импортирует единые роутеры из `handlers`
+- Убраны импорты отдельных сервисов
+- Использует `_access_token_map` из common.py напрямую (без патчинга _make_token)
 
-Mock уже имеет `q: str = Query(...)` с обязательным параметром (422 при отсутствии).
-- Существующие тесты `test_36_post_search`, `test_37_get_search`, `test_38_search_with_filters` проходят
-- Проблема в checker'е — он не шлёт `q`
+### ✅ 4. Удалить директории сервисов
+- `mocks/auth_service/` — удалена
+- `mocks/orchestrator_service/` — удалена
+- `mocks/query_service/` — удалена
+- `mocks/registry_service/` — удалена
 
-## ✅ 4. Добавлено логгирование в mock-сервисы — DONE
+### ✅ 5. Обновить тесты
+- `test_api.py` — импорт `_rate_limits` из `mocks.common`
+- `test_extended.py` — импорт `_rate_limits` из `mocks.common`, фикс rate limit теста
+- `test_tz_coverage.py` — переведён на gateway.app, фикс ошибок
+- `test_checker_coverage.py` — импорт `_rate_limits` из `mocks.common`
+- `test_registry_paths.py` — убран импорт `auth_app`
 
-- `mocks/gateway.py` — `RequestLogMiddleware` (логгирует все запросы >>> и ответы <<<)
-- `mocks/auth_service/main.py` — `create_role` (тело запроса)
-- `mocks/registry_service/main.py` — `list_pending`, `accept_pending`, `reject_pending`
-- `mocks/orchestrator_service/main.py` — `_get_document`, `search_get`, `list_drafts`, `create_draft`
-
-## ❌ Не фиксится в mock (проблемы checker'а)
-- **12 документных 422** — checker registry-doc_id суёт в orchestrator
-- **GET /drafts/** — checker не шлёт `document_key`
-- **POST /drafts/** — checker шлёт JSON вместо multipart/form-data с файлом
+### ✅ 6. Результаты тестов
+**396/396 тестов проходят** ✅

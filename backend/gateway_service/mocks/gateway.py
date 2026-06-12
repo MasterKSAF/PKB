@@ -9,13 +9,16 @@ Combines all 5 routers on a single port 8081 with:
 - Unified error format (Registry spec)
 
 Routing map (see docs/gateway_service_api.md):
-- /api/v1/auth/*, /api/v1/admin/*      → Auth Service
+- /api/v1/auth/*, /api/v1/admin/*      → Auth handlers
 - /api/v1/documents/*, /api/v1/drafts/*,
-    /api/v1/tasks/*, /api/v1/monitor/*  → Orchestrator Service
-- /api/v1/chat/*, /api/v1/text/*        → Query Service
+    /api/v1/tasks/*, /api/v1/monitor/*  → Orchestrator handlers
+- /api/v1/chat/*, /api/v1/text/*        → Query handlers
 - /api/v1/classifiers/*, /api/v1/terminology/*,
-    /api/v1/common/*, /api/v1/registry/documents/* → Registry Service
+    /api/v1/common/*, /api/v1/registry/documents/* → Registry handlers
 - /api/v1/system/health                  → Gateway (own)
+
+Все данные — в едином пространстве имён (mocks.common).
+Никакого разделения на сервисы, никакой синхронизации.
 """
 
 import json
@@ -36,18 +39,9 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import ValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
 
-# ---------------------------------------------------------------------------
-# Track generated access tokens for RBAC lookup
-# ---------------------------------------------------------------------------
-import mocks.auth_service.main as auth_mod
-from mocks.auth_service.main import router as auth_router
-from mocks.common import SEED_USERS, error_response, utcnow
-from mocks.orchestrator_service.main import router as orch_router
-from mocks.query_service.main import router as query_router
-from mocks.registry_service.main import main_router as registry_router
-from mocks.registry_service.main import registry_docs_router
+from mocks.common import SEED_USERS, error_response, utcnow, _access_token_map
+from mocks.handlers import auth_router, orch_router, query_router, registry_router
 
-_ACCESS_TOKEN_USER: Dict[str, int] = {}  # access_token -> user_id
 _MOCK_USERS: Dict[int, dict] = {u["user_id"]: u for u in SEED_USERS}
 
 # ---------------------------------------------------------------------------
@@ -56,22 +50,10 @@ _MOCK_USERS: Dict[int, dict] = {u["user_id"]: u for u in SEED_USERS}
 # ---------------------------------------------------------------------------
 ALLOW_ANONYMOUS = False
 
-_orig_make_token = auth_mod._make_token
-
-
-def _patched_make_token(user_id: int) -> dict:
-    result = _orig_make_token(user_id)
-    _ACCESS_TOKEN_USER[result["access_token"]] = user_id
-    return result
-
-
-auth_mod._make_token = _patched_make_token
-
 
 # ---------------------------------------------------------------------------
-# RBAC middleware
+# Middleware
 # ---------------------------------------------------------------------------
-
 
 logger = logging.getLogger("gateway")
 logging.basicConfig(
@@ -97,11 +79,7 @@ class RequestLogMiddleware(BaseHTTPMiddleware):
 
 class StripTrailingSlashMiddleware(BaseHTTPMiddleware):
     """Обрезает trailing slash ДО того, как FastAPI начнёт роутинг.
-
-    Checker шлёт запросы С trailing slash (/api/v1/registry/classifiers/),
-    а роуты определены БЕЗ слеша (/api/v1/registry/classifiers).
-    Вместо 307 редиректа нормализует путь заранее.
-
+    Checker шлёт запросы С trailing slash, а роуты определены БЕЗ слеша.
     Корневой путь / не трогаем.
     """
 
@@ -121,7 +99,7 @@ class RBACMiddleware(BaseHTTPMiddleware):
     - Missing/invalid token → 401 for /admin/*, anonymous for others
     - Valid token → user info from seed data attached to request.state.user
     - Blocks /admin/* paths for non-system_admin users
-    """
+    """ 
 
     async def dispatch(self, request: Request, call_next):
         auth = request.headers.get("Authorization", "")
@@ -139,7 +117,7 @@ class RBACMiddleware(BaseHTTPMiddleware):
 
         if auth.startswith("Bearer "):
             token = auth[7:]
-            user_id = _ACCESS_TOKEN_USER.get(token)
+            user_id = _access_token_map.get(token)
             if user_id and user_id in _MOCK_USERS:
                 user = _MOCK_USERS[user_id]
                 user_context.update(
@@ -155,16 +133,9 @@ class RBACMiddleware(BaseHTTPMiddleware):
         request.state.user = user_context
 
         # RBAC enforcement
-        # ────────────────────────────────────────────────────────
-        # Флаг для тестов — позволяет анонимный доступ.
-        # В реальной эксплуатации выставить ALLOW_ANONYMOUS = False.
-        # ────────────────────────────────────────────────────────
         if ALLOW_ANONYMOUS:
-            # Режим "soft mock" — анонимные запросы пропускаются,
-            # проверка permissions только для аутентифицированных.
             pass
         else:
-            # Режим "hard mock" — блокируем всех, кроме /auth/* и /system/health
             if not (
                 path.startswith("/api/v1/auth/") or path == "/api/v1/system/health"
             ):
@@ -201,8 +172,6 @@ class RBACMiddleware(BaseHTTPMiddleware):
             permissions = user_context.get("permissions", {})
 
             # POST /drafts и POST /documents — can_upload_documents
-            # NOTE: Загрузка файла всегда через POST /api/v1/drafts (gateway_service_api.md).
-            # POST /api/v1/documents — legacy, также проверяется.
             if request.method == "POST" and path in ("/api/v1/drafts", "/api/v1/documents"):
                 if not permissions.get("can_upload_documents", False):
                     return JSONResponse(
@@ -252,7 +221,6 @@ class RBACMiddleware(BaseHTTPMiddleware):
 
             # DELETE /documents/{id}, DELETE /drafts/{id},
             # POST /documents/{id}/reprocess, POST /documents/{id}/approve
-            # — knowledge_admin / system_admin only
             _doc_write = request.method == "DELETE" and (
                 path.startswith("/api/v1/documents/")
                 or path.startswith("/api/v1/drafts/")
@@ -302,15 +270,6 @@ _IDEMPOTENCY_PREFIXES = ("/api/v1/drafts", "/api/v1/chat")
 
 
 class IdempotencyMiddleware(BaseHTTPMiddleware):
-    """Caches POST responses for /api/v1/drafts* and /api/v1/chat*
-    when Idempotency-Key header is provided.
-
-    Upload of a new document always starts with `POST /api/v1/drafts`
-    (see orchestrator_service_api.md, "Черновик — точка входа"), so the
-    idempotency window covers all draft lifecycle mutations initiated
-    from the client.
-    """
-
     async def dispatch(self, request: Request, call_next):
         if request.method != "POST":
             return await call_next(request)
@@ -321,7 +280,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
         if not key:
             return await call_next(request)
 
-        # Cleanup expired entries periodically (every 100 requests)
+        # Cleanup expired entries periodically
         if len(_IDEMPOTENCY_STORE) > 1000:
             now = time.time()
             expired = [k for k, v in _IDEMPOTENCY_STORE.items()
@@ -331,7 +290,6 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
 
         cached = _IDEMPOTENCY_STORE.get(key)
         if cached is not None:
-            # Check TTL
             if time.time() - cached.get("timestamp", 0) > _IDEMPOTENCY_TTL:
                 del _IDEMPOTENCY_STORE[key]
             else:
@@ -355,11 +313,6 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
         return response
 
 
-# ---------------------------------------------------------------------------
-# X-Process-Time header middleware
-# ---------------------------------------------------------------------------
-
-
 class ProcessTimeMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         start = time.perf_counter()
@@ -378,7 +331,7 @@ class ProcessTimeMiddleware(BaseHTTPMiddleware):
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     yield
     _IDEMPOTENCY_STORE.clear()
-    _ACCESS_TOKEN_USER.clear()
+    _access_token_map.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -390,22 +343,21 @@ app = FastAPI(
     version="1.0.0",
     description="Mock gateway combining all services on a single port",
     lifespan=lifespan,
-    # False — нормализацию trailing slash делает StripTrailingSlashMiddleware
-    # ДО роутинга, без единого 307.
     redirect_slashes=False,
 )
 
 
 # ---------------------------------------------------------------------------
-# Exception handlers — unified error format (Registry spec)
+# Exception handlers — unified error format
 # ---------------------------------------------------------------------------
 
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
-    # If detail is already a JSONResponse (from service error_response), pass through
     if isinstance(exc.detail, JSONResponse):
         return exc.detail
+    if isinstance(exc.detail, dict) and "error" in exc.detail:
+        return JSONResponse(status_code=exc.status_code, content=exc.detail)
     return JSONResponse(
         status_code=exc.status_code,
         content=error_response(
@@ -454,20 +406,13 @@ async def pydantic_validation_handler(request: Request, exc: ValidationError):
 
 
 def _error_code_from_status(status_code: int, detail: any) -> str:
-    """Map HTTP status to error code.
-
-    Supports custom error codes from error_response() format:
-    detail = {"error": {"code": "DOCUMENT_NOT_FOUND", "message": "..."}}
-    """
-    # Try to extract custom code from error_response format
+    """Map HTTP status to error code."""
     if isinstance(detail, dict):
         err = detail.get("error", {})
         if isinstance(err, dict) and "code" in err:
             return err["code"]
         if "code" in detail:
             return detail["code"]
-
-    # Fallback: map from HTTP status
     mapping = {
         400: "BAD_REQUEST",
         401: "UNAUTHORIZED",
@@ -483,7 +428,6 @@ def _error_code_from_status(status_code: int, detail: any) -> str:
 
 
 def _extract_message(detail: any) -> str:
-    """Extract message from detail which may be a string, dict, or list."""
     if isinstance(detail, str):
         return detail
     if isinstance(detail, dict):
@@ -500,9 +444,6 @@ def _extract_message(detail: any) -> str:
 # Middleware stack
 # ---------------------------------------------------------------------------
 
-# StripTrailingSlash — САМЫМ ВНЕШНИМ (добавлен последним),
-# чтобы все остальные middleware (RBAC, CORS) видели
-# уже нормализованный путь без trailing slash.
 app.add_middleware(ProcessTimeMiddleware)
 app.add_middleware(IdempotencyMiddleware)
 app.add_middleware(RBACMiddleware)
@@ -525,15 +466,10 @@ app.include_router(auth_router)
 app.include_router(orch_router)
 app.include_router(query_router)
 app.include_router(registry_router, prefix="/api/v1/registry")
-app.include_router(registry_docs_router, prefix="/api/v1/registry")
 
 
 # ---------------------------------------------------------------------------
 # Health check
-# NOTE: /api/v1/system/health — единый health-check endpoint для внешних систем
-# мониторинга (см. common_api.md). Каждый внутренний сервис также имеет свой
-# /api/v1/health для прямого доступа — дублирование Operation ID в OpenAPI
-# является ожидаемым и intentional (разные пути, разная семантика).
 # ---------------------------------------------------------------------------
 
 

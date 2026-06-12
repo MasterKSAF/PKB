@@ -15,7 +15,6 @@
 import pytest
 from fastapi.testclient import TestClient
 from mocks.gateway import app
-from mocks.auth_service.main import app as auth_app
 from mocks.common import SEED_USERS
 
 client = TestClient(app)
