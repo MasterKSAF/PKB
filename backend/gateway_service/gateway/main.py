@@ -1,24 +1,18 @@
 """
-Gateway Mock — unified entry point (nginx emulation).
-Combines all 5 routers on a single port 8081 with:
-- CORS (all origins)
-- RBAC (JWT validation, anonymous fallback)
-- Idempotency-Key support for POST /drafts and POST /chat
-- X-Process-Time header
-- Lifespan context manager
-- Unified error format (Registry spec)
+PKB Neuroassistant Gateway Service — reverse-proxy для внутренних микросервисов.
 
-Routing map (see docs/gateway_service_api.md):
-- /api/v1/auth/*, /api/v1/admin/*      → Auth Service
-- /api/v1/documents/*, /api/v1/drafts/*,
-    /api/v1/tasks/*, /api/v1/monitor/*  → Orchestrator Service
-- /api/v1/chat/*, /api/v1/text/*        → Query Service
-- /api/v1/classifiers/*, /api/v1/terminology/*,
-    /api/v1/common/*, /api/v1/registry/documents/* → Registry Service
-- /api/v1/system/health                  → Gateway (own)
+Маршрутизирует запросы от Web UI к сервисам:
+  Auth (:8082), Orchestrator (:8081), Query (:8083), Registry (:8084).
+
+Режим работы только явный — GATEWAY_MODE=real.
+
+Мок-сервер для тестирования Web UI (эмуляция всей системы) — отдельное приложение:
+    python mocks/gateway.py          # единый шлюз на порту 8081
+    python mocks/start_service.py all  # или сервисы по отдельности
 """
 
 import json
+import logging
 import os
 import sys
 import time
@@ -35,49 +29,40 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import ValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
 
-# ---------------------------------------------------------------------------
-# Track generated access tokens for RBAC lookup
-# ---------------------------------------------------------------------------
-import mocks.auth_service.main as auth_mod
-from mocks.auth_service.main import router as auth_router
-from mocks.common import SEED_USERS, error_response, utcnow
-from mocks.orchestrator_service.main import router as orch_router
-from mocks.query_service.main import router as query_router
-from mocks.registry_service.main import main_router as registry_router
-from mocks.registry_service.main import registry_docs_router
-
-_ACCESS_TOKEN_USER: Dict[str, str] = {}  # access_token -> user_id
-_MOCK_USERS: Dict[str, dict] = {u["user_id"]: u for u in SEED_USERS}
+from gateway.client import (
+    check_all_services_health,
+    close_client,
+    get_client,
+)
+from gateway.config import config
+from gateway.routers import proxy_router
 
 # ---------------------------------------------------------------------------
-# Test mode flag — при True анонимные запросы пропускаются
-# (используется в тестах, чтобы не переписывать каждый вызов с токеном)
+# Logging
 # ---------------------------------------------------------------------------
-ALLOW_ANONYMOUS = False
 
-_orig_make_token = auth_mod._make_token
+logging.basicConfig(
+    level=getattr(logging, os.getenv("GATEWAY_LOG_LEVEL", "INFO").upper()),
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("gateway")
 
-
-def _patched_make_token(user_id: str) -> dict:
-    result = _orig_make_token(user_id)
-    _ACCESS_TOKEN_USER[result["access_token"]] = user_id
-    return result
-
-
-auth_mod._make_token = _patched_make_token
+logger.info("Gateway starting — mode=%s, port=%s", config.mode, config.port)
 
 
 # ---------------------------------------------------------------------------
-# RBAC middleware
+# RBAC middleware — валидация JWT через Auth Service
 # ---------------------------------------------------------------------------
 
 
 class RBACMiddleware(BaseHTTPMiddleware):
-    """Validates JWT Bearer token (mock) and attaches user context.
+    """Проверяет JWT Bearer-токен через Auth Service и применяет RBAC.
 
-    - Missing/invalid token → 401 for /admin/*, anonymous for others
-    - Valid token → user info from seed data attached to request.state.user
-    - Blocks /admin/* paths for non-system_admin users
+    Принцип работы:
+      1. Извлекает токен из заголовка Authorization
+      2. Валидирует токен через Auth Service (/api/v1/internal/auth/validate)
+      3. Применяет матрицу доступа (admin, permissions)
+      4. Прокси-запрос к сервису выполняется только после RBAC
     """
 
     async def dispatch(self, request: Request, call_next):
@@ -96,39 +81,23 @@ class RBACMiddleware(BaseHTTPMiddleware):
 
         if auth.startswith("Bearer "):
             token = auth[7:]
-            user_id = _ACCESS_TOKEN_USER.get(token)
-            if user_id and user_id in _MOCK_USERS:
-                user = _MOCK_USERS[user_id]
-                user_context.update(
-                    user_id=user_id,
-                    full_name=user.get("full_name"),
-                    roles=user.get("roles", []),
-                    role=user.get("role"),
-                    permissions=user.get("permissions", {}),
-                    is_authenticated=True,
-                    is_anonymous=False,
-                )
+            await _validate_token_remotely(token, user_context)
 
         request.state.user = user_context
 
-        # RBAC enforcement
-        # ────────────────────────────────────────────────────────
-        # Флаг для тестов — позволяет анонимный доступ.
-        # В реальной эксплуатации выставить ALLOW_ANONYMOUS = False.
-        # ────────────────────────────────────────────────────────
-        if ALLOW_ANONYMOUS:
-            # Режим "soft mock" — анонимные запросы пропускаются,
-            # проверка permissions только для аутентифицированных.
-            pass
-        else:
-            # Режим "hard mock" — блокируем всех, кроме /auth/* и /system/health
+        # ── RBAC enforcement ────────────────────────────────────────────────
+
+        # Анонимный доступ только к /auth/*, /system/health, /system/mode
+        if not config.allow_anonymous:
             if not (
-                path.startswith("/api/v1/auth/") or path == "/api/v1/system/health"
+                path.startswith("/api/v1/auth/")
+                or path == "/api/v1/system/health"
+                or path == "/api/v1/system/mode"
             ):
                 if not user_context["is_authenticated"]:
                     return JSONResponse(
                         status_code=401,
-                        content=error_response(
+                        content=_error_response(
                             "UNAUTHORIZED", "Требуется аутентификация"
                         ),
                     )
@@ -138,33 +107,30 @@ class RBACMiddleware(BaseHTTPMiddleware):
             if not user_context["is_authenticated"]:
                 return JSONResponse(
                     status_code=401,
-                    content=error_response("UNAUTHORIZED", "Требуется аутентификация"),
+                    content=_error_response(
+                        "UNAUTHORIZED", "Требуется аутентификация"
+                    ),
                 )
             role = user_context.get("role")
             if role != "system_admin":
                 return JSONResponse(
                     status_code=403,
-                    content=error_response(
+                    content=_error_response(
                         "FORBIDDEN",
                         "Недостаточно прав для доступа к административным функциям",
                     ),
                 )
 
-        # ────────────────────────────────────────────────────────
-        # Если пользователь аутентифицирован — проверяем permissions
-        # на write-операции. Анонимные запросы пропускаем (fallback).
-        # ────────────────────────────────────────────────────────
+        # Permission-based checks для аутентифицированных
         if user_context["is_authenticated"]:
             permissions = user_context.get("permissions", {})
 
             # POST /drafts и POST /documents — can_upload_documents
-            # NOTE: Загрузка файла всегда через POST /api/v1/drafts (gateway_service_api.md).
-            # POST /api/v1/documents — legacy, также проверяется.
             if request.method == "POST" and path in ("/api/v1/drafts", "/api/v1/documents"):
                 if not permissions.get("can_upload_documents", False):
                     return JSONResponse(
                         status_code=403,
-                        content=error_response(
+                        content=_error_response(
                             "FORBIDDEN",
                             "Недостаточно прав для загрузки документов",
                         ),
@@ -176,7 +142,7 @@ class RBACMiddleware(BaseHTTPMiddleware):
                 if not permissions.get("can_manage_classifiers", False):
                     return JSONResponse(
                         status_code=403,
-                        content=error_response(
+                        content=_error_response(
                             "FORBIDDEN",
                             "Недостаточно прав для управления классификаторами",
                         ),
@@ -188,7 +154,7 @@ class RBACMiddleware(BaseHTTPMiddleware):
                 if not permissions.get("can_manage_terminology", False):
                     return JSONResponse(
                         status_code=403,
-                        content=error_response(
+                        content=_error_response(
                             "FORBIDDEN",
                             "Недостаточно прав для управления терминологией",
                         ),
@@ -201,7 +167,7 @@ class RBACMiddleware(BaseHTTPMiddleware):
                 if not permissions.get("can_manage_registry", False):
                     return JSONResponse(
                         status_code=403,
-                        content=error_response(
+                        content=_error_response(
                             "FORBIDDEN",
                             "Недостаточно прав для управления реестром",
                         ),
@@ -209,7 +175,6 @@ class RBACMiddleware(BaseHTTPMiddleware):
 
             # DELETE /documents/{id}, DELETE /drafts/{id},
             # POST /documents/{id}/reprocess, POST /documents/{id}/approve
-            # — knowledge_admin / system_admin only
             _doc_write = request.method == "DELETE" and (
                 path.startswith("/api/v1/documents/")
                 or path.startswith("/api/v1/drafts/")
@@ -226,7 +191,7 @@ class RBACMiddleware(BaseHTTPMiddleware):
                 ):
                     return JSONResponse(
                         status_code=403,
-                        content=error_response(
+                        content=_error_response(
                             "FORBIDDEN",
                             "Недостаточно прав для управления документами",
                         ),
@@ -240,7 +205,7 @@ class RBACMiddleware(BaseHTTPMiddleware):
                 ):
                     return JSONResponse(
                         status_code=403,
-                        content=error_response(
+                        content=_error_response(
                             "FORBIDDEN",
                             "Недостаточно прав для просмотра метрик",
                         ),
@@ -249,24 +214,52 @@ class RBACMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+async def _validate_token_remotely(token: str, user_context: Dict[str, Any]) -> bool:
+    """Валидирует JWT через Auth Service (/api/v1/internal/auth/validate).
+
+    В production делает HTTP-вызов к Auth Service.
+    Если сервис недоступен — токен считается невалидным.
+    """
+    auth_url = config.service_urls.get("auth")
+    if not auth_url:
+        return False
+
+    try:
+        client = get_client()
+        resp = await client.post(
+            f"{auth_url}/api/v1/internal/auth/validate",
+            json={"access_token": token},
+            timeout=config.health_timeout,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            user_context.update(
+                user_id=data.get("user_id"),
+                full_name=data.get("full_name"),
+                roles=data.get("roles", []),
+                role=data.get("role"),
+                permissions=data.get("permissions", {}),
+                is_authenticated=True,
+                is_anonymous=False,
+            )
+            return True
+    except Exception:
+        logger.warning("Auth Service unavailable, token validation failed", exc_info=True)
+
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Idempotency-Key middleware
 # ---------------------------------------------------------------------------
 
 _IDEMPOTENCY_STORE: Dict[str, dict] = {}
-_IDEMPOTENCY_TTL = 3600
+_IDEMPOTENCY_TTL = config.idempotency_ttl
 _IDEMPOTENCY_PREFIXES = ("/api/v1/drafts", "/api/v1/chat")
 
 
 class IdempotencyMiddleware(BaseHTTPMiddleware):
-    """Caches POST responses for /api/v1/drafts* and /api/v1/chat*
-    when Idempotency-Key header is provided.
-
-    Upload of a new document always starts with `POST /api/v1/drafts`
-    (see orchestrator_service_api.md, "Черновик — точка входа"), so the
-    idempotency window covers all draft lifecycle mutations initiated
-    from the client.
-    """
+    """Caches POST responses for /api/v1/drafts* and /api/v1/chat*."""
 
     async def dispatch(self, request: Request, call_next):
         if request.method != "POST":
@@ -278,17 +271,18 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
         if not key:
             return await call_next(request)
 
-        # Cleanup expired entries periodically (every 100 requests)
+        # Periodic cleanup
         if len(_IDEMPOTENCY_STORE) > 1000:
             now = time.time()
-            expired = [k for k, v in _IDEMPOTENCY_STORE.items()
-                       if now - v.get("timestamp", 0) > _IDEMPOTENCY_TTL]
+            expired = [
+                k for k, v in _IDEMPOTENCY_STORE.items()
+                if now - v.get("timestamp", 0) > _IDEMPOTENCY_TTL
+            ]
             for k in expired:
                 del _IDEMPOTENCY_STORE[k]
 
         cached = _IDEMPOTENCY_STORE.get(key)
         if cached is not None:
-            # Check TTL
             if time.time() - cached.get("timestamp", 0) > _IDEMPOTENCY_TTL:
                 del _IDEMPOTENCY_STORE[key]
             else:
@@ -327,15 +321,65 @@ class ProcessTimeMiddleware(BaseHTTPMiddleware):
 
 
 # ---------------------------------------------------------------------------
+# Error helpers
+# ---------------------------------------------------------------------------
+
+
+def _error_response(code: str, message: str) -> dict:
+    return {
+        "error": {
+            "code": code,
+            "message": message,
+        }
+    }
+
+
+def _error_code_from_status(status_code: int, detail: Any) -> str:
+    mapping = {
+        400: "BAD_REQUEST",
+        401: "UNAUTHORIZED",
+        403: "FORBIDDEN",
+        404: "NOT_FOUND",
+        405: "METHOD_NOT_ALLOWED",
+        409: "CONFLICT",
+        422: "VALIDATION_ERROR",
+        429: "TOO_MANY_REQUESTS",
+        500: "INTERNAL_ERROR",
+    }
+    if isinstance(detail, dict):
+        err = detail.get("error", {})
+        if isinstance(err, dict) and "code" in err:
+            return err["code"]
+        if "code" in detail:
+            return detail["code"]
+    return mapping.get(status_code, f"HTTP_{status_code}")
+
+
+def _extract_message(detail: Any) -> str:
+    if isinstance(detail, str):
+        return detail
+    if isinstance(detail, dict):
+        return detail.get("message", detail.get("error", {}).get("message", str(detail)))
+    if isinstance(detail, list):
+        return "; ".join(str(d) for d in detail)
+    return str(detail)
+
+
+# ---------------------------------------------------------------------------
 # Lifespan
 # ---------------------------------------------------------------------------
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    logger.info(
+        "Gateway ready — mode=%s, host=%s, port=%s",
+        config.mode, config.host, config.port,
+    )
     yield
     _IDEMPOTENCY_STORE.clear()
-    _ACCESS_TOKEN_USER.clear()
+    await close_client()
+    logger.info("Gateway shut down")
 
 
 # ---------------------------------------------------------------------------
@@ -343,27 +387,28 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 # ---------------------------------------------------------------------------
 
 app = FastAPI(
-    title="PKB Neuroassistant Mock Gateway",
-    version="1.0.0",
-    description="Mock gateway combining all services on a single port",
+    title="PKB Neuroassistant Gateway Service",
+    version="1.1.0",
+    description=(
+        "Reverse-proxy для внутренних микросервисов PKB Neuroassistant. "
+        "Маршрутизирует запросы от Web UI к Auth, Orchestrator, Query, Registry."
+    ),
     lifespan=lifespan,
-    redirect_slashes=False,
 )
 
 
 # ---------------------------------------------------------------------------
-# Exception handlers — unified error format (Registry spec)
+# Exception handlers
 # ---------------------------------------------------------------------------
 
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
-    # If detail is already a JSONResponse (from service error_response), pass through
     if isinstance(exc.detail, JSONResponse):
         return exc.detail
     return JSONResponse(
         status_code=exc.status_code,
-        content=error_response(
+        content=_error_response(
             code=_error_code_from_status(exc.status_code, exc.detail),
             message=_extract_message(exc.detail),
         ),
@@ -388,7 +433,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         }
     return JSONResponse(
         status_code=422,
-        content=error_response(
+        content=_error_response(
             code="VALIDATION_ERROR",
             message="Ошибка валидации запроса",
             details=details,
@@ -400,55 +445,12 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 async def pydantic_validation_handler(request: Request, exc: ValidationError):
     return JSONResponse(
         status_code=422,
-        content=error_response(
+        content=_error_response(
             code="VALIDATION_ERROR",
             message="Ошибка валидации запроса",
             details={"errors": exc.errors()},
         ),
     )
-
-
-def _error_code_from_status(status_code: int, detail: any) -> str:
-    """Map HTTP status to error code.
-
-    Supports custom error codes from error_response() format:
-    detail = {"error": {"code": "DOCUMENT_NOT_FOUND", "message": "..."}}
-    """
-    # Try to extract custom code from error_response format
-    if isinstance(detail, dict):
-        err = detail.get("error", {})
-        if isinstance(err, dict) and "code" in err:
-            return err["code"]
-        if "code" in detail:
-            return detail["code"]
-
-    # Fallback: map from HTTP status
-    mapping = {
-        400: "BAD_REQUEST",
-        401: "UNAUTHORIZED",
-        403: "FORBIDDEN",
-        404: "NOT_FOUND",
-        405: "METHOD_NOT_ALLOWED",
-        409: "CONFLICT",
-        422: "VALIDATION_ERROR",
-        429: "TOO_MANY_REQUESTS",
-        500: "INTERNAL_ERROR",
-    }
-    return mapping.get(status_code, f"HTTP_{status_code}")
-
-
-def _extract_message(detail: any) -> str:
-    """Extract message from detail which may be a string, dict, or list."""
-    if isinstance(detail, str):
-        return detail
-    if isinstance(detail, dict):
-        return detail.get(
-            "message", detail.get("error", {}).get("message", str(detail))
-        )
-    if isinstance(detail, list):
-        parts = [str(d) for d in detail]
-        return "; ".join(parts)
-    return str(detail)
 
 
 # ---------------------------------------------------------------------------
@@ -460,49 +462,60 @@ app.add_middleware(IdempotencyMiddleware)
 app.add_middleware(RBACMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=config.cors_allowed_origins.split(",") if config.cors_allowed_origins != "*" else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ---------------------------------------------------------------------------
-# Router includes
-# ---------------------------------------------------------------------------
-
-app.include_router(auth_router)
-app.include_router(orch_router)
-app.include_router(query_router)
-app.include_router(registry_router, prefix="/api/v1/registry")
-app.include_router(registry_docs_router, prefix="/api/v1/registry")
-
 
 # ---------------------------------------------------------------------------
-# Health check
-# NOTE: /api/v1/system/health — единый health-check endpoint для внешних систем
-# мониторинга (см. common_api.md). Каждый внутренний сервис также имеет свой
-# /api/v1/health для прямого доступа — дублирование Operation ID в OpenAPI
-# является ожидаемым и intentional (разные пути, разная семантика).
+# Собственные эндпоинты Gateway (регистрируются до catch-all роутера)
 # ---------------------------------------------------------------------------
 
 
 @app.get("/api/v1/system/health")
 async def gateway_health():
+    """Health-check с агрегированным статусом всех сервисов."""
+    services = await check_all_services_health()
+    overall = "ok"
+    for svc, status in services.items():
+        if svc == "gateway":
+            continue
+        if status != "ok":
+            overall = "degraded"
+            break
+
     return {
-        "status": "ok",
-        "version": "1.0.0",
-        "services": {
-            "auth": "ok",
-            "orchestrator": "ok",
-            "query": "ok",
-            "registry": "ok",
-            "gateway": "ok",
-        },
-        "timestamp": utcnow(),
+        "status": overall,
+        "version": "1.1.0",
+        "services": services,
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "endpoints_total": sum(
             1 for r in app.routes if hasattr(r, "methods") and r.path
         ),
     }
+
+
+@app.get("/api/v1/system/mode")
+async def gateway_mode_info():
+    """Информация о конфигурации Gateway."""
+    return {
+        "mode": config.mode,
+        "port": config.port,
+        "service_urls": {
+            name: url for name, url in sorted(config.service_urls.items())
+        },
+        "allow_anonymous": config.allow_anonymous,
+        "request_timeout": config.request_timeout,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Proxy router — catch-all для всех /api/v1/* запросов к сервисам
+# ---------------------------------------------------------------------------
+
+app.include_router(proxy_router)
 
 
 # ---------------------------------------------------------------------------
@@ -512,4 +525,9 @@ async def gateway_health():
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="127.0.0.1", port=8081)
+    uvicorn.run(
+        "gateway.main:app",
+        host=config.host,
+        port=config.port,
+        reload=os.getenv("GATEWAY_RELOAD", "").lower() in ("1", "true"),
+    )
