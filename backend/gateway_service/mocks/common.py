@@ -112,6 +112,12 @@ SEED_CLASSIFIER_PENDING = [
     {"id": 1, "system": "MKS", "code": "47.020.99", "found_in_document_id": 1, "found_in_document_title": "Стойки установочные", "status": "new", "suggested_parent_code": "47.020", "suggested_parent_name": "Конструкция корпуса", "admin_comment": None, "created_at": "2026-05-15T10:01:00Z"}
 ]
 
+SEED_CATEGORIES = [
+    {"id": 1, "name": "Корпусные конструкции", "description": "Документы по корпусу, набору, обшивке, палубам", "color": "#4CAF50", "document_count": 12, "created_at": "2026-04-27T10:00:00Z", "updated_at": "2026-06-10T14:00:00Z"},
+    {"id": 2, "name": "Электрооборудование", "description": "Схемы, кабели, распределительные устройства", "color": "#2196F3", "document_count": 8, "created_at": "2026-04-27T10:00:00Z", "updated_at": "2026-06-10T14:00:00Z"},
+    {"id": 3, "name": "Материалы", "description": "Спецификации материалов, сертификаты", "color": "#FF9800", "document_count": 5, "created_at": "2026-04-27T10:00:00Z", "updated_at": "2026-06-10T14:00:00Z"},
+]
+
 SEED_DOCUMENTS = [
     {"document_id": 1, "title": "Спецификация по ГОСТ 2.109", "doc_code": "2.109-73",
      "source_type": "GOST", "era": "CURRENT", "validity_status": "active",
@@ -200,6 +206,7 @@ _registry_docs: Dict[int, dict] = {}
 _pending_classifiers: Dict[int, dict] = {}
 _registry_drafts: Dict[int, dict] = {}
 _doc_history: Dict[int, list] = {}
+_categories: Dict[int, dict] = {}
 
 
 def init_all_data():
@@ -207,7 +214,7 @@ def init_all_data():
     global _users, _roles, _audit, _tokens, _tokens_meta, _password_hashes, _rate_limits, _access_token_map
     global _documents, _document_errors, _versions, _chunks, _history, _approvals, _metrics
     global _sessions, _chat_history
-    global _classifiers, _terminology, _registry_docs, _pending_classifiers, _doc_history
+    global _classifiers, _terminology, _registry_docs, _pending_classifiers, _doc_history, _categories
 
     # Auth
     _users = {u["user_id"]: copy.deepcopy(u) for u in SEED_USERS}
@@ -276,6 +283,8 @@ def init_all_data():
              "new_status": d.get("status", "draft"), "comment": "Initial state",
              "changed_by": d.get("created_by", "system"), "changed_at": d.get("created_at", utcnow())}
         ]
+
+    _categories = {c["id"]: copy.deepcopy(c) for c in SEED_CATEGORIES}
 
 
 init_all_data()

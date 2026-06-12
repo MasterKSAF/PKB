@@ -301,7 +301,7 @@ class TestQueryExtended:
         """Session detail includes has_more flag for pagination."""
         create = client.post(
             f"{QUERY}/chat/sessions",
-            json={"title": "HasMore Test", "document_ids": []},
+            json={"title": "HasMore Test", "project_id": 1, "document_ids": []},
         ).json()
         sess_id = create["session_id"]
 
@@ -926,7 +926,7 @@ class TestFixes:
         # Создаём сессию
         sess = client.post(
             f"{QUERY}/chat/sessions",
-            json={"title": "test-failed"},
+            json={"title": "test-failed", "project_id": 1},
         ).json()
         sess_id = sess["session_id"]
 
@@ -948,7 +948,7 @@ class TestFixes:
         """Сообщение со словом 'долго' → статус 'pending'."""
         sess = client.post(
             f"{QUERY}/chat/sessions",
-            json={"title": "test-pending"},
+            json={"title": "test-pending", "project_id": 1},
         ).json()
         sess_id = sess["session_id"]
 

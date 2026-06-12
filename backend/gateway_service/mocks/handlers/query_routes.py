@@ -6,7 +6,7 @@ All data stores imported from mocks.common.
 import copy
 import random
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
@@ -57,6 +57,7 @@ def _generate_answer(question: str) -> dict:
 
 class CreateSessionRequest(BaseModel):
     title: Optional[str] = None
+    project_id: int
     document_ids: Optional[List[int]] = None
     options: Optional[Dict[str, Any]] = None
 
@@ -85,7 +86,7 @@ class ExportSessionRequest(BaseModel):
 class FeedbackRequest(BaseModel):
     session_id: int
     message_id: int
-    rating: Optional[int] = None
+    rating: Optional[Union[int, str]] = None
     comment: Optional[str] = None
     aspects: Optional[List[Dict[str, Any]]] = None
     answer_id: Optional[int] = None
@@ -133,7 +134,8 @@ async def create_session(req: CreateSessionRequest):
     now = utcnow()
     new_session = {
         "session_id": session_id, "title": req.title or f"Сессия {session_id}",
-        "user_id": "anonymous", "document_ids": req.document_ids or [],
+        "project_id": req.project_id, "user_id": "anonymous",
+        "document_ids": req.document_ids or [],
         "options": req.options or {"model": "gpt-4", "temperature": 0.3},
         "message_count": 0, "messages": [], "has_more": False,
         "last_message_preview": "", "created_at": now, "updated_at": now,
@@ -435,10 +437,11 @@ async def chat_history(page: int = Query(1, ge=1), page_size: int = Query(50, ge
 
 @router.get("/api/v1/chat/history/export")
 async def export_history(format: str = Query("csv")):
-    export_id = new_id()
-    _export_store[export_id] = {"export_id": export_id, "format": format,
-                                "url": f"/exports/history_{export_id}.{format}", "created_at": utcnow()}
-    return _export_store[export_id]
+    from fastapi.responses import PlainTextResponse
+    csv_content = "session_id,user_id,question,created_at\n1,1,\"Тестовый вопрос\",2026-04-27T10:00:00Z"
+    media_type = "text/csv" if format == "csv" else "application/json"
+    return PlainTextResponse(content=csv_content, media_type=media_type,
+                             headers={"Content-Disposition": f"attachment; filename=chat_history.{format}"})
 
 
 @router.post("/api/v1/chat")

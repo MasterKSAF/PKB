@@ -636,7 +636,7 @@ class TestQueryService:
     def test_52_create_session(self):
         resp = client.post(
             f"{QUERY}/chat/sessions",
-            json={"title": "Test Session", "document_ids": [1]},
+            json={"title": "Test Session", "project_id": 1, "document_ids": [1]},
         )
         assert_ok(resp, 201)
         assert "session_id" in resp.json()
@@ -826,7 +826,7 @@ class TestQueryService:
 
     def test_67_delete_session(self):
         create = client.post(
-            f"{QUERY}/chat/sessions", json={"title": "To Delete"}
+            f"{QUERY}/chat/sessions", json={"title": "To Delete", "project_id": 1}
         ).json()
         sess_id = create["session_id"]
         resp = client.delete(f"{QUERY}/chat/sessions/{sess_id}")
