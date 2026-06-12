@@ -38,6 +38,9 @@
 | 404 | `TERM_NOT_FOUND` | Термин не найден |
 | 404 | `DOCUMENT_NOT_FOUND` | Документ не найден |
 | 404 | `DRAFT_NOT_FOUND` | Черновик не найден |
+| 404 | `CATEGORY_NOT_FOUND` | Категория не найдена |
+| 409 | `CATEGORY_HAS_DOCUMENTS` | Нельзя удалить категорию, к которой привязаны документы |
+| 409 | `DUPLICATE_CATEGORY_NAME` | Категория с таким именем уже существует |
 | 409 | `DRAFT_ALREADY_DECIDED` | Решение по черновику уже принято |
 | 409 | `DRAFT_ALREADY_PREVIEWED` | Черновик уже прошёл preview |
 | 400 | `EMPTY_DOCUMENT` | Нельзя завершить черновик с 0 страниц |
@@ -59,6 +62,7 @@
 | `documents` | Реестр логических документов НСИ |
 | `drafts` | Управление данными черновиков (internal, доступен только Orchestrator) |
 | `common` | Статистика и справочные значения |
+| `categories` | Пользовательские категории документов (many-to-many) |
 
 ---
 
@@ -66,23 +70,23 @@
 
 | Метод | Путь | Описание |
 |-------|------|----------|
-| GET | `/registry/classifiers` | Список (плоский) |
-| GET | `/registry/classifiers/tree` | Дерево (иерархическое) |
-| GET | `/registry/classifiers/{code}` | Один узел |
-| POST | `/registry/classifiers` | Создать |
-| PUT | `/registry/classifiers/{code}` | Обновить |
-| PATCH | `/registry/classifiers/{code}` | Частичное обновление |
-| DELETE | `/registry/classifiers/{code}` | Удалить |
-| POST | `/registry/classifiers/import` | Импорт |
-| GET | `/registry/classifiers/pending` | Неизвестные коды классификатора |
-| POST | `/registry/classifiers/pending/{pending_id}/accept` | Принять неизвестный код |
-| POST | `/registry/classifiers/pending/{pending_id}/reject` | Отклонить неизвестный код |
-| POST | `/registry/classifiers/validate` | Валидация классификации |
+| GET | `/classifiers` | Список (плоский) |
+| GET | `/classifiers/tree` | Дерево (иерархическое) |
+| GET | `/classifiers/{code}` | Один узел |
+| POST | `/classifiers` | Создать |
+| PUT | `/classifiers/{code}` | Обновить |
+| PATCH | `/classifiers/{code}` | Частичное обновление |
+| DELETE | `/classifiers/{code}` | Удалить |
+| POST | `/classifiers/import` | Импорт |
+| GET | `/classifiers/pending` | Неизвестные коды классификатора |
+| POST | `/classifiers/pending/{pending_id}/accept` | Принять неизвестный код |
+| POST | `/classifiers/pending/{pending_id}/reject` | Отклонить неизвестный код |
+| POST | `/classifiers/validate` | Валидация классификации |
 
 ### 1.1. Список (плоский)
 
 ```
-GET /registry/classifiers
+GET /classifiers
 ```
 
 **Query-параметры:**
@@ -134,7 +138,7 @@ GET /registry/classifiers
 ### 1.2. Дерево (иерархическое)
 
 ```
-GET /registry/classifiers/tree
+GET /classifiers/tree
 ```
 
 **Query-параметры:**
@@ -190,7 +194,7 @@ GET /registry/classifiers/tree
 ### 1.3. Один узел
 
 ```
-GET /registry/classifiers/{code}
+GET /classifiers/{code}
 ```
 
 **Query-параметр**: `classifier_system` (обязательный, для составного PK).  
@@ -201,7 +205,7 @@ GET /registry/classifiers/{code}
 ### 1.4. Создать
 
 ```
-POST /registry/classifiers
+POST /classifiers
 ```
 
 **Тело запроса:**
@@ -235,7 +239,7 @@ POST /registry/classifiers
 ### 1.5. Обновить
 
 ```
-PUT /registry/classifiers/{code}
+PUT /classifiers/{code}
 ```
 
 **Query-параметр**: `classifier_system` (обязательный).  
@@ -248,7 +252,7 @@ PUT /registry/classifiers/{code}
 ### 1.6. Частичное обновление
 
 ```
-PATCH /registry/classifiers/{code}
+PATCH /classifiers/{code}
 ```
 
 **Query-параметр**: `classifier_system`.  
@@ -259,7 +263,7 @@ PATCH /registry/classifiers/{code}
 ### 1.7. Удалить
 
 ```
-DELETE /registry/classifiers/{code}
+DELETE /classifiers/{code}
 ```
 
 **Query-параметр**: `classifier_system`.  
@@ -270,7 +274,7 @@ DELETE /registry/classifiers/{code}
 ### 1.8. Импорт
 
 ```
-POST /registry/classifiers/import
+POST /classifiers/import
 ```
 
 **Запрос**: `multipart/form-data`
@@ -301,7 +305,7 @@ POST /registry/classifiers/import
 ### 1.9. Неизвестные коды классификатора
 
 ```
-GET /registry/classifiers/pending
+GET /classifiers/pending
 ```
 
 Коды классификатора (МКС, ОКСТУ, УДК), найденные в документах при распознавании, но отсутствующие в справочнике. Требуют административного разбора.
@@ -335,7 +339,7 @@ GET /registry/classifiers/pending
 ### 1.10. Принять неизвестный код
 
 ```
-POST /registry/classifiers/pending/{pending_id}/accept
+POST /classifiers/pending/{pending_id}/accept
 ```
 
 Переносит код в `classifier_registry`.
@@ -369,7 +373,7 @@ POST /registry/classifiers/pending/{pending_id}/accept
 ### 1.11. Отклонить неизвестный код
 
 ```
-POST /registry/classifiers/pending/{pending_id}/reject
+POST /classifiers/pending/{pending_id}/reject
 ```
 
 **Тело запроса:**
@@ -393,7 +397,7 @@ POST /registry/classifiers/pending/{pending_id}/reject
 ### 1.12. Валидация классификации
 
 ```
-POST /registry/classifiers/validate
+POST /classifiers/validate
 ```
 
 Проверка и подтверждение извлечённых классификационных кодов (МКС/ОКС, ОКСТУ, УДК) по справочнику Registry.  
@@ -450,18 +454,18 @@ Registry Service — source of truth для классификаторов. Пр
 
 | Метод | Путь | Описание |
 |-------|------|----------|
-| GET | `/registry/terminology` | Список |
-| GET | `/registry/terminology/{term_id}` | Один термин |
-| POST | `/registry/terminology` | Создать |
-| PUT | `/registry/terminology/{term_id}` | Обновить |
-| DELETE | `/registry/terminology/{term_id}` | Удалить |
-| GET | `/registry/terminology/normalize` | Поиск нормализованной формы |
-| POST | `/registry/terminology/import` | Импорт |
+| GET | `/terminology` | Список |
+| GET | `/terminology/{term_id}` | Один термин |
+| POST | `/terminology` | Создать |
+| PUT | `/terminology/{term_id}` | Обновить |
+| DELETE | `/terminology/{term_id}` | Удалить |
+| GET | `/terminology/normalize` | Поиск нормализованной формы |
+| POST | `/terminology/import` | Импорт |
 
 ### 2.1. Список
 
 ```
-GET /registry/terminology
+GET /terminology
 ```
 
 **Query-параметры:**
@@ -521,7 +525,7 @@ GET /registry/terminology
 ### 2.2. Один термин
 
 ```
-GET /registry/terminology/{term_id}
+GET /terminology/{term_id}
 ```
 
 **Ответ `200`**: объект термина.
@@ -531,7 +535,7 @@ GET /registry/terminology/{term_id}
 ### 2.3. Создать
 
 ```
-POST /registry/terminology
+POST /terminology
 ```
 
 **Тело запроса:**
@@ -570,7 +574,7 @@ POST /registry/terminology
 ### 2.4. Обновить
 
 ```
-PUT /registry/terminology/{term_id}
+PUT /terminology/{term_id}
 ```
 
 ---
@@ -578,7 +582,7 @@ PUT /registry/terminology/{term_id}
 ### 2.5. Удалить
 
 ```
-DELETE /registry/terminology/{term_id}
+DELETE /terminology/{term_id}
 ```
 
 ---
@@ -586,7 +590,7 @@ DELETE /registry/terminology/{term_id}
 ### 2.6. Поиск нормализованной формы
 
 ```
-GET /registry/terminology/normalize
+GET /terminology/normalize
 ```
 
 **Query-параметры:**
@@ -614,7 +618,7 @@ GET /registry/terminology/normalize
 ### 2.7. Импорт
 
 ```
-POST /registry/terminology/import
+POST /terminology/import
 ```
 
 **Запрос**: `multipart/form-data` (файл + mapping). Аналогично импорту классификаторов.
@@ -662,6 +666,7 @@ GET /registry/documents
 | `group` | string | Группа классификации (например, `ПО4`) |
 | `title_hash_sha256` | string | Точный поиск по бизнес-ключу |
 | `date_from` / `date_to` | date | Фильтр по дате создания |
+| `category_id` | int | Фильтр по ID категории (документы, привязанные к категории) |
 | `sort_by` | string | Поле сортировки: `title`, `doc_code`, `source_type`, `era`, `created_at`, `updated_at` (по умолчанию `created_at`) |
 | `order` | string | Направление: `asc`, `desc` (по умолчанию `desc`) |
 | `page` | int | Номер страницы |
@@ -705,6 +710,10 @@ GET /registry/documents
       "predecessor_doc_id": null,
       "total_versions": 2,
       "chunk_count": 34,
+      "categories": [
+        { "id": 1, "name": "Корпусные конструкции" },
+        { "id": 3, "name": "Материалы" }
+      ],
       "created_by": "system_registry_sync",
       "updated_by": "ivanov_ai",
       "created_at": "2026-04-27T10:00:00Z",
@@ -749,6 +758,7 @@ GET /registry/documents/{doc_id}
 - `successor_doc_id` — ID документа-преемника
 - `predecessor_doc_id` — ID документа-предшественника
 - `metadata` — произвольные метаданные (JSONB)
+- `categories` — список категорий документа: `[{ id, name }]`
 - `created_at` / `updated_at` — даты создания и обновления
 - `created_by` / `updated_by` — кем создан/обновлён
 
@@ -783,6 +793,10 @@ GET /registry/documents/{doc_id}
     "status_note": null,
     "successor_doc_id": null,
     "predecessor_doc_id": null,
+    "categories": [
+      { "id": 1, "name": "Корпусные конструкции" },
+      { "id": 3, "name": "Материалы" }
+    ],
     "metadata": {},
     "created_at": "2026-04-27T10:00:00Z",
     "updated_at": "2026-04-27T14:00:00Z",
@@ -937,36 +951,6 @@ POST /registry/documents
 
 > **Важно:** Registry использует `document_id` (bigint, sequence) как **единый первичный ключ**. `document_id` назначается Registry при создании карточки документа (после проверки уникальности): для дубликата извлекается существующий, для нового документа генерируется новый (sequence). Собственный numeric ID не создаётся — `document_id` проходит сквозь все сервисы без маппинга.
 
-В режиме пайплайна оркестратор передаёт JSON-контейнер (результат Converter-validator) как непрозрачный артефакт — сервис сам маппит поля в модель данных.
-
-**Тело запроса (прямое создание):**
-
-```json
-{
-  "title": "Стойки установочные",
-  "doc_code": "20868-81",
-  "source_type": "GOST",
-  "document_type": "normative",
-  "era": "USSR",
-  "validity_status": "active",
-  "jurisdiction": "RU",
-  "issuing_body": "Госстандарт СССР",
-  "mks_oks_code": "31.240",
-  "okstu_code": null,
-  "classification_status": {
-    "mks": ["31.240"],
-    "okstu": [],
-    "udk": [],
-    "subject_area": ["Электроника", "Монтажные изделия"]
-  },
-  "successor_doc_id": null,
-  "predecessor_doc_id": null,
-  "metadata": { "year": "1981", "udc": "629.5.021" }
-}
-```
-
-**Тело запроса (из пайплайна — enriched JSON от Converter-validator):**
-
 Registry принимает enriched JSON (схема `validated_v3`) напрямую от Converter-validator.
 Формат — см. [`schema_converter_result.json`](../schema/schema_converter_result.json).
 
@@ -1033,30 +1017,9 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
 
 > Registry сохраняет данные в БД, **сегментирует** документ на **секции** (`registry.document_sections`) и возвращает **плоский JSON** — список секций с проставленными `id`, без иерархии `subsections`. Этот плоский JSON передаётся в RAG Builder для чанкования.
 
-| Поле | Тип | Обязательность | Описание |
-|------|-----|----------------|----------|
-| `title` | string | Да* | Полное название |
-| `doc_code` | string | Нет | Регистрационный номер |
-| `source_type` | string | Нет | Тип нормативного документа-источника |
-| `document_type`| string | Нет | Категория контента (`normative`, `technical`, `drawing`, `specification`, `archival_scan`) |
-| `era` | string | Нет | Эра документа |
-| `validity_status` | string | Нет | Статус действия |
-| `jurisdiction` | string | Нет | Юрисдикция |
-| `issuing_body` | string | Нет | Организация-издатель |
-| `mks_oks_code` | string | Нет | Код МКС/ОКС (FK) |
-| `okstu_code` | string | Нет | Код ОКСТУ (FK) |
-| `classification_status` | JSONB | Нет | Статусы классификации: `{ mks: string[], okstu: string[], udk: string[], subject_area: string[] }` |
-| `successor_doc_id` | bigint | Нет | Преемник |
-| `predecessor_doc_id` | bigint | Нет | Предшественник |
-| `metadata` | JSONB | Нет | Доп. данные |
-
-> *`title` обязателен при прямом создании; в режиме пайплайна берётся из структуры JSON-контейнера.
-
 Система **автоматически вычисляет** `title_hash_sha256` по формуле:  
 `SHA-256(era | source_type | doc_code | normalized_title)`  
 где `normalized_title` — `title` в нижнем регистре с удалёнными лишними пробелами
-
-> **Полный формат данных:** [`docs/schema/schema_registry_for_rag.json`](../schema/schema_registry_for_rag.json) (схема `for_rag_v1`)
 
 > **Полный формат данных:** см. [`docs/schema/schema_registry_for_rag.json`](../schema/schema_registry_for_rag.json) (схема `for_rag_v1`).
 > Приведённый ниже пример — сокращённый. Все 7 типов секций и полный состав полей — в эталонном JSON.
@@ -1239,7 +1202,20 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
 PUT /registry/documents/{doc_id}
 ```
 
-Полное обновление. При изменении ключевых полей (`title`, `era`, `source_type`, `mks_oks_code`, `okstu_code`, `doc_code`) — `title_hash_sha256` пересчитывается автоматически.
+Полное обновление карточки документа. Тело запроса — enriched JSON (схема `validated_v3`), аналогично `POST /registry/documents`.
+При изменении ключевых полей (`title`, `era`, `source_type`, `mks_oks_code`, `okstu_code`, `doc_code`) — `title_hash_sha256` пересчитывается автоматически.
+
+**Ответ `200`:**
+```json
+{
+  "data": {
+    "id": 1,
+    "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования (ред. 2)",
+    "doc_code": "20868-81",
+    "updated_at": "2026-06-12T14:00:00Z"
+  }
+}
+```
 
 ---
 
@@ -1249,7 +1225,31 @@ PUT /registry/documents/{doc_id}
 PATCH /registry/documents/{doc_id}
 ```
 
-**Тело** — любое подмножество полей.
+**Тело** — любое подмножество полей карточки документа.
+
+```json
+{
+  "metadata": { "tags": ["важное", "обновлено"] },
+  "validity_status": "superseded",
+  "status_note": "Заменён ГОСТ Р 20868-2025",
+  "category_ids": [1, 3, 5]
+}
+```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `category_ids` | bigint[] | Массив ID категорий для назначения документу. Передаётся полный список — заменяет текущую привязку категорий |
+
+**Ответ `200`:**
+```json
+{
+  "data": {
+    "id": 1,
+    "updated_at": "2026-06-12T14:30:00Z",
+    "updated_fields": ["metadata", "validity_status", "status_note", "category_ids"]
+  }
+}
+```
 
 ---
 
@@ -1324,6 +1324,19 @@ GET /registry/documents/{doc_id}/succession
 DELETE /registry/documents/{doc_id}
 ```
 
+**Ответ `200`:**
+```json
+{
+  "data": {
+    "id": 1,
+    "deleted_at": "2026-06-12T15:00:00Z",
+    "message": "Документ мягко удалён. Запись сохранена в БД."
+  }
+}
+```
+
+**Ошибки**: `409` — есть связанные сущности (секции, версии), нельзя удалить.
+
 ---
 
 ### 3.11. Экспорт
@@ -1332,7 +1345,15 @@ DELETE /registry/documents/{doc_id}
 GET /registry/documents/export
 ```
 
-Фильтры те же, что в списке. **Ответ**: CSV-файл.
+Фильтры те же, что в списке.
+
+**Query-параметры:**
+| Параметр | Тип | Описание |
+|----------|-----|----------|
+| `format` | string | `csv` (по умолчанию), `json` |
+| `fields` | string | Список полей через запятую (по умолчанию все) |
+
+**Ответ**: файл в указанном формате.
 
 ---
 
@@ -1342,7 +1363,24 @@ GET /registry/documents/export
 POST /registry/documents/import
 ```
 
-Файл + mapping.
+**Запрос**: `multipart/form-data`
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `file` | File | CSV-файл с карточками документов |
+| `mode` | string | `create` — только новые, `update` — обновить существующие, `upsert` — создать/обновить |
+
+**Ответ `200`:**
+```json
+{
+  "data": {
+    "imported": 45,
+    "updated": 3,
+    "errors": [
+      { "row": 12, "code": "DUPLICATE_TITLE_HASH", "message": "Документ с таким title_hash уже существует" }
+    ]
+  }
+}
+```
 
 ---
 
@@ -1556,8 +1594,8 @@ POST /registry/documents/import
 
 | Метод | Путь | Описание |
 |-------|------|----------|
-| GET | `/registry/stats` | Статистика |
-| GET | `/registry/enums` | Допустимые значения |
+| GET | `/stats` | Статистика |
+| GET | `/enums` | Допустимые значения |
 
 ### 6.1. Статистика
 
@@ -1634,6 +1672,188 @@ GET /registry/enums
   }
 }
 ```
+
+---
+
+## Группа categories
+
+> Управление пользовательскими категориями документов (many-to-many).
+
+### 7.1. Список категорий
+
+```
+GET /registry/categories
+```
+
+**Ответ `200`:**
+
+```json
+{
+  "data": [
+    {
+      "id": 1,
+      "name": "Корпусные конструкции",
+      "description": "Документы по корпусу, набору, обшивке, палубам",
+      "color": "#4CAF50",
+      "document_count": 12,
+      "created_at": "2026-04-27T10:00:00Z",
+      "updated_at": "2026-06-10T14:00:00Z"
+    }
+  ],
+  "meta": { "total": 5, "page": 1, "page_size": 50 }
+}
+```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `id` | int | ID категории |
+| `name` | string | Название категории |
+| `description` | string | Описание (необязательное) |
+| `color` | string | Цвет в hex (#RRGGBB) для отображения в UI |
+| `document_count` | int | Количество привязанных документов |
+| `created_at` | string | Дата создания |
+| `updated_at` | string | Дата обновления |
+
+---
+
+### 7.2. Одна категория
+
+```
+GET /registry/categories/{category_id}
+```
+
+**Ответ `200`:**
+
+```json
+{
+  "data": {
+    "id": 1,
+    "name": "Корпусные конструкции",
+    "description": "Документы по корпусу, набору, обшивке, палубам",
+    "color": "#4CAF50",
+    "document_count": 12,
+    "created_at": "2026-04-27T10:00:00Z",
+    "updated_at": "2026-06-10T14:00:00Z"
+  }
+}
+```
+
+---
+
+### 7.3. Создать категорию
+
+```
+POST /registry/categories
+```
+
+**Тело запроса:**
+
+```json
+{
+  "name": "Корпусные конструкции",
+  "description": "Документы по корпусу, набору, обшивке, палубам",
+  "color": "#4CAF50"
+}
+```
+
+| Поле | Тип | Обязательность | Описание |
+|------|-----|---------------|----------|
+| `name` | string | Да | Название категории (уникальное) |
+| `description` | string | Нет | Описание категории |
+| `color` | string | Нет | Цвет в hex (#RRGGBB) |
+
+**Ответ `201`:**
+
+```json
+{
+  "data": {
+    "id": 6,
+    "name": "Корпусные конструкции",
+    "description": "Документы по корпусу, набору, обшивке, палубам",
+    "color": "#4CAF50",
+    "document_count": 0,
+    "created_at": "2026-06-12T14:00:00Z",
+    "updated_at": "2026-06-12T14:00:00Z"
+  }
+}
+```
+
+---
+
+### 7.4. Обновить категорию
+
+```
+PUT /registry/categories/{category_id}
+```
+
+**Тело запроса:**
+
+```json
+{
+  "name": "Корпусные конструкции и набор",
+  "description": "Обновлённое описание",
+  "color": "#2196F3"
+}
+```
+
+| Поле | Тип | Обязательность | Описание |
+|------|-----|---------------|----------|
+| `name` | string | Да | Название категории |
+| `description` | string | Нет | Описание категории |
+| `color` | string | Нет | Цвет в hex (#RRGGBB) |
+
+**Ответ `200`:**
+
+```json
+{
+  "data": {
+    "id": 1,
+    "name": "Корпусные конструкции и набор",
+    "description": "Обновлённое описание",
+    "color": "#2196F3",
+    "document_count": 12,
+    "created_at": "2026-04-27T10:00:00Z",
+    "updated_at": "2026-06-12T15:00:00Z"
+  }
+}
+```
+
+---
+
+### 7.5. Удалить категорию
+
+```
+DELETE /registry/categories/{category_id}
+```
+
+**Ответ `200`:**
+
+```json
+{
+  "data": {
+    "id": 1,
+    "deleted_at": "2026-06-12T15:30:00Z",
+    "message": "Категория удалена"
+  }
+}
+```
+
+**Возможные ошибки:**
+
+| HTTP | `error.code` | Описание |
+|------|-------------|----------|
+| 404 | `CATEGORY_NOT_FOUND` | Категория не найдена |
+| 409 | `CATEGORY_HAS_DOCUMENTS` | Категория привязана к документам, удалите связи или переназначьте документы |
+
+---
+
+### 7.6. Ошибки групп categories (справочно)
+
+| HTTP | `error.code` | Когда возникает |
+|------|-------------|----------------|
+| 404 | `CATEGORY_NOT_FOUND` | GET/PUT/DELETE по несуществующему ID |
+| 409 | `DUPLICATE_CATEGORY_NAME` | POST/PUT с именем, которое уже существует |
+| 409 | `CATEGORY_HAS_DOCUMENTS` | DELETE категории, к которой привязаны документы |
 
 ---
 
@@ -1724,6 +1944,26 @@ GET /registry/enums
 | `parser_engine` | text | NOT NULL — `docling`, `tesseract`, `easyocr` |
 | `supported` | boolean | DEFAULT true |
 | `created_at` | timestamptz | NOT NULL |
+
+---
+
+### 5.6. category
+
+| Поле | Тип | Ограничения |
+|------|-----|-------------|
+| `id` | bigint | PK, sequence |
+| `name` | varchar(255) | NOT NULL, UNIQUE |
+| `description` | text | nullable |
+| `color` | varchar(7) | nullable, hex-код (#RRGGBB) |
+| `created_at` | timestamptz | NOT NULL |
+| `updated_at` | timestamptz | NOT NULL |
+
+### 5.7. document_category
+
+| Поле | Тип | Ограничения |
+|------|-----|-------------|
+| `document_id` | bigint | PK (составной), FK → `registry.documents.id` ON DELETE CASCADE |
+| `category_id` | bigint | PK (составной), FK → `registry.categories.id` ON DELETE CASCADE |
 
 ---
 

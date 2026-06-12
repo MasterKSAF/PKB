@@ -103,6 +103,20 @@ erDiagram
         timestamptz updated_at
     }
 
+    registry.categories {
+        bigint id PK
+        varchar name
+        text description
+        varchar color
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    registry.document_categories {
+        bigint document_id PK, FK
+        bigint category_id PK, FK
+    }
+
     pipeline.tasks {
         bigint id PK
         bigint draft_id
@@ -203,6 +217,9 @@ erDiagram
     chat.projects ||--o{ chat.sessions : has_sessions
     chat.sessions ||--o{ chat.messages : has_messages
 
+    registry.categories ||--o{ registry.document_categories : has_documents
+    registry.documents ||--o{ registry.document_categories : categorized_by
+
     pipeline.tasks ||--o{ pipeline.task_steps : has
     pipeline.tasks }o--|o registry.documents : produces  (FK document_id nullable)
     registry.documents }o--|o registry.drafts : originates_from  (FK draft_id nullable)
@@ -226,6 +243,7 @@ erDiagram
 | `pipeline.tasks` | `draft_id` | B-tree | Поиск задачи по черновику |
 | `pipeline.tasks` | `document_id` | B-tree | Поиск задачи по документу |
 | `pipeline.task_steps` | `task_id` | B-tree | Поиск этапов задачи |
+| `registry.document_categories` | `category_id` | B-tree | Поиск категорий документа (обратная сторона many-to-many) |
 | `registry.document_sections` | `content` | GIN | Поиск по JSONB-полям (например, `content.amendments[].type`) |
 
 ## Ключевые условия и ограничения
@@ -388,3 +406,27 @@ erDiagram
 - **`draft_id` (bigint)** назначается Registry при создании записи черновика. Orchestrator хранит маппинг `draft_id → task_id → document_id`.
 - **`registry.drafts` и `pipeline.tasks`** не связаны FK (разные БД), логическая связь по `draft_id`.
 - **`rag.document_chunks.content`** — унифицированное хранение. `content` — строка (plain text или Markdown). `tsv` строится через `to_tsvector('russian', content)` при вставке.
+
+### 11. Категории документов (`registry.categories`, `registry.document_categories`)
+
+Пользовательские категории для группировки документов в разделы «Базы знаний». Many-to-many: один документ может относиться к нескольким категориям, одна категория — к нескольким документам.
+
+**`registry.categories`** — справочник категорий:
+
+| Поле | Тип | Ограничения |
+|------|-----|-------------|
+| `id` | bigint | PK, sequence |
+| `name` | varchar(255) | NOT NULL, UNIQUE |
+| `description` | text | nullable |
+| `color` | varchar(7) | nullable, hex-код (#RRGGBB) |
+| `created_at` | timestamptz | NOT NULL |
+| `updated_at` | timestamptz | NOT NULL |
+
+**`registry.document_categories`** — связь документа с категориями:
+
+| Поле | Тип | Ограничения |
+|------|-----|-------------|
+| `document_id` | bigint | PK (составной), FK → `registry.documents.id` ON DELETE CASCADE |
+| `category_id` | bigint | PK (составной), FK → `registry.categories.id` ON DELETE CASCADE |
+
+> **Каскадное удаление:** при удалении категории или документа связанные записи в `document_categories` удаляются автоматически.
