@@ -91,21 +91,34 @@ SEED_ROLES = [
 
 SEED_AUDIT = [
     {"event_id":1,"user_id":1,"action":"document.upload","resource_type":"document","resource_id":1,"details":{"filename":"spec_ГОСТ_2.109.pdf"},"ip_address":"192.168.1.25","timestamp":"2026-04-27T09:30:00Z"},
+    {"event_id":2,"user_id":2,"action":"classifier.update","resource_type":"classifier","resource_id":1,"details":{"code":"47.020","system":"MKS"},"ip_address":"192.168.1.30","timestamp":"2026-05-10T11:00:00Z"},
+    {"event_id":3,"user_id":3,"action":"user.create","resource_type":"user","resource_id":5,"details":{"email":"smirnova@example.com"},"ip_address":"192.168.1.10","timestamp":"2026-05-15T14:00:00Z"},
+    {"event_id":4,"user_id":2,"action":"terminology.create","resource_type":"terminology","resource_id":3,"details":{"term":"ISO"},"ip_address":"192.168.1.30","timestamp":"2026-06-01T09:15:00Z"},
 ]
 
 SEED_CLASSIFIERS = [
     {"classifier_system": "MKS", "code": "47", "parent_code": None, "full_name": "Судостроение", "status": "active", "effective_date": "2020-01-01", "replaced_by": None, "created_at": "2025-11-15T10:30:00Z", "updated_at": "2025-11-15T10:30:00Z"},
     {"classifier_system": "MKS", "code": "47.020", "parent_code": "47", "full_name": "Конструкция корпуса", "status": "active", "effective_date": "2020-01-01", "replaced_by": None, "created_at": "2025-11-15T10:30:00Z", "updated_at": "2025-11-15T10:30:00Z"},
+    {"classifier_system": "MKS", "code": "47.020.10", "parent_code": "47.020", "full_name": "Корпусные конструкции и набор корпуса", "status": "active", "effective_date": "2020-01-01", "replaced_by": None, "created_at": "2025-11-15T10:30:00Z", "updated_at": "2025-11-15T10:30:00Z"},
+    {"classifier_system": "MKS", "code": "47.020.30", "parent_code": "47.020", "full_name": "Судовые системы", "status": "active", "effective_date": "2020-01-01", "replaced_by": None, "created_at": "2025-11-15T10:30:00Z", "updated_at": "2025-11-15T10:30:00Z"},
+    {"classifier_system": "MKS", "code": "31.240", "parent_code": "31", "full_name": "Электроника", "status": "active", "effective_date": "2020-01-01", "replaced_by": None, "created_at": "2025-11-15T10:30:00Z", "updated_at": "2025-11-15T10:30:00Z"},
     {"classifier_system": "OKSTU", "code": "05.010", "parent_code": "05", "full_name": "Документы конструкторские", "status": "active", "effective_date": "1980-01-01", "replaced_by": None, "created_at": "2025-11-15T10:30:00Z", "updated_at": "2025-11-15T10:30:00Z"},
+    {"classifier_system": "OKSTU", "code": "05.020", "parent_code": "05", "full_name": "Документы технологические", "status": "active", "effective_date": "1980-01-01", "replaced_by": None, "created_at": "2025-11-15T10:30:00Z", "updated_at": "2025-11-15T10:30:00Z"},
+    {"classifier_system": "OKSTU", "code": "12.000", "parent_code": "12", "full_name": "Машиностроение", "status": "active", "effective_date": "1980-01-01", "replaced_by": None, "created_at": "2025-11-15T10:30:00Z", "updated_at": "2025-11-15T10:30:00Z"},
 ]
 
 SEED_TERMINOLOGY = [
     {"id": 1, "raw_term": "ГОСТ", "standard_term": "ГОСТ", "normalized_value": "гост", "term_type": "standard_code", "is_case_sensitive": False, "definition": "Государственный стандарт", "synonyms": ["GOST", "gost"], "related_docs": [], "scope": "Стандартизация", "is_blocked": False, "created_at": "2025-12-01T08:00:00Z", "updated_at": "2026-01-15T12:00:00Z"},
     {"id": 2, "raw_term": "DNV", "standard_term": "DNV", "normalized_value": "dnv", "term_type": "acronym", "is_case_sensitive": True, "definition": "Det Norske Veritas", "synonyms": ["DNV GL"], "related_docs": [], "scope": "Судостроение", "is_blocked": False, "created_at": "2026-01-20T14:00:00Z", "updated_at": "2026-01-20T14:00:00Z"},
+    {"id": 3, "raw_term": "ISO", "standard_term": "ISO", "normalized_value": "iso", "term_type": "standard_code", "is_case_sensitive": True, "definition": "International Organization for Standardization", "synonyms": ["ISO", "ИСО"], "related_docs": [], "scope": "Стандартизация", "is_blocked": False, "created_at": "2026-02-10T10:00:00Z", "updated_at": "2026-02-10T10:00:00Z"},
+    {"id": 4, "raw_term": "ТУ", "standard_term": "ТУ", "normalized_value": "ту", "term_type": "standard_code", "is_case_sensitive": False, "definition": "Технические условия", "synonyms": ["TU", "техусловия"], "related_docs": [], "scope": "Стандартизация", "is_blocked": False, "created_at": "2025-12-15T12:00:00Z", "updated_at": "2026-01-10T14:00:00Z"},
+    {"id": 5, "raw_term": "H11/h11", "standard_term": "H11/h11", "normalized_value": "h11/h11", "term_type": "symbol", "is_case_sensitive": True, "definition": "Поле допуска по системе отверстия/вала 11-го квалитета", "synonyms": [], "related_docs": [1], "scope": "Машиностроение", "is_blocked": False, "created_at": "2026-03-01T08:00:00Z", "updated_at": "2026-03-01T08:00:00Z"},
 ]
 
 SEED_REGISTRY_DOCUMENTS = [
-    {"id": 1, "title": "Стойки установочные", "doc_code": "20868-81", "source_type": "GOST", "title_hash_sha256": None, "status": "approved", "era": "USSR", "validity_status": "active", "jurisdiction": "RU", "issuing_body": "Госстандарт СССР", "mks_oks_code": "31.240", "mks_name": "Электроника", "okstu_code": None, "okstu_name": None, "classification_status": {"mks_status": "CONFIRMED", "okstu_status": "NOT_USED"}, "successor_doc_id": None, "predecessor_doc_id": None, "total_versions": 2, "chunk_count": 34, "created_by": "system", "updated_by": "ivanov_ai", "created_at": "2026-04-27T10:00:00Z", "updated_at": "2026-04-27T14:00:00Z"}
+    {"id": 1, "title": "Стойки установочные", "doc_code": "20868-81", "source_type": "GOST", "title_hash_sha256": None, "status": "approved", "era": "USSR", "validity_status": "active", "jurisdiction": "RU", "issuing_body": "Госстандарт СССР", "mks_oks_code": "31.240", "mks_name": "Электроника", "okstu_code": None, "okstu_name": None, "classification_status": {"mks_status": "CONFIRMED", "okstu_status": "NOT_USED"}, "successor_doc_id": None, "predecessor_doc_id": None, "total_versions": 2, "chunk_count": 34, "created_by": "system", "updated_by": "ivanov_ai", "created_at": "2026-04-27T10:00:00Z", "updated_at": "2026-04-27T14:00:00Z"},
+    {"id": 2, "title": "Правила классификации и постройки морских судов", "doc_code": "РД 31.11.21-96", "source_type": "RD", "title_hash_sha256": None, "status": "approved", "era": "RF", "validity_status": "active", "jurisdiction": "RU", "issuing_body": "Российский морской регистр судоходства", "mks_oks_code": "47.020", "mks_name": "Конструкция корпуса", "okstu_code": "05.020", "okstu_name": "Документы технологические", "classification_status": {"mks_status": "CONFIRMED", "okstu_status": "CONFIRMED"}, "successor_doc_id": None, "predecessor_doc_id": None, "total_versions": 3, "chunk_count": 128, "created_by": "petrova_ai", "updated_by": "petrova_ai", "created_at": "2026-05-10T08:00:00Z", "updated_at": "2026-06-01T16:00:00Z"},
+    {"id": 3, "title": "Трубы стальные бесшовные горячедеформированные", "doc_code": "ГОСТ 8732-78", "source_type": "GOST", "title_hash_sha256": None, "status": "draft", "era": "USSR", "validity_status": "active", "jurisdiction": "RU", "issuing_body": "Госстандарт СССР", "mks_oks_code": "47.020.30", "mks_name": "Судовые системы", "okstu_code": "12.000", "okstu_name": "Машиностроение", "classification_status": {"mks_status": "PENDING_REVIEW", "okstu_status": "PENDING_REVIEW"}, "successor_doc_id": None, "predecessor_doc_id": None, "total_versions": 1, "chunk_count": 56, "created_by": "system", "updated_by": "system", "created_at": "2026-06-10T09:00:00Z", "updated_at": "2026-06-11T11:00:00Z"},
 ]
 
 SEED_CLASSIFIER_PENDING = [
@@ -116,6 +129,8 @@ SEED_CATEGORIES = [
     {"id": 1, "name": "Корпусные конструкции", "description": "Документы по корпусу, набору, обшивке, палубам", "color": "#4CAF50", "document_count": 12, "created_at": "2026-04-27T10:00:00Z", "updated_at": "2026-06-10T14:00:00Z"},
     {"id": 2, "name": "Электрооборудование", "description": "Схемы, кабели, распределительные устройства", "color": "#2196F3", "document_count": 8, "created_at": "2026-04-27T10:00:00Z", "updated_at": "2026-06-10T14:00:00Z"},
     {"id": 3, "name": "Материалы", "description": "Спецификации материалов, сертификаты", "color": "#FF9800", "document_count": 5, "created_at": "2026-04-27T10:00:00Z", "updated_at": "2026-06-10T14:00:00Z"},
+    {"id": 4, "name": "Сварка", "description": "Документы по сварочным работам, аттестации и контролю", "color": "#9C27B0", "document_count": 3, "created_at": "2026-05-01T10:00:00Z", "updated_at": "2026-06-10T14:00:00Z"},
+    {"id": 5, "name": "Контроль качества", "description": "Методы контроля, испытания, дефектоскопия", "color": "#F44336", "document_count": 7, "created_at": "2026-05-01T10:00:00Z", "updated_at": "2026-06-10T14:00:00Z"},
 ]
 
 SEED_DOCUMENTS = [
@@ -132,13 +147,50 @@ SEED_DOCUMENTS = [
      "chunk_count": 34, "chunk_validation": None,
      "metadata": {"year": 1981, "udc": "629.5.021", "tags": ["судостроение"]},
      "total_versions": 1,
-    }
+    },
+    {"document_id": 2, "title": "Правила классификации морских судов", "doc_code": "РД 31.11.21-96",
+     "source_type": "RD", "era": "RF", "validity_status": "active",
+     "jurisdiction": "RU", "issuing_body": "Российский морской регистр",
+     "mks_oks_code": "47.020", "okstu_code": "05.020",
+     "classification_status": {"mks_status": "CONFIRMED", "okstu_status": "PENDING_REVIEW"},
+     "successor_doc_id": None, "predecessor_doc_id": None, "chunk_container_id": None,
+     "status": "review_required", "file_size": 2048000, "pages_total": 45, "pages_processed": 44,
+     "pages_failed": 1, "ocr_status": "completed", "index_status": "pending",
+     "user_id": 2, "uploaded_by": "Петрова А.В.",
+     "created_at": "2026-05-10T08:00:00Z", "updated_at": "2026-05-12T16:30:00Z",
+     "chunk_count": 128, "chunk_validation": None,
+     "metadata": {"year": 1996, "udc": "629.5.011", "tags": ["классификация", "морские суда"]},
+     "total_versions": 2,
+    },
+    {"document_id": 3, "title": "Трубы стальные бесшовные. Технические условия", "doc_code": "ГОСТ 8732-78",
+     "source_type": "GOST", "era": "USSR", "validity_status": "active",
+     "jurisdiction": "RU", "issuing_body": "Госстандарт СССР",
+     "mks_oks_code": "47.020.30", "okstu_code": "12.000",
+     "classification_status": {"mks_status": "CONFIRMED", "okstu_status": "NOT_USED"},
+     "successor_doc_id": None, "predecessor_doc_id": None, "chunk_container_id": None,
+     "status": "failed", "file_size": 512000, "pages_total": 8, "pages_processed": 3,
+     "pages_failed": 5, "ocr_status": "failed", "index_status": "pending",
+     "user_id": 1, "uploaded_by": "Иванов И.И.",
+     "created_at": "2026-06-01T09:00:00Z", "updated_at": "2026-06-01T09:15:00Z",
+     "chunk_count": 0, "chunk_validation": {"status": "error", "message": "OCR failed on pages 4-8"},
+     "metadata": {"year": 1978, "udc": "621.774.2", "tags": ["трубы", "сталь"]},
+     "total_versions": 1,
+    },
 ]
 
 SEED_DOCUMENT_ERRORS = [
     {"error_id": 1, "document_id": 1, "stage": "ocr", "page": 5,
      "error_code": "LOW_CONFIDENCE", "error_message": "Качество распознавания ниже порога",
-     "severity": "warning", "timestamp": "2026-04-27T10:01:00Z"}
+     "severity": "warning", "timestamp": "2026-04-27T10:01:00Z"},
+    {"error_id": 2, "document_id": 2, "stage": "validation", "page": 44,
+     "error_code": "VALIDATION_FAILED", "error_message": "Несоответствие формата поля doc_code",
+     "severity": "error", "timestamp": "2026-05-12T16:00:00Z"},
+    {"error_id": 3, "document_id": 3, "stage": "ocr", "page": 4,
+     "error_code": "OCR_FAILED", "error_message": "Ошибка распознавания: повреждённый PDF",
+     "severity": "error", "timestamp": "2026-06-01T09:10:00Z"},
+    {"error_id": 4, "document_id": 3, "stage": "ocr", "page": 5,
+     "error_code": "OCR_FAILED", "error_message": "Ошибка распознавания: повреждённый PDF",
+     "severity": "error", "timestamp": "2026-06-01T09:10:05Z"},
 ]
 
 SEED_METRICS = {
@@ -156,13 +208,72 @@ SEED_SESSIONS = [
           "content":"Здравствуйте! Чем могу помочь?","sources":[],"model_used":"gpt-4","processing_time_ms":500,
           "timestamp":"2026-04-27T10:00:01Z","feedback":None}
      ], "has_more": False, "last_message_preview": "Здравствуйте!",
-     "created_at": "2026-04-27T10:00:00Z", "updated_at": "2026-04-27T10:00:01Z"}
+     "created_at": "2026-04-27T10:00:00Z", "updated_at": "2026-04-27T10:00:01Z"},
+    {"session_id": 2, "title": "Анализ корпусных конструкций", "user_id": 1,
+     "document_ids": [1, 2], "options": {"model": "gpt-4", "temperature": 0.2},
+     "message_count": 4, "messages": [
+         {"message_id": 3, "role":"user","content":"Какая толщина стенки корпуса?","timestamp":"2026-05-15T14:00:00Z","status":"completed"},
+         {"message_id": 4, "role":"assistant","status":"completed",
+          "content":"Согласно спецификации по ГОСТ 2.109, толщина стенки корпуса составляет 5 мм. Материал: Сталь 45.","sources":[{"document_id":1,"page":3,"excerpt":"Толщина стенки корпуса: 5 мм"}],
+          "model_used":"gpt-4","processing_time_ms":1200,
+          "timestamp":"2026-05-15T14:00:02Z","feedback":None},
+         {"message_id": 5, "role":"user","content":"А какие допуски применяются?","timestamp":"2026-05-15T14:01:00Z","status":"completed"},
+         {"message_id": 6, "role":"assistant","status":"completed",
+          "content":"Предельные отклонения по H11/h11. Рекомендуется проверить допуски на отверстие Ø12H12.","sources":[{"document_id":1,"page":5,"excerpt":"Отверстие Ø12H12"},{"document_id":2,"page":3,"excerpt":"H11/h11"}],
+          "model_used":"gpt-4","processing_time_ms":900,
+          "timestamp":"2026-05-15T14:01:03Z","feedback":None}
+     ], "has_more": False, "last_message_preview": "Предельные отклонения по H11/h11.",
+     "created_at": "2026-05-15T14:00:00Z", "updated_at": "2026-05-15T14:01:03Z"},
+    {"session_id": 3, "title": "Поиск материалов для сварки", "user_id": 2,
+     "document_ids": [3], "options": {},
+     "message_count": 1, "messages": [
+         {"message_id": 7, "role":"user","content":"Какие требования к сварке корпусных конструкций?","timestamp":"2026-06-10T09:30:00Z","status":"completed"},
+     ], "has_more": False, "last_message_preview": "Какие требования к сварке корпусных конструкций?",
+     "created_at": "2026-06-10T09:30:00Z", "updated_at": "2026-06-10T09:30:00Z"},
 ]
 
 SEED_HISTORY = [
     {"history_id": 1, "session_id": 1, "created_at":"2026-04-27T10:00:01Z",
      "user_id": 1, "user_name":"Иванов И.И.","question":"Привет","answer_preview":"Здравствуйте!",
-     "status":"completed","source_count":0,"answer_id": 1}
+     "status":"completed","source_count":0,"answer_id": 1},
+    {"history_id": 2, "session_id": 2, "created_at":"2026-05-15T14:00:02Z",
+     "user_id": 1, "user_name":"Иванов И.И.","question":"Какая толщина стенки корпуса?",
+     "answer_preview":"Согласно спецификации по ГОСТ 2.109, толщина стенки корпуса составляет 5 мм.",
+     "status":"completed","source_count":1,"answer_id": 2},
+    {"history_id": 3, "session_id": 2, "created_at":"2026-05-15T14:01:03Z",
+     "user_id": 1, "user_name":"Иванов И.И.","question":"А какие допуски применяются?",
+     "answer_preview":"Предельные отклонения по H11/h11. Рекомендуется проверить допуски на отверстие Ø12H12.",
+     "status":"completed","source_count":2,"answer_id": 3},
+    {"history_id": 4, "session_id": 3, "created_at":"2026-06-10T09:30:00Z",
+     "user_id": 2, "user_name":"Петрова А.В.","question":"Какие требования к сварке корпусных конструкций?",
+     "answer_preview":"",
+     "status":"awaiting","source_count":0,"answer_id": None},
+]
+
+SEED_PROJECTS = [
+    {"project_id": 1, "code": "PRJ-2026-001", "name": "Ледокол 'Арктика'",
+     "description": "Проект строительства ледокола нового поколения",
+     "status": "active", "created_at": "2026-01-15T08:00:00Z", "updated_at": "2026-06-01T10:00:00Z"},
+    {"project_id": 2, "code": "PRJ-2026-002", "name": "Танкер 'Восток'",
+     "description": "Разработка документации для танкера усиленного ледового класса",
+     "status": "active", "created_at": "2026-02-01T09:00:00Z", "updated_at": "2026-05-20T14:00:00Z"},
+    {"project_id": 3, "code": "PRJ-2025-015", "name": "Модернизация СРЗ",
+     "description": "Модернизация судоремонтного завода (завершённый проект)",
+     "status": "archived", "created_at": "2025-06-01T08:00:00Z", "updated_at": "2026-01-10T12:00:00Z"},
+]
+
+SEED_REGISTRY_DRAFTS = [
+    {"id": 1, "file_key": "f-upload_001", "document_key": "sha256:abc123",
+     "status": "previewing", "confidence": None, "preview_metadata": None,
+     "raw_data": None, "error_code": None, "error_message": None,
+     "created_by": "system", "updated_by": None, "created_at": "2026-06-11T10:00:00Z",
+     "updated_at": "2026-06-11T10:00:00Z", "deleted_at": None},
+    {"id": 2, "file_key": "f-upload_002", "document_key": "sha256:def456",
+     "status": "ready_for_approve", "confidence": 0.94,
+     "preview_metadata": {"doc_code": "ГОСТ 12345-78", "title": "Балки стальные", "year": 1978},
+     "raw_data": None, "error_code": None, "error_message": None,
+     "created_by": "petrova_ai", "updated_by": "system",
+     "created_at": "2026-06-10T14:00:00Z", "updated_at": "2026-06-11T09:00:00Z", "deleted_at": None},
 ]
 
 # ---------------------------------------------------------------------------
@@ -213,8 +324,8 @@ def init_all_data():
     """Инициализация всех seed-данных."""
     global _users, _roles, _audit, _tokens, _tokens_meta, _password_hashes, _rate_limits, _access_token_map
     global _documents, _document_errors, _versions, _chunks, _history, _approvals, _metrics
-    global _sessions, _chat_history
-    global _classifiers, _terminology, _registry_docs, _pending_classifiers, _doc_history, _categories
+    global _sessions, _chat_history, _projects, _projects_id_seq
+    global _classifiers, _terminology, _registry_docs, _pending_classifiers, _registry_drafts, _doc_history, _categories
 
     # Auth
     _users = {u["user_id"]: copy.deepcopy(u) for u in SEED_USERS}
@@ -270,6 +381,10 @@ def init_all_data():
     # Query
     _sessions = {s["session_id"]: copy.deepcopy(s) for s in SEED_SESSIONS}
     _chat_history = copy.deepcopy(SEED_HISTORY)
+    _projects = {p["project_id"]: copy.deepcopy(p) for p in SEED_PROJECTS}
+    _projects_id_seq = max((p["project_id"] for p in SEED_PROJECTS), default=0)
+    _feedback_store = []
+    _export_store = {}
 
     # Registry
     _classifiers = {c["code"]: copy.deepcopy(c) for c in SEED_CLASSIFIERS}
@@ -285,6 +400,7 @@ def init_all_data():
         ]
 
     _categories = {c["id"]: copy.deepcopy(c) for c in SEED_CATEGORIES}
+    _registry_drafts = {d["id"]: copy.deepcopy(d) for d in SEED_REGISTRY_DRAFTS}
 
 
 init_all_data()

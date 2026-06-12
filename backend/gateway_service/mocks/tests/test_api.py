@@ -395,7 +395,7 @@ class TestOrchestratorService:
         assert "archived" in summary
 
     def test_24_list_documents_filter_type(self):
-        resp = client.get(f"{ORCH}/documents", params={"document_type": "GOST"})
+        resp = client.get(f"{ORCH}/documents", params={"source_type": "GOST"})
         assert_ok(resp)
         for doc in resp.json()["items"]:
             assert doc["source_type"] == "GOST"
@@ -486,10 +486,11 @@ class TestOrchestratorService:
         assert "queue" in data
         if len(data["queue"]) > 0:
             item = data["queue"][0]
-            # New queue item uses pipeline structure
-            assert "pipeline" in item
-            assert "formation" in item["pipeline"]
-            assert "indexation" in item["pipeline"]
+            # New queue item uses pipeline structure under steps
+            assert "steps" in item
+            assert "pipeline" in item["steps"]
+            assert "formation" in item["steps"]["pipeline"]
+            assert "indexation" in item["steps"]["pipeline"]
 
     def test_36_post_search(self):
         resp = client.post(
