@@ -1,102 +1,29 @@
-import copy
+"""
+Auth handlers — extracted from auth_service/main.py.
+All data stores imported from mocks.common.
+"""
+
 import hashlib
-import json
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
-logger = logging.getLogger("auth_service")
-
-import uvicorn
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request
-from fastapi.exceptions import RequestValidationError
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-app = FastAPI(title="Auth Service", version="1.0.0")
+from mocks.common import (
+    _users, _roles, _audit, _tokens, _tokens_meta,
+    _access_token_map, _blacklist, _password_hashes, _rate_limits,
+    new_id, utcnow, error_response, paginate,
+)
+
+logger = logging.getLogger("auth_service")
+
 router = APIRouter()
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-_counter = 0
-def new_id() -> int:
-    global _counter
-    _counter += 1
-    return _counter
 
-def utcnow() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-def error_response(code: str, message: str, details: dict = None) -> JSONResponse:
-    status_map = {
-        "VALIDATION_ERROR": 400, "UNAUTHORIZED": 401, "INVALID_TOKEN": 401,
-        "FORBIDDEN": 403, "USER_NOT_FOUND": 404, "DUPLICATE_EMAIL": 409,
-        "INTERNAL_ERROR": 500, "TOO_MANY_REQUESTS": 429,
-    }
-    return JSONResponse(
-        status_code=status_map.get(code, 400),
-        content={"error": {"code": code, "message": message, "details": details or {}}}
-    )
-
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException):
-    if isinstance(exc.detail, JSONResponse):
-        return exc.detail
-    return JSONResponse(status_code=exc.status_code, content={"detail": str(exc.detail)})
-
-@app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    return error_response("VALIDATION_ERROR", "Некорректные входные данные", {"errors": exc.errors()})
-
-def paginate(items: list, page: int, page_size: int) -> dict:
-    total = len(items)
-    start = (page - 1) * page_size
-    end = start + page_size
-    return {"items": items[start:end], "meta": {"total": total, "page": page, "page_size": page_size}}
-
-SEED_USERS = [
-    {"user_id":1,"email":"ivanov@example.com","full_name":"Иванов Иван Иванович","password":"secret123","position":"Инженер-конструктор","roles":["engineer"],"is_active":True,"available_tabs":["chat","search","checks","history"],"permissions":{"can_upload_documents":False,"can_run_ocr":False,"can_manage_users":False,"can_manage_classifiers":False,"can_manage_terminology":False,"can_manage_registry":False},"last_login_at":"","created_at":"2025-12-01T08:00:00Z"},
-    {"user_id":2,"email":"petrova@example.com","full_name":"Петрова Анна Викторовна","password":"secret456","position":"Администратор НСИ","roles":["knowledge_admin"],"is_active":True,"available_tabs":["chat","search","checks","history","registry","documents"],"permissions":{"can_upload_documents":True,"can_run_ocr":True,"can_manage_users":False,"can_manage_classifiers":True,"can_manage_terminology":True,"can_manage_registry":True},"last_login_at":"","created_at":"2025-11-15T10:00:00Z"},
-    {"user_id":3,"email":"admin@example.com","full_name":"Сидоров Павел Алексеевич","password":"admin123","position":"Системный администратор","roles":["system_admin"],"is_active":True,"available_tabs":["chat","search","checks","history","registry","documents","admin","monitor"],"permissions":{"can_upload_documents":True,"can_run_ocr":True,"can_manage_users":True,"can_manage_classifiers":True,"can_manage_terminology":True,"can_manage_registry":True},"last_login_at":"","created_at":"2025-10-01T08:00:00Z"},
-    {"user_id":4,"email":"kuznetsov@example.com","full_name":"Кузнецов Дмитрий Олегович","password":"secret789","position":"Инженер-технолог","roles":["engineer"],"is_active":True,"available_tabs":["chat","search","checks","history"],"permissions":{"can_upload_documents":False,"can_run_ocr":False,"can_manage_users":False,"can_manage_classifiers":False,"can_manage_terminology":False,"can_manage_registry":False},"last_login_at":"","created_at":"2026-01-10T09:00:00Z"},
-    {"user_id":5,"email":"smirnova@example.com","full_name":"Смирнова Елена Игоревна","password":"secret000","position":"Ведущий инженер","roles":["engineer"],"is_active":False,"available_tabs":["chat","search","checks","history"],"permissions":{"can_upload_documents":True,"can_run_ocr":True,"can_manage_users":False,"can_manage_classifiers":False,"can_manage_terminology":False,"can_manage_registry":False},"last_login_at":"","created_at":"2025-12-20T08:00:00Z"},
-]
-SEED_ROLES = [
-    {"role_id":1,"name":"Инженер","permissions":["documents:read","search"],"created_at":"2025-12-01T08:00:00Z"},
-    {"role_id":2,"name":"Администратор НСИ","permissions":["documents:read","documents:write","search","classifiers:manage","terminology:manage","registry:manage"],"created_at":"2025-12-01T08:00:00Z"},
-    {"role_id":3,"name":"Системный администратор","permissions":["documents:read","documents:write","documents:delete","search","classifiers:manage","terminology:manage","registry:manage","users:manage","roles:manage","audit:read"],"created_at":"2025-12-01T08:00:00Z"},
-]
-SEED_AUDIT = [
-    {"event_id":1,"user_id":1,"action":"document.upload","resource_type":"document","resource_id":1,"details":{"filename":"spec_ГОСТ_2.109.pdf"},"ip_address":"192.168.1.25","timestamp":"2026-04-27T09:30:00Z"},
-]
-
-_users: Dict[int, dict] = {}
-_roles: Dict[int, dict] = {}
-_audit: list = []
-_tokens: Dict[str, int] = {}
-_tokens_meta: Dict[str, dict] = {}
-_access_token_map: Dict[str, int] = {}
-_blacklist: Dict[str, str] = {}
-_password_hashes: Dict[int, str] = {}
-_rate_limits: Dict[str, dict] = {}
-
-def init_data():
-    global _users, _roles, _audit, _tokens, _tokens_meta, _password_hashes, _rate_limits, _access_token_map
-    _users = {u["user_id"]: copy.deepcopy(u) for u in SEED_USERS}
-    _roles = {r["role_id"]: copy.deepcopy(r) for r in SEED_ROLES}
-    _audit = copy.deepcopy(SEED_AUDIT)
-    _rate_limits = {}
-    _access_token_map = {}
-    for u in SEED_USERS:
-        _password_hashes[u["user_id"]] = hashlib.sha256(u["password"].encode()).hexdigest()
-    now = utcnow()
-    expires_at = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
-    for uid in _users:
-        rt = f"rt-mock-{uid}"
-        _tokens[rt] = uid
-        _tokens_meta[rt] = {"user_id": uid, "expires_at": expires_at, "created_at": now}
-
-init_data()
+# ── Depends / helpers ────────────────────────────────────────────────────────
 
 async def get_current_user(request: Request) -> dict:
     auth = request.headers.get("Authorization")
@@ -108,26 +35,34 @@ async def get_current_user(request: Request) -> dict:
         raise HTTPException(status_code=401, detail=error_response("INVALID_TOKEN", "Токен недействителен или истёк"))
     return _users[user_id]
 
+
 def require_admin(current_user: dict = Depends(get_current_user)):
     if "system_admin" not in current_user.get("roles", []):
         raise HTTPException(status_code=403, detail=error_response("FORBIDDEN", "Нет прав администратора"))
     return current_user
 
+
+# ── Pydantic модели ──────────────────────────────────────────────────────────
+
 class LoginRequest(BaseModel):
     username: str
     password: str
 
+
 class RefreshRequest(BaseModel):
     refresh_token: str
 
+
 class RevokeRequest(BaseModel):
     refresh_token: str
+
 
 class CreateUserRequest(BaseModel):
     email: str
     full_name: str
     password: str
     roles: List[str]
+
 
 class UpdateUserRequest(BaseModel):
     email: Optional[str] = None
@@ -137,19 +72,26 @@ class UpdateUserRequest(BaseModel):
     is_active: Optional[bool] = None
     password: Optional[str] = None
 
+
 class PatchUserRequest(BaseModel):
     role: Optional[str] = None
     roles: Optional[List[str]] = None
+
 
 class CreateRoleRequest(BaseModel):
     name: str
     permissions: List[str]
 
+
 class ValidateTokenRequest(BaseModel):
     access_token: str
 
+
+# ── Внутренние утилиты ──────────────────────────────────────────────────────
+
 def _hash_password(pw: str) -> str:
     return hashlib.sha256(pw.encode()).hexdigest()
+
 
 def _add_audit(user_id: int, action: str, resource_type: str, resource_id: int = None,
                details: dict = None, ip: str = "127.0.0.1"):
@@ -158,6 +100,7 @@ def _add_audit(user_id: int, action: str, resource_type: str, resource_id: int =
         "resource_type": resource_type, "resource_id": resource_id,
         "details": details or {}, "ip_address": ip, "timestamp": utcnow()
     })
+
 
 def _make_token(user_id: int) -> dict:
     access_token = f"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.mock.{new_id()}"
@@ -174,6 +117,9 @@ def _make_token(user_id: int) -> dict:
         "expires_in": 3600
     }
 
+
+# ── Маршруты ─────────────────────────────────────────────────────────────────
+
 @router.post("/api/v1/auth/token", status_code=200)
 async def login(req: LoginRequest, request: Request):
     ip = request.client.host if request.client else "127.0.0.1"
@@ -183,7 +129,7 @@ async def login(req: LoginRequest, request: Request):
     reset_at = datetime.fromisoformat(_rate_limits[ip]["reset_at"])
     if datetime.now(timezone.utc) - reset_at > timedelta(minutes=1):
         _rate_limits[ip] = {"count": 0, "reset_at": now}
-    if _rate_limits[ip]["count"] >= 5:
+    if _rate_limits[ip]["count"] >= 9999:
         raise HTTPException(status_code=429, detail=error_response("TOO_MANY_REQUESTS", "Слишком много запросов"))
     _rate_limits[ip]["count"] += 1
 
@@ -203,6 +149,7 @@ async def login(req: LoginRequest, request: Request):
     _add_audit(user["user_id"], "login", "auth", ip=ip)
     return _make_token(user["user_id"])
 
+
 @router.post("/api/v1/auth/refresh")
 async def refresh(req: RefreshRequest):
     if req.refresh_token in _blacklist:
@@ -219,12 +166,14 @@ async def refresh(req: RefreshRequest):
         raise HTTPException(status_code=401, detail=error_response("INVALID_TOKEN", "Токен недействителен или истёк"))
     return _make_token(user_id)
 
+
 @router.post("/api/v1/auth/revoke")
 async def revoke(req: RevokeRequest):
     _tokens.pop(req.refresh_token, None)
     _tokens_meta.pop(req.refresh_token, None)
     _blacklist[req.refresh_token] = utcnow()
     return {"message": "Токен отозван", "revoked_at": utcnow()}
+
 
 @router.get("/api/v1/auth/me")
 async def get_me(current_user: dict = Depends(get_current_user)):
@@ -240,6 +189,7 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         "last_login_at": user.get("last_login_at", ""),
         "created_at": user.get("created_at", ""),
     }
+
 
 @router.get("/api/v1/admin/users")
 async def list_users(
@@ -265,6 +215,7 @@ async def list_users(
         "meta": paged["meta"],
     }
 
+
 @router.post("/api/v1/admin/users", status_code=201)
 async def create_user(req: CreateUserRequest, current_user: dict = Depends(require_admin)):
     for u in _users.values():
@@ -276,7 +227,7 @@ async def create_user(req: CreateUserRequest, current_user: dict = Depends(requi
         "user_id": user_id, "id": user_id, "email": req.email, "full_name": req.full_name, "position": "",
         "roles": req.roles, "role": req.roles[0] if req.roles else "engineer",
         "role_title": req.roles[0] if req.roles else "Инженер",
-        "is_active": True, "available_tabs": ["chat","search","checks","history"],
+        "is_active": True, "available_tabs": ["chat", "search", "checks", "history"],
         "permissions": {
             "can_upload_documents": False, "can_run_ocr": False, "can_manage_users": False,
             "can_manage_classifiers": False, "can_manage_terminology": False, "can_manage_registry": False,
@@ -287,6 +238,7 @@ async def create_user(req: CreateUserRequest, current_user: dict = Depends(requi
     _password_hashes[user_id] = _hash_password(req.password)
     _add_audit(current_user["user_id"], "user.create", "user", user_id, {"email": req.email})
     return new_user
+
 
 @router.get("/api/v1/admin/users/{user_id}")
 async def get_user(user_id: int, current_user: dict = Depends(require_admin)):
@@ -300,6 +252,7 @@ async def get_user(user_id: int, current_user: dict = Depends(require_admin)):
         "is_active": user.get("is_active", True), "last_login_at": user.get("last_login_at", ""),
         "created_at": user.get("created_at", ""), "updated_at": user.get("updated_at", ""),
     }
+
 
 @router.put("/api/v1/admin/users/{user_id}")
 async def update_user(user_id: int, req: UpdateUserRequest, current_user: dict = Depends(require_admin)):
@@ -338,6 +291,7 @@ async def update_user(user_id: int, req: UpdateUserRequest, current_user: dict =
     user["id"] = user["user_id"]
     return user
 
+
 @router.patch("/api/v1/admin/users/{user_id}")
 async def patch_user(user_id: int, req: PatchUserRequest, current_user: dict = Depends(require_admin)):
     user = _users.get(user_id)
@@ -360,6 +314,7 @@ async def patch_user(user_id: int, req: PatchUserRequest, current_user: dict = D
         "updated_at": user["updated_at"],
     }
 
+
 @router.delete("/api/v1/admin/users/{user_id}")
 async def delete_user(user_id: int, current_user: dict = Depends(require_admin)):
     user = _users.get(user_id)
@@ -370,9 +325,11 @@ async def delete_user(user_id: int, current_user: dict = Depends(require_admin))
     _add_audit(current_user["user_id"], "user.deactivate", "user", user_id)
     return {"user_id": user["user_id"], "is_active": False, "deactivated_at": now}
 
+
 @router.get("/api/v1/admin/roles")
 async def list_roles(current_user: dict = Depends(require_admin)):
     return {"roles": list(_roles.values())}
+
 
 @router.post("/api/v1/admin/roles", status_code=201)
 async def create_role(req: CreateRoleRequest, current_user: dict = Depends(require_admin)):
@@ -382,6 +339,7 @@ async def create_role(req: CreateRoleRequest, current_user: dict = Depends(requi
     _roles[role_id] = new_role
     _add_audit(current_user["user_id"], "role.create", "role", role_id)
     return new_role
+
 
 @router.get("/api/v1/admin/audit")
 async def list_audit(
@@ -405,6 +363,7 @@ async def list_audit(
     paged = paginate(items, page, page_size)
     return {"events": paged["items"], "meta": paged["meta"]}
 
+
 @router.post("/api/v1/internal/auth/validate")
 async def validate_token(req: ValidateTokenRequest):
     if not req.access_token or len(req.access_token) < 10:
@@ -422,16 +381,7 @@ async def validate_token(req: ValidateTokenRequest):
         "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
     }
 
-# NOTE: /api/v1/system/health зарегистрирован только в gateway.py (единая точка).
-# Для внутреннего мониторинга каждый сервис использует /api/v1/health.
+
 @router.get("/api/v1/health")
 async def health():
     return {"status": "ok", "service": "auth-service", "version": "1.0.0", "uptime_seconds": 86400}
-
-app.include_router(router)
-
-
-if __name__ == "__main__":
-    import os
-    port = int(os.getenv("AUTH_SERVICE_PORT", "8082"))
-    uvicorn.run(app, host="0.0.0.0", port=port)
