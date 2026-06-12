@@ -15,8 +15,11 @@ sys.path.insert(
     0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 )
 
+import httpx
 import pytest
-from gateway.client import resolve_service
+from fastapi import Request
+from gateway.client import resolve_service, proxy_request
+from unittest.mock import AsyncMock, patch
 
 
 # ===========================================================================
@@ -111,3 +114,104 @@ class TestTrailingSlashHandling:
     def test_trailing_slashes(self, path: str, expected: str):
         """Both with and without trailing slash should resolve identically."""
         assert resolve_service(path) == expected
+
+
+# ===========================================================================
+# proxy_request path normalisation
+# ===========================================================================
+
+class TestProxyRequestPathNormalization:
+    """Verifies proxy_request strips trailing slashes before forwarding to the
+    downstream microservice, preventing unwanted 307 redirects from servers
+    with redirect_slashes enabled."""
+
+    @staticmethod
+    def _make_request(path: str) -> Request:
+        """Build a minimal fastapi.Request from an ASGI scope dict."""
+        async def _receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        return Request({
+            "type": "http",
+            "method": "GET",
+            "scheme": "http",
+            "server": ("testserver", 80),
+            "path": path,
+            "query_string": b"",
+            "headers": [],
+        }, receive=_receive)
+
+    @pytest.mark.asyncio
+    async def test_trailing_slash_is_stripped(self):
+        """Path with trailing slash (/classifiers/) has it removed in target_url."""
+        with (
+            patch("gateway.client.get_client") as mock_get_client,
+            patch("gateway.client.config") as mock_config,
+        ):
+            mock_config.service_urls = {"registry": "http://registry:8084"}
+
+            mock_client = AsyncMock(spec=httpx.AsyncClient)
+            mock_response = AsyncMock(spec=httpx.Response)
+            mock_response.status_code = 200
+            mock_response.headers = {}
+            mock_response.content = b""
+            mock_client.request.return_value = mock_response
+            mock_get_client.return_value = mock_client
+
+            request = self._make_request("/api/v1/registry/classifiers/")
+            await proxy_request(request, "registry")
+
+            url = mock_client.request.call_args.kwargs["url"]
+            assert url == "http://registry:8084/api/v1/registry/classifiers", (
+                f"Expected trailing slash stripped, got {url!r}"
+            )
+
+    @pytest.mark.asyncio
+    async def test_no_trailing_slash_stays_unchanged(self):
+        """Path without trailing slash stays as-is."""
+        with (
+            patch("gateway.client.get_client") as mock_get_client,
+            patch("gateway.client.config") as mock_config,
+        ):
+            mock_config.service_urls = {"registry": "http://registry:8084"}
+
+            mock_client = AsyncMock(spec=httpx.AsyncClient)
+            mock_response = AsyncMock(spec=httpx.Response)
+            mock_response.status_code = 200
+            mock_response.headers = {}
+            mock_response.content = b""
+            mock_client.request.return_value = mock_response
+            mock_get_client.return_value = mock_client
+
+            request = self._make_request("/api/v1/registry/classifiers")
+            await proxy_request(request, "registry")
+
+            url = mock_client.request.call_args.kwargs["url"]
+            assert url == "http://registry:8084/api/v1/registry/classifiers", (
+                f"Expected unchanged path, got {url!r}"
+            )
+
+    @pytest.mark.asyncio
+    async def test_root_path_stays_slash(self):
+        """Root path / is preserved (edge case, not stripped to empty string)."""
+        with (
+            patch("gateway.client.get_client") as mock_get_client,
+            patch("gateway.client.config") as mock_config,
+        ):
+            mock_config.service_urls = {"registry": "http://registry:8084"}
+
+            mock_client = AsyncMock(spec=httpx.AsyncClient)
+            mock_response = AsyncMock(spec=httpx.Response)
+            mock_response.status_code = 200
+            mock_response.headers = {}
+            mock_response.content = b""
+            mock_client.request.return_value = mock_response
+            mock_get_client.return_value = mock_client
+
+            request = self._make_request("/")
+            await proxy_request(request, "registry")
+
+            url = mock_client.request.call_args.kwargs["url"]
+            assert url == "http://registry:8084/", (
+                f"Expected root path /, got {url!r}"
+            )
