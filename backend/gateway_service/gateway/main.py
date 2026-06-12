@@ -51,6 +51,30 @@ logger.info("Gateway starting — mode=%s, port=%s", config.mode, config.port)
 
 
 # ---------------------------------------------------------------------------
+# StripTrailingSlash — нормализует путь ДО роутинга (без 307)
+# ---------------------------------------------------------------------------
+
+
+class StripTrailingSlashMiddleware(BaseHTTPMiddleware):
+    """Обрезает trailing slash до того, как роутер начнёт обработку.
+
+    Проверяет путь запроса: если он не корневой (/) и заканчивается на /
+    — обрезает слеш в scope["path"] и scope["raw_path"].
+    Это гарантирует, что catch-all роутер и resolve_service() увидят
+    нормализованный путь без единого 307 редиректа.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        if path != "/" and path.endswith("/"):
+            request.scope["path"] = path.rstrip("/")
+            raw = request.scope.get("raw_path")
+            if raw is not None and len(raw) > 1 and raw.endswith(b"/"):
+                request.scope["raw_path"] = raw.rstrip(b"/")
+        return await call_next(request)
+
+
+# ---------------------------------------------------------------------------
 # RBAC middleware — валидация JWT через Auth Service
 # ---------------------------------------------------------------------------
 
@@ -458,6 +482,9 @@ async def pydantic_validation_handler(request: Request, exc: ValidationError):
 # Middleware stack
 # ---------------------------------------------------------------------------
 
+# StripTrailingSlash — ПЕРВЫМ, чтобы роутер и resolve_service
+# видели нормализованный путь без trailing slash (без 307).
+app.add_middleware(StripTrailingSlashMiddleware)
 app.add_middleware(ProcessTimeMiddleware)
 app.add_middleware(IdempotencyMiddleware)
 app.add_middleware(RBACMiddleware)

@@ -72,6 +72,26 @@ auth_mod._make_token = _patched_make_token
 # ---------------------------------------------------------------------------
 
 
+class StripTrailingSlashMiddleware(BaseHTTPMiddleware):
+    """Обрезает trailing slash ДО того, как FastAPI начнёт роутинг.
+
+    Checker шлёт запросы С trailing slash (/api/v1/registry/classifiers/),
+    а роуты определены БЕЗ слеша (/api/v1/registry/classifiers).
+    Вместо 307 редиректа нормализует путь заранее.
+
+    Корневой путь / не трогаем.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        if path != "/" and path.endswith("/"):
+            request.scope["path"] = path.rstrip("/")
+            raw = request.scope.get("raw_path")
+            if raw is not None and len(raw) > 1 and raw.endswith(b"/"):
+                request.scope["raw_path"] = raw.rstrip(b"/")
+        return await call_next(request)
+
+
 class RBACMiddleware(BaseHTTPMiddleware):
     """Validates JWT Bearer token (mock) and attaches user context.
 
@@ -347,11 +367,9 @@ app = FastAPI(
     version="1.0.0",
     description="Mock gateway combining all services on a single port",
     lifespan=lifespan,
-    # True — чтобы запросы с trailing slash (/registry/classifiers/) корректно
-    # редиректились на роуты без слеша (/registry/classifiers).
-    # 307 возникает ТОЛЬКО когда есть соответствующий роут (без слеша).
-    # Несуществующие пути (без /registry/) получают 404, а не 307.
-    redirect_slashes=True,
+    # False — нормализацию trailing slash делает StripTrailingSlashMiddleware
+    # ДО роутинга, без единого 307.
+    redirect_slashes=False,
 )
 
 
@@ -459,6 +477,9 @@ def _extract_message(detail: any) -> str:
 # Middleware stack
 # ---------------------------------------------------------------------------
 
+# StripTrailingSlash — ПЕРВЫМ, чтобы все последующие middleware
+# и роутер видели уже нормализованный путь (без trailing slash).
+app.add_middleware(StripTrailingSlashMiddleware)
 app.add_middleware(ProcessTimeMiddleware)
 app.add_middleware(IdempotencyMiddleware)
 app.add_middleware(RBACMiddleware)

@@ -111,18 +111,24 @@ class TestOldPathsReturn404:
         assert resp.status_code == 404
 
 
-class TestNo307OnExistingRoutes:
-    """redirect_slashes=True — запросы с trailing slash редиректятся (307)
-    на каноничный роут (без слеша). 307 возникает ТОЛЬКО если роут существует.
-    Неизвестные пути получают 404, а не 307.
+class TestTrailingSlashNormalization:
+    """StripTrailingSlashMiddleware обрезает / ДО роутинга.
+    Запросы с / и без / работают одинаково, без единого 307.
     """
 
-    def test_router_has_redirect_slashes_true(self):
-        """redirect_slashes=True — trailing-slash запросы редиректом
-        направляются на каноничный роут (без слеша).
-        307 возникает ТОЛЬКО когда роут существует (без слеша).
-        """
-        assert app.router.redirect_slashes is True
+    def test_router_has_redirect_slashes_false(self):
+        """redirect_slashes=False — нормализацию делает middleware."""
+        assert app.router.redirect_slashes is False
+
+    def test_registry_classifiers_with_slash_returns_200(self):
+        """С trailing slash — middleware обрезает, роут срабатывает."""
+        resp = client.get("/api/v1/registry/classifiers/", follow_redirects=False)
+        assert resp.status_code == 200, f"expected 200, got {resp.status_code}"
+
+    def test_registry_classifiers_without_slash_returns_200(self):
+        """Без trailing slash — прямой матчинг."""
+        resp = client.get("/api/v1/registry/classifiers", follow_redirects=False)
+        assert resp.status_code == 200
 
     def test_documents_no_redirect(self):
         resp = client.get("/api/v1/documents", follow_redirects=False)
