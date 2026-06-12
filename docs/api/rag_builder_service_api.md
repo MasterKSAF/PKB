@@ -100,9 +100,9 @@ RAG Builder принимает JSON от Registry (через `GET /registry/doc
 |------|-----|---------------|----------|
 | `document_id` | bigint | Да | ID документа в Registry |
 | `sections` | array | Да | Массив секций для индексации |
-| `sections[].id` | bigint | Да | ID секции |
+| `sections[].section_id` | bigint | Да | ID секции |
 | `sections[].path` | string | Да | Путь секции (напр. "1.2.3") |
-| `sections[].type` | string | Да | Тип секции: `text`, `textBlock`, `table`, `drawing` |
+| `sections[].type` | string | Да | Тип секции: `text`, `textBlock`, `table`, `image`, `list`, `formula`, `headerFooter` |
 | `sections[].content` | object/jsonb | Да | Содержимое секции (JSONB, см. `registry_for_rag_v2`) |
 | `sections[].chunk_index` | int | Нет | Порядковый номер чанка (если предварительно нарезан) |
 

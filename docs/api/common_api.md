@@ -365,8 +365,16 @@ GET .../{doc_id}/status?longpoll=15
 | `GET /admin/audit` | ✗ | ✗ | ✓ |
 | `GET /monitor/health` | ✓ (без аутентификации) | ✓ | ✓ |
 | `GET /monitor/metrics` | ✗ | ✓ | ✓ |
-| `GET /registry/*` | ✓ | ✓ | ✓ |
-| `POST /PUT /DELETE /registry/*` | ✗ | ✓ | ✓ |
+| `GET /tasks/{task_id}/status` | ✗ | ✓ | ✓ |
+| `GET /tasks/{task_id}/steps` | ✗ | ✗ | ✓ |
+| `GET /drafts/{draft_id}/tasks` | ✗ | ✓ | ✓ |
+| `GET /classifiers/*` | ✓ | ✓ | ✓ |
+| `POST /PUT /PATCH /DELETE /classifiers/*` | ✗ | ✓ | ✓ |
+| `GET /terminology/*` | ✓ | ✓ | ✓ |
+| `POST /PUT /PATCH /DELETE /terminology/*` | ✗ | ✓ | ✓ |
+| `GET /registry/documents/*` | ✓ | ✓ | ✓ |
+| `POST /PUT /PATCH /DELETE /registry/documents/*` | ✗ | ✓ | ✓ |
+| `GET /common/*` | ✓ | ✓ | ✓ |
 
 > **Примечания:**
 > - Роли: `engineer` — инженер-конструктор; `knowledge_admin` — администратор НСИ; `system_admin` — системный администратор.
@@ -474,12 +482,12 @@ GET .../{doc_id}/status?longpoll=15
 
 | Этап | Формат | Единицы | Порядок |
 |---|---|---|---|
-| OCR / Parser (сырой JSON) | `[x1, y1, x2, y2]` | нормализованные (0..1) | Левая верхняя (0,0), Y вниз |
+| OCR / Parser (сырой JSON) | `[x1, y1, x2, y2]` | пиксели (px) — нормирование выполняет Converter-validator | Левая верхняя (0,0), Y вниз |
 | Converter-validator | `[x1, y1, x2, y2]` | нормализованные (0..1) | Левая верхняя (0,0), Y вниз |
 | Registry (БД) | `[x1, y1, x2, y2]` | нормализованные (0..1) | Левая верхняя (0,0), Y вниз |
 | Orchestrator (через Gateway) | `[x1, y1, x2, y2]` | нормализованные (0..1) | Левая верхняя (0,0), Y вниз |
 
-> **Единый формат:** bbox нормализован (0..1) относительно размеров страницы на всех этапах. Начало координат — левый верхний угол, ось Y направлена вниз. Конвертация пикселей в нормализованные координаты выполняется внутри OCR/Parser.
+> **Нормирование bbox:** OCR/Parser выдают bbox в пикселях (px) относительно размеров страницы (`page.width`, `page.height`). Converter-validator выполняет нормирование в диапазон [0,1]. Начиная с Converter-validator и далее (Registry, Orchestrator через Gateway) bbox передаётся в нормализованном виде (0..1).
 
 ---
 
@@ -512,7 +520,7 @@ GET .../{doc_id}/status?longpoll=15
 
 - **Лимиты загрузки:** максимальный размер файла — 100 МБ. Поддерживаемые MIME-типы: `application/pdf`, `image/png`, `image/jpeg`, `image/tiff`. При превышении лимита возвращается `413 PAYLOAD_TOO_LARGE`.
 
-- **Идемпотентность:** опциональный заголовок `Idempotency-Key` поддерживается для `POST /drafts` и `POST /chat/ask`. При повторном запросе с тем же ключом в течение 1 часа возвращается сохранённый результат.
+- **Идемпотентность:** опциональный заголовок `Idempotency-Key` поддерживается для `POST /drafts` (создание черновика). При повторном запросе с тем же ключом в течение 1 часа возвращается сохранённый результат.
 
 ---
 
