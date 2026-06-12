@@ -146,11 +146,13 @@ class TestOldPathsReturn404:
 # Trailing slash — проверяем, что нет 307 redirect
 # ===========================================================================
 
-class TestNoTrailingSlashRedirect:
-    """redirect_slashes=False — ни один запрос не должен вернуть 307."""
+class TestNo307OnNonExistentPaths:
+    """redirect_slashes=True — 307 бывает ТОЛЬКО когда роут существует.
+    Неизвестные пути (старые /api/v1/classifiers/) получают 404, а не 307.
+    """
 
-    def test_redirect_slashes_is_false(self):
-        assert app.router.redirect_slashes is False
+    def test_redirect_slashes_is_true(self):
+        assert app.router.redirect_slashes is True
 
     REGISTRY_PATHS = [
         "/api/v1/registry/classifiers",

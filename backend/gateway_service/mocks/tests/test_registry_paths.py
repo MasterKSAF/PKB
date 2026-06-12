@@ -111,12 +111,18 @@ class TestOldPathsReturn404:
         assert resp.status_code == 404
 
 
-class TestNoRedirect:
-    """redirect_slashes=False — запросы без trailing slash не редиректят."""
+class TestNo307OnExistingRoutes:
+    """redirect_slashes=True — запросы с trailing slash редиректятся (307)
+    на каноничный роут (без слеша). 307 возникает ТОЛЬКО если роут существует.
+    Неизвестные пути получают 404, а не 307.
+    """
 
-    def test_router_has_redirect_slashes_false(self):
-        """Проверка что FastAPI app создан с redirect_slashes=False."""
-        assert app.router.redirect_slashes is False
+    def test_router_has_redirect_slashes_true(self):
+        """redirect_slashes=True — trailing-slash запросы редиректом
+        направляются на каноничный роут (без слеша).
+        307 возникает ТОЛЬКО когда роут существует (без слеша).
+        """
+        assert app.router.redirect_slashes is True
 
     def test_documents_no_redirect(self):
         resp = client.get("/api/v1/documents", follow_redirects=False)
