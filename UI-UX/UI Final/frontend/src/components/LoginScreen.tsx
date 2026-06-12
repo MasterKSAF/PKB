@@ -160,9 +160,9 @@ export const LoginScreen: React.FC = () => {
                 size="small"
                 variant={!isDemoMode ? 'contained' : 'text'}
                 onClick={() => handleWorkModeChange('prod')}
-                sx={{ minWidth: 88, textTransform: 'none' }}
+                sx={{ minWidth: 116, textTransform: 'none' }}
               >
-                Gateway
+                Продуктивный
               </Button>
               <Button
                 size="small"
@@ -170,7 +170,7 @@ export const LoginScreen: React.FC = () => {
                 onClick={() => handleWorkModeChange('demo')}
                 sx={{ minWidth: 72, textTransform: 'none' }}
               >
-                Demo
+                Демо
               </Button>
             </Stack>
           </Stack>

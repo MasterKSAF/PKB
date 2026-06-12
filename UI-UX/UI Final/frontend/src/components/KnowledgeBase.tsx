@@ -29,7 +29,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useUIStore } from '../store/uiStore';
 import { MOCK_DOCUMENTS, MOCK_KNOWLEDGE_SECTIONS, type Citation, type Document, type KnowledgeSection } from '../utils/mockData';
-import { documentsApi, searchApi, sourceApi } from '../utils/http';
+import { documentsApi, registryApi, searchApi, sourceApi } from '../utils/http';
 import { downloadPreviewFile } from '../utils/downloadPreview';
 
 type SectionDocument = Document & {
@@ -65,7 +65,37 @@ const createDocumentCitation = (doc: Document): Citation => ({
   version: doc.version,
 });
 
-const buildDocumentPreviewText = (doc: Document, citation?: Citation | null) =>
+const contentValueToText = (value: unknown): string => {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) return value.map(contentValueToText).filter(Boolean).join('\n');
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    if (typeof record.text === 'string') return record.text;
+    if (typeof record.content === 'string') return record.content;
+    return Object.values(record).map(contentValueToText).filter(Boolean).join('\n');
+  }
+
+  return '';
+};
+
+const extractRegistrySectionLines = (payload?: any): string[] => {
+  const sections = payload?.sections ?? payload?.data?.sections ?? payload?.document?.sections ?? [];
+  if (!Array.isArray(sections)) return [];
+
+  return sections
+    .map((section: any, index: number) => {
+      const heading = [section.clause, section.title].filter(Boolean).join(' ') || `Раздел ${index + 1}`;
+      const page = section.page ? `стр. ${section.page}` : '';
+      const body = contentValueToText(section.content ?? section.text).trim();
+
+      return [heading, page, body].filter(Boolean).join('\n');
+    })
+    .filter(Boolean);
+};
+
+const buildDocumentPreviewText = (doc: Document, citation?: Citation | null, registrySectionLines: string[] = []) =>
   [
     doc.name,
     `ID: ${doc.id}`,
@@ -77,38 +107,52 @@ const buildDocumentPreviewText = (doc: Document, citation?: Citation | null) =>
     `Обновлен: ${doc.updatedAt || 'не указано'}`,
     citation?.documentUrl ? `Ссылка на файл: ${citation.documentUrl}` : '',
     '',
+    registrySectionLines.length ? `Секции Registry:\n${registrySectionLines.join('\n\n')}` : '',
+    registrySectionLines.length ? '' : '',
     citation?.text ?? 'Карточка документа отображается из UI, пока источник предпросмотра не получен.',
   ]
     .filter(Boolean)
     .join('\n');
 
-const buildPreviewPages = (doc: Document, citation?: Citation | null): PreviewPage[] => [
-  {
-    title: 'Краткий срез',
-    lines: [
-      doc.name,
-      `Тип: ${doc.type}`,
-      `Версия: ${doc.version}`,
-      `Источник: ${doc.source}`,
-      `OCR: ${doc.ocrStatus}`,
-      `Индекс: ${doc.indexStatus}`,
-    ],
-  },
-  {
-    title: 'Служебные данные',
-    lines: [
-      `ID: ${doc.id}`,
-      `Обновлен: ${doc.updatedAt || 'не указано'}`,
-      `Тип источника: ${doc.type}`,
-      `Версия: ${doc.version}`,
-      citation?.documentUrl ? `URL файла: ${citation.documentUrl}` : 'URL файла не передан.',
-    ],
-  },
-  {
+const buildPreviewPages = (doc: Document, citation?: Citation | null, registrySectionLines: string[] = []): PreviewPage[] => {
+  const pages: PreviewPage[] = [
+    {
+      title: 'Краткий срез',
+      lines: [
+        doc.name,
+        `Тип: ${doc.type}`,
+        `Версия: ${doc.version}`,
+        `Источник: ${doc.source}`,
+        `OCR: ${doc.ocrStatus}`,
+        `Индекс: ${doc.indexStatus}`,
+      ],
+    },
+    {
+      title: 'Служебные данные',
+      lines: [
+        `ID: ${doc.id}`,
+        `Обновлен: ${doc.updatedAt || 'не указано'}`,
+        `Тип источника: ${doc.type}`,
+        `Версия: ${doc.version}`,
+        citation?.documentUrl ? `URL файла: ${citation.documentUrl}` : 'URL файла не передан.',
+      ],
+    },
+  ];
+
+  if (registrySectionLines.length) {
+    pages.push({
+      title: 'Секции Registry',
+      lines: registrySectionLines,
+    });
+  }
+
+  pages.push({
     title: 'Текст предпросмотра',
-    lines: buildDocumentPreviewText(doc, citation).split('\n'),
-  },
-];
+    lines: buildDocumentPreviewText(doc, citation, registrySectionLines).split('\n'),
+  });
+
+  return pages;
+};
 
 const sortDocuments = (documents: SectionDocument[], sort: DocumentSort) => {
   const compareDate = (left: SectionDocument, right: SectionDocument) =>
@@ -197,17 +241,23 @@ export const KnowledgeBase: React.FC = () => {
 
   const documentsQuery = useQuery({
     queryKey: ['gateway-documents', workMode],
-    queryFn: documentsApi.list,
+    queryFn: registryApi.documents,
     staleTime: 30_000,
   });
   const knowledgeSectionsQuery = useQuery({
     queryKey: ['gateway-knowledge-sections', workMode],
-    queryFn: documentsApi.knowledgeSections,
+    queryFn: registryApi.knowledgeSections,
     staleTime: 60_000,
   });
   const documentDetailQuery = useQuery({
     queryKey: ['gateway-document-detail', workMode, selectedDocument?.id],
-    queryFn: () => documentsApi.get(selectedDocument!.id),
+    queryFn: () => registryApi.document(selectedDocument!.id),
+    enabled: Boolean(selectedDocument) && workMode === 'prod',
+    staleTime: 30_000,
+  });
+  const documentRegistrySectionsQuery = useQuery({
+    queryKey: ['gateway-registry-document-sections', workMode, selectedDocument?.id],
+    queryFn: () => registryApi.documentSections(selectedDocument!.id),
     enabled: Boolean(selectedDocument) && workMode === 'prod',
     staleTime: 30_000,
   });
@@ -473,12 +523,18 @@ export const KnowledgeBase: React.FC = () => {
     void handleOpenPreview(document, resultCitation);
   };
 
+  const registrySectionLines = useMemo(
+    () => extractRegistrySectionLines(documentRegistrySectionsQuery.data),
+    [documentRegistrySectionsQuery.data],
+  );
   const previewPages = useMemo(
-    () => (selectedDocument ? buildPreviewPages(selectedDocument, previewCitation) : []),
-    [previewCitation, selectedDocument],
+    () => (selectedDocument ? buildPreviewPages(selectedDocument, previewCitation, registrySectionLines) : []),
+    [previewCitation, registrySectionLines, selectedDocument],
   );
   const currentPreviewPage = previewPages[Math.min(previewPageIndex, Math.max(previewPages.length - 1, 0))] ?? null;
-  const selectedDocumentPreviewText = selectedDocument ? buildDocumentPreviewText(selectedDocument, previewCitation) : '';
+  const selectedDocumentPreviewText = selectedDocument
+    ? buildDocumentPreviewText(selectedDocument, previewCitation, registrySectionLines)
+    : '';
   const previewSearchMatchCount = countTextMatches(selectedDocumentPreviewText, previewDocumentSearch);
   const gatewayDocumentDetail = documentDetailQuery.data;
   const gatewayDocumentStatus = documentStatusQuery.data;
@@ -808,7 +864,7 @@ export const KnowledgeBase: React.FC = () => {
                             selectedDocument
                               ? downloadPreviewFile(
                                   selectedDocument.name,
-                                  buildDocumentPreviewText(selectedDocument, previewCitation),
+                                  selectedDocumentPreviewText,
                                   'txt',
                                 )
                               : undefined
@@ -924,6 +980,11 @@ export const KnowledgeBase: React.FC = () => {
                                 <Chip label={`Версий: ${gatewayDocumentDetail?.total_versions ?? 0}`} size="small" variant="outlined" />
                                 <Chip
                                   label={`Страниц: ${gatewayDocumentPages.length || 0}`}
+                                  size="small"
+                                  variant="outlined"
+                                />
+                                <Chip
+                                  label={`Секций: ${registrySectionLines.length || 0}`}
                                   size="small"
                                   variant="outlined"
                                 />
@@ -1135,7 +1196,7 @@ export const KnowledgeBase: React.FC = () => {
           {selectedDocument && (
             <Button
               startIcon={<Download size={16} />}
-              onClick={() => downloadPreviewFile(selectedDocument.name, buildDocumentPreviewText(selectedDocument, previewCitation), 'txt')}
+              onClick={() => downloadPreviewFile(selectedDocument.name, selectedDocumentPreviewText, 'txt')}
             >
               Скачать
             </Button>

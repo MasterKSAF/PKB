@@ -111,7 +111,7 @@ export const useUIStore = create<UIState>((set) => ({
   toggleFocusMode: () => set((state) => ({ focusMode: !state.focusMode })),
   videoGuideOpen: false,
   setVideoGuideOpen: (videoGuideOpen) => set({ videoGuideOpen }),
-  apiStatus: 'demo',
+  apiStatus: 'offline',
   setApiStatus: (apiStatus) => set({ apiStatus }),
   adminUsers: MOCK_ADMIN_USERS,
   setAdminUsers: (adminUsers) => set({ adminUsers }),
@@ -129,21 +129,12 @@ export const useUIStore = create<UIState>((set) => ({
     set((state) => ({
       adminUsers: state.adminUsers.map((user) => (user.id === userId ? { ...user, ...patch } : user)),
     })),
-  adminAuditLog: [
-    {
-      id: 'audit-1',
-      time: '2026-04-30 12:40',
-      actor: 'Система',
-      target: 'Права доступа',
-      action: 'Инициализация',
-      details: 'Загружена демонстрационная матрица ролей и прав доступа.',
-    },
-  ],
+  adminAuditLog: [],
   addAdminAuditLogItem: (item) =>
     set((state) => ({
       adminAuditLog: [item, ...state.adminAuditLog].slice(0, 20),
     })),
-  chatMessages: MOCK_CHATS,
+  chatMessages: [],
   setChatMessages: (chatMessages) => set({ chatMessages }),
   appendChatMessages: (messages) =>
     set((state) => ({

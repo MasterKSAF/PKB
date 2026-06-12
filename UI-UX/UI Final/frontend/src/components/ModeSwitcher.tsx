@@ -40,7 +40,7 @@ import {
 import { useUIStore, AppTab } from '../store/uiStore';
 import { ROLE_TAB_ACCESS } from '../utils/access';
 import { MOCK_CHAT_THREADS } from '../utils/mockData';
-import { chatApi, clearGatewayTokens, type GatewayChatProject } from '../utils/http';
+import { chatApi, clearGatewayTokens, projectsApi, type GatewayChatProject } from '../utils/http';
 
 const NAV_ITEMS: Array<{ value: AppTab; label: string; icon: React.ReactNode }> = [
   { value: 'chat', label: 'Чат', icon: <MessageSquare size={18} /> },
@@ -140,8 +140,8 @@ export const ModeSwitcher: React.FC = () => {
     setCurrentGatewaySessionId(null);
     setChatProjects(gatewayFallbackProjects);
 
-    void chatApi
-      .sessions()
+    void projectsApi
+      .list()
       .then((projects) => {
         if (!isMounted) return;
         setChatProjects(projects.length ? projects : [{ id: 'gateway-dialogs', name: 'Рабочие диалоги', chats: [] }]);
@@ -160,7 +160,7 @@ export const ModeSwitcher: React.FC = () => {
     setExpandedProjects((state) => ({ ...state, [projectId]: !state[projectId] }));
   };
 
-  const createProject = () => {
+  const createProject = async () => {
     const newProjectNumber = chatProjects.filter((project) => project.name.startsWith('Новый проект')).length + 1;
     const projectId = `project-${Date.now()}`;
     const name = `Новый проект ${newProjectNumber}`;
@@ -175,6 +175,26 @@ export const ModeSwitcher: React.FC = () => {
     setEditingProjectId(projectId);
     setProjectDraftName(name);
     setActiveTab('chat');
+
+    if (workMode !== 'prod') return;
+
+    try {
+      const createdProject = await projectsApi.create(name);
+
+      setChatProjects((projects) =>
+        projects.map((project) => (project.id === projectId ? { ...createdProject, chats: project.chats } : project)),
+      );
+      setExpandedProjects((state) => {
+        const nextState = { ...state };
+        delete nextState[projectId];
+        nextState[createdProject.id] = true;
+        return nextState;
+      });
+      setActiveProjectId(createdProject.id);
+      setEditingProjectId(createdProject.id);
+    } catch {
+      // Проект остается локально видимым; online/offline-индикатор покажет проблему Gateway.
+    }
   };
 
   const handleNavClick = (tab: AppTab) => {
@@ -239,7 +259,7 @@ export const ModeSwitcher: React.FC = () => {
     if (workMode !== 'prod') return;
 
     try {
-      const created = await chatApi.createSession(title);
+      const created = await chatApi.createSession(title, projectId);
       const gatewayChatId = created.session_id ?? created.id ?? created.session?.session_id ?? chatId;
       const gatewayTitle = created.title ?? title;
 
@@ -272,18 +292,29 @@ export const ModeSwitcher: React.FC = () => {
     setProjectDraftName(name);
   };
 
-  const saveProjectRename = () => {
+  const saveProjectRename = async () => {
     if (!editingProjectId || !projectDraftName.trim()) {
       setEditingProjectId(null);
       return;
     }
 
+    const projectId = editingProjectId;
+    const name = projectDraftName.trim();
+
     setChatProjects((projects) =>
       projects.map((project) =>
-        project.id === editingProjectId ? { ...project, name: projectDraftName.trim() } : project,
+        project.id === projectId ? { ...project, name } : project,
       ),
     );
     setEditingProjectId(null);
+
+    if (workMode === 'prod') {
+      try {
+        await projectsApi.update(projectId, { name });
+      } catch {
+        // Локальное имя остается; проблему синхронизации покажет общий статус Gateway.
+      }
+    }
   };
 
   const saveRename = async () => {
@@ -405,31 +436,40 @@ export const ModeSwitcher: React.FC = () => {
     }
   };
 
-  const confirmDeleteProject = () => {
+  const confirmDeleteProject = async () => {
     if (!deleteProjectCandidate) return;
+    const candidate = deleteProjectCandidate;
 
-    const remainingProjects = chatProjects.filter((project) => project.id !== deleteProjectCandidate.projectId);
-    const deletedProject = chatProjects.find((project) => project.id === deleteProjectCandidate.projectId);
+    const remainingProjects = chatProjects.filter((project) => project.id !== candidate.projectId);
+    const deletedProject = chatProjects.find((project) => project.id === candidate.projectId);
     const shouldResetThread = deletedProject?.chats.some((chat) => chat.id === activeThreadId);
 
     setChatProjects(remainingProjects);
     setExpandedProjects((state) => {
       const nextState = { ...state };
-      delete nextState[deleteProjectCandidate.projectId];
+      delete nextState[candidate.projectId];
       return nextState;
     });
 
-    if (activeProjectId === deleteProjectCandidate.projectId) {
+    if (activeProjectId === candidate.projectId) {
       setActiveProjectId(remainingProjects[0]?.id ?? '');
     }
 
-    if (shouldResetThread || activeProjectId === deleteProjectCandidate.projectId) {
+    if (shouldResetThread || activeProjectId === candidate.projectId) {
       setActiveThreadId('');
       setCurrentGatewaySessionId(null);
       setChatMessages([]);
     }
 
     setDeleteProjectCandidate(null);
+
+    if (workMode === 'prod') {
+      try {
+        await projectsApi.delete(candidate.projectId);
+      } catch {
+        // Удаление оптимистичное; при ошибке Gateway дерево обновится при следующей загрузке.
+      }
+    }
   };
 
   return (
@@ -691,7 +731,7 @@ export const ModeSwitcher: React.FC = () => {
                         <Button
                           size="small"
                           startIcon={<Plus size={12} />}
-                          onClick={createProject}
+                          onClick={() => void createProject()}
                           sx={{
                             width: 74,
                             minHeight: 24,
@@ -748,7 +788,7 @@ export const ModeSwitcher: React.FC = () => {
                                     autoFocus
                                     onChange={(event) => setProjectDraftName(event.target.value)}
                                     onKeyDown={(event) => {
-                                      if (event.key === 'Enter') saveProjectRename();
+                                      if (event.key === 'Enter') void saveProjectRename();
                                       if (event.key === 'Escape') setEditingProjectId(null);
                                     }}
                                     slotProps={{
@@ -765,7 +805,7 @@ export const ModeSwitcher: React.FC = () => {
                                     }}
                                     sx={{ flex: 1, minWidth: 0 }}
                                   />
-                                  <IconButton size="small" onClick={saveProjectRename} sx={{ width: 25, height: 25 }}>
+                                  <IconButton size="small" onClick={() => void saveProjectRename()} sx={{ width: 25, height: 25 }}>
                                     <Check size={13} />
                                   </IconButton>
                                   <IconButton
@@ -1158,7 +1198,7 @@ export const ModeSwitcher: React.FC = () => {
           <Button variant="outlined" color="inherit" onClick={() => setDeleteProjectCandidate(null)}>
             Отмена
           </Button>
-          <Button variant="contained" color="error" startIcon={<Trash2 size={15} />} onClick={confirmDeleteProject}>
+          <Button variant="contained" color="error" startIcon={<Trash2 size={15} />} onClick={() => void confirmDeleteProject()}>
             Удалить проект
           </Button>
         </DialogActions>

@@ -3,7 +3,12 @@ import { Alert, Box, Typography, Button, TextField, IconButton, Tooltip } from '
 import { ThumbsUp, ThumbsDown, Send } from 'lucide-react';
 import { feedbackApi } from '../utils/http';
 
-export const Feedback: React.FC = () => {
+interface FeedbackProps {
+  messageId?: string;
+  sessionId?: string;
+}
+
+export const Feedback: React.FC<FeedbackProps> = ({ messageId, sessionId }) => {
   const [useful, setUseful] = useState<boolean | null>(null);
   const [comment, setComment] = useState('');
   const [sent, setSent] = useState(false);
@@ -26,7 +31,7 @@ export const Feedback: React.FC = () => {
     setError('');
 
     try {
-      await feedbackApi.send({ useful, comment });
+      await feedbackApi.send({ useful, comment, messageId, sessionId });
       setSent(true);
     } catch (sendError: any) {
       setError(sendError?.message ?? 'Не удалось отправить отзыв.');

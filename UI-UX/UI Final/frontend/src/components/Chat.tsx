@@ -190,7 +190,7 @@ function highlightText(text: string, query: string, isLight: boolean, activeOccu
 }
 
 export const Chat: React.FC = () => {
-  const { appendChatMessages, chatMessages, themeMode } = useUIStore();
+  const { appendChatMessages, chatMessages, currentGatewaySessionId, themeMode } = useUIStore();
   const isLight = themeMode === 'light';
   const assistantAccent = isLight ? '#0284c7' : '#98d9d8';
   const messages = chatMessages;
@@ -657,13 +657,13 @@ export const Chat: React.FC = () => {
                               На ручную проверку
                             </Button>
                           </Box>
-                          <Feedback />
+                          <Feedback messageId={msg.id} sessionId={currentGatewaySessionId ?? undefined} />
                         </Box>
                       )}
 
                       {isAssistant && msg.id === messages[messages.length - 1].id && (
                         <Box sx={{ mt: 1.4 }}>
-                          <Feedback />
+                          <Feedback messageId={msg.id} sessionId={currentGatewaySessionId ?? undefined} />
                         </Box>
                       )}
                     </Box>
