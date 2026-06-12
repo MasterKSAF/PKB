@@ -11,7 +11,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Union
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -24,6 +24,18 @@ from mocks.common import (
 logger = logging.getLogger("registry_service")
 
 router = APIRouter()
+
+
+async def _read_body_or_file(request: Request) -> bytes:
+    """Читает тело запроса: из JSON-тела или из multipart file."""
+    content_type = request.headers.get("content-type", "")
+    if "multipart" in content_type:
+        form = await request.form()
+        upload = form.get("file")
+        if upload and hasattr(upload, "read"):
+            return await upload.read()
+        raise HTTPException(400, detail=error_response("VALIDATION_ERROR", "Файл не передан"))
+    return await request.body()
 
 
 # ── Pydantic модели ──────────────────────────────────────────────────────────
@@ -169,8 +181,8 @@ async def get_tree():
 
 
 @router.post("/classifiers/import")
-async def import_classifiers(file: UploadFile = File(...)):
-    content = await file.read()
+async def import_classifiers(request: Request):
+    content = await _read_body_or_file(request)
     raw_data = json.loads(content)
     if isinstance(raw_data, dict):
         raw_data = raw_data.get("data") or raw_data.get("classifiers") or []
@@ -327,8 +339,8 @@ async def normalize_term(term: str = Query(...)):
 
 
 @router.post("/terminology/import")
-async def import_terms(file: UploadFile = File(...)):
-    content = await file.read()
+async def import_terms(request: Request):
+    content = await _read_body_or_file(request)
     raw_data = json.loads(content)
     if isinstance(raw_data, dict):
         raw_data = raw_data.get("data") or raw_data.get("terms") or []
@@ -426,8 +438,8 @@ async def export_docs(format: str = "json"):
 
 
 @router.post("/documents/import")
-async def import_docs(file: UploadFile = File(...)):
-    content = await file.read()
+async def import_docs(request: Request):
+    content = await _read_body_or_file(request)
     raw_data = json.loads(content)
     if isinstance(raw_data, dict):
         raw_data = raw_data.get("data") or raw_data.get("documents") or []
