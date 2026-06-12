@@ -21,7 +21,7 @@ DISPLAY_NAME = "Gateway Service"
 
 # Gateway-specific credentials (пароль admin123 из SEED_USERS мока)
 _CREDS = {"username": "admin@example.com", "password": "admin123"}
-_PREP_SESSION = {"title": "Тестовая сессия Gateway"}
+_PREP_SESSION = {"title": "Тестовая сессия Gateway", "project_id": 1}
 _PREP_MESSAGE = {"text": "Тестовое сообщение", "content": "Тестовое сообщение"}
 _PREP_DOC = {"title": "Тестовый документ Gateway", "doc_code": f"GW.{int(time.time())%100000}", "source_type": "GOST"}
 _PREP_CLASSIF = {"classifier_system": "MKS", "code": f"CK.{int(time.time())%100000}", "full_name": "Тестовый классификатор Gateway", "status": "active"}
@@ -65,10 +65,17 @@ def get_service_def() -> ServiceDef:
             response_schema={"data": dict, "data.id": int},
             is_preparation=True, expected_status={201, 409}),
 
+        # Create category (prepare category_id)
+        EndpointDef("POST", f"{API_PREFIX}/registry/categories", "categories",
+            "Создать категорию (prepare)",
+            body={"name": f"Категория_{int(time.time())%100000}"},
+            extract_keys=["category_id"],
+            is_preparation=True, expected_status={201, 409}),
+
         # Chat project (prepare project_id)
         EndpointDef("POST", f"{API_PREFIX}/chat/projects", "chat",
             "Создать проект (prepare)",
-            body={"title": "Тестовый проект"}, extract_keys=["project_id"],
+            body={"code": "TEST-PRJ", "name": "Тестовый проект", "status": "active"}, extract_keys=["project_id"],
             is_preparation=True, expected_status={201, 409}),
 
         # Admin: create user (prepare user_id)
@@ -82,7 +89,7 @@ def get_service_def() -> ServiceDef:
         # Drafts: create draft (prepare draft_id)
         EndpointDef("POST", f"{API_PREFIX}/registry/drafts", "registry_documents",
             "Создать черновик (prepare)",
-            body={"document_key": "prepare-draft-key"},
+            body={"file_key": "prepare-file.pdf", "document_key": "prepare-draft-key"},
             extract_keys=["draft_id"],
             is_preparation=True, expected_status={201, 409}),
     ]
@@ -91,7 +98,7 @@ def get_service_def() -> ServiceDef:
         # ── Health ──
         EndpointDef("GET", f"{API_PREFIX}/system/health", "health", "System health",
             response_schema={"status": str, "version": str, "services": dict}),
-        EndpointDef("GET", f"{API_PREFIX}/health", "health", "Health check"),
+
         EndpointDef("GET", f"{API_PREFIX}/monitor/health", "health", "Monitor health"),
         EndpointDef("GET", f"{API_PREFIX}/monitor/metrics", "health", "Metrics"),
 
@@ -102,7 +109,8 @@ def get_service_def() -> ServiceDef:
             response_schema={"user_id": str, "full_name": str, "role": str}),
         EndpointDef("POST", f"{API_PREFIX}/auth/refresh", "auth", "Обновление токена",
             body={"refresh_token": "{refresh_token}"}),
-        EndpointDef("POST", f"{API_PREFIX}/auth/revoke", "auth", "Отзыв токена"),
+        EndpointDef("POST", f"{API_PREFIX}/auth/revoke", "auth", "Отзыв токена",
+            body={"refresh_token": "{refresh_token}"}),
         EndpointDef("GET", f"{API_PREFIX}/admin/users", "admin", "Список пользователей",
             params={"page": 1, "page_size": 10}),
         EndpointDef("POST", f"{API_PREFIX}/admin/users", "admin", "Создать пользователя",
@@ -116,14 +124,12 @@ def get_service_def() -> ServiceDef:
         EndpointDef("DELETE", f"{API_PREFIX}/admin/users/{{user_id}}", "admin", "Деактивировать пользователя"),
         EndpointDef("GET", f"{API_PREFIX}/admin/roles", "admin", "Список ролей"),
         EndpointDef("POST", f"{API_PREFIX}/admin/roles", "admin", "Создать роль",
-            body={"name": "viewer", "permissions": {"can_view_documents": True}}),
+            body={"name": "viewer", "permissions": ["documents:read"]}),
         EndpointDef("GET", f"{API_PREFIX}/admin/audit", "admin", "Журнал аудита"),
         EndpointDef("POST", f"{API_PREFIX}/internal/auth/validate", "auth", "Валидация токена",
             body={"access_token": "{access_token}"}, response_schema={"valid": bool}),
 
         # ── Chat ──
-        EndpointDef("POST", f"{API_PREFIX}/chat", "chat", "Чат-запрос",
-            body={"message": "привет"}),
         EndpointDef("POST", f"{API_PREFIX}/chat/sessions", "chat", "Создать сессию",
             body=_PREP_SESSION, response_schema={"session_id": int, "title": str}),
         EndpointDef("GET", f"{API_PREFIX}/chat/sessions", "chat", "Список сессий"),
@@ -134,7 +140,7 @@ def get_service_def() -> ServiceDef:
         EndpointDef("GET", f"{API_PREFIX}/chat/history", "chat", "История чатов"),
         EndpointDef("GET", f"{API_PREFIX}/chat/history/export", "chat", "Экспорт истории"),
         EndpointDef("POST", f"{API_PREFIX}/chat/projects", "chat", "Создать проект",
-            body={"title": "Тестовый проект"}),
+            body={"code": "TEST-PRJ", "name": "Тестовый проект", "status": "active"}),
         EndpointDef("GET", f"{API_PREFIX}/chat/projects", "chat", "Список проектов"),
         EndpointDef("GET", f"{API_PREFIX}/chat/projects/{{project_id}}", "chat", "Детали проекта"),
         EndpointDef("PUT", f"{API_PREFIX}/chat/projects/{{project_id}}", "chat", "Обновить проект",
@@ -156,8 +162,7 @@ def get_service_def() -> ServiceDef:
 
         # ── Documents (orchestrator-style) ──
         EndpointDef("GET", f"{API_PREFIX}/documents", "documents", "Список документов"),
-        EndpointDef("POST", f"{API_PREFIX}/documents", "documents", "Создать документ",
-            body={"title": "Новый документ"}),
+
         EndpointDef("GET", f"{API_PREFIX}/documents/queue", "documents", "Очередь документов"),
         EndpointDef("GET", f"{API_PREFIX}/documents/{{doc_id}}", "documents", "Детали документа",
             response_schema={"id": int, "title": str}),
@@ -168,7 +173,7 @@ def get_service_def() -> ServiceDef:
         EndpointDef("GET", f"{API_PREFIX}/documents/{{doc_id}}/errors", "documents", "Ошибки документа"),
         EndpointDef("GET", f"{API_PREFIX}/documents/{{doc_id}}/versions", "documents", "Версии документа"),
         EndpointDef("POST", f"{API_PREFIX}/documents/{{doc_id}}/versions", "documents", "Создать версию",
-            body={"changes": "update"}),
+            form_body={"comment": "Новая версия"}),
         EndpointDef("POST", f"{API_PREFIX}/documents/{{doc_id}}/approve", "documents", "Утвердить документ"),
         EndpointDef("POST", f"{API_PREFIX}/documents/{{doc_id}}/reprocess", "documents", "Переобработать документ"),
         EndpointDef("GET", f"{API_PREFIX}/documents/{{doc_id}}/pages", "documents", "Страницы документа"),
@@ -176,17 +181,13 @@ def get_service_def() -> ServiceDef:
         EndpointDef("GET", f"{API_PREFIX}/documents/{{doc_id}}/pages/{{page_num}}/text", "documents", "Текст страницы"),
         EndpointDef("GET", f"{API_PREFIX}/documents/{{doc_id}}/pages/{{page_num}}/preview", "documents", "Превью страницы"),
         EndpointDef("GET", f"{API_PREFIX}/documents/{{doc_id}}/parameters", "documents", "Параметры документа"),
-        EndpointDef("POST", f"{API_PREFIX}/documents/search", "search", "Поиск документов",
-            body={"query": "тест"}, response_schema={"items": list}),
-        EndpointDef("GET", f"{API_PREFIX}/documents/search", "search", "Поиск документов (GET)",
-            params={"query": "тест"}),
 
         # ── Tasks ──
         EndpointDef("GET", f"{API_PREFIX}/tasks/{{task_id}}/status", "tasks", "Статус задачи"),
 
         # ── Drafts (orchestrator-style) ──
         EndpointDef("POST", f"{API_PREFIX}/drafts", "drafts", "Создать черновик",
-            form_body={"document_key": "test-doc-key", "title": "Тестовый черновик"},
+            body={"document_key": "test-doc-key", "title": "Тестовый черновик", "source_type": "GOST"},
             response_schema={"draft_id": int}),
         EndpointDef("GET", f"{API_PREFIX}/drafts", "drafts", "Список черновиков"),
         EndpointDef("GET", f"{API_PREFIX}/drafts/{{draft_id}}", "drafts", "Детали черновика"),
@@ -198,8 +199,8 @@ def get_service_def() -> ServiceDef:
         EndpointDef("GET", f"{API_PREFIX}/drafts/{{draft_id}}/preview/status", "drafts", "Статус превью"),
 
         # ── Text ──
-        EndpointDef("POST", f"{API_PREFIX}/text/search", "text", "Поиск текста", body={"query": "тест"}),
-        EndpointDef("POST", f"{API_PREFIX}/text/ask", "text", "Задать вопрос", body={"question": "тест"}),
+        EndpointDef("POST", f"{API_PREFIX}/text/search", "text", "Поиск текста", body={"text": "тест"}),
+        EndpointDef("POST", f"{API_PREFIX}/text/ask", "text", "Задать вопрос", body={"text": "тест"}),
 
         # ── Registry: Classifiers ──
         EndpointDef("GET", f"{API_PREFIX}/registry/classifiers", "classifiers", "Список классификаторов",
@@ -214,7 +215,8 @@ def get_service_def() -> ServiceDef:
         EndpointDef("PATCH", f"{API_PREFIX}/registry/classifiers/{{code}}", "classifiers", "Частичное обновление",
             body={"status": "inactive"}),
         EndpointDef("DELETE", f"{API_PREFIX}/registry/classifiers/{{code}}", "classifiers", "Удалить классификатор"),
-        EndpointDef("POST", f"{API_PREFIX}/registry/classifiers/import", "classifiers", "Импорт классификаторов"),
+        EndpointDef("POST", f"{API_PREFIX}/registry/classifiers/import", "classifiers", "Импорт классификаторов",
+            body=[{"code": "IMP.TEST", "full_name": "Тестовый импорт"}]),
         EndpointDef("GET", f"{API_PREFIX}/registry/classifiers/quarantine", "classifiers", "Карантин классификаторов"),
         EndpointDef("POST", f"{API_PREFIX}/registry/classifiers/quarantine/{{pending_id}}/accept", "classifiers", "Принять из карантина"),
         EndpointDef("POST", f"{API_PREFIX}/registry/classifiers/quarantine/{{pending_id}}/reject", "classifiers", "Отклонить из карантина"),
@@ -232,7 +234,8 @@ def get_service_def() -> ServiceDef:
         EndpointDef("DELETE", f"{API_PREFIX}/registry/terminology/{{term_id}}", "terminology", "Удалить термин"),
         EndpointDef("GET", f"{API_PREFIX}/registry/terminology/normalize", "terminology", "Нормализация",
             params={"term": "тест"}),
-        EndpointDef("POST", f"{API_PREFIX}/registry/terminology/import", "terminology", "Импорт терминов"),
+        EndpointDef("POST", f"{API_PREFIX}/registry/terminology/import", "terminology", "Импорт терминов",
+            body=[{"raw_term": "test.import"}]),
 
         # ── Registry: Documents ──
         EndpointDef("GET", f"{API_PREFIX}/registry/documents", "registry_documents", "Список документов"),
@@ -249,16 +252,26 @@ def get_service_def() -> ServiceDef:
         EndpointDef("GET", f"{API_PREFIX}/registry/documents/{{doc_id}}/succession", "registry_documents", "Преемственность"),
         EndpointDef("GET", f"{API_PREFIX}/registry/documents/{{doc_id}}/sections", "registry_documents", "Разделы документа"),
         EndpointDef("GET", f"{API_PREFIX}/registry/documents/export", "registry_documents", "Экспорт документов"),
-        EndpointDef("POST", f"{API_PREFIX}/registry/documents/import", "registry_documents", "Импорт документов"),
+        EndpointDef("POST", f"{API_PREFIX}/registry/documents/import", "registry_documents", "Импорт документов",
+            body=[{"title": "Тестовый импорт", "doc_code": "IMP.DOC"}]),
         EndpointDef("POST", f"{API_PREFIX}/registry/documents/check-uniqueness", "registry_documents", "Проверка уникальности",
-            body={"doc_code": "TEST"}),
+            body={"title": "Тест", "doc_code": "TEST"}),
         EndpointDef("POST", f"{API_PREFIX}/registry/drafts", "registry_documents", "Создать черновик (registry)",
-            body={"document_key": "test-key"}),
+            body={"file_key": "test-file.pdf", "document_key": f"test-draft-{int(time.time())%100000}"}),
         EndpointDef("GET", f"{API_PREFIX}/registry/drafts", "registry_documents", "Список черновиков (registry)"),
         EndpointDef("GET", f"{API_PREFIX}/registry/drafts/{{draft_id}}", "registry_documents", "Детали черновика (registry)"),
         EndpointDef("DELETE", f"{API_PREFIX}/registry/drafts/{{draft_id}}", "registry_documents", "Удалить черновик (registry)"),
         EndpointDef("GET", f"{API_PREFIX}/registry/drafts/{{draft_id}}/preview", "registry_documents", "Превью черновика (registry)"),
         EndpointDef("PATCH", f"{API_PREFIX}/registry/drafts/{{draft_id}}/status", "registry_documents", "Статус черновика (registry)"),
+
+        # ── Registry: Categories ──
+        EndpointDef("GET", f"{API_PREFIX}/registry/categories", "categories", "Список категорий"),
+        EndpointDef("POST", f"{API_PREFIX}/registry/categories", "categories", "Создать категорию",
+            body={"name": f"Категория_{int(time.time())%100000}_main"}),
+        EndpointDef("GET", f"{API_PREFIX}/registry/categories/{{category_id}}", "categories", "Детали категории"),
+        EndpointDef("PUT", f"{API_PREFIX}/registry/categories/{{category_id}}", "categories", "Обновить категорию",
+            body={"name": "Обновлённая категория"}),
+        EndpointDef("DELETE", f"{API_PREFIX}/registry/categories/{{category_id}}", "categories", "Удалить категорию"),
 
         # ── Registry: Common ──
         EndpointDef("GET", f"{API_PREFIX}/registry/common/stats", "common", "Статистика"),

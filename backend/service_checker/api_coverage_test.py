@@ -269,6 +269,8 @@ class ApiCoverageTester:
                     "term_id": ["id", "term_id", "termId"],
                     "message_id": ["id", "messageId", "message_id"],
                     "task_id": ["task_id", "taskId"],
+                    "draft_id": ["id", "draft_id"],
+                    "category_id": ["id", "category_id"],
                 }
                 for alt in alt_map.get(key, []):
                     if alt in obj:
@@ -281,14 +283,13 @@ class ApiCoverageTester:
             return None
 
         for key in extract_keys:
-            if key not in self.context:
-                # Сначала ищем как data.key (для обёрнутых ответов)
-                value = _get_by_path(raw, f"data.{key}")
-                # Потом рекурсивно
-                if value is None:
-                    value = _search(raw, key)
-                if value is not None:
-                    self.context[key] = value
+            # Сначала ищем как data.key (для обёрнутых ответов)
+            value = _get_by_path(raw, f"data.{key}")
+            # Потом рекурсивно
+            if value is None:
+                value = _search(raw, key)
+            if value is not None:
+                self.context[key] = value
 
     async def _execute_endpoint(
         self, ep: EndpointDef, port: int, result: ServiceResult, alive: bool,
