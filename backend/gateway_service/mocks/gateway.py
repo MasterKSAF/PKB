@@ -157,8 +157,10 @@ class RBACMiddleware(BaseHTTPMiddleware):
         if user_context["is_authenticated"]:
             permissions = user_context.get("permissions", {})
 
-            # POST /documents — can_upload_documents
-            if request.method == "POST" and path == "/api/v1/documents":
+            # POST /drafts и POST /documents — can_upload_documents
+            # NOTE: Загрузка файла всегда через POST /api/v1/drafts (gateway_service_api.md).
+            # POST /api/v1/documents — legacy, также проверяется.
+            if request.method == "POST" and path in ("/api/v1/drafts", "/api/v1/documents"):
                 if not permissions.get("can_upload_documents", False):
                     return JSONResponse(
                         status_code=403,
@@ -207,10 +209,13 @@ class RBACMiddleware(BaseHTTPMiddleware):
                         ),
                     )
 
-            # DELETE /documents/{id}, POST /documents/{id}/reprocess,
-            # POST /documents/{id}/approve
+            # DELETE /documents/{id}, DELETE /drafts/{id},
+            # POST /documents/{id}/reprocess, POST /documents/{id}/approve
             # — knowledge_admin / system_admin only
-            _doc_write = request.method == "DELETE" or (
+            _doc_write = request.method == "DELETE" and (
+                path.startswith("/api/v1/documents/")
+                or path.startswith("/api/v1/drafts/")
+            ) or (
                 request.method == "POST"
                 and path.startswith("/api/v1/documents/")
                 and not path.startswith("/api/v1/documents/search")
@@ -475,6 +480,10 @@ app.include_router(registry_docs_router, prefix="/api/v1/registry")
 
 # ---------------------------------------------------------------------------
 # Health check
+# NOTE: /api/v1/system/health — единый health-check endpoint для внешних систем
+# мониторинга (см. common_api.md). Каждый внутренний сервис также имеет свой
+# /api/v1/health для прямого доступа — дублирование Operation ID в OpenAPI
+# является ожидаемым и intentional (разные пути, разная семантика).
 # ---------------------------------------------------------------------------
 
 

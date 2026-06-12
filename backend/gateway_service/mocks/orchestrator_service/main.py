@@ -226,15 +226,27 @@ def _get_draft(draft_id) -> dict:
     return draft
 
 # ── маршруты ─────────────────────────────────────────────────────────────
-@router.get("/api/v1/system/health")
-async def health():
-    return {"status": "ok", "version": "1.0.0", "uptime_seconds": 86400,
-            "services": {"auth":"ok","rag":"ok","ocr":"ok","validation":"ok","integration":"ok"},
-            "database":"ok","search_index":"ok","ocr_queue":"ok","storage":"ok"}
-
+# NOTE: /api/v1/system/health зарегистрирован только в gateway.py (единая точка).
+# Внутренний health для мониторинга — /api/v1/monitor/health.
 @router.get("/api/v1/monitor/health")
 async def monitor_health():
-    return await health()
+    return {
+        "status": "ok",
+        "version": "1.0.0",
+        "uptime_seconds": 86400,
+        "services": {
+            "auth": "ok",
+            "rag_builder": "ok",
+            "rag_search": "ok",
+            "ocr": "ok",
+            "validation": "ok",
+            "integration": "ok",
+        },
+        "database": "ok",
+        "search_index": "ok",
+        "ocr_queue": "ok",
+        "storage": "ok",
+    }
 
 @router.get("/api/v1/monitor/metrics")
 async def get_metrics():
@@ -729,24 +741,124 @@ async def get_document(doc_id: str):
 
 @router.get("/api/v1/documents/{doc_id}/status")
 async def document_status(doc_id: str, longpoll: int = 15):
+    # NOTE: Формат ответа приведён к спецификации orchestrator_service_api.md (L344-447).
+    # Статусы: processing → pipeline.formation.preview + decision + indexation;
+    # approval_required → pipeline.formation.preview;
+    # completed → pipeline.formation + indexation + chunk_summary.
     doc = _get_document(doc_id)
-    status = doc.get("status")
-    steps = {
-        "pipeline": {
-            "formation": {"status": "completed" if status in ("completed","approved","ready_for_promotion") else "in_progress",
-                          "parsing": {"status": "completed" if status not in ("uploaded","parsing") else "pending"},
-                          "validation": {"status": "valid" if status == "ready_for_promotion" else "pending"},
-                          "registry": {"status": "completed" if status in ("approved","ready_for_promotion") else "pending"}},
-            "indexation": {"status": "completed" if status == "ready_for_promotion" else "pending",
-                           "rag_indexing": {"status": "completed" if status == "ready_for_promotion" else "pending"}}
+    status = doc.get("status", "unknown")
+    now = utcnow()
+
+    # Определяем маппинг статусов документа в статусы спецификации
+    if status in ("completed", "approved", "ready_for_promotion"):
+        spec_status = "completed"
+        progress = 100.0
+    elif status in ("uploaded", "parsing", "validation", "processing", "queued"):
+        spec_status = "processing"
+        progress = 60.0
+    elif status == "review_required":
+        spec_status = "approval_required"
+        progress = 40.0
+    elif status == "failed":
+        spec_status = "failed"
+        progress = 0.0
+    else:
+        spec_status = status
+        progress = 50.0
+
+    if spec_status == "processing":
+        # NOTE: processing → formation.preview (ocr_parser, converter_validator) + decision + indexation
+        formation_status = "processing"
+        preview_status = "completed" if status not in ("uploaded",) else "in_progress"
+        decision_status = "pending"
+        indexation_status = "pending"
+        is_indexing = status in ("validation", "processing")
+        return {
+            "document_id": doc_id,
+            "status": spec_status,
+            "progress_percent": progress,
+            "steps": {
+                "pipeline": {
+                    "formation": {
+                        "status": formation_status,
+                        "preview": {
+                            "status": preview_status,
+                            "ocr_parser": {"status": preview_status, "pages_processed": doc.get("pages_processed", 0)},
+                            "converter_validator": {"status": preview_status, "metadata_extracted": preview_status == "completed"},
+                        },
+                        "decision": {
+                            "status": decision_status,
+                            "action": None,
+                        },
+                    },
+                    "indexation": {
+                        "status": indexation_status,
+                        "rag_indexing": {"status": "in_progress" if is_indexing else "pending"},
+                    },
+                }
+            },
+            "started_at": doc.get("created_at", ""),
+            "estimated_completion": now,
         }
-    }
-    progress = 100.0 if status in ("completed","approved","ready_for_promotion") else 60.0
-    return {
-        "document_id": doc_id, "status": status, "progress_percent": progress,
-        "pipeline": steps["pipeline"],   # исправлено: вынесено на верхний уровень
-        "started_at": doc.get("created_at",""), "completed_at": doc.get("updated_at","") if progress == 100 else None,
-    }
+    elif spec_status == "approval_required":
+        # NOTE: approval_required → только formation.preview, без indexation
+        return {
+            "document_id": doc_id,
+            "status": spec_status,
+            "progress_percent": progress,
+            "steps": {
+                "pipeline": {
+                    "formation": {
+                        "status": "ready_for_approve",
+                        "preview": {"status": "completed"},
+                    }
+                }
+            },
+        }
+    elif spec_status == "completed":
+        # NOTE: completed → formation + indexation + chunk_summary
+        return {
+            "document_id": doc_id,
+            "status": spec_status,
+            "progress_percent": progress,
+            "steps": {
+                "pipeline": {
+                    "formation": {
+                        "status": "completed",
+                        "preview": {"status": "completed"},
+                        "decision": {"status": "completed", "action": "approve"},
+                    },
+                    "indexation": {
+                        "status": "completed",
+                        "rag_indexing": {
+                            "status": "completed",
+                            "chunks_generated": doc.get("chunk_count", 0),
+                        },
+                    },
+                }
+            },
+            "chunk_summary": {
+                "sections": doc.get("pages_processed", 0),
+                "chunks": doc.get("chunk_count", 0),
+                "embeddings": doc.get("chunk_count", 0),
+            },
+            "started_at": doc.get("created_at", ""),
+            "completed_at": doc.get("updated_at", ""),
+        }
+    else:
+        # failed / unknown — минимальный ответ
+        return {
+            "document_id": doc_id,
+            "status": spec_status,
+            "progress_percent": progress,
+            "steps": {
+                "pipeline": {
+                    "formation": {"status": "failed" if spec_status == "failed" else "unknown"},
+                    "indexation": {"status": "failed" if spec_status == "failed" else "unknown"},
+                }
+            },
+            "started_at": doc.get("created_at", ""),
+        }
 
 @router.get("/api/v1/documents/{doc_id}/file")
 async def get_file(doc_id: str):

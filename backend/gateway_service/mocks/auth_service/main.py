@@ -415,9 +415,11 @@ async def validate_token(req: ValidateTokenRequest):
         "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
     }
 
-@router.get("/api/v1/system/health")
+# NOTE: /api/v1/system/health зарегистрирован только в gateway.py (единая точка).
+# Для внутреннего мониторинга каждый сервис использует /api/v1/health.
+@router.get("/api/v1/health")
 async def health():
-    return {"status": "ok", "service": "auth-service", "timestamp": utcnow()}
+    return {"status": "ok", "service": "auth-service", "version": "1.0.0", "uptime_seconds": 86400}
 
 app.include_router(router)
 

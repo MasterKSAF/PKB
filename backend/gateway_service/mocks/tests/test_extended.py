@@ -514,7 +514,8 @@ class TestRegistryExtended:
 
     def test_29_registry_stats_has_all_keys(self):
         """Stats classifiers_total includes standard system keys."""
-        resp = client.get(f"{REG}/stats")
+        # NOTE: Путь изменён на /api/v1/common/stats (routing table gateway_service_api.md).
+        resp = client.get(f"{COMMON}/stats")
         assert_ok(resp)
         data = resp.json()["data"]
         assert "classifiers_total" in data

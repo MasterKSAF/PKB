@@ -426,15 +426,16 @@ class TestOrchestratorService:
         assert_ok(resp)
         data = resp.json()
         assert data["status"] == "completed"
-        # New pipeline structure
-        assert "pipeline" in data
-        pipeline = data["pipeline"]
+        # NOTE: Формат ответа приведён к спецификации orchestrator_service_api.md (L344-447).
+        # pipeline вложен в steps, formation содержит preview и decision вместо parsing/validation/registry.
+        assert "steps" in data
+        pipeline = data["steps"]["pipeline"]
         assert "formation" in pipeline
         assert "indexation" in pipeline
-        assert "parsing" in pipeline["formation"]
-        assert "validation" in pipeline["formation"]
-        assert "registry" in pipeline["formation"]
+        assert "preview" in pipeline["formation"]
+        assert "decision" in pipeline["formation"]
         assert "rag_indexing" in pipeline["indexation"]
+        assert "chunk_summary" in data
 
     def test_29_document_file(self):
         resp = client.get(f"{ORCH}/documents/doc-001/file")
@@ -561,7 +562,8 @@ class TestOrchestratorService:
             assert_ok(resp)
 
     def test_44_health(self):
-        resp = client.get(f"{ORCH}/system/health")
+        # NOTE: Orchestrator health — /api/v1/monitor/health (см. common_api.md).
+        resp = client.get(f"{ORCH}/monitor/health")
         assert_ok(resp)
 
     # --- NEW endpoint tests for documents ---
@@ -1180,7 +1182,8 @@ class TestRegistryService:
 
     def test_96_get_stats(self):
         """New stats structure with classifiers by system, documents by status/source_type/era."""
-        resp = client.get(f"{REG}/stats")
+        # NOTE: Путь изменён на /api/v1/common/stats (routing table gateway_service_api.md).
+        resp = client.get(f"{COMMON}/stats")
         assert_ok(resp)
         data = resp.json()["data"]
         assert "classifiers_total" in data
@@ -1198,7 +1201,7 @@ class TestRegistryService:
 
     def test_97_get_enums(self):
         """Expanded enums with more values."""
-        resp = client.get(f"{REG}/enums")
+        resp = client.get(f"{COMMON}/enums")
         assert_ok(resp)
         data = resp.json()["data"]
         assert "classifier_system" in data

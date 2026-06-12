@@ -1,20 +1,9 @@
 ## Пайплайны обработки документов (v3.0)
 
-Оркестратор координирует сквозную обработку документов через **два пайплайна** (Формирование и Индексация). Пайплайн 3 (Поиск) работает **независимо**.
-
-**Контроль доступа:** все внешние запросы от UI проходят через **Nginx** (:443), который проксирует их на внутренний **Gateway Service** (:8080). Gateway проверяет JWT-токен и права доступа (RBAC) перед тем, как запрос попадёт к внутренним сервисам. Без валидного токена — `401`, без прав на операцию — `403`.
+Оркестратор координирует сквозную обработку документов через **два пайплайна** (Формирование и Индексация). Пайплайн 3 (Поиск) работает **независимо** — пользователь обращается напрямую к Query Service.
 
 ```mermaid
 graph LR
-    subgraph "Внешняя сеть"
-        Nginx[Nginx<br/>:443 / HTTPS]
-        UI[UI]
-    end
-
-    subgraph "Внутренняя сеть"
-        GW[Gateway Service<br/>:8080 / JWT / RBAC]
-    end
-
     subgraph "Оркестратор (Пайплайны 1 и 2)"
         direction TB
         P1[Пайплайн 1: Формирование документа] --> P2[Пайплайн 2: Индексация документа]
@@ -27,7 +16,7 @@ graph LR
         D -->|JSON| E[Registry]
         E -->|JSON со ссылками| F[(PostgreSQL)]
 
-        A -.->|preview ref| PB[OCR/Parser preview]
+        A -.->|preview ref| PB[OCR/Parser process (mode=preview)]
         PB -.->|preview JSON| PC[Converter-validator preview]
         PC -.->|preview result| UI{UI Decision}
         UI -.->|approve| D
@@ -38,25 +27,13 @@ graph LR
         G --> H[(pgvector)]
     end
 
-    subgraph "Пайплайн 3: Поиск"
-        J[Query Service]
-        K[RAG Search]
-        J -->|query| K
+    subgraph "Пайплайн 3: Поиск (независимый)"
+        I[UI] -->|вопрос| J[Query Service]
+        J -->|query| K[RAG Search]
         K -->|чанки| J
+        J -->|answer| I
     end
 
-    %% Все запросы — через Nginx → Gateway
-    UI -->|1. HTTPS| Nginx
-    Nginx -->|2. proxy :8080| GW
-    GW -->|3. JWT / RBAC| J
-    GW -->|3. JWT / RBAC| D
-    GW -->|3. JWT / RBAC| E
-    J -->|answer| GW
-    GW -->|4. Ответ| Nginx
-    Nginx -->|5. HTTPS| UI
-
-    style Nginx fill:#555,color:#fff
-    style GW fill:#e74c3c,color:#fff
     style B fill:#e6f3ff
     style C fill:#e6f3ff
     style D fill:#fff3e6
@@ -75,9 +52,7 @@ graph LR
 - Ведёт историю обработки документа (`GET /documents/{doc_id}/history`)
 - Управляет статусной моделью FSM для каждого пайплайна независимо
 
-**Роль Gateway:** внутренний сервис, принимает запросы от Nginx, проверяет JWT-токен (аутентификация) и права доступа (авторизация) на основе роли пользователя и матрицы RBAC. После успешной проверки перенаправляет запрос к соответствующему внутреннему сервису.
-
-**Роль Nginx:** внешний веб-сервер, принимает HTTPS-запросы от UI и проксирует их на внутренний Gateway (`:8080`). Единственная точка входа из внешней сети. Подробнее — [gateway_service_api.md](gateway_service_api.md).
+Пайплайн 3 (Поиск) работает **независимо** — пользователь обращается напрямую к Query Service, минуя Оркестратор.
 
 Детальное описание пайплайнов:
 
@@ -95,7 +70,7 @@ graph LR
 | Формирование | 1. OCR / Parser (альтернативно) | **Нет** (изоляция)        | Вход: ссылка MinIO → Выход: JSON                                   |
 | Формирование | 2. Converter-validator    | **Читает**                    | Вход: JSON → Выход: JSON с решением                                |
 | Формирование | 3. Registry               | **Пишет**                     | Вход: JSON → Выход: JSON со ссылками                               |
-| Формирование | Preview OCR/Parser        | **Нет** (изоляция)            | Вход: preview ref MinIO → Выход: preview JSON                      |
+| Формирование | Preview OCR/Parser (mode=preview) | **Нет** (изоляция)       | Вход: file_key + mode=preview → Выход: JSON (preview или full + preview_not_supported) |
 | Формирование | Preview Converter-validator | **Читает** (Registry)       | Вход: preview JSON → Выход: preview результат                      |
 | Индексация   | 1. RAG Builder            | **Пишет**                     | Вход: обогащённый JSON → Выход: статус                             |
 | Поиск        | 1. Приём сообщения        | **Пишет** (история чата)      | Вход: content → Выход: 202 + message_id                            |
@@ -110,39 +85,33 @@ graph LR
 
 Детальные FSM-диаграммы и описание состояний — в соответствующих документах:
 
-- **Пайплайн 1 (Формирование):** `uploaded → previewing → awaiting_decision → parsing → validation → ready_for_promotion / review_required → approved → registry` — [FSM и таблица состояний](pipeline1-formation.md#статусная-модель-fsm)
-- **Пайплайн 2 (Индексация):** `pending_index → indexing → indexed` — [FSM и таблица состояний](pipeline2-indexation.md#статусная-модель-fsm)
+- **Пайплайн 1 (Формирование):** `uploaded → previewing → ready_for_approve → approved → created` — [FSM и таблица состояний](pipeline1-formation.md#статусная-модель-fsm)
+- **Пайплайн 2 (Индексация):** `pending_index → indexing → indexed / failed` — [FSM и таблица состояний](pipeline2-indexation.md#статусная-модель-fsm)
 - **Пайплайн 3 (Поиск):** `idle → pending → enriching → searching → generating → enriching_citations → answered` — [FSM и таблица состояний](pipeline3-search.md#статусная-модель-fsm)
 
 ---
 
 ### 5. Матрица ответственности сервисов
 
-| Операция                                       | Пайплайн | Этап              | Сервис                    | Доступ к БД  | Контроль доступа |
-| ---------------------------------------------- | -------- | ----------------- | ------------------------- | ------------ | ---------------- |
-| **Аутентификация** (проверка JWT)              | Все      | Вход              | **Gateway**               | Нет          | Все запросы      |
-| **Авторизация** (проверка прав RBAC)           | Все      | Вход              | **Gateway**               | Нет          | Все запросы      |
-| Загрузка файла, SHA-256, MinIO                 | 1        | Пре-стейдж        | **Orchestrator**          | Пишет        | `can_upload_documents` |
-| Preview-фаза, хранение preview-данных          | 1        | Preview           | **Orchestrator**          | Пишет        | Аутентификация   |
-| Распознавание (OCR)                            | 1        | 1. OCR            | **OCR Service**           | Нет          | Внутренний вызов |
-| Парсинг структуры                              | 1        | 2. Parser         | **Parser Service**        | Нет          | Внутренний вызов |
-| Валидация JSON, классификация                  | 1        | 3. Converter-validator | **Converter-validator Service** | Читает | Внутренний вызов |
-| Проверка кодов по справочнику                  | 1        | 3. Converter-validator | **Registry Service**      | Читает       | Внутренний вызов |
-| Запись карточки документа в БД                 | 1        | 4. Registry       | **Registry Service**      | Пишет        | `can_manage_registry` |
-| Чанкинг + Embeddings + Индекс                  | 2        | 1. RAG Builder    | **RAG Builder Service**   | Пишет        | Внутренний вызов |
-| Приём сообщения                                | 3        | 1. Query Service  | **Query Service**         | Пишет        | Аутентификация   |
-| Обогащение терминами                           | 3        | 2. Query Service  | **Query Service**         | Читает       | Внутренний вызов |
-| RAG поиск чанков                               | 3        | 3. RAG Search     | **RAG Search Service**    | Читает       | Внутренний вызов |
-| Генерация ответа LLM                           | 3        | 3b. Query Service | **Query Service**         | Нет          | Внутренний вызов |
-| Обогащение цитирований                         | 3        | 4. Query Service  | **Query Service**         | Нет          | Внутренний вызов |
-| Управление файлами, экспорт во внешние системы | —        | Вспомогательный   | **Integration Service**   | Читает/Пишет | Аутентификация   |
-| Сопоставление норм и проектов, расчёты         | —        | Вспомогательный   | **Analyse Service**       | Читает       | Аутентификация   |
-
-> **Контроль доступа:**
-> - **«Все запросы»** — Gateway проверяет JWT и RBAC на каждый внешний запрос. Без токена — `401`, без прав — `403`.
-> - **«Аутентификация»** — требуется только валидный JWT-токен (любая аутентифицированная роль).
-> - **«Внутренний вызов»** — сервис вызывается Orchestrator'ом в рамках пайплайна, внешний доступ отсутствует.
-> - Конкретные permissions (`can_upload_documents`, `can_manage_registry` и др.) проверяются Gateway на соответствующих эндпоинтах.
+| Операция                                       | Пайплайн | Этап              | Сервис                    | Доступ к БД  |
+| ---------------------------------------------- | -------- | ----------------- | ------------------------- | ------------ |
+| Загрузка файла, SHA-256, MinIO                 | 1        | Пре-стейдж        | **Orchestrator**          | Пишет (pipeline.tasks, pipeline.task_steps) |
+| Создание записи черновика                      | 1        | Пре-стейдж        | **Orchestrator** → **Registry** (POST /registry/drafts) | Registry: Пишет (registry.drafts) |
+| Preview-фаза, хранение preview-данных          | 1        | Preview           | **Orchestrator**          | Вызов Registry (PATCH /registry/drafts/{id}/status) |
+| Распознавание (OCR)                            | 1        | 1. OCR            | **OCR Service**           | Нет          |
+| Парсинг структуры                              | 1        | 2. Parser         | **Parser Service**        | Нет          |
+| Валидация JSON, классификация                  | 1        | 3. Converter-validator | **Converter-validator Service** | Читает |
+| Проверка кодов по справочнику                  | 1        | 3. Converter-validator | **Registry Service**      | Читает       |
+| Запись карточки документа в БД                 | 1        | 4. Registry       | **Registry Service**      | Пишет        |
+| Ведение этапов задачи (task_steps)             | 1        | Все               | **Orchestrator**          | Пишет (pipeline.task_steps) |
+| Чанкинг + Embeddings + Индекс                  | 2        | 1. RAG Builder    | **RAG Builder Service**   | Пишет
+| Приём сообщения                                | 3        | 1. Query Service  | **Query Service**         | Пишет        |
+| Обогащение терминами                           | 3        | 2. Query Service  | **Query Service**         | Читает       |
+| RAG поиск чанков                               | 3        | 3. RAG Search     | **RAG Search Service**    | Читает       |
+| Генерация ответа LLM                           | 3        | 3b. Query Service | **Query Service**         | Нет          |
+| Обогащение цитирований                         | 3        | 4. Query Service  | **Query Service**         | Нет          |
+| Управление файлами, экспорт во внешние системы | —        | Вспомогательный   | **Integration Service**   | Читает/Пишет |
+| Сопоставление норм и проектов, расчёты         | —        | Вспомогательный   | **Analyse Service**       | Читает       |
 
 ---
 
@@ -152,8 +121,6 @@ graph LR
 
 | Сервис                  | Документация                                                          | Базовый URL (внутренний) |
 | ----------------------- | --------------------------------------------------------------------- | ------------------------ |
-| **Nginx** (внешний)     | —                                                                     | `https://{host}:443`     |
-| **Gateway** (внутренний) | [gateway_service_api.md](gateway_service_api.md)                      | `http://127.0.0.1:8080`  |
 | Orchestrator            | [orchestrator_service_api.md](../api/orchestrator_service_api.md)     | `http://127.0.0.1:8081`  |
 | Auth                    | [auth_service_api.md](../api/auth_service_api.md)                     | `http://127.0.0.1:8082`  |
 | Query Service           | [query_service_api.md](../api/query_service_api.md)                   | `http://127.0.0.1:8083`  |
@@ -170,19 +137,8 @@ graph LR
 
 ### 7. Поток данных (Data Flow)
 
-Все внешние запросы от UI проходят через **Nginx** (внешний веб-сервер, :443), который проксирует их на внутренний **Gateway Service** (:8080). Gateway выполняет аутентификацию (JWT) и авторизацию (RBAC). Только после успешной проверки запрос направляется к соответствующему внутреннему сервису.
-
 ```mermaid
 flowchart LR
-    subgraph "Внешняя сеть"
-        UI[User Interface]
-        Nginx[Nginx<br/>:443 / HTTPS]
-    end
-
-    subgraph "Внутренняя сеть"
-        GW[Gateway<br/>:8080 / JWT / RBAC]
-    end
-
     subgraph "Пайплайн 1: Формирование документа"
         MinIO[(MinIO)] -->|"file_ref"| Type{Тип файла}
         Type -->|"скан/изображение"| OCR[OCR Service]
@@ -193,8 +149,8 @@ flowchart LR
         Reg -->|"JSON со ссылками"| DB[(PostgreSQL Registry)]
 
         MinIO -.->|"preview ref"| Preview{Preview}
-        Preview -.->|"скан"| P_OCR[OCR preview]
-        Preview -.->|"цифровой"| P_Pars[Parser preview]
+        Preview -.->|"скан"| P_OCR[OCR process (mode=preview)]
+        Preview -.->|"цифровой"| P_Pars[Parser process (mode=preview)]
         P_OCR -.->|"preview JSON"| P_CV[Converter-validator preview]
         P_Pars -.->|"preview JSON"| P_CV
         P_CV -.->|"preview result"| UID{UI Decision}
@@ -208,25 +164,13 @@ flowchart LR
     end
 
     subgraph "Пайплайн 3: Поиск документа"
-        QS[Query Service]
-        RAGs[RAG Search]
-        QS -->|"query + filters"| RAGs
+        UI[User Interface] -->|"question"| QS[Query Service]
+        QS -->|"query + filters"| RAGs[RAG Search]
         Vec --> RAGs
         RAGs -->|"чанки"| QS
+        QS -->|"answer + сноски"| UI
     end
 
-    %% Все запросы — через Nginx → Gateway
-    UI -->|"1. HTTPS"| Nginx
-    Nginx -->|"2. proxy :8080"| GW
-    GW -->|"3. JWT проверен, RBAC ок"| QS
-    GW -->|"3. JWT проверен, RBAC ок"| Reg
-    GW -->|"3. JWT проверен, RBAC ок"| CV
-    QS -->|"4. answer + сноски"| GW
-    GW -->|"5. Ответ"| Nginx
-    Nginx -->|"6. HTTPS"| UI
-
-    style Nginx fill:#555,color:#fff,stroke:#333
-    style GW fill:#e74c3c,color:#fff,stroke:#333
     style OCR fill:#e6f3ff,stroke:#333
     style Pars fill:#e6f3ff,stroke:#333
     style CV fill:#fff3e6,stroke:#333
@@ -256,8 +200,8 @@ flowchart LR
 | Registry → Orchestrator              | **Обогащённый JSON (структура + ссылки в БД)** | JSON via HTTP | —                                               |
 | Orchestrator → RAG Builder          | **Обогащённый JSON от Registry**               | JSON via HTTP | —                                               |
 | RAG Builder → Orchestrator          | Статус завершения                              | JSON via HTTP | —                                               |
-| Orchestrator → OCR/Parser preview    | `preview ref` (ссылка MinIO)                   | JSON via HTTP | Preview-фаза                                    |
-| OCR/Parser preview → Orchestrator    | **preview JSON**                               | JSON via HTTP | Непрозрачен для Orchestrator                    |
+| Orchestrator → OCR/Parser process (mode=preview) | `file_key` + `mode=preview`            | JSON via HTTP | Preview-фаза; если движок не умеет постранично — `preview_not_supported: true` |
+| OCR/Parser process (mode=preview) → Orchestrator | **JSON** (preview или full)            | JSON via HTTP | Непрозрачен для Orchestrator                    |
 | Orchestrator → Converter-validator preview | **preview JSON**                         | JSON via HTTP | Preview-фаза                                    |
 | Converter-validator preview → Orchestrator | **preview результат**                    | JSON via HTTP | Содержит решение для UI                         |
 | UI → Orchestrator (decision)         | **approve / reject**                           | JSON via HTTP | User decision point                             |
@@ -304,34 +248,105 @@ flowchart LR
 | **CAS-пути для файлов**                        | `{doc_id}/v{n}/{hash}.{ext}` — гарантирует целостность и исключает дубликаты                                                                                                                                                                                                                                                                              |
 | **Бизнес-ключ `title_hash_sha256`**            | Учитывает `era`, `source_type`, коды классификации — исключает коллизии (ГОСТ СССР vs ГОСТ РФ с одинаковым номером)                                                                                                                                                                                                                                       |
 | **Единый `document_id`**                       | `document_id` назначается на этапе Validation (Пайплайн 1, Этап 2) после проверки уникальности: для дубликатов — извлекается существующий, для новых документов — генерируется. Этот же `document_id` используется как первичный ключ во всех последующих сервисах — Registry и RAG. Registry не создаёт свой numeric ID, а пишет `document_id` как есть. Это исключает маппинг идентификаторов на стыке пайплайнов и упрощает трассировку документа от загрузки до поиска. |
-| **Gateway — единая точка авторизации**         | Все внешние запросы приходят через Nginx (:443) на внутренний Gateway (:8080), который проверяет JWT-токен и права доступа (RBAC) до того, как запрос попадёт во внутренний сервис. Это позволяет отсечь неавторизованные запросы на границе системы, не нагружая внутренние сервисы. Разные эндпоинты требуют разных permissions (`can_upload_documents`, `can_manage_classifiers`, `can_manage_terminology`, `can_manage_registry`), что даёт гибкое управление доступом. Анонимный доступ — только к `/auth/*` и `/system/health`. |
-| **RBAC-матрица на Gateway**                    | Gateway централизованно проверяет права доступа по матрице RBAC. Внутренние сервисы могут не реализовывать свою проверку прав (доверяют Gateway), что упрощает их логику. Однако для критичных операций внутренние сервисы могут выполнять дополнительную проверку. |
 | **Двухфазный пайплайн с user decision point** | Пайплайн 1 разделён на две фазы: preview (быстрый проход OCR/Parser → Converter-validator) и commit (основной проход). После preview пользователь принимает решение — утвердить или отклонить результат. Это позволяет отсеивать ошибочные документы до записи в Registry и индексации. |
 | **Preview-данные в журнале Оркестратора**     | Результаты preview-фазы сохраняются в журнале Оркестратора (`/documents/{doc_id}/history`). При утверждении preview-данные используются как основа для основного прохода, что исключает повторное распознавание. |
 | **OCR и Parser — независимые сервисы с единым контрактом** | Разделение OCR (распознавание изображения/PDF в текст) и Parser (структурирование текста в JSON) позволяет заменять OCR-движок без влияния на парсинг. Единый JSON-контракт между сервисами обеспечивает слабую связанность. |
-| **Таймауты для «зависших» состояний (Scheduler)** | Для состояний `awaiting_decision` и `review_required` установлены таймауты (24ч и 48ч), по истечении которых документ переводится в `failed`. Scheduler проверяет зависшие документы каждые 5 минут. |
+| **Таймауты для «зависших» состояний (Scheduler)** | Для состояния `ready_for_approve` установлен таймаут (24ч), по истечении которого документ переводится в `discarded`. Для `pending_index` — таймаут 1 час, документ переводится в `failed`. Scheduler проверяет зависшие документы каждые 5 минут. |
 | **Проверка уникальности через `POST /registry/documents/check-uniqueness`** | Выделенный эндпоинт Registry для быстрой проверки уникальности по метаданным, вызываемый **Оркестратором** на preview- и full-этапах перед записью документа. Позволяет отделить логику поиска дубликатов от логики создания документа и обеспечивает единый механизм duplicate-детекции. |
-| **Rate Limiting для всех публичных эндпоинтов** | Единая политика ограничения запросов с разными лимитами для разных групп эндпоинтов. Redis для распределённого rate limiting. Код ошибки `429 TOO_MANY_REQUESTS`. |
+| **Rate Limiting для всех эндпоинтов через Gateway** | Единая политика ограничения запросов с разными лимитами для разных групп эндпоинтов. Redis для распределённого rate limiting. Код ошибки `429 TOO_MANY_REQUESTS`. |
 
 ---
 
 ### 9. End-to-end (сквозной поток)
 
+#### Схема обработки документа (обзорная)
+
+```
+┌───────────────────────────────────────────────────────────────┐
+│ 1. POST /drafts                                               │
+│    Создание черновика (обязательная точка входа)               │
+│    → task_id (сначала — сквозной ID задачи, internal)          │
+│    → draft_id (внешний ID черновика)                           │
+│    → file сохранён в MinIO                                    │
+└─────────────────────────────┬─────────────────────────────────┘
+                              │
+                              ▼
+┌───────────────────────────────────────────────────────────────┐
+│ 2. POST /drafts/{draft_id}/preview                           │
+│    Запуск preview-фазы                                        │
+│    → OCR/Parser preview → Converter-validator preview         │
+│    → Registry check-uniqueness → preview_metadata + дубликаты │
+└─────────────────────────────┬─────────────────────────────────┘
+                              │
+                              ▼
+┌───────────────────────────────────────────────────────────────┐
+│ 3. GET /drafts/{draft_id}/preview/status (longpoll)          │
+│    Ожидание завершения preview                                │
+│    → ready_for_approve / ошибка                               │
+└─────────────────────────────┬─────────────────────────────────┘
+                              │
+                              ▼
+┌───────────────────────────────────────────────────────────────┐
+│ 4. PATCH /drafts/{draft_id}/decide?action=approve|reject     │
+│    → action=approve — завершить черновик, запустить full-фазу│
+│    → action=reject — отклонить черновик (→ discarded)         │
+│    (пустой документ → approve недоступен)                    │
+└─────────────────────────────┬─────────────────────────────────┘
+                              │ approve
+                              ▼
+┌───────────────────────────────────────────────────────────────┐
+│ 5. Full-фаза (выполнение)                                     │
+│    ┌──────────────────────────────┐                           │
+│    │ OCR/Parser full (все стр.)   │ → raw_ocr_v4              │
+│    └──────────────┬───────────────┘                           │
+│                   ▼                                           │
+│    ┌──────────────────────────────┐                           │
+│    │ Converter-validator full     │ → validated_document       │
+│    └──────────────────────────────┘                           │
+└───────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌───────────────────────────────────────────────────────────────┐
+│ 6. Registry + запуск Пайплайна 2                              │
+│    ┌──────────────────────────────┐                           │
+│    │ Registry: создание карточки  │ → document_id             │
+│    │ документа                    │   → статус `created`      │
+│    └──────────────┬───────────────┘                           │
+│                   ▼                                           │
+│    ┌──────────────────────────────┐                           │
+│    │ Пайплайн 2: Индексация      │ → чанкинг → эмбеддинги     │
+│    │ (RAG Builder)               │ → поисковый индекс         │
+│    │                              │ → статус `indexed`/`failed`│
+│    └──────────────────────────────┘                           │
+└───────────────────────────────────────────────────────────────┘
+```
+
+**Порядок создания ID в Оркестраторе:**
+1. `task_id` — создаётся первым как сквозной ID задачи (internal), сквозное отслеживание через все этапы
+2. `draft_id` — создаётся вместе с task_id как внешний идентификатор черновика
+3. `document_id` — создаётся в Registry при записи карточки документа (финальный ID)
+
+**Ключевые принципы:**
+- Черновик — **обязательная точка входа.** Без черновика загрузить документ невозможно.
+- `draft_id` — внешний ID для загрузки, preview и решения.
+- `task_id` — internal, для сквозного отслеживания и администрирования.
+- `document_id` — внешний ID после завершения черновика и записи в Registry.
+- Пустой документ (0 страниц) не может быть завершён — только reject или удаление.
+
 Детальные sequence-диаграммы для каждого пайплайна — в соответствующих документах:
 
-- **Пайплайн 1 (Формирование):** загрузка файла → preview (OCR/Parser → Converter-validator) → решение UI → OCR → Parser → Converter-validator → Registry — [sequence-диаграмма](pipeline1-formation.md)
-- **Пайплайн 2 (Индексация):** запуск RAG Builder → чанкинг → embeddings → векторный индекс — [sequence-диаграмма](pipeline2-indexation.md)
+- **Пайплайн 1 (Формирование):** загрузка → preview → решение → full → Registry — [sequence-диаграмма](pipeline1-formation.md)
+- **Пайплайн 2 (Индексация):** чанкинг → embeddings → векторный индекс — [sequence-диаграмма](pipeline2-indexation.md)
 - **Пайплайн 3 (Поиск):** сообщение → обогащение → RAG Search → LLM → цитирование — [sequence-диаграмма](pipeline3-search.md)
 
 **Ключевые наблюдения:**
 
-- **Nginx** принимает все внешние запросы и проксирует их на **Gateway**, который проверяет JWT и RBAC — ни один запрос от UI не попадает к внутренним сервисам без аутентификации и авторизации
-- Оркестратор координирует только Пайплайны 1 и 2
-- Пайплайн 1 включает двухфазный процесс: preview (OCR/Parser → Converter-validator → UI decision) и commit (OCR → Parser → Converter-validator → Registry)
-- Пайплайн 3 работает независимо, но также проходит через Gateway
+- Оркестратор координирует Пайплайны 1 и 2
+- Пайплайн 1 включает двухфазный процесс: preview (через черновик) и full-фазу (завершение черновика → Registry)
+- Пайплайн 3 работает независимо, напрямую между UI, Query Service и RAG Search
 - Все асинхронные вызовы используют longpoll-механизм (таймаут 15с)
-- Единый `document_id` проходит через Пайплайны 1 и 2 без трансформации
-- JSON-контейнер передаётся между этапами Пайплайнов 1 и 2 как непрозрачный артефакт
+- `task_id` (internal) обеспечивает сквозное отслеживание через все пайплайны
+- JSON-контейнер передаётся между этапами как непрозрачный артефакт
 
 ---
 
@@ -342,79 +357,42 @@ flowchart LR
 ```mermaid
 stateDiagram-v2
     state "Пайплайн 1: Формирование" as P1 {
-        [*] --> uploaded : POST /documents
+        [*] --> uploaded : POST /drafts
         uploaded --> previewing : запуск preview
-        previewing --> awaiting_decision : preview завершён
-        previewing --> failed : ошибка распознавания
-        awaiting_decision --> parsing : решение = proceed
-        awaiting_decision --> duplicate : решение = stop_duplicate
-        awaiting_decision --> new_version : решение = force_new_version
-        awaiting_decision --> failed : таймаут 24ч
-        parsing --> validation : OCR/Parser завершён
-        parsing --> failed : таймаут 15 мин
-        validation --> ready_for_promotion : авто-валидация
-        validation --> review_required : требуется подтверждение
-        validation --> failed : таймаут 30 мин
-        review_required --> approved : approve оператора
-        review_required --> validation : повторная валидация
-        review_required --> failed : отклонено оператором
-        review_required --> archived : таймаут 48ч
-        ready_for_promotion --> registry : промотирование
-        ready_for_promotion --> failed : таймаут 24ч
-        approved --> registry : промотирование
-        registry --> pending_index : запуск индексации
-        registry --> failed : ошибка записи
-        registry --> archived
+        previewing --> ready_for_approve : preview завершён
+        previewing --> discarded : ошибка распознавания
+        ready_for_approve --> approved : approve
+        ready_for_approve --> discarded : reject / таймаут 24ч
+        approved --> created : запись в Registry
+        created --> pending_index : запуск индексации
+        created --> failed : ошибка записи
     }
 
     state "Пайплайн 2: Индексация" as P2 {
         pending_index --> indexing : чанкинг + embeddings
         indexing --> indexed : индексация завершена
         indexing --> failed : ошибка индексации
+        pending_index --> failed : таймаут 1 час
     }
 
-    state "Пайплайн 3: Поиск (сообщение)" as P3 {
-        [*] --> idle
-        idle --> pending : новое сообщение
-        pending --> enriching : обогащение терминами
-        enriching --> searching : поиск чанков
-        searching --> generating : генерация LLM
-        generating --> answered : цитирование
-        pending --> failed
-        enriching --> failed
-        searching --> failed
-        generating --> failed
-    }
-
-    %% Terminal
     indexed --> [*] : готов к поиску
-    answered --> [*] : ответ отправлен
-
-    %% Дополнительно
-    indexed --> pending_index : реиндексация
     failed --> uploaded : reprocess
 ```
 
 **Карта соответствия состояний:**
 
-| Состояние             | Пайплайн | Описание                                                 |
-| --------------------- | -------- | -------------------------------------------------------- |
-| `uploaded`            | 1        | Файл загружен в MinIO, ожидание preview                  |
-| `previewing`          | 1        | Выполняется preview OCR/Parser и Converter-validator     |
-| `awaiting_decision`   | 1        | Preview завершён, ожидание решения пользователя          |
-| `parsing`             | 1        | Выполняется OCR и распознавание структуры                |
-| `validation`          | 1        | Валидация структуры, классификация, уникальность         |
-| `review_required`     | 1        | Ожидание ручного подтверждения оператором                |
-| `ready_for_promotion` | 1        | Автоматическое подтверждение, ожидание записи в Registry |
-| `approved`            | 1        | Оператор подтвердил, ожидание записи в Registry          |
-| `registry`            | 1        | Документ записан в реестр (registry.documents)                |
-| `pending_index`       | 2        | Ожидание начала индексации                               |
-| `indexing`            | 2        | Выполняется чанкинг и построение векторного индекса      |
-| `indexed`             | 2        | Документ проиндексирован, готов к поиску                 |
-| `duplicate`           | 1        | Документ-дубликат, обработка завершена                  |
-| `new_version`         | 1        | Создана новая версия существующего документа             |
-| `failed`              | 1/2/3    | Ошибка на одном из этапов                                |
-| `archived`            | 1        | Документ архивирован (неактивен)                         |
+| Состояние | Пайплайн | Описание |
+|---|---|---|
+| `uploaded` | Черновик | Файл загружен в MinIO, ожидание preview |
+| `previewing` | Черновик | Выполняется preview OCR/Parser и Converter-validator |
+| `ready_for_approve` | Черновик | Preview завершён, ожидание решения пользователя |
+| `approved` | Черновик | Оператор подтвердил, документ создаётся в Registry |
+| `discarded` | Черновик | Черновик отклонён (человеком или автоматом) |
+| `created` | 1 → 2 | Документ записан в реестр (registry.documents) |
+| `pending_index` | 2 | Ожидание начала индексации |
+| `indexing` | 2 | Выполняется чанкинг и построение векторного индекса |
+| `indexed` | 2 | Документ проиндексирован, готов к поиску |
+| `failed` | 1/2 | Ошибка на одном из этапов |
 
 ---
 
@@ -433,14 +411,12 @@ stateDiagram-v2
 ```mermaid
 graph TB
     subgraph "Внешняя сеть"
-        Nginx[Nginx<br/>:443 / HTTPS]
+        LB[Load Balancer<br/>:80/:443]
         UI[Web UI]
     end
 
-    subgraph "Сеть приложений"
-        subgraph "API Gateway"
-            GW[Gateway Service<br/>JWT, RBAC, Routing<br/>:8080]
-        end
+    subgraph "Внутренняя сеть"
+        GW[Gateway Service<br/>:8080]
 
         subgraph "Оркестратор"
             Orch[Orchestrator Service<br/>:8081]
@@ -451,18 +427,15 @@ graph TB
             Pars[Parser-сервис<br/>:8087]
             CV[Converter-validator<br/>:8086]
             Reg[Registry<br/>:8084]
-            RAGb[RAG Builder<br/>:8090]
         end
 
         subgraph "Пайплайн 2: Индексация"
-            RAGi[RAG Builder
-:8090]
+            RAGb[RAG Builder<br/>:8090]
         end
 
         subgraph "Пайплайн 3: Поиск"
             QS[Query Service<br/>:8083]
-            RAGs[RAG Search
-:8091]
+            RAGs[RAG Search<br/>:8091]
         end
 
         subgraph "Вспомогательные сервисы"
@@ -488,11 +461,12 @@ OpenAI / Custom]
     end
 
     %% Соединения
-    UI -->|HTTPS| Nginx
-    Nginx -->|proxy :8080| GW
-    GW -->|JWT / RBAC| Auth
+    LB -->|только Web UI| UI
+    UI -->|внутренние вызовы| GW
+    GW --> Auth
     GW --> Orch
     GW --> QS
+    GW --> IS
 
     Orch --> OCR
     Orch --> Pars
@@ -515,14 +489,13 @@ OpenAI / Custom]
     Orch --> PG
 
     %% Стили
-    style GW fill:#e74c3c,color:#fff
+    style GW fill:#ff9900,color:#fff
     style Orch fill:#4a90d9,color:#fff
     style OCR fill:#e6f3ff
     style Pars fill:#e6f3ff
     style CV fill:#fff3e6
     style Reg fill:#e6ffe6
     style RAGb fill:#ffe6f3
-    style RAGi fill:#ffe6f3
     style RAGs fill:#f3e6ff
     style QS fill:#fffacd
     style PG fill:#f9f9f9
@@ -535,8 +508,6 @@ OpenAI / Custom]
 
 | Сервис              | Порт | Пайплайн | Доступ к БД        | Зависимости                        |
 | ------------------- | ---- | -------- | ------------------ | ---------------------------------- |
-| **Gateway**         | 8080 | —        | Нет                | Auth (JWT), Orchestrator, Query, Registry, Integration |
-| **Nginx**           | 443  | —        | Нет                | Gateway (прокси) |
 | Orchestrator        | 8081 | 1, 2     | Пишет (пре-стейдж) | OCR, Parser, Converter-validator, Registry, RAG Builder |
 | Auth                | 8082 | —        | Читает             | PostgreSQL                         |
 | Query Service       | 8083 | 3        | Читает/Пишет       | RAG Search, LLM, PostgreSQL        |

@@ -104,7 +104,8 @@
 
 | Идентификатор | Тип | Назначается | Используется в URL |
 |---|---|---|---|
-| `task_id` | bigint | Оркестратором при `POST /drafts` | Внутренний (internal) — `/tasks/{task_id}/...` |
+| `draft_id` | bigint (sequence) | Registry при создании записи черновика (`registry.drafts`) | `/drafts/{draft_id}/...` (через Gateway → Orchestrator) |
+| `task_id` | bigint (sequence) | Оркестратором при создании задачи (`pipeline.tasks`) | Внутренний (internal) — `/tasks/{task_id}/...` |
 | `document_id` | bigint (sequence) | Registry при создании карточки документа | `/documents/{document_id}/...` (после записи в Registry) |
 | `version_id` | bigint (sequence) | Оркестратором при создании новой версии | В ответах `POST /documents/{doc_id}/versions` |
 | `project_id` | bigint (sequence) | Query Service при создании проекта | `/chat/projects/{project_id}/...` |
@@ -115,8 +116,8 @@
 | `history_id` | bigint (sequence) | Registry при записи события аудита | В ответах API аудита/истории |
 
 **Жизненный цикл идентификаторов:**
-1. `draft_id` (bigint) — назначается Оркестратором при `POST /drafts`, внешний ID для preview и решения через `/drafts/{draft_id}/...`
-2. `task_id` (bigint) — внутренний сквозной ID задачи (internal), используется для межсервисного взаимодействия и администрирования
+1. `draft_id` (bigint) — назначается Registry при создании записи черновика (`registry.drafts`). Внешний ID для preview и решения через `/drafts/{draft_id}/...`
+2. `task_id` (bigint) — назначается Оркестратором при создании задачи (`pipeline.tasks`). Внутренний ID задачи, агрегирует этапы (`task_steps`) с входными/выходными данными сервисов
 3. `document_id` (bigint) — назначается Registry при создании карточки документа
 4. После записи в Registry все операции переключаются на `/documents/{document_id}/...`
 5. Оркестратор хранит маппинг `draft_id → task_id → document_id`
@@ -571,7 +572,7 @@ uploaded → previewing → ready_for_approve → approved → created
 1. **Загрузка**: пользователь загружает файл через `POST /drafts` → статус черновика `uploaded`.
 2. **Preview**: запуск предварительной обработки (OCR/Parser preview) → статус `previewing`.
 3. **Решение**: после preview черновик переходит в `ready_for_approve`. Если документ уникален и не требует ручного вмешательства — автозавершение. Иначе — решение пользователя через `PATCH /drafts/{draft_id}/decide`.
-4. **Завершение**: при `approve` выполняется полный OCR/Parser, затем Converter-validator. Результат записывается в Registry (статус документа `created`).
+4. **Завершение**: при `approve` выполняется Converter-validator. Если на preview был частичный JSON — перед этим запускается полный OCR/Parser (`mode=full`). Если preview уже вернул полный JSON (`preview_not_supported: true`) — OCR/Parser пропускается. Результат записывается в Registry (статус документа `created`).
 5. **Отклонение**: при `reject` или ошибке черновик переводится в `discarded`.
 
 ### Пайплайн 2: Индексация документа

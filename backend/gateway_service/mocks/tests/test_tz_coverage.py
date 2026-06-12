@@ -91,13 +91,16 @@ class TestUC02_OcrProcessing:
         reset_rate_limiter()
 
     def test_status_has_pipeline_steps(self):
+        # NOTE: Формат ответа приведён к спецификации orchestrator_service_api.md (L344-447).
+        # pipeline вложен в steps, formation содержит preview и decision.
         resp = orch_client.get(f"{BASE}/documents/doc-001/status")
         assert_ok(resp)
         data = resp.json()
-        pipeline = data["pipeline"]
+        assert "steps" in data
+        pipeline = data["steps"]["pipeline"]
         assert "formation" in pipeline
         assert "indexation" in pipeline
-        for s in ["parsing", "validation", "registry"]:
+        for s in ["preview", "decision"]:
             assert s in pipeline["formation"]
 
     def test_status_has_progress(self):
@@ -109,12 +112,15 @@ class TestUC02_OcrProcessing:
             assert resp.status_code == 404
 
     def test_completed_has_pipeline_completed(self):
+        # NOTE: Формат ответа приведён к спецификации — formation содержит preview и decision.
         resp = orch_client.get(f"{BASE}/documents/doc-001/status")
         assert_ok(resp)
         data = resp.json()
         if data["status"] == "completed":
-            for step in ["parsing", "validation", "registry"]:
-                assert data["pipeline"]["formation"][step] == "completed"
+            pipeline = data["steps"]["pipeline"]
+            assert pipeline["formation"]["status"] == "completed"
+            assert pipeline["formation"]["preview"]["status"] == "completed"
+            assert pipeline["formation"]["decision"]["status"] == "completed"
 
     def test_failed_has_error(self):
         resp = orch_client.get(f"{BASE}/documents/doc-005/status")
@@ -123,16 +129,21 @@ class TestUC02_OcrProcessing:
             assert "code" in resp.json().get("error", {})
 
     def test_completed_has_chunk_summary(self):
+        # NOTE: chunk_summary содержит sections, chunks, embeddings (спецификация orchestrator_service_api.md).
         resp = orch_client.get(f"{BASE}/documents/doc-001/status")
         assert_ok(resp)
         if resp.json()["status"] == "completed":
             cs = resp.json().get("chunk_summary", {})
-            assert "total" in cs
+            assert "sections" in cs
+            assert "chunks" in cs
+            assert "embeddings" in cs
 
     def test_processing_has_pipeline(self):
+        # NOTE: pipeline вложен в steps (спецификация orchestrator_service_api.md).
         resp = orch_client.get(f"{BASE}/documents/doc-003/status")
         if resp.status_code == 200:
-            assert "pipeline" in resp.json()
+            assert "steps" in resp.json()
+            assert "pipeline" in resp.json()["steps"]
         else:
             assert resp.status_code == 404
 
@@ -456,7 +467,9 @@ class TestNFR_NonFunctional:
         assert resp.status_code in (200, 404)
 
     def test_health_all_services(self):
-        resp = orch_client.get(f"{BASE}/system/health")
+        # NOTE: Orchestrator health — /api/v1/monitor/health (см. common_api.md).
+        # /api/v1/system/health зарегистрирован только в gateway.py.
+        resp = orch_client.get(f"{BASE}/monitor/health")
         assert_ok(resp)
         data = resp.json()
         assert data["status"] == "ok"
@@ -543,7 +556,8 @@ class TestRegistry_Specifics:
             assert doc["status"] in valid
 
     def test_common_enums(self):
-        resp = reg_client.get(f"{BASE}/enums")
+        # NOTE: Путь изменён на /api/v1/common/enums (routing table gateway_service_api.md).
+        resp = reg_client.get(f"{BASE}/common/enums")
         assert_ok(resp)
         enums = resp.json()["data"]
         for key in ["classifier_system", "classifier_status", "source_type", "document_status", "era", "validity_status", "term_type",
@@ -551,7 +565,7 @@ class TestRegistry_Specifics:
             assert key in enums
 
     def test_registry_stats_new_format(self):
-        resp = reg_client.get(f"{BASE}/stats")
+        resp = reg_client.get(f"{BASE}/common/stats")
         assert_ok(resp)
         data = resp.json()["data"]
         assert isinstance(data["classifiers_total"], dict)

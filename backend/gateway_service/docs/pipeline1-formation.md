@@ -3,7 +3,33 @@
 Назначение: преобразовать исходный файл в структурированную карточку документа в БД.  
 Пайплайн состоит из двух фаз: **Preview** (быстрая проверка, метаданные, решение пользователя) и **Full** (полная обработка).
 
-**Черновик (draft) — обязательная точка входа:** `POST /drafts` всегда создаёт черновик. Без черновика загрузить документ невозможно. Из черновика данные передаются на конвертацию (Converter-validator) и после — в Registry (чистовик).
+**Черновик (draft) — обязательная точка входа:** `POST /drafts` всегда создаёт задачу (`pipeline.tasks`) и запись черновика в Registry (`POST /registry/drafts`). Без черновика загрузить документ невозможно. Из черновика данные передаются на конвертацию (Converter-validator) и после — в Registry (чистовик).  
+Данные черновиков хранятся в `registry.drafts` (БД Registry). Управление жизненным циклом — через Orchestrator. Этапы задачи с входными/выходными данными сервисов — в `pipeline.task_steps` (БД Orchestrator).
+
+**Создание черновика (POST /drafts):**
+
+```mermaid
+sequenceDiagram
+    participant UI as Web UI
+    participant Orch as Orchestrator
+    participant Reg as Registry
+
+    UI->>Orch: POST /drafts (file)
+    activate Orch
+    Orch->>Orch: SHA-256, определение формата
+    Orch->>Orch: Создание task (pipeline.tasks)
+    Orch->>Orch: Создание task_step "upload"
+    Orch->>Reg: POST /registry/drafts (file_key, document_key, status)
+    activate Reg
+    Reg-->>Orch: { id: draft_id }
+    deactivate Reg
+    Orch->>Orch: Маппинг task_id -> draft_id
+    Orch->>Orch: Завершение task_step "upload"
+    Orch-->>UI: 202 { draft_id, task_id, status: "uploaded" }
+    deactivate Orch
+```
+
+**Preview-фаза и решение (основной поток):**
 
 ```mermaid
 sequenceDiagram
@@ -14,29 +40,41 @@ sequenceDiagram
     participant Conv as Converter-validator
     participant Reg as Registry
 
-
     %% Фаза Preview
     UI->>Orch: POST /drafts/{draft_id}/preview
     activate Orch
+    Orch->>Orch: Создание task_step "preview_ocr"
     Orch->>Orch: Определение типа файла (скан/цифровой)
     alt Скан/изображение
-        Orch->>OCR: POST /ocr/preview (max_pages=3)
+        Orch->>OCR: POST /ocr/process (mode=preview, max_pages=3)
         activate OCR
-        OCR-->>Orch: Частичный сырой JSON (первые N стр.)
+        alt Движок умеет постранично
+            OCR-->>Orch: Частичный сырой JSON (первые N стр.)
+        else Движок не умеет постранично
+            OCR-->>Orch: Полный JSON + preview_not_supported=true
+        end
         deactivate OCR
     else Цифровой PDF/DOC
-        Orch->>Pars: POST /parser/preview (max_pages=3)
+        Orch->>Pars: POST /parser/process (mode=preview, max_pages=3)
         activate Pars
-        Pars-->>Orch: Частичный сырой JSON (первые N стр.)
+        alt Движок умеет постранично
+            Pars-->>Orch: Частичный сырой JSON (первые N стр.)
+        else Движок не умеет постранично
+            Pars-->>Orch: Полный JSON + preview_not_supported=true
+        end
         deactivate Pars
     end
+    Orch->>Orch: Завершение task_step "preview_ocr"
+    Orch->>Orch: Проверка preview_not_supported + решение об auto-approve
+    Orch->>Orch: Создание task_step "preview_converter"
     Orch->>Conv: POST /converter/preview/metadata
     activate Conv
     Conv-->>Orch: Первичные метаданные
     deactivate Conv
-    Orch->>Reg: POST /registry/documents/check-uniqueness (метаданные + file_size_bytes)
+    Orch->>Orch: Завершение task_step "preview_converter"
+    Orch->>Reg: PATCH /registry/drafts/{draft_id}/status (status: "ready_for_approve", preview_metadata)
     activate Reg
-    Reg-->>Orch: Список кандидатов-дубликатов
+    Reg-->>Orch: { status: "ready_for_approve", updated_at }
     deactivate Reg
     Orch-->>UI: Preview-данные (метаданные, дубликаты)
     deactivate Orch
@@ -46,42 +84,59 @@ sequenceDiagram
     UI->>Orch: PATCH /drafts/{draft_id}/decide
     activate Orch
     alt action = approve
+        Orch->>Reg: PATCH /registry/drafts/{draft_id}/status (status: "approved")
+        activate Reg
+        Reg-->>Orch: { status: "approved" }
+        deactivate Reg
         Orch-->>UI: 202 {status: proceeding}
 
         %% Фаза Full
-        alt Скан/изображение
-            Orch->>OCR: POST /ocr/process (full)
-            activate OCR
-            OCR-->>Orch: Полный сырой JSON
-            deactivate OCR
-        else Цифровой PDF/DOC
-            Orch->>Pars: POST /parser/process (full)
-            activate Pars
-            Pars-->>Orch: Полный сырой JSON
-            deactivate Pars
+        alt preview_not_supported = true (JSON уже полный)
+            Orch->>Orch: Пропуск full_ocr — JSON получен на preview
+        else preview частичный
+            Orch->>Orch: Создание task_step "full_ocr"
+            alt Скан/изображение
+                Orch->>OCR: POST /ocr/process (mode=full)
+                activate OCR
+                OCR-->>Orch: Полный сырой JSON
+                deactivate OCR
+            else Цифровой PDF/DOC
+                Orch->>Pars: POST /parser/process (mode=full)
+                activate Pars
+                Pars-->>Orch: Полный сырой JSON
+                deactivate Pars
+            end
+            Orch->>Orch: Завершение task_step "full_ocr"
         end
-
+        Orch->>Orch: Создание task_step "full_converter"
         Orch->>Conv: POST /converter/convert
         activate Conv
         Conv->>Conv: Построение иерархии, LLM, метаданные
         Conv-->>Orch: Иерархический типизированный JSON
         deactivate Conv
+        Orch->>Orch: Завершение task_step "full_converter"
 
         Orch->>Reg: POST /registry/documents/check-uniqueness (метаданные + file_size_bytes)
         activate Reg
         Reg-->>Orch: { is_duplicate, candidates }
         deactivate Reg
         alt is_duplicate = true
+            Orch->>Reg: PATCH /registry/drafts/{draft_id}/status (status: "discarded", error_code: DUPLICATE)
+            Reg-->>Orch: { status: "discarded" }
             Orch-->>UI: action: discard_with_duplicate
         else
+            Orch->>Orch: Создание task_step "registry_creation"
             Orch->>Reg: POST /registry/documents (JSON)
             activate Reg
             Reg->>Reg: Сохранение карточки, сегментация на секции
             Reg-->>Orch: JSON со ссылками в БД
             deactivate Reg
+            Orch->>Orch: Завершение task_step "registry_creation"
             Orch-->>UI: status: completed
         end
     else action = reject (duplicate)
+        Orch->>Reg: PATCH /registry/drafts/{draft_id}/status (status: "discarded")
+        Reg-->>Orch: { status: "discarded" }
         Orch-->>UI: action: discard_with_duplicate
     else action = reject (force_new_version)
         Orch->>Orch: Создание новой версии через POST /documents/{doc_id}/versions
@@ -99,11 +154,12 @@ sequenceDiagram
 | Шаг | Действие | Сервис | Результат |
 |-----|----------|--------|-----------|
 | P.1 | Определение типа файла (скан/цифровой) | Оркестратор | Выбор OCR или Parser |
-| P.2 | Preview-распознавание (первые N страниц) | OCR-сервис или Parser-сервис | Частичный сырой JSON |
+| P.2 | Preview-распознавание (первые N страниц) | OCR-сервис или Parser-сервис | Частичный сырой JSON (или полный, если движок не умеет постранично) |
 | P.3 | Извлечение первичных метаданных | Converter-validator (preview API) | Обозначение, наименование, тип, даты |
 | P.4 | Проверка уникальности (по метаданным + размеру) | Оркестратор → `POST /registry/documents/check-uniqueness` | Список кандидатов-дубликатов |
 | P.5 | Отображение preview пользователю | UI | Метаданные + дубликаты |
-| P.6 | Решение пользователя | UI → Оркестратор (`PATCH /drafts/{draft_id}/decide`) | approve / reject |
+| P.6 | Решение пользователя (или auto-approve) | UI → Оркестратор (`PATCH /drafts/{draft_id}/decide`) | approve / reject |
+| P.6a | Auto-approve (если `preview_not_supported=true`, метаданные корректны, дубликатов нет) | Оркестратор | Пропуск шага P.6, переход к full-фазе |
 
 **Параметры preview:**
 
@@ -111,6 +167,7 @@ sequenceDiagram
 |----------|----------------------|----------|
 | `max_pages` | 3 | Количество страниц для preview-обработки |
 | `preview_timeout` | 60с (OCR) / 30с (Parser) | Таймаут на preview-этап |
+| `preview_not_supported_fallback` | — | Если `preview_not_supported: true` + метаданные корректны + нет дубликатов → auto-approve (пропуск шага подтверждения) |
 | `preview_llm_timeout` | 15с | Таймаут на LLM-вызов при извлечении метаданных |
 
 ---
@@ -119,16 +176,18 @@ sequenceDiagram
 
 Запускается после решения пользователя `approve` (через `PATCH /drafts/{draft_id}/decide`). Черновик завершается, документ записывается в Registry через конвертацию. Состоит из трёх этапов.
 
+> **Оптимизация:** если на preview-фазе был получен полный JSON (`preview_not_supported: true`), **этап 1 (OCR/Parser) пропускается** — готовый JSON из preview сразу подаётся в Converter-validator. Этапы 2 и 3 выполняются как обычно.
+
 ### Форматы входных/выходных данных Full-фазы
 
-| № | Сервис | Входной формат | Выходной формат |
-|---|--------|---------------|----------------|
-| 1.1 | OCR-сервис (`:8088`) / Parser-сервис (`:8087`) | `file_key` → бинарный файл из MinIO | `raw_ocr_v4` (JSON) — плоский массив блоков |
-| 1.2 | Converter-validator (`:8086`) | `raw_ocr_v4` (JSON) | `validated_v3` (JSON) — иерархический типизированный |
-| 1.3 | Registry (`:8084`) — `POST /check-uniqueness` | `file_hash_sha256`, `title_hash_sha256` | `{is_unique: bool, duplicate_of: bigint/null}` |
-| 1.4 | Registry (`:8084`) — `POST /documents` | `validated_v3` + метаданные | `document_id` (bigint) |
-| 1.5 | Orchestrator → Scheduler (RAG Builder) | `document_id` | Статус `pending_index` → Pipeline 2 |
-| 1.6 | Orchestrator (очистка preview-артефактов) | `draft_id` | Удаление preview-данных (preview_metadata, preview_blobs) |
+| № | Сервис | Входной формат | Выходной формат | Примечание |
+|---|--------|---------------|----------------|------------|
+| 1.1 | OCR-сервис (`:8088`) / Parser-сервис (`:8087`) | `file_key` → бинарный файл из MinIO | `raw_ocr_v4` (JSON) — плоский массив блоков | Пропускается, если на preview получен полный JSON (`preview_not_supported: true`) |
+| 1.2 | Converter-validator (`:8086`) | `raw_ocr_v4` (JSON) | `validated_v3` (JSON) — иерархический типизированный | |
+| 1.3 | Registry (`:8084`) — `POST /check-uniqueness` | `file_hash_sha256`, `title_hash_sha256` | `{is_unique: bool, duplicate_of: bigint/null}` | |
+| 1.4 | Registry (`:8084`) — `POST /documents` | `validated_v3` + метаданные | `document_id` (bigint) | |
+| 1.5 | Orchestrator → Scheduler (RAG Builder) | `document_id` | Статус `pending_index` → Pipeline 2 | |
+| 1.6 | Orchestrator (очистка preview-артефактов) | `draft_id` | Удаление preview-данных (preview_metadata, preview_blobs) | |
 
 #### Этап 1: OCR-сервис и Parser-сервис (распознавание и извлечение сырых данных)
 
@@ -295,7 +354,7 @@ stateDiagram-v2
 
 **Архивация документов:** Документ может быть помечен как архивный (неактивный) автоматически через N дней после создания новой версии (настраиваемый параметр, по умолчанию 365 дней). Также архивация может быть инициирована вручную `system_admin`. Архивированный документ доступен только для чтения. Архивация — административная операция, не связанная с FSM пайплайна.
 
-> **Черновики (drafts):** Черновик — основной элемент управления загрузкой документа. `file_key` — у черновика (`pipeline.drafts.file_key`). `raw_data` — в `pipeline.drafts.raw_data` (JSONB, результат Parser или OCR). MinIO — только для бинарных файлов (PDF, изображения). OCR/Parser выполняется **полностью** уже в черновике; Converter-validator — только извлечение метаданных. Полная конвертация (validated_v3) запускается при approve, после чего документ записывается в Registry. Решение пользователя принимается через `PATCH /drafts/{draft_id}/decide`. `task_id` — внутренний сквозной ID задачи (internal). Детальная реализация — см. [`docs/plans/drafts_storage_plan.md`](../plans/drafts_storage_plan.md).
+> **Черновики (drafts):** Черновик — основной элемент управления загрузкой документа. Данные черновиков хранятся в `registry.drafts` (БД Registry). `file_key` — у черновика (`registry.drafts.file_key`). `raw_data` — в `registry.drafts.raw_data` (JSONB, результат Parser или OCR). MinIO — только для бинарных файлов (PDF, изображения). OCR/Parser выполняется **полностью** уже в черновике; Converter-validator — только извлечение метаданных. Полная конвертация (validated_v3) запускается при approve, после чего документ записывается в Registry. Решение пользователя принимается через `PATCH /drafts/{draft_id}/decide`. `task_id` — внутренний сквозной ID задачи (`pipeline.tasks`, БД Orchestrator). Этапы задачи с входными/выходными данными сервисов — в `pipeline.task_steps`.
 
 **Новая Draft FSM:**
 
@@ -331,7 +390,7 @@ stateDiagram-v2
 | Preview OCR/Parser | Распознавание первых N страниц | Ошибка распознавания | Статус `discarded` |
 | Preview Converter-validator | Извлечение метаданных | Ошибка извлечения метаданных | `ready_for_approve` с флагом ошибки |
 | Preview проверка уникальности (Оркестратор → Registry) | Проверка по метаданным через `check-uniqueness` | Ошибка Registry | `ready_for_approve` (повтор при доступности) |
-| Full OCR/Parser | Распознавание и парсинг | Ошибка OCR/таймаут | Повтор (до 3 раз), при превышении — статус `failed` |
+| Full OCR/Parser | Распознавание и парсинг (пропускается, если preview вернул полный JSON) | Ошибка OCR/таймаут | Повтор (до 3 раз), при превышении — статус `failed` |
 | Full Converter-validator | Конвертация, валидация | Ошибка структуры JSON | Вернуть `validation.errors`, статус `failed` |
 | Registry | Запись карточки в БД | Ошибка записи | Откат транзакции, повтор (до 2 раз) |
 

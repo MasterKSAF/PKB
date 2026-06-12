@@ -79,6 +79,7 @@ _classifiers: Dict[str, dict] = {}
 _terminology: Dict[str, dict] = {}
 _registry_docs: Dict[str, dict] = {}
 _pending_classifiers: Dict[str, dict] = {}
+_registry_drafts: Dict[str, dict] = {}  # NOTE: Хранилище черновиков (internal). Доступно только для межсервисного взаимодействия.
 _doc_history: Dict[str, list] = {}
 
 def init_data():
@@ -167,6 +168,31 @@ class RegistryDocStatusUpdate(BaseModel):
     status: str
     comment: Optional[str] = None
     changed_by: Optional[str] = None
+
+class DraftCreate(BaseModel):
+    # NOTE: Модель создания черновика в registry. Поля соответствуют registry_service_api.md (группа drafts).
+    file_key: str
+    document_key: str
+    status: str = "uploaded"
+    raw_data: Optional[dict] = None
+    created_by: Optional[str] = None
+
+class DraftStatusUpdate(BaseModel):
+    # NOTE: Модель обновления статуса черновика. Все поля опциональны, кроме status.
+    status: str
+    confidence: Optional[float] = None
+    preview_metadata: Optional[dict] = None
+    error_code: Optional[str] = None
+    error_message: Optional[str] = None
+    updated_by: Optional[str] = None
+
+class CheckUniquenessRequest(BaseModel):
+    # NOTE: Модель проверки уникальности документа. Поля соответствуют registry_service_api.md (3.2.5).
+    title: str
+    doc_code: Optional[str] = None
+    era: Optional[str] = None
+    source_type: Optional[str] = None
+    file_size_bytes: Optional[int] = None
 
 # ── эндпоинты ─────────────────────────────────────────────────────────────
 
@@ -534,8 +560,186 @@ async def delete_registry_doc(doc_id: str):
     del _registry_docs[doc_id]
     return {"data": {"id": doc_id, "deleted": True}}
 
+# 3.5. GET /documents/{doc_id}/sections — полный объект для RAG Builder
+# NOTE: Mock-заглушка, возвращает минимальный набор данных.
+# В реальном сервисе возвращает document + sections + terminology + references.
+@registry_docs_router.get("/documents/{doc_id}/sections")
+async def get_doc_sections(doc_id: str):
+    doc = _registry_docs.get(doc_id)
+    if not doc:
+        raise HTTPException(404, detail=error_response("DOCUMENT_NOT_FOUND", "Документ не найден"))
+    return {
+        "document": {
+            "id": doc.get("id"),
+            "doc_code": doc.get("doc_code"),
+            "title": doc.get("title"),
+            "era": doc.get("era"),
+            "validity_status": doc.get("validity_status"),
+        },
+        "sections": [
+            {
+                "section_id": "sec-001",
+                "document_id": doc_id,
+                "parent_id": None,
+                "clause": "1",
+                "title": None,
+                "level": 1,
+                "path": "1",
+                "page": 1,
+                "type": "text",
+                "content": {"text": "Mock content", "amendments": []},
+            }
+        ],
+        "terminology": [],
+        "references": [],
+    }
+
+# 3.2.5. POST /documents/check-uniqueness — проверка уникальности
+# NOTE: Mock-заглушка, всегда возвращает is_duplicate=false.
+# В реальном сервисе выполняет поиск дубликатов по хешам и бизнес-ключам.
+@registry_docs_router.post("/documents/check-uniqueness")
+async def check_uniqueness(req: CheckUniquenessRequest):
+    # NOTE: hashlib уже импортирован на уровне модуля (строка 7).
+    file_hash = hashlib.sha256((str(req.file_size_bytes or "") + req.title).encode()).hexdigest() if req.file_size_bytes else None
+    title_hash = hashlib.sha256(req.title.encode()).hexdigest()
+    return {
+        "data": {
+            "is_duplicate": False,
+            "is_duplicate_file": False,
+            "candidates": [],
+            "file_hash_sha256": file_hash,
+            "title_hash_sha256": title_hash,
+            "file_size_bytes": req.file_size_bytes,
+            "checked_at": utcnow(),
+        }
+    }
+
+# 4. Registry Drafts (internal) — доступны только для межсервисного взаимодействия.
+# NOTE: Все эндпоинты drafts зарегистрированы на registry_docs_router с префиксом /api/v1/registry.
+
+@registry_docs_router.post("/drafts", status_code=201)
+async def create_draft(req: DraftCreate):
+    # NOTE: Создаёт запись черновика в registry.drafts. Вызывается Orchestrator после POST /drafts.
+    draft_id = f"draft-{new_id()}"
+    now = utcnow()
+    draft = {
+        "id": draft_id,
+        "file_key": req.file_key,
+        "document_key": req.document_key,
+        "status": req.status,
+        "confidence": None,
+        "preview_metadata": None,
+        "raw_data": req.raw_data,
+        "error_code": None,
+        "error_message": None,
+        "created_by": req.created_by or "system",
+        "updated_by": None,
+        "created_at": now,
+        "updated_at": now,
+        "deleted_at": None,
+    }
+    _registry_drafts[draft_id] = draft
+    return {
+        "data": {
+            "id": draft_id,
+            "file_key": req.file_key,
+            "document_key": req.document_key,
+            "status": req.status,
+            "created_at": now,
+        }
+    }
+
+@registry_docs_router.get("/drafts")
+async def list_drafts(
+    status: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+):
+    # NOTE: Список черновиков с пагинацией. Формат ответа — {data, meta}.
+    items = list(_registry_drafts.values())
+    if status:
+        items = [d for d in items if d.get("status") == status]
+    items.sort(key=lambda d: d.get("created_at", ""), reverse=True)
+    result = []
+    for d in items:
+        entry = {
+            "id": d["id"],
+            "file_key": d["file_key"],
+            "document_key": d["document_key"],
+            "status": d["status"],
+            "confidence": d.get("confidence"),
+            "preview_metadata": d.get("preview_metadata"),
+            "created_by": d.get("created_by"),
+            "created_at": d.get("created_at"),
+        }
+        result.append(entry)
+    return paginate_registry(result, page, page_size)
+
+@registry_docs_router.get("/drafts/{draft_id}")
+async def get_draft(draft_id: str):
+    # NOTE: Полная информация о черновике, включая raw_data.
+    draft = _registry_drafts.get(draft_id)
+    if not draft:
+        raise HTTPException(404, detail=error_response("DRAFT_NOT_FOUND", "Черновик не найден"))
+    return {"data": draft}
+
+@registry_docs_router.get("/drafts/{draft_id}/preview")
+async def get_draft_preview(draft_id: str):
+    # NOTE: Preview-метаданные черновика (без raw_data).
+    draft = _registry_drafts.get(draft_id)
+    if not draft:
+        raise HTTPException(404, detail=error_response("DRAFT_NOT_FOUND", "Черновик не найден"))
+    return {
+        "data": {
+            "id": draft["id"],
+            "file_key": draft["file_key"],
+            "status": draft["status"],
+            "confidence": draft.get("confidence"),
+            "preview_metadata": draft.get("preview_metadata"),
+            "created_at": draft.get("created_at"),
+        }
+    }
+
+@registry_docs_router.patch("/drafts/{draft_id}/status")
+async def update_draft_status(draft_id: str, req: DraftStatusUpdate):
+    # NOTE: Обновляет статус черновика. Вызывается Orchestrator при изменении жизненного цикла.
+    draft = _registry_drafts.get(draft_id)
+    if not draft:
+        raise HTTPException(404, detail=error_response("DRAFT_NOT_FOUND", "Черновик не найден"))
+    previous_status = draft["status"]
+    draft["status"] = req.status
+    if req.confidence is not None:
+        draft["confidence"] = req.confidence
+    if req.preview_metadata is not None:
+        draft["preview_metadata"] = req.preview_metadata
+    if req.error_code is not None:
+        draft["error_code"] = req.error_code
+    if req.error_message is not None:
+        draft["error_message"] = req.error_message
+    if req.updated_by is not None:
+        draft["updated_by"] = req.updated_by
+    draft["updated_at"] = utcnow()
+    return {
+        "data": {
+            "id": draft_id,
+            "status": req.status,
+            "previous_status": previous_status,
+            "updated_at": draft["updated_at"],
+        }
+    }
+
+@registry_docs_router.delete("/drafts/{draft_id}")
+async def delete_draft(draft_id: str):
+    # NOTE: Удаляет запись черновика из registry.drafts.
+    if draft_id not in _registry_drafts:
+        raise HTTPException(404, detail=error_response("DRAFT_NOT_FOUND", "Черновик не найден"))
+    del _registry_drafts[draft_id]
+    return {"data": {"id": draft_id, "deleted_at": utcnow()}}
+
 # 4. common
-@main_router.get("/api/v1/stats")
+# NOTE: Путь /api/v1/common/stats соответствует routing table gateway_service_api.md
+# (префикс /api/v1/common/* → Registry Service).
+@main_router.get("/api/v1/common/stats")
 async def stats():
     docs_by_status = {}
     docs_by_source = {}
@@ -558,7 +762,7 @@ async def stats():
         "documents_by_era": docs_by_era
     }}
 
-@main_router.get("/api/v1/enums")
+@main_router.get("/api/v1/common/enums")
 async def enums():
     return {"data": {
         "classifier_system": ["MKS", "OKSTU", "UDC", "EXTERNAL"],
@@ -575,9 +779,11 @@ async def enums():
         "chunk_type": ["text", "table", "image", "formula"]
     }}
 
-@main_router.get("/api/v1/system/health")
+# NOTE: /api/v1/system/health зарегистрирован только в gateway.py (единая точка).
+# Для внутреннего мониторинга каждый сервис использует /api/v1/health.
+@main_router.get("/api/v1/health")
 async def health():
-    return {"status": "ok", "service": "registry-service", "timestamp": utcnow()}
+    return {"status": "ok", "service": "registry-service", "version": "1.0.0", "uptime_seconds": 86400}
 
 app.include_router(main_router)
 app.include_router(registry_docs_router, prefix="/api/v1/registry")

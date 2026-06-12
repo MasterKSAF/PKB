@@ -251,11 +251,13 @@ class TestOrchestratorService:
         assert "error" in resp.json()
 
     def test_25_document_status(self):
+        # NOTE: Формат ответа приведён к спецификации orchestrator_service_api.md — pipeline вложен в steps.
         resp = orch_client.get(f"{BASE}/documents/doc-001/status")
         assert_ok(resp)
         data = resp.json()
-        assert "pipeline" in data
-        assert "formation" in data["pipeline"]
+        assert "steps" in data
+        assert "pipeline" in data["steps"]
+        assert "formation" in data["steps"]["pipeline"]
 
     def test_26_document_file(self):
         resp = orch_client.get(f"{BASE}/documents/doc-001/file")
@@ -363,7 +365,9 @@ class TestOrchestratorService:
         assert "history" in resp.json()
 
     def test_44_health(self):
-        resp = orch_client.get(f"{BASE}/system/health")
+        # NOTE: Orchestrator health — /api/v1/monitor/health (см. common_api.md).
+        # /api/v1/system/health зарегистрирован только в gateway.py.
+        resp = orch_client.get(f"{BASE}/monitor/health")
         assert_ok(resp)
         assert resp.json()["status"] == "ok"
 
@@ -745,13 +749,15 @@ class TestRegistryService:
         assert_ok(resp)
 
     def test_87_get_stats(self):
-        resp = reg_client.get(f"{BASE}/stats")
+        # NOTE: Путь изменён на /api/v1/common/stats (routing table gateway_service_api.md).
+        resp = reg_client.get(f"{BASE}/common/stats")
         assert_ok(resp)
         data = resp.json()["data"]
         assert "documents_total" in data
 
     def test_88_get_enums(self):
-        resp = reg_client.get(f"{BASE}/enums")
+        # NOTE: Путь изменён на /api/v1/common/enums (routing table gateway_service_api.md).
+        resp = reg_client.get(f"{BASE}/common/enums")
         assert_ok(resp)
         data = resp.json()["data"]
         assert "classifier_system" in data

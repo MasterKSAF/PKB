@@ -74,6 +74,8 @@ SEED_HISTORY = [
 
 _sessions: Dict[str, dict] = {}
 _history: List[dict] = []
+_projects: Dict[str, dict] = {}  # NOTE: InMemoryStore для проектов чата — отдельное хранилище, чтобы не смешивать с сессиями
+_projects_id_seq: int = 0  # NOTE: Счётчик для генерации project_id; не используем new_id(), т.к. project_id — числовой bigint
 _feedback_store: List[dict] = []
 _export_store: Dict[str, dict] = {}
 
@@ -140,6 +142,18 @@ class FeedbackRequest(BaseModel):
     answer_id: Optional[str] = None
     useful: Optional[bool] = None
     opened_citation_ids: Optional[List[str]] = None
+class CreateProjectRequest(BaseModel):
+    # NOTE: Модель создания проекта — поля соответствуют спецификации query_service_api.md
+    code: str
+    name: str
+    description: Optional[str] = None
+    status: str = "active"
+
+class UpdateProjectRequest(BaseModel):
+    # NOTE: Модель обновления проекта — только name и status опциональны
+    name: Optional[str] = None
+    status: Optional[str] = None
+
 class ChatRequest(BaseModel):
     question: str
     session_id: Optional[str] = None
@@ -212,6 +226,72 @@ async def delete_session(session_id: str):
     del _sessions[session_id]
     return {"session_id": session_id, "deleted_at": utcnow()}
 
+# ── Chat Projects CRUD ────────────────────────────────────────────────────
+# NOTE: Проекты чата — отдельная сущность, не связанная с сессиями.
+# Хранилище _projects инициализировано выше, рядом с _history.
+
+@router.post("/api/v1/chat/projects", status_code=201)
+async def create_project(req: CreateProjectRequest):
+    # NOTE: project_id — числовой autoincrement (bigint), как в спецификации.
+    global _projects_id_seq
+    _projects_id_seq += 1
+    project_id = str(_projects_id_seq)
+    now = utcnow()
+    project = {
+        "project_id": project_id,
+        "code": req.code,
+        "name": req.name,
+        "description": req.description or "",
+        "status": req.status,
+        "created_at": now,
+        "updated_at": now,
+    }
+    _projects[project_id] = project
+    return project
+
+@router.get("/api/v1/chat/projects")
+async def list_projects(
+    status: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+):
+    # NOTE: Пагинация через общую утилиту paginate, фильтр по status.
+    items = list(_projects.values())
+    if status:
+        items = [p for p in items if p.get("status") == status]
+    items.sort(key=lambda p: p.get("created_at", ""), reverse=True)
+    paged = paginate(items, page, page_size)
+    return {"items": paged["items"], "meta": paged["meta"]}
+
+@router.get("/api/v1/chat/projects/{project_id}")
+async def get_project(project_id: str):
+    project = _projects.get(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail=error_response("NOT_FOUND", "Проект не найден"))
+    return project
+
+@router.put("/api/v1/chat/projects/{project_id}")
+async def update_project(project_id: str, req: UpdateProjectRequest):
+    project = _projects.get(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail=error_response("NOT_FOUND", "Проект не найден"))
+    if req.name is not None:
+        project["name"] = req.name
+    if req.status is not None:
+        project["status"] = req.status
+    project["updated_at"] = utcnow()
+    return project
+
+@router.delete("/api/v1/chat/projects/{project_id}", status_code=204)
+async def delete_project(project_id: str):
+    # NOTE: DELETE возвращает 204 No Content, тело ответа не требуется.
+    if project_id not in _projects:
+        raise HTTPException(status_code=404, detail=error_response("NOT_FOUND", "Проект не найден"))
+    del _projects[project_id]
+    return None
+
+# ── Chat Messages ───────────────────────────────────────────────────────────
+
 @router.post("/api/v1/chat/sessions/{session_id}/messages")
 async def send_message(session_id: str, req: SendMessageRequest):
     session = _sessions.get(session_id)
@@ -258,6 +338,86 @@ async def send_message(session_id: str, req: SendMessageRequest):
         "message_id": asst_msg["message_id"], "session_id": session_id,
         "role": "assistant", "status": status, "content": asst_content,
         "timestamp": asst_msg["timestamp"],
+    }
+
+@router.get("/api/v1/chat/sessions/{session_id}/messages")
+async def list_messages(
+    session_id: str,
+    after: Optional[str] = Query(None, description="ID сообщения, после которого вернуть"),
+    before: Optional[str] = Query(None, description="ID сообщения, до которого вернуть"),
+    limit: int = Query(50, ge=1, le=100, description="Максимум записей"),
+):
+    # NOTE: after и before взаимоисключающие; если указаны оба — 400.
+    if after and before:
+        return error_response("VALIDATION_ERROR", "Параметры after и before не могут быть указаны одновременно")
+    session = _sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail=error_response("SESSION_NOT_FOUND", "Сессия не найдена"))
+    messages = session.get("messages", [])
+    document_ids = session.get("document_ids", [])
+    if after:
+        # NOTE: after — возвращаем сообщения после указанного message_id (для polling новых)
+        idx = next((i for i, m in enumerate(messages) if m.get("message_id") == after), None)
+        if idx is not None:
+            messages = messages[idx + 1:]
+        else:
+            messages = []
+    elif before:
+        # NOTE: before — возвращаем сообщения до указанного message_id (для подгрузки истории)
+        idx = next((i for i, m in enumerate(messages) if m.get("message_id") == before), None)
+        if idx is not None:
+            messages = messages[:idx]
+        else:
+            messages = []
+    messages = messages[-limit:] if limit else messages
+    has_more = len(session.get("messages", [])) > len(messages)
+    return {
+        "session_id": session_id,
+        "document_ids": document_ids,
+        "messages": messages,
+        "has_more": has_more,
+    }
+
+@router.get("/api/v1/chat/sessions/{session_id}/messages/last")
+async def last_messages(
+    session_id: str,
+    limit: int = Query(20, ge=1, le=100, description="Количество последних сообщений"),
+):
+    # NOTE: Возвращает последние N сообщений сессии. Используется при стартовой загрузке чата.
+    session = _sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail=error_response("SESSION_NOT_FOUND", "Сессия не найдена"))
+    messages = session.get("messages", [])
+    document_ids = session.get("document_ids", [])
+    last = messages[-limit:] if messages else []
+    has_older = len(messages) > len(last)
+    return {
+        "session_id": session_id,
+        "document_ids": document_ids,
+        "messages": last,
+        "has_older": has_older,
+    }
+
+@router.get("/api/v1/chat/sessions/{session_id}/messages/{message_id}")
+async def get_message(
+    session_id: str,
+    message_id: str,
+    longpoll: Optional[int] = Query(None, ge=0, le=60, description="Longpoll-ожидание (сек)"),
+):
+    # NOTE: Longpoll — mock-заглушка, сразу возвращает сообщение.
+    # В реальном сервисе longpoll держит соединение до появления результата.
+    session = _sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail=error_response("SESSION_NOT_FOUND", "Сессия не найдена"))
+    messages = session.get("messages", [])
+    document_ids = session.get("document_ids", [])
+    message = next((m for m in messages if m.get("message_id") == message_id), None)
+    if not message:
+        raise HTTPException(status_code=404, detail=error_response("MESSAGE_NOT_FOUND", "Сообщение не найдено"))
+    return {
+        "session_id": session_id,
+        "document_ids": document_ids,
+        "message": message,
     }
 
 @router.post("/api/v1/chat/sessions/{session_id}/context")
@@ -382,9 +542,11 @@ async def text_ask(req: TextAskRequest):
         "model_used": answer["model_used"],
     }
 
-@router.get("/api/v1/system/health")
+# NOTE: /api/v1/system/health зарегистрирован только в gateway.py (единая точка).
+# Для внутреннего мониторинга каждый сервис использует /api/v1/health.
+@router.get("/api/v1/health")
 async def health():
-    return {"status": "ok", "service": "query-service", "timestamp": utcnow()}
+    return {"status": "ok", "service": "query-service", "version": "1.0.0", "uptime_seconds": 86400}
 
 app.include_router(router)
 
