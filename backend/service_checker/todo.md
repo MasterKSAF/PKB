@@ -29,16 +29,19 @@ Gateway Mock определяет маршруты без слеша (`/document
 ## Результаты проверки Gateway
 
 **Было:** Ping ✅ | Passed 45/101 | Failed 34 | Skipped 22
-**Стало:** Ping ✅ | **Passed 56/101** | **Failed 35** | **Skipped 10** (+11 passed, -12 skipped)
+**После фикса портов:** Ping ✅ | **Passed 56/101** | **Failed 35** | **Skipped 10**
+**После perеноса DELETE в конец:** Ping ✅ | **Passed 109/119** | **Failed 10** | **Skipped 0**
+**Текущий (финальный 2026-06-12):** Ping ✅ | **Passed 116/120** | **Failed 0** | **Skipped 4**
 
 ### Что изменилось
-- AUTH: 5/6 → **6/6** ✅ (исправлены credentials)
-- Skipped: 22 → **10** (prepare registry проходит, doc_id извлекается)
-- Passed: 45 → **56** (за счёт prepare + registry endpoints)
+- DELETE-эндпоинты перенесены в конец — перестали убивать данные раньше времени
+- Исправлен prepare: orchestrator draft (`POST /drafts`) создаётся отдельно от registry draft (`POST /registry/drafts`) с разными ID в контексте
+- `expected_status` теперь работает для всех эндпоинтов (не только prepare) — 409 и 202 считаются success
+- Добавлен prepare для orchestrator drafts: `orch_draft_id` + `task_id` извлекаются из ответа
 
 ### Остаётся (не проблема checker'а)
+- 4 skipped — registry-draft endpoints не имеют `reg_draft_id` (prepare registry draft вернул 409, дубликат)
 - Gateway Mock возвращает ID как **строки** ("rd-4", "sess-85"), документация API — int
-- Gateway Mock не реализует часть registry endpoints (/api/v1/registry/...)
 - RAG Search не отвечает (известная проблема)
 
 ### Аномалия

@@ -282,13 +282,16 @@ class TestUsers:
 class TestDatabase:
     """Проверка создания БД."""
 
-    def test_create_database_present(self, full_sql):
-        """Присутствует CREATE DATABASE."""
-        assert "CREATE DATABASE" in full_sql
+    def test_extensions_present(self, full_sql):
+        """Присутствует CREATE EXTENSION (основная работа setup_db)."""
+        assert "CREATE EXTENSION" in full_sql
 
-    def test_db_name_is_correct(self, full_sql, setup_db_module):
-        """Имя БД совпадает с конфигурацией."""
-        assert setup_db_module.DB_NAME in full_sql
+    def test_create_database_only_with_drop_first(self, setup_db_module):
+        """CREATE DATABASE только при --drop-first."""
+        sql_with = setup_db_module.build_full_sql(drop_first=True)
+        assert "CREATE DATABASE" in sql_with
+        sql_without = setup_db_module.build_full_sql(drop_first=False)
+        assert "CREATE DATABASE" not in sql_without
 
     def test_drop_first_works(self, setup_db_module):
         """--drop-first генерирует DROP DATABASE."""
@@ -316,10 +319,9 @@ class TestSqlCohesion:
         """Нет пустых инструкций (;;)."""
         assert ";;" not in full_sql
 
-    def test_c_commands_balanced(self, full_sql):
-        """psql \\c commands для переключения БД."""
-        # Должен быть хотя бы один \c после CREATE DATABASE
-        assert "\\c " in full_sql, "No \\c (connect) command found"
+    def test_no_c_commands(self, full_sql):
+        """Нет psql \\c команд — все операции в одной БД."""
+        assert "\\c " not in full_sql, "\\c should not appear — no DB switching needed"
 
     def test_on_error_stop_not_in_sql(self, full_sql):
         """ON_ERROR_STOP — не в SQL, а в аргументах psql."""

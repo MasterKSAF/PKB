@@ -31,8 +31,8 @@ class EndpointDef:
     response_schema: Optional[Dict[str, type]] = None
     # Если True — эндпоинт создаёт данные для последующих вызовов (prepare-шаг)
     is_preparation: bool = False
-    # Ожидаемый HTTP статус (для prepare-шагов)
-    expected_status: int = 200
+    # Ожидаемый HTTP статус (если не указан — 2xx/3xx)
+    expected_status: Optional[int] = None
 
 
 @dataclass

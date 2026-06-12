@@ -47,6 +47,7 @@ service_checker/
 │   ├── Dockerfile.base / .full          # Образы
 │   ├── entrypoint.sh                    # Точка входа
 │   ├── prepare_tei_model.py             # Скачивание и подготовка модели TEI
+│   ├── recheck.bat                      # Быстрый re-check: сброс БД + restat + full-report
 │   └── requirements.txt                 # Python-зависимости всех сервисов
 ├── tests/
 │   ├── conftest.py                        # Общие фикстуры
@@ -87,7 +88,18 @@ docker/prepare.bat
 ```
 Сборка образа + очистка volumes + запуск + проверка coverage.
 
-### Вариант C — вручную
+### Вариант C — `recheck.bat` (быстрый re-check без установки)
+
+```bash
+docker/recheck.bat
+```
+Пересоздаёт контейнеры с чистой БД (kill + rm -v + up) и запускает полный отчёт
+(coverage + pipelines + db-check). TEI контейнер не перезапускается.
+Подходит для повторных проверок после изменений в сервисах.
+
+> **Внимание:** удаляет volumes с БД — каждый запуск начинается с чистого состояния.
+
+### Вариант D — вручную
 
 ```bash
 # 1. Собрать образ (если нет)

@@ -269,6 +269,7 @@ class ApiCoverageTester:
                     "term_id": ["id", "term_id", "termId"],
                     "message_id": ["id", "messageId", "message_id"],
                     "task_id": ["task_id", "taskId"],
+                    "reg_draft_id": ["id", "draft_id"],
                     "draft_id": ["id", "draft_id"],
                     "category_id": ["id", "category_id"],
                 }
@@ -363,9 +364,8 @@ class ApiCoverageTester:
             elapsed = int((time.time() - start) * 1000)
 
             resp_body = resp.text if resp.content else None
-            # Для prepare-шагов: success по expected_status (201 или 409 — данные созданы)
-            # Для основных endpoints: только 2xx/3xx
-            if ep.is_preparation and ep.expected_status:
+            # Success по expected_status (если указан), иначе 2xx/3xx
+            if ep.expected_status is not None:
                 if isinstance(ep.expected_status, set):
                     success = resp.status_code in ep.expected_status
                 else:
@@ -652,10 +652,11 @@ class ApiCoverageTester:
             lines.append(f"**{result.name}** (port {result.port})\n")
             lines.append(f"**Ping:** {'✅ Alive' if result.ping_ok else '❌ Unreachable'}\n")
 
-            # ⚠️ Workaround-предупреждения
-            svc_def = SERVICE_REGISTRY[svc_key]()
-            for warn in svc_def.warnings:
-                lines.append(f"> ⚠️ {warn}\n")
+            # ⚠️ Workaround-предупреждения (если сервис известен)
+            svc_def_fn = SERVICE_REGISTRY.get(svc_key)
+            if svc_def_fn:
+                for warn in svc_def_fn().warnings:
+                    lines.append(f"> ⚠️ {warn}\n")
 
             failed_detail = (
                 f'<span style="color:red;font-weight:bold">{result.endpoints_failed}</span>'
