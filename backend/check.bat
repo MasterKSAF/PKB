@@ -10,3 +10,4 @@ echo === PKB Neuroassistant: re-check ===
 echo.
 
 call service_checker\docker\recheck.bat
+pause

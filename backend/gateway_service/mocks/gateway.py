@@ -3,10 +3,19 @@ Gateway Mock — unified entry point (nginx emulation).
 Combines all 5 routers on a single port 8081 with:
 - CORS (all origins)
 - RBAC (JWT validation, anonymous fallback)
-- Idempotency-Key support for POST /documents and POST /chat
+- Idempotency-Key support for POST /drafts and POST /chat
 - X-Process-Time header
 - Lifespan context manager
 - Unified error format (Registry spec)
+
+Routing map (see docs/gateway_service_api.md):
+- /api/v1/auth/*, /api/v1/admin/*      → Auth Service
+- /api/v1/documents/*, /api/v1/drafts/*,
+    /api/v1/tasks/*, /api/v1/monitor/*  → Orchestrator Service
+- /api/v1/chat/*, /api/v1/text/*        → Query Service
+- /api/v1/classifiers/*, /api/v1/terminology/*,
+    /api/v1/common/*, /api/v1/registry/documents/* → Registry Service
+- /api/v1/system/health                  → Gateway (own)
 """
 
 import json
@@ -148,8 +157,10 @@ class RBACMiddleware(BaseHTTPMiddleware):
         if user_context["is_authenticated"]:
             permissions = user_context.get("permissions", {})
 
-            # POST /documents — can_upload_documents
-            if request.method == "POST" and path == "/api/v1/documents":
+            # POST /drafts и POST /documents — can_upload_documents
+            # NOTE: Загрузка файла всегда через POST /api/v1/drafts (gateway_service_api.md).
+            # POST /api/v1/documents — legacy, также проверяется.
+            if request.method == "POST" and path in ("/api/v1/drafts", "/api/v1/documents"):
                 if not permissions.get("can_upload_documents", False):
                     return JSONResponse(
                         status_code=403,
@@ -198,10 +209,13 @@ class RBACMiddleware(BaseHTTPMiddleware):
                         ),
                     )
 
-            # DELETE /documents/{id}, POST /documents/{id}/reprocess,
-            # POST /documents/{id}/approve
+            # DELETE /documents/{id}, DELETE /drafts/{id},
+            # POST /documents/{id}/reprocess, POST /documents/{id}/approve
             # — knowledge_admin / system_admin only
-            _doc_write = request.method == "DELETE" or (
+            _doc_write = request.method == "DELETE" and (
+                path.startswith("/api/v1/documents/")
+                or path.startswith("/api/v1/drafts/")
+            ) or (
                 request.method == "POST"
                 and path.startswith("/api/v1/documents/")
                 and not path.startswith("/api/v1/documents/search")
@@ -243,12 +257,18 @@ class RBACMiddleware(BaseHTTPMiddleware):
 
 _IDEMPOTENCY_STORE: Dict[str, dict] = {}
 _IDEMPOTENCY_TTL = 3600
-_IDEMPOTENCY_PREFIXES = ("/api/v1/documents", "/api/v1/chat")
+_IDEMPOTENCY_PREFIXES = ("/api/v1/drafts", "/api/v1/chat")
 
 
 class IdempotencyMiddleware(BaseHTTPMiddleware):
-    """Caches POST responses for /api/v1/documents* and /api/v1/chat*
-    when Idempotency-Key header is provided."""
+    """Caches POST responses for /api/v1/drafts* and /api/v1/chat*
+    when Idempotency-Key header is provided.
+
+    Upload of a new document always starts with `POST /api/v1/drafts`
+    (see orchestrator_service_api.md, "Черновик — точка входа"), so the
+    idempotency window covers all draft lifecycle mutations initiated
+    from the client.
+    """
 
     async def dispatch(self, request: Request, call_next):
         if request.method != "POST":
@@ -260,13 +280,25 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
         if not key:
             return await call_next(request)
 
+        # Cleanup expired entries periodically (every 100 requests)
+        if len(_IDEMPOTENCY_STORE) > 1000:
+            now = time.time()
+            expired = [k for k, v in _IDEMPOTENCY_STORE.items()
+                       if now - v.get("timestamp", 0) > _IDEMPOTENCY_TTL]
+            for k in expired:
+                del _IDEMPOTENCY_STORE[k]
+
         cached = _IDEMPOTENCY_STORE.get(key)
         if cached is not None:
-            return JSONResponse(
-                status_code=cached["status_code"],
-                content=cached["body"],
-                headers={"Idempotency-Key-Repeated": "true"},
-            )
+            # Check TTL
+            if time.time() - cached.get("timestamp", 0) > _IDEMPOTENCY_TTL:
+                del _IDEMPOTENCY_STORE[key]
+            else:
+                return JSONResponse(
+                    status_code=cached["status_code"],
+                    content=cached["body"],
+                    headers={"Idempotency-Key-Repeated": "true"},
+                )
 
         response = await call_next(request)
         if response.status_code < 500:
@@ -327,6 +359,9 @@ app = FastAPI(
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
+    # If detail is already a JSONResponse (from service error_response), pass through
+    if isinstance(exc.detail, JSONResponse):
+        return exc.detail
     return JSONResponse(
         status_code=exc.status_code,
         content=error_response(
@@ -342,8 +377,15 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     errors = exc.errors()
     if errors:
         details = {
-            "fields": [e["loc"] for e in errors],
-            "messages": [e["msg"] for e in errors],
+            "validation_errors": [
+                {
+                    "field": ".".join(str(p) for p in e.get("loc", [])),
+                    "reason": e.get("msg", "invalid"),
+                    "value": e.get("input", None),
+                    "constraint": e.get("ctx", {}).get("expected", None) if e.get("ctx") else None,
+                }
+                for e in errors
+            ]
         }
     return JSONResponse(
         status_code=422,
@@ -438,6 +480,10 @@ app.include_router(registry_docs_router, prefix="/api/v1/registry")
 
 # ---------------------------------------------------------------------------
 # Health check
+# NOTE: /api/v1/system/health — единый health-check endpoint для внешних систем
+# мониторинга (см. common_api.md). Каждый внутренний сервис также имеет свой
+# /api/v1/health для прямого доступа — дублирование Operation ID в OpenAPI
+# является ожидаемым и intentional (разные пути, разная семантика).
 # ---------------------------------------------------------------------------
 
 
