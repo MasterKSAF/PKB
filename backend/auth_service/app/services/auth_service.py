@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.logger import get_logger
 from app.core.security import (
     create_access_token,
     generate_refresh_token,
@@ -15,11 +16,15 @@ from app.core.security import (
 from app.models.models import RefreshToken
 from app.services.user_service import get_permissions, get_user_by_email, get_user_by_id, role_names
 
+logger = get_logger(__name__)
+
 
 async def authenticate(db: AsyncSession, username: str, password: str):
     user = await get_user_by_email(db, username)
     if not user or not user.is_active or not verify_password(password, user.password_hash):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="РќРµРІРµСЂРЅС‹Рµ СѓС‡РµС‚РЅС‹Рµ РґР°РЅРЅС‹Рµ")
+        logger.warning("Failed login attempt for user: %s", username)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверные учётные данные")
+    logger.info("User logged in: %s", username)
     return user
 
 
@@ -52,6 +57,7 @@ async def refresh_access_token(db: AsyncSession, refresh_token: str):
     db_token = result.scalar_one_or_none()
 
     if not db_token:
+        logger.warning("Refresh token not found")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Токен истек или отозван")
 
     expires_at = db_token.expires_at
@@ -61,11 +67,13 @@ async def refresh_access_token(db: AsyncSession, refresh_token: str):
         expires_at = expires_at.replace(tzinfo=timezone.utc)
 
     if db_token.revoked_at is not None or expires_at < utcnow():
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="РўРѕРєРµРЅ РёСЃС‚РµРє РёР»Рё РѕС‚РѕР·РІР°РЅ")
+        logger.warning("Refresh token expired or revoked for user: %s", db_token.user_id)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Токен истёк или отозван")
 
     user = await get_user_by_id(db, db_token.user_id)
     if not user or not user.is_active:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµРґРѕСЃС‚СѓРїРµРЅ")
+        logger.warning("User unavailable during token refresh: %s", db_token.user_id)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Пользователь недоступен")
 
     return await issue_tokens(db, user)
 
@@ -77,10 +85,12 @@ async def revoke_refresh_token(db: AsyncSession, refresh_token: str):
     db_token = result.scalar_one_or_none()
 
     if not db_token or db_token.revoked_at is not None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="РўРѕРєРµРЅ РЅРµРґРµР№СЃС‚РІРёС‚РµР»РµРЅ")
+        logger.warning("Attempt to revoke invalid or already revoked token")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Токен недействителен")
 
     db_token.revoked_at = utcnow()
     await db.commit()
     await db.refresh(db_token)
+    logger.info("Refresh token revoked for user: %s", db_token.user_id)
     return db_token
 
