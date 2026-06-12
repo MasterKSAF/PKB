@@ -36,8 +36,7 @@ docs/
 │   └── pipeline3-search.md           #   Пайплайн 3: Поиск и генерация ответов
 │
 ├── database/                         # Модели базы данных
-│   ├── db_diagrams.md                #   ER-диаграмма базы данных
-│   └── db_audit_report.md            #   Аудит схемы данных (05.06.2026)
+│   └── db_diagrams.md                #   ER-диаграмма базы данных
 │
 ├── schema/                           # JSON-схемы данных (контракты между сервисами)
 │   ├── diagrams.md                   #   Диаграммы JSON-файлов (документная модель)
@@ -46,13 +45,9 @@ docs/
 │   ├── schema_converter_preview.json  #   Preview от Converter-validator
 │   ├── schema_registry_for_rag.json  #   JSON для Registry / RAG Builder
 │
-├── plans/                            # Планы и дорожные карты
-│   ├── СВОДНЫЙ_ПЛАН_РЕАЛИЗАЦИИ.md    #   Сводный план реализации (спринты 1–4, архитектура)
-│   ├── sprint1_04_06_10_06.md        #   План Спринта 1: 04.06 – 10.06
-│   ├── sprint2_11_06_17_06.md        #   План Спринта 2: 11.06 – 17.06 (тест качества)
-│   ├── drafts_storage_plan.md        #   План хранилища черновиков (Purgatory)
-│   ├── Итоги встречи (совещание от 2026-06-02).md  #   Протокол от 02.06
-│   └── итоги общей встречи 03.06.26.md            #   Протокол от 03.06
+├── audit/                            # Аудиты и анализ синхронизации
+│   ├── audit_06_06_2026.md           #   Аудит документации от 06.06.2026
+│   └── ui_gateway_sync_analysis.md   #   Анализ UI/Gateway-синхронизации
 │
 ├── rules/                            # Правила и чек-листы
 │   └── check_rule.md                 #   Чек-лист аудита документации
@@ -148,7 +143,7 @@ flowchart LR
     KB -->|задать вопрос| Chat[Чат QueryService]
 ```
 
-> **Примечание:** пользовательские категории документов (many-to-many) — см. открытый вопрос 4.5 в [sprint1_04_06_10_06.md](plans/sprint1_04_06_10_06.md). Реализация запланирована на Спринт 2 (дедлайн 17.06).
+> **Примечание:** пользовательские категории документов (many-to-many) — спроектированы. API и модель данных документированы в [`registry_service_api.md`](api/registry_service_api.md#группа-categories) и [`db_diagrams.md`](database/db_diagrams.md#13-категории-документов-registrycategories-registrydocument_categories). Реализация — приоритет Спринта 3.
 
 ---
 
@@ -196,6 +191,7 @@ flowchart LR
 curl -X POST http://127.0.0.1:8080/api/v1/auth/token \
   -H "Content-Type: application/json" \
   -d '{"username": "user", "password": "pass"}'
+```
 
 ```bash
 # Загрузка документа (асинхронно) — возвращает draft_id
@@ -237,6 +233,7 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 | 04–05.06.2026 | **Полная синхронизация документации Спринта 1**: все API, схемы, ER-диаграмма, глоссарий и пайплайны приведены к bigint; исправлены единицы bbox; `glossary.md` дополнен (`comparison_id`, `batch_id`, `Проект`); структура `docs/README.md` исправлена; UUID в `registry_service_api.md` заменены на bigint; `diagrams.md` и спринт-план актуализированы. См. `specificity.md` A1–A13 и `plans/sprint1_04_06_10_06.md`. |
 | 05.06.2026 | **Новый функционал**: группа `drafts` в API Оркестратора (5 эндпоинтов), FSM черновиков в `pipeline1-formation.md`, архитектура двух экранов UI (Загрузка / База знаний), маршрут `/api/v1/drafts/*` в Gateway. |
 | 05.06.2026 | **Комплексный аудит документации**: проверка API (13 файлов), пайплайнов (5 файлов), схемы данных (6 файлов), кросс-проверка, security review, тупиковые состояния. Найдено 112+ проблем (23 критических). Результаты: `docs/specificity.md` (аномалии A15–A34, S1–S12, C1–C16), `docs/database/db_audit_report.md` (43 замечания). |
+| 12.06.2026 | **Анализ UI/Gateway-синхронизации**: разбор 10 вопросов к backend, 5 UI-задач, ожидающих подтверждения контрактов, и 4 веток-кандидатов на удаление. Результаты: `docs/audit/ui_gateway_sync_analysis.md`. Добавлены аномалии A25–A33 в `specificity.md`. |
 | Текущая | **Схема БД**: все FK на bigint, добавлены `chat.projects`, `project_id`, `document_type`. |
 | v3.0 | Разделение RAG-сервиса на Builder и Search. |
 | v2.3 | Двухфазный пайплайн (preview + full). |

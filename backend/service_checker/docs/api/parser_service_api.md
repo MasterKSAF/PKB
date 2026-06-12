@@ -212,8 +212,8 @@
 | `document.source.page_count`                 | int    | Общее количество страниц в документе                                 |
 | `document.pages`                             | array  | Массив страниц документа (только геометрия)                          |
 | `document.pages[].page`                      | int    | Номер страницы (начиная с 1)                                         |
-| `document.pages[].width`                     | float  | Ширина страницы в мм                                                 |
-| `document.pages[].height`                    | float  | Высота страницы в мм                                                 |
+| `document.pages[].width`                     | float  | Ширина страницы в пикселях (сырые, px) — для нормирования bbox      |
+| `document.pages[].height`                    | float  | Высота страницы в пикселях (сырые, px) — для нормирования bbox                                                 |
 | `document.block`                             | array  | **Единый** массив всех элементов в reading order (сквозная нумерация)|
 | `block[].number`                             | int    | Порядковый номер элемента в reading order                            |
 | `block[].type`                               | string | Тип элемента: `headerFooter`, `heading`, `paragraph`, `text_block`, `list`, `table`, `image`, `caption`, `formula` |
