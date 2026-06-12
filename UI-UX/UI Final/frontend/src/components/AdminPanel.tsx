@@ -250,6 +250,7 @@ export const AdminPanel: React.FC = () => {
   const [adminNotice, setAdminNotice] = useState('');
   const [draftRole, setDraftRole] = useState<RoleLabel>(selectedUser?.role ?? 'Пользователь');
   const [draftAccess, setDraftAccess] = useState<AccessKey[]>(selectedUser ? inferAccessKeys(selectedUser) : []);
+  const [roleOptions, setRoleOptions] = useState<RoleLabel[]>(ROLE_OPTIONS);
 
   useEffect(() => {
     let alive = true;
@@ -285,6 +286,34 @@ export const AdminPanel: React.FC = () => {
       alive = false;
     };
   }, [setAdminUsers, workMode]);
+
+  useEffect(() => {
+    let alive = true;
+
+    if (workMode === 'demo') {
+      setRoleOptions(ROLE_OPTIONS);
+      return () => {
+        alive = false;
+      };
+    }
+
+    void adminApi
+      .roles()
+      .then((roles) => {
+        if (alive) {
+          setRoleOptions(roles.length ? roles : ROLE_OPTIONS);
+        }
+      })
+      .catch(() => {
+        if (alive) {
+          setRoleOptions(ROLE_OPTIONS);
+        }
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [workMode]);
 
   useEffect(() => {
     if (!adminUsers.some((user) => user.id === selectedUserId) && adminUsers[0]) {
@@ -665,7 +694,7 @@ export const AdminPanel: React.FC = () => {
                   label="Роль"
                   onChange={(event) => handleRoleChange(event.target.value as RoleLabel)}
                 >
-                  {ROLE_OPTIONS.map((role) => (
+                  {roleOptions.map((role) => (
                     <MenuItem key={role} value={role}>
                       {role}
                     </MenuItem>

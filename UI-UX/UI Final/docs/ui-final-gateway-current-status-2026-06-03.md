@@ -1,6 +1,9 @@
 # UI Final: матрица интеграции с актуальным Gateway
 
+> Исторический статус на 03.06.2026. Актуальные остаточные вопросы по Gateway, Registry, chat projects, feedback/export и веткам-кандидатам на удаление см. в `ui-final-gateway-open-items-2026-06-12.md`.
+
 Дата проверки: 03.06.2026
+
 UI-ветка: `feature/ui-final-gateway-current`
 UI-папка: `UI-UX/UI Final/frontend`
 Gateway-ветка: `origin/develop_gateway_feature`

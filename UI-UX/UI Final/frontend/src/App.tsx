@@ -236,7 +236,25 @@ export default function App() {
                   }}
                 >
                   <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Stack spacing={0.65} sx={{ alignItems: 'flex-start' }}>
+                    <Stack
+                      sx={{
+                        height: 49,
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-start',
+                      }}
+                    >
+                      <Typography
+                        variant="h5"
+                        sx={{
+                          lineHeight: 1.05,
+                          fontSize: { xs: '1.12rem', md: '1.24rem' },
+                          fontWeight: 500,
+                          color: themeMode === 'dark' ? 'rgba(230, 236, 244, 0.86)' : '#111827',
+                          fontFamily: '"Segoe UI Variable Display", "Segoe UI", "Inter", sans-serif',
+                        }}
+                      >
+                        {TAB_TITLES[activeTab]}
+                      </Typography>
                       <Typography
                         variant="overline"
                         sx={{
@@ -249,18 +267,6 @@ export default function App() {
                         }}
                       >
                         Рабочая область
-                      </Typography>
-                      <Typography
-                        variant="h5"
-                        sx={{
-                          lineHeight: 1.05,
-                          fontSize: { xs: '1.12rem', md: '1.24rem' },
-                          fontWeight: 500,
-                          color: themeMode === 'dark' ? 'rgba(230, 236, 244, 0.86)' : '#111827',
-                          fontFamily: '"Segoe UI Variable Display", "Segoe UI", "Inter", sans-serif',
-                        }}
-                      >
-                        {TAB_TITLES[activeTab]}
                       </Typography>
                       {TAB_DESCRIPTIONS[activeTab] && (
                         <Typography variant="body2" color="text.secondary">

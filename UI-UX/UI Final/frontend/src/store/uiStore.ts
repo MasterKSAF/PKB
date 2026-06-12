@@ -7,6 +7,14 @@ import type { ChatMessage } from '../utils/mockData';
 
 export type { AppTab, UserRole };
 
+const getInitialThemeMode = (): 'dark' | 'light' => {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return 'dark';
+  }
+
+  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+};
+
 export interface AdminAuditLogItem {
   id: string;
   time: string;
@@ -78,9 +86,9 @@ export const useUIStore = create<UIState>((set) => ({
   setCurrentGatewaySessionId: (currentGatewaySessionId) => set({ currentGatewaySessionId }),
   activeProjectId: 'project-223m',
   setActiveProjectId: (activeProjectId) => set({ activeProjectId }),
-  themeMode: 'dark',
+  themeMode: getInitialThemeMode(),
   setThemeMode: (themeMode) => set({ themeMode }),
-  workMode: 'demo',
+  workMode: 'prod',
   setWorkMode: (workMode) =>
     set({
       workMode,
@@ -103,7 +111,7 @@ export const useUIStore = create<UIState>((set) => ({
   toggleFocusMode: () => set((state) => ({ focusMode: !state.focusMode })),
   videoGuideOpen: false,
   setVideoGuideOpen: (videoGuideOpen) => set({ videoGuideOpen }),
-  apiStatus: 'demo',
+  apiStatus: 'offline',
   setApiStatus: (apiStatus) => set({ apiStatus }),
   adminUsers: MOCK_ADMIN_USERS,
   setAdminUsers: (adminUsers) => set({ adminUsers }),
@@ -121,21 +129,12 @@ export const useUIStore = create<UIState>((set) => ({
     set((state) => ({
       adminUsers: state.adminUsers.map((user) => (user.id === userId ? { ...user, ...patch } : user)),
     })),
-  adminAuditLog: [
-    {
-      id: 'audit-1',
-      time: '2026-04-30 12:40',
-      actor: 'Система',
-      target: 'Права доступа',
-      action: 'Инициализация',
-      details: 'Загружена демонстрационная матрица ролей и прав доступа.',
-    },
-  ],
+  adminAuditLog: [],
   addAdminAuditLogItem: (item) =>
     set((state) => ({
       adminAuditLog: [item, ...state.adminAuditLog].slice(0, 20),
     })),
-  chatMessages: MOCK_CHATS,
+  chatMessages: [],
   setChatMessages: (chatMessages) => set({ chatMessages }),
   appendChatMessages: (messages) =>
     set((state) => ({

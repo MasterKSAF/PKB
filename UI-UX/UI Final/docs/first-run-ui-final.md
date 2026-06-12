@@ -14,7 +14,7 @@
 
 ## 2. Забрать только UI Final
 
-Для запуска UI Final не обязательно забирать все рабочие материалы проекта. Удобный вариант - скачать ZIP ветки `feature/ui-final-gateway-current` с GitHub и открыть только папку:
+Для запуска UI Final не обязательно забирать все рабочие материалы проекта. Удобный вариант - скачать ZIP ветки `feature/ui-final-api-gap-adaptation` с GitHub и открыть только папку:
 
 ```text
 UI-UX/UI Final/frontend
@@ -25,7 +25,7 @@ UI-UX/UI Final/frontend
 ```bash
 git clone --filter=blob:none --sparse https://github.com/NeuronsUII/PKB_neuroassistant.git
 cd PKB_neuroassistant
-git checkout feature/ui-final-gateway-current
+git checkout feature/ui-final-api-gap-adaptation
 git sparse-checkout set "UI-UX/UI Final"
 cd "UI-UX/UI Final/frontend"
 ```
@@ -55,7 +55,7 @@ cd PKB_neuroassistant
 Переключиться на ветку объединенного интерфейса:
 
 ```bash
-git checkout feature/ui-final-gateway-current
+git checkout feature/ui-final-api-gap-adaptation
 ```
 
 Перейти в папку фронтенда:

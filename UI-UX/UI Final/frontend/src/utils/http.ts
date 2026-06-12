@@ -1,5 +1,6 @@
 import axios from 'axios';
 import {
+  MOCK_ADMIN_USERS,
   MOCK_CHATS,
   MOCK_CITATIONS,
   MOCK_DOCUMENTS,
@@ -51,6 +52,9 @@ export type MetricsDashboard = {
 export type GatewayChatProject = {
   id: string;
   name: string;
+  code?: string;
+  description?: string;
+  status?: string;
   chats: Array<{
     id: string;
     title: string;
@@ -338,6 +342,24 @@ function mapGatewayStatus(status?: string, scenario?: string): ChatMessage['stat
   return 'answered';
 }
 
+function mapGatewayDocumentOcrStatus(status?: string): Document['ocrStatus'] {
+  const normalized = String(status ?? '').toLowerCase();
+
+  if (normalized === 'failed' || normalized === 'error') return 'Ошибка';
+  if (['uploaded', 'queued', 'created', 'processing', 'parsing', 'previewing', 'indexing'].includes(normalized)) {
+    return 'В обработке';
+  }
+
+  return 'Завершено';
+}
+
+function mapGatewayDocumentIndexStatus(status?: string): Document['indexStatus'] {
+  const normalized = String(status ?? '').toLowerCase();
+
+  if (['indexed', 'completed', 'approved', 'ready_for_promotion'].includes(normalized)) return 'Индексировано';
+  return 'Ожидание';
+}
+
 function mapGatewaySource(source: any, index = 0): Citation {
   return {
     id: source.section_id ?? source.source_id ?? source.document_id ?? `gateway-source-${index}`,
@@ -365,7 +387,7 @@ function mapGatewayChatResponse(payload: any, query: string): ChatMessage {
 
   if (messagePayload.scenario === 'needs_clarification') {
     return {
-      id: messagePayload.answer_id ?? messagePayload.message_id ?? Math.random().toString(36).slice(2),
+      id: messagePayload.message_id ?? messagePayload.answer_id ?? Math.random().toString(36).slice(2),
       role: 'assistant',
       content: `Система просит уточнить запрос: ${(messagePayload.missing_fields ?? []).join(', ') || 'недостаточно контекста'}.`,
       status: 'answered',
@@ -376,7 +398,7 @@ function mapGatewayChatResponse(payload: any, query: string): ChatMessage {
 
   if (messagePayload.scenario === 'conflict') {
     return {
-      id: messagePayload.answer_id ?? messagePayload.message_id ?? Math.random().toString(36).slice(2),
+      id: messagePayload.message_id ?? messagePayload.answer_id ?? Math.random().toString(36).slice(2),
       role: 'assistant',
       content: messagePayload.message ?? 'Система обнаружила конфликт источников.',
       status: 'answered',
@@ -391,7 +413,7 @@ function mapGatewayChatResponse(payload: any, query: string): ChatMessage {
       : messagePayload.content ?? messagePayload.answer ?? messagePayload.message ?? `Система приняла запрос: ${query}`;
 
   return {
-    id: messagePayload.answer_id ?? messagePayload.message_id ?? Math.random().toString(36).slice(2),
+    id: messagePayload.message_id ?? messagePayload.answer_id ?? Math.random().toString(36).slice(2),
     role: 'assistant',
     content,
     status: mapGatewayStatus(messagePayload.status, messagePayload.scenario),
@@ -402,7 +424,7 @@ function mapGatewayChatResponse(payload: any, query: string): ChatMessage {
 
 function isFinalChatStatus(status?: string) {
   const normalized = String(status ?? '').toLowerCase();
-  return normalized === 'answered' || normalized === 'failed';
+  return normalized === 'answered' || normalized === 'completed' || normalized === 'failed';
 }
 
 function chatLongpollIncompleteMessage(messageId?: string): ChatMessage {
@@ -476,6 +498,7 @@ function mapGatewayDocumentsResponse(payload: any): Document[] {
   const documents = Array.isArray(payload) ? payload : payload.documents ?? payload.items ?? [];
 
   return documents.map((doc: any, index: number) => {
+    const normalizedStatus = String(doc.status ?? '').toLowerCase();
     const classificationStatus = doc.classification_status ?? {};
     const mksOksCode =
       doc.mks_oks_code ??
@@ -496,8 +519,8 @@ function mapGatewayDocumentsResponse(payload: any): Document[] {
       type: (doc.document_type ?? doc.source_type ?? doc.type ?? 'PDF').toUpperCase(),
       version: `v${doc.latest_version ?? doc.version ?? 1}`,
       source: doc.source ?? doc.uploaded_by ?? 'База знаний',
-      ocrStatus: doc.status === 'failed' ? 'Ошибка' : doc.status === 'uploaded' || doc.status === 'parsing' ? 'В обработке' : 'Завершено',
-      indexStatus: doc.status === 'completed' || doc.status === 'approved' || doc.status === 'ready_for_promotion' ? 'Индексировано' : 'Ожидание',
+      ocrStatus: mapGatewayDocumentOcrStatus(normalizedStatus),
+      indexStatus: mapGatewayDocumentIndexStatus(normalizedStatus),
       updatedAt: doc.updated_at ?? doc.created_at ?? '',
       sectionId: doc.section_id ?? group,
       group,
@@ -625,6 +648,68 @@ function mapGatewaySessionsToProjects(payload: any): GatewayChatProject[] {
   return [...groups.values()];
 }
 
+function mapGatewayProject(project: any, index = 0): GatewayChatProject {
+  const projectId = String(project.project_id ?? project.id ?? project.code ?? `gateway-project-${index}`);
+
+  return {
+    id: projectId,
+    name: project.name ?? project.title ?? project.code ?? `Проект ${index + 1}`,
+    code: project.code,
+    description: project.description,
+    status: project.status,
+    chats: [],
+  };
+}
+
+function mapGatewayProjectsResponse(payload: any): GatewayChatProject[] {
+  const items = Array.isArray(payload) ? payload : payload.items ?? payload.projects ?? payload.data ?? [];
+  return items.map((project: any, index: number) => mapGatewayProject(project, index));
+}
+
+function mergeGatewayProjectsWithSessions(projects: GatewayChatProject[], sessionProjects: GatewayChatProject[]) {
+  if (!projects.length) return sessionProjects;
+
+  const merged = new Map<string, GatewayChatProject>();
+  projects.forEach((project) => {
+    merged.set(project.id, { ...project, chats: [...project.chats] });
+  });
+
+  sessionProjects.forEach((sessionProject) => {
+    const matchingProject =
+      merged.get(sessionProject.id) ??
+      [...merged.values()].find(
+        (project) =>
+          (project.code && project.code === sessionProject.code) ||
+          project.name.trim().toLowerCase() === sessionProject.name.trim().toLowerCase(),
+      );
+
+    if (matchingProject) {
+      matchingProject.chats = [...matchingProject.chats, ...sessionProject.chats];
+      return;
+    }
+
+    merged.set(sessionProject.id, sessionProject);
+  });
+
+  return [...merged.values()];
+}
+
+function normalizeGatewayProjectId(projectId?: string) {
+  if (!projectId || projectId === 'gateway-dialogs') return undefined;
+  return projectId;
+}
+
+function createGatewayProjectCode(name: string) {
+  const normalized = name
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-ZА-Я0-9]+/gi, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 20);
+
+  return `${normalized || 'UI'}-${Date.now().toString(36).toUpperCase()}`;
+}
+
 function mapGatewayMetricsResponse(payload: any): SystemMetrics {
   const control = payload.control_metrics ?? payload;
   const toPercent = (value: unknown, fallback: number) => {
@@ -677,13 +762,42 @@ function mapGatewayMonitorLogs(payload: any): MonitorLogRow[] {
 function mapGatewayQueueResponse(payload: any): ProcessingQueueItem[] {
   const queue = Array.isArray(payload) ? payload : payload.queue ?? payload.items ?? [];
 
-  return queue.map((item: any, index: number) => ({
-    id: item.document_id ?? item.id ?? `gateway-queue-${index}`,
-    document: item.title ?? item.document_title ?? item.document_id ?? 'Документ базы знаний',
-    stage: item.status === 'failed' ? 'Индексация' : item.status === 'parsing' ? 'Разбор таблиц' : 'OCR',
-    progress: Number(item.progress ?? (item.status === 'completed' ? 100 : 45)),
-    status: item.status === 'failed' ? 'ошибка' : item.status === 'queued' || item.status === 'uploaded' ? 'в очереди' : 'в работе',
-  }));
+  return queue.map((item: any, index: number) => {
+    const status = String(item.status ?? '').toLowerCase();
+    const progressByStatus: Record<string, number> = {
+      queued: 10,
+      uploaded: 18,
+      created: 24,
+      parsing: 38,
+      processing: 45,
+      previewing: 58,
+      ready_for_approve: 76,
+      indexing: 82,
+      completed: 100,
+      indexed: 100,
+      approved: 100,
+      failed: 100,
+    };
+    const stage =
+      status === 'parsing'
+        ? 'Разбор таблиц'
+        : ['indexing', 'indexed', 'completed', 'approved', 'failed'].includes(status)
+          ? 'Индексация'
+          : 'OCR';
+
+    return {
+      id: item.document_id ?? item.draft_id ?? item.id ?? `gateway-queue-${index}`,
+      document: item.title ?? item.document_title ?? item.filename ?? item.document_id ?? 'Документ базы знаний',
+      stage,
+      progress: Number(item.progress ?? item.progress_percent ?? progressByStatus[status] ?? 45),
+      status:
+        status === 'failed' || status === 'error'
+          ? 'ошибка'
+          : ['queued', 'uploaded', 'created'].includes(status)
+            ? 'в очереди'
+            : 'в работе',
+    };
+  });
 }
 
 function countClassifierChildren(node: any): number {
@@ -719,9 +833,27 @@ function mapGatewayKnowledgeSections(payload: any): KnowledgeSection[] {
 }
 
 function mapGatewayRole(role?: string): AdminUser['role'] {
-  if (role === 'system_admin' || role === 'admin') return 'Системный администратор';
-  if (role === 'knowledge_admin') return 'Администратор знаний';
+  const normalized = String(role ?? '').trim().toLowerCase();
+
+  if (normalized === 'system_admin' || normalized === 'admin' || normalized === 'системный администратор') {
+    return 'Системный администратор';
+  }
+  if (
+    normalized === 'knowledge_admin' ||
+    normalized === 'knowledge admin' ||
+    normalized === 'администратор знаний' ||
+    normalized === 'администратор нси'
+  ) {
+    return 'Администратор знаний';
+  }
   return 'Пользователь';
+}
+
+function mapGatewayRolesResponse(payload: any): AdminUser['role'][] {
+  const roles = Array.isArray(payload) ? payload : payload.roles ?? payload.items ?? [];
+  const mapped = roles.map((role: any) => mapGatewayRole(role?.name ?? role?.role ?? role?.title ?? role?.role_id ?? role));
+
+  return Array.from(new Set(mapped));
 }
 
 function mapGatewayUserStatus(active?: boolean): AdminUser['status'] {
@@ -799,7 +931,8 @@ function mapGatewayDraftRecord(payload: any) {
     status: normalizeDraftStatus(payload.status),
     confidence: payload.confidence ?? null,
     preview_metadata: previewMetadata,
-    promoted_document_id: payload.promoted_document_id ?? payload.document_id ?? null,
+    promoted_document_id: payload.promoted_document_id ?? payload.approved_document_id ?? payload.document_id ?? null,
+    approved_document_id: payload.approved_document_id ?? payload.promoted_document_id ?? payload.document_id ?? null,
     error_code: payload.error_code ?? null,
     error_message: payload.error_message ?? null,
     raw_data: payload.raw_data ?? null,
@@ -956,10 +1089,11 @@ export const chatApi = {
     const [session] = mapGatewaySessionsResponse({ sessions: [response.data] });
     return session;
   },
-  createSession: async (title: string) => {
+  createSession: async (title: string, projectId?: string) => {
     const response = await gatewayRequest<any>(() =>
       apiClient.post('/chat/sessions', {
         title,
+        project_id: normalizeGatewayProjectId(projectId),
         document_ids: [],
       }),
     );
@@ -1060,6 +1194,51 @@ export const chatApi = {
         return backendUnavailableMessage();
       }
     }
+  },
+};
+
+export const projectsApi = {
+  list: async (): Promise<GatewayChatProject[]> => {
+    const [projectsResult, sessionsResult] = await Promise.allSettled([
+      gatewayRequest<any>(() => apiClient.get('/chat/projects', { params: { page_size: 100 } })),
+      gatewayRequest<any>(() => apiClient.get('/chat/sessions', { params: { page_size: 100 } })),
+    ]);
+
+    const projects =
+      projectsResult.status === 'fulfilled' ? mapGatewayProjectsResponse(projectsResult.value.data) : [];
+    const sessionProjects =
+      sessionsResult.status === 'fulfilled' ? mapGatewaySessionsToProjects(sessionsResult.value.data) : [];
+
+    if (!projects.length && !sessionProjects.length && projectsResult.status === 'rejected') {
+      throw projectsResult.reason;
+    }
+
+    return mergeGatewayProjectsWithSessions(projects, sessionProjects);
+  },
+  create: async (name: string) => {
+    const response = await gatewayRequest<any>(() =>
+      apiClient.post('/chat/projects', {
+        code: createGatewayProjectCode(name),
+        name,
+        status: 'active',
+      }),
+    );
+
+    return mapGatewayProject(response.data);
+  },
+  update: async (projectId: string, patch: { name?: string; status?: string }) => {
+    const response = await gatewayRequest<any>(() =>
+      apiClient.put(`/chat/projects/${projectId}`, {
+        name: patch.name,
+        status: patch.status,
+      }),
+    );
+
+    return mapGatewayProject(response.data);
+  },
+  delete: async (projectId: string) => {
+    await gatewayRequest<any>(() => apiClient.delete(`/chat/projects/${projectId}`));
+    return { ok: true };
   },
 };
 
@@ -1253,6 +1432,75 @@ export const documentsApi = {
   },
 };
 
+export const registryApi = {
+  documents: async () => {
+    if (isDemoMode()) return MOCK_DOCUMENTS;
+
+    try {
+      const response = await gatewayRequest<any>(() =>
+        apiClient.get('/registry/documents', {
+          params: {
+            page_size: 200,
+            sort_by: 'updated_at',
+            order: 'desc',
+          },
+        }),
+      );
+      useUIStore.getState().setApiStatus('online');
+      return mapGatewayDocumentsResponse(response.data);
+    } catch {
+      return documentsApi.list();
+    }
+  },
+  document: async (documentId: string) => {
+    try {
+      const response = await gatewayRequest<any>(() => apiClient.get(`/registry/documents/${documentId}`));
+      return mapGatewayDocumentDetailResponse(response.data);
+    } catch {
+      return documentsApi.get(documentId);
+    }
+  },
+  documentSections: async (documentId: string) => {
+    const response = await gatewayRequest<any>(() => apiClient.get(`/registry/documents/${documentId}/sections`));
+    return response.data;
+  },
+  knowledgeSections: async () => {
+    if (isDemoMode()) return MOCK_KNOWLEDGE_SECTIONS;
+
+    try {
+      const response = await gatewayRequest<any>(() =>
+        apiClient.get('/classifiers/tree', {
+          params: {
+            classifier_system: 'MKS',
+            max_depth: 10,
+          },
+        }),
+      );
+      useUIStore.getState().setApiStatus('online');
+      return mapGatewayKnowledgeSections(response.data);
+    } catch {
+      const response = await gatewayRequest<any>(() =>
+        apiClient.get('/registry/classifiers/tree', {
+          params: {
+            classifier_system: 'MKS',
+            max_depth: 10,
+          },
+        }),
+      );
+      useUIStore.getState().setApiStatus('online');
+      return mapGatewayKnowledgeSections(response.data);
+    }
+  },
+  stats: async () => {
+    const response = await gatewayRequest<any>(() => apiClient.get('/common/stats'));
+    return response.data?.data ?? response.data;
+  },
+  enums: async () => {
+    const response = await gatewayRequest<any>(() => apiClient.get('/common/enums'));
+    return response.data?.data ?? response.data;
+  },
+};
+
 export const historyApi = {
   get: async () => {
     if (isDemoMode()) return MOCK_HISTORY;
@@ -1284,7 +1532,11 @@ export const historyApi = {
     }
   },
   export: async (format = 'csv') => {
-    const response = await gatewayRequest<any>(() => apiClient.get('/chat/history/export', { params: { format } }));
+    const response = await gatewayRequest<any>(() =>
+      apiClient.get('/chat/history/export', {
+        params: { format },
+      }),
+    );
     return response.data;
   },
 };
@@ -1331,6 +1583,14 @@ export const metricsApi = {
 };
 
 export const adminApi = {
+  roles: async (): Promise<AdminUser['role'][]> => {
+    if (isDemoMode()) {
+      return Array.from(new Set(MOCK_ADMIN_USERS.map((user) => user.role)));
+    }
+
+    const response = await gatewayRequest<any>(() => apiClient.get('/admin/roles'));
+    return mapGatewayRolesResponse(response.data);
+  },
   users: async () => {
     if (isDemoMode()) return useUIStore.getState().adminUsers;
 
@@ -1410,11 +1670,18 @@ export const feedbackApi = {
   send: async (payload: { useful: boolean; comment: string; sessionId?: string; messageId?: string }) => {
     if (isDemoMode()) return { ok: true, demo: true };
 
+    const sessionId = payload.sessionId ?? useUIStore.getState().currentGatewaySessionId;
+    const messageId = payload.messageId;
+
+    if (!sessionId || !messageId) {
+      throw new Error('Не удалось отправить отзыв: нет связки сессии и сообщения Gateway.');
+    }
+
     try {
       await gatewayRequest<any>(() =>
         apiClient.post('/chat/feedback', {
-          session_id: payload.sessionId ?? useUIStore.getState().currentGatewaySessionId ?? 'ui-final-session',
-          message_id: payload.messageId ?? 'ui-final-message',
+          session_id: sessionId,
+          message_id: messageId,
           rating: payload.useful ? 5 : 1,
           useful: payload.useful,
           comment: payload.comment,
