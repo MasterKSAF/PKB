@@ -85,8 +85,8 @@ def get_service_def() -> ServiceDef:
             response_schema={"status": str}),
         EndpointDef("POST", f"{API_PREFIX}/chat/feedback", "chat", "Отправить отзыв",
             body={"session_id": "{session_id}", "message_id": "{message_id}",
-                  "rating": 5},
-            response_schema={"status": str}),
+                  "rating": "positive"},
+            response_schema={"saved": bool, "feedback_id": int}),
         EndpointDef("DELETE", f"{API_PREFIX}/chat/sessions/{{session_id}}", "chat",
             "Удалить сессию",
             response_schema={"session_id": int}),
@@ -103,6 +103,10 @@ def get_service_def() -> ServiceDef:
             response_schema={"answer": str, "sources": list}),
     ]
 
+    _warnings = [
+        "⚠️ POST /chat/feedback: docs требует rating:int + rating_status:string, но сервис принимает только rating:string (без rating_status). Docs новее реализации.",
+    ]
+
     return ServiceDef(
         service_key=SERVICE_KEY,
         display_name=DISPLAY_NAME,
@@ -112,4 +116,5 @@ def get_service_def() -> ServiceDef:
         prepare_endpoints=prepare_endpoints,
         depends_on=["registry"],
         base_data={},
+        warnings=_warnings,
     )

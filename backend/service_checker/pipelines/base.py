@@ -418,6 +418,7 @@ class PipelineRunner:
                     "file_key": ["file_key", "fileKey", "key"],
                     "access_token": ["access_token"],
                     "refresh_token": ["refresh_token"],
+                    "pending_id": ["id"],
                 }
                 for alt in alt_map.get(key, []):
                     if alt in obj:

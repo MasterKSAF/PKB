@@ -809,3 +809,72 @@ Gateway Service — `gateway_service/mocks/gateway.py`.
 ### Статус
 🟡 **Открыто (аномалия сервиса)**
 
+## 23. Решение: pending/accept и pending/reject — не нужен file upload
+
+### Проблема
+Registry: `pending/accept` и `pending/reject` были **skipped** (2 skipped), т.к. `pending_id`
+не подхватывался. Считалось, что для создания карантинного классификатора нужен
+`POST /classifiers/import/` с file upload.
+
+### Диагностика
+Файл не нужен. 
+
+1. `create_document()` в CRUD вызывает `check_and_quarantine_classifiers()`
+2. Если у документа есть `mks_oks_code`/`okstu_code`/`udc`, которых нет в `classifiers`,
+   автоматически создаётся `ClassifierPending` (карантинная запись)
+3. `POST /classifiers/import/` — заглушка, не создаёт pending
+
+### Что исправлено (checker, 2026-06-14)
+
+**`services/registry.py`:**
+- Добавлены `mks_oks_code` и `okstu_code` в `PREPARE_DOCUMENT` (несуществующие коды)
+- Добавлен prepare-эндпоинт `GET /classifiers/pending/` с `extract_keys=["pending_id"]`
+- Убрано предупреждение о 30/32
+
+**`api_coverage_test.py`:**
+- Добавлен `"pending_id": ["id"]` в alt_map для рекурсивного поиска pending_id
+
+**`pipelines/base.py`:**
+- Добавлен `"pending_id": ["id"]` в alt_map для консистентности
+
+### Результат
+- Registry: **33/33** (было 30/32 + 1 новый prepare-эндпоинт)
+- 2 skipped → passed
+
+### Статус
+✅ **Исправлено**
+
+## 24. Query feedback — несоответствие документации и реализации
+
+### Проблема
+`POST /chat/feedback` возвращает 422 — не проходит валидацию тела запроса.
+
+### Диагностика
+
+**Документация** (`docs/api/query_service_api.md`):
+- `rating: int` (1–5) + `rating_status: string` (`positive`/`negative`/`neutral`) — оба обязательные
+
+**Реальная реализация** (`query_service/app/schemas.py`):
+```python
+class FeedbackRequest(BaseModel):
+    rating: str | None = None   # строка, а не int
+    # rating_status — нет вообще
+```
+
+Сервис не поддерживает `rating_status` и ожидает `rating` как строку.
+
+### Что сделано (checker, 2026-06-14)
+
+**`services/query.py`:**
+- body приведён к реализации сервиса: `{"rating": "positive"}` (сервис не принимает `rating:int` и не имеет `rating_status`)
+- response_schema исправлена: `{"status": str}` → `{"saved": bool, "feedback_id": int}`
+- Добавлен warning о расхождении docs и реализации
+
+### Результат
+- Эндпоинт проходит: 200 OK
+- Warning выводится: docs требует `rating:int + rating_status:string`, сервис — только `rating:string`
+- Query: 20/20 ✅
+
+### Статус
+🟡 **Принято** — docs новее реализации, checker тестирует по факту
+

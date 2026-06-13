@@ -279,6 +279,7 @@ class ApiCoverageTester:
                     "reg_draft_id": ["id", "draft_id"],
                     "draft_id": ["id", "draft_id"],
                     "category_id": ["id", "category_id"],
+                    "pending_id": ["id"],
                 }
                 for alt in alt_map.get(key, []):
                     if alt in obj:

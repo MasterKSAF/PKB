@@ -40,12 +40,17 @@ VALIDATE_CLASSIFICATION = {
 }
 
 # Документ для prepare
+# Важно: mks_oks_code и okstu_code — несуществующие коды, чтобы
+# create_document → check_and_quarantine_classifiers создал pending-записи
+# для тестирования accept/reject карантина
 PREPARE_DOCUMENT = {
     "title": f"Тестовый документ API Coverage {_ts}",
     "doc_code": f"ТЕСТ-{_ts}",
     "source_type": "GOST",
     "era": "RF",
     "validity_status": "active",
+    "mks_oks_code": f"98.{_ts}",  # не совпадает с PREPARE_CLASSIFIER.code (99.{_ts}), чтобы delete_classifier не падал с 409
+    "okstu_code": f"88.{_ts}",
 }
 
 # Термин для prepare
@@ -63,7 +68,6 @@ def get_service_def() -> ServiceDef:
 
     _warnings = [
             "⚠️ Registry требует trailing slash на всех эндпоинтах /classifiers/, /documents/, /terminology/ (в т.ч. параметризованные). Документация — без /.",
-            "⚠️ API Coverage Registry 30/32 (0 failed, 2 skipped — pending_id не подхвачен).",
         ]
 
     # ── Prepare-эндпоинты (создают данные для тестов) ──────────────
@@ -92,6 +96,14 @@ def get_service_def() -> ServiceDef:
             response_schema={"data": dict, "data.raw_term": str, "data.standard_term": str, "data.normalized_value": str, "data.term_type": str},
             is_preparation=True,
             expected_status={201, 409}),
+        # Получить pending_id для accept/reject карантина
+        # После create_document (с mks_oks_code/okstu_code) check_and_quarantine_classifiers
+        # создаёт записи в classifier_pending. Забираем id первой из них.
+        EndpointDef("GET", f"{API_PREFIX}/registry/classifiers/pending/", "classifiers",
+            "Получить pending_id (prepare)",
+            params={"page": 1, "page_size": 10},
+            extract_keys=["pending_id"],
+            is_preparation=True),
     ]
 
     # ── Основные эндпоинты ──────────────────────────────────────────
