@@ -6,7 +6,14 @@
 Черновики → `registry.drafts` (Registry), документы → `registry.documents` (Registry).
 Оркестратор хранит только `pipeline.tasks` и `pipeline.task_steps`.
 
-### 1.2. Двухфазный pipeline
+### 1.2. Graceful fallback при вызове внешних сервисов
+При `ConnectError` (сервис недоступен) `base_client.call()` не пробрасывает
+исключение, а возвращает `mock_response` как fallback. Это осознанное решение
+для обеспечения отказоустойчивости в development-окружении.
+В production-режиме ожидается, что все сервисы доступны, и fallback будет
+заменен на корректную обработку ошибок с ретраем через tenacity.
+
+### 1.3. Двухфазный pipeline
 - **Preview-фаза:** Upload → OCR/Parser (3 страницы) → Converter-validator
 - **Decision:** auto-approve (если preview полный) или ожидание решения пользователя
 - **Full-фаза:** OCR/Parser → Converter-validator → Registry

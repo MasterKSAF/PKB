@@ -48,6 +48,11 @@ class Task(Base):
     current_step_index: Mapped[int] = mapped_column(Integer, default=0)
     total_steps: Mapped[int] = mapped_column(Integer, default=0)
 
+    # Trace ID for request tracing
+    trace_id: Mapped[Optional[str]] = mapped_column(
+        String(32), nullable=True, index=True
+    )
+
     # Preview result tracking
     full_completed: Mapped[bool] = mapped_column(Boolean, default=False)
 

@@ -96,6 +96,46 @@ class PipelineConfig(BaseSettings):
     )
 
 
+class HTTPClientConfig(BaseSettings):
+    """HTTP client settings for external service calls."""
+
+    # Default timeout for HTTP requests (seconds)
+    DEFAULT_TIMEOUT: int = Field(
+        default=30, description="Default HTTP request timeout"
+    )
+
+    # Connection timeout (seconds)
+    CONNECT_TIMEOUT: int = Field(
+        default=10, description="TCP connection timeout"
+    )
+
+    # Read timeout (seconds)
+    READ_TIMEOUT: int = Field(
+        default=30, description="HTTP read/response timeout"
+    )
+
+    # Pool timeout (seconds) — max time to wait for a connection from pool
+    POOL_TIMEOUT: int = Field(
+        default=5, description="Connection pool timeout"
+    )
+
+    # Connection pool limits
+    POOL_CONNECTIONS: int = Field(
+        default=50, description="Max connections in pool"
+    )
+    POOL_MAX_SIZE: int = Field(
+        default=100, description="Max keepalive connections"
+    )
+
+    # Retry settings
+    MAX_RETRIES: int = Field(
+        default=3, description="Max retries for HTTP requests"
+    )
+    RETRY_BACKOFF_FACTOR: float = Field(
+        default=2.0, description="Exponential backoff multiplier"
+    )
+
+
 class Settings(BaseSettings):
     """Main application settings."""
 
@@ -146,6 +186,12 @@ class Settings(BaseSettings):
     pipeline: PipelineConfig = Field(
         default_factory=PipelineConfig,
         description="Pipeline execution parameters",
+    )
+
+    # HTTP Client Configuration
+    http_client: HTTPClientConfig = Field(
+        default_factory=HTTPClientConfig,
+        description="HTTP client settings for external service calls",
     )
 
     model_config = ConfigDict(
