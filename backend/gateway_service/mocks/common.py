@@ -116,9 +116,9 @@ SEED_TERMINOLOGY = [
 ]
 
 SEED_REGISTRY_DOCUMENTS = [
-    {"id": 1, "title": "Стойки установочные", "doc_code": "20868-81", "source_type": "GOST", "title_hash_sha256": None, "status": "approved", "era": "USSR", "validity_status": "active", "jurisdiction": "RU", "issuing_body": "Госстандарт СССР", "mks_oks_code": "31.240", "mks_name": "Электроника", "okstu_code": None, "okstu_name": None, "classification_status": {"mks_status": "CONFIRMED", "okstu_status": "NOT_USED"}, "successor_doc_id": None, "predecessor_doc_id": None, "total_versions": 2, "chunk_count": 34, "created_by": "system", "updated_by": "ivanov_ai", "created_at": "2026-04-27T10:00:00Z", "updated_at": "2026-04-27T14:00:00Z"},
-    {"id": 2, "title": "Правила классификации и постройки морских судов", "doc_code": "РД 31.11.21-96", "source_type": "RD", "title_hash_sha256": None, "status": "approved", "era": "RF", "validity_status": "active", "jurisdiction": "RU", "issuing_body": "Российский морской регистр судоходства", "mks_oks_code": "47.020", "mks_name": "Конструкция корпуса", "okstu_code": "05.020", "okstu_name": "Документы технологические", "classification_status": {"mks_status": "CONFIRMED", "okstu_status": "CONFIRMED"}, "successor_doc_id": None, "predecessor_doc_id": None, "total_versions": 3, "chunk_count": 128, "created_by": "petrova_ai", "updated_by": "petrova_ai", "created_at": "2026-05-10T08:00:00Z", "updated_at": "2026-06-01T16:00:00Z"},
-    {"id": 3, "title": "Трубы стальные бесшовные горячедеформированные", "doc_code": "ГОСТ 8732-78", "source_type": "GOST", "title_hash_sha256": None, "status": "draft", "era": "USSR", "validity_status": "active", "jurisdiction": "RU", "issuing_body": "Госстандарт СССР", "mks_oks_code": "47.020.30", "mks_name": "Судовые системы", "okstu_code": "12.000", "okstu_name": "Машиностроение", "classification_status": {"mks_status": "PENDING_REVIEW", "okstu_status": "PENDING_REVIEW"}, "successor_doc_id": None, "predecessor_doc_id": None, "total_versions": 1, "chunk_count": 56, "created_by": "system", "updated_by": "system", "created_at": "2026-06-10T09:00:00Z", "updated_at": "2026-06-11T11:00:00Z"},
+    {"id": 1, "title": "Стойки установочные", "doc_code": "20868-81", "source_type": "GOST", "title_hash_sha256": None, "status": "approved", "era": "USSR", "validity_status": "active", "jurisdiction": "RU", "issuing_body": "Госстандарт СССР", "group": "ПО4", "mks_oks_code": "31.240", "mks_name": "Электроника. Монтажные изделия", "okstu_code": None, "okstu_name": None, "classification_status": {"mks": ["31.240"], "okstu": [], "udk": [], "subject_area": ["Электроника", "Монтажные изделия"]}, "successor_doc_id": None, "predecessor_doc_id": None, "total_versions": 2, "chunk_count": 34, "created_by": "system", "updated_by": "ivanov_ai", "created_at": "2026-04-27T10:00:00Z", "updated_at": "2026-04-27T14:00:00Z"},
+    {"id": 2, "title": "Правила классификации и постройки морских судов", "doc_code": "РД 31.11.21-96", "source_type": "RD", "title_hash_sha256": None, "status": "approved", "era": "RF", "validity_status": "active", "jurisdiction": "RU", "issuing_body": "Российский морской регистр судоходства", "group": "К4", "mks_oks_code": "47.020", "mks_name": "Конструкция корпуса", "okstu_code": "05.020", "okstu_name": "Документы технологические", "classification_status": {"mks": ["47.020"], "okstu": ["05.020"], "udk": [], "subject_area": ["Судостроение", "Корпусные конструкции"]}, "successor_doc_id": None, "predecessor_doc_id": None, "total_versions": 3, "chunk_count": 128, "created_by": "petrova_ai", "updated_by": "petrova_ai", "created_at": "2026-05-10T08:00:00Z", "updated_at": "2026-06-01T16:00:00Z"},
+    {"id": 3, "title": "Трубы стальные бесшовные горячедеформированные", "doc_code": "ГОСТ 8732-78", "source_type": "GOST", "title_hash_sha256": None, "status": "draft", "era": "USSR", "validity_status": "active", "jurisdiction": "RU", "issuing_body": "Госстандарт СССР", "group": "М1", "mks_oks_code": "47.020.30", "mks_name": "Судовые системы", "okstu_code": "12.000", "okstu_name": "Машиностроение", "classification_status": {"mks": ["47.020.30"], "okstu": ["12.000"], "udk": [], "subject_area": ["Судовые системы", "Машиностроение"]}, "successor_doc_id": None, "predecessor_doc_id": None, "total_versions": 1, "chunk_count": 56, "created_by": "system", "updated_by": "system", "created_at": "2026-06-10T09:00:00Z", "updated_at": "2026-06-11T11:00:00Z"},
 ]
 
 SEED_CLASSIFIER_PENDING = [
@@ -137,8 +137,9 @@ SEED_DOCUMENTS = [
     {"document_id": 1, "title": "Спецификация по ГОСТ 2.109", "doc_code": "2.109-73",
      "source_type": "GOST", "era": "CURRENT", "validity_status": "active",
      "jurisdiction": "RU", "issuing_body": "Госстандарт",
-     "mks_oks_code": "01.100", "okstu_code": None,
-     "classification_status": {"mks_status": "CONFIRMED", "okstu_status": "NOT_USED"},
+     "group": "ПО4",
+     "mks_oks_code": "31.240", "okstu_code": None,
+     "classification_status": {"mks": ["31.240"], "okstu": [], "udk": [], "subject_area": ["Электроника", "Монтажные изделия"]},
      "successor_doc_id": None, "predecessor_doc_id": None, "chunk_container_id": None,
      "status": "completed", "file_size": 1024000, "pages_total": 12, "pages_processed": 12,
      "pages_failed": 0, "ocr_status": "completed", "index_status": "completed",
@@ -151,8 +152,9 @@ SEED_DOCUMENTS = [
     {"document_id": 2, "title": "Правила классификации морских судов", "doc_code": "РД 31.11.21-96",
      "source_type": "RD", "era": "RF", "validity_status": "active",
      "jurisdiction": "RU", "issuing_body": "Российский морской регистр",
+     "group": "К4",
      "mks_oks_code": "47.020", "okstu_code": "05.020",
-     "classification_status": {"mks_status": "CONFIRMED", "okstu_status": "PENDING_REVIEW"},
+     "classification_status": {"mks": ["47.020"], "okstu": ["05.020"], "udk": [], "subject_area": ["Судостроение", "Корпусные конструкции"]},
      "successor_doc_id": None, "predecessor_doc_id": None, "chunk_container_id": None,
      "status": "review_required", "file_size": 2048000, "pages_total": 45, "pages_processed": 44,
      "pages_failed": 1, "ocr_status": "completed", "index_status": "pending",
@@ -165,8 +167,9 @@ SEED_DOCUMENTS = [
     {"document_id": 3, "title": "Трубы стальные бесшовные. Технические условия", "doc_code": "ГОСТ 8732-78",
      "source_type": "GOST", "era": "USSR", "validity_status": "active",
      "jurisdiction": "RU", "issuing_body": "Госстандарт СССР",
+     "group": "М1",
      "mks_oks_code": "47.020.30", "okstu_code": "12.000",
-     "classification_status": {"mks_status": "CONFIRMED", "okstu_status": "NOT_USED"},
+     "classification_status": {"mks": ["47.020.30"], "okstu": ["12.000"], "udk": [], "subject_area": ["Судовые системы", "Машиностроение"]},
      "successor_doc_id": None, "predecessor_doc_id": None, "chunk_container_id": None,
      "status": "failed", "file_size": 512000, "pages_total": 8, "pages_processed": 3,
      "pages_failed": 5, "ocr_status": "failed", "index_status": "pending",
@@ -200,7 +203,7 @@ SEED_METRICS = {
 }
 
 SEED_SESSIONS = [
-    {"session_id": 1, "title": "Тестовая сессия", "user_id": 1,
+    {"session_id": 1, "title": "Тестовая сессия", "user_id": 1, "project_id": 1,
      "document_ids": [1], "options": {},
      "message_count": 2, "messages": [
          {"message_id": 1, "role":"user","content":"Привет","timestamp":"2026-04-27T10:00:00Z","status":"completed"},
@@ -209,7 +212,7 @@ SEED_SESSIONS = [
           "timestamp":"2026-04-27T10:00:01Z","feedback":None}
      ], "has_more": False, "last_message_preview": "Здравствуйте!",
      "created_at": "2026-04-27T10:00:00Z", "updated_at": "2026-04-27T10:00:01Z"},
-    {"session_id": 2, "title": "Анализ корпусных конструкций", "user_id": 1,
+    {"session_id": 2, "title": "Анализ корпусных конструкций", "user_id": 1, "project_id": 2,
      "document_ids": [1, 2], "options": {"model": "gpt-4", "temperature": 0.2},
      "message_count": 4, "messages": [
          {"message_id": 3, "role":"user","content":"Какая толщина стенки корпуса?","timestamp":"2026-05-15T14:00:00Z","status":"completed"},

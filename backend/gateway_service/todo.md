@@ -1,46 +1,36 @@
-# Todo — Комплексные тесты Gateway Mock (43 падающих эндпоинта)
+# Todo — Исправление 4 замечаний Gateway — ВЫПОЛНЕНО ✅
 
-## Задача
-Написать нормальные unit-тесты (через FastAPI TestClient) для всех 43 эндпоинтов Gateway Mock,
-которые сейчас падают в checker coverage (report 2026-06-12).
+## Результаты
 
-## План
+### 1. Feedback в чате (замечание #1) ✅
+- Добавлено поле `rating_status` в `FeedbackRequest`
+- Добавлена валидация эксклюзивности `session_id` vs `answer_id` (400 AMBIGUOUS_FEEDBACK_FORMAT)
+- Добавлена валидация `rating` (1–5) и `rating_status` (positive/negative/neutral)
+- Тесты исправлены (разделены на 2 формата)
+- Документация уже была корректна
 
-### 1. Анализ падающих эндпоинтов по группам
-- **AUTH (1)**: POST /auth/revoke → 422 (тело запроса не проходит валидацию)
-- **CHAT (12)**: projects (5), sessions resources (6), /chat POST (1)
-- **REGISTRY CLASSIFIERS (2)**: import (422), duplicate (409 — OK)
-- **REGISTRY DOCUMENTS (6)**: status/history/succession/sections/import/check-uniqueness
-- **REGISTRY DRAFTS (7)**: create (x2), get, delete, preview, patch status
-- **TERMINOLOGY (1)**: import → 422
-- **ADMIN (1)**: roles create → 422
-- **DOCUMENTS ORCH (2)**: versions, search
-- **TASKS (1)**: task status → 404
-- **DRAFTS ORCH (8)**: create, list, get, delete, decide, preview, preview-status
-- **TEXT (2)**: search, ask → 422
-- **SEARCH (1)**: GET search → 422
+### 2. Chat projects и сессии (замечание #2) ✅
+- Добавлен `project_id: Optional[int]` в `UpdateSessionRequest`
+- Хендлер `update_session` сохраняет `project_id` при обновлении
+- Документация уже была корректна
 
-### ✅ 2. Создан test_gateway_fails.py
-- 56 тестов на все 43 падающих эндпоинта Gateway Mock
-- Использует ALLOW_ANONYMOUS = True + TestClient
-- **56/56 тестов проходят** ✅
-- Документированы особенности каждой модели Pydantic
+### 3. GET /drafts — фильтр по draft_id + document_key опционально (замечание #7) ✅
+- Добавлен опциональный параметр `draft_id` в `list_drafts`
+- `document_key` сделан опциональным (был `default=""`, стал `Optional[str] = Query(None)`)
+- Документация обновлена
+- Тесты уже ожидали поведение 200 без document_key
 
-### ✅ 3. Результаты
-- **452 теста всего** (396 старых + 56 новых) — все проходят
-- Падающие эндпоинты (43 из checker coverage) покрыты тестами
-- 8 skipped — отсутствуют из-за особенностей lifecycle (не фатально)
+### 4. Связь документов с разделами (замечание #8) ✅
+- Добавлено поле `group` в SEED_DOCUMENTS и SEED_REGISTRY_DOCUMENTS
+- Исправлен `mks_oks_code` документа 1: `"01.100"` → `"31.240"` (существует в классификаторах)
+- Обновлён формат `classification_status` с `{"mks_status":...}` на `{"mks": [...], "okstu": [...], ...}`
+- Добавлены `group`, `mks_name`, `okstu_name` в ответы `list_documents` и `get_document`
+- Обновлены хендлеры `decide_draft`, `upload_document`
+- Классификаторы уже содержат все нужные коды (47.020, 47.020.30, 31.240, 05.020, 12.000)
 
-## Обнаруженные проблемы Gateway Mock (история)
-1. **POST /documents** возвращает random task_id, но не создаёт задачу в `_tasks` — ✅ исправлено
-2. **validation_exception_handler** (gateway.py:386) падает с TypeError: Object of type bytes в Docker — ✅ исправлено
-3. Registry sub-endpoints (history, succession, sections) не были имплементированы в mock, но работают после добавления маршрутизации — ✅ исправлено
+### 5. Замечание #5 (upload-by-url) — удалено
+- Endpoint upload-by-url не реализован и не запланирован
+- Загрузка документов работает через POST /drafts (multipart)
 
-## Оставшиеся особенности
-— нет, все решены.
-
-## Статус (2026-06-12)
-- 30 из 30 reported failures **исправлены и подтверждены тестами**
-- Import endpoints переделаны на `UploadFile` (multipart) ✅
-- `GET /documents/{id}` возвращает `id` ✅
-- Все 462 теста проходят
+### 6. Валидация ✅
+- **470 тестов проходят** (было 468, 2 упавших исправлены)

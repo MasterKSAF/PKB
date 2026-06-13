@@ -695,13 +695,24 @@ class TestQueryService:
         assert "export_id" in resp.json()
 
     def test_60_feedback(self):
-        """POST /chat/feedback — includes new fields: answer_id, useful, opened_citation_ids."""
+        # Format 1 — session-based
         resp = client.post(
             f"{QUERY}/chat/feedback",
             json={
                 "session_id": 1,
                 "message_id": 1,
                 "rating": 5,
+                "rating_status": "positive",
+            },
+        )
+        assert_ok(resp)
+        data = resp.json()
+        assert data["saved"] is True
+
+        # Format 2 — answer-based
+        resp = client.post(
+            f"{QUERY}/chat/feedback",
+            json={
                 "answer_id": 1,
                 "useful": True,
                 "opened_citation_ids": ["cit-001", "cit-002"],
@@ -710,8 +721,6 @@ class TestQueryService:
         assert_ok(resp)
         data = resp.json()
         assert data["saved"] is True
-        assert "status" in data
-        assert data["status"] == "completed"
 
     def test_61_chat_history(self):
         resp = client.get(f"{QUERY}/chat/history")

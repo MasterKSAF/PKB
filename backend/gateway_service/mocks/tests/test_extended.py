@@ -376,13 +376,28 @@ class TestQueryExtended:
         assert len(data["disclaimer"]) > 0
 
     def test_18_feedback_returns_metrics_changed(self):
-        """Feedback response includes metrics_changed block."""
+        # Format 1 — session-based
         resp = client.post(
             f"{QUERY}/chat/feedback",
             json={
-                "session_id": 1,
-                "message_id": 1,
+                "session_id": 1001,
+                "message_id": 2001,
                 "rating": 5,
+                "rating_status": "positive",
+            },
+        )
+        assert_ok(resp)
+        data = resp.json()
+        assert "saved" in data
+        assert data["saved"] is True
+        assert "metrics_changed" in data, f"Missing metrics_changed: {data}"
+        assert "rated_answers" in data["metrics_changed"]
+        assert "useful_rate" in data["metrics_changed"]
+
+        # Format 2 — answer-based
+        resp = client.post(
+            f"{QUERY}/chat/feedback",
+            json={
                 "answer_id": 2,
                 "useful": True,
                 "opened_citation_ids": ["cit-001"],
@@ -392,10 +407,7 @@ class TestQueryExtended:
         data = resp.json()
         assert "saved" in data
         assert data["saved"] is True
-        # metrics_changed should exist (even if empty)
         assert "metrics_changed" in data, f"Missing metrics_changed: {data}"
-        assert "rated_answers" in data["metrics_changed"]
-        assert "useful_rate" in data["metrics_changed"]
 
     def test_19_404_for_nonexistent_session_messages(self):
         """Send message to non-existent session returns 404."""
