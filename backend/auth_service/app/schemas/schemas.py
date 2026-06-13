@@ -63,11 +63,15 @@ class UserListItem(BaseModel):
     created_at: datetime
 
 
+class MetaPagination(BaseModel):
+    total: int
+    page: int
+    page_size: int
+
+
 class UserListResponse(BaseModel):
     users: list[UserListItem]
-    total: int
-    limit: int
-    offset: int
+    meta: MetaPagination
 
 
 class RoleCreate(BaseModel):
@@ -99,7 +103,7 @@ class AuditEventPublic(BaseModel):
 
 class AuditListResponse(BaseModel):
     events: list[AuditEventPublic]
-    total: int
+    meta: MetaPagination
 
 
 class InternalValidateRequest(BaseModel):

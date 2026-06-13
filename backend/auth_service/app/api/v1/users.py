@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user, require_permission
 from app.db.session import get_db
-from app.schemas.schemas import UserCreate, UserListItem, UserListResponse, UserPublic, UserUpdate
+from app.schemas.schemas import MetaPagination, UserCreate, UserListItem, UserListResponse, UserPublic, UserUpdate
 from app.services.audit_service import create_audit_event
 from app.services.user_service import create_user, get_permissions, get_user_by_id, list_users, role_names, update_user
 
@@ -27,12 +27,13 @@ def to_public(user) -> UserPublic:
 async def users(
     role: str | None = None,
     search: str | None = None,
-    limit: int = Query(20, ge=1, le=100),
-    offset: int = Query(0, ge=0),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user = Depends(require_permission("users:manage")),
 ):
-    found, total = await list_users(db, role, search, limit, offset)
+    offset = (page - 1) * page_size
+    found, total = await list_users(db, role, search, page_size, offset)
     return {
         "users": [
             UserListItem(
@@ -44,9 +45,7 @@ async def users(
                 created_at=u.created_at,
             ) for u in found
         ],
-        "total": total,
-        "limit": limit,
-        "offset": offset,
+        "meta": MetaPagination(total=total, page=page, page_size=page_size),
     }
 
 
@@ -70,6 +69,21 @@ async def get_one(user_id: str, db: AsyncSession = Depends(get_db), current_user
     if not user:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
     return to_public(user)
+
+
+@router.put("/{user_id}", response_model=UserPublic)
+async def replace_one(user_id: str, payload: UserUpdate, request: Request, db: AsyncSession = Depends(get_db), current_user = Depends(require_permission("users:manage"))):
+    user = await get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    try:
+        updated = await update_user(db, user, **payload.model_dump(exclude_unset=True))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    await create_audit_event(db, "user.update", current_user.user_id, "user", user_id, payload.model_dump(exclude_unset=True), request.client.host if request.client else None)
+    return to_public(updated)
 
 
 @router.patch("/{user_id}", response_model=UserPublic)
