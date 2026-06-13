@@ -329,6 +329,19 @@ else:
 
 ## 8. Аномалия: Pipeline тесты падают на повторных запусках — конфликт данных и неверные параметры
 
+### Исправлено (2026-06-13): Converter → Registry trailing slash
+
+`converter_validator_service/app/services/registry_client.py:19`:
+```python
+# Было (без слеша → 307):
+"/registry/classifiers/validate"
+
+# Стало (со слешем):
+"/registry/classifiers/validate/"
+```
+
+Converter больше не получает 307 при вызове Registry. Ошибка в `.err` логе — только от предыдущих запусков, после `recheck.bat` исчезнет.
+
 **Обнаружено:** 2026-06-10
 
 ### Симптом
@@ -484,7 +497,8 @@ POST /api/v1/registry/documents/ → 500
 Разработчики Registry сервиса — исправление миграций БД.
 
 ### Статус
-🔴 **Открыто (баг сервиса)**
+🟢 **Исправлено разработчиком Registry** — `Base.metadata.create_all()` добавлен в `lifespan`.
+Аномалия была актуальна до 2026-06-10, после фикса в `registry_service/main.py` — закрыта.
 
 ## 11. Аномалия: setup_db.py падает при старте — БД не инициализируется
 
@@ -516,22 +530,12 @@ POST /api/v1/registry/documents/ → 500
 
 ### Остаётся разработчикам сервисов
 
-#### 🔴 Registry Service: нет `Base.metadata.create_all()` в startup
+#### ✅ Registry Service: `Base.metadata.create_all()` добавлен в startup
 
-Файл: `registry_service/main.py` — нет lifespan, нет startup. 
-В Docker таблицы создаёт `setup_db.py` через дамп, но при standalone-запуске — таблиц нет.
+Файл: `registry_service/main.py` — `lifespan` содержит `Base.metadata.create_all(bind=engine)`.
+Исправлено разработчиком после 2026-06-10.
 
-Необходимо добавить (аналогично auth/query/orchestrator):
-```python
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    Base.metadata.create_all(bind=db_engine)
-    yield
-
-app = FastAPI(lifespan=lifespan)
-```
-
-#### 🟡 RAG Builder: тоже не создаёт таблицы при старте
+#### 🟡 RAG Builder: не создаёт таблицы при старте
 
 Файл: `rag_builder_service/src/rag_builder/api/app.py` — `create_app()` без `create_all()`.
 Есть `Base`, `engine`, модели `RagDocumentChunk`, но `create_all()` не вызывается.
@@ -540,7 +544,7 @@ app = FastAPI(lifespan=lifespan)
 Аналогичное исправление: добавить `Base.metadata.create_all(bind=engine)` в `create_app()`.
 
 ### Статус
-🔴 **Registry — открыто** (не создаёт таблицы при старте)
+✅ **Registry — исправлено**
 🟡 **RAG Builder — открыто** (не создаёт таблицы при старте)
 
 ## 12. Checker больше не создаёт схемы и таблицы сервисов
@@ -722,5 +726,86 @@ Gateway (mock на порту 8080) тестируется как **полнос
 ### Статус
 - [x] Исправлено в checker (2026-06-12)
 
+## 19. Аномалия: Orchestrator — `DraftItem.created_by` получает CurrentUser вместо строки
 
+### Симптом
+В `orchestrator.err`:
+```
+Failed to list drafts: 1 validation error for DraftItem
+created_by
+  Input should be a valid string [type=string_type, 
+  input_value=<app.api.deps.CurrentUser...bject at 0x7facd8141e80>, 
+  input_type=CurrentUser]
+```
+
+### Причина
+`DraftItem.created_by` (Optional[str]) получает объект `CurrentUser` вместо строки.
+Ошибка возникает в `list_drafts()` → `DraftItem(**item)`, перехватывается `except`,
+и endpoint возвращает пустой список.
+
+### Зона ответственности
+Оркестратор — `app/schemas/drafts.py:29` и `app/api/v1/endpoints/drafts.py:245`.
+
+### Статус
+✅ **Исправлено** — `created_by=current_user.user_id` вместо `created_by=current_user`
+
+## 20. Аномалия: Registry — `.env` не создаётся при старте контейнера
+
+### Симптом
+Registry Service падает при старте в Docker с `FileNotFoundError`:
+```
+FileNotFoundError: Required environment file not found: /app/backend/registry_service/.env
+```
+
+### Причина
+`entrypoint.sh` (шаг 3) имеет условие `if [ -f "$env_path" ]` — .env файл
+перезаписывается только если уже существует. На свежем checkout/volume `.env` нет,
+потому что он в `.gitignore`. Registry Service требует `.env` физически (env.py:9-11).
+
+### Что исправлено (checker, 2026-06-13)
+- [x] `docker/entrypoint.sh` — убрано условие `if [ -f ]`, файл создаётся всегда
+- [x] Добавлен `mkdir -p` для parent dir на случай отсутствия структуры
+
+### Статус
+- [x] Исправлено в checker
+
+## 21. Аномалия: Query Service — двойное открытие транзакции в export_session
+
+### Симптом
+```
+sqlalchemy.exc.InvalidRequestError: A transaction is already begun on this Session.
+```
+в `app/routes/chat.py:357` при вызове `export_session`.
+
+### Причина
+Второй вызов `async with db.begin()` внутри уже открытой транзакции.
+
+### Зона ответственности
+Query Service — `app/routes/chat.py`.
+
+### Статус
+🔴 **Открыто (баг сервиса)**
+
+## 22. Аномалия: Gateway Mock пишет INFO-логи в stderr вместо stdout
+
+### Симптом
+`gateway.err` содержит 250+ строк INFO-логов от Gateway Mock:
+```
+19:08:04 [INFO] gateway: >>> GET /api/v1/health
+19:08:04 [INFO] gateway: <<< GET /api/v1/health → 401
+```
+
+### Причина
+`logging.basicConfig()` в `gateway_service/mocks/gateway.py:59` по умолчанию использует
+`StreamHandler` → `sys.stderr`. Supervisor перенаправляет stderr в `.err` файл.
+
+### Ожидаемое поведение
+Логи должны идти в stdout (`stream=sys.stdout`), а в stderr — только ошибки (исключения,
+traceback, 5xx).
+
+### Зона ответственности
+Gateway Service — `gateway_service/mocks/gateway.py`.
+
+### Статус
+🟡 **Открыто (аномалия сервиса)**
 

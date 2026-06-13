@@ -40,8 +40,9 @@ echo "   ✓ PYTHONPATH=$PYTHONPATH"
 # =============================================================================
 echo "[3/6] Перезапись .env файлов сервисов..."
 for env_path in /app/backend/registry_service/.env /app/backend/rag_builder_service/.env /app/backend/rag_search_service/.env; do
-    if [ -f "$env_path" ]; then
-        cat > "$env_path" <<-EOF
+    # Создаём parent dir (если volume не смонтировал полную структуру)
+    mkdir -p "$(dirname "$env_path")"
+    cat > "$env_path" <<-EOF
 	DB_HOST=$DB_HOST
 	DB_PORT=$DB_PORT
 	DB_USERNAME=$DB_USERNAME
@@ -50,8 +51,7 @@ for env_path in /app/backend/registry_service/.env /app/backend/rag_builder_serv
 	DATABASE_URL=$DATABASE_URL
 	EMBEDDING_API_KEY=$EMBEDDING_API_KEY
 	EOF
-        echo "   ✓ $env_path"
-    fi
+    echo "   ✓ $env_path"
 done
 echo "   ✓ .env файлы обновлены"
 
@@ -99,6 +99,9 @@ echo "[7/7] Запуск supervisord..."
 echo ""
 
 mkdir -p /var/log/supervisor /var/run/supervisor
+
+# Симлинк для supervisorctl — конфиг лежит в conf.d/, а supervisorctl ищет в /etc/supervisor/supervisord.conf
+ln -sf /etc/supervisor/conf.d/supervisord.conf /etc/supervisor/supervisord.conf 2>/dev/null || true
 
 if [ ! -f /etc/supervisor/conf.d/supervisord.conf ]; then
     echo "   ✗ /etc/supervisor/conf.d/supervisord.conf не найден!"

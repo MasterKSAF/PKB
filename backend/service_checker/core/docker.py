@@ -269,26 +269,41 @@ def _docker_health_check(services: List[str]) -> bool:
         log_err(f"Ошибка: {e}")
         return False
 
-    # ── HTTP health check Python-сервисов ──
+    # ── HTTP health check Python-сервисов (с ожиданием готовности) ──
     log_header("Docker Health Check: HTTP-endpoint'ы Python-сервисов")
     all_ok = True
     for svc_key, (port, path, display_name) in DOCKER_SUPERVISOR_SERVICES.items():
         url = f"http://127.0.0.1:{port}{path}"
-        try:
-            resp = httpx.get(url, timeout=5)
-            if resp.status_code < 500:
-                log_ok(f"{display_name:<25} :{port} — HTTP {resp.status_code}")
-            else:
-                log_warn(f"{display_name:<25} :{port} — HTTP {resp.status_code}")
-                all_ok = False
-        except httpx.ConnectError:
-            log_err(f"{display_name:<25} :{port} — Connection refused")
-            all_ok = False
-        except httpx.TimeoutException:
-            log_err(f"{display_name:<25} :{port} — Timeout")
-            all_ok = False
-        except Exception as e:
-            log_err(f"{display_name:<25} :{port} — {e}")
+        ok = False
+        for attempt in range(18):  # до 36 секунд (18 * 2)
+            try:
+                resp = httpx.get(url, timeout=3)
+                if resp.status_code < 500:
+                    log_ok(f"{display_name:<25} :{port} — HTTP {resp.status_code}")
+                    ok = True
+                    break
+                elif attempt == 17:
+                    log_warn(f"{display_name:<25} :{port} — HTTP {resp.status_code}")
+            except httpx.ConnectError:
+                if attempt == 17:
+                    log_err(f"{display_name:<25} :{port} — Connection refused")
+                else:
+                    time.sleep(2)
+                    continue
+            except httpx.TimeoutException:
+                if attempt == 17:
+                    log_err(f"{display_name:<25} :{port} — Timeout")
+                else:
+                    time.sleep(2)
+                    continue
+            except Exception as e:
+                if attempt == 17:
+                    log_err(f"{display_name:<25} :{port} — {e}")
+                else:
+                    time.sleep(2)
+                    continue
+            break
+        if not ok:
             all_ok = False
 
     # ── Supervisorctl status ──
@@ -317,25 +332,97 @@ def _docker_health_check(services: List[str]) -> bool:
                     if state != "RUNNING":
                         all_ok = False
         else:
-            log_warn(f"supervisorctl вернул код {sup_result.returncode}: {sup_result.stderr.strip()[:100]}")
-            log_info("Читаем логи supervisord из контейнера...")
+            # Fallback: попробовать supervisorctl с явным путём к конфигу
+            log_info("Пробуем supervisorctl с -c /etc/supervisor/conf.d/supervisord.conf...")
             try:
-                log_cmd = ["docker", "compose", "-f", str(compose_file),
-                           "exec", "-T", "app", "cat", "/var/log/supervisor/supervisord.log"]
-                log_result = subprocess.run(
-                    log_cmd, capture_output=True, text=True, timeout=10,
+                sup_cmd_c = [
+                    "docker", "compose", "-f", str(compose_file),
+                    "exec", "-T", "app", "supervisorctl",
+                    "-c", "/etc/supervisor/conf.d/supervisord.conf", "status"
+                ]
+                sup_result_c = subprocess.run(
+                    sup_cmd_c, capture_output=True, text=True, timeout=15,
                     shell=use_shell,
                 )
-                lines = log_result.stdout.strip().split("\n")
-                for line in lines[-8:]:
-                    if line.strip():
-                        print(f"  {line.strip()}")
-            except Exception:
-                pass
+                if sup_result_c.returncode == 0 and sup_result_c.stdout.strip():
+                    for line in sup_result_c.stdout.strip().split("\n"):
+                        line = line.strip()
+                        if not line:
+                            continue
+                        parts = line.split()
+                        if len(parts) >= 2:
+                            name = parts[0]
+                            state = parts[1]
+                            icon = "✓" if state == "RUNNING" else "✗"
+                            print(f"  {icon} {name:<25} {line[len(name):]}")
+                            if state != "RUNNING":
+                                all_ok = False
+                else:
+                    log_warn(f"supervisorctl (-c) вернул код {sup_result_c.returncode}: {sup_result_c.stderr.strip()[:100]}")
+                    log_info("Читаем логи supervisord из контейнера...")
+                    try:
+                        log_cmd = ["docker", "compose", "-f", str(compose_file),
+                                   "exec", "-T", "app", "cat", "/var/log/supervisor/supervisord.log"]
+                        log_result = subprocess.run(
+                            log_cmd, capture_output=True, text=True, timeout=10,
+                            shell=use_shell,
+                        )
+                        lines = log_result.stdout.strip().split("\n")
+                        for line in lines[-8:]:
+                            if line.strip():
+                                print(f"  {line.strip()}")
+                    except Exception:
+                        pass
+            except subprocess.TimeoutExpired:
+                log_warn("supervisorctl timeout (контейнер app не запущен?)")
+            except Exception as e:
+                log_warn(f"supervisorctl error: {e}")
     except subprocess.TimeoutExpired:
         log_warn("supervisorctl timeout (контейнер app не запущен?)")
     except Exception as e:
         log_warn(f"supervisorctl error: {e}")
+
+    # ── Supervisor .err log check ──
+    log_header("Docker Health Check: ошибки в supervisor .err логах")
+    has_errors = False
+    err_files = [
+        "auth.err", "gateway.err", "orchestrator.err", "query.err",
+        "registry.err", "integration.err", "converter_validator.err",
+        "parser.err", "ocr.err", "rag_builder.err", "rag_search.err",
+    ]
+    try:
+        use_shell = sys.platform == "win32"
+        for err_file in err_files:
+            try:
+                err_cmd = ["docker", "compose", "-f", str(compose_file),
+                           "exec", "-T", "app", "cat", f"/var/log/supervisor/{err_file}"]
+                err_result = subprocess.run(
+                    err_cmd, capture_output=True, text=True, timeout=10,
+                    shell=use_shell,
+                )
+                if err_result.returncode == 0 and err_result.stdout.strip():
+                    raw_lines = err_result.stdout.strip().split("\n")
+                    # Фильтруем: INFO/WARNING логи — не ошибки
+                    error_lines = [
+                        l for l in raw_lines
+                        if not l.startswith("INFO:") and not l.startswith("WARNING:")
+                    ]
+                    # Если после фильтра остались только пустые или ничего — не показываем
+                    if not error_lines:
+                        continue
+                    lines = error_lines
+                    preview = "\n  ".join(lines[:3])
+                    log_warn(f"{err_file} — {len(lines)} строк(и) ошибок:")
+                    print(f"  {preview}")
+                    if len(lines) > 3:
+                        print(f"  ... и ещё {len(lines) - 3} строк(и)")
+                    has_errors = True
+            except Exception:
+                pass
+        if not has_errors:
+            log_ok("Все .err логи пусты — ошибок нет")
+    except Exception:
+        pass
 
     print()
     if all_ok:

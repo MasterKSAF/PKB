@@ -423,6 +423,10 @@ async def cmd_docker(
         check_result_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
+        # 0. Docker health check (статус контейнеров + HTTP + supervisorctl + .err логи)
+        _docker_health_check(target_services)
+        print()
+
         # 1. DB Health check (нужен для CheckDb в coverage и сводном отчёте)
         db_result = None
         try:
@@ -625,6 +629,13 @@ async def cmd_all(
 
 
 async def main():
+    # ── Windows cp1251 → UTF-8 для Unicode box-drawing символов ──
+    if sys.platform == "win32":
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
     args = parse_args()
 
     if args.command == "start":

@@ -60,6 +60,43 @@ service_checker/
 └── readme.md                # Точка входа (этот файл)
 ```
 
+## Текущий статус сервисов в Docker
+
+После `recheck.bat` (2026-06-13):
+
+| Сервис | Порт | HTTP | supervisorctl | Проблемы |
+|--------|:----:|:----:|:-------------:|----------|
+| PostgreSQL | 5432 | — | — | (здоров) |
+| Redis | 6379 | — | — | (здоров) |
+| MinIO | 9000 | — | — | (здоров) |
+| TEI | 8092 | 200 | — | (здоров) |
+| Gateway (Mock) | 8080 | 401 | RUNNING | 🟡 Логи в stderr (аном. №22) |
+| Orchestrator | 8081 | 200 | RUNNING | ✅ Исправлен `DraftItem.created_by` |
+| Auth | 8082 | 200 | RUNNING | 🟡 Ключ JWT короткий (предупреждение) |
+| Query | 8083 | 200 | RUNNING | ❌ Двойная транзакция (аном. №21) |
+| Registry | 8084 | 200 | RUNNING | ✅ `create_all()` есть в lifespan |
+| Integration | 8085 | 200 | RUNNING | ✅ |
+| Converter-Validator | 8086 | 200 | RUNNING | ✅ Исправлен trailing slash /validate |
+| Parser | 8087 | 200 | RUNNING | ✅ |
+| OCR | 8088 | — | RUNNING | ✅ |
+| RAG Builder | 8090 | 200 | RUNNING | 🟡 Нет `create_all()` при старте |
+| RAG Search | 8091 | 200 | RUNNING | 🟡 500 в pipeline |
+
+**supervisorctl:** ✅ Все 11 процессов RUNNING (исправлен socket + symlink)
+**.env файлы:** ✅ Создаются автоматически (исправлен entrypoint.sh)
+**.err логи:** ✅ Health check проверяет ошибки, INFO/WARNING фильтруются
+
+> **Важно:** `recheck.bat` уже запускает **все проверки**:
+> 1. Health check (контейнеры + HTTP + supervisorctl + .err логи) ← теперь выводится
+> 2. DB check
+> 3. API Coverage Test
+> 4. Pipeline Testing
+> 5. Сводный отчёт + сбор логов
+>
+> Отдельный `docker --action health` после recheck **не нужен** — вся диагностика уже в начале `full-report`. Смотрите отчёты в `check_result/`.
+
+> Подробности аномалий — в [`specificity.md`](specificity.md)
+
 ## Быстрый старт (с нуля)
 
 ### Вариант A — `setup.py` (рекомендуется)

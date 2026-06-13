@@ -16,7 +16,7 @@ async def validate_classifiers(
 
     url = (
         f"{settings.registry_service_url.rstrip('/')}"
-        "/registry/classifiers/validate"
+        "/registry/classifiers/validate/"
     )
     try:
         async with httpx.AsyncClient(
