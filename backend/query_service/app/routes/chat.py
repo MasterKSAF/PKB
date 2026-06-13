@@ -350,11 +350,11 @@ async def export_session(
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(get_current_user),
 ):
-    s = await session_repo.get_session(db, session_id, user_id)
-    if not s:
-        raise HTTPException(status_code=404, detail={"error": {"code": "SESSION_NOT_FOUND", "message": "Сессия не найдена", "details": {}}})
     now = datetime.now(timezone.utc)
     async with db.begin():
+        s = await session_repo.get_session(db, session_id, user_id)
+        if not s:
+            raise HTTPException(status_code=404, detail={"error": {"code": "SESSION_NOT_FOUND", "message": "Сессия не найдена", "details": {}}})
         exp = ChatExport(
             session_id=session_id, format=body.format,
             status="completed", created_at=now, expires_at=now + timedelta(days=7),
@@ -380,11 +380,19 @@ async def post_feedback(
     if body.useful is not None and rating is None:
         rating = "positive" if body.useful else "negative"
 
+    def _to_int(v) -> int | None:
+        if v is None:
+            return None
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return None
+
     async with db.begin():
         fb = await feedback_repo.save_feedback(
             db, user_id,
-            message_id=body.message_id,
-            answer_id=body.answer_id,
+            message_id=_to_int(body.message_id),
+            answer_id=_to_int(body.answer_id),
             rating=rating,
             useful=body.useful,
             comment=body.comment,

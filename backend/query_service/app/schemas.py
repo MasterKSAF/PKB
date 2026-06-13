@@ -186,13 +186,13 @@ class AspectRating(BaseModel):
 
 class FeedbackRequest(BaseModel):
     # session-формат
-    session_id: int | None = None
-    message_id: int | None = None
+    session_id: int | str | None = None
+    message_id: int | str | None = None
     rating: str | None = None
     comment: str | None = None
     aspects: list[AspectRating] | None = None
     # UI-формат
-    answer_id: int | None = None
+    answer_id: int | str | None = None
     useful: bool | None = None
     opened_citation_ids: list[str] | None = None
 
