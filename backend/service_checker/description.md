@@ -119,16 +119,18 @@ python service_checker.py report    # отчёт из сохранённых л�
 |--------|------|-------------------|
 | auth | 8082 | 16 (health, auth, admin, internal) |
 | registry | 8084 | 28 (classifiers, terminology, documents, common) |
-| orchestrator | 8000 | 27 (monitor, documents, search, health) |
+| orchestrator | 8081 | 30 (health, monitor, tasks, documents, search, drafts) |
 | query | 8083 | 20 (health, chat, history, text) |
 | parser | 8087 | 5 |
 | ocr | 8088 | 5 (см. аномалию — сервис не существует) |
 | converter_validator | 8086 | 4 |
 | rag_builder | 8090 | 4 |
 | rag_search | 8091 | 2 |
-| gateway | 8081 | 80+ (агрегирует auth+orchestrator+query+registry) |
+| gateway | 8080 | 120+ (агрегирует auth+orchestrator+query+registry) |
 
-**Контекстные переменные:** между вызовами сохраняются ID (`doc_id`, `session_id`, `user_id`, `classifier_code`, `term_id`, `message_id`, `task_id`, `refresh_token`, `access_token`) для подстановки в шаблоны путей (`{{doc_id}}`).
+**Контекстные переменные:** между вызовами сохраняются ID (`doc_id`, `session_id`, `user_id`, `classifier_code`, `term_id`, `message_id`, `task_id`, `refresh_token`, `access_token`) для подстановки в шаблоны путей (`{doc_id}`, `{draft_id}`).
+
+**Prepare-шаги:** перед основными эндпоинтами выполняются prepare-эндпоинты, которые создают необходимые данные (JWT-токен, ID объектов). Prepare могут обращаться к другим сервисам через `override_port` — альтернативный порт, отличный от порта тестируемого сервиса.
 
 > 🔹 **Особенность:** контекстные переменные обеспечивают связанность цепочек эндпоинтов. Например, `POST /classifiers` возвращает `classifier_code`, который автоматически подставляется в `GET /classifiers/{classifier_code}`, `PUT /classifiers/{classifier_code}`, `DELETE /classifiers/{classifier_code}`. Без этого пришлось бы хардкодить ID.
 > 🔹 **Особенность:** валидация схемы ответа (`response_schema`) — проверяет не только наличие поля, но и его тип (точечная нотация: `data.id` → str). Если схема не совпала — эндпоинт помечается как failed, даже при HTTP 200.

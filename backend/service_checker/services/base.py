@@ -12,7 +12,22 @@ from typing import Any, Dict, List, Optional, Tuple
 
 @dataclass
 class EndpointDef:
-    """Определение эндпоинта из документации."""
+    """Определение эндпоинта из документации.
+
+    Поля:
+        method: GET, POST, PUT, PATCH, DELETE
+        path: /api/v1/... с плейсхолдерами {doc_id}, {draft_id}, {task_id} и т.д.
+        group: группа эндпоинтов (classifiers, documents, ...)
+        description: краткое описание
+        body: тело запроса JSON (для POST/PUT/PATCH)
+        form_body: multipart/form-data (вместо body)
+        params: query-параметры
+        extract_keys: какие ключи из ответа сохранять в контекст
+        response_schema: схема ответа для валидации {поле: тип}
+        is_preparation: True — эндпоинт создаёт данные для последующих вызовов
+        expected_status: ожидаемый HTTP статус (если не указан — 2xx/3xx)
+        override_port: альтернативный порт (prepare может обращаться к другому сервису)
+    """
 
     method: str  # GET, POST, PUT, PATCH, DELETE
     path: str  # /api/v1/...
@@ -33,6 +48,9 @@ class EndpointDef:
     is_preparation: bool = False
     # Ожидаемый HTTP статус (если не указан — 2xx/3xx)
     expected_status: Optional[int] = None
+    # Если указан — эндпоинт выполняется на этом порту вместо порта сервиса
+    # (нужно для prepare-шагов, обращающихся к другим сервисам, например auth)
+    override_port: Optional[int] = None
 
 
 @dataclass

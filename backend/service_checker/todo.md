@@ -9,23 +9,30 @@ Coverage test для Orchestrator: 22/30 skipped. Контекст (draft_id, ta
 
 ## Решение
 
-### [ ] 1. EndpointDef — добавить `override_port` (для prepare на других портах)
+### [x] 1. EndpointDef — добавить `override_port` (для prepare на других портах)
 **Файл:** `services/base.py`
 - Добавить `override_port: Optional[int] = None` в EndpointDef
 - Если указан — `_execute_endpoint` использует его вместо port сервиса
 
-### [ ] 2. coverage test — поддержка override_port
+### [x] 2. coverage test — поддержка override_port
 **Файл:** `api_coverage_test.py`
 - В `_execute_endpoint`: если `ep.override_port` не None → `target_port = ep.override_port`
-- В `test_service`: при вызове prepare передавать порт с учётом override_port
+- URL формируется с target_port вместо port
 
-### [ ] 3. Orchestrator — добавить prepare_endpoints + base_data
+### [x] 3. Orchestrator — добавить prepare_endpoints + base_data
 **Файл:** `services/orchestrator.py`
-- Prepare 1: GET /api/v1/auth/token (через override_port=8082) → access_token
+- Prepare 1: POST /api/v1/auth/token (через override_port=8082) → access_token
 - Prepare 2: POST /api/v1/drafts/ → draft_id, task_id
-- Для doc_id: base_data = {"doc_id": 1} + expected_status={200, 202, 404} на документных эндпоинтах
-- Для search и tasks — expected_status где нужно
+- Для doc_id: base_data = {"doc_id": "1", "page_num": 1}
+- response_schema для document_id — (int, str)
 
-### [ ] 4. Проверить результат
+### [x] 4. Проверить результат
 - `python -m service_checker docker --action coverage`
-- Orchestrator: passed >= 20/30, skipped <= 10
+- **Orchestrator: 32/32 passed, 0 failed, 0 skipped**
+- Фикс skipped: добавил `params={"longpoll": 0}` в preview/status — сервис возвращает статус сразу без longpoll
+
+## Итог
+- **Было:** 8/30 passed, 22 skipped, 0 failed
+- **Стало:** 32/32 passed, 0 failed, 0 skipped
+- Добавлен механизм `override_port` для prepare-шагов на других портах
+- Orchestrator теперь тестируется изолированно: получает JWT от Auth (8082), создаёт draft через свой API (8081), подставляет ID в path-параметры

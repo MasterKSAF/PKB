@@ -302,7 +302,14 @@ class ApiCoverageTester:
     async def _execute_endpoint(
         self, ep: EndpointDef, port: int, result: ServiceResult, alive: bool,
     ) -> None:
-        """Выполнить один эндпоинт и записать результат."""
+        """Выполнить один эндпоинт и записать результат.
+
+        Если у эндпоинта указан override_port — он используется вместо port.
+        Это нужно для prepare-шагов, которые обращаются к другим сервисам
+        (например, получение JWT токена от auth service).
+        """
+        # override_port — альтернативный порт для prepare-шагов
+        target_port = ep.override_port if ep.override_port is not None else port
         # Если сервис не отвечает — пропускаем все эндпоинты
         if not alive:
             result.results.append(
@@ -337,7 +344,7 @@ class ApiCoverageTester:
 
         # Формируем URL
         resolved_path = self._resolve_path(ep.path)
-        url = f"http://{self.base_host}:{port}{resolved_path}"
+        url = f"http://{self.base_host}:{target_port}{resolved_path}"
 
         # Формируем заголовки
         headers = {**HEADERS_JSON}

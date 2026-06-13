@@ -164,7 +164,7 @@ def get_service_def() -> ServiceDef:
             body={"format": "json"}),
         EndpointDef("POST", f"{API_PREFIX}/chat/feedback", "chat", "Отправить отзыв",
             body={"session_id": "{session_id}", "message_id": "{message_id}", "rating": 5},
-            response_schema={"status": str}),
+            response_schema={"saved": bool, "metrics_changed": dict}),
 
         # ── Documents (orchestrator-style, без DELETE) ──
         EndpointDef("GET", f"{API_PREFIX}/documents", "documents", "Список документов"),

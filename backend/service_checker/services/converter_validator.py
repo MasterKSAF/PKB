@@ -43,17 +43,17 @@ def get_service_def() -> ServiceDef:
             body={"task_id": "12345", "version_id": "1",
                   "raw_json": {"test": True}},
             # docs: { task_id, version_id, document_id, metadata{}, document{}, validation{} }
-            # ⚠️ WORKAROUND: document_id приходит как UUID-строка, хотя docs — int.
+            # document_id теперь в registry, converter его не возвращает
             response_schema={"task_id": str, "version_id": str,
-                             "document_id": str, "validation": dict}),
+                             "validation": dict}),
         EndpointDef("POST", f"{API_PREFIX}/validate/document", "validate",
             "Валидация документа",
             # ⚠️ WORKAROUND: сервис ожидает str, docs — int.
             body={"task_id": "12345", "version_id": "1",
                   "raw_json": {"test": True}},
             # docs: { validation_id, document_id, structure_valid, classification{}, status }
-            # ⚠️ WORKAROUND: validation_id и document_id приходят как str (UUID), хотя docs — int.
-            response_schema={"validation_id": str, "document_id": str,
+            # document_id теперь в registry
+            response_schema={"validation_id": str,
                              "structure_valid": bool, "status": str}),
     ]
 
