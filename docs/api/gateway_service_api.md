@@ -52,7 +52,6 @@ Gateway объединяет API всех внутренних сервисов 
 | `/api/v1/registry/common/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
 | `/api/v1/registry/documents/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
 | `/api/v1/registry/categories/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
-| `/api/v1/registry/pkb/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
 | `/api/v1/system/health` | Gateway (собственный) | `8080` | — |
 | `/api/v1/analyse/*` | Analyse Service | `8089` | [analyse_service_api.md](analyse_service_api.md) |
 | `/api/v1/meridian/*` | Integration Service | `8085` | [integration_service_api.md](integration_service_api.md) |
