@@ -6,6 +6,11 @@ Uses in-memory storage for mock data instead of static responses.
 from typing import Any, Dict, List, Optional
 
 from app.core.config import settings
+from app.schemas.requests import (
+    CheckUniquenessRequest,
+    CreateDraftRequest,
+    UpdateDraftStatusRequest,
+)
 from app.services.base_client import ServiceClient
 
 
@@ -447,18 +452,17 @@ class RegistryServiceClient(ServiceClient):
         title_hash_sha256: Optional[str] = None,
     ) -> dict:
         """Create a draft in Registry. Returns draft_id."""
-        body = {
-            "file_key": file_key,
-            "document_key": document_key,
-            "created_by": created_by,
-        }
-        if file_hash_sha256:
-            body["file_hash_sha256"] = file_hash_sha256
-        if title_hash_sha256:
-            body["title_hash_sha256"] = title_hash_sha256
+        body = CreateDraftRequest(
+            file_key=file_key,
+            document_key=document_key,
+            created_by=created_by,
+            file_hash_sha256=file_hash_sha256,
+            title_hash_sha256=title_hash_sha256,
+        )
         return await self.call(
             "POST",
             "/registry/drafts",
+            request_model=CreateDraftRequest,
             mock_response={
                 "data": {
                     "draft_id": 1,
@@ -469,7 +473,7 @@ class RegistryServiceClient(ServiceClient):
                     "created_at": "2026-06-08T10:00:00Z",
                 }
             },
-            json=body,
+            json=body.model_dump(exclude_none=True),
         )
 
     async def get_draft(self, draft_id: int) -> dict:
@@ -537,12 +541,14 @@ class RegistryServiceClient(ServiceClient):
         document_id: Optional[int] = None,
     ) -> dict:
         """Update draft status (and optionally set document_id)."""
-        body = {"status": status}
-        if document_id is not None:
-            body["document_id"] = document_id
+        body = UpdateDraftStatusRequest(
+            status=status,
+            document_id=document_id,
+        )
         return await self.call(
             "PATCH",
             f"/registry/drafts/{draft_id}/status",
+            request_model=UpdateDraftStatusRequest,
             mock_response={
                 "data": {
                     "draft_id": draft_id,
@@ -551,7 +557,7 @@ class RegistryServiceClient(ServiceClient):
                     "updated_at": "2026-06-08T10:00:00Z",
                 }
             },
-            json=body,
+            json=body.model_dump(exclude_none=True),
         )
 
     async def delete_draft(self, draft_id: int) -> dict:
@@ -574,12 +580,14 @@ class RegistryServiceClient(ServiceClient):
         title_hash_sha256: Optional[str] = None,
     ) -> dict:
         """Check document uniqueness (duplicate detection)."""
-        body = {"file_hash_sha256": file_hash_sha256}
-        if title_hash_sha256:
-            body["title_hash_sha256"] = title_hash_sha256
+        body = CheckUniquenessRequest(
+            file_hash_sha256=file_hash_sha256,
+            title_hash_sha256=title_hash_sha256,
+        )
         return await self.call(
             "POST",
             "/registry/documents/check-uniqueness",
+            request_model=CheckUniquenessRequest,
             mock_response={
                 "data": {
                     "is_duplicate_file": False,
@@ -587,5 +595,5 @@ class RegistryServiceClient(ServiceClient):
                     "candidates": [],
                 }
             },
-            json=body,
+            json=body.model_dump(exclude_none=True),
         )

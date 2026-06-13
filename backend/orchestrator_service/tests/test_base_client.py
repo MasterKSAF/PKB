@@ -122,6 +122,72 @@ class TestServiceClientRealMode:
         assert result == {}
 
 
+class TestServiceClientDataValidation:
+    """Tests for JSON guard and request_model in call()."""
+
+    @pytest.mark.asyncio
+    async def test_json_guard_rejects_non_serializable(self):
+        """call() raises TypeError when json body contains non-serializable object."""
+        client = SimpleTestClient(mock_mode=True)
+        with pytest.raises(TypeError, match="non-serializable"):
+            await client.call(
+                "POST",
+                "/test",
+                json={"user": object()},  # object() is not JSON-serializable
+            )
+
+    @pytest.mark.asyncio
+    async def test_json_guard_allows_serializable(self):
+        """call() succeeds with valid JSON body."""
+        client = SimpleTestClient(mock_mode=True)
+        result = await client.call(
+            "POST",
+            "/kwargs/test",
+            mock_response={"default": "data"},
+            json={"name": "test", "count": 42},
+        )
+        assert result["received"] == {"name": "test", "count": 42}
+
+    @pytest.mark.asyncio
+    async def test_request_model_validates_types(self):
+        """call() with request_model validates json body through Pydantic."""
+        from pydantic import BaseModel, Field
+
+        class TestRequest(BaseModel):
+            name: str = Field(...)
+            count: int = Field(...)
+
+        client = SimpleTestClient(mock_mode=True)
+
+        # Valid data passes
+        result = await client.call(
+            "POST",
+            "/kwargs/test",
+            mock_response={"default": "data"},
+            request_model=TestRequest,
+            json={"name": "hello", "count": 10},
+        )
+        assert result["received"] == {"name": "hello", "count": 10}
+
+    @pytest.mark.asyncio
+    async def test_request_model_rejects_wrong_types(self):
+        """call() with request_model raises TypeError on type mismatch."""
+        from pydantic import BaseModel, Field
+
+        class TestRequest(BaseModel):
+            name: str = Field(...)
+
+        client = SimpleTestClient(mock_mode=True)
+
+        with pytest.raises(TypeError, match="Pydantic validation"):
+            await client.call(
+                "POST",
+                "/test",
+                request_model=TestRequest,
+                json={"name": 42},  # int where str expected
+            )
+
+
 class TestServiceClientClose:
     """Tests for close() method."""
 
