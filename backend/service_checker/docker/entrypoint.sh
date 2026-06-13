@@ -53,13 +53,6 @@ for env_path in /app/backend/registry_service/.env /app/backend/rag_builder_serv
 	EOF
     echo "   ✓ $env_path"
 done
-# Для auth_service отдельно: только JWT_SECRET_KEY (strict pydantic не принимает лишние поля)
-auth_env="/app/backend/auth_service/.env"
-mkdir -p "$(dirname "$auth_env")"
-if [ -n "${JWT_SECRET_KEY:-}" ]; then
-    echo "JWT_SECRET_KEY=$JWT_SECRET_KEY" > "$auth_env"
-    echo "   ✓ $auth_env (JWT_SECRET_KEY)"
-fi
 echo "   ✓ .env файлы обновлены"
 
 # =============================================================================
