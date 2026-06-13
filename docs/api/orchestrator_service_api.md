@@ -370,7 +370,6 @@ Orchestrator вычисляет SHA-256 содержимого, определя
   "jurisdiction": "RU",
   "issuing_body": "Госстандарт СССР",
   "enterprise_id": null,
-  "pkb_code": null,
   "mks_oks_code": "31.240",
   "okstu_code": null,
   "classification_status": {
