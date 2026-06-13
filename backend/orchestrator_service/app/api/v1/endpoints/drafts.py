@@ -166,7 +166,7 @@ async def create_draft(
         draft_result = await registry.create_draft(
             file_key=file_key,
             document_key=document_key,
-            created_by=current_user or MOCK_USER_ID,
+            created_by=current_user.user_id if current_user else MOCK_USER_ID,
             file_hash_sha256=file_hash,
             title_hash_sha256=title_hash,
         )

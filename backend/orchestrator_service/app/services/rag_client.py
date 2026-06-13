@@ -5,6 +5,11 @@ RAG Service Client with mock mode support.
 from typing import Any, Dict, List, Optional
 
 from app.core.config import settings
+from app.schemas.requests import (
+    RagGenerateRequest,
+    RagIndexRequest,
+    RagSearchRequest,
+)
 from app.services.base_client import ServiceClient
 
 
@@ -87,11 +92,13 @@ class RAGServiceClient(ServiceClient):
         self, document_id: str, chunks: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
         """Index document chunks."""
+        body = RagIndexRequest(document_id=document_id, chunks=chunks)
         return await self.call(
             "POST",
             "/rag/index",
+            request_model=RagIndexRequest,
             mock_response={"indexed_count": len(chunks), "status": "completed"},
-            json={"document_id": document_id, "chunks": chunks},
+            json=body.model_dump(exclude_none=True),
         )
 
     async def delete_index(self, document_id: str) -> Dict[str, Any]:
@@ -110,20 +117,22 @@ class RAGServiceClient(ServiceClient):
         search_type: str = "hybrid",
     ) -> Dict[str, Any]:
         """Search in vector index."""
+        body = RagSearchRequest(
+            query=query,
+            top_k=top_k,
+            filters=filters or {},
+            search_type=search_type,
+        )
         return await self.call(
             "POST",
             "/rag/search",
+            request_model=RagSearchRequest,
             mock_response={
                 "results": [],
                 "search_type_used": search_type,
                 "processing_time_ms": 0,
             },
-            json={
-                "query": query,
-                "top_k": top_k,
-                "filters": filters or {},
-                "search_type": search_type,
-            },
+            json=body.model_dump(exclude_none=True),
         )
 
     async def generate(
@@ -134,23 +143,22 @@ class RAGServiceClient(ServiceClient):
         temperature: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Generate answer using LLM."""
-        body = {
-            "messages": messages,
-            "context_chunks": context_chunks,
-        }
-        if model:
-            body["model"] = model
-        if temperature is not None:
-            body["temperature"] = temperature
+        body = RagGenerateRequest(
+            messages=messages,
+            context_chunks=context_chunks,
+            model=model,
+            temperature=temperature,
+        )
 
         return await self.call(
             "POST",
             "/rag/generate",
+            request_model=RagGenerateRequest,
             mock_response={
                 "content": "Mock generated answer based on context.",
                 "model_used": model or "llama-3-70b",
                 "usage": {"prompt_tokens": 150, "completion_tokens": 40},
                 "finish_reason": "stop",
             },
-            json=body,
+            json=body.model_dump(exclude_none=True),
         )

@@ -26,6 +26,15 @@
 Выбран вариант B (опрос БД) вместо Redis Pub/Sub для простоты.
 При появлении Redis в инфраструктуре можно перейти на Вариант A.
 
+### 1.5. Валидация данных на границе service client
+Все запросы к внешним сервисам проходят через `ServiceClient.call()`.
+Там добавлены два уровня защиты:
+1. **Pydantic request_model** — валидация структуры, если схема передана
+2. **JSON serialization guard** — `json.dumps()` проверка для всех `json` kwargs
+
+Ошибка выбрасывается как `TypeError` ДО ветвления mock/real, что
+исключает «тихие» ошибки в мок-режиме и крахи при HTTP-сериализации.
+
 ## 2. Расхождения со спецификациями
 
 ### 2.1. `docs/api/orchestrator_service_api.md` — устарела
@@ -112,7 +121,16 @@ SQLite не поддерживает JSONB нативно. Текущая реа
 		| **Versions** | `POST/GET /documents/{id}/versions` | documents |
 		| **History** | `GET /documents/{id}/history` | documents |
 
-		### 3.9. Чекер шлёт JSON на multipart-эндпоинт POST /drafts
+		### 3.9. `created_by` в `create_draft` получал объект `CurrentUser` вместо строки
+
+		В эндпоинте `POST /api/v1/drafts/` параметр `created_by` ожидает строку,
+		но в коде передавался `current_user or MOCK_USER_ID`, где `current_user` —
+		объект `CurrentUser` (из `app/api/deps/__init__.py`).
+		Pydantic валидация падала с ошибкой типа.
+
+		**Исправлено:** `created_by=current_user.user_id if current_user else MOCK_USER_ID`.
+
+		### 3.10. Чекер шлёт JSON на multipart-эндпоинт POST /drafts
 
 		Внешняя тестовая система (чекер) отправляет `POST /api/v1/drafts/`
 		с JSON-телом `{"title": "...", "content": "..."}`, в то время как

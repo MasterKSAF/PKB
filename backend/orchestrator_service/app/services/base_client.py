@@ -9,11 +9,13 @@ HTTP client uses httpx with configurable timeouts, retry (tenacity),
 and circuit breaker for resilience.
 """
 
+import json
 import logging
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Type
 
 import httpx
+from pydantic import BaseModel, ValidationError
 from circuitbreaker import CircuitBreaker, CircuitBreakerError
 from tenacity import (
     retry,
@@ -95,6 +97,7 @@ class ServiceClient:
         method: str,
         endpoint: str,
         mock_response: Optional[Dict[str, Any]] = None,
+        request_model: Optional[Type[BaseModel]] = None,
         **kwargs,
     ) -> Dict[str, Any]:
         """Make an API call (mock or real HTTP).
@@ -102,7 +105,35 @@ class ServiceClient:
         In mock mode: delegates to ``_generate_mock``.
         In real mode: performs an actual HTTP request via httpx with
         retry (tenacity) and circuit breaker protection.
+
+        Parameters
+        ----------
+        request_model : optional
+            If provided, validates ``json`` kwargs through this Pydantic model
+            before sending (catches type mismatches early in both mock and real mode).
         """
+        # --- Validate json body through Pydantic if request_model provided ---
+        if request_model is not None and "json" in kwargs:
+            try:
+                kwargs["json"] = request_model.model_validate(
+                    kwargs["json"]
+                ).model_dump(exclude_none=True)
+            except ValidationError as exc:
+                raise TypeError(
+                    f"Request body for {method} {endpoint} failed "
+                    f"Pydantic validation: {exc}"
+                ) from exc
+
+        # --- Guard: ensure json body is JSON-serializable ---
+        if "json" in kwargs:
+            try:
+                json.dumps(kwargs["json"], ensure_ascii=False)
+            except TypeError as exc:
+                raise TypeError(
+                    f"Request body for {method} {endpoint} contains "
+                    f"non-serializable value: {exc}"
+                ) from exc
+
         start_time = time.monotonic()
 
         if self.mock_mode:

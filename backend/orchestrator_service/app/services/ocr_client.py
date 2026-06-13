@@ -5,6 +5,7 @@ OCR Service Client with mock mode support.
 from typing import Any, Dict, List, Optional
 
 from app.core.config import settings
+from app.schemas.requests import OcrProcessRequest
 from app.services.base_client import ServiceClient
 
 
@@ -80,11 +81,17 @@ class OCRServiceClient(ServiceClient):
         self, file_id: str, pages: Optional[str] = None, options: Optional[Dict] = None
     ) -> Dict[str, Any]:
         """Process document with OCR."""
+        body = OcrProcessRequest(
+            file_id=file_id,
+            pages=pages,
+            options=options or {},
+        )
         return await self.call(
             "POST",
             "/ocr/process",
+            request_model=OcrProcessRequest,
             mock_response={"pages": [], "total_pages": 0, "successful_pages": 0},
-            json={"file_id": file_id, "pages": pages, "options": options or {}},
+            json=body.model_dump(exclude_none=True),
         )
 
     async def get_engines(self) -> Dict[str, Any]:

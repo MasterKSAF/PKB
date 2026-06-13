@@ -5,6 +5,7 @@ Parser Service Client with mock mode support.
 from typing import Any, Dict, Optional
 
 from app.core.config import settings
+from app.schemas.requests import ParserPreviewRequest, ParserProcessRequest
 from app.services.base_client import ServiceClient
 
 
@@ -57,20 +58,24 @@ class ParserServiceClient(ServiceClient):
 
     async def process_preview(self, file_key: str, max_pages: int = 3) -> Dict[str, Any]:
         """Start preview processing of a file."""
+        body = ParserPreviewRequest(file_key=file_key, max_pages=max_pages)
         return await self.call(
             "POST",
             "/parser/preview",
+            request_model=ParserPreviewRequest,
             mock_response={"data": {}},
-            json={"file_key": file_key, "max_pages": max_pages},
+            json=body.model_dump(exclude_none=True),
         )
 
     async def process_full(self, file_key: str) -> Dict[str, Any]:
         """Start full processing of a file."""
+        body = ParserProcessRequest(file_key=file_key)
         return await self.call(
             "POST",
             "/parser/process",
+            request_model=ParserProcessRequest,
             mock_response={"data": {}},
-            json={"file_key": file_key},
+            json=body.model_dump(exclude_none=True),
         )
 
     async def get_status(self, task_id: str) -> Dict[str, Any]:
