@@ -28,7 +28,7 @@ x-env-common: &env-common
   DEV_AUTH_MODE: "true"
   MOCK_LLM_ENABLED: "true"
   APP_VERSION: "1.0.0"
-  JWT_SECRET_KEY: change-me-in-production
+  JWT_SECRET_KEY: pkb-neuroassistant-jwt-secret-key-2026-dev
   JWT_ALGORITHM: HS256
   REGISTRY_SERVICE_URL: http://127.0.0.1:8084/api/v1
   INTEGRATION_SERVICE_URL: http://127.0.0.1:8085/api/v1

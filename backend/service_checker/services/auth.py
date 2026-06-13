@@ -41,7 +41,7 @@ def get_service_def() -> ServiceDef:
         EndpointDef("POST", f"{API_PREFIX}/admin/users", "admin", "Создать пользователя (prepare)",
             body={"email": f"prepare-user-{_ts}@test.com", "full_name": "Prepare User", "password": "Test1234!", "roles": ["engineer"]},
             extract_keys=["user_id"],
-            response_schema={"id": int, "email": str},
+            response_schema={"user_id": str, "email": str},
             is_preparation=True,
             expected_status={201, 409}),
     ]
@@ -74,7 +74,7 @@ def get_service_def() -> ServiceDef:
             body={"email": "test@test.com", "full_name": "Test User", "password": "Test1234!", "roles": ["engineer"]},
             extract_keys=["user_id"],
             expected_status={201, 409},
-            response_schema={"id": int, "email": str}),
+            response_schema={"user_id": str, "email": str}),
         EndpointDef("GET", f"{API_PREFIX}/admin/users/{{user_id}}", "admin", "Получить пользователя",
             # docs: { user_id, email, full_name, position, roles, permissions{}, is_active }
             response_schema={"user_id": str, "email": str, "is_active": bool}),
@@ -95,7 +95,7 @@ def get_service_def() -> ServiceDef:
         EndpointDef("POST", f"{API_PREFIX}/admin/roles", "admin", "Создать роль",
             body={"name": "viewer", "permissions": ["documents:read", "search"]},
             expected_status={201, 409},
-            response_schema={"id": int, "name": str}),
+            response_schema={"role_id": str, "name": str}),
         EndpointDef("GET", f"{API_PREFIX}/admin/audit", "admin", "Журнал аудита",
             params={"page": 1, "page_size": 10},
             # docs: { events[], meta{total, page, page_size} }
