@@ -46,7 +46,7 @@
 
 Каждый микросервис предоставляет endpoint `GET /health` для проверки своего состояния.
 Эндпоинт используется:
-- **Orchestrator** — для агрегации статусов в `GET /monitor/health`;
+- **Orchestrator** — для агрегации статусов в `GET /health`;
 - **Инфраструктурными системами** (Kubernetes liveness/readiness probes, системы мониторинга).
 
 **Формат ответа (`200 OK`):**
@@ -82,7 +82,8 @@
 | Сервис | Внутренний URL | URL через Gateway |
 |--------|----------------|-------------------|
 | Gateway | `http://127.0.0.1:8080/api/v1/system/health` | — (собственный) |
-| Orchestrator | `http://127.0.0.1:8081/api/v1/monitor/health` | `http://127.0.0.1:8080/api/v1/monitor/health` |
+| Gateway | `http://127.0.0.1:8080/api/v1/monitor/metrics` | — (собственный) |
+| Orchestrator | `http://127.0.0.1:8081/api/v1/health` | — (внутренний) |
 | Auth | `http://127.0.0.1:8082/api/v1/health` | — (внутренний) |
 | Query | `http://127.0.0.1:8083/api/v1/health` | — (внутренний) |
 | Registry | `http://127.0.0.1:8084/api/v1/health` | — (внутренний) |
@@ -94,7 +95,7 @@
 | RAG Builder | `http://127.0.0.1:8090/api/v1/health` | — (внутренний) |
 | RAG Search | `http://127.0.0.1:8091/api/v1/health` | — (внутренний) |
 
-> **Примечание:** Эндпоинт `/monitor/health` Orchestrator'а агрегирует статусы внутренних сервисов,
+> **Примечание:** Эндпоинт `/health` Orchestrator'а агрегирует статусы внутренних сервисов,
 > обращаясь к их `/health` и возвращая сведённый результат. Для внутренних сервисов
 > эндпоинт `/health` не имеет ограничений rate limiting и не требует аутентификации.
 
@@ -123,7 +124,7 @@
 5. Оркестратор хранит маппинг `draft_id → task_id → document_id`
 
 Аутентификация:
-  - **Эндпоинты через Gateway:** все запросы, кроме `/auth/*` и `/monitor/health`, требуют заголовок
+  - **Эндпоинты через Gateway:** все запросы, кроме `/auth/*`, требуют заголовок
     `Authorization: Bearer <access_token>`. Токен получается через `/auth/token`.
   - **Внутренние сервисы (межсервисное взаимодействие):** вызовы между микросервисами выполняются
     по внутренней сети `127.0.0.1:{port}`.
@@ -363,7 +364,6 @@ GET .../{doc_id}/status?longpoll=15
 | `GET /admin/users`, `POST/PUT/PATCH/DELETE /admin/users` | ✗ | ✗ | ✓ |
 | `GET /admin/roles`, `POST /admin/roles` | ✗ | ✗ | ✓ |
 | `GET /admin/audit` | ✗ | ✗ | ✓ |
-| `GET /monitor/health` | ✓ (без аутентификации) | ✓ | ✓ |
 | `GET /monitor/metrics` | ✗ | ✓ | ✓ |
 | `GET /tasks/{task_id}/status` | ✗ | ✗ | ✓ |
 | `GET /tasks/{task_id}/steps` | ✗ | ✗ | ✓ |
@@ -381,7 +381,7 @@ GET .../{doc_id}/status?longpoll=15
 > **Примечания:**
 > - Роли: `engineer` — инженер-конструктор; `knowledge_admin` — администратор НСИ; `system_admin` — системный администратор.
 > - Матрица применяется ко всем эндпоинтам через Gateway. Внутренние сервисы вызываются через Gateway; RBAC проверяется на Gateway.
-> - `GET /monitor/health` доступен без аутентификации для использования инфраструктурными системами мониторинга.
+> - `GET /api/v1/system/health` доступен без аутентификации для использования инфраструктурными системами мониторинга.
 
 ---
 
@@ -405,7 +405,6 @@ GET .../{doc_id}/status?longpoll=15
 | `POST /text/search` | 30 запросов / мин | 1 мин | Текстовый поиск |
 | `GET /admin/*`                        | 60 запросов / мин         | 1 мин               | Административные                   |
 | `POST /admin/*`                       | 20 запросов / мин         | 1 мин               |                                    |
-| `GET /monitor/health`                 | Не ограничен              | —                   | Health check                       |
 | Остальные эндпоинты                   | 60 запросов / мин         | 1 мин               | По умолчанию                       |
 
 При превышении лимита возвращается HTTP `429 Too Many Requests` с телом:

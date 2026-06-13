@@ -243,6 +243,8 @@ API черновиков и FSM документированы, но **UI сра
 - **bbox** — пиксели (px) в OCR/Parser, нормализованные [0,1] в Converter-validator.
 - **Двухфазный пайплайн**: preview → full (от 23.05).
 - **OCR и Parser — два независимых сервиса** (от 23.05).
+- **Унификация health-эндпоинта Orchestrator** (13.06): `/api/v1/monitor/health` → `/api/v1/health` как у всех внутренних сервисов. Health Orchestrator больше не проксируется через Gateway (внутренний, как Auth и др.). Gateway предоставляет `/api/v1/system/health` для внешнего мониторинга.
+- **Перенос `/api/v1/monitor/metrics` в Gateway** (13.06): эндпоинт метрик качества пайплайнов перенесён из Orchestrator в Gateway как собственный (не проксируемый). Спецификация удалена из `orchestrator_service_api.md` и добавлена в `gateway_service_api.md`.
 
 ### 🔄 Схлопывание `/parser/preview` и `/parser/process` (08.06)
 

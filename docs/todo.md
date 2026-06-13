@@ -1,37 +1,29 @@
-# Todo: Текущие задачи
+# Todo: Унификация health-эндпоинта Orchestrator + перенос monitor/metrics в Gateway
 
----
+## Задача
+1. ✅ `/api/v1/monitor/health` → `/api/v1/health` (выполнено)
+2. ✅ `GET /api/v1/monitor/metrics` — перенесён из Orchestrator в Gateway как собственный endpoint
 
-## ✓ Выполнено: Резолвер графа связей и постобработка LLM (13.06)
+## Результат
 
-### Что сделано
-1. **`api/registry_service_api.md`** — добавлена спецификация резолвера:
-   - Модель `5.8. document_reference` (полная структура таблицы)
-   - Раздел «Фоновые задачи → Резолвер графа связей» с триггерами (событие + CRON), SQL-запросом и индексом
+### 1. ✅ `api/gateway_service_api.md`
+- Удалена строка `/api/v1/monitor/metrics` из таблицы маршрутизации
+- Добавлена строка в таблицу собственных эндпоинтов Gateway
+- Добавлена полная спецификация `GET /api/v1/monitor/metrics`
 
-2. **`pipelines/pipeline3-search.md`** — добавлена валидация цитирования:
-   - Описание алгоритма в составе этапа 4 (без новых FSM-состояний)
-   - Синхронная проверка ссылок: поиск, сверка с источниками, удаление невалидных
+### 2. ✅ `api/orchestrator_service_api.md`
+- Удалён `GET /monitor/metrics` и его спецификация
+- Группа `monitor` заменена на `health` в таблице групп
+- Заголовок группы `health` убран (один эндпоинт)
 
-### Статус
-- ✅ Граф связей — специфицирован в `registry_service_api.md`
-- ✅ Постобработка LLM — добавлена в `pipeline3-search.md` (без кода, без нового FSM)
+### 3. ✅ `api/common_api.md`
+- Таблица эндпоинтов: добавлен Gateway entry для `/api/v1/monitor/metrics`
+- RBAC: `GET /monitor/metrics` — остаётся (теперь Gateway endpoint)
+- Rate limiting: не требуется (попадает под "Остальные эндпоинты")
 
----
+### 4. ✅ `README.md`
+- Orchestrator: `/monitor/*` → `/health`
+- Gateway: добавлена строка про метрики `/api/v1/monitor/metrics`
 
-## Активная задача: PKB_DOMAIN — откат `pkb_domains`, расширение `categories`
-
-### Решение
-Зафиксирован вариант C: расширение `categories` + `pkb_code` как FK → `categories.id` (без `pkb_domains`).  
-См. `specificity.md` A36.
-
-### План
-1. ✅ **`specificity.md`** — A36 с решением C
-2. **`registry_service_api.md`** — модель `document.categories[]` + `pkb_code` как FK
-3. **`database/db_diagrams.md`** — актуализировать ER-диаграмму (связь doc → categories, `pkb_code` заменить на FK)
-4. **Проверка целостности** — перекрёстные ссылки между файлами
-
-### После правок
-- Сверка с todo.md
-- Перепросмотр изменений
-- Проверка целостности и связности
+### 5. ✅ `specificity.md`
+- Дополнена запись о переносе monitor/metrics в Gateway

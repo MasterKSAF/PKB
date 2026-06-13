@@ -44,7 +44,6 @@ Gateway объединяет API всех внутренних сервисов 
 | `/api/v1/documents/*` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md) |
 | `/api/v1/tasks/*` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md)² |
 | `/api/v1/drafts/*` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md) |
-| `/api/v1/monitor/*` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md) |
 | `/api/v1/chat/*` | Query Service | `8083` | [query_service_api.md](query_service_api.md) |
 | `/api/v1/text/*` | Query Service | `8083` | [query_service_api.md](query_service_api.md) |
 | `/api/v1/registry/classifiers/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
@@ -196,10 +195,11 @@ Request → CORS → RBAC → Idempotency → ProcessTime → Router → Respons
 | Метод | Путь | Описание |
 |-------|------|----------|
 | GET | `/api/v1/system/health` | Health-check: агрегированный статус всех сервисов, версия, количество эндпоинтов |
+| GET | `/api/v1/monitor/metrics` | Метрики качества системы (пайплайны) |
 
 #### GET /api/v1/system/health
 
-> **Примечание**: `/api/v1/system/health` — основной health-check endpoint для внешних систем мониторинга. Orchestrator имеет дополнительный `/monitor/health` для внутреннего использования.
+> **Примечание**: `/api/v1/system/health` — основной health-check endpoint для внешних систем мониторинга. Orchestrator имеет дополнительный `/health` для внутреннего использования (не проксируется через Gateway).
 
 Проверка состояния Gateway и всех подключённых сервисов.
 
@@ -228,6 +228,57 @@ Request → CORS → RBAC → Idempotency → ProcessTime → Router → Respons
 | `services` | object | Статус каждого внутреннего сервиса (`ok`, `degraded`, `unavailable`) |
 | `timestamp` | string | Время проверки (ISO 8601) |
 | `endpoints_total` | int | Общее количество зарегистрированных эндпоинтов |
+
+---
+
+#### GET /api/v1/monitor/metrics
+
+Метрики качества системы, агрегируемые Gateway на основе данных пайплайнов.
+
+**Ответ `200`:**
+
+```json
+{
+  "control_metrics": {
+    "ocr_quality": 0.984,
+    "retrieval_quality": 0.91,
+    "answers_with_sources": 0.96,
+    "avg_latency_ms": 1420
+  },
+  "answer_metrics": {
+    "useful_rate": 0.84,
+    "rated_answers": 43,
+    "flagged_for_review": 5,
+    "open_questions": 3
+  },
+  "logs": [
+    {
+      "time": "12:34:02",
+      "type": "search",
+      "text": "...",
+      "level": "info"
+    }
+  ]
+}
+```
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `control_metrics` | object | Объект с метриками качества контроля |
+| `control_metrics.ocr_quality` | number | Качество OCR (0–1) |
+| `control_metrics.retrieval_quality` | number | Качество поиска (0–1) |
+| `control_metrics.answers_with_sources` | number | Доля ответов с источниками (0–1) |
+| `control_metrics.avg_latency_ms` | number | Средняя задержка, мс |
+| `answer_metrics` | object | Объект с метриками качества ответов |
+| `answer_metrics.useful_rate` | number | Доля полезных ответов (0–1) |
+| `answer_metrics.rated_answers` | int | Количество оценённых ответов |
+| `answer_metrics.flagged_for_review` | int | Количество отмеченных на ревью |
+| `answer_metrics.open_questions` | int | Количество открытых вопросов |
+| `logs` | array | Массив записей лога |
+| `logs[].time` | string | Время события |
+| `logs[].type` | string | Тип события |
+| `logs[].text` | string | Текст события |
+| `logs[].level` | string | Уровень логирования |
 
 ---
 

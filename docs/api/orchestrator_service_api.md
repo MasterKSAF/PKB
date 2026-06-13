@@ -16,7 +16,7 @@
 
 | Группа      | Описание                                                            |
 | ----------- | ------------------------------------------------------------------- |
-| `monitor`   | Мониторинг, метрики и health                                        |
+| `health`    | Агрегированный health-check                                         |
 | `documents` | Документы: загрузка, список, статус, версии, аппрув, завершение обработки |
 | `drafts`    | Черновики: управление загрузкой, preview, решение (approve/reject) — единая точка входа. Вызов Registry internal API для CRUD |
 | `pages`     | Просмотр страниц и текстового слоя                                  |
@@ -1368,16 +1368,14 @@ Orchestrator — **единая точка входа** для работы с �
 
 ---
 
-## Группа monitor
-
-### GET /monitor/health
-
-> **Примечание**: Этот эндпоинт — для внутреннего мониторинга сервиса. Внешним системам следует использовать `/api/v1/system/health` (Gateway).
+### GET /health
 
 Агрегированная проверка состояния системы.
 
 Orchestrator последовательно опрашивает `GET /health` каждого внутреннего сервиса
 (см. [Мониторинг (Health Check)](common_api.md#мониторинг-health-check)) и возвращает сведённый результат.
+
+> **Примечание**: Этот эндпоинт — для внутреннего мониторинга сервиса. Внешним системам следует использовать `/api/v1/system/health` (Gateway).
 
 ```json
 {
@@ -1410,32 +1408,3 @@ Orchestrator последовательно опрашивает `GET /health` �
 | `ocr_queue` | string | Состояние очереди OCR |
 | `storage` | string | Статус файлового хранилища (MinIO) |
 
-### GET /monitor/metrics
-
-Метрики качества системы.
-
-```json
-{
-  "control_metrics": { "ocr_quality": 0.984, "retrieval_quality": 0.91, "answers_with_sources": 0.96, "avg_latency_ms": 1420 },
-  "answer_metrics": { "useful_rate": 0.84, "rated_answers": 43, "flagged_for_review": 5, "open_questions": 3 },
-  "logs": [ { "time": "12:34:02", "type": "search", "text": "...", "level": "info" } ]
-}
-```
-
-| Поле | Тип | Описание |
-|---|---|---|
-| `control_metrics` | object | Объект с метриками качества контроля |
-| `control_metrics.ocr_quality` | number | Качество OCR (0–1) |
-| `control_metrics.retrieval_quality` | number | Качество поиска (0–1) |
-| `control_metrics.answers_with_sources` | number | Доля ответов с источниками (0–1) |
-| `control_metrics.avg_latency_ms` | number | Средняя задержка, мс |
-| `answer_metrics` | object | Объект с метриками качества ответов |
-| `answer_metrics.useful_rate` | number | Доля полезных ответов (0–1) |
-| `answer_metrics.rated_answers` | int | Количество оценённых ответов |
-| `answer_metrics.flagged_for_review` | int | Количество отмеченных на ревью |
-| `answer_metrics.open_questions` | int | Количество открытых вопросов |
-| `logs` | array | Массив записей лога |
-| `logs[].time` | string | Время события |
-| `logs[].type` | string | Тип события |
-| `logs[].text` | string | Текст события |
-| `logs[].level` | string | Уровень логирования |
