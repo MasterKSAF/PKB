@@ -8,4 +8,5 @@ def test_embedding_stub():
 
     embedding = service.create_embedding("ГОСТ 20868-81")
 
-    assert embedding == [0.0, 0.0, 0.0]
+    assert len(embedding) == 1536
+    assert embedding[:3] == [0.0, 0.0, 0.0]

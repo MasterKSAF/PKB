@@ -24,7 +24,7 @@ class EmbeddingService:
         Пока возвращает тестовый вектор.
         """
 
-        return [0.0, 0.0, 0.0]
+        return [0.0] * 1536
 
 
     def enrich_chunk(self, chunk: Chunk) -> EmbeddedChunk:

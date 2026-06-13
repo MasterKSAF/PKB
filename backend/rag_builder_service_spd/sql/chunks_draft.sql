@@ -2,25 +2,37 @@
 -- Не утверждено
 -- Требует согласования с Knowledge Base
 
-CREATE TABLE nsi.chunks (
-    id bigint generated always as identity,
+CREATE SCHEMA IF NOT EXISTS nsi;
 
-    document_id bigint not null,
-    document_version_id bigint not null,
+CREATE EXTENSION IF NOT EXISTS vector;
 
-    section_id bigint not null,
+CREATE TABLE IF NOT EXISTS nsi.chunks (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 
-    clause text,
-    page integer,
+    document_id BIGINT NOT NULL,
+    document_version_id BIGINT NOT NULL,
+    section_id BIGINT NOT NULL,
+    parent_id BIGINT,
 
-    bbox jsonb,
+    clause TEXT,
+    path TEXT,
 
-    chunk_index integer not null,
-    chunk_type text not null,
+    page INTEGER,
+    bbox JSONB,
 
-    content text not null,
+    chunk_index INTEGER NOT NULL,
+    chunk_type TEXT NOT NULL,
 
-    metadata jsonb,
+    content TEXT NOT NULL,
+    metadata JSONB,
 
-    embedding vector(1536)
+    embedding VECTOR(1536),
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE INDEX idx_chunks_document
+    ON nsi.chunks(document_id);
+
+CREATE INDEX idx_chunks_version
+    ON nsi.chunks(document_version_id);

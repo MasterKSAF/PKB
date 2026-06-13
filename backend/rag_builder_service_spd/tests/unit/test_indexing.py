@@ -26,4 +26,5 @@ def test_index_document_returns_embedded_chunks():
     assert first.chunk.document_version_id == 420001
     assert first.chunk.clause == "1"
 
-    assert first.embedding == [0.0, 0.0, 0.0]
+    assert len(first.embedding) == 1536
+    assert first.embedding[:3] == [0.0, 0.0, 0.0]
