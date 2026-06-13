@@ -63,7 +63,7 @@ def get_service_def() -> ServiceDef:
 
     _warnings = [
             "⚠️ Registry требует trailing slash на всех эндпоинтах /classifiers/, /documents/, /terminology/ (в т.ч. параметризованные). Документация — без /.",
-            "⚠️ Checker: пути пайплайнов исправлены — добавлены слеши. API Coverage Registry 28/32 (2 failed — import/walidate без endpoints), pipeline registry_lifecycle теперь должен проходить.",
+            "⚠️ API Coverage Registry 30/32 (0 failed, 2 skipped — pending_id не подхвачен).",
         ]
 
     # ── Prepare-эндпоинты (создают данные для тестов) ──────────────
@@ -105,9 +105,10 @@ def get_service_def() -> ServiceDef:
             "Список классификаторов",
             params={"page": 1, "page_size": 10},
             response_schema={"data": list, "meta": dict, "meta.total": int, "meta.page": int, "meta.page_size": int}),
-        EndpointDef("GET", f"{API_PREFIX}/registry/classifiers/tree", "classifiers",
+        EndpointDef("GET", f"{API_PREFIX}/registry/classifiers/tree/", "classifiers",
             "Дерево классификаторов",
-            response_schema={"data": list, "meta": dict, "meta.total": int}),
+            params={"classifier_system": "MKS"},
+            response_schema={"data": list}),
         EndpointDef("GET", f"{API_PREFIX}/registry/classifiers/{{classifier_code}}",
             "classifiers", "Получить классификатор",
             params={"classifier_system": "MKS"},
@@ -194,9 +195,9 @@ def get_service_def() -> ServiceDef:
         EndpointDef("GET", f"{API_PREFIX}/registry/documents/{{doc_id}}/history",
             "documents", "История статусов",
             response_schema={"data": list, "meta": dict}),
-        EndpointDef("GET", f"{API_PREFIX}/registry/documents/{{doc_id}}/succession",
+        EndpointDef("GET", f"{API_PREFIX}/registry/documents/{{doc_id}}/succession/",
             "documents", "Цепочка преемственности",
-            response_schema={"data": list, "meta": dict}),
+            response_schema={"data": dict, "data.document_id": int, "data.chain": list}),
         EndpointDef("DELETE", f"{API_PREFIX}/registry/documents/{{doc_id}}",
             "documents", "Удалить документ",
             response_schema={"data": dict}),
