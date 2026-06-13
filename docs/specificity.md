@@ -101,31 +101,20 @@ API черновиков и FSM документированы, но **UI сра
 - `registry_service_api.md` — internal `GET /registry/drafts`
 - `README.md` — описание экрана загрузки
 
-### A37. Выбор модели эмбеддингов — VECTOR(1536) vs VECTOR(768)
-
-Текущая ER-диаграмма фиксирует `VECTOR(1536)` (размерность OpenAI/text-embedding-ada-002). Анализ альтернативного проекта показал, что для русского языка нормативно-технической документации может быть предпочтительнее `VECTOR(768)` (multilingual-e5-large). Решение не принято.
-
-**Что зависит:**
-- Размерность `rag.document_chunks.embedding` в DDL.
-- Модель эмбеддингов в RAG Builder.
-- Процедура переиндексации при смене модели.
-
-**Решение:** требуется техническое решение команды. После выбора:
-- Зафиксировать в `db_diagrams.md` (размерность) и `pipeline2-indexation.md` (модель).
-- Добавить инструкцию по смене размерности (скрипт `ALTER COLUMN ... TYPE VECTOR(N)` + переиндексация).
-
-См. полный анализ в `analyse_alternative_project.md` (Рекомендация 1).
-
-### A38. Резолвер графа связей — не реализован
+### A37. Резолвер графа связей — не реализован
 
 В `registry.document_references` есть поля `is_resolved` и `resolved_document_id`, но не описан сервис или механизм, который их проставляет. При загрузке нового документа все ссылки создаются с `is_resolved = FALSE` и остаются в этом состоянии.
 
 **Что нужно:**
-- Спецификация резолвера: периодический (CRON) или событийный (по загрузке документа).
-- Логика: `SELECT id FROM registry.documents WHERE doc_code = target_doc_code`.
-- Частичный индекс `WHERE is_resolved = FALSE` для производительности.
+- Спецификация резолвера в `registry_service_api.md`.
+- Триггеры: по событию (создание документа) + CRON-задача.
+- SQL: `UPDATE ref SET is_resolved=TRUE, resolved_document_id=d.id FROM registry.documents d WHERE d.doc_code=ref.target_doc_code AND ref.is_resolved=FALSE`.
+- Частичный индекс `WHERE is_resolved = FALSE`.
+- Единый нормализатор `doc_code` в Converter-validator и Registry.
 
-**Решение:** требуется реализация. См. `analyse_alternative_project.md` (Рекомендация 3).
+**Статус:** требуется реализация. См. `analyse_alternative_project.md` (п. 1.1).
+
+
 
 ### A36. Классификация ПКБ — расширение `categories` вместо отдельной таблицы
 

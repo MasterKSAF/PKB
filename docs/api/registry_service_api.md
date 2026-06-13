@@ -2016,6 +2016,57 @@ DELETE /registry/categories/{category_id}
 | `document_id` | bigint | PK (составной), FK → `registry.documents.id` ON DELETE CASCADE |
 | `category_id` | bigint | PK (составной), FK → `registry.categories.id` ON DELETE CASCADE |
 
+### 5.8. document_reference
+
+| Поле | Тип | Ограничения |
+|------|-----|-------------|
+| `id` | bigint | PK |
+| `source_document_id` | bigint | FK → `registry.documents.id`, NOT NULL |
+| `target_doc_code` | text | NOT NULL — обозначение документа из текста (напр. «ГОСТ 24705-81») |
+| `reference_type` | varchar(20) | NOT NULL — `single`, `range` |
+| `context` | text | nullable — контекст ссылки |
+| `current_status` | varchar(20) | nullable — `active`, `superseded` |
+| `replaced_by` | text | nullable |
+| `replacement_date` | date | nullable |
+| `is_resolved` | boolean | DEFAULT false — связь проведена к `registry.documents` |
+| `resolved_document_id` | bigint | FK → `registry.documents.id`, nullable — целевой документ в реестре |
+| `created_at` | timestamptz | NOT NULL |
+| `updated_at` | timestamptz | NOT NULL |
+
+---
+
+## Фоновые задачи
+
+### Резолвер графа связей (background task within registry-service)
+
+**Назначение:** сопоставить `target_doc_code` из `document_references` с `registry.documents.doc_code` и проставить `resolved_document_id`.
+
+**Проблема:** при создании документа все его перекрёстные ссылки сохраняются с `is_resolved = FALSE`, так как целевой документ может ещё не существовать в системе.
+
+**Триггеры запуска:**
+- **По событию:** после создания документа в `registry.documents` Registry запускает резолвер для всех `is_resolved = FALSE`, где `target_doc_code` совпадает с `doc_code` нового документа.
+- **Фоново:** CRON-задача (период настраиваемый, рекомендуемый — 1 час) для обработки оставшихся неразрешённых ссылок.
+
+**SQL:**
+```sql
+UPDATE registry.document_references AS ref
+SET is_resolved = TRUE,
+    resolved_document_id = d.id,
+    updated_at = NOW()
+FROM registry.documents AS d
+WHERE d.doc_code = ref.target_doc_code
+  AND ref.is_resolved = FALSE;
+```
+
+**Индекс для производительности:**
+```sql
+CREATE INDEX idx_refs_unresolved
+ON registry.document_references(target_doc_code)
+WHERE is_resolved = FALSE;
+```
+
+**Важно:** корректная работа резолвера требует единого нормализатора `doc_code` как в Converter-validator (при извлечении ссылки из текста), так и в Registry (при сохранении карточки документа). Иначе «ГОСТ 24705-81» и «ГОСТ 24705-81» с разным количеством пробелов не совпадут.
+
 ---
 
 ## Примечания
