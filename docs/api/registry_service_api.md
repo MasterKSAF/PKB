@@ -61,6 +61,7 @@
 | `terminology` | Реестр терминов, синонимов и правил нормализации |
 | `documents` | Реестр логических документов НСИ |
 | `drafts` | Управление данными черновиков (internal, доступен только Orchestrator) |
+| `pkb` | Предметные области ПКБ (проектно-конструкторские отделы: ПО1, ПО4 и т.д.) |
 | `common` | Статистика и справочные значения |
 | `categories` | Пользовательские категории документов (many-to-many) |
 
@@ -663,7 +664,8 @@ GET /registry/documents
 | `jurisdiction` | string | `RU`, `EU`, `US`, `NO`, `INTL` |
 | `issuing_body` | string | Организация-издатель |
 | `document_type` | string | Категория контента: `normative`, `technical`, `drawing`, `specification`, `archival_scan` |
-| `group` | string | Группа классификации (например, `ПО4`) |
+| `group` | string | **Deprecated.** Группа классификации (например, `ПО4`). Аlias на `pkb_code` — использовать `pkb_code`. |
+| `pkb_code` | string | Фильтр по коду предметной области ПКБ |
 | `title_hash_sha256` | string | Точный поиск по бизнес-ключу |
 | `date_from` / `date_to` | date | Фильтр по дате создания |
 | `category_id` | int | Фильтр по ID категории (документы, привязанные к категории) |
@@ -747,7 +749,8 @@ GET /registry/documents/{doc_id}
 - `issuing_body` — организация-издатель
 - `source_type` — тип источника (`GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `OTHER`)
 - `document_type` — категория контента (`normative`, `technical`, `drawing`, `specification`, `archival_scan`)
-- `group` — группа классификации (например, `ПО4`)
+- `group` — **deprecated.** Группа классификации. Аlias на `pkb_code`.
+- `pkb_code` — код предметной области ПКБ (FK → `pkb_domains`)
 - `mks_oks_code` — код МКС/ОКС
 - `okstu_code` — код ОКСТУ
 - `classification_status` — статус классификации (`{ mks: string[], okstu: string[], udk: string[], subject_area: string[] }`)
@@ -1101,7 +1104,8 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
 | `document.doc_code` | string | Обозначение документа |
 | `document.title` | string | Полное название |
 | `document.normalized_title` | string | Нормализованное название |
-| `document.group` | string | Группа документа |
+| `document.group` | string | **Deprecated.** Группа документа. Аlias на `document.pkb_code` |
+| `document.pkb_code` | string\|null | Код предметной области ПКБ (FK → `pkb_domains`) |
 | `document.mks_oks_code` | string | Код МКС/ОКС |
 | `document.okstu` | string\|null | Код ОКСТУ |
 | `document.udc` | string\|null | Код УДК |
@@ -1437,7 +1441,8 @@ POST /registry/documents/import
 
 | Параметр | Тип | Обязательный | Описание |
 |----------|-----|-------------|----------|
-| `document_key` | string | Нет | Фильтр по бизнес-ключу |
+| `draft_id` | bigint | Нет | Фильтр по ID черновика |
+| `document_key` | string | Нет | Фильтр по бизнес-ключу документа |
 | `status` | string | Нет | Фильтр по статусу |
 
 **Ответ `200`**:
@@ -1590,6 +1595,139 @@ POST /registry/documents/import
 
 ---
 
+## Группа pkb
+
+Предметные области ПКБ (проектно-конструкторские отделы).
+Хранятся в таблице `pkb_domains` (см. модель 5.8).
+`pkb_domain` — внутренняя организационная классификация, в отличие от `classifier_system`
+(`MKS`/`OKSTU`/`UDC`/`EXTERNAL`), которые являются внешними стандартами.
+
+Иерархическая структура (дерево) поддерживается через `parent_id` (самоссылка).
+
+| Метод | Путь | Описание |
+|-------|------|----------|
+| GET | `/registry/pkb` | Список (плоский) |
+| GET | `/registry/pkb/tree` | Дерево (иерархическое) |
+| GET | `/registry/pkb/{code}` | Один узел |
+| POST | `/registry/pkb` | Создать |
+| PUT | `/registry/pkb/{code}` | Обновить |
+| PATCH | `/registry/pkb/{code}` | Частичное обновление |
+| DELETE | `/registry/pkb/{code}` | Удалить |
+
+### 5.0. GET /registry/pkb — Список (плоский)
+
+**Query-параметры:**
+
+| Параметр | Тип | Описание |
+|----------|-----|----------|
+| `code` | string | Частичное совпадение по коду |
+| `full_name` | string | Поиск по названию (ILIKE) |
+| `status` | string | `active`, `deprecated`, `archived` |
+| `parent_code` | string | Дочерние узлы |
+| `page` | int | Номер страницы |
+| `page_size` | int | Записей на странице (max 200) |
+
+**Ответ `200`:**
+
+```json
+{
+  "data": [
+    {
+      "code": "ПО4",
+      "parent_code": null,
+      "full_name": "Проектный отдел №4 (корпусные конструкции)",
+      "status": "active",
+      "created_at": "2026-01-15T10:00:00Z"
+    },
+    {
+      "code": "ПО4.КМ",
+      "parent_code": "ПО4",
+      "full_name": "Сектор корпусных металлоконструкций",
+      "status": "active",
+      "created_at": "2026-01-15T10:00:00Z"
+    }
+  ],
+  "meta": { "total": 2, "page": 1, "page_size": 50 }
+}
+```
+
+### 5.1. GET /registry/pkb/tree — Дерево (иерархическое)
+
+**Query-параметры:**
+
+| Параметр | Тип | Обязательный | Описание |
+|----------|-----|-------------|----------|
+| `root_code` | string | Нет | Если не указан — корень |
+| `max_depth` | int | Нет (default 10) | Максимальная глубина |
+| `status` | string | Нет | `active`, `deprecated`, `archived` |
+
+**Ответ `200`:**
+
+```json
+{
+  "data": [
+    {
+      "code": "ПО4",
+      "parent_code": null,
+      "full_name": "Проектный отдел №4",
+      "status": "active",
+      "children": [
+        {
+          "code": "ПО4.КМ",
+          "parent_code": "ПО4",
+          "full_name": "Сектор корпусных металлоконструкций",
+          "status": "active",
+          "children": []
+        }
+      ]
+    }
+  ],
+  "meta": { "total": 1, "max_depth_reached": false }
+}
+```
+
+### 5.2. GET /registry/pkb/{code} — Один узел
+
+**Ответ `200`:** объект узла + `children` первого уровня.
+
+### 5.3. POST /registry/pkb — Создать
+
+**Тело запроса:**
+
+```json
+{
+  "code": "ПО4.КМ",
+  "parent_code": "ПО4",
+  "full_name": "Сектор корпусных металлоконструкций",
+  "status": "active"
+}
+```
+
+| Поле | Тип | Обязательность | Описание |
+|------|-----|----------------|----------|
+| `code` | string | Да | Код предметной области (напр. `ПО4`, `ПО4.КМ`) |
+| `parent_code` | string | Нет | Код родительского узла |
+| `full_name` | string | Да | Наименование |
+| `status` | string | Нет | `active` (default) |
+
+**Ответ `201`:** созданный объект.
+
+**Ошибки:** `409` — `DUPLICATE_CODE`, `400` — `CROSS_SYSTEM_PARENT`, `404` — `PARENT_NOT_FOUND`.
+
+### 5.4. PUT /registry/pkb/{code}
+
+Полное обновление.
+
+### 5.5. PATCH /registry/pkb/{code}
+
+Частичное обновление.
+
+### 5.6. DELETE /registry/pkb/{code}
+
+**Ошибки:** `409` — `HAS_CHILDREN` / `HAS_DOCUMENTS`.
+
+---
+
 ## Группа common
 
 | Метод | Путь | Описание |
@@ -1614,6 +1752,7 @@ GET /registry/stats
       "UDC": 52,
       "EXTERNAL": 18
     },
+    "pkb_total": 15,
     "classifiers_pending": 7,
     "terminology_total": 1204,
     "documents_total": 56,
@@ -1910,7 +2049,6 @@ DELETE /registry/categories/{category_id}
 | Поле | Тип | Ограничения |
 |------|-----|-------------|
 | `id` | bigint | PK |
-| `classifier_code` | text | nullable |
 | `doc_code` | text | nullable |
 | `title` | text | NOT NULL |
 | `title_hash_sha256` | text | UNIQUE — бизнес-ключ |
@@ -1919,10 +2057,10 @@ DELETE /registry/categories/{category_id}
 | `validity_status` | varchar(20) | nullable |
 | `jurisdiction` | varchar(10) | nullable |
 | `issuing_body` | text | nullable |
-| `industry_code` | text | nullable |
 | `enterprise_id` | bigint | nullable |
 | `mks_oks_code` | text | FK → classifier_registry (MKS) |
 | `okstu_code` | text | FK → classifier_registry (OKSTU) |
+| `pkb_code` | text | FK → pkb_domains, nullable |
 | `classification_status` | jsonb | DEFAULT `{}` |
 | `successor_doc_id` | bigint | FK → self, nullable |
 | `predecessor_doc_id` | bigint | FK → self, nullable |
@@ -1932,6 +2070,8 @@ DELETE /registry/categories/{category_id}
 | `updated_at` | timestamptz | NOT NULL |
 | `updated_by` | text | nullable |
 
+> Удалены поля `classifier_code` и `industry_code` (старая модель, не использовались в API).
+> Поле `group` в API сохранено как deprecated alias на `pkb_code`.
 > Сгенерированные колонки `mks_system` и `okstu_system` (GENERATED ALWAYS AS 'MKS'/'OKSTU') обеспечивают строгую FK-проверку к системе классификации.
 
 ### 5.5. format_registry
@@ -1947,7 +2087,21 @@ DELETE /registry/categories/{category_id}
 
 ---
 
-### 5.6. category
+### 5.6. pkb_domain
+
+| Поле | Тип | Ограничения |
+|------|-----|-------------|
+| `code` | text | PK |
+| `parent_code` | text | FK → self, nullable |
+| `full_name` | text | NOT NULL |
+| `status` | varchar(20) | DEFAULT `'active'` |
+| `created_at` | timestamptz | NOT NULL |
+
+> PKB_DOMAIN — **внутренняя** организационная классификация (проектно-конструкторские отделы).
+> Не смешивать с `classifier_system` (MKS/OKSTU/UDC — внешние стандарты).
+> Иерархия через `parent_code` (аналогично `classifier_node`, но без `classifier_system`).
+
+### 5.7. category
 
 | Поле | Тип | Ограничения |
 |------|-----|-------------|
@@ -1958,7 +2112,7 @@ DELETE /registry/categories/{category_id}
 | `created_at` | timestamptz | NOT NULL |
 | `updated_at` | timestamptz | NOT NULL |
 
-### 5.7. document_category
+### 5.8. document_category
 
 | Поле | Тип | Ограничения |
 |------|-----|-------------|

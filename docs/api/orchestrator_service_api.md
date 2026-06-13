@@ -369,8 +369,8 @@ Orchestrator вычисляет SHA-256 содержимого, определя
   "validity_status": "active",
   "jurisdiction": "RU",
   "issuing_body": "Госстандарт СССР",
-  "industry_code": null,
   "enterprise_id": null,
+  "pkb_code": null,
   "mks_oks_code": "31.240",
   "okstu_code": null,
   "classification_status": {
@@ -991,14 +991,18 @@ Orchestrator — **единая точка входа** для работы с �
 
 ### GET /drafts
 
-Список черновиков по бизнес-ключу документа (история попыток).
+Список черновиков с фильтрацией. Без параметров возвращает все черновики (доступно `system_admin` и `knowledge_admin`).
+С одним из параметров — фильтрация по бизнес-ключу или конкретному черновику.
 
 **Query-параметры:**
 
 | Параметр | Тип | Обязательный | Описание |
 |----------|-----|-------------|----------|
-| `document_key` | string | Да | Бизнес-ключ документа (SHA-256) |
+| `draft_id` | bigint | Нет | Фильтр по ID черновика |
+| `document_key` | string | Нет | Бизнес-ключ документа (SHA-256). История попыток обработки одного документа |
 | `status` | string | Нет | Фильтр по статусу: `uploaded`, `previewing`, `ready_for_approve`, `approved`, `discarded` |
+| `page` | int | Нет | Номер страницы (по умолчанию 1) |
+| `page_size` | int | Нет | Записей на странице (по умолчанию 50, max 200) |
 
 **Ответ `200`:**
 

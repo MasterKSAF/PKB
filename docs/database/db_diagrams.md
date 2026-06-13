@@ -16,7 +16,8 @@ erDiagram
         text normalized_title
         varchar source_type
         varchar document_type
-        varchar group
+        varchar group "deprecated, alias on pkb_code"
+        text pkb_code FK "FK -> pkb_domains"
         text mks_oks_code
         text okstu_code
         text udc
@@ -116,6 +117,14 @@ erDiagram
     registry.document_categories {
         bigint document_id PK, FK
         bigint category_id PK, FK
+    }
+
+    registry.pkb_domains {
+        text code PK
+        text parent_code FK "FK -> self"
+        text full_name
+        varchar status
+        timestamptz created_at
     }
 
     pipeline.tasks {
@@ -252,6 +261,7 @@ erDiagram
     pipeline.tasks ||--o{ pipeline.task_steps : has
     pipeline.tasks }o--|o registry.documents : produces  (FK document_id nullable)
     registry.documents }o--|o registry.drafts : originates_from  (FK draft_id nullable)
+    registry.documents }o--|o registry.pkb_domains : classified_by  (FK pkb_code)
 ```
 
 ---
@@ -273,6 +283,7 @@ erDiagram
 | `pipeline.tasks` | `document_id` | B-tree | Поиск задачи по документу |
 | `pipeline.task_steps` | `task_id` | B-tree | Поиск этапов задачи |
 | `registry.document_categories` | `category_id` | B-tree | Поиск категорий документа (обратная сторона many-to-many) |
+| `registry.documents` | `pkb_code` | B-tree | Фильтрация по предметной области ПКБ |
 | `registry.document_sections` | `content` | GIN | Поиск по JSONB-полям (например, `content.amendments[].type`) |
 
 ## Ключевые условия и ограничения

@@ -52,6 +52,7 @@ Gateway объединяет API всех внутренних сервисов 
 | `/api/v1/registry/common/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
 | `/api/v1/registry/documents/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
 | `/api/v1/registry/categories/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
+| `/api/v1/registry/pkb/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
 | `/api/v1/system/health` | Gateway (собственный) | `8080` | — |
 | `/api/v1/analyse/*` | Analyse Service | `8089` | [analyse_service_api.md](analyse_service_api.md) |
 | `/api/v1/meridian/*` | Integration Service | `8085` | [integration_service_api.md](integration_service_api.md) |
@@ -76,7 +77,7 @@ Registry drafts — только internal, доступ к ним через Gat
 | Метод | Путь | Описание | RBAC | Иденпотентность |
 |-------|------|----------|------|-----------------|
 | `POST` | `/api/v1/drafts` | Загрузка файла, создание черновика | `engineer` + `can_upload_documents` | ✅ `Idempotency-Key` |
-| `GET`  | `/api/v1/drafts` | Список черновиков по `document_key` | `engineer`, `knowledge_admin`, `system_admin` | — |
+| `GET`  | `/api/v1/drafts` | Список черновиков (фильтр: `draft_id`, `document_key`, `status`). Без фильтров — все черновики (admin) | `engineer`, `knowledge_admin`, `system_admin` | — |
 | `GET`  | `/api/v1/drafts/{draft_id}` | Полная информация о черновике (с `raw_data`) | `engineer`, `knowledge_admin`, `system_admin` | — |
 | `GET`  | `/api/v1/drafts/{draft_id}/preview` | Preview-метаданные (без `raw_data`) | `engineer`, `knowledge_admin`, `system_admin` | — |
 | `POST` | `/api/v1/drafts/{draft_id}/preview` | Запуск preview-фазы | `engineer`, `knowledge_admin`, `system_admin` | — |
