@@ -65,7 +65,7 @@ def _decision(
 async def validate_document(
     document: dict[str, Any],
     *,
-    task_id: str,
+    task_id: int,
     version_id: str,
     document_id: str | None = None,
 ) -> dict[str, Any]:
@@ -95,7 +95,7 @@ async def validate_document(
         "structure_valid": structure_ok,
         "classification": classification,
         "fingerprint": {
-            "file_hash_sha256": file_hash or _sha256_hex(task_id + version_id),
+            "file_hash_sha256": file_hash or _sha256_hex(f"{task_id}{version_id}"),
             "title_hash_sha256": title_hash,
         },
         "matching": matching,

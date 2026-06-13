@@ -2,7 +2,7 @@ def test_preview_metadata(client, raw_gost_sample):
     response = client.post(
         "/api/v1/converter/preview/metadata",
         json={
-            "task_id": "task-8a3f2b",
+            "task_id": 420000,
             "version_id": "c4b9f2d3-0000-0000-0000-000000000001",
             "raw_json": raw_gost_sample,
         },
@@ -20,7 +20,7 @@ def test_preview_metadata_empty_raw(client):
     response = client.post(
         "/api/v1/converter/preview/metadata",
         json={
-            "task_id": "task-1",
+            "task_id": 1,
             "version_id": "v1",
             "raw_json": {},
         },

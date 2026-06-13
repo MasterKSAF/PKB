@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class RawJsonRequest(BaseModel):
-    task_id: str = Field(..., min_length=1)
+    task_id: int = Field(..., ge=1)
     version_id: str = Field(..., min_length=1)
     raw_json: dict[str, Any] = Field(default_factory=dict)
 
@@ -66,7 +66,7 @@ class ValidateDocumentResponse(ValidationResult):
 
 
 class ConvertResponse(BaseModel):
-    task_id: str
+    task_id: int
     version_id: str
     document_id: str
     metadata: dict[str, Any]

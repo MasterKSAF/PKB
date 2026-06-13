@@ -29,15 +29,23 @@
 
 > **Полный формат данных:** [`docs/schema/schema_parser_preview.json`](../schema/schema_parser_preview.json) (схема `converter_validator_preview_v1`)
 
+**Важно:** идентификатор задачи (`task_id`) генерирует Оркестратор и передаёт в запросе (тот же `task_id`, что у Parser/OCR).
+
 **Запрос:**
 
 ```json
 {
-  "task_id": "task-8a3f2b",
+  "task_id": 420000,
   "version_id": "c4b9f2d3-...",
   "raw_json": { ... }
 }
 ```
+
+| Поле | Тип | Обязательность | Описание |
+| ---- | --- | -------------- | -------- |
+| `task_id` | bigint | Да | Идентификатор задачи (генерируется Оркестратором, `≥ 1`) |
+| `version_id` | string | Да | ID версии документа |
+| `raw_json` | object | Да | Сырой JSON (результат Parser/OCR) |
 
 **Ответ `200`:**
 
@@ -102,7 +110,7 @@
 
 ```json
 {
-  "task_id": "task-8a3f2b",
+  "task_id": 420000,
   "version_id": "c4b9f2d3-...",
   "use_llm": true,
   "llm_model": "gpt-4o-mini",
@@ -112,16 +120,26 @@
 }
 ```
 
+| Поле | Тип | Обязательность | Описание |
+| ---- | --- | -------------- | -------- |
+| `task_id` | bigint | Да | Идентификатор задачи (генерируется Оркестратором, `≥ 1`) |
+| `version_id` | string | Да | ID версии документа |
+| `raw_json` | object | Да | Полный сырой JSON (результат Parser/OCR) |
+| `use_llm` | bool | Нет | Включить LLM-обработку (по умолчанию `false`) |
+| `llm_model` | string | Нет | Модель LLM |
+| `llm_max_tokens` | int | Нет | Лимит токенов на запрос |
+| `llm_timeout` | int | Нет | Таймаут LLM-запроса, сек |
+
 **Ответ `200` (схема `validated_v3`):**
 
 ```json
 {
-  "task_id": "task-8a3f2b",
+  "task_id": 420000,
   "version_id": "c4b9f2d3-...",
   "document_id": "b3a8f1c2-...",
   "metadata": {
     "schema": "validated_v3",
-    "task_id": "task-8a3f2b",
+    "task_id": 420000,
     "created_at": "2026-05-17T09:15:00Z",
     "parser": { "name": "docling", "version": "2.1.0", "ocr_engine": "paddleocr", "ocr_fallback": false }
   },
@@ -165,7 +183,7 @@
 
 | Поле | Тип | Описание |
 |---|---|---|
-| `task_id` | string | ID задачи, переданный в запросе |
+| `task_id` | bigint | ID задачи, переданный в запросе |
 | `version_id` | string | ID версии файла, переданный в запросе |
 | `document_id` | string | ID документа. Назначается при конвертации: извлекается существующий для дубликата, либо генерируется новый |
 | `metadata` | object | Служебные метаданные ответа (схема, дата, информация о парсере) |
@@ -178,6 +196,7 @@
 | Поле | Тип | Описание |
 |---|---|---|
 | `schema` | string | Идентификатор схемы ответа — `"validated_v3"` |
+| `task_id` | bigint | ID задачи (эхо запроса) |
 | `created_at` | string (datetime) | Дата и время формирования ответа |
 | `parser` | object | Информация о парсере, выполнившем первичную обработку |
 
@@ -274,11 +293,17 @@
 
 ```json
 {
-  "task_id": "task-8a3f2b",
+  "task_id": 420000,
   "version_id": "c4b9f2d3-...",
   "raw_json": { ... }
 }
 ```
+
+| Поле | Тип | Обязательность | Описание |
+| ---- | --- | -------------- | -------- |
+| `task_id` | bigint | Да | Идентификатор задачи (генерируется Оркестратором, `≥ 1`) |
+| `version_id` | string | Да | ID версии документа |
+| `raw_json` | object | Да | JSON-контейнер (сырой или `validated_v3`) |
 
 **Ответ `200`:**
 

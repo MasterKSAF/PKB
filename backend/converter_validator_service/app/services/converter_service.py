@@ -42,7 +42,7 @@ def _merge_document_metadata(
 
 async def convert(
     *,
-    task_id: str,
+    task_id: int,
     version_id: str,
     raw_json: dict[str, Any],
     use_llm: bool = False,
