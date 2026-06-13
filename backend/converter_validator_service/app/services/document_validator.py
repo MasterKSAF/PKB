@@ -65,9 +65,9 @@ def _decision(
 async def validate_document(
     document: dict[str, Any],
     *,
-    task_id: str,
-    version_id: str,
-    document_id: str | None = None,
+    task_id: int,
+    version_id: int,
+    document_id: int | None = None,
 ) -> dict[str, Any]:
     preview_meta = extract_preview_metadata({"document": document})
     structure_ok = _structure_valid(document)
@@ -85,17 +85,19 @@ async def validate_document(
     }
     hints = document.get("_matching") or {}
     if isinstance(hints, dict):
-        matching["predecessor_doc_id"] = hints.get("predecessor_doc_id")
-        matching["successor_doc_id"] = hints.get("successor_doc_id")
+        pred = hints.get("predecessor_doc_id")
+        succ = hints.get("successor_doc_id")
+        matching["predecessor_doc_id"] = int(pred) if pred is not None else None
+        matching["successor_doc_id"] = int(succ) if succ is not None else None
 
     status = "completed" if structure_ok else "failed"
     return {
         "validation_id": f"val-{uuid.uuid4().hex[:8]}",
-        "document_id": document_id or str(uuid.uuid4()),
+        "document_id": document_id,
         "structure_valid": structure_ok,
         "classification": classification,
         "fingerprint": {
-            "file_hash_sha256": file_hash or _sha256_hex(task_id + version_id),
+            "file_hash_sha256": file_hash or _sha256_hex(f"{task_id}:{version_id}"),
             "title_hash_sha256": title_hash,
         },
         "matching": matching,

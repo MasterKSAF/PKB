@@ -55,13 +55,13 @@ class Settings(BaseSettings):
     # --- Embedding Provider ---
     embedding_api_key: str = Field(default="", alias="EMBEDDING_API_KEY")
     embedding_base_url: str = Field(
-        default="https://api.openai.com/v1", alias="EMBEDDING_BASE_URL"
+        default="http://infinity:7997", alias="EMBEDDING_BASE_URL"
     )
     embedding_model: str = Field(
         default="Qwen/Qwen3-Embedding-0.6B", alias="EMBEDDING_MODEL"
     )
     embedding_dim: int = Field(default=1024, alias="EMBEDDING_DIM")
-    embedding_timeout: int = Field(default=30, alias="EMBEDDING_TIMEOUT")
+    embedding_timeout: int = Field(default=60, alias="EMBEDDING_TIMEOUT")
     embedding_instruction: str = Field(default="", alias="EMBEDDING_INSTRUCTION")
 
     # --- Search ---

@@ -31,6 +31,7 @@ async def convert_document(request: ConvertRequest):
         task_id=request.task_id,
         version_id=request.version_id,
         raw_json=request.raw_json,
+        document_id=request.document_id,
         use_llm=request.use_llm,
         llm_model=request.llm_model,
         llm_max_tokens=request.llm_max_tokens,

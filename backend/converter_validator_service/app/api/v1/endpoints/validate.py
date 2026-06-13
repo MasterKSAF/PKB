@@ -30,5 +30,6 @@ async def validate_document_endpoint(request: RawJsonRequest):
         document,
         task_id=request.task_id,
         version_id=request.version_id,
+        document_id=request.document_id,
     )
     return ValidateDocumentResponse(**validation)

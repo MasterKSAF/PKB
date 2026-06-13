@@ -1,8 +1,7 @@
-import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from app.core.exceptions import ConversionFailedError
+from app.core.exceptions import ConversionFailedError, MetadataExtractionFailedError
 from app.services.document_validator import validate_document
 from app.services.hierarchy_builder import build_hierarchy
 from app.services.llm_processor import enrich_document
@@ -40,18 +39,26 @@ def _merge_document_metadata(
     return hierarchy
 
 
+def _extract_document_id(raw_json: dict[str, Any]) -> int | None:
+    val = raw_json.get("document_id")
+    if val is None:
+        return None
+    return int(val)
+
+
 async def convert(
     *,
-    task_id: str,
-    version_id: str,
+    task_id: int,
+    version_id: int,
     raw_json: dict[str, Any],
+    document_id: int | None = None,
     use_llm: bool = False,
     llm_model: str = "gpt-4o-mini",
     llm_max_tokens: int = 4096,
     llm_timeout: int = 60,
 ) -> dict[str, Any]:
     if not raw_json:
-        raise ConversionFailedError("raw_json is empty")
+        raise MetadataExtractionFailedError("raw_json is empty")
 
     preview_meta = extract_preview_metadata(raw_json)
     try:
@@ -71,7 +78,7 @@ async def convert(
             timeout=llm_timeout,
         )
 
-    document_id = str(uuid.uuid4())
+    document_id = document_id or _extract_document_id(raw_json)
     validation = await validate_document(
         hierarchy,
         task_id=task_id,
@@ -106,5 +113,5 @@ async def convert(
 
 def extract_metadata(raw_json: dict[str, Any]) -> dict[str, Any]:
     if not raw_json:
-        raise ConversionFailedError("raw_json is empty")
+        raise MetadataExtractionFailedError("raw_json is empty")
     return extract_preview_metadata(raw_json)

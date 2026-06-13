@@ -172,7 +172,7 @@ import uvicorn
 
 # ==================== ШАГ 3.2: настройка observability ====================
 app = FastAPI()
-service_name = "payment-service"
+service_name = "name_service" # <- запишите имя сервиса
 otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "signoz-otel-collector:4317")
 
 tracer_provider, meter_provider, _ = setup_observability(service_name, otlp_endpoint)
@@ -181,7 +181,7 @@ tracer_provider, meter_provider, _ = setup_observability(service_name, otlp_endp
 instrument_fastapi(app, tracer_provider)
 
 # ==================== ШАГ 3.3: получение логгера ====================
-log = logging.getLogger(service_name)   # используйте этот логгер везде
+log = logging.getLogger(service_name)   
 
 # ==================== ШАГ 5.1: метрики (опционально и НЕ ОБЯЗАТЕЛЬНО т.е. можно удалить и не выполнять) ====================
 meter = meter_provider.get_meter(service_name)
