@@ -106,6 +106,26 @@ class AuditListResponse(BaseModel):
     meta: MetaPagination
 
 
+class UserPermissions(BaseModel):
+    can_upload_documents: bool
+    can_run_ocr: bool
+    can_manage_users: bool
+    can_manage_classifiers: bool
+    can_manage_terminology: bool
+    can_manage_registry: bool
+
+
+class UserMeResponse(BaseModel):
+    user_id: str
+    full_name: str
+    role: str
+    role_title: str
+    available_tabs: list[str]
+    permissions: UserPermissions
+    last_login_at: datetime | None = None
+    created_at: datetime
+
+
 class InternalValidateRequest(BaseModel):
     access_token: str
 

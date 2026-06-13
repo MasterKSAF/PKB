@@ -3,25 +3,51 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user
 from app.db.session import get_db
-from app.schemas.schemas import RefreshRequest, RevokeRequest, RevokeResponse, TokenRequest, TokenResponse, UserPublic
+from app.schemas.schemas import RefreshRequest, RevokeRequest, RevokeResponse, TokenRequest, TokenResponse, UserMeResponse, UserPermissions
 from app.services.audit_service import create_audit_event
 from app.services.auth_service import authenticate, issue_tokens, refresh_access_token, revoke_refresh_token
 from app.services.user_service import get_permissions, role_names
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+_ROLE_TITLES = {
+    "engineer": "Инженер-конструктор",
+    "knowledge_admin": "Администратор НСИ",
+    "system_admin": "Системный администратор",
+}
 
-@router.get("/me", response_model=UserPublic)
+_ROLE_TABS = {
+    "engineer": ["chat", "search", "checks", "history"],
+    "knowledge_admin": ["chat", "search", "checks", "history"],
+    "system_admin": ["chat", "search", "checks", "history"],
+}
+
+
+def _to_bool_permissions(string_permissions: list[str]) -> UserPermissions:
+    perms = set(string_permissions)
+    return UserPermissions(
+        can_upload_documents="documents:write" in perms,
+        can_run_ocr=False,
+        can_manage_users="users:manage" in perms,
+        can_manage_classifiers=False,
+        can_manage_terminology=False,
+        can_manage_registry=False,
+    )
+
+
+@router.get("/me", response_model=UserMeResponse)
 async def me(current_user=Depends(get_current_user)):
-    return UserPublic(
+    role = role_names(current_user)[0] if current_user.roles else ""
+    string_permissions = get_permissions(current_user)
+    return UserMeResponse(
         user_id=current_user.user_id,
-        email=current_user.email,
         full_name=current_user.full_name,
-        roles=role_names(current_user),
-        permissions=get_permissions(current_user),
-        is_active=current_user.is_active,
+        role=role,
+        role_title=_ROLE_TITLES.get(role, role),
+        available_tabs=_ROLE_TABS.get(role, []),
+        permissions=_to_bool_permissions(string_permissions),
+        last_login_at=None,
         created_at=current_user.created_at,
-        updated_at=current_user.updated_at,
     )
 
 
