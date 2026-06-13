@@ -1,7 +1,7 @@
 import pytest
 
 def test_get_enums(client):
-    response = client.get("/api/v1/registry/enums")
+    response = client.get("/api/v1/registry/enums/")
     assert response.status_code == 200
     data = response.json()
     assert "data" in data
@@ -11,7 +11,7 @@ def test_get_enums(client):
     assert "era" in data["data"]
 
 def test_get_enums_structure(client):
-    response = client.get("/api/v1/registry/enums")
+    response = client.get("/api/v1/registry/enums/")
     assert response.status_code == 200
     data = response.json()
 
@@ -22,7 +22,7 @@ def test_get_enums_structure(client):
     assert "draft" in data["data"]["document_status"]
 
 def test_get_stats_empty(client):
-    response = client.get("/api/v1/registry/stats")
+    response = client.get("/api/v1/registry/stats/")
     assert response.status_code == 200
     data = response.json()
     assert "data" in data
@@ -65,7 +65,7 @@ def test_get_stats_with_data(client):
         "classifier_system": "MKS"
     })
 
-    response = client.get("/api/v1/registry/stats")
+    response = client.get("/api/v1/registry/stats/")
     assert response.status_code == 200
     data = response.json()
 
@@ -80,7 +80,7 @@ def test_get_stats_status_breakdown(client):
     client.post("/api/v1/registry/documents/", json={"title": "Approved Doc Status", "status": "approved", "classifier_system": "MKS"})
     client.post("/api/v1/registry/documents/", json={"title": "Processing Doc Status", "status": "processing", "classifier_system": "MKS"})
 
-    response = client.get("/api/v1/registry/stats")
+    response = client.get("/api/v1/registry/stats/")
     assert response.status_code == 200
     data = response.json()
 
@@ -88,3 +88,26 @@ def test_get_stats_status_breakdown(client):
     assert status_breakdown["draft"] >= 2
     assert status_breakdown["approved"] >= 1
     assert status_breakdown["processing"] >= 1
+
+
+def test_get_db_logs_on_failure(monkeypatch):
+    from api.v1.dependencies.database import get_db
+    
+    logged_events = []
+    def mock_log_event(severity, endpoint, query_string=None, data=None, error=None):
+        logged_events.append((severity, endpoint, error))
+    
+    monkeypatch.setattr("api.v1.dependencies.database.log_event", mock_log_event)
+    
+    # We will simulate an error during db dependency execution
+    db_gen = get_db()
+    db = next(db_gen)
+    
+    with pytest.raises(ValueError, match="Simulated database error"):
+        db_gen.throw(ValueError("Simulated database error"))
+        
+    assert len(logged_events) == 1
+    assert logged_events[0][0] == "ERROR"
+    assert logged_events[0][1] == "database_connection"
+    assert "Simulated database error" in logged_events[0][2]
+

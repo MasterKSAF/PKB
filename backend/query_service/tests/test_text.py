@@ -34,7 +34,7 @@ async def test_text_ask(client):
 
 @pytest.mark.asyncio
 async def test_error_format(client):
-    r = await client.get("/api/v1/chat/sessions/nonexistent-session-id-xyz")
+    r = await client.get("/api/v1/chat/sessions/999999")
     assert r.status_code == 404
     body = r.json()
     # Должен быть либо detail.error либо error напрямую

@@ -97,16 +97,6 @@ class ClassificationConfidence(str, Enum):
     EXTRACTED = "EXTRACTED"
 
 
-class DecisionAction(str, Enum):
-    """Decision actions after preview."""
-
-    PROCEED = "proceed"
-    STOP_DUPLICATE = "stop_duplicate"
-    FORCE_NEW_VERSION = "force_new_version"
-
-
-# Alias for backward compatibility with endpoint imports
-DecideAction = DecisionAction
 
 
 class ReprocessMode(str, Enum):
@@ -162,79 +152,12 @@ class DocumentCreateResponse(BaseModel):
     created_at: datetime = Field(..., description="Время создания")
 
 
-# ---------------------------------------------------------------------------
-#  POST /tasks/{task_id}/preview
-# ---------------------------------------------------------------------------
 
 
-class TaskPreviewResponse(BaseModel):
-    """Response for starting preview phase (202 Accepted)."""
-
-    task_id: int = Field(..., description="ID задачи превью")
-    status: str = Field("previewing", description="Статус: previewing")
-    estimated_completion: Optional[datetime] = Field(
-        None, description="Предполагаемое время завершения"
-    )
 
 
-class DuplicateCandidate(BaseModel):
-    """Duplicate candidate found during preview."""
-
-    document_id: str = Field(..., description="UUID найденного дубликата")
-    doc_code: Optional[str] = Field(None, description="Обозначение документа-дубликата")
-    title: Optional[str] = Field(None, description="Название документа-дубликата")
-    similarity: float = Field(..., description="Коэффициент схожести (0..1)")
 
 
-class PreviewMetadata(BaseModel):
-    """Preview metadata extracted during preview phase."""
-
-    doc_code: Optional[str] = Field(None, description="Обозначение документа")
-    title: Optional[str] = Field(None, description="Название документа")
-    document_type: Optional[str] = Field(None, description="Тип документа")
-    year: Optional[str] = Field(None, description="Год издания")
-    revision: Optional[str] = Field(None, description="Номер редакции")
-
-
-class TaskPreviewStatusResponse(BaseModel):
-    """Preview status response (completed / processing / failed)."""
-
-    document_id: Optional[str] = Field(None, description="UUID документа")
-    status: str = Field(..., description="Статус превью: pending, processing, completed, failed")
-    ocr_parser_status: Optional[str] = Field(
-        None, description="Статус сервиса распознавания"
-    )
-    converter_validator_status: Optional[str] = Field(
-        None, description="Статус converter-validator"
-    )
-    preview: Optional[PreviewMetadata] = Field(None, description="Метаданные превью")
-    duplicates: List[DuplicateCandidate] = Field(
-        default_factory=list, description="Найденные дубликаты"
-    )
-    decision_required: bool = Field(
-        False, description="Требуется решение пользователя"
-    )
-
-
-# ---------------------------------------------------------------------------
-#  POST /tasks/{task_id}/decide
-# ---------------------------------------------------------------------------
-
-
-class DecideRequest(BaseModel):
-    """Decision request after preview."""
-
-    action: DecisionAction = Field(..., description="Решение: proceed, stop_duplicate, force_new_version")
-    comment: Optional[str] = Field(None, description="Комментарий пользователя")
-
-
-class DecideResponse(BaseModel):
-    """Decision response (202 Accepted)."""
-
-    document_id: str = Field(..., description="UUID документа")
-    status: str = Field(..., description="Статус: proceeding, stopped, forcing")
-    action: DecisionAction = Field(..., description="Принятое решение")
-    message: str = Field(..., description="Сообщение")
 
 
 # ---------------------------------------------------------------------------
@@ -445,7 +368,7 @@ class DecisionStep(BaseModel):
     """Decision step status."""
 
     status: str = Field(..., description="Статус: awaiting, completed")
-    action: Optional[DecisionAction] = Field(None, description="Принятое решение")
+    action: Optional[str] = Field(None, description="Принятое решение")
 
 
 class PreviewPhase(BaseModel):

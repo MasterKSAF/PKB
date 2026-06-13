@@ -9,7 +9,7 @@ class DocumentSection(Base):
     __table_args__ = {'schema': 'registry'}
 
     id = Column('id', BigInteger, primary_key=True)
-    document_id = Column('document_id', UUID(as_uuid=True), nullable=False)
+    document_id = Column('document_id', BigInteger, nullable=False)
     parent_id = Column('parent_id', BigInteger)
     clause = Column('clause', Text)
     title = Column('title', Text)

@@ -1,4 +1,3 @@
-env.py
 migrations/
 .venv/
 __pycache__/
@@ -7,3 +6,5 @@ __pycache__/
 .vscode/
 .idea/
 service.log
+specifications.md
+agents.md

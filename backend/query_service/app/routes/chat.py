@@ -22,7 +22,6 @@ from ..schemas import (
 from ..repositories import session_repo, message_repo, feedback_repo
 from ..services.auth import get_current_user
 from ..services.pipeline import run_pipeline
-from ..models import new_id
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -34,6 +33,7 @@ def _session_to_response(s: ChatSession, msg_count: int = 0) -> SessionResponse:
         session_id=s.session_id,
         title=s.title,
         user_id=s.user_id,
+        project_id=s.project_id,
         document_ids=s.document_ids or [],
         options=s.options or {},
         message_count=msg_count,
@@ -79,7 +79,7 @@ async def create_session(
     user_id: str = Depends(get_current_user),
 ):
     async with db.begin():
-        s = await session_repo.create_session(db, user_id, body.title, body.document_ids, body.options.model_dump())
+        s = await session_repo.create_session(db, user_id, body.title, body.document_ids, body.options.model_dump(), body.project_id)
     return _session_to_response(s, 0)
 
 
@@ -88,10 +88,11 @@ async def list_sessions(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     search: str | None = None,
+    project_id: int | None = None,
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(get_current_user),
 ):
-    sessions, total = await session_repo.list_sessions(db, user_id, page, page_size, search)
+    sessions, total = await session_repo.list_sessions(db, user_id, page, page_size, search, project_id)
     items = []
     for s in sessions:
         cnt = await session_repo.message_count(db, s.session_id)
@@ -100,6 +101,7 @@ async def list_sessions(
         items.append(SessionListItem(
             session_id=s.session_id,
             title=s.title,
+            project_id=s.project_id,
             document_ids=s.document_ids or [],
             message_count=cnt,
             last_message_preview=preview,
@@ -111,7 +113,7 @@ async def list_sessions(
 
 @router.get("/sessions/{session_id}", response_model=SessionMessagesResponse)
 async def get_session(
-    session_id: str,
+    session_id: int,
     limit: int = Query(50, ge=1, le=200),
     before: str | None = None,
     db: AsyncSession = Depends(get_db),
@@ -132,7 +134,7 @@ async def get_session(
 
 @router.get("/sessions/{session_id}/messages/last")
 async def get_last_messages(
-    session_id: str,
+    session_id: int,
     limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(get_current_user),
@@ -163,9 +165,9 @@ async def get_last_messages(
 
 @router.get("/sessions/{session_id}/messages")
 async def list_messages(
-    session_id: str,
-    after: str | None = None,
-    before: str | None = None,
+    session_id: int,
+    after: int | None = None,
+    before: int | None = None,
     limit: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(get_current_user),
@@ -205,8 +207,8 @@ async def list_messages(
 
 @router.get("/sessions/{session_id}/messages/{message_id}")
 async def get_message(
-    session_id: str,
-    message_id: str,
+    session_id: int,
+    message_id: int,
     longpoll: int | None = Query(None, ge=1, le=60),
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(get_current_user),
@@ -246,7 +248,7 @@ async def get_message(
 
 @router.post("/sessions/{session_id}/messages", status_code=202, response_model=PendingMessageResponse)
 async def send_message(
-    session_id: str,
+    session_id: int,
     body: SendMessageRequest,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
@@ -259,10 +261,8 @@ async def send_message(
 
         await message_repo.save_user_message(db, session_id, body.content)
 
-        answer_id = new_id("ans-")
         msg = ChatMessage(
             session_id=session_id,
-            answer_id=answer_id,
             role="assistant",
             status="pending",
             content=None,
@@ -271,6 +271,7 @@ async def send_message(
         db.add(msg)
         await db.flush()
         message_id = msg.message_id
+        msg.answer_id = message_id  # answer_id == message_id для ответов ассистента
         s.updated_at = datetime.now(timezone.utc)
 
     session_factory = get_session_factory()
@@ -288,7 +289,7 @@ async def send_message(
 
 @router.put("/sessions/{session_id}", response_model=SessionResponse)
 async def update_session(
-    session_id: str,
+    session_id: int,
     body: UpdateSessionRequest,
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(get_current_user),
@@ -297,14 +298,14 @@ async def update_session(
         s = await session_repo.get_session(db, session_id, user_id)
         if not s:
             raise HTTPException(status_code=404, detail={"error": {"code": "SESSION_NOT_FOUND", "message": "Сессия не найдена", "details": {}}})
-        s = await session_repo.update_session(db, s, body.title, body.document_ids)
+        s = await session_repo.update_session(db, s, body.title, body.document_ids, body.project_id)
     cnt = await session_repo.message_count(db, session_id)
     return _session_to_response(s, cnt)
 
 
 @router.delete("/sessions/{session_id}", response_model=DeleteSessionResponse)
 async def delete_session(
-    session_id: str,
+    session_id: int,
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(get_current_user),
 ):
@@ -318,7 +319,7 @@ async def delete_session(
 
 @router.post("/sessions/{session_id}/context", response_model=ContextResponse)
 async def manage_context(
-    session_id: str,
+    session_id: int,
     body: ContextRequest,
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(get_current_user),
@@ -344,7 +345,7 @@ async def manage_context(
 
 @router.post("/sessions/{session_id}/export", response_model=ExportResponse)
 async def export_session(
-    session_id: str,
+    session_id: int,
     body: ExportRequest,
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(get_current_user),
@@ -352,14 +353,16 @@ async def export_session(
     s = await session_repo.get_session(db, session_id, user_id)
     if not s:
         raise HTTPException(status_code=404, detail={"error": {"code": "SESSION_NOT_FOUND", "message": "Сессия не найдена", "details": {}}})
-    export_id = new_id("exp-")
     now = datetime.now(timezone.utc)
     async with db.begin():
-        db.add(ChatExport(
-            export_id=export_id, session_id=session_id, format=body.format,
-            status="completed", url=f"/files/exports/{export_id}/download",
-            created_at=now, expires_at=now + timedelta(days=7),
-        ))
+        exp = ChatExport(
+            session_id=session_id, format=body.format,
+            status="completed", created_at=now, expires_at=now + timedelta(days=7),
+        )
+        db.add(exp)
+        await db.flush()
+        export_id = exp.export_id
+        exp.url = f"/files/exports/{export_id}/download"
     return ExportResponse(
         export_id=export_id, session_id=session_id, format=body.format,
         status="completed", url=f"/files/exports/{export_id}/download",
@@ -411,14 +414,13 @@ async def chat(
         else:
             title = body.question[:60] if body.question else "Новый диалог"
             doc_ids = body.context.document_ids if body.context else []
-            s = await session_repo.create_session(db, user_id, title, doc_ids, {})
+            project_id = body.context.project_id if body.context else None
+            s = await session_repo.create_session(db, user_id, title, doc_ids, {}, project_id)
 
         await message_repo.save_user_message(db, s.session_id, body.question)
 
-        answer_id = new_id("ans-")
         msg = ChatMessage(
             session_id=s.session_id,
-            answer_id=answer_id,
             role="assistant",
             status="pending",
             content=None,
@@ -427,6 +429,7 @@ async def chat(
         db.add(msg)
         await db.flush()
         message_id = msg.message_id
+        msg.answer_id = message_id
         session_id_snapshot = s.session_id
         s.updated_at = datetime.now(timezone.utc)
 
@@ -434,7 +437,7 @@ async def chat(
     background_tasks.add_task(run_pipeline, session_factory, message_id, session_id_snapshot, body.question)
 
     return ChatResponse(
-        answer_id=answer_id,
+        answer_id=message_id,
         session_id=session_id_snapshot,
         status="pending",
         message=None,
@@ -449,6 +452,7 @@ async def chat(
 async def get_history(
     user_id_filter: str | None = Query(None, alias="user_id"),
     status_filter: str | None = Query(None, alias="status"),
+    project_id: int | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
     page: int = Query(1, ge=1),
@@ -466,6 +470,8 @@ async def get_history(
     )
     if status_filter:
         q = q.where(ChatMessage.status == status_filter)
+    if project_id is not None:
+        q = q.where(ChatSession.project_id == project_id)
 
     total_q = select(func.count()).select_from(q.subquery())
     total = (await db.execute(total_q)).scalar_one()
@@ -502,11 +508,10 @@ async def get_history(
 async def export_history(
     user_id: str = Depends(get_current_user),
 ):
-    export_id = new_id("exp-hist-")
     now = datetime.now(timezone.utc)
     return HistoryExportResponse(
-        export_id=export_id,
+        export_id="pending",
         format="xlsx",
-        url=f"/files/exports/{export_id}/download",
+        url="/files/exports/history/download",
         created_at=now,
     )

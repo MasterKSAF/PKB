@@ -1,0 +1,126 @@
+#!/bin/bash
+# =============================================================================
+# PKB Neuroassistant — Entrypoint
+# Создаёт директории, инициализирует БД, ждёт БД и запускает supervisord
+# =============================================================================
+set -e
+
+# Self-fix CRLF (Windows git clone converts LF to CRLF)
+if grep -q $'\r$' "$0" 2>/dev/null; then
+    echo "  ⚠ CRLF detected in entrypoint, fixing..."
+    sed -i 's/\r$//' "$0"
+    exec bash "$0" "$@"
+fi
+
+echo ""
+echo "╔══════════════════════════════════════════════════════════════════╗"
+echo "║     PKB Neuroassistant — Backend Services                       ║"
+echo "╚══════════════════════════════════════════════════════════════════╝"
+echo ""
+
+# =============================================================================
+# 1. Создание директорий для сервисов
+# =============================================================================
+echo "[1/6] Создание директорий..."
+mkdir -p /app/backend/integration_service/files1 \
+         /app/backend/integration_service/files2 \
+         /app/backend/registry_service/files1 \
+         /app/backend/registry_service/files2
+echo "   ✓ Директории созданы"
+
+# =============================================================================
+# 2. Настройка PYTHONPATH
+# =============================================================================
+echo "[2/6] Настройка PYTHONPATH..."
+export PYTHONPATH="/app/backend:/app/backend/shared:/app/backend/rag_builder_service/src:${PYTHONPATH:-}"
+echo "   ✓ PYTHONPATH=$PYTHONPATH"
+
+# =============================================================================
+# 3. Перезапись .env файлов сервисов (сервисы загружают env из .env, а не из Docker)
+# =============================================================================
+echo "[3/6] Перезапись .env файлов сервисов..."
+for env_path in /app/backend/registry_service/.env /app/backend/rag_builder_service/.env /app/backend/rag_search_service/.env; do
+    if [ -f "$env_path" ]; then
+        cat > "$env_path" <<-EOF
+	DB_HOST=$DB_HOST
+	DB_PORT=$DB_PORT
+	DB_USERNAME=$DB_USERNAME
+	DB_PASSWORD=$DB_PASSWORD
+	DB_DATABASE=$DB_DATABASE
+	DATABASE_URL=$DATABASE_URL
+	EMBEDDING_API_KEY=$EMBEDDING_API_KEY
+	EOF
+        echo "   ✓ $env_path"
+    fi
+done
+echo "   ✓ .env файлы обновлены"
+
+# =============================================================================
+# 4. Автоустановка Python-зависимостей
+# =============================================================================
+echo "[4/6] Проверка Python-зависимостей..."
+if [ -f /app/backend/service_checker/docker/requirements.txt ]; then
+    pip install --no-cache-dir -r /app/backend/service_checker/docker/requirements.txt 2>&1 | tail -1
+    echo "   ✓ Python-зависимости актуальны"
+else
+    echo "   ⚠ requirements.txt не найден, пропускаем"
+fi
+
+# =============================================================================
+# 5. Инициализация БД (схемы, таблицы, расширения)
+# =============================================================================
+echo "[5/6] Инициализация БД..."
+SETUP_DB="/app/backend/service_checker/setup_db.py"
+if [ -f "$SETUP_DB" ]; then
+    # --docker = без создания пользователей (используем pkb), пароль pkb
+    python "$SETUP_DB" --docker 2>&1 || {
+        echo "   ⚠ setup_db.py завершился с ошибкой (код $?)"
+        echo "   ⚠ Сервисы будут запущены, но БД может быть не готова"
+    }
+    echo "   ✓ БД инициализирована"
+else
+    echo "   ⚠ setup_db.py не найден, пропускаем инициализацию БД"
+fi
+
+# =============================================================================
+# 6. Инициализация MinIO bucket'ов
+# =============================================================================
+echo "[6/7] Инициализация MinIO bucket'ов..."
+python /app/backend/service_checker/docker/init_minio.py 2>&1 || {
+    echo "   ⚠ Не удалось создать bucket'ы MinIO"
+}
+
+echo ""
+
+# =============================================================================
+# 7. Запуск supervisord
+# =============================================================================
+echo "[7/7] Запуск supervisord..."
+echo ""
+
+mkdir -p /var/log/supervisor /var/run/supervisor
+
+if [ ! -f /etc/supervisor/conf.d/supervisord.conf ]; then
+    echo "   ✗ /etc/supervisor/conf.d/supervisord.conf не найден!"
+    exit 1
+fi
+
+echo ""
+echo "   Процессы под управлением:"
+echo "   ┌──────────────────┬────────┬──────────────────────────┐"
+echo "   │ Auth Service     │ 8082   │ Аутентификация           │"
+echo "   │ Gateway          │ 8080   │ Mock-шлюз                │"
+echo "   │ Orchestrator     │ 8081   │ Главное API              │"
+echo "   │ Query            │ 8083   │ Чаты / сессии            │"
+echo "   │ Registry         │ 8084   │ Классификаторы / реестр  │"
+echo "   │ Integration      │ 8085   │ Внешние интеграции       │"
+echo "   │ Converter-Valid  │ 8086   │ Валидация данных         │"
+echo "   │ Parser           │ 8087   │ Парсинг документов       │"
+echo "   │ OCR              │ 8088   │ OCR-распознавание        │"
+echo "   │ RAG Builder      │ 8090   │ RAG-индексы              │"
+echo "   │ RAG Search       │ 8091   │ Гибридный поиск          │"
+echo "   └──────────────────┴────────┴──────────────────────────┘"
+echo ""
+
+echo ""
+exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf -n

@@ -19,49 +19,39 @@ class TestServiceConfig:
     def test_default_mock_mode(self):
         """All services default to mock=True."""
         config = ServiceConfig()
-        assert config.AUTH_SERVICE_MOCK is True
-        assert config.QUERY_SERVICE_MOCK is True
         assert config.REGISTRY_SERVICE_MOCK is True
-        assert config.INTEGRATION_SERVICE_MOCK is True
-        assert config.VALIDATE_SERVICE_MOCK is True
         assert config.RAG_SERVICE_MOCK is True
         assert config.OCR_SERVICE_MOCK is True
 
     def test_default_service_urls(self):
         """All service URLs default to None."""
         config = ServiceConfig()
-        assert config.AUTH_SERVICE_URL is None
-        assert config.QUERY_SERVICE_URL is None
         assert config.REGISTRY_SERVICE_URL is None
-        assert config.INTEGRATION_SERVICE_URL is None
-        assert config.VALIDATE_SERVICE_URL is None
         assert config.RAG_SERVICE_URL is None
         assert config.OCR_SERVICE_URL is None
 
     def test_override_with_env(self):
         """Setting env vars should override defaults."""
         with patch.dict(os.environ, {
-            "AUTH_SERVICE_URL": "http://auth:8082",
-            "AUTH_SERVICE_MOCK": "false",
+            "REGISTRY_SERVICE_URL": "http://registry:8084",
+            "REGISTRY_SERVICE_MOCK": "false",
             "RAG_SERVICE_URL": "http://rag:8087",
             "RAG_SERVICE_MOCK": "false",
         }, clear=False):
             config = ServiceConfig()
-            assert config.AUTH_SERVICE_URL == "http://auth:8082"
-            assert config.AUTH_SERVICE_MOCK is False
+            assert config.REGISTRY_SERVICE_URL == "http://registry:8084"
+            assert config.REGISTRY_SERVICE_MOCK is False
             assert config.RAG_SERVICE_URL == "http://rag:8087"
             assert config.RAG_SERVICE_MOCK is False
 
     def test_mixed_mock_and_real(self):
         """Some services mock, some real."""
         with patch.dict(os.environ, {
-            "AUTH_SERVICE_MOCK": "false",
             "OCR_SERVICE_MOCK": "false",
         }, clear=False):
             config = ServiceConfig()
-            assert config.AUTH_SERVICE_MOCK is False
             assert config.OCR_SERVICE_MOCK is False
-            assert config.QUERY_SERVICE_MOCK is True  # still default
+            assert config.REGISTRY_SERVICE_MOCK is True  # still default
 
 
 class TestSettings:
@@ -73,7 +63,7 @@ class TestSettings:
         assert settings.APP_VERSION == "1.0.0"
         assert settings.DEBUG is False
         assert settings.HOST == "0.0.0.0"
-        assert settings.PORT == 8000
+        assert settings.PORT == 8081
         assert settings.API_V1_PREFIX == "/api/v1"
 
     def test_default_jwt(self):
@@ -108,7 +98,25 @@ class TestSettings:
     def test_nested_service_config(self):
         settings = Settings()
         assert isinstance(settings.services, ServiceConfig)
-        assert settings.services.AUTH_SERVICE_MOCK is True
+        assert settings.services.REGISTRY_SERVICE_MOCK is True
+
+    def test_flat_env_vars_do_not_crash(self):
+        """
+        Flat env vars (without SERVICES__ prefix) must not cause
+        ValidationError on Settings init.
+        ServiceConfig (nested BaseSettings) reads them independently.
+        """
+        with patch.dict(os.environ, {
+            "REGISTRY_SERVICE_URL": "http://registry:8084",
+            "REGISTRY_SERVICE_MOCK": "false",
+            "OCR_SERVICE_URL": "http://ocr:8088",
+        }, clear=False):
+            # Must not raise
+            settings = Settings()
+            # Values are read by nested ServiceConfig
+            assert settings.services.REGISTRY_SERVICE_URL == "http://registry:8084"
+            assert settings.services.REGISTRY_SERVICE_MOCK is False
+            assert settings.services.OCR_SERVICE_URL == "http://ocr:8088"
 
 
 class TestGetSettings:

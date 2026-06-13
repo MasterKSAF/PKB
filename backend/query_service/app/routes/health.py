@@ -5,6 +5,7 @@ from ..db import AsyncSessionLocal
 router = APIRouter()
 
 
+@router.get("/system/health")
 @router.get("/health")
 async def health():
     try:

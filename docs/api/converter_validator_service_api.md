@@ -11,7 +11,17 @@
 ### Формат ответа
 
 Успех — данные возвращаются напрямую.  
-При ошибке: `{ "error": { "code": "CONVERSION_FAILED", "message": "...", "details": {} } }`
+При ошибке: `{ "error": { "code": "...", "message": "...", "details": {} } }`
+
+**Специфичные коды ошибок:**
+| HTTP | `error.code` | Описание |
+|------|-------------|----------|
+| 400 | `INVALID_INPUT` | Входной JSON не соответствует схеме `raw_ocr_v4` |
+| 422 | `METADATA_EXTRACTION_FAILED` | Не удалось извлечь обязательные метаданные (doc_code, title) |
+| 422 | `VALIDATION_FAILED` | Ошибка валидации структуры документа |
+| 500 | `CONVERSION_FAILED` | Ошибка конвертации (общая) |
+| 502 | `LLM_TIMEOUT` | Таймаут LLM-запроса |
+| 504 | `REGISTRY_TIMEOUT` | Таймаут при проверке классификаторов в Registry |
 
 ---
 
@@ -27,7 +37,7 @@
 
 **Выход:** doc_code, title, document_type, year, revision.
 
-> **Полный формат данных:** [`docs/schema/schema_parser_preview.json`](../schema/schema_parser_preview.json) (схема `converter_validator_preview_v1`)
+> **Полный формат данных:** [`docs/schema/schema_converter_preview.json`](../schema/schema_converter_preview.json) (схема `converter_validator_preview_v1`)
 
 **Важно:** идентификатор задачи (`task_id`) генерирует Оркестратор и передаёт в запросе (тот же `task_id`, что у Parser/OCR).
 
@@ -36,7 +46,7 @@
 ```json
 {
   "task_id": 420000,
-  "version_id": "c4b9f2d3-...",
+  "version_id": 420001,
   "raw_json": { ... }
 }
 ```
@@ -63,7 +73,7 @@
 |---|---|---|
 | `doc_code` | string | Обозначение документа |
 | `title` | string | Полное название документа |
-| `document_type` | string | Тип документа (`normative`, `drawing`, `specification`, ...) |
+| `document_type` | string | Категория контента (`normative`, `technical`, `drawing`, `specification`, `archival_scan`) |
 | `year` | string | Год издания/утверждения |
 | `revision` | string\|null | Номер редакции, если применимо |
 
@@ -111,7 +121,7 @@
 ```json
 {
   "task_id": 420000,
-  "version_id": "c4b9f2d3-...",
+  "version_id": 420001,
   "use_llm": true,
   "llm_model": "gpt-4o-mini",
   "llm_max_tokens": 4096,
@@ -135,8 +145,8 @@
 ```json
 {
   "task_id": 420000,
-  "version_id": "c4b9f2d3-...",
-  "document_id": "b3a8f1c2-...",
+  "version_id": 420001,
+  "document_id": null,
   "metadata": {
     "schema": "validated_v3",
     "task_id": 420000,
@@ -164,7 +174,7 @@
     "references": []
   },
   "validation": {
-    "validation_id": "val-001",
+    "validation_id": 1,
     "structure_valid": true,
     "classification": { "mks_oks_code": "47.020", "overall_status": "CONFIRMED" },
     "fingerprint": { "file_hash_sha256": "...", "title_hash_sha256": "..." },
@@ -184,8 +194,8 @@
 | Поле | Тип | Описание |
 |---|---|---|
 | `task_id` | bigint | ID задачи, переданный в запросе |
-| `version_id` | string | ID версии файла, переданный в запросе |
-| `document_id` | string | ID документа. Назначается при конвертации: извлекается существующий для дубликата, либо генерируется новый |
+| `version_id` | bigint | ID версии файла, переданный в запросе |
+| `document_id` | bigint | ID документа. Заполняется для дубликатов — передаётся от Оркестратора (получен на preview-этапе проверки уникальности). Для новых документов — null; будет назначен Registry при создании карточки |
 | `metadata` | object | Служебные метаданные ответа (схема, дата, информация о парсере) |
 | `document` | object | Полная структура документа: источник, метаданные, контент, терминология, ссылки |
 | `validation` | object | Результаты полной валидации (структура, классификация, fingerprint, сопоставление, кросс-ссылки) |
@@ -275,7 +285,7 @@
 | `fingerprint` | object | Хэши документа (`file_hash_sha256`, `title_hash_sha256`) |
 | `matching` | object | Связи с существующими документами (`predecessor_doc_id`, `successor_doc_id`) |
 | `cross_references` | array | Список кросс-ссылок на другие документы |
-| `decision` | string | `auto` — автоматическое продвижение, `review_required` — требуется ручное подтверждение |
+| `decision` | string | `auto` — автоматическое завершение, `manual` — требуется ручное подтверждение |
 | `status` | string | Статус: `completed`, `failed` |
 
 ---
@@ -294,7 +304,7 @@
 ```json
 {
   "task_id": 420000,
-  "version_id": "c4b9f2d3-...",
+  "version_id": 420001,
   "raw_json": { ... }
 }
 ```
@@ -309,8 +319,8 @@
 
 ```json
 {
-  "validation_id": "val-001",
-  "document_id": "b3a8f1c2-...",
+  "validation_id": 1,
+  "document_id": 1,
   "structure_valid": true,
   "classification": {
     "mks_oks_code": "47.020",
@@ -340,7 +350,7 @@
 | `classification` | object | Статусы классификационных кодов |
 | `fingerprint` | object | Хэши документа (`file_hash_sha256`, `title_hash_sha256`) |
 | `matching` | object | Связи с существующими документами |
-| `decision` | string | `auto` — автоматическое продвижение, `review_required` — требуется ручное подтверждение |
+| `decision` | string | `auto` — автоматическое завершение, `manual` — требуется ручное подтверждение |
 | `status` | string | Статус: `completed`, `failed` |
 
 > **Внутренние функции валидации:**

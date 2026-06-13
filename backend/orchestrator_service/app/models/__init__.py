@@ -1,10 +1,8 @@
 """SQLAlchemy ORM models."""
 
-from app.models.document import Document
-from app.models.pipeline import PipelineJob, PipelineStepLog
+from app.models.pipeline import Task, TaskStep
 
 __all__ = [
-    "Document",
-    "PipelineJob",
-    "PipelineStepLog",
+    "Task",
+    "TaskStep",
 ]

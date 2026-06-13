@@ -90,38 +90,38 @@ def test_get_classifiers_pagination(client):
 def test_get_classifier(client):
     client.post("/api/v1/registry/classifiers/", json={"classifier_system": "MKS", "code": "TEST_03", "full_name": "Test 3"})
     
-    response = client.get("/api/v1/registry/classifiers/TEST_03?classifier_system=MKS")
+    response = client.get("/api/v1/registry/classifiers/TEST_03/?classifier_system=MKS")
     assert response.status_code == 200
     data = response.json()
     assert data["data"]["code"] == "TEST_03"
     assert data["data"]["classifier_system"] == "MKS"
 
 def test_get_classifier_not_found(client):
-    response = client.get("/api/v1/registry/classifiers/NONEXISTENT?classifier_system=MKS")
+    response = client.get("/api/v1/registry/classifiers/NONEXISTENT/?classifier_system=MKS")
     assert response.status_code == 404
 
 def test_update_classifier(client):
     client.post("/api/v1/registry/classifiers/", json={"classifier_system": "MKS", "code": "TEST_04", "full_name": "Test 4"})
     
     update_payload = {"full_name": "Updated Test 4"}
-    response = client.put("/api/v1/registry/classifiers/TEST_04?classifier_system=MKS", json=update_payload)
+    response = client.put("/api/v1/registry/classifiers/TEST_04/?classifier_system=MKS", json=update_payload)
     assert response.status_code == 200
     data = response.json()
     assert data["data"]["full_name"] == "Updated Test 4"
 
 def test_update_classifier_not_found(client):
     update_payload = {"full_name": "Updated Name"}
-    response = client.put("/api/v1/registry/classifiers/NONEXISTENT?classifier_system=MKS", json=update_payload)
+    response = client.put("/api/v1/registry/classifiers/NONEXISTENT/?classifier_system=MKS", json=update_payload)
     assert response.status_code == 404
 
 def test_delete_classifier(client):
     client.post("/api/v1/registry/classifiers/", json={"classifier_system": "MKS", "code": "TEST_05", "full_name": "Test 5"})
     
-    response = client.delete("/api/v1/registry/classifiers/TEST_05?classifier_system=MKS")
+    response = client.delete("/api/v1/registry/classifiers/TEST_05/?classifier_system=MKS")
     assert response.status_code == 200
     
     # Verify it's gone
-    get_response = client.get("/api/v1/registry/classifiers/TEST_05?classifier_system=MKS")
+    get_response = client.get("/api/v1/registry/classifiers/TEST_05/?classifier_system=MKS")
     assert get_response.status_code == 404
 
 def test_delete_classifier_with_children(client):
@@ -130,15 +130,15 @@ def test_delete_classifier_with_children(client):
     client.post("/api/v1/registry/classifiers/", json={"classifier_system": "MKS", "code": "CHILD", "full_name": "Child", "parent_code": "PARENT"})
     
     # Try to delete parent without force
-    response = client.delete("/api/v1/registry/classifiers/PARENT?classifier_system=MKS")
+    response = client.delete("/api/v1/registry/classifiers/PARENT/?classifier_system=MKS")
     assert response.status_code == 409
     
     # Delete with force
-    response = client.delete("/api/v1/registry/classifiers/PARENT?classifier_system=MKS&force=true")
+    response = client.delete("/api/v1/registry/classifiers/PARENT/?classifier_system=MKS&force=true")
     assert response.status_code == 200
 
 def test_delete_classifier_not_found(client):
-    response = client.delete("/api/v1/registry/classifiers/NONEXISTENT?classifier_system=MKS")
+    response = client.delete("/api/v1/registry/classifiers/NONEXISTENT/?classifier_system=MKS")
     assert response.status_code == 404
 
 def test_get_classifier_tree(client):
@@ -146,7 +146,7 @@ def test_get_classifier_tree(client):
     client.post("/api/v1/registry/classifiers/", json={"classifier_system": "MKS", "code": "CHILD_1", "full_name": "Child Classifier", "parent_code": "ROOT_1"})
     client.post("/api/v1/registry/classifiers/", json={"classifier_system": "MKS", "code": "CHILD_2", "full_name": "Child 2", "parent_code": "ROOT_1"})
     
-    response = client.get("/api/v1/registry/classifiers/tree?classifier_system=MKS")
+    response = client.get("/api/v1/registry/classifiers/tree/?classifier_system=MKS")
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data.get("data"), list)
@@ -156,7 +156,7 @@ def test_get_classifier_tree_with_root(client):
     client.post("/api/v1/registry/classifiers/", json={"classifier_system": "MKS", "code": "ROOT_B", "full_name": "Root B"})
     client.post("/api/v1/registry/classifiers/", json={"classifier_system": "MKS", "code": "CHILD_A", "full_name": "Child A", "parent_code": "ROOT_A"})
     
-    response = client.get("/api/v1/registry/classifiers/tree?classifier_system=MKS&root_code=ROOT_A")
+    response = client.get("/api/v1/registry/classifiers/tree/?classifier_system=MKS&root_code=ROOT_A")
     assert response.status_code == 200
     data = response.json()
     assert len(data["data"]) >= 1
@@ -165,7 +165,7 @@ def test_get_classifier_tree_with_search(client):
     client.post("/api/v1/registry/classifiers/", json={"classifier_system": "MKS", "code": "ROOT_SEARCH", "full_name": "Machine Learning Root"})
     client.post("/api/v1/registry/classifiers/", json={"classifier_system": "MKS", "code": "CHILD_SEARCH", "full_name": "ML Child", "parent_code": "ROOT_SEARCH"})
     
-    response = client.get("/api/v1/registry/classifiers/tree?classifier_system=MKS&search=Machine")
+    response = client.get("/api/v1/registry/classifiers/tree/?classifier_system=MKS&search=Machine")
     assert response.status_code == 200
     data = response.json()
     assert len(data["data"]) >= 1
@@ -173,18 +173,18 @@ def test_get_classifier_tree_with_search(client):
 def test_patch_classifier(client):
     client.post("/api/v1/registry/classifiers/", json={"classifier_system": "MKS", "code": "TEST_PATCH", "full_name": "Original Name"})
     
-    response = client.patch("/api/v1/registry/classifiers/TEST_PATCH?classifier_system=MKS", json={"full_name": "Patched Name"})
+    response = client.patch("/api/v1/registry/classifiers/TEST_PATCH/?classifier_system=MKS", json={"full_name": "Patched Name"})
     assert response.status_code == 200
     data = response.json()
     assert data["data"]["full_name"] == "Patched Name"
 
 def test_patch_classifier_not_found(client):
-    response = client.patch("/api/v1/registry/classifiers/NONEXISTENT?classifier_system=MKS", json={"full_name": "Patched Name"})
+    response = client.patch("/api/v1/registry/classifiers/NONEXISTENT/?classifier_system=MKS", json={"full_name": "Patched Name"})
     assert response.status_code == 404
 
 def test_import_classifiers(client):
     # Dummy file upload test
-    response = client.post("/api/v1/registry/classifiers/import?classifier_system=MKS&mapping=some_mapping", files={"file": ("test.csv", b"dummy content", "text/csv")})
+    response = client.post("/api/v1/registry/classifiers/import/?classifier_system=MKS&mapping=some_mapping", files={"file": ("test.csv", b"dummy content", "text/csv")})
     assert response.status_code in [200, 201]
 
 def test_get_classifiers_with_parent_filter(client):
@@ -196,3 +196,65 @@ def test_get_classifiers_with_parent_filter(client):
     assert response.status_code == 200
     data = response.json()
     assert all(item["parent_code"] == "PARENT_FILTER" for item in data["data"])
+
+
+def test_classifier_tree_hierarchical(client):
+    client.post("/api/v1/registry/classifiers/", json={"classifier_system": "MKS", "code": "H_ROOT", "full_name": "Hierarchical Root"})
+    client.post("/api/v1/registry/classifiers/", json={"classifier_system": "MKS", "code": "H_ROOT.CHILD1", "full_name": "Child 1", "parent_code": "H_ROOT"})
+    client.post("/api/v1/registry/classifiers/", json={"classifier_system": "MKS", "code": "H_ROOT.CHILD1.GRANDCHILD", "full_name": "Grandchild", "parent_code": "H_ROOT.CHILD1"})
+    
+    # Test max_depth = 1 (should not include grandchild)
+    response = client.get("/api/v1/registry/classifiers/tree/?classifier_system=MKS&max_depth=2&root_code=H_ROOT")
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert len(data) == 1
+    assert data[0]["code"] == "H_ROOT"
+    assert len(data[0]["children"]) == 1
+    assert data[0]["children"][0]["code"] == "H_ROOT.CHILD1"
+    # depth limit reached
+    assert len(data[0]["children"][0]["children"]) == 0
+
+
+def test_create_classifier_with_effective_date(client):
+    payload = {
+        "classifier_system": "MKS",
+        "code": "EFF_01",
+        "full_name": "Effective Date Test",
+        "effective_date": "2026-06-08T00:00:00"
+    }
+    response = client.post("/api/v1/registry/classifiers/", json=payload)
+    assert response.status_code == 201
+    data = response.json()
+    assert data["data"]["effective_date"] == "2026-06-08"
+
+
+def test_delete_classifier_has_documents(client):
+    client.post("/api/v1/registry/classifiers/", json={"classifier_system": "MKS", "code": "MKS_REF", "full_name": "Referenced Classifier"})
+    # Create document referencing it
+    client.post("/api/v1/registry/documents/", json={
+        "title": "Document Ref Test",
+        "doc_code": "DOC_REF_01",
+        "mks_oks_code": "MKS_REF"
+    })
+    
+    # Delete should fail with HAS_DOCUMENTS
+    response = client.delete("/api/v1/registry/classifiers/MKS_REF/?classifier_system=MKS")
+    assert response.status_code == 409
+    assert response.json()["detail"]["error"]["code"] == "HAS_DOCUMENTS"
+
+
+def test_pending_suggested_parent(client, db_session):
+    # Setup parent classifier
+    client.post("/api/v1/registry/classifiers/", json={"classifier_system": "MKS", "code": "47.020", "full_name": "Parent Section"})
+    
+    # Add pending quarantine item
+    from api.v1.crud.classifier import create_classifier_pending
+    create_classifier_pending(db_session, system="MKS", code="47.020.99")
+        
+    response = client.get("/api/v1/registry/classifiers/pending/")
+    assert response.status_code == 200
+    data = response.json()["data"]
+    item = next(x for x in data if x["code"] == "47.020.99")
+    assert item["suggested_parent_code"] == "47.020"
+    assert item["suggested_parent_name"] == "Parent Section"
+

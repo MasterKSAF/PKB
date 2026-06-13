@@ -1,13 +1,12 @@
 """
 Unit tests for ServiceClient base class (base_client.py).
 
-Tests the dual-mode (mock/real), HTTP client management, and error handling.
+Tests initialization, mock mode, and close behaviour.
 """
 
 import pytest
-from unittest.mock import AsyncMock, patch
 
-from app.services.base_client import ServiceClient, ServiceError
+from app.services.base_client import ServiceClient
 
 
 class SimpleTestClient(ServiceClient):
@@ -39,18 +38,24 @@ class TestServiceClientInitialization:
         assert client.service_name == "test_service"
         assert client.service_url is None
         assert client.mock_mode is True
-        assert client._http_client is None
 
     def test_initialization_with_real_mode(self):
         client = SimpleTestClient(service_url="http://localhost:9999", mock_mode=False)
         assert client.service_name == "test_service"
         assert client.service_url == "http://localhost:9999"
         assert client.mock_mode is False
-        assert client._http_client is None
 
     def test_initialization_default_mock_mode(self):
         client = SimpleTestClient()
         assert client.mock_mode is True
+
+    def test_service_url_strips_trailing_slash(self):
+        client = SimpleTestClient(service_url="http://localhost:9999/", mock_mode=False)
+        assert client.service_url == "http://localhost:9999"
+
+    def test_service_url_none(self):
+        client = SimpleTestClient(service_url=None)
+        assert client.service_url is None
 
 
 class TestServiceClientMockMode:
@@ -88,138 +93,46 @@ class TestServiceClientMockMode:
         assert result["received"] == {"key": "value"}
         assert result["params"] == {"param1": "val1"}
 
+    @pytest.mark.asyncio
+    async def test_mock_mode_default_response(self):
+        """Unknown endpoint returns default_mock."""
+        client = SimpleTestClient(mock_mode=True)
+        result = await client.call("GET", "/unknown", mock_response={"fallback": True})
+        assert result == {"fallback": True}
+
 
 class TestServiceClientRealMode:
-    """Tests for real (HTTP) mode behavior."""
+    """Tests for real (non-mock) mode behavior.
+
+    In non-mock mode without HTTP client, call() returns mock_response as-is.
+    """
 
     @pytest.mark.asyncio
-    async def test_real_mode_makes_http_request(self):
-        """When mock_mode=False and service_url is set, should make HTTP call."""
+    async def test_real_mode_returns_mock_response(self):
+        """When mock_mode=False, call returns mock_response directly."""
         client = SimpleTestClient(service_url="http://localhost:9999", mock_mode=False)
-
-        # Patch the internal _make_request
-        with patch.object(client, "_make_request", new=AsyncMock()) as mock_request:
-            mock_request.return_value = {"real": "response"}
-
-            result = await client.call("GET", "/api/test", mock_response={"mock": "data"})
-            assert result == {"real": "response"}
-            mock_request.assert_awaited_once_with("GET", "/api/test")
+        result = await client.call("GET", "/api/test", mock_response={"real": "data"})
+        assert result == {"real": "data"}
 
     @pytest.mark.asyncio
-    async def test_real_mode_passes_kwargs(self):
-        """call() should forward kwargs to _make_request."""
+    async def test_real_mode_empty_response(self):
+        """When mock_mode=False and no mock_response, returns empty dict."""
         client = SimpleTestClient(service_url="http://localhost:9999", mock_mode=False)
-
-        with patch.object(client, "_make_request", new=AsyncMock()) as mock_request:
-            mock_request.return_value = {"ok": True}
-
-            await client.call(
-                "POST",
-                "/api/echo",
-                mock_response={},
-                json={"hello": "world"},
-                params={"x": "1"},
-            )
-
-            # Verify _make_request received the kwargs
-            call_kwargs = mock_request.call_args.kwargs
-            assert call_kwargs.get("json") == {"hello": "world"}
-            assert call_kwargs.get("params") == {"x": "1"}
+        result = await client.call("GET", "/api/test")
+        assert result == {}
 
 
-class TestServiceClientHttpClient:
-    """Tests for HTTP client (_get_client / close)."""
+class TestServiceClientClose:
+    """Tests for close() method."""
 
     @pytest.mark.asyncio
-    async def test_get_client_creates_new_client(self):
-        client = SimpleTestClient(service_url="http://localhost:9999", mock_mode=False)
-        http_client = await client._get_client()
-        assert http_client is not None
-        assert client._http_client is not None
-        assert http_client is client._http_client
-
-    @pytest.mark.asyncio
-    async def test_get_client_reuses_existing(self):
-        client = SimpleTestClient(service_url="http://localhost:9999", mock_mode=False)
-        first = await client._get_client()
-        second = await client._get_client()
-        assert first is second
-
-    @pytest.mark.asyncio
-    async def test_close_clears_http_client(self):
-        client = SimpleTestClient(service_url="http://localhost:9999", mock_mode=False)
-        http_client = await client._get_client()
-        mock_close = AsyncMock()
-        http_client.aclose = mock_close
-
-        await client.close()
-        assert client._http_client is None
-        mock_close.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_close_when_no_client(self):
+    async def test_close_mock_mode(self):
+        """close() should not raise in mock mode."""
         client = SimpleTestClient(mock_mode=True)
-        # Should not raise
         await client.close()
 
-
-class TestServiceError:
-    """Tests for ServiceError exception."""
-
-    def test_service_error_default_code(self):
-        error = ServiceError("Something went wrong")
-        assert error.message == "Something went wrong"
-        assert error.status_code == 500
-        assert error.details is None
-        assert str(error) == "Something went wrong"
-
-    def test_service_error_with_all_params(self):
-        error = ServiceError("Not found", status_code=404, details="missing doc")
-        assert error.status_code == 404
-        assert error.details == "missing doc"
-
-    def test_to_dict_format(self):
-        error = ServiceError("Document not found", status_code=404)
-        result = error.to_dict()
-        assert "error" in result
-        assert result["error"]["code"] == "NOT_FOUND"
-        assert result["error"]["message"] == "Document not found"
-        assert result["error"]["details"] == {}
-
-    def test_to_dict_with_details(self):
-        error = ServiceError("Error", status_code=400, details="invalid param")
-        result = error.to_dict()
-        assert result["error"]["code"] == "BAD_REQUEST"
-        assert result["error"]["details"] == {"service_error": "invalid param"}
-
-    def test_to_dict_code_mapping(self):
-        mapping = [
-            (400, "BAD_REQUEST"),
-            (401, "UNAUTHORIZED"),
-            (403, "FORBIDDEN"),
-            (404, "NOT_FOUND"),
-            (409, "CONFLICT"),
-            (422, "VALIDATION_FAILED"),
-            (500, "INTERNAL_ERROR"),
-            (503, "SERVICE_UNAVAILABLE"),
-            (999, "INTERNAL_ERROR"),  # unknown
-        ]
-        for status_code, expected_code in mapping:
-            error = ServiceError("Test", status_code=status_code)
-            assert error._get_code_name() == expected_code, f"Failed for {status_code}"
-
-
-class TestBaseClientAbstract:
-    """Tests that ServiceClient properly enforces abstract interface."""
-
-    def test_cannot_instantiate_abstract(self):
-        """ServiceClient is abstract due to _generate_mock, but Python allows
-        instantiation if all abstract methods are defined. This test verifies
-        that a class without the method raises TypeError."""
-        with pytest.raises(TypeError):
-            # noinspection PyUnusedLocal,PyAbstractClass
-            class IncompleteClient(ServiceClient):
-                def __init__(self):
-                    super().__init__("test", mock_mode=True)
-
-            IncompleteClient()
+    @pytest.mark.asyncio
+    async def test_close_real_mode(self):
+        """close() should not raise in real mode."""
+        client = SimpleTestClient(service_url="http://localhost:9999", mock_mode=False)
+        await client.close()

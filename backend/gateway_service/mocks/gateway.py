@@ -3,13 +3,26 @@ Gateway Mock — unified entry point (nginx emulation).
 Combines all 5 routers on a single port 8081 with:
 - CORS (all origins)
 - RBAC (JWT validation, anonymous fallback)
-- Idempotency-Key support for POST /documents and POST /chat
+- Idempotency-Key support for POST /drafts and POST /chat
 - X-Process-Time header
 - Lifespan context manager
 - Unified error format (Registry spec)
+
+Routing map (see docs/gateway_service_api.md):
+- /api/v1/auth/*, /api/v1/admin/*      → Auth handlers
+- /api/v1/documents/*, /api/v1/drafts/*,
+    /api/v1/tasks/*, /api/v1/monitor/*  → Orchestrator handlers
+- /api/v1/chat/*, /api/v1/text/*        → Query handlers
+- /api/v1/classifiers/*, /api/v1/terminology/*,
+    /api/v1/common/*, /api/v1/registry/documents/* → Registry handlers
+- /api/v1/system/health                  → Gateway (own)
+
+Все данные — в едином пространстве имён (mocks.common).
+Никакого разделения на сервисы, никакой синхронизации.
 """
 
 import json
+import logging
 import os
 import sys
 import time
@@ -26,19 +39,10 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import ValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
 
-# ---------------------------------------------------------------------------
-# Track generated access tokens for RBAC lookup
-# ---------------------------------------------------------------------------
-import mocks.auth_service.main as auth_mod
-from mocks.auth_service.main import router as auth_router
-from mocks.common import SEED_USERS, error_response, utcnow
-from mocks.orchestrator_service.main import router as orch_router
-from mocks.query_service.main import router as query_router
-from mocks.registry_service.main import main_router as registry_router
-from mocks.registry_service.main import registry_docs_router
+from mocks.common import SEED_USERS, error_response, utcnow, _access_token_map
+from mocks.handlers import auth_router, orch_router, query_router, registry_router
 
-_ACCESS_TOKEN_USER: Dict[str, str] = {}  # access_token -> user_id
-_MOCK_USERS: Dict[str, dict] = {u["user_id"]: u for u in SEED_USERS}
+_MOCK_USERS: Dict[int, dict] = {u["user_id"]: u for u in SEED_USERS}
 
 # ---------------------------------------------------------------------------
 # Test mode flag — при True анонимные запросы пропускаются
@@ -46,21 +50,47 @@ _MOCK_USERS: Dict[str, dict] = {u["user_id"]: u for u in SEED_USERS}
 # ---------------------------------------------------------------------------
 ALLOW_ANONYMOUS = False
 
-_orig_make_token = auth_mod._make_token
-
-
-def _patched_make_token(user_id: str) -> dict:
-    result = _orig_make_token(user_id)
-    _ACCESS_TOKEN_USER[result["access_token"]] = user_id
-    return result
-
-
-auth_mod._make_token = _patched_make_token
-
 
 # ---------------------------------------------------------------------------
-# RBAC middleware
+# Middleware
 # ---------------------------------------------------------------------------
+
+logger = logging.getLogger("gateway")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
+
+
+class RequestLogMiddleware(BaseHTTPMiddleware):
+    """Логгирует все входящие запросы и статус ответа."""
+
+    async def dispatch(self, request: Request, call_next):
+        method = request.method
+        path = request.url.path
+        qs = request.url.query
+        full_path = f"{path}?{qs}" if qs else path
+        logger.info(">>> %s %s", method, full_path)
+        response = await call_next(request)
+        logger.info("<<< %s %s → %s", method, full_path, response.status_code)
+        return response
+
+
+class StripTrailingSlashMiddleware(BaseHTTPMiddleware):
+    """Обрезает trailing slash ДО того, как FastAPI начнёт роутинг.
+    Checker шлёт запросы С trailing slash, а роуты определены БЕЗ слеша.
+    Корневой путь / не трогаем.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        if path != "/" and path.endswith("/"):
+            request.scope["path"] = path.rstrip("/")
+            raw = request.scope.get("raw_path")
+            if raw is not None and len(raw) > 1 and raw.endswith(b"/"):
+                request.scope["raw_path"] = raw.rstrip(b"/")
+        return await call_next(request)
 
 
 class RBACMiddleware(BaseHTTPMiddleware):
@@ -69,7 +99,7 @@ class RBACMiddleware(BaseHTTPMiddleware):
     - Missing/invalid token → 401 for /admin/*, anonymous for others
     - Valid token → user info from seed data attached to request.state.user
     - Blocks /admin/* paths for non-system_admin users
-    """
+    """ 
 
     async def dispatch(self, request: Request, call_next):
         auth = request.headers.get("Authorization", "")
@@ -87,7 +117,7 @@ class RBACMiddleware(BaseHTTPMiddleware):
 
         if auth.startswith("Bearer "):
             token = auth[7:]
-            user_id = _ACCESS_TOKEN_USER.get(token)
+            user_id = _access_token_map.get(token)
             if user_id and user_id in _MOCK_USERS:
                 user = _MOCK_USERS[user_id]
                 user_context.update(
@@ -103,16 +133,9 @@ class RBACMiddleware(BaseHTTPMiddleware):
         request.state.user = user_context
 
         # RBAC enforcement
-        # ────────────────────────────────────────────────────────
-        # Флаг для тестов — позволяет анонимный доступ.
-        # В реальной эксплуатации выставить ALLOW_ANONYMOUS = False.
-        # ────────────────────────────────────────────────────────
         if ALLOW_ANONYMOUS:
-            # Режим "soft mock" — анонимные запросы пропускаются,
-            # проверка permissions только для аутентифицированных.
             pass
         else:
-            # Режим "hard mock" — блокируем всех, кроме /auth/* и /system/health
             if not (
                 path.startswith("/api/v1/auth/") or path == "/api/v1/system/health"
             ):
@@ -148,8 +171,8 @@ class RBACMiddleware(BaseHTTPMiddleware):
         if user_context["is_authenticated"]:
             permissions = user_context.get("permissions", {})
 
-            # POST /documents — can_upload_documents
-            if request.method == "POST" and path == "/api/v1/documents":
+            # POST /drafts и POST /documents — can_upload_documents
+            if request.method == "POST" and path in ("/api/v1/drafts", "/api/v1/documents"):
                 if not permissions.get("can_upload_documents", False):
                     return JSONResponse(
                         status_code=403,
@@ -160,9 +183,8 @@ class RBACMiddleware(BaseHTTPMiddleware):
                     )
 
             # POST/PUT/DELETE /classifiers — can_manage_classifiers
-            if request.method in ("POST", "PUT", "PATCH", "DELETE") and path.startswith(
-                "/api/v1/classifiers"
-            ):
+            _classifier_path = path.startswith("/api/v1/classifiers") or path.startswith("/api/v1/registry/classifiers")
+            if request.method in ("POST", "PUT", "PATCH", "DELETE") and _classifier_path:
                 if not permissions.get("can_manage_classifiers", False):
                     return JSONResponse(
                         status_code=403,
@@ -173,9 +195,8 @@ class RBACMiddleware(BaseHTTPMiddleware):
                     )
 
             # POST/PUT/DELETE /terminology — can_manage_terminology
-            if request.method in ("POST", "PUT", "PATCH", "DELETE") and path.startswith(
-                "/api/v1/terminology"
-            ):
+            _term_path = path.startswith("/api/v1/terminology") or path.startswith("/api/v1/registry/terminology")
+            if request.method in ("POST", "PUT", "PATCH", "DELETE") and _term_path:
                 if not permissions.get("can_manage_terminology", False):
                     return JSONResponse(
                         status_code=403,
@@ -198,10 +219,12 @@ class RBACMiddleware(BaseHTTPMiddleware):
                         ),
                     )
 
-            # DELETE /documents/{id}, POST /documents/{id}/reprocess,
-            # POST /documents/{id}/approve
-            # — knowledge_admin / system_admin only
-            _doc_write = request.method == "DELETE" or (
+            # DELETE /documents/{id}, DELETE /drafts/{id},
+            # POST /documents/{id}/reprocess, POST /documents/{id}/approve
+            _doc_write = request.method == "DELETE" and (
+                path.startswith("/api/v1/documents/")
+                or path.startswith("/api/v1/drafts/")
+            ) or (
                 request.method == "POST"
                 and path.startswith("/api/v1/documents/")
                 and not path.startswith("/api/v1/documents/search")
@@ -243,13 +266,10 @@ class RBACMiddleware(BaseHTTPMiddleware):
 
 _IDEMPOTENCY_STORE: Dict[str, dict] = {}
 _IDEMPOTENCY_TTL = 3600
-_IDEMPOTENCY_PREFIXES = ("/api/v1/documents", "/api/v1/chat")
+_IDEMPOTENCY_PREFIXES = ("/api/v1/drafts", "/api/v1/chat")
 
 
 class IdempotencyMiddleware(BaseHTTPMiddleware):
-    """Caches POST responses for /api/v1/documents* and /api/v1/chat*
-    when Idempotency-Key header is provided."""
-
     async def dispatch(self, request: Request, call_next):
         if request.method != "POST":
             return await call_next(request)
@@ -260,13 +280,24 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
         if not key:
             return await call_next(request)
 
+        # Cleanup expired entries periodically
+        if len(_IDEMPOTENCY_STORE) > 1000:
+            now = time.time()
+            expired = [k for k, v in _IDEMPOTENCY_STORE.items()
+                       if now - v.get("timestamp", 0) > _IDEMPOTENCY_TTL]
+            for k in expired:
+                del _IDEMPOTENCY_STORE[k]
+
         cached = _IDEMPOTENCY_STORE.get(key)
         if cached is not None:
-            return JSONResponse(
-                status_code=cached["status_code"],
-                content=cached["body"],
-                headers={"Idempotency-Key-Repeated": "true"},
-            )
+            if time.time() - cached.get("timestamp", 0) > _IDEMPOTENCY_TTL:
+                del _IDEMPOTENCY_STORE[key]
+            else:
+                return JSONResponse(
+                    status_code=cached["status_code"],
+                    content=cached["body"],
+                    headers={"Idempotency-Key-Repeated": "true"},
+                )
 
         response = await call_next(request)
         if response.status_code < 500:
@@ -280,11 +311,6 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                 "timestamp": time.time(),
             }
         return response
-
-
-# ---------------------------------------------------------------------------
-# X-Process-Time header middleware
-# ---------------------------------------------------------------------------
 
 
 class ProcessTimeMiddleware(BaseHTTPMiddleware):
@@ -305,7 +331,7 @@ class ProcessTimeMiddleware(BaseHTTPMiddleware):
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     yield
     _IDEMPOTENCY_STORE.clear()
-    _ACCESS_TOKEN_USER.clear()
+    _access_token_map.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -317,16 +343,21 @@ app = FastAPI(
     version="1.0.0",
     description="Mock gateway combining all services on a single port",
     lifespan=lifespan,
+    redirect_slashes=False,
 )
 
 
 # ---------------------------------------------------------------------------
-# Exception handlers — unified error format (Registry spec)
+# Exception handlers — unified error format
 # ---------------------------------------------------------------------------
 
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
+    if isinstance(exc.detail, JSONResponse):
+        return exc.detail
+    if isinstance(exc.detail, dict) and "error" in exc.detail:
+        return JSONResponse(status_code=exc.status_code, content=exc.detail)
     return JSONResponse(
         status_code=exc.status_code,
         content=error_response(
@@ -342,8 +373,15 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     errors = exc.errors()
     if errors:
         details = {
-            "fields": [e["loc"] for e in errors],
-            "messages": [e["msg"] for e in errors],
+            "validation_errors": [
+                {
+                    "field": ".".join(str(p) for p in e.get("loc", [])),
+                    "reason": e.get("msg", "invalid"),
+                    "value": e.get("input", None),
+                    "constraint": e.get("ctx", {}).get("expected", None) if e.get("ctx") else None,
+                }
+                for e in errors
+            ]
         }
     return JSONResponse(
         status_code=422,
@@ -368,20 +406,13 @@ async def pydantic_validation_handler(request: Request, exc: ValidationError):
 
 
 def _error_code_from_status(status_code: int, detail: any) -> str:
-    """Map HTTP status to error code.
-
-    Supports custom error codes from error_response() format:
-    detail = {"error": {"code": "DOCUMENT_NOT_FOUND", "message": "..."}}
-    """
-    # Try to extract custom code from error_response format
+    """Map HTTP status to error code."""
     if isinstance(detail, dict):
         err = detail.get("error", {})
         if isinstance(err, dict) and "code" in err:
             return err["code"]
         if "code" in detail:
             return detail["code"]
-
-    # Fallback: map from HTTP status
     mapping = {
         400: "BAD_REQUEST",
         401: "UNAUTHORIZED",
@@ -397,7 +428,6 @@ def _error_code_from_status(status_code: int, detail: any) -> str:
 
 
 def _extract_message(detail: any) -> str:
-    """Extract message from detail which may be a string, dict, or list."""
     if isinstance(detail, str):
         return detail
     if isinstance(detail, dict):
@@ -424,6 +454,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(StripTrailingSlashMiddleware)
+app.add_middleware(RequestLogMiddleware)
+
 
 # ---------------------------------------------------------------------------
 # Router includes
@@ -432,8 +465,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(orch_router)
 app.include_router(query_router)
-app.include_router(registry_router)
-app.include_router(registry_docs_router, prefix="/api/v1/registry")
+app.include_router(registry_router, prefix="/api/v1/registry")
 
 
 # ---------------------------------------------------------------------------

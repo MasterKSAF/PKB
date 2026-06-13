@@ -388,28 +388,35 @@ async def test_preview_mode_first_3_pages(pipeline):
 
 **Фаза Preview:**
 1. Определить тип файла (скан/изображение → OCR, цифровой PDF/DOC → Parser)
-2. Вызвать `POST /ocr/preview` или `POST /parser/preview` с `max_pages=3`
-3. Получить частичный сырой JSON (первые N страниц)
+2. Вызвать `POST /ocr/process` или `POST /parser/process` с `mode: "preview"`, `max_pages=3`
+3. Получить частичный сырой JSON (первые N страниц) или полный, если движок не поддерживает постраничный
 4. Передать в Converter-validator (preview API): `POST /converter/preview/metadata`
 5. Выполнить проверку уникальности: **Оркестратор → Registry**: `POST /registry/documents/check-uniqueness` (с метаданными из шага 4)
 6. Отобразить пользователю метаданные и кандидатов в дубликаты
 7. Ожидать решение пользователя: `proceed` / `stop_duplicate` / `force_new_version`
 
 **Фаза Full (при `proceed`):**
-1. Вызвать `POST /ocr/process` или `POST /parser/process` (полный режим, без `max_pages`)
+
+*Если на preview был получен полный JSON (`preview_not_supported: true`):*
+1. **Пропуск** вызова OCR/Parser — JSON уже есть
+
+*Если preview был частичным (обычный случай):*
+1. Вызвать `POST /ocr/process` или `POST /parser/process` (`mode: "full"`)
    - Получить `task_id`
    - Ожидание результата через longpoll: `GET /ocr/process/{task_id}/status?longpoll=15`
      - При завершении → сразу ответ
      - При таймауте 15c → ответ с прогрессом, повтор longpoll
    - При `status: completed` → `GET /ocr/process/{task_id}/result`
+
 2. Передать полный сырой JSON в Converter-validator: `POST /converter/convert`
 3. Выполнить проверку уникальности (Оркестратор): `POST /registry/documents/check-uniqueness`
 4. Если дубликат не найден — передать иерархический JSON в Registry: `POST /registry/documents`
 5. Передать плоский JSON (секции) в RAG Builder: `POST /rag/build`
 
 **Особенности preview-режима:**
-- Параметр `?preview=true` (или `max_pages=N`) в `POST /ocr/preview` / `POST /parser/preview`
-- Preview-ответ: без `file_key`, без сохранения бинарных объектов
+- Параметр `mode: "preview"` и `max_pages=N` в `POST /ocr/process` / `POST /parser/process`
+- Preview-ответ: без `image_key`, без сохранения бинарных объектов
+- Если движок не поддерживает постраничный парсинг — возвращается полный документ с `preview_not_supported: true`
 - Сервис не использует LLM в preview-режиме
 - Оркестратор хранит preview-данные в журнале пайплайна (не в БД)
 

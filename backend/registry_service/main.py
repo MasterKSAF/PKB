@@ -9,6 +9,7 @@ PROJECT_DIR = Path(__file__).parent
 if str(PROJECT_DIR) not in sys.path:
     sys.path.insert(0, str(PROJECT_DIR))
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.requests import Request
@@ -22,7 +23,40 @@ builtins.DomainException = DomainException
 
 from api.v1 import routes as v1_routes
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    import sys
+    from sqlalchemy import text
+    from api.v1.dependencies.database import engine
+    from api.v1.models import Base
+    from services.logger import log_event
+
+    if "pytest" not in sys.modules:
+        try:
+            # Create required schemas if they do not exist (only if backend is not sqlite)
+            if engine.dialect.name != "sqlite":
+                schemas = {table.schema for table in Base.metadata.tables.values() if table.schema}
+                try:
+                    with engine.connect() as conn:
+                        for schema in schemas:
+                            if schema == "public":
+                                continue
+                            conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema}"))
+                        conn.commit()
+                except Exception as schema_err:
+                    log_event("WARNING", "startup", error=f"Schema creation failed (might already exist or lack permissions): {str(schema_err)}")
+
+            try:
+                Base.metadata.create_all(bind=engine)
+                log_event("INFO", "startup", data={"message": "All database schemas and models created successfully"})
+            except Exception as create_all_err:
+                log_event("WARNING", "startup", error=f"Database table creation failed (might already exist or lack permissions): {str(create_all_err)}")
+        except Exception as e:
+            log_event("ERROR", "startup", error=f"Database initialization wrapper failed: {str(e)}")
+            raise e
+    yield
+
+app = FastAPI(lifespan=lifespan)
 
 @app.exception_handler(DomainException)
 async def domain_exception_handler(request: Request, exc: DomainException):

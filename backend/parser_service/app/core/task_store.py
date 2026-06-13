@@ -1,10 +1,9 @@
 """
-Новая реализация TaskStore (фасад).
+TaskStore – точка доступа к хранилищу задач.
 
-Сохраняет публичный API: task_store, TaskInfo, TaskStatus.
-Все функции делегируются фасаду TaskStore из task_store_facade.py.
+Экспортирует глобальный экземпляр task_store и модели TaskInfo, TaskStatus.
 """
-from app.core.task_store_facade import task_store
+from app.core.task_state_storage import task_store
 from app.core.task_models import TaskInfo, TaskStatus
 
 __all__ = ["task_store", "TaskInfo", "TaskStatus"]

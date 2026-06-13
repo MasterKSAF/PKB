@@ -1,0 +1,57 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE
+.idea
+.vscode
+.gigaide
+.kilo
+
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+
+# Environment
+.env
+.env.local
+*.env
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Documentation / non-code
+docs/
+docs_discussions/
+*.md
+*.docx
+
+# UI (not backend)
+UI-UX/
+
+# Individual developer folders (not backend services)
+Abzalov_Igor/
+Benuni_George/
+Documents_Pipeline/
+Eugene_Rizov/
+Fakhrutdinov_Roman/
+Osipenko_Dmitrii/
+Vitalyy_Novozhilov/
+
+# Data / temp
+orchestrator.db
+__pycache__

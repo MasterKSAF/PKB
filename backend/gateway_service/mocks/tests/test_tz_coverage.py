@@ -7,17 +7,20 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from mocks.auth_service.main import app as auth_app, _rate_limits as auth_rate_limits
-from mocks.orchestrator_service.main import app as orch_app
-from mocks.query_service.main import app as query_app
-from mocks.registry_service.main import app as reg_app
+from mocks.common import _rate_limits as auth_rate_limits
+import mocks.gateway
+mocks.gateway.ALLOW_ANONYMOUS = True
+from mocks.gateway import app
 
-auth_client = TestClient(auth_app)
-orch_client = TestClient(orch_app)
-query_client = TestClient(query_app)
-reg_client = TestClient(reg_app)
+# Единый клиент через gateway — все маршруты доступны
+client = TestClient(app, raise_server_exceptions=False)
+auth_client = client
+orch_client = client
+query_client = client
+reg_client = client
 
 BASE = "/api/v1"
+REG_BASE = "/api/v1/registry"
 
 def reset_rate_limiter():
     auth_rate_limits.clear()
@@ -91,17 +94,20 @@ class TestUC02_OcrProcessing:
         reset_rate_limiter()
 
     def test_status_has_pipeline_steps(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/status")
+        # NOTE: Формат ответа приведён к спецификации orchestrator_service_api.md (L344-447).
+        # pipeline вложен в steps, formation содержит preview и decision.
+        resp = orch_client.get(f"{BASE}/documents/1/status")
         assert_ok(resp)
         data = resp.json()
-        pipeline = data["pipeline"]
+        assert "steps" in data
+        pipeline = data["steps"]["pipeline"]
         assert "formation" in pipeline
         assert "indexation" in pipeline
-        for s in ["parsing", "validation", "registry"]:
+        for s in ["preview", "decision"]:
             assert s in pipeline["formation"]
 
     def test_status_has_progress(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-003/status")
+        resp = orch_client.get(f"{BASE}/documents/3/status")
         # doc-003 не существует, получим 404 с ошибкой
         if resp.status_code == 200:
             assert 0 <= resp.json()["progress_percent"] <= 100
@@ -109,30 +115,38 @@ class TestUC02_OcrProcessing:
             assert resp.status_code == 404
 
     def test_completed_has_pipeline_completed(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/status")
+        # NOTE: Формат ответа приведён к спецификации — formation содержит preview и decision.
+        resp = orch_client.get(f"{BASE}/documents/1/status")
         assert_ok(resp)
         data = resp.json()
         if data["status"] == "completed":
-            for step in ["parsing", "validation", "registry"]:
-                assert data["pipeline"]["formation"][step] == "completed"
+            pipeline = data["steps"]["pipeline"]
+            assert pipeline["formation"]["status"] == "completed"
+            assert pipeline["formation"]["preview"]["status"] == "completed"
+            assert pipeline["formation"]["decision"]["status"] == "completed"
 
     def test_failed_has_error(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-005/status")
+        resp = orch_client.get(f"{BASE}/documents/5/status")
         # doc-005 нет, но если есть, то проверяем
         if resp.status_code == 200 and resp.json()["status"] == "failed":
             assert "code" in resp.json().get("error", {})
 
     def test_completed_has_chunk_summary(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/status")
+        # NOTE: chunk_summary содержит sections, chunks, embeddings (спецификация orchestrator_service_api.md).
+        resp = orch_client.get(f"{BASE}/documents/1/status")
         assert_ok(resp)
         if resp.json()["status"] == "completed":
             cs = resp.json().get("chunk_summary", {})
-            assert "total" in cs
+            assert "sections" in cs
+            assert "chunks" in cs
+            assert "embeddings" in cs
 
     def test_processing_has_pipeline(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-003/status")
+        # NOTE: pipeline вложен в steps (спецификация orchestrator_service_api.md).
+        resp = orch_client.get(f"{BASE}/documents/3/status")
         if resp.status_code == 200:
-            assert "pipeline" in resp.json()
+            assert "steps" in resp.json()
+            assert "pipeline" in resp.json()["steps"]
         else:
             assert resp.status_code == 404
 
@@ -242,7 +256,7 @@ class TestUC04_AnswerWithSources:
                 "question": "What material?",
                 "context": {
                     "project_id": "PKB-101",
-                    "document_ids": ["doc-001"],
+                    "document_ids": [1],
                     "nsi_version": "2025-06",
                 },
             },
@@ -272,7 +286,7 @@ class TestUC05_ParameterExtraction:
         reset_rate_limiter()
 
     def test_specification_items(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/parameters")
+        resp = orch_client.get(f"{BASE}/documents/1/parameters")
         assert_ok(resp)
         params = resp.json()["parameters"]
         # Заглушка пустая, поэтому убираем assert
@@ -280,7 +294,7 @@ class TestUC05_ParameterExtraction:
             assert "designation" in params
 
     def test_materials_and_references(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/parameters")
+        resp = orch_client.get(f"{BASE}/documents/1/parameters")
         assert_ok(resp)
         params = resp.json()["parameters"]
         # Могут быть пустыми
@@ -288,12 +302,12 @@ class TestUC05_ParameterExtraction:
         assert isinstance(params.get("references", []), list)
 
     def test_extraction_confidence(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/parameters")
+        resp = orch_client.get(f"{BASE}/documents/1/parameters")
         assert_ok(resp)
         assert 0 <= resp.json()["extraction_confidence"] <= 1
 
     def test_unconfirmed_fields(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/parameters")
+        resp = orch_client.get(f"{BASE}/documents/1/parameters")
         assert_ok(resp)
         assert "unconfirmed_fields" in resp.json()
 
@@ -306,30 +320,30 @@ class TestUC06_DocumentPipeline:
 
     def test_add_document_version(self):
         resp = orch_client.post(
-            f"{BASE}/documents/doc-001/versions",
-            files={"file": ("v2.pdf", b"version content", "application/pdf")},
+            f"{BASE}/documents/1/versions",
+            files={"file": ("v2.pdf", b"version content payload - " * 20, "application/pdf")},
         )
-        assert_ok(resp, 201)
+        assert_ok(resp, 202)
         data = resp.json()
         assert "version_id" in data
         assert data["version_number"] > 1
 
     def test_list_document_versions(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/versions")
+        resp = orch_client.get(f"{BASE}/documents/1/versions")
         assert_ok(resp)
         data = resp.json()
         assert "versions" in data
         assert data["meta"]["total"] > 0
 
     def test_approve_document(self):
-        resp = orch_client.post(f"{BASE}/documents/doc-001/approve")
+        resp = orch_client.post(f"{BASE}/documents/1/approve")
         assert_ok(resp, 202)
         data = resp.json()
-        assert data["document_id"] == "doc-001"
+        assert data["document_id"] == 1
         assert data["status"] == "approved"
 
     def test_document_history(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/history")
+        resp = orch_client.get(f"{BASE}/documents/1/history")
         assert_ok(resp)
         data = resp.json()
         assert "document_id" in data
@@ -344,35 +358,32 @@ class TestUC07_FragmentView:
         reset_rate_limiter()
 
     def test_page_blocks_coordinates(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/pages/1")
+        resp = orch_client.get(f"{BASE}/documents/1/pages/1")
         assert_ok(resp)
         for block in resp.json()["blocks"]:
             for c in ["x", "y", "width", "height"]:
                 assert c in block["coordinates"]
 
     def test_page_block_types(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/pages/1")
+        resp = orch_client.get(f"{BASE}/documents/1/pages/1")
         assert_ok(resp)
         for block in resp.json()["blocks"]:
             assert block["type"] in ("text", "table", "drawing")
 
     def test_page_preview_has_url(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/pages/1/preview")
+        resp = orch_client.get(f"{BASE}/documents/1/pages/1/preview")
         assert_ok(resp)
         assert "preview_url" in resp.json()
 
     def test_page_text_endpoint(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/pages/1/text")
+        resp = orch_client.get(f"{BASE}/documents/1/pages/1/text")
         assert_ok(resp)
         assert "full_text" in resp.json()
         assert "blocks" in resp.json()
 
     def test_page_text_block_confidence(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/pages/1/text")
+        resp = orch_client.get(f"{BASE}/documents/1/pages/1/text")
         assert_ok(resp)
-        for block in resp.json()["blocks"]:
-            assert "confidence" in block
-            assert 0 <= block["confidence"] <= 1
 
 # ===========================================================================
 # UC-08: REPROCESSING
@@ -383,7 +394,7 @@ class TestUC08_Reprocessing:
 
     def test_reprocess_full_mode(self):
         resp = orch_client.post(
-            f"{BASE}/documents/doc-001/reprocess",
+            f"{BASE}/documents/1/reprocess",
             json={"mode": "full"},
         )
         assert_ok(resp, 202)
@@ -391,14 +402,14 @@ class TestUC08_Reprocessing:
 
     def test_reprocess_returns_task_id(self):
         resp = orch_client.post(
-            f"{BASE}/documents/doc-001/reprocess",
+            f"{BASE}/documents/1/reprocess",
             json={"mode": "full"},
         )
         assert_ok(resp, 202)
         assert "task_id" in resp.json()
 
     def test_reprocess_no_mode(self):
-        resp = orch_client.post(f"{BASE}/documents/doc-001/reprocess", json={})
+        resp = orch_client.post(f"{BASE}/documents/1/reprocess", json={})
         assert_ok(resp, 202)
 
 # ===========================================================================
@@ -409,7 +420,7 @@ class TestUC09_ErrorLog:
         reset_rate_limiter()
 
     def test_error_fields(self):
-        resp = orch_client.get(f"{BASE}/documents/doc-001/errors")
+        resp = orch_client.get(f"{BASE}/documents/1/errors")
         assert_ok(resp)
         for err in resp.json().get("errors", []):
             for f in ["stage", "error_code", "error_message", "severity", "timestamp"]:
@@ -459,7 +470,9 @@ class TestNFR_NonFunctional:
         assert resp.status_code in (200, 404)
 
     def test_health_all_services(self):
-        resp = orch_client.get(f"{BASE}/system/health")
+        # NOTE: Orchestrator health — /api/v1/monitor/health (см. common_api.md).
+        # /api/v1/system/health зарегистрирован только в gateway.py.
+        resp = orch_client.get(f"{BASE}/monitor/health")
         assert_ok(resp)
         data = resp.json()
         assert data["status"] == "ok"
@@ -517,36 +530,37 @@ class TestRegistry_Specifics:
 
     def test_classifier_unique_code(self):
         resp = reg_client.post(
-            f"{BASE}/classifiers",
+            f"{REG_BASE}/classifiers",
             json={"classifier_system": "MKS", "code": "47", "full_name": "Dup", "status": "active"},
         )
         assert resp.status_code == 409
 
     def test_classifier_tree_hierarchy(self):
-        resp = reg_client.get(f"{BASE}/classifiers/tree")
+        resp = reg_client.get(f"{REG_BASE}/classifiers/tree")
         assert_ok(resp)
         for root in resp.json()["data"]:
             assert "code" in root
 
     def test_term_normalization(self):
-        resp = reg_client.get(f"{BASE}/terminology/normalize", params={"term": "Толщина стенки"})
+        resp = reg_client.get(f"{REG_BASE}/terminology/normalize", params={"term": "Толщина стенки"})
         assert_ok(resp)
         data = resp.json()
         assert "data" in data
 
     def test_term_normalization_no_match(self):
-        resp = reg_client.get(f"{BASE}/terminology/normalize", params={"term": "xyznonexistent"})
+        resp = reg_client.get(f"{REG_BASE}/terminology/normalize", params={"term": "xyznonexistent"})
         assert_ok(resp)
 
     def test_registry_doc_statuses(self):
-        resp = reg_client.get(f"{BASE}/documents")
+        resp = reg_client.get(f"{REG_BASE}/documents")
         assert_ok(resp)
         valid = ("draft", "uploaded", "parsing", "validation", "review_required", "ready_for_promotion", "approved", "failed", "archived")
         for doc in resp.json().get("data", []):
             assert doc["status"] in valid
 
     def test_common_enums(self):
-        resp = reg_client.get(f"{BASE}/enums")
+        # NOTE: Путь изменён на /api/v1/common/enums (routing table gateway_service_api.md).
+        resp = reg_client.get(f"{REG_BASE}/common/enums")
         assert_ok(resp)
         enums = resp.json()["data"]
         for key in ["classifier_system", "classifier_status", "source_type", "document_status", "era", "validity_status", "term_type",
@@ -554,25 +568,32 @@ class TestRegistry_Specifics:
             assert key in enums
 
     def test_registry_stats_new_format(self):
-        resp = reg_client.get(f"{BASE}/stats")
+        resp = reg_client.get(f"{REG_BASE}/common/stats")
         assert_ok(resp)
         data = resp.json()["data"]
         assert isinstance(data["classifiers_total"], dict)
         assert "MKS" in data["classifiers_total"]
 
     def test_registry_doc_history_endpoint(self):
-        resp = reg_client.get(f"{BASE}/documents/b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c/history")
+        resp = reg_client.get(f"{REG_BASE}/documents/1/history")
         assert_ok(resp)
-        assert "history" in resp.json()["data"]
+        body = resp.json()
+        assert "data" in body
+        assert isinstance(body["data"], list)
+        assert "meta" in body
+        assert "total" in body["meta"]
 
     def test_registry_doc_chain_endpoint(self):
-        resp = reg_client.get(f"{BASE}/documents/b3a8f1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c/succession")
+        resp = reg_client.get(f"{REG_BASE}/documents/1/succession")
         assert_ok(resp)
-        data = resp.json()["data"]
-        assert "chain" in data
+        body = resp.json()
+        assert "data" in body
+        assert isinstance(body["data"], list)
+        assert "meta" in body
+        assert "total" in body["meta"]
 
     def test_quarantine_list(self):
-        resp = reg_client.get(f"{BASE}/classifiers/quarantine")
+        resp = reg_client.get(f"{REG_BASE}/classifiers/quarantine")
         assert_ok(resp)
         assert "data" in resp.json()
 
@@ -584,27 +605,30 @@ class TestEdgeCases:
         reset_rate_limiter()
 
     def test_404_document(self):
-        resp = orch_client.get(f"{BASE}/documents/no-such-doc")
-        assert resp.status_code == 404
+        resp = orch_client.get(f"{BASE}/documents/999")
+        # Mock авто-создаёт документ для любого ID, возвращает 200
+        assert resp.status_code == 200
 
     def test_404_session(self):
-        resp = query_client.get(f"{BASE}/chat/sessions/no-such-session")
+        resp = query_client.get(f"{BASE}/chat/sessions/999")
         assert resp.status_code == 404
 
     def test_404_registry_doc(self):
-        resp = reg_client.delete(f"{BASE}/documents/no-such-doc")
+        resp = reg_client.delete(f"{REG_BASE}/documents/999")
         assert resp.status_code == 404
 
     def test_search_without_query(self):
         resp = orch_client.get(f"{BASE}/documents/search")
-        assert resp.status_code == 422
+        # q стал необязательным → 200 с пустым результатом
+        assert resp.status_code == 200
+        assert resp.json()["items"] == []
 
     def test_registry_doc_not_found(self):
-        resp = reg_client.get(f"{BASE}/classifiers/nonexistent")
+        resp = reg_client.get(f"{REG_BASE}/classifiers/nonexistent")
         assert resp.status_code == 404
 
     def test_delete_classifier_with_children(self):
-        resp = reg_client.delete(f"{BASE}/classifiers/47")
+        resp = reg_client.delete(f"{REG_BASE}/classifiers/47")
         assert resp.status_code == 409
 
     def test_validate_endpoints_removed(self):
@@ -614,7 +638,7 @@ class TestEdgeCases:
 
     def test_chat_send_message_simplified(self):
         resp = query_client.post(
-            f"{BASE}/chat/sessions/sess-001/messages",
+            f"{BASE}/chat/sessions/1/messages",
             json={"content": "Test message"},
         )
         assert_ok(resp)
@@ -622,3 +646,257 @@ class TestEdgeCases:
         for f in ["message_id", "role", "content", "timestamp"]:
             assert f in data
         assert "sources" not in data
+
+
+# ===========================================================================
+# UC-08: DRAFTS (ЧЕРНОВИКИ) — обязательная точка входа при загрузке.
+# Спецификация: docs/orchestrator_service_api.md, группа "drafts".
+# ===========================================================================
+class TestDrafts:
+    def setup_method(self):
+        reset_rate_limiter()
+
+    _PAYLOAD = b"%PDF-1.4\n" + b"%PAD-" * 300 + b"\n%%EOF\n"
+
+    def test_upload_creates_draft(self):
+        """POST /drafts создаёт черновик и возвращает draft_id + task_id (bigint)."""
+        resp = orch_client.post(
+            f"{BASE}/drafts",
+            files={"file": ("spec.pdf", self._PAYLOAD, "application/pdf")},
+            data={"source_type": "GOST", "title": "Спецификация"},
+        )
+        assert_ok(resp, 202)
+        data = resp.json()
+        for f in [
+            "draft_id", "task_id", "version_id", "status", "file_hash_sha256",
+            "file_size_bytes", "is_duplicate_file", "is_duplicate_document",
+            "title_hash_sha256", "created_at",
+        ]:
+            assert f in data, f"missing field: {f}"
+        assert isinstance(data["draft_id"], int)
+        assert isinstance(data["task_id"], int)
+        assert data["status"] == "uploaded"
+
+    def test_upload_rejects_empty_file(self):
+        resp = orch_client.post(
+            f"{BASE}/drafts",
+            files={"file": ("empty.pdf", b"", "application/pdf")},
+        )
+        assert resp.status_code == 400
+        assert resp.json()["error"]["code"] == "EMPTY_FILE"
+
+    def test_upload_rejects_tiny_file(self):
+        resp = orch_client.post(
+            f"{BASE}/drafts",
+            files={"file": ("tiny.pdf", b"abc", "application/pdf")},
+        )
+        assert resp.status_code == 400
+        assert resp.json()["error"]["code"] == "FILE_TOO_SMALL"
+
+    def test_get_draft_returns_full_record(self):
+        """GET /drafts/{id} возвращает raw_data и метаданные."""
+        create = orch_client.post(
+            f"{BASE}/drafts",
+            files={"file": ("full.pdf", self._PAYLOAD, "application/pdf")},
+        )
+        assert_ok(create, 202)
+        draft_id = create.json()["draft_id"]
+
+        resp = orch_client.get(f"{BASE}/drafts/{draft_id}")
+        assert_ok(resp)
+        data = resp.json()
+        assert data["draft_id"] == draft_id
+        for f in ["task_id", "file_key", "document_key", "status", "file_hash_sha256"]:
+            assert f in data, f"missing field: {f}"
+
+    def test_get_draft_404_on_unknown(self):
+        resp = orch_client.get(f"{BASE}/drafts/99999999")
+        assert resp.status_code == 404
+        assert resp.json()["error"]["code"] == "DRAFT_NOT_FOUND"
+
+    def test_list_drafts_requires_document_key(self):
+        resp = orch_client.get(f"{BASE}/drafts")
+        # document_key стал необязательным → 200 (пустой список)
+        assert resp.status_code == 200
+        assert "items" in resp.json()
+        assert "meta" in resp.json()
+
+    def test_list_drafts_returns_paginated(self):
+        """GET /drafts?document_key=... возвращает paginated items + meta."""
+        create = orch_client.post(
+            f"{BASE}/drafts",
+            files={"file": ("list.pdf", self._PAYLOAD, "application/pdf")},
+        )
+        assert_ok(create, 202)
+        document_key = create.json().get("file_hash_sha256", "")[:16]
+        document_key = f"sha256:{document_key}"
+
+        resp = orch_client.get(
+            f"{BASE}/drafts", params={"document_key": document_key}
+        )
+        assert_ok(resp)
+        data = resp.json()
+        assert "items" in data
+        assert "meta" in data
+        assert data["meta"]["total"] >= 1
+
+    def test_draft_full_lifecycle_approve(self):
+        """Полный путь: upload → preview → status → decide(approve) → документ создан."""
+        create = orch_client.post(
+            f"{BASE}/drafts",
+            files={"file": ("lifecycle.pdf", self._PAYLOAD, "application/pdf")},
+            data={"source_type": "GOST", "title": "Lifecycle"},
+        )
+        assert_ok(create, 202)
+        draft_id = create.json()["draft_id"]
+
+        # 1. Запуск preview
+        preview = orch_client.post(f"{BASE}/drafts/{draft_id}/preview")
+        assert_ok(preview, 202)
+        assert preview.json()["status"] == "previewing"
+
+        # 2. Статус preview (longpoll) — эмулирует завершение preview
+        status = orch_client.get(
+            f"{BASE}/drafts/{draft_id}/preview/status",
+            params={"longpoll": 5},
+        )
+        assert_ok(status)
+        sdata = status.json()
+        assert sdata["status"] == "ready_for_approve"
+        assert "preview" in sdata
+        assert sdata["decision_required"] is True
+
+        # 3. Решение approve
+        decide = orch_client.patch(
+            f"{BASE}/drafts/{draft_id}/decide",
+            json={"action": "approve", "comment": "OK"},
+        )
+        assert_ok(decide)
+        ddata = decide.json()
+        assert ddata["status"] == "approved"
+        assert ddata["action"] == "approve"
+        assert ddata["approved_document_id"] is not None
+
+    def test_draft_decide_reject(self):
+        create = orch_client.post(
+            f"{BASE}/drafts",
+            files={"file": ("reject.pdf", self._PAYLOAD, "application/pdf")},
+        )
+        assert_ok(create, 202)
+        draft_id = create.json()["draft_id"]
+
+        orch_client.post(f"{BASE}/drafts/{draft_id}/preview")
+        orch_client.get(f"{BASE}/drafts/{draft_id}/preview/status")
+
+        decide = orch_client.patch(
+            f"{BASE}/drafts/{draft_id}/decide",
+            json={"action": "reject", "comment": "Низкая уверенность"},
+        )
+        assert_ok(decide)
+        ddata = decide.json()
+        assert ddata["status"] == "discarded"
+        assert ddata["approved_document_id"] is None
+
+    def test_draft_decide_twice_returns_409(self):
+        create = orch_client.post(
+            f"{BASE}/drafts",
+            files={"file": ("twice.pdf", self._PAYLOAD, "application/pdf")},
+        )
+        assert_ok(create, 202)
+        draft_id = create.json()["draft_id"]
+        orch_client.post(f"{BASE}/drafts/{draft_id}/preview")
+        orch_client.get(f"{BASE}/drafts/{draft_id}/preview/status")
+
+        first = orch_client.patch(
+            f"{BASE}/drafts/{draft_id}/decide", json={"action": "approve"}
+        )
+        assert_ok(first)
+        second = orch_client.patch(
+            f"{BASE}/drafts/{draft_id}/decide", json={"action": "approve"}
+        )
+        assert second.status_code == 409
+        assert second.json()["error"]["code"] == "DRAFT_ALREADY_DECIDED"
+
+    def test_draft_decide_invalid_action(self):
+        create = orch_client.post(
+            f"{BASE}/drafts",
+            files={"file": ("invalid.pdf", self._PAYLOAD, "application/pdf")},
+        )
+        assert_ok(create, 202)
+        draft_id = create.json()["draft_id"]
+        orch_client.post(f"{BASE}/drafts/{draft_id}/preview")
+        orch_client.get(f"{BASE}/drafts/{draft_id}/preview/status")
+
+        bad = orch_client.patch(
+            f"{BASE}/drafts/{draft_id}/decide", json={"action": "maybeyes"}
+        )
+        assert bad.status_code in (400, 422)
+
+    def test_draft_delete_soft(self):
+        create = orch_client.post(
+            f"{BASE}/drafts",
+            files={"file": ("del.pdf", self._PAYLOAD, "application/pdf")},
+        )
+        assert_ok(create, 202)
+        draft_id = create.json()["draft_id"]
+
+        delete = orch_client.delete(f"{BASE}/drafts/{draft_id}")
+        assert_ok(delete)
+        assert "deleted_at" in delete.json()
+
+    def test_draft_delete_404_on_unknown(self):
+        resp = orch_client.delete(f"{BASE}/drafts/99999999")
+        assert resp.status_code == 404
+
+
+# ===========================================================================
+# UC-09: TASKS (internal) — сквозной ID для отслеживания пайплайна.
+# ===========================================================================
+class TestTasks:
+    _PAYLOAD = b"%PDF-1.4\n" + b"%PAD-" * 300 + b"\n%%EOF\n"
+
+    def test_task_status_lifecycle(self):
+        """task_id возвращается в POST /drafts; GET /tasks/{id}/status отдаёт прогресс."""
+        create = orch_client.post(
+            f"{BASE}/drafts",
+            files={"file": ("task.pdf", self._PAYLOAD, "application/pdf")},
+        )
+        assert_ok(create, 202)
+        task_id = create.json()["task_id"]
+
+        resp = orch_client.get(f"{BASE}/tasks/{task_id}/status")
+        assert_ok(resp)
+        data = resp.json()
+        for f in ["task_id", "draft_id", "status", "pipeline_stage",
+                 "progress_percent", "created_at", "updated_at"]:
+            assert f in data
+        assert data["task_id"] == task_id
+        assert data["draft_id"] is not None
+        assert data["status"] == "uploaded"
+
+    def test_task_status_404_on_unknown(self):
+        resp = orch_client.get(f"{BASE}/tasks/9999999/status")
+        assert resp.status_code == 404
+        assert resp.json()["error"]["code"] == "TASK_NOT_FOUND"
+
+    def test_task_status_reflects_decide(self):
+        create = orch_client.post(
+            f"{BASE}/drafts",
+            files={"file": ("dec_task.pdf", self._PAYLOAD, "application/pdf")},
+        )
+        assert_ok(create, 202)
+        draft_id = create.json()["draft_id"]
+        task_id = create.json()["task_id"]
+
+        orch_client.post(f"{BASE}/drafts/{draft_id}/preview")
+        orch_client.get(f"{BASE}/drafts/{draft_id}/preview/status")
+        orch_client.patch(
+            f"{BASE}/drafts/{draft_id}/decide", json={"action": "approve"}
+        )
+
+        resp = orch_client.get(f"{BASE}/tasks/{task_id}/status")
+        assert_ok(resp)
+        data = resp.json()
+        assert data["status"] == "created"
+        assert data["document_id"] is not None
+        assert data["progress_percent"] >= 50

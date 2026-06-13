@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -29,24 +29,40 @@ class Settings(BaseSettings):
     )
 
     # --- Database ---
-    postgres_user: str = Field(default="rag_user", alias="POSTGRES_USER")
-    postgres_password: str = Field(default="rag_password", alias="POSTGRES_PASSWORD")
-    postgres_db: str = Field(default="knowledge_base", alias="POSTGRES_DB")
-    postgres_host: str = Field(default="127.0.0.1", alias="POSTGRES_HOST")
-    postgres_port: int = Field(default=5432, alias="POSTGRES_PORT")
+    postgres_user: str = Field(
+        default="rag_user",
+        validation_alias=AliasChoices("DB_USERNAME", "POSTGRES_USER"),
+    )
+    postgres_password: str = Field(
+        default="rag_password",
+        validation_alias=AliasChoices("DB_PASSWORD", "POSTGRES_PASSWORD"),
+    )
+    postgres_db: str = Field(
+        default="knowledge_base",
+        validation_alias=AliasChoices("DB_DATABASE", "POSTGRES_DB"),
+    )
+    postgres_host: str = Field(
+        default="127.0.0.1",
+        validation_alias=AliasChoices("DB_HOST", "POSTGRES_HOST"),
+    )
+    postgres_port: int = Field(
+        default=5432,
+        validation_alias=AliasChoices("DB_PORT", "POSTGRES_PORT"),
+    )
     postgres_pool_min: int = Field(default=2, alias="POSTGRES_POOL_MIN")
     postgres_pool_max: int = Field(default=10, alias="POSTGRES_POOL_MAX")
 
     # --- Embedding Provider ---
     embedding_api_key: str = Field(default="", alias="EMBEDDING_API_KEY")
     embedding_base_url: str = Field(
-        default="https://api.openai.com/v1", alias="EMBEDDING_BASE_URL"
+        default="http://infinity:7997", alias="EMBEDDING_BASE_URL"
     )
     embedding_model: str = Field(
-        default="intfloat/multilingual-e5-large", alias="EMBEDDING_MODEL"
+        default="Qwen/Qwen3-Embedding-0.6B", alias="EMBEDDING_MODEL"
     )
     embedding_dim: int = Field(default=1024, alias="EMBEDDING_DIM")
-    embedding_timeout: int = Field(default=30, alias="EMBEDDING_TIMEOUT")
+    embedding_timeout: int = Field(default=60, alias="EMBEDDING_TIMEOUT")
+    embedding_instruction: str = Field(default="", alias="EMBEDDING_INSTRUCTION")
 
     # --- Search ---
     search_default_top_k: int = Field(default=10, alias="SEARCH_DEFAULT_TOP_K")
@@ -72,10 +88,6 @@ class Settings(BaseSettings):
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
 
-    @property
-    def use_local_embedding(self) -> bool:
-        """Если API-ключ не задан — используем локальную модель."""
-        return not bool(self.embedding_api_key.strip())
 
 
 @lru_cache

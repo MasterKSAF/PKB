@@ -43,19 +43,35 @@ DB_DATABASE=<database_name>
 
 Файл `.env` **не должен** включаться в систему контроля версий (уже добавлен в `.gitignore`).
 
+## Инсталляция базы данных
+
+Перед первым запуском сервера надо сделфть пользователя БД и присвоить ему праваю. Для этого можно воспользоваться скриптом ```install/user_grants.py```. **Обратите внимание:** Скрипт должен быть запущен с правами суперпользователя (root). Результатом будет создание пользователя БД с заданными правами.
+
+Структуру базы данных сервер сам инсталлирует при первом запуске. Этот скрипт загружает в базу данных базовые данные:
+* enums
+* classifiers
+
+После первого запуска сервера надо загрузить в базу данных:
+``` python install/load_data.py```
+
+
 # Статусы разработки API
 
 ## 1. Классификаторы
-| METHOD | EndPoint                      | Описание                         | Статус      | Комментарии          |
-|--------|-------------------------------|----------------------------------|-------------|----------------------|
-| GET    | /registry/classifiers/        | Список классификаторов           | Реализовано |                      |
-| GET    | /registry/classifiers/tree    | Деревянная иерархия классификаторов | Реализовано |                      |
-| GET    | /registry/classifiers/{code}  | Получить один классификатор      | Реализовано |                      |
-| POST   | /registry/classifiers/        | Создать классификатор            | Реализовано |                      |
-| PUT    | /registry/classifiers/{code}  | Полное обновление классификатора | Реализовано |                      |
-| PATCH  | /registry/classifiers/{code}  | Частичное обновление            | Реализовано |                      |
-| DELETE | /registry/classifiers/{code}  | Удалить классификатор            | Реализовано |                      |
-| POST   | /registry/classifiers/import  | Импорт классификаторов           | Реализовано | Заглушка             |
+| METHOD | EndPoint                                       | Описание                            | Статус      | Комментарии          |
+|--------|------------------------------------------------|-------------------------------------|-------------|----------------------|
+| GET    | /registry/classifiers/                         | Список классификаторов              | Реализовано |                      |
+| GET    | /registry/classifiers/tree                     | Деревянная иерархия классификаторов | Реализовано |                      |
+| GET    | /registry/classifiers/{code}                   | Получить один классификатор         | Реализовано |                      |
+| POST   | /registry/classifiers/                         | Создать классификатор               | Реализовано |                      |
+| PUT    | /registry/classifiers/{code}                   | Полное обновление классификатора    | Реализовано |                      |
+| PATCH  | /registry/classifiers/{code}                   | Частичное обновление                | Реализовано |                      |
+| DELETE | /registry/classifiers/{code}                   | Удалить классификатор               | Реализовано |                      |
+| POST   | /registry/classifiers/import                   | Импорт классификаторов              | Реализовано | Заглушка             |
+| GET    | /registry/classifiers/pending                  | Список карантина классификаторов    | Реализовано |                      |
+| POST   | /registry/classifiers/pending/{id}/accept      | Принять код из карантина            | Реализовано |                      |
+| POST   | /registry/classifiers/pending/{id}/reject      | Отклонить код из карантина          | Реализовано |                      |
+| POST   | /registry/classifiers/validate                 | Валидация классификации             | Реализовано |                      |
 
 ## 2. Термины
 | METHOD | EndPoint                              | Описание                                | Статус      | Комментарии          |
@@ -81,8 +97,10 @@ DB_DATABASE=<database_name>
 | DELETE | /registry/documents/{document_id}           | Удалить документ                         | Реализовано |                      |
 | GET    | /registry/documents/export                 | Экспорт документов в CSV                 | Реализовано |                      |
 | POST   | /registry/documents/import                 | Импорт документов                        | Реализовано | Заглушка             |
-| GET    | /registry/documents/{document_id}/history  | История документа                        | Реализовано | Возвращает заглушку  |
-| GET    | /registry/documents/{document_id}/succession | История смены/приемственности документа | Реализовано | Возвращает заглушку  |
+| GET    | /registry/documents/{document_id}/history  | История изменения статусов                | Реализовано |                      |
+| GET    | /registry/documents/{document_id}/succession | Цепочка преемственности документа       | Реализовано |                      |
+| POST   | /registry/documents/check-uniqueness        | Проверить уникальность документа         | Реализовано |                      |
+| GET    | /registry/documents/{document_id}/sections  | Секции документа (для RAG Builder)       | Реализовано |                      |
 
 ## 4. Общие
 | METHOD | EndPoint            | Описание                     | Статус      | Комментарии          |
@@ -91,6 +109,7 @@ DB_DATABASE=<database_name>
 | GET    | /registry/enums     | Списки допустимых значений   | Реализовано |                      |
 
 ## 5. Модели данных
+
 
 Таблицы находятся в общей БД, доступны напрямую всем сервисам.
 

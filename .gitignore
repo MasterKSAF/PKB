@@ -23,6 +23,7 @@ data_raw/
 data_processed/
 data_artifacts/
 artifacts/
+check_result/
 
 *.pdf
 *.dwg
@@ -43,6 +44,15 @@ Desktop.ini
 
 # IDE
 .vscode/
+
+# Windows artifacts
+NUL
+nul
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
 .idea/
 .gigaide/gigaide.properties
 .kilo/agent-manager.json

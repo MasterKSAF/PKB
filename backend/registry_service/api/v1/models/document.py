@@ -1,7 +1,7 @@
 import uuid
 
 from sqlalchemy import Column, String, Text, BigInteger, Integer, Boolean, Date, DateTime
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB
 
 from .base import Base
 
@@ -10,7 +10,7 @@ class Document(Base):
     __tablename__ = 'documents'
     __table_args__ = {'schema': 'registry'}
 
-    id = Column('id', UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column('id', BigInteger, primary_key=True, autoincrement=True)
     doc_code = Column('doc_code', Text, nullable=False)
     title = Column('title', Text, nullable=False)
     normalized_title = Column('normalized_title', Text)
@@ -33,9 +33,14 @@ class Document(Base):
     file_size_bytes = Column('file_size_bytes', BigInteger)
     processing_status = Column('processing_status', String(50))
     chunk_count = Column('chunk_count', Integer)
-    successor_doc_id = Column('successor_doc_id', UUID(as_uuid=True))
-    predecessor_doc_id = Column('predecessor_doc_id', UUID(as_uuid=True))
+    successor_doc_id = Column('successor_doc_id', BigInteger)
+    predecessor_doc_id = Column('predecessor_doc_id', BigInteger)
+    classifier_code = Column('classifier_code', Text, nullable=True)
+    industry_code = Column('industry_code', Text, nullable=True)
+    enterprise_id = Column('enterprise_id', BigInteger, nullable=True)
     created_by = Column('created_by', Text)
     updated_by = Column('updated_by', Text)
+    classification_status = Column('classification_status', JSONB, default=dict, server_default='{}')
+    doc_metadata = Column('metadata', JSONB, default=dict, server_default='{}')
     created_at = Column('created_at', DateTime)
     updated_at = Column('updated_at', DateTime)

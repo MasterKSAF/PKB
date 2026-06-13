@@ -50,11 +50,11 @@ RAG Builder принимает JSON от Registry (через `GET /registry/doc
 
 ```json
 {
-  "document_id": "b3a8f1c2-...",
+  "document_id": 1,
   "sections": [
     {
       "section_id": 420001,
-      "document_id": "b3a8f1c2-...",
+      "document_id": 1,
       "clause": "1",
       "title": null,
       "level": 1,
@@ -68,7 +68,7 @@ RAG Builder принимает JSON от Registry (через `GET /registry/doc
     },
     {
       "section_id": 420005,
-      "document_id": "b3a8f1c2-...",
+      "document_id": 1,
       "clause": "6.1",
       "title": "Допуск соосности при степени точности",
       "level": 2,
@@ -97,18 +97,19 @@ RAG Builder принимает JSON от Registry (через `GET /registry/doc
 ```
 
 | Поле | Тип | Обязательность | Описание |
-|---|---|---|---|
-| `document_id` | string | Да | ID документа (UUID) |
-| `sections` | array | Да | Массив секций документа от Registry. Каждая секция содержит: `section_id`, `document_id`, `clause`, `title`, `level`, `path`, `page`, `type`, `content`, `created_at` |
-| `sections[].type` | string | Да | Тип секции: `text`, `textBlock`, `headerFooter`, `table`, `list`, `image`, `formula`. Влияет на стратегию чанкования |
-| `sections[].content` | object | Да | Объектный контент. Структура зависит от `type` |
-| `protected_spans` | array | Нет | Массив неразрывных блоков: `{section_id, start_offset, end_offset}`. Запрещает чанкование внутри указанного диапазона секции |
-| `options.strategy` | string | Нет | Стратегия разбиения → `rag_document_chunks.strategy` (`semantic_512`, `fixed_256`) |
+|------|-----|---------------|----------|
+| `document_id` | bigint | Да | ID документа в Registry |
+| `sections` | array | Да | Массив секций для индексации |
+| `sections[].section_id` | bigint | Да | ID секции |
+| `sections[].path` | string | Да | Путь секции (напр. "1.2.3") |
+| `sections[].type` | string | Да | Тип секции: `text`, `textBlock`, `table`, `image`, `list`, `formula`, `headerFooter` |
+| `sections[].content` | object/jsonb | Да | Содержимое секции (JSONB, см. `registry_for_rag_v2`) |
+| `sections[].chunk_index` | int | Нет | Порядковый номер чанка (если предварительно нарезан) |
 
 **Ответ `201`:**
 ```json
 {
-  "document_id": "b3a8f1c2-...",
+  "document_id": 1,
   "status": "completed",
   "indexed_at": "2026-05-15T12:00:18Z",
   "chunks_count": 34,
@@ -139,7 +140,7 @@ RAG Builder принимает JSON от Registry (через `GET /registry/doc
 **Ответ `200`:**
 ```json
 {
-  "document_id": "b3a8f1c2-...",
+  "document_id": 1,
   "deleted_count": 128,
   "status": "completed"
 }
@@ -160,7 +161,7 @@ RAG Builder принимает JSON от Registry (через `GET /registry/doc
 **Ответ `200`:**
 ```json
 {
-  "document_id": "b3a8f1c2-...",
+  "document_id": 1,
   "status": "indexed",
   "chunks_count": 34,
   "has_embeddings": true,

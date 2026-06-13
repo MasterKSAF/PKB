@@ -56,7 +56,7 @@ async def test_delete_session(client):
 
 @pytest.mark.asyncio
 async def test_session_not_found(client):
-    r = await client.get("/api/v1/chat/sessions/nonexistent-id")
+    r = await client.get("/api/v1/chat/sessions/999999")
     assert r.status_code == 404
     data = r.json()
     assert "error" in data or "detail" in data

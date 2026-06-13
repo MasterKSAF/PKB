@@ -104,25 +104,26 @@ backend/gateway_service/
 │   ├── registry_service_api.md
 │   └── overview.md
 ├── mocks/
-│   ├── common.py                   # Seed-данные, модели, утилиты
-│   ├── gateway.py                  # Единый шлюз (порт 8081)
+│   ├── common.py                   # Единый источник: seed-данные, модели,
+│   │                               #   in-memory хранилища, утилиты
+│   ├── gateway.py                  # Единый шлюз (порт 8081) + middleware
+│   ├── handlers/                   # Единая папка хендлеров (без сервисов)
+│   │   ├── __init__.py
+│   │   ├── auth_routes.py          # auth/admin/internal
+│   │   ├── orch_routes.py          # documents/drafts/tasks/monitor
+│   │   ├── query_routes.py         # chat/text/projects
+│   │   └── registry_routes.py      # classifiers/terminology/common/docs
+│   ├── shared.py                   # (устарел, данные в common.py)
 │   ├── start_service.py            # Утилита запуска
 │   ├── run_all.py                  # Запуск всех сервисов
 │   ├── README.md                   # Этот файл
 │   │
-│   ├── auth_service/
-│   │   └── main.py                 # Auth Service (router)
-│   ├── orchestrator_service/
-│   │   └── main.py                 # Orchestrator (router)
-│   ├── query_service/
-│   │   └── main.py                 # Query Service (router)
-│   ├── registry_service/
-│   │   └── main.py                 # Registry Service (2 routers)
-│   │
 │   └── tests/
-│       ├── test_api.py             # 151 базовых теста
-│       ├── test_extended.py        # 61 расширенный тест
-│       └── test_tz_coverage.py     # 76 тестов покрытия ТЗ
+│       ├── test_api.py             # 153 теста
+│       ├── test_extended.py        # 68 расширенных тестов
+│       ├── test_tz_coverage.py     # 115 тестов покрытия ТЗ
+│       ├── test_checker_coverage.py
+│       └── test_registry_paths.py
 └── README.md                       # Этот файл
 ```
 

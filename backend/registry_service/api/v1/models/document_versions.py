@@ -8,8 +8,8 @@ class DocumentVersion(Base):
     __tablename__ = 'document_versions'
     __table_args__ = {'schema': 'registry'}
 
-    id = Column('id', UUID(as_uuid=True), primary_key=True)
-    document_id = Column('document_id', UUID(as_uuid=True), nullable=False)
+    id = Column('id', BigInteger, primary_key=True, autoincrement=True)
+    document_id = Column('document_id', BigInteger, nullable=False)
     version_number = Column('version_number', Integer)
     file_hash_sha256 = Column('file_hash_sha256', Text)
     file_size_bytes = Column('file_size_bytes', BigInteger)

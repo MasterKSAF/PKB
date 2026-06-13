@@ -1,5 +1,6 @@
 """
 Registry Service Client with mock mode support.
+Uses in-memory storage for mock data instead of static responses.
 """
 
 from typing import Any, Dict, List, Optional
@@ -9,7 +10,44 @@ from app.services.base_client import ServiceClient
 
 
 class RegistryServiceClient(ServiceClient):
-    """Client for Registry Service (classifiers, terminology, documents)."""
+    """Client for Registry Service."""
+
+    # ------------------------------------------------------------------
+    #  Immutable seed data — always available as fallback
+    # ------------------------------------------------------------------
+
+    _SEED_DRAFTS: Dict[int, Dict[str, Any]] = {
+        1: {
+            "draft_id": 1,
+            "file_key": "drafts/1/file.pdf",
+            "document_key": "doc-1",
+            "status": "uploaded",
+            "created_by": "user-1",
+            "created_at": "2026-06-08T10:00:00Z",
+            "updated_at": "2026-06-08T10:00:00Z",
+        },
+    }
+
+    _SEED_DOCUMENTS: Dict[int, Dict[str, Any]] = {
+        1: {
+            "document_id": 1,
+            "title": "Test Document",
+            "status": "active",
+        },
+    }
+
+    # ------------------------------------------------------------------
+    #  Runtime storage — mutated by mock operations.
+    #  Reads fall back to seed data when runtime has no entry.
+    #  Deletes remove from runtime only (re-exposing seed).
+    # ------------------------------------------------------------------
+
+    _storage: Dict[str, Any] = {
+        "drafts": {},  # runtime overrides
+        "documents": {},
+        "draft_seq": 1,
+        "doc_seq": 1,
+    }
 
     def __init__(self):
         super().__init__(
@@ -18,533 +56,536 @@ class RegistryServiceClient(ServiceClient):
             mock_mode=settings.services.REGISTRY_SERVICE_MOCK,
         )
 
+    # ------------------------------------------------------------------
+    #  Storage helpers
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def _get_draft(cls, storage: dict, draft_id: int) -> Optional[dict]:
+        """Get draft from runtime or fall back to seed."""
+        draft = storage["drafts"].get(draft_id)
+        if draft is not None:
+            return draft
+        return cls._SEED_DRAFTS.get(draft_id)
+
+    @classmethod
+    def _get_document(cls, storage: dict, doc_id: int) -> Optional[dict]:
+        """Get document from runtime or fall back to seed."""
+        doc = storage["documents"].get(doc_id)
+        if doc is not None:
+            return doc
+        return cls._SEED_DOCUMENTS.get(doc_id)
+
+    @classmethod
+    def _all_drafts(cls, storage: dict) -> List[dict]:
+        """Merge seed + runtime drafts (runtime shadows seed)."""
+        merged = dict(cls._SEED_DRAFTS)
+        merged.update(storage["drafts"])
+        return list(merged.values())
+
+    @classmethod
+    def _all_documents(cls, storage: dict) -> List[dict]:
+        """Merge seed + runtime documents (runtime shadows seed)."""
+        merged = dict(cls._SEED_DOCUMENTS)
+        merged.update(storage["documents"])
+        return list(merged.values())
+
+    # ------------------------------------------------------------------
+    #  Mock generator — routes method+endpoint to storage-backed handlers
+    # ------------------------------------------------------------------
+
     async def _generate_mock(
         self, method: str, endpoint: str, default_mock: Dict[str, Any], **kwargs
     ) -> Dict[str, Any]:
-        """Generate mock registry responses."""
-        # --- Classifiers ---
-        if endpoint == "/classifiers" and method == "GET":
-            return {
-                "data": [
-                    {
-                        "code": "01",
-                        "parent_code": None,
-                        "full_name": "Судостроение",
-                        "doc_type": "normative",
-                        "jurisdiction": "RF",
-                        "language": "ru",
-                        "oks_code": "01.040.47",
-                        "is_thematic": False,
-                        "created_at": "2025-12-01T08:00:00Z",
-                        "updated_at": "2025-12-01T08:00:00Z",
-                    }
-                ],
-                "meta": {"total": 1, "page": 1, "page_size": 50},
-            }
+        storage = type(self)._storage
+        endpoint = endpoint.rstrip("/")
+        parts = endpoint.split("/")
+        # parts = ["", "registry", ...]
 
-        if endpoint == "/classifiers/tree" and method == "GET":
-            return {
-                "data": [
-                    {
-                        "code": "01",
-                        "full_name": "Судостроение",
-                        "doc_type": "normative",
-                        "oks_code": "01.040.47",
-                        "is_thematic": False,
-                        "children": [],
-                    }
-                ],
-                "meta": {"total": 1, "max_depth_reached": 5},
-            }
+        # --- Drafts ---
+        if endpoint == "/registry/drafts":
+            if method == "POST":
+                return self._mock_create_draft(storage, kwargs.get("json", {}))
+            elif method == "GET":
+                return self._mock_list_drafts(storage, kwargs.get("params", {}))
+            return default_mock
 
         if (
-            endpoint.startswith("/classifiers/")
-            and method == "GET"
-            and "tree" not in endpoint
+            len(parts) >= 4
+            and parts[1] == "registry"
+            and parts[2] == "drafts"
+            and parts[3].isdigit()
         ):
-            code = endpoint.split("/")[-1]
-            return {
-                "data": {
-                    "code": code,
-                    "parent_code": None,
-                    "full_name": f"Узел {code}",
-                    "doc_type": "normative",
-                    "jurisdiction": "RF",
-                    "language": "ru",
-                    "oks_code": "01.040.47",
-                    "is_thematic": False,
-                    "created_at": "2025-12-01T08:00:00Z",
-                    "updated_at": "2025-12-01T08:00:00Z",
-                }
-            }
+            draft_id = int(parts[3])
+            sub = parts[4] if len(parts) > 4 else None
 
-        if endpoint == "/classifiers" and method == "POST":
-            request_data = kwargs.get("json", {})
-            return {
-                "data": {
-                    "code": request_data.get("code", "new-code"),
-                    "parent_code": request_data.get("parent_code"),
-                    "full_name": request_data.get("full_name", "Новый узел"),
-                    "doc_type": request_data.get("doc_type", "normative"),
-                    "jurisdiction": request_data.get("jurisdiction", "RF"),
-                    "language": request_data.get("language", "ru"),
-                    "oks_code": request_data.get("oks_code"),
-                    "is_thematic": request_data.get("is_thematic", False),
-                    "created_at": "2026-05-05T10:00:00Z",
-                    "updated_at": "2026-05-05T10:00:00Z",
-                }
-            }
+            if sub is None:
+                if method == "GET":
+                    return self._mock_get_draft(storage, draft_id)
+                elif method == "DELETE":
+                    return self._mock_delete_draft(storage, draft_id)
+                return default_mock
 
-        if endpoint.startswith("/classifiers/") and method == "DELETE":
-            code = endpoint.split("/")[-1]
-            return {
-                "data": {
-                    "code": code,
-                    "deleted": True,
-                    "deleted_at": "2026-05-05T10:30:00Z",
-                }
-            }
+            if sub == "preview" and method == "GET":
+                return self._mock_get_draft_preview(storage, draft_id)
 
-        if endpoint == "/classifiers/import" and method == "POST":
-            return {"data": {"inserted": 5, "updated": 2, "errors": []}}
+            if sub == "status" and method == "PATCH":
+                return self._mock_update_draft_status(
+                    storage, draft_id, kwargs.get("json", {})
+                )
 
-        # --- Terminology ---
-        if endpoint == "/terminology" and method == "GET":
-            return {
-                "data": [
-                    {
-                        "term_id": "t-mock-001",
-                        "term": "обшивка",
-                        "normalized_term": "обшивка",
-                        "context": "Конструкция корпуса",
-                        "source": "Правила РС",
-                        "created_at": "2025-12-01T08:00:00Z",
-                    }
-                ],
-                "meta": {"total": 1, "page": 1, "page_size": 50},
-            }
+        # --- Documents ---
+        # /registry/documents/check-uniqueness (must be before generic /documents/{id})
+        if endpoint == "/registry/documents/check-uniqueness" and method == "POST":
+            return self._mock_check_uniqueness(storage, kwargs.get("json", {}))
 
-        if endpoint.startswith("/terminology/") and method == "GET":
-            term_id = endpoint.split("/")[-1]
-            return {
-                "data": {
-                    "term_id": term_id,
-                    "term": "обшивка",
-                    "normalized_term": "обшивка",
-                    "context": "Конструкция корпуса",
-                    "source": "Правила РС",
-                    "created_at": "2025-12-01T08:00:00Z",
-                }
-            }
+        if endpoint == "/registry/documents":
+            if method == "POST":
+                return self._mock_create_document(storage, kwargs.get("json", {}))
+            elif method == "GET":
+                return self._mock_list_documents(storage, kwargs.get("params", {}))
+            return default_mock
 
-        if endpoint == "/terminology" and method == "POST":
-            request_data = kwargs.get("json", {})
-            return {
-                "data": {
-                    "term_id": "t-mock-new",
-                    "term": request_data.get("term", ""),
-                    "normalized_term": request_data.get("normalized_term", ""),
-                    "context": request_data.get("context", ""),
-                    "source": request_data.get("source", ""),
-                    "created_at": "2026-05-05T10:00:00Z",
-                }
-            }
-
-        if endpoint.startswith("/terminology/") and method == "DELETE":
-            return {
-                "data": {
-                    "term_id": endpoint.split("/")[-1],
-                    "deleted": True,
-                    "deleted_at": "2026-05-05T10:30:00Z",
-                }
-            }
-
-        if endpoint == "/terminology/normalize" and method == "POST":
-            request_data = kwargs.get("json", {})
-            return {
-                "data": {
-                    "original": request_data.get("term", ""),
-                    "normalized": request_data.get("term", "").lower(),
-                    "found": True,
-                }
-            }
-
-        # --- Registry Documents ---
-        if endpoint == "/documents" and method == "GET":
-            return {
-                "data": [
-                    {
-                        "doc_id": 1,
-                        "title": "Правила РС часть I",
-                        "doc_number": "РС-001-2023",
-                        "classifier_code": "01",
-                        "classifier_name": "Судостроение",
-                        "status": "active",
-                        "source": "Российский морской регистр",
-                        "notes": "",
-                        "created_at": "2025-12-01T08:00:00Z",
-                        "updated_at": "2025-12-01T08:00:00Z",
-                    }
-                ],
-                "meta": {"total": 1, "page": 1, "page_size": 50},
-            }
-
-        if endpoint.startswith("/documents/") and method == "GET":
-            doc_id = endpoint.split("/")[-1]
-            return {
-                "data": {
-                    "doc_id": int(doc_id) if doc_id.isdigit() else 1,
-                    "title": "Правила РС часть I",
-                    "doc_number": "РС-001-2023",
-                    "classifier_code": "01",
-                    "classifier_name": "Судостроение",
-                    "status": "active",
-                    "source": "Российский морской регистр",
-                    "notes": "",
-                    "created_at": "2025-12-01T08:00:00Z",
-                    "updated_at": "2025-12-01T08:00:00Z",
-                }
-            }
-
-        if endpoint == "/documents" and method == "POST":
-            request_data = kwargs.get("json", {})
-            return {
-                "data": {
-                    "doc_id": 999,
-                    "title": request_data.get("title", ""),
-                    "doc_number": request_data.get("doc_number", ""),
-                    "classifier_code": request_data.get("classifier_code", ""),
-                    "status": request_data.get("status", "draft"),
-                    "source": request_data.get("source", ""),
-                    "notes": request_data.get("notes", ""),
-                    "created_at": "2026-05-05T10:00:00Z",
-                    "updated_at": "2026-05-05T10:00:00Z",
-                }
-            }
-
-        if endpoint.startswith("/documents/") and method == "DELETE":
-            return {
-                "data": {
-                    "doc_id": endpoint.split("/")[-1],
-                    "deleted": True,
-                    "deleted_at": "2026-05-05T10:30:00Z",
-                }
-            }
-
-        # --- Common ---
-        if endpoint == "/common/statistics" and method == "GET":
-            return {
-                "data": {
-                    "classifiers_total": 150,
-                    "terminology_total": 1200,
-                    "documents_total": 45,
-                    "documents_by_status": {
-                        "draft": 5,
-                        "active": 30,
-                        "obsolete": 8,
-                        "need_to_buy": 1,
-                        "searching": 1,
-                    },
-                }
-            }
-
-        if endpoint == "/common/enums" and method == "GET":
-            return {
-                "data": {
-                    "doc_type": [
-                        "normative",
-                        "archival_scan",
-                        "drawing",
-                        "specification",
-                    ],
-                    "jurisdiction": ["RF", "international"],
-                    "language": ["ru", "en"],
-                    "document_status": [
-                        "draft",
-                        "active",
-                        "obsolete",
-                        "need_to_buy",
-                        "searching",
-                    ],
-                    "context": ["construction", "materials", "welding", "pipeline"],
-                    "file_document_type": ["pdf", "png", "jpg", "tiff"],
-                    "file_document_status": [
-                        "queued",
-                        "processing",
-                        "completed",
-                        "failed",
-                    ],
-                    "check_result_status": ["ok", "warning", "error"],
-                    "match_status": [
-                        "match",
-                        "possible_discrepancy",
-                        "not_found_in_project",
-                        "not_found_in_norm",
-                        "insufficient_data",
-                    ],
-                    "ocr_engine": ["paddleocr", "tesseract"],
-                    "chat_status": ["active", "archived"],
-                }
-            }
+        if (
+            len(parts) >= 4
+            and parts[1] == "registry"
+            and parts[2] == "documents"
+            and parts[3].isdigit()
+        ):
+            doc_id = int(parts[3])
+            if method == "GET":
+                return self._mock_get_document(storage, doc_id)
+            elif method == "PATCH":
+                return self._mock_update_document(storage, doc_id, kwargs.get("json", {}))
+            elif method == "DELETE":
+                return self._mock_delete_document(storage, doc_id)
+            return default_mock
 
         return default_mock
 
-    # --- Classifiers ---
+    # ------------------------------------------------------------------
+    #  Draft mock handlers
+    # ------------------------------------------------------------------
 
-    async def list_classifiers(
-        self,
-        page: int = 1,
-        page_size: int = 50,
-        doc_type: Optional[str] = None,
-        parent_code: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        """List classifier nodes (flat)."""
-        params: Dict[str, Any] = {"page": page, "page_size": page_size}
-        if doc_type:
-            params["doc_type"] = doc_type
-        if parent_code:
-            params["parent_code"] = parent_code
-        return await self.call(
-            "GET",
-            "/classifiers",
-            mock_response={
-                "data": [],
-                "meta": {"total": 0, "page": 1, "page_size": 50},
-            },
-            params=params,
-        )
+    @staticmethod
+    def _mock_create_draft(storage: dict, body: dict) -> dict:
+        storage["draft_seq"] += 1
+        draft_id = storage["draft_seq"]
+        now = "2026-06-08T10:00:00Z"
+        draft: Dict[str, Any] = {
+            "draft_id": draft_id,
+            "file_key": body.get("file_key", ""),
+            "document_key": body.get("document_key", ""),
+            "status": "uploaded",
+            "created_by": body.get("created_by", ""),
+            "created_at": now,
+            "updated_at": now,
+        }
+        if body.get("file_hash_sha256"):
+            draft["file_hash_sha256"] = body["file_hash_sha256"]
+        if body.get("title_hash_sha256"):
+            draft["title_hash_sha256"] = body["title_hash_sha256"]
+        storage["drafts"][draft_id] = draft
+        return {"data": dict(draft)}
 
-    async def get_classifier_tree(
-        self, root_code: Optional[str] = None, max_depth: int = 5
-    ) -> Dict[str, Any]:
-        """Get classifier tree (hierarchical)."""
-        params: Dict[str, Any] = {}
-        if root_code:
-            params["root_code"] = root_code
-        params["max_depth"] = max_depth
-        return await self.call(
-            "GET",
-            "/classifiers/tree",
-            mock_response={
-                "data": [],
-                "meta": {"total": 0, "max_depth_reached": max_depth},
-            },
-            params=params,
-        )
+    @classmethod
+    def _mock_get_draft(cls, storage: dict, draft_id: int) -> dict:
+        draft = cls._get_draft(storage, draft_id)
+        if draft is not None:
+            return {"data": dict(draft)}
+        return {"error": {"code": "NOT_FOUND", "message": f"Draft {draft_id} not found"}}
 
-    async def get_classifier(self, code: str) -> Dict[str, Any]:
-        """Get a single classifier node."""
-        return await self.call(
-            "GET", f"/classifiers/{code}", mock_response={"data": {}}
-        )
+    @classmethod
+    def _mock_get_draft_preview(cls, storage: dict, draft_id: int) -> dict:
+        if cls._get_draft(storage, draft_id) is None:
+            return {"error": {"code": "NOT_FOUND", "message": f"Draft {draft_id} not found"}}
+        return {
+            "data": {
+                "draft_id": draft_id,
+                "doc_code": "ГОСТ 20868-81",
+                "title": "Стойки установочные крепежные",
+                "document_type": "normative",
+                "year": "1981",
+                "revision": None,
+                "preview_not_supported": False,
+                "total_pages": 3,
+                "processed_pages": 3,
+            }
+        }
 
-    async def create_classifier(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Create a classifier node."""
-        return await self.call(
-            "POST", "/classifiers", mock_response={"data": {}}, json=data
-        )
+    @classmethod
+    def _mock_list_drafts(cls, storage: dict, params: dict) -> dict:
+        page = int(params.get("page", 1))
+        page_size = int(params.get("page_size", 50))
+        status_filter = params.get("status")
 
-    async def update_classifier(
-        self, code: str, data: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """Update a classifier node."""
-        return await self.call(
-            "PUT", f"/classifiers/{code}", mock_response={"data": {}}, json=data
-        )
+        items = cls._all_drafts(storage)
+        if status_filter:
+            items = [d for d in items if d.get("status") == status_filter]
 
-    async def patch_classifier(self, code: str, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Partially update a classifier node."""
-        return await self.call(
-            "PATCH", f"/classifiers/{code}", mock_response={"data": {}}, json=data
-        )
+        total = len(items)
+        start = (page - 1) * page_size
+        end = start + page_size
+        page_items = [dict(d) for d in items[start:end]]
 
-    async def delete_classifier(self, code: str) -> Dict[str, Any]:
-        """Delete a classifier node."""
-        return await self.call(
-            "DELETE", f"/classifiers/{code}", mock_response={"data": {}}
-        )
+        return {
+            "data": page_items,
+            "meta": {"total": total, "page": page, "page_size": page_size},
+        }
 
-    async def import_classifiers(self, nodes: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Import classifier nodes in bulk."""
+    @classmethod
+    def _mock_update_draft_status(cls, storage: dict, draft_id: int, body: dict) -> dict:
+        # If not in runtime, copy seed to runtime first so we can mutate it
+        draft = storage["drafts"].get(draft_id)
+        if draft is None:
+            seed = cls._SEED_DRAFTS.get(draft_id)
+            if seed is None:
+                return {
+                    "error": {
+                        "code": "NOT_FOUND",
+                        "message": f"Draft {draft_id} not found",
+                    }
+                }
+            draft = dict(seed)
+            storage["drafts"][draft_id] = draft
+
+        status = body.get("status")
+        draft["status"] = status
+        if "document_id" in body:
+            draft["document_id"] = body["document_id"]
+        draft["updated_at"] = "2026-06-08T10:00:00Z"
+        return {
+            "data": {
+                "draft_id": draft_id,
+                "status": status,
+                "document_id": body.get("document_id"),
+                "updated_at": draft["updated_at"],
+            }
+        }
+
+    @classmethod
+    def _mock_delete_draft(cls, storage: dict, draft_id: int) -> dict:
+        # Check existence in runtime OR seed
+        exists = draft_id in storage["drafts"] or draft_id in cls._SEED_DRAFTS
+        if not exists:
+            return {
+                "error": {
+                    "code": "NOT_FOUND",
+                    "message": f"Draft {draft_id} not found",
+                }
+            }
+        # Remove runtime entry (seed re-exposed — pre-seeded entries are
+        # logically indestructible, matching old mock behaviour)
+        storage["drafts"].pop(draft_id, None)
+        return {
+            "data": {
+                "draft_id": draft_id,
+                "deleted": True,
+                "deleted_at": "2026-06-08T10:00:00Z",
+            }
+        }
+
+    # ------------------------------------------------------------------
+    #  Document mock handlers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _mock_create_document(storage: dict, body: dict) -> dict:
+        storage["doc_seq"] += 1
+        doc_id = storage["doc_seq"]
+        doc = {"document_id": doc_id, **body}
+        storage["documents"][doc_id] = doc
+        return {"data": dict(doc)}
+
+    @classmethod
+    def _mock_get_document(cls, storage: dict, doc_id: int) -> dict:
+        doc = cls._get_document(storage, doc_id)
+        if doc is not None:
+            return {"data": dict(doc)}
+        return {"error": {"code": "NOT_FOUND", "message": f"Document {doc_id} not found"}}
+
+    @classmethod
+    def _mock_list_documents(cls, storage: dict, params: dict) -> dict:
+        page = int(params.get("page", 1))
+        page_size = int(params.get("page_size", 50))
+        status_filter = params.get("status")
+
+        items = cls._all_documents(storage)
+        if status_filter:
+            items = [d for d in items if d.get("status") == status_filter]
+
+        total = len(items)
+        start = (page - 1) * page_size
+        end = start + page_size
+        page_items = [dict(d) for d in items[start:end]]
+
+        return {
+            "data": page_items,
+            "meta": {"total": total, "page": page, "page_size": page_size},
+        }
+
+    @classmethod
+    def _mock_update_document(cls, storage: dict, doc_id: int, body: dict) -> dict:
+        doc = storage["documents"].get(doc_id)
+        if doc is None:
+            seed = cls._SEED_DOCUMENTS.get(doc_id)
+            if seed is None:
+                return {
+                    "error": {
+                        "code": "NOT_FOUND",
+                        "message": f"Document {doc_id} not found",
+                    }
+                }
+            doc = dict(seed)
+            storage["documents"][doc_id] = doc
+        doc.update(body)
+        return {"data": {"document_id": doc_id, **doc}}
+
+    @classmethod
+    def _mock_delete_document(cls, storage: dict, doc_id: int) -> dict:
+        exists = doc_id in storage["documents"] or doc_id in cls._SEED_DOCUMENTS
+        if not exists:
+            return {
+                "error": {
+                    "code": "NOT_FOUND",
+                    "message": f"Document {doc_id} not found",
+                }
+            }
+        storage["documents"].pop(doc_id, None)
+        return {"data": {"deleted": True, "document_id": doc_id}}
+
+    @classmethod
+    def _mock_check_uniqueness(cls, storage: dict, body: dict) -> dict:
+        file_hash = body.get("file_hash_sha256", "")
+        is_duplicate = False
+        if file_hash:
+            for d in cls._all_drafts(storage) + cls._all_documents(storage):
+                if d.get("file_hash_sha256") == file_hash:
+                    is_duplicate = True
+                    break
+        return {
+            "data": {
+                "is_duplicate_file": is_duplicate,
+                "is_duplicate_document": False,
+                "candidates": [],
+            }
+        }
+
+    # ------------------------------------------------------------------
+    #  Public API — each delegates to self.call() which routes through
+    #  _generate_mock in mock mode.  Signatures unchanged.
+    # ------------------------------------------------------------------
+
+    async def create_document(self, document_data: dict) -> dict:
+        """Create a new document in the registry."""
         return await self.call(
             "POST",
-            "/classifiers/import",
-            mock_response={"data": {"inserted": 0, "updated": 0, "errors": []}},
-            json={"nodes": nodes},
+            "/registry/documents",
+            mock_response={"data": {"document_id": 1, **document_data}},
+            json=document_data,
         )
 
-    # --- Terminology ---
-
-    async def list_terminology(
-        self, page: int = 1, page_size: int = 50, search: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """List terminology entries."""
-        params: Dict[str, Any] = {"page": page, "page_size": page_size}
-        if search:
-            params["search"] = search
+    async def get_document(self, document_id: int) -> dict:
+        """Get document by ID."""
         return await self.call(
             "GET",
-            "/terminology",
+            f"/registry/documents/{document_id}",
             mock_response={
-                "data": [],
-                "meta": {"total": 0, "page": 1, "page_size": 50},
+                "data": {
+                    "document_id": document_id,
+                    "title": "Test Document",
+                    "status": "active",
+                }
             },
-            params=params,
         )
 
-    async def get_term(self, term_id: str) -> Dict[str, Any]:
-        """Get a terminology entry."""
-        return await self.call(
-            "GET", f"/terminology/{term_id}", mock_response={"data": {}}
-        )
-
-    async def create_term(
-        self,
-        term: str,
-        normalized_term: Optional[str] = None,
-        context: Optional[str] = None,
-        source: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        """Create a terminology entry."""
-        body = {"term": term}
-        if normalized_term:
-            body["normalized_term"] = normalized_term
-        if context:
-            body["context"] = context
-        if source:
-            body["source"] = source
-        return await self.call(
-            "POST", "/terminology", mock_response={"data": {}}, json=body
-        )
-
-    async def update_term(self, term_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Update a terminology entry."""
-        return await self.call(
-            "PUT", f"/terminology/{term_id}", mock_response={"data": {}}, json=data
-        )
-
-    async def delete_term(self, term_id: str) -> Dict[str, Any]:
-        """Delete a terminology entry."""
-        return await self.call(
-            "DELETE", f"/terminology/{term_id}", mock_response={"data": {}}
-        )
-
-    async def normalize_term(self, term: str) -> Dict[str, Any]:
-        """Find normalized form of a term."""
-        return await self.call(
-            "POST",
-            "/terminology/normalize",
-            mock_response={
-                "data": {"original": term, "normalized": term.lower(), "found": True}
-            },
-            json={"term": term},
-        )
-
-    async def import_terms(self, terms: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Import terminology entries in bulk."""
-        return await self.call(
-            "POST",
-            "/terminology/import",
-            mock_response={"data": {"inserted": 0, "updated": 0, "errors": []}},
-            json={"terms": terms},
-        )
-
-    # --- Registry Documents ---
-
-    async def list_registry_documents(
-        self,
-        page: int = 1,
-        page_size: int = 50,
-        classifier_code: Optional[str] = None,
-        status: Optional[str] = None,
-        search: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        """List registry documents."""
-        params: Dict[str, Any] = {"page": page, "page_size": page_size}
-        if classifier_code:
-            params["classifier_code"] = classifier_code
-        if status:
-            params["status"] = status
-        if search:
-            params["search"] = search
-        return await self.call(
-            "GET",
-            "/documents",
-            mock_response={
-                "data": [],
-                "meta": {"total": 0, "page": 1, "page_size": 50},
-            },
-            params=params,
-        )
-
-    async def get_registry_document(self, doc_id: str) -> Dict[str, Any]:
-        """Get a registry document."""
-        return await self.call(
-            "GET", f"/documents/{doc_id}", mock_response={"data": {}}
-        )
-
-    async def create_registry_document(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Create a registry document."""
-        return await self.call(
-            "POST", "/documents", mock_response={"data": {}}, json=data
-        )
-
-    async def update_registry_document(
-        self, doc_id: str, data: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """Update a registry document."""
-        return await self.call(
-            "PUT", f"/documents/{doc_id}", mock_response={"data": {}}, json=data
-        )
-
-    async def update_registry_document_status(
-        self, doc_id: str, status: str
-    ) -> Dict[str, Any]:
-        """Update registry document status."""
+    async def update_document(self, document_id: int, document_data: dict) -> dict:
+        """Update an existing document."""
         return await self.call(
             "PATCH",
-            f"/documents/{doc_id}/status",
-            mock_response={"data": {}},
-            json={"status": status},
+            f"/registry/documents/{document_id}",
+            mock_response={"data": {"document_id": document_id, **document_data}},
+            json=document_data,
         )
 
-    async def delete_registry_document(self, doc_id: str) -> Dict[str, Any]:
-        """Delete a registry document."""
+    async def delete_document(self, document_id: int) -> dict:
+        """Delete a document from the registry."""
         return await self.call(
-            "DELETE", f"/documents/{doc_id}", mock_response={"data": {}}
+            "DELETE",
+            f"/registry/documents/{document_id}",
+            mock_response={"data": {"deleted": True, "document_id": document_id}},
         )
 
-    async def export_registry_documents(
-        self, format: str = "xlsx", classifier_code: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """Export registry documents."""
-        params: Dict[str, Any] = {"format": format}
-        if classifier_code:
-            params["classifier_code"] = classifier_code
+    async def list_documents(
+        self,
+        page: int = 1,
+        page_size: int = 50,
+        status: Optional[str] = None,
+    ) -> dict:
+        """List documents with pagination."""
+        params = {"page": page, "page_size": page_size}
+        if status:
+            params["status"] = status
         return await self.call(
             "GET",
-            "/documents/export",
-            mock_response={"data": {"url": "/exports/registry/documents.xlsx"}},
+            "/registry/documents",
+            mock_response={
+                "data": [],
+                "meta": {"total": 0, "page": page, "page_size": page_size},
+            },
             params=params,
         )
 
-    async def import_registry_documents(
-        self, documents: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
-        """Import registry documents in bulk."""
+    # --- Drafts ---
+
+    async def create_draft(
+        self,
+        file_key: str,
+        document_key: str,
+        created_by: str,
+        file_hash_sha256: Optional[str] = None,
+        title_hash_sha256: Optional[str] = None,
+    ) -> dict:
+        """Create a draft in Registry. Returns draft_id."""
+        body = {
+            "file_key": file_key,
+            "document_key": document_key,
+            "created_by": created_by,
+        }
+        if file_hash_sha256:
+            body["file_hash_sha256"] = file_hash_sha256
+        if title_hash_sha256:
+            body["title_hash_sha256"] = title_hash_sha256
         return await self.call(
             "POST",
-            "/documents/import",
-            mock_response={"data": {"inserted": 0, "updated": 0, "errors": []}},
-            json={"documents": documents},
+            "/registry/drafts",
+            mock_response={
+                "data": {
+                    "draft_id": 1,
+                    "file_key": file_key,
+                    "document_key": document_key,
+                    "status": "uploaded",
+                    "created_by": created_by,
+                    "created_at": "2026-06-08T10:00:00Z",
+                }
+            },
+            json=body,
         )
 
-    # --- Common ---
+    async def get_draft(self, draft_id: int) -> dict:
+        """Get draft by ID."""
+        return await self.call(
+            "GET",
+            f"/registry/drafts/{draft_id}",
+            mock_response={
+                "data": {
+                    "draft_id": draft_id,
+                    "file_key": f"drafts/{draft_id}/file.pdf",
+                    "document_key": f"doc-{draft_id}",
+                    "status": "uploaded",
+                    "created_by": "user-1",
+                    "created_at": "2026-06-08T10:00:00Z",
+                    "updated_at": "2026-06-08T10:00:00Z",
+                }
+            },
+        )
 
-    async def get_statistics(self) -> Dict[str, Any]:
-        """Get registry statistics."""
-        return await self.call("GET", "/common/statistics", mock_response={"data": {}})
+    async def get_draft_preview(self, draft_id: int) -> dict:
+        """Get preview metadata for a draft."""
+        return await self.call(
+            "GET",
+            f"/registry/drafts/{draft_id}/preview",
+            mock_response={
+                "data": {
+                    "draft_id": draft_id,
+                    "doc_code": "ГОСТ 20868-81",
+                    "title": "Стойки установочные крепежные",
+                    "document_type": "normative",
+                    "year": "1981",
+                    "revision": None,
+                    "preview_not_supported": False,
+                    "total_pages": 3,
+                    "processed_pages": 3,
+                }
+            },
+        )
 
-    async def get_enums(self) -> Dict[str, Any]:
-        """Get valid enum values."""
-        return await self.call("GET", "/common/enums", mock_response={"data": {}})
+    async def list_drafts(
+        self,
+        page: int = 1,
+        page_size: int = 50,
+        status: Optional[str] = None,
+    ) -> dict:
+        """List drafts with pagination."""
+        params = {"page": page, "page_size": page_size}
+        if status:
+            params["status"] = status
+        return await self.call(
+            "GET",
+            "/registry/drafts",
+            mock_response={
+                "data": [],
+                "meta": {"total": 0, "page": page, "page_size": page_size},
+            },
+            params=params,
+        )
+
+    async def update_draft_status(
+        self,
+        draft_id: int,
+        status: str,
+        document_id: Optional[int] = None,
+    ) -> dict:
+        """Update draft status (and optionally set document_id)."""
+        body = {"status": status}
+        if document_id is not None:
+            body["document_id"] = document_id
+        return await self.call(
+            "PATCH",
+            f"/registry/drafts/{draft_id}/status",
+            mock_response={
+                "data": {
+                    "draft_id": draft_id,
+                    "status": status,
+                    "document_id": document_id,
+                    "updated_at": "2026-06-08T10:00:00Z",
+                }
+            },
+            json=body,
+        )
+
+    async def delete_draft(self, draft_id: int) -> dict:
+        """Delete a draft."""
+        return await self.call(
+            "DELETE",
+            f"/registry/drafts/{draft_id}",
+            mock_response={
+                "data": {
+                    "draft_id": draft_id,
+                    "deleted": True,
+                    "deleted_at": "2026-06-08T10:00:00Z",
+                }
+            },
+        )
+
+    async def check_uniqueness(
+        self,
+        file_hash_sha256: str,
+        title_hash_sha256: Optional[str] = None,
+    ) -> dict:
+        """Check document uniqueness (duplicate detection)."""
+        body = {"file_hash_sha256": file_hash_sha256}
+        if title_hash_sha256:
+            body["title_hash_sha256"] = title_hash_sha256
+        return await self.call(
+            "POST",
+            "/registry/documents/check-uniqueness",
+            mock_response={
+                "data": {
+                    "is_duplicate_file": False,
+                    "is_duplicate_document": False,
+                    "candidates": [],
+                }
+            },
+            json=body,
+        )
