@@ -47,7 +47,7 @@ def _check_minio_upload(body: Optional[str], ctx: PipelineContext) -> Tuple[bool
 
 
 def _check_converter(body: Optional[str], ctx: PipelineContext) -> Tuple[bool, str]:
-    """Проверка конвертации: извлекаем document_id из ответа."""
+    """Проверка конвертации: проверяем что ответ валидный JSON с task_id."""
     if not body:
         return False, "пустой ответ"
     import json
@@ -55,11 +55,9 @@ def _check_converter(body: Optional[str], ctx: PipelineContext) -> Tuple[bool, s
         data = json.loads(body)
     except json.JSONDecodeError:
         return False, "ответ не JSON"
-    doc_id = data.get("document_id")
-    if not doc_id:
-        return False, f"нет поля document_id в ответе"
-    ctx.set("doc_id", doc_id)
-    return True, f"document_id = {doc_id}"
+    if not data.get("task_id"):
+        return False, "нет поля task_id в ответе"
+    return True, f"task_id = {data.get('task_id')}"
 
 
 class DocumentProcessingPipeline(PipelineDef):
@@ -171,8 +169,8 @@ class DocumentProcessingPipeline(PipelineDef):
             retry_delay=2.0,
             retry_max=30,
             check=check_json_fields({
-                "content": dict,
-            }),
+                    "document": dict,
+                }),
         ))
 
         # -- Шаг 6: Конвертация JSON --

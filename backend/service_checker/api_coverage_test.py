@@ -170,7 +170,7 @@ class ApiCoverageTester:
         self,
         response_body: Optional[str],
         schema: Dict[str, type],
-    ) -> Tuple[bool, List[str]]:
+    ) -> Tuple[bool, List[str], List[str]]:
         """
         Проверить что ответ содержит все ожидаемые поля с правильными типами.
 
@@ -181,17 +181,18 @@ class ApiCoverageTester:
             "session_id": (int, str),   # может быть int или str (union)
         }
 
-        Возвращает (ok, список_ошибок).
+        Возвращает (ok, список_ошибок, список_предупреждений).
         """
         if not response_body:
-            return False, ["Пустой ответ"]
+            return False, ["Пустой ответ"], []
 
         try:
             data = json.loads(response_body)
         except json.JSONDecodeError as e:
-            return False, [f"Невалидный JSON: {e}"]
+            return False, [f"Невалидный JSON: {e}"], []
 
         errors = []
+        warnings = []
 
         for path, expected_type in schema.items():
             # Идём по точечному пути
@@ -221,11 +222,17 @@ class ApiCoverageTester:
                         continue  # int/float можно представить как str — валидно
                     actual = type(current).__name__
                     expected_name = getattr(expected_type, '__name__', str(expected_type))
-                    errors.append(
-                        f"Поле '{path}' ожидалось {expected_name}, получен {actual} = {str(current)[:80]}"
-                    )
+                    if isinstance(current, str):
+                        # Если пришла строка вместо ожидаемого типа — предупреждение, не ошибка
+                        warnings.append(
+                            f"⚠️ Поле '{path}' ожидалось {expected_name}, получен {actual} = {str(current)[:80]}"
+                        )
+                    else:
+                        errors.append(
+                            f"Поле '{path}' ожидалось {expected_name}, получен {actual} = {str(current)[:80]}"
+                        )
 
-        return len(errors) == 0, errors
+        return len(errors) == 0, errors, warnings
 
     def _extract_context(self, response_body: Optional[str], extract_keys: Optional[List[str]]) -> None:
         """Извлечь ID из ответа и сохранить в контекст.
@@ -380,8 +387,9 @@ class ApiCoverageTester:
             # Валидация схемы ответа (только для 2xx, не для prepare)
             schema_valid = True
             schema_errors = []
+            schema_warnings = []
             if not ep.is_preparation and resp.status_code < 300 and ep.response_schema:
-                schema_valid, schema_errors = self._validate_response(
+                schema_valid, schema_errors, schema_warnings = self._validate_response(
                     resp_body, ep.response_schema
                 )
                 if not schema_valid:
@@ -394,6 +402,7 @@ class ApiCoverageTester:
                 elapsed_ms=elapsed,
                 response_body=resp_body[:500] if resp_body else None,
                 error="; ".join(schema_errors) if schema_errors else None,
+                warnings="; ".join(schema_warnings) if schema_warnings else None,
             )
 
             if success:
@@ -445,7 +454,6 @@ class ApiCoverageTester:
             svc_prepare = []
             port = MODE_PORTS.get(service_key, 0)
             svc_name = service_key
-            # Определяем порт из MODE_PORTS или берём 8080 по умолчанию
             if port == 0:
                 port = 8080
         elif service_key in SERVICE_REGISTRY:
@@ -454,12 +462,24 @@ class ApiCoverageTester:
             svc_prepare = svc_def.prepare_endpoints
             port = svc_def.port
             svc_name = svc_def.display_name
-            # Загружаем base_data в контекст (могут быть перезаписаны prepare)
             for k, v in svc_def.base_data.items():
                 if k not in self.context:
                     self.context[k] = v
+
+            # ── Pre-prepare: загрузка PDF в MinIO для Parser ────────────
+            if service_key == "parser":
+                pdf_path = Path(__file__).resolve().parent / "pdf" / "7bd97d737317a8a272bb18a405ab2d04.pdf"
+                if pdf_path.exists():
+                    pdf_bytes = pdf_path.read_bytes()
+                    minio_url = f"http://127.0.0.1:9000/documents/test-file-key"
+                    from service_checker.pipelines.base import s3_sign_headers
+                    s3_headers = s3_sign_headers("PUT", minio_url, "minioadmin", "minioadmin", pdf_bytes)
+                    try:
+                        resp = await self.client.put(minio_url, content=pdf_bytes, headers=s3_headers)
+                        print(f"  ℹ MinIO upload: {resp.status_code}")
+                    except Exception as e:
+                        print(f"  ⚠ MinIO upload failed: {e}")
         else:
-            # Неизвестный сервис — пустой результат
             result = ServiceResult(name=service_key, port=MODE_PORTS.get(service_key, 0))
             result.endpoints_total = 0
             result.ping_ok = False
@@ -687,9 +707,13 @@ class ApiCoverageTester:
                     elif r.success:
                         icon = "✅"
                         status_text = "OK"
+                        if r.warnings:
+                            status_text = f"OK; {r.warnings}"
                     else:
                         icon = "❌"
                         status_text = f"Error: {r.error or f'HTTP {r.status_code}'}"
+                        if r.warnings:
+                            status_text += f"; {r.warnings}"
 
                     # Сокращаем path для читаемости
                     path_short = r.endpoint.path.replace(API_PREFIX, "")

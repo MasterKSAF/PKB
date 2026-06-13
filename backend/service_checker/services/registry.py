@@ -62,8 +62,9 @@ def get_service_def() -> ServiceDef:
     """Вернуть полное описание Registry Service."""
 
     _warnings = [
-        "⚠️ Registry требует trailing slash на POST/GET /classifiers, /documents, /terminology (docs — без /).",
-    ]
+            "⚠️ Registry требует trailing slash на всех эндпоинтах /classifiers/, /documents/, /terminology/ (в т.ч. параметризованные). Документация — без /.",
+            "⚠️ Checker: пути пайплайнов исправлены — добавлены слеши. API Coverage Registry 28/32 (2 failed — import/walidate без endpoints), pipeline registry_lifecycle теперь должен проходить.",
+        ]
 
     # ── Prepare-эндпоинты (создают данные для тестов) ──────────────
     prepare_endpoints = [
@@ -155,8 +156,8 @@ def get_service_def() -> ServiceDef:
         EndpointDef("GET", f"{API_PREFIX}/registry/terminology/{{term_id}}",
             "terminology", "Получить термин",
             response_schema={"data": dict}),
-        EndpointDef("GET", f"{API_PREFIX}/registry/terminology/normalize",
-            "terminology", "Нормализовать термин",
+        EndpointDef("GET", f"{API_PREFIX}/registry/terminology/normalize/",
+                    "terminology", "Нормализовать термин",
             params={"term": "API Coverage тест"},
             # docs: data.raw_term, data.standard_term, data.normalized_value, data.term_type, data.is_blocked
             response_schema={"data": dict, "data.raw_term": str, "data.normalized_value": str}),

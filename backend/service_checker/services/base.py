@@ -45,6 +45,7 @@ class EndpointResult:
     elapsed_ms: int = 0
     response_body: Optional[str] = None
     error: Optional[str] = None
+    warnings: Optional[str] = None
     skipped: bool = False
     skip_reason: Optional[str] = None
 

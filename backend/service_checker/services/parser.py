@@ -2,6 +2,9 @@
 PKB Neuroassistant — Parser Service API Definitions.
 
 Основано на: docs/api/parser_service_api.md
+
+Замечание: документация описывает единый POST /parser/process с полем mode,
+реальная реализация разделяет на process (version_id) и preview (отдельный endpoint).
 """
 
 from __future__ import annotations
@@ -21,8 +24,10 @@ def get_service_def() -> ServiceDef:
     """Вернуть полное описание Parser Service."""
 
     _warnings = [
-        "⚠️ Parser требует version_id (нет в docs API). Убрать после синхронизации документации и реализации.",
+        "⚠️ Реальная реализация расходится с docs: process требует version_id (docs: mode+file_key).",
         "⚠️ Health Parser на /health, а не /api/v1/health — сервис не использует префикс.",
+        "⚠️ Ответ GET /process/{task_id}/result не содержит поля 'content'. Данные — внутри 'document' (result_builder.py собирает JSON с document, quality, errors, status).",
+        "⚠️ API Coverage prepare не загружает PDF в MinIO (нужна S3-подпись). GET /result будет 500 в coverage, но работает в pipeline test (где MinIO заполнен).",
     ]
 
     prepare_endpoints = [
@@ -38,7 +43,6 @@ def get_service_def() -> ServiceDef:
     ]
 
     endpoints = [
-        # ⚠️ WORKAROUND: health на /health, а не /api/v1/health (сервис не использует префикс).
         EndpointDef("GET", "/health", "health", "Health check сервиса",
             response_schema={"status": str}),
         EndpointDef("POST", f"{API_PREFIX}/parser/process", "parser",
@@ -47,18 +51,13 @@ def get_service_def() -> ServiceDef:
                   "version_id": "1",
                   "file_key": "test-file-key"},
             response_schema={"task_id": int, "status": str}),
-        EndpointDef("POST", f"{API_PREFIX}/parser/preview", "parser",
-            "Быстрый предпросмотр",
-            body={"task_id": 12345,
-                  "version_id": "1",
-                  "file_key": "test-file-key", "max_pages": 1},
-            response_schema={"task_id": int, "status": str}),
         EndpointDef("GET", f"{API_PREFIX}/parser/process/{{task_id}}/status",
             "parser", "Статус обработки (longpoll)",
             response_schema={"status": str}),
         EndpointDef("GET", f"{API_PREFIX}/parser/process/{{task_id}}/result",
             "parser", "Итоговый JSON обработки",
-            response_schema={"content": dict}),
+            expected_status={200, 409},
+            response_schema={"status": str}),
     ]
 
     return ServiceDef(

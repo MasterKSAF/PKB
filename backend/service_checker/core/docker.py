@@ -411,7 +411,7 @@ async def _docker_collect_logs(services: List[str] = None, timestamp: str = None
                 read_cmd = docker_cmd_prefix + ["cat", log_file]
                 try:
                     r = subprocess.run(
-                        read_cmd, capture_output=True, text=True, timeout=30,
+                        read_cmd, capture_output=True, encoding='utf-8', errors='replace', timeout=30,
                     )
                     content = r.stdout.strip()
                 except Exception as e:
