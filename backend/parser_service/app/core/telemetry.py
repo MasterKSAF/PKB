@@ -71,7 +71,8 @@ def setup_observability(service_name: str, otlp_endpoint: str = None):
 
     # Configure root logger
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG)
+    log_level = getattr(logging, os.getenv("LOG_LEVEL", "DEBUG").upper(), logging.DEBUG)
+    root_logger.setLevel(log_level)
     root_logger.handlers.clear()  # избегаем дублирования логов
     root_logger.addHandler(otlp_handler)
     root_logger.addHandler(console_handler)
