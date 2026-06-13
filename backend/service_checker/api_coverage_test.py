@@ -391,11 +391,14 @@ class ApiCoverageTester:
             if success and ep.extract_keys:
                 self._extract_context(resp_body, ep.extract_keys)
 
-            # Валидация схемы ответа (только для 2xx, не для prepare)
+            # Валидация схемы ответа (не для prepare)
+            # Проверяется для 2xx/3xx успешных ответов.
+            # Для 4xx/5xx успешных (expected_status, Conflict и т.п.) —
+            # сервис возвращает ошибку, а не данные — schema не проверяем.
             schema_valid = True
             schema_errors = []
             schema_warnings = []
-            if not ep.is_preparation and resp.status_code < 300 and ep.response_schema:
+            if not ep.is_preparation and success and resp.status_code < 300 and ep.response_schema:
                 schema_valid, schema_errors, schema_warnings = self._validate_response(
                     resp_body, ep.response_schema
                 )
