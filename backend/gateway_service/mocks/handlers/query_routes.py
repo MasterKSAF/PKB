@@ -6,9 +6,9 @@ All data stores imported from mocks.common.
 import copy
 import random
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -64,6 +64,7 @@ class CreateSessionRequest(BaseModel):
 
 class UpdateSessionRequest(BaseModel):
     title: Optional[str] = None
+    project_id: Optional[int] = None
     document_ids: Optional[List[str]] = None
 
 
@@ -84,9 +85,10 @@ class ExportSessionRequest(BaseModel):
 
 
 class FeedbackRequest(BaseModel):
-    session_id: int
-    message_id: int
-    rating: Optional[Union[int, str]] = None
+    session_id: Optional[int] = None
+    message_id: Optional[int] = None
+    rating: Optional[int] = None
+    rating_status: Optional[str] = None
     comment: Optional[str] = None
     aspects: Optional[List[Dict[str, Any]]] = None
     answer_id: Optional[int] = None
@@ -164,8 +166,13 @@ async def get_session(session_id: int):
         raise HTTPException(status_code=404, detail=error_response("SESSION_NOT_FOUND", "Сессия не найдена"))
     return {
         "session_id": session["session_id"], "title": session.get("title", ""),
+        "project_id": session.get("project_id"),
+        "user_id": session.get("user_id", ""),
         "document_ids": session.get("document_ids", []),
+        "options": session.get("options", {}),
         "messages": session.get("messages", []), "has_more": session.get("has_more", False),
+        "last_message_preview": session.get("last_message_preview", ""),
+        "created_at": session.get("created_at", ""), "updated_at": session.get("updated_at", ""),
     }
 
 
@@ -176,6 +183,8 @@ async def update_session(session_id: int, req: UpdateSessionRequest):
         raise HTTPException(status_code=404, detail=error_response("SESSION_NOT_FOUND", "Сессия не найдена"))
     if req.title is not None:
         session["title"] = req.title
+    if req.project_id is not None:
+        session["project_id"] = req.project_id
     if req.document_ids is not None:
         session["document_ids"] = req.document_ids
     session["updated_at"] = utcnow()
@@ -412,15 +421,52 @@ async def export_session(session_id: int, req: ExportSessionRequest):
 
 @router.post("/api/v1/chat/feedback")
 async def submit_feedback(req: FeedbackRequest):
+    has_session = req.session_id is not None or req.message_id is not None
+    has_answer = req.answer_id is not None
+
+    if has_session and has_answer:
+        raise HTTPException(
+            status_code=400,
+            detail=error_response("AMBIGUOUS_FEEDBACK_FORMAT",
+                                  "Передавайте session_id+message_id (формат 1) или answer_id (формат 2), не оба набора"),
+        )
+
+    if has_session:
+        if req.rating is not None and not (1 <= req.rating <= 5):
+            raise HTTPException(
+                status_code=422,
+                detail=error_response("INVALID_RATING", "Оценка rating должна быть в диапазоне 1–5"),
+            )
+        if req.rating_status is not None and req.rating_status not in ("positive", "negative", "neutral"):
+            raise HTTPException(
+                status_code=422,
+                detail=error_response("INVALID_RATING_STATUS",
+                                      "rating_status должен быть positive/negative/neutral"),
+            )
+
     fb_id = new_id()
     _feedback_store.append({
-        "feedback_id": fb_id, "session_id": req.session_id, "message_id": req.message_id,
-        "rating": req.rating, "comment": req.comment, "aspects": req.aspects or [],
-        "answer_id": req.answer_id, "useful": req.useful,
-        "opened_citation_ids": req.opened_citation_ids or [], "created_at": utcnow(),
+        "feedback_id": fb_id,
+        "session_id": req.session_id,
+        "message_id": req.message_id,
+        "rating": req.rating,
+        "rating_status": req.rating_status,
+        "comment": req.comment,
+        "aspects": req.aspects or [],
+        "answer_id": req.answer_id,
+        "useful": req.useful,
+        "opened_citation_ids": req.opened_citation_ids or [],
+        "created_at": utcnow(),
     })
-    return {"feedback_id": fb_id, "saved": True, "status": "completed",
-            "metrics_changed": {"rated_answers": len(_feedback_store), "useful_rate": 0.78, "flagged_for_review": 0}}
+    return {
+        "feedback_id": fb_id,
+        "saved": True,
+        "metrics_changed": {
+            "rated_answers": len(_feedback_store),
+            "useful_rate": 0.78,
+            "flagged_for_review": 0,
+        },
+    }
 
 
 @router.get("/api/v1/chat/history")

@@ -85,9 +85,10 @@ def _get_document(doc_id: int) -> dict:
             "validity_status": "active",
             "jurisdiction": "RU",
             "issuing_body": "Госстандарт",
-            "mks_oks_code": "01.100",
+            "group": "ПО4",
+            "mks_oks_code": "31.240",
             "okstu_code": None,
-            "classification_status": {"mks_status": "CONFIRMED", "okstu_status": "NOT_USED"},
+            "classification_status": {"mks": ["31.240"], "okstu": [], "udk": [], "subject_area": ["Электроника", "Монтажные изделия"]},
             "successor_doc_id": None,
             "predecessor_doc_id": None,
             "chunk_container_id": None,
@@ -440,15 +441,18 @@ async def create_draft(request: Request):
 
 @router.get("/api/v1/drafts")
 async def list_drafts(
-    document_key: str = Query(default="", description="Фильтр по document_key"),
+    document_key: Optional[str] = Query(None, description="Фильтр по document_key (бизнес-ключ документа)"),
+    draft_id: Optional[int] = Query(None, description="Фильтр по draft_id (конкретный черновик)"),
     status: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
 ):
-    logger.info("list_drafts: document_key=%s status=%s", document_key, status)
+    logger.info("list_drafts: document_key=%s draft_id=%s status=%s", document_key, draft_id, status)
     items = list(_drafts.values())
     if document_key:
         items = [d for d in items if d.get("document_key") == document_key]
+    if draft_id:
+        items = [d for d in items if d.get("draft_id") == draft_id]
     if status:
         items = [d for d in items if d.get("status") == status]
     items.sort(key=lambda d: d.get("created_at", ""), reverse=True)
@@ -558,9 +562,10 @@ async def decide_draft(draft_id: int, req: DecideRequest):
             "era": draft.get("era") or "CURRENT", "validity_status": "active",
             "jurisdiction": draft.get("jurisdiction") or "RF",
             "issuing_body": draft.get("issuing_body"),
+            "group": draft.get("group"),
             "mks_oks_code": draft.get("mks_oks_code"),
             "okstu_code": draft.get("okstu_code"),
-            "classification_status": {"mks_status": "unknown", "okstu_status": "unknown"},
+            "classification_status": {"mks": [], "okstu": [], "udk": [], "subject_area": []},
             "successor_doc_id": None, "predecessor_doc_id": None, "chunk_container_id": None,
             "status": "created", "file_size": draft.get("file_size_bytes", 0),
             "pages_total": 1, "pages_processed": 1, "pages_failed": 0,
@@ -726,8 +731,9 @@ async def upload_document(request: Request):
             "doc_code": body.get("doc_code"), "source_type": body.get("source_type", "OTHER"),
             "era": body.get("era", "CURRENT"), "validity_status": "active",
             "jurisdiction": body.get("jurisdiction", "RF"), "issuing_body": body.get("issuing_body"),
+            "group": body.get("group"),
             "mks_oks_code": body.get("mks_oks_code"), "okstu_code": body.get("okstu_code"),
-            "classification_status": {"mks_status": "unknown", "okstu_status": "unknown"},
+            "classification_status": {"mks": [], "okstu": [], "udk": [], "subject_area": []},
             "successor_doc_id": None, "predecessor_doc_id": None, "chunk_container_id": None,
             "status": "uploaded", "file_size": 0, "pages_total": 0, "pages_processed": 0,
             "pages_failed": 0, "ocr_status": "pending", "index_status": "pending",
@@ -762,8 +768,9 @@ async def upload_document(request: Request):
     new_doc = {
         "document_id": doc_id, "filename": file.filename, "title": file.filename or f"Документ {doc_id}",
         "doc_code": None, "source_type": "GOST", "era": "CURRENT", "validity_status": "active",
-        "jurisdiction": "RF", "issuing_body": None, "mks_oks_code": None, "okstu_code": None,
-        "classification_status": {"mks_status": "unknown", "okstu_status": "unknown"},
+        "jurisdiction": "RF", "issuing_body": None, "group": None,
+        "mks_oks_code": None, "okstu_code": None,
+        "classification_status": {"mks": [], "okstu": [], "udk": [], "subject_area": []},
         "successor_doc_id": None, "predecessor_doc_id": None, "chunk_container_id": None,
         "status": "uploaded", "file_size": 1024000, "pages_total": 0, "pages_processed": 0,
         "pages_failed": 0, "ocr_status": "pending", "index_status": "pending",
@@ -820,6 +827,7 @@ async def list_documents(
             "document_id": d["document_id"], "title": d.get("title", ""), "doc_code": d.get("doc_code"),
             "source_type": d.get("source_type", ""), "era": d.get("era", ""), "validity_status": d.get("validity_status", ""),
             "jurisdiction": d.get("jurisdiction"), "issuing_body": d.get("issuing_body"),
+            "group": d.get("group"),
             "mks_oks_code": d.get("mks_oks_code"), "okstu_code": d.get("okstu_code"),
             "classification_status": d.get("classification_status", {}),
             "status": d.get("status", ""), "latest_version": d.get("total_versions", 1),
@@ -840,6 +848,7 @@ async def get_document(doc_id: int):
         "source_type": doc.get("source_type", ""), "title_hash_sha256": hashlib.sha256(doc.get("title", "").encode()).hexdigest(),
         "status": doc.get("status", ""), "era": doc.get("era", ""), "validity_status": doc.get("validity_status", ""),
         "jurisdiction": doc.get("jurisdiction"), "issuing_body": doc.get("issuing_body"),
+        "group": doc.get("group"),
         "mks_oks_code": doc.get("mks_oks_code"), "okstu_code": doc.get("okstu_code"),
         "classification_status": doc.get("classification_status", {}),
         "successor_doc_id": doc.get("successor_doc_id"), "predecessor_doc_id": doc.get("predecessor_doc_id"),

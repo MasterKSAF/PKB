@@ -40,3 +40,37 @@
 - 26 из 30 reported failures **уже исправлены** на момент проверки
 - 2 оставшиеся особенности — осознанные упрощения mock (JSON вместо multipart, `document_id` вместо `id`)
 - 2 из 30 (Registry drafts duplicate → 422, POST /drafts multipart) — не воспроизводятся, тесты проходят
+
+## 2026-06-13: Исправление 4 замечаний по синхронизации docs/mock
+
+### Изменения
+
+#### 1. Feedback в чате (query_routes.py)
+- `FeedbackRequest`: добавлены поля `rating_status`, `session_id`/`message_id` теперь опциональны
+- Валидация: `AMBIGUOUS_FEEDBACK_FORMAT` (400) при пересечении форматов, `INVALID_RATING` (422) для rating вне 1–5, `INVALID_RATING_STATUS` для невалидного rating_status
+- Тесты: разделены на 2 формата (была отправка session_id+answer_id одновременно)
+
+#### 2. Chat projects и сессии (query_routes.py)
+- `UpdateSessionRequest`: добавлено поле `project_id: Optional[int]`
+- `update_session`: теперь обновляет `project_id` в сессии
+
+#### 3. GET /drafts с фильтром по draft_id (orch_routes.py + docs)
+- `document_key` сделан опциональным (`Optional[str] = Query(None)` вместо `default=""`)
+- Добавлен параметр `draft_id: Optional[int]` для фильтра по ID черновика
+- Документация `orchestrator_service_api.md` обновлена
+
+#### 4. Связь документов с классификаторами (common.py, orch_routes.py)
+- Добавлено поле `group` в seed-данные документов и в ответы `list_documents`/`get_document`
+- Исправлен `mks_oks_code` документа 1: `"01.100"` → `"31.240"` (существует в классификаторах)
+- `classification_status` приведён к формату `{"mks": [...], "okstu": [...], ...}`
+- Все seed-документы теперь имеют коды, существующие в classifiers
+
+### Синхронизация с production gateway
+- `gateway/main.py`, `gateway/routers.py`, `gateway/client.py` — **не требуют изменений**
+- Production gateway — thin reverse proxy: не имеет Pydantic-моделей бизнес-данных
+- Все изменения API (поля `rating_status`, `project_id` в update, `draft_id` фильтр, `group`) проксируются as-is
+- `SERVICE_ROUTES` в client.py уже корректна
+- `docs/gateway_service_api.md` — таблица маршрутизации в порядке
+
+### Статус тестов
+- **470 тестов проходят** (было 468 + 2 упавших исправлены)
