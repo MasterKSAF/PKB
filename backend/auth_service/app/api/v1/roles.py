@@ -7,7 +7,7 @@ from app.schemas.schemas import RoleCreate, RoleListResponse, RolePublic
 from app.services.audit_service import create_audit_event
 from app.services.user_service import create_role, list_roles
 
-router = APIRouter(prefix="/roles", tags=["roles"])
+router = APIRouter(prefix="/admin/roles", tags=["admin/roles"])
 
 
 def to_public(role) -> RolePublic:

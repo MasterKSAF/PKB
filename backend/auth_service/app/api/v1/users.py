@@ -7,7 +7,7 @@ from app.schemas.schemas import UserCreate, UserListItem, UserListResponse, User
 from app.services.audit_service import create_audit_event
 from app.services.user_service import create_user, get_permissions, get_user_by_id, list_users, role_names, update_user
 
-router = APIRouter(prefix="/users", tags=["users"])
+router = APIRouter(prefix="/admin/users", tags=["admin/users"])
 
 
 def to_public(user) -> UserPublic:
@@ -21,11 +21,6 @@ def to_public(user) -> UserPublic:
         created_at=user.created_at,
         updated_at=user.updated_at,
     )
-
-
-@router.get("/me", response_model=UserPublic)
-async def me(current_user = Depends(get_current_user)):
-    return to_public(current_user)
 
 
 @router.get("", response_model=UserListResponse)
@@ -77,7 +72,7 @@ async def get_one(user_id: str, db: AsyncSession = Depends(get_db), current_user
     return to_public(user)
 
 
-@router.put("/{user_id}", response_model=UserPublic)
+@router.patch("/{user_id}", response_model=UserPublic)
 async def update_one(user_id: str, payload: UserUpdate, request: Request, db: AsyncSession = Depends(get_db), current_user = Depends(require_permission("users:manage"))):
     user = await get_user_by_id(db, user_id)
     if not user:

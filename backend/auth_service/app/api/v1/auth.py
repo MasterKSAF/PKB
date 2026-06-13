@@ -1,12 +1,28 @@
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.deps import get_current_user
 from app.db.session import get_db
-from app.schemas.schemas import RefreshRequest, RevokeRequest, RevokeResponse, TokenRequest, TokenResponse
+from app.schemas.schemas import RefreshRequest, RevokeRequest, RevokeResponse, TokenRequest, TokenResponse, UserPublic
 from app.services.audit_service import create_audit_event
 from app.services.auth_service import authenticate, issue_tokens, refresh_access_token, revoke_refresh_token
+from app.services.user_service import get_permissions, role_names
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+@router.get("/me", response_model=UserPublic)
+async def me(current_user=Depends(get_current_user)):
+    return UserPublic(
+        user_id=current_user.user_id,
+        email=current_user.email,
+        full_name=current_user.full_name,
+        roles=role_names(current_user),
+        permissions=get_permissions(current_user),
+        is_active=current_user.is_active,
+        created_at=current_user.created_at,
+        updated_at=current_user.updated_at,
+    )
 
 
 @router.post("/token", response_model=TokenResponse)

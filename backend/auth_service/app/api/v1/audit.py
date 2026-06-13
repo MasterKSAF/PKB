@@ -9,7 +9,7 @@ from app.db.session import get_db
 from app.models.models import AuditEvent
 from app.schemas.schemas import AuditListResponse
 
-router = APIRouter(prefix="/audit", tags=["audit"])
+router = APIRouter(prefix="/admin/audit", tags=["admin/audit"])
 
 
 @router.get("", response_model=AuditListResponse)
