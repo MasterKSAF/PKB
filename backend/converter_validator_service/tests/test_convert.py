@@ -3,7 +3,7 @@ def test_convert_full_cycle(client, raw_gost_sample):
         "/api/v1/converter/convert",
         json={
             "task_id": 420000,
-            "version_id": "c4b9f2d3-0000-0000-0000-000000000001",
+            "version_id": 420001,
             "use_llm": False,
             "raw_json": raw_gost_sample,
         },
@@ -15,7 +15,7 @@ def test_convert_full_cycle(client, raw_gost_sample):
     assert data["document"]["content"]
     assert data["validation"]["structure_valid"] is True
     assert data["validation"]["status"] == "completed"
-    assert "document_id" in data
+    assert data["document_id"] is None
 
 
 def test_convert_with_references(client, raw_gost_sample):
@@ -23,7 +23,7 @@ def test_convert_with_references(client, raw_gost_sample):
         "/api/v1/converter/convert",
         json={
             "task_id": 420001,
-            "version_id": "v-ref",
+            "version_id": 420002,
             "raw_json": raw_gost_sample,
         },
     )

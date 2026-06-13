@@ -3,7 +3,7 @@ def test_preview_metadata(client, raw_gost_sample):
         "/api/v1/converter/preview/metadata",
         json={
             "task_id": 420000,
-            "version_id": "c4b9f2d3-0000-0000-0000-000000000001",
+            "version_id": 420001,
             "raw_json": raw_gost_sample,
         },
     )
@@ -21,9 +21,9 @@ def test_preview_metadata_empty_raw(client):
         "/api/v1/converter/preview/metadata",
         json={
             "task_id": 1,
-            "version_id": "v1",
+            "version_id": 1,
             "raw_json": {},
         },
     )
-    assert response.status_code == 500
-    assert response.json()["error"]["code"] == "CONVERSION_FAILED"
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "METADATA_EXTRACTION_FAILED"

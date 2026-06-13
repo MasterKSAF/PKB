@@ -6,7 +6,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class RawJsonRequest(BaseModel):
     task_id: int = Field(..., ge=1)
-    version_id: str = Field(..., min_length=1)
+    version_id: int = Field(..., ge=1)
+    document_id: int | None = Field(None, ge=1)
     raw_json: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -46,8 +47,8 @@ class FingerprintResult(BaseModel):
 
 
 class MatchingResult(BaseModel):
-    predecessor_doc_id: str | None = None
-    successor_doc_id: str | None = None
+    predecessor_doc_id: int | None = None
+    successor_doc_id: int | None = None
 
 
 class ValidationResult(BaseModel):
@@ -62,13 +63,13 @@ class ValidationResult(BaseModel):
 
 
 class ValidateDocumentResponse(ValidationResult):
-    document_id: str
+    document_id: int | None = None
 
 
 class ConvertResponse(BaseModel):
     task_id: int
-    version_id: str
-    document_id: str
+    version_id: int
+    document_id: int | None = None
     metadata: dict[str, Any]
     document: dict[str, Any]
     validation: ValidationResult

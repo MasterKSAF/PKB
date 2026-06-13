@@ -41,3 +41,13 @@ class ValidationFailedError(ConverterValidatorError):
             message=message,
             details=details,
         )
+
+
+class MetadataExtractionFailedError(ConverterValidatorError):
+    def __init__(self, message: str, details: dict | None = None):
+        super().__init__(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            error_code="METADATA_EXTRACTION_FAILED",
+            message=message,
+            details=details,
+        )

@@ -3,7 +3,7 @@ def test_validate_document_from_raw(client, raw_gost_sample):
         "/api/v1/validate/document",
         json={
             "task_id": 420000,
-            "version_id": "c4b9f2d3-0000-0000-0000-000000000001",
+            "version_id": 420001,
             "raw_json": raw_gost_sample,
         },
     )
@@ -11,7 +11,7 @@ def test_validate_document_from_raw(client, raw_gost_sample):
     data = response.json()
     assert data["structure_valid"] is True
     assert data["validation_id"].startswith("val-")
-    assert data["document_id"]
+    assert data["document_id"] is None
     assert data["fingerprint"]["title_hash_sha256"]
 
 
