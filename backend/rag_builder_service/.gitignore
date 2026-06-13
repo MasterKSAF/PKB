@@ -30,6 +30,10 @@ Thumbs.db
 .env.*
 !.env.example
 
+# Logs
+logs/
+*.log
+
 # Project docs to keep local-only
 AGENTS.md
 SKILLS.md

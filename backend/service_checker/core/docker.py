@@ -495,7 +495,8 @@ async def _docker_collect_logs(services: List[str] = None, timestamp: str = None
                 fname = Path(log_file).name
                 anchor = fname.replace(".", "-")
 
-                read_cmd = docker_cmd_prefix + ["cat", log_file]
+                # Читаем только последние 50 строк — весь файл может быть гигантским
+                read_cmd = docker_cmd_prefix + ["tail", "-50", log_file]
                 try:
                     r = subprocess.run(
                         read_cmd, capture_output=True, encoding='utf-8', errors='replace', timeout=30,
@@ -518,23 +519,14 @@ async def _docker_collect_logs(services: List[str] = None, timestamp: str = None
             lines.append("\n".join(toc_items) + "\n")
             lines.append("\n---\n")
 
-            # 3. Выводим INFO-файлы
+            # 3. INFO-файлы не выводим — они только шум (access-логи каждого запроса).
+            # Если в файле нет ERROR-паттерна, он не представляет диагностической ценности.
             lines.append("## ℹ️ Info-логи\n")
-            info_count = 0
-            for fname, log_path, label, content, anchor in entries:
-                if label != "ℹ️ INFO":
-                    continue
-                info_count += 1
-                lines.append(f"\n### {anchor}\n")
-                lines.append(f"**{label}** — `{log_path}`\n")
-                lines.append(f"\n```\n")
-                if content:
-                    lines.append(content)
-                else:
-                    lines.append("(пусто)")
-                lines.append("\n```\n")
-
-            if info_count == 0:
+            info_count = sum(1 for _, _, label, _, _ in entries if label == "ℹ️ INFO")
+            if info_count:
+                names = [fname for fname, _, label, _, _ in entries if label == "ℹ️ INFO"]
+                lines.append(f"_{info_count} файл(ов) без ошибок (пропущены): {', '.join(names)}_\n")
+            else:
                 lines.append("_Нет info-файлов._\n")
 
             # 4. Выводим ERROR-файлы только если есть ошибки
