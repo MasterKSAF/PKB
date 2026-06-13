@@ -79,11 +79,12 @@ erDiagram
         bigint document_id FK
         int version_number
         varchar(50) revision
-        text file_hash_sha256
+        text source_filename "original file name"
+        text file_hash_sha256 UNIQUE "CAS-дедупликация"
         bigint file_size_bytes
         text format_code
         text format_label
-        text file_key
+        text file_path "CAS path in MinIO"
         text uploaded_by
         timestamptz uploaded_at
         timestamptz updated_at
@@ -99,8 +100,10 @@ erDiagram
         jsonb raw_data
         varchar error_code
         varchar error_message
+        text source_filename "original file name"
         varchar created_by
         varchar updated_by
+        varchar uploaded_by
         timestamptz created_at
         timestamptz updated_at
     }
@@ -124,6 +127,17 @@ erDiagram
         text parent_code FK "FK -> self"
         text full_name
         varchar status
+        timestamptz created_at
+    }
+
+    registry.classifier_registry {
+        varchar classifier_system PK "ENUM: MKS, OKSTU, UDC, EXTERNAL"
+        text code PK
+        text parent_code FK "FK -> self (same classifier_system)"
+        text full_name
+        varchar status "DEFAULT 'active'"
+        date effective_date
+        text replaced_by
         timestamptz created_at
     }
 
@@ -262,6 +276,9 @@ erDiagram
     pipeline.tasks }o--|o registry.documents : produces  (FK document_id nullable)
     registry.documents }o--|o registry.drafts : originates_from  (FK draft_id nullable)
     registry.documents }o--|o registry.pkb_domains : classified_by  (FK pkb_code)
+    registry.classifier_registry ||--o{ registry.classifier_registry : parent_of  (self-reference via parent_code)
+    registry.documents }o--|| registry.classifier_registry : mks_classified_by  (FK mks_oks_code -> code + generated mks_system)
+    registry.documents }o--|| registry.classifier_registry : okstu_classified_by  (FK okstu_code -> code + generated okstu_system)
 ```
 
 ---
@@ -292,9 +309,39 @@ erDiagram
 |---------|------|---------|
 | `registry.document_sections` | `type` | `CHECK (type IN ('text','textBlock','headerFooter','table','list','image','formula'))` |
 | `registry.documents` | `file_hash_sha256` | Для быстрого дубликат-детекта (`WHERE file_hash_sha256 = ? AND file_size_bytes = ?`) |
+| `registry.document_versions` | `file_hash_sha256` | UNIQUE — CAS-дедупликация: один хэш = одна версия файла в системе |
 | `registry.documents` | `title_hash_sha256` | Индекс для поиска дубликатов по `doc_code + title + era` |
 | `rag.document_chunks` | `embedding` | `VECTOR(1536)` — pgvector, `IVFFlat` индекс для `cosine_similarity` |
 | `rag.document_chunks` | `tsv` | `tsvector` — GIN-индекс для полнотекстового поиска (`ts_rank`) |
+
+---
+
+## Сводная таблица FK-связей
+
+| Дочерняя таблица | Поле | Родительская таблица | Поле | Тип связи |
+|-----------------|------|---------------------|------|----------|
+| `registry.documents` | `draft_id` | `registry.drafts` | `id` | M:1 (nullable) |
+| `registry.documents` | `current_version_id` | `registry.document_versions` | `id` | M:1 (nullable) |
+| `registry.documents` | `successor_doc_id` | `registry.documents` | `id` | самоссылка (nullable) |
+| `registry.documents` | `predecessor_doc_id` | `registry.documents` | `id` | самоссылка (nullable) |
+| `registry.documents` | `pkb_code` | `registry.pkb_domains` | `code` | M:1 (nullable) |
+| `registry.document_sections` | `document_id` | `registry.documents` | `id` | M:1 |
+| `registry.document_sections` | `parent_id` | `registry.document_sections` | `id` | самоссылка (nullable) |
+| `registry.document_references` | `source_document_id` | `registry.documents` | `id` | M:1 |
+| `registry.document_references` | `resolved_document_id` | `registry.documents` | `id` | M:1 (nullable) |
+| `registry.document_versions` | `document_id` | `registry.documents` | `id` | M:1 CASCADE |
+| `registry.document_history` | `document_id` | `registry.documents` | `id` | M:1 CASCADE |
+| `rag.document_chunks` | `section_id` | `registry.document_sections` | `id` | M:1 |
+| `rag.document_chunks` | `document_id` | `registry.documents` | `id` | M:1 |
+| `registry.document_categories` | `document_id` | `registry.documents` | `id` | M:1 CASCADE |
+| `registry.document_categories` | `category_id` | `registry.categories` | `id` | M:1 CASCADE |
+| `pipeline.tasks` | `document_id` | `registry.documents` | `id` | M:1 (nullable) |
+| `pipeline.task_steps` | `task_id` | `pipeline.tasks` | `id` | M:1 |
+| `chat.sessions` | `user_id` | `auth.users` | `id` | M:1 |
+| `chat.sessions` | `project_id` | `chat.projects` | `id` | M:1 (nullable) |
+| `chat.messages` | `session_id` | `chat.sessions` | `id` | M:1 |
+| `registry.documents` | `mks_oks_code` | `registry.classifier_registry` | `code` | M:1 (через generated column `mks_system`) |
+| `registry.documents` | `okstu_code` | `registry.classifier_registry` | `code` | M:1 (через generated column `okstu_system`) |
 
 ---
 
@@ -311,7 +358,9 @@ erDiagram
 | `preview_metadata` | JSONB с метаданными preview: `doc_code`, `title`, `document_type`, `year`, `revision`. |
 | `raw_data` | JSONB с сырыми данными от Parser (schema: `raw_ocr_v4`) или Converter (`validated_v3`). |
 | `error_code` / `error_message` | Код и описание ошибки при `discarded`. |
+| `source_filename` | Оригинальное имя загруженного файла (до очистки для CAS). |
 | `created_by` / `updated_by` | Кто создал/обновил запись. |
+| `uploaded_by` | Кто загрузил файл (может отличаться от `created_by` при перезагрузке). |
 | `created_at` | Дата создания черновика. |
 | `updated_at` | Дата последнего обновления черновика. |
 
@@ -386,7 +435,11 @@ erDiagram
 |------|------------|
 | `revision` | Обозначение редакции (напр. «Изм. 1», «Изд. 2»), извлекается из preview-метаданных документа |
 | `format_code` | Формат файла: `pdf`, `doc`, `tiff`, ... |
-| `file_key` | Ссылка на MinIO |
+| `file_path` | CAS-путь в MinIO (см. `specifications/cas_storage_specification.md`). Ранее называлось `file_key` |
+| `source_filename` | Оригинальное имя загруженного файла (до очистки для CAS) |
+| `uploaded_by` | Идентификатор пользователя или сервиса, загрузившего версию |
+
+> **В модели данных** поле называется `file_path` (CAS-путь). В API может использоваться как `file_key` для обратной совместимости.
 
 > **Примечание**: `revision` (обозначение редакции, напр. «Изм. 1», «Изд. 2») извлекается из preview-метаданных документа.
 

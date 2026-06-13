@@ -69,6 +69,28 @@
 
 ## Группа classifiers
 
+### О системе кодирования МКС/ОКС
+
+Классификатор МКС (ОК 001-2021, ICS) использует трёхуровневую иерархию:
+
+- **Раздел (XX)** — двузначный код, например `47 Судостроение и морские сооружения`
+- **Группа (XX.XXX)** — трёхзначный код после точки, например `47.020 Конструкция корпуса`
+- **Подгруппа (XX.XXX.XX)** — двузначный код, например `47.020.30 Корпусные конструкции`
+- **Национальное расширение (XX.XXX.XX-XX)** — дополнительный двузначный код через дефис, например `27.010-01 Энергосбережение`
+
+**Валидация кода:**
+```
+^\d{2}(?:\.\d{3}(?:\.\d{2})?)?(?:-\d{2})?$
+```
+
+> ⚠️ **Недопустимо**: использовать усечённые коды (например, `31.24` вместо `31.240`). Подгруппы должны иметь полный трёхуровневый код `XX.XXX.XX`. Нарушение приводит к ошибкам классификации документов.
+
+**Источник:** ОК 001-2021 (ИСО МКС), гармонизированный с ISO ICS. Демонстрационный набор кодов — в `specifications/mks_oks_classifier.csv`. Корневые узлы классификаторов — в `specifications/classifier_roots.csv`.
+
+**Запрет:** ОКС — рубрики-папки, документ — файл с метаданными. Не следует «встраивать» тип документа в дерево классификаторов.
+
+---
+
 | Метод | Путь | Описание |
 |-------|------|----------|
 | GET | `/registry/classifiers` | Список (плоский) |
@@ -2061,7 +2083,7 @@ DELETE /registry/categories/{category_id}
 | `mks_oks_code` | text | FK → classifier_registry (MKS) |
 | `okstu_code` | text | FK → classifier_registry (OKSTU) |
 | `pkb_code` | text | FK → pkb_domains, nullable |
-| `classification_status` | jsonb | DEFAULT `{}` |
+| `classification_status` | jsonb | DEFAULT `'{}'` — см. спецификацию ниже |
 | `successor_doc_id` | bigint | FK → self, nullable |
 | `predecessor_doc_id` | bigint | FK → self, nullable |
 | `metadata` | jsonb | DEFAULT `{}` |
@@ -2074,6 +2096,42 @@ DELETE /registry/categories/{category_id}
 > Поле `group` в API сохранено как deprecated alias на `pkb_code`.
 > Сгенерированные колонки `mks_system` и `okstu_system` (GENERATED ALWAYS AS 'MKS'/'OKSTU') обеспечивают строгую FK-проверку к системе классификации.
 
+**Спецификация `classification_status` (JSONB):**
+
+Поле содержит статусы извлечения кодов классификации и метаданные парсинга:
+
+```json
+{
+  "mks_status": "CONFIRMED",
+  "okstu_status": "NOT_USED",
+  "udk_code": "629.5.021",
+  "extracted_at": "2026-06-13T10:00:00Z",
+  "extracted_by": "converter_validator_v3",
+  "confidence": 0.89
+}
+```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `mks_status` | string | Статус кода МКС/ОКС. Один из: `CONFIRMED`, `PENDING_REVIEW`, `NOT_FOUND`, `NOT_USED`, `UNASSIGNED` |
+| `okstu_status` | string | Статус кода ОКСТУ. Аналогичные значения |
+| `udk_code` | string or null | Извлечённый код УДК (если найден) |
+| `extracted_at` | timestamp or null | Время извлечения кодов |
+| `extracted_by` | string | Идентификатор парсера |
+| `confidence` | float (0..1) | Уверенность в извлечении кодов |
+
+**Значения статусов:**
+
+| Статус | Отображение | Значение |
+|--------|-------------|----------|
+| `CONFIRMED` | ✅ | Код найден в справочнике и верифицирован |
+| `PENDING_REVIEW` | \<PENDING\> | Извлечён автоматически, требует подтверждения |
+| `NOT_FOUND` | \<NOT_FOUND\> | Парсер не обнаружил код на первых страницах |
+| `NOT_USED` | \<NOT_USED\> | Не применяется для данной эры/типа документа |
+| `UNASSIGNED` | \<FREE\> | Классификация не назначалась |
+
+> **Важно**: поля `mks_oks_code` и `okstu_code` содержат только реальные коды или NULL (для целостности FK). Статусы `PENDING_REVIEW`, `NOT_FOUND`, `NOT_USED` хранятся только в `classification_status`, а не в самих кодовых полях.
+
 ### 5.5. format_registry
 
 | Поле | Тип | Ограничения |
@@ -2084,6 +2142,8 @@ DELETE /registry/categories/{category_id}
 | `parser_engine` | text | NOT NULL — `docling`, `tesseract`, `easyocr` |
 | `supported` | boolean | DEFAULT true |
 | `created_at` | timestamptz | NOT NULL |
+
+> **Примечание:** `file_hash_sha256` в `registry.document_versions` должен иметь UNIQUE-ограничение для обеспечения CAS-дедупликации файлов. Один хэш = одна версия файла в системе. Попытка загрузить файл с существующим хэшом вызывает `unique_violation` и должна обрабатываться как дубликат файла.
 
 ---
 
@@ -2124,7 +2184,7 @@ DELETE /registry/categories/{category_id}
 ## Примечания
 
 1. **DB shared:** Все таблицы registry находятся в общей БД. Другие сервисы читают их напрямую.
-2. **title_hash_sha256** вычисляется автоматически, гарантирует дедупликацию. Формула: `SHA-256(era | source_type | doc_code | normalized_title)`, где `normalized_title` — `title` в нижнем регистре с удалёнными лишними пробелами.
+2. **title_hash_sha256** вычисляется автоматически, гарантирует дедупликацию. Формула: `SHA-256(era | source_type | mks_oks_code | okstu_code | doc_code | normalized_title)`, где `normalized_title` — `title` в нижнем регистре с удалёнными лишними пробелами. Коды классификации (mks_oks_code, okstu_code) включены в формулу для разграничения документов с одинаковым номером, но разной тематической привязкой. Детальный алгоритм нормализации — в `specifications/normalizer_specification.md`.
 3. **Параллельная классификация:** Документ может одновременно ссылаться на МКС/ОКС и ОКСТУ через разные FK.
 4. **Журнал статусов:** Все изменения `documents.status` автоматически логируются в `status_history` триггером БД.
 5. **Неизвестные коды классификатора:** Коды, не найденные в справочнике, попадают в `classifier_pending`. Администратор разбирает их через UI.

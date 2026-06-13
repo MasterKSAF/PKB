@@ -285,9 +285,9 @@ sequenceDiagram
 }
 ```
 
-**title_hash_sha256** = SHA-256(`era` | `source_type` | `doc_code` | `normalized_title`)
+**title_hash_sha256** = SHA-256(`era` | `source_type` | `mks_oks_code` | `okstu_code` | `doc_code` | `normalized_title`)
 
-где `normalized_title` — `title` в нижнем регистре с удалёнными лишними пробелами.
+где `normalized_title` — `title` в нижнем регистре с удалёнными лишними пробелами. Коды классификации включены в формулу для разграничения документов с одинаковым номером, но разной тематикой. Детальный алгоритм нормализации — в `specifications/normalizer_specification.md`.
 
 > **⚠️ Race condition**: Проверка уникальности через `check-uniqueness` неатомарна с последующей записью. Между check и write может быть вставлен другой документ. 
 > **Решение**: использовать уникальный индекс `UNIQUE (file_hash_sha256)` в БД + `INSERT ... ON CONFLICT DO NOTHING` для атомарной проверки при записи.
