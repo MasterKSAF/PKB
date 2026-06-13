@@ -94,7 +94,7 @@ async def create_role(db: AsyncSession, name: str, permissions: list[str]) -> Ro
     role.permissions = [RolePermission(permission=p) for p in sorted(set(permissions))]
     db.add(role)
     await db.commit()
-    await db.refresh(role)
+    await db.refresh(role, ["permissions"])
     logger.info("Role created: %s", name)
     return role
 
