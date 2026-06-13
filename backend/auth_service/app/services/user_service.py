@@ -9,6 +9,10 @@ from app.models.models import Role, RolePermission, User
 logger = get_logger(__name__)
 
 
+class DuplicateError(Exception):
+    pass
+
+
 def get_permissions(user: User) -> list[str]:
     permissions: set[str] = set()
     for role in user.roles:
@@ -44,7 +48,7 @@ async def create_user(db: AsyncSession, email: str, full_name: str, password: st
     existing = await get_user_by_email(db, email)
     if existing:
         logger.warning("Attempt to create duplicate user: %s", email)
-        raise ValueError("Пользователь с таким email уже существует")
+        raise DuplicateError("Пользователь с таким email уже существует")
 
     role_objects = await get_roles_by_names(db, roles)
     if len(role_objects) != len(set(roles)):
@@ -88,7 +92,7 @@ async def create_role(db: AsyncSession, name: str, permissions: list[str]) -> Ro
     existing = result.scalar_one_or_none()
     if existing:
         logger.warning("Attempt to create duplicate role: %s", name)
-        raise ValueError("Роль уже существует")
+        raise DuplicateError("Роль уже существует")
 
     role = Role(name=name)
     role.permissions = [RolePermission(permission=p) for p in sorted(set(permissions))]

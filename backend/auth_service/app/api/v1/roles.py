@@ -5,7 +5,7 @@ from app.core.deps import require_permission
 from app.db.session import get_db
 from app.schemas.schemas import RoleCreate, RoleListResponse, RolePublic
 from app.services.audit_service import create_audit_event
-from app.services.user_service import create_role, list_roles
+from app.services.user_service import DuplicateError, create_role, list_roles
 
 router = APIRouter(prefix="/admin/roles", tags=["admin/roles"])
 
@@ -29,6 +29,8 @@ async def roles(db: AsyncSession = Depends(get_db), current_user = Depends(requi
 async def create(payload: RoleCreate, request: Request, db: AsyncSession = Depends(get_db), current_user = Depends(require_permission("roles:manage"))):
     try:
         role = await create_role(db, payload.name, payload.permissions)
+    except DuplicateError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 

@@ -5,7 +5,7 @@ from app.core.deps import get_current_user, require_permission
 from app.db.session import get_db
 from app.schemas.schemas import MetaPagination, UserCreate, UserListItem, UserListResponse, UserPublic, UserUpdate
 from app.services.audit_service import create_audit_event
-from app.services.user_service import create_user, get_permissions, get_user_by_id, list_users, role_names, update_user
+from app.services.user_service import DuplicateError, create_user, get_permissions, get_user_by_id, list_users, role_names, update_user
 
 router = APIRouter(prefix="/admin/users", tags=["admin/users"])
 
@@ -53,6 +53,8 @@ async def users(
 async def create(payload: UserCreate, request: Request, db: AsyncSession = Depends(get_db), current_user = Depends(require_permission("users:manage"))):
     try:
         user = await create_user(db, payload.email, payload.full_name, payload.password, payload.roles)
+    except DuplicateError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 

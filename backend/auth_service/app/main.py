@@ -32,4 +32,4 @@ async def on_startup():
 @app.get("/health")
 @app.get("/api/v1/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "service": "auth_service"}
