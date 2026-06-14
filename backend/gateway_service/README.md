@@ -17,6 +17,7 @@
 | **Orchestrator** | Документы, поиск, валидация, метрики | `/api/v1/documents/*`, `/api/v1/monitor/*` |
 | **Query Service** | Чат-сессии, Q&A, текстовый поиск | `/api/v1/chat/*`, `/api/v1/text/*` |
 | **Registry** | Классификаторы, терминология, НСИ | `/api/v1/classifiers/*`, `/api/v1/terminology/*`, `/api/v1/common/*`, `/api/v1/registry/documents/*` |
+| **Gateway** | Health-check | `/api/v1/health`, `/api/v1/system/health` |
 
 Детальное описание каждого эндпоинта (параметры, тела запросов/ответов, примеры) — в `docs/`:
 
@@ -52,13 +53,15 @@ python backend/gateway_service/mocks/start_service.py registry   # (порт 808
 ## 🧪 Запуск тестов
 
 ```bash
-# Все 288 тестов
+# Все 487 тестов
 python -m pytest backend/gateway_service/mocks/tests/ -v
 
 # По файлам
-python -m pytest backend/gateway_service/mocks/tests/test_api.py        -v  # 151 базовых
-python -m pytest backend/gateway_service/mocks/tests/test_extended.py   -v  # 61 расширенный
-python -m pytest backend/gateway_service/mocks/tests/test_tz_coverage.py -v  # 76 покрытие ТЗ
+python -m pytest backend/gateway_service/mocks/tests/test_api.py        -v  # 153 базовых
+python -m pytest backend/gateway_service/mocks/tests/test_extended.py   -v  # 85 расширенных
+python -m pytest backend/gateway_service/mocks/tests/test_tz_coverage.py -v  # 115 покрытие ТЗ
+python -m pytest backend/gateway_service/mocks/tests/test_gateway_fails.py -v  # 43 checker coverage
+python -m pytest backend/gateway_service/mocks/tests/test_checker_coverage.py -v  # checker coverage
 ```
 
 ---
@@ -136,3 +139,5 @@ backend/gateway_service/
 - Ответы `POST /chat` и `/text/ask` генерируются из предопределённых шаблонов
 - Асинхронные операции (`POST /documents`) сразу возвращают `202` без реальной обработки
 - Idempotency-Key кеширует ответы в памяти (TTL: 1 час)
+- Импорт CSV/XLSX: для XLSX требуется `openpyxl`, для CSV используется встроенный `csv`
+- `scope` терминологии приведён к `list[str]` (seed-данные и модель), обратная совместимость со строкой сохранена

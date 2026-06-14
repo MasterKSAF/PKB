@@ -770,7 +770,7 @@ class TestRegistryService:
     def test_90_accept_quarantine(self):
         resp = reg_client.post(f"{BASE}/classifiers/quarantine/1/accept")
         assert_ok(resp)
-        assert resp.json()["data"]["status"] == "accepted"
+        assert resp.json()["data"]["status"] == "mapped"
 
     def test_91_reject_quarantine(self):
         resp = reg_client.post(f"{BASE}/classifiers/quarantine/1/reject")

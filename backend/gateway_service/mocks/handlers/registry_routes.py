@@ -5,7 +5,9 @@ All paths are relative (prefix /api/v1/registry is applied at mount time in gate
 """
 
 import copy
+import csv
 import hashlib
+import io
 import json
 import logging
 from datetime import datetime, timezone
@@ -13,7 +15,7 @@ from typing import Dict, List, Optional, Union
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from mocks.common import (
     _classifiers, _terminology, _registry_docs,
@@ -36,6 +38,69 @@ async def _read_body_or_file(request: Request) -> bytes:
             return await upload.read()
         raise HTTPException(400, detail=error_response("VALIDATION_ERROR", "Файл не передан"))
     return await request.body()
+
+
+def _detect_format(filename: str = "", content_type: str = "") -> str:
+    """Определяет формат файла по расширению или content-type."""
+    name_lower = filename.lower()
+    if name_lower.endswith(".csv") or "csv" in content_type:
+        return "csv"
+    if name_lower.endswith(".xlsx") or "spreadsheet" in content_type:
+        return "xlsx"
+    return "json"
+
+
+def _parse_csv(content: bytes, mapping: Optional[dict] = None, classifier_system: Optional[str] = None) -> list[dict]:
+    """Парсит CSV-байты, применяет mapping колонок."""
+    text = content.decode("utf-8-sig")  # handle BOM
+    reader = csv.DictReader(io.StringIO(text))
+    result = []
+    for row in reader:
+        if mapping:
+            mapped = {}
+            for csv_col, model_field in mapping.items():
+                if csv_col in row:
+                    mapped[model_field] = row[csv_col]
+            if classifier_system and "classifier_system" not in mapped:
+                mapped["classifier_system"] = classifier_system
+            if mapped:
+                result.append(mapped)
+        else:
+            if classifier_system and "classifier_system" not in row:
+                row["classifier_system"] = classifier_system
+            result.append(dict(row))
+    return result
+
+
+def _parse_xlsx(content: bytes, mapping: Optional[dict] = None, classifier_system: Optional[str] = None) -> list[dict]:
+    """Парсит XLSX-байты, применяет mapping колонок."""
+    try:
+        import openpyxl
+    except ImportError:
+        raise HTTPException(400, detail=error_response("VALIDATION_ERROR", "XLSX support requires openpyxl"))
+    wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    ws = wb.active
+    rows_data = list(ws.iter_rows(values_only=True))
+    if not rows_data:
+        return []
+    headers = [str(h) if h is not None else "" for h in rows_data[0]]
+    result = []
+    for row in rows_data[1:]:
+        if not any(cell is not None for cell in row):
+            continue
+        mapped = {}
+        for i, header in enumerate(headers):
+            if i < len(row):
+                value = row[i]
+                if mapping and header in mapping:
+                    mapped[mapping[header]] = value
+                elif not mapping:
+                    mapped[header] = value
+        if classifier_system and "classifier_system" not in mapped:
+            mapped["classifier_system"] = classifier_system
+        if mapped:
+            result.append(mapped)
+    return result
 
 
 # ── Pydantic модели ──────────────────────────────────────────────────────────
@@ -66,8 +131,15 @@ class TermCreate(BaseModel):
     definition: Optional[str] = None
     synonyms: Optional[List[str]] = None
     related_docs: Optional[List[str]] = None
-    scope: Optional[str] = None
+    scope: Optional[Union[str, List[str]]] = None
     is_blocked: bool = False
+
+    @field_validator("scope", mode="before")
+    @classmethod
+    def normalize_scope(cls, v):
+        if isinstance(v, str):
+            return [v]
+        return v
 
 
 class TermUpdate(BaseModel):
@@ -79,8 +151,15 @@ class TermUpdate(BaseModel):
     definition: Optional[str] = None
     synonyms: Optional[List[str]] = None
     related_docs: Optional[List[str]] = None
-    scope: Optional[str] = None
+    scope: Optional[Union[str, List[str]]] = None
     is_blocked: Optional[bool] = None
+
+    @field_validator("scope", mode="before")
+    @classmethod
+    def normalize_scope(cls, v):
+        if isinstance(v, str):
+            return [v]
+        return v
 
 
 class RegistryDocCreate(BaseModel):
@@ -134,6 +213,16 @@ class DraftStatusUpdate(BaseModel):
     updated_by: Optional[str] = None
 
 
+class AcceptPendingRequest(BaseModel):
+    parent_code: Optional[str] = None
+    full_name: Optional[str] = None
+    admin_comment: Optional[str] = None
+
+
+class RejectPendingRequest(BaseModel):
+    admin_comment: Optional[str] = None
+
+
 class CheckUniquenessRequest(BaseModel):
     title: str
     doc_code: Optional[str] = None
@@ -182,15 +271,84 @@ async def get_tree():
 
 @router.post("/classifiers/import")
 async def import_classifiers(request: Request):
-    content = await _read_body_or_file(request)
-    raw_data = json.loads(content)
-    if isinstance(raw_data, dict):
-        raw_data = raw_data.get("data") or raw_data.get("classifiers") or []
-    rows = [ClassifierCreate(**r) if isinstance(r, dict) else r for r in raw_data]
+    content_type = request.headers.get("content-type", "")
+    file_bytes = None
+    filename = ""
+    classifier_system = None
+    mapping = None
+
+    if "multipart" in content_type:
+        form = await request.form()
+        upload = form.get("file")
+        if upload and hasattr(upload, "read"):
+            file_bytes = await upload.read()
+            filename = upload.filename or ""
+        classifier_system = form.get("classifier_system")
+        mapping_str = form.get("mapping")
+        if mapping_str:
+            try:
+                mapping = json.loads(mapping_str)
+            except json.JSONDecodeError:
+                raise HTTPException(400, detail=error_response("VALIDATION_ERROR", "mapping должен быть JSON"))
+    else:
+        file_bytes = await request.body()
+        # Try JSON-тело (массив объектов)
+        try:
+            raw_data = json.loads(file_bytes)
+        except json.JSONDecodeError:
+            raise HTTPException(400, detail=error_response("VALIDATION_ERROR", "Тело запроса должно быть JSON"))
+        if isinstance(raw_data, dict):
+            raw_data = raw_data.get("data") or raw_data.get("classifiers") or []
+        rows = [ClassifierCreate(**r) if isinstance(r, dict) else r for r in raw_data]
+        inserted = updated = 0
+        errors = []
+        for row in rows:
+            try:
+                if row.code in _classifiers:
+                    node = _classifiers[row.code]
+                    node.update({"classifier_system": row.classifier_system, "full_name": row.full_name,
+                                 "status": row.status, "effective_date": row.effective_date,
+                                 "parent_code": row.parent_code, "updated_at": utcnow()})
+                    updated += 1
+                else:
+                    _classifiers[row.code] = {"classifier_system": row.classifier_system, "code": row.code,
+                                              "parent_code": row.parent_code, "full_name": row.full_name,
+                                              "status": row.status, "effective_date": row.effective_date,
+                                              "replaced_by": None, "created_at": utcnow(), "updated_at": utcnow()}
+                    inserted += 1
+            except Exception as e:
+                errors.append({"row": row.code, "message": str(e)})
+        return {"data": {"inserted": inserted, "updated": updated, "errors": errors}}
+
+    # Handle file-based import (CSV/XLSX/JSON)
+    if not file_bytes:
+        raise HTTPException(400, detail=error_response("VALIDATION_ERROR", "Файл не передан"))
+
+    fmt = _detect_format(filename, content_type)
+    try:
+        if fmt == "csv":
+            raw_rows = _parse_csv(file_bytes, mapping, classifier_system)
+        elif fmt == "xlsx":
+            raw_rows = _parse_xlsx(file_bytes, mapping, classifier_system)
+        else:
+            # JSON file
+            raw_data = json.loads(file_bytes)
+            if isinstance(raw_data, dict):
+                raw_data = raw_data.get("data") or raw_data.get("classifiers") or raw_data.get("terms") or []
+            raw_rows = raw_data
+    except Exception as e:
+        raise HTTPException(400, detail=error_response("VALIDATION_ERROR", f"Ошибка парсинга файла: {e}"))
+
     inserted = updated = 0
     errors = []
-    for row in rows:
+    for i, rd in enumerate(raw_rows):
         try:
+            if isinstance(rd, dict):
+                if classifier_system and "classifier_system" not in rd:
+                    rd["classifier_system"] = classifier_system
+                row = ClassifierCreate(**rd)
+            else:
+                row = rd
             if row.code in _classifiers:
                 node = _classifiers[row.code]
                 node.update({"classifier_system": row.classifier_system, "full_name": row.full_name,
@@ -204,7 +362,7 @@ async def import_classifiers(request: Request):
                                           "replaced_by": None, "created_at": utcnow(), "updated_at": utcnow()}
                 inserted += 1
         except Exception as e:
-            errors.append({"row": row.code, "message": str(e)})
+            errors.append({"row": i + 1, "code": rd.get("code", "?"), "message": str(e)})
     return {"data": {"inserted": inserted, "updated": updated, "errors": errors}}
 
 
@@ -217,49 +375,74 @@ async def list_quarantine(status: str = None, page: int = 1, page_size: int = 50
 
 
 @router.post("/classifiers/quarantine/{pending_id}/accept")
-async def accept_quarantine(pending_id: int):
+async def accept_quarantine(pending_id: int, req: Optional[AcceptPendingRequest] = None):
     pending = _pending_classifiers.get(pending_id)
     if not pending:
         raise HTTPException(404, detail=error_response("CLASSIFIER_NOT_FOUND", "Элемент карантина не найден"))
+    if req is None:
+        req = AcceptPendingRequest()
     code = pending.get("code", f"auto-{new_id()}")
+    parent_code = req.parent_code or pending.get("suggested_parent_code")
+    full_name = req.full_name or pending.get("found_in_document_title", "")
+    admin_comment = req.admin_comment
+    if admin_comment is not None:
+        pending["admin_comment"] = admin_comment
+
     _classifiers[code] = {"classifier_system": pending.get("system", "MKS"), "code": code,
-                          "parent_code": pending.get("suggested_parent_code"), "full_name": pending.get("found_in_document_title", ""),
+                          "parent_code": parent_code, "full_name": full_name,
                           "status": "active", "effective_date": utcnow()[:10], "replaced_by": None,
                           "created_at": utcnow(), "updated_at": utcnow()}
-    pending["status"] = "accepted"
-    return {"data": {"id": pending_id, "status": "accepted", "classifier_code": code}}
+    pending["status"] = "mapped"
+    return {"data": {"pending_id": pending_id, "classifier_system": pending.get("system", "MKS"),
+                     "code": code, "status": "mapped", "registry_created": True}}
 
 
 @router.post("/classifiers/quarantine/{pending_id}/reject")
-async def reject_quarantine(pending_id: int):
+async def reject_quarantine(pending_id: int, req: Optional[RejectPendingRequest] = None):
     pending = _pending_classifiers.get(pending_id)
     if not pending:
         raise HTTPException(404, detail=error_response("CLASSIFIER_NOT_FOUND", "Элемент карантина не найден"))
+    if req is None:
+        req = RejectPendingRequest()
+    if req.admin_comment is not None:
+        pending["admin_comment"] = req.admin_comment
     pending["status"] = "rejected"
-    return {"data": {"id": pending_id, "status": "rejected"}}
+    return {"data": {"pending_id": pending_id, "status": "rejected"}}
 
 
 @router.get("/classifiers/pending")
-async def list_pending(status: str = None, page: int = 1, page_size: int = 50):
-    logger.info("list_pending: status=%s page=%d", status, page)
-    return await list_quarantine(status, page, page_size)
+async def list_pending(status: str = None, system: str = None, page: int = 1, page_size: int = 50):
+    logger.info("list_pending: status=%s system=%s page=%d", status, system, page)
+    items = list(_pending_classifiers.values())
+    if status:
+        items = [p for p in items if p.get("status") == status]
+    if system:
+        items = [p for p in items if p.get("system") == system]
+    return paginate_registry(items, page, page_size)
 
 
 @router.post("/classifiers/pending/{pending_id}/accept")
-async def accept_pending(pending_id: int):
+async def accept_pending(pending_id: int, req: Optional[AcceptPendingRequest] = None):
     logger.info("accept_pending: id=%d", pending_id)
-    return await accept_quarantine(pending_id)
+    return await accept_quarantine(pending_id, req)
 
 
 @router.post("/classifiers/pending/{pending_id}/reject")
-async def reject_pending(pending_id: int):
+async def reject_pending(pending_id: int, req: Optional[RejectPendingRequest] = None):
     logger.info("reject_pending: id=%d", pending_id)
-    return await reject_quarantine(pending_id)
+    return await reject_quarantine(pending_id, req)
 
 
 @router.post("/classifiers/validate")
 async def validate_classification(req: dict):
-    code = req.get("mks_oks_code", req.get("code"))
+    # Support both classification.* wrapper and top-level
+    classification = req.get("classification", {})
+    code = (
+        classification.get("mks_oks_code")
+        or classification.get("code")
+        or req.get("mks_oks_code")
+        or req.get("code")
+    )
     node = _classifiers.get(code) if code else None
     valid = node is not None
     status = "CONFIRMED" if valid else "NOT_FOUND"
@@ -335,20 +518,96 @@ async def normalize_term(term: str = Query(...)):
         if t.get("normalized_value", "").lower() == q or t.get("raw_term", "").lower() == q:
             return {"data": {"raw_term": t["raw_term"], "standard_term": t["standard_term"],
                              "normalized_value": t.get("normalized_value", t["raw_term"]), "term_type": t.get("term_type"), "is_blocked": t.get("is_blocked", False)}}
-    return {"data": {"raw_term": term, "standard_term": term.lower(), "normalized_value": term.lower(), "term_type": "preferred", "is_blocked": False}}
+    return {"data": {"raw_term": term, "standard_term": term, "normalized_value": term, "term_type": "unknown", "is_blocked": False}}
 
 
 @router.post("/terminology/import")
 async def import_terms(request: Request):
-    content = await _read_body_or_file(request)
-    raw_data = json.loads(content)
-    if isinstance(raw_data, dict):
-        raw_data = raw_data.get("data") or raw_data.get("terms") or []
-    rows = [TermCreate(**r) if isinstance(r, dict) else r for r in raw_data]
+    content_type = request.headers.get("content-type", "")
+    file_bytes = None
+    filename = ""
+    classifier_system = None
+    mapping = None
+
+    if "multipart" in content_type:
+        form = await request.form()
+        upload = form.get("file")
+        if upload and hasattr(upload, "read"):
+            file_bytes = await upload.read()
+            filename = upload.filename or ""
+        classifier_system = form.get("classifier_system")
+        mapping_str = form.get("mapping")
+        if mapping_str:
+            try:
+                mapping = json.loads(mapping_str)
+            except json.JSONDecodeError:
+                raise HTTPException(400, detail=error_response("VALIDATION_ERROR", "mapping должен быть JSON"))
+    else:
+        file_bytes = await request.body()
+        # Try JSON-тело (массив объектов)
+        try:
+            raw_data = json.loads(file_bytes)
+        except json.JSONDecodeError:
+            raise HTTPException(400, detail=error_response("VALIDATION_ERROR", "Тело запроса должно быть JSON"))
+        if isinstance(raw_data, dict):
+            raw_data = raw_data.get("data") or raw_data.get("terms") or []
+        rows = [TermCreate(**r) if isinstance(r, dict) else r for r in raw_data]
+        inserted = updated = 0
+        errors = []
+        for row in rows:
+            try:
+                existing = next((t for t in _terminology.values() if t.get("raw_term", "").lower() == row.raw_term.lower()), None)
+                if existing:
+                    existing.update({"standard_term": row.standard_term or existing.get("standard_term"),
+                                     "normalized_value": row.normalized_value or existing.get("normalized_value"),
+                                     "term_type": row.term_type, "is_case_sensitive": row.is_case_sensitive,
+                                     "definition": row.definition, "synonyms": row.synonyms or [],
+                                     "related_docs": row.related_docs or [], "scope": row.scope,
+                                     "is_blocked": row.is_blocked, "updated_at": utcnow()})
+                    updated += 1
+                else:
+                    tid = new_id()
+                    _terminology[tid] = {"id": tid, "raw_term": row.raw_term,
+                                         "standard_term": row.standard_term or row.raw_term.lower(),
+                                         "normalized_value": row.normalized_value or row.raw_term.lower(),
+                                         "term_type": row.term_type, "is_case_sensitive": row.is_case_sensitive,
+                                         "definition": row.definition, "synonyms": row.synonyms or [],
+                                         "related_docs": row.related_docs or [], "scope": row.scope,
+                                         "is_blocked": row.is_blocked, "created_at": utcnow(), "updated_at": utcnow()}
+                    inserted += 1
+            except Exception as e:
+                errors.append({"row": row.raw_term, "message": str(e)})
+        return {"data": {"inserted": inserted, "updated": updated, "errors": errors}}
+
+    # Handle file-based import (CSV/XLSX/JSON)
+    if not file_bytes:
+        raise HTTPException(400, detail=error_response("VALIDATION_ERROR", "Файл не передан"))
+
+    fmt = _detect_format(filename, content_type)
+    try:
+        if fmt == "csv":
+            raw_rows = _parse_csv(file_bytes, mapping, classifier_system)
+        elif fmt == "xlsx":
+            raw_rows = _parse_xlsx(file_bytes, mapping, classifier_system)
+        else:
+            # JSON file
+            raw_data = json.loads(file_bytes)
+            if isinstance(raw_data, dict):
+                raw_data = raw_data.get("data") or raw_data.get("terms") or raw_data.get("classifiers") or []
+            raw_rows = raw_data
+    except Exception as e:
+        raise HTTPException(400, detail=error_response("VALIDATION_ERROR", f"Ошибка парсинга файла: {e}"))
+
     inserted = updated = 0
     errors = []
-    for row in rows:
+    for i, rd in enumerate(raw_rows):
         try:
+            if isinstance(rd, dict):
+                if classifier_system and "classifier_system" not in rd:
+                    rd["classifier_system"] = classifier_system
+                row = TermCreate(**rd)
+            else:
+                row = rd
             existing = next((t for t in _terminology.values() if t.get("raw_term", "").lower() == row.raw_term.lower()), None)
             if existing:
                 existing.update({"standard_term": row.standard_term or existing.get("standard_term"),
@@ -369,7 +628,7 @@ async def import_terms(request: Request):
                                      "is_blocked": row.is_blocked, "created_at": utcnow(), "updated_at": utcnow()}
                 inserted += 1
         except Exception as e:
-            errors.append({"row": row.raw_term, "message": str(e)})
+            errors.append({"row": i + 1, "raw_term": rd.get("raw_term", "?"), "message": str(e)})
     return {"data": {"inserted": inserted, "updated": updated, "errors": errors}}
 
 
