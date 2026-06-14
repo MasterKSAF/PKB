@@ -19,6 +19,10 @@ class Settings(BaseSettings):
 
     POSTGRES_SCHEMA: str = "nsi"
 
+    EMBEDDING_PROVIDER: str = "stub"
+    EMBEDDING_MODEL: str = "text-embedding-3-small"
+    EMBEDDING_DIM: int = 1536
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

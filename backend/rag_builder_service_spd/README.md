@@ -77,6 +77,10 @@ POSTGRES_USER=nsi_dev
 POSTGRES_PASSWORD=SecureP@ssw0rd_2026_Dev
 
 POSTGRES_SCHEMA=nsi
+
+EMBEDDING_PROVIDER=stub
+EMBEDDING_MODEL=text-embedding-3-small
+EMBEDDING_DIM=1536
 ```
 
 Проверить настройки:
@@ -267,13 +271,118 @@ sql/
 17 passed
 ```
 
-### Следующие шаги
+---
 
-* Реальная embedding-модель
-* Startup migrations
-* README refinement
-* CI/CD pipeline
-* Интеграция с остальными сервисами платформы
+## 12. Integration Contract
 
+### Назначение
+
+RAG Builder является сервисом индексации документов.
+
+Сервис принимает chunk-container, преобразует его в чанки, вычисляет эмбеддинги и сохраняет результат в PostgreSQL.
+
+### Input
+
+```text
+BuildRequest
+(chunk-container)
 ```
+
+Источник данных:
+
+```text
+Document Pipeline
+        ↓
+RAG Builder
 ```
+
+### Output
+
+```text
+IndexResponse
+```
+
+Пример:
+
+```json
+{
+  "status": "indexed",
+  "document_id": 420000,
+  "document_version_id": 420001,
+  "chunks_count": 3
+}
+```
+
+### API DTO
+
+Data Transfer Object это объект для передачи данных через границу сервиса.
+В сервисе используются типизированные DTO:
+
+```text
+HealthResponse
+IndexResponse
+```
+
+### Database Writes
+
+На текущем этапе сервис записывает данные только в:
+
+```text
+nsi.chunks
+```
+
+### Out of Scope
+
+Следующие функции не входят в ответственность RAG Builder:
+
+* Hybrid Search
+* Vector Search
+* RRF (Reciprocal Rank Fusion)
+* Citation Assembly
+* Prompt Construction
+* LLM Inference
+* Answer Generation
+
+Эти функции реализуются другими сервисами платформы.
+
+---
+
+## 13. Roadmap
+
+### Stage 1 (текущий MVP)
+
+* nsi.chunks
+* PostgreSQL persistence
+* FastAPI API
+* Docker
+
+### Stage 2
+
+* nsi.document_sections
+* сохранение иерархии документа (ltree)
+
+### Stage 3
+
+* nsi.cross_references
+* граф ссылок между нормативными документами
+
+### Stage 4
+
+* nsi.images
+* nsi.extracted_tables
+* nsi.formulas
+* nsi.formula_parameters
+
+### Stage 5
+
+* интеграция с реальной embedding-моделью
+* OpenAI Embeddings
+* локальные embedding-модели
+
+### Stage 6
+
+* интеграция с Search Service
+* Hybrid Search
+* RRF
+* Citation Engine
+
