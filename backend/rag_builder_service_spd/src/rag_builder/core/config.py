@@ -1,7 +1,10 @@
 # src/rag_builder/core/config.py
 
+from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+BASE_DIR = Path(__file__).resolve().parents[3]
+ENV_FILE = BASE_DIR / ".env"
 
 class Settings(BaseSettings):
     """
@@ -26,7 +29,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str | None = None
     
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=ENV_FILE,
         env_file_encoding="utf-8",
     )
 
