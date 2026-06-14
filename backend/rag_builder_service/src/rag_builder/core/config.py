@@ -4,6 +4,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
+    service_name: str = "rag-builder"
+    app_version: str = "1.0.0"
+
     db_host: str = "localhost"
     db_port: int = 5433
     db_name: str = "pkb_db"
@@ -21,10 +24,16 @@ class Settings(BaseSettings):
     embedding_api_url: str = "http://localhost:8000/v1/embeddings"
     embedding_model: str = "text-embedding-3-small"
     embedding_timeout: int = 30
+    embedding_batch_size: int = 32
     embedding_provider: str = "openai_compatible"  # mock | openai_compatible
     embedding_api_key: str = ""
     embedding_retries: int = 2
-    jwt_secret: str = "change-me"
+    jwt_secret: str = "change-me-at-least-32-characters"
+    jwt_algorithm: str = "HS256"
+    jwt_access_expire_minutes: int = 30
+    jwt_refresh_expire_minutes: int = 10080
+    auth_username: str = "admin"
+    auth_password: str = "admin"
 
     api_prefix: str = "/api/v1"
     default_longpoll_seconds: int = 15
