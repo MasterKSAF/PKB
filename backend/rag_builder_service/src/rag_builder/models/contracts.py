@@ -121,3 +121,34 @@ class StatusResponse(BaseModel):
     chunks_count: int
     has_embeddings: bool
     indexed_at: datetime | None = None
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class LoginResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: Literal["bearer"] = "bearer"
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+class RefreshResponse(BaseModel):
+    access_token: str
+    token_type: Literal["bearer"] = "bearer"
+
+
+class TokenValidationRequest(BaseModel):
+    access_token: str
+
+
+class TokenValidationResponse(BaseModel):
+    active: bool
+    sub: str
+    exp: int
+    type: Literal["access"]

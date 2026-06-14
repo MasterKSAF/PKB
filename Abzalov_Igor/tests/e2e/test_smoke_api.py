@@ -28,14 +28,31 @@ async def test_e2e_build_status_delete(app: FastAPI) -> None:
     }
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        build = await client.post("/api/v1/rag/build", json=payload)
+        auth = await client.post("/api/v1/auth/login", json={"username": "admin", "password": "admin"})
+        assert auth.status_code == 200
+        token = auth.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        build = await client.post("/api/v1/rag/build", json=payload, headers=headers)
         assert build.status_code == 201
         assert build.json()["status"] == "completed"
 
-        status = await client.get(f"/api/v1/rag/build/{doc_id}/status?longpoll=1")
+        status = await client.get(f"/api/v1/rag/build/{doc_id}/status?longpoll=1", headers=headers)
         assert status.status_code == 200
         assert status.json()["status"] in {"indexed", "pending"}
 
-        delete = await client.delete(f"/api/v1/rag/build/{doc_id}")
+        delete = await client.delete(f"/api/v1/rag/build/{doc_id}", headers=headers)
         assert delete.status_code == 200
         assert delete.json()["status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_e2e_health_endpoints(app: FastAPI) -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        health = await client.get("/api/v1/health")
+        assert health.status_code == 200
+        assert health.json()["status"] == "ok"
+        assert health.json()["service"] == "rag-builder"
+        assert health.json()["version"] == "1.0.0"
+        assert isinstance(health.json()["uptime_seconds"], int)

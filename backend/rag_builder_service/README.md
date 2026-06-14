@@ -1,4 +1,5 @@
-﻿# RAG Builder Service
+Для развертывания смотри файл:  backend/rag_builder_service/GITHUB_PULL_RUNBOOK.md
+ # RAG Builder Service
 
 ## Назначение
 RAG Builder Service строит векторный индекс документа:
@@ -14,8 +15,7 @@ RAG Builder Service строит векторный индекс докумен�
 - `POST /api/v1/rag/build`
 - `DELETE /api/v1/rag/build/{doc_id}`
 - `GET /api/v1/rag/build/{doc_id}/status?longpoll=15`
-- `GET /api/v1/rag/health/live`
-- `GET /api/v1/rag/health/ready`
+- `GET /api/v1/health`
 
 ## Как работает система
 
@@ -77,6 +77,7 @@ RAG Builder Service строит векторный индекс докумен�
 - `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DATABASE_URL`
 - `LOG_LEVEL`, `LOG_DIR`, `LOG_FILE`
 - `EMBEDDING_API_URL`, `EMBEDDING_MODEL`, `EMBEDDING_TIMEOUT`
+- `EMBEDDING_BATCH_SIZE`, `EMBEDDING_RETRIES`
 - `EMBEDDING_DIM`, `VECTOR_DIMENSION`
 - `CHUNK_SIZE`, `CHUNK_MAX_TOKENS`, `MAX_TOKENS`
 
@@ -98,6 +99,31 @@ py -3.13 -m uvicorn rag_builder.main:app --host 0.0.0.0 --port 8090
 ```
 4. Проверить OpenAPI:
 - `http://127.0.0.1:8090/openapi.json`
+
+## Быстрый запуск через Docker Compose
+Из папки `Abzalov_Igor`:
+
+```powershell
+docker compose up -d --build
+```
+
+Что поднимется:
+- `pkb-pg16` с PostgreSQL 16 + pgvector
+- `rag-builder-service` с автопрогоном Alembic-миграций
+
+Проверка:
+```powershell
+docker compose ps
+curl.exe http://127.0.0.1:8090/api/v1/health
+```
+
+Подробная инструкция для разработчика после `git pull`:
+- [GITHUB_PULL_RUNBOOK.md](C:\Users\Игорь\projects\PKB\PKB_neuroassistant\Abzalov_Igor\GITHUB_PULL_RUNBOOK.md)
+
+Важно по embeddings:
+- `EMBEDDING_PROVIDER=openai_compatible`
+- токен хранится в `EMBEDDING_API_KEY`
+- не вставлять токен в `EMBEDDING_PROVIDER`
 
 ## Логи
 - Папка логов: `./logs`

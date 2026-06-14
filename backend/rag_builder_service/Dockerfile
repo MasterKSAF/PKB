@@ -5,12 +5,17 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
+COPY alembic /app/alembic
+COPY alembic.ini /app/alembic.ini
+
 COPY pyproject.toml ./
 COPY src ./src
 COPY .env.example ./
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 
 RUN pip install --no-cache-dir -e .
+RUN sed -i 's/\r$//' /app/docker-entrypoint.sh && chmod +x /app/docker-entrypoint.sh
 
 EXPOSE 8090
 
-CMD ["python", "-m", "uvicorn", "rag_builder.main:app", "--host", "0.0.0.0", "--port", "8090"]
+CMD ["/app/docker-entrypoint.sh"]
