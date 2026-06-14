@@ -1,4 +1,4 @@
-# src/rag_builder/services/factory.py
+# src/rag_builder/embeddings/factory.py
 
 from rag_builder.core.config import settings
 from rag_builder.embeddings.stub import StubEmbeddingProvider

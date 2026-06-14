@@ -27,3 +27,9 @@ class Chunk:
 class EmbeddedChunk:
     chunk: Chunk
     embedding: list[float]
+
+@dataclass(frozen=True)
+class EmbeddingResult:
+    embedding: list[float]
+    token_count: int
+    cost_usd: float

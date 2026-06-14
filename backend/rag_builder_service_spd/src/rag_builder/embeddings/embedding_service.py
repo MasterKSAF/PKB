@@ -27,3 +27,5 @@ class EmbeddingService:
             chunk=chunk,
             embedding=self.create_embedding(chunk.content),
         )
+
+    def create_embedding_with_usage(self, text: str) -> EmbeddingResult:

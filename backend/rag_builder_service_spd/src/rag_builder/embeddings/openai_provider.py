@@ -3,6 +3,7 @@
 from openai import OpenAI
 
 from rag_builder.core.config import settings
+from rag_builder.models.domain import EmbeddingResult
 
 
 class OpenAIEmbeddingProvider:
@@ -17,9 +18,23 @@ class OpenAIEmbeddingProvider:
         self.client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
     def create_embedding(self, text: str) -> list[float]:
+        return self.create_embedding_with_usage(text).embedding
+
+    def create_embedding_with_usage(self, text: str) -> EmbeddingResult:
         response = self.client.embeddings.create(
             model=settings.EMBEDDING_MODEL,
             input=text,
         )
 
-        return response.data[0].embedding
+        usage = response.usage
+        token_count = usage.total_tokens if usage else 0
+
+        cost_usd = (
+            token_count / 1_000_000
+        ) * settings.EMBEDDING_PRICE_PER_1M_TOKENS_USD
+
+        return EmbeddingResult(
+            embedding=response.data[0].embedding,
+            token_count=token_count,
+            cost_usd=cost_usd,
+        )

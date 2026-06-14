@@ -24,6 +24,7 @@ class Settings(BaseSettings):
 
     EMBEDDING_PROVIDER: str = "stub"
     EMBEDDING_MODEL: str = "text-embedding-3-small"
+    EMBEDDING_PRICE_PER_1M_TOKENS_USD: float = 0.02
     EMBEDDING_DIM: int = 1536
 
     OPENAI_API_KEY: str | None = None
