@@ -1128,3 +1128,250 @@ class TestFixes:
             assert resp.status_code == 401
         finally:
             gw.ALLOW_ANONYMOUS = old_value
+
+
+# =====================================================================
+# STOPPER FIX TESTS — проверки исправлений 9 стоперов
+# =====================================================================
+
+
+class TestStopperFixes:
+    """Tests for 9 stopper fixes: import, validate, pending, scope, normalize, health."""
+
+    def setup_method(self):
+        _reset_rate_limiter()
+
+    # ── Stopper 1 & 2: CSV/XLSX import ─────────────────────────────────
+
+    def test_62_import_classifiers_csv(self):
+        """POST /classifiers/import с CSV-файлом + mapping → 200."""
+        csv_content = "code,full_name\nCSV.001,Test CSV Import\nCSV.002,Another CSV"
+        mapping = _json.dumps({"code": "code", "full_name": "full_name"})
+        resp = client.post(
+            f"{REG}/classifiers/import",
+            data={"classifier_system": "MKS", "mapping": mapping},
+            files={"file": ("data.csv", csv_content, "text/csv")},
+        )
+        assert_ok(resp)
+        data = resp.json()["data"]
+        assert data["inserted"] >= 1
+
+    def test_63_import_terminology_csv(self):
+        """POST /terminology/import с CSV-файлом + mapping → 200."""
+        csv_content = "raw_term,definition\nCSV Term,Imported from CSV\n"
+        mapping = _json.dumps({"raw_term": "raw_term", "definition": "definition"})
+        resp = client.post(
+            f"{REG}/terminology/import",
+            files={"file": ("data.csv", csv_content, "text/csv")},
+        )
+        assert_ok(resp)
+        data = resp.json()["data"]
+        assert data["inserted"] >= 1
+
+    def test_64_import_json_still_works(self):
+        """JSON-импорт (без multipart) продолжает работать после добавления CSV."""
+        resp = client.post(
+            f"{REG}/classifiers/import",
+            json=[{"classifier_system": "MKS", "code": "JSON.001", "full_name": "JSON Import"}],
+        )
+        assert_ok(resp)
+        assert resp.json()["data"]["inserted"] >= 1
+
+    # ── Stopper 3: validate with classification.* wrapper ──────────────
+
+    def test_65_validate_classification_wrapper(self):
+        """POST /classifiers/validate с classification.mks_oks_code → CONFIRMED."""
+        resp = client.post(
+            f"{REG}/classifiers/validate",
+            json={"classification": {"mks_oks_code": "47.020"}},
+        )
+        assert_ok(resp)
+        data = resp.json()["data"]
+        assert data["mks_status"] == "CONFIRMED", (
+            f"Ожидался CONFIRMED, получен {data['mks_status']}"
+        )
+
+    def test_66_validate_classification_wrapper_not_found(self):
+        """POST /classifiers/validate с неизвестным classification.mks_oks_code → NOT_FOUND."""
+        resp = client.post(
+            f"{REG}/classifiers/validate",
+            json={"classification": {"mks_oks_code": "99.999.99"}},
+        )
+        assert_ok(resp)
+        data = resp.json()["data"]
+        assert data["mks_status"] == "NOT_FOUND"
+
+    def test_67_validate_classification_top_level_still_works(self):
+        """top-level mks_oks_code продолжает работать (обратная совместимость)."""
+        resp = client.post(
+            f"{REG}/classifiers/validate",
+            json={"mks_oks_code": "47"},
+        )
+        assert_ok(resp)
+        data = resp.json()["data"]
+        assert data["mks_status"] == "CONFIRMED"
+
+    # ── Stopper 4: accept pending with body ────────────────────────────
+
+    def test_68_accept_pending_with_body(self):
+        """POST /classifiers/pending/{id}/accept с body → статус mapped."""
+        resp = client.post(
+            f"{REG}/classifiers/pending/1/accept",
+            json={
+                "parent_code": "47.020",
+                "full_name": "Прочие корпусные конструкции",
+                "admin_comment": "Подтверждено по МКС 2025",
+            },
+        )
+        assert_ok(resp)
+        data = resp.json()["data"]
+        assert data["status"] == "mapped", (
+            f"Ожидался 'mapped', получен '{data['status']}'"
+        )
+        assert "pending_id" in data
+        assert "classifier_system" in data
+        assert "code" in data
+        assert "registry_created" in data
+
+    # ── Stopper 5: reject pending with admin_comment ───────────────────
+
+    def test_69_reject_pending_with_admin_comment(self):
+        """POST /classifiers/pending/{id}/reject с admin_comment → комментарий сохранён."""
+        resp = client.post(
+            f"{REG}/classifiers/pending/1/reject",
+            json={"admin_comment": "Ошибка OCR — кода не существует"},
+        )
+        assert_ok(resp)
+        data = resp.json()["data"]
+        assert data["status"] == "rejected"
+        assert data["pending_id"] == 1
+
+    # ── Stopper 6: pending list filter by system ───────────────────────
+
+    def test_70_list_pending_filter_by_system(self):
+        """GET /classifiers/pending?system=MKS фильтрует по system."""
+        resp = client.get(f"{REG}/classifiers/pending", params={"system": "MKS"})
+        assert_ok(resp)
+        data = resp.json()["data"]
+        # Все элементы должны иметь system == "MKS"
+        for item in data:
+            assert item["system"] == "MKS", (
+                f"Ожидался system=MKS, получен {item.get('system')}"
+            )
+
+    def test_71_list_pending_filter_by_status(self):
+        """GET /classifiers/pending?status=new фильтрует по status (существующий функционал)."""
+        resp = client.get(f"{REG}/classifiers/pending", params={"status": "new"})
+        assert_ok(resp)
+        data = resp.json()["data"]
+        for item in data:
+            assert item["status"] == "new"
+
+    # ── Stopper 7: scope as list[str] ─────────────────────────────────
+
+    def test_72_create_term_with_scope_list(self):
+        """POST /terminology со scope: ["A", "B"] → 201, scope сохранён как массив."""
+        resp = client.post(
+            f"{REG}/terminology",
+            json={
+                "raw_term": "ScopeTestList",
+                "term_type": "preferred",
+                "scope": ["Проектирование", "Машиностроение"],
+                "is_case_sensitive": False,
+                "is_blocked": False,
+                "synonyms": [],
+                "related_docs": [],
+            },
+        )
+        assert_ok(resp, 201)
+        data = resp.json()["data"]
+        assert isinstance(data["scope"], list), (
+            f"scope должен быть list, получен {type(data['scope'])}: {data['scope']}"
+        )
+        assert "Проектирование" in data["scope"]
+
+    def test_73_create_term_with_scope_string(self):
+        """POST /terminology со scope: "str" → 201 (обратная совместимость), нормализован в массив."""
+        resp = client.post(
+            f"{REG}/terminology",
+            json={
+                "raw_term": "ScopeTestStr",
+                "term_type": "preferred",
+                "scope": "Стандартизация",
+                "is_case_sensitive": False,
+                "is_blocked": False,
+                "synonyms": [],
+                "related_docs": [],
+            },
+        )
+        assert_ok(resp, 201)
+        data = resp.json()["data"]
+        assert isinstance(data["scope"], list), (
+            f"scope должен быть list после нормализации, получен {type(data['scope'])}: {data['scope']}"
+        )
+        assert "Стандартизация" in data["scope"]
+
+    def test_74_list_term_scope_is_list(self):
+        """GET /terminology/{id} возвращает scope как list[str] (нормализация seed)."""
+        resp = client.get(f"{REG}/terminology/1")
+        assert_ok(resp)
+        data = resp.json()["data"]
+        assert isinstance(data.get("scope"), list), (
+            f"scope должен быть list, получен {type(data.get('scope'))}: {data.get('scope')}"
+        )
+
+    # ── Stopper 8: normalize unknown term → term_type = "unknown" ──────
+
+    def test_75_normalize_unknown_term(self):
+        """GET /terminology/normalize?term=NONEXISTENT → term_type = unknown."""
+        resp = client.get(
+            f"{REG}/terminology/normalize", params={"term": "ZZZZ_NEVER_EXISTS"}
+        )
+        assert_ok(resp)
+        data = resp.json()["data"]
+        assert data["term_type"] == "unknown", (
+            f"Ожидался term_type='unknown', получен '{data['term_type']}'"
+        )
+        assert data["raw_term"] == "ZZZZ_NEVER_EXISTS"
+
+    def test_76_normalize_known_term_still_works(self):
+        """GET /terminology/normalize для известного термина возвращает данные из справочника."""
+        resp = client.get(
+            f"{REG}/terminology/normalize", params={"term": "ГОСТ"}
+        )
+        assert_ok(resp)
+        data = resp.json()["data"]
+        assert data["term_type"] != "unknown"
+        assert data["standard_term"] == "ГОСТ"
+
+    # ── Stopper 9: /api/v1/health alias public ─────────────────────────
+
+    def test_77_health_public_without_auth(self):
+        """GET /api/v1/health (alias) доступен без токена."""
+        import mocks.gateway as gw
+
+        old_value = gw.ALLOW_ANONYMOUS
+        try:
+            gw.ALLOW_ANONYMOUS = False
+            resp = client.get(f"{BASE}/health")
+            assert resp.status_code == 200, (
+                f"Ожидался 200, получен {resp.status_code}: {resp.text[:200]}"
+            )
+            data = resp.json()
+            assert data["status"] == "ok"
+        finally:
+            gw.ALLOW_ANONYMOUS = old_value
+
+    def test_78_system_health_still_public(self):
+        """GET /api/v1/system/health остаётся публичным."""
+        import mocks.gateway as gw
+
+        old_value = gw.ALLOW_ANONYMOUS
+        try:
+            gw.ALLOW_ANONYMOUS = False
+            resp = client.get(f"{BASE}/system/health")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["status"] == "ok"
+        finally:
+            gw.ALLOW_ANONYMOUS = old_value

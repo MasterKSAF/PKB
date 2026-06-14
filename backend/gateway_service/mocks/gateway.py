@@ -137,8 +137,8 @@ class RBACMiddleware(BaseHTTPMiddleware):
             pass
         else:
             if not (
-                path.startswith("/api/v1/auth/") or path == "/api/v1/system/health"
-            ):
+                    path.startswith("/api/v1/auth/") or path == "/api/v1/system/health" or path == "/api/v1/health"
+                ):
                 if not user_context["is_authenticated"]:
                     return JSONResponse(
                         status_code=401,
@@ -474,6 +474,7 @@ app.include_router(registry_router, prefix="/api/v1/registry")
 
 
 @app.get("/api/v1/system/health")
+@app.get("/api/v1/health")
 async def gateway_health():
     return {
         "status": "ok",

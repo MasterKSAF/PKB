@@ -1272,12 +1272,13 @@ class TestRegistryService:
         assert_paginated(data)
 
     def test_99_accept_quarantine(self):
-        """POST /classifiers/quarantine/{id}/accept — accept pending classifier."""
+        """POST /classifiers/quarantine/{id}/accept — accept pending classifier (status=mapped)."""
         resp = client.post(f"{REG}/classifiers/quarantine/1/accept")
         assert_ok(resp)
         data = resp.json()["data"]
-        assert data["status"] == "accepted"
-        assert "classifier_code" in data
+        assert data["status"] == "mapped"
+        assert "pending_id" in data
+        assert "code" in data
 
     def test_100_reject_quarantine(self):
         """POST /classifiers/quarantine/{id}/reject — reject pending classifier."""
@@ -1295,12 +1296,13 @@ class TestRegistryService:
         assert_paginated(data)
 
     def test_100c_accept_pending(self):
-        """POST /classifiers/pending/{id}/accept — alias for quarantine accept."""
+        """POST /classifiers/pending/{id}/accept — alias for quarantine accept (status=mapped)."""
         resp = client.post(f"{REG}/classifiers/pending/1/accept")
         assert_ok(resp)
         data = resp.json()["data"]
-        assert data["status"] == "accepted"
-        assert "classifier_code" in data
+        assert data["status"] == "mapped"
+        assert "pending_id" in data
+        assert "code" in data
 
     def test_100d_reject_pending(self):
         """POST /classifiers/pending/{id}/reject — alias for quarantine reject."""

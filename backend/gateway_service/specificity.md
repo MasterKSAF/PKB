@@ -1,5 +1,37 @@
 # Specificity / Аномалии
 
+## 2026-06-14: Исправление 9 стоперов (проверка замечаний)
+
+### Изменения
+
+#### registry_routes.py
+- **Стопер 1-2**: Добавлены `_detect_format`, `_parse_csv`, `_parse_xlsx` — поддержка CSV/XLSX импорта классификаторов и терминологии с mapping и построчными ошибками. Backward-compatible JSON-импорт сохранён.
+- **Стопер 3**: `validate_classification` теперь поддерживает `classification.{mks_oks_code, code}` wrapper + fallback на top-level `mks_oks_code`/`code`.
+- **Стопер 4-5**: `accept_quarantine`/`reject_quarantine` (и `accept_pending`/`reject_pending`) теперь принимают body (`AcceptPendingRequest`, `RejectPendingRequest`), сохраняют `admin_comment`. Ответ accept возвращает `status: "mapped"` (вместо "accepted"), поля `pending_id`, `classifier_system`, `code`, `registry_created`.
+- **Стопер 6**: `list_pending` получил query `system` с фильтрацией по `pending.system`.
+- **Стопер 7**: `TermCreate.scope` и `TermUpdate.scope` изменены с `Optional[str]` на `Optional[Union[str, List[str]]]` с `@field_validator`, нормализующим строку в массив.
+- **Стопер 8**: `normalize_term` для not found возвращает `term_type: "unknown"` (вместо "preferred").
+
+#### common.py
+- Seed `SEED_TERMINOLOGY.scope` обновлён: строка → массив строк для всех 5 записей.
+
+#### gateway.py
+- Добавлен алиас `GET /api/v1/health` (тот же handler, что `/api/v1/system/health`).
+- RBACMiddleware исключает `/api/v1/health` из авторизации.
+
+#### requirements.txt
+- Добавлен `openpyxl>=3.1.0` для XLSX-парсинга.
+
+### Аномалии
+1. **scope seed-данных**: Seed-данные были строками (`"scope": "Стандартизация"`), модель Pydantic ожидала `str`. Приведено к массиву для соответствия документации и DB-модели.
+2. **accept_pending response**: Старый формат ответа (`status: "accepted"`, поле `classifier_code`) заменён на документированный (`status: "mapped"`, поля `pending_id`, `classifier_system`, `code`, `registry_created`).
+3. **normalize_term для not found**: Старое поведение возвращало `term_type: "preferred"` с трансформированным `standard_term` (lowercase). Новое — `term_type: "unknown"` с исходным `raw_term` без трансформации.
+4. **Health endpoint**: `/api/v1/system/health` уже был публичным. Добавлен `/api/v1/health` как алиас для совместимости с UI.
+5. **CSV/XLSX без openpyxl**: XLSX требует установленного `openpyxl`. Если библиотека отсутствует, возвращается 400 VALIDATION_ERROR с сообщением.
+
+### Статус тестов
+- **487 тестов проходят** (было 470, добавлено 17 новых в TestStopperFixes, 4 обновлено под новый формат ответов).
+
 ## 2026-06-12: Унификация gateway — удаление сервисной архитектуры
 
 ### Изменения
