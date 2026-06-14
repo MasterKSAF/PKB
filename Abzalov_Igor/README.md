@@ -99,6 +99,31 @@ py -3.13 -m uvicorn rag_builder.main:app --host 0.0.0.0 --port 8090
 4. Проверить OpenAPI:
 - `http://127.0.0.1:8090/openapi.json`
 
+## Быстрый запуск через Docker Compose
+Из папки `Abzalov_Igor`:
+
+```powershell
+docker compose up -d --build
+```
+
+Что поднимется:
+- `pkb-pg16` с PostgreSQL 16 + pgvector
+- `rag-builder-service` с автопрогоном Alembic-миграций
+
+Проверка:
+```powershell
+docker compose ps
+curl.exe http://127.0.0.1:8090/api/v1/health
+```
+
+Подробная инструкция для разработчика после `git pull`:
+- [GITHUB_PULL_RUNBOOK.md](C:\Users\Игорь\projects\PKB\PKB_neuroassistant\Abzalov_Igor\GITHUB_PULL_RUNBOOK.md)
+
+Важно по embeddings:
+- `EMBEDDING_PROVIDER=openai_compatible`
+- токен хранится в `EMBEDDING_API_KEY`
+- не вставлять токен в `EMBEDDING_PROVIDER`
+
 ## Логи
 - Папка логов: `./logs`
 - Файл: `logs/rag_builder.log`

@@ -3,6 +3,41 @@
 ## Цель
 Пошаговый деплой RAG Builder Service в Docker с PostgreSQL 16 + pgvector 0.8.2.
 
+## Рекомендуемый вариант: Docker Compose
+
+Из папки `Abzalov_Igor`:
+
+```powershell
+docker compose up -d --build
+```
+
+Compose сам:
+- поднимет `pkb-pg16`
+- дождется готовности PostgreSQL
+- соберет `rag-builder-service`
+- запустит Alembic-миграции при старте приложения
+- создаст таблицы `rag.*`
+
+Проверка:
+```powershell
+docker compose ps
+docker logs rag-builder-service --tail 200
+curl.exe http://127.0.0.1:8090/api/v1/health
+```
+
+Отдельная пошаговая инструкция для нового разработчика после `git pull`:
+- [GITHUB_PULL_RUNBOOK.md](C:\Users\Игорь\projects\PKB\PKB_neuroassistant\Abzalov_Igor\GITHUB_PULL_RUNBOOK.md)
+
+Остановка:
+```powershell
+docker compose down
+```
+
+Полное удаление вместе с volume PostgreSQL:
+```powershell
+docker compose down -v
+```
+
 ## Предусловия
 - Docker Desktop установлен.
 - Свободны порты:
@@ -70,6 +105,11 @@ MIGRATION_RETRIES=20
 MIGRATION_RETRY_DELAY_SECONDS=3
 ```
 
+Важно:
+- `EMBEDDING_PROVIDER=openai_compatible`
+- токен OpenAI хранить в `EMBEDDING_API_KEY`
+- не подставлять токен в `EMBEDDING_PROVIDER`
+
 ## 3. Собрать образ приложения
 Из папки `Abzalov_Igor`:
 
@@ -116,3 +156,7 @@ Get-ChildItem .\logs
 docker stop rag-builder-service pkb-pg16
 docker rm rag-builder-service pkb-pg16
 ```
+
+## 7. Когда что использовать
+- `docker compose up -d --build` — лучший вариант для нового разработчика
+- ручные `docker run ...` — если нужно отдельно управлять PostgreSQL и приложением
