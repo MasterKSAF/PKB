@@ -24,10 +24,13 @@ def _get_db_url() -> str:
     env_url = os.getenv("DATABASE_URL")
     if env_url:
         return env_url
+    settings_url = build_database_url(settings)
+    if settings_url and settings_url.strip():
+        return settings_url
     cfg_url = config.get_main_option("sqlalchemy.url")
     if cfg_url and cfg_url.strip():
         return cfg_url
-    return build_database_url(settings)
+    raise RuntimeError("Database URL is not configured for Alembic")
 
 
 def run_migrations_offline() -> None:
