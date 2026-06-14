@@ -90,6 +90,15 @@ class PostgresChunkRepository(ChunkRepository):
 
         with self._connect() as conn:
             with conn.cursor() as cur:
+                document_version_id = chunks[0].chunk.document_version_id
+
+                cur.execute(
+                    f"""
+                    DELETE FROM {settings.POSTGRES_SCHEMA}.chunks
+                    WHERE document_version_id = %s
+                    """,
+                    (document_version_id,),
+                )
 
                 for item in chunks:
                     cur.execute(
