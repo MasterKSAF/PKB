@@ -1,15 +1,32 @@
 # src/rag_builder/api/app.py
 
 from fastapi import FastAPI
+from contextlib import asynccontextmanager
 
 from rag_builder.models.contracts import BuildRequest
 from rag_builder.repositories.postgres_chunk_repository import PostgresChunkRepository
 from rag_builder.services.indexing_service import IndexingService
 from rag_builder.core.logger import logger
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("Starting RAG Builder service")
+
+    repository = PostgresChunkRepository()
+    repository.ensure_schema()
+
+    logger.info("Database schema ensured")
+
+    yield
+
+    logger.info("Stopping RAG Builder service")
+
+
 app = FastAPI(
     title="RAG Builder SPD",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 
@@ -49,7 +66,6 @@ def index_document(request: BuildRequest) -> dict:
     )
 
     repository = PostgresChunkRepository()
-    repository.ensure_schema()
 
     service = IndexingService(repository=repository)
 
