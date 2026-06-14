@@ -1,4 +1,5 @@
-﻿# RAG Builder Service
+Для развертывания смотри файл:  backend/rag_builder_service/GITHUB_PULL_RUNBOOK.md
+ # RAG Builder Service
 
 ## Назначение
 RAG Builder Service строит векторный индекс документа:
