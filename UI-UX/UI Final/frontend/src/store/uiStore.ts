@@ -34,6 +34,8 @@ interface UIState {
   setCurrentUserId: (userId: string) => void;
   currentRole: UserRole;
   setCurrentRole: (role: UserRole) => void;
+  currentPermissions: Record<string, boolean>;
+  setCurrentPermissions: (permissions: Record<string, boolean>) => void;
   currentGatewaySessionId: string | null;
   setCurrentGatewaySessionId: (sessionId: string | null) => void;
   activeProjectId: string;
@@ -72,16 +74,20 @@ export const useUIStore = create<UIState>((set) => ({
         isAuthenticated: true,
         currentUserId: user.id,
         currentRole,
+        currentPermissions: user.permissions ?? {},
         activeTab: getFallbackTab(currentRole),
       };
     }),
-  logout: () => set({ isAuthenticated: false, activeTab: 'chat', focusMode: false, currentGatewaySessionId: null }),
+  logout: () =>
+    set({ isAuthenticated: false, activeTab: 'chat', focusMode: false, currentGatewaySessionId: null, currentPermissions: {} }),
   activeTab: 'chat',
   setActiveTab: (activeTab) => set({ activeTab }),
   currentUserId: 'u1',
   setCurrentUserId: (currentUserId) => set({ currentUserId }),
   currentRole: 'user',
   setCurrentRole: (currentRole) => set({ currentRole }),
+  currentPermissions: {},
+  setCurrentPermissions: (currentPermissions) => set({ currentPermissions }),
   currentGatewaySessionId: null,
   setCurrentGatewaySessionId: (currentGatewaySessionId) => set({ currentGatewaySessionId }),
   activeProjectId: 'project-223m',

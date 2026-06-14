@@ -59,7 +59,7 @@ Demo-режим использует локальные профили:
 | `Вход` | Логин, пароль, выбор `Продуктивный` / `Демо`. В продуктивном режиме роль подтягивается через `/auth/me`. |
 | `Чат` | Дерево проектов и чатов, отправка вопроса, longpoll ответа, источники, поиск по текущему чату, обратная связь. |
 | `База знаний` | Поиск по базе знаний, фильтр области поиска, разделы Registry/Classifiers, провал в раздел, список документов, предпросмотр и поиск внутри открытого документа. |
-| `Обработка базы знаний` | Загрузка файла, загрузка по ссылке через модальное окно, draft lifecycle через `/drafts/*`, preview, approve/reject/delete, очередь и журнал обработки. |
+| `Обработка базы знаний` | Прямая загрузка файла, draft lifecycle через `/drafts/*`, preview, approve/reject/delete, очередь и журнал обработки. |
 | `История` | Поиск по диалогам, фильтры, раскрытие найденного чата, продолжение диалога, экспорт. |
 | `QA` | Контрольные метрики, оценка ответов ассистента, журнал проверки. |
 | `Администрирование` | Пользователи, роли, права доступа, сохранение прав, административный журнал, журнал обработки. |
@@ -119,12 +119,12 @@ VITE_GATEWAY_PASSWORD=admin123
 | Чаты и сообщения | `GET /chat/sessions`, `POST /chat/sessions`, `POST /chat/sessions/{id}/messages`, `GET /chat/sessions/{id}/messages/{message_id}?longpoll=15` |
 | История | `GET /chat/history`, `GET /chat/history/export`, `POST /chat/sessions/{id}/export` |
 | Feedback | `POST /chat/feedback` |
-| Поиск | `POST /text/search`, `POST /documents/search`, `GET /documents/search` |
+| Поиск | `POST /text/search` |
 | Черновики | `POST /drafts`, `GET /drafts`, `GET /drafts/{draft_id}`, `GET /drafts/{draft_id}/preview`, `POST /drafts/{draft_id}/preview`, `GET /drafts/{draft_id}/preview/status`, `PATCH /drafts/{draft_id}/decide`, `DELETE /drafts/{draft_id}` |
 | Документы | `GET /documents`, `GET /documents/{doc_id}`, `GET /documents/{doc_id}/status` |
 | Страницы и preview | `GET /documents/{doc_id}/pages/{page_num}`, `GET /documents/{doc_id}/pages/{page_num}/text`, `GET /documents/{doc_id}/pages/{page_num}/preview`, `GET /documents/{doc_id}/file` |
 | OCR и обработка | `GET /documents/queue`, `POST /documents/{doc_id}/reprocess`; внешний пользовательский поток загрузки идет через `/drafts/*` |
-| База знаний | `GET /registry/documents`, `GET /registry/documents/{doc_id}`, `GET /registry/documents/{doc_id}/sections`, `GET /classifiers/tree` / fallback `GET /registry/classifiers/tree`, `GET /common/stats`, `GET /common/enums` |
+| База знаний | `GET /registry/documents`, `GET /registry/documents/{doc_id}`, `GET /registry/documents/{doc_id}/sections`, `GET /registry/classifiers/tree`, `GET /common/stats`, `GET /common/enums` |
 | QA/мониторинг | `GET /monitor/health`, `GET /monitor/metrics` |
 
 ## Структура проекта

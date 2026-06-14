@@ -236,8 +236,12 @@ export const History: React.FC = () => {
 
       try {
         const exportResult = await historyApi.export('csv');
-        const format = String(exportResult?.format ?? 'csv').replace(/^\./, '') || 'csv';
-        const filename = `pkb_history_gateway.${format}`;
+        const filename = 'pkb_history_gateway.csv';
+
+        if (typeof exportResult === 'string') {
+          downloadBlob(new Blob([`\uFEFF${exportResult}`], { type: 'text/csv;charset=utf-8' }), filename);
+          return;
+        }
 
         if (exportResult?.url) {
           try {
@@ -249,7 +253,7 @@ export const History: React.FC = () => {
           }
         }
 
-        downloadBlob(buildHistoryCsvBlob(filteredData), 'pkb_history_gateway.csv');
+        downloadBlob(buildHistoryCsvBlob(filteredData), filename);
       } catch (error: any) {
         setExportError(error?.message ?? 'Не удалось экспортировать историю через Gateway.');
       } finally {

@@ -55,13 +55,10 @@
    Свежая документация описывает основной поиск как:
    - `POST /text/search`
 
-   Текущий UI сначала пробует:
-   - `POST /documents/search`
-
-   И только потом fallback:
+   Текущий UI уже использует:
    - `POST /text/search`
 
-   Статус: можно исправить сразу. `/text/search` должен быть основным endpoint для поиска по базе знаний.
+   Статус: закрыто в UI. `/text/search` стал основным endpoint для поиска по базе знаний.
 
 4. Chat projects
 
@@ -130,10 +127,9 @@
    - `gateway_service_api.md`: `/classifiers/*`
 
    Текущий UI использует:
-   - сначала `/classifiers/tree`
-   - затем fallback `/registry/classifiers/tree`
+   - только `/registry/classifiers/tree`
 
-   Статус: совместимость добавлена. Нужно зафиксировать канонический Gateway-путь.
+   Статус: UI уже зафиксирован на `/registry/classifiers/tree`. Нужна только backend-позиция, считать ли `/classifiers/*` alias-ом или отдельным legacy-путем.
 
 9. Drafts
 
@@ -160,7 +156,7 @@
 
 ## Что можно исправить сразу
 
-1. Сделать `/text/search` основным endpoint поиска по базе знаний, если backend подтвердит, что именно он должен заменить `/documents/search` в UI Final.
+1. Проверить на реальных данных, как UI отрабатывает поиск по базе знаний и провал в раздел при новых registry/classifier-кодах.
 
 2. Расширить визуальное отображение Registry-полей в карточке/preview документа:
    - `adoption_date`
@@ -188,7 +184,7 @@
 
 1. Переключать Auth/Admin с `/auth/me` и `/admin/*` на `/users/*`, `/roles`, `/audit`.
 
-2. Переключать классификаторы с `/classifiers/tree` на `/registry/classifiers/tree`.
+2. Возвращать UI на `/classifiers/tree` без отдельного подтверждения backend.
 
 3. Менять payload `POST /chat/feedback` на строковый `rating`, пока mock Gateway и документация расходятся.
 

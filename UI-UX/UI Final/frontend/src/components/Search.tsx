@@ -47,6 +47,15 @@ type DocumentPreview = {
   page: number;
   section: string;
   fragment: string;
+  documentId?: string;
+  sectionId?: string;
+  group?: string;
+  classifierCode?: string;
+  classifierSystem?: string;
+  mksOksCode?: string;
+  okstuCode?: string;
+  pagePreviewUrl?: string;
+  documentUrl?: string;
 };
 
 function previewLinkButtonSx(isLight: boolean) {
@@ -132,6 +141,55 @@ function highlightPreviewText(text: string, query: string, isLight: boolean, act
   return parts;
 }
 
+function normalizeClassifierToken(value?: string | null) {
+  return String(value ?? '').trim().toLowerCase();
+}
+
+function classifierTokenMatches(documentToken: string, sectionToken: string) {
+  if (!documentToken || !sectionToken) return false;
+  return documentToken === sectionToken || documentToken.startsWith(`${sectionToken}.`);
+}
+
+function getSectionTokens(section?: { id?: string; title?: string } | null) {
+  return [section?.id, section?.title].map(normalizeClassifierToken).filter(Boolean);
+}
+
+function getSearchResultTokens(item: any) {
+  return [
+    item.sectionId,
+    item.section_id,
+    item.group,
+    item.classifierCode,
+    item.classifier_code,
+    item.mksOksCode,
+    item.mks_oks_code,
+    item.okstuCode,
+    item.okstu_code,
+    item.classifierSystem,
+    item.classifier_system,
+  ]
+    .map(normalizeClassifierToken)
+    .filter(Boolean);
+}
+
+function resultMatchesSection(item: any, section?: { id?: string; title?: string } | null) {
+  if (!section) return false;
+
+  const sectionTokens = getSectionTokens(section);
+  if (!sectionTokens.length) return false;
+
+  const itemTokens = getSearchResultTokens(item);
+  if (itemTokens.some((token) => sectionTokens.some((sectionToken) => classifierTokenMatches(token, sectionToken)))) {
+    return true;
+  }
+
+  const sectionTitle = normalizeClassifierToken(section.title);
+  const itemSection = normalizeClassifierToken(item.section);
+  return sectionTitle
+    ? itemSection === sectionTitle || itemSection.startsWith(sectionTitle) || sectionTitle.startsWith(itemSection)
+    : false;
+}
+
 export const Search: React.FC = () => {
   const themeMode = useUIStore((state) => state.themeMode);
   const workMode = useUIStore((state) => state.workMode);
@@ -175,7 +233,7 @@ export const Search: React.FC = () => {
       selectedSectionIds.length === 0 ||
       selectedSectionIds.some((sectionId) => {
         const section = knowledgeSections.find((entry) => entry.id === sectionId);
-        return section ? item.section === section.title : false;
+        return resultMatchesSection(item, section);
       });
 
     return matchesType && matchesVersion && matchesSection;
@@ -230,9 +288,25 @@ export const Search: React.FC = () => {
     );
   };
 
+  const buildActiveDocumentExportText = () =>
+    [
+      activeDocument?.name ?? '',
+      activeDocument?.section ?? '',
+      activeDocument?.group ? `Группа: ${activeDocument.group}` : '',
+      activeDocument?.classifierCode ? `Код классификатора: ${activeDocument.classifierCode}` : '',
+      activeDocument?.documentUrl ? `Ссылка на файл: ${activeDocument.documentUrl}` : '',
+      activeDocument?.pagePreviewUrl ? `Ссылка на страницу: ${activeDocument.pagePreviewUrl}` : '',
+      `Страница ${activeDocument?.page ?? 1}`,
+      '',
+      activeDocument?.fragment ?? '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
   const openDocument = (item: any, index: number) => {
+    const documentId = item.documentId ?? item.document_id ?? item.id ?? `search-doc-${index}`;
     const preview: DocumentPreview = {
-      id: item.id ?? `search-doc-${index}`,
+      id: documentId,
       name: item.name,
       type: item.type ?? 'PDF',
       source: item.source,
@@ -240,6 +314,15 @@ export const Search: React.FC = () => {
       page: 1,
       section: item.section ?? 'Фрагмент базы знаний',
       fragment: item.fragment,
+      documentId,
+      sectionId: item.sectionId ?? item.section_id,
+      group: item.group,
+      classifierCode: item.classifierCode ?? item.classifier_code,
+      classifierSystem: item.classifierSystem ?? item.classifier_system,
+      mksOksCode: item.mksOksCode ?? item.mks_oks_code,
+      okstuCode: item.okstuCode ?? item.okstu_code,
+      pagePreviewUrl: item.pagePreviewUrl ?? item.page_preview_url,
+      documentUrl: item.documentUrl ?? item.document_url,
     };
 
     setOpenedDocuments((prev) => {
@@ -493,8 +576,13 @@ export const Search: React.FC = () => {
                         <Typography variant="body2">{item.version}</Typography>
                       </Box>
                       <Box>
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>Статус</Typography>
-                        <Typography variant="body2" color="success.main">Проверено</Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>Раздел</Typography>
+                        <Typography variant="body2">{item.section}</Typography>
+                        {(item.group || item.classifierCode) && (
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                            {item.group ? `Группа: ${item.group}` : `Код: ${item.classifierCode}`}
+                          </Typography>
+                        )}
                       </Box>
                     </Box>
                   </Box>
@@ -580,12 +668,7 @@ export const Search: React.FC = () => {
                       className="source-link-button"
                       startIcon={<Download size={14} />}
                       title={activeDocument.name}
-                      onClick={() =>
-                        downloadPreviewFile(
-                          activeDocument.name,
-                          `${activeDocument.name}\n${activeDocument.section}\nСтраница ${activeDocument.page}\n\n${activeDocument.fragment}`,
-                        )
-                      }
+                      onClick={() => downloadPreviewFile(activeDocument.name, buildActiveDocumentExportText())}
                       sx={{
                         ...previewLinkButtonSx(isLight),
                         justifyContent: 'flex-start',
@@ -742,7 +825,9 @@ export const Search: React.FC = () => {
                                 ? highlightPreviewText(activeDocument.fragment, normalizedPreviewSearch, isLight, activePreviewSearchMatch)
                                 : 'Значение из спецификации'}
                             </Box>
-                            <Box component="td" sx={{ border: '1px solid #c8d8c8', p: 1, fontSize: 12 }}>Проверено</Box>
+                            <Box component="td" sx={{ border: '1px solid #c8d8c8', p: 1, fontSize: 12 }}>
+                              {activeDocument.group || activeDocument.classifierCode || activeDocument.section || 'Раздел'}
+                            </Box>
                           </Box>
                         ))}
                       </Box>

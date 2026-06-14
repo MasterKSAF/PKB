@@ -134,7 +134,7 @@ export const ModeSwitcher: React.FC = () => {
     }
 
     let isMounted = true;
-    clearGatewayTokens();
+    const activeProjectIdSnapshot = useUIStore.getState().activeProjectId;
     setChatMessages([]);
     setActiveThreadId('');
     setCurrentGatewaySessionId(null);
@@ -144,7 +144,12 @@ export const ModeSwitcher: React.FC = () => {
       .list()
       .then((projects) => {
         if (!isMounted) return;
-        setChatProjects(projects.length ? projects : [{ id: 'gateway-dialogs', name: 'Рабочие диалоги', chats: [] }]);
+        const nextProjects = projects.length ? projects : [{ id: 'gateway-dialogs', name: 'Рабочие диалоги', chats: [] }];
+        setChatProjects(nextProjects);
+
+        if (!nextProjects.some((project) => project.id === activeProjectIdSnapshot) && nextProjects[0]?.id) {
+          setActiveProjectId(nextProjects[0].id);
+        }
       })
       .catch(() => {
         if (!isMounted) return;
@@ -154,7 +159,7 @@ export const ModeSwitcher: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [gatewayFallbackProjects, setChatMessages, setCurrentGatewaySessionId, workMode]);
+  }, [gatewayFallbackProjects, setActiveProjectId, setChatMessages, setCurrentGatewaySessionId, workMode]);
 
   const toggleProject = (projectId: string) => {
     setExpandedProjects((state) => ({ ...state, [projectId]: !state[projectId] }));
