@@ -137,6 +137,23 @@ class ChunkingService:
         Это позволяет индексировать содержимое таблицы
         обычным текстовым поиском и эмбеддингами.
         """
+        headers = content.get("headers")
+        rows = content.get("rows")
+
+        if isinstance(headers, list) and isinstance(rows, list):
+
+            lines = [
+                "| " + " | ".join(map(str, headers)) + " |",
+                "| " + " | ".join(["---"] * len(headers)) + " |",
+            ]
+
+            for row in rows:
+                if isinstance(row, list):
+                    lines.append(
+                        "| " + " | ".join(map(str, row)) + " |"
+                    )
+
+            return "\n".join(lines)
 
         markdown = content.get("markdown")
 

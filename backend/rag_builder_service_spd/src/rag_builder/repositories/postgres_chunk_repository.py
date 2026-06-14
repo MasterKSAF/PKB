@@ -4,6 +4,7 @@ import json
 import psycopg
 from psycopg import sql
 
+from rag_builder.core.logger import logger
 from rag_builder.core.config import settings
 from rag_builder.models.domain import EmbeddedChunk
 from rag_builder.repositories.chunk_repository import ChunkRepository
@@ -15,12 +16,21 @@ class PostgresChunkRepository(ChunkRepository):
     """
 
     def _connect(self):
+        logger.info(
+            "PostgreSQL connect host=%s port=%s db=%s user=%s",
+            settings.POSTGRES_HOST,
+            settings.POSTGRES_PORT,
+            settings.POSTGRES_DB,
+            settings.POSTGRES_USER,
+        )
+
         return psycopg.connect(
             host=settings.POSTGRES_HOST,
             port=settings.POSTGRES_PORT,
             dbname=settings.POSTGRES_DB,
             user=settings.POSTGRES_USER,
             password=settings.POSTGRES_PASSWORD,
+            connect_timeout=5,
         )
 
     def ping(self) -> bool:
@@ -31,54 +41,58 @@ class PostgresChunkRepository(ChunkRepository):
 
         return result == (1,)
 
+
+
     def ensure_schema(self) -> None:
         """
         Создаёт расширение vector, схему и таблицу chunks,
         если они ещё не существуют.
         """
+        logger.info("ensure_schema: start")
+        logger.info("ensure_schema: before connect")
 
         with self._connect() as conn:
+            logger.info("ensure_schema: after connect")
+
             with conn.cursor() as cur:
+                logger.info("ensure_schema: before create extension")
                 cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
 
+                logger.info("ensure_schema: before create schema")
                 cur.execute(
                     sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(
                         sql.Identifier(settings.POSTGRES_SCHEMA)
                     )
                 )
 
+                logger.info("ensure_schema: before create table")
                 cur.execute(
                     sql.SQL(
                         """
                         CREATE TABLE IF NOT EXISTS {}.chunks (
                             id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-
                             document_id BIGINT NOT NULL,
                             document_version_id BIGINT NOT NULL,
-
                             section_id BIGINT NOT NULL,
                             parent_id BIGINT,
-
                             clause TEXT,
                             path TEXT,
-
                             page INTEGER,
                             bbox JSONB,
-
                             chunk_index INTEGER NOT NULL,
                             chunk_type TEXT NOT NULL,
-
                             content TEXT NOT NULL,
                             metadata JSONB,
-
                             embedding VECTOR(1536),
-
                             created_at TIMESTAMPTZ NOT NULL DEFAULT now()
                         )
                         """
                     ).format(sql.Identifier(settings.POSTGRES_SCHEMA))
                 )
 
+            conn.commit()
+
+        logger.info("ensure_schema: done")
 
     def save_chunks(self, chunks: list[EmbeddedChunk]) -> None:
         """
@@ -137,7 +151,7 @@ class PostgresChunkRepository(ChunkRepository):
                             item.chunk.chunk_type,
                             item.chunk.content,
                             json.dumps(item.chunk.metadata),
-                            item.embedding,
+                            json.dumps(item.embedding),
                         ),
                     )
 

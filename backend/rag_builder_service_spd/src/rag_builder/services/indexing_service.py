@@ -1,5 +1,6 @@
 # src/rag_builder/services/indexing_service.py
 
+from rag_builder.core.logger import logger
 from rag_builder.chunking.service import ChunkingService
 from rag_builder.models.contracts import BuildRequest
 from rag_builder.models.domain import (
@@ -40,8 +41,19 @@ class IndexingService:
 
         Возвращает список чанков с эмбеддингами.
         """
+        logger.info(
+            "Received %s sections for document_id=%s",
+            len(request.sections),
+            request.metadata.document_id,
+        )
 
         chunks = self.chunking_service.build_chunks(request)
+
+        logger.info(
+            "Produced %s chunks for document_id=%s",
+            len(chunks),
+            request.metadata.document_id,
+        )
 
         embedded_chunks: list[EmbeddedChunk] = []
 
