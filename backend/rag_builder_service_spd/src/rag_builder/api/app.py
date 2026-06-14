@@ -2,6 +2,10 @@
 
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
+from rag_builder.models.responses import (
+    HealthResponse,
+    IndexResponse,
+)
 
 from rag_builder.models.contracts import BuildRequest
 from rag_builder.repositories.postgres_chunk_repository import PostgresChunkRepository
@@ -30,29 +34,38 @@ app = FastAPI(
 )
 
 
-@app.get("/health")
-def health_check() -> dict:
+@app.get(
+    "/health",
+    response_model=HealthResponse,
+)
+def health_check() -> HealthResponse:
     repository = PostgresChunkRepository()
 
     try:
         database_ok = repository.ping()
     except Exception as exc:
-        return {
-            "status": "degraded",
-            "service": "rag_builder_service_spd",
-            "database": "error",
-            "error": str(exc),
-        }
+        logger.exception("Database health check failed")
 
-    return {
-        "status": "ok" if database_ok else "degraded",
-        "service": "rag_builder_service_spd",
-        "database": "ok" if database_ok else "error",
-    }
+        return HealthResponse(
+            status="degraded",
+            service="rag_builder_service_spd",
+            database="error",
+            error=str(exc),
+        )
+    return HealthResponse(
+        status="ok",
+        service="rag_builder_service_spd",
+        database="ok",
+        error=None,
+    )
 
-
-@app.post("/index")
-def index_document(request: BuildRequest) -> dict:
+@app.post(
+    "/index",
+    response_model=IndexResponse,
+)
+def index_document(
+    request: BuildRequest,
+) -> IndexResponse:
     """
     Принимает chunk-container,
     строит чанки,
@@ -78,9 +91,9 @@ def index_document(request: BuildRequest) -> dict:
         request.metadata.document_version_id,
     )
 
-    return {
-        "status": "indexed",
-        "document_id": request.metadata.document_id,
-        "document_version_id": request.metadata.document_version_id,
-        "chunks_count": len(embedded_chunks),
-    }
+    return IndexResponse(
+        status="indexed",
+        document_id=request.metadata.document_id,
+        document_version_id=request.metadata.document_version_id,
+        chunks_count=len(embedded_chunks),
+    )
