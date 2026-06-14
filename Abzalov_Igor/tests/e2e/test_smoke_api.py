@@ -44,3 +44,15 @@ async def test_e2e_build_status_delete(app: FastAPI) -> None:
         delete = await client.delete(f"/api/v1/rag/build/{doc_id}", headers=headers)
         assert delete.status_code == 200
         assert delete.json()["status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_e2e_health_endpoints(app: FastAPI) -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        health = await client.get("/api/v1/health")
+        assert health.status_code == 200
+        assert health.json()["status"] == "ok"
+        assert health.json()["service"] == "rag-builder"
+        assert health.json()["version"] == "1.0.0"
+        assert isinstance(health.json()["uptime_seconds"], int)

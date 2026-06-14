@@ -1,8 +1,7 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, Query
 from loguru import logger
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rag_builder.auth.dependencies import require_access_token
@@ -12,36 +11,6 @@ from rag_builder.models.contracts import BuildRequest, BuildResponse, DeleteResp
 from rag_builder.services.indexing_service import indexing_service
 
 router = APIRouter(prefix="/rag", tags=["rag"])
-
-
-@router.get(
-    "/health/live",
-    summary="Проверка жизни сервиса (liveness)",
-    description="Быстрая проверка, что процесс API запущен и отвечает.",
-    responses={200: {"description": "Сервис жив."}},
-)
-async def health_live() -> dict[str, str]:
-    logger.debug("GET /rag/health/live")
-    return {"status": "ok"}
-
-
-@router.get(
-    "/health/ready",
-    summary="Готовность сервиса (readiness)",
-    description="Проверяет доступность базы данных через SQL-запрос `SELECT 1`.",
-    responses={
-        200: {"description": "Сервис готов, БД доступна."},
-        503: {"description": "Сервис не готов: БД недоступна (`database unavailable`)."},
-    },
-)
-async def health_ready(session: AsyncSession = Depends(get_session)) -> dict[str, str]:
-    logger.debug("GET /rag/health/ready")
-    try:
-        await session.execute(text("SELECT 1"))
-        return {"status": "ok"}
-    except Exception:
-        logger.exception("Health readiness failed")
-        raise HTTPException(status_code=503, detail="database unavailable")
 
 
 @router.post(

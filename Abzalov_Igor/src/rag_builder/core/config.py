@@ -4,6 +4,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
+    service_name: str = "rag-builder"
+    app_version: str = "1.0.0"
+
     db_host: str = "localhost"
     db_port: int = 5433
     db_name: str = "pkb_db"

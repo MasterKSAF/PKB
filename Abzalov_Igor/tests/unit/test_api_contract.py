@@ -16,6 +16,10 @@ def test_openapi_and_contract_shape() -> None:
     assert "/api/v1/rag/build" in paths
     assert "/api/v1/rag/build/{doc_id}" in paths
     assert "/api/v1/rag/build/{doc_id}/status" in paths
+    assert "/api/v1/health" in paths
+    assert "/api/v1/rag/health" not in paths
+    assert "/api/v1/rag/health/live" not in paths
+    assert "/api/v1/rag/health/ready" not in paths
     assert "/api/v1/auth/login" in paths
     assert "/api/v1/auth/refresh" in paths
     assert "/api/v1/auth/validate" in paths

@@ -14,8 +14,7 @@ RAG Builder Service строит векторный индекс докумен�
 - `POST /api/v1/rag/build`
 - `DELETE /api/v1/rag/build/{doc_id}`
 - `GET /api/v1/rag/build/{doc_id}/status?longpoll=15`
-- `GET /api/v1/rag/health/live`
-- `GET /api/v1/rag/health/ready`
+- `GET /api/v1/health`
 
 ## Как работает система
 
