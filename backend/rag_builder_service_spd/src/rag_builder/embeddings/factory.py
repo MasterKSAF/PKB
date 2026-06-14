@@ -1,29 +1,24 @@
-# src/rag_builder/services/embedding_service.py
+# src/rag_builder/services/factory.py
 
-from rag_builder.embeddings.base import EmbeddingProvider
-from rag_builder.embeddings.factory import build_embedding_provider
-from rag_builder.models.domain import Chunk, EmbeddedChunk
+from rag_builder.core.config import settings
+from rag_builder.embeddings.stub import StubEmbeddingProvider
 
 
-class EmbeddingService:
-    """
-    Сервис генерации эмбеддингов.
+def build_embedding_provider():
 
-    Не знает, какая именно модель используется.
-    Работает через EmbeddingProvider.
-    """
+    if settings.EMBEDDING_PROVIDER == "stub":
+        return StubEmbeddingProvider()
 
-    def __init__(
-        self,
-        provider: EmbeddingProvider | None = None,
-    ) -> None:
-        self.provider = provider or build_embedding_provider()
+    if settings.EMBEDDING_PROVIDER == "openai":
 
-    def create_embedding(self, text: str) -> list[float]:
-        return self.provider.create_embedding(text)
-
-    def enrich_chunk(self, chunk: Chunk) -> EmbeddedChunk:
-        return EmbeddedChunk(
-            chunk=chunk,
-            embedding=self.create_embedding(chunk.content),
+        from rag_builder.embeddings.openai_provider import (
+            OpenAIEmbeddingProvider,
         )
+
+        return OpenAIEmbeddingProvider()
+
+    raise ValueError(
+        f"Unsupported EMBEDDING_PROVIDER: "
+        f"{settings.EMBEDDING_PROVIDER}"
+    )
+
