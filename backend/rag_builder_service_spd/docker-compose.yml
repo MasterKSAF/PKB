@@ -1,0 +1,16 @@
+services:
+  rag-builder:
+    build: .
+    image: rag-builder-spd:latest
+    container_name: rag-builder-spd-dev
+
+    env_file:
+      - .env
+
+    environment:
+      POSTGRES_HOST: host.docker.internal
+
+    ports:
+      - "8001:8000"
+
+    restart: unless-stopped
