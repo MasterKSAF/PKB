@@ -33,3 +33,10 @@ class EmbeddingResult:
     embedding: list[float]
     token_count: int
     cost_usd: float
+
+@dataclass(frozen=True)
+class IndexingResult:
+    chunks: list[EmbeddedChunk]
+
+    embedding_tokens: int
+    embedding_cost_usd: float

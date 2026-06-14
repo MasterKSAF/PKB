@@ -38,3 +38,6 @@ def test_index_endpoint():
     assert data["document_id"] == 420000
     assert data["document_version_id"] == 420001
     assert data["chunks_count"] == 3
+
+    assert data["embedding_tokens"] == 0
+    assert data["embedding_cost_usd"] == 0.0

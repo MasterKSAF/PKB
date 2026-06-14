@@ -18,9 +18,11 @@ def test_index_document_returns_embedded_chunks():
     service = IndexingService()
     result = service.index_document(request)
 
-    assert len(result) == 3
+    assert len(result.chunks) == 3
+    assert result.embedding_tokens == 0
+    assert result.embedding_cost_usd == 0.0
 
-    first = result[0]
+    first = result.chunks[0]
 
     assert first.chunk.document_id == 420000
     assert first.chunk.document_version_id == 420001

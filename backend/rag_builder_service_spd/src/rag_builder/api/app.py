@@ -82,11 +82,11 @@ def index_document(
 
     service = IndexingService(repository=repository)
 
-    embedded_chunks = service.index_document(request)
+    result = service.index_document(request)
 
     logger.info(
         "Indexed %s chunks for document_id=%s document_version_id=%s",
-        len(embedded_chunks),
+        len(result.chunks),
         request.metadata.document_id,
         request.metadata.document_version_id,
     )
@@ -95,5 +95,7 @@ def index_document(
         status="indexed",
         document_id=request.metadata.document_id,
         document_version_id=request.metadata.document_version_id,
-        chunks_count=len(embedded_chunks),
+        chunks_count=len(result.chunks),
+        embedding_tokens=result.embedding_tokens,
+        embedding_cost_usd=result.embedding_cost_usd,
     )

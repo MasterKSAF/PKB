@@ -10,6 +10,11 @@ class HealthResponse(BaseModel):
 
 class IndexResponse(BaseModel):
     status: str
+
     document_id: int
     document_version_id: int
+
     chunks_count: int
+
+    embedding_tokens: int
+    embedding_cost_usd: float

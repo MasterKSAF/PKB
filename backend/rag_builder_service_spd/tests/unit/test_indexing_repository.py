@@ -22,7 +22,9 @@ def test_indexing_saves_chunks_to_repository():
 
     result = service.index_document(request)
 
-    assert len(result) == 3
+    assert len(result.chunks) == 3
+    assert result.embedding_tokens == 0
+    assert result.embedding_cost_usd == 0.0
 
     assert repository.count() == 3
 

@@ -20,9 +20,9 @@ def test_save_chunks_to_postgres():
 
     indexing_service = IndexingService()
 
-    chunks = indexing_service.index_document(request)
+    result = indexing_service.index_document(request)
 
     repository = PostgresChunkRepository()
 
     repository.ensure_schema()
-    repository.save_chunks(chunks)
+    repository.save_chunks(result.chunks)
