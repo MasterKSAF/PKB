@@ -497,7 +497,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
       }
     }
   },
-  "chunk_summary": {"sections": 12, "chunks": 34, "embeddings": 34},
+  "chunk_summary": {"sections": 12, "chunks": 34, "embeddings": 31},
   "started_at": "2025-06-06T10:00:00Z",
   "completed_at": "2025-06-06T10:25:00Z"
 }
@@ -507,7 +507,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 
 > **Таймаут `uploaded`**: Если preview не запущен в течение 1 часа после загрузки, статус автоматически меняется на `failed` с кодом `PREVIEW_TRIGGER_TIMEOUT`.
 
-**Статусы Indexation (Индексация)**: `pending` → `indexing` → `indexed` / `failed`. Подробнее — [статусная модель FSM](../pipelines/pipeline2-indexation.md#статусная-модель-fsm).
+**Статусы документов (FSM) для Indexation**: `pending_index` → `indexing` → `indexed` / `failed`. Подробнее — [статусная модель FSM](../pipelines/pipeline2-indexation.md#статусная-модель-fsm).
 
 **Группировка `steps.pipeline`**: каждый пайплайн имеет свой ключ (`formation`, `indexation`) с полем `status` — агрегированный статус пайплайна, и вложенными этапами. Статусы пайплайна: `pending`, `in_progress`, `completed`, `failed`, `blocked`. Статусы этапов: `pending`, `in_progress`, `completed`, `error`, `blocked`.
 
@@ -677,6 +677,9 @@ Orchestrator вычисляет SHA-256 содержимого, определя
   "message": "Переобработка запущена. Новый черновик не создаётся — используется существующий документ."
 }
 ```
+
+**Особенности переиндексации (`mode: reindex`):**
+Перед повторным чанкингом Оркестратор вызывает `DELETE /rag/build/{doc_id}` для очистки существующих чанков документа из векторного индекса. Только после успешного удаления запускается новый `POST /rag/build`. Если `DELETE` вернул ошибку, переиндексация отменяется с кодом `CLEANUP_FAILED`.
 
 **Ошибки**: `404` — документ не найден, `409` — документ в обработке.
 
