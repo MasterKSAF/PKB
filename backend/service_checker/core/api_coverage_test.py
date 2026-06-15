@@ -52,6 +52,7 @@ from service_checker.services import (
     SERVICE_DEPENDENCIES,
     SERVICE_REGISTRY,
 )
+from service_checker.core.openapi_loader import OpenApiLoader
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -80,9 +81,11 @@ class ApiCoverageTester:
         services: Optional[List[str]] = None,
         base_host: str = "127.0.0.1",
         skip_prepare: bool = False,
+        schema_check: bool = False,
     ):
         self.base_host = base_host
         self.skip_prepare = skip_prepare
+        self.schema_check = schema_check
 
         available_services = set(MODE_PORTS.keys())
         self.services_with_impl = SERVICES_WITH_REAL
@@ -113,6 +116,9 @@ class ApiCoverageTester:
         self.client = httpx.AsyncClient(timeout=15, follow_redirects=True)
         # Для тестов: можно подставить свои endpoint'ы (ключ → List[EndpointDef])
         self._test_endpoints: Dict[str, List[EndpointDef]] = {}
+        # OpenAPI схемы сервисов: service_key → {path: {method: OpenApiEndpoint}}
+        self.openapi_schemas: Dict[str, Dict[str, Dict[str, Any]]] = {}
+        self._current_svc_key: str = ""
 
     async def close(self) -> None:
         await self.client.aclose()
@@ -234,6 +240,118 @@ class ApiCoverageTester:
 
         return len(errors) == 0, errors, warnings
 
+    def _validate_against_openapi(
+        self,
+        svc_key: str,
+        ep: EndpointDef,
+        response_body: Optional[str],
+    ) -> List[str]:
+        """Сверить ответ с OpenAPI-схемой сервиса.
+
+        Если OpenAPI схема для сервиса загружена — сверяет структуру ответа
+        с ожидаемой схемой и возвращает список предупреждений о расхождениях.
+        """
+        warnings: List[str] = []
+
+        oapi_endpoints = self.openapi_schemas.get(svc_key)
+        if not oapi_endpoints:
+            return warnings
+
+        # Ищем эндпоинт в OpenAPI схеме по path + method
+        from service_checker.core.openapi_loader import OpenApiLoader
+        stub_loader = OpenApiLoader("http://stub")
+
+        # Пробуем точное совпадение
+        path_item = oapi_endpoints.get(ep.path)
+        oapi_ep = None
+        if path_item:
+            oapi_ep = path_item.get(ep.method)
+
+        # Если нет точного — ищем с path params
+        if not oapi_ep:
+            for oa_path, methods in oapi_endpoints.items():
+                oa_parts = oa_path.strip("/").split("/")
+                ep_parts = ep.path.strip("/").split("/")
+                if len(oa_parts) != len(ep_parts):
+                    continue
+                match = True
+                for op, pp in zip(oa_parts, ep_parts):
+                    if op.startswith("{") and op.endswith("}"):
+                        continue
+                    if op != pp:
+                        match = False
+                        break
+                if match:
+                    oapi_ep = methods.get(ep.method)
+                    break
+
+        if not oapi_ep:
+            warnings.append(f"⚠️ OpenAPI: эндпоинт {ep.method} {ep.path} не найден в схеме сервиса")
+            return warnings
+
+        # Сравниваем поля ответа
+        if not response_body:
+            return warnings
+
+        try:
+            data = json.loads(response_body)
+        except json.JSONDecodeError:
+            return warnings
+
+        if not isinstance(data, dict):
+            return warnings
+
+        # Flatten ответа
+        response_fields = self._flatten_response(data)
+
+        # Flatten OpenAPI схемы
+        oapi_fields: Dict[str, Dict[str, Any]] = {}
+        for sc in ("200", "201", "default"):
+            if sc in oapi_ep.responses:
+                oapi_fields = stub_loader._flatten_schema(oapi_ep.responses[sc])
+                break
+
+        if not oapi_fields:
+            return warnings
+
+        # Сравниваем
+        for field, oapi_info in oapi_fields.items():
+            if field not in response_fields:
+                oapi_type = oapi_info.get("type")
+                if oapi_info.get("required", False):
+                    warnings.append(
+                        f"⚠️ OpenAPI: обязательное поле '{field}' ({oapi_type}) отсутствует в ответе"
+                    )
+
+        return warnings
+
+    @staticmethod
+    def _flatten_response(data: Dict[str, Any], prefix: str = "") -> Dict[str, Any]:
+        """Преобразовать JSON-ответ в плоскую карту полей."""
+        result: Dict[str, Any] = {}
+        for key, value in data.items():
+            full_key = f"{prefix}.{key}" if prefix else key
+            if isinstance(value, dict):
+                result[full_key] = {"type": "object"}
+                result.update(ApiCoverageTester._flatten_response(value, full_key))
+            elif isinstance(value, list):
+                result[full_key] = {"type": "array"}
+                if value and isinstance(value[0], dict):
+                    result.update(
+                        ApiCoverageTester._flatten_response(value[0], f"{full_key}[]")
+                    )
+            elif isinstance(value, bool):
+                result[full_key] = {"type": "boolean"}
+            elif isinstance(value, int):
+                result[full_key] = {"type": "integer"}
+            elif isinstance(value, float):
+                result[full_key] = {"type": "number"}
+            elif isinstance(value, str):
+                result[full_key] = {"type": "string"}
+            else:
+                result[full_key] = {"type": "string"}
+        return result
+
     def _extract_context(self, response_body: Optional[str], extract_keys: Optional[List[str]]) -> None:
         """Извлечь ID из ответа и сохранить в контекст.
 
@@ -301,7 +419,7 @@ class ApiCoverageTester:
                 self.context[key] = value
 
     async def _execute_endpoint(
-        self, ep: EndpointDef, port: int, result: ServiceResult, alive: bool,
+        self, svc_key: str, ep: EndpointDef, port: int, result: ServiceResult, alive: bool,
     ) -> None:
         """Выполнить один эндпоинт и записать результат.
 
@@ -309,6 +427,7 @@ class ApiCoverageTester:
         Это нужно для prepare-шагов, которые обращаются к другим сервисам
         (например, получение JWT токена от auth service).
         """
+        self._current_svc_key = svc_key
         # override_port — альтернативный порт для prepare-шагов
         target_port = ep.override_port if ep.override_port is not None else port
         # Если сервис не отвечает — пропускаем все эндпоинты
@@ -349,7 +468,10 @@ class ApiCoverageTester:
 
         # Формируем заголовки
         headers = {**HEADERS_JSON}
-        if "access_token" in self.context:
+        # Публичные health-эндпоинты (/api/v1/health, /health) проверяем без токена.
+        # Внутренние (/system/health, /monitor/health) — с токеном.
+        is_public_health = ep.group == "health" and ep.path in ("/api/v1/health", "/health")
+        if "access_token" in self.context and not is_public_health:
             headers["Authorization"] = f"Bearer {self.context['access_token']}"
 
         # Выполняем запрос
@@ -412,6 +534,19 @@ class ApiCoverageTester:
                 if not schema_valid:
                     success = False
 
+            # OpenAPI валидация (если схема загружена и эндпоинт не prepare)
+            oapi_warnings = []
+            if (self.schema_check and not ep.is_preparation and success
+                    and resp.status_code < 300):
+                oapi_warnings = self._validate_against_openapi(
+                    svc_key, ep, resp_body
+                )
+                schema_warnings.extend(oapi_warnings)
+
+            all_warnings = []
+            if schema_warnings:
+                all_warnings.extend(schema_warnings)
+
             ep_result = EndpointResult(
                 endpoint=ep,
                 status_code=resp.status_code,
@@ -419,7 +554,7 @@ class ApiCoverageTester:
                 elapsed_ms=elapsed,
                 response_body=resp_body[:500] if resp_body else None,
                 error="; ".join(schema_errors) if schema_errors else None,
-                warnings="; ".join(schema_warnings) if schema_warnings else None,
+                warnings="\n".join(all_warnings) if all_warnings else None,
             )
 
             if success:
@@ -521,7 +656,7 @@ class ApiCoverageTester:
         # ── 1. Prepare-этап: создаём необходимые данные ──────────────
         if not self.skip_prepare and alive and svc_prepare:
             for ep in svc_prepare:
-                await self._execute_endpoint(ep, port, result, alive)
+                await self._execute_endpoint(service_key, ep, port, result, alive)
             # Проверяем, что prepare-шаги извлекли контекст
             if svc_def and svc_def.base_data:
                 missing = [k for k in svc_def.base_data if k not in self.context]
@@ -537,7 +672,7 @@ class ApiCoverageTester:
 
         # ── 2. Основные эндпоинты ────────────────────────────────────
         for ep in svc_endpoints:
-            await self._execute_endpoint(ep, port, result, alive)
+            await self._execute_endpoint(service_key, ep, port, result, alive)
 
         # Если сервис ответил на ping, но все не-health эндпоинты вернули 404 —
         # значит сервиса по факту нет (на порту что-то есть, но не то).
@@ -558,13 +693,45 @@ class ApiCoverageTester:
 
         return result
 
+    async def load_openapi_schemas(self) -> None:
+        """Загрузить OpenAPI-схемы для сервисов, которые их имеют.
+
+        Исключения: gateway-mock, TEI (нет /openapi.json).
+        """
+        for svc_key in self.services_to_test:
+            port = MODE_PORTS.get(svc_key)
+            if not port:
+                continue
+            # Gateway (mock) и TEI не имеют /openapi.json
+            if svc_key in ("gateway", "tei"):
+                continue
+
+            base_url = f"http://{self.base_host}:{port}"
+            loader = OpenApiLoader(base_url, timeout=5)
+            success = await loader.load()
+            if success:
+                self.openapi_schemas[svc_key] = loader.endpoints
+                print(f"  📖 OpenAPI: {svc_key} ({len(loader.endpoints)} paths)")
+            else:
+                print(f"  ⚠️  OpenAPI: {svc_key} — не загружена")
+                for err in loader.errors:
+                    print(f"       {err}")
+
     async def run_all(self) -> Dict[str, ServiceResult]:
         """Запустить тестирование всех сервисов."""
         print("=" * 70)
         print(f"  PKB Neuroassistant — API Coverage Test")
         print(f"  🔬 Real mode (Docker)")
         print(f"  Основано на docs/api/*.md")
+        if self.schema_check:
+            print(f"  📋 Schema validation: ON")
         print("=" * 70)
+
+        # Загружаем OpenAPI-схемы, если запрошена валидация
+        if self.schema_check:
+            print("\n  📖 Загрузка OpenAPI-схем...")
+            await self.load_openapi_schemas()
+            print()
 
         for svc_key in self.services_to_test:
             if svc_key not in SERVICE_REGISTRY:
@@ -837,6 +1004,16 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Пропустить prepare-шаги (не создавать данные)",
     )
+    parser.add_argument(
+        "--schema-check",
+        action="store_true",
+        help="Валидировать ответы по OpenAPI-схеме сервиса (если доступна)",
+    )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Режим strict: fail при любом расхождении ответа с OpenAPI-схемой",
+    )
     return parser.parse_args()
 
 
@@ -875,7 +1052,10 @@ async def main():
         services=services_list,
         base_host=args.host,
         skip_prepare=args.skip_prepare,
+        schema_check=args.schema_check or args.strict,
     )
+    if args.strict:
+        tester.strict_mode = True
 
     try:
         if args.ping_only:

@@ -1,19 +1,69 @@
-# TODO: Разложить Python-файлы по каталогам
+# TODO: Валидация данных через openapi.json и сверка с документацией
 
-## План
-Корневые `.py` файлы (кроме `__init__.py`, `__main__.py`, `setup.py`) перенести в `core/`:
-- `service_checker.py` → `core/service_checker.py` (дубль `__main__.py`, сделаем прокладку)
-- `api_coverage_test.py` → `core/api_coverage_test.py`
-- `pipeline_test.py` → `core/pipeline_test.py`
-- `setup_db.py` → `core/setup_db.py`
+## Изученная архитектура
 
-## Шаги
-- [x] 1. Создать todo.md (этот файл)
-- [x] 2. Перенести `api_coverage_test.py` → `core/api_coverage_test.py` (move_path)
-- [x] 3. Перенести `pipeline_test.py` → `core/pipeline_test.py` (move_path)
-- [x] 4. Перенести `setup_db.py` → `core/setup_db.py` (move_path)
-- [x] 5. Перенести `service_checker.py` → `core/service_checker.py` (move_path)
-- [x] 6. Обновить импорты и пути во всех файлах проекта
-- [x] 7. Обновить `readme.md` (структура проекта)
-- [x] 8. Запустить тесты — 140 passed, 1 pre-existing fail (Docker integration)
-- [x] 9. Финальная сверка по todo.md
+### Текущее состояние
+- **`services/*.py`** — вручную прописанные `response_schema` (Dict[str, type]), неполные, упрощённые
+- **`docs/api/*.md`** — подробная документация с примерами JSON и таблицами полей (14 файлов)
+- **`core/api_coverage_test.py::_validate_response()`** — проверяет ответ только по ручной схеме
+- **Real-сервисы (FastAPI)** — имеют `/openapi.json` (кроме gateway-mock и TEI)
+
+### Задача пользователя
+1. Сверять openapi.json реальных сервисов с документацией `docs/api/*.md`
+2. Для этого нужно из md-документации генерировать схему в формате, сопоставимом с OpenAPI
+
+---
+
+## План реализации
+
+### Блок 1: Парсер markdown-документации → структура эндпоинтов (core/md_parser.py)
+- [x] Создать парсер `docs/api/*.md`
+  - Извлекает по каждому эндпоинту: method, path, group, описание
+  - Парсит примеры JSON-ответов (```json блоки) и строит JSON Schema
+  - Парсит таблицы полей (имя, тип, обязательность, описание)
+  - Строит древовидную схему ответа из примеров + таблиц
+- [x] Покрыть тестами на 14 md-файлах (40 тестов)
+- [x] Встроенная конвертация в OpenAPI 3.0.3 (MdApiParser.to_openapi)
+
+### Блок 2: Загрузчик OpenAPI-схем от сервисов (core/openapi_loader.py)
+- [x] Загружает `/openapi.json` с сервиса по URL
+- [x] Разрешает `$ref` (локальные ссылки)
+- [x] Извлекает schema для каждого эндпоинта по method + path
+- [x] Строит плоскую карту полей для сравнения
+- [x] Match эндпоинтов с path parameters
+- [x] Исключения: gateway-mock, TEI (нет /openapi.json)
+
+### Блок 3: Генератор схемы из md (встроен в md_parser.py как to_openapi)
+- [x] Преобразует распарсенную md-документацию в OpenAPI 3.0.3
+- [x] Формат: paths → {method} → parameters, requestBody, responses
+
+### Блок 4: Компаратор схем (core/schema_comparator.py)
+- [x] Сравнивает OpenAPI-схему сервиса со сгенерированной из md
+- [x] Выявляет расхождения: missing_in_md, missing_in_oapi, type_mismatches, required_mismatches
+- [x] Сравнивает query-параметры
+- [x] format_diff() — читаемый отчёт
+- [x] summarize_diff() — сводная статистика
+
+### Блок 5: Интеграция в coverage test (api_coverage_test.py)
+- [x] Флаг `--schema-check` — загружает OpenAPI-схемы и валидирует ответы
+- [x] Флаг `--strict` — fail при любом расхождении с OpenAPI
+- [x] `_validate_against_openapi()` — сверяет ответ с OpenAPI-схемой
+- [x] `_flatten_response()` — преобразует JSON-ответ в плоскую карту полей
+- [x] `load_openapi_schemas()` — загружает схемы для всех сервисов
+- [x] Предупреждения о расхождениях в warnings эндпоинта
+
+### Блок 6: Ограничения и исключения
+- [x] Gateway (mock) и TEI — нет `/openapi.json`, остаётся ручная `response_schema`
+- [x] Не валидировать prepare-шаги (они создают данные, а не возвращают)
+- [ ] Converter и Parser health на `/health` — их OpenAPI может отличаться от ожиданий
+- [ ] RAG Builder / RAG Search могут иметь неполные схемы
+
+---
+
+## Результат
+- ✅ Парсер md-документации — 14 файлов, ~160 эндпоинтов, 40 тестов
+- ✅ Загрузчик OpenAPI-схем с `$ref` resolution
+- ✅ Компаратор схем (md vs openapi)
+- ✅ Интеграция в coverage test (--schema-check, --strict)
+- ✅ Все тесты: 210/210
+- ❓ Остаётся: полный цикл md→OpenAPI→сравнение в отдельном CLI
