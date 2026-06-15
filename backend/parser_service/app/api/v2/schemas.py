@@ -63,19 +63,8 @@ class ProcessResponse(BaseModel):
     """
     task_id: int = Field(..., description="ID задачи")
     status: str = Field("accepted", description="Статус ('accepted')")
+    mode: ProcessingMode = Field(default=ProcessingMode.FULL, description="Режим обработки")
     estimated_completion: datetime = Field(..., description="Предполагаемое время завершения (UTC)")
-
-
-class PreviewResponse(BaseModel):
-    """
-    Ответ на синхронный предпросмотр (v2).
-    """
-    task_id: int = Field(..., description="ID задачи")
-    version_id: str = Field("", description="Версия документа (в v2 всегда пустая строка)")
-    preview: bool = Field(True, description="Флаг предпросмотра")
-    max_pages: int = Field(..., description="Максимальное количество обработанных страниц")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Метаданные")
-    document: Dict[str, Any] = Field(..., description="Содержимое документа")
 
 
 class StatusResponse(BaseModel):

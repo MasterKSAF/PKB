@@ -1,10 +1,17 @@
-Инструкция по установке и использованию Parser Service
 
-1. Предварительные требования
-Docker (для запуска MinIO)
-Python 3.10+ (для запуска сервиса)
-pip, virtualenv (рекомендуется)
-Git (опционально)
+**Инструкция по установке и использованию Parser Service**
+
+Сервис парсинга цифровых PDF/DOC-документов (без OCR).
+
+**1. Предварительные требования**
+- Docker (для запуска MinIO)
+- Python 3.10+ (для запуска сервиса)
+- pip, virtualenv (рекомендуется)
+- Git (опционально)
+
+Дополнительные: 
+- запуск в изолированной среде с ограничением прав пользователя 
+- запрет на выход в интернет
 
 **2. Установка, запуск и настройка MinIO (если его нет)**
 2.1 Docker Compose для MinIO
@@ -43,7 +50,7 @@ API: http://localhost:9000
 2.2 Создание бакетов и пользователя
 Вариант А: через Web консоль
 Зайдите в http://localhost:9001
-Создайте бакеты: documents, images
+Создайте бакеты: files, images
 Перейдите в Identity → Users → создайте пользователя parser_user (придумайте пароль)
 Назначьте права: readwrite на оба бакета
 
@@ -59,7 +66,7 @@ sudo mv mc /usr/local/bin/
 mc alias set local http://localhost:9000 minioadmin minioadmin
 
 # Создаём бакеты
-mc mb local/documents
+mc mb local/files
 mc mb local/images
 
 # Создаём пользователя
@@ -73,7 +80,7 @@ cat > policy.json <<EOF
     {
       "Effect": "Allow",
       "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
-      "Resource": ["arn:aws:s3:::documents/*"]
+      "Resource": ["arn:aws:s3:::files/*"]
     },
     {
       "Effect": "Allow",
@@ -101,7 +108,7 @@ mc admin policy attach local parser-policy --user parser_user
 Способ 1: через mc
 ```text
 bash
-mc cp --recursive ./input/ local/documents/
+mc cp --recursive ./input/ local/files/
 ```
 
 2.5. Дополнительно. Остановка и очистка
@@ -154,7 +161,7 @@ pip install -r requirements.txt
 Способ 1: через mc
 ```text
 bash
-mc cp --recursive ./input/ local/documents/
+mc cp --recursive ./input/ local/files/
 ```
 
 Способ 2: через Python скрипт
@@ -179,7 +186,7 @@ async def upload_file(file_path, bucket, object_name):
 async def main():
     for f in os.listdir('./input'):
         if f.lower().endswith('.pdf'):
-            await upload_file(f'./input/{f}', 'documents', f)
+            await upload_file(f'./input/{f}', 'files', f)
 asyncio.run(main())
 ```
 После загрузки файлы будут доступны по ключу (имени файла), например document.pdf.

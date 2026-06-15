@@ -95,7 +95,10 @@ async def test_pipeline_cancelled_by_shutdown():
         with pytest.raises(asyncio.CancelledError):
             await pipeline.run(ctx)
 
-    mock_task_store.update_task.assert_called_with(
-        1, status=TaskStatus.FAILED,
-        error={"code": "CANCELLED", "message": "Task cancelled due to shutdown"}
-    )
+    # Проверяем, что update_task был вызван с параметром completed_at
+    call_args = mock_task_store.update_task.call_args
+    assert call_args is not None
+    args, kwargs = call_args
+    assert kwargs["status"] == TaskStatus.FAILED
+    assert kwargs["error"]["code"] == "CANCELLED"
+    assert "completed_at" in kwargs  # теперь в update_task передаётся completed_at
