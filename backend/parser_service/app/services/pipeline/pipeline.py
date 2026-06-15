@@ -1,11 +1,13 @@
 """
 Пайплайн обработки документа: последовательное выполнение шагов.
 """
+
 import logging
 from typing import List
 import asyncio
 import os
 import shutil
+from datetime import datetime, timezone
 from app.services.pipeline.steps import PipelineStep
 from app.services.pipeline.context import ProcessingContext
 from app.core.task_store import task_store
@@ -95,10 +97,7 @@ class Pipeline:
             for i, step in enumerate(self.steps):
                 # Проверка на graceful shutdown
                 if ctx.shutdown_event and ctx.shutdown_event.is_set():
-                    logger.warning(
-                        "Pipeline cancelled for task %d due to shutdown",
-                        ctx.task_id
-                    )
+                    logger.warning("Pipeline cancelled for task %d due to shutdown", ctx.task_id)
                     raise asyncio.CancelledError("Pipeline cancelled due to shutdown")
 
                 step_name = step.__class__.__name__
@@ -111,10 +110,7 @@ class Pipeline:
                         step_detail=f"Шаг {i+1}/{total_steps}: {step_name}",
                         progress_percent=progress
                     )
-                    logger.debug(
-                        "Executing step %d/%d: %s",
-                        i + 1, total_steps, step_name
-                    )
+                    logger.debug("Executing step %d/%d: %s", i + 1, total_steps, step_name)
 
                 ctx = await step.execute(ctx)
 
@@ -134,21 +130,20 @@ class Pipeline:
                 await task_store.update_task(
                     ctx.task_id,
                     status=TaskStatus.FAILED,
-                    error={"code": "CANCELLED", "message": "Task cancelled due to shutdown"}
+                    error={"code": "CANCELLED", "message": "Task cancelled due to shutdown"},
+                    completed_at=datetime.now(timezone.utc)
                 )
             if ctx.temp_dir and os.path.exists(ctx.temp_dir):
                 shutil.rmtree(ctx.temp_dir, ignore_errors=True)
             raise
         except StorageError as e:
-            logger.error(
-                "Storage error in pipeline for task %d: %s",
-                ctx.task_id, str(e), exc_info=True
-            )
+            logger.error("Storage error in pipeline for task %d: %s", ctx.task_id, str(e), exc_info=True)
             if ctx.track_progress:
                 await task_store.update_task(
                     ctx.task_id,
                     status=TaskStatus.FAILED,
-                    error={"code": "STORAGE_ERROR", "message": str(e)}
+                    error={"code": "STORAGE_ERROR", "message": str(e)},
+                    completed_at=datetime.now(timezone.utc)
                 )
             raise
         except Exception as e:
@@ -157,6 +152,7 @@ class Pipeline:
                 await task_store.update_task(
                     ctx.task_id,
                     status=TaskStatus.FAILED,
-                    error={"code": "PARSER_FAILED", "message": str(e)}
+                    error={"code": "PARSER_FAILED", "message": str(e)},
+                    completed_at=datetime.now(timezone.utc)
                 )
             raise
