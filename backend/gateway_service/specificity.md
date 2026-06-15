@@ -35,31 +35,31 @@
 ## 2026-06-15: Health endpoint возвращает 401 в Docker
 
 ### Проблема
-`/api/v1/system/health` возвращал 401 при запросе из Docker, хотя был в белом списке RBACMiddleware.
+В Docker `GET /api/v1/health` (и `/api/v1/health/`) возвращает 401 Unauthorized, хотя должен быть публичным.
 
-### Корень
-Порядок middleware в Starlette: последний добавленный — самый внешний (выполняется первым).
-`StripTrailingSlashMiddleware` был добавлен первым (строка 487), а `RBACMiddleware` — четвёртым (строка 490).
+### Корень (две проблемы)
 
-Реальный порядок выполнения для входящего запроса:
-1. CORSMiddleware
-2. **RBACMiddleware** ← проверяет path ДО обрезки слеша
-3. IdempotencyMiddleware
-4. ProcessTimeMiddleware
-5. StripTrailingSlashMiddleware ← обрезает слеш ПОСЛЕ RBAC
+**1. Отсутствие `/api/v1/health` в production gateway.**
+Mock-сервер (`mocks/gateway.py`) имел алиас `@app.get("/api/v1/health")` и запись в белом списке RBAC. Production (`gateway/main.py`) — нет. UI шлёт запрос именно на `/api/v1/health`.
 
-Docker healthcheck-ы часто шлют запрос со слешем (`/api/v1/system/health/`).
-RBACMiddleware видел путь `/api/v1/system/health/`, который не совпадал с `path == "/api/v1/system/health"` — белый список не срабатывал → 401.
+**2. Порядок middleware** (вторично).
+`StripTrailingSlashMiddleware` регистрировался первым (строка 487), но в Starlette последний middleware — самый внешний. `RBACMiddleware` проверял `request.url.path` до обрезки trailing slash.
 
-### Исправление
-Добавлена нормализация пути в `RBACMiddleware.dispatch()`:
-```python
-path = request.url.path.rstrip("/") if request.url.path != "/" else "/"
+Реальный порядок:
+```
+CORSMiddleware → RBACMiddleware → ... → StripTrailingSlashMiddleware
 ```
 
+Docker healthcheck может слать `/api/v1/system/health/` — слеш ещё не обрезан → белый список не срабатывает.
+
+### Исправление
+1. **`gateway/main.py`**: добавлен `@app.get("/api/v1/health")` алиас и `/api/v1/health` в whitelist RBACMiddleware.
+2. **`gateway/main.py` + `mocks/gateway.py`**: нормализация `path` в `RBACMiddleware.dispatch()` — `rstrip("/")`.
+
 Затронутые файлы:
-- `gateway/main.py` — RBACMiddleware (production)
-- `mocks/gateway.py` — RBACMiddleware (mock)
+- `gateway/main.py` — добавлен алиас + whitelist + нормализация path
+- `mocks/gateway.py` — нормализация path
+- `mocks/tests/test_extended.py` — 4 новых теста (trailing slash, пустой/невалидный токен)
 
 ## 2026-06-12: Унификация gateway — удаление сервисной архитектуры
 
