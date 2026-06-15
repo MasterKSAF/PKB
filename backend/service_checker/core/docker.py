@@ -269,19 +269,18 @@ def _docker_health_check(services: List[str]) -> bool:
         log_err(f"Ошибка: {e}")
         return False
 
-    # ── HTTP health check Python-сервисов (с ожиданием готовности) ──
+    # ── HTTP health check Python-сервисов (конкурентно) ──
     log_header("Docker Health Check: HTTP-endpoint'ы Python-сервисов")
     all_ok = True
-    for svc_key, (port, path, display_name) in DOCKER_SUPERVISOR_SERVICES.items():
+
+    def _ping_one(svc_key: str, port: int, path: str, display_name: str) -> bool:
         url = f"http://127.0.0.1:{port}{path}"
-        ok = False
-        for attempt in range(3):  # до 6 секунд (3 + 3 попытки по 1с)
+        for attempt in range(3):
             try:
                 resp = httpx.get(url, timeout=3)
                 if resp.status_code < 500:
                     log_ok(f"{display_name:<25} :{port} — HTTP {resp.status_code}")
-                    ok = True
-                    break
+                    return True
                 if attempt < 2:
                     time.sleep(1)
             except httpx.ConnectError:
@@ -299,8 +298,17 @@ def _docker_health_check(services: List[str]) -> bool:
                     time.sleep(1)
                 else:
                     log_err(f"{display_name:<25} :{port} — {e}")
-        if not ok:
-            all_ok = False
+        return False
+
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    with ThreadPoolExecutor(max_workers=len(DOCKER_SUPERVISOR_SERVICES)) as executor:
+        fut_map = {
+            executor.submit(_ping_one, svc_key, port, path, display_name): svc_key
+            for svc_key, (port, path, display_name) in DOCKER_SUPERVISOR_SERVICES.items()
+        }
+        for future in as_completed(fut_map):
+            if not future.result():
+                all_ok = False
 
     # ── Supervisorctl status ──
     log_header("Docker Health Check: supervisord (все Python-процессы)")
@@ -583,7 +591,7 @@ async def _docker_run_coverage() -> bool:
 
     # Импортируем напрямую ApiCoverageTester
     sys.path.insert(0, str(BACKEND_DIR))
-    from service_checker.api_coverage_test import ApiCoverageTester
+    from service_checker.core.api_coverage_test import ApiCoverageTester
 
     log_path = check_result_dir / "errors.md"
 

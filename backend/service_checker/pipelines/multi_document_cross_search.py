@@ -26,6 +26,7 @@ from .base import (
     check_json_fields,
     s3_sign_headers,
 )
+from service_checker.core.utils import int_to_uuid
 
 MINIO_PORT = 9000
 _HERE = Path(__file__).resolve().parent.parent
@@ -39,6 +40,18 @@ TEST_CREDENTIALS = {
 
 TEST_TASK_ID_1 = 20001
 TEST_TASK_ID_2 = 20002
+
+
+def _save_uuid_for_build(ctx_key: str, uuid_ctx_key: str):
+    """Check-функция: после Registry создаёт UUID-версию doc_id для RAG Builder."""
+    def _check(body: Optional[str], ctx: PipelineContext) -> Tuple[bool, str]:
+        raw = ctx.get(ctx_key)
+        if raw is not None:
+            uuid_val = int_to_uuid(int(raw))
+            ctx.set(uuid_ctx_key, uuid_val)
+            return True, f"{ctx_key}={raw} → {uuid_ctx_key}={uuid_val}"
+        return True, f"{ctx_key} not in context, skipping UUID conversion"
+    return _check
 
 
 class MultiDocumentCrossSearchPipeline(PipelineDef):
@@ -190,7 +203,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             expected_status={201, 409},
             needs_auth=True,
             extract_keys=["doc_id_1"],
-            check=check_json_field("data", dict),
+            check=_save_uuid_for_build("doc_id_1", "doc_id_1_uuid"),
         ))
 
         # ⚠️ Шаг 9: Построение индекса для документа #1
@@ -203,10 +216,10 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             path="/api/v1/rag/build",
             port=8090,
             body={
-                "document_id": "{doc_id_1}",
+                "document_id": "{doc_id_1_uuid}",
                 "sections": [{
                     "section_id": 1,
-                    "document_id": "{doc_id_1}",
+                    "document_id": "{doc_id_1_uuid}",
                     "clause": "1",
                     "level": 1,
                     "path": "1",
@@ -215,7 +228,6 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
                     "content": {"text": f"Содержимое документа 1 {ts}"},
                 }],
             },
-            # ⚠️ 422 НЕ включён — известная проблема UUID (specificity.md §25)
             expected_status={200, 201},
             needs_auth=True,
             check=check_json_field("status", str),
@@ -313,7 +325,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             expected_status={201, 409},
             needs_auth=True,
             extract_keys=["doc_id_2"],
-            check=check_json_field("data", dict),
+            check=_save_uuid_for_build("doc_id_2", "doc_id_2_uuid"),
         ))
 
         # ⚠️ Шаг 16: Построение индекса #2 — без 422
@@ -324,10 +336,10 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             path="/api/v1/rag/build",
             port=8090,
             body={
-                "document_id": "{doc_id_2}",
+                "document_id": "{doc_id_2_uuid}",
                 "sections": [{
                     "section_id": 1,
-                    "document_id": "{doc_id_2}",
+                    "document_id": "{doc_id_2_uuid}",
                     "clause": "1",
                     "level": 1,
                     "path": "1",
@@ -341,7 +353,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             check=check_json_field("status", str),
         ))
 
-        # ── Шаг 17: Поиск по общему запросу ───────────────────────────
+        # ── Шаг 17: Поиск без документа #1 ────────────────────────────
         steps.append(PipelineStep(
             name="Поиск по общему запросу",
             service="rag_search",

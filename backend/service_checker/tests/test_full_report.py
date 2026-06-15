@@ -82,7 +82,7 @@ class TestPipelineGenerateReport:
 
     def test_generate_report_returns_string(self):
         """Базовая проверка: функция возвращает строку с отчётом."""
-        from service_checker.pipeline_test import generate_report
+        from service_checker.core.pipeline_test import generate_report
 
         results = {
             "doc": make_mock_pipeline_result(name="doc", passed=True),
@@ -95,7 +95,7 @@ class TestPipelineGenerateReport:
 
     def test_generate_report_contains_pipeline_names(self):
         """В отчёте присутствуют имена пайплайнов."""
-        from service_checker.pipeline_test import generate_report
+        from service_checker.core.pipeline_test import generate_report
 
         results = {
             "document_processing": make_mock_pipeline_result(name="document_processing"),
@@ -107,7 +107,7 @@ class TestPipelineGenerateReport:
 
     def test_generate_report_passed_failed_icons(self):
         """Проверяем иконки: ✅ для passed, ❌ для failed."""
-        from service_checker.pipeline_test import generate_report
+        from service_checker.core.pipeline_test import generate_report
 
         results = {
             "ok": make_mock_pipeline_result(name="ok", passed=True),
@@ -323,8 +323,8 @@ class TestPipelineAutoSave:
     def test_auto_save_path_resolves_to_backend_check_result(self):
         """Проверяем, что путь автосохранения ведёт в backend/check_result/."""
         # Имитируем логику из pipeline_test.py
-        fake_script = Path("H:/Projects/PKB_neuroassistant_develop/backend/service_checker/pipeline_test.py")
-        check_dir = fake_script.resolve().parent.parent / "check_result"
+        fake_script = Path("H:/Projects/PKB_neuroassistant_develop/backend/service_checker/core/pipeline_test.py")
+        check_dir = fake_script.resolve().parent.parent.parent / "check_result"
         assert "check_result" in str(check_dir)
         # Убеждаемся, что это НЕ service_checker/check_result
         assert "service_checker" not in str(check_dir.parent)
@@ -333,7 +333,7 @@ class TestPipelineAutoSave:
 
     def test_pipeline_report_filename_format(self):
         """Имя файла соответствует формату pipeline_YYYYMMDD_HHMMSS.md."""
-        from service_checker.pipeline_test import generate_report
+        from service_checker.core.pipeline_test import generate_report
         # Проверяем, что функция существует и импортируется
         assert callable(generate_report)
 

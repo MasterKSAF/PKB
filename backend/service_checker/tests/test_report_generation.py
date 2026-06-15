@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from service_checker.api_coverage_test import ApiCoverageTester, ServiceResult, EndpointResult
+from service_checker.core.api_coverage_test import ApiCoverageTester, ServiceResult, EndpointResult
 
 
 def test_report_status_column_reflects_ping(make_endpoint):
@@ -88,7 +88,7 @@ def test_ping_icons_in_report():
 def test_ping_icons_in_console():
     """Проверить что в консольном выводе используются иконки ✅/❌ для ping."""
     test_dir = Path(__file__).resolve().parent
-    with open(test_dir.parent / "api_coverage_test.py", "r", encoding="utf-8") as f:
+    with open(test_dir.parent / "core" / "api_coverage_test.py", "r", encoding="utf-8") as f:
         source = f.read()
 
     assert '"✅" if result.ping_ok else "❌"' in source, (

@@ -9,7 +9,7 @@ import pytest
 # from service_checker.api_coverage_test import ...
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from service_checker.api_coverage_test import ApiCoverageTester
+from service_checker.core.api_coverage_test import ApiCoverageTester
 from service_checker.services.base import EndpointDef
 from service_checker.services import MODE_PORTS
 

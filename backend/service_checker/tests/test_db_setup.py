@@ -44,7 +44,7 @@ def setup_db_module():
 
     spec = importlib.util.spec_from_file_location(
         "setup_db",
-        Path(__file__).resolve().parent.parent / "setup_db.py",
+        Path(__file__).resolve().parent.parent / "core" / "setup_db.py"
     )
     mod = importlib.util.module_from_spec(spec)
     # Замокаем константы для тестов

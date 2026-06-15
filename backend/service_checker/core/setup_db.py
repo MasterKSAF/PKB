@@ -22,7 +22,7 @@ import textwrap
 from pathlib import Path
 from typing import List, Optional
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 # ──────────────────────────────────────────────────────────────────────
 #  Config (from env with fallback to hardcoded defaults)

@@ -456,7 +456,7 @@ async def cmd_docker(
         tester = None
         try:
             sys.path.insert(0, str(BACKEND_DIR))
-            from service_checker.api_coverage_test import ApiCoverageTester
+            from service_checker.core.api_coverage_test import ApiCoverageTester
 
             # 1a. RAG Builder patch (создание таблиц, если нет)
             try:

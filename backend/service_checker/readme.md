@@ -23,17 +23,20 @@
 service_checker/
 ├── setup.py                 # One-command setup: модель TEI + Docker Compose
 ├── Makefile                 # Альтернативный setup (Linux/macOS/Git Bash)
-├── api_coverage_test.py     # API Coverage Test (real-режим, Docker)
-├── service_checker.py       # Точка входа (делегирует в core/)
 ├── core/                    # Основные модули
 │   ├── __init__.py
+│   ├── api_coverage_test.py  # API Coverage Test (real-режим, Docker)
+│   ├── cli.py                # CLI-парсер и команды
 │   ├── config.py             # Конфигурация (пути, сервисы, credentials)
-│   ├── models.py             # Модели данных (Report, ServiceProcess, HealthResult...)
-│   ├── utils.py              # Утилиты (логирование, конвертация Markdown→HTML)
-│   ├── services.py           # Запуск/остановка сервисов, health check, эмуляция UI
+│   ├── db_check.py           # Проверка состояния БД
 │   ├── docker.py             # Docker Compose управление
+│   ├── models.py             # Модели данных (Report, ServiceProcess, HealthResult...)
+│   ├── pipeline_test.py      # Pipeline Testing (сквозные сценарии)
 │   ├── reports.py            # Генерация full-отчёта (coverage + pipeline)
-│   └── cli.py                # CLI-парсер и команды
+│   ├── service_checker.py    # Точка входа (делегирует в cli.py)
+│   ├── services.py           # Запуск/остановка сервисов, health check, эмуляция UI
+│   ├── setup_db.py           # Инициализация БД (расширения, схемы, .env)
+│   └── utils.py              # Утилиты (логирование, конвертация Markdown→HTML)
 ├── services/                # Описания API сервисов (эндпоинты + prepare-шаги)
 │   ├── __init__.py           # Реестр SERVICE_REGISTRY, MODE_PORTS
 │   ├── base.py               # ServiceDef, EndpointDef, константы
@@ -48,8 +51,8 @@ service_checker/
 │   ├── rag_search.py         # RAG Search (2 endpoints)
 │   ├── tei.py                # TEI Embeddings (2 endpoints)
 │   └── gateway.py            # Gateway (агрегирует auth+orchestrator+query+registry)
-- `setup_db.py`              # Инициализация БД (только база + расширения, схемы/таблицы — создают сами сервисы)
-├── pipeline_test.py         # Pipeline Testing (сквозные сценарии)
+├── __init__.py               # Пакетный файл
+├── __main__.py               # Точка входа python -m service_checker
 ├── pipelines/               # Модули пайплайнов
 │   ├── __init__.py                      # Реестр пайплайнов (8 шт.)
 │   ├── base.py                          # Базовые классы (PipelineStep, PipelineRunner и др.)

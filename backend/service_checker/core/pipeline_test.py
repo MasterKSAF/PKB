@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 # Добавляем backend/ в sys.path (нужно для импорта service_checker как пакета)
-_backend = Path(__file__).resolve().parent.parent
+_backend = Path(__file__).resolve().parent.parent.parent
 if str(_backend) not in sys.path:
     sys.path.insert(0, str(_backend))
 
@@ -126,7 +126,7 @@ async def cmd_run(
                 print(f"\n  📄 Отчёт сохранён: {out_path.resolve()}")
             else:
                 # Автосохранение в backend/check_result/ (рядом с service_checker/)
-                check_dir = Path(__file__).resolve().parent.parent / "check_result"
+                check_dir = Path(__file__).resolve().parent.parent.parent / "check_result"
                 check_dir.mkdir(parents=True, exist_ok=True)
                 report_path = check_dir / f"pipeline_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
                 report_path.write_text(report, encoding="utf-8")

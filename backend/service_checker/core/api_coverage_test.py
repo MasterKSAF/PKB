@@ -392,6 +392,12 @@ class ApiCoverageTester:
             if success and ep.extract_keys:
                 self._extract_context(resp_body, ep.extract_keys)
 
+            # Пост-обработка: check-функция эндпоинта (модификация контекста и т.п.)
+            if success and ep.check:
+                check_ok, check_msg = ep.check(resp_body, self.context)
+                if not check_ok:
+                    success = False
+
             # Валидация схемы ответа (не для prepare)
             # Проверяется для 2xx/3xx успешных ответов.
             # Для 4xx/5xx успешных (expected_status, Conflict и т.п.) —
@@ -479,7 +485,7 @@ class ApiCoverageTester:
 
             # ── Pre-prepare: загрузка PDF в MinIO для Parser ────────────
             if service_key == "parser":
-                pdf_path = Path(__file__).resolve().parent / "pdf" / "7bd97d737317a8a272bb18a405ab2d04.pdf"
+                pdf_path = Path(__file__).resolve().parent.parent / "pdf" / "7bd97d737317a8a272bb18a405ab2d04.pdf"
                 if pdf_path.exists():
                     pdf_bytes = pdf_path.read_bytes()
                     minio_url = f"http://127.0.0.1:9000/documents/test-file-key"

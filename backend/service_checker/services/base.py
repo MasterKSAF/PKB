@@ -27,6 +27,7 @@ class EndpointDef:
         is_preparation: True — эндпоинт создаёт данные для последующих вызовов
         expected_status: ожидаемый HTTP статус (если не указан — 2xx/3xx)
         override_port: альтернативный порт (prepare может обращаться к другому сервису)
+        check: функция (body, ctx) -> Tuple[bool, str] для пост-обработки ответа
     """
 
     method: str  # GET, POST, PUT, PATCH, DELETE
@@ -36,6 +37,7 @@ class EndpointDef:
     body: Optional[Dict[str, Any]] = None  # тело запроса JSON (для POST/PUT/PATCH)
     form_body: Optional[Dict[str, Any]] = None  # multipart/form-data (вместо body)
     params: Optional[Dict[str, Any]] = None  # query-параметры
+    check: Optional[Any] = None  # пост-обработка ответа: (body, ctx) -> (ok, msg)
     # Если эндпоинт требует ID из предыдущего ответа — шаблон подстановки
     # {doc_id}, {session_id}, {user_id}, {version_id}, {task_id},
     # {term_id}, {classifier_code}, {comparison_id} и т.д.

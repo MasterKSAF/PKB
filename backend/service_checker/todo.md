@@ -1,31 +1,19 @@
-# Todo — Orchestrator не проходит тесты в Docker
-
-## Проблема
-Оркестратор валится с 500 (step 6) и 422 (step 7) в pipeline `orchestrator_draft_lifecycle`.
-
-## Причины
-
-### 1. `get_preview_status` использовал локальную таблицу `drafts` вместо Registry
-- В `get_preview_status()` был `from app.models.drafts import Draft` + `db.get(Draft, draft_id)` — проверка через локальную таблицу `public.drafts`
-- Registry уже ведёт свою таблицу `registry.drafts` — оркестратор не должен дублировать
-- Таблица `public.drafts` не создавалась → `UndefinedTableError`
-- **Исправление:** заменён на HTTP-вызов `registry.get_draft(draft_id)`
-
-### 2. Несоответствие полей запроса в `decide`
-- Pipeline шлёт `{"decision": "approved", "comment": "..."}`
-- API ожидает `{"action": "approve", "comment": "..."}`
+# TODO: Разложить Python-файлы по каталогам
 
 ## План
+Корневые `.py` файлы (кроме `__init__.py`, `__main__.py`, `setup.py`) перенести в `core/`:
+- `service_checker.py` → `core/service_checker.py` (дубль `__main__.py`, сделаем прокладку)
+- `api_coverage_test.py` → `core/api_coverage_test.py`
+- `pipeline_test.py` → `core/pipeline_test.py`
+- `setup_db.py` → `core/setup_db.py`
 
-### Шаг 1: Импорт app.models в main.py
-- [x] Добавить `import app.models` в `app/main.py` (lifespan startup)
-
-### Шаг 2: Исправить pipeline шаг 7 (decide)
-- [x] В `service_checker/pipelines/orchestrator_draft_lifecycle.py` исправить body на `{"action": "approve", "comment": "..."}`
-- [x] В тесте `test_pipeline_orchestrator_draft_lifecycle.py` обновить expected_status (сейчас 200, 409 — 422 был workaround)
-
-### Шаг 3: Проверить
-- [x] `python -m pytest tests/ -v` в `service_checker` — 141 passed
-- [x] `python -m pytest tests/ -v` в `orchestrator_service` — 351 passed, 1 pre-existing fail
-- [x] `docker compose down --volumes && up -d` — полный сброс
-- [x] `python -m service_checker docker --action full-report` — **Orchestrator: ✅ 8/8**
+## Шаги
+- [x] 1. Создать todo.md (этот файл)
+- [x] 2. Перенести `api_coverage_test.py` → `core/api_coverage_test.py` (move_path)
+- [x] 3. Перенести `pipeline_test.py` → `core/pipeline_test.py` (move_path)
+- [x] 4. Перенести `setup_db.py` → `core/setup_db.py` (move_path)
+- [x] 5. Перенести `service_checker.py` → `core/service_checker.py` (move_path)
+- [x] 6. Обновить импорты и пути во всех файлах проекта
+- [x] 7. Обновить `readme.md` (структура проекта)
+- [x] 8. Запустить тесты — 140 passed, 1 pre-existing fail (Docker integration)
+- [x] 9. Финальная сверка по todo.md

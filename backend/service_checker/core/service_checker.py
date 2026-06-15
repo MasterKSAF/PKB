@@ -23,7 +23,7 @@ import sys
 from pathlib import Path
 
 # Добавляем backend/ в sys.path (нужно для импорта service_checker как пакета)
-_backend = Path(__file__).resolve().parent.parent
+_backend = Path(__file__).resolve().parent.parent.parent
 if str(_backend) not in sys.path:
     sys.path.insert(0, str(_backend))
 
