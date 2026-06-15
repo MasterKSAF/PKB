@@ -8,6 +8,7 @@ opendataloader-pdf==2.4.7
 pypdf==6.12.2
 python-dotenv==1.2.2
 # зависимости aiohttp и botocore будут подтянуты автоматически
+yara-python
 
 pytest==9.0.3
 pytest-asyncio==1.4.0

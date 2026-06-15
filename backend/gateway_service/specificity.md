@@ -32,6 +32,35 @@
 ### Статус тестов
 - **487 тестов проходят** (было 470, добавлено 17 новых в TestStopperFixes, 4 обновлено под новый формат ответов).
 
+## 2026-06-15: Health endpoint возвращает 401 в Docker
+
+### Проблема
+`/api/v1/system/health` возвращал 401 при запросе из Docker, хотя был в белом списке RBACMiddleware.
+
+### Корень
+Порядок middleware в Starlette: последний добавленный — самый внешний (выполняется первым).
+`StripTrailingSlashMiddleware` был добавлен первым (строка 487), а `RBACMiddleware` — четвёртым (строка 490).
+
+Реальный порядок выполнения для входящего запроса:
+1. CORSMiddleware
+2. **RBACMiddleware** ← проверяет path ДО обрезки слеша
+3. IdempotencyMiddleware
+4. ProcessTimeMiddleware
+5. StripTrailingSlashMiddleware ← обрезает слеш ПОСЛЕ RBAC
+
+Docker healthcheck-ы часто шлют запрос со слешем (`/api/v1/system/health/`).
+RBACMiddleware видел путь `/api/v1/system/health/`, который не совпадал с `path == "/api/v1/system/health"` — белый список не срабатывал → 401.
+
+### Исправление
+Добавлена нормализация пути в `RBACMiddleware.dispatch()`:
+```python
+path = request.url.path.rstrip("/") if request.url.path != "/" else "/"
+```
+
+Затронутые файлы:
+- `gateway/main.py` — RBACMiddleware (production)
+- `mocks/gateway.py` — RBACMiddleware (mock)
+
 ## 2026-06-12: Унификация gateway — удаление сервисной архитектуры
 
 ### Изменения

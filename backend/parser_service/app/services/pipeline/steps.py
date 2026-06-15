@@ -1,6 +1,7 @@
 """
 Отдельные шаги пайплайна. Каждый шаг реализует метод execute(context).
 """
+
 import io
 import os
 import json
@@ -49,7 +50,7 @@ class ValidateStep(PipelineStep):
 
     async def execute(self, ctx: ProcessingContext) -> ProcessingContext:
         logger.debug("Validating file")
-        ctx.mime_type = Validator.validate(ctx.file_bytes)
+        ctx.mime_type = await Validator.validate(ctx.file_bytes, ctx.original_file_name)
         logger.debug("Validation passed, MIME=%s", ctx.mime_type)
         return ctx
 
@@ -68,7 +69,6 @@ class PagesTotalStep(PipelineStep):
                 logger.warning("Failed to get page count via pypdf: %s", str(e))
                 total_pages = 1
         ctx.total_pages = total_pages
-
         if ctx.track_progress:
             await task_store.update_task(
                 ctx.task_id,
@@ -86,7 +86,6 @@ class ParseStep(PipelineStep):
         parser = ParserFactory.get_parser(ctx.mime_type)
         if parser is None:
             raise ValueError(f"No parser for MIME {ctx.mime_type}")
-
         ctx.parse_result = await parser.parse(
             ctx.file_bytes,
             ctx.options,
@@ -95,11 +94,7 @@ class ParseStep(PipelineStep):
         )
         if ctx.parse_result.temp_dir:
             ctx.temp_dir = ctx.parse_result.temp_dir
-        logger.debug(
-            "Parsing completed, total_pages=%d",
-            ctx.parse_result.total_pages
-        )
-
+        logger.debug("Parsing completed, total_pages=%d", ctx.parse_result.total_pages)
         if ctx.max_pages is not None and ctx.parse_result.total_pages > ctx.max_pages:
             ctx.parse_result.total_pages = ctx.max_pages
             ctx.parse_result.images = [
@@ -115,12 +110,13 @@ class UploadImagesStep(PipelineStep):
     """Шаг загрузки извлечённых изображений в MinIO и замены путей в JSON."""
 
     async def execute(self, ctx: ProcessingContext) -> ProcessingContext:
+        # Для preview (track_progress=False) НИЧЕГО НЕ ДЕЛАЕМ с временной директорией
         if not ctx.track_progress:
-            if ctx.temp_dir and os.path.exists(ctx.temp_dir):
-                shutil.rmtree(ctx.temp_dir, ignore_errors=True)
-                logger.debug("Removed temp dir for preview: %s", ctx.temp_dir)
+            # Никакой задержки, никакого удаления – оставляем ОС чистить /tmp
+            logger.debug("Preview mode: keeping temp dir %s (cleanup delegated to OS)", ctx.temp_dir)
             return ctx
 
+        # Full-режим: обрабатываем изображения и удаляем директорию
         if not ctx.parse_result or not ctx.parse_result.images:
             if ctx.temp_dir and os.path.exists(ctx.temp_dir):
                 shutil.rmtree(ctx.temp_dir, ignore_errors=True)
@@ -131,12 +127,10 @@ class UploadImagesStep(PipelineStep):
             if not os.path.exists(file_path):
                 logger.warning("Image file not found: %s", file_path)
                 continue
-
             with open(file_path, "rb") as f:
                 img_bytes = f.read()
-
             file_hash = hashlib.md5(img_bytes).hexdigest()[:16]
-            suggested_key = f"task_{ctx.task_id}/{ctx.task_id}_{idx}_{file_hash}{ext}"
+            suggested_key = f"{ctx.task_id}/{ctx.task_id}_{idx}_{file_hash}{ext}"
             returned_key = await minio_client.upload_image(
                 img_bytes, ctx.task_id, page_num, ext, custom_key=suggested_key
             )
@@ -161,10 +155,7 @@ class UploadImagesStep(PipelineStep):
                     replace_paths(item)
 
         replace_paths(ctx.parse_result.full_json)
-        logger.debug(
-            "Replaced image paths in JSON for %d images",
-            len(path_to_key)
-        )
+        logger.debug("Replaced image paths in JSON for %d images", len(path_to_key))
 
         if ctx.temp_dir and os.path.exists(ctx.temp_dir):
             shutil.rmtree(ctx.temp_dir, ignore_errors=True)
@@ -229,14 +220,12 @@ class StoreResultStep(PipelineStep):
             ctx.parse_result.total_pages if ctx.parse_result else 0
         )
         mode = "preview" if ctx.max_pages is not None else "full"
-
         result_payload = ResultBuilder.build(
             task_id=ctx.task_id,
             final_json=ctx.final_json,
             mode=mode,
             preview_not_supported=ctx.preview_not_supported
         )
-
         await task_store.update_task(
             ctx.task_id,
             status=TaskStatus.COMPLETED,
@@ -260,24 +249,16 @@ class TruncatePdfStep(PipelineStep):
             return ctx
         if not ctx.file_bytes:
             raise ValueError("No file bytes to truncate")
-
         reader = PdfReader(io.BytesIO(ctx.file_bytes))
         total_pages = len(reader.pages)
         if ctx.max_pages >= total_pages:
-            logger.debug(
-                "No truncation needed (max_pages=%d >= total=%d)",
-                ctx.max_pages, total_pages
-            )
+            logger.debug("No truncation needed (max_pages=%d >= total=%d)", ctx.max_pages, total_pages)
             return ctx
-
         writer = PdfWriter()
         for i in range(ctx.max_pages):
             writer.add_page(reader.pages[i])
         output = io.BytesIO()
         writer.write(output)
         ctx.file_bytes = output.getvalue()
-        logger.debug(
-            "Truncated PDF from %d to %d pages",
-            total_pages, ctx.max_pages
-        )
+        logger.debug("Truncated PDF from %d to %d pages", total_pages, ctx.max_pages)
         return ctx

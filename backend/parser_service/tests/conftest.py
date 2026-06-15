@@ -11,6 +11,11 @@ from fastapi.testclient import TestClient
 from httpx import AsyncClient, ASGITransport
 from unittest.mock import patch, AsyncMock, MagicMock
 
+
+# Очищаем переменные, которые могут переопределить таймауты из окружения
+for env_var in ["PREVIEW_TIMEOUT", "PIPELINE_TIMEOUT", "PARSER_TIMEOUT", "VALIDATION_GLOBAL_TIMEOUT"]:
+    os.environ.pop(env_var, None)
+
 # Устанавливаем переменные окружения для тестов (до импорта app)
 os.environ.setdefault("MINIO_ENDPOINT", "localhost:9000")
 os.environ.setdefault("MINIO_ACCESS_KEY", "test_access")
