@@ -4,6 +4,7 @@ from datetime import datetime
 from dataclasses import dataclass
 
 from rag_builder.models.domain import EmbeddedChunk
+from rag_builder.models.contracts import BuildRequest
 
 
 @dataclass(frozen=True)
@@ -36,6 +37,13 @@ class ChunkRepository:
         """
         raise NotImplementedError
 
+    def save_sections(
+            self,
+            request: BuildRequest,
+    ) -> None:
+        raise NotImplementedError
+
+
 class InMemoryChunkRepository(ChunkRepository):
     """
     Тестовая реализация репозитория.
@@ -55,3 +63,9 @@ class InMemoryChunkRepository(ChunkRepository):
 
     def count(self) -> int:
         return len(self._chunks)
+
+    def save_sections(
+            self,
+            request: BuildRequest,
+    ) -> None:
+        pass

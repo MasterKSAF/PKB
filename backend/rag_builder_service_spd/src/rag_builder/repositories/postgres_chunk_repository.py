@@ -8,6 +8,7 @@ from rag_builder.core.logger import logger
 from rag_builder.core.config import settings
 from rag_builder.models.domain import EmbeddedChunk
 from rag_builder.repositories.chunk_repository import ChunkRepository
+from rag_builder.models.contracts import BuildRequest
 
 
 class PostgresChunkRepository(ChunkRepository):
@@ -45,7 +46,7 @@ class PostgresChunkRepository(ChunkRepository):
 
     def ensure_schema(self) -> None:
         """
-        Создаёт расширение vector, схему и таблицу chunks,
+        Создаёт расширение vector, схему и таблицы  chunks,
         если они ещё не существуют.
         """
         logger.info("ensure_schema: start")
@@ -65,7 +66,7 @@ class PostgresChunkRepository(ChunkRepository):
                     )
                 )
 
-                logger.info("ensure_schema: before create table")
+                logger.info("ensure_schema: before create table chunks")
                 cur.execute(
                     sql.SQL(
                         """
@@ -90,6 +91,30 @@ class PostgresChunkRepository(ChunkRepository):
                     ).format(sql.Identifier(settings.POSTGRES_SCHEMA))
                 )
 
+                logger.info("ensure_schema: before create table document_sections")
+                cur.execute(
+                    sql.SQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS {}.document_sections(
+                            id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                            document_id BIGINT NOT NULL,
+                            document_version_id BIGINT NOT NULL,
+                            section_id BIGINT NOT NULL,
+                            parent_id BIGINT,              
+                            clause TEXT,
+                            title TEXT,
+                            level INTEGER NOT NULL,
+                            path TEXT NOT NULL,                
+                            page INTEGER,
+                            bbox JSONB,
+                            section_type TEXT NOT NULL,
+                            metadata JSONB,
+                            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                            UNIQUE(document_version_id, section_id)
+                        )
+                        """
+                    ).format(sql.Identifier(settings.POSTGRES_SCHEMA))
+                )
             conn.commit()
 
         logger.info("ensure_schema: done")
@@ -152,6 +177,69 @@ class PostgresChunkRepository(ChunkRepository):
                             item.chunk.content,
                             json.dumps(item.chunk.metadata),
                             json.dumps(item.embedding),
+                        ),
+                    )
+
+            conn.commit()
+
+    def save_sections(self, request: BuildRequest) -> None:
+        logger.info(
+            "Saving %s document sections",
+            len(request.sections),
+        )
+
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    DELETE FROM {settings.POSTGRES_SCHEMA}.document_sections
+                    WHERE document_version_id = %s
+                    """,
+                    (request.metadata.document_version_id,),
+                )
+
+                for section in request.sections:
+                    cur.execute(
+                        f"""
+                        INSERT INTO {settings.POSTGRES_SCHEMA}.document_sections (
+                            document_id,
+                            document_version_id,
+                            section_id,
+                            parent_id,
+                            clause,
+                            title,
+                            level,
+                            path,
+                            page,
+                            bbox,
+                            section_type,
+                            metadata
+                        )
+                        VALUES (
+                            %s, %s, %s, %s,
+                            %s, %s, %s, %s,
+                            %s, %s, %s, %s
+                        )
+                        """,
+                        (
+                            request.metadata.document_id,
+                            request.metadata.document_version_id,
+                            section.section_id,
+                            section.parent_id,
+                            section.clause,
+                            section.title,
+                            section.level,
+                            section.path,
+                            section.page,
+                            json.dumps(section.bbox),
+                            section.type,
+                            json.dumps({
+                                "references": [
+                                    ref.model_dump()
+                                    for ref in section.references
+                                ],
+                                "raw_content": section.content,
+                            }),
                         ),
                     )
 

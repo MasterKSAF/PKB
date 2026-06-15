@@ -47,6 +47,9 @@ class IndexingService:
             request.metadata.document_id,
         )
 
+        if self.repository is not None:
+            self.repository.save_sections(request)
+
         chunks = self.chunking_service.build_chunks(request)
 
         logger.info(
