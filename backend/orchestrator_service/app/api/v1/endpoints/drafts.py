@@ -17,6 +17,7 @@ from fastapi import (
 )
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import CurrentUser, get_current_user
 from app.core.config import settings
@@ -185,13 +186,47 @@ async def create_draft(
     finally:
         await registry.close()
 
+    # --- Check: Task for this draft_id already exists? ---
+    from sqlalchemy import select
+    from app.models.pipeline import Task
+    existing = await db.execute(
+        select(Task).where(
+            Task.draft_id == draft_id,
+            Task.pipeline_type == "formation",
+        )
+    )
+    if existing.scalar_one_or_none() is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": {
+                    "code": "TASK_ALREADY_EXISTS",
+                    "message": f"Задача для черновика {draft_id} уже существует",
+                }
+            },
+        )
+
     # --- Create Task in local DB ---
     orchestrator = PipelineOrchestrator(db)
-    task = await orchestrator.task_repo.create_task(
-        draft_id=draft_id,
-        pipeline_type="formation",
-        total_steps=6,
-    )
+    try:
+        task = await orchestrator.task_repo.create_task(
+            draft_id=draft_id,
+            pipeline_type="formation",
+            total_steps=6,
+        )
+    except IntegrityError as exc:
+        logger.warning(
+            f"Task creation race condition for draft {draft_id}: {exc}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": {
+                    "code": "TASK_ALREADY_EXISTS",
+                    "message": f"Задача для черновика {draft_id} уже существует",
+                }
+            },
+        )
 
     # --- Start pipeline (preview phase) ---
     mime_type = file.content_type or "application/octet-stream"

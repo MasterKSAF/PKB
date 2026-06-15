@@ -96,7 +96,7 @@ service_checker/
 | MinIO | 9000 | — | — | здоров |
 | TEI | 8092 | 200 | — | здоров |
 | Gateway (Mock) | 8080 | 401 | RUNNING | Логи в stderr (аном. N22) |
-| Orchestrator | 8081 | 200 | RUNNING | preview/status 500->404 исправлен (аном. N26) |
+| Orchestrator | 8081 | 200 | RUNNING | preview/status 500->404 (аном. N26); защита от дублей (аном. N29) |
 | Auth | 8082 | 200 | RUNNING | Ключ JWT короткий (предупреждение) |
 | Query | 8083 | 200 | RUNNING | Двойная транзакция (аном. N21) |
 | Registry | 8084 | 200 | RUNNING | create_all() есть в lifespan |

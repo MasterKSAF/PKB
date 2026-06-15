@@ -1003,3 +1003,44 @@ recovery_step = PipelineStep(
 ### Статус
 ✅ **Реализовано (service_checker, 2026-06-15)**
 
+## 29. Orchestrator — MultipleResultsFound в start_preview при дублирующихся Task
+
+### Проблема
+При повторных запусках `create_draft` (POST /drafts/) для одного `draft_id`
+создавались дублирующиеся записи в таблице `tasks`. При вызове `start_preview`
+(POST /drafts/{id}/preview) SQLAlchemy `.scalar_one_or_none()` падал с
+`MultipleResultsFound` → HTTP 500.
+
+Причина:
+- RegistryServiceClient в mock-режиме использует class variable `_storage["draft_seq"]`,
+  которая сбрасывается при каждом перезапуске процесса orchestrator.
+- `recheck.bat` дропал схемы `auth`, `registry`, `rag`, но таблицы orchestrator'а
+  (`tasks`, `task_steps`) в схеме `public` не очищались.
+- Старые Task оставались в БД, новые получали те же `draft_id`.
+
+### Что исправлено (checker, 2026-06-15)
+
+1. **orchestrator: проверка дубликата в create_draft**
+   - Перед созданием Task проверяется, нет ли уже Task с таким `draft_id`.
+   - Если есть → 409 CONFLICT с кодом `TASK_ALREADY_EXISTS`.
+
+2. **orchestrator: UniqueConstraint на уровне БД**
+   - Модель `Task`: два unique constraint:
+     - `("draft_id", "pipeline_type")` — запрет дублирующих задач для одного черновика
+     - `("document_id", "pipeline_type")` — запрет дублирующих задач для одного документа
+   - Физический запрет дубликатов в PostgreSQL.
+   - `document_id` nullable — NULL-ы уникальным индексом игнорируются.
+
+3. **recheck.bat / recheck.sh: полное пересоздание БД**
+   - Было: `DROP SCHEMA auth CASCADE; DROP SCHEMA registry CASCADE; DROP SCHEMA rag CASCADE;`
+   - Стало: `DROP DATABASE pkb_neuro; CREATE DATABASE pkb_neuro;` (+ terminate connections)
+   - Расширения создаются через `setup_db.py --docker` в entrypoint.sh.
+
+### Результат
+- Дублирующиеся Task больше не создаются.
+- После recheck.bat БД полностью чистая.
+- start_preview не падает 500 при отсутствии дубликатов.
+
+### Статус
+✅ **Исправлено (checker, 2026-06-15)**
+
