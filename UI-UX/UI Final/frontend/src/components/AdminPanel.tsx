@@ -24,6 +24,7 @@ import {
   Typography,
 } from '@mui/material';
 import { ClipboardList, Save, Search, ShieldCheck, SlidersHorizontal, UserCog, Users } from 'lucide-react';
+import { RegistryEditors } from './RegistryEditors';
 import { useUIStore } from '../store/uiStore';
 import { ADMIN_SECTIONS_ACCESS, ROLE_LABELS } from '../utils/access';
 import { MOCK_PROCESSING_LOGS, type AdminUser } from '../utils/mockData';
@@ -204,6 +205,7 @@ export const AdminPanel: React.FC = () => {
     adminAuditLog,
     adminUsers,
     addAdminAuditLogItem,
+    currentPermissions,
     currentRole,
     currentUserId,
     setAdminUsers,
@@ -214,9 +216,13 @@ export const AdminPanel: React.FC = () => {
   const isLight = themeMode === 'light';
   const currentUser = adminUsers.find((user) => user.id === currentUserId) ?? adminUsers[0];
   const availableSections = ADMIN_SECTIONS_ACCESS[currentRole];
-  const canManageUsers = availableSections.includes('users');
-  const canManagePermissions = availableSections.includes('permissions');
+  const canManageUsers = availableSections.includes('users') || Boolean(currentPermissions.can_manage_users);
+  const canManagePermissions =
+    availableSections.includes('permissions') || Boolean(currentPermissions.can_manage_users || currentPermissions.can_manage_registry);
   const canSeeFullLogs = currentRole === 'systemAdmin';
+  const [adminNotice, setAdminNotice] = useState('');
+  const [adminUsersError, setAdminUsersError] = useState('');
+  const [adminAuditError, setAdminAuditError] = useState('');
   const [gatewayProcessingLogs, setGatewayProcessingLogs] = useState<typeof MOCK_PROCESSING_LOGS>([]);
   const processingLogs =
     workMode === 'demo'
@@ -227,27 +233,9 @@ export const AdminPanel: React.FC = () => {
   const logs = canSeeFullLogs
     ? processingLogs
     : processingLogs.filter((log) => log.visibility !== 'Администратор');
-  const contentAdminCards = [
-    {
-      label: 'Артефакты',
-      value: 'текст, чанки, индекс',
-      note: 'то, что передается в поиск и LLM',
-      icon: <ShieldCheck size={17} />,
-      accent: '#d9b783',
-    },
-    {
-      label: 'Журналы',
-      value: 'обработка и ошибки',
-      note: 'контроль pipeline и повторных попыток',
-      icon: <UserCog size={17} />,
-      accent: '#c5afff',
-    },
-  ];
-
   const [selectedUserId, setSelectedUserId] = useState(currentUser?.id ?? adminUsers[0]?.id ?? '');
   const selectedUser = adminUsers.find((user) => user.id === selectedUserId) ?? adminUsers[0];
   const [searchQuery, setSearchQuery] = useState('');
-  const [adminNotice, setAdminNotice] = useState('');
   const [draftRole, setDraftRole] = useState<RoleLabel>(selectedUser?.role ?? 'Пользователь');
   const [draftAccess, setDraftAccess] = useState<AccessKey[]>(selectedUser ? inferAccessKeys(selectedUser) : []);
   const [roleOptions, setRoleOptions] = useState<RoleLabel[]>(ROLE_OPTIONS);
@@ -258,13 +246,16 @@ export const AdminPanel: React.FC = () => {
     void adminApi
       .users()
       .then((users) => {
-        if (alive && users.length) {
-          setAdminUsers(users);
+        if (alive) {
+          if (users.length) {
+            setAdminUsers(users);
+          }
+          setAdminUsersError('');
         }
       })
       .catch(() => {
         if (alive && workMode === 'prod') {
-          setAdminNotice('Не удалось загрузить пользователей из Gateway.');
+          setAdminUsersError('Не удалось загрузить пользователей из Gateway.');
         }
       });
 
@@ -273,12 +264,13 @@ export const AdminPanel: React.FC = () => {
       .then((items) => {
         if (alive) {
           setGatewayProcessingLogs(items);
+          setAdminAuditError('');
         }
       })
       .catch(() => {
         if (alive && workMode === 'prod') {
           setGatewayProcessingLogs([]);
-          setAdminNotice('Не удалось загрузить административный журнал из Gateway.');
+          setAdminAuditError('Не удалось загрузить административный журнал из Gateway.');
         }
       });
 
@@ -429,7 +421,7 @@ export const AdminPanel: React.FC = () => {
         <Paper
           variant="outlined"
           sx={{
-          p: 2.1,
+            p: 2.1,
             borderRadius: 3,
             bgcolor: 'rgba(22, 23, 27, 0.72)',
             borderColor: 'rgba(198, 216, 240, 0.34)',
@@ -457,6 +449,22 @@ export const AdminPanel: React.FC = () => {
             />
           </Stack>
         </Paper>
+
+        {adminNotice && (
+          <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
+            {adminNotice}
+          </Alert>
+        )}
+        {adminUsersError && (
+          <Alert severity="error" variant="outlined" sx={{ borderRadius: 2 }}>
+            {adminUsersError}
+          </Alert>
+        )}
+        {adminAuditError && (
+          <Alert severity="error" variant="outlined" sx={{ borderRadius: 2 }}>
+            {adminAuditError}
+          </Alert>
+        )}
 
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2.4 }}>
           <Box sx={{ flex: '1 1 210px', minWidth: 210 }}>
@@ -497,81 +505,7 @@ export const AdminPanel: React.FC = () => {
           </Box>
         </Box>
 
-        <Paper
-          variant="outlined"
-          sx={{
-            p: 2.1,
-            borderRadius: 3,
-            bgcolor: 'rgba(22, 23, 27, 0.72)',
-            borderColor: 'rgba(198, 216, 240, 0.34)',
-            borderWidth: 1.5,
-            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.045)',
-          }}
-        >
-          <Stack spacing={1.35}>
-            <Box>
-              <Typography sx={{ fontWeight: 560, color: 'rgba(233, 237, 243, 0.92)' }}>
-                Управление контентом базы знаний
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                Администратор знаний видит полный цикл обработки документа: от загрузки до индексации.
-              </Typography>
-            </Box>
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(4, 1fr)' }, gap: 1.15 }}>
-              {contentAdminCards.map((item) => (
-                <Paper
-                  key={item.label}
-                  variant="outlined"
-                  onClick={() =>
-                    setAdminNotice(
-                      `${item.label}: действие будет открывать соответствующий раздел администрирования базы знаний в рабочем режиме.`,
-                    )
-                  }
-                  sx={{
-                    p: 1.35,
-                    borderRadius: 2.2,
-                    bgcolor: 'rgba(255,255,255,0.025)',
-                    borderColor: 'rgba(198,216,240,0.22)',
-                    cursor: 'pointer',
-                    transition: 'transform 160ms ease, border-color 160ms ease',
-                    '&:hover': {
-                      transform: 'translateY(-1px)',
-                      borderColor: isLight ? 'rgba(2,132,199,0.44)' : 'rgba(152,217,216,0.42)',
-                    },
-                  }}
-                >
-                  <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
-                    <Box
-                      sx={{
-                        p: 0.8,
-                        borderRadius: 1.6,
-                        color: item.accent,
-                        bgcolor: 'rgba(255,255,255,0.035)',
-                        border: '1px solid rgba(198,216,240,0.18)',
-                      }}
-                    >
-                      {item.icon}
-                    </Box>
-                    <Box sx={{ minWidth: 0 }}>
-                      <Typography sx={{ fontSize: '0.84rem', fontWeight: 560 }}>{item.label}</Typography>
-                      <Typography variant="caption" sx={{ display: 'block', mt: 0.25, color: 'rgba(233,237,243,0.86)' }}>
-                        {item.value}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.35, lineHeight: 1.35 }}>
-                        {item.note}
-                      </Typography>
-                    </Box>
-                  </Stack>
-                </Paper>
-              ))}
-            </Box>
-            {adminNotice && (
-              <Alert severity="info" variant="outlined" onClose={() => setAdminNotice('')} sx={{ borderRadius: 2 }}>
-                {adminNotice}
-              </Alert>
-            )}
-          </Stack>
-        </Paper>
+        <RegistryEditors />
 
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 1.35fr) minmax(360px, 0.9fr)' }, gap: 2.4 }}>
           <Paper

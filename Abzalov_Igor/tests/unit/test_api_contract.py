@@ -16,6 +16,20 @@ def test_openapi_and_contract_shape() -> None:
     assert "/api/v1/rag/build" in paths
     assert "/api/v1/rag/build/{doc_id}" in paths
     assert "/api/v1/rag/build/{doc_id}/status" in paths
+    assert "/api/v1/health" in paths
+    assert "/api/v1/rag/health" not in paths
+    assert "/api/v1/rag/health/live" not in paths
+    assert "/api/v1/rag/health/ready" not in paths
+    assert "/api/v1/auth/login" in paths
+    assert "/api/v1/auth/refresh" in paths
+    assert "/api/v1/auth/validate" in paths
+
+
+def _auth_headers(client: TestClient) -> dict[str, str]:
+    auth = client.post("/api/v1/auth/login", json={"username": "admin", "password": "admin"})
+    assert auth.status_code == 200
+    token = auth.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.mark.asyncio
@@ -32,7 +46,7 @@ async def test_build_minimal_payload_accepted(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr("rag_builder.api.v1.rag_routes.indexing_service.build", fake_build)
     client = TestClient(create_app())
     payload = {"document_id": str(uuid4()), "sections": [], "protected_spans": [], "options": {}}
-    resp = client.post("/api/v1/rag/build", json=payload)
+    resp = client.post("/api/v1/rag/build", json=payload, headers=_auth_headers(client))
     assert resp.status_code == 201
 
 
@@ -73,5 +87,5 @@ async def test_build_document3_payload_accepted(monkeypatch: pytest.MonkeyPatch)
         "protected_spans": [],
         "options": {"strategy": "semantic_512"},
     }
-    resp = client.post("/api/v1/rag/build", json=payload)
+    resp = client.post("/api/v1/rag/build", json=payload, headers=_auth_headers(client))
     assert resp.status_code == 201

@@ -149,6 +149,53 @@ type GatewayDocumentPages = {
   meta?: Record<string, unknown>;
 };
 
+export interface RegistryListResponse<T> {
+  data: T[];
+  meta?: Record<string, unknown>;
+}
+
+export interface RegistryClassifierNode {
+  classifier_system: string;
+  code: string;
+  parent_code?: string | null;
+  full_name: string;
+  status: string;
+  effective_date?: string | null;
+  replaced_by?: string | null;
+  created_at?: string | null;
+  documents_count?: number;
+  children?: RegistryClassifierNode[];
+}
+
+export interface RegistryClassifierPending {
+  id: string;
+  system: string;
+  code: string;
+  found_in_document_id?: string | null;
+  found_in_document_title?: string;
+  status: string;
+  suggested_parent_code?: string | null;
+  suggested_parent_name?: string;
+  admin_comment?: string | null;
+  created_at?: string | null;
+}
+
+export interface RegistryTerminologyEntry {
+  id: string;
+  raw_term: string;
+  standard_term: string;
+  normalized_value: string;
+  term_type: string;
+  is_case_sensitive?: boolean;
+  definition?: string | null;
+  synonyms?: string[];
+  related_docs?: string[];
+  scope?: string[];
+  is_blocked?: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
 const EMPTY_SYSTEM_METRICS: SystemMetrics = {
   ocrQuality: 0,
   retrievalQuality: 0,
@@ -168,6 +215,10 @@ const EMPTY_ENGINEER_RATINGS: EngineerRatingMetrics = {
 function appendFormValue(form: FormData, key: string, value: unknown) {
   if (value === undefined || value === null || value === '') return;
   form.append(key, typeof value === 'string' ? value : String(value));
+}
+
+function toGatewayStringId(value: unknown, fallback = '') {
+  return value === undefined || value === null || value === '' ? fallback : String(value);
 }
 
 function deriveDocumentKey(fileHashSha256?: string) {
@@ -247,6 +298,7 @@ async function syncGatewayCurrentUser(accessToken?: string) {
   store.upsertAdminUser(profile);
   store.setCurrentUserId(profile.id);
   store.setCurrentRole(USER_ROLE_BY_LABEL[profile.role] ?? 'user');
+  store.setCurrentPermissions(profile.permissions ?? {});
 
   return profile;
 }
@@ -279,8 +331,8 @@ async function ensureGatewayToken() {
     token = response.data?.access_token;
   }
 
-  const currentUserId = useUIStore.getState().currentUserId;
-  if (!currentUserId.includes('-')) {
+  const currentUserId = String(useUIStore.getState().currentUserId ?? '');
+  if (!currentUserId || currentUserId.startsWith('u')) {
     await syncGatewayCurrentUser(token ?? undefined);
   }
 }
@@ -362,8 +414,8 @@ function mapGatewayDocumentIndexStatus(status?: string): Document['indexStatus']
 
 function mapGatewaySource(source: any, index = 0): Citation {
   return {
-    id: source.section_id ?? source.source_id ?? source.document_id ?? `gateway-source-${index}`,
-    documentId: source.document_id ?? source.doc_id,
+    id: toGatewayStringId(source.section_id ?? source.source_id ?? source.document_id, `gateway-source-${index}`),
+    documentId: toGatewayStringId(source.document_id ?? source.doc_id),
     document: source.document_title ?? source.document ?? source.document_id ?? 'Документ базы знаний',
     section: source.clause ?? source.section ?? source.section_id ?? 'Фрагмент источника',
     page: Number(source.page ?? source.page_num ?? 1),
@@ -464,7 +516,7 @@ function mapGatewaySessionMessages(session: any): ChatMessage[] {
   const messages = Array.isArray(session.messages) ? session.messages : [];
 
   return messages.map((message: any, index: number) => ({
-    id: message.message_id ?? `${session.session_id ?? 'session'}-${index}`,
+    id: toGatewayStringId(message.message_id, `${session.session_id ?? 'session'}-${index}`),
     role: message.role === 'assistant' ? 'assistant' : 'user',
     content: message.content ?? message.text ?? message.answer ?? '',
     timestamp: toUiTimestamp(message.timestamp ?? message.created_at),
@@ -476,11 +528,11 @@ function mapGatewaySessionMessages(session: any): ChatMessage[] {
 }
 
 function mapGatewaySearchResponse(payload: any) {
-  const items = Array.isArray(payload) ? payload : payload.results ?? payload.items ?? [];
+  const items = Array.isArray(payload) ? payload : payload.results ?? payload.items ?? payload.data ?? [];
 
   return items.map((item: any, index: number) => ({
-    id: item.document_id ?? item.section_id ?? `gateway-search-${index}`,
-    documentId: item.document_id ?? item.doc_id,
+    id: toGatewayStringId(item.document_id ?? item.section_id, `gateway-search-${index}`),
+    documentId: toGatewayStringId(item.document_id ?? item.doc_id),
     name: item.document_title ?? item.title ?? item.document_id ?? 'Документ базы знаний',
     type: (item.document_type ?? item.source_type ?? item.type ?? 'PDF').toUpperCase(),
     version: item.version ?? 'Актуальная версия',
@@ -489,13 +541,19 @@ function mapGatewaySearchResponse(payload: any) {
     fragment: item.content ?? item.excerpt ?? item.text ?? '',
     page: Number(item.page ?? 1),
     section: item.clause ?? item.section ?? item.section_id ?? 'Фрагмент',
+    sectionId: item.section_id ?? item.group ?? item.classifier_code ?? item.mks_oks_code ?? item.okstu_code ?? '',
+    group: item.group ?? item.classification_group ?? item.classifier_group ?? '',
+    classifierCode: item.classifier_code ?? item.section_code ?? item.group ?? item.section_id ?? '',
+    classifierSystem: item.classifier_system ?? (item.mks_oks_code ? 'MKS' : item.okstu_code ? 'OKSTU' : ''),
+    mksOksCode: item.mks_oks_code ?? item.mks_oks ?? item.oks_code ?? '',
+    okstuCode: item.okstu_code ?? '',
     pagePreviewUrl: item.page_preview_url ?? item.preview_url,
     documentUrl: item.document_url ?? item.file_url,
   }));
 }
 
 function mapGatewayDocumentsResponse(payload: any): Document[] {
-  const documents = Array.isArray(payload) ? payload : payload.documents ?? payload.items ?? [];
+  const documents = Array.isArray(payload) ? payload : payload.documents ?? payload.items ?? payload.data ?? [];
 
   return documents.map((doc: any, index: number) => {
     const normalizedStatus = String(doc.status ?? '').toLowerCase();
@@ -514,7 +572,7 @@ function mapGatewayDocumentsResponse(payload: any): Document[] {
     const group = doc.group ?? doc.classification_group ?? doc.classifier_group ?? classifierCode ?? '';
 
     return {
-      id: doc.document_id ?? doc.id ?? `gateway-document-${index}`,
+      id: toGatewayStringId(doc.document_id ?? doc.id, `gateway-document-${index}`),
       name: doc.title ?? doc.filename ?? doc.name ?? 'Документ базы знаний',
       type: (doc.document_type ?? doc.source_type ?? doc.type ?? 'PDF').toUpperCase(),
       version: `v${doc.latest_version ?? doc.version ?? 1}`,
@@ -522,7 +580,7 @@ function mapGatewayDocumentsResponse(payload: any): Document[] {
       ocrStatus: mapGatewayDocumentOcrStatus(normalizedStatus),
       indexStatus: mapGatewayDocumentIndexStatus(normalizedStatus),
       updatedAt: doc.updated_at ?? doc.created_at ?? '',
-      sectionId: doc.section_id ?? group,
+      sectionId: toGatewayStringId(doc.section_id ?? group),
       group,
       sourceType: doc.source_type ?? doc.document_type ?? doc.type ?? '',
       documentKey: doc.document_key ?? doc.file_hash_sha256 ?? '',
@@ -538,8 +596,8 @@ function mapGatewayDocumentDetailResponse(payload: any): GatewayDocumentDetail {
   const data = payload?.data ?? payload ?? {};
 
   return {
-    document_id: data.document_id ?? data.id ?? '',
-    id: data.document_id ?? data.id ?? '',
+    document_id: toGatewayStringId(data.document_id ?? data.id),
+    id: toGatewayStringId(data.document_id ?? data.id),
     title: data.title ?? '',
     doc_code: data.doc_code ?? '',
     source_type: data.source_type ?? '',
@@ -551,13 +609,13 @@ function mapGatewayDocumentDetailResponse(payload: any): GatewayDocumentDetail {
     mks_oks_code: data.mks_oks_code ?? null,
     okstu_code: data.okstu_code ?? null,
     classification_status: data.classification_status ?? {},
-    successor_doc_id: data.successor_doc_id ?? null,
-    predecessor_doc_id: data.predecessor_doc_id ?? null,
-    chunk_container_id: data.chunk_container_id ?? null,
+    successor_doc_id: data.successor_doc_id === undefined || data.successor_doc_id === null ? null : String(data.successor_doc_id),
+    predecessor_doc_id: data.predecessor_doc_id === undefined || data.predecessor_doc_id === null ? null : String(data.predecessor_doc_id),
+    chunk_container_id: data.chunk_container_id === undefined || data.chunk_container_id === null ? null : String(data.chunk_container_id),
     metadata: data.metadata ?? {},
     latest_version: data.latest_version ?? null,
     total_versions: Number(data.total_versions ?? 0),
-    user_id: data.user_id ?? '',
+    user_id: toGatewayStringId(data.user_id),
     uploaded_by: data.uploaded_by ?? '',
     created_by: data.created_by ?? '',
     updated_by: data.updated_by ?? '',
@@ -567,7 +625,7 @@ function mapGatewayDocumentDetailResponse(payload: any): GatewayDocumentDetail {
 }
 
 function mapGatewayHistoryResponse(payload: any): QueryHistoryItem[] {
-  const items = Array.isArray(payload) ? payload : payload.items ?? payload.history ?? [];
+  const items = Array.isArray(payload) ? payload : payload.items ?? payload.history ?? payload.data ?? [];
 
   return items.map((item: any, index: number) => {
     const query = item.question ?? item.query ?? '';
@@ -575,11 +633,11 @@ function mapGatewayHistoryResponse(payload: any): QueryHistoryItem[] {
     const status = mapGatewayStatus(item.status);
 
     return {
-      id: item.history_id ?? item.id ?? `gateway-history-${index}`,
+      id: toGatewayStringId(item.history_id ?? item.id, `gateway-history-${index}`),
       user: item.user_name ?? item.user_id ?? 'Пользователь системы',
       project: item.project ?? item.project_name ?? 'Проект не указан',
       topic: item.topic ?? item.title ?? 'Рабочий чат',
-      session: item.session_id ?? item.session ?? '',
+      session: toGatewayStringId(item.session_id ?? item.session),
       query,
       answer,
       sources: Number(item.source_count ?? item.sources_count ?? 0),
@@ -610,11 +668,11 @@ function mapGatewaySessionsResponse(payload: any): QueryHistoryItem[] {
     const sourceCount = messages.reduce((sum, message) => sum + (message.citations?.length ?? 0), 0);
 
     return {
-      id: session.session_id ?? session.id ?? `gateway-session-${index}`,
+      id: toGatewayStringId(session.session_id ?? session.id, `gateway-session-${index}`),
       user: session.user_name ?? session.user_id ?? 'Пользователь системы',
       project: session.project ?? session.project_name ?? 'Рабочие диалоги',
       topic: session.topic ?? session.title ?? 'Рабочий диалог',
-      session: session.title ?? session.session_id ?? `Сессия ${index + 1}`,
+      session: toGatewayStringId(session.title ?? session.session_id, `Сессия ${index + 1}`),
       query: userMessage?.content ?? session.last_question ?? session.last_message_preview ?? '',
       answer: assistantMessage?.content ?? session.last_answer ?? session.last_message_preview ?? '',
       sources: Number(session.source_count ?? sourceCount),
@@ -631,15 +689,15 @@ function mapGatewaySessionsToProjects(payload: any): GatewayChatProject[] {
 
   sessions.forEach((session: any, index: number) => {
     const projectName = session.project ?? session.project_name ?? session.workspace ?? 'Рабочие диалоги';
-    const projectId = session.project_id ?? projectName;
+    const projectId = toGatewayStringId(session.project_id ?? projectName, 'gateway-dialogs');
 
     if (!groups.has(projectId)) {
       groups.set(projectId, { id: projectId, name: projectName, chats: [] });
     }
 
     groups.get(projectId)?.chats.push({
-      id: session.session_id ?? session.id ?? `gateway-session-${index}`,
-      title: session.title ?? session.session_id ?? `Сессия ${index + 1}`,
+      id: toGatewayStringId(session.session_id ?? session.id, `gateway-session-${index}`),
+      title: toGatewayStringId(session.title ?? session.session_id, `Сессия ${index + 1}`),
       preview: session.last_message_preview ?? session.last_question ?? '',
       updatedAt: session.updated_at ?? session.created_at ?? '',
     });
@@ -786,7 +844,7 @@ function mapGatewayQueueResponse(payload: any): ProcessingQueueItem[] {
           : 'OCR';
 
     return {
-      id: item.document_id ?? item.draft_id ?? item.id ?? `gateway-queue-${index}`,
+      id: toGatewayStringId(item.document_id ?? item.draft_id ?? item.id, `gateway-queue-${index}`),
       document: item.title ?? item.document_title ?? item.filename ?? item.document_id ?? 'Документ базы знаний',
       stage,
       progress: Number(item.progress ?? item.progress_percent ?? progressByStatus[status] ?? 45),
@@ -860,6 +918,28 @@ function mapGatewayUserStatus(active?: boolean): AdminUser['status'] {
   return active === false ? 'Отключен' : 'Активен';
 }
 
+function mapGatewayPermissions(permissions: any): Record<string, boolean> {
+  if (!permissions) return {};
+
+  if (Array.isArray(permissions)) {
+    return permissions.reduce<Record<string, boolean>>((acc, permission) => {
+      if (typeof permission === 'string' && permission.trim()) {
+        acc[permission.trim()] = true;
+      }
+      return acc;
+    }, {});
+  }
+
+  if (typeof permissions === 'object') {
+    return Object.entries(permissions).reduce<Record<string, boolean>>((acc, [key, value]) => {
+      acc[key] = Boolean(value);
+      return acc;
+    }, {});
+  }
+
+  return {};
+}
+
 function mapGatewayUsersResponse(payload: any): AdminUser[] {
   const users = Array.isArray(payload) ? payload : payload.users ?? payload.items ?? [];
 
@@ -867,7 +947,7 @@ function mapGatewayUsersResponse(payload: any): AdminUser[] {
     const role = Array.isArray(user.roles) ? user.roles[0] : user.role;
 
     return {
-      id: user.user_id ?? user.id ?? `gateway-user-${index}`,
+      id: toGatewayStringId(user.user_id ?? user.id, `gateway-user-${index}`),
       name: user.full_name ?? user.name ?? 'Пользователь системы',
       position: user.position ?? user.role_title ?? 'Должность не указана',
       login: user.email ?? user.username ?? user.login ?? '',
@@ -879,6 +959,8 @@ function mapGatewayUsersResponse(payload: any): AdminUser[] {
           : role ?? '',
       status: mapGatewayUserStatus(user.is_active),
       lastSeen: user.last_login_at ?? user.updated_at ?? '',
+      availableTabs: Array.isArray(user.available_tabs) ? user.available_tabs : undefined,
+      permissions: mapGatewayPermissions(user.permissions),
     };
   });
 }
@@ -887,7 +969,7 @@ function mapGatewayProfileToAdminUser(profile: any): AdminUser {
   const role = profile.role ?? (Array.isArray(profile.roles) ? profile.roles[0] : undefined);
 
   return {
-    id: profile.user_id ?? profile.id ?? 'gateway-current-user',
+    id: toGatewayStringId(profile.user_id ?? profile.id, 'gateway-current-user'),
     name: profile.full_name ?? profile.name ?? profile.email ?? 'Пользователь системы',
     position: profile.position ?? profile.role_title ?? 'Пользователь',
     login: profile.email ?? profile.username ?? profile.login ?? profile.user_id ?? '',
@@ -899,21 +981,28 @@ function mapGatewayProfileToAdminUser(profile: any): AdminUser {
         : JSON.stringify(profile.permissions ?? {}),
     status: mapGatewayUserStatus(profile.is_active),
     lastSeen: profile.last_login_at ?? '',
+    availableTabs: Array.isArray(profile.available_tabs) ? profile.available_tabs : undefined,
+    permissions: mapGatewayPermissions(profile.permissions),
   };
 }
 
 function mapGatewayAuditResponse(payload: any): ProcessingLogItem[] {
   const events = Array.isArray(payload) ? payload : payload.events ?? payload.items ?? payload.audit ?? [];
 
-  return events.slice(0, 20).map((event: any, index: number) => ({
-    id: event.event_id ?? event.id ?? `gateway-audit-${index}`,
-    time: toUiTimestamp(event.timestamp ?? event.created_at),
-    document: event.resource_id || event.resource_type || 'Система',
-    stage: 'Answer generation',
-    event: `${event.action ?? 'event'}${event.ip_address ? `, ${event.ip_address}` : ''}`,
-    retryStatus: event.action?.includes('error') || event.action?.includes('delete') ? 'Запланирована' : 'Не требуется',
-    visibility: event.action?.includes('admin') ? 'Администратор' : 'Инженер',
-  }));
+  return events.slice(0, 20).map((event: any, index: number) => {
+    const action = String(event?.action ?? 'event');
+    const resource = event?.resource_id ?? event?.resource_type ?? 'Система';
+
+    return {
+      id: toGatewayStringId(event?.event_id ?? event?.id, `gateway-audit-${index}`),
+      time: toUiTimestamp(event?.timestamp ?? event?.created_at),
+      document: String(resource),
+      stage: event?.resource_type ? String(event.resource_type) : 'Gateway audit',
+      event: `${action}${event?.ip_address ? `, ${event.ip_address}` : ''}`,
+      retryStatus: action.includes('error') || action.includes('delete') ? 'Запланирована' : 'Не требуется',
+      visibility: action.includes('admin') || action.includes('user') || action.includes('role') ? 'Администратор' : 'Инженер',
+    };
+  });
 }
 
 function mapGatewayDraftRecord(payload: any) {
@@ -931,13 +1020,79 @@ function mapGatewayDraftRecord(payload: any) {
     status: normalizeDraftStatus(payload.status),
     confidence: payload.confidence ?? null,
     preview_metadata: previewMetadata,
-    promoted_document_id: payload.promoted_document_id ?? payload.approved_document_id ?? payload.document_id ?? null,
-    approved_document_id: payload.approved_document_id ?? payload.promoted_document_id ?? payload.document_id ?? null,
+    document_id: payload.document_id ?? payload.promoted_document_id ?? payload.approved_document_id ?? null,
+    promoted_document_id: payload.document_id ?? payload.promoted_document_id ?? payload.approved_document_id ?? null,
+    approved_document_id: payload.document_id ?? payload.approved_document_id ?? payload.promoted_document_id ?? null,
     error_code: payload.error_code ?? null,
     error_message: payload.error_message ?? null,
     raw_data: payload.raw_data ?? null,
     created_at: payload.created_at ?? payload.createdAt ?? '',
     updated_at: payload.updated_at ?? payload.updatedAt ?? '',
+  };
+}
+
+function unwrapRegistryObject<T>(payload: any): T {
+  return (payload?.data ?? payload) as T;
+}
+
+function mapRegistryListResponse<T>(payload: any, mapper: (item: any, index: number) => T): RegistryListResponse<T> {
+  const items = Array.isArray(payload) ? payload : payload?.data ?? payload?.items ?? [];
+
+  return {
+    data: items.map(mapper),
+    meta: payload?.meta ?? payload?.pagination ?? payload?.page ?? {},
+  };
+}
+
+function mapRegistryClassifierNode(node: any): RegistryClassifierNode {
+  const children = Array.isArray(node.children) ? node.children.map((child: any) => mapRegistryClassifierNode(child)) : [];
+
+  return {
+    classifier_system: String(node.classifier_system ?? node.system ?? ''),
+    code: String(node.code ?? ''),
+    parent_code: node.parent_code ?? null,
+    full_name: node.full_name ?? node.name ?? node.code ?? '',
+    status: node.status ?? 'active',
+    effective_date: node.effective_date ?? null,
+    replaced_by: node.replaced_by ?? null,
+    created_at: node.created_at ?? null,
+    documents_count: Number(node.documents_count ?? node.document_count ?? node.linked_documents_count ?? 0),
+    children,
+  };
+}
+
+function mapRegistryPendingNode(node: any): RegistryClassifierPending {
+  return {
+    id: toGatewayStringId(node.id),
+    system: node.system ?? node.classifier_system ?? '',
+    code: node.code ?? '',
+    found_in_document_id: node.found_in_document_id === undefined || node.found_in_document_id === null ? null : String(node.found_in_document_id),
+    found_in_document_title: node.found_in_document_title ?? '',
+    status: node.status ?? '',
+    suggested_parent_code: node.suggested_parent_code ?? null,
+    suggested_parent_name: node.suggested_parent_name ?? '',
+    admin_comment: node.admin_comment ?? null,
+    created_at: node.created_at ?? null,
+  };
+}
+
+function mapRegistryTerminologyNode(node: any): RegistryTerminologyEntry {
+  const scope = Array.isArray(node.scope) ? node.scope : node.scope ? [node.scope] : [];
+
+  return {
+    id: toGatewayStringId(node.id),
+    raw_term: node.raw_term ?? '',
+    standard_term: node.standard_term ?? '',
+    normalized_value: node.normalized_value ?? '',
+    term_type: node.term_type ?? '',
+    is_case_sensitive: Boolean(node.is_case_sensitive),
+    definition: node.definition ?? null,
+    synonyms: Array.isArray(node.synonyms) ? node.synonyms.map((item: any) => String(item)) : [],
+    related_docs: Array.isArray(node.related_docs) ? node.related_docs.map((item: any) => String(item)) : [],
+    scope: scope.map((item: any) => String(item)),
+    is_blocked: Boolean(node.is_blocked),
+    created_at: node.created_at ?? null,
+    updated_at: node.updated_at ?? null,
   };
 }
 
@@ -1031,6 +1186,7 @@ export const authApi = {
     store.upsertAdminUser(profile);
     store.setCurrentUserId(profile.id);
     store.setCurrentRole(USER_ROLE_BY_LABEL[profile.role] ?? 'user');
+    store.setCurrentPermissions(profile.permissions ?? {});
 
     return profile;
   },
@@ -1125,8 +1281,30 @@ export const chatApi = {
     }
 
     try {
+      const resolveGatewayProjectId = async () => {
+        const currentProjectId = useUIStore.getState().activeProjectId;
+        if (currentProjectId && /^\d+$/.test(currentProjectId)) {
+          return currentProjectId;
+        }
+
+        try {
+          const projects = await projectsApi.list();
+          const resolvedProjectId = projects.find((project) => /^\d+$/.test(project.id))?.id ?? projects[0]?.id;
+
+          if (resolvedProjectId) {
+            useUIStore.getState().setActiveProjectId(resolvedProjectId);
+            return resolvedProjectId;
+          }
+        } catch {
+          // Если список проектов временно недоступен, попробуем создать сессию с текущим activeProjectId.
+        }
+
+        return currentProjectId || undefined;
+      };
+
       const createAndSelectSession = async () => {
-        const created = await chatApi.createSession(query.slice(0, 70) || 'Новый чат');
+        const projectId = await resolveGatewayProjectId();
+        const created = await chatApi.createSession(query.slice(0, 70) || 'Новый чат', projectId);
         const sessionId = created.session_id ?? created.id ?? created.session?.session_id;
 
         if (sessionId) {
@@ -1252,19 +1430,12 @@ export const searchApi = {
     }
 
     try {
-      const response = await gatewayRequest<any>(() => apiClient.post('/documents/search', { query: q, top_k: 10 }));
+      const response = await gatewayRequest<any>(() => apiClient.post('/text/search', { text: q, top_k: 10 }));
       useUIStore.getState().setApiStatus('online');
       return mapGatewaySearchResponse(response.data);
     } catch {
       useUIStore.getState().setApiStatus('offline');
-
-      try {
-        const response = await gatewayRequest<any>(() => apiClient.post('/text/search', { text: q, top_k: 10 }));
-        useUIStore.getState().setApiStatus('online');
-        return mapGatewaySearchResponse(response.data);
-      } catch {
-        throw new Error('Серверная часть недоступна');
-      }
+      throw new Error('Серверная часть недоступна');
     }
   },
 };
@@ -1399,7 +1570,7 @@ export const documentsApi = {
     if (isDemoMode()) return MOCK_KNOWLEDGE_SECTIONS;
 
     const response = await gatewayRequest<any>(() =>
-      apiClient.get('/classifiers/tree', {
+      apiClient.get('/registry/classifiers/tree', {
         params: {
           classifier_system: 'MKS',
           max_depth: 10,
@@ -1409,14 +1580,7 @@ export const documentsApi = {
     return mapGatewayKnowledgeSections(response.data);
   },
   upload: async (file: File) => {
-    const form = new FormData();
-    form.append('file', file);
-    const response = await gatewayRequest<any>(() =>
-      apiClient.post('/documents', form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      }),
-    );
-    return response.data;
+    return draftsApi.create(file);
   },
   reprocess: async (documentId: string) => {
     const response = await gatewayRequest<any>(() => apiClient.post(`/documents/${documentId}/reprocess`, { mode: 'full' }));
@@ -1433,6 +1597,248 @@ export const documentsApi = {
 };
 
 export const registryApi = {
+  classifiers: {
+    list: async (params: {
+      classifierSystem?: string;
+      code?: string;
+      fullName?: string;
+      status?: string;
+      parentCode?: string;
+      page?: number;
+      pageSize?: number;
+    } = {}) => {
+      if (isDemoMode()) {
+        return { data: [], meta: { total: 0, page: params.page ?? 1, page_size: params.pageSize ?? 50 } };
+      }
+
+      const response = await gatewayRequest<any>(() =>
+        apiClient.get('/registry/classifiers', {
+          params: {
+            classifier_system: params.classifierSystem,
+            code: params.code,
+            full_name: params.fullName,
+            status: params.status,
+            parent_code: params.parentCode,
+            page: params.page ?? 1,
+            page_size: params.pageSize ?? 50,
+          },
+        }),
+      );
+
+      return mapRegistryListResponse(response.data, mapRegistryClassifierNode);
+    },
+    tree: async (params: { classifierSystem: string; rootCode?: string; maxDepth?: number; search?: string; status?: string }) => {
+      if (isDemoMode()) {
+        return { data: [], meta: { total: 0, max_depth_reached: false } };
+      }
+
+      const response = await gatewayRequest<any>(() =>
+        apiClient.get('/registry/classifiers/tree', {
+          params: {
+            classifier_system: params.classifierSystem,
+            root_code: params.rootCode,
+            max_depth: params.maxDepth ?? 10,
+            search: params.search,
+            status: params.status,
+          },
+        }),
+      );
+
+      return mapRegistryListResponse(response.data, mapRegistryClassifierNode);
+    },
+    get: async (code: string, classifierSystem: string) => {
+      if (isDemoMode()) return null;
+
+      const response = await gatewayRequest<any>(() =>
+        apiClient.get(`/registry/classifiers/${encodeURIComponent(code)}`, {
+          params: { classifier_system: classifierSystem },
+        }),
+      );
+
+      return mapRegistryClassifierNode(unwrapRegistryObject(response.data));
+    },
+    create: async (payload: Partial<RegistryClassifierNode> & { effective_date?: string | null }) => {
+      const response = await gatewayRequest<any>(() => apiClient.post('/registry/classifiers', payload));
+      return mapRegistryClassifierNode(unwrapRegistryObject(response.data));
+    },
+    update: async (code: string, classifierSystem: string, payload: Partial<RegistryClassifierNode> & { effective_date?: string | null }) => {
+      const response = await gatewayRequest<any>(() =>
+        apiClient.put(`/registry/classifiers/${encodeURIComponent(code)}`, payload, {
+          params: { classifier_system: classifierSystem },
+        }),
+      );
+      return mapRegistryClassifierNode(unwrapRegistryObject(response.data));
+    },
+    patch: async (code: string, classifierSystem: string, payload: Partial<RegistryClassifierNode> & { effective_date?: string | null }) => {
+      const response = await gatewayRequest<any>(() =>
+        apiClient.patch(`/registry/classifiers/${encodeURIComponent(code)}`, payload, {
+          params: { classifier_system: classifierSystem },
+        }),
+      );
+      return mapRegistryClassifierNode(unwrapRegistryObject(response.data));
+    },
+    delete: async (code: string, classifierSystem: string) => {
+      const response = await gatewayRequest<any>(() =>
+        apiClient.delete(`/registry/classifiers/${encodeURIComponent(code)}`, {
+          params: { classifier_system: classifierSystem },
+        }),
+      );
+      return response.data ?? { ok: true };
+    },
+    import: async (file: File, classifierSystem: string, mapping: string | Record<string, unknown>) => {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('classifier_system', classifierSystem);
+      form.append('mapping', typeof mapping === 'string' ? mapping : JSON.stringify(mapping));
+
+      const response = await gatewayRequest<any>(() =>
+        apiClient.post('/registry/classifiers/import', form, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        }),
+      );
+      return response.data;
+    },
+    pending: async (params: { system?: string; status?: string; page?: number; pageSize?: number } = {}) => {
+      if (isDemoMode()) {
+        return { data: [], meta: { total: 0, page: params.page ?? 1, page_size: params.pageSize ?? 50 } };
+      }
+
+      const response = await gatewayRequest<any>(() =>
+        apiClient.get('/registry/classifiers/pending', {
+          params: {
+            system: params.system,
+            status: params.status,
+            page: params.page ?? 1,
+            page_size: params.pageSize ?? 50,
+          },
+        }),
+      );
+
+      return mapRegistryListResponse(response.data, mapRegistryPendingNode);
+    },
+    acceptPending: async (pendingId: string, payload: { parentCode?: string; fullName?: string; adminComment?: string }) => {
+      const response = await gatewayRequest<any>(() =>
+        apiClient.post(`/registry/classifiers/pending/${encodeURIComponent(pendingId)}/accept`, {
+          parent_code: payload.parentCode,
+          full_name: payload.fullName,
+          admin_comment: payload.adminComment,
+        }),
+      );
+      return response.data;
+    },
+    rejectPending: async (pendingId: string, adminComment?: string) => {
+      const response = await gatewayRequest<any>(() =>
+        apiClient.post(`/registry/classifiers/pending/${encodeURIComponent(pendingId)}/reject`, {
+          admin_comment: adminComment,
+        }),
+      );
+      return response.data;
+    },
+    validate: async (classification: { mksOksCode?: string; okstuCode?: string; udkCode?: string }) => {
+      if (isDemoMode()) {
+        return {
+          classification: {
+            mks_status: 'UNASSIGNED',
+            okstu_status: 'UNASSIGNED',
+            udk_valid: false,
+            overall_status: 'pending',
+          },
+        };
+      }
+
+      const response = await gatewayRequest<any>(() =>
+        apiClient.post('/registry/classifiers/validate', {
+          classification: {
+            mks_oks_code: classification.mksOksCode,
+            okstu_code: classification.okstuCode,
+            udk_code: classification.udkCode,
+          },
+        }),
+      );
+      return unwrapRegistryObject(response.data);
+    },
+  },
+  terminology: {
+    list: async (params: {
+      rawTerm?: string;
+      standardTerm?: string;
+      termType?: string;
+      isBlocked?: boolean;
+      scope?: string;
+      page?: number;
+      pageSize?: number;
+    } = {}) => {
+      if (isDemoMode()) {
+        return { data: [], meta: { total: 0, page: params.page ?? 1, page_size: params.pageSize ?? 50 } };
+      }
+
+      const response = await gatewayRequest<any>(() =>
+        apiClient.get('/registry/terminology', {
+          params: {
+            raw_term: params.rawTerm,
+            standard_term: params.standardTerm,
+            term_type: params.termType,
+            is_blocked: params.isBlocked,
+            scope: params.scope,
+            page: params.page ?? 1,
+            page_size: params.pageSize ?? 50,
+          },
+        }),
+      );
+
+      return mapRegistryListResponse(response.data, mapRegistryTerminologyNode);
+    },
+    get: async (termId: string) => {
+      if (isDemoMode()) return null;
+
+      const response = await gatewayRequest<any>(() => apiClient.get(`/registry/terminology/${encodeURIComponent(termId)}`));
+      return mapRegistryTerminologyNode(unwrapRegistryObject(response.data));
+    },
+    create: async (payload: Partial<RegistryTerminologyEntry>) => {
+      const response = await gatewayRequest<any>(() => apiClient.post('/registry/terminology', payload));
+      return mapRegistryTerminologyNode(unwrapRegistryObject(response.data));
+    },
+    update: async (termId: string, payload: Partial<RegistryTerminologyEntry>) => {
+      const response = await gatewayRequest<any>(() =>
+        apiClient.put(`/registry/terminology/${encodeURIComponent(termId)}`, payload),
+      );
+      return mapRegistryTerminologyNode(unwrapRegistryObject(response.data));
+    },
+    delete: async (termId: string) => {
+      const response = await gatewayRequest<any>(() => apiClient.delete(`/registry/terminology/${encodeURIComponent(termId)}`));
+      return response.data ?? { ok: true };
+    },
+    normalize: async (term: string) => {
+      if (isDemoMode()) {
+        return {
+          raw_term: term,
+          standard_term: term,
+          normalized_value: term.toLowerCase(),
+          term_type: 'unknown',
+          is_blocked: false,
+        };
+      }
+
+      const response = await gatewayRequest<any>(() =>
+        apiClient.get('/registry/terminology/normalize', {
+          params: { term },
+        }),
+      );
+      return unwrapRegistryObject(response.data);
+    },
+    import: async (file: File, mapping: string | Record<string, unknown>) => {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('mapping', typeof mapping === 'string' ? mapping : JSON.stringify(mapping));
+
+      const response = await gatewayRequest<any>(() =>
+        apiClient.post('/registry/terminology/import', form, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        }),
+      );
+      return response.data;
+    },
+  },
   documents: async () => {
     if (isDemoMode()) return MOCK_DOCUMENTS;
 
@@ -1467,29 +1873,16 @@ export const registryApi = {
   knowledgeSections: async () => {
     if (isDemoMode()) return MOCK_KNOWLEDGE_SECTIONS;
 
-    try {
-      const response = await gatewayRequest<any>(() =>
-        apiClient.get('/classifiers/tree', {
-          params: {
-            classifier_system: 'MKS',
-            max_depth: 10,
-          },
-        }),
-      );
-      useUIStore.getState().setApiStatus('online');
-      return mapGatewayKnowledgeSections(response.data);
-    } catch {
-      const response = await gatewayRequest<any>(() =>
-        apiClient.get('/registry/classifiers/tree', {
-          params: {
-            classifier_system: 'MKS',
-            max_depth: 10,
-          },
-        }),
-      );
-      useUIStore.getState().setApiStatus('online');
-      return mapGatewayKnowledgeSections(response.data);
-    }
+    const response = await gatewayRequest<any>(() =>
+      apiClient.get('/registry/classifiers/tree', {
+        params: {
+          classifier_system: 'MKS',
+          max_depth: 10,
+        },
+      }),
+    );
+    useUIStore.getState().setApiStatus('online');
+    return mapGatewayKnowledgeSections(response.data);
   },
   stats: async () => {
     const response = await gatewayRequest<any>(() => apiClient.get('/common/stats'));
@@ -1589,6 +1982,7 @@ export const adminApi = {
     }
 
     const response = await gatewayRequest<any>(() => apiClient.get('/admin/roles'));
+    useUIStore.getState().setApiStatus('online');
     return mapGatewayRolesResponse(response.data);
   },
   users: async () => {
@@ -1610,6 +2004,7 @@ export const adminApi = {
 
     try {
       const response = await gatewayRequest<any>(() => apiClient.get('/admin/audit'));
+      useUIStore.getState().setApiStatus('online');
       return mapGatewayAuditResponse(response.data);
     } catch {
       throw new Error('Не удалось загрузить журнал аудита из Gateway');
@@ -1683,6 +2078,7 @@ export const feedbackApi = {
           session_id: sessionId,
           message_id: messageId,
           rating: payload.useful ? 5 : 1,
+          rating_status: payload.useful ? 'positive' : 'negative',
           useful: payload.useful,
           comment: payload.comment,
         }),

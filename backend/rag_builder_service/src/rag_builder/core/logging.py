@@ -1,5 +1,6 @@
 from pathlib import Path
 from datetime import timedelta, timezone
+from typing import Any, cast
 
 from loguru import logger
 
@@ -9,13 +10,14 @@ from rag_builder.core.config import settings
 UTC_PLUS_3 = timezone(timedelta(hours=3))
 
 
-def _format_record(record: dict[str, object]) -> str:
-    time_value = record["time"].astimezone(UTC_PLUS_3)  # type: ignore[union-attr]
-    level = record["level"].name  # type: ignore[union-attr]
-    name = record["name"]
-    function = record["function"]
-    line = record["line"]
-    message = record["message"]
+def _format_record(record: Any) -> str:
+    rec = cast(dict[str, Any], record)
+    time_value = rec["time"].astimezone(UTC_PLUS_3)
+    level = rec["level"].name
+    name = rec["name"]
+    function = rec["function"]
+    line = rec["line"]
+    message = rec["message"]
     return (
         f"{time_value.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]} UTC+3 | "
         f"{level} | {name}:{function}:{line} | {message}\n"

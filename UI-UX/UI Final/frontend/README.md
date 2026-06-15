@@ -59,10 +59,10 @@ Demo-режим использует локальные профили:
 | `Вход` | Логин, пароль, выбор `Продуктивный` / `Демо`. В продуктивном режиме роль подтягивается через `/auth/me`. |
 | `Чат` | Дерево проектов и чатов, отправка вопроса, longpoll ответа, источники, поиск по текущему чату, обратная связь. |
 | `База знаний` | Поиск по базе знаний, фильтр области поиска, разделы Registry/Classifiers, провал в раздел, список документов, предпросмотр и поиск внутри открытого документа. |
-| `Обработка базы знаний` | Загрузка файла, загрузка по ссылке через модальное окно, draft lifecycle через `/drafts/*`, preview, approve/reject/delete, очередь и журнал обработки. |
+| `Обработка базы знаний` | Прямая загрузка файла, draft lifecycle через `/drafts/*`, preview, approve/reject/delete, очередь и журнал обработки. |
 | `История` | Поиск по диалогам, фильтры, раскрытие найденного чата, продолжение диалога, экспорт. |
 | `QA` | Контрольные метрики, оценка ответов ассистента, журнал проверки. |
-| `Администрирование` | Пользователи, роли, права доступа, сохранение прав, административный журнал, журнал обработки. |
+| `Администрирование` | Пользователи, роли, права доступа, административный журнал, журнал обработки, Registry-редакторы классификаторов, терминологии и неизвестных кодов НСИ. |
 | `Фокус-режим` | Скрывает левую навигацию и оставляет только текущую рабочую область. |
 | `Темы` | Темная и светлая тема. Переключатель находится в левой навигации. |
 | `Видеоинструкция` | Обучающий demo-сценарий интерфейса. |
@@ -119,12 +119,15 @@ VITE_GATEWAY_PASSWORD=admin123
 | Чаты и сообщения | `GET /chat/sessions`, `POST /chat/sessions`, `POST /chat/sessions/{id}/messages`, `GET /chat/sessions/{id}/messages/{message_id}?longpoll=15` |
 | История | `GET /chat/history`, `GET /chat/history/export`, `POST /chat/sessions/{id}/export` |
 | Feedback | `POST /chat/feedback` |
-| Поиск | `POST /text/search`, `POST /documents/search`, `GET /documents/search` |
+| Поиск | `POST /text/search` |
 | Черновики | `POST /drafts`, `GET /drafts`, `GET /drafts/{draft_id}`, `GET /drafts/{draft_id}/preview`, `POST /drafts/{draft_id}/preview`, `GET /drafts/{draft_id}/preview/status`, `PATCH /drafts/{draft_id}/decide`, `DELETE /drafts/{draft_id}` |
 | Документы | `GET /documents`, `GET /documents/{doc_id}`, `GET /documents/{doc_id}/status` |
 | Страницы и preview | `GET /documents/{doc_id}/pages/{page_num}`, `GET /documents/{doc_id}/pages/{page_num}/text`, `GET /documents/{doc_id}/pages/{page_num}/preview`, `GET /documents/{doc_id}/file` |
 | OCR и обработка | `GET /documents/queue`, `POST /documents/{doc_id}/reprocess`; внешний пользовательский поток загрузки идет через `/drafts/*` |
-| База знаний | `GET /registry/documents`, `GET /registry/documents/{doc_id}`, `GET /registry/documents/{doc_id}/sections`, `GET /classifiers/tree` / fallback `GET /registry/classifiers/tree`, `GET /common/stats`, `GET /common/enums` |
+| База знаний | `GET /registry/documents`, `GET /registry/documents/{doc_id}`, `GET /registry/documents/{doc_id}/sections`, `GET /registry/classifiers/tree`, `GET /common/stats`, `GET /common/enums` |
+| Registry: классификаторы | `GET /registry/classifiers`, `GET /registry/classifiers/tree`, `GET /registry/classifiers/{code}`, `POST/PUT/PATCH/DELETE /registry/classifiers/{code}`, `POST /registry/classifiers/import` |
+| Registry: неизвестные коды | `GET /registry/classifiers/pending`, `POST /registry/classifiers/pending/{id}/accept`, `POST /registry/classifiers/pending/{id}/reject`, `POST /registry/classifiers/validate` |
+| Registry: терминология | `GET /registry/terminology`, `GET /registry/terminology/{term_id}`, `POST/PUT/DELETE /registry/terminology/{term_id}`, `GET /registry/terminology/normalize`, `POST /registry/terminology/import` |
 | QA/мониторинг | `GET /monitor/health`, `GET /monitor/metrics` |
 
 ## Структура проекта
@@ -143,7 +146,8 @@ VITE_GATEWAY_PASSWORD=admin123
 | `src/components/KnowledgeProcessing.tsx` | Вкладка `Обработка базы знаний`: upload/drafts/preview/approve/reject/delete. |
 | `src/components/History.tsx` | История диалогов и поиск по чатам. |
 | `src/components/Monitor.tsx` | QA-метрики и журнал проверки. |
-| `src/components/AdminPanel.tsx` | Администрирование пользователей, ролей и прав. |
+| `src/components/AdminPanel.tsx` | Администрирование пользователей, ролей, прав, audit и Registry-разделов. |
+| `src/components/RegistryEditors.tsx` | Редакторы классификаторов, терминологии и неизвестных кодов Registry. |
 | `src/components/SourcePreviewDialog.tsx` | Предпросмотр страницы или документа. |
 | `src/components/VideoGuideDialog.tsx` | Видеоинструкция / обучающий сценарий. |
 | `src/components/Feedback.tsx` | Оценка ответа ассистента. |
@@ -179,12 +183,15 @@ VITE_GATEWAY_PASSWORD=admin123
 | `../docs/first-run-ui-final-with-gateway.md` | Инструкция запуска связки UI Final + Gateway. |
 | `../docs/ui-final-gateway-current-status-2026-06-03.md` | Исторический статус экспериментального подключения к Gateway на 03.06. |
 | `../docs/ui-final-gateway-open-items-2026-06-12.md` | Остаточные вопросы к backend/Gateway и ветки-кандидаты на удаление. |
+| `gateway-backend-blockers.md` | Короткий список стоперов и вопросов, переданных backend по Gateway/Registry. |
 
 ## Текущее состояние
 
 - Интерфейс готов для демонстрации без backend и для проверки с локальным Gateway.
-- Чат, проекты чата, история, база знаний, обработка базы знаний, QA и администрирование подключены к Gateway-контрактам в текущем объеме.
-- Открытые вопросы по Gateway зафиксированы в `../docs/ui-final-gateway-open-items-2026-06-12.md`.
+- Чат, проекты чата, история, база знаний, обработка базы знаний, QA, администрирование и Registry-редакторы подключены к Gateway-контрактам в текущем объеме.
+- Registry-редакторы классификаторов, терминологии и неизвестных кодов НСИ проверены с актуальным Gateway на `develop`.
+- UI-only проблемы по ложному offline/audit, счетчику неизвестных кодов и счетчику терминологии закрыты.
+- Открытые вопросы по Gateway зафиксированы в `../docs/ui-final-gateway-open-items-2026-06-12.md`, короткий список для backend продублирован в `gateway-backend-blockers.md`.
 - Код собирается через `npm run build`.
 - TypeScript-проверка запускается через `npm run lint`.
 - Полноценный end-to-end тест требует рабочей единой точки Gateway.

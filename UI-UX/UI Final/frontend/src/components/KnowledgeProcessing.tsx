@@ -31,7 +31,6 @@ import {
   FileSearch,
   FileText,
   FolderInput,
-  Link2,
   Maximize2,
   PlayCircle,
   RotateCw,
@@ -72,7 +71,6 @@ type MetadataReviewStatus = 'manual' | 'extracted' | 'review' | 'empty';
 type DraftItem = {
   id: string;
   fileName: string;
-  sourceUrl?: string;
   title: string;
   sourceType: string;
   docCode: string;
@@ -250,16 +248,6 @@ const getQueueColor = (status: string) => {
   return 'success';
 };
 
-const resolveFileNameFromUrl = (value: string) => {
-  try {
-    const url = new URL(value.trim());
-    const rawName = decodeURIComponent(url.pathname.split('/').filter(Boolean).pop() || 'document');
-    return /\.[a-z0-9]{2,6}$/i.test(rawName) ? rawName : `${rawName || 'document'}.pdf`;
-  } catch {
-    return 'document.pdf';
-  }
-};
-
 const buildPreviewPages = (draft: DraftItem): PreviewPage[] => {
   const preview = draft.preview;
   const previewStatusLine = preview
@@ -274,7 +262,7 @@ const buildPreviewPages = (draft: DraftItem): PreviewPage[] => {
       lines: [
         draft.title,
         `Файл: ${draft.fileName}`,
-        `Источник: ${draft.sourceUrl ? 'ссылка' : 'локальный файл'}`,
+        'Источник: локальный файл',
         `Статус: ${getStatusLabel(draft.status)}`,
         previewStatusLine,
       ],
@@ -308,7 +296,7 @@ const buildDocumentPreviewText = (draft: DraftItem) =>
   [
     draft.title,
     `Файл: ${draft.fileName}`,
-    `Источник: ${draft.sourceUrl ?? 'локальный файл'}`,
+    'Источник: локальный файл',
     `Статус: ${getStatusLabel(draft.status)}`,
     `Тип источника: ${draft.sourceType}`,
     `Код: ${draft.docCode || 'не указан'}`,
@@ -479,7 +467,6 @@ const mapGatewayDraftRecordToUi = (payload: any, fallback?: Partial<DraftItem>):
   return {
     id: String(fallback?.id ?? payload?.draft_id ?? payload?.id ?? `draft-${Date.now()}`),
     fileName: fallback?.fileName ?? payload?.filename ?? payload?.file_name ?? payload?.title ?? 'Документ',
-    sourceUrl: fallback?.sourceUrl ?? undefined,
     title: fallback?.title ?? payload?.title ?? payload?.preview_metadata?.title ?? payload?.filename ?? 'Документ',
     sourceType: fallback?.sourceType ?? payload?.source_type ?? 'OTHER',
     docCode: fallback?.docCode ?? payload?.doc_code ?? payload?.preview_metadata?.doc_code ?? '',
@@ -503,9 +490,9 @@ const mapGatewayDraftRecordToUi = (payload: any, fallback?: Partial<DraftItem>):
     gatewayFileHashSha256: String(payload?.file_hash_sha256 ?? payload?.fileHashSha256 ?? fallback?.gatewayFileHashSha256 ?? ''),
     gatewayTitleHashSha256: String(payload?.title_hash_sha256 ?? payload?.titleHashSha256 ?? fallback?.gatewayTitleHashSha256 ?? ''),
     gatewayPromotedDocumentId:
+      payload?.document_id ??
       payload?.promoted_document_id ??
       payload?.approved_document_id ??
-      payload?.document_id ??
       fallback?.gatewayPromotedDocumentId ??
       null,
     gatewayErrorCode: payload?.error_code ?? fallback?.gatewayErrorCode ?? null,
@@ -519,7 +506,6 @@ const draftPatchFromGateway = (payload: any, fallback?: Partial<DraftItem>): Par
 
   return {
     fileName: normalized.fileName,
-    sourceUrl: normalized.sourceUrl,
     title: normalized.title,
     sourceType: normalized.sourceType,
     docCode: normalized.docCode,
@@ -556,15 +542,12 @@ export const KnowledgeProcessing: React.FC = () => {
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedFileName, setSelectedFileName] = useState('');
-  const [sourceUrl, setSourceUrl] = useState('');
   const [notice, setNotice] = useState('');
   const [selectedDraftId, setSelectedDraftId] = useState<string>('');
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
   const [previewPageIndex, setPreviewPageIndex] = useState(0);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
-  const [isUploadingByUrl, setIsUploadingByUrl] = useState(false);
-  const [sourceUrlDialogOpen, setSourceUrlDialogOpen] = useState(false);
   const [metadataOpen, setMetadataOpen] = useState(false);
   const [draftSort, setDraftSort] = useState<DraftSort>('updated_desc');
   const [drafts, setDrafts] = useState<DraftItem[]>(() => (workMode === 'demo' ? createDemoDrafts() : []));
@@ -615,13 +598,10 @@ export const KnowledgeProcessing: React.FC = () => {
     setSelectedDraftId('');
     setSelectedFile(null);
     setSelectedFileName('');
-    setSourceUrl('');
     setPreviewDialogOpen(false);
     setPreviewPageIndex(0);
     setPreviewLoading(false);
     setPreviewError('');
-    setIsUploadingByUrl(false);
-    setSourceUrlDialogOpen(false);
     setMetadataOpen(false);
     setDraftSort('updated_desc');
     setDraftDocumentKeys(workMode === 'prod' ? readStoredDraftDocumentKeys() : []);
@@ -674,7 +654,6 @@ export const KnowledgeProcessing: React.FC = () => {
     setPreviewDialogOpen(false);
     setPreviewPageIndex(0);
     setPreviewLoading(false);
-    setSourceUrlDialogOpen(false);
     setMetadataOpen(false);
   }, [activeTab]);
 
@@ -753,33 +732,20 @@ export const KnowledgeProcessing: React.FC = () => {
 
     setSelectedFile(file);
     setSelectedFileName(file.name);
-    setSourceUrl('');
   };
 
   const clearSourceInputs = () => {
     setSelectedFile(null);
     setSelectedFileName('');
-    setSourceUrl('');
   };
 
-  const openSourceUrlDialog = () => {
-    setSourceUrlDialogOpen(true);
-  };
-
-  const closeSourceUrlDialog = () => {
-    setSourceUrlDialogOpen(false);
-    setSourceUrl('');
-    setIsUploadingByUrl(false);
-  };
-
-  const createLocalDraft = (sourceName: string, sourceUrlValue?: string) => {
+  const createLocalDraft = (sourceName: string) => {
     const id = `draft-${Date.now()}`;
     const now = nextClock();
     const title = form.title.trim() || sourceName.replace(/\.[^.]+$/, '');
     const newDraft: DraftItem = {
       id,
       fileName: sourceName,
-      sourceUrl: sourceUrlValue,
       title,
       sourceType: form.sourceType,
       docCode: form.docCode.trim(),
@@ -795,7 +761,7 @@ export const KnowledgeProcessing: React.FC = () => {
       duplicates: [],
       createdAt: now,
       updatedAt: now,
-      note: sourceUrlValue ? 'Ссылка добавлена в обработку.' : 'Файл добавлен в очередь обработки.',
+      note: 'Файл добавлен в очередь обработки.',
     };
 
     setDrafts((current) => [newDraft, ...current]);
@@ -866,69 +832,6 @@ export const KnowledgeProcessing: React.FC = () => {
     }
 
     clearSourceInputs();
-  };
-
-  const handleCreateDraftFromUrl = async () => {
-    const urlValue = sourceUrl.trim();
-
-    if (!urlValue) {
-      setNotice('Сначала укажите ссылку на файл.');
-      return false;
-    }
-
-    let normalizedUrl: URL;
-    try {
-      normalizedUrl = new URL(urlValue);
-      if (!/^https?:$/i.test(normalizedUrl.protocol)) {
-        throw new Error('invalid protocol');
-      }
-    } catch {
-      setNotice('Ссылка должна начинаться с http:// или https://');
-      return false;
-    }
-
-    const sourceName = resolveFileNameFromUrl(urlValue);
-
-    if (workMode === 'demo') {
-      const { title } = createLocalDraft(sourceName, urlValue);
-      clearSourceInputs();
-      setNotice(`Черновик «${title}» создан по ссылке.`);
-      return true;
-    }
-
-    setIsUploadingByUrl(true);
-    try {
-      const response = await fetch(normalizedUrl.toString());
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const blob = await response.blob();
-      const sourceFile = new File([blob], sourceName, {
-        type: blob.type || 'application/octet-stream',
-      });
-
-      const { id, title } = createLocalDraft(sourceName, urlValue);
-      try {
-        await uploadDraftFile(id, sourceFile, sourceName);
-        setNotice(`Файл по ссылке «${sourceName}» отправлен в Gateway на обработку.`);
-      } catch (error: any) {
-        updateDraft(id, {
-          status: 'failed',
-          progress: 100,
-          note: 'Gateway не принял файл, скачанный по ссылке.',
-          gatewayErrorMessage: error?.message ?? 'Не удалось отправить файл в Gateway.',
-        });
-        setNotice(`Черновик «${title}» не удалось отправить в Gateway.`);
-      }
-    } catch {
-      setNotice('Не удалось скачать файл по ссылке.');
-    } finally {
-      setIsUploadingByUrl(false);
-      clearSourceInputs();
-    }
-
-    return true;
   };
 
   const handleCreateDraft = async () => {
@@ -1282,15 +1185,6 @@ export const KnowledgeProcessing: React.FC = () => {
                 onClick={() => void handleCreateDraft()}
               >
                 Создать черновик
-              </Button>
-              <Button
-                className="app-action-button"
-                variant="outlined"
-                startIcon={<Link2 size={16} />}
-                onClick={openSourceUrlDialog}
-                sx={{ minWidth: 220 }}
-              >
-                Загрузить по ссылке
               </Button>
               <Button
                 className="app-action-button"
@@ -1847,48 +1741,6 @@ export const KnowledgeProcessing: React.FC = () => {
             )}
           </Paper>
         </Box>
-
-        <Dialog open={sourceUrlDialogOpen} onClose={closeSourceUrlDialog} maxWidth="sm" fullWidth>
-          <DialogTitle sx={{ pb: 1.2 }}>
-            <Stack direction="row" spacing={1.2} sx={{ alignItems: 'flex-start', justifyContent: 'space-between' }}>
-              <Box sx={{ minWidth: 0 }}>
-                <Typography sx={{ fontWeight: 600, lineHeight: 1.2 }}>Загрузка по ссылке</Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Вставьте прямую ссылку на файл и отправьте ее в обработку.
-                </Typography>
-              </Box>
-              <IconButton aria-label="Закрыть окно загрузки по ссылке" onClick={closeSourceUrlDialog} size="small">
-                <X size={18} />
-              </IconButton>
-            </Stack>
-          </DialogTitle>
-          <DialogContent dividers>
-            <Stack spacing={2} sx={{ pt: 1 }}>
-              <TextField
-                autoFocus
-                fullWidth
-                label="Ссылка на файл"
-                value={sourceUrl}
-                onChange={(event) => setSourceUrl(event.target.value)}
-                helperText="Прямая ссылка на PDF, изображение или другой доступный файл."
-              />
-              {isUploadingByUrl && <LinearProgress />}
-            </Stack>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={closeSourceUrlDialog}>Отмена</Button>
-            <Button
-              variant="contained"
-              onClick={async () => {
-                const ok = await handleCreateDraftFromUrl();
-                if (ok) closeSourceUrlDialog();
-              }}
-              disabled={isUploadingByUrl}
-            >
-              {isUploadingByUrl ? 'Загрузка...' : 'Загрузить'}
-            </Button>
-          </DialogActions>
-        </Dialog>
 
         <Dialog open={previewDialogOpen && Boolean(selectedDraft)} onClose={handleClosePreviewDialog} maxWidth="lg" fullWidth>
           <DialogTitle sx={{ pb: 1.2 }}>

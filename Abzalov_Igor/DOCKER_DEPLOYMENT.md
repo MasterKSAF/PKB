@@ -1,7 +1,42 @@
-﻿# Docker Deployment Guide
+# Docker Deployment Guide
 
 ## Цель
 Пошаговый деплой RAG Builder Service в Docker с PostgreSQL 16 + pgvector 0.8.2.
+
+## Рекомендуемый вариант: Docker Compose
+
+Из папки `Abzalov_Igor`:
+
+```powershell
+docker compose up -d --build
+```
+
+Compose сам:
+- поднимет `pkb-pg16`
+- дождется готовности PostgreSQL
+- соберет `rag-builder-service`
+- запустит Alembic-миграции при старте приложения
+- создаст таблицы `rag.*`
+
+Проверка:
+```powershell
+docker compose ps
+docker logs rag-builder-service --tail 200
+curl.exe http://127.0.0.1:8090/api/v1/health
+```
+
+Отдельная пошаговая инструкция для нового разработчика после `git pull`:
+- [GITHUB_PULL_RUNBOOK.md](C:\Users\Игорь\projects\PKB\PKB_neuroassistant\Abzalov_Igor\GITHUB_PULL_RUNBOOK.md)
+
+Остановка:
+```powershell
+docker compose down
+```
+
+Полное удаление вместе с volume PostgreSQL:
+```powershell
+docker compose down -v
+```
 
 ## Предусловия
 - Docker Desktop установлен.
@@ -27,9 +62,9 @@ docker run -d --name pkb-pg16 `
 ```powershell
 docker exec pkb-pg16 psql -U pkb_user -d pkb_db -c "CREATE EXTENSION IF NOT EXISTS vector; SELECT extversion FROM pg_extension WHERE extname='vector';"
 ```
-Ожидается `0.8.2` (или выше 0.7).
+Ожидается `0.8.2` (или выше `0.7`).
 
-## 2. Подготовить .env
+## 2. Подготовить `.env`
 Создайте `.env` рядом с `.env.example`:
 ```env
 APP_PORT=8090
@@ -66,11 +101,17 @@ MAX_TOKENS=512
 CHUNK_DEFAULT_STRATEGY=semantic_512
 API_PREFIX=/api/v1
 DEFAULT_LONGPOLL_SECONDS=15
-
+MIGRATION_RETRIES=20
+MIGRATION_RETRY_DELAY_SECONDS=3
 ```
 
+Важно:
+- `EMBEDDING_PROVIDER=openai_compatible`
+- токен OpenAI хранить в `EMBEDDING_API_KEY`
+- не подставлять токен в `EMBEDDING_PROVIDER`
+
 ## 3. Собрать образ приложения
-перейти локально в ветку rag_builder_service подтянуть посл изменения и из папки `Abzalov_Igor`:
+Из папки `Abzalov_Igor`:
 
 ```powershell
 docker build -t rag-builder-service:local -f Dockerfile .
@@ -88,13 +129,20 @@ docker run -d --name rag-builder-service `
   rag-builder-service:local
 ```
 
+Что теперь происходит при старте контейнера:
+- контейнер сам выполняет `alembic upgrade head`
+- если PostgreSQL еще не готов, контейнер делает ретраи
+- после успешных миграций запускается `uvicorn`
+- таблицы `rag` и `alembic_version` создаются автоматически
+
 ## 5. Проверить работоспособность
 
 ```powershell
 curl http://127.0.0.1:8090/openapi.json
 ```
-или открываем в браузере:  http://127.0.0.1:8090/docs
 
+или откройте в браузере:
+`http://127.0.0.1:8090/docs`
 
 Проверить логи:
 ```powershell
@@ -109,3 +157,6 @@ docker stop rag-builder-service pkb-pg16
 docker rm rag-builder-service pkb-pg16
 ```
 
+## 7. Когда что использовать
+- `docker compose up -d --build` — лучший вариант для нового разработчика
+- ручные `docker run ...` — если нужно отдельно управлять PostgreSQL и приложением

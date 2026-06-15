@@ -88,11 +88,11 @@ http://127.0.0.1:3300
 - Сообщения чата: `POST /chat/sessions/{id}/messages`.
 - Longpoll ответа: `GET /chat/sessions/{id}/messages/{message_id}?longpoll=15`.
 - Оценка ответа: `POST /chat/feedback`.
-- Поиск: `POST /documents/search`.
+- Поиск: `POST /text/search`.
 - Черновики: `POST /drafts`, `GET /drafts`, `GET /drafts/{id}`, `GET /drafts/{id}/preview`, `POST /drafts/{id}/preview`, `GET /drafts/{id}/preview/status`, `PATCH /drafts/{id}/decide`, `DELETE /drafts/{id}`.
 - Документы: `GET /documents`, `GET /documents/queue`, `POST /documents/{id}/reprocess`.
 - Источники: `GET /documents/{id}/file`, `GET /documents/{id}/pages/{page}/preview`, `GET /documents/{id}/pages/{page}/text`.
-- Registry: `GET /registry/documents`, `GET /registry/documents/{doc_id}`, `GET /registry/documents/{doc_id}/sections`, `GET /classifiers/tree` / fallback `GET /registry/classifiers/tree`.
+- Registry: `GET /registry/documents`, `GET /registry/documents/{doc_id}`, `GET /registry/documents/{doc_id}/sections`, `GET /registry/classifiers/tree`.
 - История: `GET /chat/sessions`, fallback `GET /chat/history`.
 - QA: `GET /monitor/metrics`.
 - Администрирование: `GET /admin/users`, `GET /admin/roles`, `PATCH /admin/users/{id}`, `GET /admin/audit`.

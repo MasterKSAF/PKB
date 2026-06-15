@@ -35,6 +35,8 @@ class IndexingService:
         self._events: dict[str, asyncio.Event] = {}
 
     async def build(self, req: BuildRequest, session: AsyncSession) -> BuildResponse:
+        if req.document_id is None:
+            raise ValueError("document_id must be resolved by request validation")
         doc_id = str(req.document_id)
         logger.info("Indexing start document_id={}", doc_id)
         self._set_status(doc_id, DocStatus(status="indexing"))

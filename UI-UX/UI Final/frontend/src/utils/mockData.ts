@@ -88,6 +88,8 @@ export interface AdminUser {
   access: string;
   status: 'Активен' | 'Ожидает настройки' | 'Отключен';
   lastSeen: string;
+  availableTabs?: string[];
+  permissions?: Record<string, boolean>;
 }
 
 export interface ProcessingLogItem {
