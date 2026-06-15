@@ -26,8 +26,8 @@ PYTHON_SERVICES = {
     "gateway":     (8080, ["/api/v1/system/health", "/api/v1/health", "/health"]),
 }
 
-POLL_INTERVAL = 2
-MAX_RETRIES = 45  # 45 * 2 = 90 секунд максимум
+POLL_INTERVAL = 1
+MAX_RETRIES = 12  # 12 * 1 = 12 секунд максимум
 
 
 def log(msg: str):

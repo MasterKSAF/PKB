@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 
 import pytest
 
-from pipelines.base import PipelineResult, PipelineStep, PipelineContext, StepStatus
+from service_checker.pipelines.base import PipelineResult, PipelineStep, PipelineContext, StepStatus
 
 
 # ── Helpers: моки данных ──────────────────────────────────────────
@@ -192,8 +192,23 @@ class TestGenerateFullReport:
         assert len(auth_line) > 0
         assert "❌" in auth_line[0]
 
-    def test_full_report_documents_column(self):
-        """Проверяем колонку Documents: ✅ если pipeline пройден, ❌ если нет."""
+    def _get_pipe_table_lines(self, lines):
+        """Извлечь строки секции pipeline-таблицы из отчёта."""
+        in_pipe = False
+        pipe_lines = []
+        for line in lines:
+            if "### 📋 Pipeline статусы по сервисам" in line:
+                in_pipe = True
+                continue
+            if in_pipe:
+                if line.startswith("## "):
+                    break
+                if line.startswith("|") and "---" not in line:
+                    pipe_lines.append(line)
+        return pipe_lines
+
+    def test_full_report_pipelines_column(self):
+        """Проверяем колонку Pipelines в сводной таблице: ✅ если все пайплайны пройдены, ❌ если нет."""
         from service_checker.core.reports import _generate_full_report
 
         # Registry участвует в document_processing
@@ -213,18 +228,30 @@ class TestGenerateFullReport:
         lines_ok = report_ok.split("\n")
         lines_fail = report_fail.split("\n")
 
+        # В сводной таблице ищем строку сервиса с колонкой Pipelines (index 6)
         reg_ok = [l for l in lines_ok if "Registry" in l][0]
         reg_fail = [l for l in lines_fail if "Registry" in l][0]
 
-        # Столбцы: Service(1) | Port(2) | Ping(3) | CheckDb(4) | ✅ Passed(5) | Documents(6) | Query(7) | Status(8)
         parts_ok = [p.strip() for p in reg_ok.split("|")]
         parts_fail = [p.strip() for p in reg_fail.split("|")]
 
+        # Столбцы сводной таблицы: Service(1) | Port(2) | Ping(3) | CheckDb(4) | API(5) | Pipelines(6) | Status(7)
         assert parts_ok[6] == "✅", f"Expected ✅, got {parts_ok[6]}"
         assert parts_fail[6] == "❌", f"Expected ❌, got {parts_fail[6]}"
 
+        # В pipeline-таблице проверяем колонку Documents (index 2)
+        pipe_tbl_ok = self._get_pipe_table_lines(lines_ok)
+        pipe_tbl_fail = self._get_pipe_table_lines(lines_fail)
+        pipe_line_ok = [l for l in pipe_tbl_ok if "Registry" in l][0]
+        pipe_line_fail = [l for l in pipe_tbl_fail if "Registry" in l][0]
+        parts_pipe_ok = [p.strip() for p in pipe_line_ok.split("|")]
+        parts_pipe_fail = [p.strip() for p in pipe_line_fail.split("|")]
+        # Столбцы pipeline-таблицы: Service(1) | Documents(2) | Status(3)
+        assert parts_pipe_ok[2] == "✅", f"Expected ✅, got {parts_pipe_ok[2]}"
+        assert parts_pipe_fail[2] == "❌", f"Expected ❌, got {parts_pipe_fail[2]}"
+
     def test_full_report_query_column(self):
-        """Проверяем колонку Query: ✅ если pipeline пройден, ❌ если нет."""
+        """Проверяем колонку Chat в pipeline-таблице: ✅ если pipeline пройден, ❌ если нет."""
         from service_checker.core.reports import _generate_full_report
 
         cov_results = {
@@ -243,15 +270,18 @@ class TestGenerateFullReport:
         lines_ok = report_ok.split("\n")
         lines_fail = report_fail.split("\n")
 
-        auth_ok = [l for l in lines_ok if "Auth" in l][0]
-        auth_fail = [l for l in lines_fail if "Auth" in l][0]
+        # Ищем строку Auth в pipeline-таблице (где есть колонка Chat)
+        pipe_tbl_ok = self._get_pipe_table_lines(lines_ok)
+        pipe_tbl_fail = self._get_pipe_table_lines(lines_fail)
+        auth_ok = [l for l in pipe_tbl_ok if "Auth" in l][0]
+        auth_fail = [l for l in pipe_tbl_fail if "Auth" in l][0]
 
-        # Столбцы: Service(1) | Port(2) | Ping(3) | CheckDb(4) | ✅ Passed(5) | Documents(6) | Query(7) | Status(8)
+        # Столбцы pipeline-таблицы (только chat_inference): Service(1) | Chat(2) | Status(3)
         parts_ok = [p.strip() for p in auth_ok.split("|")]
         parts_fail = [p.strip() for p in auth_fail.split("|")]
 
-        assert parts_ok[7] == "✅", f"Expected ✅, got {parts_ok[7]}"
-        assert parts_fail[7] == "❌", f"Expected ❌, got {parts_fail[7]}"
+        assert parts_ok[2] == "✅", f"Expected ✅, got {parts_ok[2]}"
+        assert parts_fail[2] == "❌", f"Expected ❌, got {parts_fail[2]}"
 
     def test_full_report_non_participating_service(self):
         """Сервис не участвующий в пайплайне получает '—'."""
@@ -261,18 +291,27 @@ class TestGenerateFullReport:
         cov_results = {
             "gateway": MockCoverageResult("Gateway", 8080, ping_ok=True),
         }
+        # Используем pipeline имена из PIPELINE_SERVICE_COLUMNS для pipe_order
         pipe_results = {
-            "doc": make_mock_pipeline_result(name="doc", passed=True, services=["parser"]),
-            "chat": make_mock_pipeline_result(name="chat", passed=True, services=["auth"]),
+            "document_processing": make_mock_pipeline_result(name="doc", passed=True, services=["parser"]),
+            "chat_inference": make_mock_pipeline_result(name="chat", passed=True, services=["auth"]),
         }
         report = _generate_full_report(cov_results, pipe_results, "t")
         lines = report.split("\n")
-        gw_line = [l for l in lines if "Gateway" in l][0]
-        parts = [p.strip() for p in gw_line.split("|")]
-        # Столбцы: Service(1) | Port(2) | Ping(3) | CheckDb(4) | ✅ Passed(5) | Documents(6) | Query(7) | Status(8)
-        # Gateway не участвует в пайплайнах → Documents и Query = —
-        assert parts[6] == "—", f"Expected '—', got {parts[6]}"
-        assert parts[7] == "—", f"Expected '—', got {parts[7]}"
+
+        # В сводной таблице: Pipelines колонка (index 6) должна быть "—" для Gateway
+        gw_line_main = [l for l in lines if "Gateway" in l and "| 8080 |" in l][0]
+        parts_main = [p.strip() for p in gw_line_main.split("|")]
+        # Столбцы сводной: Service(1) | Port(2) | Ping(3) | CheckDb(4) | API(5) | Pipelines(6) | Status(7)
+        assert parts_main[6] == "—", f"Expected '—', got {parts_main[6]}"
+
+        # В pipeline-таблице: все колонки пайплайнов тоже "—" для Gateway
+        pipe_tbl = self._get_pipe_table_lines(lines)
+        gw_line_pipe = [l for l in pipe_tbl if "Gateway" in l][0]
+        parts_pipe = [p.strip() for p in gw_line_pipe.split("|")]
+        # Столбцы pipeline-таблицы: Service(1) | Documents(2) | Chat(3) | Status(4)
+        assert parts_pipe[2] == "—", f"Expected '—', got {parts_pipe[2]}"
+        assert parts_pipe[3] == "—", f"Expected '—', got {parts_pipe[3]}"
 
 
 # ── Тесты: автосохранение pipeline_test.py ────────────────────────

@@ -68,6 +68,11 @@ async def preview_task(db_session: AsyncSession) -> dict:
         input_data={"file_key": "drafts/200/file.pdf", "mode": "preview"},
     )
 
+    # Insert Draft record (required by get_preview_status existence check)
+    from app.models.drafts import Draft
+    draft_record = Draft(draft_id=200, status="uploaded")
+    db_session.add(draft_record)
+
     await db_session.commit()
 
     return {

@@ -171,6 +171,40 @@ class TestPipelineRunner:
         # Не перезаписывает уже существующий
         assert ctx.get("doc_id") == "existing"
 
+    # ── skip_if: ветвление шагов ──────────────────────────────────
+
+    def test_skip_if_default_is_none(self):
+        """По умолчанию skip_if = None (нет ветвления)."""
+        step = PipelineStep(name="test", service="auth", method="GET", path="/health", port=8082)
+        assert step.skip_if is None
+
+    def test_skip_if_skip_when_true(self):
+        """Если skip_if(ctx) вернул True — шаг должен пропускаться."""
+        step = PipelineStep(
+            name="Skippable", service="auth", method="GET", path="/health", port=8082,
+            skip_if=lambda ctx: ctx.get("skip", False),
+        )
+        ctx = PipelineContext()
+        ctx.set("skip", True)
+        assert step.skip_if is not None
+        assert step.skip_if(ctx) is True
+
+    def test_skip_if_run_when_false(self):
+        """Если skip_if(ctx) вернул False — шаг выполняется."""
+        step = PipelineStep(
+            name="Skippable", service="auth", method="GET", path="/health", port=8082,
+            skip_if=lambda ctx: ctx.get("skip", False),
+        )
+        ctx = PipelineContext()
+        ctx.set("skip", False)
+        assert step.skip_if(ctx) is False
+
+    def test_skip_if_not_set_still_runs(self):
+        """Если skip_if=None — шаг всегда выполняется."""
+        step = PipelineStep(name="normal", service="auth", method="GET", path="/health", port=8082)
+        # Нет skip_if — выполняется всегда (не пропускается)
+        assert step.skip_if is None
+
 
 class TestStepStatus:
     """StepStatus — enum статусов шага."""

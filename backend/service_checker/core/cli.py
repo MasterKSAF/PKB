@@ -145,7 +145,7 @@ def parse_args() -> argparse.Namespace:
     )
     p_docker.add_argument(
         "--action",
-        choices=["up", "down", "build", "restart", "reset", "logs", "ps", "health", "coverage", "full-report", "db-check"],
+        choices=["up", "down", "build", "restart", "reset", "logs", "ps", "health", "coverage", "full-report", "db-check", "patch-rag"],
         default="up",
         help="Действие с Docker Compose (по умолч. up — запустить все сервисы)",
     )
@@ -409,12 +409,20 @@ async def cmd_docker(
             log_warn("БД инициализирована не полностью")
         return
 
+    if action == "patch-rag":
+        log_header("🔧 Патч RAG Builder: создание таблиц и alembic_version")
+        from service_checker.docker.patch_rag_tables import patch_rag_tables
+        ok = await patch_rag_tables()
+        if ok:
+            log_ok("RAG таблицы готовы")
+        return
+
     if action == "coverage":
         log_header("📋 Coverage + Logs")
-        cov_ts = await _docker_run_coverage()
-        if cov_ts:
+        ok = await _docker_run_coverage()
+        if ok:
             log_info("Собираем логи ошибок...")
-            await _docker_collect_logs(target_services, timestamp=cov_ts)
+            await _docker_collect_logs(target_services)
         return
 
     if action == "full-report":
@@ -450,6 +458,14 @@ async def cmd_docker(
             sys.path.insert(0, str(BACKEND_DIR))
             from service_checker.api_coverage_test import ApiCoverageTester
 
+            # 1a. RAG Builder patch (создание таблиц, если нет)
+            try:
+                from service_checker.docker.patch_rag_tables import patch_rag_tables
+                log_info("Проверка RAG таблиц...")
+                await patch_rag_tables()
+            except Exception as e:
+                log_warn(f"RAG patch не сработал: {e}")
+
             log_info("Очистка supervisor-логов...")
             try:
                 subprocess.run(
@@ -464,7 +480,7 @@ async def cmd_docker(
             tester = ApiCoverageTester(base_host="127.0.0.1")
             cov_results = await tester.run_all()
             cov_report = tester.generate_report(db_result=db_result)
-            cov_path = check_result_dir / f"api_coverage_{timestamp}.md"
+            cov_path = check_result_dir / "api_coverage.md"
             cov_path.write_text(cov_report, encoding="utf-8")
             log_ok(f"API Coverage отчёт сохранён: {cov_path}")
         except Exception as e:
@@ -500,13 +516,13 @@ async def cmd_docker(
             if cov_results is None:
                 cov_results = {}
             full_report = _generate_full_report(cov_results, pipe_results, timestamp, db_result=db_result)
-            full_path = check_result_dir / f"full_report_{timestamp}.md"
+            full_path = check_result_dir / "full_report.md"
             full_path.write_text(full_report, encoding="utf-8")
             log_ok(f"Сводный отчёт сохранён: {full_path}")
 
             # Собираем логи ошибок
             log_info("Собираем логи ошибок...")
-            await _docker_collect_logs(target_services, timestamp=timestamp)
+            await _docker_collect_logs(target_services)
         return
 
     if action == "logs":

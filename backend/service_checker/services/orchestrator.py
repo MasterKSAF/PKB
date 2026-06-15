@@ -161,7 +161,7 @@ def get_service_def() -> ServiceDef:
             "Статус превью",
             params={"longpoll": 0},
             response_schema={"status": str},
-            expected_status={200, 404}),
+            expected_status={200, 404})
     ]
 
     return ServiceDef(
@@ -173,4 +173,5 @@ def get_service_def() -> ServiceDef:
         prepare_endpoints=prepare_endpoints,
         depends_on=["auth", "registry", "query", "converter_validator", "parser", "rag_search"],
         base_data={"doc_id": "1", "page_num": 1},
+        warnings=[],  # ранее: 500 вместо 404 на preview/status — ИСПРАВЛЕНО 2026-06-15
     )

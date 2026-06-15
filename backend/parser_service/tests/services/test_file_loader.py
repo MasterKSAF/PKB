@@ -11,12 +11,12 @@ import asyncio
 async def test_fetch_and_validate_success():
     with patch("app.services.file_loader.minio_client.download_file", new_callable=AsyncMock) as mock_download:
         mock_download.return_value = b"%PDF-1.4"
-        with patch("app.services.file_loader.Validator.validate") as mock_validate:
+        with patch("app.services.file_loader.Validator.validate", new_callable=AsyncMock) as mock_validate:
             mock_validate.return_value = "application/pdf"
             data = await fetch_and_validate("test.pdf")
             assert data == b"%PDF-1.4"
             mock_download.assert_called_once_with("test.pdf")
-            mock_validate.assert_called_once_with(b"%PDF-1.4")
+            mock_validate.assert_called_once_with(b"%PDF-1.4", "test.pdf")  # теперь два аргумента
 
 
 @pytest.mark.asyncio

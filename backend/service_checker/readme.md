@@ -1,6 +1,21 @@
 # PKB Neuroassistant — Service Checker
 
-Утилита для проверки сервисов PKB Neuroassistant.
+Назначение — **запустить сервисы в Docker (recheck.bat) и проверить корректность их работы.**
+
+Это не production-сервис. Используется для локальной разработки, отладки и интеграционного тестирования.
+
+Что делает проверка:
+
+| Этап | Действие |
+|------|----------|
+| Docker Compose up | Запуск инфраструктуры: PostgreSQL, Redis, MinIO, TEI, 10 Python-сервисов под supervisord |
+| Health Check | Проверка `/health` каждого сервиса — жив ли, отвечает ли |
+| API Coverage | Вызов каждого эндпоинта из API-документации (~150 шт.) — проверка HTTP-статуса и JSON-схемы |
+| Pipeline Testing | Сквозные сценарии: загрузка → парсинг → индексация → поиск, чат-сессия, CRUD классификаторов |
+| Сбор логов | Чтение supervisor-логов каждого сервиса, поиск ошибок |
+| Генерация отчёта | Сводная таблица по всем сервисам (Markdown / HTML) |
+
+> 🔹 service_checker НЕ изменяет код, конфиги или данные сервисов — **кроме `gateway_service` и `orchestrator_service`**, которые разрешено править для исправления багов, не влияющих на бизнес-логику. Остальные сервисы (`auth`, `registry`, `rag_builder` и др.) — **не трогать**, только диагностика.
 
 ## Структура
 
@@ -36,11 +51,16 @@ service_checker/
 - `setup_db.py`              # Инициализация БД (только база + расширения, схемы/таблицы — создают сами сервисы)
 ├── pipeline_test.py         # Pipeline Testing (сквозные сценарии)
 ├── pipelines/               # Модули пайплайнов
-│   ├── __init__.py                      # Реестр пайплайнов
+│   ├── __init__.py                      # Реестр пайплайнов (8 шт.)
 │   ├── base.py                          # Базовые классы (PipelineStep, PipelineRunner и др.)
-│   ├── document_processing.py           # Пайплайн обработки документов (8 шагов)
-│   ├── chat_inference.py                # Пайплайн чат-инференса (6 шагов)
-│   └── registry_lifecycle.py            # Пайплайн жизненного цикла Registry (13 шагов)
+│   ├── document_processing.py           # Пайплайн обработки документов (10 шагов)
+│   ├── chat_inference.py                # Пайплайн чат-инференса (5 шагов)
+│   ├── registry_lifecycle.py            # Пайплайн жизненного цикла Registry (11 шагов)
+│   ├── full_document_lifecycle.py       # Полный цикл: создание → ошибка → восстановление (12 шагов)
+│   ├── admin_user_lifecycle.py          # Admin управление пользователем (10 шагов)
+│   ├── registry_quarantine.py           # Карантин классификаторов (10 шагов)
+│   ├── orchestrator_draft_lifecycle.py  # Черновик Orchestrator (8 шагов)
+│   └── multi_document_cross_search.py   # Мульти-документный поиск (19 шагов)
 ├── docker/                  # Docker-конфигурация
 │   ├── docker-compose.yml               # 5 контейнеров: postgres, redis, minio, tei, app
 │   ├── supervisord.conf                 # Управление Python-сервисами
@@ -55,32 +75,37 @@ service_checker/
 │   ├── test_override_logic.py             # Оверрайд all_404 и ping_ok
 │   ├── test_report_generation.py          # Формирование отчёта
 │   ├── test_pipeline_base.py              # Тесты базовых классов Pipeline Testing
-│   └── test_pipeline_steps.py             # Тесты шагов пайплайнов
+│   ├── test_pipeline_steps.py             # Тесты шагов (document_processing, chat_inference, registry_lifecycle)
+│   ├── test_pipeline_full_document_lifecycle.py   # Полный цикл документа (12 шагов, skip_if)
+│   ├── test_pipeline_admin_user_lifecycle.py      # Admin управление пользователем (10 шагов)
+│   ├── test_pipeline_registry_quarantine.py       # Карантин классификаторов (10 шагов)
+│   ├── test_pipeline_orchestrator_draft_lifecycle.py # Черновик Orchestrator (8 шагов)
+│   └── test_pipeline_multi_document_cross_search.py  # Мульти-документный поиск (19 шагов)
 ├── specificity.md           # Аномалии и архитектурные решения
 └── readme.md                # Точка входа (этот файл)
 ```
 
 ## Текущий статус сервисов в Docker
 
-После `recheck.bat` (2026-06-13):
+После фиксов (2026-06-15):
 
 | Сервис | Порт | HTTP | supervisorctl | Проблемы |
 |--------|:----:|:----:|:-------------:|----------|
-| PostgreSQL | 5432 | — | — | (здоров) |
-| Redis | 6379 | — | — | (здоров) |
-| MinIO | 9000 | — | — | (здоров) |
-| TEI | 8092 | 200 | — | (здоров) |
-| Gateway (Mock) | 8080 | 401 | RUNNING | 🟡 Логи в stderr (аном. №22) |
-| Orchestrator | 8081 | 200 | RUNNING | ✅ Исправлен `DraftItem.created_by` |
-| Auth | 8082 | 200 | RUNNING | 🟡 Ключ JWT короткий (предупреждение) |
-| Query | 8083 | 200 | RUNNING | ❌ Двойная транзакция (аном. №21) |
-| Registry | 8084 | 200 | RUNNING | ✅ `create_all()` есть в lifespan |
-| Integration | 8085 | 200 | RUNNING | ✅ |
-| Converter-Validator | 8086 | 200 | RUNNING | ✅ Исправлен trailing slash /validate |
-| Parser | 8087 | 200 | RUNNING | ✅ |
-| OCR | 8088 | — | RUNNING | ✅ |
-| RAG Builder | 8090 | 200 | RUNNING | 🟡 Нет `create_all()` при старте |
-| RAG Search | 8091 | 200 | RUNNING | 🟡 500 в pipeline |
+| PostgreSQL | 5432 | — | — | здоров |
+| Redis | 6379 | — | — | здоров |
+| MinIO | 9000 | — | — | здоров |
+| TEI | 8092 | 200 | — | здоров |
+| Gateway (Mock) | 8080 | 401 | RUNNING | Логи в stderr (аном. N22) |
+| Orchestrator | 8081 | 200 | RUNNING | preview/status 500->404 (аном. N26); защита от дублей (аном. N29) |
+| Auth | 8082 | 200 | RUNNING | Ключ JWT короткий (предупреждение) |
+| Query | 8083 | 200 | RUNNING | Двойная транзакция (аном. N21) |
+| Registry | 8084 | 200 | RUNNING | create_all() есть в lifespan |
+| Integration | 8085 | 200 | RUNNING | |
+| Converter-Validator | 8086 | 200 | RUNNING | |
+| Parser | 8087 | 200 | RUNNING | |
+| OCR | 8088 | — | RUNNING | |
+| RAG Builder | 8090 | 200 | RUNNING | Нет create_all() (аном. N25), JWT не синхронизирован |
+| RAG Search | 8091 | 200 | RUNNING | починился после создания rag.document_chunks |
 
 **supervisorctl:** ✅ Все 11 процессов RUNNING (исправлен socket + symlink)
 **.env файлы:** ✅ Создаются автоматически (исправлен entrypoint.sh)
@@ -192,9 +217,14 @@ python -m service_checker docker --action full-report  # full-report включ�
 
 | Пайплайн | Описание | Сервисы | Шагов |
 |----------|----------|---------|:-----:|
-| `document_processing` | Полный цикл обработки документа | Auth → MinIO → Parser → Converter → Registry → RAG Builder → RAG Search | 9 |
+| `document_processing` | Полный цикл обработки документа | Auth → MinIO → Parser → Converter → Registry → RAG Builder → RAG Search | 10 |
 | `chat_inference` | Чат-сессия с поиском по документам | Auth → Query (Chat) → Query (Text Search) → RAG Search | 5 |
 | `registry_lifecycle` | CRUD + импорт классификаторов и терминов | Auth → Registry | 11 |
+| `full_document_lifecycle` | Полный цикл: создание → ошибка → восстановление → удаление → пересоздание | Auth → Registry → RAG Builder → RAG Search | 12 |
+| `admin_user_lifecycle` | Admin создаёт пользователя → работа → аудит → деактивация → 401 | Auth → Query | 10 |
+| `registry_quarantine` | Карантин классификаторов: accept/reject + валидация | Auth → Registry | 10 |
+| `orchestrator_draft_lifecycle` | Черновик Orchestrator: создание → превью → решение → 404 | Auth → Orchestrator | 8 |
+| `multi_document_cross_search` | 2 документа → индексация → кросс-поиск → удаление → фильтрация | Auth → MinIO → Parser → Converter → Registry → RAG Builder → RAG Search | 19 |
 
 ## Ключевые решения
 

@@ -13,7 +13,7 @@ def test_default_settings():
     assert settings.parsing_schema == "raw_ocr_v4"
     assert settings.pdf_dpi == 72
     assert settings.minio_timeout == 30
-    assert settings.preview_timeout == 30
+    assert settings.preview_timeout == 300
     assert settings.pipeline_timeout == 300
     assert settings.parser_timeout == 300
     # Обязательные поля заданы в conftest
@@ -29,7 +29,7 @@ def test_settings_from_env():
         "MINIO_ENDPOINT": "minio:9000",
         "MINIO_ACCESS_KEY": "admin",
         "MINIO_SECRET_KEY": "password",
-        "MINIO_BUCKET": "docs",
+        "MINIO_BUCKET": "files",
         "MINIO_IMAGE_BUCKET": "images",
         "PORT": "9000",
         "LOG_LEVEL": "DEBUG"

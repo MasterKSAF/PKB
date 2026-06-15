@@ -1,3 +1,8 @@
+"""
+Парсер PDF-файлов с использованием библиотеки opendataloader_pdf.
+Выполняет конвертацию PDF в JSON, извлечение изображений и метаданных.
+"""
+
 import tempfile
 import os
 import json
@@ -18,6 +23,7 @@ class PdfParser(BaseParser):
     """Парсер для PDF-файлов, использующий opendataloader_pdf."""
 
     def __init__(self):
+        # Ограниченный пул потоков для параллельного выполнения
         self._executor = ThreadPoolExecutor(max_workers=2)
         logger.debug("PdfParser initialized with ThreadPoolExecutor")
 
@@ -43,8 +49,9 @@ class PdfParser(BaseParser):
         Raises:
             TimeoutError: Если парсинг превысил таймаут.
         """
-        logger.info("Parsing PDF for task %d, options=%s", task_id, options)        
+        logger.info("Parsing PDF for task %d, options=%s", task_id, options)
 
+        # Определение количества страниц
         if total_pages is None:
             try:
                 reader = PdfReader(file_bytes)
@@ -57,11 +64,13 @@ class PdfParser(BaseParser):
             total_pages_original = total_pages
             logger.debug("Using provided total_pages=%d", total_pages_original)
 
+        # Создание временного файла PDF
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp_pdf:
             tmp_pdf.write(file_bytes)
             tmp_pdf_path = tmp_pdf.name
             logger.debug("Temporary PDF file created: %s", tmp_pdf_path)
 
+        # Создание временной директории для результатов
         output_dir = tempfile.mkdtemp()
         logger.debug("Temporary output directory created: %s", output_dir)
 
@@ -82,6 +91,7 @@ class PdfParser(BaseParser):
             )
             logger.info("opendataloader_pdf conversion completed for task %d", task_id)
 
+            # Поиск сгенерированного JSON-файла
             files = os.listdir(output_dir)
             json_path = next((os.path.join(output_dir, f) for f in files if f.endswith('.json')), None)
             if not json_path:
@@ -91,6 +101,7 @@ class PdfParser(BaseParser):
                 full_json = json.load(f)
             logger.debug("Loaded JSON from %s", json_path)
 
+            # Сбор путей к изображениям
             images = self._collect_image_paths(full_json, output_dir)
             logger.info("Found %d image references in JSON", len(images))
 

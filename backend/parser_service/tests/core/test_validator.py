@@ -2,14 +2,13 @@
 Тесты для валидатора файлов (размер, MIME, безопасность).
 """
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, AsyncMock
 from app.core.validator import Validator
 from app.core.exceptions import FileTooLargeError, UnsupportedFormatError
 
-
 class TestValidator:
     def test_validate_size_ok(self):
-        data = b"x" * (1024 * 1024)  # 1 MB
+        data = b"x" * (1024 * 1024)
         Validator.validate_size(data)  # не должно выбросить ошибку
 
     def test_validate_size_too_large(self):
@@ -32,18 +31,16 @@ class TestValidator:
             Validator.validate_mime(b"fake")
         assert "image/jpeg" in str(exc.value)
 
-    def test_validate_safety(self):
-        """Заглушка всегда возвращает True."""
-        assert Validator.validate_safety(b"any") is True
+    @pytest.mark.asyncio
+    async def test_validate_success(self):
+        data = b"%PDF-1.4"
+        with patch("app.core.validator.SecurityScanner.scan_pdf", return_value=(True, None)):
+            mime = await Validator.validate(data, "test.pdf")
+            assert mime == "application/pdf"
 
-    @patch("app.core.validator.Validator.validate_size")
-    @patch("app.core.validator.Validator.validate_mime")
-    @patch("app.core.validator.Validator.validate_safety")
-    def test_validate_calls_all(self, mock_safety, mock_mime, mock_size):
-        mock_mime.return_value = "application/pdf"
-        data = b"test"
-        mime = Validator.validate(data)
-        mock_size.assert_called_once_with(data)
-        mock_mime.assert_called_once_with(data)
-        mock_safety.assert_called_once_with(data)
-        assert mime == "application/pdf"
+    @pytest.mark.asyncio
+    async def test_validate_security_failure(self):
+        data = b"%PDF-1.4"
+        with patch("app.core.validator.SecurityScanner.scan_pdf", return_value=(False, "malicious")):
+            with pytest.raises(UnsupportedFormatError, match="Security check failed: malicious"):
+                await Validator.validate(data, "bad.pdf")

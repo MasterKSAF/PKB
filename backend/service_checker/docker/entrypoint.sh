@@ -50,15 +50,26 @@ for env_path in /app/backend/registry_service/.env /app/backend/rag_builder_serv
 	DB_DATABASE=$DB_DATABASE
 	DATABASE_URL=$DATABASE_URL
 	EMBEDDING_API_KEY=$EMBEDDING_API_KEY
-	EOF
+	EMBEDDING_API_URL=$EMBEDDING_BASE_URL
+	EMBEDDING_MODEL=$EMBEDDING_MODEL
+	EMBEDDING_DIM=$EMBEDDING_DIM
+	EMBEDDING_PROVIDER=$EMBEDDING_PROVIDER
+	VECTOR_DIMENSION=$EMBEDDING_DIM
+	JWT_SECRET_KEY=$JWT_SECRET_KEY
+	JWT_SECRET=$JWT_SECRET_KEY
+	JWT_ALGORITHM=$JWT_ALGORITHM
+EOF
     echo "   ✓ $env_path"
 done
 # Для auth_service отдельно: только JWT_SECRET_KEY (strict pydantic не принимает лишние поля)
 auth_env="/app/backend/auth_service/.env"
 mkdir -p "$(dirname "$auth_env")"
 if [ -n "${JWT_SECRET_KEY:-}" ]; then
-    echo "JWT_SECRET_KEY=$JWT_SECRET_KEY" > "$auth_env"
-    echo "   ✓ $auth_env (JWT_SECRET_KEY)"
+    cat > "$auth_env" <<-EOF
+	JWT_SECRET_KEY=$JWT_SECRET_KEY
+	JWT_ALGORITHM=$JWT_ALGORITHM
+	EOF
+    echo "   ✓ $auth_env (JWT_SECRET_KEY, JWT_ALGORITHM)"
 fi
 echo "   ✓ .env файлы обновлены"
 

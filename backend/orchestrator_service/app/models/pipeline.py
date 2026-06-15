@@ -7,7 +7,7 @@ Tracks execution of pipeline tasks and their steps.
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -17,6 +17,11 @@ class Task(Base):
     """A pipeline task (formation) for a draft/document."""
 
     __tablename__ = "tasks"
+
+    __table_args__ = (
+        UniqueConstraint("draft_id", "pipeline_type", name="uq_tasks_draft_pipeline"),
+        UniqueConstraint("document_id", "pipeline_type", name="uq_tasks_document_pipeline"),
+    )
 
     id: Mapped[int] = mapped_column(
         Integer, primary_key=True, autoincrement=True

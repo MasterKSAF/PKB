@@ -275,34 +275,30 @@ def _docker_health_check(services: List[str]) -> bool:
     for svc_key, (port, path, display_name) in DOCKER_SUPERVISOR_SERVICES.items():
         url = f"http://127.0.0.1:{port}{path}"
         ok = False
-        for attempt in range(18):  # до 36 секунд (18 * 2)
+        for attempt in range(3):  # до 6 секунд (3 + 3 попытки по 1с)
             try:
                 resp = httpx.get(url, timeout=3)
                 if resp.status_code < 500:
                     log_ok(f"{display_name:<25} :{port} — HTTP {resp.status_code}")
                     ok = True
                     break
-                elif attempt == 17:
-                    log_warn(f"{display_name:<25} :{port} — HTTP {resp.status_code}")
+                if attempt < 2:
+                    time.sleep(1)
             except httpx.ConnectError:
-                if attempt == 17:
+                if attempt < 2:
+                    time.sleep(1)
+                else:
                     log_err(f"{display_name:<25} :{port} — Connection refused")
-                else:
-                    time.sleep(2)
-                    continue
             except httpx.TimeoutException:
-                if attempt == 17:
+                if attempt < 2:
+                    time.sleep(1)
+                else:
                     log_err(f"{display_name:<25} :{port} — Timeout")
-                else:
-                    time.sleep(2)
-                    continue
             except Exception as e:
-                if attempt == 17:
-                    log_err(f"{display_name:<25} :{port} — {e}")
+                if attempt < 2:
+                    time.sleep(1)
                 else:
-                    time.sleep(2)
-                    continue
-            break
+                    log_err(f"{display_name:<25} :{port} — {e}")
         if not ok:
             all_ok = False
 
@@ -433,16 +429,14 @@ def _docker_health_check(services: List[str]) -> bool:
     return all_ok
 
 
-async def _docker_collect_logs(services: List[str] = None, timestamp: str = None) -> bool:
+async def _docker_collect_logs(services: List[str] = None) -> bool:
     """Собрать все логи (info + error) из supervisor в отчёт."""
     log_header("Docker: сбор логов (info + error)")
 
     check_result_dir = BACKEND_DIR / "check_result"
     check_result_dir.mkdir(parents=True, exist_ok=True)
 
-    if timestamp is None:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    report_path = check_result_dir / f"errors_{timestamp}.md"
+    report_path = check_result_dir / "errors.md"
 
     container_name = "pkb-neuro"
     docker_cmd_prefix = ["docker", "exec", container_name]
@@ -564,8 +558,8 @@ async def _docker_collect_logs(services: List[str] = None, timestamp: str = None
     return True
 
 
-async def _docker_run_coverage() -> Optional[str]:
-    """Запустить API Coverage Test для Docker-окружения. Возвращает timestamp."""
+async def _docker_run_coverage() -> bool:
+    """Запустить API Coverage Test для Docker-окружения. Возвращает True при успехе."""
     log_header("Docker: API Coverage Test")
 
     # Очищаем supervisor-логи перед запуском тестов — чтобы в отчёт
@@ -583,8 +577,7 @@ async def _docker_run_coverage() -> Optional[str]:
     check_result_dir = BACKEND_DIR / "check_result"
     check_result_dir.mkdir(parents=True, exist_ok=True)
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_path = check_result_dir / f"api_coverage_{timestamp}.md"
+    output_path = check_result_dir / "api_coverage.md"
 
     log_info(f"Отчёт будет сохранён: {output_path}")
 
@@ -592,7 +585,7 @@ async def _docker_run_coverage() -> Optional[str]:
     sys.path.insert(0, str(BACKEND_DIR))
     from service_checker.api_coverage_test import ApiCoverageTester
 
-    log_path = check_result_dir / f"errors_{timestamp}.md"
+    log_path = check_result_dir / "errors.md"
 
     try:
         tester = ApiCoverageTester(base_host="127.0.0.1")
@@ -601,10 +594,10 @@ async def _docker_run_coverage() -> Optional[str]:
         output_path.write_text(report, encoding="utf-8")
         await tester.close()
         log_ok(f"API Coverage отчёт сохранён: {output_path}")
-        return timestamp
+        return True
     except Exception as e:
         log_err(f"Ошибка при запуске coverage test: {e}")
-        return None
+        return False
 
 
 async def _docker_run_pipeline() -> Dict[str, Any]:

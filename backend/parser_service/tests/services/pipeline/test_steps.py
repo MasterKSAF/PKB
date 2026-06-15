@@ -51,11 +51,12 @@ async def test_download_step_storage_error():
 @pytest.mark.asyncio
 async def test_validate_step_success():
     ctx = ProcessingContext(task_id=1, version_id="v1", file_key="test.pdf", file_bytes=b"fake")
-    with patch("app.services.pipeline.steps.Validator") as mock_validator:
-        mock_validator.validate.return_value = "application/pdf"
+    with patch("app.services.pipeline.steps.Validator.validate", new_callable=AsyncMock) as mock_validate:
+        mock_validate.return_value = "application/pdf"
         step = ValidateStep()
         new_ctx = await step.execute(ctx)
     assert new_ctx.mime_type == "application/pdf"
+    mock_validate.assert_called_once_with(b"fake", "")
 
 
 # ===================== PagesTotalStep =====================
@@ -184,6 +185,7 @@ async def test_upload_images_step_full_mode():
     assert new_ctx.parse_result.full_json["pages"][0]["image"]["image_key"] == "minio_key_123"
 
 
+
 @pytest.mark.asyncio
 async def test_upload_images_step_preview_mode():
     ctx = ProcessingContext(task_id=1, version_id="v1", file_key="test.pdf", track_progress=False)
@@ -191,6 +193,34 @@ async def test_upload_images_step_preview_mode():
     step = UploadImagesStep()
     with patch("shutil.rmtree") as mock_rmtree:
         new_ctx = await step.execute(ctx)
+    mock_rmtree.assert_not_called()  # в preview директория НЕ удаляется
+
+
+@pytest.mark.asyncio
+async def test_upload_images_step_full_mode_with_images():
+    ctx = ProcessingContext(task_id=1, version_id="v1", file_key="test.pdf", track_progress=True)
+    parse_result = ParseResult(
+        full_json={"pages": [{"image": {"_temp_path": "/tmp/img.png"}}]},
+        images=[(1, "/tmp/img.png", ".png")],
+        total_pages=1
+    )
+    ctx.parse_result = parse_result
+    ctx.temp_dir = "/tmp"
+
+    mock_minio = AsyncMock()
+    mock_minio.upload_image.return_value = "minio_key"
+    with patch("app.services.pipeline.steps.minio_client", mock_minio):
+        with patch("os.path.exists", return_value=True):
+            with patch("builtins.open", MagicMock()) as mock_open:
+                mock_file = MagicMock()
+                mock_file.read.return_value = b"imgdata"
+                mock_open.return_value.__enter__.return_value = mock_file
+                with patch("os.unlink") as mock_unlink:
+                    with patch("shutil.rmtree") as mock_rmtree:
+                        step = UploadImagesStep()
+                        await step.execute(ctx)
+    mock_minio.upload_image.assert_called_once()
+    mock_unlink.assert_called_once()
     mock_rmtree.assert_called_once_with("/tmp", ignore_errors=True)
 
 
