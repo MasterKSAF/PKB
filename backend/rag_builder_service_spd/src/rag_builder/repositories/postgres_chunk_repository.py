@@ -599,6 +599,27 @@ class PostgresChunkRepository(ChunkRepository):
 
             conn.commit()
 
+    def _render_table_markdown(self, content: dict,) -> str | None:
+        headers = content.get("headers")
+        rows = content.get("rows")
+
+        if not isinstance(headers, list) or not isinstance(rows, list):
+            return None
+
+        lines = [
+            "| " + " | ".join(map(str, headers)) + " |",
+            "| " + " | ".join(["---"] * len(headers)) + " |",
+        ]
+
+        for row in rows:
+            if isinstance(row, list):
+                lines.append(
+                    "| " + " | ".join(map(str, row)) + " |"
+                )
+
+        return "\n".join(lines)
+
+
     def save_extracted_tables(
             self,
             request: BuildRequest,
@@ -649,6 +670,12 @@ class PostgresChunkRepository(ChunkRepository):
                         else None
                     )
 
+                    table_markdown = (
+                        self._render_table_markdown(section.content)
+                        if isinstance(section.content, dict)
+                        else None
+                    )
+
                     cur.execute(
                         f"""
                         INSERT INTO {settings.POSTGRES_SCHEMA}.extracted_tables (
@@ -662,13 +689,14 @@ class PostgresChunkRepository(ChunkRepository):
                             bbox,
                             title,
                             caption,
+                            table_markdown,
                             table_json,
                             metadata
                         )
                         VALUES (
                             %s, %s, %s, %s,
                             %s, %s, %s, %s,
-                            %s, %s, %s, %s
+                            %s, %s, %s, %s, %s
                         )
                         """,
                         (
@@ -682,6 +710,7 @@ class PostgresChunkRepository(ChunkRepository):
                             json.dumps(section.bbox),
                             section.title,
                             caption,
+                            table_markdown,
                             json.dumps(section.content),  # table_json
                             json.dumps(section.content),  # metadata
                         ),
