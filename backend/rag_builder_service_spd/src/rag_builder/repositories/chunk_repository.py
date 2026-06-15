@@ -49,6 +49,18 @@ class ChunkRepository:
     ) -> None:
         raise NotImplementedError
 
+    def save_images(
+            self,
+            request: BuildRequest,
+    ) -> None:
+        raise NotImplementedError
+
+    def save_extracted_tables(
+            self,
+            request: BuildRequest,
+    ) -> None:
+        raise NotImplementedError
+
 
 
 class InMemoryChunkRepository(ChunkRepository):
@@ -82,3 +94,16 @@ class InMemoryChunkRepository(ChunkRepository):
         request: BuildRequest,
     ) -> None:
         pass
+
+    def save_images(
+            self,
+            request: BuildRequest,
+    ) -> None:
+        pass
+
+    def save_extracted_tables(
+            self,
+            request: BuildRequest,
+    ) -> None:
+        pass
+

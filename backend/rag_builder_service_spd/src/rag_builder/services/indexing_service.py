@@ -50,6 +50,8 @@ class IndexingService:
         if self.repository is not None:
             self.repository.save_sections(request)
             self.repository.save_cross_references(request)
+            self.repository.save_images(request)
+            self.repository.save_extracted_tables(request)
 
         chunks = self.chunking_service.build_chunks(request)
 

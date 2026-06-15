@@ -42,7 +42,7 @@ class PostgresChunkRepository(ChunkRepository):
 
         return result == (1,)
 
-
+# Создание схемы базы данных и таблиц
 
     def ensure_schema(self) -> None:
         """
@@ -187,9 +187,88 @@ class PostgresChunkRepository(ChunkRepository):
                     )
                 )
 
+                logger.info("ensure_schema: before create table images")
+                cur.execute(
+                    sql.SQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS {}.images (
+                            id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    
+                            document_id BIGINT NOT NULL,
+                            document_version_id BIGINT NOT NULL,
+                            document_section_id BIGINT NOT NULL,
+    
+                            source_section_id BIGINT NOT NULL,
+                            clause TEXT,
+                            path TEXT,
+                            page INTEGER,
+                            bbox JSONB,
+    
+                            title TEXT,
+                            caption TEXT,
+                            description TEXT,
+                            image_key TEXT,
+    
+                            metadata JSONB,
+                            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    
+                            CONSTRAINT fk_images_document_section
+                                FOREIGN KEY (document_section_id)
+                                REFERENCES {}.document_sections(id)
+                                ON DELETE CASCADE
+                        )
+                        """
+                    ).format(
+                        sql.Identifier(settings.POSTGRES_SCHEMA),
+                        sql.Identifier(settings.POSTGRES_SCHEMA),
+                    )
+                )
+
+                logger.info("ensure_schema: before create table extracted_tables")
+                cur.execute(
+                    sql.SQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS {}.extracted_tables (
+                            id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    
+                            document_id BIGINT NOT NULL,
+                            document_version_id BIGINT NOT NULL,
+                            document_section_id BIGINT NOT NULL,
+    
+                            source_section_id BIGINT NOT NULL,
+                            clause TEXT,
+                            path TEXT,
+                            page INTEGER,
+                            bbox JSONB,
+    
+                            title TEXT,
+                            caption TEXT,
+    
+                            table_markdown TEXT,
+                            table_json JSONB,
+    
+                            metadata JSONB,
+                            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    
+                            CONSTRAINT fk_extracted_tables_document_section
+                                FOREIGN KEY (document_section_id)
+                                REFERENCES {}.document_sections(id)
+                                ON DELETE CASCADE
+                        )
+                        """
+                    ).format(
+                        sql.Identifier(settings.POSTGRES_SCHEMA),
+                        sql.Identifier(settings.POSTGRES_SCHEMA),
+                    )
+                )
+
+
+
             conn.commit()
 
         logger.info("ensure_schema: done")
+
+# Конец создания схемы базы данных и таблиц
 
     def save_chunks(self, chunks: list[EmbeddedChunk]) -> None:
         """
@@ -431,3 +510,183 @@ class PostgresChunkRepository(ChunkRepository):
                         )
 
             conn.commit()
+
+    def save_images(
+            self,
+            request: BuildRequest,
+    ) -> None:
+        logger.info(
+            "Saving images for document_id=%s",
+            request.metadata.document_id,
+        )
+
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+
+                cur.execute(
+                    f"""
+                    DELETE FROM {settings.POSTGRES_SCHEMA}.images
+                    WHERE document_version_id = %s
+                    """,
+                    (request.metadata.document_version_id,),
+                )
+
+                cur.execute(
+                    f"""
+                    SELECT section_id, id
+                    FROM {settings.POSTGRES_SCHEMA}.document_sections
+                    WHERE document_version_id = %s
+                    """,
+                    (request.metadata.document_version_id,),
+                )
+
+                section_id_to_db_id = {
+                    section_id: document_section_id
+                    for section_id, document_section_id
+                    in cur.fetchall()
+                }
+
+                for section in request.sections:
+
+                    if section.type != "image":
+                        continue
+
+                    document_section_id = (
+                        section_id_to_db_id[section.section_id]
+                    )
+
+                    caption = (
+                        section.content.get("caption")
+                        if isinstance(section.content, dict)
+                        else None
+                    )
+
+                    cur.execute(
+                        f"""
+                        INSERT INTO {settings.POSTGRES_SCHEMA}.images (
+                            document_id,
+                            document_version_id,
+                            document_section_id,
+                            source_section_id,
+                            clause,
+                            path,
+                            page,
+                            bbox,
+                            title,
+                            caption,
+                            metadata
+                        )
+                        VALUES (
+                            %s, %s, %s, %s,
+                            %s, %s, %s, %s,
+                            %s, %s, %s
+                        )
+                        """,
+                        (
+                            request.metadata.document_id,
+                            request.metadata.document_version_id,
+                            document_section_id,
+                            section.section_id,
+                            section.clause,
+                            section.path,
+                            section.page,
+                            json.dumps(section.bbox),
+                            section.title,
+                            caption,
+                            json.dumps(section.content),
+                        ),
+                    )
+
+            conn.commit()
+
+    def save_extracted_tables(
+            self,
+            request: BuildRequest,
+    ) -> None:
+        logger.info(
+            "Saving tables for document_id=%s",
+            request.metadata.document_id,
+        )
+
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+
+                cur.execute(
+                    f"""
+                    DELETE FROM {settings.POSTGRES_SCHEMA}.extracted_tables
+                    WHERE document_version_id = %s
+                    """,
+                    (request.metadata.document_version_id,),
+                )
+
+                cur.execute(
+                    f"""
+                    SELECT section_id, id
+                    FROM {settings.POSTGRES_SCHEMA}.document_sections
+                    WHERE document_version_id = %s
+                    """,
+                    (request.metadata.document_version_id,),
+                )
+
+                section_id_to_db_id = {
+                    section_id: document_section_id
+                    for section_id, document_section_id
+                    in cur.fetchall()
+                }
+
+                for section in request.sections:
+
+                    if section.type != "table":
+                        continue
+
+                    document_section_id = (
+                        section_id_to_db_id[section.section_id]
+                    )
+
+                    caption = (
+                        section.content.get("caption")
+                        if isinstance(section.content, dict)
+                        else None
+                    )
+
+                    cur.execute(
+                        f"""
+                        INSERT INTO {settings.POSTGRES_SCHEMA}.extracted_tables (
+                            document_id,
+                            document_version_id,
+                            document_section_id,
+                            source_section_id,
+                            clause,
+                            path,
+                            page,
+                            bbox,
+                            title,
+                            caption,
+                            table_json,
+                            metadata
+                        )
+                        VALUES (
+                            %s, %s, %s, %s,
+                            %s, %s, %s, %s,
+                            %s, %s, %s, %s
+                        )
+                        """,
+                        (
+                            request.metadata.document_id,
+                            request.metadata.document_version_id,
+                            document_section_id,
+                            section.section_id,
+                            section.clause,
+                            section.path,
+                            section.page,
+                            json.dumps(section.bbox),
+                            section.title,
+                            caption,
+                            json.dumps(section.content),  # table_json
+                            json.dumps(section.content),  # metadata
+                        ),
+                    )
+
+                conn.commit()
+
+
