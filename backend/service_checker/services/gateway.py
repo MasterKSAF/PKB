@@ -105,7 +105,7 @@ def get_service_def() -> ServiceDef:
 
     endpoints = [
         # ── Health ──
-        EndpointDef("GET", f"{API_PREFIX}/system/health", "health", "System health",
+        EndpointDef("GET", f"{API_PREFIX}/health", "health", "Health check",
             response_schema={"status": str, "version": str, "services": dict}),
         EndpointDef("GET", f"{API_PREFIX}/monitor/health", "health", "Monitor health"),
         EndpointDef("GET", f"{API_PREFIX}/monitor/metrics", "health", "Metrics"),

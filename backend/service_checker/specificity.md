@@ -1105,3 +1105,44 @@ class DecideRequest(BaseModel):
 
 **Статус:** ✅ Исправлено (checker, 2026-06-15)
 
+---
+
+## 31. Аномалия: `.env` не создавался — Docker Compose падал при старте с нуля (2026-06-15)
+
+### Проблема
+`docker-compose.yml` содержит `env_file: ./.env`. При старте с нуля (свежий clone)
+файла нет — Docker Compose v2 падает:
+```
+env file ...\\.env not found: CreateFile ...\\.env: The system cannot find the file specified.
+```
+
+### Дополнительные проблемы
+1. **`entrypoint.sh` искал `setup_db.py` по старому пути** — после рефакторинга
+   (аномалия №5) файл перенесён в `core/setup_db.py`, а `entrypoint.sh` всё ещё
+   ссылался на `/app/backend/service_checker/setup_db.py`. Инициализация БД
+   молча пропускалась: `\u26a0 setup_db.py не найден, пропускаем инициализацию БД`.
+2. **`prepare.bat` не создавал `.env`** — полный setup с нуля тоже падал.
+
+### Что исправлено (checker, 2026-06-15)
+
+1. **Создан `docker/create_env.py`** — единый Python-генератор `.env`.
+   Переменные в `EXTRA_VARS` — один источник правды для всех env-файлов.
+   - Вызывается **всегда** (не по `if exist`) — гарантирует актуальность.
+
+2. **`docker/recheck.bat`** — шаг [0/6]: `python create_env.py`.
+
+3. **`docker/prepare.bat`** — шаг [0/8]: `python create_env.py`.
+
+4. **`docker/recheck.sh`** — шаг 0: `python create_env.py`.
+
+5. **`docker/entrypoint.sh`** — путь исправлен:
+   ```diff
+   - SETUP_DB="/app/backend/service_checker/setup_db.py"
+   + SETUP_DB="/app/backend/service_checker/core/setup_db.py"
+   ```
+
+6. **`.gitignore`** — добавлен `docker/.env` (авто-генерируемый).
+
+### Статус
+✅ **Исправлено (checker, 2026-06-15)**
+

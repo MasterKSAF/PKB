@@ -8,3 +8,6 @@ __pycache__/
 docker/tei_model/
 .nul
 nul
+
+# Авто-генерируемый .env (create_env.py)
+docker/.env

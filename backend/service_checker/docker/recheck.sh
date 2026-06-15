@@ -20,12 +20,18 @@ cd "$COMPOSE_DIR"
 echo "=== PKB Neuroassistant: Re-check ==="
 echo ""
 
+# ── 0. Создание .env ────────────────────────────────────────────────────
+if ! python create_env.py; then
+    echo "    WARNING: Failed to generate .env"
+fi
+echo ""
+
 # ── 1. Проверка base-образа ────────────────────────────────────────────
 IMAGE_NAME="ghcr.io/pkb/neuro-base:latest"
 if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "$IMAGE_NAME"; then
-    echo "[1/5] Base image found, skipping build."
+    echo "[1/6] Base image found, skipping build."
 else
-    echo "[1/5] Base image not found — building..."
+    echo "[1/6] Base image not found — building..."
     echo ""
     DOCKER_SCOUT_SUPPRESS_ANALYSIS=1 docker build -f Dockerfile.base -t "$IMAGE_NAME" .
 fi
@@ -33,16 +39,16 @@ echo ""
 
 # ── 2. Проверка модели TEI ─────────────────────────────────────────────
 if [ -f "tei_model/model.onnx" ]; then
-    echo "[2/5] TEI model found, skipping download."
+    echo "[2/6] TEI model found, skipping download."
 else
-    echo "[2/5] TEI model not found — downloading..."
+    echo "[2/6] TEI model not found — downloading..."
     echo ""
     python prepare_tei_model.py
 fi
 echo ""
 
 # ── 3. Проверка контейнера TEI ─────────────────────────────────────────
-echo "[3/5] Checking TEI container status..."
+echo "[3/6] Checking TEI container status..."
 if docker compose ps --format "{{.State}}" tei 2>/dev/null | grep -q "running"; then
     echo "    TEI container is already running, skipping restart."
 else
@@ -58,7 +64,7 @@ fi
 echo ""
 
 # ── 4. Очистка данных + перезапуск app ─────────────────────────────────
-echo "[4/5] Dropping data + restarting app..."
+echo "[4/6] Dropping data + restarting app..."
 
 echo "    Recreating database..."
 docker exec pkb-postgres psql -U pkb -d postgres -c "SELECT pg_terminate_backend(pg_stat_activity.pid) FROM pg_stat_activity WHERE datname = 'pkb_neuro' AND pid <> pg_backend_pid();" 2>/dev/null || true
@@ -73,7 +79,7 @@ docker compose rm -f -v app 2>/dev/null || true
 echo ""
 
 # ── 5. Запуск app + отчёт ──────────────────────────────────────────────
-echo "[5/5] Starting app..."
+echo "[5/6] Starting app..."
 docker compose up -d app
 echo "    App started. Running full report..."
 echo ""

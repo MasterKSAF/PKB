@@ -29,16 +29,16 @@ from service_checker.core.utils import log, log_ok, log_warn, log_err, log_info,
 
 # ── Docker: HTTP health-check endpoint'ы для каждого сервиса внутри контейнера ──
 DOCKER_SUPERVISOR_SERVICES = {
-    "auth":                (8082, "/openapi.json", "Auth Service"),
-    "gateway":             (8080, "/openapi.json", "Gateway (Mock)"),
-    "orchestrator":        (8081, "/openapi.json", "Orchestrator"),
-    "query":               (8083, "/openapi.json", "Query Service"),
-    "registry":            (8084, "/openapi.json", "Registry Service"),
+    "auth":                (8082, "/api/v1/health", "Auth Service"),
+    "gateway":             (8080, "/api/v1/health", "Gateway (Mock)"),
+    "orchestrator":        (8081, "/api/v1/system/health", "Orchestrator"),
+    "query":               (8083, "/api/v1/health", "Query Service"),
+    "registry":            (8084, "/api/v1/health", "Registry Service"),
     "integration":         (8085, "/openapi.json", "Integration Service"),
     "converter-validator": (8086, "/health", "Converter-Validator"),
     "parser":              (8087, "/health", "Parser Service"),
-    "rag-builder":         (8090, "/openapi.json", "RAG Builder"),
-    "rag-search":          (8091, "/openapi.json", "RAG Search"),
+    "rag-builder":         (8090, "/api/v1/health", "RAG Builder"),
+    "rag-search":          (8091, "/api/v1/health", "RAG Search"),
     "tei":                 (8092, "/health", "TEI (Embeddings)"),
 }
 

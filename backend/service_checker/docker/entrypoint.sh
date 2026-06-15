@@ -88,7 +88,7 @@ fi
 # 5. Инициализация БД (схемы, таблицы, расширения)
 # =============================================================================
 echo "[5/6] Инициализация БД..."
-SETUP_DB="/app/backend/service_checker/setup_db.py"
+SETUP_DB="/app/backend/service_checker/core/setup_db.py"
 if [ -f "$SETUP_DB" ]; then
     # --docker = без создания пользователей (используем pkb), пароль pkb
     python "$SETUP_DB" --docker 2>&1 || {
