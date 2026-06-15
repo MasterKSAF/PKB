@@ -164,7 +164,10 @@ services:
       - ../..:/app/backend
       - ./supervisord.conf:/etc/supervisor/conf.d/supervisord.conf
       - app_logs:/var/log/supervisor
-    entrypoint: ["/app/backend/service_checker/docker/entrypoint.sh"]
+    entrypoint:
+      - /bin/bash
+      - -lc
+      - sed -i 's/\r$//' /app/backend/service_checker/docker/entrypoint.sh 2>/dev/null || true; chmod +x /app/backend/service_checker/docker/entrypoint.sh; exec /app/backend/service_checker/docker/entrypoint.sh
     networks:
       - pkb-net
 
