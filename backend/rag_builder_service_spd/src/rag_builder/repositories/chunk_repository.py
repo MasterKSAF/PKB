@@ -43,6 +43,13 @@ class ChunkRepository:
     ) -> None:
         raise NotImplementedError
 
+    def save_cross_references(
+            self,
+            request: BuildRequest,
+    ) -> None:
+        raise NotImplementedError
+
+
 
 class InMemoryChunkRepository(ChunkRepository):
     """
@@ -67,5 +74,11 @@ class InMemoryChunkRepository(ChunkRepository):
     def save_sections(
             self,
             request: BuildRequest,
+    ) -> None:
+        pass
+
+    def save_cross_references(
+        self,
+        request: BuildRequest,
     ) -> None:
         pass

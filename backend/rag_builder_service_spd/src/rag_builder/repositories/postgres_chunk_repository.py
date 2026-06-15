@@ -126,6 +126,67 @@ class PostgresChunkRepository(ChunkRepository):
                         sql.Identifier(settings.POSTGRES_SCHEMA),
                     )
                 )
+
+                logger.info("ensure_schema: before create table cross_references")
+                cur.execute(
+                    sql.SQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS {}.cross_references (
+                            id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+
+                            document_id BIGINT NOT NULL,
+                            document_version_id BIGINT NOT NULL,
+                            document_section_id BIGINT NOT NULL,
+
+                            source_section_id BIGINT NOT NULL,
+                            source_clause TEXT,
+                            source_path TEXT,
+
+                            target_document_id BIGINT,
+                            target_doc_code TEXT NOT NULL,
+
+                            reference_type TEXT NOT NULL,
+                            context TEXT,
+                            note TEXT,
+
+                            metadata JSONB,
+                            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+                            CONSTRAINT fk_cross_references_document_section
+                                FOREIGN KEY (document_section_id)
+                                REFERENCES {}.document_sections(id)
+                                ON DELETE CASCADE
+                        )
+                        """
+                    ).format(
+                        sql.Identifier(settings.POSTGRES_SCHEMA),
+                        sql.Identifier(settings.POSTGRES_SCHEMA),
+                    )
+                )
+
+                logger.info("ensure_schema: before create index cross_references")
+                cur.execute(
+                    sql.SQL(
+                        """
+                        CREATE INDEX IF NOT EXISTS idx_cross_references_doc
+                        ON {}.cross_references(document_id)
+                        """
+                    ).format(
+                        sql.Identifier(settings.POSTGRES_SCHEMA)
+                    )
+                )
+
+                cur.execute(
+                    sql.SQL(
+                        """
+                        CREATE INDEX IF NOT EXISTS idx_cross_references_target
+                        ON {}.cross_references(target_doc_code)
+                        """
+                    ).format(
+                        sql.Identifier(settings.POSTGRES_SCHEMA)
+                    )
+                )
+
             conn.commit()
 
         logger.info("ensure_schema: done")
@@ -282,5 +343,91 @@ class PostgresChunkRepository(ChunkRepository):
                             }),
                         ),
                     )
+
+            conn.commit()
+
+    def save_cross_references(
+            self,
+            request: BuildRequest,
+    ) -> None:
+        logger.info(
+            "Saving cross references for document_id=%s",
+            request.metadata.document_id,
+        )
+
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    DELETE FROM {settings.POSTGRES_SCHEMA}.cross_references
+                    WHERE document_version_id = %s
+                    """,
+                    (request.metadata.document_version_id,),
+                )
+
+                cur.execute(
+                    f"""
+                    SELECT section_id, id
+                    FROM {settings.POSTGRES_SCHEMA}.document_sections
+                    WHERE document_version_id = %s
+                    """,
+                    (request.metadata.document_version_id,),
+                )
+
+                section_id_to_db_id = {
+                    section_id: document_section_id
+                    for section_id, document_section_id in cur.fetchall()
+                }
+
+                for section in request.sections:
+                    document_section_id = section_id_to_db_id.get(
+                        section.section_id
+                    )
+
+                    if document_section_id is None:
+                        raise ValueError(
+                            "No document_section_id found for "
+                            f"document_version_id={request.metadata.document_version_id}, "
+                            f"section_id={section.section_id}"
+                        )
+
+                    for ref in section.references:
+                        cur.execute(
+                            f"""
+                            INSERT INTO {settings.POSTGRES_SCHEMA}.cross_references (
+                                document_id,
+                                document_version_id,
+                                document_section_id,
+                                source_section_id,
+                                source_clause,
+                                source_path,
+                                target_document_id,
+                                target_doc_code,
+                                reference_type,
+                                context,
+                                note,
+                                metadata
+                            )
+                            VALUES (
+                                %s, %s, %s, %s,
+                                %s, %s, %s, %s,
+                                %s, %s, %s, %s
+                            )
+                            """,
+                            (
+                                request.metadata.document_id,
+                                request.metadata.document_version_id,
+                                document_section_id,
+                                section.section_id,
+                                section.clause,
+                                section.path,
+                                ref.target_document_id,
+                                ref.target_doc_code,
+                                ref.type,
+                                ref.context,
+                                ref.note,
+                                json.dumps(ref.model_dump()),
+                            ),
+                        )
 
             conn.commit()
