@@ -15,7 +15,8 @@ Routing map (see docs/gateway_service_api.md):
 - /api/v1/chat/*, /api/v1/text/*        → Query handlers
 - /api/v1/classifiers/*, /api/v1/terminology/*,
     /api/v1/common/*, /api/v1/registry/documents/* → Registry handlers
-- /api/v1/system/health                  → Gateway (own)
+- /api/v1/health                         → Gateway (own)
+- /api/v1/system/health                  → Gateway (alias)
 
 Все данные — в едином пространстве имён (mocks.common).
 Никакого разделения на сервисы, никакой синхронизации.
@@ -463,8 +464,8 @@ app.add_middleware(RequestLogMiddleware)
 # ---------------------------------------------------------------------------
 
 
-@app.get("/api/v1/system/health")
 @app.get("/api/v1/health")
+@app.get("/api/v1/system/health")
 async def gateway_health():
     return {
         "status": "ok",

@@ -115,8 +115,8 @@ class RBACMiddleware(BaseHTTPMiddleware):
         if not config.allow_anonymous:
             if not (
                 path.startswith("/api/v1/auth/")
-                or path == "/api/v1/system/health"
                 or path == "/api/v1/health"
+                or path == "/api/v1/system/health"
                 or path == "/api/v1/system/mode"
             ):
                 if not user_context["is_authenticated"]:
@@ -503,8 +503,8 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 
 
-@app.get("/api/v1/system/health")
 @app.get("/api/v1/health")
+@app.get("/api/v1/system/health")
 async def gateway_health():
     """Health-check с агрегированным статусом всех сервисов."""
     services = await check_all_services_health()
