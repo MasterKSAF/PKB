@@ -158,11 +158,23 @@ DOCKER_SERVICE_NAMES = {
 PIPELINE_SERVICE_MAP = {
     "document_processing": ["minio", "parser", "converter_validator", "registry", "rag_builder", "rag_search"],
     "chat_inference": ["auth", "query", "rag_search"],
+    "registry_lifecycle": ["auth", "registry"],
+    "full_document_lifecycle": ["auth", "registry", "rag_builder", "rag_search"],
+    "admin_user_lifecycle": ["auth", "query"],
+    "registry_quarantine": ["auth", "registry"],
+    "orchestrator_draft_lifecycle": ["auth", "orchestrator"],
+    "multi_document_cross_search": ["minio", "parser", "converter_validator", "registry", "rag_builder", "rag_search"],
 }
 
 PIPELINE_SERVICE_COLUMNS = {
     "document_processing": "Documents",
-    "chat_inference": "Query",
+    "chat_inference": "Chat",
+    "registry_lifecycle": "Registry",
+    "full_document_lifecycle": "Lifecycle",
+    "admin_user_lifecycle": "AdminUsers",
+    "registry_quarantine": "Quarantine",
+    "orchestrator_draft_lifecycle": "Orchestrator",
+    "multi_document_cross_search": "MultiDoc",
 }
 
 SERVICE_DISPLAY_NAMES = {

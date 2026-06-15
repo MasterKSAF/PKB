@@ -1,16 +1,21 @@
-"""Тесты определения шагов пайплайнов."""
+"""Тесты определения шагов пайплайнов (существующие 3 пайплайна).
+
+Новые пайплайны (full_document_lifecycle, admin_user_lifecycle,
+registry_quarantine, orchestrator_draft_lifecycle, multi_document_cross_search)
+— в отдельных файлах test_pipeline_*.py.
+"""
 from __future__ import annotations
 
 import pytest
 
-from service_checker.pipelines.base import PipelineContext, StepStatus
-from service_checker.pipelines.document_processing import DocumentProcessingPipeline
-from service_checker.pipelines.chat_inference import ChatInferencePipeline
-from service_checker.pipelines.registry_lifecycle import RegistryLifecyclePipeline
+from pipelines.base import PipelineContext, StepStatus
+from pipelines.document_processing import DocumentProcessingPipeline
+from pipelines.chat_inference import ChatInferencePipeline
+from pipelines.registry_lifecycle import RegistryLifecyclePipeline
 
 
 class TestDocumentProcessingPipeline:
-    """Пайплайн document_processing — 8 шагов."""
+    """Пайплайн document_processing — 10 шагов."""
 
     def test_pipeline_attributes(self):
         p = DocumentProcessingPipeline()
@@ -80,7 +85,7 @@ class TestDocumentProcessingPipeline:
 
 
 class TestChatInferencePipeline:
-    """Пайплайн chat_inference — 5 шагов (шаг профиля удалён — mock-режим auth)."""
+    """Пайплайн chat_inference — 5 шагов."""
 
     def test_pipeline_attributes(self):
         p = ChatInferencePipeline()
@@ -112,13 +117,11 @@ class TestChatInferencePipeline:
     def test_auth_steps_first(self):
         p = ChatInferencePipeline()
         steps = p.build_steps(PipelineContext())
-        # Первый шаг — аутентификация
         assert steps[0].service == "auth"
 
     def test_needs_auth_after_auth(self):
         p = ChatInferencePipeline()
         steps = p.build_steps(PipelineContext())
-        # Шаги после аутентификации требуют токен
         for step in steps[1:]:
             assert step.needs_auth, f"Шаг '{step.name}' должен требовать auth"
 
@@ -131,7 +134,7 @@ class TestChatInferencePipeline:
 
 
 class TestRegistryLifecyclePipeline:
-    """Пайплайн registry_lifecycle — 13 шагов."""
+    """Пайплайн registry_lifecycle — 11 шагов."""
 
     def test_pipeline_attributes(self):
         p = RegistryLifecyclePipeline()
@@ -169,7 +172,6 @@ class TestRegistryLifecyclePipeline:
     def test_crud_sequence(self):
         p = RegistryLifecyclePipeline()
         steps = p.build_steps(PipelineContext())
-        # Проверка CRUD-последовательности для классификаторов
         classifier_steps = [s for s in steps if "классификатор" in s.name.lower()]
         assert len(classifier_steps) == 6
         methods = [s.method for s in classifier_steps]
@@ -188,7 +190,7 @@ class TestRegistryLifecyclePipeline:
     def test_all_auth_required(self):
         p = RegistryLifecyclePipeline()
         steps = p.build_steps(PipelineContext())
-        for step in steps[2:]:  # После аутентификации
+        for step in steps[2:]:
             assert step.needs_auth, f"Шаг '{step.name}' должен требовать auth"
 
 
@@ -196,19 +198,24 @@ class TestRegistryLifecyclePipeline:
 
 
 class TestPipelineRegistry:
-    """PIPELINE_REGISTRY — реестр всех пайплайнов."""
+    """PIPELINE_REGISTRY — реестр всех 8 пайплайнов."""
 
     def test_registry_importable(self):
         from pipelines import PIPELINE_REGISTRY
         assert "document_processing" in PIPELINE_REGISTRY
         assert "chat_inference" in PIPELINE_REGISTRY
         assert "registry_lifecycle" in PIPELINE_REGISTRY
-        assert len(PIPELINE_REGISTRY) == 3
+        assert "full_document_lifecycle" in PIPELINE_REGISTRY
+        assert "admin_user_lifecycle" in PIPELINE_REGISTRY
+        assert "registry_quarantine" in PIPELINE_REGISTRY
+        assert "orchestrator_draft_lifecycle" in PIPELINE_REGISTRY
+        assert "multi_document_cross_search" in PIPELINE_REGISTRY
+        assert len(PIPELINE_REGISTRY) == 8
 
     def test_registry_classes(self):
         from pipelines import PIPELINE_REGISTRY
-        from pipelines.document_processing import DocumentProcessingPipeline
-        assert PIPELINE_REGISTRY["document_processing"] is DocumentProcessingPipeline
+        from pipelines.full_document_lifecycle import FullDocumentLifecyclePipeline
+        assert PIPELINE_REGISTRY["full_document_lifecycle"] is FullDocumentLifecyclePipeline
 
     def test_registry_instantiation(self):
         from pipelines import PIPELINE_REGISTRY

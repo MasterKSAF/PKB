@@ -116,8 +116,9 @@ class PipelineStep:
     :param method: HTTP-метод (GET, POST, PUT, PATCH, DELETE)
     :param path: Путь эндпоинта (например /api/v1/parser/process)
     :param port: Порт сервиса
-    :param body: Тело запроса (опционально)
-    :param content: Бинарное содержимое (опционально, заменяет body)
+    :param body: Тело запроса как JSON (опционально)
+    :param form_body: Тело запроса как form-data (опционально, заменяет body)
+    :param content: Бинарное содержимое (опционально, заменяет body/form_body)
     :param params: Query-параметры (опционально)
     :param expected_status: Ожидаемый HTTP-статус (int или set[int])
     :param retry_on: Статусы для автоматического повтора (напр. {409})
@@ -127,6 +128,14 @@ class PipelineStep:
     :param extract_keys: Ключи для извлечения из ответа в контекст
     :param needs_auth: Нужен ли Bearer-токен
     :param extra_headers: Дополнительные HTTP-заголовки (для S3-подписи и т.п.)
+    :param skip_if: Функция-условие пропуска шага (context -> bool).
+                    Если вернёт True, шаг пропускается (SKIPPED).
+                    Используется для ветвлений: один из двух шагов выполняется,
+                    второй пропускается.
+    :param on_error: Функция, вызываемая при несовпадении HTTP-статуса.
+                     Получает (response_body, context) и может сохранить
+                     информацию об ошибке в контексте для ветвления.
+                     Вызывается ДО возврата FAILED.
     """
 
     name: str
@@ -135,6 +144,7 @@ class PipelineStep:
     path: str
     port: int
     body: Optional[Dict[str, Any]] = None
+    form_body: Optional[Dict[str, Any]] = None
     content: Optional[bytes] = None
     params: Optional[Dict[str, Any]] = None
     expected_status: int | set[int] = 200
@@ -145,6 +155,8 @@ class PipelineStep:
     extract_keys: Optional[List[str]] = None
     needs_auth: bool = False
     extra_headers: Optional[Dict[str, str]] = None
+    skip_if: Optional[Callable[[PipelineContext], bool]] = None
+    on_error: Optional[Callable[[Optional[str], PipelineContext], None]] = None
 
     # Заполняется во время выполнения
     actual_status: int = 0
@@ -305,6 +317,9 @@ class PipelineRunner:
             if step.content is not None:
                 kwargs["content"] = step.content
                 headers.setdefault("Content-Type", "application/octet-stream")
+            elif step.form_body is not None:
+                kwargs["data"] = step.form_body
+                # httpx автоматически выставит Content-Type: multipart/form-data
             elif body is not None:
                 kwargs["json"] = body
                 headers.setdefault("Content-Type", "application/json")
@@ -345,6 +360,9 @@ class PipelineRunner:
             if not status_ok:
                 step.error = f"Expected HTTP {step.expected_status}, got {resp.status_code}"
                 step.status = StepStatus.FAILED
+                # on_error: сохраняем информацию об ошибке для ветвления
+                if step.on_error:
+                    step.on_error(step.response_body, ctx)
                 return step
 
             # Извлечение контекста
@@ -419,6 +437,11 @@ class PipelineRunner:
                     "access_token": ["access_token"],
                     "refresh_token": ["refresh_token"],
                     "pending_id": ["id"],
+                    "pending_id2": ["id"],
+                    "quar_doc_id": ["id", "document_id"],
+                    "quar_doc_id2": ["id", "document_id"],
+                    "doc_id_1": ["id", "document_id"],
+                    "doc_id_2": ["id", "document_id"],
                 }
                 for alt in alt_map.get(key, []):
                     if alt in obj:
@@ -485,6 +508,14 @@ class PipelineRunner:
                 # Пробуем взять токен из контекста (если auth-шаг уже выполнен)
                 if ctx.has("access_token"):
                     auth_token = str(ctx.get("access_token"))
+
+            # Ветвление: если условие пропуска вернуло True — пропускаем шаг
+            if step.skip_if is not None and step.skip_if(ctx):
+                step.status = StepStatus.SKIPPED
+                step.message = "Шаг пропущен по условию skip_if"
+                result.skipped_steps += 1
+                print(f"     ⏭️ [{i+1}/{len(steps)}] {step.name} — пропущен (skip_if)")
+                continue
 
             step = await self.run_step(step, ctx, auth_token)
 

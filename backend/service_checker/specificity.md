@@ -961,3 +961,45 @@ docker-compose задаёт единые `EMBEDDING_*` переменные, sup
 ### Статус
 ✅ **Исправлено (workaround в service_checker)**
 
+## 28. Решение: варнинги для известных проблем, ветвление через skip_if (2026-06-15)
+
+### Проблема
+Новые пайплайны (full_document_lifecycle, multi_document_cross_search) используют
+RAG Builder build. Известная проблема: RAG Builder ожидает document_id как UUID,
+но registry возвращает int — сервис возвращает 422.
+
+Первоначально 422 был включён в expected_status как молчаливый обход.
+
+### Решение
+- **422 НЕ включается в expected_status** для обычных пайплайнов.
+  Если RAG Builder вернёт 422 — шаг честно FAILED.
+- **full_document_lifecycle** включает 422 осознанно (с варнингом в docstring),
+  потому что 422 там — часть сценария error recovery.
+- Во всех файлах добавлены явные `⚠️`-варнинги с указанием specificity.md §25.
+
+### Ветвление (skip_if + on_error)
+- `PipelineStep.skip_if: Callable[[PipelineContext], bool]` — условие пропуска шага.
+  Если `skip_if(ctx)` → True, шаг пропускается (SKIPPED).
+- `PipelineStep.on_error: Callable[[str, PipelineContext], None]` — колбэк при
+  несовпадении HTTP-статуса. Вызывается до возврата FAILED, может сохранить
+  информацию об ошибке в контексте.
+- Совместное использование: on_error фиксирует сбой в контексте, skip_if на
+  recovery-шаге проверяет контекст и решает, выполнять ли recovery.
+
+Пример (full_document_lifecycle):
+```
+build_step = PipelineStep(
+    ...,
+    expected_status={200, 201},  # 422 НЕ обходится
+    on_error=lambda body, ctx: ctx.set("build_ok", False),  # фикс. ошибку
+    check=lambda body, ctx: (True, "ok") if ... else (False, "fail"),
+)
+recovery_step = PipelineStep(
+    ...,
+    skip_if=lambda ctx: ctx.get("build_ok", False),  # пропустить если успех
+)
+```
+
+### Статус
+✅ **Реализовано (service_checker, 2026-06-15)**
+

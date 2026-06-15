@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-from service_checker.core.config import PIPELINE_SERVICE_MAP, SERVICE_DISPLAY_NAMES
+from service_checker.core.config import PIPELINE_SERVICE_MAP, PIPELINE_SERVICE_COLUMNS, SERVICE_DISPLAY_NAMES
 from service_checker.services import MODE_PORTS, SERVICE_REGISTRY
 
 
@@ -76,9 +76,15 @@ def _generate_full_report(
     db_icon = _get_db_icon(db_result)
 
     # ── 1. Итоговая сводная таблица ─────────────────────────────────
+    # Динамические колонки пайплайнов из PIPELINE_SERVICE_COLUMNS
+    pipe_columns = PIPELINE_SERVICE_COLUMNS  # имя → заголовок колонки
+    pipe_order = [p for p in pipe_columns if p in pipeline_results]
+    
+    col_headers = " | ".join(pipe_columns[p] for p in pipe_order)
+    col_aligns = " | ".join(":---:" for _ in pipe_order)
     lines.append("## 📊 Итоговая сводная таблица\n")
-    lines.append("| Service | Port | Ping | CheckDb | API | Documents | Query | Status |")
-    lines.append("|---------|:----:|:----:|:-------:|:---:|:---------:|:-----:|:------:|")
+    lines.append(f"| Service | Port | Ping | CheckDb | API | {col_headers} | Status |")
+    lines.append(f"|---------|:----:|:----:|:-------:|:---:|{col_aligns}|:------:|")
 
     # Собираем per-service per-pipeline статус шагов
     # service_key -> {pipeline_name -> passed/all_count}
@@ -114,42 +120,41 @@ def _generate_full_report(
         passed_ratio = f"{cov.endpoints_passed}/{cov.endpoints_total}" if cov.endpoints_total > 0 else "0/0"
         has_failures = cov.endpoints_failed > 0 or cov.endpoints_skipped > 0
 
-        # Documents column — per-service шаги в document_processing
+        # Pipeline columns — per-service шаги в каждом пайплайне
         svc_pipe_status = pipe_service_status.get(svc_key, {})
-        doc_icon = "—"
-        if "document_processing" in PIPELINE_SERVICE_MAP and svc_key in PIPELINE_SERVICE_MAP["document_processing"]:
-            dp_status = svc_pipe_status.get("document_processing")
-            if dp_status:
-                dp_passed, dp_total = dp_status
-                doc_icon = "✅" if dp_passed > 0 and dp_passed == dp_total else "❌"
+        pipe_icons: List[str] = []
+        for pname in pipe_order:
+            if pname in PIPELINE_SERVICE_MAP and svc_key in PIPELINE_SERVICE_MAP[pname]:
+                pstatus = svc_pipe_status.get(pname)
+                if pstatus:
+                    p_passed, p_total = pstatus
+                    pipe_icons.append("✅" if p_passed > 0 and p_passed == p_total else "❌")
+                else:
+                    pipe_icons.append("—")
+            else:
+                pipe_icons.append("—")
 
-        # Query column — per-service шаги в chat_inference
-        query_icon = "—"
-        if "chat_inference" in PIPELINE_SERVICE_MAP and svc_key in PIPELINE_SERVICE_MAP["chat_inference"]:
-            ci_status = svc_pipe_status.get("chat_inference")
-            if ci_status:
-                ci_passed, ci_total = ci_status
-                query_icon = "✅" if ci_passed > 0 and ci_passed == ci_total else "❌"
-
-        # Overall status
-        all_green = (
-            cov.ping_ok and not has_failures
-            and (doc_icon == "—" or doc_icon == "✅")
-            and (query_icon == "—" or query_icon == "✅")
-        )
+        # Overall status — все колонки зелёные или прочерк
+        all_green = cov.ping_ok and not has_failures
+        for icon in pipe_icons:
+            if icon not in ("—", "✅"):
+                all_green = False
+                break
         status_icon = "✅" if all_green else "❌"
 
         # ✅ Passed column — true/false вместо 10/10
         passed_icon = "✅" if not has_failures else "❌"
 
         svc_checkdb = _get_service_checkdb_icon(db_result, svc_key)
-        lines.append(f"| {display_name} | {port} | {ping_icon} | {svc_checkdb} | {passed_icon} | {doc_icon} | {query_icon} | {status_icon} |")
+        pipe_cols = " | ".join(pipe_icons)
+        lines.append(f"| {display_name} | {port} | {ping_icon} | {svc_checkdb} | {passed_icon} | {pipe_cols} | {status_icon} |")
 
     # Сервисы в глубокой разработке (не тестируются, с прочерками)
+    dev_cols = " | ".join("—" for _ in pipe_order)
     for svc_key, display_name in SERVICE_DISPLAY_NAMES.items():
         if svc_key not in coverage_results and svc_key in MODE_PORTS:
             port = MODE_PORTS[svc_key]
-            lines.append(f"| {display_name} | {port} | — | — | — | — | — | 🟡 dev |")
+            lines.append(f"| {display_name} | {port} | — | — | — | {dev_cols} | 🟡 dev |")
 
     # Итоговая строка — количества по всем столбцам
     total_services = len(coverage_results)
@@ -169,23 +174,17 @@ def _generate_full_report(
     )
     svcs_checkdb_total = len(svcs_with_db)
 
-    # Documents: кол-во успешно пройденных шагов document_processing
-    doc_passed_total = 0
-    doc_steps_total = 0
-    for svc_key, svc_status in pipe_service_status.items():
-        if "document_processing" in svc_status:
-            passed, total = svc_status["document_processing"]
-            doc_passed_total += passed
-            doc_steps_total += total
-
-    # Query: кол-во успешно пройденных шагов chat_inference
-    query_passed_total = 0
-    query_steps_total = 0
-    for svc_key, svc_status in pipe_service_status.items():
-        if "chat_inference" in svc_status:
-            passed, total = svc_status["chat_inference"]
-            query_passed_total += passed
-            query_steps_total += total
+    # Pipeline columns totals — динамически по всем пайплайнам
+    pipe_totals: List[str] = []
+    for pname in pipe_order:
+        p_passed_total = 0
+        p_steps_total = 0
+        for svc_key, svc_status in pipe_service_status.items():
+            if pname in svc_status:
+                passed, total = svc_status[pname]
+                p_passed_total += passed
+                p_steps_total += total
+        pipe_totals.append(f"**{p_passed_total}/{p_steps_total}**")
 
     all_cov_ok = cov_ok_count == total_services
     all_pipe_ok = all(pipeline_passed.values()) if pipeline_passed else True
@@ -198,12 +197,12 @@ def _generate_full_report(
         and all(pipeline_passed.values()) if pipeline_passed else True
     ) else "❌"
 
+    totals_cols = " | ".join(pipe_totals)
     lines.append(
         f"| **Total** | | **{cov_alive}/{total_services}** "
         f"| **{svcs_checkdb_ok}/{svcs_checkdb_total}** "
         f"| **{cov_ok_count}/{total_services}** "
-        f"| **{doc_passed_total}/{doc_steps_total}** "
-        f"| **{query_passed_total}/{query_steps_total}** "
+        f"| {totals_cols} "
         f"| {overall_status} |\n"
     )
 
