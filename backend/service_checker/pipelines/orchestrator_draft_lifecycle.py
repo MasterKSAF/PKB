@@ -10,6 +10,7 @@ PKB Neuroassistant — Pipeline: orchestrator_draft_lifecycle
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from .base import (
@@ -24,6 +25,11 @@ TEST_CREDENTIALS = {
     "username": "admin@example.com",
     "password": "Admin1234!",
 }
+
+# Тестовый PDF
+_HERE = Path(__file__).resolve().parent.parent
+TEST_PDF_PATH = _HERE / "pdf" / "7bd97d737317a8a272bb18a405ab2d04.pdf"
+TEST_PDF_BYTES = TEST_PDF_PATH.read_bytes()
 
 
 class OrchestratorDraftLifecyclePipeline(PipelineDef):
@@ -52,16 +58,19 @@ class OrchestratorDraftLifecyclePipeline(PipelineDef):
         ))
 
         # ── Шаг 2: Создание черновика ────────────────────────────────
+        pdf_name = f"pipeline-draft-{ts}.pdf"
         steps.append(PipelineStep(
             name="Создание черновика",
             service="orchestrator",
             method="POST",
             path="/api/v1/drafts/",
             port=8081,
-            # ⚠️ Orchestrator ожидает multipart/form-data, не JSON
             form_body={
                 "document_key": f"pipeline-draft-key-{ts}",
                 "title": f"Pipeline черновик {ts}",
+            },
+            form_files={
+                "file": (pdf_name, TEST_PDF_BYTES, "application/pdf"),
             },
             expected_status=202,
             extract_keys=["draft_id", "task_id"],

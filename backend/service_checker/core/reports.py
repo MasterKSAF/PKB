@@ -60,6 +60,26 @@ def _get_service_checkdb_icon(db_result: Any, svc_key: str) -> str:
     return "✅" if has_it else "❌"
 
 
+def _service_pipeline_summary_icon(
+    svc_pipe_status: Dict[str, Tuple[int, int]],
+    pipe_order: List[str],
+) -> str:
+    """
+    Единый статус пайплайнов для сервиса: ✅ если все шаги всех пайплайнов пройдены,
+    ❌ если хоть где-то сбой, — если пайплайнов для сервиса нет.
+    """
+    if not svc_pipe_status:
+        return "—"
+    all_ok = True
+    for pname in pipe_order:
+        if pname in svc_pipe_status:
+            passed, total = svc_pipe_status[pname]
+            if passed == 0 or passed != total:
+                all_ok = False
+                break
+    return "✅" if all_ok else "❌"
+
+
 def _generate_full_report(
     coverage_results: Dict[str, Any],
     pipeline_results: Dict[str, Any],
@@ -76,15 +96,12 @@ def _generate_full_report(
     db_icon = _get_db_icon(db_result)
 
     # ── 1. Итоговая сводная таблица ─────────────────────────────────
-    # Динамические колонки пайплайнов из PIPELINE_SERVICE_COLUMNS
     pipe_columns = PIPELINE_SERVICE_COLUMNS  # имя → заголовок колонки
     pipe_order = [p for p in pipe_columns if p in pipeline_results]
-    
-    col_headers = " | ".join(pipe_columns[p] for p in pipe_order)
-    col_aligns = " | ".join(":---:" for _ in pipe_order)
+
     lines.append("## 📊 Итоговая сводная таблица\n")
-    lines.append(f"| Service | Port | Ping | CheckDb | API | {col_headers} | Status |")
-    lines.append(f"|---------|:----:|:----:|:-------:|:---:|{col_aligns}|:------:|")
+    lines.append(f"| Service | Port | Ping | CheckDb | API | Pipelines | Status |")
+    lines.append(f"|---------|:----:|:----:|:-------:|:---:|:--------:|:------:|")
 
     # Собираем per-service per-pipeline статус шагов
     # service_key -> {pipeline_name -> passed/all_count}
@@ -146,15 +163,14 @@ def _generate_full_report(
         passed_icon = "✅" if not has_failures else "❌"
 
         svc_checkdb = _get_service_checkdb_icon(db_result, svc_key)
-        pipe_cols = " | ".join(pipe_icons)
-        lines.append(f"| {display_name} | {port} | {ping_icon} | {svc_checkdb} | {passed_icon} | {pipe_cols} | {status_icon} |")
+        pipe_col = _service_pipeline_summary_icon(svc_pipe_status, pipe_order)
+        lines.append(f"| {display_name} | {port} | {ping_icon} | {svc_checkdb} | {passed_icon} | {pipe_col} | {status_icon} |")
 
     # Сервисы в глубокой разработке (не тестируются, с прочерками)
-    dev_cols = " | ".join("—" for _ in pipe_order)
     for svc_key, display_name in SERVICE_DISPLAY_NAMES.items():
         if svc_key not in coverage_results and svc_key in MODE_PORTS:
             port = MODE_PORTS[svc_key]
-            lines.append(f"| {display_name} | {port} | — | — | — | {dev_cols} | 🟡 dev |")
+            lines.append(f"| {display_name} | {port} | — | — | — | — | 🟡 dev |")
 
     # Итоговая строка — количества по всем столбцам
     total_services = len(coverage_results)
@@ -174,7 +190,53 @@ def _generate_full_report(
     )
     svcs_checkdb_total = len(svcs_with_db)
 
-    # Pipeline columns totals — динамически по всем пайплайнам
+    all_cov_ok = cov_ok_count == total_services
+    all_pipe_ok = all(pipeline_passed.values()) if pipeline_passed else True
+    overall_status = "✅" if (all_cov_ok and all_pipe_ok) else "❌"
+    pipe_total_icon = "✅" if all_pipe_ok else "❌"
+
+    lines.append(
+        f"| **Total** | | **{cov_alive}/{total_services}** "
+        f"| **{svcs_checkdb_ok}/{svcs_checkdb_total}** "
+        f"| **{cov_ok_count}/{total_services}** "
+        f"| {pipe_total_icon} "
+        f"| {overall_status} |\n"
+    )
+
+    # ── 1a. Pipeline статусы по сервисам (отдельная таблица) ───────────
+    lines.append("### 📋 Pipeline статусы по сервисам\n")
+    col_headers = " | ".join(pipe_columns[p] for p in pipe_order)
+    col_aligns = " | ".join(":---:" for _ in pipe_order)
+    lines.append(f"| Service | {col_headers} | Status |")
+    lines.append(f"|---------|{col_aligns}|:------:|")
+
+    for svc_key in sorted(coverage_results.keys()):
+        display_name = SERVICE_DISPLAY_NAMES.get(svc_key, svc_key)
+        svc_pipe_status = pipe_service_status.get(svc_key, {})
+        pipe_icons: List[str] = []
+        for pname in pipe_order:
+            if pname in PIPELINE_SERVICE_MAP and svc_key in PIPELINE_SERVICE_MAP[pname]:
+                pstatus = svc_pipe_status.get(pname)
+                if pstatus:
+                    p_passed, p_total = pstatus
+                    pipe_icons.append("✅" if p_passed > 0 and p_passed == p_total else "❌")
+                else:
+                    pipe_icons.append("—")
+            else:
+                pipe_icons.append("—")
+
+        ps_all_green = all(icon in ("—", "✅") for icon in pipe_icons)
+        ps_status = "✅" if ps_all_green else "❌"
+        pipe_cols = " | ".join(pipe_icons)
+        lines.append(f"| {display_name} | {pipe_cols} | {ps_status} |")
+
+    # Dev-сервисы в pipeline-таблице
+    for svc_key, display_name in SERVICE_DISPLAY_NAMES.items():
+        if svc_key not in coverage_results and svc_key in MODE_PORTS:
+            dev_cols = " | ".join("—" for _ in pipe_order)
+            lines.append(f"| {display_name} | {dev_cols} | 🟡 dev |")
+
+    # Totals row for pipeline table
     pipe_totals: List[str] = []
     for pname in pipe_order:
         p_passed_total = 0
@@ -185,26 +247,57 @@ def _generate_full_report(
                 p_passed_total += passed
                 p_steps_total += total
         pipe_totals.append(f"**{p_passed_total}/{p_steps_total}**")
-
-    all_cov_ok = cov_ok_count == total_services
-    all_pipe_ok = all(pipeline_passed.values()) if pipeline_passed else True
-    pipe_ok_count = sum(1 for p in pipeline_passed.values() if p) if pipeline_passed else 0
-    pipe_total = len(pipeline_passed) if pipeline_passed else 0
-
-    # Общий статус: ❌ если есть проблемы
-    overall_status = "✅" if (
-        cov_ok_count == total_services 
-        and all(pipeline_passed.values()) if pipeline_passed else True
-    ) else "❌"
-
     totals_cols = " | ".join(pipe_totals)
-    lines.append(
-        f"| **Total** | | **{cov_alive}/{total_services}** "
-        f"| **{svcs_checkdb_ok}/{svcs_checkdb_total}** "
-        f"| **{cov_ok_count}/{total_services}** "
-        f"| {totals_cols} "
-        f"| {overall_status} |\n"
-    )
+    lines.append(f"| **Total** | {totals_cols} | {pipe_total_icon} |\n")
+
+    # ── 1b. Пояснения к ❌ в сводной таблице ─────────────────────────
+    lines.append("#### 🔍 Пояснения к ❌ в проверках\n")
+    has_notes = False
+    for svc_key in sorted(coverage_results.keys()):
+        display_name = SERVICE_DISPLAY_NAMES.get(svc_key, svc_key)
+        cov = coverage_results[svc_key]
+        notes = []
+
+        # Ping
+        if not cov.ping_ok:
+            notes.append("Ping: сервис не отвечает на health check")
+
+        # CheckDb
+        svc_checkdb = _get_service_checkdb_icon(db_result, svc_key)
+        if svc_checkdb == "❌":
+            startup_key = COVERAGE_TO_STARTUP_KEY.get(svc_key)
+            if startup_key == "rag_builder_service":
+                notes.append("CheckDb: RAG Builder использует validate_startup_migrations(), не create_all()")
+            else:
+                notes.append("CheckDb: не найден вызов create_all() при старте сервиса")
+
+        # API
+        if cov.endpoints_failed > 0:
+            notes.append(f"API: {cov.endpoints_failed} эндпоинт(ов) упало")
+        if cov.endpoints_skipped > 0:
+            notes.append(f"API: {cov.endpoints_skipped} эндпоинт(ов) пропущено")
+
+        # Pipelines
+        svc_pipe_status = pipe_service_status.get(svc_key, {})
+        pipe_col = _service_pipeline_summary_icon(svc_pipe_status, pipe_order)
+        if pipe_col == "❌":
+            failed_pipes = [
+                pipe_columns.get(p, p) for p in pipe_order
+                if p in svc_pipe_status
+                and svc_pipe_status[p][0] != svc_pipe_status[p][1]
+            ]
+            if failed_pipes:
+                notes.append(f"Pipelines: сбой в {', '.join(failed_pipes)}")
+            else:
+                notes.append("Pipelines: не все шаги пройдены")
+
+        if notes:
+            has_notes = True
+            lines.append(f"- **{display_name}**: {'; '.join(notes)}\n")
+
+    if not has_notes:
+        lines.append("_Нет замечаний_\n")
+    lines.append("")
 
     # ── 2. Детали API Coverage ─────────────────────────────────────
     lines.append("---\n")

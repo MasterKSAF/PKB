@@ -145,6 +145,7 @@ class PipelineStep:
     port: int
     body: Optional[Dict[str, Any]] = None
     form_body: Optional[Dict[str, Any]] = None
+    form_files: Optional[Dict[str, tuple[str, bytes, str]]] = None  # {field: (filename, content, content_type)}
     content: Optional[bytes] = None
     params: Optional[Dict[str, Any]] = None
     expected_status: int | set[int] = 200
@@ -318,8 +319,13 @@ class PipelineRunner:
                 kwargs["content"] = step.content
                 headers.setdefault("Content-Type", "application/octet-stream")
             elif step.form_body is not None:
-                kwargs["data"] = step.form_body
-                # httpx автоматически выставит Content-Type: multipart/form-data
+                if step.form_files:
+                    kwargs["data"] = step.form_body
+                    kwargs["files"] = step.form_files
+                    # httpx сам выставит multipart/form-data с файлами
+                else:
+                    kwargs["data"] = step.form_body
+                    # httpx автоматически выставит Content-Type: multipart/form-data
             elif body is not None:
                 kwargs["json"] = body
                 headers.setdefault("Content-Type", "application/json")

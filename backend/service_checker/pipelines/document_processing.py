@@ -9,6 +9,7 @@ Registry -> RAG Builder -> RAG Search.
 from __future__ import annotations
 
 import time
+import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -32,6 +33,9 @@ TEST_PDF_PATH = str(_HERE / "pdf" / "7bd97d737317a8a272bb18a405ab2d04.pdf")
 # Константы для пайплайна
 TEST_TASK_ID = 12345
 TEST_DOC_ID = 1
+# ⚠️ WORKAROUND: RAG Builder ожидает UUID для document_id.
+# Конвертируем int → UUID через 128-битное представление.
+TEST_DOC_UUID = str(uuid.UUID(int=TEST_DOC_ID))
 
 # Тестовые учётные данные (admin — создаётся auth-сервисом при старте)
 TEST_CREDENTIALS = {
@@ -215,10 +219,10 @@ class DocumentProcessingPipeline(PipelineDef):
             path="/api/v1/rag/build",
             port=8090,
             body={
-                "document_id": 1,
+                "document_id": TEST_DOC_UUID,
                 "sections": [{
                     "section_id": 1,
-                    "document_id": 1,
+                    "document_id": TEST_DOC_UUID,
                     "clause": "1",
                     "level": 1,
                     "path": "1",

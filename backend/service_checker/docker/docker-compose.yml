@@ -38,6 +38,7 @@ x-env-common: &env-common
   EMBEDDING_BASE_URL: http://tei:80
   EMBEDDING_MODEL: Vuy/rubert-tiny2-onnx
   EMBEDDING_DIM: 312
+  VECTOR_DIMENSION: 312
   EMBEDDING_API_KEY: sk-noop
   SEARCH_DEFAULT_TOP_K: 10
   SEARCH_MAX_TOP_K: 100

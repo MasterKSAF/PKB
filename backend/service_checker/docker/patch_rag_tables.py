@@ -38,16 +38,25 @@ SQL_CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS rag.document_chunks (
     id BIGSERIAL PRIMARY KEY,
     section_id BIGINT NOT NULL,
-    document_id BIGINT NOT NULL,
+    document_id UUID NOT NULL,
     chunk_index INTEGER NOT NULL,
     content TEXT NOT NULL,
-    embedding VECTOR(1536),
+    embedding VECTOR(312),
     tsv TSVECTOR,
     strategy VARCHAR(32) NOT NULL,
     page INTEGER,
     bbox JSONB,
     confidence DOUBLE PRECISION,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+)
+"""
+
+# SQL для миграции: BIGINT document_id → UUID (если таблица уже создана со старым типом)
+SQL_MIGRATE_DOC_ID_TO_UUID = """
+ALTER TABLE rag.document_chunks
+ALTER COLUMN document_id TYPE UUID
+USING (
+  ('00000000-0000-0000-0000-' || lpad(to_hex(document_id), 12, '0'))::uuid
 )
 """
 
@@ -98,6 +107,17 @@ async def patch_rag_tables(db_url: str | None = None) -> bool:
             )
             if exists:
                 log_ok("rag.document_chunks уже существует")
+                # Проверяем тип колонки document_id: если BIGINT → мигрируем на UUID
+                col_type = await conn.scalar(text(
+                    "SELECT data_type FROM information_schema.columns "
+                    "WHERE table_schema='rag' AND table_name='document_chunks' "
+                    "AND column_name='document_id'"
+                ))
+                if col_type == 'bigint':
+                    log_step("Миграция document_id BIGINT → UUID...")
+                    await conn.execute(text(SQL_MIGRATE_DOC_ID_TO_UUID))
+                    log_ok("document_id изменён на UUID")
+                    changed = True
             else:
                 log_step("Создание схемы rag...")
                 await conn.execute(text(SQL_CREATE_SCHEMA))
