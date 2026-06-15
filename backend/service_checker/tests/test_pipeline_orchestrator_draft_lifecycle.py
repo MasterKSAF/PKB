@@ -46,13 +46,14 @@ class TestOrchestratorDraftLifecyclePipeline:
         last = steps[-1]
         assert 404 in last.expected_status
 
-    def test_decide_allows_422_legitimate(self):
-        """Шаг approve (decide) допускает 422 — это легитимный статус валидации,
-        а не обход UUID-бага."""
+    def test_decide_step(self):
+        """Шаг approve (decide) — ожидает action, не decision."""
         p = OrchestratorDraftLifecyclePipeline()
         steps = p.build_steps(PipelineContext())
-        # Шаг 7 — decision: может вернуть 422 при ошибке валидации
         decide = steps[6]
-        assert decide.expected_status == {200, 409, 422}
+        assert decide.expected_status == {200, 409}
         assert decide.service == "orchestrator"
         assert "approve" in decide.name.lower()
+        # Тело должно содержать action, не decision
+        assert decide.body["action"] == "approve"
+        assert "decision" not in decide.body

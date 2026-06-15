@@ -135,10 +135,10 @@ class OrchestratorDraftLifecyclePipeline(PipelineDef):
             path="/api/v1/drafts/{draft_id}/decide",
             port=8081,
             body={
-                "decision": "approved",
+                "action": "approve",
                 "comment": "Pipeline тест — approved",
             },
-            expected_status={200, 409, 422},
+            expected_status={200, 409},
             check=check_json_field("status", str),
             needs_auth=True,
         ))

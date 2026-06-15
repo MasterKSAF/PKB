@@ -35,25 +35,39 @@ async def preview_task(db_session: AsyncSession) -> dict:
     Returns dict with {task, steps, repo} for easy access in tests.
     Data is committed so TestClient can see it.
     """
+    from app.services.registry_client import RegistryServiceClient
+
     repo = TaskRepository(db_session)
     task = await repo.create_task(
         draft_id=200,
         pipeline_type="formation",
         total_steps=3,
     )
+    await db_session.flush()
 
-    # Upload step — completed
+    # Pre-populate Registry mock storage with draft 200
+    RegistryServiceClient._storage["drafts"][200] = {
+        "draft_id": 200,
+        "file_key": "drafts/200/file.pdf",
+        "status": "uploaded",
+        "created_by": "user-1",
+        "created_at": "2026-06-08T10:00:00Z",
+        "updated_at": "2026-06-08T10:00:00Z",
+    }
+
+    # Upload step (always completed immediately by orchestrator)
     upload = await repo.create_task_step(
         task_id=task.id, step_name="upload", step_index=0,
         service_name="Orchestrator",
         input_data={"file_key": "drafts/200/file.pdf"},
     )
+    await repo.start_task_step(upload.id)
     await repo.complete_task_step(
         upload.id,
         output_data={"draft_id": 200, "task_id": task.id, "file_key": "drafts/200/file.pdf"},
     )
 
-    # Preview OCR — running (simulating active Celery task)
+    # Preview OCR — running (simulates orchestator having started it)
     ocr = await repo.create_task_step(
         task_id=task.id, step_name="preview_ocr", step_index=1,
         service_name="OCR Service",
@@ -67,11 +81,6 @@ async def preview_task(db_session: AsyncSession) -> dict:
         service_name="Converter-validator",
         input_data={"file_key": "drafts/200/file.pdf", "mode": "preview"},
     )
-
-    # Insert Draft record (required by get_preview_status existence check)
-    from app.models.drafts import Draft
-    draft_record = Draft(draft_id=200, status="uploaded")
-    db_session.add(draft_record)
 
     await db_session.commit()
 

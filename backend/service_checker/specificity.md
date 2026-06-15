@@ -1044,3 +1044,36 @@ recovery_step = PipelineStep(
 ### Статус
 ✅ **Исправлено (checker, 2026-06-15)**
 
+## 30. Orchestrator — не проходил pipeline в Docker (500 + 422)
+
+### Проблема 30.1: `get_preview_status` — 500 Internal Server Error
+`get_preview_status()` использовал `from app.models.drafts import Draft` + `db.get(Draft, draft_id)` для проверки существования черновика. Это требовало отдельной таблицы `drafts` в схеме `public` (оркестратор), хотя Registry уже ведёт свою таблицу `registry.drafts`. Таблица `public.drafts` не создавалась → `UndefinedTableError`.
+
+**Неправильное исправление (откачено):** добавлен `import app.models` в `main.py` — создавалась копия таблицы.
+
+**Правильное исправление:** заменить локальный DB-запрос на HTTP-вызов Registry (`registry.get_draft(draft_id)`), как делают все остальные endpoint'ы — `get_draft`, `list_drafts`, `start_preview`.
+
+**Что удалено:**
+- `orchestrator_service/app/models/drafts.py` — ORM-модель Draft (больше не нужна)
+- Локальное кэширование Draft в `create_draft`
+- `import app.models` из `main.py`
+
+**Файл:** `orchestrator_service/app/api/v1/endpoints/drafts.py` — `get_preview_status()`
+
+### Проблема 30.2: pipeline шлёт `decision` вместо `action` (422)
+Pipeline `orchestrator_draft_lifecycle` (шаг 7 — approve) отправлял тело `{"decision": "approved", ...}`, но API (DecideRequest) ожидает `action`:
+```python
+class DecideRequest(BaseModel):
+    action: str  # "approve" | "reject"
+    comment: Optional[str]
+```
+Результат: 422 Validation Error.
+
+**Исправление:** тело запроса изменено на `{"action": "approve", "comment": "Pipeline тест — approved"}`. Убран `422` из `expected_status` (был workaround).
+
+**Файлы:**
+- `service_checker/pipelines/orchestrator_draft_lifecycle.py`
+- `service_checker/tests/test_pipeline_orchestrator_draft_lifecycle.py`
+
+**Статус:** ✅ Исправлено (checker, 2026-06-15)
+

@@ -186,15 +186,6 @@ async def create_draft(
     finally:
         await registry.close()
 
-    # --- Cache Draft record in local DB ---
-    from app.models.drafts import Draft
-    draft_record = Draft(
-        draft_id=draft_id,
-        status="uploaded",
-    )
-    db.add(draft_record)
-    await db.flush()
-
     # --- Check: Task for this draft_id already exists? ---
     from sqlalchemy import select
     from app.models.pipeline import Task
@@ -646,20 +637,28 @@ async def get_preview_status(
     """
     from sqlalchemy import select
     from app.models.pipeline import TaskStep
-    from app.models.drafts import Draft
 
-    # Проверяем, что draft существует и не удалён
-    draft = await db.get(Draft, draft_id)
-    if not draft or draft.status == "discarded":
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "error": {
-                    "code": "NOT_FOUND",
-                    "message": f"Черновик {draft_id} не найден или удалён",
-                }
-            },
-        )
+    # Проверяем, что draft существует через Registry (не через локальную БД)
+    registry = RegistryServiceClient()
+    try:
+        draft_result = await registry.get_draft(draft_id)
+        if "error" in draft_result:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": {
+                        "code": "NOT_FOUND",
+                        "message": f"Черновик {draft_id} не найден или удалён",
+                    }
+                },
+            )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning(f"Registry check failed for draft {draft_id}: {exc}")
+        # Если Registry недоступен — пропускаем проверку, полагаемся на task
+    finally:
+        await registry.close()
 
     task = await _find_task_for_draft(db, draft_id)
 

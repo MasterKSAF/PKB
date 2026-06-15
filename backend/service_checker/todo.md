@@ -1,25 +1,31 @@
-# service_checker: согласование настроек между rag_builder и rag_search
+# Todo — Orchestrator не проходит тесты в Docker
 
-## 1. Эмбеддинги (выполнено)
-- supervisord: `EMBEDDING_API_URL`, `VECTOR_DIMENSION` для rag-builder
-- entrypoint: все `EMBEDDING_*` переменные + `VECTOR_DIMENSION` в .env
-- recheck.bat / recheck.sh: не трогать postgres/redis — только дроп схем
-- Файлы отчётов: фиксированные имена без дат
+## Проблема
+Оркестратор валится с 500 (step 6) и 422 (step 7) в pipeline `orchestrator_draft_lifecycle`.
 
-## 2. JWT токен (выполнено)
-- supervisord: `JWT_SECRET_KEY`, `JWT_ALGORITHM` для rag-builder
-- entrypoint: `JWT_SECRET_KEY`, `JWT_ALGORITHM` в .env rag_builder_service и auth_service
-- RAG Builder service def: depends_on + auth, warning о разных JWT_SECRET_KEY
+## Причины
 
-## Файлы
-- [x] `docker/supervisord.conf` — EMBEDDING_API_URL, VECTOR_DIMENSION, JWT_SECRET_KEY, JWT_ALGORITHM для rag-builder
-- [x] `docker/entrypoint.sh` — .env: EMBEDDING_* + VECTOR_DIMENSION + JWT_*
-- [x] `docker/recheck.bat` — не убивать pg/redis, дроп схем + flush redis
-- [x] `docker/recheck.sh` — синхронизирован с recheck.bat
-- [x] `core/cli.py` — фиксированные имена отчётов
-- [x] `core/docker.py` — фиксированные имена отчётов, убран timestamp
-- [x] `services/rag_builder.py` — depends_on + auth, warning о JWT
-- [x] `specificity.md` — п.27 (эмбеддинги), удалён устаревший п.7.7
+### 1. `get_preview_status` использовал локальную таблицу `drafts` вместо Registry
+- В `get_preview_status()` был `from app.models.drafts import Draft` + `db.get(Draft, draft_id)` — проверка через локальную таблицу `public.drafts`
+- Registry уже ведёт свою таблицу `registry.drafts` — оркестратор не должен дублировать
+- Таблица `public.drafts` не создавалась → `UndefinedTableError`
+- **Исправление:** заменён на HTTP-вызов `registry.get_draft(draft_id)`
 
-## Проверка
-- [ ] Перезапустить через recheck.bat и убедиться что rag_builder build проходит без 401
+### 2. Несоответствие полей запроса в `decide`
+- Pipeline шлёт `{"decision": "approved", "comment": "..."}`
+- API ожидает `{"action": "approve", "comment": "..."}`
+
+## План
+
+### Шаг 1: Импорт app.models в main.py
+- [x] Добавить `import app.models` в `app/main.py` (lifespan startup)
+
+### Шаг 2: Исправить pipeline шаг 7 (decide)
+- [x] В `service_checker/pipelines/orchestrator_draft_lifecycle.py` исправить body на `{"action": "approve", "comment": "..."}`
+- [x] В тесте `test_pipeline_orchestrator_draft_lifecycle.py` обновить expected_status (сейчас 200, 409 — 422 был workaround)
+
+### Шаг 3: Проверить
+- [x] `python -m pytest tests/ -v` в `service_checker` — 141 passed
+- [x] `python -m pytest tests/ -v` в `orchestrator_service` — 351 passed, 1 pre-existing fail
+- [x] `docker compose down --volumes && up -d` — полный сброс
+- [x] `python -m service_checker docker --action full-report` — **Orchestrator: ✅ 8/8**
