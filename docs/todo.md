@@ -1,48 +1,40 @@
-# Todo: Синхронизация API RAG Builder с пайплайнами
+# Todo: Синхронизация API с пайплайнами (финальная проверка)
 
-## Задача
-Проверить и исправить соответствие `rag_builder_service_api.md` описаниям пайплайнов (pipeline2-indexation.md, overview.md) и смежных API (orchestrator_service_api.md, registry_service_api.md).
+## Задачи
 
-## Результат
+Все пункты выполнены ✅
 
-### 1. 🔴 `rag_builder_service_api.md` — `POST /rag/build` переведён на асинхронную модель
-- [x] Код ответа: `201` → `202`
-- [x] Добавлен `task_id` в ответ
-- [x] Статус в ответе: `completed` → `indexing` (нефинальный)
-- [x] Таблица кодов: `201 — Индексация запущена` → `202 — Индексация запущена (асинхронно)`
+## Правки
 
-### 2. 🔴 `rag_builder_service_api.md` + `pipeline2-indexation.md` — унификация статусов
-- [x] В ответе `POST /rag/build`: `completed` → `indexing` (промежуточный)
-- [x] В `GET /rag/build/{doc_id}/status`: сохранён `indexed` как финальный
-- [x] В longpoll pipeline2-indexation.md: `status: completed` → `status: indexed` (2 места)
-- [x] В sequence-диаграмме pipeline2-indexation.md: `completed` → `indexed`
-- [x] В описании выхода этапа pipeline2-indexation.md: `completed/failed` → `indexed/failed`
+### C1 — 🔴 `db_diagrams.md`: типы секций
+- [x] Исправить описание `section` → `text` и дополнить список актуальными типами из JSON-схемы
 
-### 3. 🟡 `rag_builder_service_api.md` — таблица полей запроса
-- [x] Добавлен `protected_spans` (массив объектов)
-- [x] Добавлен `options` (object) + `options.strategy`
-- [x] Добавлены `sections[].document_id`, `sections[].clause`, `sections[].title`, `sections[].level`, `sections[].page`
+### C2 — 🔴 `converter_validator_service_api.md`: удалить `document_id`
+- [x] Удалить `document_id` из JSON-примера ответа `POST /converter/convert`
+- [x] Удалить `document_id` из таблицы полей
 
-### 4. 🟡 `rag_builder_service_api.md` — тип `document_id`
-- [x] В таблицах ответов `document_id` исправлен с `string` на `bigint`
+### C3 — 🟡 `orchestrator_service_api.md`: убрать `version_id` из `POST /drafts`
+- [x] Удалить `version_id` из JSON-примера ответа
+- [x] `version_id` в таблице полей ответа отсутствовала — только в JSON
 
-### 5. 🟡 `orchestrator_service_api.md` — уточнение статусов
-- [x] Описание FSM уточнено: «Статусы документов (FSM) для Indexation: `pending_index` → ...»
-- [x] `indexation.status` и `rag_indexing.status` остались как `pending`/`completed` (это статусы шагов Оркестратора)
+### C4 — 🟡 `orchestrator_service_api.md` + `common_api.md`: удалить `POST /documents/{doc_id}/approve`
+- [x] Удалить секцию `POST /documents/{doc_id}/approve` из orchestrator_service_api.md
+- [x] Удалить строку `approve` из RBAC-матрицы в common_api.md
 
-### 6. ⚪ `pipeline2-indexation.md` — интеграция DELETE в workflow
-- [x] Добавлен раздел «Переиндексация» с описанием вызова `DELETE /rag/build/{doc_id}`
+### C5 — 🟡 `query_service_api.md` + `rag_search_service_api.md`: добавить `confidence` в цепочку
+- [x] `confidence` в RAG Search — остаётся
+- [x] Добавить `confidence` в `sources[]` Query API (ответы чата + `/text/search`)
+- [x] Добавить `confidence` в таблицу именования полей источников
 
-### 7. ⚪ `rag_builder_service_api.md` — уточнение источника данных
-- [x] Фраза скорректирована: Orchestrator получает JSON из Registry и передаёт в RAG Builder
+### C6 — 🟡 `db_diagrams.md`: CHECK для `chat.messages.status`
+- [x] Добавить CHECK-constraint для `chat.messages.status`
+- [x] Убрать `idle` из описания (виртуальный статус)
 
-### 8. ⚪ `rag_builder_service_api.md` — `protected_spans` и `options` в описание
-- [x] Добавлено описание `protected_spans` и `options.strategy` в тело документации
+### C7 — 🟡 `overview.md`: маппинг статусных моделей
+- [x] Добавить таблицу маппинга трёхуровневой статусной модели (DB/Task/UI)
 
-### 9. 📝 `specificity.md`
-- [x] Запись B7 разделена: RAG Builder — синхронизирован, Auth Service и RAG Search — остаются
+### C8 — 🟡 `common_api.md`: RBAC
+- [x] Удалить строку `POST /documents/{doc_id}/approve` из RBAC-матрицы (в C4)
 
-### 10. ⚪ Дополнительные правки по результатам финальной проверки
-- [x] `pipeline2-indexation.md`: удалено упоминание статуса `partially_indexed` (согласно решению X3)
-- [x] `orchestrator_service_api.md`: добавлена секция «Особенности переиндексации» в `POST /documents/{doc_id}/reprocess` с описанием вызова DELETE
-- [x] `orchestrator_service_api.md`: `embeddings: 34` → `embeddings: 31` (согласование с примером RAG Builder)
+### Дополнительно
+- [x] `specificity.md`: обновлён статус LP-C2 (document_id в Converter) на 🔄 исправлено

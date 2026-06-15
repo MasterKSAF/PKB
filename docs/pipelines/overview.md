@@ -394,6 +394,14 @@ stateDiagram-v2
 | `indexed` | 2 | Документ проиндексирован, готов к поиску |
 | `failed` | 1/2 | Ошибка на одном из этапов |
 
+**Маппинг трёхуровневой статусной модели:**
+
+| Уровень | Таблица / API | Статусы | Назначение |
+|---------|--------------|---------|------------|
+| **DB (FSM)** | `registry.documents.processing_status` | `created`, `pending_index`, `indexing`, `indexed`, `failed` | Фактическое состояние документа в БД. Статусы черновика (`uploaded`, `previewing`, `ready_for_approve`, `approved`, `discarded`) хранятся в `registry.drafts.status` |
+| **Task** | `pipeline.tasks.status` | `active`, `completed`, `failed` | Внутренний статус задачи пайплайна в Оркестраторе. Не путать со статусом документа |
+| **UI (API)** | `GET /documents/{doc_id}/status` response | `processing`, `approval_required`, `completed` | Агрегированный статус для отображения пользователю. Маппинг: `processing` ← (`uploaded`/`previewing`), `approval_required` ← (`ready_for_approve`), `completed` ← (весь документ проиндексирован) |
+
 ---
 
 ### 11. Обработка ошибок и компенсационные потоки (Saga)

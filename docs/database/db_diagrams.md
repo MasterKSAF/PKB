@@ -399,10 +399,13 @@ erDiagram
 | `level` | Уровень вложенности (`1`, `2`, `3`, ...) |
 | `path` | Ltree-путь в иерархии |
 | `bbox` | Координаты на странице: `[x1, y1, x2, y2]` |
-| `type` | Тип секции: `section`, `table`, `image`, `formula` |
+| `type` | Тип секции: `text`, `textBlock`, `headerFooter`, `table`, `list`, `image`, `formula` — CHECK (type IN ('text','textBlock','headerFooter','table','list','image','formula')) |
 | `content` | JSONB с разнородной структурой, зависящей от `type`:
-  - `section` → `{ text, amendments }`
+  - `text` → `{ text, amendments }`
+  - `textBlock` → `{ block[] }`
+  - `headerFooter` → `{ text }`
   - `table` → `{ caption, columns, rows, footnotes, amendments, image_key }`
+  - `list` → `{ numbering_style, items[] }`
   - `image` → `{ caption, image_key, description }`
   - `formula` → `{ latex, meaning, image_key, parameters }` |
 
@@ -477,8 +480,8 @@ erDiagram
 | Поле | Примечание |
 |------|------------|
 | `role` | Роль отправителя: `user`, `assistant` |
-| `status` | FSM статус сообщения: `idle`, `pending`, `enriching`, `searching`, `generating`, `enriching_citations`, `answered`, `failed` |
-| `sources` | Массив источников: `[{chunk_id, section_id, document_id, excerpt, score}]` |
+| `status` | FSM статус сообщения: `pending`, `enriching`, `searching`, `generating`, `enriching_citations`, `answered`, `failed`. CHECK (status IN ('pending','enriching','searching','generating','enriching_citations','answered','failed')). Статус `idle` — виртуальный, не хранится в БД. |
+| `sources` | Массив источников: `[{chunk_id, section_id, document_id, excerpt, score, confidence}]` |
 
 Таблицы `chat.sessions` и `chat.messages` не относятся к реестру документов, выделены в отдельную схему `chat`.
 

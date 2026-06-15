@@ -330,7 +330,6 @@ GET .../{doc_id}/status?longpoll=15
 | `GET /documents` (+ `/{doc_id}`, `/status`, `/file`, `/pages`) | ✓          | ✓                 | ✓              |
 | `DELETE /documents/{doc_id}`                                   | ✗          | ✓                 | ✓              |
 | `POST /documents/{doc_id}/reprocess`                           | ✗          | ✓                 | ✓              |
-| `POST /documents/{doc_id}/approve` | ✗ | ✓ | ✓ |
 | `GET /documents/{doc_id}/history` | ✓ | ✓ | ✓ |
 | `GET /documents/{doc_id}/errors` | ✓ | ✓ | ✓ |
 | `GET /documents/queue` | ✓ | ✓ | ✓ |

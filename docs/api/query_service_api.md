@@ -139,6 +139,7 @@ sequenceDiagram
 | URL превью страницы  | `page_preview_url` |                                               |
 | URL документа        | `document_url`     |                                               |
 | Оценка релевантности | `score`            |                                               |
+| Уверенность в релевантности | `confidence` | float 0..1, передаётся из RAG Search |
 
 ---
 
@@ -198,7 +199,8 @@ longpoll-запрос к конкретному сообщению: `GET /chat/s
         "page": 42,
         "section_id": 420042,
         "excerpt": "Для ледового класса Arc4 толщина обшивки должна быть не менее 12 мм.",
-        "score": 0.92
+        "score": 0.92,
+        "confidence": 0.85
       }
     ],
     "processing_time_ms": 3450,
@@ -463,18 +465,19 @@ CRUD для судостроительных проектов (`chat.projects`).
       "role": "assistant",
       "status": "answered",
       "content": "Согласно Правилам РС (Часть I, стр. 42), толщина обшивки ледового пояса для класса Arc4 должна быть не менее 12 мм.",
-            "sources": [
-              {
-                "document_id": 1,
-                "document_title": "Правила РС, часть I",
-                "page": 42,
-                "section_id": 420042,
-                "excerpt": "Для ледового класса Arc4 толщина обшивки...",
-                "score": 0.94
-              }
-            ],
-            "processing_time_ms": 3200,
-            "feedback": null,
+	            "sources": [
+	              {
+	                "document_id": 1,
+	                "document_title": "Правила РС, часть I",
+	                "page": 42,
+	                "section_id": 420042,
+	                "excerpt": "Для ледового класса Arc4 толщина обшивки...",
+	                "score": 0.94,
+	                "confidence": 0.85
+	              }
+	            ],
+	            "processing_time_ms": 3200,
+	            "feedback": null,
             "timestamp": "2026-04-27T14:01:04Z"
     }
   ],
@@ -607,7 +610,8 @@ CRUD для судостроительных проектов (`chat.projects`).
             "page": 42,
             "section_id": 420042,
             "excerpt": "Для ледового класса Arc4 толщина обшивки...",
-            "score": 0.94
+            "score": 0.94,
+            "confidence": 0.85
           }
         ],
         "timestamp": "2026-04-27T14:03:10Z"
@@ -736,7 +740,8 @@ CRUD для судостроительных проектов (`chat.projects`).
             "page": 42,
             "section_id": 420042,
             "excerpt": "Для ледового класса Arc4 толщина обшивки...",
-            "score": 0.94
+            "score": 0.94,
+            "confidence": 0.85
           }
         ],
         "processing_time_ms": 3200,
@@ -1027,19 +1032,20 @@ LLM возвращает ответ вида:
     "subqueries": ["толщина обшивки ледового пояса Arc4"]
   },
   "results": [
-    {
-      "section_id": 420042,
-      "document_id": 1,
-      "document_title": "Правила РС, часть I",
-      "page": 42,
-      "content": "Для ледового класса Arc4 толщина обшивки...",
-      "score": 0.94,
-      "document_type": "normative",
-      "matched_subquery": "толщина обшивки ледового пояса Arc4"
-    }
-  ],
-  "total_found": 7,
-  "processing_time_ms": 1850
+      {
+        "section_id": 420042,
+        "document_id": 1,
+        "document_title": "Правила РС, часть I",
+        "page": 42,
+        "content": "Для ледового класса Arc4 толщина обшивки...",
+        "score": 0.94,
+        "confidence": 0.85,
+        "document_type": "normative",
+        "matched_subquery": "толщина обшивки ледового пояса Arc4"
+      }
+    ],
+    "total_found": 7,
+    "processing_time_ms": 1850
 }
 ```
 
