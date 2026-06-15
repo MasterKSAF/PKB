@@ -25,4 +25,5 @@ def test_save_chunks_to_postgres():
     repository = PostgresChunkRepository()
 
     repository.ensure_schema()
+    repository.save_sections(request)
     repository.save_chunks(result.chunks)

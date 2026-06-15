@@ -93,6 +93,19 @@ class PostgresChunkRepository(ChunkRepository):
                     ).format(sql.Identifier(settings.POSTGRES_SCHEMA))
                 )
 
+                logger.info("ensure_schema: before create index document_sections_ltree")
+                cur.execute(
+                    sql.SQL(
+                        """
+                        CREATE INDEX IF NOT EXISTS idx_document_sections_ltree
+                        ON {}.document_sections
+                        USING GIST(path_ltree)
+                        """
+                    ).format(
+                        sql.Identifier(settings.POSTGRES_SCHEMA)
+                    )
+                )
+
                 logger.info("ensure_schema: before create table chunks")
                 cur.execute(
                     sql.SQL(
@@ -390,6 +403,7 @@ class PostgresChunkRepository(ChunkRepository):
                             title,
                             level,
                             path,
+                            path_ltree,
                             page,
                             bbox,
                             section_type,
@@ -398,7 +412,7 @@ class PostgresChunkRepository(ChunkRepository):
                         VALUES (
                             %s, %s, %s, %s,
                             %s, %s, %s, %s,
-                            %s, %s, %s, %s
+                            %s, %s, %s, %s, %s
                         )
                         """,
                         (
@@ -410,6 +424,7 @@ class PostgresChunkRepository(ChunkRepository):
                             section.title,
                             section.level,
                             section.path,
+                            self._to_ltree_path(section.path),
                             section.page,
                             json.dumps(section.bbox),
                             section.type,
@@ -619,6 +634,30 @@ class PostgresChunkRepository(ChunkRepository):
 
         return "\n".join(lines)
 
+
+    def _to_ltree_path(self, path: str | None,) -> str | None:
+        if not path:
+            return None
+
+        parts = path.split("/")
+
+        normalized_parts = []
+
+        for part in parts:
+            value = (
+                str(part)
+                .strip()
+                .lower()
+                .replace(".", "_")
+                .replace("-", "_")
+            )
+
+            if value and value[0].isdigit():
+                value = f"p{value}"
+
+            normalized_parts.append(value)
+
+        return ".".join(normalized_parts)
 
     def save_extracted_tables(
             self,
