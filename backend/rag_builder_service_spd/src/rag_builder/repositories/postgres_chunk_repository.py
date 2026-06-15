@@ -275,6 +275,71 @@ class PostgresChunkRepository(ChunkRepository):
                     )
                 )
 
+                logger.info("ensure_schema: before create table formulas")
+                cur.execute(
+                    sql.SQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS {}.formulas (
+                            id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    
+                            document_id BIGINT NOT NULL,
+                            document_version_id BIGINT NOT NULL,
+                            document_section_id BIGINT NOT NULL,
+    
+                            source_section_id BIGINT NOT NULL,
+                            clause TEXT,
+                            path TEXT,
+                            page INTEGER,
+                            bbox JSONB,
+    
+                            title TEXT,
+                            formula_text TEXT,
+                            formula_latex TEXT,
+                            formula_type TEXT,
+    
+                            metadata JSONB,
+                            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    
+                            CONSTRAINT fk_formulas_document_section
+                                FOREIGN KEY (document_section_id)
+                                REFERENCES {}.document_sections(id)
+                                ON DELETE CASCADE
+                        )
+                        """
+                    ).format(
+                        sql.Identifier(settings.POSTGRES_SCHEMA),
+                        sql.Identifier(settings.POSTGRES_SCHEMA),
+                    )
+                )
+
+                logger.info("ensure_schema: before create table formula_parameters")
+                cur.execute(
+                    sql.SQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS {}.formula_parameters (
+                            id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    
+                            formula_id BIGINT NOT NULL,
+    
+                            symbol TEXT NOT NULL,
+                            name TEXT,
+                            unit TEXT,
+                            description TEXT,
+    
+                            metadata JSONB,
+                            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    
+                            CONSTRAINT fk_formula_parameters_formula
+                                FOREIGN KEY (formula_id)
+                                REFERENCES {}.formulas(id)
+                                ON DELETE CASCADE
+                        )
+                        """
+                    ).format(
+                        sql.Identifier(settings.POSTGRES_SCHEMA),
+                        sql.Identifier(settings.POSTGRES_SCHEMA),
+                    )
+                )
 
 
             conn.commit()
@@ -756,5 +821,145 @@ class PostgresChunkRepository(ChunkRepository):
                     )
 
                 conn.commit()
+
+    def save_formulas(
+            self,
+            request: BuildRequest,
+    ) -> None:
+        logger.info(
+            "Saving formulas for document_id=%s",
+            request.metadata.document_id,
+        )
+
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    DELETE FROM {settings.POSTGRES_SCHEMA}.formulas
+                    WHERE document_version_id = %s
+                    """,
+                    (request.metadata.document_version_id,),
+                )
+
+                cur.execute(
+                    f"""
+                    SELECT section_id, id
+                    FROM {settings.POSTGRES_SCHEMA}.document_sections
+                    WHERE document_version_id = %s
+                    """,
+                    (request.metadata.document_version_id,),
+                )
+
+                section_id_to_db_id = {
+                    section_id: document_section_id
+                    for section_id, document_section_id
+                    in cur.fetchall()
+                }
+
+                for section in request.sections:
+                    if section.type != "formula":
+                        continue
+
+                    document_section_id = section_id_to_db_id.get(
+                        section.section_id
+                    )
+
+                    if document_section_id is None:
+                        raise ValueError(
+                            "No document_section_id found for "
+                            f"document_version_id={request.metadata.document_version_id}, "
+                            f"section_id={section.section_id}"
+                        )
+
+                    content = (
+                        section.content
+                        if isinstance(section.content, dict)
+                        else {}
+                    )
+
+                    cur.execute(
+                        f"""
+                        INSERT INTO {settings.POSTGRES_SCHEMA}.formulas (
+                            document_id,
+                            document_version_id,
+                            document_section_id,
+                            source_section_id,
+                            clause,
+                            path,
+                            page,
+                            bbox,
+                            title,
+                            formula_text,
+                            formula_latex,
+                            formula_type,
+                            metadata
+                        )
+                        VALUES (
+                            %s, %s, %s, %s,
+                            %s, %s, %s, %s,
+                            %s, %s, %s, %s, %s
+                        )
+                        RETURNING id
+                        """,
+                        (
+                            request.metadata.document_id,
+                            request.metadata.document_version_id,
+                            document_section_id,
+                            section.section_id,
+                            section.clause,
+                            section.path,
+                            section.page,
+                            json.dumps(section.bbox),
+                            section.title,
+                            content.get("text"),
+                            content.get("latex"),
+                            content.get("formula_type"),
+                            json.dumps(content),
+                        ),
+                    )
+
+                    formula_id = cur.fetchone()[0]
+
+                    parameters = content.get("parameters", [])
+
+                    if not isinstance(parameters, list):
+                        parameters = []
+
+                    for param in parameters:
+                        if not isinstance(param, dict):
+                            continue
+
+                        symbol = param.get("symbol")
+
+                        if not symbol:
+                            continue
+
+                        cur.execute(
+                            f"""
+                            INSERT INTO {settings.POSTGRES_SCHEMA}.formula_parameters (
+                                formula_id,
+                                symbol,
+                                name,
+                                unit,
+                                description,
+                                metadata
+                            )
+                            VALUES (
+                                %s, %s, %s,
+                                %s, %s, %s
+                            )
+                            """,
+                            (
+                                formula_id,
+                                symbol,
+                                param.get("name"),
+                                param.get("unit"),
+                                param.get("description"),
+                                json.dumps(param),
+                            ),
+                        )
+
+            conn.commit()
+
 
 

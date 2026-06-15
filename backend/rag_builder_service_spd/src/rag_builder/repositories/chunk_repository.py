@@ -61,6 +61,12 @@ class ChunkRepository:
     ) -> None:
         raise NotImplementedError
 
+    def save_formulas(
+        self,
+        request: BuildRequest,
+    ) -> None:
+        raise NotImplementedError
+
 
 
 class InMemoryChunkRepository(ChunkRepository):
@@ -107,3 +113,8 @@ class InMemoryChunkRepository(ChunkRepository):
     ) -> None:
         pass
 
+    def save_formulas(
+        self,
+        request: BuildRequest,
+    ) -> None:
+        pass

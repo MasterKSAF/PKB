@@ -52,6 +52,7 @@ class IndexingService:
             self.repository.save_cross_references(request)
             self.repository.save_images(request)
             self.repository.save_extracted_tables(request)
+            self.repository.save_formulas(request)
 
         chunks = self.chunking_service.build_chunks(request)
 
