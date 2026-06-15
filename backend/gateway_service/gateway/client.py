@@ -58,7 +58,8 @@ def resolve_service(path: str) -> Optional[str]:
     Сопоставление гибкое:
       /api/v1/classifiers      → registry (точное совпадение)
       /api/v1/classifiers/ext  → registry (вложенный путь)
-      /api/v1/system/health    → None (собственный эндпоинт Gateway)
+      /api/v1/health           → None (собственный эндпоинт Gateway)
+      /api/v1/system/health    → None (алиас)
     """
     normalized = path.rstrip("/")
     for prefix, svc in SERVICE_ROUTES.items():
