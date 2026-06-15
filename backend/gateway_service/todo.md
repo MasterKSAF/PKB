@@ -20,5 +20,8 @@
 - Обновлены тесты test_api.py и start_service.py под новый формат ответов
 - Добавлены 17 новых тестов (TestStopperFixes)
 
+### Сопутствующие изменения
+- Health endpoint в Docker: починен 401 из-за порядка middleware (trailing slash не обрезался до RBACMiddleware)
+
 ### Валидация
-- **487 тестов проходят** (было 470, добавлено 17 новых, 4 обновлено под новый формат)
+- **491 тест проходит** (было 487, добавлено 4 новых на trailing slash health endpoints)

@@ -1375,3 +1375,75 @@ class TestStopperFixes:
             assert data["status"] == "ok"
         finally:
             gw.ALLOW_ANONYMOUS = old_value
+
+    # ── Trailing slash для health endpoints (Stopper 9 follow-up) ─────
+
+    def test_79_system_health_trailing_slash_public(self):
+        """GET /api/v1/system/health/ (со слешем) доступен без токена."""
+        import mocks.gateway as gw
+
+        old_value = gw.ALLOW_ANONYMOUS
+        try:
+            gw.ALLOW_ANONYMOUS = False
+            resp = client.get(f"{BASE}/system/health/")
+            assert resp.status_code == 200, (
+                f"Ожидался 200 для /system/health/ без токена, "
+                f"получен {resp.status_code}: {resp.text[:200]}"
+            )
+            data = resp.json()
+            assert data["status"] == "ok"
+        finally:
+            gw.ALLOW_ANONYMOUS = old_value
+
+    def test_80_health_alias_trailing_slash_public(self):
+        """GET /api/v1/health/ (алиас со слешем) доступен без токена."""
+        import mocks.gateway as gw
+
+        old_value = gw.ALLOW_ANONYMOUS
+        try:
+            gw.ALLOW_ANONYMOUS = False
+            resp = client.get(f"{BASE}/health/")
+            assert resp.status_code == 200, (
+                f"Ожидался 200 для /health/ без токена, "
+                f"получен {resp.status_code}: {resp.text[:200]}"
+            )
+            data = resp.json()
+            assert data["status"] == "ok"
+        finally:
+            gw.ALLOW_ANONYMOUS = old_value
+
+    def test_81_system_health_trailing_slash_no_auth_header(self):
+        """GET /api/v1/system/health/ без заголовка Authorization — 200."""
+        import mocks.gateway as gw
+
+        old_value = gw.ALLOW_ANONYMOUS
+        try:
+            gw.ALLOW_ANONYMOUS = False
+            resp = client.get(
+                f"{BASE}/system/health/",
+                headers={"Authorization": ""},
+            )
+            assert resp.status_code == 200, (
+                f"Ожидался 200 для /system/health/ без заголовка Auth, "
+                f"получен {resp.status_code}: {resp.text[:200]}"
+            )
+        finally:
+            gw.ALLOW_ANONYMOUS = old_value
+
+    def test_82_system_health_trailing_slash_with_invalid_token(self):
+        """GET /api/v1/system/health/ с невалидным Bearer токеном — 200."""
+        import mocks.gateway as gw
+
+        old_value = gw.ALLOW_ANONYMOUS
+        try:
+            gw.ALLOW_ANONYMOUS = False
+            resp = client.get(
+                f"{BASE}/system/health/",
+                headers={"Authorization": "Bearer invalid_token_xyz"},
+            )
+            assert resp.status_code == 200, (
+                f"Ожидался 200 для /system/health/ с невалидным токеном, "
+                f"получен {resp.status_code}: {resp.text[:200]}"
+            )
+        finally:
+            gw.ALLOW_ANONYMOUS = old_value

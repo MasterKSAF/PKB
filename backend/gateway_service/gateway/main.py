@@ -91,7 +91,7 @@ class RBACMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         auth = request.headers.get("Authorization", "")
-        path = request.url.path
+        path = request.url.path.rstrip("/") if request.url.path != "/" else "/"
 
         user_context: Dict[str, Any] = {
             "user_id": None,
