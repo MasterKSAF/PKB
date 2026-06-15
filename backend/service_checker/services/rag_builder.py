@@ -77,10 +77,11 @@ def get_service_def() -> ServiceDef:
         needs_auth=False,
         endpoints=endpoints,
         prepare_endpoints=prepare_endpoints,
-        depends_on=["registry"],
+        depends_on=["registry", "auth"],
         base_data={},
         warnings=[
-            "⚠️ Документация не упоминает JWT, но реальный RAG Builder требует bearer token. Эндпоинты /rag/build возвращают 401 без него.",
+            "⚠️ Документация не упоминает JWT, но RAG Builder требует bearer token. Исправлено: supervisord передаёт JWT_SECRET (RAG Builder) = JWT_SECRET_KEY (Auth).",
+            "⚠️ Pipeline document_processing: RAG Builder ожидает document_id как UUID, но pipeline передаёт int (1) — падает с 422.",
             "⚠️ RAG Builder падал при старте: alembic migration 20260614_0002 не применилась — FK document_id UUID vs registry.documents.id BIGINT. Migration пропущена, таблица создана вручную с BIGINT document_id.",
             "⚠️ Подключена заглушка docker/patch_rag_tables.py — при full-report/coverage/patch-rag проверяет и создаёт таблицы, если их нет.",
         ],

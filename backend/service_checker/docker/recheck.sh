@@ -1,23 +1,101 @@
 #!/bin/bash
 # =============================================================================
-# PKB Neuroassistant — перезапуск контейнера + проверка
+# PKB Neuroassistant — re-check: clean DB + restart + full report
+#
+# Автоматически:
+#   1. Проверяет наличие base-образа — если нет, собирает
+#   2. Проверяет наличие модели TEI — если нет, скачивает
+#   3. Проверяет, запущен ли контейнер TEI — если нет, запускает
+#   4. Дропает схемы БД, сбрасывает Redis, перезапускает app
+#   5. Запускает полный отчёт (health + coverage + pipeline)
+#
+# PostgreSQL и Redis не перезапускаются — только чистим данные.
+# TEI контейнер не перезапускается (тяжёлая модель), только если не запущен.
 # =============================================================================
 set -e
 
 COMPOSE_DIR="$(cd "$(dirname "$0")" && pwd)"
-COMPOSE_FILE="$COMPOSE_DIR/docker-compose.yml"
-SERVICE_CHECKER="$COMPOSE_DIR/../service_checker.py"
+cd "$COMPOSE_DIR"
 
-echo "1. Перезапуск контейнера..."
-docker compose -f "$COMPOSE_FILE" restart app
+echo "=== PKB Neuroassistant: Re-check ==="
+echo ""
+
+# ── 1. Проверка base-образа ────────────────────────────────────────────
+IMAGE_NAME="ghcr.io/pkb/neuro-base:latest"
+if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "$IMAGE_NAME"; then
+    echo "[1/5] Base image found, skipping build."
+else
+    echo "[1/5] Base image not found — building..."
+    echo ""
+    DOCKER_SCOUT_SUPPRESS_ANALYSIS=1 docker build -f Dockerfile.base -t "$IMAGE_NAME" .
+fi
+echo ""
+
+# ── 2. Проверка модели TEI ─────────────────────────────────────────────
+if [ -f "tei_model/model.onnx" ]; then
+    echo "[2/5] TEI model found, skipping download."
+else
+    echo "[2/5] TEI model not found — downloading..."
+    echo ""
+    python prepare_tei_model.py
+fi
+echo ""
+
+# ── 3. Проверка контейнера TEI ─────────────────────────────────────────
+echo "[3/5] Checking TEI container status..."
+if docker compose ps --format "{{.State}}" tei 2>/dev/null | grep -q "running"; then
+    echo "    TEI container is already running, skipping restart."
+else
+    echo "    TEI container is NOT running — starting..."
+    docker compose up -d tei
+    sleep 3
+    if docker compose ps --format "{{.State}}" tei 2>/dev/null | grep -q "running"; then
+        echo "    TEI container started."
+    else
+        echo "    WARNING: Failed to start TEI container, continuing anyway."
+    fi
+fi
+echo ""
+
+# ── 4. Очистка данных + перезапуск app ─────────────────────────────────
+echo "[4/5] Dropping data + restarting app..."
+
+echo "    Dropping database schemas..."
+docker exec pkb-postgres psql -U pkb -d pkb_neuro -c "DROP SCHEMA IF EXISTS auth CASCADE;" 2>/dev/null || echo "    (schema auth not found)"
+docker exec pkb-postgres psql -U pkb -d pkb_neuro -c "DROP SCHEMA IF EXISTS registry CASCADE;" 2>/dev/null || echo "    (schema registry not found)"
+docker exec pkb-postgres psql -U pkb -d pkb_neuro -c "DROP SCHEMA IF EXISTS rag CASCADE;" 2>/dev/null || echo "    (schema rag not found)"
+
+echo "    Flushing Redis..."
+docker exec pkb-redis redis-cli FLUSHALL 2>/dev/null || echo "    (Redis not reachable, skipping)"
+
+docker compose kill app 2>/dev/null || true
+docker compose rm -f -v app 2>/dev/null || true
+echo ""
+
+# ── 5. Запуск app + отчёт ──────────────────────────────────────────────
+echo "[5/5] Starting app..."
+docker compose up -d app
+echo "    App started. Running full report..."
+echo ""
+
+cd "$COMPOSE_DIR/../.."
+
+echo "    Waiting for supervisor..."
+until docker exec pkb-neuro supervisorctl status 2>/dev/null | grep -q "RUNNING"; do
+    sleep 2
+done
+
+echo "    Patching RAG Builder tables..."
+python -m service_checker docker --action patch-rag || true
+
+echo "    Restarting RAG Builder with proper tables..."
+docker exec pkb-neuro supervisorctl restart rag-builder 2>/dev/null || true
 
 echo ""
-echo "2. Ожидание 10 секунд..."
-sleep 10
+echo "    Running full report..."
+python -m service_checker docker --action full-report || echo "    WARNING: Some checks failed, check the report above."
 
 echo ""
-echo "3. Проверка + формирование отчётов (coverage)..."
-python "$SERVICE_CHECKER" docker --action coverage
-
+echo "=== Done ==="
+echo "Reports: check_result/"
 echo ""
-echo "Отчёты сохранены в check_result/"

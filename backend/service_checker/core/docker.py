@@ -429,16 +429,14 @@ def _docker_health_check(services: List[str]) -> bool:
     return all_ok
 
 
-async def _docker_collect_logs(services: List[str] = None, timestamp: str = None) -> bool:
+async def _docker_collect_logs(services: List[str] = None) -> bool:
     """Собрать все логи (info + error) из supervisor в отчёт."""
     log_header("Docker: сбор логов (info + error)")
 
     check_result_dir = BACKEND_DIR / "check_result"
     check_result_dir.mkdir(parents=True, exist_ok=True)
 
-    if timestamp is None:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    report_path = check_result_dir / f"errors_{timestamp}.md"
+    report_path = check_result_dir / "errors.md"
 
     container_name = "pkb-neuro"
     docker_cmd_prefix = ["docker", "exec", container_name]
@@ -560,8 +558,8 @@ async def _docker_collect_logs(services: List[str] = None, timestamp: str = None
     return True
 
 
-async def _docker_run_coverage() -> Optional[str]:
-    """Запустить API Coverage Test для Docker-окружения. Возвращает timestamp."""
+async def _docker_run_coverage() -> bool:
+    """Запустить API Coverage Test для Docker-окружения. Возвращает True при успехе."""
     log_header("Docker: API Coverage Test")
 
     # Очищаем supervisor-логи перед запуском тестов — чтобы в отчёт
@@ -579,8 +577,7 @@ async def _docker_run_coverage() -> Optional[str]:
     check_result_dir = BACKEND_DIR / "check_result"
     check_result_dir.mkdir(parents=True, exist_ok=True)
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_path = check_result_dir / f"api_coverage_{timestamp}.md"
+    output_path = check_result_dir / "api_coverage.md"
 
     log_info(f"Отчёт будет сохранён: {output_path}")
 
@@ -588,7 +585,7 @@ async def _docker_run_coverage() -> Optional[str]:
     sys.path.insert(0, str(BACKEND_DIR))
     from service_checker.api_coverage_test import ApiCoverageTester
 
-    log_path = check_result_dir / f"errors_{timestamp}.md"
+    log_path = check_result_dir / "errors.md"
 
     try:
         tester = ApiCoverageTester(base_host="127.0.0.1")
@@ -597,10 +594,10 @@ async def _docker_run_coverage() -> Optional[str]:
         output_path.write_text(report, encoding="utf-8")
         await tester.close()
         log_ok(f"API Coverage отчёт сохранён: {output_path}")
-        return timestamp
+        return True
     except Exception as e:
         log_err(f"Ошибка при запуске coverage test: {e}")
-        return None
+        return False
 
 
 async def _docker_run_pipeline() -> Dict[str, Any]:

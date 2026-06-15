@@ -419,10 +419,10 @@ async def cmd_docker(
 
     if action == "coverage":
         log_header("📋 Coverage + Logs")
-        cov_ts = await _docker_run_coverage()
-        if cov_ts:
+        ok = await _docker_run_coverage()
+        if ok:
             log_info("Собираем логи ошибок...")
-            await _docker_collect_logs(target_services, timestamp=cov_ts)
+            await _docker_collect_logs(target_services)
         return
 
     if action == "full-report":
@@ -480,7 +480,7 @@ async def cmd_docker(
             tester = ApiCoverageTester(base_host="127.0.0.1")
             cov_results = await tester.run_all()
             cov_report = tester.generate_report(db_result=db_result)
-            cov_path = check_result_dir / f"api_coverage_{timestamp}.md"
+            cov_path = check_result_dir / "api_coverage.md"
             cov_path.write_text(cov_report, encoding="utf-8")
             log_ok(f"API Coverage отчёт сохранён: {cov_path}")
         except Exception as e:
@@ -516,13 +516,13 @@ async def cmd_docker(
             if cov_results is None:
                 cov_results = {}
             full_report = _generate_full_report(cov_results, pipe_results, timestamp, db_result=db_result)
-            full_path = check_result_dir / f"full_report_{timestamp}.md"
+            full_path = check_result_dir / "full_report.md"
             full_path.write_text(full_report, encoding="utf-8")
             log_ok(f"Сводный отчёт сохранён: {full_path}")
 
             # Собираем логи ошибок
             log_info("Собираем логи ошибок...")
-            await _docker_collect_logs(target_services, timestamp=timestamp)
+            await _docker_collect_logs(target_services)
         return
 
     if action == "logs":

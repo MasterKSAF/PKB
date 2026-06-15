@@ -6,10 +6,10 @@ REM Автоматически:
 REM   1. Проверяет наличие base-образа — если нет, собирает
 REM   2. Проверяет наличие модели TEI — если нет, скачивает
 REM   3. Проверяет, запущен ли контейнер TEI — если нет, запускает
-REM   4. Пересоздаёт контейнеры с чистой БД (kill + rm -v + up)
+REM   4. Дропает схемы БД, сбрасывает Redis, перезапускает app
 REM   5. Запускает полный отчёт (health + coverage + pipeline)
 REM
-REM Каждый запуск начинается с чистой БД — удаляются все volumes.
+REM PostgreSQL и Redis не перезапускаются — только чистим данные.
 REM TEI контейнер не перезапускается (тяжёлая модель), только если не запущен.
 REM =============================================================================
 
@@ -66,40 +66,35 @@ if %ERRORLEVEL% equ 0 (
 )
 echo.
 
-REM ── 4. Остановка app + чистка volumes ─────────────────────────────────────
-echo [4/5] Killing app + removing volumes...
-docker compose --progress quiet kill app postgres redis minio 2>&1
-docker compose --progress quiet rm -f -v app postgres redis minio 2>&1
-docker volume rm -f pkb_pg_data pkb_minio_data pkb_app_logs 2>nul
+REM ── 4. Очистка данных + перезапуск app ────────────────────────────────
+echo [4/5] Dropping data + restarting app...
+
+echo     Dropping database schemas...
+docker exec pkb-postgres psql -U pkb -d pkb_neuro -c "DROP SCHEMA IF EXISTS auth CASCADE;" 2>nul
+docker exec pkb-postgres psql -U pkb -d pkb_neuro -c "DROP SCHEMA IF EXISTS registry CASCADE;" 2>nul
+docker exec pkb-postgres psql -U pkb -d pkb_neuro -c "DROP SCHEMA IF EXISTS rag CASCADE;" 2>nul
+
+echo     Flushing Redis...
+docker exec pkb-redis redis-cli FLUSHALL 2>nul
+
+docker compose --progress quiet kill app 2>&1
+docker compose --progress quiet rm -f -v app 2>&1
 echo.
 
-REM ── 5. Запуск контейнеров + полный отчёт ───────────────────────────────────
-echo [5/5] Starting containers...
-docker compose up -d postgres redis minio app
+REM ── 5. Запуск app + отчёт ─────────────────────────────────────────────
+echo [5/5] Starting app...
+docker compose up -d app
 if %ERRORLEVEL% neq 0 (
     echo.
-    echo ERROR: Failed to start containers!
+    echo ERROR: Failed to start app container!
     pause
     exit /b 1
 )
-echo     Containers started. Running full report (health + coverage + pipeline)...
+echo     App started. Running full report...
 echo.
 
 cd /d "%~dp0..\.."
 set PYTHONIOENCODING=utf-8
-
-echo     Waiting for PostgreSQL to be ready...
-:wait_pg
-docker compose -f docker/docker-compose.yml exec -T postgres pg_isready -U pkb -d pkb_neuro 2>nul | findstr /C:"accepting connections" >nul 2>&1
-if %ERRORLEVEL% neq 0 (
-    ping -n 2 127.0.0.1 >nul
-    goto wait_pg
-)
-echo     PostgreSQL ready.
-
-echo     Patching RAG Builder tables (workaround for broken migration)...
-python -m service_checker docker --action patch-rag
-if %ERRORLEVEL% neq 0 goto skip_restart
 
 echo     Waiting for supervisor...
 :wait_supervisor
@@ -108,6 +103,10 @@ if %ERRORLEVEL% neq 0 (
     ping -n 2 127.0.0.1 >nul
     goto wait_supervisor
 )
+
+echo     Patching RAG Builder tables...
+python -m service_checker docker --action patch-rag
+if %ERRORLEVEL% neq 0 goto skip_restart
 
 echo     Restarting RAG Builder with proper tables...
 docker exec pkb-neuro supervisorctl restart rag-builder 2>nul

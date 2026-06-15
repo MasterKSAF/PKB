@@ -317,12 +317,6 @@ else:
 - Auth-сервис работает в mock-режиме (`AUTH_SERVICE_MOCK=true`, `DEV_AUTH_MODE=true`)
 - Работает только `POST /auth/token`
 
-#### 7. RAG Search не имеет настроек эмбеддингов
-- В `config.py` RAG Search нет `EMBEDDING_PROVIDER` — он не поддерживает TEI
-- Если `EMBEDDING_API_KEY` пуст → использует `HuggingFaceLocalProvider` (требует `sentence_transformers`, не установлен)
-- Если `EMBEDDING_API_KEY` не пуст → использует `OpenAICompatibleProvider` (по `EMBEDDING_BASE_URL`)
-- **Решение:** `EMBEDDING_API_KEY=sk-noop` — использует TEI через OpenAI-совместимый API
-
 #### 8. FastAPI 307 redirect при отсутствии trailing slash
 - Запрос `POST /api/v1/registry/classifiers` (без /) → FastAPI redirects to `/api/v1/registry/classifiers/`
 - PVT redirect теряет body → сервис получает пустой запрос
@@ -933,4 +927,37 @@ RAG Builder использует UUID для document_id — это ошибка
 
 ### Статус
 ✅ **Исправлено**
+
+## 27. Аномалия: RAG Builder не получает EMBEDDING_* переменные из-за несовпадения имён полей
+
+### Проблема
+docker-compose задаёт единые `EMBEDDING_*` переменные, supervisord передаёт их обоим сервисам,
+НО RAG Builder использует в `Settings` другие имена полей:
+
+| Поле в Settings | Дефолт | Ищет в env | Передаётся из supervisord | Результат до фикса |
+|---|---|---|---|---|
+| `embedding_api_url` | `localhost:8000/v1/embeddings` | `EMBEDDING_API_URL` | ❌ `EMBEDDING_BASE_URL` | Шёл на `localhost:8000` вместо TEI |
+| `vector_dimension` | 1536 | `VECTOR_DIMENSION` | ❌ `EMBEDDING_DIM` | Оставалось 1536 вместо 312 |
+
+### Последствия
+- RAG Builder индексировал чанки с размерностью 1536
+- RAG Search искал с размерностью 312 (из `EMBEDDING_DIM`)
+- pgvector `<=>` падал с ошибкой несовпадения размерности
+
+### Что исправлено (checker, 2026-06-15)
+**`service_checker/docker/supervisord.conf`:**
+- В `[program:rag-builder]` добавлены:
+  - `EMBEDDING_API_URL="%(ENV_EMBEDDING_BASE_URL)s"`
+  - `VECTOR_DIMENSION="%(ENV_EMBEDDING_DIM)s"`
+
+**`service_checker/docker/entrypoint.sh`:**
+- В .env файлы rag_builder_service/rag_search_service теперь пишутся:
+  - `EMBEDDING_API_URL`, `EMBEDDING_MODEL`, `EMBEDDING_DIM`, `EMBEDDING_PROVIDER`, `VECTOR_DIMENSION`
+
+### Ограничение
+- Правки только в service_checker (запрещено менять чужие сервисы)
+- Если RAG Builder изменит имена полей в Settings — фикс сломается
+
+### Статус
+✅ **Исправлено (workaround в service_checker)**
 
