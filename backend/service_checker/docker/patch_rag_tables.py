@@ -30,8 +30,15 @@ if str(_backend) not in sys.path:
 from service_checker.core.utils import log_ok, log_warn, log_err, log_info, log_step
 
 
-# SQL для создания таблицы rag.document_chunks
-SQL_CREATE_EXTENSIONS = "CREATE EXTENSION IF NOT EXISTS vector"
+# SQL для расширений БД (устанавливаются после DROP DATABASE / CREATE DATABASE)
+# ⚠️ asyncpg не поддерживает множественные команды в одном execute — каждый отдельно
+SQL_EXTENSIONS: list[str] = [
+    'CREATE EXTENSION IF NOT EXISTS "uuid-ossp"',
+    'CREATE EXTENSION IF NOT EXISTS "pgcrypto"',
+    'CREATE EXTENSION IF NOT EXISTS "ltree"',
+    'CREATE EXTENSION IF NOT EXISTS "pg_trgm"',
+    'CREATE EXTENSION IF NOT EXISTS vector',
+]
 SQL_CREATE_SCHEMA = "CREATE SCHEMA IF NOT EXISTS rag"
 
 SQL_CREATE_TABLE = """
@@ -121,11 +128,13 @@ async def patch_rag_tables(db_url: str | None = None) -> bool:
             else:
                 log_step("Создание схемы rag...")
                 await conn.execute(text(SQL_CREATE_SCHEMA))
-                log_step("Установка расширения vector...")
-                try:
-                    await conn.execute(text(SQL_CREATE_EXTENSIONS))
-                except Exception:
-                    log_warn("vector extension не установился, продолжаем...")
+                log_step("Установка расширений БД...")
+                for ext_sql in SQL_EXTENSIONS:
+                    try:
+                        await conn.execute(text(ext_sql))
+                    except Exception as e:
+                        log_warn(f"extension не установился: {e}")
+                log_ok("Расширения БД проверены")
                 log_step("Создание таблицы rag.document_chunks (BIGINT)...")
                 try:
                     await conn.execute(text(SQL_CREATE_TABLE))
@@ -133,8 +142,12 @@ async def patch_rag_tables(db_url: str | None = None) -> bool:
                     if "type \"vector\" does not exist" in str(e):
                         log_err("Расширение vector ещё не доступно. Ждём и пробуем ещё раз...")
                         await conn.commit()
-                        log_step("Повторная попытка: создание extension vector...")
-                        await conn.execute(text(SQL_CREATE_EXTENSIONS))
+                        log_step("Повторная попытка: установка расширений...")
+                        for ext_sql in SQL_EXTENSIONS:
+                            try:
+                                await conn.execute(text(ext_sql))
+                            except Exception:
+                                pass
                         await conn.execute(text(SQL_CREATE_TABLE))
                     else:
                         raise

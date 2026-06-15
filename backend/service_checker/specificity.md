@@ -901,6 +901,17 @@ RAG Builder использует UUID для document_id — это ошибка
 4. RAG Builder перезапущен — стартует и отвечает на health check
 5. RAG Search (зависимый) починился — 2/2 ✅
 
+### Дополнение (checker, 2026-06-15, v2)
+Таблица `rag.document_chunks` пересоздана с `document_id UUID` (изначальная схема).
+В пайплайны добавлена конвертация int→UUID с warning:
+- `pipelines/full_document_lifecycle.py` — `_save_uuid_for_build()` конвертирует BIGINT из Registry
+  в UUID перед отправкой в RAG Builder. Использует `int_to_uuid()` из `core/utils.py`.
+- `pipelines/multi_document_cross_search.py` — аналогичная конвертация уже была (создана 2026-06-15).
+- `pipelines/document_processing.py` — использует `int_to_uuid()` для TEST_DOC_ID (статическая константа).
+
+⚠️ RAG Search внутренний JOIN (`rag.document_chunks.document_id` UUID vs `registry.documents.id` BIGINT)
+всё ещё падает с `operator does not exist: bigint = uuid`. Требует фикса в RAG Search service.
+
 ### Что НЕ сделано
 2-я миграция (`20260614_0002`) пропущена — FK на registry.documents нет.
 Для корректной работы FK нужно:
@@ -999,6 +1010,23 @@ recovery_step = PipelineStep(
     skip_if=lambda ctx: ctx.get("build_ok", False),  # пропустить если успех
 )
 ```
+
+### Дополнение (2026-06-15, v2): конвертация UUID + on_error для RAG Search
+
+1. **UUID-конвертация в `full_document_lifecycle.py`:**
+   - Добавлен `_save_uuid_for_build()` — аналог из `multi_document_cross_search.py`.
+   - BIGINT из Registry → UUID через `int_to_uuid()` с warning.
+   - RAG Builder build (шаги 3, 5, 11) и delete (шаг 8) больше не падают с 422.
+   - Исправлен нерезолвящийся `{doc_id2}` на шаге 11 (теперь `{doc_id2_uuid}`).
+
+2. **on_error для RAG Search в `multi_document_cross_search.py`:**
+   - Шаги 17, 19 (RAG Search search) получили `_on_rag_search_error()`.
+   - При `body contains "bigint = uuid"` устанавливает `ctx.rag_search_bigint_uuid = True`.
+   - Позволяет отличать известную проблему (§25) от новых ошибок RAG Search.
+
+3. **gateway.err — улучшен фильтр в `core/docker.py`:**
+   - Добавлено подавление `[INFO]`/`[WARNING]` (формат gateway) и `"severity": "INFO"`/`"WARNING"` (JSON-логи).
+   - gateway больше не показывает 250 «ошибок» в health check.
 
 ### Статус
 ✅ **Реализовано (service_checker, 2026-06-15)**

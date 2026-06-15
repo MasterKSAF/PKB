@@ -407,19 +407,26 @@ def _docker_health_check(services: List[str]) -> bool:
                 if err_result.returncode == 0 and err_result.stdout.strip():
                     raw_lines = err_result.stdout.strip().split("\n")
                     # Фильтруем: INFO/WARNING логи — не ошибки
+                    # Форматы: "INFO:...", "WARNING:..." (Python), "[INFO]...", "[WARNING]..." (gateway),
+                    #          '"severity": "INFO"' / '"severity": "WARNING"' (JSON-логи)
                     error_lines = [
                         l for l in raw_lines
-                        if not l.startswith("INFO:") and not l.startswith("WARNING:")
+                        if l.strip()
+                        and not l.startswith("INFO:")
+                        and not l.startswith("WARNING:")
+                        and "[INFO]" not in l
+                        and "[WARNING]" not in l
+                        and '"severity": "INFO"' not in l
+                        and '"severity": "WARNING"' not in l
                     ]
                     # Если после фильтра остались только пустые или ничего — не показываем
                     if not error_lines:
                         continue
-                    lines = error_lines
-                    preview = "\n  ".join(lines[:3])
-                    log_warn(f"{err_file} — {len(lines)} строк(и) ошибок:")
+                    preview = "\n  ".join(error_lines[:3])
+                    log_warn(f"{err_file} — {len(error_lines)} строк(и) ошибок:")
                     print(f"  {preview}")
-                    if len(lines) > 3:
-                        print(f"  ... и ещё {len(lines) - 3} строк(и)")
+                    if len(error_lines) > 3:
+                        print(f"  ... и ещё {len(error_lines) - 3} строк(и)")
                     has_errors = True
             except Exception:
                 pass

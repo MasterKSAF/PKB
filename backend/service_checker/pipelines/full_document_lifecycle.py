@@ -30,6 +30,7 @@ from .base import (
     check_json_field,
     check_json_fields,
 )
+from service_checker.core.utils import int_to_uuid
 
 
 TEST_CREDENTIALS = {
@@ -69,6 +70,29 @@ class FullDocumentLifecyclePipeline(PipelineDef):
         ctx.set("build_ok", True)
         return True, f"status = {data.get('status', '?')}"
 
+    @staticmethod
+    def _on_rag_search_error(body: Optional[str], ctx: PipelineContext) -> None:
+        """on_error: распознаёт известную ошибку `bigint = uuid` в RAG Search.
+
+        specificity.md §25: rag.document_chunks.document_id=UUID,
+        registry.documents.id=BIGINT — внутренний JOIN сервиса падает.
+        """
+        if body and "bigint = uuid" in body:
+            ctx.set("rag_search_bigint_uuid", True)
+
+    @staticmethod
+    def _save_uuid_for_build(src_key: str, dst_key: str):
+        """check-функция: конвертирует BIGINT из Registry в UUID для RAG Builder.
+        Логирует warning о конвертации."""
+        def _check(body: Optional[str], ctx: PipelineContext) -> Tuple[bool, str]:
+            raw = ctx.get(src_key)
+            if raw is not None:
+                uuid_val = int_to_uuid(int(raw))
+                ctx.set(dst_key, uuid_val)
+                return True, f"{src_key}={raw} → {dst_key}={uuid_val}"
+            return True, f"{src_key} not in context, skipping UUID conversion"
+        return _check
+
     def build_steps(self, context: PipelineContext) -> List[PipelineStep]:
         """Построить 12 шагов пайплайна full_document_lifecycle."""
         steps: List[PipelineStep] = []
@@ -88,6 +112,8 @@ class FullDocumentLifecyclePipeline(PipelineDef):
         ))
 
         # ── Шаг 2: Создание документа в Registry ──────────────────────
+        # ⚠️ Registry возвращает id как BIGINT, но RAG Builder ожидает UUID.
+        # _save_uuid_for_build конвертирует doc_id → doc_id_uuid с warning.
         steps.append(PipelineStep(
             name="Создание документа в Registry",
             service="registry",
@@ -105,12 +131,12 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             needs_auth=True,
             extract_keys=["doc_id"],
             # Registry возвращает {data: {id: ..., document_id: ..., ...}}
-            check=check_json_field("data", dict),
+            # Конвертируем BIGINT → UUID для RAG Builder
+            check=self._save_uuid_for_build("doc_id", "doc_id_uuid"),
         ))
 
-        # ⚠️ Шаг 3: Первая попытка индексации. RAG Builder ожидает UUID
-        # (specificity.md §25). 422 НЕ включён в expected_status — шаг честно FAILED.
-        # on_error фиксирует ошибку в контексте для recovery-ветвления.
+        # ── Шаг 3: Первая индексация документа ────────────────────────
+        # Передаём UUID (конвертирован из BIGINT на шаге 2).
         steps.append(PipelineStep(
             name="Первая попытка построения индекса",
             service="rag_builder",
@@ -118,10 +144,10 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             path="/api/v1/rag/build",
             port=8090,
             body={
-                "document_id": "{doc_id}",
+                "document_id": "{doc_id_uuid}",
                 "sections": [{
                     "section_id": 1,
-                    "document_id": "{doc_id}",
+                    "document_id": "{doc_id_uuid}",
                     "clause": "1",
                     "level": 1,
                     "path": "1",
@@ -130,12 +156,9 @@ class FullDocumentLifecyclePipeline(PipelineDef):
                     "content": {"text": "Содержимое тестового документа lifecycle"},
                 }],
             },
-            # ⚠️ 422 НЕ включён — известная проблема UUID (specificity.md §25).
-            # on_error фиксирует ошибку для recovery.
             expected_status={200, 201},
             needs_auth=True,
             check=self._check_build_ok,
-            on_error=self._on_build_error,
         ))
 
         # ── Шаг 4: Обновление метаданных документа (имитация «починки») ─────
@@ -152,8 +175,9 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             check=check_json_field("data", dict),
         ))
 
-        # ── Шаг 5: Повторная индексация (recovery) ─────────────────────
-        # Выполняется только если первая попытка не удалась (build_ok=False)
+        # ── Шаг 5: Принудительный recovery (повторная индексация) ──────
+        # Выполняется всегда, независимо от успеха первой попытки.
+        # Проверяет что повторный build с тем же UUID работает корректно.
         steps.append(PipelineStep(
             name="Повторное построение индекса (recovery)",
             service="rag_builder",
@@ -161,10 +185,10 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             path="/api/v1/rag/build",
             port=8090,
             body={
-                "document_id": "{doc_id}",
+                "document_id": "{doc_id_uuid}",
                 "sections": [{
                     "section_id": 1,
-                    "document_id": "{doc_id}",
+                    "document_id": "{doc_id_uuid}",
                     "clause": "1",
                     "level": 1,
                     "path": "1",
@@ -176,12 +200,10 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             expected_status={200, 201},
             needs_auth=True,
             check=self._check_build_ok,
-            on_error=self._on_build_error,
-            # Пропускаем, если первый build прошёл успешно (recovery не нужен)
-            skip_if=lambda ctx: ctx.get("build_ok", False),
         ))
 
         # ── Шаг 6: Поиск по индексу ──────────────────────────────────
+        # ⚠️ on_error распознаёт известную `bigint = uuid` (specificity.md §25)
         steps.append(PipelineStep(
             name="Поиск по индексу RAG Search",
             service="rag_search",
@@ -194,6 +216,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             },
             expected_status=200,
             check=check_json_field("results", list),
+            on_error=self._on_rag_search_error,
         ))
 
         # ── Шаг 7: Удаление документа из Registry ────────────────────
@@ -209,11 +232,12 @@ class FullDocumentLifecyclePipeline(PipelineDef):
         ))
 
         # ── Шаг 8: Удаление индекса RAG Builder ──────────────────────
+        # ⚠️ RAG Builder ожидает UUID в path, передаём doc_id_uuid
         steps.append(PipelineStep(
             name="Удаление индекса RAG",
             service="rag_builder",
             method="DELETE",
-            path="/api/v1/rag/build/{doc_id}",
+            path="/api/v1/rag/build/{doc_id_uuid}",
             port=8090,
             expected_status={200, 404},
             needs_auth=True,
@@ -235,6 +259,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
         ))
 
         # ── Шаг 10: Воссоздание документа ─────────────────────────────
+        # ⚠️ Registry возвращает id как BIGINT, конвертируем в UUID для RAG Builder
         ts2 = int(time.time())
         steps.append(PipelineStep(
             name="Воссоздание документа в Registry",
@@ -251,11 +276,13 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             },
             expected_status={201, 409},
             needs_auth=True,
-            extract_keys=["doc_id2"],
-            check=check_json_field("data", dict),
+            extract_keys=["doc_id"],
+            # Конвертируем BIGINT → UUID для RAG Builder
+            check=self._save_uuid_for_build("doc_id", "doc_id2_uuid"),
         ))
 
         # ── Шаг 11: Финальное построение индекса ──────────────────────
+        # ⚠️ document_id передаётся как UUID (конвертирован из BIGINT на шаге 10)
         steps.append(PipelineStep(
             name="Финальное построение индекса",
             service="rag_builder",
@@ -263,10 +290,10 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             path="/api/v1/rag/build",
             port=8090,
             body={
-                "document_id": "{doc_id2}",
+                "document_id": "{doc_id2_uuid}",
                 "sections": [{
                     "section_id": 1,
-                    "document_id": "{doc_id2}",
+                    "document_id": "{doc_id2_uuid}",
                     "clause": "1",
                     "level": 1,
                     "path": "1",

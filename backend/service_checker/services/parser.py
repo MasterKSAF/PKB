@@ -26,8 +26,6 @@ def get_service_def() -> ServiceDef:
     _warnings = [
         "⚠️ Реальная реализация расходится с docs: process требует version_id (docs: mode+file_key).",
         "⚠️ Health Parser на /health, а не /api/v1/health — сервис не использует префикс.",
-        "⚠️ Ответ GET /process/{task_id}/result не содержит поля 'content'. Данные — внутри 'document' (result_builder.py собирает JSON с document, quality, errors, status).",
-        "⚠️ API Coverage prepare не загружает PDF в MinIO (нужна S3-подпись). GET /result будет 500 в coverage, но работает в pipeline test (где MinIO заполнен).",
     ]
 
     prepare_endpoints = [

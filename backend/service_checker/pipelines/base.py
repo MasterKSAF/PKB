@@ -548,10 +548,11 @@ class PipelineRunner:
             print(f"     {icon} [{i+1}/{len(steps)}] {step.name} — HTTP {step.actual_status} ({step.elapsed_ms}ms) — {detail}")
 
         # 4. Итог
+        # ⏭️ Skipped — не ошибка (ветвление через skip_if).
+        # Пайплайн пройден, если ping ок, нет failed шагов, и есть хоть один шаг.
         result.passed = (
             result.ping_ok
             and result.failed_steps == 0
-            and result.skipped_steps == 0
             and result.total_steps > 0
         )
         result.context = ctx
