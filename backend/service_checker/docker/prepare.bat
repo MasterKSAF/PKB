@@ -1,14 +1,14 @@
-@echo off
+﻿@echo off
 REM =============================================================================
-REM PKB Neuroassistant — initial setup from scratch (one time after git clone)
+REM PKB Neuroassistant вЂ” initial setup from scratch (one time after git clone)
 REM
-REM Полный цикл: подготовка модели TEI + сборка образа + очистка volumes +
-REM              запуск контейнеров + full-report проверка.
+REM РџРѕР»РЅС‹Р№ С†РёРєР»: РїРѕРґРіРѕС‚РѕРІРєР° РјРѕРґРµР»Рё TEI + СЃР±РѕСЂРєР° РѕР±СЂР°Р·Р° + РѕС‡РёСЃС‚РєР° volumes +
+REM              Р·Р°РїСѓСЃРє РєРѕРЅС‚РµР№РЅРµСЂРѕРІ + full-report РїСЂРѕРІРµСЂРєР°.
 REM
-REM Используйте когда нужно поднять всё с нуля:
+REM РСЃРїРѕР»СЊР·СѓР№С‚Рµ РєРѕРіРґР° РЅСѓР¶РЅРѕ РїРѕРґРЅСЏС‚СЊ РІСЃС‘ СЃ РЅСѓР»СЏ:
 REM   docker\prepare.bat
 REM
-REM Для повторного запуска (без сброса volumes) используйте:
+REM Р”Р»СЏ РїРѕРІС‚РѕСЂРЅРѕРіРѕ Р·Р°РїСѓСЃРєР° (Р±РµР· СЃР±СЂРѕСЃР° volumes) РёСЃРїРѕР»СЊР·СѓР№С‚Рµ:
 REM   docker\recheck.bat
 REM =============================================================================
 
@@ -16,6 +16,18 @@ cd /d "%~dp0"
 
 echo === PKB Neuroassistant: Full setup from scratch ===
 echo.
+
+if not exist ".env" (
+    if exist ".env.example" (
+        copy /Y ".env.example" ".env" >nul
+        echo Created .env from .env.example
+        echo.
+    ) else (
+        type nul > ".env"
+        echo Created empty .env
+        echo.
+    )
+)
 
 echo [1/7] Preparing TEI model (if not already cached)...
 echo.
@@ -38,7 +50,7 @@ if errorlevel 1 (
 )
 echo.
 
-REM Сначала мигрируем старые volumes (docker_* -> pkb_*), если они есть
+REM РЎРЅР°С‡Р°Р»Р° РјРёРіСЂРёСЂСѓРµРј СЃС‚Р°СЂС‹Рµ volumes (docker_* -> pkb_*), РµСЃР»Рё РѕРЅРё РµСЃС‚СЊ
 echo [3/7] Migrating old volumes (docker_* -> pkb_*)...
 python migrate_volumes.py
 echo.
