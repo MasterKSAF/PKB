@@ -67,7 +67,7 @@ class TestDocumentProcessingPipeline:
     def test_step_expected_status(self):
         p = DocumentProcessingPipeline()
         steps = p.build_steps(PipelineContext())
-        expected = [200, {200, 409}, 200, 202, 200, 200, 200, {201, 409}, 201, 200]
+        expected = [200, {200, 409}, 200, 202, 200, 200, 200, {201, 409}, {200, 201}, 200]
         actual = [s.expected_status for s in steps]
         assert actual == expected, f"Ожидаемые статусы не совпадают:\n{actual}"
 

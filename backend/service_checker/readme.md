@@ -1,6 +1,21 @@
 # PKB Neuroassistant — Service Checker
 
-Утилита для проверки сервисов PKB Neuroassistant.
+Назначение — **запустить сервисы в Docker (recheck.bat) и проверить корректность их работы.**
+
+Это не production-сервис. Используется для локальной разработки, отладки и интеграционного тестирования.
+
+Что делает проверка:
+
+| Этап | Действие |
+|------|----------|
+| Docker Compose up | Запуск инфраструктуры: PostgreSQL, Redis, MinIO, TEI, 10 Python-сервисов под supervisord |
+| Health Check | Проверка `/health` каждого сервиса — жив ли, отвечает ли |
+| API Coverage | Вызов каждого эндпоинта из API-документации (~150 шт.) — проверка HTTP-статуса и JSON-схемы |
+| Pipeline Testing | Сквозные сценарии: загрузка → парсинг → индексация → поиск, чат-сессия, CRUD классификаторов |
+| Сбор логов | Чтение supervisor-логов каждого сервиса, поиск ошибок |
+| Генерация отчёта | Сводная таблица по всем сервисам (Markdown / HTML) |
+
+> 🔹 service_checker НЕ изменяет код, конфиги или данные сервисов — **кроме `gateway_service` и `orchestrator_service`**, которые разрешено править для исправления багов, не влияющих на бизнес-логику. Остальные сервисы (`auth`, `registry`, `rag_builder` и др.) — **не трогать**, только диагностика.
 
 ## Структура
 
@@ -62,25 +77,25 @@ service_checker/
 
 ## Текущий статус сервисов в Docker
 
-После `recheck.bat` (2026-06-13):
+После фиксов (2026-06-15):
 
 | Сервис | Порт | HTTP | supervisorctl | Проблемы |
 |--------|:----:|:----:|:-------------:|----------|
-| PostgreSQL | 5432 | — | — | (здоров) |
-| Redis | 6379 | — | — | (здоров) |
-| MinIO | 9000 | — | — | (здоров) |
-| TEI | 8092 | 200 | — | (здоров) |
-| Gateway (Mock) | 8080 | 401 | RUNNING | 🟡 Логи в stderr (аном. №22) |
-| Orchestrator | 8081 | 200 | RUNNING | ✅ Исправлен `DraftItem.created_by` |
-| Auth | 8082 | 200 | RUNNING | 🟡 Ключ JWT короткий (предупреждение) |
-| Query | 8083 | 200 | RUNNING | ❌ Двойная транзакция (аном. №21) |
-| Registry | 8084 | 200 | RUNNING | ✅ `create_all()` есть в lifespan |
-| Integration | 8085 | 200 | RUNNING | ✅ |
-| Converter-Validator | 8086 | 200 | RUNNING | ✅ Исправлен trailing slash /validate |
-| Parser | 8087 | 200 | RUNNING | ✅ |
-| OCR | 8088 | — | RUNNING | ✅ |
-| RAG Builder | 8090 | 200 | RUNNING | 🟡 Нет `create_all()` при старте |
-| RAG Search | 8091 | 200 | RUNNING | 🟡 500 в pipeline |
+| PostgreSQL | 5432 | — | — | здоров |
+| Redis | 6379 | — | — | здоров |
+| MinIO | 9000 | — | — | здоров |
+| TEI | 8092 | 200 | — | здоров |
+| Gateway (Mock) | 8080 | 401 | RUNNING | Логи в stderr (аном. N22) |
+| Orchestrator | 8081 | 200 | RUNNING | preview/status 500->404 исправлен (аном. N26) |
+| Auth | 8082 | 200 | RUNNING | Ключ JWT короткий (предупреждение) |
+| Query | 8083 | 200 | RUNNING | Двойная транзакция (аном. N21) |
+| Registry | 8084 | 200 | RUNNING | create_all() есть в lifespan |
+| Integration | 8085 | 200 | RUNNING | |
+| Converter-Validator | 8086 | 200 | RUNNING | |
+| Parser | 8087 | 200 | RUNNING | |
+| OCR | 8088 | — | RUNNING | |
+| RAG Builder | 8090 | 200 | RUNNING | Нет create_all() (аном. N25), JWT не синхронизирован |
+| RAG Search | 8091 | 200 | RUNNING | починился после создания rag.document_chunks |
 
 **supervisorctl:** ✅ Все 11 процессов RUNNING (исправлен socket + symlink)
 **.env файлы:** ✅ Создаются автоматически (исправлен entrypoint.sh)

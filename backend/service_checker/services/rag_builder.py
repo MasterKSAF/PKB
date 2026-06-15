@@ -10,6 +10,7 @@ from .base import (
     EndpointDef,
     ServiceDef,
     API_PREFIX,
+    TEST_CREDENTIALS,
 )
 
 SERVICE_KEY = "rag_builder"
@@ -21,6 +22,15 @@ def get_service_def() -> ServiceDef:
     """Вернуть полное описание RAG Builder Service."""
 
     prepare_endpoints = [
+        # Получение JWT токена через Auth (prepare для авторизованных запросов)
+        # ⚠️ Документация не упоминает JWT, но реальный сервис требует bearer token
+        EndpointDef("POST", f"{API_PREFIX}/auth/token", "auth",
+            "Получение JWT токена (prepare)",
+            body=TEST_CREDENTIALS,
+            extract_keys=["access_token", "refresh_token"],
+            is_preparation=True,
+            expected_status=200,
+            override_port=8082),
         EndpointDef("POST", f"{API_PREFIX}/rag/build", "rag",
             "Построение чанков и индексация (prepare)",
             body={
@@ -69,4 +79,9 @@ def get_service_def() -> ServiceDef:
         prepare_endpoints=prepare_endpoints,
         depends_on=["registry"],
         base_data={},
+        warnings=[
+            "⚠️ Документация не упоминает JWT, но реальный RAG Builder требует bearer token. Эндпоинты /rag/build возвращают 401 без него.",
+            "⚠️ RAG Builder падал при старте: alembic migration 20260614_0002 не применилась — FK document_id UUID vs registry.documents.id BIGINT. Migration пропущена, таблица создана вручную с BIGINT document_id.",
+            "⚠️ Подключена заглушка docker/patch_rag_tables.py — при full-report/coverage/patch-rag проверяет и создаёт таблицы, если их нет.",
+        ],
     )

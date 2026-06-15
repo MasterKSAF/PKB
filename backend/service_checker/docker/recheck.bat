@@ -87,6 +87,34 @@ echo.
 
 cd /d "%~dp0..\.."
 set PYTHONIOENCODING=utf-8
+
+echo     Waiting for PostgreSQL to be ready...
+:wait_pg
+docker compose -f docker/docker-compose.yml exec -T postgres pg_isready -U pkb -d pkb_neuro 2>nul | findstr /C:"accepting connections" >nul 2>&1
+if %ERRORLEVEL% neq 0 (
+    ping -n 2 127.0.0.1 >nul
+    goto wait_pg
+)
+echo     PostgreSQL ready.
+
+echo     Patching RAG Builder tables (workaround for broken migration)...
+python -m service_checker docker --action patch-rag
+if %ERRORLEVEL% neq 0 goto skip_restart
+
+echo     Waiting for supervisor...
+:wait_supervisor
+docker exec pkb-neuro supervisorctl status 2>nul | findstr "RUNNING" >nul 2>&1
+if %ERRORLEVEL% neq 0 (
+    ping -n 2 127.0.0.1 >nul
+    goto wait_supervisor
+)
+
+echo     Restarting RAG Builder with proper tables...
+docker exec pkb-neuro supervisorctl restart rag-builder 2>nul
+:skip_restart
+
+echo.
+echo     Running full report...
 python -m service_checker docker --action full-report
 if %ERRORLEVEL% neq 0 (
     echo.

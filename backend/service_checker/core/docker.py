@@ -275,34 +275,30 @@ def _docker_health_check(services: List[str]) -> bool:
     for svc_key, (port, path, display_name) in DOCKER_SUPERVISOR_SERVICES.items():
         url = f"http://127.0.0.1:{port}{path}"
         ok = False
-        for attempt in range(18):  # до 36 секунд (18 * 2)
+        for attempt in range(3):  # до 6 секунд (3 + 3 попытки по 1с)
             try:
                 resp = httpx.get(url, timeout=3)
                 if resp.status_code < 500:
                     log_ok(f"{display_name:<25} :{port} — HTTP {resp.status_code}")
                     ok = True
                     break
-                elif attempt == 17:
-                    log_warn(f"{display_name:<25} :{port} — HTTP {resp.status_code}")
+                if attempt < 2:
+                    time.sleep(1)
             except httpx.ConnectError:
-                if attempt == 17:
+                if attempt < 2:
+                    time.sleep(1)
+                else:
                     log_err(f"{display_name:<25} :{port} — Connection refused")
-                else:
-                    time.sleep(2)
-                    continue
             except httpx.TimeoutException:
-                if attempt == 17:
+                if attempt < 2:
+                    time.sleep(1)
+                else:
                     log_err(f"{display_name:<25} :{port} — Timeout")
-                else:
-                    time.sleep(2)
-                    continue
             except Exception as e:
-                if attempt == 17:
-                    log_err(f"{display_name:<25} :{port} — {e}")
+                if attempt < 2:
+                    time.sleep(1)
                 else:
-                    time.sleep(2)
-                    continue
-            break
+                    log_err(f"{display_name:<25} :{port} — {e}")
         if not ok:
             all_ok = False
 

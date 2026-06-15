@@ -602,6 +602,20 @@ async def get_preview_status(
     """
     from sqlalchemy import select
     from app.models.pipeline import TaskStep
+    from app.models.drafts import Draft
+
+    # Проверяем, что draft существует и не удалён
+    draft = await db.get(Draft, draft_id)
+    if not draft or draft.status == "discarded":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": {
+                    "code": "NOT_FOUND",
+                    "message": f"Черновик {draft_id} не найден или удалён",
+                }
+            },
+        )
 
     task = await _find_task_for_draft(db, draft_id)
 

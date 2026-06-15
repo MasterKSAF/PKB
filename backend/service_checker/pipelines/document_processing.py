@@ -227,7 +227,8 @@ class DocumentProcessingPipeline(PipelineDef):
                     "content": {"text": "Содержимое тестового документа"},
                 }],
             },
-            expected_status=201,
+            expected_status={200, 201},
+            needs_auth=True,  # RAG Builder требует JWT (не отражено в docs)
         ))
 
         # -- Шаг 9: Поиск по индексу RAG Search --

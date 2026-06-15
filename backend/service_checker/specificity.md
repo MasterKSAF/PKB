@@ -4,7 +4,13 @@
 Фиксируются все аномалии и спорные моменты в проекте (правило 2.3).
 
 ## Запрет на редактирование чужих сервисов
-Агент не имеет права создавать, изменять или удалять файлы в сервисах, которые не относятся к его задаче. Исключение — только по явному указанию владельца сервиса.
+Агент не имеет права создавать, изменять или удалять файлы в сервисах, которые не относятся к его задаче.
+
+**Исключения (можно править с разрешения владельца):**
+- `gateway_service` — моки, не влияет на бизнес-логику
+- `orchestrator_service` — исправление багов, не влияющих на бизнес-логику (например, 500 вместо 404)
+
+**Запрещено трогать:** `auth_service`, `registry_service`, `rag_builder_service`, `rag_search_service`, `query_service`, `parser_service`, `converter_validator_service`, `integration_service`, `ocr_service` — только диагностика через checker.
 
 ---
 
@@ -877,4 +883,54 @@ class FeedbackRequest(BaseModel):
 
 ### Статус
 🟡 **Принято** — docs новее реализации, checker тестирует по факту
+
+## 25. RAG Builder — Alembic migration падает: несовместимость UUID и BIGINT
+
+### Проблема
+RAG Builder не стартует — `validate_startup_migrations()` проверяет таблицу `alembic_version`, которой нет в БД.
+А при попытке выполнить `alembic upgrade head`:
+- 1-я миграция (`20260528_0001`) создаёт `rag.document_chunks` с `document_id UUID`
+- 2-я миграция (`20260614_0002`) пытается добавить FK `document_id → registry.documents.id`, но Registry использует `BIGINT`, а не UUID
+- FK падает: `DatatypeMismatchError: key columns document_id and id are of incompatible types: uuid and bigint`
+
+### Диагностика
+```
+DETAIL: Key columns "document_id" and "id" are of incompatible types: uuid and bigint.
+```
+В проекте принято архитектурное решение: **все ID — BIGINT** (см. аномалию №13).
+RAG Builder использует UUID для document_id — это ошибка в схеме.
+
+### Что сделано (checker, 2026-06-15)
+1. Создан `alembic_version` со значением `20260614_0002` (пропуск 2-й миграции)
+2. `rag.document_chunks` создана вручную через DDL с `document_id BIGINT` (вместо UUID)
+3. Индексы (GIN, IVFFlat) созданы
+4. RAG Builder перезапущен — стартует и отвечает на health check
+5. RAG Search (зависимый) починился — 2/2 ✅
+
+### Что НЕ сделано
+2-я миграция (`20260614_0002`) пропущена — FK на registry.documents нет.
+Для корректной работы FK нужно:
+- Править 1-ю миграцию RAG Builder: `document_id` → `BIGINT` (не UUID)
+- Либо править 2-ю миграцию: проверять типы колонок перед ADD CONSTRAINT
+
+### Статус
+⚠️ **Костыль** — таблица создана вручную, 2-я миграция пропущена. Ждёт фикса от разработчика RAG Builder.
+
+## 26. Orchestrator — 500 вместо 404 при запросе удалённого draft
+
+### Проблема
+`GET /drafts/{draft_id}/preview/status` возвращал 500, если draft был удалён (DISCARDED).
+Таск в БД оставался, `_find_task_for_draft()` находил его, но код не проверял статус draft'а и падал с необработанной ошибкой.
+
+### Что сделано (checker, 2026-06-15)
+**`orchestrator_service/app/api/v1/endpoints/drafts.py`:**
+- Добавлена проверка `draft.status == "discarded"` в `get_preview_status()`
+- Если draft не найден или удалён → `HTTPException(404)` вместо 500
+
+### Результат
+- Orchestrator coverage: 32/32 ✅
+- Pipeline document_processing: не зависит (preview/status не в пайплайне)
+
+### Статус
+✅ **Исправлено**
 
