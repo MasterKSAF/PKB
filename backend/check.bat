@@ -1,6 +1,6 @@
-@echo off
+﻿@echo off
 REM =============================================================================
-REM PKB Neuroassistant — quick re-check entry point
+REM PKB Neuroassistant - quick re-check entry point
 REM Calls service_checker/docker/recheck.bat
 REM =============================================================================
 

@@ -1,15 +1,18 @@
 ﻿@echo off
 REM =============================================================================
-REM PKB Neuroassistant вЂ” initial setup from scratch (one time after git clone)
+REM PKB Neuroassistant - initial setup from scratch
 REM
-REM РџРѕР»РЅС‹Р№ С†РёРєР»: РїРѕРґРіРѕС‚РѕРІРєР° РјРѕРґРµР»Рё TEI + СЃР±РѕСЂРєР° РѕР±СЂР°Р·Р° + РѕС‡РёСЃС‚РєР° volumes +
-REM              Р·Р°РїСѓСЃРє РєРѕРЅС‚РµР№РЅРµСЂРѕРІ + full-report РїСЂРѕРІРµСЂРєР°.
+REM Full cycle:
+REM   1. Prepare TEI model.
+REM   2. Build base image.
+REM   3. Migrate legacy volumes if present.
+REM   4. Stop containers and remove data volumes.
+REM   5. Start all containers.
+REM   6. Wait for initialization.
+REM   7. Run the full report.
 REM
-REM РСЃРїРѕР»СЊР·СѓР№С‚Рµ РєРѕРіРґР° РЅСѓР¶РЅРѕ РїРѕРґРЅСЏС‚СЊ РІСЃС‘ СЃ РЅСѓР»СЏ:
-REM   docker\prepare.bat
-REM
-REM Р”Р»СЏ РїРѕРІС‚РѕСЂРЅРѕРіРѕ Р·Р°РїСѓСЃРєР° (Р±РµР· СЃР±СЂРѕСЃР° volumes) РёСЃРїРѕР»СЊР·СѓР№С‚Рµ:
-REM   docker\recheck.bat
+REM Use this script after a fresh git clone.
+REM For repeated checks without wiping volumes, use docker\recheck.bat.
 REM =============================================================================
 
 cd /d "%~dp0"
@@ -50,7 +53,6 @@ if errorlevel 1 (
 )
 echo.
 
-REM РЎРЅР°С‡Р°Р»Р° РјРёРіСЂРёСЂСѓРµРј СЃС‚Р°СЂС‹Рµ volumes (docker_* -> pkb_*), РµСЃР»Рё РѕРЅРё РµСЃС‚СЊ
 echo [3/7] Migrating old volumes (docker_* -> pkb_*)...
 python migrate_volumes.py
 echo.
@@ -78,7 +80,7 @@ ping -n 11 127.0.0.1 > nul
 echo.
 
 echo [7/7] Running full report (coverage + pipelines)...
-for %%I in ("%~dp0..\..") do cd /d "%%~fI"
+for %%I in ("%~dp0\..\..") do cd /d "%%~fI"
 python -m service_checker docker --action full-report
 if %ERRORLEVEL% neq 0 (
     echo.
