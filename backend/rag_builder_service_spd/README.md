@@ -250,22 +250,77 @@ sql/
 
 ### Реализовано
 
+#### Индексация документа
+
+* BuildRequest (chunk-container)
 * ChunkingService
-* EmbeddingService (stub)
-* InMemoryChunkRepository
-* PostgresChunkRepository
+* EmbeddingService
+* OpenAIEmbeddingProvider
+* StubEmbeddingProvider
 * PostgreSQL persistence
-* Reindex without duplicates
-* FastAPI API
+* Reindex без дубликатов
+
+#### Хранение структуры документа
+
+* nsi.document_sections
+* parent-child иерархия
+* path
+* path_ltree
+* GIST индекс для ltree
+
+#### Хранение чанков
+
+* nsi.chunks
+* embeddings (pgvector)
+* связь с document_sections через FK
+
+#### Междокументные связи
+
+* nsi.cross_references
+* нормативные ссылки
+* ссылки на таблицы
+* граф ссылок между документами
+
+#### Изображения
+
+* nsi.images
+* caption
+* metadata
+* привязка к document_sections
+
+#### Таблицы
+
+* nsi.extracted_tables
+* JSON представление таблицы
+* Markdown представление таблицы
+* привязка к document_sections
+
+#### Формулы
+
+* nsi.formulas
+* nsi.formula_parameters
+* LaTeX
+* параметры формул
+* связь с document_sections
+
+#### API
+
+* FastAPI
 * Swagger UI
 * Healthcheck
 * Logging
+
+#### Инфраструктура
+
 * Docker
 * Docker Compose
-* API tests
-* Integration tests
+* PostgreSQL
+* pgvector
+* ltree
 
 ### Тестирование
+
+Текущее состояние:
 
 ```text
 17 passed
@@ -273,116 +328,76 @@ sql/
 
 ---
 
-## 12. Integration Contract
+## Database Writes
 
-### Назначение
-
-RAG Builder является сервисом индексации документов.
-
-Сервис принимает chunk-container, преобразует его в чанки, вычисляет эмбеддинги и сохраняет результат в PostgreSQL.
-
-### Input
+На текущем этапе сервис записывает данные в следующие таблицы:
 
 ```text
-BuildRequest
-(chunk-container)
-```
-
-Источник данных:
-
-```text
-Document Pipeline
-        ↓
-RAG Builder
-```
-
-### Output
-
-```text
-IndexResponse
-```
-
-Пример:
-
-```json
-{
-  "status": "indexed",
-  "document_id": 420000,
-  "document_version_id": 420001,
-  "chunks_count": 3
-}
-```
-
-### API DTO
-
-Data Transfer Object это объект для передачи данных через границу сервиса.
-В сервисе используются типизированные DTO:
-
-```text
-HealthResponse
-IndexResponse
-```
-
-### Database Writes
-
-На текущем этапе сервис записывает данные только в:
-
-```text
+nsi.document_sections
 nsi.chunks
+nsi.cross_references
+nsi.images
+nsi.extracted_tables
+nsi.formulas
+nsi.formula_parameters
 ```
 
-### Out of Scope
+---
 
-Следующие функции не входят в ответственность RAG Builder:
+## Knowledge Base Schema
 
-* Hybrid Search
-* Vector Search
-* RRF (Reciprocal Rank Fusion)
-* Citation Assembly
-* Prompt Construction
-* LLM Inference
-* Answer Generation
-
-Эти функции реализуются другими сервисами платформы.
+```text
+document_sections
+│
+├── chunks
+├── cross_references
+├── images
+├── extracted_tables
+└── formulas
+      └── formula_parameters
+```
 
 ---
 
 ## 13. Roadmap
 
-### Stage 1 (текущий MVP)
+### Stage 1 — Core Indexing ✅
 
-* nsi.chunks
+* ChunkingService
+* EmbeddingService
 * PostgreSQL persistence
 * FastAPI API
-* Docker
 
-### Stage 2
+### Stage 2 — Document Structure ✅
 
 * nsi.document_sections
-* сохранение иерархии документа (ltree)
+* parent-child hierarchy
+* path_ltree
 
-### Stage 3
+### Stage 3 — References Graph ✅
 
 * nsi.cross_references
-* граф ссылок между нормативными документами
+* нормативные ссылки
+* междокументные связи
 
-### Stage 4
+### Stage 4 — Rich Content Extraction ✅
 
 * nsi.images
 * nsi.extracted_tables
 * nsi.formulas
 * nsi.formula_parameters
 
-### Stage 5
+### Stage 5 — Production Embeddings
 
-* интеграция с реальной embedding-моделью
 * OpenAI Embeddings
 * локальные embedding-модели
+* мониторинг стоимости эмбеддингов
 
-### Stage 6
+### Stage 6 — Search Integration
 
-* интеграция с Search Service
+* интеграция с RAG Search Service
 * Hybrid Search
 * RRF
 * Citation Engine
+* Context Expansion через ltree
 
