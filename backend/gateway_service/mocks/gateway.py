@@ -459,17 +459,7 @@ app.add_middleware(RequestLogMiddleware)
 
 
 # ---------------------------------------------------------------------------
-# Router includes
-# ---------------------------------------------------------------------------
-
-app.include_router(auth_router)
-app.include_router(orch_router)
-app.include_router(query_router)
-app.include_router(registry_router, prefix="/api/v1/registry")
-
-
-# ---------------------------------------------------------------------------
-# Health check
+# Health check — регистрируется ДО router includes, чтобы иметь приоритет
 # ---------------------------------------------------------------------------
 
 
@@ -491,6 +481,16 @@ async def gateway_health():
             1 for r in app.routes if hasattr(r, "methods") and r.path
         ),
     }
+
+
+# ---------------------------------------------------------------------------
+# Router includes
+# ---------------------------------------------------------------------------
+
+app.include_router(auth_router)
+app.include_router(orch_router)
+app.include_router(query_router)
+app.include_router(registry_router, prefix="/api/v1/registry")
 
 
 # ---------------------------------------------------------------------------
