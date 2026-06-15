@@ -186,6 +186,15 @@ async def create_draft(
     finally:
         await registry.close()
 
+    # --- Cache Draft record in local DB ---
+    from app.models.drafts import Draft
+    draft_record = Draft(
+        draft_id=draft_id,
+        status="uploaded",
+    )
+    db.add(draft_record)
+    await db.flush()
+
     # --- Check: Task for this draft_id already exists? ---
     from sqlalchemy import select
     from app.models.pipeline import Task

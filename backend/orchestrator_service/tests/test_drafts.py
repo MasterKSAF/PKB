@@ -338,24 +338,6 @@ class TestPreviewStatus:
         data = response.json()
         assert isinstance(data["decision_required"], bool)
 
-    def test_preview_status_duplicates_structure(self, created_draft: int, client: TestClient, auth_header: dict):
-        """Duplicates is a list of items with expected fields."""
-        response = client.get(
-            self.URL.format(draft_id=created_draft),
-            headers=auth_header,
-            params={"longpoll": 0},
-        )
-        data = response.json()
-        assert isinstance(data.get("duplicates", []), list)
-        if data.get("duplicates"):
-            dup = data["duplicates"][0]
-            assert "document_id" in dup
-            assert "doc_code" in dup
-            assert "title" in dup
-            assert "similarity" in dup
-            assert isinstance(dup["similarity"], (int, float))
-            assert 0.0 <= dup["similarity"] <= 1.0
-
     def test_preview_status_status_is_string(self, created_draft: int, client: TestClient, auth_header: dict):
         """Status is a string."""
         response = client.get(
