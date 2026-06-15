@@ -1,12 +1,12 @@
-from fastapi.testclient import TestClient
-
-from app.main import app
-
-
-client = TestClient(app)
+async def test_health(client):
+    r = await client.get("/health")
+    assert r.status_code == 200
+    assert r.json()["status"] == "ok"
 
 
-def test_health():
-    response = client.get("/health")
-    assert response.status_code == 200
-    assert response.json()["status"] == "ok"
+async def test_health_v1(client):
+    r = await client.get("/api/v1/health")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["status"] == "ok"
+    assert data["service"] == "auth_service"

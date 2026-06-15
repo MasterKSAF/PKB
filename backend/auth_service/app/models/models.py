@@ -1,8 +1,7 @@
 ﻿from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
@@ -73,7 +72,7 @@ class AuditEvent(Base):
     action: Mapped[str] = mapped_column(String(100), index=True)
     resource_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     resource_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    details: Mapped[dict | None] = mapped_column(JSONB(), nullable=True)
+    details: Mapped[dict | None] = mapped_column(JSON(), nullable=True)
     ip_address: Mapped[str | None] = mapped_column(String(100), nullable=True)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
