@@ -20,7 +20,6 @@ from .base import (
     check_json_fields,
     s3_sign_headers,
 )
-from service_checker.core.utils import int_to_uuid
 
 # Порт MinIO S3 API (обычно 9000)
 MINIO_PORT = 9000
@@ -33,9 +32,6 @@ TEST_PDF_PATH = str(_HERE / "pdf" / "7bd97d737317a8a272bb18a405ab2d04.pdf")
 # Константы для пайплайна
 TEST_TASK_ID = 12345
 TEST_DOC_ID = 1
-# ⚠️ WORKAROUND: RAG Builder ожидает UUID, база — BIGINT.
-# int_to_uuid() делает детерминированную конвертацию и логирует warning.
-TEST_DOC_UUID = int_to_uuid(TEST_DOC_ID)
 
 # Тестовые учётные данные (admin — создаётся auth-сервисом при старте)
 TEST_CREDENTIALS = {
@@ -219,10 +215,10 @@ class DocumentProcessingPipeline(PipelineDef):
             path="/api/v1/rag/build",
             port=8090,
             body={
-                "document_id": TEST_DOC_UUID,
+                "document_id": TEST_DOC_ID,
                 "sections": [{
                     "section_id": 1,
-                    "document_id": TEST_DOC_UUID,
+                    "document_id": TEST_DOC_ID,
                     "clause": "1",
                     "level": 1,
                     "path": "1",

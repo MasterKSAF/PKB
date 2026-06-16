@@ -521,12 +521,10 @@ POST /api/v1/registry/documents/ → 500
 | 11.4 | Отсутствует `docker/.env` | ✅ создан с DEFAULT_ADMIN_* и всеми переменными |
 | 11.5 | Путаница пользователей БД (pkb/pkb_user/rag_user) | ✅ `--docker` → все сервисы используют `pkb` (owner БД) |
 
-### Временный workaround (checker, 2026-06-12)
+### Временный workaround (checker, 2026-06-12 — УДАЛЁН 2026-06-16)
 
-Пока setup_db.py не исправлен, checker создаёт расширения и схемы БД самостоятельно:
-
-1. **`docker/wait_for_services.py`** — `init_db_schemas()` выполняет `CREATE EXTENSION IF NOT EXISTS` и `CREATE SCHEMA IF NOT EXISTS` через psql
-2. Когда `setup_db.py` починят — убрать `init_db_schemas()` из `wait_for_services.py`
+`init_db_schemas()` из `docker/wait_for_services.py` удалён.
+Расширения и схемы БД создаются setup_db.py при старте контейнера.
 
 ### Остаётся разработчикам сервисов
 
@@ -920,6 +918,15 @@ RAG Builder использует UUID для document_id — это ошибка
 
 ### Статус
 ⚠️ **Костыль** — таблица создана вручную, 2-я миграция пропущена. Ждёт фикса от разработчика RAG Builder.
+
+### Костыли удалены (2026-06-16)
+- `service_checker/docker/patch_rag_tables.py` — удалён (ручное создание таблиц)
+- `service_checker/docker/fix_rag_dim.py`, `fix_supervisor_conf.py` — удалены
+- `service_checker/core/utils.py` — `int_to_uuid()` / `uuid_to_int()` удалены
+- `service_checker/pipelines/*` — `_save_uuid_for_build`, `_on_rag_search_error` удалены
+- `service_checker/services/rag_builder.py` — warnings о костылях удалены
+
+RAG Builder теперь проверяется без обходных путей.
 
 ## 26. Orchestrator — 500 вместо 404 при запросе удалённого draft
 

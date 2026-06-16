@@ -51,46 +51,19 @@ class TestMultiDocumentCrossSearchPipeline:
         # Шаг 9 — построение индекса #1
         build_1 = steps[8]
         assert build_1.service == "rag_builder"
-        assert 422 not in build_1.expected_status, (
-            "Шаг build #1 не должен содержать 422 (silent workaround)"
-        )
+        assert 422 not in build_1.expected_status
         # Шаг 16 — построение индекса #2
         build_2 = steps[15]
         assert build_2.service == "rag_builder"
-        assert 422 not in build_2.expected_status, (
-            "Шаг build #2 не должен содержать 422 (silent workaround)"
-        )
+        assert 422 not in build_2.expected_status
 
-    def test_rag_search_steps_have_on_error(self):
-        """Шаги RAG Search (17, 19) имеют on_error для известной ошибки bigint=uuid."""
+    def test_rag_search_steps_no_on_error(self):
+        """Шаги RAG Search (17, 19) больше не имеют on_error — костыли удалены."""
         p = MultiDocumentCrossSearchPipeline()
         steps = p.build_steps(PipelineContext())
-        search_step_17 = steps[16]  # "Поиск по общему запросу"
+        search_step_17 = steps[16]
         assert search_step_17.service == "rag_search"
-        assert search_step_17.on_error is not None, (
-            "Шаг 17 должен иметь on_error для известной ошибки bigint=uuid"
-        )
-        search_step_19 = steps[18]  # "Поиск после удаления"
+        assert search_step_17.on_error is None
+        search_step_19 = steps[18]
         assert search_step_19.service == "rag_search"
-        assert search_step_19.on_error is not None, (
-            "Шаг 19 должен иметь on_error для известной ошибки bigint=uuid"
-        )
-
-    def test_on_rag_search_error_sets_context(self):
-        """_on_rag_search_error распознаёт 'bigint = uuid' и устанавливает флаг."""
-        ctx = PipelineContext()
-        body = '{"error": {"message": "Search failed: operator does not exist: bigint = uuid"}}'
-        MultiDocumentCrossSearchPipeline._on_rag_search_error(body, ctx)
-        assert ctx.get("rag_search_bigint_uuid") is True
-
-    def test_on_rag_search_error_ignores_other_errors(self):
-        """_on_rag_search_error не срабатывает на другие ошибки."""
-        ctx = PipelineContext()
-        body = '{"error": {"message": "Connection refused"}}'
-        MultiDocumentCrossSearchPipeline._on_rag_search_error(body, ctx)
-        assert ctx.get("rag_search_bigint_uuid") is None
-
-    def test_on_rag_search_error_ignores_empty_body(self):
-        ctx = PipelineContext()
-        MultiDocumentCrossSearchPipeline._on_rag_search_error(None, ctx)
-        assert ctx.get("rag_search_bigint_uuid") is None
+        assert search_step_19.on_error is None

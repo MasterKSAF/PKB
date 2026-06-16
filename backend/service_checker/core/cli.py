@@ -409,14 +409,6 @@ async def cmd_docker(
             log_warn("БД инициализирована не полностью")
         return
 
-    if action == "patch-rag":
-        log_header("🔧 Патч RAG Builder: создание таблиц и alembic_version")
-        from service_checker.docker.patch_rag_tables import patch_rag_tables
-        ok = await patch_rag_tables()
-        if ok:
-            log_ok("RAG таблицы готовы")
-        return
-
     if action == "coverage":
         log_header("📋 Coverage + Logs")
         ok = await _docker_run_coverage()
@@ -457,14 +449,6 @@ async def cmd_docker(
         try:
             sys.path.insert(0, str(BACKEND_DIR))
             from service_checker.core.api_coverage_test import ApiCoverageTester
-
-            # 1a. RAG Builder patch (создание таблиц, если нет)
-            try:
-                from service_checker.docker.patch_rag_tables import patch_rag_tables
-                log_info("Проверка RAG таблиц...")
-                await patch_rag_tables()
-            except Exception as e:
-                log_warn(f"RAG patch не сработал: {e}")
 
             log_info("Очистка supervisor-логов...")
             try:

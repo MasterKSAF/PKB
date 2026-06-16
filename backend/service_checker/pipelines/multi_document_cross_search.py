@@ -5,11 +5,6 @@ PKB Neuroassistant — Pipeline: multi_document_cross_search
 Загрузка 2 разных документов → индексация обоих → кросс-поиск → удаление одного → фильтрация.
 
 Проверяет работу RAG Search с несколькими документами.
-
-⚠️ ИЗВЕСТНЫЕ ПРОБЛЕМЫ:
-- Шаги RAG Builder build (9, 16): ожидают document_id как UUID, но registry возвращает int.
-  Сервис может вернуть 422. Это известная проблема (specificity.md §25).
-  Шаги будут FAILED — пайплайн это честно покажет.
 """
 
 from __future__ import annotations
@@ -26,7 +21,6 @@ from .base import (
     check_json_fields,
     s3_sign_headers,
 )
-from service_checker.core.utils import int_to_uuid
 
 MINIO_PORT = 9000
 _HERE = Path(__file__).resolve().parent.parent
@@ -42,25 +36,8 @@ TEST_TASK_ID_1 = 20001
 TEST_TASK_ID_2 = 20002
 
 
-def _save_uuid_for_build(ctx_key: str, uuid_ctx_key: str):
-    """Check-функция: после Registry создаёт UUID-версию doc_id для RAG Builder."""
-    def _check(body: Optional[str], ctx: PipelineContext) -> Tuple[bool, str]:
-        raw = ctx.get(ctx_key)
-        if raw is not None:
-            uuid_val = int_to_uuid(int(raw))
-            ctx.set(uuid_ctx_key, uuid_val)
-            return True, f"{ctx_key}={raw} → {uuid_ctx_key}={uuid_val}"
-        return True, f"{ctx_key} not in context, skipping UUID conversion"
-    return _check
-
-
 class MultiDocumentCrossSearchPipeline(PipelineDef):
-    """Пайплайн: мульти-документный поиск — 2 документа → кросс-поиск → удаление → фильтрация.
-
-    ⚠️ ИЗВЕСТНАЯ ПРОБЛЕМА (specificity.md §25):
-    RAG Search внутренний JOIN падает с `operator does not exist: bigint = uuid`.
-    Шаги 17, 19 имеют on_error, который распознаёт эту ошибку и помечает контекст.
-    """
+    """Пайплайн: мульти-документный поиск — 2 документа → кросс-поиск → удаление → фильтрация."""
 
     name = "multi_document_cross_search"
     description = "Мульти-документный поиск: 2 документа → индексация → кросс-поиск → удаление → фильтрация"
@@ -68,26 +45,8 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
     TEST_PDF_KEY = TEST_PDF_KEY
     TEST_PDF_PATH = TEST_PDF_PATH
 
-    @staticmethod
-    def _on_rag_search_error(body: Optional[str], ctx: PipelineContext) -> None:
-        """on_error: распознаёт известную ошибку `bigint = uuid` в RAG Search.
-
-        specificity.md §25: rag.document_chunks.document_id=UUID,
-        registry.documents.id=BIGINT — внутренний JOIN сервиса падает.
-        Проблема на стороне RAG Search, checker не может исправить.
-        """
-        if body and "bigint = uuid" in body:
-            ctx.set("rag_search_bigint_uuid", True)
-
     def build_steps(self, context: PipelineContext) -> List[PipelineStep]:
-        """Построить 19 шагов пайплайна multi_document_cross_search.
-
-        ⚠️ Шаги 9, 16 (RAG Builder build): не включают 422 в expected_status.
-        Если RAG Builder вернёт 422 из-за UUID — шаги будут FAILED.
-
-        ⚠️ Шаги 17, 19 (RAG Search): on_error распознаёт известную ошибку
-        `bigint = uuid` (specificity.md §25) и сохраняет контекст.
-        """
+        """Построить 19 шагов пайплайна multi_document_cross_search."""
         steps: List[PipelineStep] = []
         ts = int(time.time())
 
@@ -222,12 +181,9 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             expected_status={201, 409},
             needs_auth=True,
             extract_keys=["doc_id_1"],
-            check=_save_uuid_for_build("doc_id_1", "doc_id_1_uuid"),
         ))
 
-        # ⚠️ Шаг 9: Построение индекса для документа #1
-        # Не включает 422 — если RAG Builder вернёт 422 из-за UUID,
-        # шаг будет FAILED. Ожидаемый статус только 200/201.
+        # ── Шаг 9: Построение индекса для документа #1 ────────────────
         steps.append(PipelineStep(
             name="Построение индекса #1",
             service="rag_builder",
@@ -235,10 +191,10 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             path="/api/v1/rag/build",
             port=8090,
             body={
-                "document_id": "{doc_id_1_uuid}",
+                "document_id": "{doc_id_1}",
                 "sections": [{
                     "section_id": 1,
-                    "document_id": "{doc_id_1_uuid}",
+                    "document_id": "{doc_id_1}",
                     "clause": "1",
                     "level": 1,
                     "path": "1",
@@ -344,10 +300,9 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             expected_status={201, 409},
             needs_auth=True,
             extract_keys=["doc_id_2"],
-            check=_save_uuid_for_build("doc_id_2", "doc_id_2_uuid"),
         ))
 
-        # ⚠️ Шаг 16: Построение индекса #2 — без 422
+        # ── Шаг 16: Построение индекса #2 ──────────────────────────────
         steps.append(PipelineStep(
             name="Построение индекса #2",
             service="rag_builder",
@@ -355,10 +310,10 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             path="/api/v1/rag/build",
             port=8090,
             body={
-                "document_id": "{doc_id_2_uuid}",
+                "document_id": "{doc_id_2}",
                 "sections": [{
                     "section_id": 1,
-                    "document_id": "{doc_id_2_uuid}",
+                    "document_id": "{doc_id_2}",
                     "clause": "1",
                     "level": 1,
                     "path": "1",
@@ -372,8 +327,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             check=check_json_field("status", str),
         ))
 
-        # ── Шаг 17: Поиск без документа #1 ────────────────────────────
-        # ⚠️ on_error распознаёт известную `bigint = uuid` (specificity.md §25)
+        # ── Шаг 17: Поиск ────────────────────────────────────────────
         steps.append(PipelineStep(
             name="Поиск по общему запросу",
             service="rag_search",
@@ -386,7 +340,6 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             },
             expected_status=200,
             check=check_json_field("results", list),
-            on_error=self._on_rag_search_error,
         ))
 
         # ── Шаг 18: Удаление первого документа ────────────────────────
@@ -401,7 +354,6 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
         ))
 
         # ── Шаг 19: Поиск после удаления ──────────────────────────────
-        # ⚠️ on_error распознаёт известную `bigint = uuid` (specificity.md §25)
         steps.append(PipelineStep(
             name="Поиск после удаления документа #1",
             service="rag_search",
@@ -414,7 +366,6 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             },
             expected_status=200,
             check=check_json_field("results", list),
-            on_error=self._on_rag_search_error,
         ))
 
         return steps
