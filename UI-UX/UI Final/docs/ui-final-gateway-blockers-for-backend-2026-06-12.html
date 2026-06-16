@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UI Final / Gateway: актуальные вопросы к backend</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f8fb;
+      --paper: #ffffff;
+      --text: #111827;
+      --muted: #64748b;
+      --line: #dbe3ee;
+      --head: #eaf3f8;
+      --accent: #0f766e;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 32px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", Arial, sans-serif;
+      line-height: 1.55;
+    }
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 32px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: 0 14px 40px rgba(15, 23, 42, 0.08);
+    }
+    h1 { margin: 0 0 8px; font-size: 28px; line-height: 1.2; }
+    h2 { margin: 30px 0 12px; font-size: 20px; }
+    .date { margin: 0 0 24px; color: var(--muted); font-size: 14px; }
+    .summary {
+      padding: 16px 18px;
+      border-left: 4px solid var(--accent);
+      background: #f0fdfa;
+      border-radius: 10px;
+    }
+    .summary p { margin: 0 0 10px; }
+    .summary p:last-child { margin-bottom: 0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }
+    th, td { padding: 12px 11px; border: 1px solid var(--line); vertical-align: top; }
+    th { background: var(--head); text-align: left; font-weight: 700; }
+    td:first-child, th:first-child { width: 44px; text-align: center; }
+    td:nth-child(2), th:nth-child(2) { width: 200px; }
+    code {
+      padding: 1px 5px;
+      border-radius: 5px;
+      background: #eef2f7;
+      color: #0f172a;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.92em;
+    }
+    ol { margin: 10px 0 0; padding-left: 22px; }
+    li { margin: 7px 0; }
+    @media print {
+      body { padding: 0; background: #fff; }
+      main { max-width: none; border: none; border-radius: 0; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>UI Final / Gateway: актуальные вопросы к backend</h1>
+    <p class="date">Дата: 13.06.2026</p>
+
+    <section class="summary">
+      <p><strong>Короткий вывод.</strong> После обновления <code>develop</code> прежние блокеры по <code>document_id</code>, <code>project_id</code>, <code>/tasks/*</code> и обработке документов закрыты. UI и Gateway уже совпадают по login, <code>/auth/me</code>, <code>/admin/*</code>, поиску, дереву классификаторов, <code>GET /drafts</code>, export истории и feedback payload.</p>
+      <p>Ниже оставлен только будущий переход схемы разделов: <code>group</code> сейчас еще используется, но в следующей версии Gateway его заменят <code>categories</code> с множественными связями.</p>
+    </section>
+
+    <h2>Блокеры и вопросы к backend</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Область</th>
+          <th>Что меняется</th>
+          <th>Почему это важно</th>
+          <th>Что нужно от backend</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td>Схема разделов</td>
+          <td><code>group</code> остается текущим полем связи, но в следующей версии Gateway его заменят <code>categories</code> с множественными связями.</td>
+          <td>UI уже использует <code>group</code> для текущего контракта; при переходе на <code>categories</code> потребуется безопасная миграция фильтров и навигации.</td>
+          <td>Подтвердить схему <code>categories</code>, формат множественных связей и период совместимости с <code>group</code>.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Что уже закрыто относительно предыдущей версии blockers</h2>
+    <ol>
+      <li>Feedback в чате приведен к рабочему формату: UI отправляет числовой <code>rating</code> и <code>rating_status</code>.</li>
+      <li><code>GET /chat/history/export</code> работает как файловый/CSV stream; UI скачивает ответ Gateway.</li>
+      <li>Канонические пути auth/admin используются как <code>/auth/me</code> и <code>/admin/*</code>.</li>
+      <li><code>GET /drafts</code> работает без обязательного <code>document_key</code>; UI может получать список черновиков.</li>
+      <li>Дерево классификаторов доступно через <code>/registry/classifiers/tree</code>.</li>
+      <li><code>group</code>, <code>mks_oks_code</code>, <code>okstu_code</code> учитываются в UI для связи документов с разделами.</li>
+      <li><code>/tasks/*</code> доступен для админского отображения.</li>
+      <li>Upload-by-url убран из UI; текущий сценарий загрузки теперь только через прямой выбор файла.</li>
+    </ol>
+
+    <h2>Временное поведение UI до ответов backend</h2>
+    <ol>
+      <li>После approve/reject черновика UI нормализует <code>document_id</code>, <code>promoted_document_id</code>, <code>approved_document_id</code>.</li>
+      <li>Сессии без <code>project_id</code> показываются в fallback-группе <code>Рабочие диалоги</code> только как временная совместимость для старых данных.</li>
+      <li>Pipeline-разделы можно оставлять как admin-only display, пока backend не попросит отдельный публичный экран артефактов.</li>
+    </ol>
+  </main>
+</body>
+</html>

@@ -9,9 +9,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  Collapse,
   Divider,
-  LinearProgress,
   MenuItem,
   IconButton,
   Paper,
@@ -21,15 +19,12 @@ import {
 } from '@mui/material';
 import {
   ChevronLeft,
-  ChevronDown,
   ChevronRight,
-  ChevronUp,
   CheckCircle2,
   Download,
   FileDown,
   FilePlus2,
   FileSearch,
-  FileText,
   FolderInput,
   Maximize2,
   PlayCircle,
@@ -40,6 +35,7 @@ import {
 } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUIStore } from '../store/uiStore';
+import { DocumentRegistryPanel } from './DocumentRegistryPanel';
 import { adminApi, draftsApi, documentsApi } from '../utils/http';
 import { downloadPreviewFile } from '../utils/downloadPreview';
 import { MOCK_DOCUMENTS, MOCK_PROCESSING_LOGS, MOCK_PROCESSING_QUEUE } from '../utils/mockData';
@@ -74,6 +70,7 @@ type DraftItem = {
   title: string;
   sourceType: string;
   docCode: string;
+  year?: string;
   mksOksCode: string;
   okstuCode: string;
   era: string;
@@ -103,6 +100,7 @@ type DraftForm = {
   title: string;
   sourceType: string;
   docCode: string;
+  year: string;
   mksOksCode: string;
   okstuCode: string;
   era: string;
@@ -114,6 +112,81 @@ const SOURCE_TYPE_OPTIONS = ['GOST', 'GOST_R', 'OST', 'RD', 'TU', 'ISO', 'DNV', 
 const ERA_OPTIONS = ['USSR', 'CIS', 'RF', 'CURRENT'];
 const JURISDICTION_OPTIONS = ['RU', 'EU', 'US', 'NO', 'INTL'];
 const DRAFT_DOCUMENT_KEYS_STORAGE = 'pkb_gateway_draft_document_keys_v1';
+
+const createDefaultDraftForm = (): DraftForm => ({
+  title: '',
+  sourceType: 'GOST',
+  docCode: '',
+  year: '',
+  mksOksCode: '',
+  okstuCode: '',
+  era: 'CURRENT',
+  jurisdiction: 'RU',
+  issuingBody: '',
+});
+
+const buildDraftFormFromDraft = (draft: DraftItem | null): DraftForm => {
+  if (!draft) return createDefaultDraftForm();
+
+  return {
+    title: draft.title ?? '',
+    sourceType: draft.sourceType ?? 'GOST',
+    docCode: draft.docCode ?? '',
+    year: draft.year ?? draft.preview?.year ?? '',
+    mksOksCode: draft.mksOksCode ?? '',
+    okstuCode: draft.okstuCode ?? '',
+    era: draft.era ?? 'CURRENT',
+    jurisdiction: draft.jurisdiction ?? 'RU',
+    issuingBody: draft.issuingBody ?? '',
+  };
+};
+
+const buildDraftFormFromExtracted = (draft: DraftItem | null): DraftForm => {
+  if (!draft) return createDefaultDraftForm();
+
+  return {
+    title: draft.preview?.title ?? draft.title ?? '',
+    sourceType: draft.preview?.documentType ? draft.sourceType : draft.sourceType,
+    docCode: draft.preview?.docCode ?? draft.docCode ?? '',
+    year: draft.preview?.year ?? draft.year ?? '',
+    mksOksCode: draft.mksOksCode ?? '',
+    okstuCode: draft.okstuCode ?? '',
+    era: draft.era ?? 'CURRENT',
+    jurisdiction: draft.jurisdiction ?? 'RU',
+    issuingBody: draft.issuingBody ?? '',
+  };
+};
+
+const buildWorkspaceDraft = (form: DraftForm, fileName: string): DraftItem => ({
+  id: 'workspace-draft',
+  fileName: fileName || 'Новый файл',
+  title: form.title.trim() || fileName || 'Новый черновик',
+  sourceType: form.sourceType,
+  docCode: form.docCode.trim(),
+  year: form.year.trim(),
+  mksOksCode: form.mksOksCode.trim(),
+  okstuCode: form.okstuCode.trim(),
+  era: form.era,
+  jurisdiction: form.jurisdiction,
+  issuingBody: form.issuingBody.trim(),
+  status: 'uploaded',
+  progress: 0,
+  confidence: 0,
+  preview:
+    form.title.trim() || form.docCode.trim() || form.year.trim()
+      ? {
+          docCode: form.docCode.trim() || form.title.trim() || fileName || 'не указан',
+          title: form.title.trim() || fileName || 'Новый черновик',
+          documentType: form.sourceType.toLowerCase(),
+          year: form.year.trim() || '',
+          revision: null,
+        }
+      : null,
+  duplicates: [],
+  createdAt: '',
+  updatedAt: '',
+  note: '',
+});
 
 const PANEL_SX = {
   bgcolor: 'rgba(22, 23, 27, 0.72)',
@@ -272,6 +345,7 @@ const buildPreviewPages = (draft: DraftItem): PreviewPage[] => {
       lines: [
         `Код: ${draft.docCode || 'не указан'}`,
         `Тип источника: ${draft.sourceType}`,
+        `Год: ${draft.year || draft.preview?.year || 'не указан'}`,
         `МКС / ОКС: ${draft.mksOksCode || 'не указан'}`,
         `ОКСТУ: ${draft.okstuCode || 'не указан'}`,
         `Юрисдикция: ${draft.jurisdiction}`,
@@ -300,6 +374,7 @@ const buildDocumentPreviewText = (draft: DraftItem) =>
     `Статус: ${getStatusLabel(draft.status)}`,
     `Тип источника: ${draft.sourceType}`,
     `Код: ${draft.docCode || 'не указан'}`,
+    `Год: ${draft.year || draft.preview?.year || 'не указан'}`,
     `МКС / ОКС: ${draft.mksOksCode || 'не указан'}`,
     `ОКСТУ: ${draft.okstuCode || 'не указан'}`,
     `Юрисдикция: ${draft.jurisdiction}`,
@@ -312,8 +387,8 @@ const buildDocumentPreviewText = (draft: DraftItem) =>
     .join('\n');
 
 const getMetadataStatusLabel = (status: MetadataReviewStatus) => {
-  if (status === 'review') return 'требует проверки';
-  if (status === 'extracted') return 'извлечено системой';
+  if (status === 'review') return 'изменено';
+  if (status === 'extracted') return 'совпадает';
   if (status === 'manual') return 'указано вручную';
   return 'не заполнено';
 };
@@ -335,30 +410,60 @@ const resolveMetadataStatus = (manual?: string | null, extracted?: string | null
   return 'empty';
 };
 
-const buildMetadataReviewRows = (draft: DraftItem) => [
+const buildMetadataReviewRows = (draft: DraftItem, form: DraftForm) => [
   {
     label: 'Название',
-    manual: draft.title,
-    extracted: draft.preview?.title,
-    status: resolveMetadataStatus(draft.title, draft.preview?.title),
-  },
-  {
-    label: 'Код документа',
-    manual: draft.docCode,
-    extracted: draft.preview?.docCode,
-    status: resolveMetadataStatus(draft.docCode, draft.preview?.docCode),
+    manual: form.title,
+    current: draft.title ?? '',
+    status: resolveMetadataStatus(form.title, draft.title),
   },
   {
     label: 'Тип источника',
-    manual: draft.sourceType,
-    extracted: draft.preview?.documentType,
-    status: resolveMetadataStatus(draft.sourceType, draft.preview?.documentType),
+    manual: form.sourceType,
+    current: draft.sourceType ?? '',
+    status: resolveMetadataStatus(form.sourceType, draft.sourceType),
+  },
+  {
+    label: 'Код документа',
+    manual: form.docCode,
+    current: draft.docCode ?? '',
+    status: resolveMetadataStatus(form.docCode, draft.docCode),
   },
   {
     label: 'Год',
-    manual: draft.era,
-    extracted: draft.preview?.year,
-    status: resolveMetadataStatus(draft.era, draft.preview?.year),
+    manual: form.year,
+    current: draft.year ?? draft.preview?.year ?? '',
+    status: resolveMetadataStatus(form.year, draft.year ?? draft.preview?.year),
+  },
+  {
+    label: 'МКС / ОКС',
+    manual: form.mksOksCode,
+    current: draft.mksOksCode ?? '',
+    status: resolveMetadataStatus(form.mksOksCode, draft.mksOksCode),
+  },
+  {
+    label: 'ОКСТУ',
+    manual: form.okstuCode,
+    current: draft.okstuCode ?? '',
+    status: resolveMetadataStatus(form.okstuCode, draft.okstuCode),
+  },
+  {
+    label: 'Эра',
+    manual: form.era,
+    current: draft.era ?? '',
+    status: resolveMetadataStatus(form.era, draft.era),
+  },
+  {
+    label: 'Юрисдикция',
+    manual: form.jurisdiction,
+    current: draft.jurisdiction ?? '',
+    status: resolveMetadataStatus(form.jurisdiction, draft.jurisdiction),
+  },
+  {
+    label: 'Издатель',
+    manual: form.issuingBody,
+    current: draft.issuingBody ?? '',
+    status: resolveMetadataStatus(form.issuingBody, draft.issuingBody),
   },
 ];
 
@@ -470,6 +575,7 @@ const mapGatewayDraftRecordToUi = (payload: any, fallback?: Partial<DraftItem>):
     title: fallback?.title ?? payload?.title ?? payload?.preview_metadata?.title ?? payload?.filename ?? 'Документ',
     sourceType: fallback?.sourceType ?? payload?.source_type ?? 'OTHER',
     docCode: fallback?.docCode ?? payload?.doc_code ?? payload?.preview_metadata?.doc_code ?? '',
+    year: fallback?.year ?? payload?.year ?? payload?.preview_metadata?.year ?? preview?.year ?? '',
     mksOksCode: fallback?.mksOksCode ?? payload?.mks_oks_code ?? '',
     okstuCode: fallback?.okstuCode ?? payload?.okstu_code ?? '',
     era: fallback?.era ?? payload?.era ?? 'CURRENT',
@@ -509,6 +615,7 @@ const draftPatchFromGateway = (payload: any, fallback?: Partial<DraftItem>): Par
     title: normalized.title,
     sourceType: normalized.sourceType,
     docCode: normalized.docCode,
+    year: normalized.year,
     mksOksCode: normalized.mksOksCode,
     okstuCode: normalized.okstuCode,
     era: normalized.era,
@@ -548,23 +655,13 @@ export const KnowledgeProcessing: React.FC = () => {
   const [previewPageIndex, setPreviewPageIndex] = useState(0);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
-  const [metadataOpen, setMetadataOpen] = useState(false);
   const [draftSort, setDraftSort] = useState<DraftSort>('updated_desc');
   const [drafts, setDrafts] = useState<DraftItem[]>(() => (workMode === 'demo' ? createDemoDrafts() : []));
   const [draftDocumentKeys, setDraftDocumentKeys] = useState<string[]>(() =>
     workMode === 'prod' ? readStoredDraftDocumentKeys() : [],
   );
   const [deletedGatewayDraftIds, setDeletedGatewayDraftIds] = useState<string[]>([]);
-  const [form, setForm] = useState<DraftForm>({
-    title: '',
-    sourceType: 'GOST',
-    docCode: '',
-    mksOksCode: '',
-    okstuCode: '',
-    era: 'CURRENT',
-    jurisdiction: 'RU',
-    issuingBody: '',
-  });
+  const [draftForm, setDraftForm] = useState<DraftForm>(() => createDefaultDraftForm());
 
   const publishedDocumentsQuery = useQuery({
     queryKey: ['gateway-documents', workMode],
@@ -602,20 +699,10 @@ export const KnowledgeProcessing: React.FC = () => {
     setPreviewPageIndex(0);
     setPreviewLoading(false);
     setPreviewError('');
-    setMetadataOpen(false);
     setDraftSort('updated_desc');
     setDraftDocumentKeys(workMode === 'prod' ? readStoredDraftDocumentKeys() : []);
     setDeletedGatewayDraftIds([]);
-    setForm({
-      title: '',
-      sourceType: 'GOST',
-      docCode: '',
-      mksOksCode: '',
-      okstuCode: '',
-      era: 'CURRENT',
-      jurisdiction: 'RU',
-      issuingBody: '',
-    });
+    setDraftForm(createDefaultDraftForm());
   }, [workMode]);
 
   useEffect(() => {
@@ -654,8 +741,17 @@ export const KnowledgeProcessing: React.FC = () => {
     setPreviewDialogOpen(false);
     setPreviewPageIndex(0);
     setPreviewLoading(false);
-    setMetadataOpen(false);
   }, [activeTab]);
+
+  useEffect(() => {
+    if (!selectedDraftId) {
+      setDraftForm(createDefaultDraftForm());
+      return;
+    }
+
+    const draft = drafts.find((item) => item.id === selectedDraftId) ?? null;
+    setDraftForm(draft ? buildDraftFormFromDraft(draft) : createDefaultDraftForm());
+  }, [selectedDraftId]);
 
   const publishedDocuments = workMode === 'demo' ? publishedDocumentsQuery.data ?? MOCK_DOCUMENTS : publishedDocumentsQuery.data ?? [];
   const gatewayQueue =
@@ -672,41 +768,8 @@ export const KnowledgeProcessing: React.FC = () => {
       : processingAuditQuery.data ?? [];
   const sortedDrafts = useMemo(() => sortDrafts(drafts, draftSort), [drafts, draftSort]);
   const selectedDraft = drafts.find((draft) => draft.id === selectedDraftId) ?? null;
-  const readyCount = drafts.filter((draft) => draft.status === 'ready_for_approve').length;
-  const queueAttentionCount = gatewayQueue.filter((item) => item.status === 'ошибка').length;
   const queueHasError = workMode === 'prod' && gatewayQueueQuery.isError;
   const journalHasError = workMode === 'prod' && processingAuditQuery.isError;
-
-  const stats = [
-    {
-      label: 'Черновиков',
-      value: `${drafts.length}`,
-      note: 'в сессии',
-      icon: <FilePlus2 size={20} />,
-      color: '#d9b783',
-    },
-    {
-      label: 'К решению',
-      value: `${readyCount}`,
-      note: 'после предпросмотра',
-      icon: <ShieldCheck size={20} />,
-      color: '#79c58b',
-    },
-    {
-      label: 'В очереди',
-      value: `${gatewayQueue.length}`,
-      note: `${queueAttentionCount ? `${queueAttentionCount} с ошибкой` : 'без ошибок'}`,
-      icon: <RotateCw size={20} />,
-      color: '#9fb6d8',
-    },
-    {
-      label: 'В базе',
-      value: `${publishedDocuments.length}`,
-      note: 'готовые карточки',
-      icon: <CheckCircle2 size={20} />,
-      color: '#8fd19a',
-    },
-  ];
 
   const getSelectedDraft = (id = selectedDraftId) => drafts.find((draft) => draft.id === id) ?? null;
 
@@ -742,18 +805,19 @@ export const KnowledgeProcessing: React.FC = () => {
   const createLocalDraft = (sourceName: string) => {
     const id = `draft-${Date.now()}`;
     const now = nextClock();
-    const title = form.title.trim() || sourceName.replace(/\.[^.]+$/, '');
+    const title = draftForm.title.trim() || sourceName.replace(/\.[^.]+$/, '');
     const newDraft: DraftItem = {
       id,
       fileName: sourceName,
       title,
-      sourceType: form.sourceType,
-      docCode: form.docCode.trim(),
-      mksOksCode: form.mksOksCode.trim(),
-      okstuCode: form.okstuCode.trim(),
-      era: form.era,
-      jurisdiction: form.jurisdiction,
-      issuingBody: form.issuingBody.trim(),
+      sourceType: draftForm.sourceType,
+      docCode: draftForm.docCode.trim(),
+      year: draftForm.year.trim(),
+      mksOksCode: draftForm.mksOksCode.trim(),
+      okstuCode: draftForm.okstuCode.trim(),
+      era: draftForm.era,
+      jurisdiction: draftForm.jurisdiction,
+      issuingBody: draftForm.issuingBody.trim(),
       status: 'uploaded',
       progress: 14,
       confidence: 0,
@@ -772,24 +836,25 @@ export const KnowledgeProcessing: React.FC = () => {
 
   const uploadDraftFile = async (draftId: string, file: File, sourceLabel: string) => {
     const response = await draftsApi.create(file, {
-      sourceType: form.sourceType,
-      title: form.title.trim() || sourceLabel.replace(/\.[^.]+$/, ''),
-      docCode: form.docCode.trim() || undefined,
-      mksOksCode: form.mksOksCode.trim() || undefined,
-      okstuCode: form.okstuCode.trim() || undefined,
-      era: form.era,
-      jurisdiction: form.jurisdiction,
-      issuingBody: form.issuingBody.trim() || undefined,
+      sourceType: draftForm.sourceType,
+      title: draftForm.title.trim() || sourceLabel.replace(/\.[^.]+$/, ''),
+      docCode: draftForm.docCode.trim() || undefined,
+      mksOksCode: draftForm.mksOksCode.trim() || undefined,
+      okstuCode: draftForm.okstuCode.trim() || undefined,
+      era: draftForm.era,
+      jurisdiction: draftForm.jurisdiction,
+      issuingBody: draftForm.issuingBody.trim() || undefined,
       metadata: {
         manual: true,
-        source_type: form.sourceType,
-        title: form.title.trim() || undefined,
-        doc_code: form.docCode.trim() || undefined,
-        mks_oks_code: form.mksOksCode.trim() || undefined,
-        okstu_code: form.okstuCode.trim() || undefined,
-        era: form.era,
-        jurisdiction: form.jurisdiction,
-        issuing_body: form.issuingBody.trim() || undefined,
+        source_type: draftForm.sourceType,
+        title: draftForm.title.trim() || undefined,
+        doc_code: draftForm.docCode.trim() || undefined,
+        year: draftForm.year.trim() || undefined,
+        mks_oks_code: draftForm.mksOksCode.trim() || undefined,
+        okstu_code: draftForm.okstuCode.trim() || undefined,
+        era: draftForm.era,
+        jurisdiction: draftForm.jurisdiction,
+        issuing_body: draftForm.issuingBody.trim() || undefined,
       },
       idempotencyKey: createIdempotencyKey(),
     });
@@ -843,6 +908,38 @@ export const KnowledgeProcessing: React.FC = () => {
     setNotice('Сначала выберите файл для обработки.');
   };
 
+  const handleSaveDraftMetadata = () => {
+    if (!selectedDraft) {
+      setNotice('Сначала выберите черновик слева или создайте новый из выбранного файла.');
+      return;
+    }
+
+    updateDraft(selectedDraft.id, {
+      title: draftForm.title.trim() || selectedDraft.title,
+      sourceType: draftForm.sourceType,
+      docCode: draftForm.docCode.trim(),
+      year: draftForm.year.trim(),
+      mksOksCode: draftForm.mksOksCode.trim(),
+      okstuCode: draftForm.okstuCode.trim(),
+      era: draftForm.era,
+      jurisdiction: draftForm.jurisdiction,
+      issuingBody: draftForm.issuingBody.trim(),
+      note: 'Метаданные черновика сохранены вручную.',
+    });
+    setNotice(`Метаданные для «${selectedDraft.title}» сохранены.`);
+  };
+
+  const handleResetDraftMetadata = () => {
+    if (selectedDraft) {
+      setDraftForm(buildDraftFormFromExtracted(selectedDraft));
+      setNotice(`Метаданные для «${selectedDraft.title}» сброшены к извлечённым значениям.`);
+      return;
+    }
+
+    setDraftForm(createDefaultDraftForm());
+    setNotice('Форма черновика очищена.');
+  };
+
   const handleStartPreview = (draftId: string) => {
     const draft = getSelectedDraft(draftId);
     if (!draft || draft.status === 'previewing' || draft.status === 'approved' || draft.status === 'discarded') return;
@@ -863,7 +960,7 @@ export const KnowledgeProcessing: React.FC = () => {
           docCode: draftAfterPreview.docCode || draftAfterPreview.title,
           title: draftAfterPreview.title,
           documentType: draftAfterPreview.sourceType.toLowerCase(),
-          year: draftAfterPreview.era === 'CURRENT' ? String(new Date().getFullYear()) : '1981',
+          year: draftAfterPreview.year || (draftAfterPreview.era === 'CURRENT' ? String(new Date().getFullYear()) : '1981'),
           revision: draftAfterPreview.sourceType === 'GOST' ? '1' : null,
         };
 
@@ -932,7 +1029,7 @@ export const KnowledgeProcessing: React.FC = () => {
               docCode: draftAfterPreview.docCode || draftAfterPreview.title,
               title: draftAfterPreview.title,
               documentType: draftAfterPreview.sourceType.toLowerCase(),
-              year: draftAfterPreview.era === 'CURRENT' ? String(new Date().getFullYear()) : '1981',
+              year: draftAfterPreview.year || (draftAfterPreview.era === 'CURRENT' ? String(new Date().getFullYear()) : '1981'),
               revision: draftAfterPreview.sourceType === 'GOST' ? '1' : null,
             },
           duplicates,
@@ -995,7 +1092,7 @@ export const KnowledgeProcessing: React.FC = () => {
     }
 
     try {
-      const response = await draftsApi.decide(gatewayDraftId, action, form.title.trim() || undefined);
+      const response = await draftsApi.decide(gatewayDraftId, action, draftForm.title.trim() || undefined);
       updateDraft(draftId, {
         ...draftPatchFromGateway(response, draft),
         status: action === 'approve' ? 'approved' : 'discarded',
@@ -1093,6 +1190,146 @@ export const KnowledgeProcessing: React.FC = () => {
 
   const previewPages = selectedDraft ? buildPreviewPages(selectedDraft) : [];
   const currentPreviewPage = previewPages[Math.min(previewPageIndex, Math.max(previewPages.length - 1, 0))] ?? null;
+  const workspaceDraft = selectedDraft ?? buildWorkspaceDraft(draftForm, selectedFileName || '');
+  const hasWorkspaceInput = Boolean(
+    selectedDraft ||
+      selectedFileName ||
+      draftForm.title ||
+      draftForm.docCode ||
+      draftForm.year ||
+      draftForm.mksOksCode ||
+      draftForm.okstuCode ||
+      draftForm.issuingBody,
+  );
+  const workspacePreviewPage = hasWorkspaceInput ? buildPreviewPages(workspaceDraft)[0] ?? null : null;
+  const canStartPreview = Boolean(
+    selectedDraft &&
+      selectedDraft.status !== 'previewing' &&
+      selectedDraft.status !== 'ready_for_approve' &&
+      selectedDraft.status !== 'approved' &&
+      selectedDraft.status !== 'discarded',
+  );
+  const canDecideDraft = selectedDraft?.status === 'ready_for_approve';
+  const canOpenKnowledgeBase = selectedDraft?.status === 'approved';
+  const renderMetadataFieldInput = (label: string) => {
+    const commonSx = { minWidth: 0 };
+
+    switch (label) {
+      case 'Название':
+        return (
+          <TextField
+            size="small"
+            fullWidth
+            value={draftForm.title}
+            onChange={(event) => setDraftForm((current) => ({ ...current, title: event.target.value }))}
+            sx={commonSx}
+          />
+        );
+      case 'Тип источника':
+        return (
+          <TextField
+            size="small"
+            fullWidth
+            select
+            value={draftForm.sourceType}
+            onChange={(event) => setDraftForm((current) => ({ ...current, sourceType: event.target.value }))}
+            sx={commonSx}
+          >
+            {SOURCE_TYPE_OPTIONS.map((option) => (
+              <MenuItem key={option} value={option}>
+                {option}
+              </MenuItem>
+            ))}
+          </TextField>
+        );
+      case 'Код документа':
+        return (
+          <TextField
+            size="small"
+            fullWidth
+            value={draftForm.docCode}
+            onChange={(event) => setDraftForm((current) => ({ ...current, docCode: event.target.value }))}
+            sx={commonSx}
+          />
+        );
+      case 'Год':
+        return (
+          <TextField
+            size="small"
+            fullWidth
+            value={draftForm.year}
+            onChange={(event) => setDraftForm((current) => ({ ...current, year: event.target.value }))}
+            sx={commonSx}
+          />
+        );
+      case 'МКС / ОКС':
+        return (
+          <TextField
+            size="small"
+            fullWidth
+            value={draftForm.mksOksCode}
+            onChange={(event) => setDraftForm((current) => ({ ...current, mksOksCode: event.target.value }))}
+            sx={commonSx}
+          />
+        );
+      case 'ОКСТУ':
+        return (
+          <TextField
+            size="small"
+            fullWidth
+            value={draftForm.okstuCode}
+            onChange={(event) => setDraftForm((current) => ({ ...current, okstuCode: event.target.value }))}
+            sx={commonSx}
+          />
+        );
+      case 'Эра':
+        return (
+          <TextField
+            size="small"
+            fullWidth
+            select
+            value={draftForm.era}
+            onChange={(event) => setDraftForm((current) => ({ ...current, era: event.target.value }))}
+            sx={commonSx}
+          >
+            {ERA_OPTIONS.map((option) => (
+              <MenuItem key={option} value={option}>
+                {option}
+              </MenuItem>
+            ))}
+          </TextField>
+        );
+      case 'Юрисдикция':
+        return (
+          <TextField
+            size="small"
+            fullWidth
+            select
+            value={draftForm.jurisdiction}
+            onChange={(event) => setDraftForm((current) => ({ ...current, jurisdiction: event.target.value }))}
+            sx={commonSx}
+          >
+            {JURISDICTION_OPTIONS.map((option) => (
+              <MenuItem key={option} value={option}>
+                {option}
+              </MenuItem>
+            ))}
+          </TextField>
+        );
+      case 'Издатель':
+        return (
+          <TextField
+            size="small"
+            fullWidth
+            value={draftForm.issuingBody}
+            onChange={(event) => setDraftForm((current) => ({ ...current, issuingBody: event.target.value }))}
+            sx={commonSx}
+          />
+        );
+      default:
+        return <TextField size="small" fullWidth value="" disabled sx={commonSx} />;
+    }
+  };
   const panelSx = {
     ...PANEL_SX,
     ...(isLight && {
@@ -1113,63 +1350,19 @@ export const KnowledgeProcessing: React.FC = () => {
 
   return (
     <Container maxWidth="xl" sx={{ py: 3 }}>
-      <Stack spacing={3}>
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
-          {stats.map((stat) => (
-            <Box key={stat.label} sx={{ flex: '1 1 200px' }}>
-              <Paper
-                variant="outlined"
-                sx={{
-                  p: 2.3,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1.8,
-                  borderRadius: 2.4,
-                  ...panelSx,
-                }}
-              >
-                <Box
-                  sx={{
-                    p: 1,
-                    borderRadius: 1.7,
-                    bgcolor: 'rgba(255,255,255,0.03)',
-                    color: stat.color,
-                    border: '1.5px solid rgba(198, 216, 240, 0.24)',
-                  }}
-                >
-                  {stat.icon}
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.4 }}>
-                    {stat.label}
-                  </Typography>
-                  <Typography variant="h6" sx={{ lineHeight: 1.05, fontWeight: 600 }}>
-                    {stat.value}
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: isLight ? 'rgba(71, 85, 105, 0.80)' : 'rgba(171, 183, 201, 0.72)' }}>
-                    {stat.note}
-                  </Typography>
-                </Box>
-              </Paper>
-            </Box>
-          ))}
-        </Box>
-
-        <Paper variant="outlined" sx={{ p: 1.9, borderRadius: 3, ...panelSx }}>
-          <Stack spacing={2}>
+      <Stack spacing={2}>
+        <Paper variant="outlined" sx={{ p: 1.45, borderRadius: 3, ...panelSx }}>
+          <Stack spacing={1.1}>
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-              <FilePlus2 size={18} color={isLight ? '#0284c7' : '#98d9d8'} />
-              <Box>
-                <Typography sx={{ fontWeight: 560, color: isLight ? '#0f172a' : 'rgba(233, 237, 243, 0.92)' }}>
-                  Загрузка документа
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Компактный блок для старта обработки и добавления черновика.
-                </Typography>
-              </Box>
-            </Stack>
+                <FilePlus2 size={18} color={isLight ? '#0284c7' : '#98d9d8'} />
+                <Box>
+                  <Typography sx={{ fontWeight: 560, color: isLight ? '#0f172a' : 'rgba(233, 237, 243, 0.92)' }}>
+                    Загрузка и обработка документа
+                  </Typography>
+                </Box>
+              </Stack>
 
-            <Stack direction="row" spacing={1.2} sx={{ flexWrap: 'wrap' }}>
+            <Stack direction="row" spacing={1.2} sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
               <Button
                 className="app-action-button"
                 variant="contained"
@@ -1178,163 +1371,144 @@ export const KnowledgeProcessing: React.FC = () => {
               >
                 Выбрать файл
               </Button>
+              {selectedFileName && <Chip label={selectedFileName} size="small" variant="outlined" />}
+              <input ref={fileInputRef} type="file" hidden accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff" onChange={handleFileSelect} />
+            </Stack>
+
+            <Divider sx={{ borderColor: 'rgba(198, 214, 236, 0.18)' }} />
+
+            <Stack
+              direction="row"
+              spacing={1}
+              useFlexGap
+              sx={{ flexWrap: 'wrap', alignItems: 'center', '& .app-action-button': { whiteSpace: 'nowrap' } }}
+            >
               <Button
                 className="app-action-button"
                 variant="contained"
                 startIcon={<PlayCircle size={16} />}
                 onClick={() => void handleCreateDraft()}
+                disabled={!selectedFile}
               >
                 Создать черновик
               </Button>
               <Button
                 className="app-action-button"
                 variant="outlined"
-                startIcon={<XCircle size={16} />}
-                onClick={() => {
-                  setSelectedFile(null);
-                  setSelectedFileName('');
-                  setForm({
-                    title: '',
-                    sourceType: 'GOST',
-                    docCode: '',
-                    mksOksCode: '',
-                    okstuCode: '',
-                    era: 'CURRENT',
-                    jurisdiction: 'RU',
-                    issuingBody: '',
-                  });
-                  setNotice('Форма очищена.');
-                }}
+                startIcon={<CheckCircle2 size={16} />}
+                onClick={handleSaveDraftMetadata}
+                disabled={!selectedDraft}
               >
-                Сбросить
+                Сохранить изменения
               </Button>
               <Button
                 className="app-action-button"
                 variant="outlined"
-                startIcon={metadataOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                onClick={() => setMetadataOpen((current) => !current)}
+                startIcon={<XCircle size={16} />}
+                onClick={handleResetDraftMetadata}
+                disabled={!hasWorkspaceInput}
               >
-                {metadataOpen ? 'Скрыть метаданные' : 'Метаданные'}
+                Сбросить метаданные
               </Button>
-              <input ref={fileInputRef} type="file" hidden accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff" onChange={handleFileSelect} />
-            </Stack>
-
-            {selectedFileName && (
-              <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
-                Выбран файл: {selectedFileName}
-              </Alert>
-            )}
-
-            <Collapse in={metadataOpen} timeout="auto" unmountOnExit>
-              <Box
-                sx={{
-                  display: 'grid',
-                  gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' },
-                  gap: 1.4,
-                }}
+              <Button
+                className="app-action-button"
+                variant="outlined"
+                startIcon={<PlayCircle size={16} />}
+                onClick={() => selectedDraft && handleStartPreview(selectedDraft.id)}
+                disabled={!canStartPreview}
               >
-                <TextField
-                  label="Название документа"
-                  value={form.title}
-                  onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
-                />
-                <TextField
-                  label="Тип источника"
-                  select
-                  value={form.sourceType}
-                  onChange={(event) => setForm((current) => ({ ...current, sourceType: event.target.value }))}
+                Запустить предпросмотр
+              </Button>
+              <Button
+                className="app-action-button"
+                variant="contained"
+                color="success"
+                startIcon={<CheckCircle2 size={16} />}
+                onClick={() => selectedDraft && void handleDecision(selectedDraft.id, 'approve')}
+                disabled={!canDecideDraft}
+              >
+                Принять в базу знаний
+              </Button>
+              <Button
+                className="app-action-button"
+                variant="outlined"
+                color="error"
+                startIcon={<XCircle size={16} />}
+                onClick={() => selectedDraft && void handleDecision(selectedDraft.id, 'reject')}
+                disabled={!canDecideDraft}
+              >
+                Отклонить черновик
+              </Button>
+              <Button
+                className="app-action-button"
+                variant="outlined"
+                color="error"
+                startIcon={<XCircle size={16} />}
+                onClick={() => selectedDraft && handleDeleteDraft(selectedDraft.id)}
+                disabled={!selectedDraft}
+              >
+                Удалить черновик
+              </Button>
+              {canOpenKnowledgeBase && (
+                <Button
+                  className="app-action-button"
+                  variant="outlined"
+                  startIcon={<FolderInput size={16} />}
+                  onClick={() => setActiveTab('documents')}
                 >
-                  {SOURCE_TYPE_OPTIONS.map((option) => (
-                    <MenuItem key={option} value={option}>
-                      {option}
-                    </MenuItem>
-                  ))}
-                </TextField>
-                <TextField
-                  label="Код документа"
-                  value={form.docCode}
-                  onChange={(event) => setForm((current) => ({ ...current, docCode: event.target.value }))}
-                />
-                <TextField
-                  label="Организация-издатель"
-                  value={form.issuingBody}
-                  onChange={(event) => setForm((current) => ({ ...current, issuingBody: event.target.value }))}
-                />
-                <TextField
-                  label="МКС / ОКС"
-                  value={form.mksOksCode}
-                  onChange={(event) => setForm((current) => ({ ...current, mksOksCode: event.target.value }))}
-                />
-                <TextField
-                  label="ОКСТУ"
-                  value={form.okstuCode}
-                  onChange={(event) => setForm((current) => ({ ...current, okstuCode: event.target.value }))}
-                />
-                <TextField
-                  label="Эра"
-                  select
-                  value={form.era}
-                  onChange={(event) => setForm((current) => ({ ...current, era: event.target.value }))}
-                >
-                  {ERA_OPTIONS.map((option) => (
-                    <MenuItem key={option} value={option}>
-                      {option}
-                    </MenuItem>
-                  ))}
-                </TextField>
-                <TextField
-                  label="Юрисдикция"
-                  select
-                  value={form.jurisdiction}
-                  onChange={(event) => setForm((current) => ({ ...current, jurisdiction: event.target.value }))}
-                >
-                  {JURISDICTION_OPTIONS.map((option) => (
-                    <MenuItem key={option} value={option}>
-                      {option}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              </Box>
-            </Collapse>
+                  Открыть базу знаний
+                </Button>
+              )}
+            </Stack>
           </Stack>
         </Paper>
 
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: '1fr 1.2fr' }, gap: 3 }}>
-          <Paper variant="outlined" sx={{ p: 1.9, borderRadius: 3, ...panelSx }}>
-            <Stack spacing={1.4}>
-              <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
-                <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: '320px minmax(0, 1fr)' }, gap: 2 }}>
+          <Paper variant="outlined" sx={{ p: 1.45, borderRadius: 3, ...panelSx }}>
+            <Stack spacing={1.05}>
+              <Stack spacing={0.9}>
+                <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
                     <RotateCw size={18} color={isLight ? '#0284c7' : '#98d9d8'} />
-                  <Box sx={{ minWidth: 0 }}>
-                    <Typography sx={{ fontWeight: 560, color: isLight ? '#0f172a' : 'rgba(233, 237, 243, 0.92)' }}>
+                    <Typography
+                      sx={{
+                        minWidth: 0,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        fontWeight: 560,
+                        color: isLight ? '#0f172a' : 'rgba(233, 237, 243, 0.92)',
+                      }}
+                    >
                       Черновики обработки
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Отсортируйте список и выберите черновик для просмотра.
-                    </Typography>
-                  </Box>
+                  </Stack>
+                  <Chip label={drafts.length} size="small" variant="outlined" sx={{ flexShrink: 0 }} />
                 </Stack>
 
-                <TextField
-                  select
-                  size="small"
-                  label="Сортировка"
-                  value={draftSort}
-                  onChange={(event) => setDraftSort(event.target.value as DraftSort)}
-                  sx={{ minWidth: 168 }}
-                >
-                  <MenuItem value="updated_desc">По обновлению</MenuItem>
-                  <MenuItem value="name_asc">По названию</MenuItem>
-                  <MenuItem value="status">По статусу</MenuItem>
-                </TextField>
-              </Stack>
+                <Divider
+                  sx={{
+                    mx: 0.75,
+                    borderBottomWidth: 2,
+                    borderColor: isLight ? 'rgba(14, 116, 144, 0.24)' : 'rgba(198, 214, 236, 0.26)',
+                  }}
+                />
 
-              {workMode === 'prod' && draftDocumentKeys.length === 0 && (
-                <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
-                  Gateway возвращает список черновиков по `document_key`. После загрузки через этот экран здесь появятся черновики,
-                  которые можно повторно запросить из Gateway.
-                </Alert>
-              )}
+                <Stack direction="row" sx={{ justifyContent: 'flex-end' }}>
+                  <TextField
+                    select
+                    size="small"
+                    label="Сортировка"
+                    value={draftSort}
+                    onChange={(event) => setDraftSort(event.target.value as DraftSort)}
+                    sx={{ minWidth: 168 }}
+                  >
+                    <MenuItem value="updated_desc">По обновлению</MenuItem>
+                    <MenuItem value="name_asc">По названию</MenuItem>
+                    <MenuItem value="status">По статусу</MenuItem>
+                  </TextField>
+                </Stack>
+              </Stack>
 
               {workMode === 'prod' && gatewayDraftsQuery.isError && (
                 <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2 }}>
@@ -1342,9 +1516,9 @@ export const KnowledgeProcessing: React.FC = () => {
                 </Alert>
               )}
 
-              <Paper variant="outlined" sx={{ borderRadius: 2.4, overflow: 'hidden', ...tableSx }}>
-                <Stack divider={<Divider flexItem sx={{ borderColor: 'rgba(198, 214, 236, 0.18)' }} />} sx={{ maxHeight: 560, overflow: 'auto' }}>
-                  {sortedDrafts.map((draft) => {
+              <Box sx={{ overflow: 'hidden' }}>
+                <Stack divider={<Divider flexItem sx={{ borderColor: 'rgba(198, 214, 236, 0.18)' }} />} sx={{ maxHeight: 460, overflow: 'auto' }}>
+                  {sortedDrafts.map((draft, index) => {
                     const isSelected = selectedDraftId === draft.id;
 
                     return (
@@ -1352,243 +1526,207 @@ export const KnowledgeProcessing: React.FC = () => {
                         key={draft.id}
                         onClick={() => setSelectedDraftId(draft.id)}
                         sx={{
-                          p: 1.4,
+                          px: 1,
+                          py: 0.65,
                           cursor: 'pointer',
                           bgcolor: isSelected ? 'rgba(123, 166, 227, 0.12)' : 'transparent',
                           transition: 'background-color 160ms ease',
                           '&:hover': { bgcolor: 'rgba(123, 166, 227, 0.08)' },
                         }}
                       >
-                        <Stack spacing={1}>
-                          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} sx={{ justifyContent: 'space-between' }}>
-                            <Box sx={{ minWidth: 0 }}>
-                              <Typography sx={{ fontWeight: 560, lineHeight: 1.35 }}>{draft.title}</Typography>
-                              <Typography variant="caption" color="text.secondary">
-                                {draft.fileName} · {draft.createdAt}
-                              </Typography>
-                            </Box>
-                            <Stack direction="row" spacing={0.75} useFlexGap sx={{ flexWrap: 'wrap' }}>
-                              <Chip label={getStatusLabel(draft.status)} size="small" color={getStatusColor(draft.status)} variant="outlined" />
-                              <Chip label={`${draft.progress}%`} size="small" variant="outlined" />
-                            </Stack>
-                          </Stack>
-                          <LinearProgress
-                            variant="determinate"
-                            value={draft.progress}
+                        <Box
+                          sx={{
+                            display: 'grid',
+                            gridTemplateColumns: 'minmax(0, 1fr) auto',
+                            gap: 1,
+                            alignItems: 'center',
+                          }}
+                        >
+                          <Typography
+                            title={`${draft.title} · ${draft.fileName}`}
                             sx={{
-                              height: 8,
-                              borderRadius: 999,
-                              bgcolor: isLight ? 'rgba(148, 163, 184, 0.18)' : 'rgba(148, 163, 184, 0.12)',
+                              minWidth: 0,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              fontWeight: isSelected ? 620 : 520,
+                              lineHeight: 1.35,
+                              fontSize: '0.88rem',
                             }}
+                          >
+                            {index + 1}. {draft.title}
+                          </Typography>
+                          <Chip
+                            label={getStatusLabel(draft.status)}
+                            size="small"
+                            color={getStatusColor(draft.status)}
+                            variant="outlined"
+                            sx={{ height: 22, '& .MuiChip-label': { px: 0.8, fontSize: '0.68rem' } }}
                           />
-                        </Stack>
+                        </Box>
                       </Box>
                     );
                   })}
                   {sortedDrafts.length === 0 && (
-                    <Box sx={{ p: 2 }}>
-                      <Alert severity="info" variant="outlined">
-                        Пока нет черновиков. Создайте первый файл сверху.
+                    <Box sx={{ p: 1 }}>
+                      <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
+                        Черновиков пока нет.
                       </Alert>
                     </Box>
                   )}
                 </Stack>
-              </Paper>
+              </Box>
             </Stack>
           </Paper>
 
-          <Paper variant="outlined" sx={{ p: 1.9, borderRadius: 3, ...panelSx }}>
-            <Stack spacing={1.4}>
+          <Paper variant="outlined" sx={{ p: 1.45, borderRadius: 3, ...panelSx }}>
+            <Stack spacing={1.15}>
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                 <FileSearch size={18} color={isLight ? '#0284c7' : '#98d9d8'} />
                 <Box sx={{ minWidth: 0 }}>
                   <Typography sx={{ fontWeight: 560, color: isLight ? '#0f172a' : 'rgba(233, 237, 243, 0.92)' }}>
-                    Предпросмотр черновика
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Выберите черновик слева, чтобы увидеть его карточку и решение.
+                    Рабочая область черновика
                   </Typography>
                 </Box>
               </Stack>
 
-              {selectedDraft ? (
-                <>
-                  <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-                    <Chip label={getStatusLabel(selectedDraft.status)} color={getStatusColor(selectedDraft.status)} variant="outlined" />
-                    <Chip label={`${selectedDraft.progress}%`} variant="outlined" />
-                    <Chip
-                      label={selectedDraft.confidence ? `Уверенность ${Math.round(selectedDraft.confidence * 100)}%` : 'Уверенность: н/д'}
+              <Paper
+                variant="outlined"
+                sx={{
+                  minHeight: 420,
+                  p: 2.1,
+                  borderRadius: 2.3,
+                  bgcolor: '#f4f1e8',
+                  color: '#202020',
+                  fontFamily: 'Georgia, serif',
+                }}
+              >
+                <Stack spacing={1.15}>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography variant="caption" sx={{ color: '#777' }}>
+                        Предпросмотр документа
+                      </Typography>
+                      <Typography variant="h6" sx={{ mt: 0.65, color: '#1f1f1f', fontFamily: 'Georgia, serif' }}>
+                        {workspacePreviewPage?.title ?? 'Черновик не выбран'}
+                      </Typography>
+                    </Box>
+                  </Stack>
+
+                  {workspacePreviewPage ? (
+                    <Paper
                       variant="outlined"
-                    />
-                  </Stack>
-
-                  <Divider sx={{ my: 0.5 }} />
-
-                  <Stack spacing={0.8}>
-                    <Typography sx={{ fontWeight: 560, lineHeight: 1.35 }}>{selectedDraft.title}</Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {selectedDraft.fileName}
-                    </Typography>
-                    {selectedDraft.note && (
-                      <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
-                        {selectedDraft.note}
-                      </Alert>
-                    )}
-                  </Stack>
-
-                  <Paper
-                    variant="outlined"
-                    sx={{
-                      minHeight: 250,
-                      p: 2.1,
-                      borderRadius: 2.3,
-                      bgcolor: '#f4f1e8',
-                      color: '#202020',
-                      fontFamily: 'Georgia, serif',
-                    }}
-                  >
-                    <Stack spacing={1.2}>
-                      <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                        <Box sx={{ minWidth: 0 }}>
-                          <Typography variant="caption" sx={{ color: '#777' }}>
-                            Предпросмотр карточки
+                      sx={{
+                        minHeight: 310,
+                        p: 2.2,
+                        borderRadius: 2,
+                        bgcolor: '#fbf7ef',
+                        borderColor: 'rgba(99, 89, 68, 0.22)',
+                        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.7), 0 8px 18px rgba(15,23,42,0.08)',
+                        color: '#202020',
+                      }}
+                    >
+                      <Stack spacing={1.4}>
+                        <Box>
+                          <Typography variant="caption" sx={{ color: '#7c6f57' }}>
+                            Страница 1
                           </Typography>
-                          <Typography variant="h6" sx={{ mt: 0.7, color: '#1f1f1f', fontFamily: 'Georgia, serif' }}>
-                            {selectedDraft.preview?.title ?? selectedDraft.title}
+                          <Typography variant="h6" sx={{ mt: 0.45, color: '#222', fontFamily: 'Georgia, serif' }}>
+                            {workspacePreviewPage.title}
                           </Typography>
                         </Box>
-                        <Chip label={`${selectedDraft.progress}%`} size="small" variant="outlined" />
-                      </Stack>
-
-                      {selectedDraft.preview ? (
-                        <Stack spacing={0.65}>
-                          <Typography component="div" sx={{ lineHeight: 1.6, fontFamily: 'inherit' }}>
-                            Код: {selectedDraft.preview.docCode}
-                          </Typography>
-                          <Typography component="div" sx={{ lineHeight: 1.6, fontFamily: 'inherit' }}>
-                            Тип: {selectedDraft.preview.documentType}
-                          </Typography>
-                          <Typography component="div" sx={{ lineHeight: 1.6, fontFamily: 'inherit' }}>
-                            Год: {selectedDraft.preview.year}
-                          </Typography>
-                          <Typography component="div" sx={{ lineHeight: 1.6, fontFamily: 'inherit' }}>
-                            Редакция: {selectedDraft.preview.revision ?? 'не указана'}
-                          </Typography>
-                        </Stack>
-                      ) : (
-                        <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
-                          Предпросмотр еще не запущен.
-                        </Alert>
-                      )}
-
-                      <Stack direction="row" sx={{ justifyContent: 'center', pt: 0.5 }}>
-                        <Button
-                          className="app-action-button"
-                          variant="outlined"
-                          startIcon={<Maximize2 size={16} />}
-                          onClick={() => handleOpenPreviewDialog(selectedDraft.id)}
+                        <Typography
+                          component="pre"
+                          sx={{
+                            m: 0,
+                            whiteSpace: 'pre-wrap',
+                            lineHeight: 1.7,
+                            fontFamily: 'inherit',
+                            fontSize: '0.98rem',
+                            minHeight: 220,
+                          }}
                         >
-                          Развернуть
-                        </Button>
+                          {workspacePreviewPage.lines.join('\n')}
+                        </Typography>
                       </Stack>
-                    </Stack>
-                  </Paper>
+                    </Paper>
+                  ) : (
+                    <Paper
+                      variant="outlined"
+                      sx={{
+                        minHeight: 310,
+                        p: 2.2,
+                        borderRadius: 2,
+                        bgcolor: '#fbf7ef',
+                        borderColor: 'rgba(99, 89, 68, 0.22)',
+                        color: '#6f6757',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Typography sx={{ fontFamily: 'Georgia, serif' }}>Нет предпросмотра</Typography>
+                    </Paper>
+                  )}
 
-                  <Paper variant="outlined" sx={{ p: 1.25, borderRadius: 2.2, ...panelSx }}>
-                    <Stack spacing={1}>
-                      <Typography sx={{ fontWeight: 560 }}>Сверка метаданных</Typography>
-                      <Stack spacing={0.8}>
-                        {buildMetadataReviewRows(selectedDraft).map((row) => (
-                          <Box
-                            key={row.label}
-                            sx={{
-                              display: 'grid',
-                              gridTemplateColumns: { xs: '1fr', md: '0.8fr 1fr 1fr auto' },
-                              gap: 1,
-                              alignItems: 'center',
-                              p: 0.8,
-                              borderRadius: 1.6,
-                              bgcolor: isLight ? 'rgba(248,250,252,0.68)' : 'rgba(255,255,255,0.025)',
-                              border: isLight ? '1px solid rgba(14,116,144,0.14)' : '1px solid rgba(198,216,240,0.14)',
-                            }}
-                          >
-                            <Typography variant="caption" color="text.secondary">
-                              {row.label}
-                            </Typography>
-                            <Typography variant="caption" sx={{ overflowWrap: 'anywhere' }}>
-                              Ручное: {row.manual || 'не указано'}
-                            </Typography>
-                            <Typography variant="caption" sx={{ overflowWrap: 'anywhere' }}>
-                              Gateway: {row.extracted || 'не извлечено'}
-                            </Typography>
-                            <Chip
-                              size="small"
-                              label={getMetadataStatusLabel(row.status)}
-                              color={getMetadataStatusColor(row.status) as 'default' | 'info' | 'success' | 'warning'}
-                              variant="outlined"
-                            />
-                          </Box>
-                        ))}
-                      </Stack>
-                    </Stack>
-                  </Paper>
-
-                  <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-                    {selectedDraft.status !== 'previewing' &&
-                      selectedDraft.status !== 'ready_for_approve' &&
-                      selectedDraft.status !== 'approved' &&
-                      selectedDraft.status !== 'discarded' && (
-                      <Button
-                        className="app-action-button"
-                        variant="contained"
-                        startIcon={<PlayCircle size={16} />}
-                        onClick={() => handleStartPreview(selectedDraft.id)}
-                      >
-                        Запустить предпросмотр
-                      </Button>
-                    )}
-                    {selectedDraft.status === 'ready_for_approve' && (
-                      <>
-                        <Button
-                          className="app-action-button"
-                          variant="contained"
-                          color="success"
-                          startIcon={<CheckCircle2 size={16} />}
-                          onClick={() => void handleDecision(selectedDraft.id, 'approve')}
-                        >
-                          Принять в базу знаний
-                        </Button>
-                        <Button
-                          className="app-action-button"
-                          variant="outlined"
-                          color="error"
-                          startIcon={<XCircle size={16} />}
-                          onClick={() => void handleDecision(selectedDraft.id, 'reject')}
-                        >
-                          Отклонить
-                        </Button>
-                      </>
-                    )}
-                    {selectedDraft.status === 'approved' && (
-                      <Button
-                        className="app-action-button"
-                        variant="contained"
-                        startIcon={<FolderInput size={16} />}
-                        onClick={() => setActiveTab('documents')}
-                      >
-                        Открыть базу знаний
-                      </Button>
-                    )}
+                  <Stack direction="row" sx={{ justifyContent: 'center', pt: 0.25 }}>
                     <Button
                       className="app-action-button"
                       variant="outlined"
-                      startIcon={<XCircle size={16} />}
-                      onClick={() => handleDeleteDraft(selectedDraft.id)}
+                      startIcon={<Maximize2 size={16} />}
+                      onClick={() => selectedDraft && handleOpenPreviewDialog(selectedDraft.id)}
+                      disabled={!selectedDraft}
                     >
-                      Удалить
+                      Развернуть
                     </Button>
                   </Stack>
+                </Stack>
+              </Paper>
 
+              <Paper variant="outlined" sx={{ p: 1.25, borderRadius: 2.2, ...panelSx }}>
+                <Stack spacing={1}>
+                  <Typography sx={{ fontWeight: 560 }}>Сверка и правка метаданных</Typography>
+                  <Box
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: { xs: '1fr', lg: '0.72fr 0.92fr 1.25fr auto' },
+                      gap: 1,
+                      alignItems: 'start',
+                    }}
+                  >
+                    <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', lg: 'block' } }} />
+                    <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', lg: 'block' }, fontWeight: 560 }}>
+                      Текущее значение
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', lg: 'block' }, fontWeight: 560 }}>
+                      Новое значение
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', lg: 'block' }, fontWeight: 560 }}>
+                      Статус
+                    </Typography>
+                    {buildMetadataReviewRows(workspaceDraft, draftForm).map((row) => (
+                      <React.Fragment key={row.label}>
+                        <Typography variant="caption" color="text.secondary" sx={{ pt: 1 }}>
+                          {row.label}
+                        </Typography>
+                        <Typography variant="caption" sx={{ overflowWrap: 'anywhere', pt: 1.05 }}>
+                          {row.current || 'не заполнено'}
+                        </Typography>
+                        {renderMetadataFieldInput(row.label)}
+                        <Chip
+                          size="small"
+                          label={getMetadataStatusLabel(row.status)}
+                          color={getMetadataStatusColor(row.status) as 'default' | 'info' | 'success' | 'warning'}
+                          variant="outlined"
+                        />
+                      </React.Fragment>
+                    ))}
+                  </Box>
+                </Stack>
+              </Paper>
+
+              {selectedDraft ? (
+                <>
                   {selectedDraft.duplicates.length > 0 && (
                     <Box>
                       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.8 }}>
@@ -1607,14 +1745,12 @@ export const KnowledgeProcessing: React.FC = () => {
                     </Box>
                   )}
                 </>
-              ) : (
-                <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
-                  Выберите черновик слева, чтобы увидеть предпросмотр и действия.
-                </Alert>
-              )}
+              ) : null}
             </Stack>
           </Paper>
         </Box>
+
+        <DocumentRegistryPanel documents={publishedDocuments} />
 
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 3 }}>
           <Paper variant="outlined" sx={{ p: 1.9, borderRadius: 3, ...panelSx }}>
@@ -1623,9 +1759,6 @@ export const KnowledgeProcessing: React.FC = () => {
               <Box>
                 <Typography sx={{ fontWeight: 560, color: isLight ? '#0f172a' : 'rgba(233, 237, 243, 0.92)' }}>
                   Очередь обработки
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Текущие элементы, которые уже в работе.
                 </Typography>
               </Box>
             </Stack>
@@ -1702,9 +1835,6 @@ export const KnowledgeProcessing: React.FC = () => {
               <Box sx={{ minWidth: 0 }}>
                 <Typography sx={{ fontWeight: 560, color: isLight ? '#0f172a' : 'rgba(233, 237, 243, 0.92)' }}>
                   Журнал обработки
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Короткая лента последних событий для администраторов.
                 </Typography>
               </Box>
             </Stack>
