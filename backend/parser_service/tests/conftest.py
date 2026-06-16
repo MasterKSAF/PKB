@@ -67,11 +67,11 @@ async def async_client():
 
 
 @pytest.fixture(scope="function")
-async def async_client_v2():
-    """Асинхронный HTTP‑клиент для тестирования эндпоинтов v2."""
+async def async_client_v1():
+    """Асинхронный HTTP‑клиент для тестирования эндпоинтов v1."""
     async with AsyncClient(
         transport=ASGITransport(app=app),
-        base_url="http://test/api/v2"
+        base_url="http://test/api/v1"
     ) as ac:
         yield ac
 
@@ -92,7 +92,7 @@ def mock_validator():
 
 @pytest.fixture
 def mock_pipeline_preview():
-    with patch("app.api.v2.endpoints.process.Pipeline.create") as mock:
+    with patch("app.api.1.endpoints.process.Pipeline.create") as mock:
         mock_pipeline = AsyncMock()
         mock_ctx = MagicMock()
         mock_ctx.final_json = {

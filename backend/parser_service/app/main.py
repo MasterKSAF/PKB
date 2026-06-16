@@ -22,8 +22,7 @@ from fastapi.exceptions import RequestValidationError, HTTPException
 from fastapi.responses import JSONResponse
 
 from app.config import settings
-from app.api.v1.router import router as v1_router
-from app.api.v2.router import router as v2_router
+from app.api.v1.router import router as v1_router      # теперь v1 использует бывший v2
 from app.core.exception_handlers import (
     parser_service_error_handler,
     validation_error_handler,
@@ -32,8 +31,7 @@ from app.core.exception_handlers import (
 from app.core.exceptions import ParserServiceError
 from app.core.task_state_storage import task_store
 from app.core.minio_client import minio_client
-from app.api.v1.endpoints import process as v1_process
-from app.api.v2.endpoints import process as v2_process
+from app.api.v1.endpoints import process as v1_process   # теперь единственный
 
 shutdown_event = asyncio.Event()
 
@@ -48,7 +46,6 @@ async def lifespan(app: FastAPI):
     """
     logger.debug("Starting application lifespan")
     v1_process.set_shutdown_event(shutdown_event)
-    v2_process.set_shutdown_event(shutdown_event)
 
     # Создание бакетов в MinIO (если не существуют)
     await minio_client._ensure_bucket(settings.minio_bucket)
@@ -90,9 +87,8 @@ app = FastAPI(
 instrument_fastapi(app, tracer_provider)
 
 
-# Подключение роутеров API версий
-app.include_router(v1_router, prefix=settings.api_prefix)
-app.include_router(v2_router, prefix="/api/v2")
+# Подключение роутера API (теперь только v1, который содержит функциональность бывшего v2)
+app.include_router(v1_router, prefix=settings.api_prefix)   # settings.api_prefix = "/api/v1"
 
 
 @app.exception_handler(HTTPException)
@@ -111,11 +107,11 @@ app.add_exception_handler(RequestValidationError, validation_error_handler)
 app.add_exception_handler(Exception, generic_exception_handler)
 
 
-@app.get("/health")
+@app.get("/api/v1/health")
 async def health_check():
     """
-    Health check endpoint.
-    Логируется только на DEBUG уровне (в соответствии с требованиями).
+    Health check endpoint (доступен по /api/v1/health).
+    Логируется только на DEBUG уровне.
     """
     logger.debug("Health check requested")
     return {"status": "ok"}
