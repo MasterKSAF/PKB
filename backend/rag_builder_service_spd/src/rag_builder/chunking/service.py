@@ -36,40 +36,6 @@ class ChunkingService:
     MAX_CHUNK_CHARS = 2000
     OVERLAP_RATIO = 0.2
 
-    # def _split_text(
-    #         self,
-    #         text: str,
-    # ) -> list[str]:
-    #
-    #     text = text.strip()
-    #
-    #     if len(text) <= self.MAX_CHUNK_CHARS:
-    #         return [text]
-    #
-    #     chunks: list[str] = []
-    #
-    #     start = 0
-    #
-    #     while start < len(text):
-    #         end = start + self.MAX_CHUNK_CHARS
-    #
-    #         if end >= len(text):
-    #             chunks.append(text[start:])
-    #             break
-    #
-    #         split_pos = text.rfind(" ", start, end)
-    #
-    #         if split_pos <= start:
-    #             split_pos = end
-    #
-    #         chunks.append(
-    #             text[start:split_pos].strip()
-    #         )
-    #
-    #         start = split_pos
-    #
-    #     return chunks
-
     def _split_text(
             self,
             text: str,

@@ -61,3 +61,41 @@ docker compose ps
 
 Подробнее: [`backend/README.Docker.md`](backend/README.Docker.md)
 
+## RAG Builder SPD
+
+Сервис `backend/rag_builder_service_spd` отвечает за индексацию chunk-container документа в нормализованную схему `nsi`.
+
+Текущий статус MVP:
+
+* приём и валидация `BuildRequest`
+* построение чанков
+* разбиение длинного текста на subchunks с overlap
+* batch generation embeddings
+* подсчёт usage/cost для embeddings
+* сохранение структуры документа в PostgreSQL
+* поддержка `pgvector`
+* поддержка `ltree`
+* сохранение таблиц, изображений, формул и ссылок
+
+Сервис записывает данные в таблицы:
+
+```text
+nsi.document_sections
+nsi.chunks
+nsi.cross_references
+nsi.images
+nsi.extracted_tables
+nsi.formulas
+nsi.formula_parameters
+```
+
+Проверка:
+
+```text
+18 passed
+```
+
+Подробнее: [`backend/rag_builder_service_spd/README.md`](backend/rag_builder_service_spd/README.md)
+
+
+
