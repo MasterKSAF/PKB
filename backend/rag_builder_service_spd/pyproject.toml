@@ -1,0 +1,22 @@
+# pyproject.toml
+
+[project]
+name = "rag-builder-spd"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.124",
+    "uvicorn[standard]>=0.38",
+    "pydantic>=2.13",
+    "pydantic-settings>=2.12",
+    "psycopg[binary]>=3.3",
+    "openai>=2.41",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
