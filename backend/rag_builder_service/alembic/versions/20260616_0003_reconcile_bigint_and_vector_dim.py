@@ -1,15 +1,17 @@
-"""reconcile document_id to BIGINT and embedding to VECTOR(1536)
+"""reconcile document_id to BIGINT and embedding to correct vector dimension
 
 Revision ID: 20260616_0003
 Revises: 20260614_0002
 Create Date: 2026-06-16 00:00:00
 
 Fixes tables created by older migrations that used UUID for document_id
-or wrong vector dimension (e.g. 312 instead of 1536).
+or wrong vector dimension.
 Runs safely on already-correct schemas (idempotent).
 """
 
 from __future__ import annotations
+
+import os
 
 from alembic import op
 
@@ -20,6 +22,9 @@ depends_on = None
 
 
 def upgrade() -> None:
+    vector_dim = int(os.environ.get("VECTOR_DIMENSION", os.environ.get("EMBEDDING_DIM", "1536")))
+    expected_vector_type = f"vector({vector_dim})"
+
     # 1. Convert document_id to BIGINT if it is still UUID (or any non-bigint type)
     op.execute(
         """
@@ -73,10 +78,10 @@ def upgrade() -> None:
         """
     )
 
-    # 3. Re-create embedding column with correct dimension (1536)
-    #    if current dimension differs or column type is wrong.
+    # 3. Re-create embedding column with correct dimension (from VECTOR_DIMENSION env).
+    expected = expected_vector_type
     op.execute(
-        """
+        f"""
         DO $$
         DECLARE
             col_type text;
@@ -87,11 +92,10 @@ def upgrade() -> None:
               AND a.attname = 'embedding'
               AND NOT a.attisdropped;
 
-            -- vector(1536) renders as 'vector(1536)' in format_type
-            IF col_type IS NOT NULL AND col_type <> 'vector(1536)' THEN
+            IF col_type IS NOT NULL AND col_type <> '{expected}' THEN
                 DROP INDEX IF EXISTS rag.ix_rag_doc_chunks_embedding_ivfflat;
                 ALTER TABLE rag.document_chunks DROP COLUMN embedding;
-                ALTER TABLE rag.document_chunks ADD COLUMN embedding vector(1536);
+                ALTER TABLE rag.document_chunks ADD COLUMN embedding {expected};
                 CREATE INDEX IF NOT EXISTS ix_rag_doc_chunks_embedding_ivfflat
                     ON rag.document_chunks
                     USING ivfflat (embedding vector_cosine_ops)
