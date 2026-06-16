@@ -1,12 +1,15 @@
 """
 Модуль расширенной безопасности PDF (синхронная версия для вызова в потоке).
 Выполняет проверки:
-- Расширение файла (.pdf)
 - Unicode-маскировка в имени файла
 - Опасные ключи PDF (/EmbeddedFile, /JS, /JavaScript, /Launch)
 - JBIG2 (опционально)
 - YARA-правила (опционально)
 - Логирование больших файлов (не блокирует)
+
+Для каждой проверки предусмотрен переключатель блокировки (см. константы ниже).
+Если переключатель = True, обнаружение проблемы вызывает ошибку.
+Если False, проблема только логируется, но обработка продолжается.
 """
 
 import logging
@@ -25,10 +28,23 @@ except ImportError:
     logger.warning("YARA module not installed. Security scanning disabled.")
 
 
+# ========== НАСТРОЙКИ БЛОКИРОВКИ ПО КАЖДОЙ ПРОВЕРКЕ ==========
+# Если True – проверка является блокирующей (при обнаружении угрозы возвращается ошибка).
+# Если False – угроза только логируется, но обработка продолжается.
+
+BLOCK_ON_UNICODE_CHECK = False         # Блокировать при обнаружении Unicode-маскировки
+BLOCK_ON_JBIG2_CHECK = False           # Блокировать при обнаружении /JBIG2Decode (если reject_jbig2=True)
+BLOCK_ON_DANGEROUS_KEYS = False        # Блокировать при обнаружении опасных ключей (/JS, /Launch и т.д.)
+BLOCK_ON_YARA = False                  # Блокировать при срабатывании YARA-правил
+
+# Проверка расширения файла полностью удалена, т.к. file_key не содержит расширения.
+# =================================================================
+
+
 class SecurityScanner:
     """Статический класс для синхронной проверки безопасности PDF."""
 
-    # Опасные ключи, которые всегда блокируются
+    # Опасные ключи, которые всегда проверяются (блокировка управляется BLOCK_ON_DANGEROUS_KEYS)
     DANGEROUS_KEYS = {b"/EmbeddedFile", b"/JS", b"/JavaScript", b"/Launch"}
 
     @classmethod
@@ -46,58 +62,79 @@ class SecurityScanner:
 
         Args:
             file_bytes: Содержимое PDF.
-            original_filename: Имя файла.
+            original_filename: Имя файла (используется для логов и проверки Unicode).
             yara_rules_path: Путь к директории с YARA-правилами.
             max_font_stream: Максимальный размер шрифтового потока (для лога).
-            reject_jbig2: Отклонять ли JBIG2Decode.
+            reject_jbig2: Отклонять ли JBIG2Decode (влияет на блокировку только если BLOCK_ON_JBIG2_CHECK=True).
             enable_yara: Включено ли YARA-сканирование.
 
         Returns:
-            (is_safe, error_message)
+            (is_safe, error_message) – is_safe=False, если хотя бы одна блокирующая проверка провалилась.
         """
         logger.debug("Security scan started for %s", original_filename)
+        errors = []  # Список сообщений о блокирующих ошибках
+
         try:
-            # 1. Проверка расширения
-            if not cls._check_extension(original_filename):
-                return False, f"File extension not allowed: {original_filename}"
+            # 1. Проверка Unicode-маскировки
+            unicode_ok = cls._check_unicode_safety(original_filename)
+            if not unicode_ok:
+                msg = "Filename contains suspicious Unicode control characters"
+                if BLOCK_ON_UNICODE_CHECK:
+                    logger.error("Unicode check FAILED (blocking): %s", msg)
+                    errors.append(msg)
+                else:
+                    logger.warning("Unicode check FAILED (non-blocking): %s", msg)
 
-            # 2. Unicode-маскировка
-            if not cls._check_unicode_safety(original_filename):
-                return False, "Filename contains suspicious Unicode control characters"
-
-            # 3. JBIG2 – блокируем только если явно включено
+            # 2. Проверка JBIG2 (если включена в настройках reject_jbig2)
             if b"/JBIG2Decode" in file_bytes:
                 if reject_jbig2:
-                    return False, "JBIG2Decode filter detected (rejected by configuration)"
+                    msg = "JBIG2Decode filter detected (rejected by configuration)"
+                    if BLOCK_ON_JBIG2_CHECK:
+                        logger.error("JBIG2 check FAILED (blocking): %s", msg)
+                        errors.append(msg)
+                    else:
+                        logger.warning("JBIG2 check FAILED (non-blocking): %s", msg)
                 else:
                     logger.warning("JBIG2Decode filter detected in %s (not rejected)", original_filename)
 
-            # 4. Опасные ключи (всегда блокируем)
+            # 3. Проверка опасных ключей
             for key in cls.DANGEROUS_KEYS:
                 if key in file_bytes:
-                    return False, f"Suspicious PDF key found: {key.decode('ascii', errors='ignore')}"
+                    msg = f"Suspicious PDF key found: {key.decode('ascii', errors='ignore')}"
+                    if BLOCK_ON_DANGEROUS_KEYS:
+                        logger.error("Dangerous key check FAILED (blocking): %s", msg)
+                        errors.append(msg)
+                    else:
+                        logger.warning("Dangerous key check FAILED (non-blocking): %s", msg)
+                    break  # Достаточно одного ключа
 
-            # 5. YARA (опционально)
+            # 4. YARA-сканирование (опционально)
             if enable_yara and YARA_AVAILABLE:
-                yara_result = cls._yara_scan_sync(file_bytes, yara_rules_path)
-                if not yara_result[0]:
-                    return False, yara_result[1]
+                yara_ok, yara_msg = cls._yara_scan_sync(file_bytes, yara_rules_path)
+                if not yara_ok:
+                    if BLOCK_ON_YARA:
+                        logger.error("YARA check FAILED (blocking): %s", yara_msg)
+                        errors.append(yara_msg)
+                    else:
+                        logger.warning("YARA check FAILED (non-blocking): %s", yara_msg)
 
-            # 6. Большие файлы – только лог, НЕ БЛОКИРУЕМ
+            # 5. Логирование больших файлов (никогда не блокирует)
             if len(file_bytes) > max_font_stream:
                 logger.warning("Large PDF file: %d bytes (exceeds %d), but accepted", len(file_bytes), max_font_stream)
 
+            # Если есть блокирующие ошибки – возвращаем False
+            if errors:
+                # Возвращаем первое сообщение как основное (можно объединить, но для краткости берем первое)
+                return False, errors[0]
+
             return True, None
+
         except Exception as e:
             logger.error("Security scan exception: %s", e, exc_info=True)
+            # Внутренняя ошибка сканера – считаем блокирующей, чтобы не пропустить потенциально опасный файл
             return False, f"Security scan internal error: {str(e)}"
         finally:
             logger.debug("Security scan finished for %s", original_filename)
-
-    @staticmethod
-    def _check_extension(filename: str) -> bool:
-        """Проверяет, что расширение файла .pdf."""
-        return filename.lower().endswith('.pdf')
 
     @staticmethod
     def _check_unicode_safety(filename: str) -> bool:
@@ -117,7 +154,7 @@ class SecurityScanner:
 
     @staticmethod
     def _yara_scan_sync(data: bytes, rules_path: str) -> Tuple[bool, Optional[str]]:
-        """Синхронное YARA-сканирование."""
+        """Синхронное YARA-сканирование. Возвращает (ok, сообщение)."""
         if not os.path.isdir(rules_path):
             return True, None
         rules_files = {}
@@ -134,4 +171,5 @@ class SecurityScanner:
             return True, None
         except Exception as e:
             logger.error("YARA scan error: %s", e)
+            # При ошибке YARA – не блокируем, только логируем (возвращаем True)
             return True, None

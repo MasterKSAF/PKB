@@ -1,7 +1,8 @@
 """
-Эндпоинт GET /parser/process/{task_id}/status – получение статуса задачи (v1).
+Эндпоинт GET /parser/process/{task_id}/status – получение статуса задачи.
 
 Поддерживает long polling через параметр timeout.
+Отличается от v1 только отсутствием поля version_id в ответе.
 """
 from fastapi import APIRouter
 from app.core.task_store import task_store, TaskStatus
@@ -38,9 +39,8 @@ async def get_task_status(task_id: int, timeout: int = 15):
         logger.warning(f"Task {task_id} not found")
         raise TaskNotFoundError(task_id)
 
-    # Если задача завершена или провалена – сразу возвращаем
     if task_info.status in (TaskStatus.COMPLETED, TaskStatus.FAILED):
-        logger.debug(f"Task {task_id} already terminal, returning status")
+        logger.debug(f"Task {task_id} already terminal")
         return _build_status_response(task_info)
 
     current_version = task_info.get_version()
@@ -48,7 +48,6 @@ async def get_task_status(task_id: int, timeout: int = 15):
         logger.debug(f"Waiting for change of task {task_id}, version={current_version}")
         await task_store.wait_for_change(task_id, current_version, timeout)
     except Exception:
-        # Таймаут или другая ошибка – продолжаем
         pass
 
     task_info = task_store.get(task_id)

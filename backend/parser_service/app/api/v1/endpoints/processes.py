@@ -1,14 +1,17 @@
 """
-Эндпоинт GET /parser/processes – список активных процессов.
+Эндпоинт GET /api/v1/parser/processes – список активных процессов.
+
 Возвращает задачи, которые ещё не завершены (status = accepted или processing).
+Отличие от v1: отсутствует поле version_id в ответе.
 """
+
 from fastapi import APIRouter
 from app.core.task_store import task_store
 import logging
 
 router = APIRouter()
-
 logger = logging.getLogger(__name__)
+
 
 @router.get("/processes")
 async def list_active_processes():
@@ -35,5 +38,5 @@ async def list_active_processes():
             "pages_total": task.pages_total,
             "started_at": task.started_at.isoformat() + "Z"
         })
-    logger.info(f"Returned {len(result)} active processes")
+    logger.info("Returned %d active processes", len(result))
     return {"processes": result}

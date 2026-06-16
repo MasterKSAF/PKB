@@ -4,7 +4,7 @@ from app.main import app, lifespan
 
 
 def test_health_check(client):
-    response = client.get("/health")
+    response = client.get("api/v1/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
@@ -14,7 +14,7 @@ def test_routes_endpoint(client):
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, list)
-    assert any("/health" in r["path"] for r in data)
+    assert any("api/v1/health" in r["path"] for r in data)
 
 
 @pytest.mark.asyncio
