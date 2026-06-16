@@ -1,11 +1,10 @@
 ﻿from dataclasses import dataclass
-from uuid import UUID
 
 
 @dataclass(frozen=True)
 class Chunk:
     section_id: int
-    document_id: UUID
+    document_id: int
     chunk_index: int
     content: str
     strategy: str

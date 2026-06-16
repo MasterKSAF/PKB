@@ -1,8 +1,8 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
+from loguru import logger
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from loguru import logger
 
 from rag_builder.models.db import RagDocumentChunk
 from rag_builder.models.domain import Chunk
@@ -31,7 +31,7 @@ class ChunkRepository:
         logger.info("Repository.insert_chunks done inserted={}", len(rows))
         return len(rows)
 
-    async def delete_by_document(self, document_id: str) -> int:
+    async def delete_by_document(self, document_id: int) -> int:
         logger.debug("Repository.delete_by_document start document_id={}", document_id)
         stmt = delete(RagDocumentChunk).where(RagDocumentChunk.document_id == document_id)
         result = await self.session.execute(stmt)
@@ -39,7 +39,7 @@ class ChunkRepository:
         logger.info("Repository.delete_by_document done document_id={} deleted={}", document_id, deleted)
         return deleted
 
-    async def count_by_document(self, document_id: str) -> int:
+    async def count_by_document(self, document_id: int) -> int:
         logger.debug("Repository.count_by_document document_id={}", document_id)
         stmt = select(RagDocumentChunk.id).where(RagDocumentChunk.document_id == document_id)
         result = await self.session.execute(stmt)
@@ -47,7 +47,7 @@ class ChunkRepository:
         logger.debug("Repository.count_by_document result document_id={} count={}", document_id, count)
         return count
 
-    async def has_embeddings(self, document_id: str) -> bool:
+    async def has_embeddings(self, document_id: int) -> bool:
         logger.debug("Repository.has_embeddings document_id={}", document_id)
         stmt = select(RagDocumentChunk.id).where(
             RagDocumentChunk.document_id == document_id, RagDocumentChunk.embedding.is_not(None)

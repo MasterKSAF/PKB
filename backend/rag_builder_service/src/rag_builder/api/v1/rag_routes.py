@@ -1,10 +1,7 @@
-from uuid import UUID
-
-from fastapi import APIRouter, Body, Depends, Query
+﻿from fastapi import APIRouter, Body, Depends, Query
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from rag_builder.auth.dependencies import require_access_token
 from rag_builder.core.config import settings
 from rag_builder.db.session import get_session
 from rag_builder.models.contracts import BuildRequest, BuildResponse, DeleteResponse, StatusResponse
@@ -31,51 +28,68 @@ async def build(
     req: BuildRequest = Body(
         ...,
         openapi_examples={
-            "document3_full": {
-                "summary": "Полный вход по document3_for_rag.json",
-                "description": "Пример полного payload со структурой metadata/document/sections/terminology.",
+            "registry_for_rag": {
+                "summary": "Полный вход по schema_registry_for_rag.json",
+                "description": "Пример payload по актуальному SoT из develop/docs/schema/schema_registry_for_rag.json.",
                 "value": {
                     "metadata": {
                         "schema": "for_rag_v1",
-                        "document_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "document_id": 420000,
                         "created_at": "2026-05-28T12:00:00Z",
                     },
                     "document": {
-                        "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "id": 420000,
                         "doc_code": "GOST-TEST-001",
                         "title": "Тестовый нормативный документ",
                     },
                     "sections": [
                         {
                             "section_id": 1,
-                            "document_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "document_id": 420000,
                             "parent_id": None,
                             "clause": "1",
                             "title": None,
                             "level": 1,
                             "path": "1",
                             "page": 1,
-                            "bbox": [10, 20, 200, 40],
-                            "type": "section",
+                            "type": "text",
                             "content": {"text": "Тестовый текст раздела для индексации."},
                             "created_at": "2026-05-28T12:00:00Z",
-                        }
-                    ],
-                    "terminology": [
+                        },
                         {
-                            "term": "допуск",
-                            "definition": "Предельно допустимое отклонение параметра",
-                            "source_clause": "1",
-                            "normalized_term": "допуск",
-                        }
+                            "section_id": 2,
+                            "document_id": 420000,
+                            "parent_id": 1,
+                            "clause": "1",
+                            "title": None,
+                            "level": 2,
+                            "path": "1.note1",
+                            "page": 1,
+                            "type": "textBlock",
+                            "content": {"text": "Примечание к разделу"},
+                            "created_at": "2026-05-28T12:00:00Z",
+                        },
+                        {
+                            "section_id": 3,
+                            "document_id": 420000,
+                            "parent_id": 1,
+                            "clause": "1.1",
+                            "title": "Таблица допусков",
+                            "level": 2,
+                            "path": "1.1.table1",
+                            "page": 2,
+                            "type": "table",
+                            "content": {"markdown": "| A | B |\n|---|---|\n| 1 | 2 |"},
+                            "created_at": "2026-05-28T12:00:00Z",
+                        },
                     ],
+                    "terminology": [{"term": "допуск", "definition": "Предельно допустимое отклонение"}],
                     "protected_spans": [],
                     "options": {"strategy": "semantic_512"},
                 },
             }
         },
     ),
-    _sub: str = Depends(require_access_token),
     session: AsyncSession = Depends(get_session),
 ) -> BuildResponse:
     logger.info("POST /rag/build document_id={} sections={}", req.document_id, len(req.sections))
@@ -97,8 +111,7 @@ async def build(
     },
 )
 async def delete(
-    doc_id: UUID,
-    _sub: str = Depends(require_access_token),
+    doc_id: int,
     session: AsyncSession = Depends(get_session),
 ) -> DeleteResponse:
     logger.info("DELETE /rag/build/{}", doc_id)
@@ -115,7 +128,7 @@ async def delete(
     summary="Статус индексации документа",
     description=(
         "Возвращает текущий статус индексации (`pending/indexing/indexed/failed`). "
-        "Поддерживает longpoll: ожидает обновление статуса до указанного таймаута."
+        "Поддерживает longpoll."
     ),
     responses={
         200: {"description": "Текущий или финальный статус индексации."},
@@ -123,14 +136,13 @@ async def delete(
     },
 )
 async def status(
-    doc_id: UUID,
+    doc_id: int,
     longpoll: int = Query(
         default=settings.default_longpoll_seconds,
         ge=0,
         le=120,
         description="Время longpoll-ожидания в секундах (0..120).",
     ),
-    _sub: str = Depends(require_access_token),
     session: AsyncSession = Depends(get_session),
 ) -> StatusResponse:
     logger.info("GET /rag/build/{}/status longpoll={}", doc_id, longpoll)

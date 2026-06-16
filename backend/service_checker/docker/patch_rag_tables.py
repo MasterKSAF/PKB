@@ -1,13 +1,12 @@
 """
 PKB Neuroassistant — RAG Builder patch: создание таблиц и alembic_version.
 
-Заглушка (workaround) для RAG Builder, пока он не чинит свои миграции.
-
 Что делает:
 1. Создаёт схему rag, если нет
-2. Создаёт rag.document_chunks с BIGINT document_id (вместо UUID из миграции)
-3. Создаёт индексы (GIN, IVFFlat)
-4. Проставляет alembic_version = 20260614_0002 (пропуск битой миграции)
+2. Создаёт rag.document_chunks с BIGINT document_id и VECTOR(1536)
+3. Если таблица существует с UUID document_id — конвертирует в BIGINT
+4. Если embedding имеет неверный размер — пересоздаёт как vector(1536)
+5. Проставляет alembic_version = 20260616_0003
 
 Запуск:
   python docker/patch_rag_tables.py
@@ -45,25 +44,17 @@ SQL_CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS rag.document_chunks (
     id BIGSERIAL PRIMARY KEY,
     section_id BIGINT NOT NULL,
-    document_id UUID NOT NULL,
+    document_id BIGINT NOT NULL,
     chunk_index INTEGER NOT NULL,
     content TEXT NOT NULL,
-    embedding VECTOR(312),
+    embedding VECTOR(1536),
     tsv TSVECTOR,
     strategy VARCHAR(32) NOT NULL,
     page INTEGER,
     bbox JSONB,
     confidence DOUBLE PRECISION,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-)
-"""
-
-# SQL для миграции: BIGINT document_id → UUID (если таблица уже создана со старым типом)
-SQL_MIGRATE_DOC_ID_TO_UUID = """
-ALTER TABLE rag.document_chunks
-ALTER COLUMN document_id TYPE UUID
-USING (
-  ('00000000-0000-0000-0000-' || lpad(to_hex(document_id), 12, '0'))::uuid
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 )
 """
 
@@ -75,7 +66,7 @@ SQL_CREATE_INDEXES = [
 
 SQL_SET_ALEMBIC_VERSION = """
 INSERT INTO public.alembic_version (version_num)
-VALUES ('20260614_0002')
+VALUES ('20260616_0003')
 ON CONFLICT (version_num) DO NOTHING
 """
 
@@ -114,16 +105,50 @@ async def patch_rag_tables(db_url: str | None = None) -> bool:
             )
             if exists:
                 log_ok("rag.document_chunks уже существует")
-                # Проверяем тип колонки document_id: если BIGINT → мигрируем на UUID
+                # Проверяем тип document_id — должен быть BIGINT
                 col_type = await conn.scalar(text(
                     "SELECT data_type FROM information_schema.columns "
                     "WHERE table_schema='rag' AND table_name='document_chunks' "
                     "AND column_name='document_id'"
                 ))
-                if col_type == 'bigint':
-                    log_step("Миграция document_id BIGINT → UUID...")
-                    await conn.execute(text(SQL_MIGRATE_DOC_ID_TO_UUID))
-                    log_ok("document_id изменён на UUID")
+                if col_type and col_type != 'bigint':
+                    log_step(f"Конвертация document_id {col_type} → BIGINT...")
+                    # Дропаем FK если есть, затем меняем тип (данные удаляем — они всё равно тестовые)
+                    await conn.execute(text(
+                        "ALTER TABLE rag.document_chunks "
+                        "DROP CONSTRAINT IF EXISTS fk_rag_document_chunks_document_id"
+                    ))
+                    await conn.execute(text("DELETE FROM rag.document_chunks"))
+                    await conn.execute(text(
+                        "ALTER TABLE rag.document_chunks "
+                        "ALTER COLUMN document_id TYPE BIGINT USING 0"
+                    ))
+                    log_ok("document_id изменён на BIGINT")
+                    changed = True
+                # Проверяем размерность вектора
+                vec_type = await conn.scalar(text(
+                    "SELECT format_type(a.atttypid, a.atttypmod) "
+                    "FROM pg_attribute a "
+                    "WHERE a.attrelid = 'rag.document_chunks'::regclass "
+                    "AND a.attname = 'embedding' AND NOT a.attisdropped"
+                ))
+                if vec_type and vec_type != 'vector(1536)':
+                    log_step(f"Пересоздание embedding {vec_type} → vector(1536)...")
+                    await conn.execute(text(
+                        "DROP INDEX IF EXISTS rag.ix_rag_doc_chunks_embedding_ivfflat"
+                    ))
+                    await conn.execute(text(
+                        "ALTER TABLE rag.document_chunks DROP COLUMN embedding"
+                    ))
+                    await conn.execute(text(
+                        "ALTER TABLE rag.document_chunks ADD COLUMN embedding vector(1536)"
+                    ))
+                    await conn.execute(text(
+                        "CREATE INDEX IF NOT EXISTS ix_rag_doc_chunks_embedding_ivfflat "
+                        "ON rag.document_chunks USING ivfflat (embedding vector_cosine_ops) "
+                        "WITH (lists = 100)"
+                    ))
+                    log_ok("embedding пересоздан как vector(1536)")
                     changed = True
             else:
                 log_step("Создание схемы rag...")
@@ -165,6 +190,14 @@ async def patch_rag_tables(db_url: str | None = None) -> bool:
                     text("SELECT version_num FROM public.alembic_version LIMIT 1")
                 )
                 log_info(f"alembic_version: {ver}")
+                # Если стоит старая ревизия — обновляем до актуальной
+                if ver and ver < '20260616_0003':
+                    log_step(f"Обновление alembic_version {ver} → 20260616_0003...")
+                    await conn.execute(text(
+                        "UPDATE public.alembic_version SET version_num = '20260616_0003'"
+                    ))
+                    log_ok("alembic_version обновлён до 20260616_0003")
+                    changed = True
             else:
                 log_step("Создание public.alembic_version...")
                 await conn.execute(text(
@@ -173,7 +206,7 @@ async def patch_rag_tables(db_url: str | None = None) -> bool:
                     "CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num))"
                 ))
                 await conn.execute(text(SQL_SET_ALEMBIC_VERSION))
-                log_ok("alembic_version = 20260614_0002 (пропуск битой миграции)")
+                log_ok("alembic_version = 20260616_0003")
                 changed = True
 
             await conn.commit()

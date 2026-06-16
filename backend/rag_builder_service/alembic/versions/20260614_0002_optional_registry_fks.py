@@ -20,8 +20,33 @@ def upgrade() -> None:
     op.execute(
         """
         DO $$
+        DECLARE
+            registry_documents_regclass regclass;
+            chunk_doc_type text;
+            registry_doc_type text;
         BEGIN
-            IF to_regclass('registry.documents') IS NOT NULL
+            registry_documents_regclass := to_regclass('registry.documents');
+
+            IF registry_documents_regclass IS NOT NULL THEN
+                SELECT format_type(a.atttypid, a.atttypmod)
+                INTO chunk_doc_type
+                FROM pg_attribute a
+                WHERE a.attrelid = 'rag.document_chunks'::regclass
+                  AND a.attname = 'document_id'
+                  AND NOT a.attisdropped;
+
+                SELECT format_type(a.atttypid, a.atttypmod)
+                INTO registry_doc_type
+                FROM pg_attribute a
+                WHERE a.attrelid = registry_documents_regclass
+                  AND a.attname = 'id'
+                  AND NOT a.attisdropped;
+            END IF;
+
+            IF registry_documents_regclass IS NOT NULL
+               AND chunk_doc_type IS NOT NULL
+               AND registry_doc_type IS NOT NULL
+               AND chunk_doc_type = registry_doc_type
                AND NOT EXISTS (
                    SELECT 1
                    FROM pg_constraint
