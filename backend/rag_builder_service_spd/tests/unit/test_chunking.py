@@ -91,7 +91,10 @@ def test_empty_text_section_is_skipped():
     assert chunks == []
 
 def test_long_text_is_split_into_multiple_chunks():
-    long_text = "A " * 3000
+    long_text = " ".join(
+        f"Предложение номер {i}. Это тестовый текст для проверки нарезки."
+        for i in range(300)
+    )
 
     data = {
         "metadata": {
@@ -142,3 +145,4 @@ def test_long_text_is_split_into_multiple_chunks():
         for chunk in chunks
     )
 
+    assert chunks[0].content != chunks[1].content

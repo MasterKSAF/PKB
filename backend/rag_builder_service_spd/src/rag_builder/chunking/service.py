@@ -34,12 +34,46 @@ class ChunkingService:
         - references
     """
     MAX_CHUNK_CHARS = 2000
+    OVERLAP_RATIO = 0.2
+
+    # def _split_text(
+    #         self,
+    #         text: str,
+    # ) -> list[str]:
+    #
+    #     text = text.strip()
+    #
+    #     if len(text) <= self.MAX_CHUNK_CHARS:
+    #         return [text]
+    #
+    #     chunks: list[str] = []
+    #
+    #     start = 0
+    #
+    #     while start < len(text):
+    #         end = start + self.MAX_CHUNK_CHARS
+    #
+    #         if end >= len(text):
+    #             chunks.append(text[start:])
+    #             break
+    #
+    #         split_pos = text.rfind(" ", start, end)
+    #
+    #         if split_pos <= start:
+    #             split_pos = end
+    #
+    #         chunks.append(
+    #             text[start:split_pos].strip()
+    #         )
+    #
+    #         start = split_pos
+    #
+    #     return chunks
 
     def _split_text(
             self,
             text: str,
     ) -> list[str]:
-
         text = text.strip()
 
         if len(text) <= self.MAX_CHUNK_CHARS:
@@ -48,26 +82,74 @@ class ChunkingService:
         chunks: list[str] = []
 
         start = 0
+        overlap_chars = int(self.MAX_CHUNK_CHARS * self.OVERLAP_RATIO)
 
         while start < len(text):
-            end = start + self.MAX_CHUNK_CHARS
+            hard_end = min(start + self.MAX_CHUNK_CHARS, len(text))
 
-            if end >= len(text):
-                chunks.append(text[start:])
+            if hard_end >= len(text):
+                tail = text[start:].strip()
+                if tail:
+                    chunks.append(tail)
                 break
 
-            split_pos = text.rfind(" ", start, end)
-
-            if split_pos <= start:
-                split_pos = end
-
-            chunks.append(
-                text[start:split_pos].strip()
+            split_pos = self._find_split_position(
+                text=text,
+                start=start,
+                hard_end=hard_end,
             )
 
-            start = split_pos
+            chunk_text = text[start:split_pos].strip()
+
+            if chunk_text:
+                chunks.append(chunk_text)
+
+            next_start = max(
+                split_pos - overlap_chars,
+                start + 1,
+            )
+
+            # Сдвигаем старт к ближайшему пробелу,
+            # чтобы не начинать новый чанк с середины слова.
+            while (
+                    next_start < len(text)
+                    and next_start > 0
+                    and not text[next_start - 1].isspace()
+            ):
+                next_start += 1
+
+            start = next_start
 
         return chunks
+
+    def _find_split_position(
+            self,
+            text: str,
+            start: int,
+            hard_end: int,
+    ) -> int:
+        sentence_endings = [". ", "! ", "? ", ".\n", "!\n", "?\n"]
+
+        best_sentence_pos = -1
+
+        for marker in sentence_endings:
+            pos = text.rfind(marker, start, hard_end)
+
+            if pos > best_sentence_pos:
+                best_sentence_pos = pos + len(marker)
+
+        min_reasonable_end = start + int(self.MAX_CHUNK_CHARS * 0.5)
+
+        if best_sentence_pos >= min_reasonable_end:
+            return best_sentence_pos
+
+        space_pos = text.rfind(" ", start, hard_end)
+
+        if space_pos > start:
+            return space_pos
+
+        return hard_end
+
 
     def build_chunks(self, request: BuildRequest) -> list[Chunk]:
         """
