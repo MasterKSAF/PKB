@@ -1,8 +1,15 @@
 # src/rag_builder/services/embedding_service.py
 
+from dataclasses import dataclass
 from rag_builder.embeddings.base import EmbeddingProvider
 from rag_builder.embeddings.factory import build_embedding_provider
 from rag_builder.models.domain import Chunk, EmbeddedChunk, EmbeddingResult
+
+@dataclass(frozen=True)
+class EmbeddedChunksResult:
+    chunks: list[EmbeddedChunk]
+    token_count: int
+    cost_usd: float
 
 class EmbeddingService:
     """
@@ -37,7 +44,7 @@ class EmbeddingService:
     def enrich_chunks(
             self,
             chunks: list[Chunk],
-    ) -> list[EmbeddedChunk]:
+    ) -> EmbeddedChunksResult:
         texts = [
             chunk.content
             for chunk in chunks
@@ -47,10 +54,26 @@ class EmbeddingService:
             texts
         )
 
-        return [
+        embedded_chunks = [
             EmbeddedChunk(
                 chunk=chunk,
                 embedding=result.embedding,
             )
             for chunk, result in zip(chunks, results)
         ]
+
+        total_tokens = sum(
+            result.token_count
+            for result in results
+        )
+
+        total_cost = sum(
+            result.cost_usd
+            for result in results
+        )
+
+        return EmbeddedChunksResult(
+            chunks=embedded_chunks,
+            token_count=total_tokens,
+            cost_usd=total_cost,
+        )

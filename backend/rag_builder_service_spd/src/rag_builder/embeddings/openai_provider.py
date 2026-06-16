@@ -61,10 +61,16 @@ class OpenAIEmbeddingProvider:
             else 0.0
         )
 
+        token_count_per_embedding = (
+            token_count // len(response.data)
+            if response.data
+            else 0
+        )
+
         return [
             EmbeddingResult(
                 embedding=item.embedding,
-                token_count=0,
+                token_count=token_count_per_embedding,
                 cost_usd=cost_per_embedding,
             )
             for item in response.data
