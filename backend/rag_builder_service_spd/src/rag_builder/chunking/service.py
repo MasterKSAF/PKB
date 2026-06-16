@@ -33,6 +33,41 @@ class ChunkingService:
         - bbox
         - references
     """
+    MAX_CHUNK_CHARS = 2000
+
+    def _split_text(
+            self,
+            text: str,
+    ) -> list[str]:
+
+        text = text.strip()
+
+        if len(text) <= self.MAX_CHUNK_CHARS:
+            return [text]
+
+        chunks: list[str] = []
+
+        start = 0
+
+        while start < len(text):
+            end = start + self.MAX_CHUNK_CHARS
+
+            if end >= len(text):
+                chunks.append(text[start:])
+                break
+
+            split_pos = text.rfind(" ", start, end)
+
+            if split_pos <= start:
+                split_pos = end
+
+            chunks.append(
+                text[start:split_pos].strip()
+            )
+
+            start = split_pos
+
+        return chunks
 
     def build_chunks(self, request: BuildRequest) -> list[Chunk]:
         """
@@ -58,30 +93,32 @@ class ChunkingService:
 
             # Переносим все данные,
             # необходимые для будущего цитирования.
-            chunk = Chunk(
-                document_id=request.metadata.document_id,
-                document_version_id=request.metadata.document_version_id,
+            subchunks = self._split_text(content)
 
-                section_id=section.section_id,
-                parent_id=section.parent_id,
+            for chunk_index, subcontent in enumerate(subchunks):
+                chunk = Chunk(
+                    document_id=request.metadata.document_id,
+                    document_version_id=request.metadata.document_version_id,
 
-                clause=section.clause,
-                path=section.path,
+                    section_id=section.section_id,
+                    parent_id=section.parent_id,
 
-                page=section.page,
-                bbox=section.bbox,
+                    clause=section.clause,
+                    path=section.path,
 
-                # Пока одна секция = один чанк.
-                chunk_index=0,
+                    page=section.page,
+                    bbox=section.bbox,
 
-                chunk_type=section.type,
+                    chunk_index=chunk_index,
 
-                content=content,
+                    chunk_type=section.type,
 
-                metadata=self._build_chunk_metadata(section),
-            )
+                    content=subcontent,
 
-            chunks.append(chunk)
+                    metadata=self._build_chunk_metadata(section),
+                )
+
+                chunks.append(chunk)
 
         return chunks
 

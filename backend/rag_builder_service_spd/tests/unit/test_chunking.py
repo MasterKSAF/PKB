@@ -89,3 +89,56 @@ def test_empty_text_section_is_skipped():
     chunks = service.build_chunks(request)
 
     assert chunks == []
+
+def test_long_text_is_split_into_multiple_chunks():
+    long_text = "A " * 3000
+
+    data = {
+        "metadata": {
+            "schema": "schema_registry_for_rag_v2",
+            "document_id": 1,
+            "document_version_id": 1,
+        },
+        "document": {
+            "id": 1,
+            "document_version_id": 1,
+            "pkb_code": "04",
+            "doc_code": "TEST",
+            "title": "Test",
+        },
+        "sections": [
+            {
+                "section_id": 1,
+                "parent_id": None,
+                "clause": "1",
+                "title": None,
+                "level": 1,
+                "path": "1",
+                "page": 1,
+                "bbox": None,
+                "type": "text",
+                "content": {
+                    "text": long_text,
+                },
+                "references": [],
+            }
+        ],
+        "terminology": [],
+        "options": {},
+    }
+
+    request = BuildRequest.model_validate(data)
+
+    service = ChunkingService()
+    chunks = service.build_chunks(request)
+
+    assert len(chunks) > 1
+
+    assert chunks[0].chunk_index == 0
+    assert chunks[1].chunk_index == 1
+
+    assert all(
+        len(chunk.content) <= service.MAX_CHUNK_CHARS
+        for chunk in chunks
+    )
+
