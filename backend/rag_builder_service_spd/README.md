@@ -11,11 +11,16 @@ BuildRequest
     ↓
 ChunkingService
     ↓
-EmbeddingService
+EmbeddingService (batch)
     ↓
 PostgresChunkRepository
     ↓
-nsi.chunks
+nsi.document_sections
+    nsi.chunks
+    nsi.cross_references
+    nsi.images
+    nsi.extracted_tables
+    nsi.formulas
 ```
 
 Сервис является частью RAG-платформы и отвечает только за индексацию документов.
@@ -102,7 +107,7 @@ pytest
 Текущее состояние:
 
 ```text
-17 passed
+18 passed
 ```
 
 ---
@@ -260,6 +265,21 @@ sql/
 * PostgreSQL persistence
 * Reindex без дубликатов
 
+#### Chunking
+
+* поддержка subchunks
+* overlap 20%
+* разбиение по предложениям
+* fallback-разбиение по пробелам
+
+#### Embeddings
+
+* OpenAI Embeddings
+* Stub Embeddings
+* Batch Embeddings
+* Usage Accounting
+* batch embeddings для всех чанков документа
+
 #### Хранение структуры документа
 
 * nsi.document_sections
@@ -323,7 +343,7 @@ sql/
 Текущее состояние:
 
 ```text
-17 passed
+18 passed
 ```
 
 ---
@@ -354,8 +374,24 @@ document_sections
 ├── images
 ├── extracted_tables
 └── formulas
-      └── formula_parameters
+    └── formula_parameters
 ```
+
+---
+
+## MVP Status
+
+Текущее состояние:
+
+- 18 тестов проходят
+- PostgreSQL persistence реализован
+- pgvector поддерживается
+- ltree поддерживается
+- document hierarchy реализована (без связи c id внешних документов)
+- references/images/tables/formulas реализованы
+- batch embeddings реализованы
+
+Статус: MVP v1 Ready
 
 ---
 
@@ -387,13 +423,18 @@ document_sections
 * nsi.formulas
 * nsi.formula_parameters
 
-### Stage 5 — Production Embeddings
+### Stage 5 — Embeddings ✅
 
 * OpenAI Embeddings
+* Batch Embeddings
+* Usage Accounting
+
+### Stage 6 — Production Embeddings
+
 * локальные embedding-модели
 * мониторинг стоимости эмбеддингов
 
-### Stage 6 — Search Integration
+### Stage 7 — Search Integration
 
 * интеграция с RAG Search Service
 * Hybrid Search
