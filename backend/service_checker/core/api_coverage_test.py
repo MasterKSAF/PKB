@@ -618,12 +618,22 @@ class ApiCoverageTester:
                 if k not in self.context:
                     self.context[k] = v
 
+            # ── Pre-prepare: timestamp + гарантировать существование секции в БД ──
+            if service_key == "rag_builder":
+                import time
+                self.context["timestamp"] = str(int(time.time()))
+                self.context["section_id"] = 1
+                # Создаём секцию в registry.document_sections, если её нет
+                # (workaround для FK fk_rag_document_chunks_section_id)
+                # FK fk_rag_document_chunks_section_id удалён 3-й миграцией — psql не нужен
+                print(f"  ℹ RAG Builder: timestamp={self.context['timestamp']}")
+
             # ── Pre-prepare: загрузка PDF в MinIO для Parser ────────────
             if service_key == "parser":
                 pdf_path = Path(__file__).resolve().parent.parent / "pdf" / "7bd97d737317a8a272bb18a405ab2d04.pdf"
                 if pdf_path.exists():
                     pdf_bytes = pdf_path.read_bytes()
-                    minio_url = f"http://127.0.0.1:9000/documents/test-file-key"
+                    minio_url = f"http://127.0.0.1:9000/documents/test-file-key.pdf"
                     from service_checker.pipelines.base import s3_sign_headers
                     s3_headers = s3_sign_headers("PUT", minio_url, "minioadmin", "minioadmin", pdf_bytes)
                     try:

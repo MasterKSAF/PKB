@@ -223,7 +223,7 @@ class DocumentProcessingPipeline(PipelineDef):
                     "level": 1,
                     "path": "1",
                     "page": 1,
-                    "type": "section",
+                    "type": "text",
                     "content": {"text": "Содержимое тестового документа"},
                 }],
             },

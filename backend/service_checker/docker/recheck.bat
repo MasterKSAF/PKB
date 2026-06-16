@@ -123,13 +123,7 @@ if %ERRORLEVEL% neq 0 (
     goto wait_supervisor
 )
 
-echo     Patching RAG Builder tables...
-python -m service_checker docker --action patch-rag
-if %ERRORLEVEL% neq 0 goto skip_restart
-
-echo     Restarting RAG Builder with proper tables...
-docker exec pkb-neuro supervisorctl restart rag-builder 2>nul
-:skip_restart
+echo     RAG Builder tables are now handled by Alembic migrations (no patching needed).
 
 echo.
 echo     Running full report...

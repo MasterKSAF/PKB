@@ -99,7 +99,7 @@ SERVICE_STARTUP_CHECKS: Dict[str, dict] = {
         "path": "rag_builder_service/src/rag_builder/api/app.py",
         "schema": "rag",
         "reason": "RAG Builder: document_chunks (HNSW/GIN индексы)",
-        "markers": [".create_all"],
+        "markers": [".create_all", "validate_startup_migrations", "upgrade_to_head"],
     },
     "rag_search_service": {
         "path": "rag_search_service/app/main.py",
@@ -133,9 +133,8 @@ class DbCheckResult:
 
     rag_tables: List[str] = field(default_factory=list)
     rag_has_embedding: bool = False
-    rag_has_hnsw: bool = False
+    rag_has_ivfflat: bool = False
     rag_has_gin: bool = False
-    rag_has_tsv_trigger: bool = False
     rag_has_created_at: bool = False
 
     can_select_registry: bool = False
@@ -159,9 +158,8 @@ class DbCheckResult:
     @property
     def rag_ok(self) -> bool:
         return (self.rag_has_embedding and
-                self.rag_has_hnsw and
-                self.rag_has_gin and
-                self.rag_has_tsv_trigger)
+                self.rag_has_ivfflat and
+                self.rag_has_gin)
 
     @property
     def healthy(self) -> bool:
@@ -264,38 +262,34 @@ def run_db_check() -> DbCheckResult:
     result.registry_tables = tables
     result.registry_missing = EXPECTED_REGISTRY_TABLES - set(tables)
 
-    # ── 5. RAG таблицы ──────────────────────────────────────────
-    rag_tables = set(_query_single_column(
-        "SELECT schemaname || '.' || tablename "
-        "FROM pg_tables WHERE schemaname = 'rag'"
-    ))
-    result.rag_tables = sorted(rag_tables)
-    result.rag_has_embedding = bool(_query_single_column(
-        "SELECT column_name FROM information_schema.columns "
-        "WHERE table_schema = 'rag' AND table_name = 'document_chunks' "
-        "AND column_name = 'embedding'"
-    ))
-    rag_indexes = set(_query_single_column(
-        "SELECT indexname FROM pg_indexes "
-        "WHERE schemaname = 'rag' AND tablename = 'document_chunks'"
-    ))
-    result.rag_has_hnsw = "idx_chunks_embedding" in rag_indexes
-    result.rag_has_gin = "idx_chunks_tsv" in rag_indexes
-    result.rag_has_created_at = bool(_query_single_column(
-        "SELECT column_name FROM information_schema.columns "
-        "WHERE table_schema = 'rag' AND table_name = 'document_chunks' "
-        "AND column_name = 'created_at'"
-    ))
-    # Триггер tsv
-    rag_triggers = _query_single_column(
-        "SELECT tgname FROM pg_trigger "
-        "JOIN pg_class ON pg_trigger.tgrelid = pg_class.oid "
-        "JOIN pg_namespace ON pg_class.relnamespace = pg_namespace.oid "
-        "WHERE pg_namespace.nspname = 'rag' "
-        "AND pg_class.relname = 'document_chunks' "
-        "AND pg_trigger.tgname != 'pg_trigger_depth_unknown'"
-    )
-    result.rag_has_tsv_trigger = "trg_chunks_tsv" in rag_triggers
+    # ── 5. RAG таблицы (с retry — миграции могут не успеть накатиться) ──
+    import time
+    for attempt in range(15):
+        rag_tables = set(_query_single_column(
+            "SELECT schemaname || '.' || tablename "
+            "FROM pg_tables WHERE schemaname = 'rag'"
+        ))
+        result.rag_tables = sorted(rag_tables)
+        result.rag_has_embedding = bool(_query_single_column(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema = 'rag' AND table_name = 'document_chunks' "
+            "AND column_name = 'embedding'"
+        ))
+        rag_indexes = set(_query_single_column(
+            "SELECT indexname FROM pg_indexes "
+            "WHERE schemaname = 'rag' AND tablename = 'document_chunks'"
+        ))
+        result.rag_has_ivfflat = "ix_rag_doc_chunks_embedding_ivfflat" in rag_indexes
+        result.rag_has_gin = "ix_rag_doc_chunks_tsv" in rag_indexes
+        result.rag_has_created_at = bool(_query_single_column(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema = 'rag' AND table_name = 'document_chunks' "
+            "AND column_name = 'created_at'"
+        ))
+        # Триггер tsv не используется — tsv это колонка TSVECTOR
+        if result.rag_ok:
+            break
+        time.sleep(1)
 
     # ── 6. Проверка прав (SELECT) ───────────────────────────────
     if tables:
@@ -418,9 +412,8 @@ def format_db_report(result: DbCheckResult) -> str:
     rag_checks = [
         ("Таблица `document_chunks`", bool(result.rag_tables)),
         ("Колонка `embedding` (vector)", result.rag_has_embedding),
-        ("HNSW индекс `idx_chunks_embedding`", result.rag_has_hnsw),
-        ("GIN индекс `idx_chunks_tsv`", result.rag_has_gin),
-        ("Триггер `trg_chunks_tsv`", result.rag_has_tsv_trigger),
+        ("IVFFlat индекс `ix_rag_doc_chunks_embedding_ivfflat`", result.rag_has_ivfflat),
+        ("GIN индекс `ix_rag_doc_chunks_tsv`", result.rag_has_gin),
         ("Колонка `created_at`", result.rag_has_created_at),
     ]
     for label, ok in rag_checks:

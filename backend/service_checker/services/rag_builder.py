@@ -14,15 +14,6 @@ from .base import (
 )
 
 
-# Документ для prepare (создаётся через Registry, ID извлекается в контекст)
-_PREPARE_DOC = {
-    "title": "RAG Builder prepare document",
-    "doc_code": "RAG-PREPARE-DOC",
-    "source_type": "GOST",
-    "era": "RF",
-    "validity_status": "active",
-}
-
 SERVICE_KEY = "rag_builder"
 PORT = 8090
 DISPLAY_NAME = "RAG Builder Service"
@@ -43,7 +34,13 @@ def get_service_def() -> ServiceDef:
         # Создание документа через Registry — ID попадёт в контекст как doc_id
         EndpointDef("POST", f"{API_PREFIX}/registry/documents/", "documents",
             "Создать документ в Registry (prepare для build)",
-            body=_PREPARE_DOC,
+            body={
+                "title": "RAG Builder prepare document",
+                "doc_code": "RAG-PREPARE-{timestamp}",
+                "source_type": "GOST",
+                "era": "RF",
+                "validity_status": "active",
+            },
             extract_keys=["doc_id"],
             response_schema={"data": dict},
             is_preparation=True,
@@ -54,9 +51,9 @@ def get_service_def() -> ServiceDef:
             body={
                 "document_id": "{doc_id}",
                 "sections": [{
-                    "section_id": 1, "document_id": "{doc_id}",
+                    "section_id": "{section_id}", "document_id": "{doc_id}",
                     "clause": "1", "level": 1, "path": "1", "page": 1,
-                    "type": "section",
+                    "type": "text",
                     "content": {"text": "Тестовое содержимое"},
                 }],
             },
@@ -73,9 +70,9 @@ def get_service_def() -> ServiceDef:
             body={
                 "document_id": "{doc_id}",
                 "sections": [{
-                    "section_id": 1, "document_id": "{doc_id}",
+                    "section_id": "{section_id}", "document_id": "{doc_id}",
                     "clause": "1", "level": 1, "path": "1", "page": 1,
-                    "type": "section",
+                    "type": "text",
                     "content": {"text": "Тестовое содержимое"},
                 }],
             },

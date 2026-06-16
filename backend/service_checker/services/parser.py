@@ -26,6 +26,8 @@ def get_service_def() -> ServiceDef:
     _warnings = [
         "⚠️ Реальная реализация расходится с docs: process требует version_id (docs: mode+file_key).",
         "⚠️ Health Parser на /health, а не /api/v1/health — сервис не использует префикс.",
+        "⚠️ Валидатор Parser проверяет расширение file_key (не принимает без .pdf). "
+        "Реальные file_key — хэши без расширения, нужна проверка по MIME/содержимому.",
     ]
 
     prepare_endpoints = [
@@ -33,7 +35,7 @@ def get_service_def() -> ServiceDef:
             "Запуск обработки (prepare)",
             body={"task_id": 12345,
                   "version_id": "1",
-                  "file_key": "test-file-key"},
+                  "file_key": "test-file-key.pdf"},
             extract_keys=["task_id"],
             response_schema={"task_id": int, "status": str},
             is_preparation=True,
@@ -47,7 +49,7 @@ def get_service_def() -> ServiceDef:
             "Запуск обработки",
             body={"task_id": 12345,
                   "version_id": "1",
-                  "file_key": "test-file-key"},
+                  "file_key": "test-file-key.pdf"},
             response_schema={"task_id": int, "status": str}),
         EndpointDef("GET", f"{API_PREFIX}/parser/process/{{task_id}}/status",
             "parser", "Статус обработки (longpoll)",
