@@ -38,3 +38,34 @@ class OpenAIEmbeddingProvider:
             token_count=token_count,
             cost_usd=cost_usd,
         )
+
+    def create_embeddings_with_usage(
+            self,
+            texts: list[str],
+    ) -> list[EmbeddingResult]:
+        response = self.client.embeddings.create(
+            model=settings.EMBEDDING_MODEL,
+            input=texts,
+        )
+
+        usage = response.usage
+        token_count = usage.total_tokens if usage else 0
+
+        total_cost = (
+                             token_count / 1_000_000
+                     ) * settings.EMBEDDING_PRICE_PER_1M_TOKENS_USD
+
+        cost_per_embedding = (
+            total_cost / len(response.data)
+            if response.data
+            else 0.0
+        )
+
+        return [
+            EmbeddingResult(
+                embedding=item.embedding,
+                token_count=0,
+                cost_usd=cost_per_embedding,
+            )
+            for item in response.data
+        ]

@@ -21,3 +21,9 @@ class EmbeddingProvider(Protocol):
             text: str,
     ) -> EmbeddingResult:
         ...
+
+    def create_embeddings_with_usage(
+            self,
+            texts: list[str],
+    ) -> list[EmbeddingResult]:
+        ...

@@ -20,3 +20,16 @@ class StubEmbeddingProvider:
             token_count=0,
             cost_usd=0.0,
        )
+
+    def create_embeddings_with_usage(
+            self,
+            texts: list[str],
+    ) -> list[EmbeddingResult]:
+        return [
+            EmbeddingResult(
+                embedding=[0.0] * settings.EMBEDDING_DIM,
+                token_count=0,
+                cost_usd=0.0,
+            )
+            for _ in texts
+        ]

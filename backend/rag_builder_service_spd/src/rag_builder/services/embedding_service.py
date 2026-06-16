@@ -33,3 +33,24 @@ class EmbeddingService:
             chunk=chunk,
             embedding=self.create_embedding(chunk.content),
         )
+
+    def enrich_chunks(
+            self,
+            chunks: list[Chunk],
+    ) -> list[EmbeddedChunk]:
+        texts = [
+            chunk.content
+            for chunk in chunks
+        ]
+
+        results = self.provider.create_embeddings_with_usage(
+            texts
+        )
+
+        return [
+            EmbeddedChunk(
+                chunk=chunk,
+                embedding=result.embedding,
+            )
+            for chunk, result in zip(chunks, results)
+        ]
