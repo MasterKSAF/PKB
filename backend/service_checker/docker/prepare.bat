@@ -17,12 +17,24 @@ cd /d "%~dp0"
 echo === PKB Neuroassistant: Full setup from scratch ===
 echo.
 
-REM ── 0. Создание .env ───────────────────────────────────────────────────────
-echo [0/8] Generating .env...
+REM ── 0. Проверка Docker ─────────────────────────────────────────────────────
+docker info >nul 2>&1
+if %ERRORLEVEL% neq 0 (
+    echo.
+    echo ERROR: Docker is not running or not installed!
+    echo Please start Docker Desktop and try again.
+    pause
+    exit /b 1
+)
+echo [0/9] Docker is running.
+echo.
+
+REM ── 1. Создание .env ───────────────────────────────────────────────────────
+echo [1/9] Generating .env...
 python create_env.py
 echo.
 
-echo [1/8] Preparing TEI model (if not already cached)...
+echo [2/9] Preparing TEI model (if not already cached)...
 echo.
 python prepare_tei_model.py
 if %ERRORLEVEL% neq 0 (
@@ -33,7 +45,7 @@ if %ERRORLEVEL% neq 0 (
 )
 echo.
 
-echo [2/8] Building base image (Python + dependencies)...
+echo [3/9] Building base image (Python + dependencies)...
 echo.
 set DOCKER_SCOUT_SUPPRESS_ANALYSIS=1
 docker build -f Dockerfile.base -t ghcr.io/pkb/neuro-base:latest .
@@ -44,19 +56,19 @@ if errorlevel 1 (
 echo.
 
 REM Сначала мигрируем старые volumes (docker_* -> pkb_*), если они есть
-echo [3/8] Migrating old volumes (docker_* -> pkb_*)...
+echo [4/9] Migrating old volumes (docker_* -> pkb_*)...
 python migrate_volumes.py
 echo.
 
-echo [4/8] Stopping containers...
+echo [5/9] Stopping containers...
 docker compose -f docker-compose.yml down
 echo.
 
-echo [4/8] Removing known data volumes (DB, MinIO, logs)...
+echo [6/9] Removing known data volumes (DB, MinIO, logs)...
 docker volume rm -f pkb_pg_data pkb_minio_data pkb_app_logs 2>nul
 echo.
 
-echo [5/8] Starting all containers (PostgreSQL, Redis, MinIO, TEI, App)...
+echo [7/9] Starting all containers (PostgreSQL, Redis, MinIO, TEI, App)...
 docker compose -f docker-compose.yml up -d
 if %ERRORLEVEL% neq 0 (
     echo.
@@ -66,11 +78,11 @@ if %ERRORLEVEL% neq 0 (
 )
 echo.
 
-echo [6/8] Waiting 10 seconds for services to initialize...
+echo [8/9] Waiting 10 seconds for services to initialize...
 ping -n 11 127.0.0.1 > nul
 echo.
 
-echo [7/8] Running full report (coverage + pipelines)...
+echo     Running full report (coverage + pipelines)...
 for %%I in ("%~dp0..\..") do cd /d "%%~fI"
 python -m service_checker docker --action full-report
 if %ERRORLEVEL% neq 0 (
