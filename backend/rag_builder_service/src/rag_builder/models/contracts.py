@@ -2,21 +2,20 @@
 
 from datetime import datetime
 from typing import Any, Literal
-from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
-SectionType = Literal["section", "table", "image", "formula"]
+SectionType = Literal["text", "textBlock", "headerFooter", "table", "list", "image", "formula"]
 
 
 class MetadataBlock(BaseModel):
     schema_name: str = Field(alias="schema")
-    document_id: UUID
+    document_id: int
     created_at: datetime
 
 
 class DocumentBlock(BaseModel):
-    id: UUID
+    id: int
     doc_code: str | None = None
     title: str | None = None
     full_title: str | None = None
@@ -40,6 +39,7 @@ class DocumentBlock(BaseModel):
     page_count: int | None = None
     file_hash_sha256: str | None = None
     amendments: list[dict[str, Any]] = Field(default_factory=list)
+    references: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class TerminologyItem(BaseModel):
@@ -57,7 +57,7 @@ class ProtectedSpan(BaseModel):
 
 class Section(BaseModel):
     section_id: int
-    document_id: UUID
+    document_id: int
     parent_id: int | None = None
     clause: str | None = None
     title: str | None = None
@@ -71,7 +71,7 @@ class Section(BaseModel):
 
 
 class BuildRequest(BaseModel):
-    document_id: UUID | None = None
+    document_id: int | None = None
     metadata: MetadataBlock | None = None
     document: DocumentBlock | None = None
     sections: list[Section]
@@ -102,7 +102,7 @@ class BuildRequest(BaseModel):
 
 
 class BuildResponse(BaseModel):
-    document_id: UUID
+    document_id: int
     status: Literal["completed", "failed"]
     indexed_at: datetime
     chunks_count: int
@@ -110,13 +110,13 @@ class BuildResponse(BaseModel):
 
 
 class DeleteResponse(BaseModel):
-    document_id: UUID
+    document_id: int
     deleted_count: int
     status: Literal["completed"]
 
 
 class StatusResponse(BaseModel):
-    document_id: UUID
+    document_id: int
     status: Literal["pending", "indexing", "indexed", "failed"]
     chunks_count: int
     has_embeddings: bool

@@ -1,16 +1,17 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from collections.abc import Iterable
 
+from loguru import logger
+
+from rag_builder.core.config import settings
 from rag_builder.models.contracts import ProtectedSpan, Section
 from rag_builder.models.domain import Chunk
-from loguru import logger
-from rag_builder.core.config import settings
 
 
 class ChunkingService:
     def build_chunks(
-        self, document_id: str, sections: list[Section], protected_spans: list[ProtectedSpan], strategy: str
+        self, document_id: int, sections: list[Section], protected_spans: list[ProtectedSpan], strategy: str
     ) -> list[Chunk]:
         logger.info(
             "Chunking start document_id={} sections={} strategy={}",
@@ -46,10 +47,12 @@ class ChunkingService:
     def _render_section_chunks(self, section: Section, protected_span: tuple[int, int] | None) -> list[str]:
         if section.type == "table":
             return [self._table_to_markdown(section.content)]
+        if section.type == "list":
+            return [self._list_to_markdown(section.content)]
         if section.type == "image":
-            return [f"{section.content.get('caption', '')}\n{section.content.get('description', '')}".strip()]
+            return [self._content_text_or_fallback(section.content, ("caption", "description"))]
         if section.type == "formula":
-            return [f"{section.content.get('latex', '')}\n{section.content.get('meaning', '')}".strip()]
+            return [self._content_text_or_fallback(section.content, ("latex", "meaning"))]
         text = str(section.content.get("text", "")).strip()
         return self._split_tokens(text, settings.chunk_max_tokens, protected_span)
 
@@ -70,6 +73,9 @@ class ChunkingService:
         return out
 
     def _table_to_markdown(self, content: dict[str, object]) -> str:
+        markdown = str(content.get("markdown", "")).strip()
+        if markdown:
+            return markdown
         columns_obj = content.get("columns", [])
         rows_obj = content.get("rows", [])
         columns: Iterable[dict[str, object]] = columns_obj if isinstance(columns_obj, list) else []
@@ -87,3 +93,17 @@ class ChunkingService:
                 vals.append(str(cell.get("label", cell.get("value", ""))))
             lines.append("| " + " | ".join(vals) + " |")
         return "\n".join(lines)
+
+    def _list_to_markdown(self, content: dict[str, object]) -> str:
+        markdown = str(content.get("markdown", "")).strip()
+        if markdown:
+            return markdown
+        items_obj = content.get("items", [])
+        items = items_obj if isinstance(items_obj, list) else []
+        return "\n".join(f"- {item}" for item in items)
+
+    def _content_text_or_fallback(self, content: dict[str, object], keys: tuple[str, ...]) -> str:
+        markdown = str(content.get("markdown", "")).strip()
+        if markdown:
+            return markdown
+        return "\n".join(str(content.get(key, "")).strip() for key in keys).strip()

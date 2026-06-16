@@ -8,10 +8,10 @@ class Settings(BaseSettings):
     app_version: str = "1.0.0"
 
     db_host: str = "localhost"
-    db_port: int = 5433
-    db_name: str = "pkb_db"
-    db_user: str = "pkb_user"
-    db_password: str = "pkb_pass"
+    db_port: int = 5432
+    db_name: str = "pkb_neuro"
+    db_user: str = "pkb"
+    db_password: str = "pkb"
     database_url: str | None = None
 
     app_port: int = 8090
@@ -25,15 +25,9 @@ class Settings(BaseSettings):
     embedding_model: str = "text-embedding-3-small"
     embedding_timeout: int = 30
     embedding_batch_size: int = 32
-    embedding_provider: str = "openai_compatible"  # mock | openai_compatible
+    embedding_provider: str = "mock"  # mock | openai_compatible
     embedding_api_key: str = ""
     embedding_retries: int = 2
-    jwt_secret: str = "change-me-at-least-32-characters"
-    jwt_algorithm: str = "HS256"
-    jwt_access_expire_minutes: int = 30
-    jwt_refresh_expire_minutes: int = 10080
-    auth_username: str = "admin"
-    auth_password: str = "admin"
 
     api_prefix: str = "/api/v1"
     default_longpoll_seconds: int = 15
