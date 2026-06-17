@@ -27,11 +27,6 @@ class SearchService:
     def search(self, request: SearchRequest) -> SearchResponse:
         started_at = perf_counter()
 
-        if request.expand_context:
-            raise ValueError(
-                "Context expansion is not supported in RAG Search MVP"
-            )
-
         if request.search_type == "dense":
             embedding_result = self.embedding_provider.create_embedding_with_usage(
                 request.query,
@@ -87,6 +82,12 @@ class SearchService:
                 f"Unsupported search_type: {request.search_type}"
             )
 
+        context_expanded = False
+
+        if request.expand_context:
+            results = self._expand_context_for_results(results)
+            context_expanded = True
+
         processing_time_ms = int((perf_counter() - started_at) * 1000)
 
         return SearchResponse(
@@ -97,7 +98,7 @@ class SearchService:
             processing_time_ms=processing_time_ms,
             embedding_tokens=embedding_tokens,
             embedding_cost_usd=embedding_cost_usd,
-            context_expanded=False,
+            context_expanded=context_expanded,
         )
 
     def _merge_results_without_duplicates(
@@ -120,3 +121,32 @@ class SearchService:
                 break
 
         return merged
+
+    def _expand_context_for_results(self, results):
+        expanded_results = []
+
+        result_section_ids = {
+            result.document_section_id
+            for result in results
+        }
+
+        for result in results:
+            context = self.repository.expand_context(
+                document_section_id=result.document_section_id,
+            )
+
+            filtered_context = [
+                item
+                for item in context
+                if item.document_section_id not in result_section_ids
+            ]
+
+            expanded_results.append(
+                result.model_copy(
+                    update={
+                        "context": filtered_context,
+                    }
+                )
+            )
+
+        return expanded_results

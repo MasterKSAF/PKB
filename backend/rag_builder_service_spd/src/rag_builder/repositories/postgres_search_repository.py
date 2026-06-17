@@ -6,7 +6,12 @@ import math
 
 from rag_builder.core.config import settings
 from rag_builder.core.logger import logger
-from rag_builder.models.search import SearchChunkResult, SearchFilters
+
+from rag_builder.models.search import (
+    SearchChunkResult,
+    SearchContextItem,
+    SearchFilters,
+)
 
 
 class PostgresSearchRepository:
@@ -176,6 +181,106 @@ class PostgresSearchRepository:
             for row in rows
         ]
 
+    def expand_context(
+            self,
+            document_section_id: int,
+            child_limit: int = 10,
+    ) -> list[SearchContextItem]:
+        query = sql.SQL(
+            """
+            WITH current_section AS (
+                SELECT
+                    id,
+                    document_version_id,
+                    path_ltree
+                FROM {schema}.document_sections
+                WHERE id = %s
+            ),
+            parent_section AS (
+                SELECT
+                    'parent' AS relation,
+                    s.id AS document_section_id,
+                    s.section_id,
+                    s.parent_id,
+                    s.clause,
+                    s.title,
+                    s.path,
+                    s.page,
+                    s.section_type,
+                    s.metadata -> 'raw_content' AS content
+                FROM {schema}.document_sections s
+                JOIN current_section c
+                    ON s.document_version_id = c.document_version_id
+                WHERE
+                    c.path_ltree IS NOT NULL
+                    AND s.path_ltree IS NOT NULL
+                    AND s.path_ltree @> c.path_ltree
+                    AND s.path_ltree <> c.path_ltree
+                    AND nlevel(s.path_ltree) = nlevel(c.path_ltree) - 1
+                LIMIT 1
+            ),
+            child_sections AS (
+                SELECT
+                    'child' AS relation,
+                    s.id AS document_section_id,
+                    s.section_id,
+                    s.parent_id,
+                    s.clause,
+                    s.title,
+                    s.path,
+                    s.page,
+                    s.section_type,
+                    s.metadata -> 'raw_content' AS content
+                FROM {schema}.document_sections s
+                JOIN current_section c
+                    ON s.document_version_id = c.document_version_id
+                WHERE
+                    c.path_ltree IS NOT NULL
+                    AND s.path_ltree IS NOT NULL
+                    AND s.path_ltree <@ c.path_ltree
+                    AND s.path_ltree <> c.path_ltree
+                    AND nlevel(s.path_ltree) = nlevel(c.path_ltree) + 1
+                ORDER BY s.path_ltree::text
+                LIMIT %s
+            )
+            SELECT * FROM parent_section
+            UNION ALL
+            SELECT * FROM child_sections
+            """
+        ).format(
+            schema=sql.Identifier(settings.POSTGRES_SCHEMA),
+        )
+
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    query,
+                    (
+                        document_section_id,
+                        child_limit,
+                    ),
+                )
+                rows = cur.fetchall()
+
+        return [
+            self._row_to_context_item(row)
+            for row in rows
+        ]
+
+    def _row_to_context_item(self, row) -> SearchContextItem:
+        return SearchContextItem(
+            relation=row[0],
+            document_section_id=row[1],
+            section_id=row[2],
+            parent_id=row[3],
+            clause=row[4],
+            title=row[5],
+            path=row[6],
+            page=row[7],
+            section_type=row[8],
+            content=row[9],
+        )
+
     def _row_to_result_with_score(
             self,
             row,
@@ -230,3 +335,5 @@ class PostgresSearchRepository:
 
     def _to_vector_literal(self, embedding: list[float]) -> str:
         return "[" + ",".join(str(value) for value in embedding) + "]"
+
+
