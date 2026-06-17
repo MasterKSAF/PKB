@@ -9,6 +9,12 @@ from rag_builder.models.search import (
     SearchResponse,
 )
 
+from rag_builder.models.search import (
+    SearchChunkResult,
+    SearchContextItem,
+    SearchRequest,
+    SearchResponse,
+)
 
 def test_search_request_strips_query():
     request = SearchRequest(
@@ -69,3 +75,41 @@ def test_search_response_contains_citation_fields():
     assert response.results[0].page == 2
     assert response.results[0].content
     assert response.context_expanded is False
+
+def test_search_chunk_result_supports_context_items():
+    context_item = SearchContextItem(
+        relation="parent",
+        document_section_id=7,
+        section_id=7,
+        parent_id=None,
+        clause="6",
+        title="Допуски формы и расположения поверхностей",
+        path="6",
+        page=1,
+        section_type="text",
+        content={
+            "text": "Допуски формы и расположения поверхностей установлены..."
+        },
+    )
+
+    chunk = SearchChunkResult(
+        chunk_id=139,
+        document_id=420000,
+        document_version_id=420001,
+        document_section_id=8,
+        section_id=8,
+        clause="6.1",
+        path="6/6.1",
+        page=2,
+        bbox=None,
+        chunk_index=0,
+        chunk_type="text",
+        content="Допуск соосности оси отверстия...",
+        score=1.0,
+        distance=None,
+        context=[context_item],
+    )
+
+    assert chunk.context[0].relation == "parent"
+    assert chunk.context[0].clause == "6"
+    assert chunk.context[0].path == "6"
