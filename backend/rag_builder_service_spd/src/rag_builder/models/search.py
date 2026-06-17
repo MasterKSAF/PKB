@@ -38,6 +38,26 @@ class SearchRequest(BaseModel):
             raise ValueError("query must not be empty")
         return normalized
 
+class SearchContextItem(BaseModel):
+    """
+    Context item returned by context expansion.
+
+    MVP uses document_sections hierarchy:
+    parent and direct children of the found chunk section.
+    """
+    relation: Literal["parent", "child"]
+
+    document_section_id: int
+    section_id: int
+    parent_id: int | None = None
+
+    clause: str | None = None
+    title: str | None = None
+    path: str
+    page: int | None = None
+
+    section_type: str
+    content: Any | None = None
 
 class SearchChunkResult(BaseModel):
     """
@@ -65,6 +85,9 @@ class SearchChunkResult(BaseModel):
 
     score: float
     distance: float | None = None
+    context: list[SearchContextItem] = Field(default_factory=list)
+
+
 
 
 class SearchResponse(BaseModel):

@@ -107,7 +107,7 @@ pytest
 Текущее состояние:
 
 ```text
-28 passed
+29 passed
 ```
 
 ---
@@ -258,6 +258,22 @@ Request example:
 }
 ```
 
+Context expansion request example:
+
+```json
+{
+  "query": "допуск соосности",
+  "top_k": 5,
+  "search_type": "hybrid",
+  "expand_context": true
+}
+```
+
+When `expand_context=true`, each result may include a `context` array with:
+
+- `parent` section
+- direct `child` sections such as tables, images, formulas or text sections
+
 Response contains chunks with citation fields:
 
 ```json
@@ -274,7 +290,8 @@ Response contains chunks with citation fields:
       "clause": "6.1",
       "path": "6/6.1",
       "page": 2,
-      "content": "Допуск соосности оси отверстия..."
+      "content": "Допуск соосности оси отверстия...",
+      "context": []
     }
   ],
   "total_found": 1,
@@ -286,7 +303,8 @@ MVP limitations:
 
 - `hybrid` is a simple merge, not RRF yet.
 - `sparse` is a simple text search, not BM25 yet.
-- `context expansion` via `document_sections.path_ltree` is planned but not implemented yet.
+- `context expansion` uses `document_sections.path_ltree` and returns parent + direct children for each result.
+- Context deduplication is partial: context items already present in main `results` are removed.
 - With `EMBEDDING_PROVIDER=stub`, dense search is technical only and does not provide semantic ranking.
 
 ---
@@ -401,7 +419,7 @@ sql/
 Текущее состояние:
 
 ```text
-28 passed
+29 passed
 ```
 
 ---
@@ -441,7 +459,7 @@ document_sections
 
 Текущее состояние:
 
-- 28 тестов проходят
+- 29 тестов проходят
 - PostgreSQL persistence реализован
 - pgvector поддерживается
 - ltree поддерживается
@@ -460,7 +478,9 @@ document_sections
 * sparse text search
 * simple hybrid merge
 * citation fields: `document_id`, `document_version_id`, `section_id`, `clause`, `path`, `page`, `content`
-* context expansion planned
+* context expansion via `document_sections.path_ltree`
+* parent + direct children context
+* partial context deduplication by `document_section_id`
 
 ---
 
@@ -510,4 +530,5 @@ document_sections
 * RRF
 * Citation Engine
 * Context Expansion через ltree
+* context expansion применяется к каждому result из top_k
 
