@@ -25,8 +25,7 @@ docs/
 │   ├── parser_service_api.md         #   Parser Service (парсинг цифровых PDF/DOC)
 │   ├── analyse_service_api.md        #   Analyse Service (анализ проектных решений)
 │   ├── rag_builder_service_api.md    #   RAG Builder (чанкинг, embeddings, индексация)
-│   ├── rag_search_service_api.md     #   RAG Search (гибридный поиск)
-│   └── validate_service_api.md       #   (deprecated — см. converter_validator_service_api.md)
+│   └── rag_search_service_api.md     #   RAG Search (гибридный поиск)
 │
 ├── pipelines/                        # Логические пайплайны обработки документов
 │   ├── overview.md                   #   Общая схема, FSM, матрица ответственности
@@ -63,10 +62,11 @@ docs/
 │
 ├── glossary.md                       # Глоссарий терминов и сокращений
 ├── specificity.md                    # Журнал аномалий и трудных моментов
+├── todo.md                           # План синхронизации документации
 └── analyse_alternative_project.md   # Анализ альтернативного проекта KB (13.06)
 ```
 
-> 📂 **Исторические обсуждения и протоколы встреч** хранятся в директории [`../docs_discussions/`](../docs_discussions/) на уровне корня проекта.
+> 📂 **Исторические обсуждения и протоколы встреч** хранятся в директории [`../docs_plans/`](../docs_plans/) на уровне корня проекта.
 
 ---
 
@@ -231,12 +231,12 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 
 | Дата | Изменение |
 |------|-----------|
-| 04.06.2026 | **Методика экспериментов RAG**: полный перечень параметров, матрица запусков (3 фазы), метрики, псевдокод утилиты. См. [`../docs_discussions/features/rag_experiments_methodology.md`](../docs_discussions/features/rag_experiments_methodology.md). |
+| 04.06.2026 | **Методика экспериментов RAG**: полный перечень параметров, матрица запусков (3 фазы), метрики, псевдокод утилиты. См. [`../docs_plans/features/rag_experiments_methodology.md`](../docs_plans/features/rag_experiments_methodology.md). |
 | 04.06.2026 | **Переход на bigint**: все ID (`task_id`, `session_id`, `message_id`, `document_id`, `version_id`) — bigint (sequence). |
 | 04.06.2026 | **bbox**: нормализован [0,1] на всех этапах. `common_api.md` исправлен. |
 | 04.06.2026 | **UUID → bigint**: JSON-примеры во всех API-файлах синхронизированы с bigint-спецификациями. |
-| 04.06.2026 | Добавлены `specificity.md` (журнал аномалий) и `plans/` в структуру документации. |
-| 04–05.06.2026 | **Полная синхронизация документации Спринта 1**: все API, схемы, ER-диаграмма, глоссарий и пайплайны приведены к bigint; исправлены единицы bbox; `glossary.md` дополнен (`comparison_id`, `batch_id`, `Проект`); структура `docs/README.md` исправлена; UUID в `registry_service_api.md` заменены на bigint; `diagrams.md` и спринт-план актуализированы. См. `specificity.md` A1–A13 и `plans/sprint1_04_06_10_06.md`. |
+| 04.06.2026 | Добавлен `specificity.md` (журнал аномалий) в структуру документации. |
+| 04–05.06.2026 | **Полная синхронизация документации Спринта 1**: все API, схемы, ER-диаграмма, глоссарий и пайплайны приведены к bigint; исправлены единицы bbox; `glossary.md` дополнен (`comparison_id`, `batch_id`, `Проект`); структура `docs/README.md` исправлена; UUID в `registry_service_api.md` заменены на bigint; `diagrams.md` и спринт-план актуализированы. См. `specificity.md` A1–A13 и `../docs_plans/features/sprint1_04_06_10_06.md`. |
 | 05.06.2026 | **Новый функционал**: группа `drafts` в API Оркестратора (5 эндпоинтов), FSM черновиков в `pipeline1-formation.md`, архитектура двух экранов UI (Загрузка / База знаний), маршрут `/api/v1/drafts/*` в Gateway. |
 | 05.06.2026 | **Комплексный аудит документации**: проверка API (13 файлов), пайплайнов (5 файлов), схемы данных (6 файлов), кросс-проверка, security review, тупиковые состояния. Найдено 112+ проблем (23 критических). Результаты: `docs/specificity.md` (аномалии A15–A34, S1–S12, C1–C16), `docs/database/db_audit_report.md` (43 замечания). |
 | 12.06.2026 | **Анализ UI/Gateway-синхронизации**: разбор 10 вопросов к backend, 5 UI-задач, ожидающих подтверждения контрактов, и 4 веток-кандидатов на удаление. Результаты: `docs/audit/ui_gateway_sync_analysis.md`. Добавлены аномалии A25–A33 в `specificity.md`. |
