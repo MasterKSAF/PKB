@@ -11,6 +11,7 @@ from rag_builder.models.contracts import BuildRequest
 from rag_builder.repositories.postgres_chunk_repository import PostgresChunkRepository
 from rag_builder.services.indexing_service import IndexingService
 from rag_builder.core.logger import logger
+from rag_builder.api.search_routes import router as search_router
 
 
 @asynccontextmanager
@@ -33,6 +34,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.include_router(search_router)
 
 @app.get(
     "/health",
