@@ -96,6 +96,7 @@ def get_service_def() -> ServiceDef:
         depends_on=["registry", "auth"],
         base_data={},
         warnings=[
-            "⚠️ Документация не упоминает JWT, но RAG Builder требует bearer token. Исправлено: supervisord передаёт JWT_SECRET (RAG Builder) = JWT_SECRET_KEY (Auth).",
+            # RAG Builder не проверяет JWT — токен в supervisord передан, но сервис его игнорирует.
+            # Старый warning про JWT убран (2026-06-17).
         ],
     )

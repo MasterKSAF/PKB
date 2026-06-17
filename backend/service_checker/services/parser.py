@@ -2,9 +2,6 @@
 PKB Neuroassistant — Parser Service API Definitions.
 
 Основано на: docs/api/parser_service_api.md
-
-Замечание: документация описывает единый POST /parser/process с полем mode,
-реальная реализация разделяет на process (version_id) и preview (отдельный endpoint).
 """
 
 from __future__ import annotations
@@ -24,10 +21,8 @@ def get_service_def() -> ServiceDef:
     """Вернуть полное описание Parser Service."""
 
     _warnings = [
-        "⚠️ Реальная реализация расходится с docs: process требует version_id (docs: mode+file_key).",
-        "⚠️ Health Parser на /health, а не /api/v1/health — сервис не использует префикс.",
-        "⚠️ Валидатор Parser проверяет расширение file_key (не принимает без .pdf). "
-        "Реальные file_key — хэши без расширения, нужна проверка по MIME/содержимому.",
+        # Parser теперь соответствует docs: health на /api/v1/health, принимает mode и version_id,
+        # file_key без .pdf тоже работает. Все старые warnings убраны (2026-06-17).
     ]
 
     prepare_endpoints = [
@@ -43,7 +38,7 @@ def get_service_def() -> ServiceDef:
     ]
 
     endpoints = [
-        EndpointDef("GET", "/health", "health", "Health check сервиса",
+        EndpointDef("GET", f"{API_PREFIX}/health", "health", "Health check сервиса",
             response_schema={"status": str}),
         EndpointDef("POST", f"{API_PREFIX}/parser/process", "parser",
             "Запуск обработки",

@@ -67,3 +67,29 @@
 - ✅ Интеграция в coverage test (--schema-check, --strict)
 - ✅ Все тесты: 210/210
 - ❓ Остаётся: полный цикл md→OpenAPI→сравнение в отдельном CLI
+
+---
+
+## Текущее: Обновление warnings после прямой проверки API
+
+### Блок 1: Parser Service
+- [x] Исправить health endpoint: `GET /health` → `GET /api/v1/health` (сейчас падает 404)
+- [x] Убрать все 3 устаревших warnings
+
+### Блок 2: RAG Builder
+- [x] Убрать warning про JWT (RAG Builder не проверяет токен)
+- [x] Проверено: health на /api/v1/health — уже корректный в checker
+
+### Блок 3: Converter-Validator
+- [x] Уточнить warning про task_id/version_id — сервис принимает и int, и str
+- [x] Уточнить warning про document_id/validation_id — возвращает val-xxxx (string), не UUID
+
+### Блок 4: Проверка
+- [x] Запустить coverage тест — проверить что Parser health проходит
+- [x] Запустить full report — проверить что warnings обновились
+
+### Итог:
+- **Parser**: health исправлен (5/5 ✅), 3 warnings убраны
+- **RAG Builder**: warning про JWT убран (сервис не проверяет токен)
+- **Converter**: warning уточнены (int/str, val-xxxx)
+- **Full report**: 10/10 ✅, "Нет замечаний"

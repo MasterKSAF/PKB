@@ -1153,3 +1153,46 @@ env file ...\\.env not found: CreateFile ...\\.env: The system cannot find the f
 ### Статус
 ✅ **Исправлено (checker, 2026-06-15)**
 
+## 32. Проверка актуальности warnings (2026-06-17): Parser/RAG Builder/Converter
+
+### Проблема
+Warnings в отчёте могли устареть — сервисы изменились, а checker продолжал выводить
+неактуальные предупреждения.
+
+### Что проверено
+Выполнены прямые HTTP-запросы к каждому эндпоинту, по которому были warnings:
+
+| Сервис | Старый warning | Реальность | Решение |
+|--------|---------------|------------|---------|
+| Parser | Health на /health | `/health` → 404, `/api/v1/health` → 200 | Health исправлен на `/api/v1/health` |
+| Parser | process требует version_id | mode тоже работает (202) | Warning убран |
+| Parser | file_key требует .pdf | Без .pdf тоже работает (202) | Warning убран |
+| RAG Builder | JWT required | Сервис НЕ проверяет JWT | Warning убран |
+| Converter | task_id/version_id как str | Принимает и int, и str | Warning уточнён |
+| Converter | document_id — UUID | Возвращает val-xxxx string | Warning уточнён |
+
+### Что исправлено (checker, 2026-06-17)
+
+1. **`services/parser.py`:**
+   - Health endpoint: `GET /health` → `GET /api/v1/health`
+   - Все 3 warnings убраны
+
+2. **`core/docker.py`:**
+   - Parser health path: `/health` → `/api/v1/health`
+
+3. **`services/rag_builder.py`:**
+   - Warning про JWT убран (сервис не проверяет токен)
+
+4. **`services/converter_validator.py`:**
+   - Warning про task_id/version_id уточнён: "принимает и int, и str"
+   - Warning про document_id/validation_id уточнён: "val-xxxx (string), не UUID"
+   - Inline WORKAROUND-комментарии обновлены
+
+### Результат
+- API Coverage: **243/243 ✅** (было 242/243)
+- Pipelines: **8/8 ✅**
+- Warnings в отчёте: **актуальные** (Converter ×3, Registry ×1, Query ×1, Gateway ×2)
+
+### Статус
+✅ **Исправлено (checker, 2026-06-17)**
+

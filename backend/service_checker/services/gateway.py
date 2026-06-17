@@ -303,8 +303,5 @@ def get_service_def() -> ServiceDef:
         prepare_endpoints=prepare_endpoints,
         depends_on=[],
         base_data={"page_num": 1, "pending_id": 1, "user_id": 1},
-        warnings=[
-            "Gateway — отдельный mock-сервис, тестируется независимо от других сервисов.",
-            "Эндпоинты и prepare определены строго по openapi.json mock'а.",
-        ],
+        warnings=[],  # информационные описания в docstring файла
     )
