@@ -68,7 +68,7 @@ class SearchService:
                 filters=request.filters,
             )
 
-            results = self._merge_results_without_duplicates(
+            results = self._rrf_fuse_results(
                 sparse_results=sparse_results,
                 dense_results=dense_results,
                 top_k=request.top_k,
@@ -101,26 +101,49 @@ class SearchService:
             context_expanded=context_expanded,
         )
 
-    def _merge_results_without_duplicates(
+    def _rrf_fuse_results(
             self,
             sparse_results,
             dense_results,
             top_k: int,
+            rrf_k: int = 60,
     ):
-        merged = []
-        seen_chunk_ids = set()
+        by_chunk_id = {}
 
-        for result in sparse_results + dense_results:
-            if result.chunk_id in seen_chunk_ids:
-                continue
+        for rank, result in enumerate(sparse_results, start=1):
+            item = by_chunk_id.setdefault(
+                result.chunk_id,
+                {
+                    "result": result,
+                    "score": 0.0,
+                },
+            )
+            item["score"] += 1.0 / (rrf_k + rank)
 
-            merged.append(result)
-            seen_chunk_ids.add(result.chunk_id)
+        for rank, result in enumerate(dense_results, start=1):
+            item = by_chunk_id.setdefault(
+                result.chunk_id,
+                {
+                    "result": result,
+                    "score": 0.0,
+                },
+            )
+            item["score"] += 1.0 / (rrf_k + rank)
 
-            if len(merged) >= top_k:
-                break
+        fused_items = sorted(
+            by_chunk_id.values(),
+            key=lambda item: item["score"],
+            reverse=True,
+        )
 
-        return merged
+        return [
+            item["result"].model_copy(
+                update={
+                    "score": item["score"],
+                }
+            )
+            for item in fused_items[:top_k]
+        ]
 
     def _expand_context_for_results(self, results):
         expanded_results = []

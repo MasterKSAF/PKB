@@ -235,7 +235,7 @@ def test_search_service_expands_context_when_requested():
     assert 7 in context_section_ids
     assert 10 not in context_section_ids
 
-def test_search_service_runs_hybrid_search_sparse_first_no_duplicates():
+def test_search_service_runs_hybrid_search_with_rrf_no_duplicates():
     repository = FakeSearchRepository()
     embedding_provider = FakeEmbeddingProvider()
 
@@ -264,6 +264,13 @@ def test_search_service_runs_hybrid_search_sparse_first_no_duplicates():
     assert response.embedding_cost_usd == 0.000001
 
     assert response.total_found == 2
+
     assert response.results[0].chunk_id == 1001
-    assert response.results[0].score == 1.0
     assert response.results[1].chunk_id == 1002
+
+    expected_duplicate_score = (1.0 / 61) + (1.0 / 61)
+    expected_sparse_only_score = 1.0 / 62
+
+    assert response.results[0].score == expected_duplicate_score
+    assert response.results[1].score == expected_sparse_only_score
+

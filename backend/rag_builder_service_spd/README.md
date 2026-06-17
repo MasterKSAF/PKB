@@ -244,8 +244,8 @@ Supported search types:
 | search_type | Description |
 |---|---|
 | `dense` | Vector search by `nsi.chunks.embedding` |
-| `sparse` | Text search by `nsi.chunks.content` |
-| `hybrid` | MVP merge: sparse results first, dense results after them, duplicates removed |
+| `sparse` | PostgreSQL full-text search by `nsi.chunks.content` with `ts_rank_cd` |
+| `hybrid` | RRF fusion of sparse and dense results, duplicates removed |
 
 Request example:
 
@@ -301,12 +301,11 @@ Response contains chunks with citation fields:
 
 MVP limitations:
 
-- `hybrid` is a simple merge, not RRF yet.
-- `sparse` is a simple text search, not BM25 yet.
+- `hybrid` uses Reciprocal Rank Fusion with `k=60`.
+- `sparse` uses PostgreSQL full-text ranking via `ts_rank_cd`; a dedicated BM25 engine/index is not implemented yet.
 - `context expansion` uses `document_sections.path_ltree` and returns parent + direct children for each result.
 - Context deduplication is partial: context items already present in main `results` are removed.
-- With `EMBEDDING_PROVIDER=stub`, dense search is technical only and does not provide semantic ranking.
-
+- With `EMBEDDING_PROVIDER=stub`, dense search is technical only and may add non-semantic candidates to hybrid results.
 ---
 
 ## 10. Структура проекта
@@ -475,8 +474,8 @@ document_sections
 
 * `POST /search`
 * dense vector search
-* sparse text search
-* simple hybrid merge
+* sparse full-text search with `ts_rank_cd`
+* hybrid RRF fusion with `k=60`
 * citation fields: `document_id`, `document_version_id`, `section_id`, `clause`, `path`, `page`, `content`
 * context expansion via `document_sections.path_ltree`
 * parent + direct children context

@@ -48,8 +48,8 @@ class PostgresSearchRepository:
         where_clauses = [sql.SQL("embedding IS NOT NULL")]
         params: list[object] = [
             embedding_literal,
-            embedding_literal,
         ]
+
 
         if filters is not None:
             if filters.document_id is not None:
@@ -68,6 +68,7 @@ class PostgresSearchRepository:
                 where_clauses.append(sql.SQL("chunk_type = %s"))
                 params.append(filters.chunk_type)
 
+        params.append(embedding_literal)
         params.append(top_k)
 
         query = sql.SQL(
@@ -113,10 +114,16 @@ class PostgresSearchRepository:
             filters: SearchFilters | None = None,
     ) -> list[SearchChunkResult]:
         where_clauses = [
-            sql.SQL("content ILIKE %s")
+            sql.SQL(
+                """
+                to_tsvector('russian', content)
+                @@ websearch_to_tsquery('russian', %s)
+                """
+            )
         ]
         params: list[object] = [
-            f"%{query_text}%"
+            query_text,
+            query_text,
         ]
 
         if filters is not None:
@@ -153,15 +160,14 @@ class PostgresSearchRepository:
                 chunk_index,
                 chunk_type,
                 content,
-                NULL AS distance
+                NULL AS distance,
+                ts_rank_cd(
+                    to_tsvector('russian', content),
+                    websearch_to_tsquery('russian', %s)
+                ) AS rank_score
             FROM {schema}.chunks
             WHERE {where_clause}
-            ORDER BY
-                CASE
-                    WHEN content ILIKE %s THEN 0
-                    ELSE 1
-                END,
-                id
+            ORDER BY rank_score DESC, id
             LIMIT %s
             """
         ).format(
@@ -169,15 +175,16 @@ class PostgresSearchRepository:
             where_clause=sql.SQL(" AND ").join(where_clauses),
         )
 
-        params.insert(-1, f"%{query_text}%")
-
         with self._connect() as conn:
             with conn.cursor() as cur:
                 cur.execute(query, params)
                 rows = cur.fetchall()
 
         return [
-            self._row_to_result_with_score(row, score=1.0)
+            self._row_to_result_with_score(
+                row,
+                score=float(row[13] or 0.0),
+            )
             for row in rows
         ]
 
