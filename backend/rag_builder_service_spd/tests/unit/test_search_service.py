@@ -3,13 +3,18 @@
 import pytest
 
 from rag_builder.models.domain import EmbeddingResult
-from rag_builder.models.search import SearchChunkResult, SearchRequest
 from rag_builder.services.search_service import SearchService
+from rag_builder.models.search import (
+    SearchChunkResult,
+    SearchContextItem,
+    SearchRequest,
+)
 
 
 class FakeEmbeddingProvider:
     def __init__(self) -> None:
         self.received_text = None
+
 
     def create_embedding_with_usage(self, text: str) -> EmbeddingResult:
         self.received_text = text
@@ -27,6 +32,7 @@ class FakeSearchRepository:
         self.received_top_k = None
         self.received_filters = None
         self.received_query_text = None
+        self.received_expand_document_section_id = None
 
     def vector_search(
         self,
@@ -55,6 +61,43 @@ class FakeSearchRepository:
                 score=0.95,
                 distance=0.05,
             )
+        ]
+
+    def expand_context(
+            self,
+            document_section_id: int,
+    ):
+        self.received_expand_document_section_id = document_section_id
+
+        return [
+            SearchContextItem(
+                relation="parent",
+                document_section_id=7,
+                section_id=7,
+                parent_id=None,
+                clause="6",
+                title="Допуски формы и расположения поверхностей",
+                path="6",
+                page=1,
+                section_type="text",
+                content={
+                    "text": "Допуски формы и расположения поверхностей установлены..."
+                },
+            ),
+            SearchContextItem(
+                relation="child",
+                document_section_id=10,
+                section_id=8,
+                parent_id=7,
+                clause="6.1",
+                title="Допуск соосности",
+                path="6/6.1",
+                page=2,
+                section_type="text",
+                content={
+                    "text": "Дубликат основного результата."
+                },
+            ),
         ]
 
     def text_search(
@@ -160,19 +203,37 @@ def test_search_service_runs_sparse_search_without_embedding():
     assert response.results[0].score == 1.0
     assert response.results[0].clause == "6.1"
 
-def test_search_service_rejects_context_expansion_for_mvp():
+def test_search_service_expands_context_when_requested():
+    repository = FakeSearchRepository()
+    embedding_provider = FakeEmbeddingProvider()
+
     service = SearchService(
-        repository=FakeSearchRepository(),
-        embedding_provider=FakeEmbeddingProvider(),
+        repository=repository,
+        embedding_provider=embedding_provider,
     )
 
-    with pytest.raises(ValueError, match="Context expansion"):
-        service.search(
-            SearchRequest(
-                query="допуск",
-                expand_context=True,
-            )
+    response = service.search(
+        SearchRequest(
+            query="допуск",
+            expand_context=True,
         )
+    )
+
+    assert repository.received_expand_document_section_id == 10
+
+    assert response.context_expanded is True
+    assert response.results[0].context
+    assert response.results[0].context[0].relation == "parent"
+    assert response.results[0].context[0].clause == "6"
+    assert response.results[0].context[0].path == "6"
+
+    context_section_ids = {
+        item.document_section_id
+        for item in response.results[0].context
+    }
+
+    assert 7 in context_section_ids
+    assert 10 not in context_section_ids
 
 def test_search_service_runs_hybrid_search_sparse_first_no_duplicates():
     repository = FakeSearchRepository()
