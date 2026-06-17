@@ -78,4 +78,5 @@ artifacts/
 .coverage
 htmlcov/
 
-
+# Local manual test payloads
+examples/*.local.json
