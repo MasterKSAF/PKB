@@ -107,7 +107,7 @@ pytest
 Текущее состояние:
 
 ```text
-18 passed
+28 passed
 ```
 
 ---
@@ -233,6 +233,64 @@ docker compose down
 
 ---
 
+### POST /search
+
+RAG Search MVP endpoint.
+
+Search reads indexed chunks from PostgreSQL and returns source chunks with citation metadata. It does not generate LLM answers.
+
+Supported search types:
+
+| search_type | Description |
+|---|---|
+| `dense` | Vector search by `nsi.chunks.embedding` |
+| `sparse` | Text search by `nsi.chunks.content` |
+| `hybrid` | MVP merge: sparse results first, dense results after them, duplicates removed |
+
+Request example:
+
+```json
+{
+  "query": "допуск соосности",
+  "top_k": 5,
+  "search_type": "hybrid",
+  "expand_context": false
+}
+```
+
+Response contains chunks with citation fields:
+
+```json
+{
+  "query": "допуск соосности",
+  "search_type_used": "hybrid",
+  "results": [
+    {
+      "chunk_id": 151,
+      "document_id": 420000,
+      "document_version_id": 420001,
+      "document_section_id": 151,
+      "section_id": 3,
+      "clause": "6.1",
+      "path": "6/6.1",
+      "page": 2,
+      "content": "Допуск соосности оси отверстия..."
+    }
+  ],
+  "total_found": 1,
+  "context_expanded": false
+}
+```
+
+MVP limitations:
+
+- `hybrid` is a simple merge, not RRF yet.
+- `sparse` is a simple text search, not BM25 yet.
+- `context expansion` via `document_sections.path_ltree` is planned but not implemented yet.
+- With `EMBEDDING_PROVIDER=stub`, dense search is technical only and does not provide semantic ranking.
+
+---
+
 ## 10. Структура проекта
 
 ```text
@@ -343,7 +401,7 @@ sql/
 Текущее состояние:
 
 ```text
-18 passed
+28 passed
 ```
 
 ---
@@ -383,7 +441,7 @@ document_sections
 
 Текущее состояние:
 
-- 18 тестов проходят
+- 28 тестов проходят
 - PostgreSQL persistence реализован
 - pgvector поддерживается
 - ltree поддерживается
@@ -392,6 +450,17 @@ document_sections
 - batch embeddings реализованы
 
 Статус: MVP v1 Ready
+
+---
+
+#### RAG Search MVP
+
+* `POST /search`
+* dense vector search
+* sparse text search
+* simple hybrid merge
+* citation fields: `document_id`, `document_version_id`, `section_id`, `clause`, `path`, `page`, `content`
+* context expansion planned
 
 ---
 
