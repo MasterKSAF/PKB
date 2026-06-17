@@ -25,5 +25,6 @@ app.add_exception_handler(Exception, generic_exception_handler)
 
 
 @app.get("/health")
+@app.get("/api/v1/health")
 async def health_check():
     return {"status": "ok"}
