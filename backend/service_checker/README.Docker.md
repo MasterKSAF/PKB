@@ -65,7 +65,7 @@ docker compose -f backend/service_checker/docker/docker-compose.yml up -d
 
 - Docker Desktop 4.30+ (или Docker Engine 27+ с docker compose plugin)
 - 4 CPU, 8 GB RAM (рекомендуется)
-- Порты 5432, 6379, 9000, 9001, 8000, 8081-8087, 8090-8091 должны быть свободны
+- Порты 15432, 16379, 19000, 19001, 8000, 8080-8088, 8090-8091, 18092 должны быть свободны
 
 ## Быстрый запуск
 
@@ -128,7 +128,7 @@ docker compose -f backend/service_checker/docker/docker-compose.yml exec -T post
 docker compose -f backend/service_checker/docker/docker-compose.yml exec -T redis redis-cli ping
 
 # MinIO
-curl http://localhost:9000/minio/health/live
+curl http://localhost:19000/minio/health/live
 
 # Backend API (6 из 10 работают, 4 падают — см. специфичные проблемы ниже)
 curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/   # Orchestrator

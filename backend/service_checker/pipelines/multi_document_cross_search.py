@@ -22,7 +22,7 @@ from .base import (
     s3_sign_headers,
 )
 
-MINIO_PORT = 9000
+MINIO_PORT = 19000
 _HERE = Path(__file__).resolve().parent.parent
 TEST_PDF_KEY = "test-document.pdf"
 TEST_PDF_PATH = str(_HERE / "pdf" / "7bd97d737317a8a272bb18a405ab2d04.pdf")

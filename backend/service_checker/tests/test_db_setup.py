@@ -50,7 +50,7 @@ def setup_db_module():
     # Замокаем константы для тестов
     mod.DB_NAME = "pkb_neuro"
     mod.DB_HOST = "127.0.0.1"
-    mod.DB_PORT = 5432
+    mod.DB_PORT = 15432
     mod.DB_SUPERUSER = "postgres"
     mod.PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
     spec.loader.exec_module(mod)

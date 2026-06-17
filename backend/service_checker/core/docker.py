@@ -35,11 +35,11 @@ DOCKER_SUPERVISOR_SERVICES = {
     "query":               (8083, "/api/v1/health", "Query Service"),
     "registry":            (8084, "/api/v1/health", "Registry Service"),
     "integration":         (8085, "/openapi.json", "Integration Service"),
-    "converter-validator": (8086, "/health", "Converter-Validator"),
+    "converter-validator": (8086, "/api/v1/health", "Converter-Validator"),
     "parser":              (8087, "/api/v1/health", "Parser Service"),
     "rag-builder":         (8090, "/api/v1/health", "RAG Builder"),
     "rag-search":          (8091, "/api/v1/health", "RAG Search"),
-    "tei":                 (8092, "/health", "TEI (Embeddings)"),
+    "tei":                 (18092, "/health", "TEI (Embeddings)"),
 }
 
 

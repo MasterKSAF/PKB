@@ -633,7 +633,7 @@ class ApiCoverageTester:
                 pdf_path = Path(__file__).resolve().parent.parent / "pdf" / "7bd97d737317a8a272bb18a405ab2d04.pdf"
                 if pdf_path.exists():
                     pdf_bytes = pdf_path.read_bytes()
-                    minio_url = f"http://127.0.0.1:9000/documents/test-file-key.pdf"
+                    minio_url = f"http://127.0.0.1:19000/documents/test-file-key.pdf"
                     from service_checker.pipelines.base import s3_sign_headers
                     s3_headers = s3_sign_headers("PUT", minio_url, "minioadmin", "minioadmin", pdf_bytes)
                     try:

@@ -575,8 +575,8 @@ class PipelineRunner:
             "parser": 8087,
             "rag_builder": 8090,
             "rag_search": 8091,
-            "minio": 9000,  # MinIO S3 API
-            "tei": 8092,  # Hugging Face TEI
+            "minio": 19000,  # MinIO S3 API
+            "tei": 18092,  # Hugging Face TEI
         }
         return ports.get(service_key)
 

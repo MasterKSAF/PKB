@@ -30,7 +30,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 DB_NAME = os.getenv("DB_DATABASE", "pkb_neuro")
 DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
-DB_PORT = int(os.getenv("DB_PORT", "5432"))
+DB_PORT = int(os.getenv("DB_PORT", "15432"))
 DB_SUPERUSER = os.getenv("DB_SUPERUSER", "postgres")
 
 # Пользователи сервисов (каждый сервис может иметь своего)
@@ -168,56 +168,7 @@ def build_full_sql(drop_first: bool = False, skip_users: bool = False) -> str:
 
 def generate_env_files():
     """Создаёт .env файлы для каждого сервиса (если их нет)."""
-    env_files: dict[str, dict[str, str]] = {
-        # Registry Service
-        PROJECT_ROOT / "backend" / "registry_service" / ".env": {
-            "DB_USERNAME": "pkb_user",
-            "DB_PASSWORD": "pkb_pass",
-            "DB_DATABASE": DB_NAME,
-            "DB_HOST": DB_HOST,
-            "DB_PORT": str(DB_PORT),
-        },
-        # Integration Service
-        PROJECT_ROOT / "backend" / "integration_service" / ".env": {
-            "DB_USERNAME": "pkb_user",
-            "DB_PASSWORD": "pkb_pass",
-            "DB_DATABASE": DB_NAME,
-            "DB_HOST": DB_HOST,
-            "DB_PORT": str(DB_PORT),
-        },
-        # RAG Builder Service
-        PROJECT_ROOT / "backend" / "rag_builder" / ".env": {
-            "DB_HOST": DB_HOST,
-            "DB_PORT": str(DB_PORT),
-            "DB_NAME": DB_NAME,
-            "DB_USER": "rag_user",
-            "DB_PASSWORD": "rag_pass",
-            "EMBEDDING_PROVIDER": "mock",
-            "JWT_SECRET": "dev-secret-key-change-in-production",
-        },
-        # RAG Search Service
-        PROJECT_ROOT / "backend" / "rag_search_service" / ".env": {
-            "POSTGRES_USER": "rag_user",
-            "POSTGRES_PASSWORD": "rag_pass",
-            "POSTGRES_DB": DB_NAME,
-            "POSTGRES_HOST": DB_HOST,
-            "POSTGRES_PORT": str(DB_PORT),
-            "SERVICE_PORT": "8091",
-            "EMBEDDING_API_KEY": "",
-        },
-        # Orchestrator Service
-        PROJECT_ROOT / "backend" / "orchestrator_service" / ".env": {
-            "DATABASE_URL": f"postgresql+asyncpg://pkb_user:pkb_pass@{DB_HOST}:{DB_PORT}/{DB_NAME}",
-            "REDIS_URL": "redis://localhost:6379/0",
-            "AUTH_SERVICE_URL": "http://127.0.0.1:8082",
-            "AUTH_SERVICE_MOCK": "True",
-            "REGISTRY_SERVICE_URL": "http://127.0.0.1:8084",
-            "REGISTRY_SERVICE_MOCK": "True",
-            "HOST": "0.0.0.0",
-            "PORT": "8000",
-            "DEBUG": "True",
-        },
-    }
+    env_files: dict[str, dict[str, str]] = {}
 
     created = 0
     skipped = 0

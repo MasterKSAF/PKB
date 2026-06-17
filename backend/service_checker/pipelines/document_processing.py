@@ -22,7 +22,7 @@ from .base import (
 )
 
 # Порт MinIO S3 API (обычно 9000)
-MINIO_PORT = 9000
+MINIO_PORT = 19000
 
 # Тестовый PDF-файл из каталога service_checker/pdf/ (путь относительно этого файла, а не CWD)
 _HERE = Path(__file__).resolve().parent.parent

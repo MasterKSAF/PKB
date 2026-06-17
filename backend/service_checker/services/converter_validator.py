@@ -20,26 +20,19 @@ DISPLAY_NAME = "Converter-Validator Service"
 def get_service_def() -> ServiceDef:
     """Вернуть полное описание Converter-Validator Service."""
 
-    _warnings = [
-        "⚠️ Converter health на /health, а не /api/v1/health — сервис без префикса.",
-        "⚠️ task_id/version_id: docs API — int, сервис принимает и int, и str (отвечает int).",
-        "⚠️ document_id/validation_id: docs — int, сервис возвращает val-xxxx (string), не UUID.",
-    ]
+    _warnings: list = []
 
     endpoints = [
-        # ⚠️ WORKAROUND: health на /health, а не /api/v1/health (сервис не использует префикс API).
-        EndpointDef("GET", "/health", "health", "Health check сервиса",
+        EndpointDef("GET", f"{API_PREFIX}/health", "health", "Health check сервиса",
             response_schema={"status": str}),
         EndpointDef("POST", f"{API_PREFIX}/converter/preview/metadata", "converter",
             "Предпросмотр метаданных",
-            # ⚠️ WORKAROUND: docs API — int, но сервис принимает и int, и str.
             body={"task_id": "12345", "version_id": "1",
                   "raw_json": {"test": True}},
             # docs: { doc_code, title, document_type, year, revision }
             response_schema={"doc_code": str, "title": str, "document_type": str}),
         EndpointDef("POST", f"{API_PREFIX}/converter/convert", "converter",
             "Конвертация документа",
-            # ⚠️ WORKAROUND: docs — int, сервис принимает и int, и str.
             body={"task_id": "12345", "version_id": "1",
                   "raw_json": {"test": True}},
             # docs: { task_id, version_id, document_id, metadata{}, document{}, validation{} }
@@ -48,7 +41,6 @@ def get_service_def() -> ServiceDef:
                              "validation": dict}),
         EndpointDef("POST", f"{API_PREFIX}/validate/document", "validate",
             "Валидация документа",
-            # ⚠️ WORKAROUND: docs — int, сервис принимает и int, и str.
             body={"task_id": "12345", "version_id": "1",
                   "raw_json": {"test": True}},
             # docs: { validation_id, document_id, structure_valid, classification{}, status }

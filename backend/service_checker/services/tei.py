@@ -12,7 +12,7 @@ from .base import (
 )
 
 SERVICE_KEY = "tei"
-PORT = 8092
+PORT = 18092
 DISPLAY_NAME = "TEI (Embeddings)"
 
 

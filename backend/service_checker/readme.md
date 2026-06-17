@@ -90,14 +90,14 @@ service_checker/
 
 ## Текущий статус сервисов в Docker
 
-После фиксов (2026-06-15):
+После фиксов (2026-06-17):
 
 | Сервис | Порт | HTTP | supervisorctl | Проблемы |
 |--------|:----:|:----:|:-------------:|----------|
-| PostgreSQL | 5432 | — | — | здоров |
-| Redis | 6379 | — | — | здоров |
-| MinIO | 9000 | — | — | здоров |
-| TEI | 8092 | 200 | — | здоров |
+| PostgreSQL | 15432 | — | — | здоров |
+| Redis | 16379 | — | — | здоров |
+| MinIO | 19000 | — | — | здоров |
+| TEI | 18092 | 200 | — | здоров |
 | Gateway (Mock) | 8080 | 401 | RUNNING | Логи в stderr (аном. N22) |
 | Orchestrator | 8081 | 200 | RUNNING | preview/status 500->404 (аном. N26); защита от дублей (аном. N29) |
 | Auth | 8082 | 200 | RUNNING | Ключ JWT короткий (предупреждение) |
@@ -237,4 +237,5 @@ python -m service_checker docker --action full-report  # full-report включ�
 - **all_404 оверрайд** — если >=2 не-health эндпоинтов вернули 404, сервис помечается мёртвым (ping_ok=False, success откатывается)
 - **Статус-колонка отчёта** — ❌ если ping_ok=False или есть failed эндпоинты
 - **Пайплайны** — сквозные сценарии в отдельных файлах `pipelines/*.py`, запуск через `pipeline_test.py`
-- **Эмбеддинги через TEI** — локальный сервер эмбеддингов Hugging Face TEI с моделью `TrendHD/rubert-tiny2-int8` (312 dim, ONNX int8) на порту 8092
+- **Эмбеддинги через TEI** — локальный сервер эмбеддингов Hugging Face TEI с моделью `TrendHD/rubert-tiny2-int8` (312 dim, ONNX int8) на порту 18092
+

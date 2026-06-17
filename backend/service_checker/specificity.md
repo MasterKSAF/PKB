@@ -94,7 +94,7 @@ if expires_at is None:
 1. **docker-compose.yml** — добавлен сервис `tei`:
    - Образ: `ghcr.io/huggingface/text-embeddings-inference:cpu-latest`
    - Модель: `TrendHD/rubert-tiny2-int8` (312 dim, ONNX int8, русский)
-   - Порт: `8092:80`
+   - Порт: `18092:80` (было 8092:80)
    - Health check: `GET /health`
    - Volume: `./tei_model:/data` (bind mount локальной модели)
 2. **docker-compose.yml (env-common)** — изменены переменные эмбеддинга:
@@ -103,12 +103,10 @@ if expires_at is None:
    - `EMBEDDING_MODEL`: `Vuy/rubert-tiny2-onnx`
    - `EMBEDDING_DIM`: `1536` → `312`
 3. **supervisord.conf** — RAG Builder и RAG Search:
-   - Убрана зависимость от OpenAI API (`EMBEDDING_BASE_URL` → `http://127.0.0.1:8092`)
+   - Убрана зависимость от OpenAI API (`EMBEDDING_BASE_URL` → `http://127.0.0.1:18092`)
    - Добавлены `EMBEDDING_PROVIDER`, `EMBEDDING_MODEL`, `EMBEDDING_DIM`
-4. **api_coverage_test.py** — добавлен сервис `tei` (порт 8092) с эндпоинтами `/health` и `/embed`
-5. **Dockerfile.full** — добавлен EXPOSE 8092
-6. **pipelines/base.py** — добавлен порт `tei: 8092` в `_get_service_port`
-7. **docker/prepare_tei_model.py** — скрипт подготовки локальной модели из `cointegrated/rubert-tiny2` (конфиги) и `TrendHD/rubert-tiny2-int8` (ONNX)
+   - `api_coverage_test.py` — добавлен сервис `tei` (текущий host-порт), `_get_service_port`
+   - `docker/prepare_tei_model.py` — скрипт подготовки локальной модели
 
 ### Мотивация
 - Замена cloud-провайдера эмбеддингов (OpenAI) на локальный TEI
@@ -146,8 +144,8 @@ Caused by: No such file or directory (os error 2)
 - При запуске из Git Bash на Windows может потребоваться `MSYS_NO_PATHCONV=1` для команд `docker run` с volume
 
 ### Проверка
-- `curl http://127.0.0.1:8092/health` → 200 OK
-- `curl -X POST http://127.0.0.1:8092/embed -d '{"inputs":"test"}'` → возвращает 312-мерный вектор
+- `curl http://127.0.0.1:18092/health` → 200 OK
+- `curl -X POST http://127.0.0.1:18092/embed -d '{"inputs":"test"}'` → возвращает 312-мерный вектор
 - `docker inspect pkb-tei` → Health: healthy
 
 ### Статус
@@ -1195,4 +1193,30 @@ Warnings в отчёте могли устареть — сервисы изме
 
 ### Статус
 ✅ **Исправлено (checker, 2026-06-17)**
+
+---
+
+## 33. Converter-Validator — убраны все 3 варнинга (2026-06-17)
+
+### Проблема
+Все 3 варнинга Converter-Validator устарели:
+- `task_id/version_id`: сервис принимает и `int`, и `str`, в ответе `int` — расхождения с документацией нет
+- `document_id/validation_id`: `validation_id` возвращается как `val-xxxx` (внутренний формат сервиса) — docs тоже `string`, расхождения нет
+- `health на /health, а не /api/v1/health` — сервис исправлен (добавлен `/api/v1/health`)
+
+### Что исправлено
+**В сервисе `converter_validator_service` (разработчиками):**
+- Добавлен health endpoint `GET /api/v1/health`
+
+**В checker'е (`service_checker`):**
+- `services/converter_validator.py`: убраны все 3 warnings, health endpoint изменён с `/health` на `/api/v1/health`, удалены inline WORKAROUND-комментарии
+- `core/docker.py`: health path для converter-validator изменён с `/health` на `/api/v1/health`
+
+### Результат
+- **Converter-Validator: 0 warnings** ⚪
+- API Coverage: 4/4 ✅
+- Остальные warnings в отчёте: Registry ×1, Query ×1, Gateway ×2
+
+### Статус
+✅ **Исправлено (checker + сервис, 2026-06-17)**
 
