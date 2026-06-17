@@ -1007,6 +1007,7 @@ function mapGatewayAuditResponse(payload: any): ProcessingLogItem[] {
 
 function mapGatewayDraftRecord(payload: any) {
   const previewMetadata = normalizePreviewMetadata(payload.preview_metadata ?? payload.preview ?? null);
+  const rawData = payload.raw_data ?? payload.raw ?? payload;
 
   return {
     ...payload,
@@ -1025,7 +1026,7 @@ function mapGatewayDraftRecord(payload: any) {
     approved_document_id: payload.document_id ?? payload.approved_document_id ?? payload.promoted_document_id ?? null,
     error_code: payload.error_code ?? null,
     error_message: payload.error_message ?? null,
-    raw_data: payload.raw_data ?? null,
+    raw_data: rawData,
     created_at: payload.created_at ?? payload.createdAt ?? '',
     updated_at: payload.updated_at ?? payload.updatedAt ?? '',
   };
@@ -1468,12 +1469,10 @@ export const draftsApi = {
     return mapGatewayDraftRecord(response.data);
   },
   list: async (params: { documentKey?: string; status?: string; page?: number; pageSize?: number } = {}) => {
-    if (!params.documentKey) return [];
-
     const response = await gatewayRequest<any>(() =>
       apiClient.get('/drafts', {
         params: {
-          document_key: params.documentKey,
+          ...(params.documentKey ? { document_key: params.documentKey } : {}),
           status: params.status,
           page: params.page ?? 1,
           page_size: params.pageSize ?? 50,

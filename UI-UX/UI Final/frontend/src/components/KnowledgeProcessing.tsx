@@ -4,6 +4,7 @@ import {
   Box,
   Button,
   Chip,
+  Collapse,
   Container,
   Dialog,
   DialogActions,
@@ -19,7 +20,9 @@ import {
 } from '@mui/material';
 import {
   ChevronLeft,
+  ChevronDown,
   ChevronRight,
+  ChevronUp,
   CheckCircle2,
   Download,
   FileDown,
@@ -314,6 +317,23 @@ const getStatusColor = (status: DraftStatus) => {
   }
 };
 
+const getStatusDotColor = (status: DraftStatus) => {
+  switch (status) {
+    case 'approved':
+      return '#22c55e';
+    case 'ready_for_approve':
+      return '#eab308';
+    case 'previewing':
+      return '#38bdf8';
+    case 'discarded':
+    case 'failed':
+      return '#ef4444';
+    case 'uploaded':
+    default:
+      return '#60a5fa';
+  }
+};
+
 const getQueueColor = (status: string) => {
   if (status === 'в работе') return 'warning';
   if (status === 'в очереди') return 'default';
@@ -467,6 +487,99 @@ const buildMetadataReviewRows = (draft: DraftItem, form: DraftForm) => [
   },
 ];
 
+const displayValue = (value: unknown) => {
+  const text = String(value ?? '').trim();
+  return text || 'не передано';
+};
+
+const countTextMatches = (text: string, query: string) => {
+  if (!query) return 0;
+
+  let count = 0;
+  let position = text.toLowerCase().indexOf(query);
+
+  while (position !== -1) {
+    count += 1;
+    position = text.toLowerCase().indexOf(query, position + query.length);
+  }
+
+  return count;
+};
+
+const renderHighlightedText = (text: string, query: string, isLight: boolean) => {
+  if (!query) return text;
+
+  const lowerText = text.toLowerCase();
+  const parts: React.ReactNode[] = [];
+  let cursor = 0;
+  let position = lowerText.indexOf(query);
+  let index = 0;
+
+  while (position !== -1) {
+    if (position > cursor) {
+      parts.push(text.slice(cursor, position));
+    }
+
+    parts.push(
+      <Box
+        component="mark"
+        key={`${position}-${index}`}
+        sx={{
+          px: 0.35,
+          py: 0.05,
+          borderRadius: 0.7,
+          color: isLight ? '#111827' : '#f8fbff',
+          bgcolor: isLight ? 'rgba(202, 138, 4, 0.28)' : 'rgba(216, 176, 122, 0.36)',
+        }}
+      >
+        {text.slice(position, position + query.length)}
+      </Box>,
+    );
+
+    cursor = position + query.length;
+    position = lowerText.indexOf(query, cursor);
+    index += 1;
+  }
+
+  if (cursor < text.length) {
+    parts.push(text.slice(cursor));
+  }
+
+  return parts;
+};
+
+const buildDraftRawJson = (draft: DraftItem, form: DraftForm) => ({
+  gateway_raw_response: draft.gatewayRawData ?? null,
+  normalized_gateway: {
+    draft_id: draft.gatewayDraftId || null,
+    task_id: draft.gatewayTaskId || null,
+    document_key: draft.gatewayDocumentKey || null,
+    document_id: draft.gatewayPromotedDocumentId || null,
+    version_id: draft.gatewayVersionId || null,
+    status: draft.status,
+    confidence: draft.confidence || null,
+    preview_metadata: draft.preview,
+    duplicates: draft.duplicates,
+  },
+  manual_metadata: {
+    title: form.title || null,
+    source_type: form.sourceType || null,
+    doc_code: form.docCode || null,
+    year: form.year || null,
+    mks_oks_code: form.mksOksCode || null,
+    okstu_code: form.okstuCode || null,
+    era: form.era || null,
+    jurisdiction: form.jurisdiction || null,
+    issuing_body: form.issuingBody || null,
+  },
+  gateway_error: draft.gatewayErrorCode || draft.gatewayErrorMessage
+    ? {
+        code: draft.gatewayErrorCode,
+        message: draft.gatewayErrorMessage,
+      }
+    : null,
+});
+
 const sortDrafts = (items: DraftItem[], sort: DraftSort) => {
   const statusRank: Record<DraftStatus, number> = {
     ready_for_approve: 0,
@@ -525,6 +638,8 @@ const draftProgressByStatus: Record<DraftStatus, number> = {
   discarded: 100,
   failed: 100,
 };
+
+const isActiveDraftStatus = (status: DraftStatus) => status !== 'approved' && status !== 'discarded';
 
 const normalizeDraftStatusFromGateway = (status?: string): DraftStatus => {
   const normalized = String(status ?? '').toLowerCase();
@@ -655,6 +770,16 @@ export const KnowledgeProcessing: React.FC = () => {
   const [previewPageIndex, setPreviewPageIndex] = useState(0);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
+  const [metadataOpen, setMetadataOpen] = useState(true);
+  const [classificationOpen, setClassificationOpen] = useState(false);
+  const [gatewayDetailsOpen, setGatewayDetailsOpen] = useState(false);
+  const [rawJsonOpen, setRawJsonOpen] = useState(false);
+  const [duplicatesOpen, setDuplicatesOpen] = useState(false);
+  const [processingStatusOpen, setProcessingStatusOpen] = useState(false);
+  const [previewPanelOpen, setPreviewPanelOpen] = useState(false);
+  const [previewSearch, setPreviewSearch] = useState('');
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [rejectComment, setRejectComment] = useState('');
   const [draftSort, setDraftSort] = useState<DraftSort>('updated_desc');
   const [drafts, setDrafts] = useState<DraftItem[]>(() => (workMode === 'demo' ? createDemoDrafts() : []));
   const [draftDocumentKeys, setDraftDocumentKeys] = useState<string[]>(() =>
@@ -681,10 +806,21 @@ export const KnowledgeProcessing: React.FC = () => {
   const gatewayDraftsQuery = useQuery({
     queryKey: ['gateway-drafts', workMode, draftDocumentKeys],
     queryFn: async () => {
-      const batches = await Promise.all(draftDocumentKeys.map((documentKey) => draftsApi.list({ documentKey })));
-      return batches.flat();
+      const gatewayDrafts = await draftsApi.list();
+      const byId = new Map<string, any>(
+        gatewayDrafts.map((item: any) => [String(item.draft_id ?? item.id), item]),
+      );
+
+      if (draftDocumentKeys.length > 0) {
+        const batches = await Promise.all(draftDocumentKeys.map((documentKey) => draftsApi.list({ documentKey })));
+        batches.flat().forEach((item: any) => {
+          byId.set(String(item.draft_id ?? item.id), item);
+        });
+      }
+
+      return Array.from(byId.values());
     },
-    enabled: workMode === 'prod' && draftDocumentKeys.length > 0,
+    enabled: workMode === 'prod',
     staleTime: 20_000,
   });
 
@@ -699,6 +835,16 @@ export const KnowledgeProcessing: React.FC = () => {
     setPreviewPageIndex(0);
     setPreviewLoading(false);
     setPreviewError('');
+    setMetadataOpen(true);
+    setClassificationOpen(false);
+    setGatewayDetailsOpen(false);
+    setRawJsonOpen(false);
+    setDuplicatesOpen(false);
+    setProcessingStatusOpen(false);
+    setPreviewPanelOpen(false);
+    setPreviewSearch('');
+    setRejectDialogOpen(false);
+    setRejectComment('');
     setDraftSort('updated_desc');
     setDraftDocumentKeys(workMode === 'prod' ? readStoredDraftDocumentKeys() : []);
     setDeletedGatewayDraftIds([]);
@@ -723,7 +869,7 @@ export const KnowledgeProcessing: React.FC = () => {
         });
       });
 
-      return Array.from(byId.values());
+      return Array.from(byId.values()).filter((draft) => isActiveDraftStatus(draft.status));
     });
   }, [deletedGatewayDraftIds, gatewayDraftsQuery.data, workMode]);
 
@@ -741,11 +887,18 @@ export const KnowledgeProcessing: React.FC = () => {
     setPreviewDialogOpen(false);
     setPreviewPageIndex(0);
     setPreviewLoading(false);
+    setPreviewPanelOpen(false);
+    setPreviewSearch('');
+    setRejectDialogOpen(false);
+    setRejectComment('');
   }, [activeTab]);
 
   useEffect(() => {
     if (!selectedDraftId) {
       setDraftForm(createDefaultDraftForm());
+      setPreviewPanelOpen(false);
+      setPreviewSearch('');
+      setPreviewPageIndex(0);
       return;
     }
 
@@ -866,8 +1019,8 @@ export const KnowledgeProcessing: React.FC = () => {
         writeStoredDraftDocumentKeys(next);
         return next;
       });
-      await queryClient.invalidateQueries({ queryKey: ['gateway-drafts', workMode] });
     }
+    await queryClient.invalidateQueries({ queryKey: ['gateway-drafts', workMode] });
     await queryClient.invalidateQueries({ queryKey: ['gateway-documents', workMode] });
     await queryClient.invalidateQueries({ queryKey: ['gateway-documents-queue', workMode] });
     return response;
@@ -1050,7 +1203,7 @@ export const KnowledgeProcessing: React.FC = () => {
     })();
   };
 
-  const handleDecision = async (draftId: string, action: 'approve' | 'reject') => {
+  const handleDecision = async (draftId: string, action: 'approve' | 'reject', comment?: string) => {
     const draft = getSelectedDraft(draftId);
     if (!draft) return;
 
@@ -1064,14 +1217,9 @@ export const KnowledgeProcessing: React.FC = () => {
     }
 
     if (workMode === 'demo') {
-      updateDraft(draftId, {
-        status: action === 'approve' ? 'approved' : 'discarded',
-        progress: 100,
-        note:
-          action === 'approve'
-            ? 'Черновик принят и готов перейти в базу знаний.'
-            : 'Черновик отклонён и может быть загружен повторно.',
-      });
+      setDrafts((current) => current.filter((item) => item.id !== draftId));
+      setSelectedDraftId('');
+      setPreviewPanelOpen(false);
       setNotice(
         action === 'approve'
           ? `Документ «${draft.title}» принят в базу знаний.`
@@ -1092,21 +1240,19 @@ export const KnowledgeProcessing: React.FC = () => {
     }
 
     try {
-      const response = await draftsApi.decide(gatewayDraftId, action, draftForm.title.trim() || undefined);
-      updateDraft(draftId, {
-        ...draftPatchFromGateway(response, draft),
-        status: action === 'approve' ? 'approved' : 'discarded',
-        progress: 100,
-        note:
-          response?.message ??
-          (action === 'approve'
-            ? 'Черновик принят и готов перейти в базу знаний.'
-            : 'Черновик отклонён и может быть загружен повторно.'),
-      });
+      const response = await draftsApi.decide(
+        gatewayDraftId,
+        action,
+        comment || (action === 'approve' ? 'Метаданные проверены.' : 'Черновик отклонён администратором.'),
+      );
+      setDrafts((current) => current.filter((item) => item.id !== draftId));
+      setSelectedDraftId('');
+      setPreviewPanelOpen(false);
+      const gatewayMessage = typeof response?.message === 'string' && response.message.trim() ? ` ${response.message}` : '';
       setNotice(
         action === 'approve'
-          ? `Документ «${draft.title}» принят в базу знаний.`
-          : `Документ «${draft.title}» отклонён.`,
+          ? `Документ «${draft.title}» принят в базу знаний.${gatewayMessage}`
+          : `Документ «${draft.title}» отклонён.${gatewayMessage}`,
       );
       if (action === 'approve') {
         await queryClient.invalidateQueries({ queryKey: ['gateway-documents', workMode] });
@@ -1123,6 +1269,20 @@ export const KnowledgeProcessing: React.FC = () => {
       });
       setNotice(`Не удалось отправить решение по «${draft.title}» в Gateway.`);
     }
+  };
+
+  const handleOpenRejectDialog = () => {
+    if (!selectedDraft || !canDecideDraft) return;
+    setRejectComment('');
+    setRejectDialogOpen(true);
+  };
+
+  const handleSubmitReject = () => {
+    if (!selectedDraft) return;
+    const comment = rejectComment.trim() || 'Черновик отклонён администратором.';
+    setRejectDialogOpen(false);
+    setRejectComment('');
+    void handleDecision(selectedDraft.id, 'reject', comment);
   };
 
   const handleDeleteDraft = (draftId: string) => {
@@ -1188,8 +1348,22 @@ export const KnowledgeProcessing: React.FC = () => {
     setPreviewError('');
   };
 
+  const handleOpenPreviewPanel = (draftId = selectedDraftId) => {
+    const draft = getSelectedDraft(draftId);
+    if (!draft) return;
+
+    setSelectedDraftId(draftId);
+    setPreviewPanelOpen(true);
+    setPreviewPageIndex(0);
+    setPreviewError('');
+    setPreviewLoading(draft.status === 'previewing');
+  };
+
   const previewPages = selectedDraft ? buildPreviewPages(selectedDraft) : [];
   const currentPreviewPage = previewPages[Math.min(previewPageIndex, Math.max(previewPages.length - 1, 0))] ?? null;
+  const currentPreviewText = currentPreviewPage?.lines.join('\n') ?? '';
+  const normalizedPreviewSearch = previewSearch.trim().toLowerCase();
+  const previewSearchMatchCount = countTextMatches(currentPreviewText, normalizedPreviewSearch);
   const workspaceDraft = selectedDraft ?? buildWorkspaceDraft(draftForm, selectedFileName || '');
   const hasWorkspaceInput = Boolean(
     selectedDraft ||
@@ -1434,7 +1608,7 @@ export const KnowledgeProcessing: React.FC = () => {
                 variant="outlined"
                 color="error"
                 startIcon={<XCircle size={16} />}
-                onClick={() => selectedDraft && void handleDecision(selectedDraft.id, 'reject')}
+                onClick={handleOpenRejectDialog}
                 disabled={!canDecideDraft}
               >
                 Отклонить черновик
@@ -1512,7 +1686,7 @@ export const KnowledgeProcessing: React.FC = () => {
 
               {workMode === 'prod' && gatewayDraftsQuery.isError && (
                 <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2 }}>
-                  Не удалось загрузить черновики из Gateway по сохраненным `document_key`.
+                  Не удалось загрузить черновики из Gateway.
                 </Alert>
               )}
 
@@ -1537,7 +1711,7 @@ export const KnowledgeProcessing: React.FC = () => {
                         <Box
                           sx={{
                             display: 'grid',
-                            gridTemplateColumns: 'minmax(0, 1fr) auto',
+                            gridTemplateColumns: 'minmax(0, 1fr) auto auto',
                             gap: 1,
                             alignItems: 'center',
                           }}
@@ -1556,13 +1730,37 @@ export const KnowledgeProcessing: React.FC = () => {
                           >
                             {index + 1}. {draft.title}
                           </Typography>
-                          <Chip
-                            label={getStatusLabel(draft.status)}
-                            size="small"
-                            color={getStatusColor(draft.status)}
-                            variant="outlined"
-                            sx={{ height: 22, '& .MuiChip-label': { px: 0.8, fontSize: '0.68rem' } }}
+                          <Box
+                            title={getStatusLabel(draft.status)}
+                            aria-label={getStatusLabel(draft.status)}
+                            sx={{
+                              width: 10,
+                              height: 10,
+                              borderRadius: '50%',
+                              bgcolor: getStatusDotColor(draft.status),
+                              boxShadow: `0 0 0 3px ${getStatusDotColor(draft.status)}24`,
+                            }}
                           />
+                          <IconButton
+                            aria-label={`Предпросмотр ${draft.title}`}
+                            title="Предпросмотр документа"
+                            size="small"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleOpenPreviewPanel(draft.id);
+                            }}
+                            sx={{
+                              width: 26,
+                              height: 26,
+                              color: isLight ? '#0284c7' : '#98d9d8',
+                              border: `1px solid ${isLight ? 'rgba(14, 116, 144, 0.22)' : 'rgba(152, 217, 216, 0.24)'}`,
+                              '&:hover': {
+                                bgcolor: isLight ? 'rgba(14, 116, 144, 0.08)' : 'rgba(152, 217, 216, 0.08)',
+                              },
+                            }}
+                          >
+                            <FileSearch size={14} />
+                          </IconButton>
                         </Box>
                       </Box>
                     );
@@ -1581,171 +1779,405 @@ export const KnowledgeProcessing: React.FC = () => {
 
           <Paper variant="outlined" sx={{ p: 1.45, borderRadius: 3, ...panelSx }}>
             <Stack spacing={1.15}>
-              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                <FileSearch size={18} color={isLight ? '#0284c7' : '#98d9d8'} />
-                <Box sx={{ minWidth: 0 }}>
-                  <Typography sx={{ fontWeight: 560, color: isLight ? '#0f172a' : 'rgba(233, 237, 243, 0.92)' }}>
-                    Рабочая область черновика
-                  </Typography>
-                </Box>
+              <Stack
+                direction={{ xs: 'column', sm: 'row' }}
+                spacing={1}
+                sx={{ alignItems: { xs: 'flex-start', sm: 'center' }, justifyContent: 'space-between' }}
+              >
+                <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
+                  <FileSearch size={18} color={isLight ? '#0284c7' : '#98d9d8'} />
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography sx={{ fontWeight: 560, color: isLight ? '#0f172a' : 'rgba(233, 237, 243, 0.92)' }}>
+                      Рабочая область черновика
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Метаданные, JSON, классификация и предпросмотр документа.
+                    </Typography>
+                  </Box>
+                </Stack>
+                <Chip
+                  label={selectedDraft ? `draft_id ${workspaceDraft.gatewayDraftId || workspaceDraft.id}` : 'черновик не выбран'}
+                  size="small"
+                  variant="outlined"
+                  sx={{ flexShrink: 0 }}
+                />
               </Stack>
 
-              <Paper
-                variant="outlined"
+              {!selectedDraft && (
+                <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
+                  Выберите черновик слева, чтобы открыть правку метаданных, Raw JSON, данные Gateway и предпросмотр.
+                </Alert>
+              )}
+
+              <Box
                 sx={{
-                  minHeight: 420,
-                  p: 2.1,
-                  borderRadius: 2.3,
-                  bgcolor: '#f4f1e8',
-                  color: '#202020',
-                  fontFamily: 'Georgia, serif',
+                  display: 'grid',
+                  gridTemplateColumns: {
+                    xs: '1fr',
+                    lg: previewPanelOpen && selectedDraft ? 'minmax(0, 1fr) minmax(360px, 0.86fr)' : '1fr',
+                  },
+                  gap: 1.25,
+                  alignItems: 'start',
                 }}
               >
-                <Stack spacing={1.15}>
-                  <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                    <Box sx={{ minWidth: 0 }}>
-                      <Typography variant="caption" sx={{ color: '#777' }}>
-                        Предпросмотр документа
-                      </Typography>
-                      <Typography variant="h6" sx={{ mt: 0.65, color: '#1f1f1f', fontFamily: 'Georgia, serif' }}>
-                        {workspacePreviewPage?.title ?? 'Черновик не выбран'}
-                      </Typography>
-                    </Box>
-                  </Stack>
-
-                  {workspacePreviewPage ? (
-                    <Paper
-                      variant="outlined"
-                      sx={{
-                        minHeight: 310,
-                        p: 2.2,
-                        borderRadius: 2,
-                        bgcolor: '#fbf7ef',
-                        borderColor: 'rgba(99, 89, 68, 0.22)',
-                        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.7), 0 8px 18px rgba(15,23,42,0.08)',
-                        color: '#202020',
-                      }}
+                <Stack spacing={1}>
+                  <Paper variant="outlined" sx={{ borderRadius: 2.2, overflow: 'hidden', ...panelSx }}>
+                    <Button
+                      fullWidth
+                      onClick={() => setMetadataOpen((current) => !current)}
+                      endIcon={metadataOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      sx={{ justifyContent: 'space-between', px: 1.25, py: 1, color: 'text.primary', textTransform: 'none' }}
                     >
-                      <Stack spacing={1.4}>
-                        <Box>
-                          <Typography variant="caption" sx={{ color: '#7c6f57' }}>
-                            Страница 1
-                          </Typography>
-                          <Typography variant="h6" sx={{ mt: 0.45, color: '#222', fontFamily: 'Georgia, serif' }}>
-                            {workspacePreviewPage.title}
-                          </Typography>
-                        </Box>
-                        <Typography
+                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
+                        <Typography sx={{ fontWeight: 560 }}>Сверка и правка метаданных</Typography>
+                        <Chip label="первый шаг" size="small" variant="outlined" />
+                      </Stack>
+                    </Button>
+                    <Collapse in={metadataOpen}>
+                      <Divider sx={{ borderColor: 'rgba(198, 214, 236, 0.18)' }} />
+                      <Box
+                        sx={{
+                          display: 'grid',
+                          gridTemplateColumns: { xs: '1fr', lg: '0.72fr 0.92fr 1.25fr auto' },
+                          gap: 1,
+                          alignItems: 'start',
+                          p: 1.25,
+                        }}
+                      >
+                        <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', lg: 'block' } }} />
+                        <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', lg: 'block' }, fontWeight: 560 }}>
+                          Текущее значение
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', lg: 'block' }, fontWeight: 560 }}>
+                          Новое значение
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', lg: 'block' }, fontWeight: 560 }}>
+                          Статус
+                        </Typography>
+                        {buildMetadataReviewRows(workspaceDraft, draftForm).map((row) => (
+                          <React.Fragment key={row.label}>
+                            <Typography variant="caption" color="text.secondary" sx={{ pt: 1 }}>
+                              {row.label}
+                            </Typography>
+                            <Typography variant="caption" sx={{ overflowWrap: 'anywhere', pt: 1.05 }}>
+                              {row.current || 'не заполнено'}
+                            </Typography>
+                            {renderMetadataFieldInput(row.label)}
+                            <Chip
+                              size="small"
+                              label={getMetadataStatusLabel(row.status)}
+                              color={getMetadataStatusColor(row.status) as 'default' | 'info' | 'success' | 'warning'}
+                              variant="outlined"
+                            />
+                          </React.Fragment>
+                        ))}
+                      </Box>
+                    </Collapse>
+                  </Paper>
+
+                  <Paper variant="outlined" sx={{ borderRadius: 2.2, overflow: 'hidden', ...panelSx }}>
+                    <Button
+                      fullWidth
+                      onClick={() => setRawJsonOpen((current) => !current)}
+                      endIcon={rawJsonOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      disabled={!selectedDraft}
+                      sx={{ justifyContent: 'space-between', px: 1.25, py: 1, color: 'text.primary', textTransform: 'none' }}
+                    >
+                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
+                        <Typography sx={{ fontWeight: 560 }}>Raw JSON</Typography>
+                        <Chip label={workspaceDraft.gatewayRawData ? 'Gateway raw' : 'нормализованный снимок'} size="small" variant="outlined" />
+                      </Stack>
+                    </Button>
+                    <Collapse in={rawJsonOpen}>
+                      <Divider sx={{ borderColor: 'rgba(198, 214, 236, 0.18)' }} />
+                      <Stack spacing={1} sx={{ p: 1.25 }}>
+                        {!workspaceDraft.gatewayRawData && (
+                          <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
+                            Gateway не передал исходный raw JSON. Ниже показан нормализованный снимок черновика.
+                          </Alert>
+                        )}
+                        <Box
                           component="pre"
                           sx={{
                             m: 0,
+                            maxHeight: 320,
+                            overflow: 'auto',
+                            p: 1.25,
+                            borderRadius: 2,
+                            bgcolor: isLight ? 'rgba(15, 23, 42, 0.05)' : 'rgba(2, 6, 12, 0.62)',
+                            color: isLight ? '#0f172a' : 'rgba(233, 237, 243, 0.92)',
+                            fontSize: '0.76rem',
+                            lineHeight: 1.45,
                             whiteSpace: 'pre-wrap',
-                            lineHeight: 1.7,
-                            fontFamily: 'inherit',
-                            fontSize: '0.98rem',
-                            minHeight: 220,
+                            overflowWrap: 'anywhere',
                           }}
                         >
-                          {workspacePreviewPage.lines.join('\n')}
-                        </Typography>
+                          {JSON.stringify(buildDraftRawJson(workspaceDraft, draftForm), null, 2)}
+                        </Box>
                       </Stack>
-                    </Paper>
-                  ) : (
-                    <Paper
-                      variant="outlined"
-                      sx={{
-                        minHeight: 310,
-                        p: 2.2,
-                        borderRadius: 2,
-                        bgcolor: '#fbf7ef',
-                        borderColor: 'rgba(99, 89, 68, 0.22)',
-                        color: '#6f6757',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <Typography sx={{ fontFamily: 'Georgia, serif' }}>Нет предпросмотра</Typography>
-                    </Paper>
-                  )}
+                    </Collapse>
+                  </Paper>
 
-                  <Stack direction="row" sx={{ justifyContent: 'center', pt: 0.25 }}>
+                  <Paper variant="outlined" sx={{ borderRadius: 2.2, overflow: 'hidden', ...panelSx }}>
                     <Button
-                      className="app-action-button"
-                      variant="outlined"
-                      startIcon={<Maximize2 size={16} />}
-                      onClick={() => selectedDraft && handleOpenPreviewDialog(selectedDraft.id)}
+                      fullWidth
+                      onClick={() => setGatewayDetailsOpen((current) => !current)}
+                      endIcon={gatewayDetailsOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                       disabled={!selectedDraft}
+                      sx={{ justifyContent: 'space-between', px: 1.25, py: 1, color: 'text.primary', textTransform: 'none' }}
                     >
-                      Развернуть
-                    </Button>
-                  </Stack>
-                </Stack>
-              </Paper>
-
-              <Paper variant="outlined" sx={{ p: 1.25, borderRadius: 2.2, ...panelSx }}>
-                <Stack spacing={1}>
-                  <Typography sx={{ fontWeight: 560 }}>Сверка и правка метаданных</Typography>
-                  <Box
-                    sx={{
-                      display: 'grid',
-                      gridTemplateColumns: { xs: '1fr', lg: '0.72fr 0.92fr 1.25fr auto' },
-                      gap: 1,
-                      alignItems: 'start',
-                    }}
-                  >
-                    <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', lg: 'block' } }} />
-                    <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', lg: 'block' }, fontWeight: 560 }}>
-                      Текущее значение
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', lg: 'block' }, fontWeight: 560 }}>
-                      Новое значение
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', lg: 'block' }, fontWeight: 560 }}>
-                      Статус
-                    </Typography>
-                    {buildMetadataReviewRows(workspaceDraft, draftForm).map((row) => (
-                      <React.Fragment key={row.label}>
-                        <Typography variant="caption" color="text.secondary" sx={{ pt: 1 }}>
-                          {row.label}
-                        </Typography>
-                        <Typography variant="caption" sx={{ overflowWrap: 'anywhere', pt: 1.05 }}>
-                          {row.current || 'не заполнено'}
-                        </Typography>
-                        {renderMetadataFieldInput(row.label)}
-                        <Chip
-                          size="small"
-                          label={getMetadataStatusLabel(row.status)}
-                          color={getMetadataStatusColor(row.status) as 'default' | 'info' | 'success' | 'warning'}
-                          variant="outlined"
-                        />
-                      </React.Fragment>
-                    ))}
-                  </Box>
-                </Stack>
-              </Paper>
-
-              {selectedDraft ? (
-                <>
-                  {selectedDraft.duplicates.length > 0 && (
-                    <Box>
-                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.8 }}>
-                        Кандидаты на дубликаты
-                      </Typography>
-                      <Stack spacing={1}>
-                        {selectedDraft.duplicates.map((duplicate) => (
-                          <Alert key={duplicate.title} severity="warning" variant="outlined" sx={{ borderRadius: 2 }}>
-                            <Typography sx={{ fontWeight: 560 }}>{duplicate.title}</Typography>
-                            <Typography variant="body2" color="text.secondary">
-                              {duplicate.reason} · похожесть {Math.round(duplicate.similarity * 100)}%
-                            </Typography>
-                          </Alert>
-                        ))}
+                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
+                        <Typography sx={{ fontWeight: 560 }}>Данные Gateway</Typography>
+                        <Chip label={workspaceDraft.gatewayDraftId ? 'есть draft_id' : 'локальный черновик'} size="small" variant="outlined" />
                       </Stack>
-                    </Box>
-                  )}
-                </>
-              ) : null}
+                    </Button>
+                    <Collapse in={gatewayDetailsOpen}>
+                      <Divider sx={{ borderColor: 'rgba(198, 214, 236, 0.18)' }} />
+                      <Box
+                        sx={{
+                          display: 'grid',
+                          gridTemplateColumns: { xs: '1fr', md: '0.74fr 1fr 0.74fr 1fr' },
+                          gap: 1,
+                          p: 1.25,
+                        }}
+                      >
+                        {[
+                          ['draft_id', workspaceDraft.gatewayDraftId || workspaceDraft.id],
+                          ['task_id', workspaceDraft.gatewayTaskId],
+                          ['version_id', workspaceDraft.gatewayVersionId],
+                          ['document_key', workspaceDraft.gatewayDocumentKey],
+                          ['document_id', workspaceDraft.gatewayPromotedDocumentId],
+                          ['file_hash_sha256', workspaceDraft.gatewayFileHashSha256],
+                          ['title_hash_sha256', workspaceDraft.gatewayTitleHashSha256],
+                          ['ошибка Gateway', workspaceDraft.gatewayErrorMessage || workspaceDraft.gatewayErrorCode],
+                        ].map(([label, value]) => (
+                          <React.Fragment key={label}>
+                            <Typography variant="caption" color="text.secondary">
+                              {label}
+                            </Typography>
+                            <Typography variant="caption" sx={{ overflowWrap: 'anywhere' }}>
+                              {displayValue(value)}
+                            </Typography>
+                          </React.Fragment>
+                        ))}
+                      </Box>
+                    </Collapse>
+                  </Paper>
+
+                  <Paper variant="outlined" sx={{ borderRadius: 2.2, overflow: 'hidden', ...panelSx }}>
+                    <Button
+                      fullWidth
+                      onClick={() => setClassificationOpen((current) => !current)}
+                      endIcon={classificationOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      disabled={!selectedDraft}
+                      sx={{ justifyContent: 'space-between', px: 1.25, py: 1, color: 'text.primary', textTransform: 'none' }}
+                    >
+                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
+                        <Typography sx={{ fontWeight: 560 }}>Классификация</Typography>
+                        <Chip label={workspaceDraft.mksOksCode || workspaceDraft.okstuCode ? 'заполнено частично' : 'не заполнено'} size="small" variant="outlined" />
+                      </Stack>
+                    </Button>
+                    <Collapse in={classificationOpen}>
+                      <Divider sx={{ borderColor: 'rgba(198, 214, 236, 0.18)' }} />
+                      <Box
+                        sx={{
+                          display: 'grid',
+                          gridTemplateColumns: { xs: '1fr', md: '0.8fr 1fr 0.8fr 1fr' },
+                          gap: 1,
+                          p: 1.25,
+                        }}
+                      >
+                        {[
+                          ['МКС / ОКС', workspaceDraft.mksOksCode],
+                          ['ОКСТУ', workspaceDraft.okstuCode],
+                          ['Тип источника', workspaceDraft.sourceType],
+                          ['Эра', workspaceDraft.era],
+                          ['Юрисдикция', workspaceDraft.jurisdiction],
+                          ['Издатель', workspaceDraft.issuingBody],
+                          ['Категории', 'не переданы Gateway'],
+                          ['Confidence', workspaceDraft.confidence ? `${Math.round(workspaceDraft.confidence * 100)}%` : 'не передано'],
+                        ].map(([label, value]) => (
+                          <React.Fragment key={label}>
+                            <Typography variant="caption" color="text.secondary">
+                              {label}
+                            </Typography>
+                            <Typography variant="caption" sx={{ overflowWrap: 'anywhere' }}>
+                              {displayValue(value)}
+                            </Typography>
+                          </React.Fragment>
+                        ))}
+                      </Box>
+                    </Collapse>
+                  </Paper>
+
+                  <Paper variant="outlined" sx={{ borderRadius: 2.2, overflow: 'hidden', ...panelSx }}>
+                    <Button
+                      fullWidth
+                      onClick={() => setDuplicatesOpen((current) => !current)}
+                      endIcon={duplicatesOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      disabled={!selectedDraft}
+                      sx={{ justifyContent: 'space-between', px: 1.25, py: 1, color: 'text.primary', textTransform: 'none' }}
+                    >
+                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
+                        <Typography sx={{ fontWeight: 560 }}>Дубликаты</Typography>
+                        <Chip label={selectedDraft?.duplicates.length ?? 0} size="small" variant="outlined" />
+                      </Stack>
+                    </Button>
+                    <Collapse in={duplicatesOpen}>
+                      <Divider sx={{ borderColor: 'rgba(198, 214, 236, 0.18)' }} />
+                      <Stack spacing={1} sx={{ p: 1.25 }}>
+                        {selectedDraft?.duplicates.length ? (
+                          selectedDraft.duplicates.map((duplicate) => (
+                            <Alert key={duplicate.title} severity="warning" variant="outlined" sx={{ borderRadius: 2 }}>
+                              <Typography sx={{ fontWeight: 560 }}>{duplicate.title}</Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                {duplicate.reason} · похожесть {Math.round(duplicate.similarity * 100)}%
+                              </Typography>
+                            </Alert>
+                          ))
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            Кандидаты на дубликаты не переданы Gateway.
+                          </Typography>
+                        )}
+                      </Stack>
+                    </Collapse>
+                  </Paper>
+
+                  <Paper variant="outlined" sx={{ borderRadius: 2.2, overflow: 'hidden', ...panelSx }}>
+                    <Button
+                      fullWidth
+                      onClick={() => setProcessingStatusOpen((current) => !current)}
+                      endIcon={processingStatusOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      disabled={!selectedDraft}
+                      sx={{ justifyContent: 'space-between', px: 1.25, py: 1, color: 'text.primary', textTransform: 'none' }}
+                    >
+                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
+                        <Typography sx={{ fontWeight: 560 }}>Статус обработки</Typography>
+                        <Chip label={getStatusLabel(workspaceDraft.status)} size="small" variant="outlined" />
+                      </Stack>
+                    </Button>
+                    <Collapse in={processingStatusOpen}>
+                      <Divider sx={{ borderColor: 'rgba(198, 214, 236, 0.18)' }} />
+                      <Box
+                        sx={{
+                          display: 'grid',
+                          gridTemplateColumns: { xs: '1fr', md: '0.75fr 1fr 0.75fr 1fr' },
+                          gap: 1,
+                          p: 1.25,
+                        }}
+                      >
+                        {[
+                          ['Статус', getStatusLabel(workspaceDraft.status)],
+                          ['Прогресс', `${workspaceDraft.progress}%`],
+                          ['Обновлен', workspaceDraft.updatedAt],
+                          ['Комментарий', workspaceDraft.note],
+                        ].map(([label, value]) => (
+                          <React.Fragment key={label}>
+                            <Typography variant="caption" color="text.secondary">
+                              {label}
+                            </Typography>
+                            <Typography variant="caption" sx={{ overflowWrap: 'anywhere' }}>
+                              {displayValue(value)}
+                            </Typography>
+                          </React.Fragment>
+                        ))}
+                      </Box>
+                    </Collapse>
+                  </Paper>
+                </Stack>
+
+                {previewPanelOpen && selectedDraft && (
+                  <Paper variant="outlined" sx={{ p: 1.2, borderRadius: 2.4, ...panelSx }}>
+                    <Stack spacing={1.1}>
+                      <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography sx={{ fontWeight: 560 }}>Предпросмотр документа</Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {selectedDraft.title} · страница {previewPageIndex + 1} из {previewPages.length || 1}
+                          </Typography>
+                        </Box>
+                        <Stack direction="row" spacing={0.5}>
+                          <IconButton size="small" onClick={() => handleOpenPreviewDialog(selectedDraft.id)}>
+                            <Maximize2 size={16} />
+                          </IconButton>
+                          <IconButton size="small" onClick={() => setPreviewPanelOpen(false)}>
+                            <X size={16} />
+                          </IconButton>
+                        </Stack>
+                      </Stack>
+
+                      <TextField
+                        size="small"
+                        value={previewSearch}
+                        onChange={(event) => setPreviewSearch(event.target.value)}
+                        placeholder="Поиск по предпросмотру"
+                        fullWidth
+                      />
+                      {normalizedPreviewSearch && (
+                        <Chip
+                          label={previewSearchMatchCount ? `${previewSearchMatchCount} совп.` : 'Нет совпадений'}
+                          size="small"
+                          variant="outlined"
+                          sx={{ width: 'fit-content' }}
+                        />
+                      )}
+
+                      <Paper
+                        variant="outlined"
+                        sx={{
+                          minHeight: 520,
+                          maxHeight: 'calc(100vh - 260px)',
+                          overflow: 'auto',
+                          p: 2,
+                          borderRadius: 2,
+                          bgcolor: '#fbf7ef',
+                          borderColor: 'rgba(99, 89, 68, 0.22)',
+                          color: '#202020',
+                          fontFamily: 'Georgia, serif',
+                        }}
+                      >
+                        {currentPreviewPage ? (
+                          <Stack spacing={1.4}>
+                            <Box>
+                              <Typography variant="caption" sx={{ color: '#7c6f57' }}>
+                                {currentPreviewPage.title}
+                              </Typography>
+                              <Typography variant="h6" sx={{ mt: 0.45, color: '#222', fontFamily: 'Georgia, serif' }}>
+                                {selectedDraft.preview?.title ?? selectedDraft.title}
+                              </Typography>
+                            </Box>
+                            <Typography component="pre" sx={{ m: 0, whiteSpace: 'pre-wrap', lineHeight: 1.7, fontFamily: 'inherit' }}>
+                              {renderHighlightedText(currentPreviewText, normalizedPreviewSearch, isLight)}
+                            </Typography>
+                          </Stack>
+                        ) : (
+                          <Typography sx={{ color: '#6f6757', fontFamily: 'Georgia, serif' }}>Нет предпросмотра</Typography>
+                        )}
+                      </Paper>
+
+                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
+                        <Button
+                          variant="outlined"
+                          startIcon={<ChevronLeft size={16} />}
+                          onClick={() => setPreviewPageIndex((current) => Math.max(current - 1, 0))}
+                          disabled={previewPageIndex === 0}
+                        >
+                          Назад
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          endIcon={<ChevronRight size={16} />}
+                          onClick={() => setPreviewPageIndex((current) => Math.min(current + 1, previewPages.length - 1))}
+                          disabled={previewPageIndex >= previewPages.length - 1}
+                        >
+                          Вперед
+                        </Button>
+                      </Stack>
+                    </Stack>
+                  </Paper>
+                )}
+              </Box>
             </Stack>
           </Paper>
         </Box>
@@ -1899,10 +2331,30 @@ export const KnowledgeProcessing: React.FC = () => {
                   </Alert>
                 )}
 
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { xs: 'stretch', sm: 'center' } }}>
+                  <TextField
+                    size="small"
+                    value={previewSearch}
+                    onChange={(event) => setPreviewSearch(event.target.value)}
+                    placeholder="Поиск по предпросмотру"
+                    sx={{ minWidth: { xs: 0, sm: 320 } }}
+                  />
+                  {normalizedPreviewSearch && (
+                    <Chip
+                      label={previewSearchMatchCount ? `${previewSearchMatchCount} совп.` : 'Нет совпадений'}
+                      size="small"
+                      variant="outlined"
+                      sx={{ width: 'fit-content' }}
+                    />
+                  )}
+                </Stack>
+
                 <Paper
                   variant="outlined"
                   sx={{
                     minHeight: '62vh',
+                    maxHeight: '70vh',
+                    overflow: 'auto',
                     p: 3,
                     borderRadius: 2.4,
                     bgcolor: '#f4f1e8',
@@ -1921,7 +2373,7 @@ export const KnowledgeProcessing: React.FC = () => {
                         </Typography>
                       </Box>
                       <Typography component="pre" sx={{ m: 0, whiteSpace: 'pre-wrap', lineHeight: 1.75, fontFamily: 'inherit' }}>
-                        {currentPreviewPage.lines.join('\n')}
+                        {renderHighlightedText(currentPreviewText, normalizedPreviewSearch, isLight)}
                       </Typography>
                     </Stack>
                   )}
@@ -1965,6 +2417,32 @@ export const KnowledgeProcessing: React.FC = () => {
               </Button>
             )}
             <Button onClick={handleClosePreviewDialog}>Закрыть</Button>
+          </DialogActions>
+        </Dialog>
+
+        <Dialog open={rejectDialogOpen && Boolean(selectedDraft)} onClose={() => setRejectDialogOpen(false)} maxWidth="sm" fullWidth>
+          <DialogTitle>Отклонить черновик</DialogTitle>
+          <DialogContent dividers>
+            <Stack spacing={1.2}>
+              <Typography variant="body2" color="text.secondary">
+                Причина попадёт в комментарий к решению и останется в карточке черновика.
+              </Typography>
+              <TextField
+                label="Причина отклонения"
+                value={rejectComment}
+                onChange={(event) => setRejectComment(event.target.value)}
+                multiline
+                minRows={3}
+                fullWidth
+                autoFocus
+              />
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setRejectDialogOpen(false)}>Отмена</Button>
+            <Button color="error" variant="contained" onClick={handleSubmitReject}>
+              Отклонить черновик
+            </Button>
           </DialogActions>
         </Dialog>
 
