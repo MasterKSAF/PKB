@@ -150,7 +150,7 @@ API черновиков и FSM документированы, но **UI сра
 | A17 | Нет таблиц `auth.users`, `registry.terminology` | 🔄 исправлено: таблицы есть, но не были описаны в db_diagrams.md. Добавлены в ER-диаграмму и примечания |
 | A18 (DB-E10) | Нет soft-delete и `updated_at` | 🔄 решение |
 | A19 (DB-E1) | VARCHAR для ENUM без CHECK | 🔄 DDL |
-| A20 (DB-E8) | `document_chunks.document_id` денормализация без синхронизации | 🟡 открыто |
+| A20 (DB-E8) | `document_chunks.document_id` денормализация — логика простановки в RAG Builder | 🔄 решено: проставляет RAG Builder |
 | A21 (DB-E2) | `file_hash_sha256` как `text` вместо `CHAR(64)` | 🟡 открыто |
 | A22 | `sessions.message_count` без триггера синхронизации | 🔄 исправлено: поле удалено из схемы БД и API. Количество сообщений вычисляется по факту через COUNT |
 

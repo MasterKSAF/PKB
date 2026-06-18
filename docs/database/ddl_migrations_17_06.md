@@ -103,15 +103,14 @@
 - `mks_oks_code` — проверка существования в `registry.classifier_registry` с `system = 'MKS_OKS'`
 - `okstu_code` — проверка существования с `system = 'OKSTU'`
 
-Оба ограничения — через подзапрос. **Для больших объёмов (миллионы документов) заменить на триггер** `BEFORE INSERT OR UPDATE`.
+Оба ограничения — через подзапрос.
 
 ---
 
-## P2-9. valid_from / valid_trigger / indexing_txn_id
+## P2-9. valid_from / valid_until / indexing_txn_id
 
 - Добавлены поля `valid_from DATE NOT NULL DEFAULT '1000-01-01'` и `valid_until DATE NOT NULL DEFAULT '9999-12-31'` в `registry.documents` с CHECK `valid_until >= valid_from`
 - Индекс `idx_documents_validity_range` на `(valid_from, valid_until)`
-- Триггер `sync_chunk_document_id` на `rag.document_chunks`: при вставке или обновлении `section_id` автоматически проставляет `document_id` из `registry.document_sections`
 - Поле `indexing_txn_id UUID` в `rag.document_chunks` + partial index `WHERE indexing_txn_id IS NOT NULL`
 
 **Конвенция dateMax:** бессрочные документы — `9999-12-31`, а не `infinity`.
@@ -188,8 +187,8 @@
 5. **P2-4** (FK)
 6. **P2-6** (индексы)
 7. **P2-7** (CHECK positive)
-8. **P2-8** (классификаторы) — опционально, заменить триггером для больших объёмов
-9. **P2-9** (validity + trigger + txn_id)
+8. **P2-8** (классификаторы) — опционально
+9. **P2-9** (validity + txn_id)
 10. **P2-10** (rename)
 11. **audit.events** — отдельно
 12. **draft_notifications** — отдельно
