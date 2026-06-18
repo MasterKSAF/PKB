@@ -1,43 +1,10 @@
-1. Контракт API (финальный)
+1. Контракт API (актуальная спецификация — в API-файлах)
 
-### POST /ocr/process — запуск обработки
+Актуальный контракт OCR-сервиса — [`ocr_service_api.md`](../api/ocr_service_api.md), Parser-сервиса — [`parser_service_api.md`](../api/parser_service_api.md).
 
-**Запрос:** `task_id` (от Оркестратора), `version_id`, `file_key`, опционально `options` (выбор движка, языка, флаги извлечения таблиц/изображений/классификации).
+Оба сервиса имеют единый эндпоинт `POST /{ocr|parser}/process` с полем `mode: "preview" | "full"` (схлопнуты с отдельного `/preview`, решение 08.06).
 
-**Ответ `202`:** `task_id`, `status`, `version_id`, `estimated_completion`.
-
-Идентификатор задачи (`task_id`) генерируется Оркестратором, передаётся в OCR-сервис и используется для всех последующих операций — longpoll-ожидания статуса и получения результата.
-
-### GET /ocr/process/{task_id}/status — статус обработки (longpoll)
-
-**Ответ `200`:** `task_id`, `status`, `progress_percent`, `pages_processed`, `pages_total`, `avg_confidence`, `started_at`, `completed_at`, а также `step` (текущий шаг обработки) и `step_detail`.
-
-| `step` | Описание |
-|---|---|
-| `downloading` | Скачивание PDF из MinIO |
-| `splitting` | Разбивка на страницы |
-| `ocr_pages` | Распознавание страниц |
-| `extracting_tables` | Извлечение таблиц |
-| `extracting_images` | Извлечение и загрузка изображений |
-| `classifying` | Классификация (МКС, ОКСТУ, УДК) |
-| `aggregating` | Сборка итогового JSON |
-
-### GET /ocr/process/{task_id}/result — итоговый JSON
-
-**Ответ `200`:** JSON-контейнер со структурой документа (`structure`: секции, таблицы, изображения), классификацией (`classification`: коды МКС/ОКСТУ/УДК), оценкой качества (`quality`: общая и постраничная), массивом ошибок/предупреждений (`errors`) и общим статусом.
-
-### Коды ошибок OCR-сервиса
-
-| `error.code` | HTTP | Описание |
-|---|---|---|
-| `FILE_NOT_FOUND` | 404 | Файл не найден в MinIO |
-| `FILE_TOO_LARGE` | 413 | PDF > 500 MB / > 2000 страниц |
-| `UNSUPPORTED_FORMAT` | 415 | Не PDF / не изображение |
-| `ENGINE_UNAVAILABLE` | 503 | Запрошенный OCR-движок недоступен |
-| `OCR_FAILED` | 500 | Критическая ошибка распознавания |
-| `STORAGE_ERROR` | 502 | Ошибка доступа к MinIO |
-| `TASK_NOT_FOUND` | 404 | task_id не существует или протух |
-| `TASK_EXPIRED` | 410 | Результат удалён (старше N дней) |
+Ниже приведена архитектура внутренней реализации, не привязанная к конкретной версии API.
 
 ---
 
@@ -376,51 +343,11 @@ async def test_preview_mode_first_3_pages(pipeline):
 
 ---
 
-## 4. Что Orchestrator должен уметь (минимальные изменения)
+## 4. Что Orchestrator должен уметь
 
-Сейчас Orchestrator на пре-стейдже делает:
-1. Принять файл от пользователя
-2. Вычислить SHA-256
-3. Загрузить в MinIO → получить `file_key`
-4. Вернуть `202 { task_id }`
+Актуальное описание двухфазного пайплайна (preview → full), включая логику Orchestrator, — в [`pipeline1-formation.md`](../pipelines/pipeline1-formation.md).
 
-Добавляется (двухфазный пайплайн):
-
-**Фаза Preview:**
-1. Определить тип файла (скан/изображение → OCR, цифровой PDF/DOC → Parser)
-2. Вызвать `POST /ocr/process` или `POST /parser/process` с `mode: "preview"`, `max_pages=3`
-3. Получить частичный сырой JSON (первые N страниц) или полный, если движок не поддерживает постраничный
-4. Передать в Converter-validator (preview API): `POST /converter/preview/metadata`
-5. Выполнить проверку уникальности: **Оркестратор → Registry**: `POST /registry/documents/check-uniqueness` (с метаданными из шага 4)
-6. Отобразить пользователю метаданные и кандидатов в дубликаты
-7. Ожидать решение пользователя: `proceed` / `stop_duplicate` / `force_new_version`
-
-**Фаза Full (при `proceed`):**
-
-*Если на preview был получен полный JSON (`preview_not_supported: true`):*
-1. **Пропуск** вызова OCR/Parser — JSON уже есть
-
-*Если preview был частичным (обычный случай):*
-1. Вызвать `POST /ocr/process` или `POST /parser/process` (`mode: "full"`)
-   - Получить `task_id`
-   - Ожидание результата через longpoll: `GET /ocr/process/{task_id}/status?longpoll=15`
-     - При завершении → сразу ответ
-     - При таймауте 15c → ответ с прогрессом, повтор longpoll
-   - При `status: completed` → `GET /ocr/process/{task_id}/result`
-
-2. Передать полный сырой JSON в Converter-validator: `POST /converter/convert`
-3. Выполнить проверку уникальности (Оркестратор): `POST /registry/documents/check-uniqueness`
-4. Если дубликат не найден — передать иерархический JSON в Registry: `POST /registry/documents`
-5. Передать плоский JSON (секции) в RAG Builder: `POST /rag/build`
-
-**Особенности preview-режима:**
-- Параметр `mode: "preview"` и `max_pages=N` в `POST /ocr/process` / `POST /parser/process`
-- Preview-ответ: без `image_key`, без сохранения бинарных объектов
-- Если движок не поддерживает постраничный парсинг — возвращается полный документ с `preview_not_supported: true`
-- Сервис не использует LLM в preview-режиме
-- Оркестратор хранит preview-данные в журнале пайплайна (не в БД)
-
-**Контракт не меняется.** Вся логика ожидания результата описана в `common_api.md` (модель async с longpoll).
+Ниже — архитектурные детали, не попавшие в описание пайплайна (см. раздел 2 «Внутренняя архитектура OCR-сервиса»).
 
 ---
 
@@ -434,3 +361,37 @@ async def test_preview_mode_first_3_pages(pipeline):
 | **Большие документы** | Celery-воркер вне API-процесса, параллелизм страниц, потоковая загрузка из MinIO |
 | **Готовые ссылки на изображения** | OCR сам выгружает в MinIO, отдаёт `file_key` в ответе |
 | **Независимая разработка** | Другая группа может писать и тестировать OCR-сервис, имея только контракт API и интерфейсы адаптеров |
+
+---
+
+## 6. Риски внешних OCR-движков и компенсации (P3-6)
+
+> **Статус**: 🟠 P3-6 — требует фиксации риска для конфиденциальных документов.
+
+### 6.1. Использование Lama Parser (облачный сервис)
+
+Lama Parser (внешний API, провайдер — `lamainfo.com` или альтернативы) — используется как fallback для сложных PDF (многоуровневая вёрстка, формулы, смешанные языки), когда локальные движки дают низкое качество.
+
+**Риск**: Lama Parser — **облачный сервис**. Содержимое документа (включая конфиденциальные проекты, например, проекты судов с грифом) передаётся на внешний сервер.
+
+**Компенсирующие меры (обязательны для проектов с грифом):**
+
+1. **Конфигурация**: `app_settings.parser.lama_enabled = false` для проектов с грифом «конфиденциально» и выше. Контроль на стороне Orchestrator при выборе движка.
+2. **Логирование**: при каждом вызове Lama Parser в лог пишется INFO с `lama_call_id` (для аудита). В `quality.notifications[]` ответа добавляется `{code: "LAMA_FALLBACK_USED", severity: "warning", category: "quality"}`.
+3. **Альтернативы**: при отключённом Lama Parser — fallback на локальные движки (Tesseract, EasyOCR, PaddleOCR), даже при сниженном качестве. В таком случае черновик переходит в `review_required` (P1-20) для ручной проверки.
+4. **Документирование**: для каждого проекта/документа с грифом в `registry.documents.status_note` указывается «конфиденциально — Lama отключён».
+5. **Self-hosted альтернатива** (в roadmap, Sprint 5+): развёртывание self-hosted Lama Parser внутри Docker-сети `internal`, без передачи данных наружу.
+
+### 6.2. Другие внешние OCR-движки
+
+| Движок | Тип | Риск конфиденциальности | Компенсация |
+|--------|-----|--------------------------|-------------|
+| Tesseract | Open-source, локальный | Нет | — |
+| EasyOCR | Open-source, локальный | Нет | — |
+| PaddleOCR | Open-source, локальный | Нет | — |
+| Cloud Vision API (Google) | Облачный | Высокий | Отключён по умолчанию, требует явного opt-in |
+| AWS Textract | Облачный | Высокий | Отключён по умолчанию |
+| **Lama Parser** | **Облачный** | **Средний-высокий** | **Конфигурируемо, см. §6.1** |
+| Azure Form Recognizer | Облачный | Высокий | Отключён по умолчанию |
+
+> **Запрещено** (по умолчанию) передавать документы с грифом «конфиденциально» и выше в облачные OCR-сервисы. Контроль — через `app_settings.parser.allowed_engines_for_classification` (конфигурируется per-проект).

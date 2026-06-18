@@ -30,6 +30,7 @@
 
 | Сервис | Порт |
 |--------|------|
+| **Gateway** | **`8080`** |
 | Orchestrator | `8081` |
 | Auth | `8082` |
 | Query | `8083` |
@@ -46,7 +47,7 @@
 
 Каждый микросервис предоставляет endpoint `GET /health` для проверки своего состояния.
 Эндпоинт используется:
-- **Orchestrator** — для агрегации статусов в `GET /monitor/health`;
+- **Orchestrator** — для агрегации статусов в `GET /health`;
 - **Инфраструктурными системами** (Kubernetes liveness/readiness probes, системы мониторинга).
 
 **Формат ответа (`200 OK`):**
@@ -82,7 +83,8 @@
 | Сервис | Внутренний URL | URL через Gateway |
 |--------|----------------|-------------------|
 | Gateway | `http://127.0.0.1:8080/api/v1/system/health` | — (собственный) |
-| Orchestrator | `http://127.0.0.1:8081/api/v1/monitor/health` | `http://127.0.0.1:8080/api/v1/monitor/health` |
+| Gateway | `http://127.0.0.1:8080/api/v1/monitor/metrics` | — (собственный) |
+| Orchestrator | `http://127.0.0.1:8081/api/v1/health` | — (внутренний) |
 | Auth | `http://127.0.0.1:8082/api/v1/health` | — (внутренний) |
 | Query | `http://127.0.0.1:8083/api/v1/health` | — (внутренний) |
 | Registry | `http://127.0.0.1:8084/api/v1/health` | — (внутренний) |
@@ -94,7 +96,7 @@
 | RAG Builder | `http://127.0.0.1:8090/api/v1/health` | — (внутренний) |
 | RAG Search | `http://127.0.0.1:8091/api/v1/health` | — (внутренний) |
 
-> **Примечание:** Эндпоинт `/monitor/health` Orchestrator'а агрегирует статусы внутренних сервисов,
+> **Примечание:** Эндпоинт `/health` Orchestrator'а агрегирует статусы внутренних сервисов,
 > обращаясь к их `/health` и возвращая сведённый результат. Для внутренних сервисов
 > эндпоинт `/health` не имеет ограничений rate limiting и не требует аутентификации.
 
@@ -123,10 +125,65 @@
 5. Оркестратор хранит маппинг `draft_id → task_id → document_id`
 
 Аутентификация:
-  - **Эндпоинты через Gateway:** все запросы, кроме `/auth/*` и `/monitor/health`, требуют заголовок
+  - **Эндпоинты через Gateway:** все запросы, кроме `/auth/*`, требуют заголовок
     `Authorization: Bearer <access_token>`. Токен получается через `/auth/token`.
   - **Внутренние сервисы (межсервисное взаимодействие):** вызовы между микросервисами выполняются
     по внутренней сети `127.0.0.1:{port}`.
+
+---
+
+### Аутентификация service-to-service (сетевая изоляция)
+
+Внутренние сервисы (Auth, Orchestrator, Query, Registry, Integration, Converter-validator, Parser, OCR, RAG Builder, RAG Search, Analyse) **недоступны напрямую из внешней сети**. Все запросы проходят через Gateway (:8080) или по защищённому внутреннему каналу.
+
+#### Уровни аутентификации
+
+| Уровень | Когда применяется | Механизм | Требования |
+|---------|-------------------|----------|------------|
+| **L1 — внешний клиент (UI/BFF)** | UI/BFF → Gateway | JWT (Bearer) | Обязателен токен. Проверяется RBAC |
+| **L2 — Gateway → внутренний сервис** | Gateway проксирует запрос | Сетевая изоляция | Только Docker-сеть `internal` |
+| **L3 — internal service-to-service** | Прямые вызовы между сервисами (например, Orchestrator → Registry) | Сетевая изоляция | Только Docker-сеть `internal` |
+| **L4 — internal service → Auth `/internal/auth/validate`** | Gateway → Auth, Orchestrator → Auth | Сетевая изоляция | Только Docker-сеть `internal` |
+
+#### Сетевая изоляция (L2/L3)
+
+В production-деплое:
+1. Все микросервисы подключены к **приватной Docker-сети `internal`** (`docker network create --internal internal`).
+2. **Nginx и Web UI** — в **публичной сети `public`**.
+3. **Gateway** — в обеих сетях (`public` принимает UI, `internal` обращается к сервисам).
+4. Прямой доступ к портам 8081–8091 из внешней сети **невозможен** (порты не публикуются в `docker-compose.yml`).
+5. Health-checks (k8s liveness/readiness probes) выполняются через отдельный sidecar или оркестратор внутри `internal`-сети.
+
+#### Endpoints с дополнительными ограничениями
+
+| Endpoint | Требование |
+|----------|------------|
+| `POST /internal/auth/validate` (Auth) | Доступ только из internal-сети (сервисы gateway, orchestrator) |
+| `PATCH /registry/documents/{id}/status` (Registry) | Доступ только из internal-сети (P0-6). Gateway может проксировать только для admin-ролей |
+| `POST /internal/orchestrator/tasks/*` | Доступ только из internal-сети |
+| `POST /internal/rag/build` | Доступ только из internal-сети (RAG Search/Orchestrator) |
+
+#### Заголовки для сквозной трассировки
+
+| Заголовок | Генерирует | Передаётся | Описание |
+|-----------|------------|------------|----------|
+| `X-Request-ID` | Gateway (если отсутствует) | Через все сервисы | UUIDv4, уникальный для каждого внешнего запроса |
+| `X-Trace-ID` | OpenTelemetry SDK | Все спаны | Соответствует trace_id в OTLP |
+| `X-Draft-ID` | Orchestrator | Internal services | Текущий draft_id в обработке (если применимо) |
+| `X-Document-ID` | Orchestrator/Registry | Internal services | Текущий document_id в обработке |
+| `X-Version-ID` | Orchestrator | Internal services | Текущий version_id в обработке |
+
+#### Что НЕ требуется
+
+- **Отдельный `X-Internal-Token`** в HTTP-заголовках (отвергнуто 17.06 — сетевой изоляции достаточно).
+- **JWT для service-to-service** (используется только для end-user → Gateway).
+
+#### Связанные документы
+
+- `docs/api/gateway_service_api.md` §«Маршрутизация запросов» — общая схема подключения.
+- `docs/api/auth_service_api.md` §«Внутренние эндпоинты» — `/internal/auth/validate`.
+- `docs/specifications/deployment.md` — конфигурация Docker-сетей (см. P8-6).
+- P0-6 (план 5.06), P11-2 (correlation IDs).
 
 ---
 
@@ -313,10 +370,35 @@ GET .../{doc_id}/status?longpoll=15
 | 500      | `OCR_FAILED`              | Ошибка OCR-распознавания                          | OCR, Orchestrator      |
 | 500      | `ANALYSIS_FAILED`         | Ошибка анализа/сопоставления                      | Analyse                |
 | 500      | `CONVERSION_FAILED`       | Ошибка конвертации документа                     | Converter-validator    |
-| 500      | `CONVERSION_VALIDATION_FAILED` | Ошибка семантической валидации конвертации (внутренняя, не 422) | Converter-validator    |
+| 500      | `CONVERSION_VALIDATION_FAILED` | Ошибка семантической валидации конвертации (внутренняя, не 422)    | Converter-validator    |
 | 503      | `CIRCUIT_BREAKER_OPEN`    | Этап временно отключён (Circuit Breaker)          | Orchestrator           |
 | 501      | `NOT_IMPLEMENTED`         | Метод не реализован                               | все                    |
 | 504      | `GATEWAY_TIMEOUT`         | Таймаут при вызове внутреннего сервиса            | Orchestrator           |
+
+**D24 — дополнительные специфичные коды (сверка 12 API-файлов, 17.06):**
+
+| HTTP | `error.code` | Описание | Сервис |
+|------|--------------|----------|--------|
+| 404 | `DRAFT_NOT_FOUND` | Черновик не найден (проксируется через Gateway) | Registry, Gateway |
+| 404 | `CATEGORY_NOT_FOUND` | Категория не найдена | Registry |
+| 409 | `CATEGORY_HAS_DOCUMENTS` | Нельзя удалить категорию с привязанными документами | Registry |
+| 409 | `DUPLICATE_CATEGORY_NAME` | Категория с таким именем уже существует | Registry |
+| 409 | `DRAFT_ALREADY_DECIDED` | По черновику уже принято решение | Registry, Gateway |
+| 409 | `DRAFT_ALREADY_PREVIEWED` | Preview уже выполнен | Registry |
+| 422 | `EMPTY_DOCUMENT` | Документ пустой (0 страниц) | Registry, Gateway |
+| 500 | `PARSER_FAILED` | Ошибка парсинга | Parser |
+| 415 | `UNSUPPORTED_FORMAT` | Неподдерживаемый формат файла (отличается от `UNSUPPORTED_FILE_TYPE` 422) | Parser, OCR |
+| 503 | `ENGINE_UNAVAILABLE` | OCR-движок недоступен | OCR |
+| 500 | `STORAGE_ERROR` | Ошибка хранилища (MinIO) | Parser, OCR |
+| 404 | `TASK_NOT_FOUND` | Задача не найдена | Parser, OCR |
+| 422 | `INVALID_INPUT` | Некорректные входные данные | Converter-validator |
+| 500 | `METADATA_EXTRACTION_FAILED` | Ошибка извлечения метаданных | Converter-validator |
+| 504 | `LLM_TIMEOUT` | Таймаут LLM-запроса | Converter-validator |
+| 504 | `REGISTRY_TIMEOUT` | Таймаут вызова Registry | Converter-validator |
+| 400 | `EMPTY_QUERY` | Пустой поисковый запрос | RAG Search |
+| 422 | `INVALID_PARAMETER` | Некорректный параметр | RAG Search |
+
+> **Не подтверждено**: `PAGE_NOT_FOUND` — не существует ни в одном из 12 API-файлов. Источник не найден, удалено из плана.
 
 ---
 
@@ -329,7 +411,6 @@ GET .../{doc_id}/status?longpoll=15
 | `GET /documents` (+ `/{doc_id}`, `/status`, `/file`, `/pages`) | ✓          | ✓                 | ✓              |
 | `DELETE /documents/{doc_id}`                                   | ✗          | ✓                 | ✓              |
 | `POST /documents/{doc_id}/reprocess`                           | ✗          | ✓                 | ✓              |
-| `POST /documents/{doc_id}/approve` | ✗ | ✓ | ✓ |
 | `GET /documents/{doc_id}/history` | ✓ | ✓ | ✓ |
 | `GET /documents/{doc_id}/errors` | ✓ | ✓ | ✓ |
 | `GET /documents/queue` | ✓ | ✓ | ✓ |
@@ -363,7 +444,6 @@ GET .../{doc_id}/status?longpoll=15
 | `GET /admin/users`, `POST/PUT/PATCH/DELETE /admin/users` | ✗ | ✗ | ✓ |
 | `GET /admin/roles`, `POST /admin/roles` | ✗ | ✗ | ✓ |
 | `GET /admin/audit` | ✗ | ✗ | ✓ |
-| `GET /monitor/health` | ✓ (без аутентификации) | ✓ | ✓ |
 | `GET /monitor/metrics` | ✗ | ✓ | ✓ |
 | `GET /tasks/{task_id}/status` | ✗ | ✗ | ✓ |
 | `GET /tasks/{task_id}/steps` | ✗ | ✗ | ✓ |
@@ -381,7 +461,7 @@ GET .../{doc_id}/status?longpoll=15
 > **Примечания:**
 > - Роли: `engineer` — инженер-конструктор; `knowledge_admin` — администратор НСИ; `system_admin` — системный администратор.
 > - Матрица применяется ко всем эндпоинтам через Gateway. Внутренние сервисы вызываются через Gateway; RBAC проверяется на Gateway.
-> - `GET /monitor/health` доступен без аутентификации для использования инфраструктурными системами мониторинга.
+> - `GET /api/v1/system/health` доступен без аутентификации для использования инфраструктурными системами мониторинга.
 
 ---
 
@@ -405,7 +485,6 @@ GET .../{doc_id}/status?longpoll=15
 | `POST /text/search` | 30 запросов / мин | 1 мин | Текстовый поиск |
 | `GET /admin/*`                        | 60 запросов / мин         | 1 мин               | Административные                   |
 | `POST /admin/*`                       | 20 запросов / мин         | 1 мин               |                                    |
-| `GET /monitor/health`                 | Не ограничен              | —                   | Health check                       |
 | Остальные эндпоинты                   | 60 запросов / мин         | 1 мин               | По умолчанию                       |
 
 При превышении лимита возвращается HTTP `429 Too Many Requests` с телом:
@@ -542,7 +621,12 @@ GET .../{doc_id}/status?longpoll=15
 
 **XSS защита**: Все строковые поля, заполняемые пользователем (названия документов, сообщения чата, комментарии, feedback), должны экранироваться при отображении в UI. API возвращает `Content-Type: application/json` и `X-Content-Type-Options: nosniff`. Сервер не выполняет санитизацию контента — это ответственность UI.
 
-**Чувствительные данные в URL**: `user_id` в query-параметрах допустим, но при логировании запросов не логировать полный URL с query-параметрами, содержащими PII. Использовать маскирование или структурное логирование.
+**Чувствительные данные в URL** (P3-4, уточнение): **запрещено** передавать в query-string:
+- `password`, `access_token`, `refresh_token`, любые `*_token`, `*_secret`, `*_key` (аутентификационные данные).
+- `email`, `phone`, `passport`, `inn`, `snils`, `ogrn` (PII — персональные данные).
+- Полные SQL-запросы, stack-trace, file paths, config values (уже запрещены в `details`, P3-4).
+
+`user_id` (внутренний bigint) в query-параметрах допустим, но при логировании **запрещено** логировать полный URL с query-параметрами — использовать маскирование или структурное логирование. При попытке передать запрещённые поля возвращается `400 BAD_REQUEST` с кодом `PII_IN_QUERY_STRING` (только для IDOR-защиты; основная защита — структурное логирование и маскирование на Gateway).
 
 #### Логирование
 
@@ -551,6 +635,63 @@ GET .../{doc_id}/status?longpoll=15
 - **Должно быть использовано** структурное логирование с явным списком полей, исключённых из вывода (PII filter).
   Конфигурация PII filter задаётся через `LOG_PII_FIELDS` (список полей через запятую, по умолчанию:
   `password, access_token, refresh_token`).
+
+### Структурированное логирование — стандарт полей (P11-1, 17.06.2026)
+
+> **Обязательные поля** каждой записи лога (JSON):
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `timestamp` | string (ISO 8601) | Время события (`2026-06-18T14:30:00.123Z`) |
+| `level` | string | Уровень: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` |
+| `service` | string | Имя сервиса: `gateway`, `orchestrator`, `auth`, `query`, `registry`, `integration`, `converter-validator`, `parser`, `ocr`, `rag-builder`, `rag-search`, `analyse` |
+| `trace_id` | string | OpenTelemetry trace_id (32 hex) |
+| `span_id` | string | OpenTelemetry span_id (16 hex) |
+| `request_id` | string (UUID) | Корреляционный ID, генерируется Gateway при отсутствии (P11-2) |
+| `user_id` | bigint \| null | ID пользователя (если аутентифицирован) |
+| `path` | string | HTTP-путь запроса (без query-string для PII, P3-4) |
+| `method` | string | HTTP-метод: `GET`, `POST`, ... |
+| `status` | int | HTTP-статус ответа |
+| `latency_ms` | int | Длительность обработки в мс |
+| `message` | string | Человекочитаемое сообщение |
+| `error_code` | string \| null | Код ошибки (если применимо) |
+| `error_message` | string \| null | Текст ошибки (без stack-trace) |
+| `extra` | object | Дополнительные контекстные поля |
+
+**Маскирование PII** — настраивается через `LOG_PII_FIELDS`, по умолчанию маскируются: `password, access_token, refresh_token, email, phone, inn, snils`.
+
+### Корреляционные идентификаторы (P11-2, 17.06.2026)
+
+| Заголовок | Генерирует | Передаётся | Описание |
+|-----------|------------|------------|----------|
+| `X-Request-ID` | Gateway (если отсутствует) | Через все сервисы | UUIDv4, уникальный для каждого внешнего запроса. Кладётся в `request_id` каждой записи лога |
+| `X-Trace-ID` | OpenTelemetry SDK | Все спаны | Соответствует `trace_id` в OTLP |
+| `X-Draft-ID` | Orchestrator | Internal services | Текущий `draft_id` в обработке (если применимо) |
+| `X-Document-ID` | Orchestrator/Registry | Internal services | Текущий `document_id` в обработке |
+| `X-Version-ID` | Orchestrator | Internal services | Текущий `version_id` в обработке |
+| `X-User-ID` | Gateway (после JWT-валидации) | Internal services | ID пользователя (для логирования без повторной валидации) |
+
+**Правила:**
+- Gateway **обязан** сгенерировать `X-Request-ID`, если он не пришёл от клиента.
+- Все downstream-сервисы обязаны пробрасывать `X-Request-ID` и `X-Trace-ID` в каждый исходящий запрос.
+- При ошибке `request_id` возвращается в теле ответа (`details.request_id`) для быстрого поиска в логах.
+
+### Уровни логирования и правила эскалации (P11-3, 17.06.2026)
+
+| Уровень | Когда использовать | Примеры |
+|---------|-------------------|---------|
+| `DEBUG` | Детальная отладочная информация (только в dev/staging) | SQL-запросы, содержимое переменных, trace вызовов |
+| `INFO` | Нормальная работа системы | Успешный запрос (`status=200`), запуск задачи, смена статуса FSM |
+| `WARNING` | Нештатные ситуации, не приводящие к сбою | PDF-security warning (P3-5), Lama fallback (P3-6), нештатные распарсенные блоки, `enrichment_skipped` (P1-15), rate limit близок к лимиту (80%) |
+| `ERROR` | Ошибка, требующая вмешательства | Падение задачи, невозможность записать в БД/CAS, `LLM_GENERATION_FAILED`, `INDEXING_FAILED` |
+| `CRITICAL` | Потеря консистентности или катастрофический сбой | Дубликат после approve (`DUPLICATE_FILE_AFTER_APPROVE`), потеря соединения с БД, потеря CAS-ссылки, повреждение индекса |
+
+**Эскалация:**
+- `WARNING` → событие попадает в SigNoz-дашборд `warnings` (P11-8).
+- `ERROR` → SigNoz-алерт + уведомление в Slack/email.
+- `CRITICAL` → SigNoz-алерт + PagerDuty (для on-call).
+
+**Связь с аудитом (P11-4):** системные логи (этот раздел) **отдельно** от пользовательского аудита (`audit.events`). Системные логи — для отладки и мониторинга, аудит — для compliance и расследования инцидентов.
 
 #### Планы развития
 
@@ -568,6 +709,14 @@ GET .../{doc_id}/status?longpoll=15
 | `system_admin` | Все ресурсы (с аудит-записью) |
 
 Проверка выполняется перед каждым запросом к ресурсу (документ, сессия чата, черновик).
+
+**P3-3 (IDOR / перебор) — расширенная защита:**
+
+1. **Ownership-check** на Gateway/сервисах (см. таблицу выше).
+2. **Rate limiting** на эндпоинтах с bigint-ID (см. §«Rate Limiting»): 100 запросов/мин на `GET /documents/{doc_id}*`, 30 запросов/мин на `GET /drafts/{draft_id}*`, 30 запросов/мин на `GET /chat/sessions/{session_id}*`. При превышении — `429 TOO_MANY_REQUESTS` (P3-1).
+3. **Audit-запись** при каждом доступе к чужому ресурсу (для `system_admin` — обязательно; для остальных — при `403 FORBIDDEN` из-за ownership-mismatch).
+4. **Alerts**: при обнаружении > 10 `403 FORBIDDEN` от одного `user_id` за 1 минуту — WARN-алерт «возможный перебор ID».
+5. **Optional**: 2FA для `system_admin` (для критичных операций) — в roadmap.
 
 ---
 

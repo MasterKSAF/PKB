@@ -17,13 +17,13 @@ Gateway — **внутренний сервис**, не имеет внешне�
 
 | Функция | Описание |
 |---------|----------|
-| **Аутентификация** | Проверка JWT Bearer-токена. Невалидный/отсутствующий токен → `401` для защищённых эндпоинтов; анонимный доступ только к `/auth/*` и `/system/health` |
+| **Аутентификация** | Проверка JWT Bearer-токена. Невалидный/отсутствующий токен → `401` для защищённых эндпоинтов; анонимный доступ только к `/auth/*`, `/system/health` и `/health` |
 | **RBAC** | Проверка прав доступа на основе роли и permissions пользователя. Матрица доступа — см. [common_api.md](common_api.md#матрица-доступа-rbac) |
 | **Маршрутизация** | Проксирование запросов к внутренним сервисам: Auth, Orchestrator, Query, Registry, Integration и др. |
 | **Иденпотентность** | Кеширование ответов `POST` для `/drafts*` и `/chat*` по заголовку `Idempotency-Key` (TTL: 1 час) |
 | **Единый формат ошибок** | Перехват и нормализация HTTP-исключений и ошибок валидации в единый формат (см. [common_api.md](common_api.md#формат-ошибок)) |
 | **CORS** | **CORS**: По умолчанию `*` для разработки. В production среде CORS ограничен списком разрешённых доменов (`CORS_ALLOWED_ORIGINS`). Значение `*` допускается только при `ENV=development`. CI-проверка отклоняет деплой с `CORS_ALLOWED_ORIGINS=*` для production. |
-| **Мониторинг** | Health-check endpoint `/system/health` с агрегированным статусом всех сервисов |
+| **Мониторинг** | Health-check endpoint `/system/health` и `/health` с агрегированным статусом всех сервисов |
 | **X-Process-Time** | Добавление заголовка `X-Process-Time` с временем обработки запроса |
 
 ---
@@ -44,7 +44,6 @@ Gateway объединяет API всех внутренних сервисов 
 | `/api/v1/documents/*` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md) |
 | `/api/v1/tasks/*` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md)² |
 | `/api/v1/drafts/*` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md) |
-| `/api/v1/monitor/*` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md) |
 | `/api/v1/chat/*` | Query Service | `8083` | [query_service_api.md](query_service_api.md) |
 | `/api/v1/text/*` | Query Service | `8083` | [query_service_api.md](query_service_api.md) |
 | `/api/v1/registry/classifiers/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
@@ -54,7 +53,10 @@ Gateway объединяет API всех внутренних сервисов 
 | `/api/v1/registry/categories/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
 | `/api/v1/system/health` | Gateway (собственный) | `8080` | — |
 | `/api/v1/analyse/*` | Analyse Service | `8089` | [analyse_service_api.md](analyse_service_api.md) |
+| `/api/v1/health` | Gateway (собственный) | `8080` | — |
 | `/api/v1/meridian/*` | Integration Service | `8085` | [integration_service_api.md](integration_service_api.md) |
+| `/api/v1/files/*` | Integration Service | `8085` | [integration_service_api.md](integration_service_api.md) (D25: добавлен в routing table) |
+| `/api/v1/external/*` | Integration Service | `8085` | [integration_service_api.md](integration_service_api.md) (D25: добавлен в routing table) |
 
 > **¹ Примечание**: Маршрут `/api/v1/pages/*` — устаревший алиас. Все эндпоинты работы со страницами вложены в `/documents/{doc_id}/pages/*` и маршрутизируются через `/api/v1/documents/*`. Отдельный префикс `/pages/*` будет удалён после рефакторинга Gateway.
 >
@@ -62,7 +64,7 @@ Gateway объединяет API всех внутренних сервисов 
 
 > **📐 Принцип категоризации путей:** Все пути Gateway организованы по категориям сервисов. Префикс пути включает имя сервиса (например, `/api/v1/registry/*` для Registry Service, `/api/v1/chat/*` для Query Service), за которым следует логическая группа эндпоинтов. Пути без категории сервиса (например, устаревший `/pages/*`) не должны добавляться.
 
-В мок-режиме (см. [gateway.py](../mocks/gateway.py)) Gateway, Orchestrator и остальные сервисы объединены в единое FastAPI-приложение на порту `8081` (эмуляция nginx + gateway для разработки и тестов).
+В мок-режиме Gateway, Orchestrator и остальные сервисы объединены в единое FastAPI-приложение для разработки и тестов. Исходный код мок-Gateway — в репозитории `backend/` (конкретный путь уточняется в `architecture/service_dependencies.md`). Документация описывает контракт Gateway, а не привязана к пути файла.
 
 ---
 
@@ -76,7 +78,7 @@ Registry drafts — только internal, доступ к ним через Gat
 | Метод | Путь | Описание | RBAC | Иденпотентность |
 |-------|------|----------|------|-----------------|
 | `POST` | `/api/v1/drafts` | Загрузка файла, создание черновика | `engineer` + `can_upload_documents` | ✅ `Idempotency-Key` |
-| `GET`  | `/api/v1/drafts` | Список черновиков по `document_key` | `engineer`, `knowledge_admin`, `system_admin` | — |
+| `GET`  | `/api/v1/drafts` | Список черновиков (фильтр: `draft_id`, `document_key`, `status`). Без фильтров — все черновики (admin) | `engineer`, `knowledge_admin`, `system_admin` | — |
 | `GET`  | `/api/v1/drafts/{draft_id}` | Полная информация о черновике (с `raw_data`) | `engineer`, `knowledge_admin`, `system_admin` | — |
 | `GET`  | `/api/v1/drafts/{draft_id}/preview` | Preview-метаданные (без `raw_data`) | `engineer`, `knowledge_admin`, `system_admin` | — |
 | `POST` | `/api/v1/drafts/{draft_id}/preview` | Запуск preview-фазы | `engineer`, `knowledge_admin`, `system_admin` | — |
@@ -196,10 +198,11 @@ Request → CORS → RBAC → Idempotency → ProcessTime → Router → Respons
 | Метод | Путь | Описание |
 |-------|------|----------|
 | GET | `/api/v1/system/health` | Health-check: агрегированный статус всех сервисов, версия, количество эндпоинтов |
+| GET | `/api/v1/monitor/metrics` | Метрики качества системы (пайплайны) |
 
 #### GET /api/v1/system/health
 
-> **Примечание**: `/api/v1/system/health` — основной health-check endpoint для внешних систем мониторинга. Orchestrator имеет дополнительный `/monitor/health` для внутреннего использования.
+> **Примечание**: `/api/v1/system/health` — основной health-check endpoint для внешних систем мониторинга. Orchestrator имеет дополнительный `/health` для внутреннего использования (не проксируется через Gateway).
 
 Проверка состояния Gateway и всех подключённых сервисов.
 
@@ -228,6 +231,57 @@ Request → CORS → RBAC → Idempotency → ProcessTime → Router → Respons
 | `services` | object | Статус каждого внутреннего сервиса (`ok`, `degraded`, `unavailable`) |
 | `timestamp` | string | Время проверки (ISO 8601) |
 | `endpoints_total` | int | Общее количество зарегистрированных эндпоинтов |
+
+---
+
+#### GET /api/v1/monitor/metrics
+
+Метрики качества системы, агрегируемые Gateway на основе данных пайплайнов.
+
+**Ответ `200`:**
+
+```json
+{
+  "control_metrics": {
+    "ocr_quality": 0.984,
+    "retrieval_quality": 0.91,
+    "answers_with_sources": 0.96,
+    "avg_latency_ms": 1420
+  },
+  "answer_metrics": {
+    "useful_rate": 0.84,
+    "rated_answers": 43,
+    "flagged_for_review": 5,
+    "open_questions": 3
+  },
+  "logs": [
+    {
+      "time": "12:34:02",
+      "type": "search",
+      "text": "...",
+      "level": "info"
+    }
+  ]
+}
+```
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `control_metrics` | object | Объект с метриками качества контроля |
+| `control_metrics.ocr_quality` | number | Качество OCR (0–1) |
+| `control_metrics.retrieval_quality` | number | Качество поиска (0–1) |
+| `control_metrics.answers_with_sources` | number | Доля ответов с источниками (0–1) |
+| `control_metrics.avg_latency_ms` | number | Средняя задержка, мс |
+| `answer_metrics` | object | Объект с метриками качества ответов |
+| `answer_metrics.useful_rate` | number | Доля полезных ответов (0–1) |
+| `answer_metrics.rated_answers` | int | Количество оценённых ответов |
+| `answer_metrics.flagged_for_review` | int | Количество отмеченных на ревью |
+| `answer_metrics.open_questions` | int | Количество открытых вопросов |
+| `logs` | array | Массив записей лога |
+| `logs[].time` | string | Время события |
+| `logs[].type` | string | Тип события |
+| `logs[].text` | string | Текст события |
+| `logs[].level` | string | Уровень логирования |
 
 ---
 

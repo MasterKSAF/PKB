@@ -1,30 +1,25 @@
-# План работ: оценка и исправление документации — ВЫПОЛНЕНО
+# Todo — синхронизация preview-метаданных
 
-## Задачи
+> 18.06.2026 — поля preview-метаданных приведены к табличным именам.
 
-### 1. Удалить/добавить ссылки из структуры README.md ✅
-- [x] 1.1 Убрать `plans/` из структуры (директория не существует)
-- [x] 1.2 Убрать `database/db_audit_report.md` из структуры (файл не существует)
-- [x] 1.3 Добавить `audit/` в структуру (директория существует, но не отражена)
+- [x] **1.** `docs/schema/schema_converter_preview.json` — эталонная JSON-схема ✅
+- [x] **2.** `docs/api/converter_validator_service_api.md` — Preview API ✅
+- [x] **3.** `docs/api/orchestrator_service_api.md` — 5 примеров `preview_metadata` ✅
+- [x] **4.** `docs/api/registry_service_api.md` — 4 примера `preview_metadata` ✅
+- [x] **5.** `docs/pipelines/pipeline1-formation.md` — пример preview-метаданных ✅
+- [ ] **6.** `docs/pipelines/pipeline1-formation_detail.md` — нет примера JSON, пропущено
+- [x] **7.** `docs/specifications/converter_specification.md` — шаг 3, режимы ✅
+- [x] **8.** `docs/database/db_diagrams.md` — §0 описание `preview_metadata` ✅
+- [x] **9.** `docs/README.md` — чейнджлог ✅
+- [x] **10.** Перепроверка ✅
 
-### 2. Исправить конфликт RBAC в common_api.md ✅
-- [x] Строки 356 и 368 — `GET /tasks/{task_id}/status` приведён к `system_admin only`
+---
 
-### 3. Унификация формулы title_hash_sha256 (X2) ✅
-- [x] Формула: `doc_code + title + era`
-- [x] overview.md и db_diagrams.md синхронизированы
+## Этап 2: preview-слепок сохраняется
 
-### 4. X1 — document_id назначается Registry ✅
-- [x] overview.md исправлен, specificity.md — X1 закрыт
-
-### 5. Закрыть вопросы из specificity.md ✅
-- [x] X3 — `partially_indexed` удалён (нестатус)
-- [x] X6 — `current_version_id` добавлен в `registry.documents`
-- [x] X8 — `amendments` оставлены в JSONB (осознанное)
-- [x] A17 — таблицы `auth.users`, `registry.terminology` добавлены в ER-диаграмму
-
-### 6. Исправить README.md строка 151 — битый путь ✅
-- [x] Удалена битая ссылка
-
-### 7. Исправить README.md строка 198 — блок curl ✅
-- [x] Закрывающие backticks добавлены
+- [x] **1.** `docs/database/db_diagrams.md` — добавлен `preview_snapshot` в ER + примечания §0, §1 ✅
+- [x] **2.** `docs/pipelines/pipeline1-formation.md` — шаг 3.0 (копирование preview) ✅
+- [x] **3.** `docs/specifications/converter_specification.md` — принцип «Preview-метаданные сохраняются» ✅
+- [x] **4.** `docs/api/registry_service_api.md` — `preview_snapshot` в примере ответа GET /documents/{id} + описание в ключевых полях ✅
+- [x] **5.** `docs/database/ddl_migrations_17_06.md` — переписан в описательный стиль (без SQL), добавлен `preview_snapshot` ✅
+- [x] **6.** `docs/README.md` — чейнджлог + обновлено описание ddl_migrations ✅

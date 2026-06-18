@@ -12,7 +12,7 @@
 
 ### Формат ответа
 
-Формат ошибок — см. [common_api.md](../common_api.md#формат-ответа).
+Формат ошибок — см. [common_api.md](common_api.md#формат-ответа).
 
 Списочные ответы обёрнуты в `{ data, meta }`:
 ```json
@@ -30,10 +30,23 @@
 
 ### Коды ошибок
 
-Общие коды (400, 404, 500) — см. [common_api.md](../common_api.md#коды-ответов-http-и-ошибок).
+Общие коды (400, 404, 500) — см. [common_api.md](common_api.md#коды-ответов-http-и-ошибок).
 
 | HTTP | `error.code` | Описание |
 |------|-------------|----------|
+
+---
+
+## Аутентификация service-to-service (сетевая изоляция)
+
+> Полное описание защиты internal-эндпоинтов (Docker-сеть internal, сетевая изоляция, матрица доступа) — см. [common_api.md](common_api.md#аутентификация-service-to-service-сетевая-изоляция).
+
+Краткая выжимка:
+
+- **Внешний клиент → Gateway** (L1): JWT Bearer, RBAC на Gateway.
+- **Gateway → внутренний сервис** (L2): сетевая изоляция Docker-сети internal.
+- **Service-to-service** (L3): только через private сеть, прямых вызовов извне быть не может.
+- **X-Internal-Token не используется** (решение 17.06, P0-6) — сетевой изоляции достаточно.
 | 404 | `CLASSIFIER_NOT_FOUND` | Узел классификатора не найден |
 | 404 | `TERM_NOT_FOUND` | Термин не найден |
 | 404 | `DOCUMENT_NOT_FOUND` | Документ не найден |
@@ -67,6 +80,28 @@
 ---
 
 ## Группа classifiers
+
+### О системе кодирования МКС/ОКС
+
+Классификатор МКС (ОК 001-2021, ICS) использует трёхуровневую иерархию:
+
+- **Раздел (XX)** — двузначный код, например `47 Судостроение и морские сооружения`
+- **Группа (XX.XXX)** — трёхзначный код после точки, например `47.020 Конструкция корпуса`
+- **Подгруппа (XX.XXX.XX)** — двузначный код, например `47.020.30 Корпусные конструкции`
+- **Национальное расширение (XX.XXX.XX-XX)** — дополнительный двузначный код через дефис, например `27.010-01 Энергосбережение`
+
+**Валидация кода:**
+```
+^\d{2}(?:\.\d{3}(?:\.\d{2})?)?(?:-\d{2})?$
+```
+
+> ⚠️ **Недопустимо**: использовать усечённые коды (например, `31.24` вместо `31.240`). Подгруппы должны иметь полный трёхуровневый код `XX.XXX.XX`. Нарушение приводит к ошибкам классификации документов.
+
+**Источник:** ОК 001-2021 (ИСО МКС), гармонизированный с ISO ICS. Демонстрационный набор кодов — в `specifications/mks_oks_classifier.csv`. Корневые узлы классификаторов — в `specifications/classifier_roots.csv`.
+
+**Запрет:** ОКС — рубрики-папки, документ — файл с метаданными. Не следует «встраивать» тип документа в дерево классификаторов.
+
+---
 
 | Метод | Путь | Описание |
 |-------|------|----------|
@@ -663,10 +698,10 @@ GET /registry/documents
 | `jurisdiction` | string | `RU`, `EU`, `US`, `NO`, `INTL` |
 | `issuing_body` | string | Организация-издатель |
 | `document_type` | string | Категория контента: `normative`, `technical`, `drawing`, `specification`, `archival_scan` |
-| `group` | string | Группа классификации (например, `ПО4`) |
 | `title_hash_sha256` | string | Точный поиск по бизнес-ключу |
-| `date_from` / `date_to` | date | Фильтр по дате создания |
 | `category_id` | int | Фильтр по ID категории (документы, привязанные к категории) |
+| `date_from` / `date_to` | date | Фильтр по дате создания |
+| `valid_at` | date | **P12-5 (новое)**: выборка документов, действующих на указанную дату (`valid_from <= ? AND valid_until >= ?`). Использует индекс `idx_documents_validity_range` |
 | `sort_by` | string | Поле сортировки: `title`, `doc_code`, `source_type`, `era`, `created_at`, `updated_at` (по умолчанию `created_at`) |
 | `order` | string | Направление: `asc`, `desc` (по умолчанию `desc`) |
 | `page` | int | Номер страницы |
@@ -683,7 +718,6 @@ GET /registry/documents
       "doc_code": "20868-81",
       "source_type": "GOST",
       "document_type": "normative",
-      "group": "ПО4",
       "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
       "file_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "file_size_bytes": 2048576,
@@ -740,6 +774,7 @@ GET /registry/documents/{doc_id}
 - `doc_code` — код документа (ГОСТ, ОСТ и т.д.)
 - `title` — название документа
 - `title_hash_sha256` — хэш бизнес-ключа
+- `preview_snapshot` — исходный JSON ответа Converter-validator preview, скопированный из черновика при approve (JSONB, nullable). Для истории и аудита
 - `status` — FSM-статус обработки (управляется Оркестратором, Registry — read-only)
 - `era` — эпоха (`USSR`, `CIS`, `RF`, `CURRENT`)
 - `validity_status` — юридический статус (`active`, `superseded`, `cancelled`, `historical`, `draft`)
@@ -747,12 +782,13 @@ GET /registry/documents/{doc_id}
 - `issuing_body` — организация-издатель
 - `source_type` — тип источника (`GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `OTHER`)
 - `document_type` — категория контента (`normative`, `technical`, `drawing`, `specification`, `archival_scan`)
-- `group` — группа классификации (например, `ПО4`)
 - `mks_oks_code` — код МКС/ОКС
 - `okstu_code` — код ОКСТУ
 - `classification_status` — статус классификации (`{ mks: string[], okstu: string[], udk: string[], subject_area: string[] }`)
 - `adoption_date` — дата принятия документа
 - `effective_from` — дата введения в действие
+- `valid_from` — **P12-5 (новое)**: дата начала действия документа. NOT NULL. См. конвенцию `dateMax` в `glossary.md`
+- `valid_until` — **P12-5 (новое)**: дата окончания действия документа. NOT NULL. Для бессрочных — `9999-12-31` (конвенция `dateMax`)
 - `replaces` — сведения о заменяемом документе
 - `status_note` — примечание к статусу
 - `successor_doc_id` — ID документа-преемника
@@ -771,8 +807,24 @@ GET /registry/documents/{doc_id}
     "doc_code": "ГОСТ 20868-81",
     "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
     "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+    "preview_snapshot": {
+      "doc_code": "ГОСТ 20868-81",
+      "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
+      "mks_oks_code": "31.240",
+      "okstu_code": null,
+      "udk_code": null,
+      "pkb_codes": ["Электроника", "Монтажные изделия"],
+      "document_type": "normative",
+      "year": 1981,
+      "era": "USSR",
+      "validity_status": "active",
+      "issuing_body": "Государственный Комитет СССР по стандартам",
+      "jurisdiction": "RU",
+      "source_type": "GOST",
+      "language": "ru",
+      "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
+    },
     "document_type": "normative",
-    "group": "ПО4",
     "status": "indexed",
     "era": "USSR",
     "validity_status": "active",
@@ -789,6 +841,8 @@ GET /registry/documents/{doc_id}
     },
     "adoption_date": "1981-07-01",
     "effective_from": "1982-01-01",
+    "valid_from": "1982-01-01",
+    "valid_until": "9999-12-31",
     "replaces": null,
     "status_note": null,
     "successor_doc_id": null,
@@ -938,6 +992,8 @@ POST /registry/documents/check-uniqueness
 4. Если кандидат найден и имеет статус обработки `created` или `indexed` — считается дубликатом.
 5. Если кандидат найден, но находится в `failed` — возвращается как кандидат,
    решение принимает пользователь.
+
+> **P0-3 (неатомарность check-uniqueness):** раздельные шаги «проверить» + «создать» могут привести к race condition при конкурентных загрузках одного документа. **Решение**: `INSERT INTO registry.documents (...) VALUES (...) ON CONFLICT (title_hash_sha256) DO NOTHING RETURNING id`. При `duplicate_file_hash` — `SELECT id FROM registry.document_versions WHERE file_hash_sha256 = ?`. Таким образом, проверка уникальности и вставка — атомарны. Отдельный эндпоинт `check-uniqueness` остаётся для preview (информационные цели), но финальная запись всегда использует `INSERT ... ON CONFLICT`.
 
 ---
 
@@ -1101,10 +1157,9 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
 | `document.doc_code` | string | Обозначение документа |
 | `document.title` | string | Полное название |
 | `document.normalized_title` | string | Нормализованное название |
-| `document.group` | string | Группа документа |
 | `document.mks_oks_code` | string | Код МКС/ОКС |
-| `document.okstu` | string\|null | Код ОКСТУ |
-| `document.udc` | string\|null | Код УДК |
+| `document.okstu_code` | string\|null | **D-51**: переименовано из `okstu`. Код ОКСТУ |
+| `document.udk_code` | string\|null | **D-51**: переименовано из `udc` для консистентности с `*_code` |
 | `document.era` | string | Эра документа |
 | `document.validity_status` | string | Статус действия |
 | `document.issuing_body` | string | Организация-издатель |
@@ -1232,13 +1287,27 @@ PATCH /registry/documents/{doc_id}
   "metadata": { "tags": ["важное", "обновлено"] },
   "validity_status": "superseded",
   "status_note": "Заменён ГОСТ Р 20868-2025",
-  "category_ids": [1, 3, 5]
+  "category_ids": [1, 3, 5],
+  "valid_from": "1982-01-01",
+  "valid_until": "9999-12-31"
 }
 ```
 
 | Поле | Тип | Описание |
 |------|-----|----------|
 | `category_ids` | bigint[] | Массив ID категорий для назначения документу. Передаётся полный список — заменяет текущую привязку категорий |
+| `valid_from` | date | **P12-5 (новое)**: дата начала действия. Редактируемое поле |
+| `valid_until` | date | **P12-5 (новое)**: дата окончания действия. Редактируемое поле. Для бессрочных — `9999-12-31` (конвенция `dateMax`, см. `glossary.md`) |
+
+**P12-5 (разделение editable/immutable — D14):**
+
+| Категория | Поля |
+|-----------|------|
+| **editable** | `title`, `metadata`, `validity_status`, `status_note`, `category_ids`, `valid_from`, `valid_until`, `mks_oks_code`, `okstu_code`, `udk_code` |
+| **immutable** | `id`, `doc_code`, `title_hash_sha256`, `file_hash_sha256`, `created_at`, `created_by`, `current_version_id` |
+| **read-only** | `chunk_count`, `total_versions`, `subject_area` (вычисляется из `mks_oks_code` / `okstu_code` / `udk_code` через справочник) |
+
+При попытке изменить immutable-поле возвращается `400 IMMUTABLE_FIELD` с указанием имени поля.
 
 **Ответ `200`:**
 ```json
@@ -1260,6 +1329,12 @@ PATCH /registry/documents/{doc_id}/status
 ```
 
 > **Internal:** Вызывается только Оркестратором при завершении индексации (после Pipeline 2). Внешним клиентам недоступен.
+>
+> **Защита (P0-6, решение 17.06):** Endpoint защищён **только сетевой изоляцией** Docker-сети `internal` (см. [`common_api.md`](common_api.md#аутентификация-service-to-service-сетевая-изоляция)). Отдельный заголовок `X-Internal-Token` **не используется** — Gateway-изоляции достаточно при условии, что:
+> 1. Порт 8084 (Registry) не публикуется во внешнюю сеть в `docker-compose.yml`.
+> 2. Все микросервисы находятся в Docker-сети `internal`, маршрут `/api/v1/registry/documents/*/status` **не проксируется** через Gateway наружу (см. таблицу маршрутизации в `gateway_service_api.md`).
+>
+> Любой запрос извне Docker-сети `internal` возвращает `404 NOT_FOUND` (порт закрыт) — это считается достаточной защитой.
 
 Оркестратор уведомляет Registry о финальном статусе документа после прохождения всех этапов обработки.
 
@@ -1437,7 +1512,8 @@ POST /registry/documents/import
 
 | Параметр | Тип | Обязательный | Описание |
 |----------|-----|-------------|----------|
-| `document_key` | string | Нет | Фильтр по бизнес-ключу |
+| `draft_id` | bigint | Нет | Фильтр по ID черновика |
+| `document_key` | string | Нет | Фильтр по бизнес-ключу документа |
 | `status` | string | Нет | Фильтр по статусу |
 
 **Ответ `200`**:
@@ -1452,14 +1528,24 @@ POST /registry/documents/import
       "status": "approved",
       "confidence": 0.92,
       "preview_metadata": {
-        "doc_code": "ГОСТ 20868-81",
-        "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ",
+        "doc_code": "311-05-1950ц",
+        "title": "ЦИРКУЛЯРНОЕ ПИСЬМО № 311-05-1950ц от 09.06.2023",
+        "mks_oks_code": null,
+        "okstu_code": null,
+        "udk_code": null,
+        "pkb_codes": [],
         "document_type": "normative",
-        "year": "1981",
-        "revision": null
+        "year": 2023,
+        "era": "CURRENT",
+        "validity_status": "active",
+        "issuing_body": "РОССИЙСКИЙ МОРСКОЙ РЕГИСТР СУДОХОДСТВА",
+        "jurisdiction": "RU",
+        "source_type": "RMRS",
+        "language": "ru",
+        "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
       },
       "created_by": "orchestrator",
-      "created_at": "2026-06-05T10:00:00Z"
+      "created_at": "2026-06-18T10:00:00Z"
     }
   ],
   "meta": { "total": 1, "page": 1, "page_size": 50 }
@@ -1481,18 +1567,28 @@ POST /registry/documents/import
     "status": "ready_for_approve",
     "confidence": 0.92,
     "preview_metadata": {
-      "doc_code": "ГОСТ 20868-81",
-      "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ",
+      "doc_code": "311-05-1950ц",
+      "title": "ЦИРКУЛЯРНОЕ ПИСЬМО № 311-05-1950ц от 09.06.2023",
+      "mks_oks_code": null,
+      "okstu_code": null,
+      "udk_code": null,
+      "pkb_codes": [],
       "document_type": "normative",
-      "year": "1981",
-      "revision": null
+      "year": 2023,
+      "era": "CURRENT",
+      "validity_status": "active",
+      "issuing_body": "РОССИЙСКИЙ МОРСКОЙ РЕГИСТР СУДОХОДСТВА",
+      "jurisdiction": "RU",
+      "source_type": "RMRS",
+      "language": "ru",
+      "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
     },
     "raw_data": { "schema": "raw_ocr_v4", "pages": [...] },
     "error_code": null,
     "error_message": null,
     "created_by": "orchestrator",
     "updated_by": null,
-    "created_at": "2026-06-05T10:00:00Z",
+    "created_at": "2026-06-18T10:00:00Z",
     "updated_at": "2026-06-05T10:05:00Z"
   }
 }
@@ -1512,13 +1608,23 @@ POST /registry/documents/import
     "status": "ready_for_approve",
     "confidence": 0.92,
     "preview_metadata": {
-      "doc_code": "ГОСТ 20868-81",
-      "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ",
+      "doc_code": "311-05-1950ц",
+      "title": "ЦИРКУЛЯРНОЕ ПИСЬМО № 311-05-1950ц от 09.06.2023",
+      "mks_oks_code": null,
+      "okstu_code": null,
+      "udk_code": null,
+      "pkb_codes": [],
       "document_type": "normative",
-      "year": "1981",
-      "revision": null
+      "year": 2023,
+      "era": "CURRENT",
+      "validity_status": "active",
+      "issuing_body": "РОССИЙСКИЙ МОРСКОЙ РЕГИСТР СУДОХОДСТВА",
+      "jurisdiction": "RU",
+      "source_type": "RMRS",
+      "language": "ru",
+      "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
     },
-    "created_at": "2026-06-05T10:00:00Z"
+    "created_at": "2026-06-18T10:00:00Z"
   }
 }
 ```
@@ -1536,11 +1642,21 @@ POST /registry/documents/import
   "status": "ready_for_approve",
   "confidence": 0.92,
   "preview_metadata": {
-    "doc_code": "ГОСТ 20868-81",
-    "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ",
+    "doc_code": "311-05-1950ц",
+    "title": "ЦИРКУЛЯРНОЕ ПИСЬМО № 311-05-1950ц от 09.06.2023",
+    "mks_oks_code": null,
+    "okstu_code": null,
+    "udk_code": null,
+    "pkb_codes": [],
     "document_type": "normative",
-    "year": "1981",
-    "revision": null
+    "year": 2023,
+    "era": "CURRENT",
+    "validity_status": "active",
+    "issuing_body": "РОССИЙСКИЙ МОРСКОЙ РЕГИСТР СУДОХОДСТВА",
+    "jurisdiction": "RU",
+    "source_type": "RMRS",
+    "language": "ru",
+    "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
   },
   "error_code": null,
   "error_message": null,
@@ -1695,7 +1811,6 @@ GET /registry/categories
       "name": "Корпусные конструкции",
       "description": "Документы по корпусу, набору, обшивке, палубам",
       "color": "#4CAF50",
-      "document_count": 12,
       "created_at": "2026-04-27T10:00:00Z",
       "updated_at": "2026-06-10T14:00:00Z"
     }
@@ -1710,7 +1825,6 @@ GET /registry/categories
 | `name` | string | Название категории |
 | `description` | string | Описание (необязательное) |
 | `color` | string | Цвет в hex (#RRGGBB) для отображения в UI |
-| `document_count` | int | Количество привязанных документов |
 | `created_at` | string | Дата создания |
 | `updated_at` | string | Дата обновления |
 
@@ -1731,7 +1845,6 @@ GET /registry/categories/{category_id}
     "name": "Корпусные конструкции",
     "description": "Документы по корпусу, набору, обшивке, палубам",
     "color": "#4CAF50",
-    "document_count": 12,
     "created_at": "2026-04-27T10:00:00Z",
     "updated_at": "2026-06-10T14:00:00Z"
   }
@@ -1771,7 +1884,6 @@ POST /registry/categories
     "name": "Корпусные конструкции",
     "description": "Документы по корпусу, набору, обшивке, палубам",
     "color": "#4CAF50",
-    "document_count": 0,
     "created_at": "2026-06-12T14:00:00Z",
     "updated_at": "2026-06-12T14:00:00Z"
   }
@@ -1798,7 +1910,7 @@ PUT /registry/categories/{category_id}
 
 | Поле | Тип | Обязательность | Описание |
 |------|-----|---------------|----------|
-| `name` | string | Да | Название категории |
+| `name` | string | Нет | Название категории |
 | `description` | string | Нет | Описание категории |
 | `color` | string | Нет | Цвет в hex (#RRGGBB) |
 
@@ -1811,7 +1923,6 @@ PUT /registry/categories/{category_id}
     "name": "Корпусные конструкции и набор",
     "description": "Обновлённое описание",
     "color": "#2196F3",
-    "document_count": 12,
     "created_at": "2026-04-27T10:00:00Z",
     "updated_at": "2026-06-12T15:00:00Z"
   }
@@ -1910,7 +2021,6 @@ DELETE /registry/categories/{category_id}
 | Поле | Тип | Ограничения |
 |------|-----|-------------|
 | `id` | bigint | PK |
-| `classifier_code` | text | nullable |
 | `doc_code` | text | nullable |
 | `title` | text | NOT NULL |
 | `title_hash_sha256` | text | UNIQUE — бизнес-ключ |
@@ -1919,11 +2029,10 @@ DELETE /registry/categories/{category_id}
 | `validity_status` | varchar(20) | nullable |
 | `jurisdiction` | varchar(10) | nullable |
 | `issuing_body` | text | nullable |
-| `industry_code` | text | nullable |
 | `enterprise_id` | bigint | nullable |
 | `mks_oks_code` | text | FK → classifier_registry (MKS) |
 | `okstu_code` | text | FK → classifier_registry (OKSTU) |
-| `classification_status` | jsonb | DEFAULT `{}` |
+| `classification_status` | jsonb | DEFAULT `'{}'` — см. спецификацию ниже |
 | `successor_doc_id` | bigint | FK → self, nullable |
 | `predecessor_doc_id` | bigint | FK → self, nullable |
 | `metadata` | jsonb | DEFAULT `{}` |
@@ -1932,7 +2041,45 @@ DELETE /registry/categories/{category_id}
 | `updated_at` | timestamptz | NOT NULL |
 | `updated_by` | text | nullable |
 
+> Удалены поля `classifier_code` и `industry_code` (старая модель, не использовались в API).
+> `group` удалён — классификация по предметным областям ПКБ выполняется через `categories` (M:N).
 > Сгенерированные колонки `mks_system` и `okstu_system` (GENERATED ALWAYS AS 'MKS'/'OKSTU') обеспечивают строгую FK-проверку к системе классификации.
+
+**Спецификация `classification_status` (JSONB):**
+
+Поле содержит статусы извлечения кодов классификации и метаданные парсинга:
+
+```json
+{
+  "mks_status": "CONFIRMED",
+  "okstu_status": "NOT_USED",
+  "udk_code": "629.5.021",
+  "extracted_at": "2026-06-13T10:00:00Z",
+  "extracted_by": "converter_validator_v3",
+  "confidence": 0.89
+}
+```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `mks_status` | string | Статус кода МКС/ОКС. Один из: `CONFIRMED`, `PENDING_REVIEW`, `NOT_FOUND`, `NOT_USED`, `UNASSIGNED` |
+| `okstu_status` | string | Статус кода ОКСТУ. Аналогичные значения |
+| `udk_code` | string or null | Извлечённый код УДК (если найден) |
+| `extracted_at` | timestamp or null | Время извлечения кодов |
+| `extracted_by` | string | Идентификатор парсера |
+| `confidence` | float (0..1) | Уверенность в извлечении кодов |
+
+**Значения статусов:**
+
+| Статус | Отображение | Значение |
+|--------|-------------|----------|
+| `CONFIRMED` | ✅ | Код найден в справочнике и верифицирован |
+| `PENDING_REVIEW` | \<PENDING\> | Извлечён автоматически, требует подтверждения |
+| `NOT_FOUND` | \<NOT_FOUND\> | Парсер не обнаружил код на первых страницах |
+| `NOT_USED` | \<NOT_USED\> | Не применяется для данной эры/типа документа |
+| `UNASSIGNED` | \<FREE\> | Классификация не назначалась |
+
+> **Важно**: поля `mks_oks_code` и `okstu_code` содержат только реальные коды или NULL (для целостности FK). Статусы `PENDING_REVIEW`, `NOT_FOUND`, `NOT_USED` хранятся только в `classification_status`, а не в самих кодовых полях.
 
 ### 5.5. format_registry
 
@@ -1944,6 +2091,8 @@ DELETE /registry/categories/{category_id}
 | `parser_engine` | text | NOT NULL — `docling`, `tesseract`, `easyocr` |
 | `supported` | boolean | DEFAULT true |
 | `created_at` | timestamptz | NOT NULL |
+
+> **Примечание:** `file_hash_sha256` в `registry.document_versions` должен иметь UNIQUE-ограничение для обеспечения CAS-дедупликации файлов. Один хэш = одна версия файла в системе. Попытка загрузить файл с существующим хэшом вызывает `unique_violation` и должна обрабатываться как дубликат файла.
 
 ---
 
@@ -1965,12 +2114,63 @@ DELETE /registry/categories/{category_id}
 | `document_id` | bigint | PK (составной), FK → `registry.documents.id` ON DELETE CASCADE |
 | `category_id` | bigint | PK (составной), FK → `registry.categories.id` ON DELETE CASCADE |
 
+### 5.8. document_reference
+
+| Поле | Тип | Ограничения |
+|------|-----|-------------|
+| `id` | bigint | PK |
+| `source_document_id` | bigint | FK → `registry.documents.id`, NOT NULL |
+| `target_doc_code` | text | NOT NULL — обозначение документа из текста (напр. «ГОСТ 24705-81») |
+| `reference_type` | varchar(20) | NOT NULL — `single`, `range` |
+| `context` | text | nullable — контекст ссылки |
+| `current_status` | varchar(20) | nullable — `active`, `superseded` |
+| `replaced_by` | text | nullable |
+| `replacement_date` | date | nullable |
+| `is_resolved` | boolean | DEFAULT false — связь проведена к `registry.documents` |
+| `resolved_document_id` | bigint | FK → `registry.documents.id`, nullable — целевой документ в реестре |
+| `created_at` | timestamptz | NOT NULL |
+| `updated_at` | timestamptz | NOT NULL |
+
+---
+
+## Фоновые задачи
+
+### Резолвер графа связей (background task within registry-service)
+
+**Назначение:** сопоставить `target_doc_code` из `document_references` с `registry.documents.doc_code` и проставить `resolved_document_id`.
+
+**Проблема:** при создании документа все его перекрёстные ссылки сохраняются с `is_resolved = FALSE`, так как целевой документ может ещё не существовать в системе.
+
+**Триггеры запуска:**
+- **По событию:** после создания документа в `registry.documents` Registry запускает резолвер для всех `is_resolved = FALSE`, где `target_doc_code` совпадает с `doc_code` нового документа.
+- **Фоново:** CRON-задача (период настраиваемый, рекомендуемый — 1 час) для обработки оставшихся неразрешённых ссылок.
+
+**SQL:**
+```sql
+UPDATE registry.document_references AS ref
+SET is_resolved = TRUE,
+    resolved_document_id = d.id,
+    updated_at = NOW()
+FROM registry.documents AS d
+WHERE d.doc_code = ref.target_doc_code
+  AND ref.is_resolved = FALSE;
+```
+
+**Индекс для производительности:**
+```sql
+CREATE INDEX idx_refs_unresolved
+ON registry.document_references(target_doc_code)
+WHERE is_resolved = FALSE;
+```
+
+**Важно:** корректная работа резолвера требует единого нормализатора `doc_code` как в Converter-validator (при извлечении ссылки из текста), так и в Registry (при сохранении карточки документа). Иначе «ГОСТ 24705-81» и «ГОСТ 24705-81» с разным количеством пробелов не совпадут.
+
 ---
 
 ## Примечания
 
 1. **DB shared:** Все таблицы registry находятся в общей БД. Другие сервисы читают их напрямую.
-2. **title_hash_sha256** вычисляется автоматически, гарантирует дедупликацию. Формула: `SHA-256(era | source_type | doc_code | normalized_title)`, где `normalized_title` — `title` в нижнем регистре с удалёнными лишними пробелами.
+2. **title_hash_sha256** вычисляется автоматически, гарантирует дедупликацию. Формула: `SHA-256(era | source_type | mks_oks_code | okstu_code | doc_code | normalized_title)`, где `normalized_title` — `title` в нижнем регистре с удалёнными лишними пробелами. Коды классификации (mks_oks_code, okstu_code) включены в формулу для разграничения документов с одинаковым номером, но разной тематической привязкой. Детальный алгоритм нормализации — в `specifications/normalizer_specification.md`.
 3. **Параллельная классификация:** Документ может одновременно ссылаться на МКС/ОКС и ОКСТУ через разные FK.
 4. **Журнал статусов:** Все изменения `documents.status` автоматически логируются в `status_history` триггером БД.
 5. **Неизвестные коды классификатора:** Коды, не найденные в справочнике, попадают в `classifier_pending`. Администратор разбирает их через UI.

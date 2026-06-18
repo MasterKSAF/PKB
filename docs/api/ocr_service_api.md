@@ -12,6 +12,19 @@
 
 ---
 
+---
+
+## Аутентификация service-to-service (сетевая изоляция)
+
+> Полное описание защиты internal-эндпоинтов (Docker-сеть internal, сетевая изоляция, матрица доступа) — см. [common_api.md](common_api.md#аутентификация-service-to-service-сетевая-изоляция).
+
+Краткая выжимка:
+
+- **Внешний клиент → Gateway** (L1): JWT Bearer, RBAC на Gateway.
+- **Gateway → внутренний сервис** (L2): сетевая изоляция Docker-сети internal.
+- **Service-to-service** (L3): только через private сеть, прямых вызовов извне быть не может.
+- **X-Internal-Token не используется** (решение 17.06, P0-6) — сетевой изоляции достаточно.
+
 ### Контракт API (финальный)
 
 #### Формат ответа
@@ -49,6 +62,7 @@
 ```json
 {
   "task_id": 420000,
+  "draft_id": 12345,
   "file_key": "file-abc123",
   "mode": "preview",
   "max_pages": 3,
@@ -62,6 +76,7 @@
 | Поле | Тип | По умолчанию | Обязательность | Описание |
 | ---- | --- | ------------ | -------------- | -------- |
 | `task_id` | bigint | — | Да | Идентификатор задачи (генерируется Оркестратором) |
+| `draft_id` | bigint | — | **Да (P12-1)** | Идентификатор черновика в Registry. Обязателен с 17.06 |
 | `file_key` | string | — | Да | Ключ файла в MinIO |
 | `mode` | enum | `"full"` | Нет | Режим обработки: `"preview"` / `"full"` |
 | `max_pages` | int | `3` | Нет | Количество страниц для предпросмотра (только для `mode: "preview"`) |
@@ -221,8 +236,15 @@
 | `quality`                                    | object | Общая оценка качества + `per_page` — детализация по страницам        |
 | `quality.per_page[].status`                  | string | `ok`, `low_confidence`, `failed`                                     |
 | `quality.per_page[].error`                   | string | Код ошибки страницы (только при `status: failed`)                    |
-| `errors`                                     | array  | Массив некритичных ошибок и предупреждений                           |
+| `quality.notifications[]`                    | array  | **P12-3 / P3-5**: уведомления для оператора (см. parser_service_api.md) — единый массив `{code, severity, category, message, location, suggested_action}` |
+| `errors`                                     | array  | Массив **системных** ошибок OCR                                      |
 | `status`                                     | string | `completed`, `failed`                                                |
+
+**P12-3 / P3-5 — поле `quality.notifications[]`:**
+
+Единый массив уведомлений для оператора — полностью аналогичен Parser-сервису (см. [parser_service_api.md](parser_service_api.md#p12-3--p3-5--qualitynotifications-уведомления-оператора)).
+
+Коды OCR-специфичных уведомлений: `BLURRED_REGION`, `LOW_RESOLUTION`, `INVERTED_COLORS`, `MULTILINGUAL_CONTENT`, `LAMA_FALLBACK_USED` (см. P3-6). Все — с `category: quality`.
 
 ---
 

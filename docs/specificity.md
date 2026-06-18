@@ -85,6 +85,51 @@ API черновиков и FSM документированы, но **UI сра
 
 `task_id` теперь ID задачи в `pipeline.tasks` (БД Orchestrator). Агрегирует этапы (`task_steps`) с входными/выходными данными сервисов. Внешние клиенты используют `draft_id`.
 
+### A35. `GET /drafts` — поддержка `draft_id` и `document_key` как опциональных фильтров
+
+Ранее `GET /drafts` требовал `document_key` как обязательный параметр, что не позволяло администратору получить полный список всех черновиков. Также нельзя было найти черновик по `draft_id` через список.
+
+**Решение (13.06):**
+- `document_key` — опциональный фильтр (история попыток обработки одного документа)
+- Добавлен `draft_id` — опциональный фильтр по ID черновика
+- Без параметров — возвращаются все черновики (доступно `system_admin`, `knowledge_admin`)
+- Добавлены параметры пагинации `page`, `page_size`
+
+Синхронизированы:
+- `orchestrator_service_api.md` — публичный `GET /drafts`
+- `gateway_service_api.md` — таблица маршрутов
+- `registry_service_api.md` — internal `GET /registry/drafts`
+- `README.md` — описание экрана загрузки
+
+### A37. Резолвер графа связей — не реализован
+
+В `registry.document_references` есть поля `is_resolved` и `resolved_document_id`, но не описан сервис или механизм, который их проставляет. При загрузке нового документа все ссылки создаются с `is_resolved = FALSE` и остаются в этом состоянии.
+
+**Что нужно:**
+- Спецификация резолвера в `registry_service_api.md`.
+- Триггеры: по событию (создание документа) + CRON-задача.
+- SQL: `UPDATE ref SET is_resolved=TRUE, resolved_document_id=d.id FROM registry.documents d WHERE d.doc_code=ref.target_doc_code AND ref.is_resolved=FALSE`.
+- Частичный индекс `WHERE is_resolved = FALSE`.
+- Единый нормализатор `doc_code` в Converter-validator и Registry.
+
+**Статус:** требуется реализация. См. `analyse_alternative_project.md` (п. 1.1).
+
+
+
+### A36. Классификация ПКБ — расширение `categories` вместо отдельной таблицы
+
+В `registry_document` обнаружены два конкурирующих набора полей классификации:
+- **Новые:** `mks_oks_code`, `okstu_code` — используются в API
+- **Старые:** `classifier_code`, `industry_code` — есть в модели данных, но не используются в API (архитектурный запах, неполная миграция)
+
+Поле `group` использовалось в API, но отсутствовало в модели данных.
+`PKB_DOMAIN` как `classifier_system` enum не существует.
+
+**Решение (13.06, уточнено):** Вместо отдельной таблицы `pkb_domains` — используются существующие `categories` (M:N):
+- `classifier_code`, `industry_code`, `group` — удалены из модели
+- Предметные области ПКБ — это категории, привязанные к документам через `document_category`
+- `classifier_system` enum остаётся без изменений: `MKS, OKSTU, UDC, EXTERNAL`
+
 ### A34. Битый путь к sprint-плану в README.md + отсутствие документации пользовательских категорий
 
 В `docs/README.md` строка 151 ссылалась на `plans/sprint1_04_06_10_06.md` — файл не существовал по указанному пути (фактически находился в `docs_plans/features/`). Пользовательские категории документов (many-to-many) были спроектированы в вопросе 4.5 спринт-плана, но не были отражены в основной документации (`registry_service_api.md`, `db_diagrams.md`).
@@ -116,7 +161,7 @@ API черновиков и FSM документированы, но **UI сра
 | Код | Проблема | Статус |
 |-----|----------|--------|
 | S3 | Rate limiting не реализован (Nginx + Redis) | 🔄 код |
-| S10 | `/internal/auth/validate` без сетевой изоляции (mTLS) | 🔄 код |
+| S10 | `/internal/auth/validate` без сетевой изоляции | 🔄 код |
 
 ---
 
@@ -154,7 +199,7 @@ API черновиков и FSM документированы, но **UI сра
 | Код | Проблема | Статус |
 |-----|----------|--------|
 | LP-C1 | Потеря бинарных объектов на страницах preview при переходе к full-фазе | 🔄 решено: preview/full — единый эндпоинт с `mode`; если движок не поддерживает постраничный парсинг — full сразу с флагом `preview_not_supported: true`; auto-approve только при успешном извлечении метаданных и отсутствии дубликатов |
-| LP-C2 | Противоречие в назначении `document_id`: Converter-validator vs Registry | ⬜ открыто |
+| LP-C2 | Противоречие в назначении `document_id`: Converter-validator vs Registry | 🔄 исправлено: `document_id` полностью удалён из Converter-validator API (16.06) |
 | LP-C3 | Неатомарность проверки уникальности — нет компенсации при дубликате после `approve` | ⬜ открыто |
 | LP-C4 | `discarded` (черновик) отсутствует в FSM документа — корректно, так как `discarded` — статус черновика, `failed` — статус документа | 🔄 исправлено |
 
@@ -172,7 +217,8 @@ API черновиков и FSM документированы, но **UI сра
 | PL-E2 | Идемпотентность сообщений (Idempotency-Key) | 🔄 код |
 | PL-E3 | TTL preview-артефактов — не определён | 🔄 решено: preview-режим не сохраняет бинарные объекты (`image_key` отсутствует), артефактов нет |
 | B6 | `chat.messages.status` — значения не формализованы в БД | ⬜ DBA |
-| B7 | Auth Service, RAG Builder, RAG Search — API-спецификации | ⬜ аналитик |
+| B7 | RAG Builder — API-спецификация | 🔄 синхронизирована с пайплайнами (15.06) |
+| B7a | Auth Service, RAG Search — API-спецификации | ⬜ открыто (P1-1, 17.06): фактического аудита RAG Search не проводилось. Документация RAG Search в `rag_search_service_api.md` дополнена секциями (конфигурация, стратегии, метрики) в рамках P13, но **это не заменяет полноценный аудит**. Auth Service: спецификация актуальна (12.06), но детальный аудит не проводился. Приоритет: 🟠 |
 
 ## 🟡 Перекрёстные несоответствия (кросс-проверка)
 
@@ -198,6 +244,31 @@ API черновиков и FSM документированы, но **UI сра
 - **bbox** — пиксели (px) в OCR/Parser, нормализованные [0,1] в Converter-validator.
 - **Двухфазный пайплайн**: preview → full (от 23.05).
 - **OCR и Parser — два независимых сервиса** (от 23.05).
+- **Унификация health-эндпоинта Orchestrator** (13.06): `/api/v1/monitor/health` → `/api/v1/health` как у всех внутренних сервисов. Health Orchestrator больше не проксируется через Gateway (внутренний, как Auth и др.). Gateway предоставляет `/api/v1/system/health` для внешнего мониторинга.
+- **Перенос `/api/v1/monitor/metrics` в Gateway** (13.06): эндпоинт метрик качества пайплайнов перенесён из Orchestrator в Gateway как собственный (не проксируемый). Спецификация удалена из `orchestrator_service_api.md` и добавлена в `gateway_service_api.md`.
+
+### 🔄 Схлопывание `quality.warnings[]` + `quality.issues[]` в `quality.notifications[]` (18.06)
+
+**Проблема:** два параллельных массива в `quality` с почти одинаковой структурой, но разной семантикой (P3-5 security vs P12-3 операторские замечания). Разделение усложняет контракт и UI.
+
+**Решение:** единый массив `quality.notifications[]` с полем `category: security | quality`. БД-таблица `pipeline.draft_notifications` (единая, без history).
+
+**Обоснование:**
+- Оба массива адресованы оператору — сервисы лишь передают данные
+- Security-предупреждения тоже требуют внимания оператора (critical → подтверждение перед approve)
+- Единый контракт проще для UI и consumer'ов
+- Система новая — нет необходимости в патчах и обратной совместимости
+- P3-5 поглощён P12-3: отдельный `warnings[]` не создаётся
+
+**Затронутые документы:**
+- `docs/api/parser_service_api.md` — `warnings[]` + `issues[]` → `notifications[]`
+- `docs/api/ocr_service_api.md` — зеркальное изменение
+- `docs/specifications/parsing_specifications.md` — `warnings` → `notifications`
+- `docs/database/ddl_migrations_17_06.md` — `draft_issues` → `draft_notifications`
+- `docs/pipelines/pipeline1-formation.md` — `draft_issues` → `draft_notifications`
+- `docs/glossary.md` — `draft_issues` → `draft_notifications`
+- `docs/5.docs_action_plan_17_06.md` — P12-3 актуализирован, P3-5 помечен поглощённым
+- `docs/guide.md` — new: зафиксировано решение
 
 ### 🔄 Схлопывание `/parser/preview` и `/parser/process` (08.06)
 

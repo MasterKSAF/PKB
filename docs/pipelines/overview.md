@@ -10,9 +10,11 @@ graph LR
     end
 
     subgraph "Пайплайн 1: Формирование"
-        A[MinIO] -->|file_ref| B[OCR Service]
-        B -->|JSON| C[Parser Service]
-        C -->|JSON| D[Converter-validator]
+        A[MinIO] -->|file_ref| Type{Тип файла}
+        Type -->|скан| B[OCR Service]
+        Type -->|цифровой| C[Parser Service]
+        B -->|JSON| D[Converter-validator]
+        C -->|JSON| D
         D -->|JSON| E[Registry]
         E -->|JSON со ссылками| F[(PostgreSQL)]
 
@@ -245,8 +247,8 @@ flowchart LR
 | **Чанкинг в RAG Builder, а не в Parsing**     | Parsing отвечает только за распознавание и структурирование. Чанкинг — задача RAG для оптимизации поиска. Разные стратегии чанкинга не влияют на карточку документа                                                                                                                                                                                       |
 | **Изоляция доступа к БД по этапам**            | Parsing не зависит от БД — может масштабироваться горизонтально. Validation читает, Registry пишет — исключены гонки и каскадные锁. RAG Builder пишет, RAG Search читает — консистентность данных                                                                                                                                                         |
 | **Оркестратор оперирует JSON как контейнером** | Структура JSON известна только сервисам. Orchestrator не имеет доступа к БД (кроме пре-стейджа загрузки). Снижает связанность, упрощает тестирование и замену сервисов                                                                                                                                                                                    |
-| **CAS-пути для файлов**                        | `{doc_id}/v{n}/{hash}.{ext}` — гарантирует целостность и исключает дубликаты                                                                                                                                                                                                                                                                              |
-| **Бизнес-ключ `title_hash_sha256`**            | Вычисляется как SHA-256 от `doc_code + title + era` — исключает коллизии (ГОСТ СССР vs ГОСТ РФ с одинаковым номером)                                                                                                                                                                                                                                       |
+| **CAS-пути для файлов**                        | `{doc_id}/v{n}/{hash}.{ext}` — гарантирует целостность и исключает дубликаты. Детально: `specifications/cas_storage_specification.md`                                                                                                                                                                                                                                                                              |
+| **Бизнес-ключ `title_hash_sha256`**            | Вычисляется как SHA-256 от `era | source_type | mks_oks_code | okstu_code | doc_code | normalized_title` — исключает коллизии (ГОСТ СССР vs ГОСТ РФ с одинаковым номером). Детальный алгоритм: `specifications/normalizer_specification.md`                                                                                                                                                                                                                                       |
 | **Единый `document_id`**                       | `document_id` назначается в **Registry** при создании карточки документа. Converter-validator передаёт документ без ID; Registry создаёт карточку и присваивает `document_id`. Для дубликатов извлекается существующий `document_id`. Этот же `document_id` используется как первичный ключ во всех последующих сервисах — RAG Builder и RAG Search. Это исключает маппинг идентификаторов на стыке пайплайнов и упрощает трассировку документа от загрузки до поиска. |
 | **Двухфазный пайплайн с user decision point** | Пайплайн 1 разделён на две фазы: preview (быстрый проход OCR/Parser → Converter-validator) и commit (основной проход). После preview пользователь принимает решение — утвердить или отклонить результат. Это позволяет отсеивать ошибочные документы до записи в Registry и индексации. |
 | **Preview-данные в журнале Оркестратора**     | Результаты preview-фазы сохраняются в журнале Оркестратора (`/documents/{doc_id}/history`). При утверждении preview-данные используются как основа для основного прохода, что исключает повторное распознавание. |
@@ -376,6 +378,7 @@ stateDiagram-v2
     }
 
     indexed --> [*] : готов к поиску
+    indexed --> failed : integrity check failed (D23, P1-17)
     failed --> uploaded : reprocess
 ```
 
@@ -393,6 +396,14 @@ stateDiagram-v2
 | `indexing` | 2 | Выполняется чанкинг и построение векторного индекса |
 | `indexed` | 2 | Документ проиндексирован, готов к поиску |
 | `failed` | 1/2 | Ошибка на одном из этапов |
+
+**Маппинг трёхуровневой статусной модели:**
+
+| Уровень | Таблица / API | Статусы | Назначение |
+|---------|--------------|---------|------------|
+| **DB (FSM)** | `registry.documents.processing_status` | `created`, `pending_index`, `indexing`, `indexed`, `failed` | Фактическое состояние документа в БД. Статусы черновика (`uploaded`, `previewing`, `ready_for_approve`, `approved`, `discarded`) хранятся в `registry.drafts.status` |
+| **Task** | `pipeline.tasks.status` | `active`, `completed`, `failed` | Внутренний статус задачи пайплайна в Оркестраторе. Не путать со статусом документа |
+| **UI (API)** | `GET /documents/{doc_id}/status` response | `processing`, `approval_required`, `completed` | Агрегированный статус для отображения пользователю. Маппинг: `processing` ← (`uploaded`/`previewing`), `approval_required` ← (`ready_for_approve`), `completed` ← (весь документ проиндексирован) |
 
 ---
 
@@ -467,6 +478,8 @@ OpenAI / Custom]
     GW --> Orch
     GW --> QS
     GW --> IS
+    GW --> Reg
+    GW --> An
 
     Orch --> OCR
     Orch --> Pars

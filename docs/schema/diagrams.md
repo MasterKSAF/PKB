@@ -316,8 +316,7 @@
 | `caption` | `text` | Подпись к рисунку/таблице |
 | `table` | `textBlock` | Таблица |
 | `list` | `textBlock` | Список |
-| `drawing` | `textBlock` | Чертеж |
-| `image` | `textBlock` | Изображение |
+| `image` | `textBlock` | Изображение / чертеж (D56: тип `drawing` удалён, см. API-B1, объединён с `image`) |
 | `formula` | `textBlock` | Формула |
 
 ---
@@ -391,7 +390,7 @@ flowchart TD
         Parser[Parser Service :8087]
         CV[Converter-validator :8086]
         Registry[Registry :8084]
-        RAGB[RAG Builder :8090]
+        %% D57: RAG Builder перенесён в Pipeline 2 (устранён дубль)
     end
 
     subgraph Pipeline2_Indexation[Pipeline 2: Индексация]
@@ -413,7 +412,6 @@ flowchart TD
     OCR --> CV
     Parser --> CV
     CV --> Registry
-    Registry --> RAGB
-    RAGB --> RAGI
+    Registry --> RAGI
     QS --> RAGS
 ```
