@@ -10,9 +10,11 @@ graph LR
     end
 
     subgraph "Пайплайн 1: Формирование"
-        A[MinIO] -->|file_ref| B[OCR Service]
-        B -->|JSON| C[Parser Service]
-        C -->|JSON| D[Converter-validator]
+        A[MinIO] -->|file_ref| Type{Тип файла}
+        Type -->|скан| B[OCR Service]
+        Type -->|цифровой| C[Parser Service]
+        B -->|JSON| D[Converter-validator]
+        C -->|JSON| D
         D -->|JSON| E[Registry]
         E -->|JSON со ссылками| F[(PostgreSQL)]
 
@@ -376,6 +378,7 @@ stateDiagram-v2
     }
 
     indexed --> [*] : готов к поиску
+    indexed --> failed : integrity check failed (D23, P1-17)
     failed --> uploaded : reprocess
 ```
 
@@ -475,6 +478,8 @@ OpenAI / Custom]
     GW --> Orch
     GW --> QS
     GW --> IS
+    GW --> Reg
+    GW --> An
 
     Orch --> OCR
     Orch --> Pars

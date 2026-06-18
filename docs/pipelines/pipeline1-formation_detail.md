@@ -234,7 +234,7 @@
 
 ### 3.2. Сервис конвертации / валидации (Converter-validator)
 
-
+> **Полная спецификация:** [`docs/specifications/converter_specification.md`](../specifications/converter_specification.md) — архитектура «чёрного ящика», 9 шагов обработки, сценарии А–Ж, маппинг типов блоков, LLM.
 
 Выполняет основную интеллектуальную обработку и также предоставляет **preview API** для фазы превью.
 

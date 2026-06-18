@@ -129,6 +129,7 @@ stateDiagram-v2
 | `pending_index` | Ожидание запуска индексации после завершения Пайплайна 1 |
 | `indexing` | Выполняется чанкинг, вычисление эмбеддингов, построение индекса |
 | `indexed` | Документ проиндексирован, готов к семантическому поиску |
+| `partially_indexed` | Часть чанков проиндексирована, часть пропущена из-за ошибок embeddings/БД. Документ **исключён** из RAG Search (RAG фильтрует `WHERE processing_status = 'indexed'`). Требуется переиндексация через `POST /documents/{doc_id}/reprocess`. **Уточнение (P1-16)**: `partially_indexed` не выделен отдельной FSM-стрелкой на диаграмме, но фиксируется в `processing_status` при `chunk_count_actual < chunk_count_expected` после завершения индексации. Планируется выделить в отдельный статус в Sprint 4 (задача SPEC-19) |
 | `failed` | Ошибка индексации (таймаут, превышение retry, нарушение целостности). Требуется повторная индексация через `POST /documents/{doc_id}/reprocess` |
 
 ---
@@ -157,11 +158,40 @@ graph TD
         Retry4 -->|Все попытки исчерпаны| Fail2
         Retry4 -->|Успех| Index[Построение индекса]
         Chunk -->|Успех| Index
-        Index -->|Ошибка БД| Comp2[Компенсация: откат транзакции, удалить сохранённые чанки]
+        Index -->|Ошибка БД| Comp2[Компенсация: DELETE сохранённых чанков]
         Comp2 --> Retry4
         Index -->|Успех| Indexed[indexed]
     end
 ```
+
+**Механизм перехода `indexed → failed` (P1-17, уточнение):**
+
+Переход `indexed → failed : Integrity check failed` (см. диаграмму FSM выше) активируется **после** успешной записи в pgvector. Целостность проверяется **в две стадии**:
+
+1. **Пост-индексационный self-check** (RAG Builder, выполняется в конце `indexing`):
+   - `SELECT count(*) FROM rag.document_chunks WHERE document_id = $1` сравнивается с `expected_chunk_count` (рассчитан на этапе чанкинга).
+   - Проверка `chunk_count == expected_chunk_count` и `total_tokens > 0`.
+   - Проверка уникальности `chunk_index` (не должно быть дублей).
+2. **Фоновая проверка по расписанию** (Scheduler, каждые 6 часов):
+   - Для всех документов в статусе `indexed` старше 1 часа выполняется выборка `chunk_count` + `count(*)` + проверка `embedding IS NOT NULL`.
+   - Если для какого-то документа `chunk_count_actual < chunk_count_expected` или `embedding IS NULL` — перевод в `failed` с `error_code = "INTEGRITY_CHECK_FAILED"`, лог `ERROR` уровня.
+
+При переходе в `failed`:
+- `processing_status = 'failed'`
+- `error_code = 'INTEGRITY_CHECK_FAILED'`
+- `chunk_count` сохраняется для последующего анализа.
+- RAG Search **автоматически исключает** документ из выдачи (`WHERE processing_status = 'indexed'` уже включён в прод-фильтр).
+- Документ становится кандидатом на `POST /documents/{doc_id}/reprocess` (UI показывает предупреждение).
+
+**Компенсация ошибок (P1-18, устранение противоречия):**
+
+Ранее в §1 (строка 143) и в mermaid-диаграмме использовались две разные формулировки («откат транзакции» vs «удалить сохранённые чанки»). **Канонический механизм (P1-18)**:
+
+- На стадии `indexing` **вся запись выполняется в одной транзакции** (`BEGIN ... INSERT ... COMMIT`). При ошибке — `ROLLBACK` отменяет все чанки пакета. Это и есть «откат транзакции».
+- Если `ROLLBACK` невозможен (например, ошибка произошла **после** `COMMIT`, но до `UPDATE registry.documents SET processing_status='indexed'`) — выполняется **компенсирующий `DELETE FROM rag.document_chunks WHERE document_id = $1 AND created_in_txn = $txn_id`**, где `$txn_id` — уникальный идентификатор индексирующей транзакции (см. `db_diagrams.md`, новая колонка `rag.document_chunks.indexing_txn_id` — будет добавлена в P2-9).
+- После успешной компенсации — повторная попытка (`Retry4` на диаграмме). При исчерпании retry — `failed`.
+
+Таким образом, **обе формулировки корректны** и применяются на разных стадиях: транзакция — основной путь, DELETE — fallback.
 
 ---
 

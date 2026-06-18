@@ -55,6 +55,7 @@ docs/
 ├── specifications/                   # Технические спецификации
 │   ├── parsing_specifications.md       #   Спецификация парсинга (OCR + P3-6 Lama-риск)
 │   ├── normalizer_specification.md     #   Нормализатор: алгоритмы дедупликации и бизнес-ключ
+│   ├── converter_specification.md       #   Спецификация конвертера-валидатора (P8-10)
 │   ├── cas_storage_specification.md    #   CAS (Content-Addressable Storage) — два бакета (P5-9)
 │   ├── purgatory_scenario.md           #   Сценарии использования
 │   ├── registry_resolver_spec.md       #   Резолвер графа связей (P0-4)
@@ -430,7 +431,7 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 ### Сервис конвертации и валидации (Converter-validator Service)
 **Порт:** `8086`
 **Документация:** [`docs/api/converter_validator_service_api.md`](api/converter_validator_service_api.md)
-**Описание также в:** [`pipelines/pipeline1-formation.md`](pipelines/pipeline1-formation.md), [`pipelines/pipeline1-formation_detail.md`](pipelines/pipeline1-formation_detail.md), [`schema/schema_converter_result.json`](schema/schema_converter_result.json), [`schema/schema_converter_preview.json`](schema/schema_converter_preview.json)
+**Описание также в:** [`specifications/converter_specification.md`](specifications/converter_specification.md), [`pipelines/pipeline1-formation.md`](pipelines/pipeline1-formation.md), [`pipelines/pipeline1-formation_detail.md`](pipelines/pipeline1-formation_detail.md), [`schema/schema_converter_result.json`](schema/schema_converter_result.json), [`schema/schema_converter_preview.json`](schema/schema_converter_preview.json)
 
 **Назначение:**
 Принять сырые извлечённые данные, полученные от OCR или Parser, и превратить их в полноценный структурированный документ, полностью готовый к сохранению в базе данных. Не сохраняет данные в БД — только готовит структурированное представление.

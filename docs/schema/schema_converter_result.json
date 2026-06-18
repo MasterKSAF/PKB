@@ -2,6 +2,8 @@
   "metadata": {
     "schema": "validated_v3",
     "task_id": 420000,
+    "draft_id": 420000,
+    "version_id": 420042,
     "created_at": "2026-05-17T09:15:00Z",
     "parser": {
       "name": "docling",
@@ -20,10 +22,9 @@
       "doc_code": "ГОСТ 20868-81",
       "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
       "normalized_title": "стойки установочные крепежные технические требования",
-      "group": "ПО4",
       "mks_oks_code": "31.240",
       "okstu_code": null,
-      "udc": null,
+      "udk_code": null,
       "era": "USSR",
       "validity_status": "active",
       "issuing_body": "Государственный Комитет СССР по стандартам",
@@ -453,5 +454,19 @@
         "note": null
       }
     ]
+  },
+  "task_id": 420000,
+  "version_id": 420042,
+  "validation": {
+    "passed": true,
+    "errors": [],
+    "warnings": []
+  },
+  "llm_usage": {
+    "model": "deepseek-4-flash",
+    "prompt_tokens": 1500,
+    "completion_tokens": 800,
+    "total_tokens": 2300,
+    "duration_ms": 2500
   }
 }

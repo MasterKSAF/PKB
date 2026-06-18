@@ -7,11 +7,24 @@
 
 ### Формат ответа
 
-Формат ответа и ошибок — см. [common_api.md](../common_api.md#формат-ответа).
+Формат ответа и ошибок — см. [common_api.md](common_api.md#формат-ответа).
 
 **Специфичные коды ошибок:**
 | HTTP | `error.code` | Описание |
 |------|-------------|----------|
+
+---
+
+## Аутентификация service-to-service (сетевая изоляция)
+
+> Полное описание защиты internal-эндпоинтов (Docker-сеть internal, сетевая изоляция, матрица доступа) — см. [common_api.md](common_api.md#аутентификация-service-to-service-сетевая-изоляция).
+
+Краткая выжимка:
+
+- **Внешний клиент → Gateway** (L1): JWT Bearer, RBAC на Gateway.
+- **Gateway → внутренний сервис** (L2): сетевая изоляция Docker-сети internal.
+- **Service-to-service** (L3): только через private сеть, прямых вызовов извне быть не может.
+- **X-Internal-Token не используется** (решение 17.06, P0-6) — сетевой изоляции достаточно.
 | 202 | — | Индексация запущена (асинхронно) |
 | 200 | — | Статус/результат |
 | 500 | `BUILD_FAILED` | Ошибка построения чанков или эмбеддингов |
@@ -48,8 +61,22 @@ Orchestrator получает JSON из Registry (через `GET /registry/docu
 
 **Защищённые span'ы (`protected_spans`):** участки текста внутри секций, которые нельзя разбивать при чанкинге (например, заголовки, важные термины). Задаются как массив `{section_id, start_offset, end_offset}`. Если не указаны — чанкинг выполняется без ограничений.
 
-**Параметры индексации (`options`):**
-- `options.strategy` — стратегия чанкинга: `semantic_512` (по умолчанию) — семантическое разбиение с макс. 512 токенов на чанк.
+**Параметры индексации (`options`) — P13-1 (конфигурация по умолчанию, решение 17.06):**
+
+| Параметр | Прод-значение | Описание |
+|----------|---------------|----------|
+| `options.strategy` | `semantic_1024` | Стратегия чанкинга. **Изменено с `semantic_512`** (17.06) — новый дефолт 1024 токена. Для экспериментов: `semantic_512`, `semantic_2048`, `fixed_256`, `fixed_512` |
+| `options.embedding_model` | `qwen3-embedding-4b` | **P13-1**: модель эмбеддингов (Qwen3-Embedding-4B, **внешнее API**). Endpoint и API-key — `app_settings.rag.embedding_api.endpoint` / `.api_key` |
+| `options.embedding_dim` | `2048` | **P13-1**: размерность эмбеддинга. Альтернативы (экспериментально): 1536, 2560, 4096 |
+| `options.embedding_quantization` | `int8` | **P13-1**: квантизация для ускорения инференса (через Infinity — см. D67) |
+| `options.rerank_model` | `bge-reranker-v2-m3-int8` | **P13-3**: модель rerank. URL TEI-сервера — `app_settings.rag.rerank_url` |
+| `options.protected_spans` | `[]` | Защищённые span'ы (не разбивать при чанкинге) |
+
+> **Не передавать `version_id` в RAG** (P12-6, уточнение 17.06): `rag_documents.doc_id` ссылается на **документ** (без версии), а сам чанк хранит `document_version_id` только для аудита. Убедитесь, что запрос к RAG Builder содержит `document_id`, но **не** `version_id`. См. `parser_service_api.md` — там `version_id` тоже не нужен.
+
+> **P4-3 (Qwen3, int8, сетка 2560/2048/1536)**: см. `docs/methodology/rag_experiments_methodology.md` §2.5 — обоснование выбора модели и сетки размерностей.
+
+> **D67 (Infinity)**: для production-деплоя используется выделенный сервис эмбеддингов **Infinity** (OpenAI-совместимое API, локальный). Для тестирования и экспериментов — внешнее API Qwen3. Конфигурируется через `app_settings.rag.embedding_api.mode = "infinity" | "external"`.
 
 **Запрос (передаётся от Orchestrator, обогащённый JSON из Registry):**
 

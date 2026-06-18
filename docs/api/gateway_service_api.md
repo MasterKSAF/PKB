@@ -55,6 +55,8 @@ Gateway объединяет API всех внутренних сервисов 
 | `/api/v1/analyse/*` | Analyse Service | `8089` | [analyse_service_api.md](analyse_service_api.md) |
 | `/api/v1/health` | Gateway (собственный) | `8080` | — |
 | `/api/v1/meridian/*` | Integration Service | `8085` | [integration_service_api.md](integration_service_api.md) |
+| `/api/v1/files/*` | Integration Service | `8085` | [integration_service_api.md](integration_service_api.md) (D25: добавлен в routing table) |
+| `/api/v1/external/*` | Integration Service | `8085` | [integration_service_api.md](integration_service_api.md) (D25: добавлен в routing table) |
 
 > **¹ Примечание**: Маршрут `/api/v1/pages/*` — устаревший алиас. Все эндпоинты работы со страницами вложены в `/documents/{doc_id}/pages/*` и маршрутизируются через `/api/v1/documents/*`. Отдельный префикс `/pages/*` будет удалён после рефакторинга Gateway.
 >
@@ -62,7 +64,7 @@ Gateway объединяет API всех внутренних сервисов 
 
 > **📐 Принцип категоризации путей:** Все пути Gateway организованы по категориям сервисов. Префикс пути включает имя сервиса (например, `/api/v1/registry/*` для Registry Service, `/api/v1/chat/*` для Query Service), за которым следует логическая группа эндпоинтов. Пути без категории сервиса (например, устаревший `/pages/*`) не должны добавляться.
 
-В мок-режиме (см. [gateway.py](../mocks/gateway.py)) Gateway, Orchestrator и остальные сервисы объединены в единое FastAPI-приложение на порту `8081` (эмуляция nginx + gateway для разработки и тестов).
+В мок-режиме Gateway, Orchestrator и остальные сервисы объединены в единое FastAPI-приложение для разработки и тестов. Исходный код мок-Gateway — в репозитории `backend/` (конкретный путь уточняется в `architecture/service_dependencies.md`). Документация описывает контракт Gateway, а не привязана к пути файла.
 
 ---
 

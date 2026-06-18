@@ -9,11 +9,24 @@
 
 ### Формат ответа
 
-Формат ответа и ошибок — см. [common_api.md](../common_api.md#формат-ответа).
+Формат ответа и ошибок — см. [common_api.md](common_api.md#формат-ответа).
 
 **Специфичные коды ошибок Integration-сервиса:**
 | HTTP | `error.code` | Описание |
 |------|-------------|----------|
+
+---
+
+## Аутентификация service-to-service (сетевая изоляция)
+
+> Полное описание защиты internal-эндпоинтов (Docker-сеть internal, сетевая изоляция, матрица доступа) — см. [common_api.md](common_api.md#аутентификация-service-to-service-сетевая-изоляция).
+
+Краткая выжимка:
+
+- **Внешний клиент → Gateway** (L1): JWT Bearer, RBAC на Gateway.
+- **Gateway → внутренний сервис** (L2): сетевая изоляция Docker-сети internal.
+- **Service-to-service** (L3): только через private сеть, прямых вызовов извне быть не может.
+- **X-Internal-Token не используется** (решение 17.06, P0-6) — сетевой изоляции достаточно.
 | 400 | `VALIDATION_ERROR` | Неверные параметры запроса |
 | 404 | `FILE_NOT_FOUND` | Файл не найден |
 | 413 | `FILE_TOO_LARGE` | Превышение лимита размера файла |
@@ -57,7 +70,7 @@
   "size": 1048576,
   "mime_type": "image/png",
   "url": "/files/file-xyz",
-  "uploaded_at": "2026-04-27T10:01:00Z"
+  "created_at": "2026-04-27T10:01:00Z"
 }
 ```
 
@@ -68,7 +81,7 @@
 | `size` | int | Размер в байтах |
 | `mime_type` | string | MIME-тип |
 | `url` | string | URL для доступа |
-| `uploaded_at` | string | Дата загрузки |
+| `created_at` | timestamptz | Дата загрузки |
 
 ### GET /files/{file_key}
 
@@ -118,7 +131,7 @@
 
 | Поле | Тип | Обязательность | Описание |
 |------|-----|----------------|----------|
-| `document_id` | string | Да | ID документа |
+| `document_id` | bigint | Да | ID документа |
 | `data` | object | Да | Данные для экспорта. Структура определяется внешней системой «Меридиан». |
 | `data.designation` | string | Нет | Обозначение документа |
 | `data.title` | string | Нет | Наименование |
@@ -130,8 +143,8 @@
 
 ```json
 {
-  "export_id": "exp-001",
-  "external_id": "mer-12345",
+  "export_id": 500001,
+  "external_id": 12345,
   "status": "sent",
   "sent_at": "2026-04-27T12:00:00Z",
   "response_message": "Принято"
