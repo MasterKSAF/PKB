@@ -244,6 +244,7 @@ sequenceDiagram
 
 | Шаг | Действие | Результат |
 |-----|----------|-----------|
+| 3.0 | **Копирование preview-слепка** — Registry копирует `preview_metadata` из `registry.drafts` в `preview_snapshot` карточки документа | Исходный JSON ответа Converter-validator preview сохранён для истории |
 | 3.1 | Сохранение карточки документа в `registry.documents` | `document_id`, ссылки на ресурсы |
 | 3.2 | **Сегментирование:** разбиение на секции (`registry.document_sections`) | Каждая секция получает DB-идентификатор |
 | 3.3 | Сохранение перекрёстных ссылок в `registry.document_references` | Связи между элементами документа |
@@ -263,11 +264,21 @@ sequenceDiagram
 **Выход preview/metadata:**
 ```json
 {
-  "doc_code": "ГОСТ 20868-81",
-  "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
+  "doc_code": "311-05-1950ц",
+  "title": "ЦИРКУЛЯРНОЕ ПИСЬМО № 311-05-1950ц от 09.06.2023",
+  "mks_oks_code": null,
+  "okstu_code": null,
+  "udk_code": null,
+  "pkb_codes": [],
   "document_type": "normative",
-  "year": "1981",
-  "revision": null
+  "year": 2023,
+  "era": "CURRENT",
+  "validity_status": "active",
+  "issuing_body": "РОССИЙСКИЙ МОРСКОЙ РЕГИСТР СУДОХОДСТВА",
+  "jurisdiction": "RU",
+  "source_type": "RMRS",
+  "language": "ru",
+  "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
 }
 ```
 

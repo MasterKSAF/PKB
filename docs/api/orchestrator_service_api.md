@@ -999,11 +999,21 @@ Orchestrator — **единая точка входа** для работы с �
       "status": "approved",
       "confidence": 0.92,
       "preview_metadata": {
-        "doc_code": "ГОСТ 20868-81",
-        "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ",
+        "doc_code": "311-05-1950ц",
+        "title": "ЦИРКУЛЯРНОЕ ПИСЬМО № 311-05-1950ц от 09.06.2023",
+        "mks_oks_code": null,
+        "okstu_code": null,
+        "udk_code": null,
+        "pkb_codes": [],
         "document_type": "normative",
-        "year": "1981",
-        "revision": null
+        "year": 2023,
+        "era": "CURRENT",
+        "validity_status": "active",
+        "issuing_body": "РОССИЙСКИЙ МОРСКОЙ РЕГИСТР СУДОХОДСТВА",
+        "jurisdiction": "RU",
+        "source_type": "RMRS",
+        "language": "ru",
+        "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
       },
       "document_id": 1300,
       "created_at": "2026-06-05T10:00:00Z",
@@ -1017,11 +1027,21 @@ Orchestrator — **единая точка входа** для работы с �
       "status": "review_required",
       "confidence": 0.62,
       "preview_metadata": {
-        "doc_code": "ГОСТ 20868-81",
-        "title": "СТОЙКИ УСТАНОВОЧНЫЕ",
+        "doc_code": "311-05-1950ц",
+        "title": "ЦИРКУЛЯРНОЕ ПИСЬМО № 311-05-1950ц от 09.06.2023",
+        "mks_oks_code": null,
+        "okstu_code": null,
+        "udk_code": null,
+        "pkb_codes": [],
         "document_type": "normative",
-        "year": "1981",
-        "revision": null
+        "year": 2023,
+        "era": "CURRENT",
+        "validity_status": "active",
+        "issuing_body": "РОССИЙСКИЙ МОРСКОЙ РЕГИСТР СУДОХОДСТВА",
+        "jurisdiction": "RU",
+        "source_type": "RMRS",
+        "language": "ru",
+        "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
       },
       "has_notifications": true,
       "critical_count": 1,
@@ -1046,7 +1066,7 @@ Orchestrator — **единая точка входа** для работы с �
 | `document_key` | string | Бизнес-ключ документа (SHA-256) |
 | `status` | string | Статус черновика: `uploaded`, `previewing`, `ready_for_approve`, `approved`, `discarded` |
 | `confidence` | float | Оценка качества распознавания (0..1) |
-| `preview_metadata` | object | Preview-метаданные: `doc_code`, `title`, `document_type`, `year`, `revision` |
+| `preview_metadata` | object | Preview-метаданные: `doc_code`, `title`, `mks_oks_code`, `okstu_code`, `udk_code`, `pkb_codes`, `document_type`, `year`, `era`, `validity_status`, `issuing_body`, `jurisdiction`, `source_type`, `language`, `title_hash_sha256` |
 | `document_id` | bigint \| null | ID документа в Registry (FK → `registry.documents`), созданный по результатам черновика |
 | `has_notifications` | bool | **P12-3**: есть ли у черновика уведомления (для индикатора в UI) |
 | `critical_count` | int | **P12-3**: количество critical-уведомлений (для бейджа) |
@@ -1072,11 +1092,21 @@ Orchestrator — **единая точка входа** для работы с �
   "status": "ready_for_approve",
   "confidence": 0.92,
   "preview_metadata": {
-    "doc_code": "ГОСТ 20868-81",
-    "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
+    "doc_code": "311-05-1950ц",
+    "title": "ЦИРКУЛЯРНОЕ ПИСЬМО № 311-05-1950ц от 09.06.2023",
+    "mks_oks_code": null,
+    "okstu_code": null,
+    "udk_code": null,
+    "pkb_codes": [],
     "document_type": "normative",
-    "year": "1981",
-    "revision": null
+    "year": 2023,
+    "era": "CURRENT",
+    "validity_status": "active",
+    "issuing_body": "РОССИЙСКИЙ МОРСКОЙ РЕГИСТР СУДОХОДСТВА",
+    "jurisdiction": "RU",
+    "source_type": "RMRS",
+    "language": "ru",
+    "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
   },
   "raw_data": {
     "schema": "raw_ocr_v4",
@@ -1134,7 +1164,7 @@ Orchestrator — **единая точка входа** для работы с �
 | `document_key` | string | Бизнес-ключ документа (SHA-256) |
 | `status` | string | Статус черновика |
 | `confidence` | float | Оценка качества распознавания (0..1) |
-| `preview_metadata` | object | Извлечённые метаданные |
+| `preview_metadata` | object | Preview-метаданные: `doc_code`, `title`, `mks_oks_code`, `okstu_code`, `udk_code`, `pkb_codes`, `document_type`, `year`, `era`, `validity_status`, `issuing_body`, `jurisdiction`, `source_type`, `language`, `title_hash_sha256` |
 | `raw_data` | object | Сырые данные распознавания (`raw_ocr_v4`) — результат Parser или OCR |
 | `document_id` | bigint \| null | ID документа в Registry, созданный по результатам черновика |
 | `error_code` | string \| null | Код ошибки |
@@ -1166,13 +1196,23 @@ Orchestrator — **единая точка входа** для работы с �
   "status": "ready_for_approve",
   "confidence": 0.92,
   "preview_metadata": {
-    "doc_code": "ГОСТ 20868-81",
-    "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
+    "doc_code": "311-05-1950ц",
+    "title": "ЦИРКУЛЯРНОЕ ПИСЬМО № 311-05-1950ц от 09.06.2023",
+    "mks_oks_code": null,
+    "okstu_code": null,
+    "udk_code": null,
+    "pkb_codes": [],
     "document_type": "normative",
-    "year": "1981",
-    "revision": null
+    "year": 2023,
+    "era": "CURRENT",
+    "validity_status": "active",
+    "issuing_body": "РОССИЙСКИЙ МОРСКОЙ РЕГИСТР СУДОХОДСТВА",
+    "jurisdiction": "RU",
+    "source_type": "RMRS",
+    "language": "ru",
+    "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
   },
-  "created_at": "2026-06-05T10:00:00Z"
+  "created_at": "2026-06-18T10:00:00Z"
 }
 ```
 
@@ -1184,7 +1224,7 @@ Orchestrator — **единая точка входа** для работы с �
 | `document_key` | string | Бизнес-ключ документа (SHA-256) |
 | `status` | string | Статус черновика |
 | `confidence` | float | Оценка качества распознавания (0..1) |
-| `preview_metadata` | object | Извлечённые метаданные |
+| `preview_metadata` | object | Preview-метаданные: `doc_code`, `title`, `mks_oks_code`, `okstu_code`, `udk_code`, `pkb_codes`, `document_type`, `year`, `era`, `validity_status`, `issuing_body`, `jurisdiction`, `source_type`, `language`, `title_hash_sha256` |
 | `created_at` | string | Время создания (ISO 8601) |
 
 **Возможные ошибки:**
@@ -1257,11 +1297,21 @@ Orchestrator — **единая точка входа** для работы с �
   "ocr_parser_status": "completed",
   "converter_validator_status": "completed",
   "preview": {
-    "doc_code": "ГОСТ 20868-81",
-    "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
+    "doc_code": "311-05-1950ц",
+    "title": "ЦИРКУЛЯРНОЕ ПИСЬМО № 311-05-1950ц от 09.06.2023",
+    "mks_oks_code": null,
+    "okstu_code": null,
+    "udk_code": null,
+    "pkb_codes": [],
     "document_type": "normative",
-    "year": "1981",
-    "revision": null
+    "year": 2023,
+    "era": "CURRENT",
+    "validity_status": "active",
+    "issuing_body": "РОССИЙСКИЙ МОРСКОЙ РЕГИСТР СУДОХОДСТВА",
+    "jurisdiction": "RU",
+    "source_type": "RMRS",
+    "language": "ru",
+    "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
   },
   "duplicates": [],
   "decision_required": false

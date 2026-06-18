@@ -46,11 +46,11 @@
 
 ### POST /converter/preview/metadata
 
-Извлечение базовых метаданных из частичного сырого JSON.
+Извлечение метаданных из частичного сырого JSON (первые N страниц).
 
 **Вход:** сырой JSON (результат Parser/OCR) — может содержать неполные данные.
 
-**Выход:** doc_code, title, document_type, year, revision.
+**Выход:** doc_code, title, mks_oks_code, okstu_code, udk_code, pkb_codes, document_type, year, era, validity_status, issuing_body, jurisdiction, source_type, language, title_hash_sha256.
 
 > **Полный формат данных:** [`docs/schema/schema_converter_preview.json`](../schema/schema_converter_preview.json) (схема `converter_validator_preview_v1`)
 
@@ -68,21 +68,41 @@
 
 ```json
 {
-  "doc_code": "ГОСТ 20868-81",
-  "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
+  "doc_code": "311-05-1950ц",
+  "title": "ЦИРКУЛЯРНОЕ ПИСЬМО № 311-05-1950ц от 09.06.2023",
+  "mks_oks_code": null,
+  "okstu_code": null,
+  "udk_code": null,
+  "pkb_codes": [],
   "document_type": "normative",
-  "year": "1981",
-  "revision": null
+  "year": 2023,
+  "era": "CURRENT",
+  "validity_status": "active",
+  "issuing_body": "РОССИЙСКИЙ МОРСКОЙ РЕГИСТР СУДОХОДСТВА",
+  "jurisdiction": "RU",
+  "source_type": "RMRS",
+  "language": "ru",
+  "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
 }
 ```
 
 | Поле | Тип | Описание |
 |---|---|---|
 | `doc_code` | string | Обозначение документа |
-| `title` | string | Полное название документа |
+| `title` | string | Название документа |
+| `mks_oks_code` | string\|null | Код МКС/ОКС |
+| `okstu_code` | string\|null | Код ОКСТУ |
+| `udk_code` | string\|null | Код УДК |
+| `pkb_codes` | string[] | Коды предметных областей ПКБ (из `registry.categories`) |
 | `document_type` | string | Категория контента (`normative`, `technical`, `drawing`, `specification`, `archival_scan`) |
-| `year` | string | Год издания/утверждения |
-| `revision` | string\|null | Номер редакции, если применимо |
+| `year` | int | Год издания/утверждения |
+| `era` | string | Эпоха: `USSR`, `CIS`, `RF`, `CURRENT` |
+| `validity_status` | string | Статус действия: `active`, `superseded`, `cancelled`, `historical`, `draft` |
+| `issuing_body` | string | Издатель / утвердивший орган |
+| `jurisdiction` | string | Юрисдикция: `RU`, `EU`, `US`, `NO`, `INTL` |
+| `source_type` | string | Тип источника: `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `RMRS`, `OTHER` |
+| `language` | string | Основной язык документа (`ru`, `en`, ...) |
+| `title_hash_sha256` | string | Бизнес-ключ (SHA-256) |
 
 ---
 
@@ -364,7 +384,7 @@
 
 | Метод | Путь | Режим | Описание | Запись в БД |
 |---|---|---|---|---|
-| `POST` | `/converter/preview/metadata` | Preview | Извлечение базовых метаданных (doc_code, title, document_type, year, revision) | Нет |
+| `POST` | `/converter/preview/metadata` | Preview | Извлечение метаданных (doc_code, title, mks_oks_code, okstu_code, udk_code, pkb_codes, document_type, year, era, validity_status, issuing_body, jurisdiction, source_type, language, title_hash_sha256) | Нет |
 | `POST` | `/converter/convert` | Full | Полная конвертация + валидация + LLM + кросс-ссылки (схема `validated_v3`) | Нет |
 | `POST` | `/validate/document` | Standalone | Комплексная валидация документа без переконвертации | Нет |
 

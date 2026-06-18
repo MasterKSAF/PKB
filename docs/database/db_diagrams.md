@@ -32,6 +32,7 @@ erDiagram
         text status_note
         char64 file_hash_sha256
         char64 title_hash_sha256
+        jsonb preview_snapshot
         bigint file_size_bytes
         varchar processing_status
         int chunk_count
@@ -389,7 +390,7 @@ erDiagram
 | `document_key` | Бизнес-ключ документа (SHA-256). |
 | `status` | Статус черновика: `uploaded`, `previewing`, `ready_for_approve`, `approved`, `discarded`. |
 | `confidence` | Оценка качества распознавания (0..1). |
-| `preview_metadata` | JSONB с метаданными preview: `doc_code`, `title`, `document_type`, `year`, `revision`. |
+| `preview_metadata` | JSONB — **весь исходный JSON ответа Converter-validator preview** (`POST /converter/preview/metadata`). Содержит `doc_code`, `title`, `mks_oks_code`, `okstu_code`, `udk_code`, `pkb_codes`, `document_type`, `year`, `era`, `validity_status`, `issuing_body`, `jurisdiction`, `source_type`, `language`, `title_hash_sha256`. Хранится целиком для истории и аудита. При approve копируется в `registry.documents.preview_snapshot`. |
 | `raw_data` | JSONB с сырыми данными от Parser (schema: `raw_ocr_v4`) или Converter (`validated_v3`). |
 | `error_code` / `error_message` | Код и описание ошибки при `discarded`. |
 | `source_filename` | Оригинальное имя загруженного файла (до очистки для CAS). |
@@ -450,7 +451,8 @@ erDiagram
 | `valid_from` | **P12-5**: дата начала действия документа. NOT NULL, default `dateMin = '1000-01-01'::date` (для документов с неопределённой датой начала). См. конвенцию в `glossary.md` |
 | `valid_until` | **P12-5**: дата окончания действия документа. NOT NULL, default `dateMax = '9999-12-31'::date` (для бессрочных документов). См. конвенцию в `glossary.md` |
 | `file_hash_sha256` | **P2-2**: `CHAR(64)` (а не `text`). Хэш бинарного файла (вычисляется при загрузке) |
-| `title_hash_sha256` | Хэш 6-польной формулы: `SHA-256(era \| source_type \| mks_oks_code \| okstu_code \| doc_code \| normalized_title)` (вычисляется в Converter). Алгоритм нормализации и нормализация полей — см. `specifications/normalizer_specification.md` |
+| `title_hash_sha256` | Хэш 6-польной формулы: `SHA-256(era | source_type | mks_oks_code | okstu_code | doc_code | normalized_title)` (вычисляется в Converter). Алгоритм нормализации и нормализация полей — см. `specifications/normalizer_specification.md` |
+| `preview_snapshot` | JSONB — исходный JSON ответа Converter-validator preview, скопированный из `registry.drafts.preview_metadata` при approve. Хранится для истории и аудита. Не используется в поиске — только для просмотра исходных метаданных. |
 | `processing_status` | **P2-1, P1-16**: FSM статус конвейера (не путать с `validity_status` — юридическим статусом документа). Возможные значения: `created`, `pending_index`, `indexing`, `indexed`, `partially_indexed`, `failed`. **P1-16**: `partially_indexed` — промежуточный статус при частичной индексации (часть чанков в БД, часть пропущена). Исключён из RAG Search. Статусы черновика (`uploaded`, `previewing`, `ready_for_approve`, `review_required`, `validation`, `approved`, `discarded` — см. P1-20) хранятся в `registry.drafts.status`, не в `registry.documents`. |
 | `chunk_count` | **P2-7**: `CHECK (chunk_count IS NULL OR chunk_count >= 0)`. Обновляется после индексации. Если `chunk_count_actual < chunk_count_expected` — переход в `partially_indexed` (P1-16) или `failed` (P1-17) |
 
@@ -488,7 +490,7 @@ erDiagram
 
 | Поле | Примечание |
 |------|------------|
-| `revision` | Обозначение редакции (напр. «Изм. 1», «Изд. 2»), извлекается из preview-метаданных документа |
+| `revision` | Обозначение редакции (напр. «Изм. 1», «Изд. 2»), извлекается при обработке документа |
 | `format_code` | Формат файла: `pdf`, `doc`, `tiff`, ... |
 | `file_path` | CAS-путь в MinIO (см. `specifications/cas_storage_specification.md`). Ранее называлось `file_key` |
 | `source_filename` | Оригинальное имя загруженного файла (до очистки для CAS) |
@@ -496,7 +498,7 @@ erDiagram
 
 > **В модели данных** поле называется `file_path` (CAS-путь). В API может использоваться как `file_key` для обратной совместимости.
 
-> **Примечание**: `revision` (обозначение редакции, напр. «Изм. 1», «Изд. 2») извлекается из preview-метаданных документа.
+> **Примечание**: `revision` (обозначение редакции, напр. «Изм. 1», «Изд. 2») извлекается при обработке документа.
 
 **Связь с `registry.documents`:** поле `current_version_id` в `registry.documents` (FK → `registry.document_versions.id`, nullable) указывает на текущую активную версию документа. Если не задано — текущая версия определяется как последняя по `uploaded_at`.
 

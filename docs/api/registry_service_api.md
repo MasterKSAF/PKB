@@ -774,6 +774,7 @@ GET /registry/documents/{doc_id}
 - `doc_code` — код документа (ГОСТ, ОСТ и т.д.)
 - `title` — название документа
 - `title_hash_sha256` — хэш бизнес-ключа
+- `preview_snapshot` — исходный JSON ответа Converter-validator preview, скопированный из черновика при approve (JSONB, nullable). Для истории и аудита
 - `status` — FSM-статус обработки (управляется Оркестратором, Registry — read-only)
 - `era` — эпоха (`USSR`, `CIS`, `RF`, `CURRENT`)
 - `validity_status` — юридический статус (`active`, `superseded`, `cancelled`, `historical`, `draft`)
@@ -806,6 +807,23 @@ GET /registry/documents/{doc_id}
     "doc_code": "ГОСТ 20868-81",
     "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
     "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+    "preview_snapshot": {
+      "doc_code": "ГОСТ 20868-81",
+      "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
+      "mks_oks_code": "31.240",
+      "okstu_code": null,
+      "udk_code": null,
+      "pkb_codes": ["Электроника", "Монтажные изделия"],
+      "document_type": "normative",
+      "year": 1981,
+      "era": "USSR",
+      "validity_status": "active",
+      "issuing_body": "Государственный Комитет СССР по стандартам",
+      "jurisdiction": "RU",
+      "source_type": "GOST",
+      "language": "ru",
+      "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
+    },
     "document_type": "normative",
     "status": "indexed",
     "era": "USSR",
@@ -1510,14 +1528,24 @@ POST /registry/documents/import
       "status": "approved",
       "confidence": 0.92,
       "preview_metadata": {
-        "doc_code": "ГОСТ 20868-81",
-        "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ",
+        "doc_code": "311-05-1950ц",
+        "title": "ЦИРКУЛЯРНОЕ ПИСЬМО № 311-05-1950ц от 09.06.2023",
+        "mks_oks_code": null,
+        "okstu_code": null,
+        "udk_code": null,
+        "pkb_codes": [],
         "document_type": "normative",
-        "year": "1981",
-        "revision": null
+        "year": 2023,
+        "era": "CURRENT",
+        "validity_status": "active",
+        "issuing_body": "РОССИЙСКИЙ МОРСКОЙ РЕГИСТР СУДОХОДСТВА",
+        "jurisdiction": "RU",
+        "source_type": "RMRS",
+        "language": "ru",
+        "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
       },
       "created_by": "orchestrator",
-      "created_at": "2026-06-05T10:00:00Z"
+      "created_at": "2026-06-18T10:00:00Z"
     }
   ],
   "meta": { "total": 1, "page": 1, "page_size": 50 }
@@ -1539,18 +1567,28 @@ POST /registry/documents/import
     "status": "ready_for_approve",
     "confidence": 0.92,
     "preview_metadata": {
-      "doc_code": "ГОСТ 20868-81",
-      "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ",
+      "doc_code": "311-05-1950ц",
+      "title": "ЦИРКУЛЯРНОЕ ПИСЬМО № 311-05-1950ц от 09.06.2023",
+      "mks_oks_code": null,
+      "okstu_code": null,
+      "udk_code": null,
+      "pkb_codes": [],
       "document_type": "normative",
-      "year": "1981",
-      "revision": null
+      "year": 2023,
+      "era": "CURRENT",
+      "validity_status": "active",
+      "issuing_body": "РОССИЙСКИЙ МОРСКОЙ РЕГИСТР СУДОХОДСТВА",
+      "jurisdiction": "RU",
+      "source_type": "RMRS",
+      "language": "ru",
+      "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
     },
     "raw_data": { "schema": "raw_ocr_v4", "pages": [...] },
     "error_code": null,
     "error_message": null,
     "created_by": "orchestrator",
     "updated_by": null,
-    "created_at": "2026-06-05T10:00:00Z",
+    "created_at": "2026-06-18T10:00:00Z",
     "updated_at": "2026-06-05T10:05:00Z"
   }
 }
@@ -1570,13 +1608,23 @@ POST /registry/documents/import
     "status": "ready_for_approve",
     "confidence": 0.92,
     "preview_metadata": {
-      "doc_code": "ГОСТ 20868-81",
-      "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ",
+      "doc_code": "311-05-1950ц",
+      "title": "ЦИРКУЛЯРНОЕ ПИСЬМО № 311-05-1950ц от 09.06.2023",
+      "mks_oks_code": null,
+      "okstu_code": null,
+      "udk_code": null,
+      "pkb_codes": [],
       "document_type": "normative",
-      "year": "1981",
-      "revision": null
+      "year": 2023,
+      "era": "CURRENT",
+      "validity_status": "active",
+      "issuing_body": "РОССИЙСКИЙ МОРСКОЙ РЕГИСТР СУДОХОДСТВА",
+      "jurisdiction": "RU",
+      "source_type": "RMRS",
+      "language": "ru",
+      "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
     },
-    "created_at": "2026-06-05T10:00:00Z"
+    "created_at": "2026-06-18T10:00:00Z"
   }
 }
 ```
@@ -1594,11 +1642,21 @@ POST /registry/documents/import
   "status": "ready_for_approve",
   "confidence": 0.92,
   "preview_metadata": {
-    "doc_code": "ГОСТ 20868-81",
-    "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ",
+    "doc_code": "311-05-1950ц",
+    "title": "ЦИРКУЛЯРНОЕ ПИСЬМО № 311-05-1950ц от 09.06.2023",
+    "mks_oks_code": null,
+    "okstu_code": null,
+    "udk_code": null,
+    "pkb_codes": [],
     "document_type": "normative",
-    "year": "1981",
-    "revision": null
+    "year": 2023,
+    "era": "CURRENT",
+    "validity_status": "active",
+    "issuing_body": "РОССИЙСКИЙ МОРСКОЙ РЕГИСТР СУДОХОДСТВА",
+    "jurisdiction": "RU",
+    "source_type": "RMRS",
+    "language": "ru",
+    "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
   },
   "error_code": null,
   "error_message": null,

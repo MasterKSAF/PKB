@@ -310,10 +310,12 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 | 16.06.2026 | **Логирование/мониторинг** (P11): структурированное логирование (JSON, обязательные поля), корреляционные ID, уровни WARN/ERROR/CRITICAL, аудит-журнал `audit.events`, SigNoz + OpenTelemetry + ClickHouse (5 шагов внедрения), health-checks `/ready` vs `/live`, SLO/SLI, алерты, `service_checker`. |
 | 17.06.2026 | **Service-to-service auth** (P0-5): сетевая изоляция Docker-сети `internal` (без `X-Internal-Token`, решение по Gateway-изоляции). |
 | 17.06.2026 | **CAS** (P5-9): два бакета MinIO (`files` + `images`), SHA-256 ключ без расширения. |
-| 17.06.2026 | **DDL-миграции** (P2-11): `docs/database/ddl_migrations_17_06.md` — CHECK/ENUM, UNIQUE, FK ON DELETE, soft-delete, индексы, valid_from/valid_until, audit.events, draft_issues (→ `draft_notifications` 18.06). |
+| 17.06.2026 | **DDL-миграции** (P2-11): `docs/database/ddl_migrations_17_06.md` — CHECK/ENUM, UNIQUE, FK ON DELETE, soft-delete, индексы, valid_from/valid_until, audit.events, draft_notifications, preview_snapshot. |
 | 17.06.2026 | **Резолвер** (P0-4): `docs/specifications/registry_resolver_spec.md` — event-driven + cron, advisory lock, стратегии exact/latest_revision. |
 | 17.06.2026 | **Компенсация check-uniqueness** (P0-3): подробное описание `INSERT ... ON CONFLICT DO NOTHING`, обработка `DUPLICATE_FILE_AFTER_APPROVE` в pipeline1-formation.md. |
 | 18.06.2026 | **Схлопывание `quality.warnings[]` + `quality.issues[]` → `quality.notifications[]`** (P3-5 поглощён P12-3): единый массив уведомлений оператора с полем `category: security | quality`. БД-таблица `pipeline.draft_notifications`. |
+| 18.06.2026 | **Preview-метаданные синхронизированы**: поля приведены к табличным именам (`mks_oks_code`, `okstu_code`, `udk_code`, `pkb_codes`), добавлены `era`, `validity_status`, `issuing_body`, `jurisdiction`, `source_type`, `language`, `title_hash_sha256`. Обновлены примеры в API (Converter, Orchestrator, Registry), схеме JSON, спецификации конвертера, пайплайне и описании БД. |
+| 18.06.2026 | **Preview-слепок в карточке документа**: в `registry.documents` добавлено поле `preview_snapshot` (JSONB) — исходный ответ Converter-validator preview копируется из черновика при approve для истории и аудита. Обновлены ER-диаграмма, примечания БД, пайплайн (шаг 3.0) и принципы конвертера. |
 | Текущая | **Схема БД**: все FK на bigint, добавлены `chat.projects`, `project_id`, `document_type`, `valid_from`/`valid_until`, `udk_code` (D-51), `audit.events`, `pipeline.draft_notifications`. |
 | v3.0 | Разделение RAG-сервиса на Builder и Search. |
 | v2.3 | Двухфазный пайплайн (preview + full). |
