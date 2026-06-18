@@ -285,4 +285,12 @@ API черновиков и FSM документированы, но **UI сра
 - `docs/pipelines/{overview,pipeline1-formation,pipeline1-formation_detail}.md` — обновлены диаграммы и описания
 - `docs/specifications/parsing_specifications.md` — обновлён контракт
 
+---
+
+## ⚙ Особенности рабочего окружения
+
+### G1. Git-репозиторий выше корня документации
+
+Корень проекта в Zed — `docs/`, а git-репозиторий находится на уровень выше (`H:/Projects/PKB_neuroassistant_docs`). Из-за этого прямые git-команды через `cd`, ограниченный `docs/`, не работают. Требуется `git -C <путь к корню репозитория>` или `--git-dir`/`--work-tree` с абсолютным путём.
+
 
