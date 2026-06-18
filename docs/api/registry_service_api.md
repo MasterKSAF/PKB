@@ -12,7 +12,7 @@
 
 ### Формат ответа
 
-Формат ошибок — см. [common_api.md](../common_api.md#формат-ответа).
+Формат ошибок — см. [common_api.md](common_api.md#формат-ответа).
 
 Списочные ответы обёрнуты в `{ data, meta }`:
 ```json
@@ -30,10 +30,23 @@
 
 ### Коды ошибок
 
-Общие коды (400, 404, 500) — см. [common_api.md](../common_api.md#коды-ответов-http-и-ошибок).
+Общие коды (400, 404, 500) — см. [common_api.md](common_api.md#коды-ответов-http-и-ошибок).
 
 | HTTP | `error.code` | Описание |
 |------|-------------|----------|
+
+---
+
+## Аутентификация service-to-service (сетевая изоляция)
+
+> Полное описание защиты internal-эндпоинтов (Docker-сеть internal, сетевая изоляция, матрица доступа) — см. [common_api.md](common_api.md#аутентификация-service-to-service-сетевая-изоляция).
+
+Краткая выжимка:
+
+- **Внешний клиент → Gateway** (L1): JWT Bearer, RBAC на Gateway.
+- **Gateway → внутренний сервис** (L2): сетевая изоляция Docker-сети internal.
+- **Service-to-service** (L3): только через private сеть, прямых вызовов извне быть не может.
+- **X-Internal-Token не используется** (решение 17.06, P0-6) — сетевой изоляции достаточно.
 | 404 | `CLASSIFIER_NOT_FOUND` | Узел классификатора не найден |
 | 404 | `TERM_NOT_FOUND` | Термин не найден |
 | 404 | `DOCUMENT_NOT_FOUND` | Документ не найден |
@@ -688,6 +701,7 @@ GET /registry/documents
 | `title_hash_sha256` | string | Точный поиск по бизнес-ключу |
 | `category_id` | int | Фильтр по ID категории (документы, привязанные к категории) |
 | `date_from` / `date_to` | date | Фильтр по дате создания |
+| `valid_at` | date | **P12-5 (новое)**: выборка документов, действующих на указанную дату (`valid_from <= ? AND valid_until >= ?`). Использует индекс `idx_documents_validity_range` |
 | `sort_by` | string | Поле сортировки: `title`, `doc_code`, `source_type`, `era`, `created_at`, `updated_at` (по умолчанию `created_at`) |
 | `order` | string | Направление: `asc`, `desc` (по умолчанию `desc`) |
 | `page` | int | Номер страницы |
@@ -772,6 +786,8 @@ GET /registry/documents/{doc_id}
 - `classification_status` — статус классификации (`{ mks: string[], okstu: string[], udk: string[], subject_area: string[] }`)
 - `adoption_date` — дата принятия документа
 - `effective_from` — дата введения в действие
+- `valid_from` — **P12-5 (новое)**: дата начала действия документа. NOT NULL. См. конвенцию `dateMax` в `glossary.md`
+- `valid_until` — **P12-5 (новое)**: дата окончания действия документа. NOT NULL. Для бессрочных — `9999-12-31` (конвенция `dateMax`)
 - `replaces` — сведения о заменяемом документе
 - `status_note` — примечание к статусу
 - `successor_doc_id` — ID документа-преемника
@@ -807,6 +823,8 @@ GET /registry/documents/{doc_id}
     },
     "adoption_date": "1981-07-01",
     "effective_from": "1982-01-01",
+    "valid_from": "1982-01-01",
+    "valid_until": "9999-12-31",
     "replaces": null,
     "status_note": null,
     "successor_doc_id": null,
@@ -956,6 +974,8 @@ POST /registry/documents/check-uniqueness
 4. Если кандидат найден и имеет статус обработки `created` или `indexed` — считается дубликатом.
 5. Если кандидат найден, но находится в `failed` — возвращается как кандидат,
    решение принимает пользователь.
+
+> **P0-3 (неатомарность check-uniqueness):** раздельные шаги «проверить» + «создать» могут привести к race condition при конкурентных загрузках одного документа. **Решение**: `INSERT INTO registry.documents (...) VALUES (...) ON CONFLICT (title_hash_sha256) DO NOTHING RETURNING id`. При `duplicate_file_hash` — `SELECT id FROM registry.document_versions WHERE file_hash_sha256 = ?`. Таким образом, проверка уникальности и вставка — атомарны. Отдельный эндпоинт `check-uniqueness` остаётся для preview (информационные цели), но финальная запись всегда использует `INSERT ... ON CONFLICT`.
 
 ---
 
@@ -1120,8 +1140,8 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
 | `document.title` | string | Полное название |
 | `document.normalized_title` | string | Нормализованное название |
 | `document.mks_oks_code` | string | Код МКС/ОКС |
-| `document.okstu` | string\|null | Код ОКСТУ |
-| `document.udc` | string\|null | Код УДК |
+| `document.okstu_code` | string\|null | **D-51**: переименовано из `okstu`. Код ОКСТУ |
+| `document.udk_code` | string\|null | **D-51**: переименовано из `udc` для консистентности с `*_code` |
 | `document.era` | string | Эра документа |
 | `document.validity_status` | string | Статус действия |
 | `document.issuing_body` | string | Организация-издатель |
@@ -1249,13 +1269,27 @@ PATCH /registry/documents/{doc_id}
   "metadata": { "tags": ["важное", "обновлено"] },
   "validity_status": "superseded",
   "status_note": "Заменён ГОСТ Р 20868-2025",
-  "category_ids": [1, 3, 5]
+  "category_ids": [1, 3, 5],
+  "valid_from": "1982-01-01",
+  "valid_until": "9999-12-31"
 }
 ```
 
 | Поле | Тип | Описание |
 |------|-----|----------|
 | `category_ids` | bigint[] | Массив ID категорий для назначения документу. Передаётся полный список — заменяет текущую привязку категорий |
+| `valid_from` | date | **P12-5 (новое)**: дата начала действия. Редактируемое поле |
+| `valid_until` | date | **P12-5 (новое)**: дата окончания действия. Редактируемое поле. Для бессрочных — `9999-12-31` (конвенция `dateMax`, см. `glossary.md`) |
+
+**P12-5 (разделение editable/immutable — D14):**
+
+| Категория | Поля |
+|-----------|------|
+| **editable** | `title`, `metadata`, `validity_status`, `status_note`, `category_ids`, `valid_from`, `valid_until`, `mks_oks_code`, `okstu_code`, `udk_code` |
+| **immutable** | `id`, `doc_code`, `title_hash_sha256`, `file_hash_sha256`, `created_at`, `created_by`, `current_version_id` |
+| **read-only** | `chunk_count`, `total_versions`, `subject_area` (вычисляется из `mks_oks_code` / `okstu_code` / `udk_code` через справочник) |
+
+При попытке изменить immutable-поле возвращается `400 IMMUTABLE_FIELD` с указанием имени поля.
 
 **Ответ `200`:**
 ```json
@@ -1277,6 +1311,12 @@ PATCH /registry/documents/{doc_id}/status
 ```
 
 > **Internal:** Вызывается только Оркестратором при завершении индексации (после Pipeline 2). Внешним клиентам недоступен.
+>
+> **Защита (P0-6, решение 17.06):** Endpoint защищён **только сетевой изоляцией** Docker-сети `internal` (см. [`common_api.md`](common_api.md#аутентификация-service-to-service-сетевая-изоляция)). Отдельный заголовок `X-Internal-Token` **не используется** — Gateway-изоляции достаточно при условии, что:
+> 1. Порт 8084 (Registry) не публикуется во внешнюю сеть в `docker-compose.yml`.
+> 2. Все микросервисы находятся в Docker-сети `internal`, маршрут `/api/v1/registry/documents/*/status` **не проксируется** через Gateway наружу (см. таблицу маршрутизации в `gateway_service_api.md`).
+>
+> Любой запрос извне Docker-сети `internal` возвращает `404 NOT_FOUND` (порт закрыт) — это считается достаточной защитой.
 
 Оркестратор уведомляет Registry о финальном статусе документа после прохождения всех этапов обработки.
 

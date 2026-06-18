@@ -7,14 +7,27 @@
 
 ### Формат ответа
 
-Формат ответа и ошибок — см. [common_api.md](../common_api.md#формат-ответа).
+Формат ответа и ошибок — см. [common_api.md](common_api.md#формат-ответа).
 
 **Специфичные коды ошибок:**
 | HTTP | `error.code` | Описание |
 |------|-------------|----------|
+
+---
+
+## Аутентификация service-to-service (сетевая изоляция)
+
+> Полное описание защиты internal-эндпоинтов (Docker-сеть internal, сетевая изоляция, матрица доступа) — см. [common_api.md](common_api.md#аутентификация-service-to-service-сетевая-изоляция).
+
+Краткая выжимка:
+
+- **Внешний клиент → Gateway** (L1): JWT Bearer, RBAC на Gateway.
+- **Gateway → внутренний сервис** (L2): сетевая изоляция Docker-сети internal.
+- **Service-to-service** (L3): только через private сеть, прямых вызовов извне быть не может.
+- **X-Internal-Token не используется** (решение 17.06, P0-6) — сетевой изоляции достаточно.
 | 200 | — | Результаты поиска |
 | 400 | `EMPTY_QUERY` | Пустой поисковый запрос |
-| 422 | `INVALID_PARAMETER` | `top_k` вне диапазона [1, 100] или невалидный `search_type` |
+| 422 | `INVALID_PARAMETER` | `top_k` вне диапазона [1, 100] |
 | 500 | `SEARCH_FAILED` | Ошибка поиска чанков |
 
 ---
@@ -23,36 +36,52 @@
 
 Поиск релевантных чанков по запросу. Возвращает сырые чанки с полным содержимым и метаданными. Без генерации LLM.
 
+**RAG-конфигурация по умолчанию (P13-1, решение 17.06):**
+
+| Параметр | Прод-значение | Источник |
+|----------|---------------|----------|
+| Embedding | **Qwen3-Embedding-4B** (внешнее API) | `app_settings.rag.embedding_api.endpoint` |
+| Размерность | **2048** | `app_settings.rag.embedding_dim` |
+| Chunk size | **1024 токенов** | `app_settings.rag.chunk_size` |
+| Стратегия поиска | **Vector+Rerank (S2)** | `app_settings.rag.search_strategy` — **единственный источник**, не переопределяется в запросе |
+| Rerank-модель | **bge-reranker-v2-m3-int8** (TEI, локальный) | `app_settings.rag.rerank_url` |
+
+| LLM для ответа | **deepseek 4 flash** (внешнее API) | `app_settings.llm.api_url` |
+| Temperature | 0.2 | `app_settings.llm.temperature` |
+| max_tokens | 1024 | `app_settings.llm.max_tokens` |
+| top_p | 0.95 | `app_settings.llm.top_p` |
+
 **Процесс внутри:**
 
 | Шаг | Действие | Результат |
 |---|---|---|
-| 1 | Гибридный поиск (dense + sparse + pg_trgm) с реранжированием | Релевантные чанки со скорами |
+| 1 | Dense-поиск (Qwen3-Embedding-4B, VECTOR(2048), cosine) → top-N кандидатов | N=50 кандидатов |
+| 2 | Rerank (bge-reranker-v2-m3-int8) | top_k=10 результатов |
 
-**Гибридное ранжирование (RRF):** результаты векторного поиска (`cosine_similarity` по `rag_document_chunks.embedding`) и полнотекстового (`ts_rank` по `rag_document_chunks.tsv`) объединяются алгоритмом Reciprocal Rank Fusion: `score(d) = Σ 1 / (k + rank_i(d))`, k = 60.
+> **P13-2 (разделение ролей BM25)**: В этом эндпоинте (RAG Search) **используется только dense + rerank**. BM25 применяется **только** для Registry Search (поиск по `doc_code` / `title` / `classifier_links`) — см. `registry_service_api.md` §«`GET /registry/search`». Реализация BM25 = `ts_rank` + `pg_trgm`.
+
+> **P13-3 (TEI rerank)**: rerank выполняется через **TEI-сервер** (text-embeddings-inference, локальный) с int8-квантизацией. URL — `app_settings.rag.rerank_url`.
+
+> **P13-4 (экспериментальные стратегии)**: поисковые стратегии S1–S9 (см. `docs/methodology/rag_experiments_methodology.md`) задаются **только** в `app_settings.rag.search_strategy`. `search_type` **не передаётся** в запросе — стратегия фиксирована конфигом на уровне сервиса. Динамическое переключение стратегий через API требует отдельной проработки и в текущей версии не поддерживается.
+
 
 **Запрос:**
 ```json
 {
   "query": "ледовый класс Arc4",
-  "top_k": 10,
+  "valid_at": "2026-06-18",
   "filters": {
     "document_type": ["normative"],
-    "date_from": "2000-01-01",
-    "date_to": "2026-12-31"
-  },
-  "search_type": "hybrid",
-  "rerank": true
+    "category_ids": [5, 12]
+  }
 }
 ```
 
 | Поле | Тип | Обязательность | Описание |
 |---|---|---|---|
 | `query` | string | Да | Поисковый запрос |
-| `top_k` | int | Нет | Число результатов (по умолчанию 10). Диапазон: [1, 100] |
-| `filters` | object | Нет | Фильтры: `document_type`, `date_from`, `date_to` |
-| `search_type` | string | Нет | `hybrid`, `sparse`, `dense` (по умолчанию `hybrid`) |
-| `rerank` | bool | Нет | Применять реранжирование (по умолчанию true) |
+| `valid_at` | date | Да | Дата, на которую документы active |
+| `filters` | object | Нет | Фильтры (все поля опциональны): `document_type[]` — типы документов, `category_ids[]` — ID категорий, `document_ids[]` — ограничить поиск конкретными документами |
 
 **Ответ `200`:** массив релевантных чанков с полным содержимым.
 
@@ -73,7 +102,7 @@
       "confidence": 0.85
     }
   ],
-  "search_type_used": "hybrid",
+  "search_type_used": "vector_rerank",
   "processing_time_ms": 120,
   "total_found": 15
 }

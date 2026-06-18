@@ -18,7 +18,10 @@ erDiagram
         varchar document_type
         text mks_oks_code
         text okstu_code
-        text udc
+        text udk_code
+        date valid_from
+        date valid_until
+        timestamptz deleted_at
         varchar era
         varchar validity_status
         varchar jurisdiction
@@ -27,8 +30,8 @@ erDiagram
         date effective_from
         text replaces
         text status_note
-        text file_hash_sha256
-        text title_hash_sha256
+        char64 file_hash_sha256
+        char64 title_hash_sha256
         bigint file_size_bytes
         varchar processing_status
         int chunk_count
@@ -78,7 +81,7 @@ erDiagram
         int version_number
         varchar(50) revision
         text source_filename "original file name"
-        text file_hash_sha256 UNIQUE "CAS-дедупликация"
+        char64 file_hash_sha256 UNIQUE "CAS-дедупликация"
         bigint file_size_bytes
         text format_code
         text format_label
@@ -152,6 +155,19 @@ erDiagram
         varchar error_message
         timestamptz started_at
         timestamptz completed_at
+        timestamptz created_at
+    }
+
+    pipeline.draft_notifications {
+        bigint id PK
+        bigint draft_id FK "FK -> registry.drafts.id"
+        varchar source
+        varchar code
+        varchar severity
+        varchar category
+        text message
+        jsonb location
+        text suggested_action
         timestamptz created_at
     }
 
@@ -268,6 +284,8 @@ erDiagram
     registry.classifier_registry ||--o{ registry.classifier_registry : parent_of  (self-reference via parent_code)
     registry.documents }o--|| registry.classifier_registry : mks_classified_by  (FK mks_oks_code -> code + generated mks_system)
     registry.documents }o--|| registry.classifier_registry : okstu_classified_by  (FK okstu_code -> code + generated okstu_system)
+
+    pipeline.draft_notifications ||--|| registry.drafts : logged_for  (FK draft_id -> registry.drafts.id)
 ```
 
 ---
@@ -288,8 +306,13 @@ erDiagram
 | `pipeline.tasks` | `draft_id` | B-tree | Поиск задачи по черновику |
 | `pipeline.tasks` | `document_id` | B-tree | Поиск задачи по документу |
 | `pipeline.task_steps` | `task_id` | B-tree | Поиск этапов задачи |
+| `registry.document_versions` | `document_id` | B-tree | Поиск версий документа |
+| `registry.documents` | `title_hash_sha256` | B-tree UNIQUE | Дедупликация по бизнес-ключу |
+| `registry.documents` | `(valid_from, valid_until)` | B-tree | Поиск документов по дате действия |
+| `registry.drafts` | `status` | B-tree | Фильтрация черновиков по статусу |
 | `registry.document_categories` | `category_id` | B-tree | Поиск категорий документа (обратная сторона many-to-many) |
-| `registry.document_sections` | `content` | GIN | Поиск по JSONB-полям (например, `content.amendments[].type`) |
+| `registry.document_categories` | `content` | GIN | Поиск по JSONB-полям (например, `content.amendments[].type`) |
+| `pipeline.draft_notifications` | `(draft_id, created_at DESC)` | B-tree | Поиск уведомлений черновика, сортировка по времени |
 
 ## Ключевые условия и ограничения
 
@@ -297,10 +320,33 @@ erDiagram
 |---------|------|---------|
 | `registry.document_sections` | `type` | `CHECK (type IN ('text','textBlock','headerFooter','table','list','image','formula'))` |
 | `registry.documents` | `file_hash_sha256` | Для быстрого дубликат-детекта (`WHERE file_hash_sha256 = ? AND file_size_bytes = ?`) |
+| `registry.documents` | `title_hash_sha256` | **P2-3**: UNIQUE — дедупликация по бизнес-ключу документа |
+| `registry.documents` | `source_type` | **P2-1**: CHECK IN ('gost','gost_r','ost','rd','tu','iso','dnv','astm') |
+| `registry.documents` | `document_type` | **P2-1**: CHECK IN ('normative','drawing','project','contract','reference') |
+| `registry.documents` | `era` | **P2-1**: CHECK IN ('USSR','CIS','RF','CURRENT') |
+| `registry.documents` | `validity_status` | **P2-1**: CHECK IN ('active','superseded','cancelled','historical','draft') |
+| `registry.documents` | `jurisdiction` | **P2-1**: CHECK IN ('RF','CIS','USSR','NO','INT') |
+| `registry.documents` | `processing_status` | **P2-1**: CHECK IN ('created','pending_index','indexing','indexed','partially_indexed','failed') |
 | `registry.document_versions` | `file_hash_sha256` | UNIQUE — CAS-дедупликация: один хэш = одна версия файла в системе |
-| `registry.documents` | `title_hash_sha256` | Индекс для поиска дубликатов по `doc_code + title + era` |
-| `rag.document_chunks` | `embedding` | `VECTOR(1536)` — pgvector, `IVFFlat` индекс для `cosine_similarity` |
+| `registry.document_versions` | `file_size_bytes` | **P2-7**: CHECK (file_size_bytes > 0) |
+| `registry.document_versions` | `version_number` | **P2-7**: CHECK (version_number > 0) |
+| `registry.document_chunks` | `chunk_count` | **P2-7**: CHECK (chunk_count >= 0) |
+| `registry.classifier_registry` | `mks_oks_code` | **P2-8**: CHECK (mks_oks_code ~ '^\d{2}\.\d{3}$') — формат МКС/ОКС: две цифры, точка, три цифры |
+| `registry.classifier_registry` | `okstu_code` | **P2-8**: CHECK (okstu_code ~ '^\d{4}$') — формат ОКСТУ: четыре цифры |
+| `pipeline.tasks` | `processing_time_ms` | **P2-7**: CHECK (processing_time_ms >= 0) |
+| `rag.document_chunks` | `embedding` | **D10, P13-1**: `VECTOR(2048)` (не `VECTOR(1536)`!) — pgvector, размерность по умолчанию для Qwen3-Embedding-4B. Параметр конфигурации `app_settings.rag.embedding_dim` (альтернативы для экспериментов: 1536, 2560, 4096). `IVFFlat` индекс для `cosine_similarity` |
 | `rag.document_chunks` | `tsv` | `tsvector` — GIN-индекс для полнотекстового поиска (`ts_rank`) |
+
+### P2-9: Триггер синхронизации document_chunks.document_id
+
+При вставке чанка в `rag.document_chunks` поле `document_id` заполняется автоматически: `NEW.document_id := (SELECT document_id FROM registry.document_sections WHERE id = NEW.section_id)`. Триггер `BEFORE INSERT` защищает от рассинхронизации.
+
+### P2-10: Конвенция нейминга
+
+- **timestamps**: `created_at`, `updated_at`, `started_at`, `completed_at`, `deleted_at` (везде `timestamptz`)
+- **status**: поле `status` (`varchar`) с CHECK на конечный список значений
+- **FK**: именование `{parent_table}_id` (исключение — `parent_id` для самоссылок)
+- `uploaded_at`/`uploaded_by` → `created_at`/`created_by` (унифицировано)
 
 ---
 
@@ -323,12 +369,13 @@ erDiagram
 | `registry.document_categories` | `document_id` | `registry.documents` | `id` | M:1 CASCADE |
 | `registry.document_categories` | `category_id` | `registry.categories` | `id` | M:1 CASCADE |
 | `pipeline.tasks` | `document_id` | `registry.documents` | `id` | M:1 (nullable) |
+| `pipeline.draft_notifications` | `draft_id` | `registry.drafts` | `id` | M:1 |
 | `pipeline.task_steps` | `task_id` | `pipeline.tasks` | `id` | M:1 |
 | `chat.sessions` | `user_id` | `auth.users` | `id` | M:1 |
 | `chat.sessions` | `project_id` | `chat.projects` | `id` | M:1 (nullable) |
-| `chat.messages` | `session_id` | `chat.sessions` | `id` | M:1 |
-| `registry.documents` | `mks_oks_code` | `registry.classifier_registry` | `code` | M:1 (через generated column `mks_system`) |
-| `registry.documents` | `okstu_code` | `registry.classifier_registry` | `code` | M:1 (через generated column `okstu_system`) |
+| `chat.messages` | `session_id` | `chat.sessions` | `id` | M:1 CASCADE |
+| `registry.documents` | `mks_oks_code` | `registry.classifier_registry` | `code` | M:1 (через generated column `mks_system`) SET NULL |
+| `registry.documents` | `okstu_code` | `registry.classifier_registry` | `code` | M:1 (через generated column `okstu_system`) SET NULL |
 
 ---
 
@@ -374,20 +421,38 @@ erDiagram
 | `error_code` / `error_message` | Код и описание ошибки при `failed`. |
 | `started_at` / `completed_at` | Время начала и завершения этапа. |
 
+### 0б. Уведомления черновика (`pipeline.draft_notifications`)
+
+**`pipeline.draft_notifications`** — замечания для оператора (P12-3 / P3-5):
+
+| Поле | Примечание |
+|------|------------|
+| `draft_id` | FK → `registry.drafts.id`. Связь с черновиком. |
+| `source` | Какой сервис создал уведомление: `parser`, `ocr`, `converter`, `registry`. |
+| `code` | Код уведомления. Security: `EMBEDDED_JS`, `EMBEDDED_FILE`, ... Quality: `LOW_CONFIDENCE_PAGE`, `TABLE_CORRUPTED`, ... |
+| `severity` | `info`, `warning`, `error`, `critical`. |
+| `category` | `security` или `quality`. |
+| `message` | Человекочитаемое описание. |
+| `location` | JSONB — `{page, block}`. |
+| `suggested_action` | `reprocess`, `manual_edit`, `review`, `ignore`. |
+
 ### 1. Реестр документов (`registry.documents`)
 
 | Поле | Примечание |
 |------|------------|
-| `source_type` | Тип нормативного документа-источника: `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `OTHER` |
-| `document_type` | Категория контента: `normative`, `technical`, `drawing`, `specification`, `archival_scan`. Не путать с `source_type` |
-| `group` | Группа проекта (например, `ПО4`) |
-| `era` | Эпоха: `USSR`, `CIS`, `RF`, `CURRENT` |
-| `validity_status` | Статус действия: `active`, `superseded`, `expired` |
+| `source_type` | **P2-1**: enum `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `OTHER` |
+| `document_type` | **P2-1**: enum `normative`, `technical`, `drawing`, `specification`, `archival_scan`. Не путать с `source_type` |
+| `group` | **D-32/D-33**: **удалено** из модели (см. P5 — A36). Ранее использовалось для группы проекта (например, `ПО4`). Заменено на `registry_document_classifier_links` (M:N) |
+| `era` | **P2-1**: enum `USSR`, `CIS`, `RF`, `CURRENT` |
+| `validity_status` | **P2-1**: enum `active`, `superseded`, `expired`, `cancelled`, `historical`, `draft` (юридический статус, **не путать** с `valid_from/valid_until`) |
 | `jurisdiction` | Юрисдикция: `RU`, `EU`, `US`, `NO`, `INTL` |
-| `file_hash_sha256` | Хэш бинарного файла (вычисляется при загрузке) |
-| `title_hash_sha256` | Хэш `doc_code + title + era` (вычисляется в Converter) |
-| `processing_status` | FSM статус конвейера (не путать с `validity_status` — юридическим статусом документа). Возможные значения: `created`, `pending_index`, `indexing`, `indexed`, `failed`. Статусы черновика (`uploaded`, `previewing`, `ready_for_approve`, `approved`, `discarded`) хранятся в `registry.drafts.status`, не в `registry.documents`. |
-| `chunk_count` | Обновляется RAG Builder после индексации |
+| `udk_code` | **D-51**: переименовано из `udc` для консистентности с `mks_oks_code` / `okstu_code`. Код УДК (универсальная десятичная классификация). nullable |
+| `valid_from` | **P12-5**: дата начала действия документа. NOT NULL, default `dateMin = '1000-01-01'::date` (для документов с неопределённой датой начала). См. конвенцию в `glossary.md` |
+| `valid_until` | **P12-5**: дата окончания действия документа. NOT NULL, default `dateMax = '9999-12-31'::date` (для бессрочных документов). См. конвенцию в `glossary.md` |
+| `file_hash_sha256` | **P2-2**: `CHAR(64)` (а не `text`). Хэш бинарного файла (вычисляется при загрузке) |
+| `title_hash_sha256` | Хэш 6-польной формулы: `SHA-256(era \| source_type \| mks_oks_code \| okstu_code \| doc_code \| normalized_title)` (вычисляется в Converter). Алгоритм нормализации и нормализация полей — см. `specifications/normalizer_specification.md` |
+| `processing_status` | **P2-1, P1-16**: FSM статус конвейера (не путать с `validity_status` — юридическим статусом документа). Возможные значения: `created`, `pending_index`, `indexing`, `indexed`, `partially_indexed`, `failed`. **P1-16**: `partially_indexed` — промежуточный статус при частичной индексации (часть чанков в БД, часть пропущена). Исключён из RAG Search. Статусы черновика (`uploaded`, `previewing`, `ready_for_approve`, `review_required`, `validation`, `approved`, `discarded` — см. P1-20) хранятся в `registry.drafts.status`, не в `registry.documents`. |
+| `chunk_count` | **P2-7**: `CHECK (chunk_count IS NULL OR chunk_count >= 0)`. Обновляется после индексации. Если `chunk_count_actual < chunk_count_expected` — переход в `partially_indexed` (P1-16) или `failed` (P1-17) |
 
 ### 2. Разделы документов (`registry.document_sections`)
 
@@ -427,7 +492,7 @@ erDiagram
 | `format_code` | Формат файла: `pdf`, `doc`, `tiff`, ... |
 | `file_path` | CAS-путь в MinIO (см. `specifications/cas_storage_specification.md`). Ранее называлось `file_key` |
 | `source_filename` | Оригинальное имя загруженного файла (до очистки для CAS) |
-| `uploaded_by` | Идентификатор пользователя или сервиса, загрузившего версию |
+| `created_by` | **P2-10 (D3)**: переименовано из `uploaded_by`. Идентификатор пользователя или сервиса, создавшего версию |
 
 > **В модели данных** поле называется `file_path` (CAS-путь). В API может использоваться как `file_key` для обратной совместимости.
 
@@ -449,9 +514,9 @@ erDiagram
 | `section_id` | `registry.document_sections.id` |
 | `chunk_index` | Порядковый номер чанка в секции |
 | `content` | Текст чанка: plain text для `section`, Markdown для `table` |
-| `embedding` | `VECTOR(1536)` — pgvector, `IVFFlat` индекс для `cosine_similarity` |
+| `embedding` | **D10, P13-1**: `VECTOR(2048)` (не `VECTOR(1536)`!) — pgvector, размерность по умолчанию для Qwen3-Embedding-4B. `IVFFlat` индекс для `cosine_similarity` |
 | `tsv` | Полнотекстовый индекс (`to_tsvector('russian', content)`), GIN-индекс |
-| `strategy` | Стратегия чанкинга: `semantic_512`, `fixed_256` |
+| `strategy` | Стратегия чанкинга: **`semantic_1024`** (не `semantic_512`!) — **P13-1**: новый дефолт 1024 токена. Альтернативы: `semantic_512`, `semantic_2048`, `fixed_256`, `fixed_512` |
 
 Связь с секциями: чанк всегда привязан к конкретной секции документа. Одна секция может порождать несколько чанков (для `type=section` с разбивкой на ≤512 токенов) или один чанк (для `type=table/image/formula`).
 

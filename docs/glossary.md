@@ -121,3 +121,35 @@
 | `raw_ocr_v4` | OCR/Parser output | Сырой плоский JSON: блоки текста, таблиц, изображений с bbox и font-атрибутами |
 | `validated_v3` | Converter-validator output | Иерархический JSON: секции, метаданные, ссылки, терминология |
 | `registry_for_rag` | Registry → RAG Builder | Плоский JSON со списком секций, ссылками в БД и защищёнными spans |
+
+---
+
+## Дополнительные термины (P5-3, 17.06.2026)
+
+| Термин | Описание |
+|--------|----------|
+| **ui-state** | Состояние UI, сохраняемое в `localStorage` (TanStack Query cache) на стороне клиента. Включает фильтры, открытые вкладки, выбранные документы. TTL — 24 часа (D17, A44) |
+| **query-cache** | Кеш результатов запросов RAG Search и chat-сообщений на стороне клиента. Реализуется через TanStack Query. TTL: staleTime 5 мин для поиска, Infinity для истории чата (D17, A46) |
+| **optimistic-update** | UI-паттерн: обновление интерфейса до получения ответа от сервера (для операций approve/reject/quick-edit). При ошибке — rollback. См. `docs_plans/discussions/итоги встречи 08.06.26.md` |
+| **timeline** | Визуализация истории изменений документа (`GET /documents/{doc_id}/history`) и/или аудит-timeline (`audit.events`). UI-агрегация по датам (D17, A45) |
+| **editor-dirty** | Флаг UI, указывающий, что в редакторе метаданных есть несохранённые изменения. Используется для подтверждения выхода/переключения без потери правок |
+| **dateMax** | **P12-5**: символическое значение `valid_until` для бессрочных документов. **Решение 17.06**: `dateMax = '9999-12-31'::date` (универсальная конвенция, совместимая с любыми SQL-клиентами и ORM). Альтернатива `'infinity'::date` (PG native) отвергнута |
+| **dateMin** | **P12-5 (исправление 17.06)**: символическое значение `valid_from` для документов с неопределённой датой начала. `dateMin = '1000-01-01'::date`. Позволяет сохранять NOT NULL (для индексов) и одновременно не вводить «ложные» даты вроде `1900-01-01` |
+| **valid_from** | **P12-5**: дата начала действия документа. NOT NULL, default `'1900-01-01'`. См. `db_diagrams.md` |
+| **valid_until** | **P12-5**: дата окончания действия документа. NOT NULL, default `dateMax`. См. `validity_dates_spec.md` (NEW) |
+| **valid_at** | **P12-5**: параметр API Registry `GET /registry/documents?valid_at=YYYY-MM-DD` — выборка документов, действующих на указанную дату (`valid_from <= ? AND valid_until >= ?`) |
+| **title_hash_sha256** | **P0-1**: 6-польная формула `SHA-256(era \| source_type \| mks_oks_code \| okstu_code \| doc_code \| normalized_title)`. Бизнес-ключ документа |
+| **version_id** | **P12-4**: ID конкретной версии документа (`document_versions.id`). Назначается Оркестратором при создании новой версии. Связан с `document_id` через FK |
+| **draft_notifications** | **P12-3 / P3-5**: таблица `pipeline.draft_notifications` — уведомления для оператора от Parser/OCR/Converter. `code, severity, category, message, location, suggested_action, draft_id` |
+| **qwen3-embedding-4b** | **P13-1**: модель эмбеддингов по умолчанию. Внешнее API. Размерность 2048 |
+| **bge-reranker-v2-m3-int8** | **P13-3**: модель rerank по умолчанию. Локальный TEI-сервер с int8-квантизацией |
+| **deepseek-4-flash** | **P13-5**: LLM для генерации ответов по умолчанию. Внешнее API. Параметры: temperature 0.2, max_tokens 1024, top_p 0.95 |
+| **service_checker** | **P11-9**: инструмент автопроверки сервисов на соответствие стандарту observability (OTEL SDK, OTLP endpoint, span-атрибуты, структура логов). Запускается в CI (PR-чек) и post-deploy |
+| **vector_rerank (S2)** | **P13-1**: прод-стратегия RAG Search. Dense + Rerank |
+| **experimental** | **P13-4**: экспериментальные поисковые стратегии S1–S9 (см. `docs/methodology/rag_experiments_methodology.md`). Задаются только в `app_settings.rag.search_strategy`, не через API |
+
+---
+
+## Справочник ПКБ (P10)
+
+Дополнительный справочник `pkb_domains_classifier.csv` (CSV) и `specifications/pkb_domains.md` (MD) — справочник предметных областей ПКБ. Файл `справочник_предметных_областей_ПКБ.md` (имя в CP1251) перекодирован в UTF-8 (P10-1). Связь с классификаторами — через `mks_oks_code` / `udk_code`.

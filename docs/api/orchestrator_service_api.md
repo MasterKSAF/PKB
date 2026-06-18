@@ -8,14 +8,27 @@
 
 ### Формат ответа
 
-Формат ответа и ошибок — см. [common_api.md](../common_api.md#формат-ответа).
+Формат ответа и ошибок — см. [common_api.md](common_api.md#формат-ответа).
 
-Для эндпоинтов с пагинацией используется формат `{ items: [...], meta: { total, page, page_size } }` — см. [common_api.md](../common_api.md#пагинация).
+Для эндпоинтов с пагинацией используется формат `{ items: [...], meta: { total, page, page_size } }` — см. [common_api.md](common_api.md#пагинация).
 
 ### Группы
 
 | Группа      | Описание                                                            |
 | ----------- | ------------------------------------------------------------------- |
+
+---
+
+## Аутентификация service-to-service (сетевая изоляция)
+
+> Полное описание защиты internal-эндпоинтов (Docker-сеть internal, сетевая изоляция, матрица доступа) — см. [common_api.md](common_api.md#аутентификация-service-to-service-сетевая-изоляция).
+
+Краткая выжимка:
+
+- **Внешний клиент → Gateway** (L1): JWT Bearer, RBAC на Gateway.
+- **Gateway → внутренний сервис** (L2): сетевая изоляция Docker-сети internal.
+- **Service-to-service** (L3): только через private сеть, прямых вызовов извне быть не может.
+- **X-Internal-Token не используется** (решение 17.06, P0-6) — сетевой изоляции достаточно.
 | `health`    | Агрегированный health-check                                         |
 | `documents` | Документы: загрузка, список, статус, версии, аппрув, завершение обработки |
 | `drafts`    | Черновики: управление загрузкой, preview, решение (approve/reject) — единая точка входа. Вызов Registry internal API для CRUD |
@@ -52,7 +65,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 | `issuing_body` | string | Нет            | Организация-издатель                                               |
 | `metadata`     | string | Нет            | JSON-строка с доп. данными                                         |
 
-> **Примечание**: В запросе `metadata` передаётся как JSON-строка (string). Сервер парсит её в объект, который возвращается в ответе `GET /documents/{doc_id}` как структурированный JSON. Допустимые ключи: `year`, `udc`, `tags`, `notes`.
+> **Примечание**: В запросе `metadata` передаётся как JSON-строка (string). Сервер парсит её в объект, который возвращается в ответе `GET /documents/{doc_id}` как структурированный JSON. Допустимые ключи: `year`, `udk_code` (D-51: переименовано из `udc`), `tags`, `notes`.
 
 **Ответ `202`**:
 
@@ -270,8 +283,8 @@ Orchestrator вычисляет SHA-256 содержимого, определя
       "file_key": "b3a8f1c2/v1/e3b0c442...855.pdf",
       "file_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "size_bytes": 2048576,
-      "uploaded_at": "2026-05-15T10:00:00Z",
-      "uploaded_by": "Иванов И.И."
+      "created_at": "2026-05-15T10:00:00Z",
+      "created_by": "Иванов И.И."
     }
   ],
   "meta": { "total": 2 }
@@ -338,7 +351,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
       "latest_version": 1,
       "total_versions": 2,
       "user_id": "u-001",
-      "uploaded_by": "Иванов И.И.",
+      "created_by": "Иванов И.И.",
       "created_at": "2026-04-27T10:00:00Z",
       "updated_at": "2026-04-27T14:00:00Z"
     }
@@ -379,7 +392,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
   },
   "metadata": {
     "year": "1981",
-    "udc": "629.5.021",
+    "udk_code": "629.5.021",
     "tags": ["судостроение", "стойки"]
   },
   "latest_version": {
@@ -749,7 +762,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
         }
       },
       "user_id": "u-001",
-      "uploaded_by": "Иванов И.И.",
+      "created_by": "Иванов И.И.",
       "created_at": "2026-05-15T10:00:00Z",
       "started_at": "2026-05-15T10:00:05Z",
       "estimated_completion": "2026-05-15T10:02:00Z"
@@ -969,7 +982,7 @@ Orchestrator — **единая точка входа** для работы с �
 |----------|-----|-------------|----------|
 | `draft_id` | bigint | Нет | Фильтр по ID черновика |
 | `document_key` | string | Нет | Бизнес-ключ документа (SHA-256). История попыток обработки одного документа |
-| `status` | string | Нет | Фильтр по статусу: `uploaded`, `previewing`, `ready_for_approve`, `approved`, `discarded` |
+| `status` | string | Нет | Фильтр по статусу: `uploaded`, `previewing`, `ready_for_approve`, `review_required`, `approved`, `discarded` |
 | `page` | int | Нет | Номер страницы (по умолчанию 1) |
 | `page_size` | int | Нет | Записей на странице (по умолчанию 50, max 200) |
 
@@ -1001,8 +1014,8 @@ Orchestrator — **единая точка входа** для работы с �
       "task_id": 101,
       "file_key": "f-abc123",
       "document_key": "sha256:def456",
-      "status": "discarded",
-      "confidence": 0.45,
+      "status": "review_required",
+      "confidence": 0.62,
       "preview_metadata": {
         "doc_code": "ГОСТ 20868-81",
         "title": "СТОЙКИ УСТАНОВОЧНЫЕ",
@@ -1010,8 +1023,8 @@ Orchestrator — **единая точка входа** для работы с �
         "year": "1981",
         "revision": null
       },
-      "error_code": "LOW_CONFIDENCE",
-      "error_message": "Confidence below threshold (0.45 < 0.7)",
+      "has_notifications": true,
+      "critical_count": 1,
       "document_id": null,
       "created_at": "2026-06-05T10:10:00Z",
       "updated_at": "2026-06-05T10:12:00Z"
@@ -1035,6 +1048,8 @@ Orchestrator — **единая точка входа** для работы с �
 | `confidence` | float | Оценка качества распознавания (0..1) |
 | `preview_metadata` | object | Preview-метаданные: `doc_code`, `title`, `document_type`, `year`, `revision` |
 | `document_id` | bigint \| null | ID документа в Registry (FK → `registry.documents`), созданный по результатам черновика |
+| `has_notifications` | bool | **P12-3**: есть ли у черновика уведомления (для индикатора в UI) |
+| `critical_count` | int | **P12-3**: количество critical-уведомлений (для бейджа) |
 | `error_code` | string \| null | Код ошибки при `discarded` |
 | `error_message` | string \| null | Описание ошибки |
 | `created_at` | string | Время создания (ISO 8601) |
@@ -1083,6 +1098,9 @@ Orchestrator — **единая точка входа** для работы с �
     ]
   },
   "document_id": null,
+  "version_id": null,
+  "is_new_document": true,
+  "notifications": [],
   "error_code": null,
   "error_message": null,
   "created_by": "user_10",
@@ -1090,6 +1108,23 @@ Orchestrator — **единая точка входа** для работы с �
   "updated_at": "2026-06-05T10:02:00Z"
 }
 ```
+
+**P12-3 / P12-4 (новые поля в ответе черновика):**
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `document_id` | bigint \| null | ID документа в Registry. `null` пока черновик не одобрен |
+| `version_id` | bigint \| null | **P12-4**: ID версии документа (`document_versions.id`). `null` пока не создана |
+| `is_new_document` | bool | **P12-4**: `true` — новый документ, `false` — новая версия существующего |
+| `notifications` | array | **P12-3**: массив уведомлений для оператора. Заполняется при `status: review_required`. Структура — см. [parser_service_api.md](parser_service_api.md#p12-3--p3-5--qualitynotifications-уведомления-оператора). Orchestrator получает их от Parser/OCR и записывает в `pipeline.draft_notifications` |
+
+**P12-3 — поток уведомлений:**
+
+1. Parser/OCR возвращает `quality.notifications[]` в ответе `/process/{task_id}/result`.
+2. Orchestrator читает массив и вставляет записи в `pipeline.draft_notifications` (`INSERT ... RETURNING id`).
+3. Если среди уведомлений есть `severity >= warning` (или по порогам `app_settings.parser.quality_thresholds`) — черновик переводится в `review_required`.
+4. UI получает уведомления через `GET /drafts/{draft_id}` (поле `notifications`).
+5. Оператор просматривает уведомления, принимает решение через `PATCH /drafts/{draft_id}/decide`.
 
 | Поле | Тип | Описание |
 |------|-----|----------|
@@ -1189,6 +1224,16 @@ Orchestrator — **единая точка входа** для работы с �
 |------|-----|----------|
 | 404 | `DRAFT_NOT_FOUND` | Черновик не существует |
 | 409 | `DRAFT_ALREADY_PREVIEWED` | Preview уже запущен или завершён |
+| 409 | `PREVIEW_IN_PROGRESS` | (P1-19) Preview уже выполняется. Повторный POST с тем же `Idempotency-Key` (TTL 1 час) — вернётся кешированный ответ. Без `Idempotency-Key` — отказ. |
+| 422 | `PREVIEW_NOT_SUPPORTED` | (P1-19) Файл не поддерживает постраничный preview; используйте `mode=full` или см. `parser_service_api.md` |
+
+**Идемпотентность повторного запуска (P1-19, уточнение):**
+
+- С заголовком `Idempotency-Key: <uuid>` — повторный POST в течение 1 часа возвращает кешированный ответ 202.
+- Без `Idempotency-Key`:
+  - Если preview **выполняется** (`status=previewing`) — `409 PREVIEW_IN_PROGRESS`.
+  - Если preview **завершён** (`status=ready_for_approve` или `review_required`) — `409 DRAFT_ALREADY_PREVIEWED`. Для запуска заново используйте `POST /drafts/{draft_id}/reprocess` или `DELETE /drafts/{draft_id}` с повторной загрузкой.
+  - Если preview **ошибся** (`status=discarded`) — `409 DRAFT_ALREADY_PREVIEWED` (черновик терминальный).
 
 ### GET /drafts/{draft_id}/preview/status
 
@@ -1243,7 +1288,7 @@ Orchestrator — **единая точка входа** для работы с �
 
 ### PATCH /drafts/{draft_id}/decide
 
-**Основной эндпоинт для принятия решения по загруженному документу.** Доступно только для черновиков в статусе `ready_for_approve`. После решения черновик либо завершается с записью в Registry (`approve`), либо отклоняется (`reject`).
+**Основной эндпоинт для принятия решения по загруженному документу.** Доступно для черновиков в статусе `ready_for_approve` и `review_required`. Если черновик в статусе `review_required` — оператору перед принятием решения показываются `notifications` (см. P12-3). После решения черновик либо завершается с записью в Registry (`approve`), либо отклоняется (`reject`).
 
 **Тело запроса:**
 

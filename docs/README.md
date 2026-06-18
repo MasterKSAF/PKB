@@ -32,7 +32,8 @@ docs/
 │   ├── pipeline1-formation.md        #   Пайплайн 1: Формирование документа (preview + full)
 │   ├── pipeline1-formation_detail.md #   Пайплайн 1: детальное описание (microservices, field mapping)
 │   ├── pipeline2-indexation.md       #   Пайплайн 2: Индексация (RAG Builder)
-│   └── pipeline3-search.md           #   Пайплайн 3: Поиск и генерация ответов
+│   ├── pipeline3-search.md           #   Пайплайн 3: Поиск и генерация ответов
+│   └── todo.md                       #   Todo по пайплайнам
 │
 ├── database/                         # Модели базы данных
 │   └── db_diagrams.md                #   ER-диаграмма базы данных
@@ -52,18 +53,35 @@ docs/
 │   └── check_rule.md                 #   Чек-лист аудита документации
 │
 ├── specifications/                   # Технические спецификации
-│   ├── parsing_specifications.md       #   Спецификация парсинга
+│   ├── parsing_specifications.md       #   Спецификация парсинга (OCR + P3-6 Lama-риск)
 │   ├── normalizer_specification.md     #   Нормализатор: алгоритмы дедупликации и бизнес-ключ
-│   ├── cas_storage_specification.md    #   CAS (Content-Addressable Storage)
+│   ├── cas_storage_specification.md    #   CAS (Content-Addressable Storage) — два бакета (P5-9)
 │   ├── purgatory_scenario.md           #   Сценарии использования
+│   ├── registry_resolver_spec.md       #   Резолвер графа связей (P0-4)
 │   ├── mks_oks_classifier.csv          #   Справочник кодов МКС/ОКС (CSV)
 │   ├── classifier_roots.csv            #   Корневые узлы классификаторов (CSV)
-│   └── справочник_предметных_областей_ПКБ.md  #   Справочник разделов ПКБ
+│   ├── pkb_domains.md                  #   Справочник предметных областей ПКБ (P10-1, UTF-8)
+│   ├── pkb_domains_classifier.csv      #   CSV-версия справочника ПКБ (P10-2)
+│   ├── deployment.md                   #   Развёртывание (P8-6)
+│   └── справочник_предметных_областей_ПКБ.md  #   (legacy, CP1251, оставлен для истории)
+│
+├── architecture/                     # Архитектурные описания
+│   ├── monitoring.md                 #   Мониторинг, SigNoz, OpenTelemetry, SLO/SLI, алерты
+│   └── service_dependencies.md       #   Зависимости и сетевые взаимодействия сервисов
+│
+├── methodology/                      # RAG-методологии (P4-2)
+│   ├── rag_experiments_methodology.md   #   Методология экспериментов RAG
+│   └── rag_evaluation_methodology.md   #   Метрики и протоколы оценки
+│
+├── plans/                            # Планы и отчёты
+│   └── quality_report_sprint2.md      #   Отчёт о качестве (P4-1)
 │
 ├── glossary.md                       # Глоссарий терминов и сокращений
+├── guide.md                          # Архитектурные решения и стиль
 ├── specificity.md                    # Журнал аномалий и трудных моментов
 ├── todo.md                           # План синхронизации документации
-└── analyse_alternative_project.md   # Анализ альтернативного проекта KB (13.06)
+├── analyse_alternative_project.md   # Анализ альтернативного проекта KB (13.06)
+└── 5.docs_action_plan_17_06.md     # План внедрения (P0-P13 + D1-D69, 17.06.2026)
 ```
 
 > 📂 **Исторические обсуждения и протоколы встреч** хранятся в директории [`../docs_plans/`](../docs_plans/) на уровне корня проекта.
@@ -150,6 +168,51 @@ flowchart LR
 ```
 
 > **Примечание:** пользовательские категории документов (many-to-many) — спроектированы. API и модель данных документированы в [`registry_service_api.md`](api/registry_service_api.md#группа-categories) и [`db_diagrams.md`](database/db_diagrams.md#13-категории-документов-registrycategories-registrydocument_categories). Реализация — приоритет Спринта 3.
+
+### Статус UI-интеграции (P1)
+
+> Сверка UI ↔ API на 17.06.2026. Источник: `docs_plans/audit/ui_gateway_sync_analysis.md`, обсуждения 16.06.
+
+| API-возможность | Документировано | UI подключено | Комментарий |
+|-----------------|-----------------|----------------|-------------|
+| `GET /api/v1/drafts` (список черновиков) | ✅ | ❌ UI использует mock-цикл (P1-3) | Подключить через Gateway |
+| `POST /api/v1/chat/sessions/{id}/messages` (longpoll) | ✅ | ❌ UI polling без longpoll (P1-4) | Подключить FSM longpoll |
+| `GET /chat/history/export`, `POST /chat/sessions/{id}/export` (stream) | ✅ | ❌ | P1-7 |
+| `GET /registry/classifiers/*`, `/terminology/*`, `/stats`, `/enums` (CRUD) | ✅ | ❌ | P1-8 |
+| `GET /tasks/*` (read-only admin) | ✅ | ❌ нет UI-раздела (P1-9) | Добавить «Артефакты и журналы обработки» |
+| `POST /documents/{doc_id}/reprocess` | ✅ | ❌ кнопка «Повторить OCR» (P1-10) | Доработать UI-логику |
+| `GET /admin/roles` (отдельная таблица ROLES) | ✅ | ❌ | P1-12 |
+| Карточка документа: `detail / status / history / errors` | ✅ частично | ❌ не все поля (P1-13) | Дополнить UI |
+| `POST /drafts/{draft_id}/preview` (повторный запуск) | ✅ idempotency | ❌ | P1-19 (idempotency 409 описан) |
+| `DocumentRegistry.tsx` (legacy) | ❌ | deprecated (P1-11) | Удалить в UI; зафиксировать в README |
+
+### RBAC-структура UI (P1-2, уточнение 16.06)
+
+> Вкладки UI соответствуют RBAC-матрице в [`common_api.md`](api/common_api.md#матрица-доступа-rbac).
+
+| Вкладка UI | Permission | Доступно ролям |
+|------------|-----------|----------------|
+| **Загрузка документа** (drafts) | `can_upload_documents` | engineer, knowledge_admin, system_admin |
+| **База знаний** (registry) | `can_view_documents` | engineer, knowledge_admin, system_admin |
+| **Поиск** (search) | `can_search` | engineer, knowledge_admin, system_admin |
+| **Черновики** (drafts) | `can_view_drafts` | engineer, knowledge_admin, system_admin |
+| **Очередь** (queue) | `can_view_queue` | engineer, knowledge_admin, system_admin |
+| **Классификаторы** | `can_manage_classifiers` | knowledge_admin, system_admin |
+| **Терминология** | `can_manage_terminology` | knowledge_admin, system_admin |
+| **Неизвестные коды** | `can_view_unknown_codes` | knowledge_admin, system_admin |
+| **Пользователи** (admin) | `can_manage_users` | system_admin |
+| **Роли** (admin) | `can_manage_roles` | system_admin |
+| **Аудит** (admin) | `can_view_audit` | system_admin |
+
+> **Вкладка `checks` убрана** из требований (обсуждение 03.06: «нет API, не планируется»). D11 подтверждён ✅.
+
+### Demo/Prod режим Gateway (P1-5)
+
+> **Решение**: Gateway работает в двух режимах, переключаемых через `ENV` env-переменную:
+> - `ENV=development` (демо/mock): мок-данные возвращаются явно с `X-Mock-Source: true` заголовком. Ошибки mock-сервисов возвращаются как есть (без маскировки).
+> - `ENV=production`: маршрутизация в реальные сервисы, без fallback на mock.
+>
+> **Запрещено** (P1-5): маскировать ошибки mock-данными в demo-режиме. Если сервис вернул `502`, клиент должен видеть `502`, а не синтетический ответ.
 
 ---
 
@@ -240,7 +303,17 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 | 05.06.2026 | **Новый функционал**: группа `drafts` в API Оркестратора (5 эндпоинтов), FSM черновиков в `pipeline1-formation.md`, архитектура двух экранов UI (Загрузка / База знаний), маршрут `/api/v1/drafts/*` в Gateway. |
 | 05.06.2026 | **Комплексный аудит документации**: проверка API (13 файлов), пайплайнов (5 файлов), схемы данных (6 файлов), кросс-проверка, security review, тупиковые состояния. Найдено 112+ проблем (23 критических). Результаты: `docs/specificity.md` (аномалии A15–A34, S1–S12, C1–C16), `docs/database/db_audit_report.md` (43 замечания). |
 | 12.06.2026 | **Анализ UI/Gateway-синхронизации**: разбор 10 вопросов к backend, 5 UI-задач, ожидающих подтверждения контрактов, и 4 веток-кандидатов на удаление. Результаты: `docs/audit/ui_gateway_sync_analysis.md`. Добавлены аномалии A25–A33 в `specificity.md`. |
-| Текущая | **Схема БД**: все FK на bigint, добавлены `chat.projects`, `project_id`, `document_type`. |
+| 16.06.2026 | **RAG-конфигурация по умолчанию** (P13-1, P13-2, P13-3): Qwen3-Embedding-4B (внешнее API), размерность 2048, chunk 1024, стратегия Vector+Rerank (S2), rerank bge-reranker-v2-m3-int8 (TEI). |
+| 16.06.2026 | **LLM по умолчанию** (P13-5): deepseek 4 flash (внешнее API), temperature 0.2, max_tokens 1024, top_p 0.95. |
+| 16.06.2026 | **Сквозные контракты** (P12): `draft_id` обязателен в Parser/OCR, пороги качества через `app_settings` (решение Orchestrator по raw-метрикам), `quality.issues[]` (→ `quality.notifications[]` 18.06), связь черновик→`version_id`, поля `valid_from`/`valid_until` + конвенция `dateMax = '9999-12-31'`, version_id не передаётся в RAG. |
+| 16.06.2026 | **Логирование/мониторинг** (P11): структурированное логирование (JSON, обязательные поля), корреляционные ID, уровни WARN/ERROR/CRITICAL, аудит-журнал `audit.events`, SigNoz + OpenTelemetry + ClickHouse (5 шагов внедрения), health-checks `/ready` vs `/live`, SLO/SLI, алерты, `service_checker`. |
+| 17.06.2026 | **Service-to-service auth** (P0-5): сетевая изоляция Docker-сети `internal` (без `X-Internal-Token`, решение по Gateway-изоляции). |
+| 17.06.2026 | **CAS** (P5-9): два бакета MinIO (`files` + `images`), SHA-256 ключ без расширения. |
+| 17.06.2026 | **DDL-миграции** (P2-11): `docs/database/ddl_migrations_17_06.md` — CHECK/ENUM, UNIQUE, FK ON DELETE, soft-delete, индексы, valid_from/valid_until, audit.events, draft_issues (→ `draft_notifications` 18.06). |
+| 17.06.2026 | **Резолвер** (P0-4): `docs/specifications/registry_resolver_spec.md` — event-driven + cron, advisory lock, стратегии exact/latest_revision. |
+| 17.06.2026 | **Компенсация check-uniqueness** (P0-3): подробное описание `INSERT ... ON CONFLICT DO NOTHING`, обработка `DUPLICATE_FILE_AFTER_APPROVE` в pipeline1-formation.md. |
+| 18.06.2026 | **Схлопывание `quality.warnings[]` + `quality.issues[]` → `quality.notifications[]`** (P3-5 поглощён P12-3): единый массив уведомлений оператора с полем `category: security | quality`. БД-таблица `pipeline.draft_notifications`. |
+| Текущая | **Схема БД**: все FK на bigint, добавлены `chat.projects`, `project_id`, `document_type`, `valid_from`/`valid_until`, `udk_code` (D-51), `audit.events`, `pipeline.draft_notifications`. |
 | v3.0 | Разделение RAG-сервиса на Builder и Search. |
 | v2.3 | Двухфазный пайплайн (preview + full). |
 
@@ -499,9 +572,22 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 | Спецификация парсинга для разработчиков | [`docs/specifications/parsing_specifications.md`](specifications/parsing_specifications.md) |
 | **Справочники** | |
 | Глоссарий терминов и сокращений | [`docs/glossary.md`](glossary.md) |
+| Журнал аномалий и трудных моментов | [`docs/specificity.md`](specificity.md) (D44) |
+| План синхронизации документации | [`docs/todo.md`](todo.md) (D46) |
+| Анализ альтернативного проекта KB (13.06) | [`docs/analyse_alternative_project.md`](analyse_alternative_project.md) (D45) |
+| **Модели базы данных** | |
+| ER-диаграмма и типы данных | [`docs/database/db_diagrams.md`](database/db_diagrams.md) (D47) |
+| DDL-миграции 17.06 | [`docs/database/ddl_migrations_17_06.md`](database/ddl_migrations_17_06.md) |
+| **Аудит** | [`docs/audit/`](audit/) (D47) |
 | **JSON-схемы (контракты)** | |
 | Структуры данных (диаграммы) | [`docs/schema/diagrams.md`](schema/diagrams.md) |
 | Результат Parser (сырой) | [`docs/schema/schema_parser_result.json`](schema/schema_parser_result.json) |
 | Результат Converter-validator | [`docs/schema/schema_converter_result.json`](schema/schema_converter_result.json) |
 | Preview от Converter-validator | [`docs/schema/schema_converter_preview.json`](schema/schema_converter_preview.json) |
 | JSON для Registry / RAG Builder | [`docs/schema/schema_registry_for_rag.json`](schema/schema_registry_for_rag.json) |
+
+---
+
+## ❓ Open Questions (P6-4)
+
+Актуальный список открытых вопросов, аномалий и несоответствий — в [`docs/specificity.md`](specificity.md) (раздел «🟡 Открытые вопросы»).

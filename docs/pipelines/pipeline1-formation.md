@@ -292,6 +292,44 @@ sequenceDiagram
 > **⚠️ Race condition**: Проверка уникальности через `check-uniqueness` неатомарна с последующей записью. Между check и write может быть вставлен другой документ. 
 > **Решение**: использовать уникальный индекс `UNIQUE (file_hash_sha256)` в БД + `INSERT ... ON CONFLICT DO NOTHING` для атомарной проверки при записи.
 
+##### Компенсация race condition между `check-uniqueness` и `approve`-записью
+
+Полная атомарность операции «проверить уникальность + записать документ» на уровне единой БД-транзакции невозможна по двум причинам:
+1. Между `POST /registry/documents/check-uniqueness` (вызывается Оркестратором на preview-фазе) и финальной записью в `registry.documents` (на фазе `approve` → `created`) проходит **время принятия решения пользователем** (минуты–часы). В течение этого окна другой пользователь может загрузить идентичный документ.
+2. Конвертация занимает секунды–минуты; удерживать распределённую блокировку на этом интервале недопустимо (потеря доступности сервиса при сбое).
+
+**Компенсирующий механизм (стадия `approved → created`):**
+
+1. Оркестратор при `PATCH /drafts/{draft_id}/decide action=approve` повторно вызывает `POST /registry/documents/check-uniqueness` (актуальный снимок) и фиксирует `file_hash_sha256` + `title_hash_sha256` в локальном контексте задачи.
+2. Registry при `POST /registry/documents` (создание карточки) выполняет вставку через `INSERT ... ON CONFLICT (file_hash_sha256) DO NOTHING RETURNING id`. 
+   - **Конфликта нет** → строка создана, возвращён `document_id`.
+   - **Конфликт по `file_hash_sha256`** → запись не вставлена, Registry возвращает HTTP `409 DUPLICATE_FILE` с телом:
+     ```json
+     {
+       "error": {
+         "code": "DUPLICATE_FILE",
+         "message": "Документ с таким file_hash_sha256 уже зарегистрирован",
+         "details": { "conflict_document_id": 42 }
+       }
+     }
+     ```
+3. Оркестратор при получении `409 DUPLICATE_FILE`:
+   - переводит черновик в статус `discarded` с `error_code = "DUPLICATE_FILE_AFTER_APPROVE"`,
+   - записывает событие в `pipeline.task_steps.error_code` / `error_message` (уровень `CRITICAL` — потеря консистентности между preview-решением и фактической записью),
+   - отдаёт пользователю HTTP `409 DUPLICATE_FILE` через Gateway, указывая `conflict_document_id` для перехода к существующему документу.
+4. **Связанный черновик** (`pipeline.tasks.draft_id`) помечается флагом `superseded_by_document_id = 42` в задаче пайплайна (только для аудита).
+5. **Уведомление пользователя**: UI получает `409` с `conflict_document_id` и предлагает перейти к существующему документу или отклонить дубликат (`reject`).
+
+**Аудит и логирование:**
+- Событие `DUPLICATE_FILE_AFTER_APPROVE` фиксируется в `registry.document_history` с `event_type="failed_duplicate"` и в `audit.events` (см. P11-4) с уровнем `CRITICAL`.
+- В лог пишется warning: `"Дубликат обнаружен после approve — черновик discarded"`, `draft_id`, `task_id`, `conflict_document_id`.
+
+**Идемпотентность решения:** повторный `PATCH /drafts/{draft_id}/decide` для уже `discarded` черновика возвращает `409 INVALID_STATE_TRANSITION` (см. `common_api.md`).
+
+**Альтернативы (отвергнуты):**
+- **pg_advisory_xact_lock** на `title_hash_sha256` — снижает конкурентность и не покрывает окно между preview и approve.
+- **Saga с распределённой транзакцией** — не используется (дополнительная инфраструктура, eventual consistency).
+
 ##### Этап 1 → 2: OCR/Parser → Converter-validator (обогащение)
 
 **Вход:** плоский сырой JSON (блоки страниц).  
@@ -313,8 +351,13 @@ stateDiagram-v2
         uploaded --> previewing : запуск preview
         previewing --> ready_for_approve : preview завершён
         previewing --> discarded : ошибка preview
+        previewing --> review_required : low confidence / quality issues
+        review_required --> validation : оператор подтвердил
+        review_required --> discarded : оператор отклонил
         ready_for_approve --> approved : approve
         ready_for_approve --> discarded : reject / автозавершение не прошло
+        validation --> approved : validation passed
+        validation --> discarded : validation failed
         approved --> created : запись в Registry
         
         created --> pending_index : запуск RAG Builder
@@ -337,6 +380,8 @@ stateDiagram-v2
 | `uploaded` | Черновик | Файл загружен в MinIO, ожидание запуска preview |
 | `previewing` | Черновик | Выполняется preview-фаза |
 | `ready_for_approve` | Черновик | Preview завершён, ожидание решения |
+| `review_required` | Черновик | **P1-20**: Preview показал низкое качество (пороги из P12-2 в `app_settings.parser.quality_thresholds`). Требуется ручная проверка оператором. UI отображает замечания из `issues[]` (P12-3) |
+| `validation` | Черновик | Оператор подтвердил черновик, выполняется повторная валидация (полный OCR/Parser → Converter-validator) с `metadata_overrides` (см. D13) |
 | `approved` | Черновик | Оператор подтвердил, документ создаётся в Registry |
 | `discarded` | Черновик | Черновик отклонён |
 | `created` | Registry | Документ записан в реестр |
@@ -344,6 +389,16 @@ stateDiagram-v2
 | `indexing` | Пайплайн 2 | Выполняется чанкинг, эмбеддинги |
 | `indexed` | Пайплайн 2 | Документ проиндексирован |
 | `failed` | 1/2 | Ошибка на одном из этапов |
+
+**Триггер перехода `review_required → validation` (P1-20):**
+
+1. На стадии `previewing` Parser/OCR возвращает raw-метрики качества (`avg_confidence`, `pages_failed`, `per_page[].status`). Оркестратор применяет пороги из `app_settings.parser.quality_thresholds`:
+   - `avg_confidence < reprocess_avg_confidence_below` → orchestrator запускает повторную обработку
+   - `avg_confidence < operator_avg_confidence_below` ИЛИ `pages_failed > 0` ИЛИ `lama_fallback_used == true` → черновик переходит в `review_required` (а не `ready_for_approve`).
+3. На стадии `review_required` Orchestrator фиксирует замечания в `pipeline.draft_notifications` (P12-3 / P3-5) и отдаёт UI список с `code, severity, category, message, location, suggested_action`.
+4. Оператор через `PATCH /drafts/{draft_id}/operator-confirm` подтверждает черновик → статус `validation`.
+5. На стадии `validation` Orchestrator запускает полный цикл (OCR/Parser full + Converter-validator), используя `metadata_overrides` оператора (D13).
+6. Если `validation` проходит — `approved` → `created`. Если нет — `discarded` с `error_code`.
 
 **Процесс создания новой версии:**
 Версии создаются через `POST /documents/{doc_id}/versions` напрямую. При создании новой версии:

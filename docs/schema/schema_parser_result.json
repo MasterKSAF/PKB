@@ -2,7 +2,10 @@
   "metadata": {
     "schema": "raw_ocr_v4",
     "task_id": 420001,
+    "draft_id": 420000,
     "created_at": "2026-05-17T09:15:00Z",
+    "mode": "full",
+    "preview_not_supported": false,
     "parser": {
       "name": "docling",
       "version": "2.1.0",
@@ -876,5 +879,17 @@
         }
       }
     ]
+  },
+  "status": "completed",
+  "errors": [],
+  "quality": {
+    "avg_confidence": 0.92,
+    "pages_processed": 2,
+    "pages_failed": 0,
+    "per_page": [
+      {"page": 1, "status": "ok", "confidence": 0.95},
+      {"page": 2, "status": "ok", "confidence": 0.89}
+    ],
+    "notifications": []
   }
 }

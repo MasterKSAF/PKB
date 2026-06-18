@@ -12,6 +12,19 @@
 
 ---
 
+---
+
+## Аутентификация service-to-service (сетевая изоляция)
+
+> Полное описание защиты internal-эндпоинтов (Docker-сеть internal, сетевая изоляция, матрица доступа) — см. [common_api.md](common_api.md#аутентификация-service-to-service-сетевая-изоляция).
+
+Краткая выжимка:
+
+- **Внешний клиент → Gateway** (L1): JWT Bearer, RBAC на Gateway.
+- **Gateway → внутренний сервис** (L2): сетевая изоляция Docker-сети internal.
+- **Service-to-service** (L3): только через private сеть, прямых вызовов извне быть не может.
+- **X-Internal-Token не используется** (решение 17.06, P0-6) — сетевой изоляции достаточно.
+
 ### Контракт API (финальный)
 
 #### Формат ответа
@@ -51,6 +64,7 @@
 ```json
 {
   "task_id": 420000,
+  "draft_id": 12345,
   "file_key": "file-def456",
   "mode": "preview",
   "max_pages": 3,
@@ -64,6 +78,7 @@
 | Поле | Тип | По умолчанию | Обязательность | Описание |
 | ---- | --- | ------------ | -------------- | -------- |
 | `task_id` | bigint | — | Да | Идентификатор задачи (генерируется Оркестратором) |
+| `draft_id` | bigint | — | **Да (P12-1)** | Идентификатор черновика в Registry. **Обязателен** с 17.06 — без `draft_id` Parser не может записать `processing_status` / `quality` / `issues` обратно в черновик |
 | `file_key` | string | — | Да | Ключ файла в MinIO |
 | `mode` | enum | `"full"` | Нет | Режим обработки: `"preview"` / `"full"` |
 | `max_pages` | int | `3` | Нет | Количество страниц для предпросмотра (только для `mode: "preview"`) |
@@ -223,8 +238,31 @@
 | `quality`                                    | object | Общая оценка качества + `per_page` — детализация по страницам        |
 | `quality.per_page[].status`                  | string | `ok`, `low_confidence`, `failed`                                     |
 | `quality.per_page[].error`                   | string | Код ошибки страницы (только при `status: failed`)                    |
-| `errors`                                     | array  | Массив некритичных ошибок и предупреждений                           |
+| `quality.notifications[]`                    | array  | **P12-3 / P3-5**: уведомления для оператора (см. ниже) — единый массив `{code, severity, category, message, location, suggested_action, db_fk_to_draft_notification}` |
+| `errors`                                     | array  | Массив **системных** ошибок парсинга (не путать с `quality.notifications[]`) |
 | `status`                                     | string | `completed`, `failed`                                                |
+
+### P12-3 / P3-5 — quality.notifications[] (уведомления оператора)
+
+Единый массив уведомлений для оператора. Содержит как security-предупреждения (P3-5), так и замечания по качеству (P12-3). Разделяются полем `category`.
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `code` | string | Код уведомления. Security: `EMBEDDED_JS`, `EMBEDDED_FILE`, `ENCRYPTED_PAYLOAD`, `OLE_OBJECT`, `MACRO`, `EXTERNAL_REFERENCE`, `LAMA_FALLBACK_USED`. Quality: `LOW_CONFIDENCE_PAGE`, `LANGUAGE_DETECTION_FAILED`, `TABLE_CORRUPTED`, `FORMULA_UNREADABLE`, `IMAGE_BLURRED`, `HEADER_FOOTER_OVERLAP` |
+| `severity` | string | `info`, `warning`, `error`, `critical` |
+| `category` | string | `security` — предупреждение безопасности; `quality` — замечание по качеству |
+| `message` | string | Человекочитаемое описание |
+| `location` | object | `{page, block}` — где в документе (опционально) |
+| `suggested_action` | string | Что рекомендуется сделать: `reprocess`, `manual_edit`, `review`, `ignore` (опционально) |
+| `db_fk_to_draft_notification` | bigint | После записи в БД — ID в `pipeline.draft_notifications` (см. `ddl_migrations_17_06.md`) |
+
+**Особенности по category:**
+- `category: security` — severity `info`, `warning`, `critical`. При `critical` — статус `low_confidence`, в лог пишется WARN (P11-3). UI отображает плашку «Документ содержит потенциально небезопасные элементы» и требует подтверждения оператора перед approve.
+- `category: quality` — severity `info`, `warning`, `error`, `critical`. При `critical` черновик переводится в `review_required`.
+
+**Запись в БД:** Parser/OCR вставляет уведомления в `pipeline.draft_notifications` через `INSERT ... RETURNING id`.
+
+**Примечание:** Cписок кодов открытый — расширяется по мере добавления новых детекторов. Коды из разных `category` не пересекаются.
 
 ---
 

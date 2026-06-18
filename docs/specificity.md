@@ -161,7 +161,7 @@ API черновиков и FSM документированы, но **UI сра
 | Код | Проблема | Статус |
 |-----|----------|--------|
 | S3 | Rate limiting не реализован (Nginx + Redis) | 🔄 код |
-| S10 | `/internal/auth/validate` без сетевой изоляции (mTLS) | 🔄 код |
+| S10 | `/internal/auth/validate` без сетевой изоляции | 🔄 код |
 
 ---
 
@@ -218,7 +218,7 @@ API черновиков и FSM документированы, но **UI сра
 | PL-E3 | TTL preview-артефактов — не определён | 🔄 решено: preview-режим не сохраняет бинарные объекты (`image_key` отсутствует), артефактов нет |
 | B6 | `chat.messages.status` — значения не формализованы в БД | ⬜ DBA |
 | B7 | RAG Builder — API-спецификация | 🔄 синхронизирована с пайплайнами (15.06) |
-| B7a | Auth Service, RAG Search — API-спецификации | ⬜ аналитик |
+| B7a | Auth Service, RAG Search — API-спецификации | ⬜ открыто (P1-1, 17.06): фактического аудита RAG Search не проводилось. Документация RAG Search в `rag_search_service_api.md` дополнена секциями (конфигурация, стратегии, метрики) в рамках P13, но **это не заменяет полноценный аудит**. Auth Service: спецификация актуальна (12.06), но детальный аудит не проводился. Приоритет: 🟠 |
 
 ## 🟡 Перекрёстные несоответствия (кросс-проверка)
 
@@ -246,6 +246,29 @@ API черновиков и FSM документированы, но **UI сра
 - **OCR и Parser — два независимых сервиса** (от 23.05).
 - **Унификация health-эндпоинта Orchestrator** (13.06): `/api/v1/monitor/health` → `/api/v1/health` как у всех внутренних сервисов. Health Orchestrator больше не проксируется через Gateway (внутренний, как Auth и др.). Gateway предоставляет `/api/v1/system/health` для внешнего мониторинга.
 - **Перенос `/api/v1/monitor/metrics` в Gateway** (13.06): эндпоинт метрик качества пайплайнов перенесён из Orchestrator в Gateway как собственный (не проксируемый). Спецификация удалена из `orchestrator_service_api.md` и добавлена в `gateway_service_api.md`.
+
+### 🔄 Схлопывание `quality.warnings[]` + `quality.issues[]` в `quality.notifications[]` (18.06)
+
+**Проблема:** два параллельных массива в `quality` с почти одинаковой структурой, но разной семантикой (P3-5 security vs P12-3 операторские замечания). Разделение усложняет контракт и UI.
+
+**Решение:** единый массив `quality.notifications[]` с полем `category: security | quality`. БД-таблица `pipeline.draft_notifications` (единая, без history).
+
+**Обоснование:**
+- Оба массива адресованы оператору — сервисы лишь передают данные
+- Security-предупреждения тоже требуют внимания оператора (critical → подтверждение перед approve)
+- Единый контракт проще для UI и consumer'ов
+- Система новая — нет необходимости в патчах и обратной совместимости
+- P3-5 поглощён P12-3: отдельный `warnings[]` не создаётся
+
+**Затронутые документы:**
+- `docs/api/parser_service_api.md` — `warnings[]` + `issues[]` → `notifications[]`
+- `docs/api/ocr_service_api.md` — зеркальное изменение
+- `docs/specifications/parsing_specifications.md` — `warnings` → `notifications`
+- `docs/database/ddl_migrations_17_06.md` — `draft_issues` → `draft_notifications`
+- `docs/pipelines/pipeline1-formation.md` — `draft_issues` → `draft_notifications`
+- `docs/glossary.md` — `draft_issues` → `draft_notifications`
+- `docs/5.docs_action_plan_17_06.md` — P12-3 актуализирован, P3-5 помечен поглощённым
+- `docs/guide.md` — new: зафиксировано решение
 
 ### 🔄 Схлопывание `/parser/preview` и `/parser/process` (08.06)
 

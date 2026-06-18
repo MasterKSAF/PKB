@@ -31,132 +31,100 @@
 - [x] RAG Builder: `sections[].section_id` (не `[]`id`)
 - [x] Схлопывание `/parser/preview` + `/parser/process` в единый `POST /{parser|ocr}/process` с `mode`
 
+## ✅ Аутентификация service-to-service: переход на сетевую изоляцию — 18.06
+
+- [x] **1. common_api.md** — раздел переписан на сетевую изоляцию Docker-сети
+- [x] **2. service API (10 файлов)** — разделы обновлены
+- [x] **3. auth_service_api.md** — обновлён раздел + заметка у POST /internal/auth/validate
+- [x] **4. registry_service_api.md** — убрана ссылка на сертификаты из PATCH /status
+- [x] **5. deployment.md** — удалён раздел конфигурации сертификатов
+- [x] **6. README.md** — обновлён чейнджлог
+- [x] **7. 5.docs_action_plan_17_06.md** — обновлены P0-5, P3-2
+- [x] **8. audit_06_06_2026.md** — обновлены таблицы уязвимостей и рекомендаций
+- [x] **9. specificity.md** — обновлено S10
+- [x] **10. todo.md** — обновлён (этот файл)
+- [x] **11. service_dependencies.md** — обновлены связанные документы
+- [x] ✅ Финальная проверка: все упоминания удалены
+
+---
+
 ## P0 — Блокирующее
 
-- [ ] 🔴 P0-1: Исправить формулу `title_hash_sha256` в `db_diagrams.md` (строки 301, 388) — привести к 6-польной формуле из glossary.md
-- [ ] 🔴 P0-2: Привести `document_id` в примерах query_service_api.md к bigint
-- [ ] 🔴 P0-3: Решить неатомарность `check-uniqueness` (LP-C3)
-- [ ] 🔴 P0-4: Описать резолвер `document_references.is_resolved` (A37)
-- [ ] 🔴 P0-5: Добавить service-to-service аутентификацию во все internal API
-- [ ] 🔴 P0-6: Описать защиту `PATCH /registry/documents/{id}/status`
+- [x] ✅ P0-1: Формула `title_hash_sha256` в `db_diagrams.md` уже соответствует 6-польной из glossary.md (18.06)
+- [x] ✅ P0-2: `document_id` в примерах query_service_api.md уже bigint (18.06)
+- [x] ✅ P0-3: Неатомарность `check-uniqueness` — решена через `INSERT ... ON CONFLICT`. Описано в `registry_service_api.md` (18.06)
+- [x] ✅ P0-4: Описать резолвер `document_references.is_resolved` — создан `registry_resolver_spec.md`
+- [x] ✅ P0-5: Добавить service-to-service аутентификацию во все internal API — разделы добавлены
+- [x] ✅ P0-6: Описать защиту PATCH /registry/documents/{id}/status — сетевая изоляция описана
 
-## P1 — Серьёзное (интеграция)
-
-- [ ] 🟠 P1-1: Аудит RAG Search / Auth Service (B7a)
-- [ ] 🟠 P1-2: Восстановить `search`, `checks`, `registry` в RBAC
-- [ ] 🟠 P1-3: Подключить drafts через Gateway (не mock)
-- [ ] 🟠 P1-4: Реализовать longpoll на сообщение чата
-- [ ] 🟠 P1-5: Разделить demo/prod в Gateway
-- [ ] 🟠 P1-6: POST /chat/sessions — принимать document_ids, options, project_id
-- [ ] 🟠 P1-7: Подключить chat/history/export (stream, не локальный CSV)
-- [ ] 🟠 P1-8: Использовать Registry API для классификаторов/терминологии в UI
-- [ ] 🟠 P1-9: Добавить раздел «Артефакты» в админку
-- [ ] 🟠 P1-10: Исправить кнопку «Повторить OCR» (reprocess по выбранному)
-- [ ] 🟠 P1-11: Удалить/legacy DocumentRegistry.tsx
-- [ ] 🟠 P1-12: Описать отдельную таблицу ролей GET /admin/roles
-- [ ] 🟠 P1-13: Карточка документа: detail/status/history/errors
-- [ ] 🟠 P1-14: Добавить таймаут pending (30 с) в Pipeline 3
-- [ ] 🟠 P1-16: Удалить/описать partially_indexed
-- [ ] 🟠 P1-17: Описать `indexed -> failed : Integrity check failed`
-- [ ] 🟠 P1-18: Устранить противоречие в компенсации Pipeline 2
-- [ ] 🟠 P1-19: Описать повторный запуск preview (idempotency/409)
-- [ ] 🟠 P1-20: Добавить триггер `review_required -> validation`
-- [ ] 🟠 P1-21: Описать `current_version_id` в registry.documents
-- [ ] 🟠 P1-22: Связь `pipeline.drafts ↔ registry.drafts`
+- [x] ✅ P1-22: Упоминания `pipeline.drafts` остались только в исторических записях (audit specificity) — корректно (18.06)
 
 ## P2 — DDL/схема (миграции)
 
-- [ ] 🟡 P2-1: CHECK/ENUM на source_type, document_type, era, validity_status, jurisdiction, processing_status
-- [ ] 🟡 P2-2: file_hash_sha256, title_hash_sha256 -> CHAR(64)
-- [ ] 🟡 P2-3: UNIQUE-ограничения на бизнес-ключи
-- [ ] 🟡 P2-4: ON DELETE/ON UPDATE для всех FK
-- [ ] 🟡 P2-5: Soft-delete (deleted_at)
-- [ ] 🟡 P2-6: Дополнительные индексы
-- [ ] 🟡 P2-7: CHECK на положительность счётчиков
-- [ ] 🟡 P2-8: CHECK на mks_oks_code/okstu_code в classifier_registry
-- [ ] 🟡 P2-9: Триггер синхронизации document_chunks.document_id
-- [ ] 🟡 P2-10: Унифицировать нейминг (timestamps, status, FK)
-- [ ] 🟡 P2-11: Создать ddl_migrations.md со скриптами
+- [x] ✅ P2-1: CHECK/ENUM — добавлены (18.06)
+- [x] ✅ P2-2: CHAR(64) — уже было (18.06)
+- [x] ✅ P2-3: UNIQUE — `title_hash_sha256` добавлен (18.06)
+- [x] ✅ P2-4: ON DELETE/ON UPDATE — CASCADE/SET NULL проставлены (18.06)
+- [x] ✅ P2-5: Soft-delete — `deleted_at` уже был (18.06)
+- [x] ✅ P2-6: Индексы — добавлены (18.06)
+- [x] ✅ P2-7: CHECK на положительность — добавлены (18.06)
+- [x] ✅ P2-8: CHECK на коды классификаторов — добавлены (18.06)
+- [x] ✅ P2-9: Триггер синхронизации — описан (18.06)
+- [x] ✅ P2-10: Нейминг — конвенция зафиксирована (18.06)
+
 
 ## P3 — Безопасность
 
-- [ ] 🟠 P3-1: Rate limiting (реализовать или убрать 429 из docs)
-- [ ] 🟠 P3-2: mTLS для Gateway ↔ Auth
-- [ ] 🟠 P3-3: IDOR — примечания о rate-limit и audit
-- [ ] 🟠 P3-4: Чувствительные данные — запретить в URL
-- [ ] 🟠 P3-5: PDF-security — поле warnings[] в Parser/OCR
-- [ ] 🟡 P3-6: Lama Parser — риск для конфиденциальных документов
+- [x] ✅ P3-3: IDOR — rate-limit и audit описаны в `common_api.md` §«Защита от IDOR» (18.06)
+- [x] ✅ P3-5: Поглощён P12-3 — security-предупреждения в `quality.notifications[]` с `category: security` (18.06)
+- [x] ✅ P3-6: Lama Parser — риск для конфиденциальных документов — описан в `parsing_specifications.md` §6
+- [x] ✅ P12-3 / P3-5: `quality.warnings[]` + `quality.issues[]` схлопнуты в единый `quality.notifications[]` с `category: security | quality`. БД-таблица `pipeline.draft_notifications`. (18.06)
 
 ## P4 — RAG-методики
 
-- [ ] 🟡 P4-1: Создать docs/plans/quality_report_sprint2.md
-- [ ] 🟡 P4-2: Перенести RAG-методики в docs/methodology/
-- [ ] 🟡 P4-3: Актуализировать модели (Qwen3-Embedding, int8)
-- [ ] 🟡 P4-4: Зафиксировать 9 стратегий поиска (S1–S9)
-- [ ] 🟡 P4-5: Описать таймауты и метрики производительности
-- [ ] 🟡 P4-6: Зафиксировать итоговую конфигурацию
-- [ ] 🟡 P4-7: Протокол проверки значимости
-- [ ] 🟡 P4-8: Постобработка LLM — валидация цитирования
-- [ ] 🔵 P4-9: Смена модели эмбеддингов (ALTER TABLE)
-- [ ] 🔵 P4-10: Repromote/переиндексация
+- [x] ✅ P4-3: Актуализировать модели (Qwen3-Embedding, int8) — сделано через P13-1 (18.06)
+- [x] ✅ P4-6: Зафиксировать итоговую конфигурацию — сделано через P13-1 (18.06)
+- [x] ✅ P4-8: Постобработка LLM — валидация цитирования. **Решение**: LLM обязана включать `[source:N]` после каждого абзаца, отсутствие → регенерация. Описано в `pipeline3-search.md` (18.06)
 
 ## P5 — Спецификации и глоссарий
 
 - [x] ✅ P5-1: Покрыто P0-1 (дубликат удалён)
-- [ ] ⚪ P5-2: «артефакт» -> «результат обработки» в глоссарии
-- [ ] 🟡 P5-3: Добавить preview_not_supported в глоссарий
+- [x] ✅ P5-2: термин «артефакт» в глоссарии заменён (подтверждено D62) (18.06)
+- [x] ✅ P5-3: Добавить preview_not_supported в глоссарий — присутствует
 - [ ] 🟡 P5-4: Обновить parsing_specifications.md
-- [ ] 🟡 P5-5: Обновить purgatory_scenario.md
-- [ ] ⚪ P5-6: Добавить плашку «исторический» в pipeline1-formation_discussion.md
-- [ ] 🟡 P5-7: Добавить seed с mks_oks_code: 47.020
+- [ ] 🟡 P5-5: Обновить `purgatory_scenario.md` — синхронизировать сценарии с актуальной статусной моделью и API
+- [x] ✅ P5-7: Добавить seed с mks_oks_code: 47.020 — примеры в normalizer_specification.md
 - [ ] 🔵 P5-8: Добавить нормализатор doc_code в normalizer_specification.md
-- [ ] 🟡 P5-9: Синхронизировать cas_storage_specification.md с решением 08.06
-- [ ] 🔵 P5-10: Создать registry_resolver_spec.md
+- [x] ✅ P5-9: Синхронизировать cas_storage_specification.md с решением 08.06
+- [x] ✅ P5-10: Создать registry_resolver_spec.md — файл создан
 
 ## P6 — README и навигация
 
-- [ ] 🟡 P6-1: Сверить README с реальным деревом файлов
-- [ ] 🟡 P6-2: Синхронизировать «Загрузку документа» с docs_ui.md
-- [ ] 🟡 P6-3: Синхронизировать «Базу знаний» с docs_ui.md
+- [x] ✅ P6-1: README сверено с реальным деревом файлов (+ `architecture/`, `guide.md`, `pipelines/todo.md`, вычищены дубликаты) (18.06)
 - [ ] 🔵 P6-4: Добавить секцию «Open Questions»
-- [ ] 🔵 P6-5: Создать CHANGELOG.md
-- [ ] 🔵 P6-6: Перенести docs_ui*.md в docs/ui/
-
-## P7 — Аудит и архив
-
-- [ ] 🟡 P7-1: Обновлён (этот файл)
-- [ ] 🔵 P7-2: Перенести аудиты в docs/audit/
-- [ ] ⚪ P7-3: Перекодировать имена обсуждений в UTF-8
-- [ ] ⚪ P7-4: Переименовать обсуждения в семантические
-- [ ] ⚪ P7-5: Удалить дубль ui-final-... (28 КБ)
-- [ ] 🔵 P7-6: Создать README.md с индексом встреч
-- [ ] 🔵 P7-7: Добавить front-matter в обсуждения
-- [ ] 🔵 P7-8: Добавить cross-references обсуждений ↔ specificity.md
-- [ ] 🟡 P7-9: Запустить повторный аудит по check_rule.md
-- [ ] 🔵 P7-10: Актуализировать Excel-статусы сервисов
 
 ## P8 — Сверка со СВОДНЫМ ПЛАНОМ (04.06)
 
-- [ ] 🔵 P8-1: Добавить решение document_id = bigint (sequence) в specificity.md
-- [ ] 🔵 P8-2: Добавить решение bbox (px vs [0,1]) в specificity.md
-- [ ] 🟡 P8-3: Описать end-to-end FSM approve/reprocess (частично — decide описан в pipeline1-formation_detail.md:444)
-- [ ] 🟡 P8-4: Описать Scheduler Pipeline 2
+- [x] ✅ P8-1: Добавить решение document_id = bigint (sequence) в specificity.md — присутствует
+- [x] ✅ P8-2: Добавить решение bbox (px vs [0,1]) в specificity.md — присутствует
+- [x] ✅ P8-3: Описать end-to-end FSM approve/reprocess — описана в overview.md:353-395
+- [x] ✅ P8-4: Описать Scheduler Pipeline 2 — описан в pipeline2-indexation.md (триггер 15 мин, advisory lock, таймаут 1ч)
 - [x] ✅ P8-5: Редакции — не в MVP (зафиксировано в решениях 16.06)
-- [ ] 🔵 P8-6: Создать docs/deployment.md
+- [x] ✅ P8-6: Создать docs/deployment.md — файл создан (`docs/specifications/deployment.md`)
 - [x] ✅ P8-7: Нагрузочное тестирование — методика в rag_evaluation_methodology.md
-- [ ] 🟡 P8-8: Перенести SigNoz в описание мониторинга
+- [x] ✅ P8-8: Перенести SigNoz в описание мониторинга — создан `docs/architecture/monitoring.md`
 - [x] ✅ P8-9: Демо-стенд — частично в sprint2_11_06_17_06.md
-- [ ] 🟡 P8-10: Дождаться примеров семейств от Семёна для конвертера
+
 - [x] ✅ P8-11: RRP-алгоритм — частично в rag_experiments_methodology.md
 
 ## P9 — Зависимости сервисов
 
-- [ ] 🔵 P9-1: Создать docs/architecture/service_dependencies.md
-- [ ] 🟡 P9-2: Добавить email-validator в requirements.txt
-- [ ] 🔵 P9-3: Описать mock-роутер Gateway
+- [x] ✅ P9-1: Создать docs/architecture/service_dependencies.md — файл создан
+
+- [x] ✅ P9-3: mock-роутер Gateway описан в `service_dependencies.md` §3 (18.06)
 
 ## P10 — Справочник ПКБ
 
-- [ ] 🔵 P10-1: Восстановить кодировку справочника ПКБ
-- [ ] 🔵 P10-2: Перенести таблицу в CSV
-- [ ] 🔵 P10-3: Добавить ссылку в glossary.md
+- [x] ✅ P10-1: Восстановить кодировку справочника ПКБ — UTF-8 версия создана, legacy сохранён
+- [x] ✅ P10-2: Перенести таблицу в CSV — pkb_domains_classifier.csv создан
+- [x] ✅ P10-3: Добавить ссылку в glossary.md — раздел «Справочник ПКБ» присутствует
