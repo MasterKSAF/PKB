@@ -338,9 +338,10 @@ erDiagram
 | `rag.document_chunks` | `embedding` | **D10, P13-1**: `VECTOR(2048)` (не `VECTOR(1536)`!) — pgvector, размерность по умолчанию для Qwen3-Embedding-4B. Параметр конфигурации `app_settings.rag.embedding_dim` (альтернативы для экспериментов: 1536, 2560, 4096). `IVFFlat` индекс для `cosine_similarity` |
 | `rag.document_chunks` | `tsv` | `tsvector` — GIN-индекс для полнотекстового поиска (`ts_rank`) |
 
-### P2-9: Триггер синхронизации document_chunks.document_id
+### P2-9: valid_from / valid_until / indexing_txn_id
 
-При вставке чанка в `rag.document_chunks` поле `document_id` заполняется автоматически: `NEW.document_id := (SELECT document_id FROM registry.document_sections WHERE id = NEW.section_id)`. Триггер `BEFORE INSERT` защищает от рассинхронизации.
+- Поля `valid_from DATE NOT NULL DEFAULT '1000-01-01'` и `valid_until DATE NOT NULL DEFAULT '9999-12-31'` в `registry.documents` с CHECK `valid_until >= valid_from`
+- Поле `indexing_txn_id UUID` в `rag.document_chunks` + partial index `WHERE indexing_txn_id IS NOT NULL`
 
 ### P2-10: Конвенция нейминга
 
@@ -522,7 +523,7 @@ erDiagram
 
 Связь с секциями: чанк всегда привязан к конкретной секции документа. Одна секция может порождать несколько чанков (для `type=section` с разбивкой на ≤512 токенов) или один чанк (для `type=table/image/formula`).
 
-> **Денормализация**: Поле `document_id` в `document_chunks` дублирует `document_sections.document_id` для ускорения запросов «все чанки документа». Синхронизация должна обеспечиваться на уровне приложения или триггера.
+> **Денормализация**: Поле `document_id` в `document_chunks` дублирует `document_sections.document_id` для ускорения запросов «все чанки документа». Синхронизация обеспечивается на уровне приложения (RAG Builder проставляет `document_id` при вставке чанка).
 
 ### 7. Проекты (`chat.projects`)
 
