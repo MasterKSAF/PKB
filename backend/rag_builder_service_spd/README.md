@@ -302,10 +302,18 @@ Response contains chunks with citation fields:
 MVP limitations:
 
 - `hybrid` uses Reciprocal Rank Fusion with `k=60`.
-- `sparse` uses PostgreSQL full-text ranking via `ts_rank_cd`; a dedicated BM25 engine/index is not implemented yet.
+- `sparse` uses PostgreSQL full-text ranking via `ts_rank_cd`; a dedicated BM25 engine is not implemented yet.
 - `context expansion` uses `document_sections.path_ltree` and returns parent + direct children for each result.
 - Context deduplication is partial: context items already present in main `results` are removed.
 - With `EMBEDDING_PROVIDER=stub`, dense search is technical only and may add non-semantic candidates to hybrid results.
+
+Sparse search acceleration:
+
+- `nsi.chunks` has a GIN expression index:
+  - `idx_chunks_content_tsv`
+  - `to_tsvector('russian'::regconfig, content)`
+- The index accelerates PostgreSQL full-text sparse search.
+
 ---
 
 ## 10. Структура проекта
@@ -362,6 +370,7 @@ sql/
 * path
 * path_ltree
 * GIST индекс для ltree
+* GIN expression index for sparse full-text search
 
 #### Хранение чанков
 

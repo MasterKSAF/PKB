@@ -140,6 +140,19 @@ class PostgresChunkRepository(ChunkRepository):
                     )
                 )
 
+                logger.info("ensure_schema: before create index chunks_content_tsv")
+                cur.execute(
+                    sql.SQL(
+                        """
+                        CREATE INDEX IF NOT EXISTS idx_chunks_content_tsv
+                        ON {}.chunks
+                        USING GIN (to_tsvector('russian'::regconfig, content))
+                        """
+                    ).format(
+                        sql.Identifier(settings.POSTGRES_SCHEMA)
+                    )
+                )
+
                 logger.info("ensure_schema: before create table cross_references")
                 cur.execute(
                     sql.SQL(
