@@ -82,7 +82,8 @@ docs/
 ├── specificity.md                    # Журнал аномалий и трудных моментов
 ├── todo.md                           # План синхронизации документации
 ├── analyse_alternative_project.md   # Анализ альтернативного проекта KB (13.06)
-└── 5.docs_action_plan_17_06.md     # План внедрения (P0-P13 + D1-D69, 17.06.2026)
+├── 5.docs_action_plan_17_06.md     # План внедрения (P0-P13 + D1-D69, 17.06.2026) — полный
+└── 6.dev_tasks_17_06.md            # Только код: задачи разработчикам по сервисам (103 задачи, 17 🔴)
 ```
 
 > 📂 **Исторические обсуждения и протоколы встреч** хранятся в директории [`../docs_plans/`](../docs_plans/) на уровне корня проекта.
@@ -315,6 +316,7 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 | 17.06.2026 | **Компенсация check-uniqueness** (P0-3): подробное описание `INSERT ... ON CONFLICT DO NOTHING`, обработка `DUPLICATE_FILE_AFTER_APPROVE` в pipeline1-formation.md. |
 | 18.06.2026 | **Схлопывание `quality.warnings[]` + `quality.issues[]` → `quality.notifications[]`** (P3-5 поглощён P12-3): единый массив уведомлений оператора с полем `category: security | quality`. БД-таблица `pipeline.draft_notifications`. |
 | 18.06.2026 | **Preview-метаданные синхронизированы**: поля приведены к табличным именам (`mks_oks_code`, `okstu_code`, `udk_code`, `pkb_codes`), добавлены `era`, `validity_status`, `issuing_body`, `jurisdiction`, `source_type`, `language`, `title_hash_sha256`. Обновлены примеры в API (Converter, Orchestrator, Registry), схеме JSON, спецификации конвертера, пайплайне и описании БД. |
+| 19.06.2026 | **Задачи разработчикам (только код)**: `docs/6.dev_tasks_17_06.md` — 103 задачи на код/БД/тесты, 17 🔴. Документационные задачи отфильтрованы. |
 | 18.06.2026 | **Preview-слепок в карточке документа**: в `registry.documents` добавлено поле `preview_snapshot` (JSONB) — исходный ответ Converter-validator preview копируется из черновика при approve для истории и аудита. Обновлены ER-диаграмма, примечания БД, пайплайн (шаг 3.0) и принципы конвертера. |
 | Текущая | **Схема БД**: все FK на bigint, добавлены `chat.projects`, `project_id`, `document_type`, `valid_from`/`valid_until`, `udk_code` (D-51), `audit.events`, `pipeline.draft_notifications`. |
 | v3.0 | Разделение RAG-сервиса на Builder и Search. |
