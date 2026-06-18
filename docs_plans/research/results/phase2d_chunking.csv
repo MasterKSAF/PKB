@@ -1,0 +1,3 @@
+chunk_strategy,chunk_size,overlap,dim,quant,strategy,P@5,R@5,MRR,NDCG@5,Hit@5,MAP,search_sec
+fixed,1024,0.1,2048,int8,S2,0.2,1.0,0.9545,0.9664,1.0,0.9545,18.84
+paragraph,1024,0.1,2048,int8,S2,0.2,1.0,0.9394,0.9551,1.0,0.9394,18.71
