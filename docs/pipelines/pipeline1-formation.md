@@ -65,7 +65,7 @@ sequenceDiagram
         deactivate Pars
     end
     Orch->>Orch: Завершение task_step "preview_ocr"
-    Orch->>Orch: Проверка preview_not_supported + решение об auto-approve
+    Orch->>Orch: Проверка preview_not_supported — full-фаза будет пропущена
     Orch->>Orch: Создание task_step "preview_converter"
     Orch->>Conv: POST /converter/preview/metadata
     activate Conv
@@ -158,8 +158,8 @@ sequenceDiagram
 | P.3 | Извлечение первичных метаданных | Converter-validator (preview API) | Обозначение, наименование, тип, даты |
 | P.4 | Проверка уникальности (по метаданным + размеру) | Оркестратор → `POST /registry/documents/check-uniqueness` | Список кандидатов-дубликатов |
 | P.5 | Отображение preview пользователю | UI | Метаданные + дубликаты |
-| P.6 | Решение пользователя (или auto-approve) | UI → Оркестратор (`PATCH /drafts/{draft_id}/decide`) | approve / reject |
-| P.6a | Auto-approve (если `preview_not_supported=true`, метаданные корректны, дубликатов нет) | Оркестратор | Пропуск шага P.6, переход к full-фазе |
+| P.6 | Решение пользователя | UI → Оркестратор (`PATCH /drafts/{draft_id}/decide`) | approve / reject |
+| P.6a | Пропуск full-фазы (если `preview_not_supported=true`) | Оркестратор | OCR/Parser не запускается повторно — JSON уже полный |
 
 **Параметры preview:**
 
@@ -167,7 +167,7 @@ sequenceDiagram
 |----------|----------------------|----------|
 | `max_pages` | 3 | Количество страниц для preview-обработки |
 | `preview_timeout` | 60с (OCR) / 30с (Parser) | Таймаут на preview-этап |
-| `preview_not_supported_fallback` | — | Если `preview_not_supported: true` + метаданные корректны + нет дубликатов → auto-approve (пропуск шага подтверждения) |
+| `preview_not_supported_fallback` | — | Если `preview_not_supported: true` → full-фаза OCR/Parser пропускается, решение принимает пользователь |
 | `preview_llm_timeout` | 15с | Таймаут на LLM-вызов при извлечении метаданных |
 
 ---
