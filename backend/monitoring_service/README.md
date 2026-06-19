@@ -134,16 +134,13 @@ sudo ls -la /home/user/monitoring_demo/
      
    в файле  main.py (полный пошаговый пример приведен ниже):  
    3.1 настроить импорт функций из telemetry\_lib   
-   3.2 перед определением app вставить вызов setup\_observability и получить логгер. 
+   3.2 получить главный логгер сервиса setup\_observability 
      
    в файле  всех остальных модулей где будет логирование:  
-   добавить строки в начало каждого файла:
-   
-```text  
-python  
-import logging
-logger = logging.getLogger(__name__)
-```
+   добавить строки в начало каждого файла:   
+   python  
+   import logging  
+   logger = logging.getLogger(__name__)
 
    
 
@@ -159,52 +156,52 @@ logger = logging.getLogger(__name__)
 
    
 ```text
-python
-ПРИМЕР (обратите внимание на последовательность шагов): 
-# ==================== ШАГ 3.1: импорты ====================
-import os
-import logging
-from fastapi import FastAPI, HTTPException
-from telemetry_lib.telemetry import setup_observability, instrument_fastapi
-from opentelemetry import trace   # для ручных спанов
+python  
+ПРИМЕР (обратите внимание на последовательность шагов):   
+# ==================== ШАГ 3.1: импорты ====================  
+import os  
+import logging  
+from fastapi import FastAPI, HTTPException  
+from telemetry_lib.telemetry import setup_observability, instrument_fastapi  
+from opentelemetry import trace   # для ручных спанов  
 import uvicorn
 
-# ==================== ШАГ 3.2: настройка observability ====================
-app = FastAPI()
-service_name = "name_service" # <- запишите имя сервиса
+# ==================== ШАГ 3.2: настройка observability ====================  
+app = FastAPI()  
+service_name = "payment-service"  
 otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "signoz-otel-collector:4317")
 
 tracer_provider, meter_provider, log = setup_observability(service_name, otlp_endpoint)
 
-## ==================== ШАГ 4.1: инструментирование FastAPI для трейсов ====================
-instrument_fastapi(app, tracer_provider)  
+## ==================== ШАГ 4.1: инструментирование FastAPI для трейсов ====================  
+instrument_fastapi(app, tracer_provider)
 
-# ==================== ШАГ 5.1: метрики (опционально и НЕ ОБЯЗАТЕЛЬНО т.е. можно удалить и не выполнять) ====================
-meter = meter_provider.get_meter(service_name)
-payment_counter = meter.create_counter(
-    "payment_requests_total",
-    description="Total payment requests"
+# ==================== ШАГ 5.1: метрики (опционально и НЕ ОБЯЗАТЕЛЬНО т.е. можно удалить и не выполнять) ====================  
+meter = meter_provider.get_meter(service_name)  
+payment_counter = meter.create_counter(  
+    "payment_requests_total",  
+    description="Total payment requests"  
 )
 
-# ==================== ШАГ 4.2: ручной трейсер (опционально и НЕ ОБЯЗАТЕЛЬНО т.е. можно удалить и не выполнять) ====================
+# ==================== ШАГ 4.2: ручной трейсер (опционально и НЕ ОБЯЗАТЕЛЬНО т.е. можно удалить и не выполнять) ====================  
 tracer = trace.get_tracer(service_name)
 
-# ==================== ЭНДПОИНТЫ ====================
-@app.get("/health")
-async def health():
-    log.debug("Health check")
+# ==================== ЭНДПОИНТЫ ====================  
+@app.get("/health")  
+async def health():  
+    log.debug("Health check")  
     return {"status": "ok"}
 
-@app.post("/pay")
-async def pay(amount: float):
-    with tracer.start_as_current_span("process_payment") as span:
-        span.set_attribute("payment.amount", amount)
-        log.info(f"Processing payment {amount}")
-        payment_counter.add(1, {"currency": "USD"})
-        # ... логика оплаты
+@app.post("/pay")  
+async def pay(amount: float):  
+    with tracer.start_as_current_span("process_payment") as span:  
+        span.set_attribute("payment.amount", amount)  
+        log.info(f"Processing payment {amount}")  
+        payment_counter.add(1, {"currency": "USD"})  
+        # ... логика оплаты  
         return {"status": "paid"}
 
-if __name__ == "__main__":
+if __name__ == "__main__":  
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
 ```
