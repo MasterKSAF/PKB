@@ -193,6 +193,13 @@ API черновиков и FSM документированы, но **UI сра
 | API-S18 | Common: bbox описан как нормализованный [0,1] на всех этапах, но OCR/Parser — пиксели | 🔄 исправлено |
 | API-S19 | Integration `POST /meridian/export`: `document_id` тип string вместо bigint | ⬜ заморожено — интеграции не в MVP |
 | API-S20 | Все internal-сервисы: не описана аутентификация service-to-service | 🔄 исправлено — внутренние вызовы изолированы Gateway |
+| API-S21 | `review_required` → `validation`: `PATCH /decide` vs `operator-confirm`. Решение: единый `PATCH /decide` с действием `confirm` | 🔄 исправлено 19.06 |
+| API-S22 | `metadata_overrides` не было в публичном API Gateway. Решение: добавлено в `PATCH /drafts/{id}/decide` | 🔄 исправлено 19.06 |
+| API-S23 | `notifications[]` vs `issues[]`: stale-ссылка в pipeline1-formation.md. Решение: `issues[]` → `notifications[]` | 🔄 исправлено 19.06 |
+| API-S24 | `validation` отсутствовал в enum статусов черновика в Orchestrator API. Решение: добавлен | 🔄 исправлено 19.06 |
+| API-S25 | `valid_from`/`valid_until` — не указано, что доступны только в Registry. Решение: добавлено примечание | 🔄 исправлено 19.06 |
+| API-S26 | `source_type` enum: `RMRS` отсутствовал в `/registry/enums` и `db_diagrams.md`. Решение: добавлен | 🔄 исправлено 19.06 |
+| API-S27 | Gateway `/tasks/*` — нет формального read-only контракта. Решение: добавлена секция маршрутизации | 🔄 исправлено 19.06 |
 
 ## 🔴 Пайплайны (критичные — блокируют корректную реализацию)
 

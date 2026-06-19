@@ -1,26 +1,34 @@
-# todo — добавление title_key
+# todo — фикс 7 противоречий в документации
 
-## Задача
-
-При вычислении `title_hash_sha256` сохранять также `title_key` — исходную конкатенированную строку, из которой сформирован хеш.
-
-Формула бизнес-ключа: `SHA-256(era | source_type | mks_oks_code | okstu_code | doc_code | normalized_title)`
-
-`title_key` = `era | source_type | mks_oks_code | okstu_code | doc_code | normalized_title`
-
-Пример: `USSR|gost|47.020||20868-81|стойки...`
+## Источник
+Анализ пользователя: 7 несоответствий в документации API и FSM.
 
 ## План правок
 
-- [x] 1. glossary.md — добавить термин `title_key`
-- [x] 2. normalizer_specification.md — описать `title_key` как выход бизнес-ключа
-- [x] 3. converter_specification.md — упомянуть `title_key` в разделе 6.1
-- [x] 4. db_diagrams.md — добавить `title_key` в ER-диаграмму и описание `registry.documents`
-- [x] 5. converter_validator_service_api.md — добавить `title_key` в preview, fingerprint, validate
-- [x] 6. orchestrator_service_api.md — добавить `title_key` в ответы документов и черновиков
-- [x] 7. registry_service_api.md — добавить `title_key` в ответы документов, check-uniqueness, примечания
-- [x] 8. 6.dev_tasks_17_06.md — добавить задачу DB-28
-- [x] 9. specificity.md — зафиксировать решение
-- [x] 10. overview.md — упомянуть `title_key` в описании бизнес-ключа
-- [x] 11. pipeline1-formation.md — упомянуть `title_key` на шаге 2.6 и в формуле
-- [x] 12. schema/diagrams.md — добавить `title_key` в диаграмму metadata
+### P1. `review_required` — `decide` vs `operator-confirm`
+- [x] 1.1. `pipeline1-formation.md` — заменить `PATCH /drafts/{draft_id}/operator-confirm` на `PATCH /drafts/{draft_id}/decide` с `action: "confirm"`
+- [x] 1.2. `pipeline1-formation.md` — добавить `confirm` в описание FSM-перехода `review_required → validation`
+- [x] 1.3. `orchestrator_service_api.md` — PATCH /decide: добавить действие `confirm` (review_required → validation) в таблицу и тела ответов
+
+### P2. `metadata_overrides` — нет в публичном API Gateway
+- [x] 2.1. `orchestrator_service_api.md` — PATCH /decide: добавить `metadata_overrides` как опциональное поле запроса
+- [x] 2.2. `gateway_service_api.md` — PATCH /decide: упомянуть `metadata_overrides` в маршрутизации
+
+### P3. `notifications[]` vs `issues[]` — расхождение
+- [x] 3.1. `pipeline1-formation.md` — заменить `issues[]` на `notifications[]` в описании статуса `review_required`
+
+### P4. `validation` статус отсутствует в enum статусов draft API
+- [x] 4.1. `orchestrator_service_api.md` — GET /drafts: добавить `validation` и `review_required` в описание поля `status`
+- [x] 4.2. `orchestrator_service_api.md` — GET /drafts filter: добавить `validation` в список статусов
+
+### P5. `valid_from` / `valid_until` — неясность draft vs Registry
+- [x] 5.1. `orchestrator_service_api.md` — добавить примечание к GET /drafts/{id}, что `valid_from`/`valid_until` появляются только в Registry после approve
+
+### P6. `source_type` enum — RMRS расходится
+- [x] 6.1. `registry_service_api.md` — /enums: добавить `RMRS` в `source_type`
+- [x] 6.2. `db_diagrams.md` — примечание source_type: добавить `RMRS`
+- [x] 6.3. `registry_service_api.md` — statistics: добавить `RMRS` в пример documents_by_source_type
+
+### P7. `tasks/*` read-only контракт не подтверждён в Gateway
+- [x] 7.1. `gateway_service_api.md` — добавить секцию маршрутизации `/api/v1/tasks/*` с описанием read-only эндпоинтов
+- [x] 7.2. `gateway_service_api.md` — сноска в таблице маршрутизации ссылается на новую секцию

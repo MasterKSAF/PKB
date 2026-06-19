@@ -49,7 +49,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 | Поле           | Тип    | Обязательность | Описание                                                           |
 | -------------- | ------ | -------------- | ------------------------------------------------------------------ |
 | `file`         | File   | Да             | Бинарный файл (PDF, PNG, JPG, TIFF)                                |
-| `source_type`  | string | Да             | `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `OTHER` |
+| `source_type`  | string | Да             | `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `RMRS`, `OTHER` |
 | `title`        | string | Нет            | Название документа                                                 |
 | `doc_code`     | string | Нет            | Регистрационный номер (напр. `20868-81`)                           |
 | `mks_oks_code` | string | Нет            | Код МКС/ОКС                                                        |
@@ -978,7 +978,7 @@ Orchestrator — **единая точка входа** для работы с �
 |----------|-----|-------------|----------|
 | `draft_id` | bigint | Нет | Фильтр по ID черновика |
 | `document_key` | string | Нет | Бизнес-ключ документа (SHA-256). История попыток обработки одного документа |
-| `status` | string | Нет | Фильтр по статусу: `uploaded`, `previewing`, `ready_for_approve`, `review_required`, `approved`, `discarded` |
+| `status` | string | Нет | Фильтр по статусу: `uploaded`, `previewing`, `ready_for_approve`, `review_required`, `validation`, `approved`, `discarded` |
 | `page` | int | Нет | Номер страницы (по умолчанию 1) |
 | `page_size` | int | Нет | Записей на странице (по умолчанию 50, max 200) |
 
@@ -1062,7 +1062,7 @@ Orchestrator — **единая точка входа** для работы с �
 | `task_id` | bigint | Внутренний ID задачи (internal) |
 | `file_key` | string | Ссылка на файл в MinIO |
 | `document_key` | string | Бизнес-ключ документа (SHA-256) |
-| `status` | string | Статус черновика: `uploaded`, `previewing`, `ready_for_approve`, `approved`, `discarded` |
+| `status` | string | Статус черновика: `uploaded`, `previewing`, `ready_for_approve`, `review_required`, `validation`, `approved`, `discarded` |
 | `confidence` | float | Оценка качества распознавания (0..1) |
 | `preview_metadata` | object | Preview-метаданные: `doc_code`, `title`, `mks_oks_code`, `okstu_code`, `udk_code`, `pkb_codes`, `document_type`, `year`, `era`, `validity_status`, `issuing_body`, `jurisdiction`, `source_type`, `language`, `title_hash_sha256`, `title_key` |
 | `document_id` | bigint \| null | ID документа в Registry (FK → `registry.documents`), созданный по результатам черновика |
@@ -1146,6 +1146,8 @@ Orchestrator — **единая точка входа** для работы с �
 | `version_id` | bigint \| null | **P12-4**: ID версии документа (`document_versions.id`). `null` пока не создана |
 | `is_new_document` | bool | **P12-4**: `true` — новый документ, `false` — новая версия существующего |
 | `notifications` | array | **P12-3**: массив уведомлений для оператора. Заполняется при `status: review_required`. Структура — см. [parser_service_api.md](parser_service_api.md#p12-3--p3-5--qualitynotifications-уведомления-оператора). Orchestrator получает их от Parser/OCR и записывает в `pipeline.draft_notifications` |
+
+> **`valid_from` / `valid_until`:** Эти поля отсутствуют в ответах черновика и `preview_metadata`. Они назначаются только на этапе Registry (при создании документа через `approve`) и возвращаются в `GET /registry/documents/{id}`. Если оператор хочет указать даты действия, он передаёт их через `metadata_overrides` в `PATCH /drafts/{id}/decide`.
 
 **P12-3 — поток уведомлений:**
 
@@ -1339,21 +1341,56 @@ Orchestrator — **единая точка входа** для работы с �
 
 ### PATCH /drafts/{draft_id}/decide
 
-**Основной эндпоинт для принятия решения по загруженному документу.** Доступно для черновиков в статусе `ready_for_approve` и `review_required`. Если черновик в статусе `review_required` — оператору перед принятием решения показываются `notifications` (см. P12-3). После решения черновик либо завершается с записью в Registry (`approve`), либо отклоняется (`reject`).
+**Основной эндпоинт для принятия решения по загруженному документу.** Доступно для черновиков в статусе `ready_for_approve` и `review_required`. Если черновик в статусе `review_required` — оператору перед принятием решения показываются `notifications` (см. P12-3).
+
+**Действия (action):**
+- `approve` — завершить черновик, записать документ в Registry. Доступно для `ready_for_approve`.
+- `reject` — отклонить черновик (→ `discarded`). Доступно для `ready_for_approve` и `review_required`.
+- `confirm` — подтвердить черновик после просмотра замечаний. Переводит `review_required → validation` для повторной валидации с `metadata_overrides`. Доступно только для `review_required`. После успешной валидации — `approved`.
 
 **Тело запроса:**
 
 ```json
 {
   "action": "approve",
-  "comment": "Метаданные корректны, уверенность 0.92"
+  "comment": "Метаданные корректны, уверенность 0.92",
+  "metadata_overrides": {
+    "doc_code": "311-05-1950ц-ИЗМ1",
+    "title": "ЦИРКУЛЯРНОЕ ПИСЬМО № 311-05-1950ц (изм.1)",
+    "mks_oks_code": "47.020.01",
+    "okstu_code": null,
+    "udk_code": "629.5.021",
+    "validity_status": "active",
+    "valid_from": "2026-01-01",
+    "valid_until": "9999-12-31",
+    "issuing_body": "РОССИЙСКИЙ МОРСКОЙ РЕГИСТР СУДОХОДСТВА",
+    "source_type": "RMRS",
+    "jurisdiction": "RU"
+  }
 }
 ```
 
 | Поле | Тип | Обязательное | Описание |
 |------|-----|-------------|----------|
-| `action` | string | Да | Решение: `approve` — завершить черновик, записать документ в Registry; `reject` — отклонить (`discarded`) |
+| `action` | string | Да | Решение: `approve` (→ `approved`), `reject` (→ `discarded`), `confirm` (→ `validation`, только для `review_required`) |
 | `comment` | string | Нет | Комментарий оператора |
+| `metadata_overrides` | object | Нет | **D13**: ручные правки метаданных оператора. Передаётся при `action: confirm` или `approve`. Orchestrator использует эти значения при создании документа в Registry вместо автоматически извлечённых. Допустимые поля — см. таблицу ниже |
+
+**Поля `metadata_overrides`:**
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `doc_code` | string \| null | Код документа. Переопределяет автоматически извлечённый |
+| `title` | string \| null | Название документа |
+| `mks_oks_code` | string \| null | Код МКС/ОКС |
+| `okstu_code` | string \| null | Код ОКСТУ |
+| `udk_code` | string \| null | Код УДК |
+| `validity_status` | string \| null | Юридический статус: `active`, `superseded`, `cancelled`, `historical`, `draft` |
+| `valid_from` | string \| null | Дата начала действия (YYYY-MM-DD). По умолчанию `1000-01-01` |
+| `valid_until` | string \| null | Дата окончания действия (YYYY-MM-DD). Для бессрочных — `9999-12-31` |
+| `issuing_body` | string \| null | Издатель / утвердивший орган |
+| `source_type` | string \| null | Тип источника: `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `RMRS`, `OTHER` |
+| `jurisdiction` | string \| null | Юрисдикция: `RU`, `EU`, `US`, `NO`, `INTL` |
 
 **Ответ `200` (approve):**
 
@@ -1366,6 +1403,20 @@ Orchestrator — **единая точка входа** для работы с �
   "message": "Черновик завершён, документ создан в Registry. Запущен Пайплайн 2 (индексация).",
   "decided_by": "user_10",
   "decided_at": "2026-06-05T10:05:00Z"
+}
+```
+
+**Ответ `200` (confirm):**
+
+```json
+{
+  "draft_id": 2,
+  "status": "validation",
+  "action": "confirm",
+  "document_id": null,
+  "message": "Черновик подтверждён. Запущена повторная валидация с учётом metadata_overrides.",
+  "decided_by": "user_10",
+  "decided_at": "2026-06-05T10:12:00Z"
 }
 ```
 
@@ -1386,8 +1437,8 @@ Orchestrator — **единая точка входа** для работы с �
 | Поле | Тип | Описание |
 |------|-----|----------|
 | `draft_id` | bigint | Идентификатор черновика |
-| `status` | string | Новый статус: `approved` или `discarded` |
-| `action` | string | Выполненное действие: `approve` или `reject` |
+| `status` | string | Новый статус: `approved`, `validation` или `discarded` |
+| `action` | string | Выполненное действие: `approve`, `confirm` или `reject` |
 | `document_id` | bigint \| null | ID документа в Registry (null при reject) |
 | `message` | string | Описание результата |
 | `decided_by` | string | Кто принял решение |
@@ -1398,9 +1449,10 @@ Orchestrator — **единая точка входа** для работы с �
 | HTTP | Код | Описание |
 |------|-----|----------|
 | 404 | `DRAFT_NOT_FOUND` | Черновик не существует |
-| 409 | `DRAFT_ALREADY_DECIDED` | Решение уже принято (статус не `ready_for_approve`) |
-| 400 | `VALIDATION_ERROR` | Некорректный `action` (допустимы: `approve`, `reject`) |
+| 409 | `DRAFT_ALREADY_DECIDED` | Решение уже принято (статус не `ready_for_approve`/`review_required`) |
+| 400 | `VALIDATION_ERROR` | Некорректный `action` (допустимы: `approve`, `confirm`, `reject`) |
 | 400 | `EMPTY_DOCUMENT` | Нельзя аппрувнуть пустой черновик (0 страниц) |
+| 400 | `INVALID_ACTION_FOR_STATUS` | Действие не применимо к текущему статусу (например, `confirm` для `ready_for_approve`) |
 
 > **Обработка пустого документа:** Если черновик содержит 0 страниц (пустой PDF/изображение), решение `approve` недоступно. Черновик переводится в статус `discarded` с кодом ошибки `EMPTY_DOCUMENT`. Такой черновик может быть только отклонён (`reject`) или удалён. Пустой документ не может покинуть черновики.
 

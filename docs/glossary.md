@@ -62,7 +62,7 @@
 | **Бизнес-ключ (title_hash_sha256)** | SHA-256 от `era \| source_type \| mks_oks_code \| okstu_code \| doc_code \| normalized_title`. Гарантирует уникальность логического документа независимо от количества и формата файлов. Детальный алгоритм нормализации: `specifications/normalizer_specification.md`. |
 | **LLM** | Large Language Model — большая языковая модель (используется для генерации ответов) |
 | **Bbox** | Bounding box — координаты блока на странице. В `raw_ocr_v4` — сырые пиксели (px) + размер страницы (`page.width`, `page.height`). В `validated_v3` — нормализованные единицы [0,1] (нормирование — ответственность Converter-Validator) |
-| **source_type** | Тип нормативного документа-источника (`GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `OTHER`). Указывается в карточке документа. Не путать с `document_type` — категорией контента для поиска |
+| **source_type** | Тип нормативного документа-источника (`GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `RMRS`, `OTHER`). Указывается в карточке документа. Не путать с `document_type` — категорией контента для поиска |
 | **document_type** | Категория контента для фильтрации поиска (`normative`, `technical`, `drawing`, `specification`, `archival_scan`). Определяется классификатором, не зависит от `source_type`. Не путать с `source_type` — типом нормативного документа |
 | **sort_by** / **order** | Параметры сортировки для list-эндпоинтов. `sort_by` — поле (`title`, `doc_code`, `created_at`, `updated_at`, `status`, `source_type`); `order` — направление (`asc`, `desc`) |
 | **top_k** | Максимальное количество результатов поиска. Диапазон: [1, 100]. По умолчанию: 10 |

@@ -12,7 +12,7 @@
 
 На поля таблицы `registry.documents` наложены CHECK-ограничения:
 
-- `source_type` — `'GOST', 'GOST_R', 'OST', 'RD', 'TU', 'ISO', 'DNV', 'ASTM', 'OTHER'`
+- `source_type` — `'GOST', 'GOST_R', 'OST', 'RD', 'TU', 'ISO', 'DNV', 'ASTM', 'RMRS', 'OTHER'`
 - `document_type` — `'normative', 'technical', 'drawing', 'specification', 'archival_scan'`
 - `era` — `'USSR', 'CIS', 'RF', 'CURRENT'`
 - `validity_status` — `'active', 'superseded', 'expired', 'cancelled', 'historical', 'draft'`

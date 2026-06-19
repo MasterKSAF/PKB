@@ -60,11 +60,32 @@ Gateway объединяет API всех внутренних сервисов 
 
 > **¹ Примечание**: Маршрут `/api/v1/pages/*` — устаревший алиас. Все эндпоинты работы со страницами вложены в `/documents/{doc_id}/pages/*` и маршрутизируются через `/api/v1/documents/*`. Отдельный префикс `/pages/*` будет удалён после рефакторинга Gateway.
 >
-> **² Примечание:** Маршрут `/api/v1/tasks/*` — read-only для admin-ролей (`system_admin`, `knowledge_admin`). Используется для мониторинга процессов и просмотра данных, передаваемых между сервисами на этапах пайплайна. Внешние клиенты для статуса загрузки используют `/api/v1/drafts/*`.
+> **² Примечание:** Маршрут `/api/v1/tasks/*` — read-only для admin-ролей (`system_admin`, `knowledge_admin`). Контракт — см. [Маршрутизация задач пайплайна `/tasks/*` (read-only)](#маршрутизация-задач-пайплайна-tasks-read-only). Внешние клиенты для статуса загрузки используют `/api/v1/drafts/*`.
 
 > **📐 Принцип категоризации путей:** Все пути Gateway организованы по категориям сервисов. Префикс пути включает имя сервиса (например, `/api/v1/registry/*` для Registry Service, `/api/v1/chat/*` для Query Service), за которым следует логическая группа эндпоинтов. Пути без категории сервиса (например, устаревший `/pages/*`) не должны добавляться.
 
 В мок-режиме Gateway, Orchestrator и остальные сервисы объединены в единое FastAPI-приложение для разработки и тестов. Исходный код мок-Gateway — в репозитории `backend/` (конкретный путь уточняется в `architecture/service_dependencies.md`). Документация описывает контракт Gateway, а не привязана к пути файла.
+
+---
+
+### Маршрутизация задач пайплайна `/tasks/*` (read-only)
+
+Маршрут `/api/v1/tasks/*` — **read-only** для admin-ролей. Используется для мониторинга процессов и просмотра промежуточных данных этапов пайплайна (`pipeline.task_steps`).
+
+**Таблица маршрутов tasks (через Gateway → Orchestrator):**
+
+| Метод | Путь | Описание | RBAC |
+|-------|------|----------|------|
+| `GET` | `/api/v1/tasks/{task_id}/status` | Статус задачи с этапами и промежуточными данными | `system_admin`, `knowledge_admin` |
+| `GET` | `/api/v1/tasks/{task_id}/steps` | Детальные шаги задачи с input/output JSON | `system_admin`, `knowledge_admin` |
+
+> Полное описание — см. [orchestrator_service_api.md](orchestrator_service_api.md#get-taskstask_idstatus) (эндпоинты `GET /tasks/{task_id}/status` и `GET /tasks/{task_id}/steps`).
+
+**Поведение Gateway:**
+1. **RBAC.** Только `system_admin` и `knowledge_admin`. Все остальные роли → `403 FORBIDDEN`.
+2. **Read-only.** Запросы с методами, отличными от `GET` → `405 METHOD_NOT_ALLOWED`.
+3. **Проксирование.** Gateway передаёт запрос в Orchestrator без модификации. Ответ содержит `pipeline.tasks` и `pipeline.task_steps` с промежуточными JSON-контейнерами сервисов.
+4. **Мониторинг.** Предназначен для admin-панели, не для внешних клиентов. Внешние клиенты используют `/api/v1/drafts/*`.
 
 ---
 
@@ -83,7 +104,7 @@ Registry drafts — только internal, доступ к ним через Gat
 | `GET`  | `/api/v1/drafts/{draft_id}/preview` | Preview-метаданные (без `raw_data`) | `engineer`, `knowledge_admin`, `system_admin` | — |
 | `POST` | `/api/v1/drafts/{draft_id}/preview` | Запуск preview-фазы | `engineer`, `knowledge_admin`, `system_admin` | — |
 | `GET`  | `/api/v1/drafts/{draft_id}/preview/status` | Статус preview (longpoll) | `engineer`, `knowledge_admin`, `system_admin` | — |
-| `PATCH`| `/api/v1/drafts/{draft_id}/decide` | Решение: `approve` / `reject` | `engineer`, `knowledge_admin`, `system_admin` | — |
+| `PATCH`| `/api/v1/drafts/{draft_id}/decide` | Решение: `approve` / `reject` / `confirm`. Опционально `metadata_overrides` (ручные правки метаданных) | `engineer`, `knowledge_admin`, `system_admin` | — |
 | `DELETE`| `/api/v1/drafts/{draft_id}` | Удаление черновика (soft) | `knowledge_admin`, `system_admin` | — |
 
 > Полное описание форматов запросов/ответов и FSM — см. [orchestrator_service_api.md](orchestrator_service_api.md#группа-drafts).
@@ -136,6 +157,12 @@ sequenceDiagram
     GW->>Orch: PATCH /api/v1/drafts/{id}/decide
     Orch-->>GW: 200 { status: "approved", document_id: 1300 }
     GW-->>UI: 200 { status: "approved", document_id: 1300 }
+
+    Note over UI,GW: При review_required оператор передаёт action: "confirm"<br/>с опциональным metadata_overrides
+    UI->>GW: PATCH /api/v1/drafts/{id}/decide (JWT, {action: "confirm", metadata_overrides: {...}})
+    GW->>Orch: PATCH /api/v1/drafts/{id}/decide
+    Orch-->>GW: 200 { status: "validation" }
+    GW-->>UI: 200 { status: "validation" }
 ```
 
 **Специфичные коды ошибок для draft-операций** (полный список — [orchestrator_service_api.md](orchestrator_service_api.md#коды-ошибок-1) и [common_api.md](common_api.md#коды-ответов-http-и-ошибок)):
@@ -149,7 +176,8 @@ sequenceDiagram
 | 403 | `FORBIDDEN` | Нет `can_upload_documents` / не `knowledge_admin` | `POST /drafts` / `DELETE /drafts/{id}` |
 | 404 | `DRAFT_NOT_FOUND` | `draft_id` не существует | `GET/PATCH/DELETE /drafts/{id}` |
 | 409 | `DUPLICATE_FILE` | Файл с таким SHA-256 уже обрабатывается | `POST /drafts` |
-| 409 | `DRAFT_ALREADY_DECIDED` | Решение уже принято (статус ≠ `ready_for_approve`) | `PATCH /decide` |
+| 409 | `DRAFT_ALREADY_DECIDED` | Решение уже принято (статус не `ready_for_approve`/`review_required`) | `PATCH /decide` |
+| 400 | `INVALID_ACTION_FOR_STATUS` | Действие не применимо к текущему статусу (напр. `confirm` для `ready_for_approve`) | `PATCH /decide` |
 | 413 | `FILE_TOO_LARGE` | Файл превышает 100 МБ | `POST /drafts` |
 | 422 | `UNSUPPORTED_FILE_TYPE` | Неподдерживаемый MIME-тип | `POST /drafts` |
 | 502 | `BAD_GATEWAY` | Ошибка вызова Orchestrator | Все |

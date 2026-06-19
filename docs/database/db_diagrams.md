@@ -13,7 +13,6 @@ erDiagram
         bigint draft_id FK
         text doc_code
         text title
-        text normalized_title
         varchar source_type
         varchar document_type
         text mks_oks_code
@@ -324,11 +323,11 @@ erDiagram
 | `registry.document_sections` | `type` | `CHECK (type IN ('text','textBlock','headerFooter','table','list','image','formula'))` |
 | `registry.documents` | `file_hash_sha256` | Для быстрого дубликат-детекта (`WHERE file_hash_sha256 = ? AND file_size_bytes = ?`) |
 | `registry.documents` | `title_hash_sha256` | **P2-3**: UNIQUE — дедупликация по бизнес-ключу документа |
-| `registry.documents` | `source_type` | **P2-1**: CHECK IN ('gost','gost_r','ost','rd','tu','iso','dnv','astm') |
-| `registry.documents` | `document_type` | **P2-1**: CHECK IN ('normative','drawing','project','contract','reference') |
+| `registry.documents` | `source_type` | **P2-1**: CHECK IN ('GOST','GOST_R','OST','RD','TU','ISO','DNV','ASTM','RMRS','OTHER') |
+| `registry.documents` | `document_type` | **P2-1**: CHECK IN ('normative','technical','drawing','specification','archival_scan') |
 | `registry.documents` | `era` | **P2-1**: CHECK IN ('USSR','CIS','RF','CURRENT') |
 | `registry.documents` | `validity_status` | **P2-1**: CHECK IN ('active','superseded','cancelled','historical','draft') |
-| `registry.documents` | `jurisdiction` | **P2-1**: CHECK IN ('RF','CIS','USSR','NO','INT') |
+| `registry.documents` | `jurisdiction` | **P2-1**: CHECK IN ('RU','EU','US','NO','INTL') |
 | `registry.documents` | `processing_status` | **P2-1**: CHECK IN ('created','pending_index','indexing','indexed','partially_indexed','failed') |
 | `registry.document_versions` | `file_hash_sha256` | UNIQUE — CAS-дедупликация: один хэш = одна версия файла в системе |
 | `registry.document_versions` | `file_size_bytes` | **P2-7**: CHECK (file_size_bytes > 0) |
@@ -391,7 +390,7 @@ erDiagram
 |------|------------|
 | `file_key` | Ключ в MinIO для исходного файла черновика. |
 | `document_key` | Бизнес-ключ документа (SHA-256). |
-| `status` | Статус черновика: `uploaded`, `previewing`, `ready_for_approve`, `approved`, `discarded`. |
+| `status` | Статус черновика: `uploaded`, `previewing`, `ready_for_approve`, `review_required`, `validation`, `approved`, `discarded`. |
 | `confidence` | Оценка качества распознавания (0..1). |
 | `preview_metadata` | JSONB — **весь исходный JSON ответа Converter-validator preview** (`POST /converter/preview/metadata`). Содержит `doc_code`, `title`, `mks_oks_code`, `okstu_code`, `udk_code`, `pkb_codes`, `document_type`, `year`, `era`, `validity_status`, `issuing_body`, `jurisdiction`, `source_type`, `language`, `title_hash_sha256`, `title_key`. Хранится целиком для истории и аудита. При approve копируется в `registry.documents.preview_snapshot`. |
 | `raw_data` | JSONB с сырыми данными от Parser (schema: `raw_ocr_v4`) или Converter (`validated_v3`). |
@@ -444,7 +443,7 @@ erDiagram
 
 | Поле | Примечание |
 |------|------------|
-| `source_type` | **P2-1**: enum `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `OTHER` |
+| `source_type` | **P2-1**: enum `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `RMRS`, `OTHER` |
 | `document_type` | **P2-1**: enum `normative`, `technical`, `drawing`, `specification`, `archival_scan`. Не путать с `source_type` |
 | `group` | **D-32/D-33**: **удалено** из модели (см. P5 — A36). Ранее использовалось для группы проекта (например, `ПО4`). Заменено на `registry_document_classifier_links` (M:N) |
 | `era` | **P2-1**: enum `USSR`, `CIS`, `RF`, `CURRENT` |

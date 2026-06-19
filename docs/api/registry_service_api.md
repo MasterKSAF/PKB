@@ -682,7 +682,7 @@ GET /registry/documents
 |----------|-----|----------|
 | `title` | string | Поиск по названию |
 | `doc_code` | string | Поиск по номеру |
-| `source_type` | string | `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `OTHER` |
+| `source_type` | string | `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `RMRS`, `OTHER` |
 | `mks_oks_code` | string | Фильтр по коду МКС/ОКС |
 | `okstu_code` | string | Фильтр по коду ОКСТУ |
 | `status` | string | FSM-статус документа (управляется Оркестратором, фильтр read-only) |
@@ -775,7 +775,7 @@ GET /registry/documents/{doc_id}
 - `validity_status` — юридический статус (`active`, `superseded`, `cancelled`, `historical`, `draft`)
 - `jurisdiction` — юрисдикция (`RU`, `EU`, `US`, `NO`, `INTL`)
 - `issuing_body` — организация-издатель
-- `source_type` — тип источника (`GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `OTHER`)
+- `source_type` — тип источника (`GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `RMRS`, `OTHER`)
 - `document_type` — категория контента (`normative`, `technical`, `drawing`, `specification`, `archival_scan`)
 - `mks_oks_code` — код МКС/ОКС
 - `okstu_code` — код ОКСТУ
@@ -1465,6 +1465,18 @@ POST /registry/documents/import
 | PATCH| `/registry/drafts/{draft_id}/status` | Обновить статус |
 | DELETE| `/registry/drafts/{draft_id}` | Удалить запись |
 
+**Канонический список статусов черновика** (владелец — Registry, все остальные сервисы синхронизируются с этим списком):
+
+| Статус | Описание |
+|--------|----------|
+| `uploaded` | Файл загружен, черновик создан |
+| `previewing` | Выполняется preview-фаза |
+| `ready_for_approve` | Preview завершён, ожидание решения |
+| `review_required` | Preview показал низкое качество, требуется ручная проверка |
+| `validation` | Оператор подтвердил, выполняется повторная валидация |
+| `approved` | Черновик утверждён, документ создаётся в Registry |
+| `discarded` | Черновик отклонён |
+
 ### 4.1. POST /registry/drafts — Создать запись черновика
 
 Создаёт запись черновика в `registry.drafts`.  
@@ -1743,7 +1755,8 @@ GET /registry/stats
       "TU": 8,
       "ISO": 3,
       "DNV": 6,
-      "ASTM": 2
+      "ASTM": 2,
+      "RMRS": 4
     },
     "documents_by_era": {
       "USSR": 18,
@@ -1770,7 +1783,7 @@ GET /registry/enums
   "data": {
     "classifier_system": ["MKS", "OKSTU", "UDC", "EXTERNAL"],
     "classifier_status": ["active", "deprecated", "archived"],
-    "source_type": ["GOST", "GOST_R", "OST", "RD", "TU", "ISO", "DNV", "ASTM", "OTHER"],
+    "source_type": ["GOST", "GOST_R", "OST", "RD", "TU", "ISO", "DNV", "ASTM", "RMRS", "OTHER"],
     "document_type": ["normative", "technical", "drawing", "specification", "archival_scan"],
     "document_status": ["created", "pending_index", "indexing", "indexed", "failed"],
     "era": ["USSR", "CIS", "RF", "CURRENT"],
@@ -2017,21 +2030,38 @@ DELETE /registry/categories/{category_id}
 | Поле | Тип | Ограничения |
 |------|-----|-------------|
 | `id` | bigint | PK |
+| `draft_id` | bigint | FK → `registry.drafts`, nullable — исходный черновик |
 | `doc_code` | text | nullable |
 | `title` | text | NOT NULL |
 | `title_hash_sha256` | text | UNIQUE — бизнес-ключ |
 | `title_key` | text | Исходная строка конкатенации для бизнес-ключа (аудит/отладка) |
+| `file_hash_sha256` | text | **P2-2**: хеш бинарного файла (CAS-дедупликация) |
+| `file_size_bytes` | bigint | CHECK > 0 |
+| `source_type` | varchar(20) | nullable — `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `RMRS`, `OTHER` |
+| `document_type` | varchar(30) | nullable — `normative`, `technical`, `drawing`, `specification`, `archival_scan` |
 | `status` | varchar(30) | NOT NULL — `created`, `pending_index`, `indexing`, `indexed`, `failed` |
-| `era` | varchar(10) | nullable |
-| `validity_status` | varchar(20) | nullable |
-| `jurisdiction` | varchar(10) | nullable |
+| `processing_status` | varchar(20) | nullable — FSM: `created`, `pending_index`, `indexing`, `indexed`, `partially_indexed`, `failed` |
+| `chunk_count` | int | nullable, CHECK ≥ 0 — количество чанков после индексации |
+| `preview_snapshot` | jsonb | nullable — копия `preview_metadata` из черновика при approve |
+| `era` | varchar(10) | nullable — `USSR`, `CIS`, `RF`, `CURRENT` |
+| `validity_status` | varchar(20) | nullable — `active`, `superseded`, `cancelled`, `historical`, `draft` |
+| `valid_from` | date | NOT NULL DEFAULT `'1000-01-01'` — дата начала действия |
+| `valid_until` | date | NOT NULL DEFAULT `'9999-12-31'` — дата окончания действия, CHECK ≥ valid_from |
+| `deleted_at` | timestamptz | nullable — soft-delete |
+| `jurisdiction` | varchar(10) | nullable — `RU`, `EU`, `US`, `NO`, `INTL` |
 | `issuing_body` | text | nullable |
+| `adoption_date` | date | nullable — дата принятия из документа |
+| `effective_from` | date | nullable — дата введения в действие из документа |
+| `replaces` | text | nullable — код заменяемого документа |
+| `status_note` | text | nullable — примечание к статусу |
 | `enterprise_id` | bigint | nullable |
 | `mks_oks_code` | text | FK → classifier_registry (MKS) |
 | `okstu_code` | text | FK → classifier_registry (OKSTU) |
+| `udk_code` | text | nullable — код УДК |
 | `classification_status` | jsonb | DEFAULT `'{}'` — см. спецификацию ниже |
 | `successor_doc_id` | bigint | FK → self, nullable |
 | `predecessor_doc_id` | bigint | FK → self, nullable |
+| `current_version_id` | bigint | FK → `registry.document_versions`, nullable |
 | `metadata` | jsonb | DEFAULT `{}` |
 | `created_at` | timestamptz | NOT NULL |
 | `created_by` | text | nullable |

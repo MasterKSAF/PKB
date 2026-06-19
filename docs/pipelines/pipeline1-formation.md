@@ -392,7 +392,7 @@ stateDiagram-v2
 | `uploaded` | Черновик | Файл загружен в MinIO, ожидание запуска preview |
 | `previewing` | Черновик | Выполняется preview-фаза |
 | `ready_for_approve` | Черновик | Preview завершён, ожидание решения |
-| `review_required` | Черновик | **P1-20**: Preview показал низкое качество (пороги из P12-2 в `app_settings.parser.quality_thresholds`). Требуется ручная проверка оператором. UI отображает замечания из `issues[]` (P12-3) |
+| `review_required` | Черновик | **P1-20**: Preview показал низкое качество (пороги из P12-2 в `app_settings.parser.quality_thresholds`). Требуется ручная проверка оператором. UI отображает замечания из `notifications[]` (P12-3) |
 | `validation` | Черновик | Оператор подтвердил черновик, выполняется повторная валидация (полный OCR/Parser → Converter-validator) с `metadata_overrides` (см. D13) |
 | `approved` | Черновик | Оператор подтвердил, документ создаётся в Registry |
 | `discarded` | Черновик | Черновик отклонён |
@@ -408,7 +408,7 @@ stateDiagram-v2
    - `avg_confidence < reprocess_avg_confidence_below` → orchestrator запускает повторную обработку
    - `avg_confidence < operator_avg_confidence_below` ИЛИ `pages_failed > 0` ИЛИ `lama_fallback_used == true` → черновик переходит в `review_required` (а не `ready_for_approve`).
 3. На стадии `review_required` Orchestrator фиксирует замечания в `pipeline.draft_notifications` (P12-3 / P3-5) и отдаёт UI список с `code, severity, category, message, location, suggested_action`.
-4. Оператор через `PATCH /drafts/{draft_id}/operator-confirm` подтверждает черновик → статус `validation`.
+4. Оператор через `PATCH /drafts/{draft_id}/decide` с `action: "confirm"` подтверждает черновик → статус `validation`.
 5. На стадии `validation` Orchestrator запускает полный цикл (OCR/Parser full + Converter-validator), используя `metadata_overrides` оператора (D13).
 6. Если `validation` проходит — `approved` → `created`. Если нет — `discarded` с `error_code`.
 
@@ -421,9 +421,9 @@ stateDiagram-v2
 
 **Архивация документов:** Документ может быть помечен как архивный (неактивный) автоматически через N дней после создания новой версии (настраиваемый параметр, по умолчанию 365 дней). Также архивация может быть инициирована вручную `system_admin`. Архивированный документ доступен только для чтения. Архивация — административная операция, не связанная с FSM пайплайна.
 
-> **Черновики (drafts):** Черновик — основной элемент управления загрузкой документа. Данные черновиков хранятся в `registry.drafts` (БД Registry). `file_key` — у черновика (`registry.drafts.file_key`). `raw_data` — в `registry.drafts.raw_data` (JSONB, результат Parser или OCR). MinIO — только для бинарных файлов (PDF, изображения). OCR/Parser выполняется **полностью** уже в черновике; Converter-validator — только извлечение метаданных. Полная конвертация (validated_v3) запускается при approve, после чего документ записывается в Registry. Решение пользователя принимается через `PATCH /drafts/{draft_id}/decide`. `task_id` — внутренний сквозной ID задачи (`pipeline.tasks`, БД Orchestrator). Этапы задачи с входными/выходными данными сервисов — в `pipeline.task_steps`.
+> **Черновики (drafts):** Черновик — основной элемент управления загрузкой документа. Данные черновиков хранятся в `registry.drafts` (БД Registry). `file_key` — у черновика (`registry.drafts.file_key`). `raw_data` — в `registry.drafts.raw_data` (JSONB, результат Parser или OCR). MinIO — только для бинарных файлов (PDF, изображения). OCR/Parser выполняется **полностью** уже в черновике; Converter-validator — только извлечение метаданных. Полная конвертация (validated_v3) запускается при approve, после чего документ записывается в Registry. Решение пользователя принимается через `PATCH /drafts/{draft_id}/decide` с опциональным `metadata_overrides` (ручные правки метаданных). `task_id` — внутренний сквозной ID задачи (`pipeline.tasks`, БД Orchestrator). Этапы задачи с входными/выходными данными сервисов — в `pipeline.task_steps`.
 
-**Новая Draft FSM:**
+**Draft FSM (объединённая):**
 
 ```mermaid
 stateDiagram-v2
@@ -431,8 +431,13 @@ stateDiagram-v2
     uploaded --> previewing : запуск preview
     previewing --> ready_for_approve : preview завершён
     previewing --> discarded : ошибка preview
-    ready_for_approve --> approved : approve
-    ready_for_approve --> discarded : reject / автозавершение не прошло
+    previewing --> review_required : low confidence / quality issues
+    review_required --> validation : confirm (PATCH /decide)
+    review_required --> discarded : reject (PATCH /decide)
+    ready_for_approve --> approved : approve (PATCH /decide)
+    ready_for_approve --> discarded : reject (PATCH /decide)
+    validation --> approved : validation passed
+    validation --> discarded : validation failed
     approved --> [*] : документ в Registry
     discarded --> [*]
 ```
@@ -444,6 +449,8 @@ stateDiagram-v2
 | `uploaded` | Черновик создан при загрузке файла, ожидание preview |
 | `previewing` | Выполняется preview-фаза |
 | `ready_for_approve` | Preview завершён. Если уникально и чисто — автозавершение; иначе — ожидание решения человека |
+| `review_required` | Preview показал низкое качество. Требуется ручная проверка оператором |
+| `validation` | Оператор подтвердил черновик, выполняется повторная валидация с metadata_overrides |
 | `approved` | Черновик утверждён. Документ записывается в Registry |
 | `discarded` | Черновик отклонён (человеком или автоматом) |
 

@@ -26,7 +26,7 @@ title_hash_sha256 = SHA-256(era | source_type | mks_oks_code | okstu_code | doc_
 
 Где:
 - `era` — эпоха: `USSR`, `CIS`, `RF`, `CURRENT`
-- `source_type` — тип источника: `gost`, `gost_r`, `ost`, `rd`, `tu`, `iso`, `dnv`, `astm` (нижний регистр)
+- `source_type` — тип источника: `gost`, `gost_r`, `ost`, `rd`, `tu`, `iso`, `dnv`, `astm`, `rmrs`, `other` (нижний регистр — осознанное решение: бизнес-ключ нормализует регистр для единообразия хеша; API и БД хранят UPPERCASE)
 - `mks_oks_code` — код МКС/ОКС (или пустая строка, если NULL)
 - `okstu_code` — код ОКСТУ (или пустая строка, если NULL)
 - `doc_code` — регистрационный номер документа (напр. `20868-81`, `2.105-95`)
