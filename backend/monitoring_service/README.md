@@ -136,7 +136,7 @@ sudo ls \-la /home/user/monitoring\_demo/
    добавить строки в начало каждого файла:   
    python  
    import logging  
-   logger = logging.getLogger(__name__)
+   logger = logging.getLogger(/_/_name/_/_)
 
    
 
@@ -164,7 +164,7 @@ import uvicorn
 
 # ==================== ШАГ 3.2: настройка observability ====================  
 app = FastAPI()  
-service_name = "payment-service"  
+service_name = "payment-service"  <- запишите имя сервиса
 otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "signoz-otel-collector:4317")
 
 tracer_provider, meter_provider, log = setup_observability(service_name, otlp_endpoint)
