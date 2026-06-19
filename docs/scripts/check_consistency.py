@@ -11,6 +11,9 @@ import sys
 DOCS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 errors = 0
 
+# Все возможные префиксы task-ID. Единый источник истины для проверки ссылок.
+TASK_PREFIXES = r'(?:CM|GW|OR|DB|RG|QS|RS|PS|OC|CV|RB|AU|P1F|P2I|P3S|T)'
+
 
 def get_files():
     result = []
@@ -246,7 +249,7 @@ def get_task_ids():
     if not os.path.exists(tasks_path):
         return set()
     text = read_text(tasks_path)
-    ids = re.findall(r"\b(?:CM|GW|OR|DB|RG|QS|RS|PS|OC|CV|RB|AU|P1F|P2I|P3S|T)-\d+", text)
+    ids = re.findall(r"\b" + TASK_PREFIXES + r"-\d+", text)
     return set(ids)
 
 
@@ -313,7 +316,7 @@ if task_ids:
         if "6.dev_tasks_17_06" in rel or "todo" in rel or "check_consistency" in rel:
             continue
         text = read_text(path)
-        for m in re.finditer(r"\b(?:CM|GW|OR|DB|RG|QS|RS|PS|OC|CV|RB|AU)-\d+", text):
+        for m in re.finditer(r"\b" + TASK_PREFIXES + r"-\d+", text):
             tid = m.group(0)
             if tid not in task_ids:
                 print(f"  MISSING TASK: {rel} references {tid} not in task file")

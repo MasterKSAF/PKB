@@ -408,9 +408,10 @@ stateDiagram-v2
    - `avg_confidence < reprocess_avg_confidence_below` → orchestrator запускает повторную обработку
    - `avg_confidence < operator_avg_confidence_below` ИЛИ `pages_failed > 0` ИЛИ `lama_fallback_used == true` → черновик переходит в `review_required` (а не `ready_for_approve`).
 3. На стадии `review_required` Orchestrator фиксирует замечания в `pipeline.draft_notifications` (P12-3 / P3-5) и отдаёт UI список с `code, severity, category, message, location, suggested_action`.
-4. Оператор через `PATCH /drafts/{draft_id}/decide` с `action: "confirm"` подтверждает черновик → статус `validation`.
-5. На стадии `validation` Orchestrator запускает полный цикл (OCR/Parser full + Converter-validator), используя `metadata_overrides` оператора (D13).
-6. Если `validation` проходит — `approved` → `created`. Если нет — `discarded` с `error_code`.
+4. Оператор может отредактировать метаданные черновика через `PATCH /drafts/{draft_id}/metadata` (S5) — это опциональный шаг, выполняется до или после просмотра замечаний.
+5. Оператор через `PATCH /drafts/{draft_id}/decide` с `action: "confirm"` подтверждает черновик → статус `validation`. Если метаданные редактировались через шаг 4, `metadata_overrides` в `decide` не обязательны — они уже сохранены в черновике.
+6. На стадии `validation` Orchestrator запускает полный цикл (OCR/Parser full + Converter-validator), используя `metadata_overrides` оператора (сохранённые ранее или переданные в `decide`).
+7. Если `validation` проходит — `approved` → `created`. Если нет — `discarded` с `error_code`.
 
 **Процесс создания новой версии:**
 Версии создаются через `POST /documents/{doc_id}/versions` напрямую. При создании новой версии:

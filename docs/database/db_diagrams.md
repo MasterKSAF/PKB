@@ -308,8 +308,8 @@ erDiagram
 | `pipeline.tasks` | `document_id` | B-tree | Поиск задачи по документу |
 | `pipeline.task_steps` | `task_id` | B-tree | Поиск этапов задачи |
 | `registry.document_versions` | `document_id` | B-tree | Поиск версий документа |
-| `registry.documents` | `title_hash_sha256` | B-tree UNIQUE | Дедупликация по бизнес-ключу |
-| `registry.documents` | `title_key` | B-tree UNIQUE | Дедупликация по строке бизнес-ключа |
+| `registry.documents` | `title_hash_sha256` | B-tree UNIQUE | **S8 — Главный бизнес-ключ.** Дедупликация по хешу 6-польной формулы (`SHA-256(era \| source_type \| mks_oks_code \| okstu_code \| doc_code \| normalized_title)`). Единственный источник истины для проверки уникальности |
+| `registry.documents` | `title_key` | B-tree UNIQUE | **S8 — Технический индекс.** Хранит исходную строку конкатенации для аудита и отладки. UNIQUE — защита от логической ошибки при ручном пересчёте хеша. Не используется для дедупликации |
 | `registry.documents` | `(valid_from, valid_until)` | B-tree | Поиск документов по дате действия |
 | `registry.drafts` | `status` | B-tree | Фильтрация черновиков по статусу |
 | `registry.document_categories` | `category_id` | B-tree | Поиск категорий документа (обратная сторона many-to-many) |
@@ -451,7 +451,7 @@ erDiagram
 | `jurisdiction` | Юрисдикция: `RU`, `EU`, `US`, `NO`, `INTL` |
 | `udk_code` | **D-51**: переименовано из `udc` для консистентности с `mks_oks_code` / `okstu_code`. Код УДК (универсальная десятичная классификация). nullable |
 | `valid_from` | **P12-5**: дата начала действия документа. NOT NULL, default `dateMin = '1000-01-01'::date` (для документов с неопределённой датой начала). См. конвенцию в `glossary.md` |
-| `valid_until` | **P12-5**: дата окончания действия документа. NOT NULL, default `dateMax = '9999-12-31'::date` (для бессрочных документов). См. конвенцию в `glossary.md` |
+| `valid_until` | **P12-5**: дата окончания действия документа. NOT NULL, default `dateMax = '9999-12-31'::date` (для бессрочных документов). См. конвенцию в `glossary.md`. **В API-слое** это значение возвращается как `null`; при `null` от клиента backend подставляет `dateMax` перед записью в БД |
 | `file_hash_sha256` | **P2-2**: `CHAR(64)` (а не `text`). Хэш бинарного файла (вычисляется при загрузке) |
 | `title_hash_sha256` | Хэш 6-польной формулы: `SHA-256(era | source_type | mks_oks_code | okstu_code | doc_code | normalized_title)` (вычисляется в Converter). Алгоритм нормализации и нормализация полей — см. `specifications/normalizer_specification.md` |
 | `title_key` | Исходная строка конкатенации для `title_hash_sha256`: `era \| source_type \| mks_oks_code \| okstu_code \| doc_code \| normalized_title`. Хранится для аудита и отладки. Пример: `USSR\|gost\|47.020\|\|20868-81\|стойки...`. См. `specifications/normalizer_specification.md` §2.1.1 |

@@ -105,6 +105,7 @@ Registry drafts — только internal, доступ к ним через Gat
 | `POST` | `/api/v1/drafts/{draft_id}/preview` | Запуск preview-фазы | `engineer`, `knowledge_admin`, `system_admin` | — |
 | `GET`  | `/api/v1/drafts/{draft_id}/preview/status` | Статус preview (longpoll) | `engineer`, `knowledge_admin`, `system_admin` | — |
 | `PATCH`| `/api/v1/drafts/{draft_id}/decide` | Решение: `approve` / `reject` / `confirm`. Опционально `metadata_overrides` (ручные правки метаданных) | `engineer`, `knowledge_admin`, `system_admin` | — |
+| `PATCH`| `/api/v1/drafts/{draft_id}/metadata` | **S5**: Сохранение ручных правок метаданных черновика (без принятия решения). Пересчёт бизнес-ключа и проверка уникальности | `engineer`, `knowledge_admin`, `system_admin` | — |
 | `DELETE`| `/api/v1/drafts/{draft_id}` | Удаление черновика (soft) | `knowledge_admin`, `system_admin` | — |
 
 > Полное описание форматов запросов/ответов и FSM — см. [orchestrator_service_api.md](orchestrator_service_api.md#группа-drafts).
@@ -152,6 +153,12 @@ sequenceDiagram
     Orch-->>GW: 200 { status: "completed", preview: {...} }
     GW-->>UI: 200 { status: "completed", preview: {...} }
 
+    Note over UI,GW: Оператор может отредактировать метаданные (S5)<br/>(опционально, повторяется сколько угодно раз)
+    UI->>GW: PATCH /api/v1/drafts/{id}/metadata (JWT, {title: "...", ...})
+    GW->>Orch: PATCH /api/v1/drafts/{id}/metadata
+    Orch-->>GW: 200 { title_hash_sha256: "<новый-хеш>", ... }
+    GW-->>UI: 200 { title_hash_sha256: "<новый-хеш>", ... }
+
     UI->>GW: PATCH /api/v1/drafts/{id}/decide (JWT, {action: "approve"})
     GW->>GW: RBAC (аутентифицирован)
     GW->>Orch: PATCH /api/v1/drafts/{id}/decide
@@ -176,6 +183,7 @@ sequenceDiagram
 | 403 | `FORBIDDEN` | Нет `can_upload_documents` / не `knowledge_admin` | `POST /drafts` / `DELETE /drafts/{id}` |
 | 404 | `DRAFT_NOT_FOUND` | `draft_id` не существует | `GET/PATCH/DELETE /drafts/{id}` |
 | 409 | `DUPLICATE_FILE` | Файл с таким SHA-256 уже обрабатывается | `POST /drafts` |
+| 409 | `DUPLICATE_DOCUMENT` | **S8**: Конфликт уникальности — документ с таким `title_hash_sha256` уже существует в Registry. Возникает при `PATCH /decide` (approve/confirm) или `PATCH /metadata` после пересчёта бизнес-ключа | `PATCH /decide`, `PATCH /metadata` |
 | 409 | `DRAFT_ALREADY_DECIDED` | Решение уже принято (статус не `ready_for_approve`/`review_required`) | `PATCH /decide` |
 | 400 | `INVALID_ACTION_FOR_STATUS` | Действие не применимо к текущему статусу (напр. `confirm` для `ready_for_approve`) | `PATCH /decide` |
 | 413 | `FILE_TOO_LARGE` | Файл превышает 100 МБ | `POST /drafts` |

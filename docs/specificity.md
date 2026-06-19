@@ -139,6 +139,30 @@ API черновиков и FSM документированы, но **UI сра
 - Добавлены API и модель данных для категорий в `registry_service_api.md` (группа categories) и `db_diagrams.md` (раздел 11)
 - Реализация — приоритет Спринта 3
 
+### A38. `PATCH /drafts/{id}/metadata` — сохранение правок метаданных (S5, resolved)
+
+Добавлен endpoint `PATCH /drafts/{draft_id}/metadata` для сохранения ручных правок метаданных черновика без confirm. Описана логика пересчёта `title_hash_sha256`/`title_key` и проверки уникальности.
+
+**Решение:** endpoint специфицирован, Gateway маршрут добавлен, Registry internal endpoint описан.
+
+### A39. `valid_from`/`valid_until` в черновике (S6, resolved)
+
+Даты действия возвращаются в `GET /drafts/{id}` после передачи через `PATCH /metadata`. `valid_until = dateMax` в API возвращается как `null`. `valid_from` выводится из `year` (01-01-{year}) если не задан явно.
+
+**Решение:** конвертация `dateMax` ↔ `null` описана во всех слоях (БД, internal API, public API, glossary).
+
+### A40. `source_type` enum — канонический (S7, resolved)
+
+Enum: `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `RMRS`, `OTHER`. Присутствует во всех документах.
+
+**Решение:** UI берёт enum из `GET /registry/enums`, не хранит статически.
+
+### A41. Бизнес-ключ: `title_hash_sha256` vs `title_key` (S8, resolved)
+
+Главный бизнес-ключ — `title_hash_sha256`. `title_key` — технический UNIQUE-индекс для аудита. `DUPLICATE_DOCUMENT` (409) — код ошибки при конфликте.
+
+**Решение:** главный ключ зафиксирован, DDL-индексы добавлены, код ошибки специфицирован.
+
 ---
 
 ## 🔴 Схема данных (требуют DDL)
