@@ -1,19 +1,26 @@
-# todo — правки по решению от 19.06
+# todo — добавление title_key
 
-## Согласовано
+## Задача
 
-- **IDOR** — удалён (CM-3, GW-6, раздел из common_api.md)
-- **Checks** — убраны (из auth_service_api.md, добавлена GW-13)
-- **ON DELETE/ON UPDATE** — не нужно (DB-5, P2-4 удалены, README.md changelog исправлен)
-- **Rate limiting** — Nginx без Redis (CM-2, GW-4, все упоминания Redis в rate limiting удалены)
-- **RBAC-матрица** — из Common в Registry (RG-12)
-- **Матрица ответственных** — убраны счётчики
+При вычислении `title_hash_sha256` сохранять также `title_key` — исходную конкатенированную строку, из которой сформирован хеш.
 
-## OTEL SDK
+Формула бизнес-ключа: `SHA-256(era | source_type | mks_oks_code | okstu_code | doc_code | normalized_title)`
 
-- **Во всех сервисах** — восстановлено (CM-6, OR-8, monitoring.md, service_dependencies.md)
-- **service_checker** — dev-only, CI без post-deploy
+`title_key` = `era | source_type | mks_oks_code | okstu_code | doc_code | normalized_title`
 
-## Статус
+Пример: `USSR|gost|47.020||20868-81|стойки...`
 
-Все изменения внесены.
+## План правок
+
+- [x] 1. glossary.md — добавить термин `title_key`
+- [x] 2. normalizer_specification.md — описать `title_key` как выход бизнес-ключа
+- [x] 3. converter_specification.md — упомянуть `title_key` в разделе 6.1
+- [x] 4. db_diagrams.md — добавить `title_key` в ER-диаграмму и описание `registry.documents`
+- [x] 5. converter_validator_service_api.md — добавить `title_key` в preview, fingerprint, validate
+- [x] 6. orchestrator_service_api.md — добавить `title_key` в ответы документов и черновиков
+- [x] 7. registry_service_api.md — добавить `title_key` в ответы документов, check-uniqueness, примечания
+- [x] 8. 6.dev_tasks_17_06.md — добавить задачу DB-28
+- [x] 9. specificity.md — зафиксировать решение
+- [x] 10. overview.md — упомянуть `title_key` в описании бизнес-ключа
+- [x] 11. pipeline1-formation.md — упомянуть `title_key` на шаге 2.6 и в формуле
+- [x] 12. schema/diagrams.md — добавить `title_key` в диаграмму metadata

@@ -73,6 +73,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
   "is_duplicate_file": false,
   "is_duplicate_document": false,
   "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+  "title_key": "USSR|gost|47.020||20868-81|стойки установочные...",
   "created_at": "2026-05-15T10:00:00Z"
 }
 ```
@@ -370,6 +371,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
   "source_type": "GOST",
   "document_type": "normative",
   "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+  "title_key": "USSR|gost|47.020||20868-81|стойки установочные...",
   "status": "created",
   "era": "USSR",
   "validity_status": "active",
@@ -1007,7 +1009,8 @@ Orchestrator — **единая точка входа** для работы с �
         "jurisdiction": "RU",
         "source_type": "RMRS",
         "language": "ru",
-        "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
+        "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+        "title_key": "CURRENT|rmrs|||311-05-1950ц|циркулярное письмо № 311-05-1950ц от 09.06.2023"
       },
       "document_id": 1300,
       "created_at": "2026-06-05T10:00:00Z",
@@ -1035,7 +1038,8 @@ Orchestrator — **единая точка входа** для работы с �
         "jurisdiction": "RU",
         "source_type": "RMRS",
         "language": "ru",
-        "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
+        "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+        "title_key": "CURRENT|rmrs|||311-05-1950ц|циркулярное письмо № 311-05-1950ц от 09.06.2023"
       },
       "has_notifications": true,
       "critical_count": 1,
@@ -1060,7 +1064,7 @@ Orchestrator — **единая точка входа** для работы с �
 | `document_key` | string | Бизнес-ключ документа (SHA-256) |
 | `status` | string | Статус черновика: `uploaded`, `previewing`, `ready_for_approve`, `approved`, `discarded` |
 | `confidence` | float | Оценка качества распознавания (0..1) |
-| `preview_metadata` | object | Preview-метаданные: `doc_code`, `title`, `mks_oks_code`, `okstu_code`, `udk_code`, `pkb_codes`, `document_type`, `year`, `era`, `validity_status`, `issuing_body`, `jurisdiction`, `source_type`, `language`, `title_hash_sha256` |
+| `preview_metadata` | object | Preview-метаданные: `doc_code`, `title`, `mks_oks_code`, `okstu_code`, `udk_code`, `pkb_codes`, `document_type`, `year`, `era`, `validity_status`, `issuing_body`, `jurisdiction`, `source_type`, `language`, `title_hash_sha256`, `title_key` |
 | `document_id` | bigint \| null | ID документа в Registry (FK → `registry.documents`), созданный по результатам черновика |
 | `has_notifications` | bool | **P12-3**: есть ли у черновика уведомления (для индикатора в UI) |
 | `critical_count` | int | **P12-3**: количество critical-уведомлений (для бейджа) |
@@ -1100,7 +1104,8 @@ Orchestrator — **единая точка входа** для работы с �
     "jurisdiction": "RU",
     "source_type": "RMRS",
     "language": "ru",
-    "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
+    "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+    "title_key": "CURRENT|rmrs|||311-05-1950ц|циркулярное письмо № 311-05-1950ц от 09.06.2023"
   },
   "raw_data": {
     "schema": "raw_ocr_v4",
@@ -1158,7 +1163,7 @@ Orchestrator — **единая точка входа** для работы с �
 | `document_key` | string | Бизнес-ключ документа (SHA-256) |
 | `status` | string | Статус черновика |
 | `confidence` | float | Оценка качества распознавания (0..1) |
-| `preview_metadata` | object | Preview-метаданные: `doc_code`, `title`, `mks_oks_code`, `okstu_code`, `udk_code`, `pkb_codes`, `document_type`, `year`, `era`, `validity_status`, `issuing_body`, `jurisdiction`, `source_type`, `language`, `title_hash_sha256` |
+| `preview_metadata` | object | Preview-метаданные: `doc_code`, `title`, `mks_oks_code`, `okstu_code`, `udk_code`, `pkb_codes`, `document_type`, `year`, `era`, `validity_status`, `issuing_body`, `jurisdiction`, `source_type`, `language`, `title_hash_sha256`, `title_key` |
 | `raw_data` | object | Сырые данные распознавания (`raw_ocr_v4`) — результат Parser или OCR |
 | `document_id` | bigint \| null | ID документа в Registry, созданный по результатам черновика |
 | `error_code` | string \| null | Код ошибки |
@@ -1204,7 +1209,8 @@ Orchestrator — **единая точка входа** для работы с �
     "jurisdiction": "RU",
     "source_type": "RMRS",
     "language": "ru",
-    "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
+    "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+    "title_key": "CURRENT|rmrs|||311-05-1950ц|циркулярное письмо № 311-05-1950ц от 09.06.2023"
   },
   "created_at": "2026-06-18T10:00:00Z"
 }
@@ -1218,7 +1224,7 @@ Orchestrator — **единая точка входа** для работы с �
 | `document_key` | string | Бизнес-ключ документа (SHA-256) |
 | `status` | string | Статус черновика |
 | `confidence` | float | Оценка качества распознавания (0..1) |
-| `preview_metadata` | object | Preview-метаданные: `doc_code`, `title`, `mks_oks_code`, `okstu_code`, `udk_code`, `pkb_codes`, `document_type`, `year`, `era`, `validity_status`, `issuing_body`, `jurisdiction`, `source_type`, `language`, `title_hash_sha256` |
+| `preview_metadata` | object | Preview-метаданные: `doc_code`, `title`, `mks_oks_code`, `okstu_code`, `udk_code`, `pkb_codes`, `document_type`, `year`, `era`, `validity_status`, `issuing_body`, `jurisdiction`, `source_type`, `language`, `title_hash_sha256`, `title_key` |
 | `created_at` | string | Время создания (ISO 8601) |
 
 **Возможные ошибки:**
@@ -1305,7 +1311,8 @@ Orchestrator — **единая точка входа** для работы с �
     "jurisdiction": "RU",
     "source_type": "RMRS",
     "language": "ru",
-    "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
+    "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+    "title_key": "CURRENT|rmrs|||311-05-1950ц|циркулярное письмо № 311-05-1950ц от 09.06.2023"
   },
   "duplicates": [],
   "decision_required": false

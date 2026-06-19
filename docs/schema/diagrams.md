@@ -146,7 +146,7 @@
 ║  │  ┌────────────────────────────────────────────────────┐  │    ║
 ║  │  │                   metadata                         │  │    ║
 ║  │  │  • doc_code, title, normalized_title,               │  │    ║
-║  │  │    title_hash_sha256                                │  │    ║
+║  │  │    title_hash_sha256, title_key                     │  │    ║
 ║  │  │  • group, mks_oks_code, okstu_code, udc, era       │  │    ║
 ║  │  │  • validity_status, issuing_body                    │  │    ║
 ║  │  │  • adoption: date, authority, document_number,      │  │    ║

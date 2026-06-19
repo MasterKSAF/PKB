@@ -32,6 +32,7 @@ erDiagram
         text status_note
         char64 file_hash_sha256
         char64 title_hash_sha256
+        text title_key
         jsonb preview_snapshot
         bigint file_size_bytes
         varchar processing_status
@@ -309,6 +310,7 @@ erDiagram
 | `pipeline.task_steps` | `task_id` | B-tree | Поиск этапов задачи |
 | `registry.document_versions` | `document_id` | B-tree | Поиск версий документа |
 | `registry.documents` | `title_hash_sha256` | B-tree UNIQUE | Дедупликация по бизнес-ключу |
+| `registry.documents` | `title_key` | B-tree UNIQUE | Дедупликация по строке бизнес-ключа |
 | `registry.documents` | `(valid_from, valid_until)` | B-tree | Поиск документов по дате действия |
 | `registry.drafts` | `status` | B-tree | Фильтрация черновиков по статусу |
 | `registry.document_categories` | `category_id` | B-tree | Поиск категорий документа (обратная сторона many-to-many) |
@@ -391,7 +393,7 @@ erDiagram
 | `document_key` | Бизнес-ключ документа (SHA-256). |
 | `status` | Статус черновика: `uploaded`, `previewing`, `ready_for_approve`, `approved`, `discarded`. |
 | `confidence` | Оценка качества распознавания (0..1). |
-| `preview_metadata` | JSONB — **весь исходный JSON ответа Converter-validator preview** (`POST /converter/preview/metadata`). Содержит `doc_code`, `title`, `mks_oks_code`, `okstu_code`, `udk_code`, `pkb_codes`, `document_type`, `year`, `era`, `validity_status`, `issuing_body`, `jurisdiction`, `source_type`, `language`, `title_hash_sha256`. Хранится целиком для истории и аудита. При approve копируется в `registry.documents.preview_snapshot`. |
+| `preview_metadata` | JSONB — **весь исходный JSON ответа Converter-validator preview** (`POST /converter/preview/metadata`). Содержит `doc_code`, `title`, `mks_oks_code`, `okstu_code`, `udk_code`, `pkb_codes`, `document_type`, `year`, `era`, `validity_status`, `issuing_body`, `jurisdiction`, `source_type`, `language`, `title_hash_sha256`, `title_key`. Хранится целиком для истории и аудита. При approve копируется в `registry.documents.preview_snapshot`. |
 | `raw_data` | JSONB с сырыми данными от Parser (schema: `raw_ocr_v4`) или Converter (`validated_v3`). |
 | `error_code` / `error_message` | Код и описание ошибки при `discarded`. |
 | `source_filename` | Оригинальное имя загруженного файла (до очистки для CAS). |
@@ -453,6 +455,7 @@ erDiagram
 | `valid_until` | **P12-5**: дата окончания действия документа. NOT NULL, default `dateMax = '9999-12-31'::date` (для бессрочных документов). См. конвенцию в `glossary.md` |
 | `file_hash_sha256` | **P2-2**: `CHAR(64)` (а не `text`). Хэш бинарного файла (вычисляется при загрузке) |
 | `title_hash_sha256` | Хэш 6-польной формулы: `SHA-256(era | source_type | mks_oks_code | okstu_code | doc_code | normalized_title)` (вычисляется в Converter). Алгоритм нормализации и нормализация полей — см. `specifications/normalizer_specification.md` |
+| `title_key` | Исходная строка конкатенации для `title_hash_sha256`: `era \| source_type \| mks_oks_code \| okstu_code \| doc_code \| normalized_title`. Хранится для аудита и отладки. Пример: `USSR\|gost\|47.020\|\|20868-81\|стойки...`. См. `specifications/normalizer_specification.md` §2.1.1 |
 | `preview_snapshot` | JSONB — исходный JSON ответа Converter-validator preview, скопированный из `registry.drafts.preview_metadata` при approve. Хранится для истории и аудита. Не используется в поиске — только для просмотра исходных метаданных. |
 | `processing_status` | **P2-1, P1-16**: FSM статус конвейера (не путать с `validity_status` — юридическим статусом документа). Возможные значения: `created`, `pending_index`, `indexing`, `indexed`, `partially_indexed`, `failed`. **P1-16**: `partially_indexed` — промежуточный статус при частичной индексации (часть чанков в БД, часть пропущена). Исключён из RAG Search. Статусы черновика (`uploaded`, `previewing`, `ready_for_approve`, `review_required`, `validation`, `approved`, `discarded` — см. P1-20) хранятся в `registry.drafts.status`, не в `registry.documents`. |
 | `chunk_count` | **P2-7**: `CHECK (chunk_count IS NULL OR chunk_count >= 0)`. Обновляется после индексации. Если `chunk_count_actual < chunk_count_expected` — переход в `partially_indexed` (P1-16) или `failed` (P1-17) |

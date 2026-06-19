@@ -247,6 +247,22 @@ API черновиков и FSM документированы, но **UI сра
 - **Унификация health-эндпоинта Orchestrator** (13.06): `/api/v1/monitor/health` → `/api/v1/health` как у всех внутренних сервисов. Health Orchestrator больше не проксируется через Gateway (внутренний, как Auth и др.). Gateway предоставляет `/api/v1/system/health` для внешнего мониторинга.
 - **Перенос `/api/v1/monitor/metrics` в Gateway** (13.06): эндпоинт метрик качества пайплайнов перенесён из Orchestrator в Gateway как собственный (не проксируемый). Спецификация удалена из `orchestrator_service_api.md` и добавлена в `gateway_service_api.md`.
 
+### 🔄 Добавление `title_key` в `registry.documents` (19.06)
+
+**Проблема:** `title_hash_sha256` — бизнес-ключ, но без исходной строки конкатенации невозможно восстановить, из каких именно полей он вычислен. Это затрудняет аудит и отладку при расхождении хешей.
+
+**Решение:** добавлено поле `title_key` (text) в `registry.documents` — исходная строка конкатенации 6 полей: `era | source_type | mks_oks_code | okstu_code | doc_code | normalized_title`. Хранится для аудита и отладки. Возвращается в API-ответах где присутствует `title_hash_sha256`.
+
+**Затронутые документы:**
+- `docs/glossary.md` — новый термин
+- `docs/specifications/normalizer_specification.md` — описание title_key
+- `docs/specifications/converter_specification.md` — шаг 6, раздел 6.1
+- `docs/database/db_diagrams.md` — ER-диаграмма, описание registry.documents
+- `docs/api/converter_validator_service_api.md` — preview, fingerprint, validate
+- `docs/api/orchestrator_service_api.md` — drafts, documents
+- `docs/api/registry_service_api.md` — документы, check-uniqueness, примечания
+- `docs/6.dev_tasks_17_06.md` — DB-28
+
 ### 🔄 Схлопывание `quality.warnings[]` + `quality.issues[]` в `quality.notifications[]` (18.06)
 
 **Проблема:** два параллельных массива в `quality` с почти одинаковой структурой, но разной семантикой (P3-5 security vs P12-3 операторские замечания). Разделение усложняет контракт и UI.
@@ -292,5 +308,13 @@ API черновиков и FSM документированы, но **UI сра
 ### G1. Git-репозиторий выше корня документации
 
 Корень проекта в Zed — `docs/`, а git-репозиторий находится на уровень выше (`H:/Projects/PKB_neuroassistant_docs`). Из-за этого прямые git-команды через `cd`, ограниченный `docs/`, не работают. Требуется `git -C <путь к корню репозитория>` или `--git-dir`/`--work-tree` с абсолютным путём.
+
+**Важно:** терминал Zed на Windows использует Unix-стиль путей (`/h/Projects/...`), не Windows (`H:\...`). Команды с Windows-путями завершаются ошибкой.
+
+### G2. Мусорный файл `nul` в репозитории
+
+Обнаружен пустой файл `docs/nul` (19.06.2026). На Windows `nul` — зарезервированное имя устройства, из-за чего Git не может индексировать этот файл и прерывает `git add -A` с ошибкой. Файл удалён. Причина появления не установлена (возможно, артефакт работы одного из инструментов).
+
+**Рекомендация:** при ошибке `unable to index file 'docs/nul'` — удалить файл и повторить `git add`.
 
 

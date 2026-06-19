@@ -139,6 +139,7 @@
 | **valid_until** | **P12-5**: дата окончания действия документа. NOT NULL, default `dateMax`. См. `validity_dates_spec.md` (NEW) |
 | **valid_at** | **P12-5**: параметр API Registry `GET /registry/documents?valid_at=YYYY-MM-DD` — выборка документов, действующих на указанную дату (`valid_from <= ? AND valid_until >= ?`) |
 | **title_hash_sha256** | **P0-1**: 6-польная формула `SHA-256(era \| source_type \| mks_oks_code \| okstu_code \| doc_code \| normalized_title)`. Бизнес-ключ документа |
+| **title_key** | **P0-1**: исходная строка, из которой вычислен `title_hash_sha256`. Конкатенация полей через `|`: `era \| source_type \| mks_oks_code \| okstu_code \| doc_code \| normalized_title`. Пример: `USSR\|gost\|47.020\|\|20868-81\|стойки...`. Хранится в `registry.documents.title_key` для аудита и отладки |
 | **version_id** | **P12-4**: ID конкретной версии документа (`document_versions.id`). Назначается Оркестратором при создании новой версии. Связан с `document_id` через FK |
 | **draft_notifications** | **P12-3 / P3-5**: таблица `pipeline.draft_notifications` — уведомления для оператора от Parser/OCR/Converter. `code, severity, category, message, location, suggested_action, draft_id` |
 | **qwen3-embedding-4b** | **P13-1**: модель эмбеддингов по умолчанию. Внешнее API. Размерность 2048 |

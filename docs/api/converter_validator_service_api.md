@@ -44,7 +44,7 @@
 
 **Вход:** сырой JSON (результат Parser/OCR) — может содержать неполные данные.
 
-**Выход:** doc_code, title, mks_oks_code, okstu_code, udk_code, pkb_codes, document_type, year, era, validity_status, issuing_body, jurisdiction, source_type, language, title_hash_sha256.
+**Выход:** doc_code, title, mks_oks_code, okstu_code, udk_code, pkb_codes, document_type, year, era, validity_status, issuing_body, jurisdiction, source_type, language, title_hash_sha256, title_key.
 
 > **Полный формат данных:** [`docs/schema/schema_converter_preview.json`](../schema/schema_converter_preview.json) (схема `converter_validator_preview_v1`)
 
@@ -76,7 +76,8 @@
   "jurisdiction": "RU",
   "source_type": "RMRS",
   "language": "ru",
-  "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
+  "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+  "title_key": "CURRENT|rmrs|||311-05-1950ц|циркулярное письмо № 311-05-1950ц от 09.06.2023"
 }
 ```
 
@@ -97,6 +98,7 @@
 | `source_type` | string | Тип источника: `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `RMRS`, `OTHER` |
 | `language` | string | Основной язык документа (`ru`, `en`, ...) |
 | `title_hash_sha256` | string | Бизнес-ключ (SHA-256) |
+| `title_key` | string | Исходная строка конкатенации для `title_hash_sha256` (аудит/отладка) |
 
 ---
 
@@ -123,7 +125,7 @@
 | 3 | Извлечение и валидация метаданных | Шаг 1–2 |
 | 4 | Валидация структуры JSON | Шаг 1 |
 | 5 | Классификация документа (тип, эра, юрисдикция) | Шаг 3 |
-| 6 | Вычисление хэшей SHA-256 (content_hash, title_hash) | Шаг 3 |
+| 6 | Вычисление хэшей SHA-256 (content_hash, title_hash, title_key) | Шаг 3 |
 | 7 | Сопоставление с существующими документами (predecessor/successor) | Шаг 3 |
 | 8 | Валидация классификационных кодов (через Registry) | Шаг 5 |
 | 9 | Построение кросс-ссылок | Шаг 1, 7 |
@@ -187,7 +189,7 @@
     "validation_id": 1,
     "structure_valid": true,
     "classification": { "mks_oks_code": "47.020", "overall_status": "CONFIRMED" },
-    "fingerprint": { "file_hash_sha256": "...", "title_hash_sha256": "..." },
+    "fingerprint": { "file_hash_sha256": "...", "title_hash_sha256": "...", "title_key": "..." },
     "matching": { "predecessor_doc_id": null, "successor_doc_id": null },
     "decision": "auto",
     "status": "completed"
@@ -290,7 +292,7 @@
 | `validation_id` | string | ID валидации |
 | `structure_valid` | bool | Результат проверки структуры |
 | `classification` | object | Статусы классификационных кодов |
-| `fingerprint` | object | Хэши документа (`file_hash_sha256`, `title_hash_sha256`) |
+| `fingerprint` | object | Хэши документа (`file_hash_sha256`, `title_hash_sha256`, `title_key`) |
 | `matching` | object | Связи с существующими документами (`predecessor_doc_id`, `successor_doc_id`) |
 | `cross_references` | array | Список кросс-ссылок на другие документы |
 | `decision` | string | `auto` — автоматическое завершение, `manual` — требуется ручное подтверждение |
@@ -332,7 +334,8 @@
   },
   "fingerprint": {
     "file_hash_sha256": "abc123...",
-    "title_hash_sha256": "def456..."
+    "title_hash_sha256": "def456...",
+    "title_key": "USSR|gost|47.020||20868-81|стойки..."
   },
   "matching": {
     "predecessor_doc_id": null,
@@ -348,7 +351,7 @@
 | `validation_id` | string | ID валидации |
 | `structure_valid` | bool | Результат проверки структуры |
 | `classification` | object | Статусы классификационных кодов |
-| `fingerprint` | object | Хэши документа (`file_hash_sha256`, `title_hash_sha256`) |
+| `fingerprint` | object | Хэши документа (`file_hash_sha256`, `title_hash_sha256`, `title_key`) |
 | `matching` | object | Связи с существующими документами |
 | `decision` | string | `auto` — автоматическое завершение, `manual` — требуется ручное подтверждение |
 | `status` | string | Статус: `completed`, `failed` |
@@ -378,7 +381,7 @@
 
 | Метод | Путь | Режим | Описание | Запись в БД |
 |---|---|---|---|---|
-| `POST` | `/converter/preview/metadata` | Preview | Извлечение метаданных (doc_code, title, mks_oks_code, okstu_code, udk_code, pkb_codes, document_type, year, era, validity_status, issuing_body, jurisdiction, source_type, language, title_hash_sha256) | Нет |
+| `POST` | `/converter/preview/metadata` | Preview | Извлечение метаданных (doc_code, title, mks_oks_code, okstu_code, udk_code, pkb_codes, document_type, year, era, validity_status, issuing_body, jurisdiction, source_type, language, title_hash_sha256, title_key) | Нет |
 | `POST` | `/converter/convert` | Full | Полная конвертация + валидация + LLM + кросс-ссылки (схема `validated_v3`) | Нет |
 | `POST` | `/validate/document` | Standalone | Комплексная валидация документа без переконвертации | Нет |
 
