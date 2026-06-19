@@ -7,20 +7,45 @@ from pydantic import BaseModel, Field
 class ProjectResponse(BaseModel):
     project_id: int
     user_id: str
+    code: str | None
     name: str
     description: str | None
+    status: str
     created_at: datetime
     updated_at: datetime
 
 
+class ProjectListItem(BaseModel):
+    project_id: int
+    code: str | None
+    name: str
+    status: str
+    created_at: datetime
+
+
+class ProjectListMeta(BaseModel):
+    total: int
+    page: int
+    page_size: int
+
+
+class ProjectListResponse(BaseModel):
+    items: list[ProjectListItem]
+    meta: ProjectListMeta
+
+
 class CreateProjectRequest(BaseModel):
+    code: str
     name: str
     description: str | None = None
+    status: str = "active"
 
 
 class UpdateProjectRequest(BaseModel):
+    code: str | None = None
     name: str | None = None
     description: str | None = None
+    status: str | None = None
 
 
 class DeleteProjectResponse(BaseModel):
@@ -28,18 +53,11 @@ class DeleteProjectResponse(BaseModel):
     deleted_at: datetime
 
 
-class SessionOptions(BaseModel):
-    model: str | None = None
-    temperature: float | None = None
-    max_context_messages: int | None = None
-    system_prompt_override: str | None = None
-
-
 class CreateSessionRequest(BaseModel):
     title: str | None = None
     project_id: int | None = None
     document_ids: list[int] = Field(default_factory=list)
-    options: SessionOptions = Field(default_factory=SessionOptions)
+    options: dict = Field(default_factory=dict)
 
 
 class SessionResponse(BaseModel):
@@ -49,7 +67,6 @@ class SessionResponse(BaseModel):
     project_id: int | None
     document_ids: list[int]
     options: dict
-    message_count: int
     created_at: datetime
     updated_at: datetime
 
@@ -65,7 +82,6 @@ class SessionListItem(BaseModel):
     title: str | None
     project_id: int | None
     document_ids: list[int]
-    message_count: int
     last_message_preview: str | None
     created_at: datetime
     updated_at: datetime
@@ -146,6 +162,7 @@ class MessageResponse(BaseModel):
 class SessionMessagesResponse(BaseModel):
     session_id: int
     title: str | None
+    project_id: int | None = None
     document_ids: list[int]
     messages: list[dict]
     has_more: bool
@@ -246,7 +263,7 @@ class ChatResponse(BaseModel):
 
 
 class HistoryItem(BaseModel):
-    history_id: str
+    history_id: int
     session_id: int
     created_at: datetime
     user_id: str
@@ -278,8 +295,8 @@ class HistoryExportResponse(BaseModel):
 
 class TextSearchRequest(BaseModel):
     text: str
+    valid_at: str
     document_ids: list[int] | None = None
-    valid_at: str | None = None
     top_k: int = Field(default=10, ge=1, le=100)
     filters: dict = Field(default_factory=dict)
     category_ids: list[int] | None = None

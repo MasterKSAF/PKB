@@ -17,7 +17,7 @@ from ..schemas import (
     UpdateSessionRequest, DeleteSessionResponse,
     SendMessageRequest, MessageResponse, PendingMessageResponse, SourceResponse, SessionMessagesResponse,
     ContextRequest, ContextResponse,
-    ExportRequest, ExportResponse,
+    ExportRequest,
     FeedbackRequest, FeedbackResponse,
     HistoryResponse, HistoryItem, HistoryMeta, HistoryExportResponse,
 )
@@ -33,7 +33,7 @@ _FINAL_STATUSES = {"answered", "failed", "not_found", "out_of_scope", "needs_cla
 _idempotency_cache: dict[str, tuple[str, int]] = {}
 
 
-def _session_to_response(s: ChatSession, msg_count: int = 0) -> SessionResponse:
+def _session_to_response(s: ChatSession) -> SessionResponse:
     return SessionResponse(
         session_id=s.session_id,
         title=s.title,
@@ -41,7 +41,6 @@ def _session_to_response(s: ChatSession, msg_count: int = 0) -> SessionResponse:
         project_id=s.project_id,
         document_ids=s.document_ids or [],
         options=s.options or {},
-        message_count=msg_count,
         created_at=s.created_at,
         updated_at=s.updated_at,
     )
@@ -85,8 +84,8 @@ async def create_session(
     user_id: str = Depends(get_current_user),
 ):
     async with db.begin():
-        s = await session_repo.create_session(db, user_id, body.title, body.document_ids, body.options.model_dump(), body.project_id)
-    return _session_to_response(s, 0)
+        s = await session_repo.create_session(db, user_id, body.title, body.document_ids, body.options, body.project_id)
+    return _session_to_response(s)
 
 
 @router.get("/sessions", response_model=SessionListResponse)
@@ -101,7 +100,6 @@ async def list_sessions(
     sessions, total = await session_repo.list_sessions(db, user_id, page, page_size, search, project_id)
     items = []
     for s in sessions:
-        cnt = await session_repo.message_count(db, s.session_id)
         last = await session_repo.last_assistant_message(db, s.session_id)
         preview = last.content[:120] if last and last.content else None
         items.append(SessionListItem(
@@ -109,7 +107,6 @@ async def list_sessions(
             title=s.title,
             project_id=s.project_id,
             document_ids=s.document_ids or [],
-            message_count=cnt,
             last_message_preview=preview,
             created_at=s.created_at,
             updated_at=s.updated_at,
@@ -132,6 +129,7 @@ async def get_session(
     return SessionMessagesResponse(
         session_id=s.session_id,
         title=s.title,
+        project_id=s.project_id,
         document_ids=s.document_ids or [],
         messages=[_msg_dict(m) for m in msgs],
         has_more=has_more,
@@ -305,8 +303,7 @@ async def update_session(
         if not s:
             raise HTTPException(status_code=404, detail={"error": {"code": "SESSION_NOT_FOUND", "message": "Сессия не найдена", "details": {}}})
         s = await session_repo.update_session(db, s, body.title, body.document_ids, body.project_id)
-    cnt = await session_repo.message_count(db, session_id)
-    return _session_to_response(s, cnt)
+    return _session_to_response(s)
 
 
 @router.delete("/sessions/{session_id}", response_model=DeleteSessionResponse)
@@ -382,6 +379,14 @@ async def post_feedback(
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(get_current_user),
 ):
+    if body.session_id is not None and body.answer_id is not None:
+        raise HTTPException(status_code=400, detail={"error": {"code": "AMBIGUOUS_FEEDBACK_FORMAT", "message": "Нельзя передавать session_id и answer_id одновременно", "details": {}}})
+
+    if isinstance(body.rating, int) and not (1 <= body.rating <= 5):
+        raise HTTPException(status_code=422, detail={"error": {"code": "INVALID_RATING", "message": "rating должен быть в диапазоне 1–5", "details": {}}})
+    if body.rating_status is not None and body.rating_status not in ("positive", "negative", "neutral"):
+        raise HTTPException(status_code=422, detail={"error": {"code": "INVALID_RATING", "message": "rating_status должен быть positive, negative или neutral", "details": {}}})
+
     rating = body.rating
     if body.useful is not None and rating is None:
         rating = "positive" if body.useful else "negative"
@@ -531,7 +536,7 @@ async def get_history(
         )).scalar_one_or_none()
 
         items.append(HistoryItem(
-            history_id=f"hist-{m.message_id}",
+            history_id=m.message_id,
             session_id=m.session_id,
             created_at=m.timestamp,
             user_id=user_id,

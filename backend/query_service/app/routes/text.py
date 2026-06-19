@@ -17,10 +17,11 @@ async def text_search(
     filters = dict(body.filters)
     if body.document_ids:
         filters["document_ids"] = body.document_ids
-    if body.valid_at:
-        filters["valid_at"] = body.valid_at
-    if body.category_ids:
-        filters["category_ids"] = body.category_ids
+    filters["valid_at"] = body.valid_at
+    # category_ids принимается как top-level поле или внутри filters
+    category_ids = body.category_ids or (filters.get("category_ids") if isinstance(filters.get("category_ids"), list) else None)
+    if category_ids:
+        filters["category_ids"] = category_ids
 
     top_k = min(body.top_k, len(SEARCH_RESULTS))
     results = [

@@ -3,7 +3,7 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_text_search(client):
-    r = await client.post("/api/v1/text/search", json={"text": "толщина обшивки Arc4"})
+    r = await client.post("/api/v1/text/search", json={"text": "толщина обшивки Arc4", "valid_at": "2026-06-01"})
     assert r.status_code == 200
     data = r.json()
     assert "results" in data
@@ -16,6 +16,22 @@ async def test_text_search(client):
     assert "content" in result
     assert "score" in result
     assert "section_id" in result
+
+
+@pytest.mark.asyncio
+async def test_text_search_requires_valid_at(client):
+    r = await client.post("/api/v1/text/search", json={"text": "запрос без даты"})
+    assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_text_search_with_filters(client):
+    r = await client.post("/api/v1/text/search", json={
+        "text": "толщина обшивки",
+        "valid_at": "2026-06-01",
+        "filters": {"category_ids": [1, 2]},
+    })
+    assert r.status_code == 200
 
 
 @pytest.mark.asyncio
@@ -37,14 +53,13 @@ async def test_error_format(client):
     r = await client.get("/api/v1/chat/sessions/999999")
     assert r.status_code == 404
     body = r.json()
-    # Должен быть либо detail.error либо error напрямую
     assert "detail" in body or "error" in body
 
 
 @pytest.mark.asyncio
 async def test_db_tables_exist(client):
     from app.db import engine
-    from sqlalchemy import inspect, text
+    from sqlalchemy import text
     async with engine.connect() as conn:
         result = await conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
         tables = {row[0] for row in result.fetchall()}

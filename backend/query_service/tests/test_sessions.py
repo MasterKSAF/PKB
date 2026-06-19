@@ -8,7 +8,7 @@ async def test_create_session(client):
     data = r.json()
     assert "session_id" in data
     assert data["title"] == "Тест Arc4"
-    assert data["message_count"] == 0
+    assert "message_count" not in data
     return data["session_id"]
 
 
@@ -21,6 +21,10 @@ async def test_list_sessions(client):
     assert "sessions" in data
     assert "meta" in data
     assert data["meta"]["total"] >= 1
+    if data["sessions"]:
+        item = data["sessions"][0]
+        assert "message_count" not in item
+        assert "last_message_preview" in item
 
 
 @pytest.mark.asyncio
@@ -32,6 +36,7 @@ async def test_get_session_messages(client):
     data = r.json()
     assert data["session_id"] == sid
     assert "messages" in data
+    assert "project_id" in data
 
 
 @pytest.mark.asyncio
@@ -59,4 +64,4 @@ async def test_session_not_found(client):
     r = await client.get("/api/v1/chat/sessions/999999")
     assert r.status_code == 404
     data = r.json()
-    assert "error" in data or "detail" in data
+    assert "detail" in data or "error" in data
