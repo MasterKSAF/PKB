@@ -364,11 +364,11 @@ erDiagram
 | `registry.document_sections` | `parent_id` | `registry.document_sections` | `id` | самоссылка (nullable) |
 | `registry.document_references` | `source_document_id` | `registry.documents` | `id` | M:1 |
 | `registry.document_references` | `resolved_document_id` | `registry.documents` | `id` | M:1 (nullable) |
-| `registry.document_versions` | `document_id` | `registry.documents` | `id` | M:1 CASCADE |
-| `registry.document_history` | `document_id` | `registry.documents` | `id` | M:1 CASCADE |
+| `registry.document_versions` | `document_id` | `registry.documents` | `id` | M:1 |
+| `registry.document_history` | `document_id` | `registry.documents` | `id` | M:1 |
 | `rag.document_chunks` | `section_id` | `registry.document_sections` | `id` | M:1 |
 | `rag.document_chunks` | `document_id` | `registry.documents` | `id` | M:1 |
-| `registry.document_categories` | `document_id` | `registry.documents` | `id` | M:1 CASCADE |
+| `registry.document_categories` | `document_id` | `registry.documents` | `id` | M:1 |
 | `registry.document_categories` | `category_id` | `registry.categories` | `id` | M:1 CASCADE |
 | `pipeline.tasks` | `document_id` | `registry.documents` | `id` | M:1 (nullable) |
 | `pipeline.draft_notifications` | `draft_id` | `registry.drafts` | `id` | M:1 |
@@ -608,7 +608,7 @@ erDiagram
 
 | Поле | Тип | Ограничения |
 |------|-----|-------------|
-| `document_id` | bigint | PK (составной), FK → `registry.documents.id` ON DELETE CASCADE |
+| `document_id` | bigint | PK (составной), FK → `registry.documents.id` |
 | `category_id` | bigint | PK (составной), FK → `registry.categories.id` ON DELETE CASCADE |
 
-> **Каскадное удаление:** при удалении категории или документа связанные записи в `document_categories` удаляются автоматически.
+> **Каскадное удаление:** при удалении категории связанные записи в `document_categories` удаляются автоматически. Удаление документа — только soft-delete (пометка `deleted_at`), каскад не применяется.

@@ -855,7 +855,12 @@ class PipelineOrchestrator:
             )
 
     async def cleanup_stale_tasks(self) -> int:
-        """Find and mark stale running tasks as failed."""
+        """Find and mark stale running tasks as failed.
+        
+        Also handles:
+        - Stale pending steps (P3S-1: per-state timeout)
+        - Absolute timeout tasks (P3S-1: 48h limit)
+        """
         max_time = settings.pipeline.MAX_JOB_RUNNING_TIME
         stale_tasks = await self.task_repo.get_stale_running_tasks(max_time)
 
@@ -872,7 +877,33 @@ class PipelineOrchestrator:
             )
             cleaned += 1
 
+        # Handle stale pending steps (P3S-1)
+        pending_timeout = settings.pipeline.PENDING_STATE_TIMEOUT
+        stale_steps = await self.task_repo.get_stale_pending_steps(pending_timeout)
+        for step in stale_steps:
+            await self.task_repo.fail_task_step(
+                step.id,
+                error_code="PENDING_TIMEOUT",
+                error_message=f"Step pending for >{pending_timeout}s",
+            )
+            cleaned += 1
+
+        # Handle absolute timeout tasks (P3S-1)
+        abs_timeout = settings.pipeline.ABSOLUTE_TASK_TIMEOUT_HOURS
+        timed_out_tasks = await self.task_repo.get_absolute_timeout_tasks(abs_timeout)
+        for task in timed_out_tasks:
+            await self.task_repo.update_task_status(
+                task.id,
+                status=TaskStatus.FAILED.value,
+            )
+            await self.task_repo.set_task_error(
+                task.id,
+                error_code="ABSOLUTE_TIMEOUT",
+                error_message=f"Task exceeded absolute timeout of {abs_timeout}h",
+            )
+            cleaned += 1
+
         if cleaned:
-            logger.warning(f"Cleaned up {cleaned} stale pipeline tasks")
+            logger.warning(f"Cleaned up {cleaned} stale pipeline items")
 
         return cleaned

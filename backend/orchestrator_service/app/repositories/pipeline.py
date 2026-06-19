@@ -136,6 +136,64 @@ class TaskRepository:
         )
         return list(result.scalars().all())
 
+    async def get_stale_pending_steps(
+        self, max_pending_seconds: int = 30
+    ) -> list[TaskStep]:
+        """Find steps stuck in pending state (P3S-1)."""
+        from datetime import timedelta
+
+        threshold = datetime.now(timezone.utc) - timedelta(seconds=max_pending_seconds)
+        result = await self.db.execute(
+            select(TaskStep).where(
+                and_(
+                    TaskStep.status == "pending",
+                    TaskStep.created_at < threshold,
+                    TaskStep.deleted_at.is_(None),
+                )
+            )
+        )
+        return list(result.scalars().all())
+
+    async def get_absolute_timeout_tasks(
+        self, max_hours: int = 48
+    ) -> list[Task]:
+        """Find tasks exceeding absolute timeout (P3S-1).
+
+        Also returns completed indexation tasks for background integrity check (P2I-2).
+        """
+        from datetime import timedelta
+
+        threshold = datetime.now(timezone.utc) - timedelta(hours=max_hours)
+        result = await self.db.execute(
+            select(Task).where(
+                and_(
+                    Task.status == "active",
+                    Task.created_at < threshold,
+                    Task.deleted_at.is_(None),
+                )
+            )
+        )
+        return list(result.scalars().all())
+
+    async def get_recently_indexed_tasks(
+        self, max_hours: int = 24
+    ) -> list[Task]:
+        """Get tasks that completed indexation recently (P2I-2 background check)."""
+        from datetime import timedelta
+
+        threshold = datetime.now(timezone.utc) - timedelta(hours=max_hours)
+        result = await self.db.execute(
+            select(Task).where(
+                and_(
+                    Task.pipeline_type == "indexation",
+                    Task.status.in_(["completed", "partially_indexed"]),
+                    Task.completed_at >= threshold,
+                    Task.deleted_at.is_(None),
+                )
+            )
+        )
+        return list(result.scalars().all())
+
     async def set_task_error(
         self, task_id: int, error_code: str, error_message: str
     ) -> Optional[Task]:

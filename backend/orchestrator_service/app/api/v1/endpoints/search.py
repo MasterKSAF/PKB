@@ -60,6 +60,7 @@ async def search(request: SearchRequest):
             items=fragments,
             total_found=len(fragments),
             processing_time_ms=int((time.monotonic() - start) * 1000),
+            enrichment_skipped=False,
         )
     except Exception as e:
         raise HTTPException(

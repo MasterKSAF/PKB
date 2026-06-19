@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.schemas.requests import (
     CheckUniquenessRequest,
     CreateDraftRequest,
+    UpdateDocumentStatusRequest,
     UpdateDraftStatusRequest,
 )
 from app.services.base_client import ServiceClient
@@ -158,12 +159,21 @@ class RegistryServiceClient(ServiceClient):
             and parts[3].isdigit()
         ):
             doc_id = int(parts[3])
-            if method == "GET":
-                return self._mock_get_document(storage, doc_id)
-            elif method == "PATCH":
-                return self._mock_update_document(storage, doc_id, kwargs.get("json", {}))
-            elif method == "DELETE":
-                return self._mock_delete_document(storage, doc_id)
+            sub = parts[4] if len(parts) > 4 else None
+
+            # --- Document status (RG-1: internal, only Orchestrator) ---
+            if sub == "status" and method == "PATCH":
+                return self._mock_update_document_status(
+                    storage, doc_id, kwargs.get("json", {})
+                )
+
+            if sub is None:
+                if method == "GET":
+                    return self._mock_get_document(storage, doc_id)
+                elif method == "PATCH":
+                    return self._mock_update_document(storage, doc_id, kwargs.get("json", {}))
+                elif method == "DELETE":
+                    return self._mock_delete_document(storage, doc_id)
             return default_mock
 
         return default_mock
@@ -356,6 +366,35 @@ class RegistryServiceClient(ServiceClient):
         return {"data": {"document_id": doc_id, **doc}}
 
     @classmethod
+    def _mock_update_document_status(cls, storage: dict, doc_id: int, body: dict) -> dict:
+        """Mock for PATCH /registry/documents/{id}/status (RG-1)."""
+        doc = storage["documents"].get(doc_id)
+        if doc is None:
+            seed = cls._SEED_DOCUMENTS.get(doc_id)
+            if seed is None:
+                return {
+                    "error": {
+                        "code": "NOT_FOUND",
+                        "message": f"Document {doc_id} not found",
+                    }
+                }
+            doc = dict(seed)
+            storage["documents"][doc_id] = doc
+        status = body.get("status")
+        if status:
+            doc["status"] = status
+        if body.get("updated_by"):
+            doc["updated_by"] = body["updated_by"]
+        doc["updated_at"] = "2026-06-08T10:00:00Z"
+        return {
+            "data": {
+                "document_id": doc_id,
+                "status": doc["status"],
+                "updated_at": doc["updated_at"],
+            }
+        }
+
+    @classmethod
     def _mock_delete_document(cls, storage: dict, doc_id: int) -> dict:
         exists = doc_id in storage["documents"] or doc_id in cls._SEED_DOCUMENTS
         if not exists:
@@ -434,6 +473,36 @@ class RegistryServiceClient(ServiceClient):
             f"/registry/documents/{document_id}",
             mock_response={"data": {"document_id": document_id, **document_data}},
             json=document_data,
+        )
+
+    async def update_document_status(
+        self,
+        document_id: int,
+        status: str,
+        updated_by: Optional[str] = None,
+    ) -> dict:
+        """
+        Update document status (RG-1).
+
+        Internal endpoint — only Orchestrator can call PATCH /registry/documents/{id}/status.
+        Used by Pipeline 2 to mark document status after indexation.
+        """
+        body = UpdateDocumentStatusRequest(
+            status=status,
+            updated_by=updated_by,
+        )
+        return await self.call(
+            "PATCH",
+            f"/registry/documents/{document_id}/status",
+            request_model=UpdateDocumentStatusRequest,
+            mock_response={
+                "data": {
+                    "document_id": document_id,
+                    "status": status,
+                    "updated_at": "2026-06-08T10:00:00Z",
+                }
+            },
+            json=body.model_dump(exclude_none=True),
         )
 
     async def delete_document(self, document_id: int) -> dict:

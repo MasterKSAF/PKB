@@ -231,6 +231,18 @@ class TestSearchPost:
         )
         assert response.status_code == 422
 
+    def test_search_response_has_enrichment_skipped(self, client: TestClient, auth_header: dict):
+        """Search response includes enrichment_skipped field (P3S-6)."""
+        response = client.post(
+            self.SEARCH_URL,
+            json={"query": "тест запрос"},
+            headers=auth_header,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "enrichment_skipped" in data
+        assert isinstance(data["enrichment_skipped"], bool)
+
 
 class TestSearchGet:
     """Tests for GET /api/v1/documents/search"""

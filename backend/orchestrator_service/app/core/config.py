@@ -95,6 +95,18 @@ class PipelineConfig(BaseSettings):
         default=3600, description="Max seconds a job can stay running"
     )
 
+    # Per-state timeout: max time a step can stay in 'pending' before being marked stale
+    PENDING_STATE_TIMEOUT: int = Field(
+        default=30,
+        description="Max seconds a step can stay in pending state (P3S-1)",
+    )
+
+    # Absolute task timeout: max total time for any pipeline task
+    ABSOLUTE_TASK_TIMEOUT_HOURS: int = Field(
+        default=48,
+        description="Max hours a task can exist before being killed (P3S-1)",
+    )
+
     # Full phase mode (P1F-9): auto | partial | full
     # auto  — full_completed (preview_not_supported) → skip OCR, else full OCR
     # partial — always run full OCR/Parser even if full preview is available

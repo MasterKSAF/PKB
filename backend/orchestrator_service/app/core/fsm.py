@@ -71,6 +71,7 @@ class TaskStatus(str, Enum):
 
     ACTIVE = "active"
     COMPLETED = "completed"
+    PARTIALLY_INDEXED = "partially_indexed"
     FAILED = "failed"
 
 

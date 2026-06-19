@@ -59,7 +59,11 @@ class TestTaskStatus:
 
     def test_all_values(self):
         values = [s.value for s in TaskStatus]
-        assert sorted(values) == ["active", "completed", "failed"]
+        assert sorted(values) == ["active", "completed", "failed", "partially_indexed"]
+
+    def test_partially_indexed(self):
+        """partially_indexed is a valid status (P2I-1)."""
+        assert TaskStatus.PARTIALLY_INDEXED.value == "partially_indexed"
 
 
 class TestTaskStage:

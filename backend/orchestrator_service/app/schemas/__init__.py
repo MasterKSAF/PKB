@@ -8,6 +8,7 @@ from app.schemas.requests import (
     RagGenerateRequest,
     RagIndexRequest,
     RagSearchRequest,
+    UpdateDocumentStatusRequest,
     UpdateDraftStatusRequest,
 )
 from app.schemas.drafts import (
@@ -37,6 +38,7 @@ __all__ = [
     "RagGenerateRequest",
     "RagIndexRequest",
     "RagSearchRequest",
+    "UpdateDocumentStatusRequest",
     "UpdateDraftStatusRequest",
     "DecideRequest",
     "DecideResponse",

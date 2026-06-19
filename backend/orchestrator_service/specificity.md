@@ -35,6 +35,41 @@
 Ошибка выбрасывается как `TypeError` ДО ветвления mock/real, что
 исключает «тихие» ошибки в мок-режиме и крахи при HTTP-сериализации.
 
+### 1.6. partially_indexed статус (P2I-1)
+При индексации через RAG Builder, если `indexed_count < expected_count`,
+задача переводится в статус `partially_indexed`, а не `completed`.
+Это позволяет мониторингу обнаружить частичную индексацию.
+
+### 1.7. Таймауты pipeline (P3S-1/P3S-2)
+Два уровня таймаутов:
+- **Per-state timeout (30 с):** шаг, зависший в `pending` дольше 30 с,
+  помечается как `failed` с кодом `PENDING_TIMEOUT`.
+- **Absolute timeout (48 ч):** задача, активная дольше 48 ч,
+  принудительно завершается с кодом `ABSOLUTE_TIMEOUT`.
+Оба обрабатываются в `cleanup_stale_tasks()` scheduler'а (Celery Beat).
+
+### 1.8. Валидация цитирований [source:N] (P3S-4)
+LLM-ответы проверяются на корректность формата `[source:N]`.
+При несоответствии: retry (2 попытки с авто-фиксом), затем fallback
+(удаление невалидных цитирований).
+
+### 1.9. enrichment_skipped в ответе поиска (P3S-6)
+Ответ `POST /documents/search` содержит поле `enrichment_skipped: bool`.
+Показывает, был ли пропущен этап LLM-обогащения результатов.
+По умолчанию `false` — обогащение выполняется.
+
+### 1.10. Integrity check после индексации (P2I-2)
+После успешного вызова `index_document` в RAG Builder выполняется self-check:
+- Вызов `check_index()` проверяет `integrity_ok` флаг со стороны RAG
+- inline-проверка: если `expected_count > 0 && indexed_count == 0` — INTEGRITY_CHECK_FAILED
+- При провале — шаг помечается `failed` с кодом `INTEGRITY_CHECK_FAILED`
+- Фоновая задача `integrity_check` (scheduler) перепроверяет завершённые индексации раз в 6ч
+
+### 1.11. Document status update (RG-1)
+`PATCH /registry/documents/{id}/status` — internal-эндпоинт, доступный только Orchestrator.
+Используется для обновления статуса документа после индексции.
+Метод: `RegistryServiceClient.update_document_status()`.
+
 ## 2. Расхождения со спецификациями
 
 ### 2.1. `docs/api/orchestrator_service_api.md` — устарела

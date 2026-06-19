@@ -51,6 +51,36 @@ class TestRAGIndex:
         assert "deleted_count" in result
 
 
+class TestRAGCheckIndex:
+    """Tests for index integrity check (P2I-2)."""
+
+    @pytest.mark.asyncio
+    async def test_check_index_ok(self, rag_client):
+        """check_index returns integrity_ok for properly indexed doc."""
+        result = await rag_client.check_index(document_id="doc-valid-001")
+        assert result["document_id"] == "doc-valid-001"
+        assert result["integrity_ok"] is True
+        assert result["indexed_count"] == 128
+        assert result["expected_count"] == 128
+        assert result["status"] == "completed"
+
+    @pytest.mark.asyncio
+    async def test_check_index_has_all_fields(self, rag_client):
+        """check_index returns all required fields."""
+        result = await rag_client.check_index(document_id="doc-test")
+        required = ["document_id", "indexed_count", "expected_count",
+                    "integrity_ok", "status"]
+        for field in required:
+            assert field in result, f"Missing field: {field}"
+
+    @pytest.mark.asyncio
+    async def test_check_index_different_doc_ids(self, rag_client):
+        """check_index echoes the document_id parameter."""
+        for doc_id in ["doc-001", "doc-999", "doc-empty"]:
+            result = await rag_client.check_index(document_id=doc_id)
+            assert result["document_id"] == doc_id
+
+
 class TestRAGSearch:
     """Tests for semantic search."""
 

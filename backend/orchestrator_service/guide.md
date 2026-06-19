@@ -75,6 +75,10 @@
 | 409 | TASK_ALREADY_EXISTS | Задача уже существует для draft |
 | 409 | PREVIEW_ALREADY_RUNNING | Preview уже запущен |
 | 422 | VALIDATION_ERROR | Некорректные поля запроса |
+| — | INTEGRITY_CHECK_FAILED | (шаг rag_index) — проверка целостности индекса не пройдена (P2I-2) |
+| — | PENDING_TIMEOUT | Шаг завис в pending (P3S-1) |
+| — | PIPELINE_TIMEOUT | Задача превысила время выполнения |
+| — | ABSOLUTE_TIMEOUT | Задача превысила абсолютный таймаут 48ч (P3S-1) |
 
 ## Pipeline Task lifecycle
 
@@ -108,30 +112,43 @@ uploaded → previewing → ready_for_approve → approved → [formation comple
 
 ## Анализ изменений по заданию от 19.06.2026
 
-### Что уже реализовано и соответствует заданию
-- ✅ POST /drafts — единая точка входа (OR-11)
-- ✅ POST /drafts/{draft_id}/preview — запуск preview (OR-2, частично)
-- ✅ GET /drafts/{draft_id}/preview/status — статус с longpoll (OR-2)
-- ✅ PATCH /drafts/{draft_id}/decide — approve/reject (OR-12, частично)
-- ✅ GET /tasks/{task_id}/status — статус задачи (OR-1, частично)
-- ✅ Ветвление OCR vs Parser по MIME (OR-14, частично)
-- ✅ Trace ID middleware (CM-5, частично)
-- ✅ Service clients с dual-mode (все 6 клиентов)
-- ✅ Task + TaskStep модели (DB-23, DB-24)
-- ✅ Saga компенсация
-- ✅ Structured logging с trace_id
+### Все OR-задачи выполнены
+- ✅ OR-1 — GET /tasks, GET /tasks/stats, GET /tasks/{id}/steps
+- ✅ OR-2 — Идемпотентность preview (409 PREVIEW_ALREADY_RUNNING)
+- ✅ OR-3 — metadata_overrides в DecideRequest
+- ✅ OR-4 — created_at вместо uploaded_at
+- ✅ OR-5 — draft_id передаётся в Parser/OCR
+- ✅ OR-6 — DraftNotification модель + has_notifications/critical_count
+- ✅ OR-7 — document_id, version_id, is_new_document в ответах
+- ✅ OR-8 — OTEL SDK в main.py
+- ✅ OR-9 — PreviewMetadata расширен до 12 полей
+- ✅ OR-11 — POST /drafts единая точка входа
+- ✅ OR-12 — approve/reject + proceed/stop_duplicate/force_new_version
+- ✅ OR-13 — approve → Registry.create_document()
+- ✅ OR-14 — Ветвление OCR vs Parser по MIME
 
-### Что нужно изменить
-- ❌ POST /drafts не передаёт mime_type в start_pipeline (OR-14)
-- ❌ POST /drafts/{id}/preview hardcoded "application/pdf" (OR-14)
-- ❌ Нет проверки идемпотентности preview → 409 (OR-2)
-- ❌ Нет metadata_overrides в decide (OR-3)
-- ❌ Нет draft_id в вызовах Parser/OCR (OR-5)
-- ❌ Нет draft_notifications модели (OR-6)
-- ❌ Нет version_id, is_new_document в GET /drafts/{id} (OR-7)
-- ❌ Нет OTEL SDK (OR-8, CM-6)
-- ❌ PreviewMetadata — только 5 полей, нужно расширить (OR-9)
-- ❌ Нет разделения approve/reject vs proceed/stop_duplicate/force_new_version (OR-12)
-- ❌ approve не вызывает Registry.create_document() (OR-13)
-- ❌ Нет GET /tasks (список) (OR-1)
-- ❌ Нет Idempotency-Key в POST /drafts (OR-11/GW-11)
+### Pipeline задачи
+- ✅ P1F-1 — INSERT … ON CONFLICT
+- ✅ P1F-2 — review_required → validation
+- ✅ P1F-4 — preview_metadata → preview_snapshot
+- ✅ P1F-5 — Draft-first
+- ✅ P1F-6 — Пропуск full-фазы при preview_not_supported
+- ✅ P1F-7 — Разделение external/internal actions
+- ✅ P1F-8 — Ветвление OCR vs Parser по MIME
+- ✅ P1F-9 — Два варианта full-фазы A/B
+- ✅ P2I-1 — partially_indexed статус
+- ✅ P2I-2 — Integrity check после индексации (self-check + background)
+- ✅ P2I-3 — Компенсация через Saga
+- ✅ P2I-7 — Advisory lock
+- ✅ P2I-9 — POST /documents/{id}/reprocess
+- ✅ P3S-1/P3S-2 — Таймауты pending 30с + абсолютный 48ч
+- ✅ P3S-4 — Валидация [source:N] (retry 2, fallback)
+- ✅ P3S-5 — Fallback при пустом результате
+- ✅ P3S-6 — enrichment_skipped в ответе
+
+### Registry задачи
+- ✅ RG-1 — PATCH /registry/documents/{id}/status (internal endpoint)
+
+### Не входит в зону оркестратора
+- P2I-5 (CPU/GPU timeouts) — конфигурация RAG Builder
+- P2I-8 (транзакционность чанков) — логика RAG Builder

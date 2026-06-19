@@ -65,7 +65,7 @@
 
 ---
 
-## 🟠 Блок 3. Pipeline 2 — Indexation (реальные вызовы)
+## 🟠 Блок 3. Pipeline 2 — Indexation
 
 ### 3.1 Advisory lock для Scheduler (P2I-7)
 - [x] ✅ Redis SETNX lock перед стартом indexation
@@ -77,14 +77,36 @@
 - [x] ✅ `delete_from_vector_index` — реальный вызов RAG API
 - **Файлы:** `app/tasks/compensation.py`, `app/services/registry_client.py`
 
+### 3.3 partially_indexed статус (P2I-1)
+- [x] ✅ Добавлен статус `partially_indexed` в FSM/TaskStatus
+- [x] ✅ Индексация проверяет chunk_count_actual < expected
+- [x] ✅ Search schemas обновлены (IndexationPipeline)
+- **Файлы:** `app/core/fsm.py`, `app/tasks/pipeline_indexation.py`
+
+### 3.4 POST /documents/{id}/reprocess (P2I-9)
+- [x] ✅ Эндпоинт `/api/v1/documents/{document_id}/reprocess`
+- [x] ✅ Celery задача `run_reprocess_step` в pipeline_indexation.py
+- [x] ✅ Схема `ReprocessResponse`
+- **Файлы:** `app/api/v1/endpoints/documents.py`, `app/tasks/pipeline_indexation.py`
+
 ---
 
-## 🟡 Блок 4. Pipeline 3 — Search (реальные вызовы)
+## 🟡 Блок 4. Pipeline 3 — Search
 
 ### 4.1 Fallback при пустом результате (P3S-5)
 - [x] ✅ Пустой результат RAG Search → ответ с `items=[]`, не ошибка
 - [x] ✅ Реальный вызов RAGServiceClient в production, MOCK_RESULTS в mock-mode
 - **Файлы:** `app/api/v1/endpoints/search.py`
+
+### 4.2 enrichment_skipped в ответе (P3S-6)
+- [x] ✅ Поле `enrichment_skipped: bool` в SearchResponse
+- [x] ✅ Возвращается из search endpoint
+- **Файлы:** `app/schemas/search.py`, `app/api/v1/endpoints/search.py`
+
+### 4.3 Валидация [source:N] формата (P3S-4)
+- [x] ✅ CitationValidator — проверка формата [source:N]
+- [x] ✅ Retry-механизм (2 попытки, fallback)
+- **Файлы:** `app/shared/citation_validator.py`
 
 ---
 
@@ -97,7 +119,17 @@
 
 ---
 
-## 🔴 Блок 6. Тесты
+## 🟡 Блок 6. Таймауты и scheduler
+
+### 6.1 Pending state timeout + absolute timeout (P3S-1 / P3S-2)
+- [x] ✅ `PENDING_STATE_TIMEOUT: int = 30` в PipelineConfig
+- [x] ✅ `ABSOLUTE_TASK_TIMEOUT_HOURS: int = 48` в PipelineConfig
+- [x] ✅ Scheduler: cleanup_stale_tasks обнаруживает зависшие pending
+- **Файлы:** `app/core/config.py`, `app/tasks/scheduler.py`, `app/repositories/pipeline.py`
+
+---
+
+## 🔴 Блок 7. Тесты
 
 | # | Приор. | Тест | Файл | Статус |
 |---|--------|------|------|--------|
@@ -107,10 +139,31 @@
 | T-12 | 🟡 | health/live vs health/ready | `tests/integration/test_health.py` + `app/api/v1/endpoints/health.py` | ✅ |
 | T-1 | 🔴 | assess_quality пороги (<0.6 / <0.85) | `tests/shared/test_quality.py` | ✅ |
 | T-4 | 🟠 | Запись notifications в draft_notifications | `tests/orchestrator/test_issues_recording.py` | ✅ |
+| | 🟠 | enrichment_skipped в SearchResponse | `tests/test_search.py` | ✅ |
+| | 🟠 | citation_validator | `tests/shared/test_citation_validator.py` | ✅ |
+| | 🟠 | reprocess endpoint | `tests/test_documents_api.py` | ✅ |
+| | 🟠 | partially_indexed статус | `tests/test_pipelines.py` | ✅ |
+| | 🟠 | timeout config + stale pending | `tests/unit/test_pipeline_repository.py` | ✅ |
+
+## 🟠 Блок 9. Интеграционные задачи (добавлены 20.06)
+
+### 9.1 RG-1 — PATCH /registry/documents/{id}/status
+- [x] ✅ `UpdateDocumentStatusRequest` schema
+- [x] ✅ `RegistryServiceClient.update_document_status()` + mock handler
+- [x] ✅ 4 unit-теста в `tests/test_service_clients_registry.py`
+
+### 9.2 P2I-2 — Integrity check (indexed → failed)
+- [x] ✅ `RAGBuilderClient.check_index()` + mock handler
+- [x] ✅ `RAGBuilderClient = RAGServiceClient` alias (fixes runtime import)
+- [x] ✅ Self-check в `run_rag_index_step()` — проверка INTEGRITY_CHECK_FAILED
+- [x] ✅ Background check `integrity_check()` в scheduler.py
+- [x] ✅ `TaskRepository.get_recently_indexed_tasks()`
+- [x] ✅ 11 unit-тестов в `tests/unit/test_integrity_check.py`
+- [x] ✅ 3 unit-теста check_index в `tests/test_service_clients_rag.py`
 
 ---
 
-## ⚪ Блок 7. Очистка и документация
+## ⚪ Блок 8. Очистка и документация
 
 - [x] ✅ Deprecate POST /documents (уже удалён, upload только через POST /drafts)
 - [x] ✅ Monitor router — уже удалён

@@ -53,6 +53,10 @@ class SearchResponse(BaseModel):
     items: List[SearchResultFragment]
     total_found: int
     processing_time_ms: int
+    enrichment_skipped: bool = Field(
+        default=False,
+        description="Поиск выполнен без обогащения (LLM reranking) (P3S-6)",
+    )
 
 
 class SearchQueryParams(BaseModel):

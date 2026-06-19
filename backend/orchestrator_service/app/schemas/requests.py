@@ -33,6 +33,16 @@ class UpdateDraftStatusRequest(BaseModel):
     document_id: Optional[int] = Field(None, description="ID документа (после approve)")
 
 
+class UpdateDocumentStatusRequest(BaseModel):
+    """Request body for PATCH /registry/documents/{id}/status.
+
+    Internal endpoint — only Orchestrator can call this.
+    """
+
+    status: str = Field(..., description="Новый статус документа")
+    updated_by: Optional[str] = Field(None, description="Кто обновил")
+
+
 class CheckUniquenessRequest(BaseModel):
     """Request body for POST /registry/documents/check-uniqueness."""
 

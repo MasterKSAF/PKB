@@ -247,3 +247,40 @@ class TestTaskRepository:
         assert len(fetched) == 3
         for i, step in enumerate(fetched):
             assert step.step_index == i  # Ordered by step_index
+
+    async def test_stale_pending_steps(self, db_session: AsyncSession):
+        """get_stale_pending_steps finds steps stuck in pending (P3S-1)."""
+        repo = TaskRepository(db_session)
+        task = await repo.create_task(
+            draft_id=1, pipeline_type="formation", total_steps=2,
+        )
+        step = await repo.create_task_step(
+            task_id=task.id, step_name="preview_ocr",
+            step_index=1, service_name="OCR Service",
+        )
+        # Manually set created_at in the past
+        from datetime import datetime, timedelta, timezone
+        db_step = await db_session.get(type(step), step.id)
+        db_step.created_at = datetime.now(timezone.utc) - timedelta(minutes=5)
+        await db_session.flush()
+
+        stale = await repo.get_stale_pending_steps(max_pending_seconds=30)
+        assert len(stale) >= 1
+        assert any(s.id == step.id for s in stale)
+
+    async def test_absolute_timeout_tasks(self, db_session: AsyncSession):
+        """get_absolute_timeout_tasks finds tasks exceeding max age (P3S-1)."""
+        repo = TaskRepository(db_session)
+        task = await repo.create_task(
+            draft_id=1, pipeline_type="formation", total_steps=2,
+        )
+        await repo.update_task_status(task.id, status="active")
+        # Manually set created_at in the past
+        from datetime import datetime, timedelta, timezone
+        db_task = await repo.get_task_for_update(task.id)
+        db_task.created_at = datetime.now(timezone.utc) - timedelta(hours=72)
+        await db_session.flush()
+
+        stale = await repo.get_absolute_timeout_tasks(max_hours=48)
+        assert len(stale) >= 1
+        assert any(t.id == task.id for t in stale)

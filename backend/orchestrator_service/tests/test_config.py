@@ -155,3 +155,19 @@ class TestEnvFileLoading:
     def test_env_nested_delimiter(self):
         """Verify nested env delimiter is configured."""
         assert Settings.model_config.get("env_nested_delimiter") == "__"
+
+
+class TestPipelineConfig:
+    """Tests for PipelineConfig (P3S-1/P3S-2)."""
+
+    def test_pending_state_timeout_default(self):
+        """PENDING_STATE_TIMEOUT defaults to 30 seconds."""
+        from app.core.config import PipelineConfig
+        config = PipelineConfig()
+        assert config.PENDING_STATE_TIMEOUT == 30
+
+    def test_absolute_task_timeout_default(self):
+        """ABSOLUTE_TASK_TIMEOUT_HOURS defaults to 48 hours."""
+        from app.core.config import PipelineConfig
+        config = PipelineConfig()
+        assert config.ABSOLUTE_TASK_TIMEOUT_HOURS == 48
