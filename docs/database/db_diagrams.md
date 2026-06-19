@@ -13,7 +13,6 @@ erDiagram
         bigint draft_id FK
         text doc_code
         text title
-        text normalized_title
         varchar source_type
         varchar document_type
         text mks_oks_code
@@ -309,8 +308,8 @@ erDiagram
 | `pipeline.tasks` | `document_id` | B-tree | Поиск задачи по документу |
 | `pipeline.task_steps` | `task_id` | B-tree | Поиск этапов задачи |
 | `registry.document_versions` | `document_id` | B-tree | Поиск версий документа |
-| `registry.documents` | `title_hash_sha256` | B-tree UNIQUE | Дедупликация по бизнес-ключу |
-| `registry.documents` | `title_key` | B-tree UNIQUE | Дедупликация по строке бизнес-ключа |
+| `registry.documents` | `title_hash_sha256` | B-tree UNIQUE | **S8 — Главный бизнес-ключ.** Дедупликация по хешу 6-польной формулы (`SHA-256(era \| source_type \| mks_oks_code \| okstu_code \| doc_code \| normalized_title)`). Единственный источник истины для проверки уникальности |
+| `registry.documents` | `title_key` | B-tree UNIQUE | **S8 — Технический индекс.** Хранит исходную строку конкатенации для аудита и отладки. UNIQUE — защита от логической ошибки при ручном пересчёте хеша. Не используется для дедупликации |
 | `registry.documents` | `(valid_from, valid_until)` | B-tree | Поиск документов по дате действия |
 | `registry.drafts` | `status` | B-tree | Фильтрация черновиков по статусу |
 | `registry.document_categories` | `category_id` | B-tree | Поиск категорий документа (обратная сторона many-to-many) |
@@ -324,11 +323,11 @@ erDiagram
 | `registry.document_sections` | `type` | `CHECK (type IN ('text','textBlock','headerFooter','table','list','image','formula'))` |
 | `registry.documents` | `file_hash_sha256` | Для быстрого дубликат-детекта (`WHERE file_hash_sha256 = ? AND file_size_bytes = ?`) |
 | `registry.documents` | `title_hash_sha256` | **P2-3**: UNIQUE — дедупликация по бизнес-ключу документа |
-| `registry.documents` | `source_type` | **P2-1**: CHECK IN ('gost','gost_r','ost','rd','tu','iso','dnv','astm') |
-| `registry.documents` | `document_type` | **P2-1**: CHECK IN ('normative','drawing','project','contract','reference') |
+| `registry.documents` | `source_type` | **P2-1**: CHECK IN ('GOST','GOST_R','OST','RD','TU','ISO','DNV','ASTM','RMRS','OTHER') |
+| `registry.documents` | `document_type` | **P2-1**: CHECK IN ('normative','technical','drawing','specification','archival_scan') |
 | `registry.documents` | `era` | **P2-1**: CHECK IN ('USSR','CIS','RF','CURRENT') |
 | `registry.documents` | `validity_status` | **P2-1**: CHECK IN ('active','superseded','cancelled','historical','draft') |
-| `registry.documents` | `jurisdiction` | **P2-1**: CHECK IN ('RF','CIS','USSR','NO','INT') |
+| `registry.documents` | `jurisdiction` | **P2-1**: CHECK IN ('RU','EU','US','NO','INTL') |
 | `registry.documents` | `processing_status` | **P2-1**: CHECK IN ('created','pending_index','indexing','indexed','partially_indexed','failed') |
 | `registry.document_versions` | `file_hash_sha256` | UNIQUE — CAS-дедупликация: один хэш = одна версия файла в системе |
 | `registry.document_versions` | `file_size_bytes` | **P2-7**: CHECK (file_size_bytes > 0) |
@@ -391,7 +390,7 @@ erDiagram
 |------|------------|
 | `file_key` | Ключ в MinIO для исходного файла черновика. |
 | `document_key` | Бизнес-ключ документа (SHA-256). |
-| `status` | Статус черновика: `uploaded`, `previewing`, `ready_for_approve`, `approved`, `discarded`. |
+| `status` | Статус черновика: `uploaded`, `previewing`, `ready_for_approve`, `review_required`, `validation`, `approved`, `discarded`. |
 | `confidence` | Оценка качества распознавания (0..1). |
 | `preview_metadata` | JSONB — **весь исходный JSON ответа Converter-validator preview** (`POST /converter/preview/metadata`). Содержит `doc_code`, `title`, `mks_oks_code`, `okstu_code`, `udk_code`, `pkb_codes`, `document_type`, `year`, `era`, `validity_status`, `issuing_body`, `jurisdiction`, `source_type`, `language`, `title_hash_sha256`, `title_key`. Хранится целиком для истории и аудита. При approve копируется в `registry.documents.preview_snapshot`. |
 | `raw_data` | JSONB с сырыми данными от Parser (schema: `raw_ocr_v4`) или Converter (`validated_v3`). |
@@ -444,7 +443,7 @@ erDiagram
 
 | Поле | Примечание |
 |------|------------|
-| `source_type` | **P2-1**: enum `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `OTHER` |
+| `source_type` | **P2-1**: enum `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `RMRS`, `OTHER` |
 | `document_type` | **P2-1**: enum `normative`, `technical`, `drawing`, `specification`, `archival_scan`. Не путать с `source_type` |
 | `group` | **D-32/D-33**: **удалено** из модели (см. P5 — A36). Ранее использовалось для группы проекта (например, `ПО4`). Заменено на `registry_document_classifier_links` (M:N) |
 | `era` | **P2-1**: enum `USSR`, `CIS`, `RF`, `CURRENT` |
@@ -452,7 +451,7 @@ erDiagram
 | `jurisdiction` | Юрисдикция: `RU`, `EU`, `US`, `NO`, `INTL` |
 | `udk_code` | **D-51**: переименовано из `udc` для консистентности с `mks_oks_code` / `okstu_code`. Код УДК (универсальная десятичная классификация). nullable |
 | `valid_from` | **P12-5**: дата начала действия документа. NOT NULL, default `dateMin = '1000-01-01'::date` (для документов с неопределённой датой начала). См. конвенцию в `glossary.md` |
-| `valid_until` | **P12-5**: дата окончания действия документа. NOT NULL, default `dateMax = '9999-12-31'::date` (для бессрочных документов). См. конвенцию в `glossary.md` |
+| `valid_until` | **P12-5**: дата окончания действия документа. NOT NULL, default `dateMax = '9999-12-31'::date` (для бессрочных документов). См. конвенцию в `glossary.md`. **В API-слое** это значение возвращается как `null`; при `null` от клиента backend подставляет `dateMax` перед записью в БД |
 | `file_hash_sha256` | **P2-2**: `CHAR(64)` (а не `text`). Хэш бинарного файла (вычисляется при загрузке) |
 | `title_hash_sha256` | Хэш 6-польной формулы: `SHA-256(era | source_type | mks_oks_code | okstu_code | doc_code | normalized_title)` (вычисляется в Converter). Алгоритм нормализации и нормализация полей — см. `specifications/normalizer_specification.md` |
 | `title_key` | Исходная строка конкатенации для `title_hash_sha256`: `era \| source_type \| mks_oks_code \| okstu_code \| doc_code \| normalized_title`. Хранится для аудита и отладки. Пример: `USSR\|gost\|47.020\|\|20868-81\|стойки...`. См. `specifications/normalizer_specification.md` §2.1.1 |

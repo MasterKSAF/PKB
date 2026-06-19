@@ -12,7 +12,7 @@
 
 На поля таблицы `registry.documents` наложены CHECK-ограничения:
 
-- `source_type` — `'GOST', 'GOST_R', 'OST', 'RD', 'TU', 'ISO', 'DNV', 'ASTM', 'OTHER'`
+- `source_type` — `'GOST', 'GOST_R', 'OST', 'RD', 'TU', 'ISO', 'DNV', 'ASTM', 'RMRS', 'OTHER'`
 - `document_type` — `'normative', 'technical', 'drawing', 'specification', 'archival_scan'`
 - `era` — `'USSR', 'CIS', 'RF', 'CURRENT'`
 - `validity_status` — `'active', 'superseded', 'expired', 'cancelled', 'historical', 'draft'`
@@ -36,6 +36,8 @@
 ## P2-3. UNIQUE-индексы
 
 - `registry.documents (doc_code, era)` — уникальность по коду в пределах эпохи (partial, `WHERE doc_code IS NOT NULL`)
+- `registry.documents (title_hash_sha256)` — **S8**: главный бизнес-ключ документа (`CHAR(64)`, UNIQUE). Дедупликация по `SHA-256(era | source_type | mks_oks_code | okstu_code | doc_code | normalized_title)`
+- `registry.documents (title_key)` — **S8**: технический UNIQUE-индекс для аудита и отладки. Исходная строка конкатенации 6 полей бизнес-ключа
 - `registry.document_sections (document_id, path)` — уникальность секции по ltree-пути в документе
 - `registry.document_versions (document_id, version_number)` — уникальность номера версии в пределах документа
 - `rag.document_chunks (section_id, chunk_index)` — уникальность индекса чанка в пределах секции
@@ -96,6 +98,7 @@
 - Поле `indexing_txn_id UUID` в `rag.document_chunks` + partial index `WHERE indexing_txn_id IS NOT NULL`
 
 **Конвенция dateMax:** бессрочные документы — `9999-12-31`, а не `infinity`.
+**API-конвертация:** на уровне API (публичный и internal) `valid_until = '9999-12-31'` возвращается как `null`. При `null` от клиента backend подставляет `dateMax` перед записью в БД. Это внутренняя оптимизация для эффективного поиска по `(valid_from, valid_until)` — в UI понятие «бессрочно».
 
 ---
 

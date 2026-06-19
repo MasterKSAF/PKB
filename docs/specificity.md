@@ -139,6 +139,30 @@ API черновиков и FSM документированы, но **UI сра
 - Добавлены API и модель данных для категорий в `registry_service_api.md` (группа categories) и `db_diagrams.md` (раздел 11)
 - Реализация — приоритет Спринта 3
 
+### A38. `PATCH /drafts/{id}/metadata` — сохранение правок метаданных (S5, resolved)
+
+Добавлен endpoint `PATCH /drafts/{draft_id}/metadata` для сохранения ручных правок метаданных черновика без confirm. Описана логика пересчёта `title_hash_sha256`/`title_key` и проверки уникальности.
+
+**Решение:** endpoint специфицирован, Gateway маршрут добавлен, Registry internal endpoint описан.
+
+### A39. `valid_from`/`valid_until` в черновике (S6, resolved)
+
+Даты действия возвращаются в `GET /drafts/{id}` после передачи через `PATCH /metadata`. `valid_until = dateMax` в API возвращается как `null`. `valid_from` выводится из `year` (01-01-{year}) если не задан явно.
+
+**Решение:** конвертация `dateMax` ↔ `null` описана во всех слоях (БД, internal API, public API, glossary).
+
+### A40. `source_type` enum — канонический (S7, resolved)
+
+Enum: `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `RMRS`, `OTHER`. Присутствует во всех документах.
+
+**Решение:** UI берёт enum из `GET /registry/enums`, не хранит статически.
+
+### A41. Бизнес-ключ: `title_hash_sha256` vs `title_key` (S8, resolved)
+
+Главный бизнес-ключ — `title_hash_sha256`. `title_key` — технический UNIQUE-индекс для аудита. `DUPLICATE_DOCUMENT` (409) — код ошибки при конфликте.
+
+**Решение:** главный ключ зафиксирован, DDL-индексы добавлены, код ошибки специфицирован.
+
 ---
 
 ## 🔴 Схема данных (требуют DDL)
@@ -193,6 +217,13 @@ API черновиков и FSM документированы, но **UI сра
 | API-S18 | Common: bbox описан как нормализованный [0,1] на всех этапах, но OCR/Parser — пиксели | 🔄 исправлено |
 | API-S19 | Integration `POST /meridian/export`: `document_id` тип string вместо bigint | ⬜ заморожено — интеграции не в MVP |
 | API-S20 | Все internal-сервисы: не описана аутентификация service-to-service | 🔄 исправлено — внутренние вызовы изолированы Gateway |
+| API-S21 | `review_required` → `validation`: `PATCH /decide` vs `operator-confirm`. Решение: единый `PATCH /decide` с действием `confirm` | 🔄 исправлено 19.06 |
+| API-S22 | `metadata_overrides` не было в публичном API Gateway. Решение: добавлено в `PATCH /drafts/{id}/decide` | 🔄 исправлено 19.06 |
+| API-S23 | `notifications[]` vs `issues[]`: stale-ссылка в pipeline1-formation.md. Решение: `issues[]` → `notifications[]` | 🔄 исправлено 19.06 |
+| API-S24 | `validation` отсутствовал в enum статусов черновика в Orchestrator API. Решение: добавлен | 🔄 исправлено 19.06 |
+| API-S25 | `valid_from`/`valid_until` — не указано, что доступны только в Registry. Решение: добавлено примечание | 🔄 исправлено 19.06 |
+| API-S26 | `source_type` enum: `RMRS` отсутствовал в `/registry/enums` и `db_diagrams.md`. Решение: добавлен | 🔄 исправлено 19.06 |
+| API-S27 | Gateway `/tasks/*` — нет формального read-only контракта. Решение: добавлена секция маршрутизации | 🔄 исправлено 19.06 |
 
 ## 🔴 Пайплайны (критичные — блокируют корректную реализацию)
 

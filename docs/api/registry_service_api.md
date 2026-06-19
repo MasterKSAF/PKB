@@ -682,7 +682,7 @@ GET /registry/documents
 |----------|-----|----------|
 | `title` | string | Поиск по названию |
 | `doc_code` | string | Поиск по номеру |
-| `source_type` | string | `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `OTHER` |
+| `source_type` | string | `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `RMRS`, `OTHER` |
 | `mks_oks_code` | string | Фильтр по коду МКС/ОКС |
 | `okstu_code` | string | Фильтр по коду ОКСТУ |
 | `status` | string | FSM-статус документа (управляется Оркестратором, фильтр read-only) |
@@ -775,7 +775,7 @@ GET /registry/documents/{doc_id}
 - `validity_status` — юридический статус (`active`, `superseded`, `cancelled`, `historical`, `draft`)
 - `jurisdiction` — юрисдикция (`RU`, `EU`, `US`, `NO`, `INTL`)
 - `issuing_body` — организация-издатель
-- `source_type` — тип источника (`GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `OTHER`)
+- `source_type` — тип источника (`GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `RMRS`, `OTHER`)
 - `document_type` — категория контента (`normative`, `technical`, `drawing`, `specification`, `archival_scan`)
 - `mks_oks_code` — код МКС/ОКС
 - `okstu_code` — код ОКСТУ
@@ -783,7 +783,7 @@ GET /registry/documents/{doc_id}
 - `adoption_date` — дата принятия документа
 - `effective_from` — дата введения в действие
 - `valid_from` — **P12-5 (новое)**: дата начала действия документа. NOT NULL. См. конвенцию `dateMax` в `glossary.md`
-- `valid_until` — **P12-5 (новое)**: дата окончания действия документа. NOT NULL. Для бессрочных — `9999-12-31` (конвенция `dateMax`)
+- `valid_until` — **P12-5 (новое)**: дата окончания действия документа. NOT NULL (в БД). Для бессрочных — в БД хранится `9999-12-31` (конвенция `dateMax`), но в API-ответах возвращается как `null`. При `null` от клиента backend подставляет `dateMax`
 - `replaces` — сведения о заменяемом документе
 - `status_note` — примечание к статусу
 - `successor_doc_id` — ID документа-преемника
@@ -838,7 +838,7 @@ GET /registry/documents/{doc_id}
     "adoption_date": "1981-07-01",
     "effective_from": "1982-01-01",
     "valid_from": "1982-01-01",
-    "valid_until": "9999-12-31",
+    "valid_until": null,
     "replaces": null,
     "status_note": null,
     "successor_doc_id": null,
@@ -1287,7 +1287,7 @@ PATCH /registry/documents/{doc_id}
   "status_note": "Заменён ГОСТ Р 20868-2025",
   "category_ids": [1, 3, 5],
   "valid_from": "1982-01-01",
-  "valid_until": "9999-12-31"
+  "valid_until": null
 }
 ```
 
@@ -1295,7 +1295,7 @@ PATCH /registry/documents/{doc_id}
 |------|-----|----------|
 | `category_ids` | bigint[] | Массив ID категорий для назначения документу. Передаётся полный список — заменяет текущую привязку категорий |
 | `valid_from` | date | **P12-5 (новое)**: дата начала действия. Редактируемое поле |
-| `valid_until` | date | **P12-5 (новое)**: дата окончания действия. Редактируемое поле. Для бессрочных — `9999-12-31` (конвенция `dateMax`, см. `glossary.md`) |
+| `valid_until` | date | **P12-5 (новое)**: дата окончания действия. Редактируемое поле. Для бессрочных — в API передаётся `null`, в БД хранится `9999-12-31` (конвенция `dateMax`, см. `glossary.md`). При `null` от клиента backend подставляет `dateMax` |
 
 **P12-5 (разделение editable/immutable — D14):**
 
@@ -1464,6 +1464,18 @@ POST /registry/documents/import
 | GET  | `/registry/drafts/{draft_id}/preview` | Preview-метаданные |
 | PATCH| `/registry/drafts/{draft_id}/status` | Обновить статус |
 | DELETE| `/registry/drafts/{draft_id}` | Удалить запись |
+
+**Канонический список статусов черновика** (владелец — Registry, все остальные сервисы синхронизируются с этим списком):
+
+| Статус | Описание |
+|--------|----------|
+| `uploaded` | Файл загружен, черновик создан |
+| `previewing` | Выполняется preview-фаза |
+| `ready_for_approve` | Preview завершён, ожидание решения |
+| `review_required` | Preview показал низкое качество, требуется ручная проверка |
+| `validation` | Оператор подтвердил, выполняется повторная валидация |
+| `approved` | Черновик утверждён, документ создаётся в Registry |
+| `discarded` | Черновик отклонён |
 
 ### 4.1. POST /registry/drafts — Создать запись черновика
 
@@ -1678,7 +1690,53 @@ POST /registry/documents/import
 
 ---
 
-### 4.6. DELETE /registry/drafts/{draft_id} — Удалить запись
+### 4.6. PATCH /registry/drafts/{draft_id}/metadata — Обновить метаданные черновика (internal)
+
+Вызывается Orchestrator при `PATCH /drafts/{draft_id}/metadata`. Сохраняет ручные правки метаданных в `registry.drafts.preview_metadata`, включая пересчитанный `title_hash_sha256` и `title_key`.
+
+**Запрос:**
+
+```json
+{
+  "preview_metadata": {
+    "doc_code": "311-05-1950ц-ИЗМ1",
+    "title": "ЦИРКУЛЯРНОЕ ПИСЬМО № 311-05-1950ц (изм.1)",
+    "title_hash_sha256": "<новый-хеш>",
+    "title_key": "<новая-строка>",
+    ...
+  },
+  "metadata_overrides": {
+    "valid_from": "2026-01-01",
+    "valid_until": null
+  },
+  "updated_by": "orchestrator"
+}
+```
+
+**Поля запроса:**
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `preview_metadata` | object | Полный объект preview_metadata с обновлёнными полями и пересчитанными `title_hash_sha256`/`title_key` |
+| `metadata_overrides` | object | Опционально. Временные overrides оператора: `valid_from`, `valid_until` и др. Хранятся до approve |
+| `updated_by` | string | Кто обновил |
+
+**Ответ `200`:**
+
+```json
+{
+  "data": {
+    "id": 1,
+    "status": "ready_for_approve",
+    "preview_metadata": { ... },
+    "updated_at": "2026-06-05T10:03:00Z"
+  }
+}
+```
+
+---
+
+### 4.7. DELETE /registry/drafts/{draft_id} — Удалить запись
 
 Каскадное удаление записи черновика из `registry.drafts`.  
 Вызывается Orchestrator при `DELETE /drafts/{draft_id}`.
@@ -1743,7 +1801,8 @@ GET /registry/stats
       "TU": 8,
       "ISO": 3,
       "DNV": 6,
-      "ASTM": 2
+      "ASTM": 2,
+      "RMRS": 4
     },
     "documents_by_era": {
       "USSR": 18,
@@ -1770,7 +1829,7 @@ GET /registry/enums
   "data": {
     "classifier_system": ["MKS", "OKSTU", "UDC", "EXTERNAL"],
     "classifier_status": ["active", "deprecated", "archived"],
-    "source_type": ["GOST", "GOST_R", "OST", "RD", "TU", "ISO", "DNV", "ASTM", "OTHER"],
+    "source_type": ["GOST", "GOST_R", "OST", "RD", "TU", "ISO", "DNV", "ASTM", "RMRS", "OTHER"],
     "document_type": ["normative", "technical", "drawing", "specification", "archival_scan"],
     "document_status": ["created", "pending_index", "indexing", "indexed", "failed"],
     "era": ["USSR", "CIS", "RF", "CURRENT"],
@@ -2017,21 +2076,38 @@ DELETE /registry/categories/{category_id}
 | Поле | Тип | Ограничения |
 |------|-----|-------------|
 | `id` | bigint | PK |
+| `draft_id` | bigint | FK → `registry.drafts`, nullable — исходный черновик |
 | `doc_code` | text | nullable |
 | `title` | text | NOT NULL |
 | `title_hash_sha256` | text | UNIQUE — бизнес-ключ |
 | `title_key` | text | Исходная строка конкатенации для бизнес-ключа (аудит/отладка) |
+| `file_hash_sha256` | text | **P2-2**: хеш бинарного файла (CAS-дедупликация) |
+| `file_size_bytes` | bigint | CHECK > 0 |
+| `source_type` | varchar(20) | nullable — `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `RMRS`, `OTHER` |
+| `document_type` | varchar(30) | nullable — `normative`, `technical`, `drawing`, `specification`, `archival_scan` |
 | `status` | varchar(30) | NOT NULL — `created`, `pending_index`, `indexing`, `indexed`, `failed` |
-| `era` | varchar(10) | nullable |
-| `validity_status` | varchar(20) | nullable |
-| `jurisdiction` | varchar(10) | nullable |
+| `processing_status` | varchar(20) | nullable — FSM: `created`, `pending_index`, `indexing`, `indexed`, `partially_indexed`, `failed` |
+| `chunk_count` | int | nullable, CHECK ≥ 0 — количество чанков после индексации |
+| `preview_snapshot` | jsonb | nullable — копия `preview_metadata` из черновика при approve |
+| `era` | varchar(10) | nullable — `USSR`, `CIS`, `RF`, `CURRENT` |
+| `validity_status` | varchar(20) | nullable — `active`, `superseded`, `cancelled`, `historical`, `draft` |
+| `valid_from` | date | NOT NULL DEFAULT `'1000-01-01'` — дата начала действия |
+| `valid_until` | date | NOT NULL DEFAULT `'9999-12-31'` — дата окончания действия, CHECK ≥ valid_from |
+| `deleted_at` | timestamptz | nullable — soft-delete |
+| `jurisdiction` | varchar(10) | nullable — `RU`, `EU`, `US`, `NO`, `INTL` |
 | `issuing_body` | text | nullable |
+| `adoption_date` | date | nullable — дата принятия из документа |
+| `effective_from` | date | nullable — дата введения в действие из документа |
+| `replaces` | text | nullable — код заменяемого документа |
+| `status_note` | text | nullable — примечание к статусу |
 | `enterprise_id` | bigint | nullable |
 | `mks_oks_code` | text | FK → classifier_registry (MKS) |
 | `okstu_code` | text | FK → classifier_registry (OKSTU) |
+| `udk_code` | text | nullable — код УДК |
 | `classification_status` | jsonb | DEFAULT `'{}'` — см. спецификацию ниже |
 | `successor_doc_id` | bigint | FK → self, nullable |
 | `predecessor_doc_id` | bigint | FK → self, nullable |
+| `current_version_id` | bigint | FK → `registry.document_versions`, nullable |
 | `metadata` | jsonb | DEFAULT `{}` |
 | `created_at` | timestamptz | NOT NULL |
 | `created_by` | text | nullable |
