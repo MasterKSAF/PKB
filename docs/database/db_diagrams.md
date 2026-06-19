@@ -87,8 +87,8 @@ erDiagram
         text format_code
         text format_label
         text file_path "CAS path in MinIO"
-        text uploaded_by
-        timestamptz uploaded_at
+        text created_by
+        timestamptz created_at
         timestamptz updated_at
     }
 
@@ -105,7 +105,6 @@ erDiagram
         text source_filename "original file name"
         varchar created_by
         varchar updated_by
-        varchar uploaded_by
         timestamptz created_at
         timestamptz updated_at
     }
@@ -396,8 +395,7 @@ erDiagram
 | `raw_data` | JSONB с сырыми данными от Parser (schema: `raw_ocr_v4`) или Converter (`validated_v3`). |
 | `error_code` / `error_message` | Код и описание ошибки при `discarded`. |
 | `source_filename` | Оригинальное имя загруженного файла (до очистки для CAS). |
-| `created_by` / `updated_by` | Кто создал/обновил запись. |
-| `uploaded_by` | Кто загрузил файл (может отличаться от `created_by` при перезагрузке). |
+| `created_by` / `updated_by` | Кто создал/обновил запись (в т.ч. загрузил файл). |
 | `created_at` | Дата создания черновика. |
 | `updated_at` | Дата последнего обновления черновика. |
 
@@ -503,7 +501,7 @@ erDiagram
 
 > **Примечание**: `revision` (обозначение редакции, напр. «Изм. 1», «Изд. 2») извлекается при обработке документа.
 
-**Связь с `registry.documents`:** поле `current_version_id` в `registry.documents` (FK → `registry.document_versions.id`, nullable) указывает на текущую активную версию документа. Если не задано — текущая версия определяется как последняя по `uploaded_at`.
+**Связь с `registry.documents`:** поле `current_version_id` в `registry.documents` (FK → `registry.document_versions.id`, nullable) указывает на текущую активную версию документа. Если не задано — текущая версия определяется как последняя по `created_at`.
 
 ### 5. История обработки (`registry.document_history`)
 
