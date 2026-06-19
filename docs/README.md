@@ -312,38 +312,6 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 
 ---
 
-## 📌 Последние изменения документации
-
-| Дата | Изменение |
-|------|-----------|
-| 04.06.2026 | **Методика экспериментов RAG**: полный перечень параметров, матрица запусков (3 фазы), метрики, псевдокод утилиты. См. [`../docs_plans/features/rag_experiments_methodology.md`](../docs_plans/features/rag_experiments_methodology.md). |
-| 04.06.2026 | **Переход на bigint**: все ID (`task_id`, `session_id`, `message_id`, `document_id`, `version_id`) — bigint (sequence). |
-| 04.06.2026 | **bbox**: нормализован [0,1] на всех этапах. `common_api.md` исправлен. |
-| 04.06.2026 | **UUID → bigint**: JSON-примеры во всех API-файлах синхронизированы с bigint-спецификациями. |
-| 04.06.2026 | Добавлен `specificity.md` (журнал аномалий) в структуру документации. |
-| 04–05.06.2026 | **Полная синхронизация документации Спринта 1**: все API, схемы, ER-диаграмма, глоссарий и пайплайны приведены к bigint; исправлены единицы bbox; `glossary.md` дополнен (`comparison_id`, `batch_id`, `Проект`); структура `docs/README.md` исправлена; UUID в `registry_service_api.md` заменены на bigint; `diagrams.md` и спринт-план актуализированы. См. `specificity.md` A1–A13 и `../docs_plans/features/sprint1_04_06_10_06.md`. |
-| 05.06.2026 | **Новый функционал**: группа `drafts` в API Оркестратора (5 эндпоинтов), FSM черновиков в `pipeline1-formation.md`, архитектура двух экранов UI (Загрузка / База знаний), маршрут `/api/v1/drafts/*` в Gateway. |
-| 05.06.2026 | **Комплексный аудит документации**: проверка API (13 файлов), пайплайнов (5 файлов), схемы данных (6 файлов), кросс-проверка, security review, тупиковые состояния. Найдено 112+ проблем (23 критических). Результаты: `docs/specificity.md` (аномалии A15–A34, S1–S12, C1–C16), `docs/database/db_audit_report.md` (43 замечания). |
-| 12.06.2026 | **Анализ UI/Gateway-синхронизации**: разбор 10 вопросов к backend, 5 UI-задач, ожидающих подтверждения контрактов, и 4 веток-кандидатов на удаление. Результаты: `docs/audit/ui_gateway_sync_analysis.md`. Добавлены аномалии A25–A33 в `specificity.md`. |
-| 16.06.2026 | **RAG-конфигурация по умолчанию** (P13-1, P13-2, P13-3): Qwen3-Embedding-4B (внешнее API), размерность 2048, chunk 1024, стратегия Vector+Rerank (S2), rerank bge-reranker-v2-m3-int8 (TEI). |
-| 16.06.2026 | **LLM по умолчанию** (P13-5): deepseek 4 flash (внешнее API), temperature 0.2, max_tokens 1024, top_p 0.95. |
-| 16.06.2026 | **Сквозные контракты** (P12): `draft_id` обязателен в Parser/OCR, пороги качества через `app_settings` (решение Orchestrator по raw-метрикам), `quality.issues[]` (→ `quality.notifications[]` 18.06), связь черновик→`version_id`, поля `valid_from`/`valid_until` + конвенция `dateMax = '9999-12-31'`, version_id не передаётся в RAG. |
-| 16.06.2026 | **Логирование/мониторинг** (P11): структурированное логирование (JSON, обязательные поля), корреляционные ID, уровни WARN/ERROR/CRITICAL, аудит-журнал `audit.events`, SigNoz + OpenTelemetry + ClickHouse (5 шагов внедрения), health-checks `/ready` vs `/live`, SLO/SLI, алерты, `service_checker`. |
-| 17.06.2026 | **Service-to-service auth** (P0-5): сетевая изоляция Docker-сети `internal` (без `X-Internal-Token`, решение по Gateway-изоляции). |
-| 17.06.2026 | **CAS** (P5-9): два бакета MinIO (`files` + `images`), SHA-256 ключ без расширения. |
-| 17.06.2026 | **DDL-миграции** (P2-11): `docs/database/ddl_migrations_17_06.md` — CHECK/ENUM, UNIQUE, soft-delete, индексы, valid_from/valid_until, audit.events, draft_notifications, preview_snapshot.
-| 17.06.2026 | **Резолвер** (P0-4): `docs/specifications/registry_resolver_spec.md` — event-driven + cron, advisory lock, стратегии exact/latest_revision. |
-| 17.06.2026 | **Компенсация check-uniqueness** (P0-3): подробное описание `INSERT ... ON CONFLICT DO NOTHING`, обработка `DUPLICATE_FILE_AFTER_APPROVE` в pipeline1-formation.md. |
-| 18.06.2026 | **Схлопывание `quality.warnings[]` + `quality.issues[]` → `quality.notifications[]`** (P3-5 поглощён P12-3): единый массив уведомлений оператора с полем `category: security | quality`. БД-таблица `pipeline.draft_notifications`. |
-| 18.06.2026 | **Preview-метаданные синхронизированы**: поля приведены к табличным именам (`mks_oks_code`, `okstu_code`, `udk_code`, `pkb_codes`), добавлены `era`, `validity_status`, `issuing_body`, `jurisdiction`, `source_type`, `language`, `title_hash_sha256`. Обновлены примеры в API (Converter, Orchestrator, Registry), схеме JSON, спецификации конвертера, пайплайне и описании БД. |
-| 19.06.2026 | **Задачи разработчикам (только код)**: `docs/6.dev_tasks_17_06.md` — 103 задачи на код/БД/тесты, 17 🔴. Документационные задачи отфильтрованы. |
-| 18.06.2026 | **Preview-слепок в карточке документа**: в `registry.documents` добавлено поле `preview_snapshot` (JSONB) — исходный ответ Converter-validator preview копируется из черновика при approve для истории и аудита. Обновлены ER-диаграмма, примечания БД, пайплайн (шаг 3.0) и принципы конвертера. |
-| Текущая | **Схема БД**: все FK на bigint, добавлены `chat.projects`, `project_id`, `document_type`, `valid_from`/`valid_until`, `udk_code` (D-51), `audit.events`, `pipeline.draft_notifications`. |
-| v3.0 | Разделение RAG-сервиса на Builder и Search. |
-| v2.3 | Двухфазный пайплайн (preview + full). |
-
----
-
 ## 🧩 Сервисы (микросервисная архитектура)
 
 ---

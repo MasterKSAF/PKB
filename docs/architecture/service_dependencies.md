@@ -212,5 +212,5 @@ for prefix, module_name in MOCK_ROUTES.items():
 
 - `docs/specifications/deployment.md` — Docker-сети, развёртывание.
 - `docs/architecture/monitoring.md` — SigNoz, OpenTelemetry, метрики.
-- `docs/api/common_api.md` §«Аутентификация service-to-service» — контракт сетевой изоляции.
+- `docs/api/common_api.md` §«Межсервисное взаимодействие».
 - `docs_plans/errors/ошибки запуска сервисов.md` — история проблем.

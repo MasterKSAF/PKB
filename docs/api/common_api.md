@@ -132,36 +132,9 @@
 
 ---
 
-### Аутентификация service-to-service (сетевая изоляция)
+### Межсервисное взаимодействие
 
-Внутренние сервисы (Auth, Orchestrator, Query, Registry, Integration, Converter-validator, Parser, OCR, RAG Builder, RAG Search, Analyse) **недоступны напрямую из внешней сети**. Все запросы проходят через Gateway (:8080) или по защищённому внутреннему каналу.
-
-#### Уровни аутентификации
-
-| Уровень | Когда применяется | Механизм | Требования |
-|---------|-------------------|----------|------------|
-| **L1 — внешний клиент (UI/BFF)** | UI/BFF → Gateway | JWT (Bearer) | Обязателен токен. Проверяется RBAC |
-| **L2 — Gateway → внутренний сервис** | Gateway проксирует запрос | Сетевая изоляция | Только Docker-сеть `internal` |
-| **L3 — internal service-to-service** | Прямые вызовы между сервисами (например, Orchestrator → Registry) | Сетевая изоляция | Только Docker-сеть `internal` |
-| **L4 — internal service → Auth `/internal/auth/validate`** | Gateway → Auth, Orchestrator → Auth | Сетевая изоляция | Только Docker-сеть `internal` |
-
-#### Сетевая изоляция (L2/L3)
-
-В production-деплое:
-1. Все микросервисы подключены к **приватной Docker-сети `internal`** (`docker network create --internal internal`).
-2. **Nginx и Web UI** — в **публичной сети `public`**.
-3. **Gateway** — в обеих сетях (`public` принимает UI, `internal` обращается к сервисам).
-4. Прямой доступ к портам 8081–8091 из внешней сети **невозможен** (порты не публикуются в `docker-compose.yml`).
-5. Health-checks (k8s liveness/readiness probes) выполняются через отдельный sidecar или оркестратор внутри `internal`-сети.
-
-#### Endpoints с дополнительными ограничениями
-
-| Endpoint | Требование |
-|----------|------------|
-| `POST /internal/auth/validate` (Auth) | Доступ только из internal-сети (сервисы gateway, orchestrator) |
-| `PATCH /registry/documents/{id}/status` (Registry) | Доступ только из internal-сети (P0-6). Gateway может проксировать только для admin-ролей |
-| `POST /internal/orchestrator/tasks/*` | Доступ только из internal-сети |
-| `POST /internal/rag/build` | Доступ только из internal-сети (RAG Search/Orchestrator) |
+Авторизацию контролирует только Gateway. Внутренние сервисы не имеют своей аутентификации — доверенные, общаются напрямую.
 
 #### Заголовки для сквозной трассировки
 
@@ -173,20 +146,9 @@
 | `X-Document-ID` | Orchestrator/Registry | Internal services | Текущий document_id в обработке |
 | `X-Version-ID` | Orchestrator | Internal services | Текущий version_id в обработке |
 
-#### Что НЕ требуется
-
-- **Отдельный `X-Internal-Token`** в HTTP-заголовках (отвергнуто 17.06 — сетевой изоляции достаточно).
-- **JWT для service-to-service** (используется только для end-user → Gateway).
-
-#### Связанные документы
-
-- `docs/api/gateway_service_api.md` §«Маршрутизация запросов» — общая схема подключения.
-- `docs/api/auth_service_api.md` §«Внутренние эндпоинты» — `/internal/auth/validate`.
-- `docs/specifications/deployment.md` — конфигурация Docker-сетей (см. P8-6).
-- P0-6 (план 5.06), P11-2 (correlation IDs).
-
 ---
 
+## Обзор конвейера обработки документов
 ### Формат ответа
 
 #### API Gateway (внутренние сервисы, доступные через Gateway)
