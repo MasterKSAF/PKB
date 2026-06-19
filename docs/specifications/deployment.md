@@ -184,6 +184,6 @@ volumes:
 
 - `docs/architecture/monitoring.md` — SigNoz, OTel, SLO, алерты.
 - `docs/specifications/registry_resolver_spec.md` — cron-задачи.
-- `docs/api/common_api.md` §«Аутентификация service-to-service» — детали сетевой изоляции.
+- `docs/api/common_api.md` §«Межсервисное взаимодействие».
 - Обсуждения 16.06 (микросервисы) — Docker-сети.
 - План 5.06 P0-6, P8-6, P11-5.
