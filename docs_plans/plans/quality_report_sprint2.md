@@ -52,8 +52,8 @@
 
 ## 6. Связанные документы
 
-- `docs/methodology/rag_experiments_methodology.md` — методология экспериментов.
-- `docs/methodology/rag_evaluation_methodology.md` — метрики и протоколы оценки.
+- `docs_plans/methodology/rag_experiments_methodology.md` — методология экспериментов.
+- `docs_plans/methodology/rag_evaluation_methodology.md` — метрики и протоколы оценки.
 - `docs/architecture/monitoring.md` (NEW) — SLO/SLI (P11-7) и алерты (P11-8).
 - `docs/api/rag_search_service_api.md` — конфигурация по умолчанию (P13-1).
 - Sprint 2 план: `docs_plans/features/sprint2_11_06_17_06.md`.
