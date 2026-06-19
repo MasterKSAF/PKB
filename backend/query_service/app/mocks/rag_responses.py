@@ -1,4 +1,3 @@
-"""Статические mock-ответы для заглушки RAG/LLM."""
 import itertools
 
 _ANSWERED = {
@@ -14,23 +13,23 @@ _ANSWERED = {
             "citations": [
                 {
                     "citation_id": "cit-001",
-                    "document_id": "doc-norm-001",
+                    "document_id": 1,
                     "document_title": "Правила классификации и постройки морских судов, Часть II",
                     "section": "Корпус",
                     "page": 42,
                     "fragment": "Для ледового класса Arc4 толщина обшивки ледового пояса должна быть не менее 12 мм.",
-                    "page_preview_url": "/documents/doc-norm-001/pages/42/preview",
-                    "document_url": "/documents/doc-norm-001/file",
+                    "page_preview_url": "/documents/1/pages/42/preview",
+                    "document_url": "/documents/1/file",
                 },
                 {
                     "citation_id": "cit-002",
-                    "document_id": "doc-norm-002",
+                    "document_id": 2,
                     "document_title": "НСИ ПКБ, версия 2026",
                     "section": "Нормативные требования",
                     "page": 17,
                     "fragment": "Класс Arc4: толщина листов — не менее 12 мм при стали категории Е.",
-                    "page_preview_url": "/documents/doc-norm-002/pages/17/preview",
-                    "document_url": "/documents/doc-norm-002/file",
+                    "page_preview_url": "/documents/2/pages/17/preview",
+                    "document_url": "/documents/2/file",
                 },
             ],
         }
@@ -51,13 +50,13 @@ _SOURCE_CONFLICT = {
     "message": "Найдены разные требования в двух редакциях нормативного документа.",
     "conflicts": [
         {
-            "document_id": "doc-norm-001",
+            "document_id": 1,
             "document_title": "НСИ, редакция 2024",
             "page": 45,
             "value": "8 мм",
         },
         {
-            "document_id": "doc-norm-003",
+            "document_id": 3,
             "document_title": "НСИ, редакция 2026",
             "page": 47,
             "value": "10 мм",
@@ -77,7 +76,7 @@ def next_chat_response() -> dict:
 SEARCH_RESULTS = [
     {
         "section_id": 420042,
-        "document_id": "doc-norm-001",
+        "document_id": 1,
         "document_title": "Правила РС, часть I",
         "page": 42,
         "content": "Для ледового класса Arc4 толщина обшивки ледового пояса должна быть не менее 12 мм.",
@@ -87,7 +86,7 @@ SEARCH_RESULTS = [
     },
     {
         "section_id": 420017,
-        "document_id": "doc-norm-002",
+        "document_id": 2,
         "document_title": "НСИ ПКБ 2026",
         "page": 17,
         "content": "Класс Arc4: нормативная толщина — не менее 12 мм при стали категории Е.",
@@ -106,7 +105,7 @@ ASK_RESPONSE = {
     ),
     "sources": [
         {
-            "document_id": "doc-norm-001",
+            "document_id": 1,
             "document_title": "Правила РС, часть I",
             "page_number": 42,
             "fragment_id": "frg-042",

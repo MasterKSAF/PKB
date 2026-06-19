@@ -46,6 +46,8 @@ Gateway объединяет API всех внутренних сервисов 
 | `/api/v1/drafts/*` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md) |
 | `/api/v1/chat/*` | Query Service | `8083` | [query_service_api.md](query_service_api.md) |
 | `/api/v1/text/*` | Query Service | `8083` | [query_service_api.md](query_service_api.md) |
+| `/api/v1/search/*` | Query Service | `8083` | [query_service_api.md](query_service_api.md) — группа search |
+| `/api/v1/ask` | Query Service | `8083` | [query_service_api.md](query_service_api.md) — POST /ask |
 | `/api/v1/registry/classifiers/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
 | `/api/v1/registry/terminology/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
 | `/api/v1/registry/common/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
@@ -76,6 +78,8 @@ Gateway объединяет API всех внутренних сервисов 
 
 | Метод | Путь | Описание | RBAC |
 |-------|------|----------|------|
+| `GET` | `/api/v1/tasks` | Список задач с фильтрацией | `system_admin` |
+| `GET` | `/api/v1/tasks/stats` | Статистика по задачам | `system_admin` |
 | `GET` | `/api/v1/tasks/{task_id}/status` | Статус задачи с этапами и промежуточными данными | `system_admin`, `knowledge_admin` |
 | `GET` | `/api/v1/tasks/{task_id}/steps` | Детальные шаги задачи с input/output JSON | `system_admin`, `knowledge_admin` |
 

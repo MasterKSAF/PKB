@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .db import Base
 
@@ -10,11 +10,15 @@ def utcnow() -> datetime:
 
 class ChatProject(Base):
     __tablename__ = "chat_projects"
+    __table_args__ = (UniqueConstraint("user_id", "code", name="uq_chat_projects_user_code"),)
 
     project_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    code: Mapped[str | None] = mapped_column(String(64))
     name: Mapped[str] = mapped_column(String(256), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(16), default="active")
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
@@ -30,6 +34,7 @@ class ChatSession(Base):
     title: Mapped[str | None] = mapped_column(String(256))
     document_ids: Mapped[list] = mapped_column(JSON, default=list)
     options: Mapped[dict] = mapped_column(JSON, default=dict)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
@@ -39,6 +44,7 @@ class ChatSession(Base):
 
 class ChatMessage(Base):
     __tablename__ = "chat_messages"
+    __table_args__ = (Index("ix_chat_messages_session_created", "session_id", "timestamp"),)
 
     message_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     session_id: Mapped[int] = mapped_column(ForeignKey("chat_sessions.session_id", ondelete="CASCADE"))
@@ -52,6 +58,7 @@ class ChatMessage(Base):
     answer_items: Mapped[list | None] = mapped_column(JSON)
     model_used: Mapped[str | None] = mapped_column(String(64))
     processing_time_ms: Mapped[int | None] = mapped_column(Integer)
+    enrichment_skipped: Mapped[bool] = mapped_column(Boolean, default=False)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     session: Mapped["ChatSession"] = relationship(back_populates="messages")
@@ -66,7 +73,7 @@ class ChatSource(Base):
     message_id: Mapped[int] = mapped_column(ForeignKey("chat_messages.message_id", ondelete="CASCADE"))
     chunk_id: Mapped[int | None] = mapped_column(BigInteger)
     fragment_id: Mapped[str | None] = mapped_column(String(64))
-    document_id: Mapped[str] = mapped_column(String(64))
+    document_id: Mapped[int] = mapped_column(BigInteger)
     document_title: Mapped[str | None] = mapped_column(String(256))
     section_id: Mapped[int | None] = mapped_column(BigInteger)
     page_number: Mapped[int | None] = mapped_column(Integer)
