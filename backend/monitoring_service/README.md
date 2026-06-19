@@ -140,7 +140,7 @@ sudo ls -la /home/user/monitoring_demo/
    добавить строки в начало каждого файла:   
    python  
    import logging  
-   logger = logging.getLogger(/_/_name/_/_)
+   logger = logging.getLogger(\_\_name\_\_)
 
    
 
