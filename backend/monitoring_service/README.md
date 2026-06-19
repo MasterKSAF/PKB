@@ -134,8 +134,7 @@ sudo ls -la /home/user/monitoring_demo/
      
    в файле  main.py (полный пошаговый пример приведен ниже):  
    3.1 настроить импорт функций из telemetry\_lib   
-   3.2 перед определением app вставить вызов setup\_observability    
-   3.3.получить логгер через logging.getLogger(service\_name).После вызова setup\_observability.  
+   3.2 перед определением app вставить вызов setup\_observability и получить логгер. 
      
    в файле  всех остальных модулей где будет логирование:  
    добавить строки в начало каждого файла:
@@ -175,13 +174,10 @@ app = FastAPI()
 service_name = "name_service" # <- запишите имя сервиса
 otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "signoz-otel-collector:4317")
 
-tracer_provider, meter_provider, _ = setup_observability(service_name, otlp_endpoint)
+tracer_provider, meter_provider, log = setup_observability(service_name, otlp_endpoint)
 
 ## ==================== ШАГ 4.1: инструментирование FastAPI для трейсов ====================
-instrument_fastapi(app, tracer_provider)
-
-# ==================== ШАГ 3.3: получение логгера ====================
-log = logging.getLogger(service_name)   
+instrument_fastapi(app, tracer_provider)  
 
 # ==================== ШАГ 5.1: метрики (опционально и НЕ ОБЯЗАТЕЛЬНО т.е. можно удалить и не выполнять) ====================
 meter = meter_provider.get_meter(service_name)
