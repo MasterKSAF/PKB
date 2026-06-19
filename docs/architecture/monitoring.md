@@ -45,7 +45,7 @@
 ```
 
 **Стек:**
-- **OpenTelemetry SDK** в каждом сервисе (Python: `opentelemetry-python` + `opentelemetry-instrumentation-fastapi`, `opentelemetry-instrumentation-sqlalchemy`, `opentelemetry-instrumentation-asyncpg`).
+- **OpenTelemetry SDK** в каждом сервисе (Python: `opentelemetry-python` + `opentelemetry-instrumentation-fastapi`, `opentelemetry-instrumentation-httpx`).
 - **OTLP-экспорт** через `OTLPSpanExporter` → `signoz-otel-collector:4317` (gRPC).
 - **SigNoz** (UI + Query Service) + **ClickHouse** (storage) внутри Docker-сети `signoz-network`.
 - **Алерты** — Prometheus-формат через SigNoz Alerts → Slack / PagerDuty.
@@ -54,7 +54,7 @@
 
 ## 2. 5 шагов внедрения (P11-5, уточнение 17.06)
 
-> **OpenTelemetry обязателен во всех сервисах без исключения.** Проверка наличия OTEL-инструментации — через `service_checker` (см. §7).
+> **OpenTelemetry SDK — во всех сервисах.** Инструментирование FastAPI (трейсы) + структурированные логи (JSON + OTLP). Единая библиотека `telemetry_lib` (см. Шаг 2).
 
 ### Шаг 1: Развёртывание SigNoz
 
@@ -71,46 +71,38 @@ docker compose -f docker-compose.yaml up -d
 
 ### Шаг 2: Добавление OTEL SDK в каждый сервис
 
-В `pyproject.toml` (или `requirements.txt`) каждого сервиса:
+В `requirements.txt` каждого сервиса:
 
-```toml
-opentelemetry-api = "^1.27.0"
-opentelemetry-sdk = "^1.27.0"
-opentelemetry-exporter-otlp-proto-grpc = "^1.27.0"
-opentelemetry-instrumentation-fastapi = "^0.48b0"
-opentelemetry-instrumentation-sqlalchemy = "^0.48b0"
-opentelemetry-instrumentation-asyncpg = "^0.48b0"
-opentelemetry-instrumentation-redis = "^0.48b0"
-opentelemetry-instrumentation-celery = "^0.48b0"
-opentelemetry-instrumentation-httpx = "^0.48b0"
-opentelemetry-instrumentation-requests = "^0.48b0"
 ```
+opentelemetry-api==1.27.0
+opentelemetry-sdk==1.27.0
+opentelemetry-distro==0.48b0
+opentelemetry-exporter-otlp==1.27.0
+opentelemetry-instrumentation-fastapi==0.48b0
+opentelemetry-instrumentation-httpx==0.48b0
+opentelemetry-propagator-b3==1.27.0
+python-json-logger==2.0.4
+setuptools<70
+```
+
+Скопировать общую библиотеку `telemetry_lib` (из `services/`) в проект сервиса.
 
 В `main.py` каждого сервиса (вызывается **до** создания FastAPI app):
 
 ```python
-from opentelemetry import trace
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+import os
+import logging
+from fastapi import FastAPI
+from telemetry_lib.telemetry import setup_observability, instrument_fastapi
 
-resource = Resource.create({
-    "service.name": "rag-search",  # имя сервиса
-    "service.version": "1.0.0",
-    "deployment.environment": "production",
-})
+app = FastAPI()
+service_name = "name_service"  # имя сервиса
+otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "signoz-otel-collector:4317")
 
-provider = TracerProvider(resource=resource)
-processor = BatchSpanProcessor(
-    OTLPSpanExporter(endpoint="http://signoz-otel-collector:4317", insecure=True)
-)
-provider.add_span_processor(processor)
-trace.set_tracer_provider(provider)
+tracer_provider, meter_provider, _ = setup_observability(service_name, otlp_endpoint)
+instrument_fastapi(app, tracer_provider)
 
-# Затем инструментация FastAPI/SQLAlchemy/etc.
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-FastAPIInstrumentor.instrument_app(app)
+log = logging.getLogger(service_name)
 ```
 
 ### Шаг 3: Стандартизация span-имён
@@ -118,16 +110,11 @@ FastAPIInstrumentor.instrument_app(app)
 | Префикс | Пример | Описание |
 |---------|--------|----------|
 | `http.{method}.{route}` | `http.POST./api/v1/drafts` | HTTP-эндпоинт (FastAPI auto-instrumentation) |
-| `db.{op}.{table}` | `db.INSERT.registry.documents` | SQL-операция (SQLAlchemy auto) |
 | `parser.process` | — | Полный цикл парсинга |
-| `parser.preview` | — | Preview-фаза парсинга |
 | `ocr.process` | — | Полный цикл OCR |
-| `ocr.preview` | — | Preview-фаза OCR |
-| `converter.convert` | — | Полная конвертация |
 | `rag.search` | — | Поиск чанков |
 | `rag.build` | — | Индексация |
 | `llm.generate` | — | Генерация ответа LLM |
-| `cache.get` / `cache.set` | — | Операции с кешем |
 
 **Обязательные span-атрибуты:**
 - `service.name` (устанавливается через Resource)
@@ -140,17 +127,18 @@ FastAPIInstrumentor.instrument_app(app)
 
 ### Шаг 4: Экспорт OTLP в `signoz-otel-collector:4317`
 
-Конфигурация в `app_settings.yaml` каждого сервиса:
+На стороне сервиса — через библиотеку `telemetry_lib` (автоматически). На стороне инфраструктуры — переменные окружения:
 
 ```yaml
-observability:
-  otel:
-    enabled: true
-    endpoint: "signoz-otel-collector:4317"
-    insecure: true
-    service_name: "rag-search"
-    service_version: "1.0.0"
-    deployment_environment: "production"
+OTEL_EXPORTER_OTLP_ENDPOINT: "signoz-otel-collector:4317"
+OTEL_EXPORTER_OTLP_INSECURE: "true"
+```
+
+Подключение к сети SigNoz в `docker-compose.yml`:
+
+```yaml
+networks:
+  - signoz-net
 ```
 
 ### Шаг 5: Дашборды и алерты в SigNoz
@@ -267,7 +255,7 @@ observability:
 | A-08 | MinIO disk usage > 80% | `minio_disk_used_percent > 80` | 5 мин | warning | Slack #alerts |
 | A-09 | OTEL exporter down | `up{job="otel-collector"} == 0` | 1 мин | critical | PagerDuty |
 | A-10 | DB connection pool > 90% | `db_pool_connections{state="active"} / db_pool_connections{state="max"} > 0.9` | 5 мин | warning | Slack #alerts |
-| A-11 | Redis недоступен | `redis_up == 0` | 1 мин | warning | Slack #alerts (rate limit отключён — см. common_api.md) |
+| A-11 | Redis недоступен | `redis_up == 0` | 1 мин | warning | Slack #alerts (idempotency не работает, кэш отключён) |
 | A-12 | Health `/ready` failing | `kube_pod_status_ready{condition="ready"} == 0` | 5 мин | critical | PagerDuty |
 | A-13 | Audit log gap | `time() - max(audit_events_total.timestamp) > 600` | 10 мин | warning | Slack #alerts |
 
@@ -275,7 +263,7 @@ observability:
 
 ## 7. `service_checker` (P11-9, 17.06.2026)
 
-> **Назначение**: автопроверка сервисов на соответствие стандарту observability. Запускается в CI (PR-чек) и post-deploy.
+> **Назначение**: автопроверка сервисов на соответствие стандарту observability. Запускается в CI (PR-чек). Dev-only, в production не используется.
 
 ### 7.1. Что проверяет
 
@@ -294,9 +282,6 @@ python -m service_checker \
   --service-path backend/services/rag_search/ \
   --config-path backend/services/rag_search/app_settings.yaml \
   --report-path /var/log/service_checker/rag_search.json
-
-# Post-deploy (в k8s Job)
-kubectl create job --from=cronjob/service-checker-postdeploy service-checker-$(date +%s)
 ```
 
 ### 7.3. Формат отчёта
@@ -318,10 +303,10 @@ kubectl create job --from=cronjob/service-checker-postdeploy service-checker-$(d
 }
 ```
 
-### 7.4. CI-интеграция
+### 7.4. CI-интеграция (dev-only)
 
 - **PR-чек**: `service_checker` запускается параллельно с unit-тестами. При `overall_status != ok` — блокируется merge.
-- **Post-deploy**: Job в k8s, запускается через 5 мин после деплоя. Отчёт сохраняется в `/var/log/service_checker/<service>.json`, отправляется в SigNoz как лог-событие.
+- В production не используется — только на этапе разработки.
 
 ---
 

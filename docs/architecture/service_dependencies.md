@@ -16,6 +16,15 @@ python-multipart==0.0.*
 redis==5.*
 prometheus-client==0.21.*
 structlog==24.*
+opentelemetry-api==1.27.*
+opentelemetry-sdk==1.27.*
+opentelemetry-distro==0.48b0
+opentelemetry-exporter-otlp==1.27.*
+opentelemetry-instrumentation-fastapi==0.48b0
+opentelemetry-instrumentation-httpx==0.48b0
+opentelemetry-propagator-b3==1.27.*
+python-json-logger==2.0.4
+setuptools<70
 ```
 
 ### Orchestrator (orchestrator:8081)
@@ -31,9 +40,7 @@ python-multipart
 boto3==1.35.*             # MinIO
 prometheus-client
 structlog
-opentelemetry-api, opentelemetry-sdk, opentelemetry-instrumentation-fastapi,
-opentelemetry-instrumentation-sqlalchemy, opentelemetry-instrumentation-asyncpg,
-opentelemetry-instrumentation-redis, opentelemetry-instrumentation-celery
+opentelemetry-*
 ```
 
 ### Auth (auth:8082)
@@ -47,6 +54,7 @@ python-multipart
 email-validator>=2.0  # P9-2: для валидации email
 prometheus-client
 structlog
+opentelemetry-*
 ```
 
 ### Query Service (query:8083)
@@ -79,6 +87,7 @@ boto3                    # MinIO
 httpx                    # Меридиан API
 prometheus-client
 structlog
+opentelemetry-*
 ```
 
 ### Converter-validator (converter-validator:8086)
@@ -89,6 +98,7 @@ httpx
 pydantic
 prometheus-client
 structlog
+opentelemetry-*
 ```
 
 ### Parser (parser:8087)
@@ -102,6 +112,7 @@ boto3                    # MinIO
 pydantic
 prometheus-client
 structlog
+opentelemetry-*
 ```
 
 ### OCR (ocr:8088)
@@ -114,6 +125,7 @@ Pillow==10.*
 boto3                    # MinIO
 prometheus-client
 structlog
+opentelemetry-*
 ```
 
 ### RAG Builder (rag-builder:8090)
@@ -146,6 +158,7 @@ sqlalchemy[asyncio], asyncpg
 pydantic
 prometheus-client
 structlog
+opentelemetry-*
 ```
 
 ## 2. Внешние сервисы
@@ -155,12 +168,12 @@ structlog
 | **MinIO** (CAS) | `http://minio:9000` | Все сервисы хранят/читают файлы | Access Key / Secret Key |
 | **PostgreSQL 15+** | `postgresql://postgres:5432/pkb` | Все сервисы с доступом к БД | user / password |
 | **pgvector** | (расширение PostgreSQL) | Registry, RAG Builder, RAG Search | — |
-| **Redis 7** | `redis://redis:6379` | Gateway (rate limit, idempotency), Orchestrator (Celery), Auth (sessions) | (без пароля в dev) |
+| **Redis 7** | `redis://redis:6379` | Gateway (idempotency), Orchestrator (Celery), Auth (sessions) | (без пароля в dev) |
 | **Qwen3-Embedding-4B API** (внешний) | `app_settings.rag.embedding_api.endpoint` | RAG Builder, RAG Search | API key в `app_settings` |
 | **deepseek 4 flash API** (внешний) | `app_settings.llm.api_url` | Query Service, Converter-validator | API key в `app_settings` |
 | **TEI** (text-embeddings-inference, локальный) | `http://tei:8080` | RAG Builder (embeddings), RAG Search (rerank) | (без auth, в internal-сети) |
 | **Infinity** (опционально, локальный) | `http://infinity:8080` | RAG Builder (вместо внешнего Qwen3) | (без auth, в internal-сети) |
-| **SigNoz OTLP** | `http://signoz-otel-collector:4317` | Все сервисы (трейсинг) | (без auth, в internal-сети) |
+| **SigNoz OTLP** | `http://signoz-otel-collector:4317` | Все сервисы (мониторинг, логи) | (без auth, в internal-сети) |
 | **ClickHouse** | `http://clickhouse:8123` | SigNoz (storage) | (внутренний) |
 | **Nginx** (reverse proxy) | `https://example.com:443` | Web UI | TLS termination |
 

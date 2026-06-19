@@ -175,7 +175,7 @@ Rate limit: не более 10 запросов в минуту на `/auth/toke
   "position": "Инженер-конструктор",
   "role": "engineer",
   "role_title": "Инженер",
-  "available_tabs": ["chat", "search", "checks", "history"],
+  "available_tabs": ["chat", "search", "history"],
   "permissions": {
     "can_upload_documents": false,
     "can_run_ocr": false,
@@ -461,7 +461,7 @@ Rate limit: не более 10 запросов в минуту на `/auth/toke
 }
 ```
 
-> **Маскировка PII**: IP-адрес в audit-логе маскируется (последний октет заменён на `xxx`, например `192.168.1.xxx`). Audit-логи хранятся 90 дней, после чего удаляются.
+> **Маскировка**: в логах маскируются только пароли и секретные данные (password, access_token, refresh_token). IP-адреса не маскируются. Audit-логи хранятся 90 дней, после чего удаляются.
 
 ---
 

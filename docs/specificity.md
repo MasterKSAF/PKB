@@ -146,7 +146,7 @@ API черновиков и FSM документированы, но **UI сра
 | Код | Проблема | Статус |
 |-----|----------|--------|
 | A15 (DB-E4) | Нет UNIQUE-ограничений для 6 бизнес-ключей | 🔄 DDL |
-| A16 (DB-E5) | Нет ON DELETE (NO ACTION по умолч.) | 🔄 DDL |
+| A16 (DB-E5) | Нет ON DELETE (NO ACTION по умолч.) | ✅ не нужно — soft-delete через deleted_at, DELETE не происходит |
 | A17 | Нет таблиц `auth.users`, `registry.terminology` | 🔄 исправлено: таблицы есть, но не были описаны в db_diagrams.md. Добавлены в ER-диаграмму и примечания |
 | A18 (DB-E10) | Нет soft-delete и `updated_at` | 🔄 решение |
 | A19 (DB-E1) | VARCHAR для ENUM без CHECK | 🔄 DDL |
@@ -160,7 +160,7 @@ API черновиков и FSM документированы, но **UI сра
 
 | Код | Проблема | Статус |
 |-----|----------|--------|
-| S3 | Rate limiting не реализован (Nginx + Redis) | 🔄 код |
+| S3 | Rate limiting не реализован (Nginx) | 🔄 код |
 | S10 | `/internal/auth/validate` без сетевой изоляции | 🔄 код |
 
 ---
