@@ -91,9 +91,78 @@ DB CHECK-ограничения, DDL-миграции и спецификаци�
 
 ---
 
+## Маппинг статусных моделей
+
+**Дата:** 19.06.2026
+
+В системе три разные статусные модели, которые ссылаются друг на друга:
+
+| Модель | Документ | Статусы | Назначение |
+|--------|----------|---------|-----------|
+| `task.status` | `orchestrator_service_api.md` | `uploaded`, `previewing`, `ready_for_approve`, `processing`, `created`, `indexing`, `indexed`, `failed` | Статус сквозной задачи пайплайна (`pipeline.tasks`). Агрегирует все этапы обработки одной загрузки |
+| `draft.status` | `orchestrator_service_api.md`, `pipeline1-formation.md` | `uploaded`, `previewing`, `ready_for_approve`, `review_required`, `validation`, `approved`, `discarded` | Статус черновика (`registry.drafts`). Отражает жизненный цикл черновика от загрузки до принятия решения |
+| `document.processing_status` | `pipeline2-indexation.md`, `db_diagrams.md` | `pending_index`, `indexing`, `indexed`, `failed` (+ `partially_indexed` в тексте) | Статус индексации документа (`registry.documents.processing_status`). Отражает состояние Пайплайна 2 |
+
+**Связь моделей:**
+- `task.status` — сквозной агрегатор, покрывает все этапы (preview + full + registry + indexation)
+- `draft.status` — покрывает только Пайплайн 1 (до `approved`/`discarded`)
+- `document.processing_status` — покрывает только Пайплайн 2 (после `created`)
+
+После `approved` → создаётся документ, начинается Пайплайн 2:
+`task.status = "indexing"` → `document.processing_status = "indexing"` (одновременно).
+
+`partially_indexed` — не выделен в отдельный FSM-статус, но фиксируется в `processing_status` при `chunk_count_actual < chunk_count_expected`. См. LP-V2.
+
+---
+
+## Health-формат: внутренние сервисы vs Gateway
+
+**Дата:** 19.06.2026
+
+В системе два разных health-эндпоинта:
+
+| Тип | Путь | Формат | Где описан |
+|-----|------|--------|-----------|
+| **Внутренние сервисы** (Orchestrator, Registry, Auth, Query) | `GET /api/v1/health` | `status`, `version`, `service` | `common_api.md` (эталон) |
+| **Gateway (внешний мониторинг)** | `GET /api/v1/system/health` | `status`, `version`, `services{}`, `timestamp`, `endpoints_total` | `gateway_service_api.md` |
+
+**Правила:**
+1. Все внутренние сервисы возвращают **одинаковый** минимальный набор: `status`, `version`, `service`.
+2. Gateway не проксирует health внутренних сервисов — у него собственный сводный health.
+3. `uptime_seconds`, `database`, `search_index`, `ocr_queue`, `storage` — **НЕ входят** в health внутренних сервисов. Это метрики, а не health. Они должны быть в `/api/v1/monitor/metrics` (Gateway) или в отдельном debug-эндпоинте.
+4. При добавлении нового внутреннего сервиса — health эндпоинт должен соответствовать формату common_api.md.
+
+---
+
 ## Рабочие практики
 
 - **Кэш перед чтением.** Перед `read_file` проверять, загружен ли файл в кэш текущей сессии. Повторное чтение уже загруженных файлов — потеря токенов и времени. Исключение — если файл гарантированно изменился между сессиями.
+
+## Правило `resolved` в specificity.md
+
+Статус `✅ resolved` проставляется ТОЛЬКО после выполнения всех условий:
+1. Все затронутые файлы перечислены в записи аномалии
+2. По каждому файлу внесена правка (подтверждено diff-ом)
+3. Запущен `check_cross_references.py` — все проверки пройдены
+4. Если поле добавлено/изменено — обновлён `_data_dictionary.md`
+5. Если схема изменена — обновлён `_schemas.md`
+
+Без выполнения любого из пунктов — статус остаётся `🔄 исправляется` или `📝 спеки`.
+
+---
+
+## Правило: не дублировать схемы
+
+Повторяющиеся структуры данных (PreviewMetadata, DraftItem, DecideResponse) **не должны дублироваться** в API-спеках и пайплайнах.
+
+- **Source of truth:** `docs/api/_schemas.md`.
+- **В таблицах:** вместо перечисления всех полей — ссылка `см. [_schemas.md](_schemas.md#PreviewMetadata)`.
+- **В JSON-примерах:** вместо полного JSON с 17 полями — `{ /* см. _schemas.md#PreviewMetadata */ }`.
+- **Исключение:** уникальные поля, специфичные для конкретного эндпоинта, могут описываться отдельно.
+
+Нарушение правила — **CRITICAL** при code review.
+
+---
 
 ## Стиль оформления документации
 
