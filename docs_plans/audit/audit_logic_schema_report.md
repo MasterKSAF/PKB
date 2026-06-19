@@ -2,7 +2,7 @@
 ## PKB Neuroassistant — Отчёт по правилу check_rule.md (п.2 и п.3)
 
 **Дата аудита:** 2026-06-06  
-**Источники:** `docs/pipelines/*.md`, `docs/database/*.md`, `docs/schema/*`, `docs/specifications/*`, `docs/rules/check_rule.md`
+**Источники:** `docs/pipelines/*.md`, `docs/database/*.md`, `docs/schema/*`, `docs/specifications/*`, `docs/checks/check_rule.md`
 
 ---
 

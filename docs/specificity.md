@@ -292,7 +292,7 @@ Enum: `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `RMRS`, `OTHER`
 - `docs/api/converter_validator_service_api.md` — preview, fingerprint, validate
 - `docs/api/orchestrator_service_api.md` — drafts, documents
 - `docs/api/registry_service_api.md` — документы, check-uniqueness, примечания
-- `docs/6.dev_tasks_17_06.md` — DB-28
+- `docs_plans/plans/6.dev_tasks_17_06.md` — DB-28
 
 ### 🔄 Схлопывание `quality.warnings[]` + `quality.issues[]` в `quality.notifications[]` (18.06)
 

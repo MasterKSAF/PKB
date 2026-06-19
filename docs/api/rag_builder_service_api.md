@@ -68,7 +68,7 @@ Orchestrator получает JSON из Registry (через `GET /registry/docu
 
 > **Не передавать `version_id` в RAG** (P12-6, уточнение 17.06): `rag_documents.doc_id` ссылается на **документ** (без версии), а сам чанк хранит `document_version_id` только для аудита. Убедитесь, что запрос к RAG Builder содержит `document_id`, но **не** `version_id`. См. `parser_service_api.md` — там `version_id` тоже не нужен.
 
-> **P4-3 (Qwen3, int8, сетка 2560/2048/1536)**: см. `docs/methodology/rag_experiments_methodology.md` §2.5 — обоснование выбора модели и сетки размерностей.
+> **P4-3 (Qwen3, int8, сетка 2560/2048/1536)**: см. `docs_plans/methodology/rag_experiments_methodology.md` §2.5 — обоснование выбора модели и сетки размерностей.
 
 > **D67 (Infinity)**: для production-деплоя используется выделенный сервис эмбеддингов **Infinity** (OpenAI-совместимое API, локальный). Для тестирования и экспериментов — внешнее API Qwen3. Конфигурируется через `app_settings.rag.embedding_api.mode = "infinity" | "external"`.
 

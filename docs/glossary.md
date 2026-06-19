@@ -147,7 +147,7 @@
 | **deepseek-4-flash** | **P13-5**: LLM для генерации ответов по умолчанию. Внешнее API. Параметры: temperature 0.2, max_tokens 1024, top_p 0.95 |
 | **service_checker** | **P11-9**: инструмент автопроверки сервисов на соответствие стандарту observability (OTEL SDK, OTLP endpoint, span-атрибуты, структура логов). Запускается в CI (PR-чек). Dev-only, в production не используется |
 | **vector_rerank (S2)** | **P13-1**: прод-стратегия RAG Search. Dense + Rerank |
-| **experimental** | **P13-4**: экспериментальные поисковые стратегии S1–S9 (см. `docs/methodology/rag_experiments_methodology.md`). Задаются только в `app_settings.rag.search_strategy`, не через API |
+| **experimental** | **P13-4**: экспериментальные поисковые стратегии S1–S9 (см. `docs_plans/methodology/rag_experiments_methodology.md`). Задаются только в `app_settings.rag.search_strategy`, не через API |
 
 ---
 

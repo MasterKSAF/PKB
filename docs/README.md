@@ -262,7 +262,7 @@ flowchart LR
 Перед фиксацией любых изменений в `docs/` — запустить скрипт:
 
 ```bash
-python docs/scripts/check_consistency.py
+python docs/checks/scripts/check_consistency.py
 ```
 
 Скрипт проверяет:
@@ -566,12 +566,9 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 | **Справочники** | |
 | Глоссарий терминов и сокращений | [`docs/glossary.md`](glossary.md) |
 | Журнал аномалий и трудных моментов | [`docs/specificity.md`](specificity.md) (D44) |
-| План синхронизации документации | [`docs/todo.md`](todo.md) (D46) |
-| Анализ альтернативного проекта KB (13.06) | [`docs/analyse_alternative_project.md`](analyse_alternative_project.md) (D45) |
 | **Модели базы данных** | |
 | ER-диаграмма и типы данных | [`docs/database/db_diagrams.md`](database/db_diagrams.md) (D47) |
 | DDL-миграции 17.06 | [`docs/database/ddl_migrations_17_06.md`](database/ddl_migrations_17_06.md) |
-| **Аудит** | [`docs/audit/`](audit/) (D47) |
 | **JSON-схемы (контракты)** | |
 | Структуры данных (диаграммы) | [`docs/schema/diagrams.md`](schema/diagrams.md) |
 | Результат Parser (сырой) | [`docs/schema/schema_parser_result.json`](schema/schema_parser_result.json) |
