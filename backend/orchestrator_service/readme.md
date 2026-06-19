@@ -333,8 +333,11 @@ pytest tests/test_drafts.py::TestCreateDraft::test_create_draft_success -v
 - Все тесты запускаются в mock-режиме (устанавливается в `conftest.py`)
 - Тесты используют `TestClient` из FastAPI
 - Для аутентифицированных запросов используется фикстура `auth_header`
-- **238 тестов** проходят, **84 пропущено** (legacy тесты удалены)
-- Основные группы тестов: `test_drafts.py` (22), `test_tasks.py` (5), `test_search.py` (25), `test_health.py` (11), `test_monitor.py` (14), `test_error_handling.py` (20), `tests/integration/` (19), `tests/unit/` (18)
+- **345 тестов** проходят (актуально на 19.06.2026)
+- Основные группы: `test_drafts.py` (26), `test_tasks.py` (10), `test_search.py` (25), `test_health.py` (12), `tests/integration/` (27), `tests/unit/` (18)
+
+
+---
 
 ## Архитектура клиентов сервисов
 
