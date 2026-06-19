@@ -400,7 +400,6 @@ Orchestrator вычисляет SHA-256 содержимого, определя
   },
   "total_versions": 2,
   "user_id": "u-001",
-  "uploaded_by": "Иванов И.И.",
   "created_by": "system_registry_sync",
   "updated_by": "ivanov_ai",
   "created_at": "2026-04-27T10:00:00Z",
