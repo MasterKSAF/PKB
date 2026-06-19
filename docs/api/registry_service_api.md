@@ -1172,7 +1172,7 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
 | `registry` | object | Метаданные записи в БД |
 | `registry.document_id` | bigint | ID документа |
 | `registry.version_id` | bigint | ID версии |
-| `registry.created_at` | string | Дата создания записи |
+| `registry.created_at` | datetime | Дата создания записи |
 | `registry.sections_count` | int | Количество сохранённых секций |
 | `registry.references_count` | int | Количество ссылок |
 
@@ -1331,7 +1331,7 @@ PATCH /registry/documents/{doc_id}/status
 |------|-----|---------------|----------|
 | `status` | string | Да | FSM-статус документа (`created`, `pending_index`, `indexing`, `indexed`, `failed`) |
 | `comment` | string | Нет | Причина смены статуса |
-| `changed_by` | string | Нет | Инициатор (по умолчанию `orchestrator`) |
+| `changed_by` | string | Нет | Субъект (пользователь или сервис). По умолчанию `orchestrator` |
 
 **Ответ `200`:**
 
@@ -1814,8 +1814,8 @@ GET /registry/categories
 | `name` | string | Название категории |
 | `description` | string | Описание (необязательное) |
 | `color` | string | Цвет в hex (#RRGGBB) для отображения в UI |
-| `created_at` | string | Дата создания |
-| `updated_at` | string | Дата обновления |
+| `created_at` | datetime | Дата создания |
+| `updated_at` | datetime | Дата обновления |
 
 ---
 

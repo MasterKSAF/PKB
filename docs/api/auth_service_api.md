@@ -192,8 +192,8 @@ Rate limit: не более 10 запросов в минуту на `/auth/toke
 | `role_title` | string | Отображаемое название роли |
 | `available_tabs` | string[] | Доступные вкладки UI |
 | `permissions` | object | Права доступа (boolean) |
-| `last_login_at` | string | Дата последнего входа (ISO 8601) |
-| `created_at` | string | Дата создания (ISO 8601) |
+| `last_login_at` | datetime | Дата последнего входа (ISO 8601) |
+| `created_at` | datetime | Дата создания (ISO 8601) |
 
 ---
 
