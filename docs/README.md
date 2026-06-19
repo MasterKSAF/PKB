@@ -50,7 +50,10 @@ docs/
 │   └── ui_gateway_sync_analysis.md   #   Анализ UI/Gateway-синхронизации
 │
 ├── rules/                            # Правила и чек-листы
-│   └── check_rule.md                 #   Чек-лист аудита документации
+│   ├── check_rule.md                 #   Чек-лист аудита документации
+│   └── check_consistency.md          #   Чек-лист целостности при изменениях
+├── scripts/                          # Скрипты проверки
+│   └── check_consistency.py          #   Проверка целостности документации
 │
 ├── specifications/                   # Технические спецификации
 │   ├── parsing_specifications.md       #   Спецификация парсинга (OCR + P3-6 Lama-риск)
@@ -254,6 +257,23 @@ flowchart LR
 
 ## 🚀 Быстрый старт (для интегратора)
 
+### 🔍 Запуск проверки целостности документации
+
+Перед фиксацией любых изменений в `docs/` — запустить скрипт:
+
+```bash
+python docs/scripts/check_consistency.py
+```
+
+Скрипт проверяет:
+- Нет ли упоминаний удалённых концепций (IDOR, Redis+rate limiting)
+- Нет ли `service_checker` в post-deploy (dev-only)
+- Нет ли ссылок на несуществующие task-ID
+- Нет ли файлов, не упомянутых в README.md
+- Не осталось ли устаревших утверждений (маскировка IP, OTEL только Gateway)
+
+При ошибках (красный) — исправить перед коммитом. Предупреждения (жёлтый) — некритично.
+
 > **Примечание:** API — внутренний, доступен только через Gateway (:8080).
 > Примеры ниже — для вызовов из Web UI (серверный код) по внутренней сети.
 
@@ -311,7 +331,7 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 | 16.06.2026 | **Логирование/мониторинг** (P11): структурированное логирование (JSON, обязательные поля), корреляционные ID, уровни WARN/ERROR/CRITICAL, аудит-журнал `audit.events`, SigNoz + OpenTelemetry + ClickHouse (5 шагов внедрения), health-checks `/ready` vs `/live`, SLO/SLI, алерты, `service_checker`. |
 | 17.06.2026 | **Service-to-service auth** (P0-5): сетевая изоляция Docker-сети `internal` (без `X-Internal-Token`, решение по Gateway-изоляции). |
 | 17.06.2026 | **CAS** (P5-9): два бакета MinIO (`files` + `images`), SHA-256 ключ без расширения. |
-| 17.06.2026 | **DDL-миграции** (P2-11): `docs/database/ddl_migrations_17_06.md` — CHECK/ENUM, UNIQUE, FK ON DELETE, soft-delete, индексы, valid_from/valid_until, audit.events, draft_notifications, preview_snapshot. |
+| 17.06.2026 | **DDL-миграции** (P2-11): `docs/database/ddl_migrations_17_06.md` — CHECK/ENUM, UNIQUE, soft-delete, индексы, valid_from/valid_until, audit.events, draft_notifications, preview_snapshot.
 | 17.06.2026 | **Резолвер** (P0-4): `docs/specifications/registry_resolver_spec.md` — event-driven + cron, advisory lock, стратегии exact/latest_revision. |
 | 17.06.2026 | **Компенсация check-uniqueness** (P0-3): подробное описание `INSERT ... ON CONFLICT DO NOTHING`, обработка `DUPLICATE_FILE_AFTER_APPROVE` в pipeline1-formation.md. |
 | 18.06.2026 | **Схлопывание `quality.warnings[]` + `quality.issues[]` → `quality.notifications[]`** (P3-5 поглощён P12-3): единый массив уведомлений оператора с полем `category: security | quality`. БД-таблица `pipeline.draft_notifications`. |

@@ -43,24 +43,6 @@
 
 ---
 
-## P2-4. ON DELETE / ON UPDATE для всех FK
-
-| Таблица | FK | ON DELETE | ON UPDATE |
-|---------|----|-----------|-----------|
-| `registry.document_sections` | `document_id` → `registry.documents` | `CASCADE` | `CASCADE` |
-| `registry.document_sections` | `parent_id` → `self` | `SET NULL` | `CASCADE` |
-| `registry.document_references` | `source_document_id` → `registry.documents` | `RESTRICT` | `CASCADE` |
-| `registry.document_references` | `resolved_document_id` → `registry.documents` | `SET NULL` | `CASCADE` |
-| `registry.document_versions` | `document_id` → `registry.documents` | `CASCADE` | `CASCADE` |
-| `registry.document_categories` | `document_id` → `registry.documents` | `CASCADE` | `CASCADE` |
-| `registry.document_categories` | `category_id` → `registry.categories` | `CASCADE` | `CASCADE` |
-| `chat.sessions` | `user_id` → `auth.users` | `RESTRICT` | `CASCADE` |
-| `chat.sessions` | `project_id` → `chat.projects` | `SET NULL` | `CASCADE` |
-| `chat.messages` | `session_id` → `chat.sessions` | `CASCADE` | `CASCADE` |
-| `rag.document_chunks` | `section_id` → `registry.document_sections` | `CASCADE` | `CASCADE` |
-
----
-
 ## P2-5. Soft-delete: deleted_at TIMESTAMPTZ
 
 Поле `deleted_at TIMESTAMPTZ` добавлено в таблицы:
@@ -184,11 +166,10 @@
 2. **P2-5** (soft-delete) — до UNIQUE, чтобы не мешал
 3. **P2-2** (CHAR(64)) — после проверки длин
 4. **P2-3** (UNIQUE)
-5. **P2-4** (FK)
-6. **P2-6** (индексы)
-7. **P2-7** (CHECK positive)
-8. **P2-8** (классификаторы) — опционально
-9. **P2-9** (validity + txn_id)
-10. **P2-10** (rename)
+5. **P2-6** (индексы)
+6. **P2-7** (CHECK positive)
+7. **P2-8** (классификаторы) — опционально
+8. **P2-9** (validity + txn_id)
+9. **P2-10** (rename)
 11. **audit.events** — отдельно
 12. **draft_notifications** — отдельно

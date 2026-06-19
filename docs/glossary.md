@@ -144,7 +144,7 @@
 | **qwen3-embedding-4b** | **P13-1**: модель эмбеддингов по умолчанию. Внешнее API. Размерность 2048 |
 | **bge-reranker-v2-m3-int8** | **P13-3**: модель rerank по умолчанию. Локальный TEI-сервер с int8-квантизацией |
 | **deepseek-4-flash** | **P13-5**: LLM для генерации ответов по умолчанию. Внешнее API. Параметры: temperature 0.2, max_tokens 1024, top_p 0.95 |
-| **service_checker** | **P11-9**: инструмент автопроверки сервисов на соответствие стандарту observability (OTEL SDK, OTLP endpoint, span-атрибуты, структура логов). Запускается в CI (PR-чек) и post-deploy |
+| **service_checker** | **P11-9**: инструмент автопроверки сервисов на соответствие стандарту observability (OTEL SDK, OTLP endpoint, span-атрибуты, структура логов). Запускается в CI (PR-чек). Dev-only, в production не используется |
 | **vector_rerank (S2)** | **P13-1**: прод-стратегия RAG Search. Dense + Rerank |
 | **experimental** | **P13-4**: экспериментальные поисковые стратегии S1–S9 (см. `docs/methodology/rag_experiments_methodology.md`). Задаются только в `app_settings.rag.search_strategy`, не через API |
 
