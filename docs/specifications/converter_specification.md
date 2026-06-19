@@ -61,10 +61,10 @@ flowchart LR
 |-----|----------|------|-------|-------------|
 | 1 | **Построение иерархии** — плоские блоки `raw_ocr_v4` преобразуются в структуру разделов, подразделов, абзацев, списков, таблиц, изображений, формул | `raw_ocr_v4.content[]` (плоский массив блоков) | Иерархическая структура с `clause`, `level`, `parent_clause`, `path` | Нет |
 | 2 | **LLM-обработка** (если `use_llm = true`) — уточнение иерархии, классификация типов секций, нормализация сложных структур | Иерархия (шаг 1) | Уточнённая иерархия | Шаг 1 |
-| 3 | **Извлечение метаданных** — `doc_code`, `title`, `mks_oks_code`, `okstu_code`, `udk_code`, `pkb_codes`, `document_type`, `year`, `era`, `validity_status`, `issuing_body`, `jurisdiction`, `source_type`, `language`, `title_hash_sha256`, `adoption`, `replaces`, `amendments` | Иерархия (шаги 1–2) | `document.metadata` | Шаги 1–2 |
+| 3 | **Извлечение метаданных** — `doc_code`, `title`, `mks_oks_code`, `okstu_code`, `udk_code`, `pkb_codes`, `document_type`, `year`, `era`, `validity_status`, `issuing_body`, `jurisdiction`, `source_type`, `language`, `title_hash_sha256`, `title_key`, `adoption`, `replaces`, `amendments` | Иерархия (шаги 1–2) | `document.metadata` | Шаги 1–2 |
 | 4 | **Валидация структуры** — проверка полноты данных, соответствия целевой схеме (`validated_v3`) | Иерархия (шаг 1) | `validation.structure_valid: bool` | Шаг 1 |
 | 5 | **Классификация** — определение `era` (USSR/CIS/RF/CURRENT), `source_type` (gost/gost_r/ost/rd/tu/iso/dnv/astm), `jurisdiction`, `validity_status` | `document.metadata` (шаг 3) | `classification` с кодами МКС/ОКС, ОКСТУ, УДК | Шаг 3 |
-| 6 | **Вычисление хэшей** — `file_hash_sha256` (SHA-256 от бинарного содержимого файла) и `title_hash_sha256` (бизнес-ключ по формуле нормализатора) | `file_hash_sha256`: файл; `title_hash_sha256`: метаданные (шаг 3) | `validation.fingerprint` | Шаг 3 |
+| 6 | **Вычисление хэшей** — `file_hash_sha256` (SHA-256 от бинарного содержимого файла), `title_hash_sha256` (бизнес-ключ по формуле нормализатора) и `title_key` (исходная строка конкатенации для хеша) | `file_hash_sha256`: файл; `title_hash_sha256`, `title_key`: метаданные (шаг 3) | `validation.fingerprint` | Шаг 3 |
 | 7 | **Сопоставление** — поиск `predecessor_doc_id` / `successor_doc_id` по `title_hash_sha256` (через Registry). Если найден дубликат — `decision = manual` | `title_hash_sha256` (шаг 6) | `validation.matching` | Шаг 6 |
 | 8 | **Валидация классификационных кодов** — проверка `mks_oks_code`, `okstu_code`, `udk_code` по справочнику Registry | Коды (шаг 5) | `classification_status`: `CONFIRMED`, `PENDING_REVIEW`, `NOT_FOUND`, `NOT_USED`, `UNASSIGNED` | Шаг 5, Registry |
 | 9 | **Построение кросс-ссылок** — извлечение из текста ссылок на другие документы, нормализация `target_doc_code`, формирование `document.references[]` | Иерархия (шаги 1–2) | `document.references[]` | Шаги 1, 7 |
@@ -73,7 +73,7 @@ flowchart LR
 
 | Режим | Эндпоинт | Шаги | LLM | Запись в БД |
 |-------|----------|------|-----|-------------|
-| **Preview** | `POST /converter/preview/metadata` | Только шаг 3 (извлечение метаданных: `doc_code`, `title`, `mks_oks_code`, `okstu_code`, `udk_code`, `pkb_codes`, `document_type`, `year`, `era`, `validity_status`, `issuing_body`, `jurisdiction`, `source_type`, `language`, `title_hash_sha256`) | Нет (или быстрый вызов с ограничением) | Нет |
+| **Preview** | `POST /converter/preview/metadata` | Только шаг 3 (извлечение метаданных: `doc_code`, `title`, `mks_oks_code`, `okstu_code`, `udk_code`, `pkb_codes`, `document_type`, `year`, `era`, `validity_status`, `issuing_body`, `jurisdiction`, `source_type`, `language`, `title_hash_sha256`, `title_key`) | Нет (или быстрый вызов с ограничением) | Нет |
 | **Full** | `POST /converter/convert` | Шаги 1–9 (полный цикл) | Да (управляется `use_llm`) | Нет |
 | **Standalone validate** | `POST /validate/document` | Шаги 4–8 (только валидация, без переконвертации) | Нет | Нет |
 
@@ -276,7 +276,13 @@ LLM используется в шаге 2 полного цикла (`POST /con
 title_hash_sha256 = SHA-256(era | source_type | mks_oks_code | okstu_code | doc_code | normalized_title)
 ```
 
-**Converter-validator** вычисляет `title_hash_sha256` на шаге 6 и передаёт в `validation.fingerprint`. **Оркестратор** использует этот хэш для проверки уникальности через `POST /registry/documents/check-uniqueness`.
+Наряду с хешем вычисляется и сохраняется `title_key` — исходная строка конкатенации:
+
+```
+title_key = era | source_type | mks_oks_code | okstu_code | doc_code | normalized_title
+```
+
+**Converter-validator** вычисляет `title_hash_sha256` и `title_key` на шаге 6 и передаёт в `validation.fingerprint`. **Оркестратор** использует хэш для проверки уникальности через `POST /registry/documents/check-uniqueness`.
 
 ### 6.2. Нормализация `doc_code` для кросс-ссылок
 
@@ -306,7 +312,7 @@ title_hash_sha256 = SHA-256(era | source_type | mks_oks_code | okstu_code | doc_
 | **Нет доступа к БД** | Converter-validator не читает и не пишет в БД. Все данные получает через тело запроса | А–Ж | `converter_validator_service_api.md` |
 | **Preview vs Full** | Preview — быстрые метаданные без LLM и валидации; Full — полный цикл | А, Д | `converter_validator_service_api.md` |
 | **LLM — опционально** | LLM включается параметром `use_llm`. Без LLM — эвристики | А, Б, Г, Е | `app_settings.llm` |
-| **Бизнес-ключ на основе метаданных** | `title_hash_sha256` вычисляется по нормализованным метаданным, а не по содержимому файла | А, Б, Е | `normalizer_specification.md` §2 |
+| **Бизнес-ключ на основе метаданных** | `title_hash_sha256` вычисляется по нормализованным метаданным, а не по содержимому файла. `title_key` — исходная строка конкатенации, сохраняется для аудита | А, Б, Е | `normalizer_specification.md` §2 |
 | **Маппинг типов через CV** | Converter-validator отвечает за преобразование типов блоков OCR/Parser → Registry | А, Б | `pipeline1-formation_detail.md` |
 | **Кросс-ссылки извлекаются на шаге 9** | Ссылки на другие документы извлекаются после построения иерархии, перед отдачей результата | А, Б | `normalizer_specification.md` §8 |
 | **Обнаружение аватаров → manual** | Латинские аватары в названии переводят `decision` в `manual` | Е | `normalizer_specification.md` §3.3 |

@@ -712,6 +712,7 @@ GET /registry/documents
       "source_type": "GOST",
       "document_type": "normative",
       "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+      "title_key": "USSR|gost|47.020||20868-81|стойки установочные...",
       "file_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "file_size_bytes": 2048576,
       "status": "indexed",
@@ -767,6 +768,7 @@ GET /registry/documents/{doc_id}
 - `doc_code` — код документа (ГОСТ, ОСТ и т.д.)
 - `title` — название документа
 - `title_hash_sha256` — хэш бизнес-ключа
+- `title_key` — исходная строка конкатенации для `title_hash_sha256` (аудит/отладка)
 - `preview_snapshot` — исходный JSON ответа Converter-validator preview, скопированный из черновика при approve (JSONB, nullable). Для истории и аудита
 - `status` — FSM-статус обработки (управляется Оркестратором, Registry — read-only)
 - `era` — эпоха (`USSR`, `CIS`, `RF`, `CURRENT`)
@@ -800,6 +802,7 @@ GET /registry/documents/{doc_id}
     "doc_code": "ГОСТ 20868-81",
     "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
     "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+    "title_key": "USSR|gost|31.240||20868-81|стойки установочные крепежные...",
     "preview_snapshot": {
       "doc_code": "ГОСТ 20868-81",
       "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
@@ -972,6 +975,7 @@ POST /registry/documents/check-uniqueness
     ],
     "file_hash_sha256": null,
     "title_hash_sha256": "a1b2c3d4e5f6...",
+    "title_key": "USSR|gost|47.020||20868-81|стойки установочные...",
     "file_size_bytes": 2048576,
     "checked_at": "2026-05-15T12:00:00Z"
   }
@@ -1018,6 +1022,7 @@ Registry принимает enriched JSON (схема `validated_v3`) напря
       "title": "СТОЙКИ УСТАНОВОЧНЫЕ...",
       "normalized_title": "стойки установочные...",
       "title_hash_sha256": "a1b2c3d4...",
+      "title_key": "USSR|gost|47.020||20868-81|стойки установочные...",
       "era": "USSR",
       "validity_status": "active",
       "mks_oks_code": "31.240"
@@ -1251,7 +1256,7 @@ PUT /registry/documents/{doc_id}
 ```
 
 Полное обновление карточки документа. Тело запроса — enriched JSON (схема `validated_v3`), аналогично `POST /registry/documents`.
-При изменении ключевых полей (`title`, `era`, `source_type`, `mks_oks_code`, `okstu_code`, `doc_code`) — `title_hash_sha256` пересчитывается автоматически.
+При изменении ключевых полей (`title`, `era`, `source_type`, `mks_oks_code`, `okstu_code`, `doc_code`) — `title_hash_sha256` и `title_key` пересчитываются автоматически.
 
 **Ответ `200`:**
 ```json
@@ -1297,7 +1302,7 @@ PATCH /registry/documents/{doc_id}
 | Категория | Поля |
 |-----------|------|
 | **editable** | `title`, `metadata`, `validity_status`, `status_note`, `category_ids`, `valid_from`, `valid_until`, `mks_oks_code`, `okstu_code`, `udk_code` |
-| **immutable** | `id`, `doc_code`, `title_hash_sha256`, `file_hash_sha256`, `created_at`, `created_by`, `current_version_id` |
+| **immutable** | `id`, `doc_code`, `title_hash_sha256`, `title_key`, `file_hash_sha256`, `created_at`, `created_by`, `current_version_id` |
 | **read-only** | `chunk_count`, `total_versions`, `subject_area` (вычисляется из `mks_oks_code` / `okstu_code` / `udk_code` через справочник) |
 
 При попытке изменить immutable-поле возвращается `400 IMMUTABLE_FIELD` с указанием имени поля.
@@ -1529,7 +1534,8 @@ POST /registry/documents/import
         "jurisdiction": "RU",
         "source_type": "RMRS",
         "language": "ru",
-        "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
+        "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+        "title_key": "CURRENT|rmrs|||311-05-1950ц|циркулярное письмо № 311-05-1950ц от 09.06.2023"
       },
       "created_by": "orchestrator",
       "created_at": "2026-06-18T10:00:00Z"
@@ -1568,7 +1574,8 @@ POST /registry/documents/import
       "jurisdiction": "RU",
       "source_type": "RMRS",
       "language": "ru",
-      "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
+      "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+      "title_key": "CURRENT|rmrs|||311-05-1950ц|циркулярное письмо № 311-05-1950ц от 09.06.2023"
     },
     "raw_data": { "schema": "raw_ocr_v4", "pages": [...] },
     "error_code": null,
@@ -1609,7 +1616,8 @@ POST /registry/documents/import
       "jurisdiction": "RU",
       "source_type": "RMRS",
       "language": "ru",
-      "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
+      "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+      "title_key": "CURRENT|rmrs|||311-05-1950ц|циркулярное письмо № 311-05-1950ц от 09.06.2023"
     },
     "created_at": "2026-06-18T10:00:00Z"
   }
@@ -1643,7 +1651,8 @@ POST /registry/documents/import
     "jurisdiction": "RU",
     "source_type": "RMRS",
     "language": "ru",
-    "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
+    "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+    "title_key": "CURRENT|rmrs|||311-05-1950ц|циркулярное письмо № 311-05-1950ц от 09.06.2023"
   },
   "error_code": null,
   "error_message": null,
@@ -2011,6 +2020,7 @@ DELETE /registry/categories/{category_id}
 | `doc_code` | text | nullable |
 | `title` | text | NOT NULL |
 | `title_hash_sha256` | text | UNIQUE — бизнес-ключ |
+| `title_key` | text | Исходная строка конкатенации для бизнес-ключа (аудит/отладка) |
 | `status` | varchar(30) | NOT NULL — `created`, `pending_index`, `indexing`, `indexed`, `failed` |
 | `era` | varchar(10) | nullable |
 | `validity_status` | varchar(20) | nullable |
@@ -2157,7 +2167,7 @@ WHERE is_resolved = FALSE;
 ## Примечания
 
 1. **DB shared:** Все таблицы registry находятся в общей БД. Другие сервисы читают их напрямую.
-2. **title_hash_sha256** вычисляется автоматически, гарантирует дедупликацию. Формула: `SHA-256(era | source_type | mks_oks_code | okstu_code | doc_code | normalized_title)`, где `normalized_title` — `title` в нижнем регистре с удалёнными лишними пробелами. Коды классификации (mks_oks_code, okstu_code) включены в формулу для разграничения документов с одинаковым номером, но разной тематической привязкой. Детальный алгоритм нормализации — в `specifications/normalizer_specification.md`.
+2. **title_hash_sha256** вычисляется автоматически, гарантирует дедупликацию. Формула: `SHA-256(era | source_type | mks_oks_code | okstu_code | doc_code | normalized_title)`, где `normalized_title` — `title` в нижнем регистре с удалёнными лишними пробелами. **title_key** — исходная строка конкатенации тех же полей, сохраняется для аудита и отладки. Коды классификации (mks_oks_code, okstu_code) включены в формулу для разграничения документов с одинаковым номером, но разной тематической привязкой. Детальный алгоритм нормализации — в `specifications/normalizer_specification.md`.
 3. **Параллельная классификация:** Документ может одновременно ссылаться на МКС/ОКС и ОКСТУ через разные FK.
 4. **Журнал статусов:** Все изменения `documents.status` логируются в `status_history` на уровне сервиса (Registry).
 5. **Неизвестные коды классификатора:** Коды, не найденные в справочнике, попадают в `classifier_pending`. Администратор разбирает их через UI.

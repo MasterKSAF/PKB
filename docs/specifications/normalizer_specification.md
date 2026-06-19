@@ -34,24 +34,34 @@ title_hash_sha256 = SHA-256(era | source_type | mks_oks_code | okstu_code | doc_
 
 **Разделитель**: `|` (pipe). Если поле отсутствует (NULL), в ключ не включается.
 
+### 2.1.1. title_key
+
+Наряду с хешем сохраняется исходная строка конкатенации — `title_key`:
+
+```
+title_key = era | source_type | mks_oks_code | okstu_code | doc_code | normalized_title
+```
+
+`title_key` хранится в `registry.documents.title_key` и возвращается в API-ответах для аудита и отладки. Позволяет восстановить, из каких именно полей был вычислен бизнес-ключ.
+
 ### 2.2. Примеры
 
 **ГОСТ СССР 20868-81:**
 ```
-USSR|gost|47.020||20868-81|стойки...
-→ SHA-256 → a1b2c3d4...
+title_key = USSR|gost|47.020||20868-81|стойки...
+title_hash_sha256 = SHA-256(title_key) → a1b2c3d4...
 ```
 
 **ГОСТ Р 2.105-95:**
 ```
-RF|gost_r|||2.105-95|ескд...
-→ SHA-256 → e5f6g7h8...
+title_key = RF|gost_r|||2.105-95|ескд...
+title_hash_sha256 = SHA-256(title_key) → e5f6g7h8...
 ```
 
 **DNV-RU-SHIP-Pt3:**
 ```
-CURRENT|dnv|47.020||dnv-ru-ship-pt3|rules for classification...
-→ SHA-256 → i9j0k1l2...
+title_key = CURRENT|dnv|47.020||dnv-ru-ship-pt3|rules for classification...
+title_hash_sha256 = SHA-256(title_key) → i9j0k1l2...
 ```
 
 ### 2.3. Почему бизнес-ключ, а не ID файла
@@ -200,6 +210,7 @@ CURRENT|dnv|47.020||dnv-ru-ship-pt3|rules for classification...
 | Таблица | Поле | Роль в нормализаторе |
 |---------|------|---------------------|
 | `registry.documents` | `title_hash_sha256` | Результат вычисления бизнес-ключа |
+| `registry.documents` | `title_key` | Исходная строка конкатенации для бизнес-ключа (аудит/отладка) |
 | `registry.documents` | `title` | Исходное название (не изменяется) |
 | `registry.documents` | `normalized_title` | Очищенное название (результат нормализации) |
 | `registry.documents` | `classification_status` | JSONB-статусы извлечения кодов |
@@ -221,7 +232,8 @@ CURRENT|dnv|47.020||dnv-ru-ship-pt3|rules for classification...
 3. Токены: `[гост, 20868-81, стойки, фундаментные, для, судовых, механизмов]`
 4. `гост` → найдено в terminology → `normalized = гост`
 5. Сборка: `гост20868-81стойкифундаментныедлясудовыхмеханизмов`
-6. Бизнес-ключ: `SHA-256(USSR|gost|47.020||20868-81|гост20868-81...)`
+6. `title_key = USSR|gost|47.020||20868-81|гост20868-81...`
+7. Бизнес-ключ: `SHA-256(title_key) → a1b2c3d4...`
 
 ### Пример 2: Иностранный документ с латинским аватаром
 
@@ -230,7 +242,8 @@ CURRENT|dnv|47.020||dnv-ru-ship-pt3|rules for classification...
 **Шаги:**
 1. `source_type = dnv`, `is_foreign = true`
 2. Упрощённая нормализация: `dnvrulesforclassificationofships`
-3. Бизнес-ключ: `SHA-256(CURRENT|dnv|47.020||dnv-ru-ship-pt3|dnvrules...)`
+3. `title_key = CURRENT|dnv|47.020||dnv-ru-ship-pt3|dnvrules...`
+4. Бизнес-ключ: `SHA-256(title_key) → i9j0k1l2...`
 
 ### Пример 3: Смешанный скрипт (опечатка в названии)
 
