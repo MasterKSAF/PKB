@@ -39,6 +39,7 @@ Production Gateway — reverse-proxy для внутренних микросе�
 - [`docs/parser_service_api.md`](docs/parser_service_api.md) — парсинг цифровых документов
 - [`docs/ocr_service_api.md`](docs/ocr_service_api.md) — OCR-распознавание
 - [`docs/overview.md`](docs/overview.md) — пайплайны обработки, FSM, архитектура
+- [`docs/mock_architecture.md`](docs/mock_architecture.md) — архитектура mock-режима (GW-8)
 
 ---
 

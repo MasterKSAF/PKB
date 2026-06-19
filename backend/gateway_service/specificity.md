@@ -1,5 +1,70 @@
 # Specificity / Аномалии
 
+## 2026-06-19: Доработка моков — API, структуры данных, логика (17 задач)
+
+### Изменения
+
+#### mocks/handlers/auth_routes.py
+- **AU-3**: Брутфорс-защита: `failed_attempts`, `locked_until` в модели пользователя. При 5 неудачных попытках → блокировка 30 мин (423 LOCKED). Сброс при успешном входе.
+- **AU-4**: Парольная политика: валидация длины ≥ 8 при create/update пользователя (WEAK_PASSWORD, 422).
+- **AU-5**: `PATCH /admin/users/{id}`: приоритет `roles[]` над `role`. `role` оставлен для обратной совместимости.
+- **AU-6**: Маскировка PII: `_mask_ip()` — IP-адреса в audit-логах маскируются (`123.xxx.xxx.xxx`).
+
+#### mocks/handlers/orch_routes.py
+- **OR-3**: `metadata_overrides: Optional[dict]` в `DecideRequest`. При approve — применение overrides к метаданным документа.
+- **OR-6**: `has_notifications`, `critical_count`, `notifications[]` в ответе `GET /drafts/{id}`.
+
+#### mocks/handlers/query_routes.py
+- **QS-6**: `valid_at: str` (обязательное) и `filters.category_ids[]` в `TextSearchRequest` + `POST /text/search`.
+- **QS-9**: `confidence: float` в каждом `sources[]` (mapped from score).
+- **QS-10**: `DELETE /chat/sessions/{id}` — engineer проверяет, что сессия принадлежит ему (403 если чужая).
+- **QS-11**: Удалён `message_count` из ответов `POST /chat/sessions`, `GET /chat/sessions`, `send_message`.
+
+#### mocks/handlers/registry_routes.py
+- **RG-2**: `current_version_id` в `GET /documents` и `GET /documents/{id}`.
+- **RG-5**: `PATCH /registry/documents/{id}` с разделением на editable (title, status, ...) и immutable (doc_code, era).
+- **RG-6**: `valid_from`, `valid_until` в `RegistryDocCreate`, `RegistryDocUpdate`, import-хендлере.
+- **RG-7**: `?valid_at=YYYY-MM-DD` фильтр в `GET /registry/documents`.
+- **RG-8**: `GET /registry/search?q=` — поиск по title + doc_code.
+- **RG-9**: `source_draft_id: Optional[int]` в `RegistryDocCreate`. Ответ `POST /documents` возвращает `version_id`.
+- **RG-10**: `preview_snapshot: Optional[dict]` в `GET /documents/{id}`.
+
+#### mocks/common.py
+- Seed-данные `SEED_REGISTRY_DOCUMENTS`: добавлены `valid_from`, `valid_until`, `current_version_id`, `preview_snapshot`.
+
+### Статус тестов
+- **529 passed, 1 skipped**
+
+---
+
+## 2026-06-19: Реализация GW-3 (CORS demo/prod), CM-1 (RBAC), GW-8 (документация), тесты T-11–T-15
+
+### Изменения
+
+#### gateway/config.py
+- **GW-3**: Добавлено поле `env` (development/production). Валидация: `CORS_ALLOWED_ORIGINS=*` запрещён для production.
+
+#### gateway/main.py
+- **GW-3**: CORS middleware — предупреждение в лог, если production с `*`.
+- **CM-1**: Добавлен RBAC для `GET /api/v1/registry/search`. Очищены старые checks (`/api/v1/classifiers` → `/api/v1/registry/classifiers`).
+
+#### mocks/gateway.py
+- **CM-1**: Синхронизирован RBAC: очищены старые пути, добавлен `/registry/search`.
+
+#### docs/mock_architecture.md
+- **GW-8**: Новый файл — описание архитектуры mock-режима.
+
+#### mocks/tests/
+- **T-11**: `test_correlation_headers.py` — 7 тестов на корреляционные заголовки.
+- **T-12**: `test_health_endpoints.py` — 8 тестов на health/live vs health/ready.
+- **T-14**: `test_service_checker.py` — 6 тестов на service_checker.
+- **T-15**: `test_otel.py` — 4 теста на OTEL → SigNoz (1 skipped).
+
+### Статус тестов
+- **529 passed, 1 skipped**
+
+---
+
 ## 2026-06-19: Актуализация Gateway по документации (P11, маршрутизация, безопасность, CM, GW)
 
 ### Изменения

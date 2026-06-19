@@ -173,11 +173,14 @@ class RegistryDocCreate(BaseModel):
     issuing_body: Optional[str] = None
     mks_oks_code: Optional[str] = None
     okstu_code: Optional[str] = None
+    valid_from: Optional[str] = None  # RG-6: YYYY-MM-DD
+    valid_until: Optional[str] = None  # RG-6: YYYY-MM-DD, default 9999-12-31
+    source_draft_id: Optional[int] = None  # RG-9
 
 
 class RegistryDocUpdate(BaseModel):
     title: Optional[str] = None
-    doc_code: Optional[str] = None
+    doc_code: Optional[str] = None  # immutable (RG-5)
     source_type: Optional[str] = None
     status: Optional[str] = None
     era: Optional[str] = None
@@ -677,7 +680,8 @@ async def delete_term(term_id: int):
 
 @router.get("/documents")
 async def list_registry_docs(search: str = None, status: str = None, source_type: str = None,
-                             era: str = None, page: int = 1, page_size: int = 50):
+                             era: str = None, valid_at: str = None,  # RG-7
+                             page: int = 1, page_size: int = 50):
     items = list(_registry_docs.values())
     if search:
         s = search.lower()
@@ -688,6 +692,9 @@ async def list_registry_docs(search: str = None, status: str = None, source_type
         items = [d for d in items if d.get("source_type") == source_type]
     if era:
         items = [d for d in items if d.get("era") == era]
+    # RG-7: фильтр valid_at
+    if valid_at:
+        items = [d for d in items if d.get("valid_from", "0001-01-01") <= valid_at <= d.get("valid_until", "9999-12-31")]
     return paginate_registry(items, page, page_size)
 
 
@@ -717,10 +724,14 @@ async def import_docs(request: Request):
                 updated += 1
             else:
                 doc_id = new_id()
+                version_id = new_id()
                 new_doc = {"id": doc_id, "title": item.title, "doc_code": item.doc_code, "source_type": item.source_type,
                            "status": item.status, "era": item.era, "validity_status": item.validity_status,
                            "jurisdiction": item.jurisdiction, "issuing_body": item.issuing_body,
                            "mks_oks_code": item.mks_oks_code, "okstu_code": item.okstu_code,
+                           "valid_from": item.valid_from or utcnow()[:10], "valid_until": item.valid_until or "9999-12-31",
+                           "source_draft_id": item.source_draft_id,
+                           "current_version_id": version_id, "preview_snapshot": None,
                            "title_hash_sha256": None, "classification_status": {}, "successor_doc_id": None,
                            "predecessor_doc_id": None, "total_versions": 1, "chunk_count": 0,
                            "created_by": "system", "updated_by": "system", "created_at": utcnow(), "updated_at": utcnow()}
@@ -738,23 +749,35 @@ async def get_registry_doc(doc_id: int):
     doc = _registry_docs.get(doc_id)
     if not doc:
         raise HTTPException(404, detail=error_response("DOCUMENT_NOT_FOUND", "Документ не найден"))
-    return {"data": doc}
+    # RG-2, RG-10: current_version_id, preview_snapshot (из хранилища)
+    resp = dict(doc)
+    resp.setdefault("current_version_id", doc.get("total_versions", 1))
+    resp.setdefault("preview_snapshot", None)
+    return {"data": resp}
 
 
 @router.post("/documents", status_code=201)
 async def create_registry_doc(req: RegistryDocCreate):
     doc_id = new_id()
+    version_id = new_id()  # RG-9
+    # RG-6: умолчания для valid_from/valid_until
+    valid_from = req.valid_from or utcnow()[:10]
+    valid_until = req.valid_until or "9999-12-31"
     new_doc = {"id": doc_id, "title": req.title, "doc_code": req.doc_code, "source_type": req.source_type,
                "status": req.status, "era": req.era, "validity_status": req.validity_status,
                "jurisdiction": req.jurisdiction, "issuing_body": req.issuing_body,
                "mks_oks_code": req.mks_oks_code, "okstu_code": req.okstu_code,
+               "valid_from": valid_from, "valid_until": valid_until,  # RG-6
+               "source_draft_id": req.source_draft_id,  # RG-9
+               "current_version_id": version_id,  # RG-2
+               "preview_snapshot": None,  # RG-10
                "title_hash_sha256": None, "classification_status": {}, "successor_doc_id": None,
                "predecessor_doc_id": None, "total_versions": 1, "chunk_count": 0,
                "created_by": "system", "updated_by": "system", "created_at": utcnow(), "updated_at": utcnow()}
     _registry_docs[doc_id] = new_doc
     _doc_history[doc_id] = [{"history_id": new_id(), "doc_id": doc_id, "previous_status": None,
                              "new_status": req.status, "comment": "Created", "changed_by": "system", "changed_at": utcnow()}]
-    return {"data": new_doc}
+    return {"data": new_doc, "version_id": version_id}
 
 
 @router.put("/documents/{doc_id}")
@@ -763,11 +786,42 @@ async def update_registry_doc(doc_id: int, req: RegistryDocUpdate):
     if not doc:
         raise HTTPException(404, detail=error_response("DOCUMENT_NOT_FOUND", "Документ не найден"))
     update_data = req.model_dump(exclude_unset=True)
+    # RG-5: immutable поля не обновляются через PUT
+    for k in ("doc_code", "era"):
+        update_data.pop(k, None)
     for k, v in update_data.items():
         if v is not None:
             doc[k] = v
     doc["updated_at"] = utcnow()
     return {"data": doc}
+
+
+@router.patch("/documents/{doc_id}")
+async def patch_registry_doc(doc_id: int, req: RegistryDocUpdate):
+    """RG-5: PATCH с разделением editable/immutable."""
+    doc = _registry_docs.get(doc_id)
+    if not doc:
+        raise HTTPException(404, detail=error_response("DOCUMENT_NOT_FOUND", "Документ не найден"))
+    update_data = req.model_dump(exclude_unset=True)
+    # RG-5: только editable поля
+    editable = {"title", "status", "validity_status", "jurisdiction", "issuing_body",
+                "mks_oks_code", "okstu_code", "successor_doc_id", "predecessor_doc_id"}
+    for k, v in update_data.items():
+        if v is not None and k in editable:
+            doc[k] = v
+    doc["updated_at"] = utcnow()
+    return {"data": doc} 
+
+
+@router.get("/search")
+async def search_registry(q: str = ""):
+    """RG-8: Поиск по реестру."""
+    if not q:
+        return {"data": [], "meta": {"total": 0, "query": q}}
+    s = q.lower()
+    items = [d for d in _registry_docs.values()
+             if s in d.get("title", "").lower() or s in d.get("doc_code", "").lower()]
+    return {"data": items, "meta": {"total": len(items), "query": q}}
 
 
 @router.patch("/documents/{doc_id}/status")

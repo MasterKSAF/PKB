@@ -42,6 +42,7 @@ class DecideRequest(BaseModel):
     action: str = ""
     decision: str = ""
     comment: Optional[str] = None
+    metadata_overrides: Optional[Dict[str, Any]] = None  # OR-3
 
 
 # ── утилиты ──────────────────────────────────────────────────────────────────
@@ -458,6 +459,8 @@ async def list_drafts(
 @router.get("/api/v1/drafts/{draft_id}")
 async def get_draft(draft_id: int):
     draft = _get_draft(draft_id)
+    # OR-6: уведомления качества
+    notifications = draft.get("notifications", [])
     return {
         "draft_id": draft["draft_id"],
         "task_id": draft["task_id"],
@@ -468,6 +471,9 @@ async def get_draft(draft_id: int):
         "version_id": draft.get("version_id"),
         "file_hash_sha256": draft.get("file_hash_sha256"),
         "is_new_document": draft.get("approved_document_id") is None and draft.get("status") not in ("discarded",),
+        "has_notifications": len(notifications) > 0,
+        "critical_count": sum(1 for n in notifications if n.get("severity") == "critical"),
+        "notifications": notifications,
         "created_at": draft.get("created_at"),
         "updated_at": draft.get("updated_at"),
     }
@@ -588,6 +594,10 @@ async def decide_draft(draft_id: int, req: DecideRequest):
 
     if action == "approve":
         new_doc_id = new_id()
+        # OR-3: применение metadata_overrides
+        metadata = dict(draft.get("metadata") or {})
+        if req.metadata_overrides:
+            metadata.update(req.metadata_overrides)
         new_doc = {
             "document_id": new_doc_id, "title": draft.get("title") or f"Документ {new_doc_id}",
             "doc_code": draft.get("doc_code"), "source_type": draft.get("source_type") or "OTHER",
@@ -603,7 +613,7 @@ async def decide_draft(draft_id: int, req: DecideRequest):
             "pages_total": 1, "pages_processed": 1, "pages_failed": 0,
             "ocr_status": "completed", "index_status": "pending",
             "user_id": user_id, "created_by": user_id,
-            "metadata": draft.get("metadata") or {},
+            "metadata": metadata,
             "created_at": now, "updated_at": now,
             "chunk_count": 0, "chunk_validation": None,
         }

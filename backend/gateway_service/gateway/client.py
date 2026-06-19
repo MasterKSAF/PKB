@@ -39,15 +39,17 @@ SERVICE_ROUTES: Dict[str, str] = {
     "/api/v1/documents/": "orchestrator",
     "/api/v1/drafts/": "orchestrator",
     "/api/v1/tasks/": "orchestrator",
-    "/api/v1/monitor/": "orchestrator",
     # Query Service (:8083)
     "/api/v1/chat/": "query",
     "/api/v1/text/": "query",
     # Registry Service (:8084)
     "/api/v1/registry/": "registry",
-    # Integration Service (:8085) — зарезервировано
+    "/api/v1/registry/categories/": "registry",
+    # Integration Service (:8085)
     "/api/v1/meridian/": "integration",
-    # Analyse Service (:8089) — зарезервировано
+    "/api/v1/files/": "integration",
+    "/api/v1/external/": "integration",
+    # Analyse Service (:8089)
     "/api/v1/analyse/": "analyse",
 }
 
@@ -183,6 +185,21 @@ async def proxy_request(request: Request, service_name: str) -> Response:
             del headers[key]
     # Удаляем host — httpx установит правильный
     headers.pop("host", None)
+
+    # Проброс корреляционных заголовков (P11-2 / CM-5)
+    for hdr in ("X-Request-ID", "X-Trace-ID"):
+        val = getattr(request.state, hdr.lower().replace("-", "_"), None)
+        if val:
+            headers[hdr] = val
+    # X-User-ID после JWT-валидации
+    user_id = getattr(request.state, "user_id", None)
+    if user_id is not None:
+        headers["X-User-ID"] = str(user_id)
+    # X-Draft-ID / X-Document-ID / X-Version-ID из пути
+    for hdr in ("X-Draft-ID", "X-Document-ID", "X-Version-ID"):
+        val = getattr(request.state, hdr.lower().replace("-", "_"), None)
+        if val is not None:
+            headers[hdr] = str(val)
 
     # Читаем тело запроса
     body = await request.body()

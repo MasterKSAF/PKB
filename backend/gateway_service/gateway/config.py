@@ -16,6 +16,11 @@ class GatewayConfig:
     # Режим работы
     mode: str = field(default_factory=lambda: os.getenv("GATEWAY_MODE", "real"))
 
+    # Окружение: development | production (GW-3)
+    env: str = field(
+        default_factory=lambda: os.getenv("ENV", "development").lower()
+    )
+
     # Порт самого Gateway
     port: int = field(
         default_factory=lambda: int(os.getenv("GATEWAY_PORT", "8080"))
@@ -27,17 +32,24 @@ class GatewayConfig:
     # Адреса внутренних сервисов
     # Формат: "http://host:port"
     service_urls: Dict[str, str] = field(default_factory=lambda: {
-        "auth":         os.getenv("AUTH_SERVICE_URL",         "http://127.0.0.1:8082"),
-        "orchestrator": os.getenv("ORCHESTRATOR_SERVICE_URL", "http://127.0.0.1:8081"),
-        "query":        os.getenv("QUERY_SERVICE_URL",        "http://127.0.0.1:8083"),
-        "registry":     os.getenv("REGISTRY_SERVICE_URL",     "http://127.0.0.1:8084"),
+        "auth":                os.getenv("AUTH_SERVICE_URL",                "http://127.0.0.1:8082"),
+        "orchestrator":        os.getenv("ORCHESTRATOR_SERVICE_URL",        "http://127.0.0.1:8081"),
+        "query":               os.getenv("QUERY_SERVICE_URL",               "http://127.0.0.1:8083"),
+        "registry":            os.getenv("REGISTRY_SERVICE_URL",            "http://127.0.0.1:8084"),
+        "integration":         os.getenv("INTEGRATION_SERVICE_URL",         "http://127.0.0.1:8085"),
+        "converter_validator": os.getenv("CONVERTER_VALIDATOR_SERVICE_URL","http://127.0.0.1:8086"),
+        "parser":              os.getenv("PARSER_SERVICE_URL",              "http://127.0.0.1:8087"),
+        "ocr":                 os.getenv("OCR_SERVICE_URL",                 "http://127.0.0.1:8088"),
+        "analyse":             os.getenv("ANALYSE_SERVICE_URL",             "http://127.0.0.1:8089"),
+        "rag_builder":         os.getenv("RAG_BUILDER_SERVICE_URL",         "http://127.0.0.1:8090"),
+        "rag_search":          os.getenv("RAG_SEARCH_SERVICE_URL",          "http://127.0.0.1:8091"),
     })
 
     # Таймауты
     request_timeout: float = float(os.getenv("GATEWAY_REQUEST_TIMEOUT", "30.0"))
     health_timeout: float = float(os.getenv("GATEWAY_HEALTH_TIMEOUT", "5.0"))
 
-    # CORS
+    # CORS (GW-3)
     cors_allowed_origins: str = field(
         default_factory=lambda: os.getenv("CORS_ALLOWED_ORIGINS", "*")
     )
@@ -56,6 +68,21 @@ class GatewayConfig:
             raise ValueError(
                 f"GATEWAY_MODE={self.mode!r} не поддерживается. "
                 f"Допустимые значения: {', '.join(valid_modes)}"
+            )
+
+        # Валидация ENV (GW-3)
+        valid_envs = ("development", "production")
+        if self.env not in valid_envs:
+            raise ValueError(
+                f"ENV={self.env!r} не поддерживается. "
+                f"Допустимые значения: {', '.join(valid_envs)}"
+            )
+
+        # CI-check: * запрещён для production (GW-3)
+        if self.env == "production" and self.cors_allowed_origins == "*":
+            raise ValueError(
+                "CORS_ALLOWED_ORIGINS=* запрещён для production. "
+                "Укажите конкретные домены через запятую."
             )
 
 

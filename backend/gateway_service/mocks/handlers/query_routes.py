@@ -116,6 +116,7 @@ class ChatRequest(BaseModel):
 
 class TextSearchRequest(BaseModel):
     text: str
+    valid_at: str = ""  # QS-6: YYYY-MM-DD, обязательное
     document_ids: Optional[List[int]] = None
     top_k: Optional[int] = 5
     filters: Optional[Dict[str, Any]] = None
@@ -139,7 +140,7 @@ async def create_session(req: CreateSessionRequest):
         "project_id": req.project_id, "user_id": "anonymous",
         "document_ids": req.document_ids or [],
         "options": req.options or {"model": "gpt-4", "temperature": 0.3},
-        "message_count": 0, "messages": [], "has_more": False,
+        "messages": [], "has_more": False,
         "last_message_preview": "", "created_at": now, "updated_at": now,
     }
     _sessions[session_id] = new_session
@@ -149,9 +150,10 @@ async def create_session(req: CreateSessionRequest):
 @router.get("/api/v1/chat/sessions")
 async def list_sessions(page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=200)):
     items = sorted(_sessions.values(), key=lambda s: s.get("updated_at", ""), reverse=True)
+    # QS-11: message_count удалён
     result = [{
         "session_id": s["session_id"], "title": s.get("title", ""),
-        "document_ids": s.get("document_ids", []), "message_count": s.get("message_count", 0),
+        "document_ids": s.get("document_ids", []),
         "last_message_preview": s.get("last_message_preview", ""),
         "created_at": s.get("created_at", ""), "updated_at": s.get("updated_at", ""),
     } for s in items]
@@ -192,9 +194,21 @@ async def update_session(session_id: int, req: UpdateSessionRequest):
 
 
 @router.delete("/api/v1/chat/sessions/{session_id}")
-async def delete_session(session_id: int):
-    if session_id not in _sessions:
+async def delete_session(session_id: int, request: Request):
+    session = _sessions.get(session_id)
+    if not session:
         raise HTTPException(status_code=404, detail=error_response("SESSION_NOT_FOUND", "Сессия не найдена"))
+    # QS-10: engineer удаляет только свои сессии
+    user = getattr(request.state, "user", {})
+    role = user.get("role", "")
+    user_id = user.get("user_id")
+    if role == "engineer" and user_id is not None:
+        try:
+            session_user_id = int(session.get("user_id", -1))
+            if session_user_id != user_id:
+                raise HTTPException(status_code=403, detail=error_response("FORBIDDEN", "Инженер может удалять только свои сессии"))
+        except (ValueError, TypeError):
+            pass
     del _sessions[session_id]
     return {"session_id": session_id, "deleted_at": utcnow()}
 
@@ -293,7 +307,6 @@ async def send_message(session_id: int, req: SendMessageRequest):
         "timestamp": utcnow(), "feedback": None,
     }
     session["messages"].append(asst_msg)
-    session["message_count"] = len(session["messages"])
     session["last_message_preview"] = asst_content[:80] + "..."
     session["updated_at"] = utcnow()
 
@@ -530,18 +543,23 @@ async def text_search(req: TextSearchRequest):
     ]
     if req.document_ids:
         all_results = [r for r in all_results if r["document_id"] in req.document_ids]
-    if req.filters and req.filters.get("document_type"):
-        all_results = [r for r in all_results if r["document_type"] == req.filters["document_type"]]
+    if req.filters:
+        if req.filters.get("document_type"):
+            all_results = [r for r in all_results if r["document_type"] == req.filters["document_type"]]
+        if req.filters.get("category_ids"):
+            all_results = [r for r in all_results if r.get("document_id") in req.filters["category_ids"]]
     all_results.sort(key=lambda x: x["score"], reverse=True)
     top_k = min(req.top_k or 5, len(all_results))
     results = all_results[:top_k]
     return {
         "original_text": req.text,
+        "valid_at": req.valid_at,
         "analysis": {"normalized_query": req.text.lower(), "entities": [], "subqueries": [req.text]},
         "results": [{
             "section_id": r["section_id"], "document_id": r["document_id"],
             "document_title": r["document_title"], "page": r["page"],
             "content": r["content"], "score": r["score"],
+            "confidence": r["score"],  # QS-9
             "document_type": r["document_type"], "matched_subquery": req.text,
         } for r in results],
         "total_found": len(all_results),

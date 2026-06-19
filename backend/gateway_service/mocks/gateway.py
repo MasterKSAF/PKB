@@ -221,8 +221,8 @@ class RBACMiddleware(BaseHTTPMiddleware):
                         ),
                     )
 
-            # POST/PUT/DELETE /classifiers — can_manage_classifiers
-            _classifier_path = path.startswith("/api/v1/classifiers") or path.startswith("/api/v1/registry/classifiers")
+            # POST/PUT/DELETE /registry/classifiers — can_manage_classifiers (CM-1)
+            _classifier_path = path.startswith("/api/v1/registry/classifiers")
             if request.method in ("POST", "PUT", "PATCH", "DELETE") and _classifier_path:
                 if not permissions.get("can_manage_classifiers", False):
                     return JSONResponse(
@@ -233,8 +233,8 @@ class RBACMiddleware(BaseHTTPMiddleware):
                         ),
                     )
 
-            # POST/PUT/DELETE /terminology — can_manage_terminology
-            _term_path = path.startswith("/api/v1/terminology") or path.startswith("/api/v1/registry/terminology")
+            # POST/PUT/DELETE /registry/terminology — can_manage_terminology (CM-1)
+            _term_path = path.startswith("/api/v1/registry/terminology")
             if request.method in ("POST", "PUT", "PATCH", "DELETE") and _term_path:
                 if not permissions.get("can_manage_terminology", False):
                     return JSONResponse(
@@ -255,6 +255,20 @@ class RBACMiddleware(BaseHTTPMiddleware):
                         content=error_response(
                             "FORBIDDEN",
                             "Недостаточно прав для управления реестром",
+                        ),
+                    )
+
+            # GET /registry/search — knowledge_admin / system_admin (CM-1)
+            if request.method == "GET" and path.startswith("/api/v1/registry/search"):
+                if not (
+                    permissions.get("can_manage_classifiers", False)
+                    or permissions.get("can_manage_registry", False)
+                ):
+                    return JSONResponse(
+                        status_code=403,
+                        content=error_response(
+                            "FORBIDDEN",
+                            "Недостаточно прав для поиска по реестру",
                         ),
                     )
 

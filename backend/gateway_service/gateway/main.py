@@ -365,8 +365,8 @@ class RBACMiddleware(BaseHTTPMiddleware):
                         ),
                     )
 
-            # POST/PUT/DELETE /classifiers — can_manage_classifiers
-            _classifier_path = path.startswith("/api/v1/classifiers") or path.startswith("/api/v1/registry/classifiers")
+            # POST/PUT/DELETE /registry/classifiers — can_manage_classifiers (CM-1)
+            _classifier_path = path.startswith("/api/v1/registry/classifiers")
             if request.method in ("POST", "PUT", "PATCH", "DELETE") and _classifier_path:
                 if not permissions.get("can_manage_classifiers", False):
                     return JSONResponse(
@@ -377,8 +377,8 @@ class RBACMiddleware(BaseHTTPMiddleware):
                         ),
                     )
 
-            # POST/PUT/DELETE /terminology — can_manage_terminology
-            _term_path = path.startswith("/api/v1/terminology") or path.startswith("/api/v1/registry/terminology")
+            # POST/PUT/DELETE /registry/terminology — can_manage_terminology (CM-1)
+            _term_path = path.startswith("/api/v1/registry/terminology")
             if request.method in ("POST", "PUT", "PATCH", "DELETE") and _term_path:
                 if not permissions.get("can_manage_terminology", False):
                     return JSONResponse(
@@ -399,6 +399,20 @@ class RBACMiddleware(BaseHTTPMiddleware):
                         content=_error_response(
                             "FORBIDDEN",
                             "Недостаточно прав для управления реестром",
+                        ),
+                    )
+
+            # GET /registry/search — knowledge_admin / system_admin (CM-1)
+            if request.method == "GET" and path.startswith("/api/v1/registry/search"):
+                if not (
+                    permissions.get("can_manage_classifiers", False)
+                    or permissions.get("can_manage_registry", False)
+                ):
+                    return JSONResponse(
+                        status_code=403,
+                        content=_error_response(
+                            "FORBIDDEN",
+                            "Недостаточно прав для поиска по реестру",
                         ),
                     )
 
@@ -761,9 +775,13 @@ app.add_middleware(RBACMiddleware)
 app.add_middleware(CorrelationHeadersMiddleware)
 app.add_middleware(RequestTracingMiddleware)
 app.add_middleware(PIIQueryValidatorMiddleware)
+# CORS (GW-3): в development разрешено всё, в production — только CORS_ALLOWED_ORIGINS
+_cors_origins = config.cors_allowed_origins.split(",") if config.cors_allowed_origins != "*" else ["*"]
+if config.env == "production" and _cors_origins == ["*"]:
+    logger.warning("CORS: ALL origins allowed — это небезопасно для production!")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=config.cors_allowed_origins.split(",") if config.cors_allowed_origins != "*" else ["*"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
