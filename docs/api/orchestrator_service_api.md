@@ -111,10 +111,13 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 {
   "task_id": 420000,
   "draft_id": 420000,
-  "document_id": null,
+  "document_id": 1,
+  "version_id": 1,
   "status": "previewing",
   "pipeline_stage": "preview",
   "progress_percent": 45,
+  "has_notifications": false,
+  "critical_count": 0,
   "steps": [
     {
       "step_name": "upload",
@@ -145,12 +148,15 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 | `task_id` | bigint | Сквозной ID задачи |
 | `draft_id` | bigint \| null | ID черновика в Registry |
 | `document_id` | bigint \| null | ID документа в Registry (если создан) |
+| `version_id` | bigint \| null | ID версии документа (если создана) |
 | `status` | string | Текущий статус (`uploaded`, `previewing`, `ready_for_approve`, `processing`, `created`, `indexing`, `indexed`, `failed`) |
 | `pipeline_stage` | string | Этап конвейера: `upload`, `preview`, `decision`, `full`, `registry`, `indexation` |
 | `progress_percent` | int | Общий прогресс (0–100) |
+| `has_notifications` | bool | Есть ли уведомления у черновика |
+| `critical_count` | int | Количество critical-уведомлений |
 | `steps` | array | Массив этапов задачи с промежуточными данными (`step_name`, `service_name`, `status`, `input_data`, `output_data`, `started_at`, `completed_at`) |
-| `created_at` | string | Время создания задачи (ISO 8601) |
-| `updated_at` | string | Время последнего обновления (ISO 8601) |
+| `created_at` | datetime | Время создания задачи (ISO 8601) |
+| `updated_at` | datetime | Время последнего обновления (ISO 8601) |
 
 **Примечание:** `GET /tasks/{task_id}/status` — эндпоинт для сквозного отслеживания задачи админом. `task` — агрегатор этапов пайплайна, каждый этап хранит входные/выходные JSON-контейнеры сервисов. Внешним клиентам для статуса загрузки следует использовать `GET /drafts/{draft_id}/preview/status`, для статуса документа — `GET /documents/{document_id}/status`.
 
@@ -167,6 +173,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 ```json
 {
   "task_id": 420000,
+  "total": 2,
   "steps": [
     {
       "step_name": "upload",
@@ -193,6 +200,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 | Поле | Тип | Описание |
 |---|---|---|
 | `task_id` | bigint | Сквозной ID задачи |
+| `total` | int | Количество шагов |
 | `steps` | array | Массив этапов задачи (схема — см. `GET /tasks/{task_id}/status`) |
 
 ### GET /drafts/{draft_id}/tasks
@@ -224,7 +232,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 | Поле | Тип | Описание |
 |---|---|---|
 | `draft_id` | bigint | ID черновика |
-| `tasks` | array | Массив задач: `task_id`, `status`, `pipeline_stage`, `initiated_by`, `created_at`, `updated_at` |
+| `tasks` | array | Массив задач: `task_id`, `status`, `pipeline_stage`, `initiated_by` (субъект), `created_at`, `updated_at` |
 
 ### POST /documents/{doc_id}/versions
 
@@ -786,6 +794,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 |----------|-----|---------------|-------------|----------|
 | `status` | string | Нет | — | Фильтр по статусу задачи: `uploaded`, `previewing`, `ready_for_approve`, `processing`, `created`, `indexing`, `indexed`, `failed` |
 | `draft_id` | bigint | Нет | — | Фильтр по ID черновика |
+| `pipeline_type` | string | Нет | — | Фильтр по типу пайплайна |
 | `page` | int | Нет | 1 | Номер страницы |
 | `page_size` | int | Нет | 50 | Размер страницы (макс. 100) |
 
@@ -822,8 +831,8 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 | `items[].status` | string | Статус задачи |
 | `items[].pipeline_stage` | string | Этап конвейера |
 | `items[].progress_percent` | int | Прогресс (0–100) |
-| `items[].created_at` | string | Время создания |
-| `items[].updated_at` | string | Время обновления |
+| `items[].created_at` | datetime | Время создания |
+| `items[].updated_at` | datetime | Время обновления |
 | `meta.total` | int | Всего задач |
 | `meta.page` | int | Текущая страница |
 | `meta.page_size` | int | Размер страницы |
@@ -1145,8 +1154,8 @@ Orchestrator — **единая точка входа** для работы с �
 | `critical_count` | int | **P12-3**: количество critical-уведомлений (для бейджа) |
 | `error_code` | string \| null | Код ошибки при `discarded` |
 | `error_message` | string \| null | Описание ошибки |
-| `created_at` | string | Время создания (ISO 8601) |
-| `updated_at` | string | Время последнего изменения (ISO 8601) |
+| `created_at` | datetime | Время создания (ISO 8601) |
+| `updated_at` | datetime | Время последнего изменения (ISO 8601) |
 
 **Терминальные и промежуточные статусы:**
 
@@ -1250,9 +1259,9 @@ Orchestrator — **единая точка входа** для работы с �
 | `document_id` | bigint \| null | ID документа в Registry, созданный по результатам черновика |
 | `error_code` | string \| null | Код ошибки |
 | `error_message` | string \| null | Описание ошибки |
-| `created_by` | string | Кто создал черновик |
-| `created_at` | string | Время создания (ISO 8601) |
-| `updated_at` | string | Время последнего изменения (ISO 8601) |
+| `created_by` | string | Субъект (пользователь или сервис) |
+| `created_at` | datetime | Время создания (ISO 8601) |
+| `updated_at` | datetime | Время последнего изменения (ISO 8601) |
 
 **Возможные ошибки:**
 
@@ -1292,7 +1301,7 @@ Orchestrator — **единая точка входа** для работы с �
 | `status` | string | Статус черновика |
 | `confidence` | float | Оценка качества распознавания (0..1) |
 | `preview_metadata` | object | Preview-метаданные — см. [_schemas.md](_schemas.md#PreviewMetadata) |
-| `created_at` | string | Время создания (ISO 8601) |
+| `created_at` | datetime | Время создания (ISO 8601) |
 
 **Возможные ошибки:**
 
@@ -1323,7 +1332,7 @@ Orchestrator — **единая точка входа** для работы с �
 |---|---|---|
 | `draft_id` | bigint | ID черновика |
 | `status` | string | Статус: `previewing` |
-| `estimated_completion` | string | Предполагаемое время завершения |
+| `estimated_completion` | datetime | Предполагаемое время завершения (ISO 8601) |
 
 **Возможные ошибки:**
 
@@ -1503,8 +1512,8 @@ Orchestrator — **единая точка входа** для работы с �
 | `action` | string | Выполненное действие: `approve`, `confirm` или `reject` |
 | `document_id` | bigint \| null | ID документа в Registry (null при reject) |
 | `message` | string | Описание результата |
-| `decided_by` | string | Кто принял решение |
-| `decided_at` | string | Время решения (ISO 8601) |
+| `decided_by` | string | Субъект (пользователь или сервис) |
+| `decided_at` | datetime | Время решения (ISO 8601) |
 
 **Возможные ошибки:**
 
@@ -1590,7 +1599,7 @@ Orchestrator — **единая точка входа** для работы с �
 | `title_hash_sha256` | string | Пересчитанный бизнес-ключ (SHA-256) |
 | `title_key` | string | Исходная строка конкатенации (аудит) |
 | `message` | string | Описание результата |
-| `updated_at` | string | Время обновления (ISO 8601) |
+| `updated_at` | datetime | Время обновления (ISO 8601) |
 
 **Возможные ошибки:**
 
@@ -1619,7 +1628,7 @@ Orchestrator — **единая точка входа** для работы с �
 | Поле | Тип | Описание |
 |------|-----|----------|
 | `draft_id` | bigint | Идентификатор удалённого черновика |
-| `deleted_at` | string | Время удаления (ISO 8601) |
+| `deleted_at` | datetime | Время удаления (ISO 8601) |
 
 **Возможные ошибки:**
 
@@ -1644,8 +1653,7 @@ Orchestrator последовательно опрашивает `GET /health` �
 {
   "status": "ok",
   "service": "orchestrator",
-  "version": "1.0.0",
-  "uptime_seconds": 234567
+  "version": "1.0.0"
 }
 ```
 
@@ -1654,7 +1662,6 @@ Orchestrator последовательно опрашивает `GET /health` �
 | `status` | string | Общий статус системы: `ok`, `degraded`, `error` |
 | `service` | string | Идентификатор сервиса (`orchestrator`) |
 | `version` | string | Версия Orchestrator |
-| `uptime_seconds` | int | Время работы с момента запуска |
 
 Формат соответствует общему стандарту health для внутренних сервисов (см. `common_api.md`).
 

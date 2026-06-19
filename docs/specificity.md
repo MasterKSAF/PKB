@@ -145,6 +145,22 @@ API черновиков и FSM документированы, но **UI сра
 
 **Решение:** endpoint специфицирован, Gateway маршрут добавлен, Registry internal endpoint описан.
 
+### A42. Статусы задач — целевая модель vs код (20.06)
+
+Спецификация `task.status` задаёт 8 статусов: `uploaded`, `previewing`, `ready_for_approve`, `processing`, `created`, `indexing`, `indexed`, `failed` (зафиксировано в `guide.md`). Код использует упрощённую модель: `active`, `completed`, `failed`, `partially_indexed`. 
+
+**Решение:** целевая модель спеки верна. Код должен быть доработан.
+
+### A43. `GET /drafts/{draft_id}/tasks` — не реализован (20.06)
+
+Эндпоинт спроектирован, специфицирован, подтверждён как необходимый. Ожидает реализации.
+
+### A44. Формат пагинации `GET /tasks` — не соответствует common_api.md (20.06)
+
+`GET /tasks` код возвращает плоские `total`, `page`, `page_size`, а стандарт API (`common_api.md`) требует `meta: { total, page, page_size }`. 
+
+**Решение:** формат `meta: {}` оставлен как целевой. Код должен быть приведён к стандарту.
+
 ### A39. `valid_from`/`valid_until` в черновике (S6, resolved)
 
 Даты действия возвращаются в `GET /drafts/{id}` после передачи через `PATCH /metadata`. `valid_until = dateMax` в API возвращается как `null`. `valid_from` выводится из `year` (01-01-{year}) если не задан явно.
