@@ -1,26 +1,17 @@
-import subprocess, sys, time, os
+"""
+Запуск единого mock-сервера Gateway (все сервисы на порту 8081).
 
-SERVICES = [
-    ("Auth", 8082, "mocks.auth_service.main:app"),
-    ("Orchestrator", 8081, "mocks.orchestrator_service.main:app"),
-    ("Query", 8083, "mocks.query_service.main:app"),
-    ("Registry", 8084, "mocks.registry_service.main:app"),
-]
+Использует mocks/gateway.py как unified entry point.
+"""
 
-procs = []
-for name, port, app in SERVICES:
-    print(f"[+] {name} :{port}")
-    p = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", app, "--host", "127.0.0.1", "--port", str(port)],
-        cwd=os.path.dirname(os.path.abspath(__file__))
+import subprocess
+import sys
+import os
+
+if __name__ == "__main__":
+    print("Запуск mock Gateway на порту 8081...")
+    subprocess.run(
+        [sys.executable, "-m", "uvicorn", "mocks.gateway:app",
+         "--host", "127.0.0.1", "--port", "8081", "--reload"],
+        cwd=os.path.dirname(os.path.abspath(__file__)),
     )
-    procs.append((name, p))
-
-print("Все сервисы запущены. Ctrl+C для остановки.")
-try:
-    while True:
-        time.sleep(1)
-except KeyboardInterrupt:
-    for n, p in procs:
-        p.terminate()
-    print("Остановлены.")

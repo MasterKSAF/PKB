@@ -1,46 +1,31 @@
-# Todo — Доработка моков: API, структуры данных, логика
+# Сверка проекта с документацией
 
 ## Выполнено ✅
 
-### 1. Auth Service (4 задачи)
-- [x] AU-3: Брутфорс-защита (failed_attempts, locked_until, блокировка 30 мин, сброс при успехе)
-- [x] AU-4: Парольная политика (длина ≥ 8 символов)
-- [x] AU-5: PATCH /admin/users/{id}: приоритет roles[] над role
-- [x] AU-6: Маскировка PII в audit-логах (IP → xxx.xxx.xxx.xxx)
+### README.md (vs фактическая структура)
+- [x] **Неполный список docs/**: добавлены mock_architecture.md, db_diagrams.md, diagrams.md, pipeline-файлы, JSON-схемы
+- [x] **Неполный список mocks/tests/**: добавлены все 8 файлов
+- [x] **Устаревшее количество тестов**: обновлено 496 → 530+
+- [x] **Не описаны mocks/__init__.py, mocks/requirements.txt, mocks/todo.md** — добавлены
 
-### 2. Orchestrator (2 задачи)
-- [x] OR-3: metadata_overrides в DecideRequest + применение при approve
-- [x] OR-6: has_notifications, critical_count, notifications[] в GET /drafts/{id}
+### guide.md (не существует)
+- [x] **guide.md создан** — архитектурные решения и ориентиры
 
-### 3. Query Service (4 задачи)
-- [x] QS-6: valid_at (date) + filters.category_ids[] в POST /text/search
-- [x] QS-9: confidence в sources[] (mapped from score)
-- [x] QS-10: engineer → только свои сессии при DELETE
-- [x] QS-11: Удалён message_count из ответов create_session, list_sessions, send_message
+### run_all.py (сломан)
+- [x] **run_all.py исправлен** — теперь запускает единый mock-gateway (`mocks.gateway:app`)
 
-### 4. Registry Service (7 задач)
-- [x] RG-2: current_version_id в ответах GET /documents и GET /documents/{id}
-- [x] RG-5: PATCH /registry/documents/{id} с разделением editable/immutable
-- [x] RG-6: valid_from, valid_until в RegistryDocCreate, RegistryDocUpdate, seed
-- [x] RG-7: ?valid_at фильтр в GET /registry/documents
-- [x] RG-8: GET /registry/search?q= (поиск по title + doc_code)
-- [x] RG-9: source_draft_id в POST /documents + version_id в ответе
-- [x] RG-10: preview_snapshot (JSONB, nullable) в GET /documents/{id}
+### Пустые папки-остатки
+- [x] **Удалены** mocks/auth_service/, mocks/orchestrator_service/, mocks/query_service/, mocks/registry_service/
 
-### 5. Rate Limiting + IDOR protection (4 задачи)
-- [x] CM-2 / GW-4: Rate limiting middleware (InMemory + Redis backend)
-- [x] CM-3 / GW-6: IDOR protection — rate limit по draft_id / document_id / session_id
-- [x] docker-compose.yml: сетевая изоляция L2–L4 (GW-1, GW-2, GW-5, CM-4)
-- [x] gateway/rate_limiter.py: модуль с InMemoryRateLimiter + RedisRateLimiter + rule matching
-- [x] mocks/gateway.py: RateLimitMiddleware синхронизирован с production
-- [x] test_rate_limiting.py: 22 теста (общий rate limit, IDOR, unit)
+### .rules
+- [x] **Синхронизировать readme.md → README.md** в .rules п.2.1
 
-### 6. Mock-структуры: DB-1, DB-2, DB-25, DB-26 (5 задач)
-- [x] DB-1: 6-польная формула title_hash_sha256 — функция compute_title_hash_sha256() в common.py
-- [x] DB-2: CHECK/ENUM валидация source_type, era, validity_status, jurisdiction, status в RegistryDocCreate/Update
-- [x] DB-25: revision, source_filename, file_path, updated_at в document_versions
-- [x] DB-26: draft_id FK в registry.documents (seed + модели + хендлеры)
-- [x] DB-12: проверено — uploaded_at/uploaded_by не осталось в моках
+---
 
-### Статус тестов
-- **530 passed, 1 skipped** (+22 rate limiting, + enum валидация в моках)
+## Финальная проверка
+- [x] Протестировать run_all.py — импорт mocks.gateway OK, gateway.main OK
+- [x] Проверить целостность связей (gateway/, mocks/, docs/, tests/) — все 100% на месте
+- [x] Запущены тесты: 22/22 rate_limiting, 34/34 health+routing — все OK
+- [x] Найден и исправлен **`mocks/tests/start_service.py`** — импортировал удалённые модули
+- [x] Найден и исправлен устаревший раздел «Быстрый старт» в README — команды запуска отдельных сервисов
+- [ ] **Не требует правок**: specificity.md — аномалии релевантны

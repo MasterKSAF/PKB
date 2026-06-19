@@ -38,8 +38,17 @@ Production Gateway — reverse-proxy для внутренних микросе�
 - [`docs/converter_validator_service_api.md`](docs/converter_validator_service_api.md) — конвертация и валидация
 - [`docs/parser_service_api.md`](docs/parser_service_api.md) — парсинг цифровых документов
 - [`docs/ocr_service_api.md`](docs/ocr_service_api.md) — OCR-распознавание
-- [`docs/overview.md`](docs/overview.md) — пайплайны обработки, FSM, архитектура
 - [`docs/mock_architecture.md`](docs/mock_architecture.md) — архитектура mock-режима (GW-8)
+- [`docs/db_diagrams.md`](docs/db_diagrams.md) — ER-диаграммы БД
+- [`docs/diagrams.md`](docs/diagrams.md) — диаграммы архитектуры
+- [`docs/pipeline1-formation.md`](docs/pipeline1-formation.md) — пайплайн формирования
+- [`docs/pipeline1-formation_detail.md`](docs/pipeline1-formation_detail.md) — детали пайплайна
+- [`docs/pipeline3-search.md`](docs/pipeline3-search.md) — пайплайн поиска
+- [`docs/overview.md`](docs/overview.md) — пайплайны обработки, FSM, архитектура
+- [`docs/schema_converter_preview.json`](docs/schema_converter_preview.json) — схема converter preview
+- [`docs/schema_converter_result.json`](docs/schema_converter_result.json) — схема converter result
+- [`docs/schema_parser_result.json`](docs/schema_parser_result.json) — схема parser result
+- [`docs/schema_registry_for_rag.json`](docs/schema_registry_for_rag.json) — схема registry для RAG
 
 ---
 
@@ -61,30 +70,37 @@ python -m gateway.main
 # Запустить единый шлюз (все сервисы на порту 8081)
 python backend/gateway_service/mocks/gateway.py
 
-# Или запустить сервисы по отдельности
-python backend/gateway_service/mocks/start_service.py all
-python backend/gateway_service/mocks/start_service.py auth         # только Auth (порт 8082)
-python backend/gateway_service/mocks/start_service.py orchestrator # (порт 8081)
-python backend/gateway_service/mocks/start_service.py query        # (порт 8083)
-python backend/gateway_service/mocks/start_service.py registry     # (порт 8084)
+# Или через утилиту
+python backend/gateway_service/mocks/run_all.py
+python backend/gateway_service/mocks/start_service.py
 ```
 
 После запуска откройте `http://127.0.0.1:8081/docs` — интерактивная Swagger-документация.
+
+> **Единый Gateway** (порт 8081) объединяет все 5 сервисов: Auth, Orchestrator, Query, Registry, Integration.
+> Отдельный запуск каждого сервиса больше не поддерживается (унифицированная архитектура mock).
 
 ---
 
 ## 🧪 Запуск тестов
 
 ```bash
-# Все 496 тестов
+# Все 530+ тестов
 python -m pytest backend/gateway_service/mocks/tests/ -v
 
 # По файлам
-python -m pytest backend/gateway_service/mocks/tests/test_api.py        -v  # 158 базовых
-python -m pytest backend/gateway_service/mocks/tests/test_extended.py   -v  # 68 расширенных
-python -m pytest backend/gateway_service/mocks/tests/test_tz_coverage.py -v  # 115 покрытие ТЗ
-python -m pytest backend/gateway_service/mocks/tests/test_checker_coverage.py -v  # checker coverage
-python -m pytest backend/gateway_service/mocks/tests/test_gateway_fails.py -v  # gateway fails
+python -m pytest backend/gateway_service/mocks/tests/test_api.py               -v  # API-тесты
+python -m pytest backend/gateway_service/mocks/tests/test_extended.py          -v  # расширенные
+python -m pytest backend/gateway_service/mocks/tests/test_tz_coverage.py        -v  # покрытие ТЗ
+python -m pytest backend/gateway_service/mocks/tests/test_checker_coverage.py   -v  # checker coverage
+python -m pytest backend/gateway_service/mocks/tests/test_gateway_fails.py      -v  # gateway fails
+python -m pytest backend/gateway_service/mocks/tests/test_rate_limiting.py      -v  # rate limiting (22 теста)
+python -m pytest backend/gateway_service/mocks/tests/test_health_endpoints.py   -v  # health endpoints
+python -m pytest backend/gateway_service/mocks/tests/test_gateway_routing.py    -v  # routing
+python -m pytest backend/gateway_service/mocks/tests/test_correlation_headers.py -v  # корреляция
+python -m pytest backend/gateway_service/mocks/tests/test_otel.py               -v  # OpenTelemetry
+python -m pytest backend/gateway_service/mocks/tests/test_service_checker.py    -v  # service checker
+python -m pytest backend/gateway_service/mocks/tests/test_integration_gateway.py -v  # интеграция
 ```
 
 ---
@@ -133,7 +149,17 @@ backend/gateway_service/
 │   ├── converter_validator_service_api.md
 │   ├── parser_service_api.md
 │   ├── ocr_service_api.md
-│   └── overview.md
+│   ├── mock_architecture.md
+│   ├── db_diagrams.md
+│   ├── diagrams.md
+│   ├── pipeline1-formation.md
+│   ├── pipeline1-formation_detail.md
+│   ├── pipeline3-search.md
+│   ├── overview.md
+│   ├── schema_converter_preview.json
+│   ├── schema_converter_result.json
+│   ├── schema_parser_result.json
+│   └── schema_registry_for_rag.json
 ├── gateway/                        # Production reverse-proxy Gateway
 │   ├── __init__.py
 │   ├── main.py                     # FastAPI app, middleware, endpoints
@@ -143,6 +169,7 @@ backend/gateway_service/
 │   ├── logging_config.py           # Структурированное JSON-логирование (P11)
 │   └── rate_limiter.py             # Rate limiting + IDOR protection (CM-2, CM-3, GW-4, GW-6)
 ├── mocks/                          # Mock-сервер для тестирования/разработки
+│   ├── __init__.py
 │   ├── common.py                   # Seed-данные, in-memory хранилища, модели
 │   ├── gateway.py                  # Единый шлюз (порт 8081) + middleware
 │   ├── handlers/                   # Хендлеры мок-сервисов
@@ -152,14 +179,25 @@ backend/gateway_service/
 │   │   ├── query_routes.py
 │   │   └── registry_routes.py
 │   ├── start_service.py            # Утилита запуска
-│   ├── run_all.py                  # Запуск всех сервисов
-│   └── tests/                      # 496 тестов
+│   ├── run_all.py                  # Запуск mock Gateway
+│   ├── requirements.txt            # Зависимости mock-сервисов
+│   ├── todo.md                     # Расширение seed-данных
+│   └── tests/                      # 530+ тестов
+│       ├── __init__.py
+│       ├── start_service.py
 │       ├── test_api.py
-│       ├── test_extended.py
-│       ├── test_tz_coverage.py
 │       ├── test_checker_coverage.py
+│       ├── test_correlation_headers.py
+│       ├── test_extended.py
 │       ├── test_gateway_fails.py
-│       └── test_registry_paths.py
+│       ├── test_gateway_routing.py
+│       ├── test_health_endpoints.py
+│       ├── test_integration_gateway.py
+│       ├── test_otel.py
+│       ├── test_rate_limiting.py
+│       ├── test_registry_paths.py
+│       ├── test_service_checker.py
+│       └── test_tz_coverage.py
 ├── docker-compose.yml              # Production: сети L2–L4, все сервисы
 ├── requirements.txt
 ├── specificity.md                  # Аномалии и изменения
