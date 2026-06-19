@@ -60,12 +60,14 @@ async def run_pipeline(
 
     try:
         await _set_status(session_factory, message_id, "enriching")
+        enrichment_skipped = False
         try:
             enriched_query, _synonyms = await asyncio.wait_for(
-                registry_client.enrich_query(user_query), timeout=15.0
+                registry_client.enrich_query(user_query), timeout=30.0
             )
         except Exception:
             enriched_query = user_query
+            enrichment_skipped = True
 
         await _set_status(session_factory, message_id, "searching")
         try:
@@ -128,7 +130,7 @@ async def run_pipeline(
         try:
             final_text = await asyncio.wait_for(
                 asyncio.to_thread(_enrich_citations, llm_text, chunks),
-                timeout=10.0,
+                timeout=30.0,
             )
         except Exception:
             final_text = llm_text
@@ -142,6 +144,7 @@ async def run_pipeline(
                         content=final_text,
                         status="answered",
                         processing_time_ms=0,
+                        enrichment_skipped=enrichment_skipped,
                     )
                 )
                 for chunk in chunks:

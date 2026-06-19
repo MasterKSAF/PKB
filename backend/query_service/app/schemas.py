@@ -38,7 +38,7 @@ class SessionOptions(BaseModel):
 class CreateSessionRequest(BaseModel):
     title: str | None = None
     project_id: int | None = None
-    document_ids: list[str] = Field(default_factory=list)
+    document_ids: list[int] = Field(default_factory=list)
     options: SessionOptions = Field(default_factory=SessionOptions)
 
 
@@ -47,7 +47,7 @@ class SessionResponse(BaseModel):
     title: str | None
     user_id: str
     project_id: int | None
-    document_ids: list[str]
+    document_ids: list[int]
     options: dict
     message_count: int
     created_at: datetime
@@ -64,7 +64,7 @@ class SessionListItem(BaseModel):
     session_id: int
     title: str | None
     project_id: int | None
-    document_ids: list[str]
+    document_ids: list[int]
     message_count: int
     last_message_preview: str | None
     created_at: datetime
@@ -79,7 +79,7 @@ class SessionListResponse(BaseModel):
 class UpdateSessionRequest(BaseModel):
     title: str | None = None
     project_id: int | None = None
-    document_ids: list[str] | None = None
+    document_ids: list[int] | None = None
 
 
 class DeleteSessionResponse(BaseModel):
@@ -90,7 +90,7 @@ class DeleteSessionResponse(BaseModel):
 class MessageAttachment(BaseModel):
     type: str
     text: str | None = None
-    source_document_id: str | None = None
+    source_document_id: int | None = None
     source_page_number: int | None = None
 
 
@@ -106,7 +106,7 @@ class SendMessageRequest(BaseModel):
 
 
 class SourceResponse(BaseModel):
-    document_id: str
+    document_id: int
     document_title: str | None = None
     section_id: int | None = None
     page: int | None = None
@@ -146,7 +146,7 @@ class MessageResponse(BaseModel):
 class SessionMessagesResponse(BaseModel):
     session_id: int
     title: str | None
-    document_ids: list[str]
+    document_ids: list[int]
     messages: list[dict]
     has_more: bool
 
@@ -188,7 +188,8 @@ class FeedbackRequest(BaseModel):
     # session-формат
     session_id: int | str | None = None
     message_id: int | str | None = None
-    rating: str | None = None
+    rating: int | str | None = None  # int 1-5 или "positive"/"negative"/"neutral"
+    rating_status: str | None = None  # "positive" | "negative" | "neutral"
     comment: str | None = None
     aspects: list[AspectRating] | None = None
     # UI-формат
@@ -200,12 +201,13 @@ class FeedbackRequest(BaseModel):
 class FeedbackResponse(BaseModel):
     feedback_id: int
     saved: bool
+    rating_status: str | None = None
     metrics_changed: dict
 
 
 class ChatContext(BaseModel):
     project_id: int | None = None
-    document_ids: list[str] = Field(default_factory=list)
+    document_ids: list[int] = Field(default_factory=list)
     nsi_version: str | None = None
 
 
@@ -217,7 +219,7 @@ class ChatRequest(BaseModel):
 
 class CitationResponse(BaseModel):
     citation_id: str
-    document_id: str
+    document_id: int
     document_title: str | None
     section: str | None
     page: int | None
@@ -276,15 +278,17 @@ class HistoryExportResponse(BaseModel):
 
 class TextSearchRequest(BaseModel):
     text: str
-    document_ids: list[str] | None = None
+    document_ids: list[int] | None = None
+    valid_at: str | None = None
     top_k: int = Field(default=10, ge=1, le=100)
     filters: dict = Field(default_factory=dict)
+    category_ids: list[int] | None = None
     options: dict = Field(default_factory=dict)
 
 
 class TextSearchResult(BaseModel):
     section_id: int | None = None
-    document_id: str
+    document_id: int
     document_title: str | None = None
     page: int
     content: str
@@ -314,7 +318,7 @@ class TextAskRequest(BaseModel):
 
 
 class TextAskSource(BaseModel):
-    document_id: str
+    document_id: int
     document_title: str | None = None
     page_number: int
     fragment_id: str

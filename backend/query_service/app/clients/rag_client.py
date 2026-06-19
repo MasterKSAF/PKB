@@ -6,7 +6,7 @@ from ..config import get_settings
 _MOCK_CHUNKS = [
     {
         "chunk_id": 420001,
-        "document_id": "doc-norm-001",
+        "document_id": 1,
         "document_title": "Правила классификации и постройки морских судов, Часть II",
         "section_id": 420001,
         "page": 42,
@@ -22,7 +22,7 @@ _MOCK_CHUNKS = [
     },
     {
         "chunk_id": 420017,
-        "document_id": "doc-norm-002",
+        "document_id": 2,
         "document_title": "НСИ ПКБ, версия 2026",
         "section_id": 420017,
         "page": 17,
@@ -42,7 +42,7 @@ _MOCK_CHUNKS = [
 @dataclass
 class Chunk:
     chunk_id: int
-    document_id: str
+    document_id: int
     document_title: str
     section_id: int
     page: int

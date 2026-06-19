@@ -1,28 +1,55 @@
 import asyncio
+import logging
+import logging.config
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .config import get_settings
-from .db import init_db, wait_for_db
+from .db import init_db, wait_for_db, get_session_factory
+from .middleware import CorrelationMiddleware
 from .routes.health import router as health_router
 from .routes.chat import router as chat_router
 from .routes.text import router as text_router
 from .routes.projects import router as projects_router
+from .services.pending_watchdog import run_watchdog
 
 settings = get_settings()
+
+logging.config.dictConfig({
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "json": {"format": "%(message)s"},
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "json",
+        }
+    },
+    "root": {"handlers": ["console"], "level": "INFO"},
+    "loggers": {
+        "query_service": {"handlers": ["console"], "level": "INFO", "propagate": False},
+    },
+})
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await wait_for_db()
     await init_db()
-    yield
+    watchdog_task = asyncio.create_task(run_watchdog(get_session_factory()))
+    try:
+        yield
+    finally:
+        watchdog_task.cancel()
 
 
 app = FastAPI(title="PKB Query Service", version="1.0.0", lifespan=lifespan)
 
+app.add_middleware(CorrelationMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,

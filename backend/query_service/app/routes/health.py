@@ -15,3 +15,22 @@ async def health():
     except Exception:
         db_status = "unavailable"
     return {"status": "ok", "db": db_status, "service": "query-service"}
+
+
+@router.get("/health/live")
+async def health_live():
+    return {"status": "ok"}
+
+
+@router.get("/health/ready")
+async def health_ready():
+    try:
+        async with AsyncSessionLocal() as db:
+            await db.execute(text("SELECT 1"))
+        return {"status": "ok", "db": "ok"}
+    except Exception as e:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=503,
+            content={"status": "unavailable", "db": str(e)},
+        )

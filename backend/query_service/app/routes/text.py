@@ -14,6 +14,14 @@ async def text_search(
     body: TextSearchRequest,
     user_id: str = Depends(get_current_user),
 ):
+    filters = dict(body.filters)
+    if body.document_ids:
+        filters["document_ids"] = body.document_ids
+    if body.valid_at:
+        filters["valid_at"] = body.valid_at
+    if body.category_ids:
+        filters["category_ids"] = body.category_ids
+
     top_k = min(body.top_k, len(SEARCH_RESULTS))
     results = [
         TextSearchResult(**{**r, "matched_subquery": body.text[:40]})

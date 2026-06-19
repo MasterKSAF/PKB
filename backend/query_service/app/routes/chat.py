@@ -1,7 +1,9 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+import json
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -26,6 +28,9 @@ from ..services.pipeline import run_pipeline
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 _FINAL_STATUSES = {"answered", "failed", "not_found", "out_of_scope", "needs_clarification", "source_conflict"}
+
+# TTL 1 час, хранит (user_id, answer_id) для дедупликации POST /chat
+_idempotency_cache: dict[str, tuple[str, int]] = {}
 
 
 def _session_to_response(s: ChatSession, msg_count: int = 0) -> SessionResponse:
@@ -69,6 +74,7 @@ def _msg_dict(m: ChatMessage) -> dict:
     if m.role == "assistant":
         base["sources"] = [_source_dict(src) for src in m.sources]
         base["processing_time_ms"] = m.processing_time_ms
+        base["enrichment_skipped"] = m.enrichment_skipped
     return base
 
 
@@ -343,30 +349,30 @@ async def manage_context(
     )
 
 
-@router.post("/sessions/{session_id}/export", response_model=ExportResponse)
+@router.post("/sessions/{session_id}/export")
 async def export_session(
     session_id: int,
     body: ExportRequest,
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(get_current_user),
 ):
-    now = datetime.now(timezone.utc)
-    async with db.begin():
-        s = await session_repo.get_session(db, session_id, user_id)
-        if not s:
-            raise HTTPException(status_code=404, detail={"error": {"code": "SESSION_NOT_FOUND", "message": "Сессия не найдена", "details": {}}})
-        exp = ChatExport(
-            session_id=session_id, format=body.format,
-            status="completed", created_at=now, expires_at=now + timedelta(days=7),
-        )
-        db.add(exp)
-        await db.flush()
-        export_id = exp.export_id
-        exp.url = f"/files/exports/{export_id}/download"
-    return ExportResponse(
-        export_id=export_id, session_id=session_id, format=body.format,
-        status="completed", url=f"/files/exports/{export_id}/download",
-        expires_at=now + timedelta(days=7), created_at=now,
+    s = await session_repo.get_session(db, session_id, user_id)
+    if not s:
+        raise HTTPException(status_code=404, detail={"error": {"code": "SESSION_NOT_FOUND", "message": "Сессия не найдена", "details": {}}})
+
+    msgs, _ = await message_repo.get_session_messages(db, session_id, limit=1000, before=None)
+
+    async def _stream():
+        yield json.dumps({"session_id": session_id, "title": s.title, "format": body.format}) + "\n"
+        for m in msgs:
+            yield json.dumps(_msg_dict(m)) + "\n"
+
+    media_type = "application/json" if body.format == "json" else "text/plain"
+    filename = f"session_{session_id}.{body.format}"
+    return StreamingResponse(
+        _stream(),
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
@@ -379,6 +385,14 @@ async def post_feedback(
     rating = body.rating
     if body.useful is not None and rating is None:
         rating = "positive" if body.useful else "negative"
+
+    # rating_status: нормализуем к строке если пришло число (1-5 → positive/neutral/negative)
+    rating_status = body.rating_status
+    if rating_status is None:
+        if isinstance(rating, int):
+            rating_status = "positive" if rating >= 4 else ("neutral" if rating == 3 else "negative")
+        elif isinstance(rating, str) and rating in ("positive", "negative", "neutral"):
+            rating_status = rating
 
     def _to_int(v) -> int | None:
         if v is None:
@@ -403,6 +417,7 @@ async def post_feedback(
     return FeedbackResponse(
         feedback_id=fb_id,
         saved=True,
+        rating_status=rating_status,
         metrics_changed={"rated_answers": 1, "useful_rate": 1.0 if body.useful else 0.0, "flagged_for_review": 0},
     )
 
@@ -413,7 +428,23 @@ async def chat(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(get_current_user),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ):
+    if idempotency_key:
+        cache_key = f"{user_id}:{idempotency_key}"
+        if cache_key in _idempotency_cache:
+            cached_session_id, cached_answer_id = _idempotency_cache[cache_key]
+            return ChatResponse(
+                answer_id=cached_answer_id,
+                session_id=cached_session_id,
+                status="pending",
+                message=None,
+                answer_items=[],
+                missing_fields=None,
+                conflicts=None,
+                latency_ms=0,
+            )
+
     async with db.begin():
         if body.session_id:
             s = await session_repo.get_session(db, body.session_id, user_id)
@@ -440,6 +471,9 @@ async def chat(
         msg.answer_id = message_id
         session_id_snapshot = s.session_id
         s.updated_at = datetime.now(timezone.utc)
+
+    if idempotency_key:
+        _idempotency_cache[f"{user_id}:{idempotency_key}"] = (session_id_snapshot, message_id)
 
     session_factory = get_session_factory()
     background_tasks.add_task(run_pipeline, session_factory, message_id, session_id_snapshot, body.question)
