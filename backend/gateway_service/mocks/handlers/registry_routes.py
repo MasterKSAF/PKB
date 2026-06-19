@@ -15,13 +15,26 @@ from typing import Dict, List, Optional, Union
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
+
 from pydantic import BaseModel, field_validator
 
 from mocks.common import (
     _classifiers, _terminology, _registry_docs,
     _pending_classifiers, _registry_drafts, _doc_history, _categories,
-    new_id, utcnow, error_response, paginate_registry,
+    new_id, utcnow, error_response, paginate_registry, compute_title_hash_sha256,
 )
+
+
+# ---------------------------------------------------------------------------
+# DB-2: Допустимые значения для enum-полей
+# ---------------------------------------------------------------------------
+
+VALID_SOURCE_TYPES = {"GOST", "RD", "SNIP", "SANPIN", "TU", "OST", "STO", "ISO", "IEC", "GOST_R", "GOST_ISO", "OTHER"}
+VALID_ERAS = {"USSR", "RF", "CURRENT", "FUTURE"}
+VALID_VALIDITY_STATUSES = {"active", "superseded", "canceled", "draft"}
+VALID_JURISDICTIONS = {"RU", "BY", "KZ", "AM", "KG", "OTHER", "INTERNATIONAL"}
+VALID_DOC_STATUSES = {"draft", "approved", "rejected", "archived"}
+VALID_PROCESSING_STATUSES = {"pending", "processing", "completed", "failed", "review_required"}
 
 logger = logging.getLogger("registry_service")
 
@@ -176,6 +189,43 @@ class RegistryDocCreate(BaseModel):
     valid_from: Optional[str] = None  # RG-6: YYYY-MM-DD
     valid_until: Optional[str] = None  # RG-6: YYYY-MM-DD, default 9999-12-31
     source_draft_id: Optional[int] = None  # RG-9
+    draft_id: Optional[int] = None  # DB-26: связь с черновиком
+
+    # DB-2: валидация enum-полей
+    @field_validator("source_type", mode="before")
+    @classmethod
+    def validate_source_type(cls, v):
+        if v and v not in VALID_SOURCE_TYPES:
+            raise ValueError(f"source_type='{v}' недопустим. Допустимые: {', '.join(sorted(VALID_SOURCE_TYPES))}")
+        return v
+
+    @field_validator("era", mode="before")
+    @classmethod
+    def validate_era(cls, v):
+        if v and v not in VALID_ERAS:
+            raise ValueError(f"era='{v}' недопустима. Допустимые: {', '.join(sorted(VALID_ERAS))}")
+        return v
+
+    @field_validator("validity_status", mode="before")
+    @classmethod
+    def validate_validity_status(cls, v):
+        if v and v not in VALID_VALIDITY_STATUSES:
+            raise ValueError(f"validity_status='{v}' недопустим. Допустимые: {', '.join(sorted(VALID_VALIDITY_STATUSES))}")
+        return v
+
+    @field_validator("jurisdiction", mode="before")
+    @classmethod
+    def validate_jurisdiction(cls, v):
+        if v and v not in VALID_JURISDICTIONS:
+            raise ValueError(f"jurisdiction='{v}' недопустима. Допустимые: {', '.join(sorted(VALID_JURISDICTIONS))}")
+        return v
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def validate_status(cls, v):
+        if v and v not in VALID_DOC_STATUSES:
+            raise ValueError(f"status='{v}' недопустим. Допустимые: {', '.join(sorted(VALID_DOC_STATUSES))}")
+        return v
 
 
 class RegistryDocUpdate(BaseModel):
@@ -191,6 +241,43 @@ class RegistryDocUpdate(BaseModel):
     okstu_code: Optional[str] = None
     successor_doc_id: Optional[int] = None
     predecessor_doc_id: Optional[int] = None
+    draft_id: Optional[int] = None  # DB-26
+
+    # DB-2: валидация enum-полей (только если переданы)
+    @field_validator("source_type", mode="before")
+    @classmethod
+    def validate_source_type(cls, v):
+        if v is not None and v not in VALID_SOURCE_TYPES:
+            raise ValueError(f"source_type='{v}' недопустим")
+        return v
+
+    @field_validator("era", mode="before")
+    @classmethod
+    def validate_era(cls, v):
+        if v is not None and v not in VALID_ERAS:
+            raise ValueError(f"era='{v}' недопустима")
+        return v
+
+    @field_validator("validity_status", mode="before")
+    @classmethod
+    def validate_validity_status(cls, v):
+        if v is not None and v not in VALID_VALIDITY_STATUSES:
+            raise ValueError(f"validity_status='{v}' недопустим")
+        return v
+
+    @field_validator("jurisdiction", mode="before")
+    @classmethod
+    def validate_jurisdiction(cls, v):
+        if v is not None and v not in VALID_JURISDICTIONS:
+            raise ValueError(f"jurisdiction='{v}' недопустима")
+        return v
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def validate_status(cls, v):
+        if v is not None and v not in VALID_DOC_STATUSES:
+            raise ValueError(f"status='{v}' недопустим")
+        return v
 
 
 class RegistryDocStatusUpdate(BaseModel):
@@ -731,10 +818,13 @@ async def import_docs(request: Request):
                            "mks_oks_code": item.mks_oks_code, "okstu_code": item.okstu_code,
                            "valid_from": item.valid_from or utcnow()[:10], "valid_until": item.valid_until or "9999-12-31",
                            "source_draft_id": item.source_draft_id,
+                           "draft_id": item.draft_id,  # DB-26
                            "current_version_id": version_id, "preview_snapshot": None,
                            "title_hash_sha256": None, "classification_status": {}, "successor_doc_id": None,
                            "predecessor_doc_id": None, "total_versions": 1, "chunk_count": 0,
                            "created_by": "system", "updated_by": "system", "created_at": utcnow(), "updated_at": utcnow()}
+                # DB-1: title_hash_sha256
+                new_doc["title_hash_sha256"] = compute_title_hash_sha256(new_doc)
                 _registry_docs[doc_id] = new_doc
                 _doc_history[doc_id] = [{"history_id": new_id(), "doc_id": doc_id, "previous_status": None,
                                          "new_status": item.status, "comment": "Created", "changed_by": "system", "changed_at": utcnow()}]
@@ -769,11 +859,14 @@ async def create_registry_doc(req: RegistryDocCreate):
                "mks_oks_code": req.mks_oks_code, "okstu_code": req.okstu_code,
                "valid_from": valid_from, "valid_until": valid_until,  # RG-6
                "source_draft_id": req.source_draft_id,  # RG-9
+               "draft_id": req.draft_id,  # DB-26
                "current_version_id": version_id,  # RG-2
                "preview_snapshot": None,  # RG-10
                "title_hash_sha256": None, "classification_status": {}, "successor_doc_id": None,
                "predecessor_doc_id": None, "total_versions": 1, "chunk_count": 0,
                "created_by": "system", "updated_by": "system", "created_at": utcnow(), "updated_at": utcnow()}
+    # DB-1: title_hash_sha256
+    new_doc["title_hash_sha256"] = compute_title_hash_sha256(new_doc)
     _registry_docs[doc_id] = new_doc
     _doc_history[doc_id] = [{"history_id": new_id(), "doc_id": doc_id, "previous_status": None,
                              "new_status": req.status, "comment": "Created", "changed_by": "system", "changed_at": utcnow()}]

@@ -140,7 +140,8 @@ backend/gateway_service/
 │   ├── client.py                   # HTTP-клиент для проксирования запросов
 │   ├── config.py                   # Конфигурация (env vars)
 │   ├── routers.py                  # Catch-all router
-│   └── logging_config.py           # Структурированное JSON-логирование (P11)
+│   ├── logging_config.py           # Структурированное JSON-логирование (P11)
+│   └── rate_limiter.py             # Rate limiting + IDOR protection (CM-2, CM-3, GW-4, GW-6)
 ├── mocks/                          # Mock-сервер для тестирования/разработки
 │   ├── common.py                   # Seed-данные, in-memory хранилища, модели
 │   ├── gateway.py                  # Единый шлюз (порт 8081) + middleware
@@ -159,6 +160,7 @@ backend/gateway_service/
 │       ├── test_checker_coverage.py
 │       ├── test_gateway_fails.py
 │       └── test_registry_paths.py
+├── docker-compose.yml              # Production: сети L2–L4, все сервисы
 ├── requirements.txt
 ├── specificity.md                  # Аномалии и изменения
 ├── todo.md                         # Текущий план работ
@@ -179,6 +181,7 @@ backend/gateway_service/
 | **request_id в ошибках** | При ошибке `request_id` возвращается в `details.request_id` для быстрого поиска в логах |
 | **PII-фильтрация** | Маскирование `password`, `access_token`, `refresh_token` в логах |
 | **Health check** | Минимальный `{"status":"ok"}` для неаутентифицированных; полный ответ — только для system_admin |
+| **Rate limiting + IDOR (CM-2, CM-3, GW-4, GW-6)** | InMemory rate limiter. 14 групп эндпоинтов. 80% threshold → WARNING. IDOR: 30 запросов/мин к draft_id / document_id / session_id. Настройка: `RATE_LIMIT_ENABLED`. |
 | **Idempotency-Key** | Кеширование POST-ответов для `/drafts*` и `/chat*` (TTL: 1 час) |
 | **CORS** | Настраивается через `CORS_ALLOWED_ORIGINS` |
 
@@ -197,4 +200,7 @@ backend/gateway_service/
 - **uploaded_by → created_by** (DB-11, OR-4) — во всех моделях и ответах
 - **preview_metadata** содержит 11 полей (OR-9). `udc` → `udk_code` в metadata (DB-27)
 - **GET /drafts/{id}** возвращает document_id, version_id, file_hash_sha256, is_new_document (OR-7)
-- Вкладка `checks` удалена из `available_tabs` пользователей (GW-13)
+- **Вкладка `checks` удалена** из `available_tabs` пользователей (GW-13)
+- **Rate limiting** — InMemory по умолчанию, Redis для production (CM-2, GW-4)
+- **IDOR protection** — rate limit по draft_id/document_id/session_id (CM-3, GW-6)
+- **Сетевая изоляция** — docker-compose.yml с L2 (dmz), L3 (internal), L4 (data) сетями (CM-4, GW-1, GW-2, GW-5)

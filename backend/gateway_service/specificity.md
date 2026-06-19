@@ -1,5 +1,52 @@
 # Specificity / Аномалии
 
+## 2026-06-19: Реализация rate limiting, IDOR protection, Docker network isolation
+
+### Изменения
+
+#### gateway/rate_limiter.py (НОВЫЙ)
+- **CM-2 / CM-3 / GW-4 / GW-6**: Модуль rate limiting + IDOR protection (InMemory)
+- `InMemoryRateLimiter` — единый бэкенд (достаточно для single-instance Gateway)
+- Правила лимитов из common_api.md (14 групп эндпоинтов)
+- 80% threshold → WARNING в лог
+- Конфигурация через: RATE_LIMIT_ENABLED
+
+#### gateway/config.py
+- Добавлено поле: rate_limit_enabled
+
+#### gateway/main.py
+- **RateLimitMiddleware**: двойная проверка (общий rate limit + IDOR)
+- Middleware порядок: CORS → PIIQueryValidator → **RateLimit** → RequestTracing → ...
+- При блокировке: 429 + Retry-After + TOO_MANY_REQUESTS
+
+#### mocks/gateway.py
+- Добавлен RateLimitMiddleware (синхронизирован с production)
+- Включён по умолчанию (RATE_LIMIT_ENABLED)
+
+#### docker-compose.yml (НОВЫЙ)
+- **CM-4 / GW-1 / GW-2 / GW-5**: Трёхуровневая сетевая изоляция:
+  - L2 (dmz): Gateway + Auth (validate)
+  - L3 (internal, `internal: true`): все сервисы без доступа к internet
+  - L4 (data, `internal: true`): PostgreSQL, Redis
+- Auth в двух сетях (dmz + internal) для /internal/auth/validate
+- Gateway в dmz + internal для прокси
+
+#### mocks/tests/test_rate_limiting.py (НОВЫЙ)
+- 22 теста: общий rate limit (5), IDOR (5), unit internals (10), edge cases (2)
+- Отдельное тестовое FastAPI-приложение (не влияет на другие тесты)
+
+### Аномалии
+1. **InMemory лимитер** — состояние теряется при перезапуске Gateway (не проблема: rate limit живёт, пока жив процесс).
+2. **Rate limit rules** — жёстко заданы в DEFAULT_RULES, переопределяются через `add_rules()`. Для кастомизации production-правил нужно менять код или env.
+3. **Docker-compose** — `internal: true` в internal/data сетях означает отсутствие доступа к internet. Для образов нужен registry или предварительная загрузка.
+4. **IDOR лимиты** — одинаковы для всех entity ID (30/мин). При необходимости можно настроить индивидуально в IDOR_RULES.
+
+### Статус тестов
+- **+22 новых теста** (rate_limiting.py) — все проходят
+- Остальные тесты без изменений (старые 43 failed / 19 errors — pre-existing)
+
+---
+
 ## 2026-06-19: Доработка моков — API, структуры данных, логика (17 задач)
 
 ### Изменения

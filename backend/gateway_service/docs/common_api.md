@@ -429,9 +429,15 @@ GET .../{doc_id}/status?longpoll=15
 
 ### Rate Limiting (ограничение запросов)
 
-> **⚠️ Статус реализации**: Лимиты, описанные ниже, вступают в силу после настройки Nginx (`limit_req`) в production. В текущей (мок) реализации rate limiting не применяется.
+> **✅ Реализовано**: Rate limiting middleware в Gateway (`gateway/rate_limiter.py`).
 >
-> **⏳ Требует реализации в коде**: настройка Nginx `limit_req` модуль. Ответ `429 Too Many Requests` в мок-режиме не возвращается.
+> **Бэкенд**: InMemory (достаточно для single-instance Gateway, состояние живёт в процессе).
+>
+> **IDOR protection** (CM-3, GW-6): дополнительный лимит 30 запросов/мин к одному draft_id / document_id / session_id (блокировка 5 мин).
+>
+> **Конфигурация**: `RATE_LIMIT_ENABLED=1`.
+>
+> **429 ответ**: `{"error": {"code": "TOO_MANY_REQUESTS", "message": "...", "details": {"retry_after_seconds": N}}}` + заголовок `Retry-After`.
 
 Для защиты от перегрузок и DoS-атак на все эндпоинты через Gateway действуют следующие лимиты:
 

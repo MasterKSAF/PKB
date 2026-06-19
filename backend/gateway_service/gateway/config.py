@@ -57,6 +57,11 @@ class GatewayConfig:
     # Idempotency
     idempotency_ttl: int = int(os.getenv("IDEMPOTENCY_TTL", "3600"))
 
+    # Rate limiting + IDOR protection (CM-2, CM-3, GW-4, GW-6)
+    rate_limit_enabled: bool = field(
+        default_factory=lambda: os.getenv("RATE_LIMIT_ENABLED", "1").lower() in ("1", "true", "yes")
+    )
+
     # Разрешён ли анонимный доступ (для тестов)
     allow_anonymous: bool = field(
         default_factory=lambda: os.getenv("ALLOW_ANONYMOUS", "").lower() in ("1", "true", "yes")

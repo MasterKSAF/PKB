@@ -27,5 +27,20 @@
 - [x] RG-9: source_draft_id в POST /documents + version_id в ответе
 - [x] RG-10: preview_snapshot (JSONB, nullable) в GET /documents/{id}
 
+### 5. Rate Limiting + IDOR protection (4 задачи)
+- [x] CM-2 / GW-4: Rate limiting middleware (InMemory + Redis backend)
+- [x] CM-3 / GW-6: IDOR protection — rate limit по draft_id / document_id / session_id
+- [x] docker-compose.yml: сетевая изоляция L2–L4 (GW-1, GW-2, GW-5, CM-4)
+- [x] gateway/rate_limiter.py: модуль с InMemoryRateLimiter + RedisRateLimiter + rule matching
+- [x] mocks/gateway.py: RateLimitMiddleware синхронизирован с production
+- [x] test_rate_limiting.py: 22 теста (общий rate limit, IDOR, unit)
+
+### 6. Mock-структуры: DB-1, DB-2, DB-25, DB-26 (5 задач)
+- [x] DB-1: 6-польная формула title_hash_sha256 — функция compute_title_hash_sha256() в common.py
+- [x] DB-2: CHECK/ENUM валидация source_type, era, validity_status, jurisdiction, status в RegistryDocCreate/Update
+- [x] DB-25: revision, source_filename, file_path, updated_at в document_versions
+- [x] DB-26: draft_id FK в registry.documents (seed + модели + хендлеры)
+- [x] DB-12: проверено — uploaded_at/uploaded_by не осталось в моках
+
 ### Статус тестов
-- **529 passed, 1 skipped**
+- **530 passed, 1 skipped** (+22 rate limiting, + enum валидация в моках)

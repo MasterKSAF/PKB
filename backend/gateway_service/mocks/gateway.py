@@ -3,7 +3,9 @@ Gateway Mock — unified entry point (nginx emulation).
 Combines all 5 routers on a single port 8081 with:
 - CORS (all origins)
 - RBAC (JWT validation, anonymous fallback)
+- Rate limiting (InMemory) + IDOR protection (CM-2, CM-3, GW-4, GW-6)
 - Idempotency-Key support for POST /drafts and POST /chat
+- PII query-params validation (GW-7)
 - X-Process-Time header
 - Lifespan context manager
 - Unified error format (Registry spec)
@@ -30,7 +32,7 @@ import sys
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -42,6 +44,11 @@ from pydantic import ValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from mocks.common import SEED_USERS, error_response, utcnow, _access_token_map
+from gateway.rate_limiter import (
+    RateLimitResult,
+    check_idor_rate_limit,
+    check_rate_limit,
+)
 from mocks.handlers import auth_router, orch_router, query_router, registry_router
 
 _MOCK_USERS: Dict[int, dict] = {u["user_id"]: u for u in SEED_USERS}
@@ -51,6 +58,9 @@ _MOCK_USERS: Dict[int, dict] = {u["user_id"]: u for u in SEED_USERS}
 # (используется в тестах, чтобы не переписывать каждый вызов с токеном)
 # ---------------------------------------------------------------------------
 ALLOW_ANONYMOUS = False
+
+# Rate limiting выключен по умолчанию (не мешает старым тестам), включается через RATE_LIMIT_ENABLED=1
+_RATE_LIMIT_ENABLED = os.getenv("RATE_LIMIT_ENABLED", "0").lower() in ("1", "true", "yes")
 
 
 # ---------------------------------------------------------------------------
@@ -92,6 +102,46 @@ class StripTrailingSlashMiddleware(BaseHTTPMiddleware):
             raw = request.scope.get("raw_path")
             if raw is not None and len(raw) > 1 and raw.endswith(b"/"):
                 request.scope["raw_path"] = raw.rstrip(b"/")
+        return await call_next(request)
+
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    """Rate limiting и IDOR protection (CM-2, CM-3, GW-4, GW-6)."""
+
+    async def dispatch(self, request: Request, call_next):
+        if not _RATE_LIMIT_ENABLED:
+            return await call_next(request)
+
+        client_ip = "127.0.0.1"
+        method = request.method
+        path = request.url.path
+
+        # 1. Общий rate limit
+        decision = await check_rate_limit(method, path, client_ip)
+        if decision.result == RateLimitResult.BLOCKED:
+            return JSONResponse(
+                status_code=429,
+                content=error_response(
+                    "TOO_MANY_REQUESTS",
+                    "Превышен лимит запросов. Попробуйте через %d секунд"
+                    % decision.retry_after_seconds,
+                ),
+                headers={"Retry-After": str(decision.retry_after_seconds)},
+            )
+
+        # 2. IDOR protection
+        idor_decision = await check_idor_rate_limit(method, path, client_ip)
+        if idor_decision and idor_decision.result == RateLimitResult.BLOCKED:
+            return JSONResponse(
+                status_code=429,
+                content=error_response(
+                    "TOO_MANY_REQUESTS",
+                    "Превышен лимит запросов к ресурсу. Попробуйте через %d секунд"
+                    % idor_decision.retry_after_seconds,
+                ),
+                headers={"Retry-After": str(idor_decision.retry_after_seconds)},
+            )
+
         return await call_next(request)
 
 
@@ -495,11 +545,14 @@ def _extract_message(detail: any) -> str:
 
 # ---------------------------------------------------------------------------
 # Middleware stack
-# ---------------------------------------------------------------------------
+# Порядок middleware (внешний → внутренний):
+# CORS → PIIQueryValidator → RateLimit → RBAC →
+# Idempotency → ProcessTime → StripTrailingSlash → RequestLog → Router
 
-app.add_middleware(ProcessTimeMiddleware)
+app.add_middleware(ProcessTimeMiddleware)           # innermost
 app.add_middleware(IdempotencyMiddleware)
 app.add_middleware(RBACMiddleware)
+app.add_middleware(RateLimitMiddleware)             # CM-2, CM-3, GW-4, GW-6
 app.add_middleware(PIIQueryValidatorMiddleware)
 app.add_middleware(
     CORSMiddleware,
@@ -507,9 +560,10 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-)
+)                                                   # outermost
 app.add_middleware(StripTrailingSlashMiddleware)
 app.add_middleware(RequestLogMiddleware)
+
 
 
 # ---------------------------------------------------------------------------

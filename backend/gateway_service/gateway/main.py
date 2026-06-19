@@ -38,6 +38,11 @@ from gateway.client import (
 )
 from gateway.config import config
 from gateway.logging_config import setup_logging
+from gateway.rate_limiter import (
+    RateLimitResult,
+    check_idor_rate_limit,
+    check_rate_limit,
+)
 from gateway.routers import proxy_router
 
 # ---------------------------------------------------------------------------
@@ -557,6 +562,63 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
 # ---------------------------------------------------------------------------
 
 
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    """Rate limiting и IDOR protection (CM-2, CM-3, GW-4, GW-6).
+
+    Проверяет лимиты для каждого запроса:
+      1. Общий rate limit по группе эндпоинтов (CM-2, GW-4)
+      2. IDOR rate limit по entity ID (CM-3, GW-6)
+
+    При превышении — 429 Too Many Requests.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        if not config.rate_limit_enabled:
+            return await call_next(request)
+
+        client_ip = request.client.host if request.client else "127.0.0.1"
+        method = request.method
+        path = request.url.path
+
+        # 1. Общий rate limit
+        decision = await check_rate_limit(method, path, client_ip)
+        if decision.result == RateLimitResult.BLOCKED:
+            logger.warning(
+                "Rate limit blocked: %s %s from %s (retry_after=%ds)",
+                method, path, client_ip, decision.retry_after_seconds,
+            )
+            return JSONResponse(
+                status_code=429,
+                content=_error_response(
+                    "TOO_MANY_REQUESTS",
+                    "Превышен лимит запросов. Попробуйте через %d секунд"
+                    % decision.retry_after_seconds,
+                    details={"retry_after_seconds": decision.retry_after_seconds},
+                ),
+                headers={"Retry-After": str(decision.retry_after_seconds)},
+            )
+
+        # 2. IDOR protection
+        idor_decision = await check_idor_rate_limit(method, path, client_ip)
+        if idor_decision and idor_decision.result == RateLimitResult.BLOCKED:
+            logger.warning(
+                "IDOR rate limit blocked: %s %s from %s (retry_after=%ds)",
+                method, path, client_ip, idor_decision.retry_after_seconds,
+            )
+            return JSONResponse(
+                status_code=429,
+                content=_error_response(
+                    "TOO_MANY_REQUESTS",
+                    "Превышен лимит запросов к ресурсу. Попробуйте через %d секунд"
+                    % idor_decision.retry_after_seconds,
+                    details={"retry_after_seconds": idor_decision.retry_after_seconds},
+                ),
+                headers={"Retry-After": str(idor_decision.retry_after_seconds)},
+            )
+
+        return await call_next(request)
+
+
 class ProcessTimeMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         start = time.perf_counter()
@@ -763,7 +825,7 @@ async def pydantic_validation_handler(request: Request, exc: ValidationError):
 # ---------------------------------------------------------------------------
 
 # Порядок middleware (внешний → внутренний):
-# CORS → PIIQueryValidator → RequestTracing → CorrelationHeaders → RBAC →
+# CORS → PIIQueryValidator → RateLimit → RequestTracing → CorrelationHeaders → RBAC →
 # Idempotency → ProcessTime → StripTrailingSlash → Router
 #
 # StripTrailingSlash — ПЕРВЫМ (самый глубокий), чтобы роутер и resolve_service
@@ -774,6 +836,7 @@ app.add_middleware(IdempotencyMiddleware)
 app.add_middleware(RBACMiddleware)
 app.add_middleware(CorrelationHeadersMiddleware)
 app.add_middleware(RequestTracingMiddleware)
+app.add_middleware(RateLimitMiddleware)    # CM-2, CM-3, GW-4, GW-6
 app.add_middleware(PIIQueryValidatorMiddleware)
 # CORS (GW-3): в development разрешено всё, в production — только CORS_ALLOWED_ORIGINS
 _cors_origins = config.cors_allowed_origins.split(",") if config.cors_allowed_origins != "*" else ["*"]
