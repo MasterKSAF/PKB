@@ -381,12 +381,26 @@ class RegistryServiceClient(ServiceClient):
     #  _generate_mock in mock mode.  Signatures unchanged.
     # ------------------------------------------------------------------
 
+    _mock_doc_seq: int = 1000
+
     async def create_document(self, document_data: dict) -> dict:
-        """Create a new document in the registry."""
+        """Create a new document in the registry.
+
+        Returns document_id, version_id, is_new_document.
+        """
+        RegistryServiceClient._mock_doc_seq += 1
+        doc_id = RegistryServiceClient._mock_doc_seq
         return await self.call(
             "POST",
             "/registry/documents",
-            mock_response={"data": {"document_id": 1, **document_data}},
+            mock_response={
+                "data": {
+                    "document_id": doc_id,
+                    "version_id": doc_id * 10 + 1,
+                    "is_new_document": True,
+                    **document_data,
+                }
+            },
             json=document_data,
         )
 

@@ -1,31 +1,34 @@
 """
 API v1 router configuration with auth dependency.
+
+Единая точка входа — POST /drafts (draft-first).
+POST /documents больше не используется для загрузки.
 """
 
 from fastapi import APIRouter, Depends
 
 from app.api.deps import get_current_user
-from app.api.v1.endpoints import documents, drafts, health, monitor, search, tasks
+from app.api.v1.endpoints import documents, drafts, health, search, tasks
 
 api_router = APIRouter(
     dependencies=[Depends(get_current_user)],
 )
 
-# Drafts endpoints
+# Drafts endpoints — единая точка входа для загрузки
 api_router.include_router(
     drafts.router,
     prefix="/drafts",
     tags=["drafts"],
 )
 
-# Documents endpoints (existing, will be deprecated)
+# Documents endpoints — только чтение существующих документов
 api_router.include_router(
     documents.router,
     prefix="/documents",
     tags=["documents"],
 )
 
-# Tasks endpoints
+# Tasks endpoints — админка пайплайнов
 api_router.include_router(
     tasks.router,
     prefix="/tasks",
@@ -44,11 +47,4 @@ api_router.include_router(
     health.router,
     prefix="",
     tags=["health"],
-)
-
-# Monitor / metrics
-api_router.include_router(
-    monitor.router,
-    prefix="/monitor",
-    tags=["monitor"],
 )

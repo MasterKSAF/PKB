@@ -13,6 +13,46 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 
+class DraftNotification(Base):
+    """Quality notifications from Parser/OCR services for a draft."""
+
+    __tablename__ = "draft_notifications"
+
+    id: Mapped[int] = mapped_column(
+        Integer, primary_key=True, autoincrement=True
+    )
+    task_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    draft_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, index=True
+    )
+    service: Mapped[str] = mapped_column(
+        String(32), nullable=False
+    )  # "ocr" | "parser"
+    code: Mapped[str] = mapped_column(
+        String(64), nullable=False
+    )  # "low_quality", "missing_pages", etc.
+    message: Mapped[str] = mapped_column(
+        Text, nullable=False, default=""
+    )
+    severity: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="warning"
+    )  # "critical" | "warning" | "info"
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    # Relationships
+    task: Mapped["Task"] = relationship(back_populates="notifications")
+
+    def __repr__(self) -> str:
+        return (
+            f"<DraftNotification id={self.id} task={self.task_id} "
+            f"code={self.code} severity={self.severity}>"
+        )
+
+
 class Task(Base):
     """A pipeline task (formation) for a draft/document."""
 
@@ -31,6 +71,9 @@ class Task(Base):
     )
     document_id: Mapped[Optional[int]] = mapped_column(
         Integer, nullable=True, index=True
+    )
+    version_id: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True
     )
     pipeline_type: Mapped[str] = mapped_column(
         String(16), nullable=False, index=True
@@ -90,6 +133,9 @@ class Task(Base):
     steps: Mapped[list["TaskStep"]] = relationship(
         back_populates="task", cascade="all, delete-orphan"
     )
+    notifications: Mapped[list["DraftNotification"]] = relationship(
+        back_populates="task", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return (
@@ -105,7 +151,7 @@ class TaskStep(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     task_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("tasks.id"), nullable=False, index=True
+        Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True
     )
     step_name: Mapped[str] = mapped_column(
         String(64), nullable=False

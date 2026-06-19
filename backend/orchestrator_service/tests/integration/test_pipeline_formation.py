@@ -131,9 +131,10 @@ class TestStartPipeline:
         assert upload_step.service_name == "Orchestrator"
 
         # Preview OCR should be pending (enqueued, not started locally)
+        # application/pdf &#8594; Parser Service (digital PDF by default)
         ocr_step = next(s for s in steps if s.step_name == "preview_ocr")
         assert ocr_step.status == "pending"
-        assert ocr_step.service_name == "OCR Service"
+        assert ocr_step.service_name == "Parser Service"
 
         # Preview converter should be pending
         conv_step = next(s for s in steps if s.step_name == "preview_converter")
@@ -275,8 +276,20 @@ class TestOnStepCompletedPreviewConverterFullAutoApprove:
             "metadata": {"doc_code": "&#1043;&#1054;&#1057;&#1058; 1234-56", "title": "Test"},
         }
 
+        mock_registry = AsyncMock()
+        mock_registry.create_document = AsyncMock(return_value={
+            "data": {
+                "document_id": 42,
+                "version_id": 421,
+                "is_new_document": True,
+            }
+        })
+        mock_registry.update_draft_status = AsyncMock()
+        mock_registry.close = AsyncMock()
+
         with patch(
             "app.core.pipeline.orchestrator.RegistryServiceClient",
+            return_value=mock_registry,
         ), patch(
             "app.tasks.pipeline_formation.run_ocr_full_step.delay",
         ), patch(
@@ -292,7 +305,7 @@ class TestOnStepCompletedPreviewConverterFullAutoApprove:
                 output_data=converter_output,
             )
 
-        # Verify task stage &#8594; decision (auto-approve goes through decision
+        # Verify task stage goes to decision (auto-approve goes through decision
         # stage but immediately continues to full)
         updated = await repo.get_task(task.id)
         assert updated is not None
@@ -333,8 +346,20 @@ class TestApproveDraftPartial:
             output_data={"draft_id": 100, "task_id": task.id, "file_key": "test.pdf"},
         )
 
+        mock_registry = AsyncMock()
+        mock_registry.create_document = AsyncMock(return_value={
+            "data": {
+                "document_id": 100,
+                "version_id": 1001,
+                "is_new_document": True,
+            }
+        })
+        mock_registry.update_draft_status = AsyncMock()
+        mock_registry.close = AsyncMock()
+
         with patch(
             "app.core.pipeline.orchestrator.RegistryServiceClient",
+            return_value=mock_registry,
         ), patch(
             "app.tasks.pipeline_formation.run_ocr_full_step.delay",
         ), patch(
@@ -343,9 +368,15 @@ class TestApproveDraftPartial:
             "app.tasks.pipeline_formation.run_registry_step.delay",
         ):
             orchestrator = PipelineOrchestrator(db_session)
-            await orchestrator.approve_draft(draft_id=100, task_id=task.id)
+            result = await orchestrator.approve_draft(draft_id=100, task_id=task.id)
 
-        # Verify task stage &#8594; full
+        # Verify create_document was called
+        mock_registry.create_document.assert_awaited_once()
+        assert result["document_id"] == 100
+        assert result["version_id"] == 1001
+        assert result["is_new_document"] is True
+
+        # Verify task stage goes to full
         updated = await repo.get_task(task.id)
         assert updated is not None
         assert updated.pipeline_stage == TaskStage.FULL.value
@@ -375,24 +406,108 @@ class TestApproveDraftFull:
         """Full preview approve: only full_converter + registry_creation."""
         task = await _create_task(db_session, full_completed=True, total_steps=3)
 
+        mock_registry = AsyncMock()
+        mock_registry.create_document = AsyncMock(return_value={
+            "data": {
+                "document_id": 100,
+                "version_id": 1001,
+                "is_new_document": True,
+            }
+        })
+        mock_registry.update_draft_status = AsyncMock()
+        mock_registry.close = AsyncMock()
+
+        # Create upload step with file_key (needed for approve_draft)
+        repo = TaskRepository(db_session)
+        upload = await repo.create_task_step(
+            task_id=task.id, step_name="upload", step_index=0,
+            service_name="Orchestrator",
+            input_data={"file_key": "test.pdf"},
+        )
+        await repo.complete_task_step(
+            upload.id,
+            output_data={"draft_id": 100, "task_id": task.id, "file_key": "test.pdf"},
+        )
+
         with patch(
             "app.core.pipeline.orchestrator.RegistryServiceClient",
+            return_value=mock_registry,
         ), patch(
             "app.tasks.pipeline_formation.run_converter_full_step.delay",
         ), patch(
             "app.tasks.pipeline_formation.run_registry_step.delay",
         ):
             orchestrator = PipelineOrchestrator(db_session)
-            await orchestrator.approve_draft(draft_id=100, task_id=task.id)
+            result = await orchestrator.approve_draft(draft_id=100, task_id=task.id)
 
-        # Verify new steps
-        repo = TaskRepository(db_session)
+        # Verify create_document was called
+        mock_registry.create_document.assert_awaited_once()
+        assert result["is_new_document"] is True
+
+        # Verify task stage goes to full
+        updated = await repo.get_task(task.id)
+        assert updated is not None
+        assert updated.pipeline_stage == TaskStage.FULL.value
+        assert updated.progress_percent == 50
+
+        # Verify only full_converter + registry_creation (no full_ocr)
         all_steps = await repo.get_task_steps(task.id)
         step_names = [s.step_name for s in all_steps]
-        assert "full_ocr" not in step_names, \
-            "full_ocr should be skipped when full_completed=True"
+        assert "full_ocr" not in step_names
         assert "full_converter" in step_names
         assert "registry_creation" in step_names
+
+
+class TestApproveDraftVersionId:
+    """Verify version_id is persisted in Task model after approve."""
+
+    async def test_version_id_saved_to_task(self, db_session: AsyncSession):
+        """version_id from Registry.create_document is saved to Task."""
+        task = await _create_task(db_session, full_completed=True, total_steps=3)
+        repo = TaskRepository(db_session)
+
+        mock_registry = AsyncMock()
+        mock_registry.create_document = AsyncMock(return_value={
+            "data": {
+                "document_id": 200,
+                "version_id": 2001,
+                "is_new_document": True,
+            }
+        })
+        mock_registry.update_draft_status = AsyncMock()
+        mock_registry.close = AsyncMock()
+
+        # Create upload step
+        upload = await repo.create_task_step(
+            task_id=task.id, step_name="upload", step_index=0,
+            service_name="Orchestrator",
+        )
+        await repo.complete_task_step(
+            upload.id,
+            output_data={"draft_id": 100, "task_id": task.id, "file_key": "test.pdf"},
+        )
+
+        with patch(
+            "app.core.pipeline.orchestrator.RegistryServiceClient",
+            return_value=mock_registry,
+        ), patch(
+            "app.tasks.pipeline_formation.run_converter_full_step.delay",
+        ), patch(
+            "app.tasks.pipeline_formation.run_registry_step.delay",
+        ):
+            orchestrator = PipelineOrchestrator(db_session)
+            result = await orchestrator.approve_draft(draft_id=100, task_id=task.id)
+
+        # Verify returned values
+        assert result["document_id"] == 200
+        assert result["version_id"] == 2001
+        assert result["is_new_document"] is True
+
+        # Verify version_id PERSISTED in DB (critical: was a bug!)
+        updated = await repo.get_task(task.id)
+        assert updated is not None
+        assert updated.document_id == 200, "document_id should be persisted in Task"
+        assert updated.version_id == 2001, "version_id should be persisted in Task"
 
 
 # ---------------------------------------------------------------------------

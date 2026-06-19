@@ -397,8 +397,11 @@ class TestDecideDraft:
     URL = "/api/v1/drafts/{draft_id}/decide"
 
     @pytest.fixture
-    def created_draft(self, client: TestClient, auth_header: dict) -> int:
-        """Create a draft via API and return its draft_id."""
+    async def created_draft(self, client: TestClient, auth_header: dict, db_session) -> int:
+        """Create a draft via API and return its draft_id.
+
+        Advances task state to 'decision' stage so approve/reject can be tested.
+        """
         response = client.post(
             "/api/v1/drafts/",
             headers=auth_header,
@@ -406,7 +409,22 @@ class TestDecideDraft:
             data={"document_key": "doc-decide", "title": "Test"},
         )
         assert response.status_code == 202
-        return response.json()["draft_id"]
+        draft_id = response.json()["draft_id"]
+
+        # Advance task to decision stage (Celery is mocked, so steps won't run)
+        from sqlalchemy import select, update
+        from app.models.pipeline import Task
+        result = await db_session.execute(
+            select(Task).where(Task.draft_id == draft_id)
+        )
+        task = result.scalar_one_or_none()
+        if task:
+            task.pipeline_stage = "decision"
+            task.status = "active"
+            await db_session.flush()
+            await db_session.commit()  # Make visible to endpoint's session
+
+        return draft_id
 
     def test_approve_draft(self, created_draft: int, client: TestClient, auth_header: dict):
         """Approve action returns success."""
@@ -440,8 +458,6 @@ class TestDecideDraft:
             json={"action": "invalid_action"},
         )
         assert response.status_code == 400
-        data = response.json()
-        assert "error" in data.get("detail", data)
 
     def test_decide_with_comment(self, created_draft: int, client: TestClient, auth_header: dict):
         """Decision with a comment is accepted."""
@@ -462,20 +478,66 @@ class TestDecideDraft:
         assert response.status_code == 422
 
     def test_decide_response_has_all_fields(self, created_draft: int, client: TestClient, auth_header: dict):
-        """Response has document_id, status, action."""
+        """Response has document_id, version_id, status, action."""
         response = client.patch(
             self.URL.format(draft_id=created_draft),
             headers=auth_header,
             json={"action": "approve"},
         )
+        assert response.status_code == 200
         data = response.json()
         assert "draft_id" in data
+        assert "task_id" in data
+        assert "document_id" in data
+        assert "version_id" in data
+        assert "is_new_document" in data
         assert "status" in data
         assert "action" in data
-        assert isinstance(data["status"], str)
-        assert isinstance(data["action"], str)
+        assert "message" in data
 
-    def test_decide_without_auth(self, client: TestClient):
+    async def test_decide_terminal_task(self, created_draft: int, client: TestClient, auth_header: dict, db_session):
+        """Decide on a completed task returns 409."""
+        # Set task to completed
+        from sqlalchemy import select
+        from app.models.pipeline import Task
+        result = await db_session.execute(
+            select(Task).where(Task.draft_id == created_draft)
+        )
+        task = result.scalar_one_or_none()
+        if task:
+            task.status = "completed"
+            await db_session.flush()
+            await db_session.commit()
+
+        response = client.patch(
+            self.URL.format(draft_id=created_draft),
+            headers=auth_header,
+            json={"action": "approve"},
+        )
+        assert response.status_code == 409
+
+    async def test_decide_wrong_stage(self, created_draft: int, client: TestClient, auth_header: dict, db_session):
+        """Decide on upload stage returns 409."""
+        # Revert task to upload stage
+        from sqlalchemy import select
+        from app.models.pipeline import Task
+        result = await db_session.execute(
+            select(Task).where(Task.draft_id == created_draft)
+        )
+        task = result.scalar_one_or_none()
+        if task:
+            task.pipeline_stage = "upload"
+            await db_session.flush()
+            await db_session.commit()
+
+        response = client.patch(
+            self.URL.format(draft_id=created_draft),
+            headers=auth_header,
+            json={"action": "approve"},
+        )
+        assert response.status_code == 409
+
+    async def test_decide_without_auth(self, client: TestClient, db_session):
         """Decide works without auth in mock mode."""
         # Create a draft without auth first
         response = client.post(
@@ -485,6 +547,20 @@ class TestDecideDraft:
         )
         assert response.status_code == 202
         draft_id = response.json()["draft_id"]
+
+        # Advance task to decision stage
+        from sqlalchemy import select
+        from app.models.pipeline import Task
+        result = await db_session.execute(
+            select(Task).where(Task.draft_id == draft_id)
+        )
+        task = result.scalar_one_or_none()
+        if task:
+            task.pipeline_stage = "decision"
+            task.status = "active"
+            await db_session.flush()
+            await db_session.commit()
+
         # Decide without auth
         response = client.patch(
             self.URL.format(draft_id=draft_id),

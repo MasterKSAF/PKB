@@ -30,6 +30,9 @@ def _patch_task_retry(task_func, exc_to_raise=None):
     return mock_retry, patcher
 
 
+DRAFT_ID = 10
+
+
 class TestRunOcrPreviewStep:
     """Tests for run_ocr_preview_step Celery task."""
 
@@ -44,7 +47,7 @@ class TestRunOcrPreviewStep:
     def test_happy_path(self):
         """OCR preview step completes successfully."""
         mock_client = AsyncMock()
-        mock_client.process_preview.return_value = self.HAPPY_OCR_RESPONSE
+        mock_client.process.return_value = self.HAPPY_OCR_RESPONSE
         mock_client.close = AsyncMock()
 
         notify_completed = AsyncMock()
@@ -60,12 +63,12 @@ class TestRunOcrPreviewStep:
 
             # .run() is already bound to the task instance
             result = run_ocr_preview_step.run(
-                task_id=1, draft_id=10, file_key="drafts/10/file.pdf"
+                task_id=1, draft_id=DRAFT_ID, file_key="drafts/10/file.pdf"
             )
 
-        # Verify service client was called correctly
-        mock_client.process_preview.assert_awaited_once_with(
-            "drafts/10/file.pdf", max_pages=3
+        # Verify service client was called correctly with new unified method
+        mock_client.process.assert_awaited_once_with(
+            file_key="drafts/10/file.pdf", draft_id=DRAFT_ID, mode="preview", max_pages=3
         )
 
         # Verify notify was called with correct args
@@ -77,6 +80,7 @@ class TestRunOcrPreviewStep:
             "file_key": "drafts/10/file.pdf",
             "mode": "preview",
             "max_pages": 3,
+            "draft_id": DRAFT_ID,
         }
         assert args[3] == {  # output_data
             "preview_not_supported": False,
@@ -94,7 +98,7 @@ class TestRunOcrPreviewStep:
     def test_failure_path_triggers_retry(self):
         """When OCR service raises, the task calls notify_failed and retries."""
         mock_client = AsyncMock()
-        mock_client.process_preview.side_effect = Exception("OCR service down")
+        mock_client.process.side_effect = Exception("OCR service down")
         mock_client.close = AsyncMock()
 
         notify_failed = AsyncMock()
@@ -116,7 +120,7 @@ class TestRunOcrPreviewStep:
                 with pytest.raises(Exception, match="self.retry called"):
                     run_ocr_preview_step.run(
                         task_id=1,
-                        draft_id=10,
+                        draft_id=DRAFT_ID,
                         file_key="drafts/10/file.pdf",
                     )
             finally:
@@ -159,20 +163,20 @@ class TestRunConverterPreviewStep:
             from app.tasks.pipeline_formation import run_converter_preview_step
 
             result = run_converter_preview_step.run(
-                task_id=2, draft_id=10, file_key="drafts/10/file.pdf"
+                task_id=2, draft_id=DRAFT_ID, file_key="drafts/10/file.pdf"
             )
 
-        # Verify service call
+        # Verify service call includes draft_id
         mock_client.convert_preview.assert_awaited_once_with(
-            {"file_key": "drafts/10/file.pdf"}
+            {"file_key": "drafts/10/file.pdf", "draft_id": DRAFT_ID}
         )
 
-        # Verify notify
+        # Verify notify includes draft_id
         notify_completed.assert_awaited_once()
         args, _ = notify_completed.await_args
         assert args[0] == 2
         assert args[1] == "preview_converter"
-        assert args[2] == {"file_key": "drafts/10/file.pdf", "mode": "preview"}
+        assert args[2] == {"file_key": "drafts/10/file.pdf", "mode": "preview", "draft_id": DRAFT_ID}
         assert args[3] == {
             "validated": True,
             "metadata": {"doc_code": "&#1043;&#1054;&#1057;&#1058; 1234-56", "title": "Test doc"},
@@ -188,14 +192,12 @@ class TestRunConverterPreviewStep:
 class TestRunRegistryStep:
     """Tests for run_registry_step Celery task."""
 
-    HAPPY_REGISTRY_RESPONSE = {
-        "data": {"document_id": 42, "status": "registered"}
-    }
-
     def test_happy_path(self):
-        """Registry step completes successfully."""
+        """Registry step confirms document status."""
         mock_client = AsyncMock()
-        mock_client.create_document.return_value = self.HAPPY_REGISTRY_RESPONSE
+        mock_client.update_draft_status = AsyncMock(return_value={
+            "data": {"status": "approved", "document_id": 42}
+        })
         mock_client.close = AsyncMock()
 
         notify_completed = AsyncMock()
@@ -209,20 +211,23 @@ class TestRunRegistryStep:
         ):
             from app.tasks.pipeline_formation import run_registry_step
 
-            result = run_registry_step.run(task_id=3, draft_id=10)
+            result = run_registry_step.run(
+                task_id=3, draft_id=DRAFT_ID, document_id=42, version_id=421
+            )
 
-        # Verify service call
-        mock_client.create_document.assert_awaited_once_with(
-            {"draft_id": 10}
+        # Verify service call — now calls update_draft_status, not create_document
+        mock_client.update_draft_status.assert_awaited_once_with(
+            draft_id=DRAFT_ID, status="approved", document_id=42
         )
+        mock_client.create_document.assert_not_called()
 
         # Verify notify
         notify_completed.assert_awaited_once()
         args, _ = notify_completed.await_args
         assert args[0] == 3
         assert args[1] == "registry_creation"
-        assert args[2] == {"draft_id": 10}
-        assert args[3] == {"registry_id": 42, "status": "registered"}
+        assert args[2] == {"draft_id": DRAFT_ID, "document_id": 42}
+        assert args[3] == {"registry_id": 42, "version_id": 421, "status": "registered"}
 
         assert result == {
             "status": "completed",
@@ -241,7 +246,7 @@ class TestRunOcrFullStep:
     def test_happy_path(self):
         """Full OCR step completes successfully."""
         mock_client = AsyncMock()
-        mock_client.process_full.return_value = self.HAPPY_OCR_FULL_RESPONSE
+        mock_client.process.return_value = self.HAPPY_OCR_FULL_RESPONSE
         mock_client.close = AsyncMock()
 
         notify_completed = AsyncMock()
@@ -257,13 +262,13 @@ class TestRunOcrFullStep:
 
             result = run_ocr_full_step.run(
                 task_id=4,
-                draft_id=10,
+                draft_id=DRAFT_ID,
                 file_key="drafts/10/file.pdf",
             )
 
-        # Verify service call
-        mock_client.process_full.assert_awaited_once_with(
-            "drafts/10/file.pdf"
+        # Verify service call with new unified method
+        mock_client.process.assert_awaited_once_with(
+            file_key="drafts/10/file.pdf", draft_id=DRAFT_ID, mode="full"
         )
 
         # Verify notify
@@ -271,7 +276,7 @@ class TestRunOcrFullStep:
         args, _ = notify_completed.await_args
         assert args[0] == 4
         assert args[1] == "full_ocr"
-        assert args[2] == {"file_key": "drafts/10/file.pdf", "mode": "full"}
+        assert args[2] == {"file_key": "drafts/10/file.pdf", "mode": "full", "draft_id": DRAFT_ID}
         assert args[3] == {"pages_processed": 15, "status": "completed"}
 
         assert result == {

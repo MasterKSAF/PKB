@@ -335,3 +335,150 @@ python backend/service_checker/service_checker.py docker --action health
 
 		**Статус:** не наша сторона. Если требуется прохождение чекера —
 		нужно добавлять поддержку JSON-тела как альтернативного формата.
+
+		---
+
+		## 6. Аномалии, обнаруженные при анализе task assignment (19.06.2026)
+
+		### 6.1. POST /drafts не передаёт mime_type в start_pipeline
+
+		**Файл:** `app/api/v1/endpoints/drafts.py`
+
+		В `create_draft()` есть `file.content_type`, но он не передаётся в `start_pipeline()`.
+		`start_pipeline()` вызывается без mime_type (строки 233-238), что приводит к тому,
+		что `start_pipeline()` определяет `is_scanned` без контекста — используется дефолт.
+
+		**Нужно:** передавать `mime_type=file.content_type` в `start_pipeline()`.
+
+		### 6.2. start_preview использует hardcoded "application/pdf"
+
+		**Файл:** `app/api/v1/endpoints/drafts.py`, строка 482
+
+		В `start_preview()` при вызове `start_pipeline()` всегда передаётся
+		`mime_type="application/pdf"`. Если файл — изображение (PNG/JPEG/TIFF),
+		это приведёт к неверному ветвлению OCR vs Parser.
+
+		**Нужно:** хранить mime_type в Task или получать из Registry.
+
+		### 6.3. _check_auto_approve всегда возвращает True
+
+		**Файл:** `app/core/pipeline/orchestrator.py`, строки 288-293
+
+		Метод `_check_auto_approve` всегда возвращает True, что означает auto-approve
+		после каждого preview. Это может быть нежелательно для production, где
+		требуется ручное подтверждение от пользователя.
+
+		**Нужно:** реализовать реальную проверку (наличие дубликатов, качество метаданных).
+
+		### 6.4. approve_draft не вызывает Registry.create_document()
+
+		**Файл:** `app/core/pipeline/orchestrator.py`, метод `approve_draft()`
+
+		При approve создаются TaskSteps и запускается full_phase, но document_id
+		не запрашивается из Registry до registry_creation шага. По заданию (OR-13),
+		document_id должен назначаться Registry при approve, а не Converter-validator.
+
+		**Нужно:** при approve вызывать `Registry.create_document()` и
+		возвращать document_id в ответе DecideResponse.
+
+		### 6.5. Ветвление OCR vs Parser некорректно для PDF
+
+		**Файл:** `app/core/pipeline/orchestrator.py`, строки 71-73
+
+		Логика `is_scanned`:
+		```python
+		is_scanned = mime_type in ("image/png", "image/jpeg", "image/tiff") or (
+		    mime_type == "application/pdf"  # would need deeper check
+		)
+		```
+
+		Все PDF считаются scanned → идут в OCR Service. Но digital PDF (с текстовым слоем)
+		должны идти в Parser Service. Нужна более глубокая проверка или явное указание
+		типа документа при загрузке.
+
+		**Нужно:** добавить параметр `document_type` (digital/scanned) в POST /drafts,
+		либо выполнять MIME-детекцию по содержимому (magic bytes).
+
+		### 6.6. Нет разделения внешних и внутренних действий в decide
+
+		**Файл:** `app/api/v1/endpoints/drafts.py`, `decide_draft()`
+
+		Сейчас поддерживаются только `approve` и `reject`. По заданию (OR-12):
+		- Внешние (UI): approve, reject
+		- Внутренние: proceed, stop_duplicate, force_new_version
+
+		**Нужно:** добавить внутренние экшены с проверкой RBAC.
+
+		### 6.7. Нет проверки идемпотентности preview
+
+		**Файл:** `app/api/v1/endpoints/drafts.py`, `start_preview()`
+
+		При повторном вызове `POST /drafts/{draft_id}/preview` не возвращается 409.
+		Запускается новый pipeline, создаётся дублирующая задача.
+
+		**Нужно:** проверять статус draft/task и возвращать 409 если preview уже запущен.
+
+		### 6.8. PreviewMetadata содержит только 5 полей из требуемых 8+
+
+		**Файл:** `app/schemas/drafts.py`, класс `PreviewMetadata`
+
+		Сейчас:
+		- doc_code
+		- title
+		- document_type
+		- year
+		- revision
+
+		По заданию (OR-9) требуется минимум 8 полей:
+		- source_type, era, jurisdiction, mks_oks_code, okstu_code, issuing_body, udk_code
+
+		### 6.9. Нет OTEL SDK
+
+		**Файл:** `app/main.py`
+
+		OpenTelemetry SDK не подключён. Нет инициализации tracer, meter, exporter.
+		По заданию (OR-8, CM-6) требуется OTEL интеграция с SigNoz.
+
+		### 6.10. Нет модели DraftNotification
+
+		По заданию (OR-6) требуется таблица `pipeline.draft_notifications`
+		для хранения quality.notifications[] от Parser/OCR.
+		Сейчас качество не отслеживается.
+
+	### 6.11. Двойное создание document_id (ИСПРАВЛЕНО)
+
+	**Проблема:** approve_draft вызывал Registry.create_document(), и затем
+	run_registry_step (Celery задача) снова вызывал create_document().
+	Документ создавался дважды.
+
+	**Исправлено:** run_registry_step теперь вызывает update_draft_status()
+	вместо create_document(), так как документ уже создан в approve_draft.
+
+	### 6.12. approve_draft не проверял ответ Registry (ИСПРАВЛЕНО)
+
+	**Проблема:** при ошибке Registry.create_document() без исключения,
+	document_id = doc_data.get("document_id", draft_id) давал fallback = draft_id,
+	и pipeline продолжался с некорректным ID.
+
+	**Исправлено:** добавлена явная проверка `if not document_id: raise ValueError`.
+
+	### 6.13. full_completed не запускал full_converter (ИСПРАВЛЕНО)
+
+	**Файл:** `app/core/pipeline/orchestrator.py`, approve_draft()
+
+	**Проблема:** при full_completed=True (preview вернул полный документ),
+	создавались full_converter и registry_creation шаги, но full_converter
+	не стартовался (не было start_task_step). Pipeline зависал.
+
+	**Исправлено:** добавлен запуск full_converter step при full_completed=True.
+
+	### 6.14. PDF всегда шёл в OCR (ИСПРАВЛЕНО)
+
+	**Файл:** `app/core/pipeline/orchestrator.py`, строки 71-73
+
+	**Проблема:** `is_scanned = ... or (mime_type == "application/pdf")` —
+	все PDF считались сканами и шли в OCR Service. Digital PDF должны
+	обрабатываться Parser Service.
+
+	**Исправлено:** логика разделена: image/* + scanned_pdf -> OCR,
+	application/pdf (digital) -> Parser.

@@ -55,19 +55,28 @@ class DraftDetailResponse(BaseModel):
     file_key: Optional[str] = Field(None, description="Ключ файла")
     status: str = Field(..., description="Статус черновика")
     document_id: Optional[int] = Field(None, description="ID документа после approve")
+    version_id: Optional[int] = Field(None, description="ID версии документа")
+    is_new_document: bool = Field(True, description="Создан новый документ (true) или новая версия (false)")
     created_by: Optional[str] = Field(None, description="Кто создал")
     created_at: datetime = Field(..., description="Время создания")
     updated_at: Optional[datetime] = Field(None, description="Время обновления")
 
 
 class PreviewMetadata(BaseModel):
-    """Preview metadata extracted during preview phase."""
+    """Preview metadata extracted during preview phase (12 полей)."""
 
     doc_code: Optional[str] = Field(None, description="Обозначение документа")
     title: Optional[str] = Field(None, description="Название документа")
     document_type: Optional[str] = Field(None, description="Тип документа")
+    source_type: Optional[str] = Field(None, description="Тип источника: GOST, GOST_R, OST, RD, TU, ISO, DNV, ASTM, OTHER")
     year: Optional[str] = Field(None, description="Год издания")
     revision: Optional[str] = Field(None, description="Номер редакции")
+    era: Optional[str] = Field(None, description="Эпоха: USSR, CIS, RF, CURRENT")
+    jurisdiction: Optional[str] = Field(None, description="Юрисдикция: RU, EU, US, NO, INTL")
+    mks_oks_code: Optional[str] = Field(None, description="Код МКС/ОКС")
+    okstu_code: Optional[str] = Field(None, description="Код ОКСТУ")
+    issuing_body: Optional[str] = Field(None, description="Организация-издатель")
+    udk_code: Optional[str] = Field(None, description="Код УДК")
 
 
 class DraftPreviewResponse(BaseModel):
@@ -89,10 +98,15 @@ class DraftPreviewStatusResponse(BaseModel):
 
 
 class DecideRequest(BaseModel):
-    """Decision request after preview."""
+    """Decision request after preview.
 
-    action: str = Field(..., description="Решение: approve или reject")
+    Внешние действия (UI): approve, reject
+    Внутренние действия (pipeline): proceed, stop_duplicate, force_new_version
+    """
+
+    action: str = Field(..., description="Решение: approve, reject, proceed, stop_duplicate, force_new_version")
     comment: Optional[str] = Field(None, description="Комментарий пользователя")
+    metadata_overrides: Optional[Dict[str, Any]] = Field(None, description="Переопределение полей метаданных перед approve")
 
 
 class DecideResponse(BaseModel):
@@ -100,6 +114,9 @@ class DecideResponse(BaseModel):
 
     draft_id: int = Field(..., description="ID черновика")
     task_id: int = Field(..., description="ID задачи")
+    document_id: Optional[int] = Field(None, description="ID созданного документа (после approve)")
+    version_id: Optional[int] = Field(None, description="ID версии документа")
+    is_new_document: bool = Field(False, description="Создан новый документ или версия")
     status: str = Field(..., description="Новый статус")
     action: str = Field(..., description="Принятое решение")
     message: str = Field(..., description="Сообщение")

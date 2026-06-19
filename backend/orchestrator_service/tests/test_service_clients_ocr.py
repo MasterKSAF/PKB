@@ -2,8 +2,8 @@
 Unit tests for OCRServiceClient.
 
 Tests mock generation for:
-  - process_document — обработка OCR
-  - get_engines — список движков
+  - POST /ocr/process (mode=preview|full)
+  - GET /ocr/engines
 """
 
 import pytest
@@ -18,55 +18,71 @@ def ocr_client():
     return client
 
 
-class TestOCRProcess:
-    """Tests for OCR document processing."""
+DRAFT_ID = 420001
+
+
+class TestOCRProcessPreview:
+    """Tests for OCRServiceClient.process(mode=preview)."""
 
     @pytest.mark.asyncio
-    async def test_process_document_basic(self, ocr_client):
-        result = await ocr_client.process_document(file_id="file-test-001")
-        assert "document_id" in result
-        assert "pages" in result
-        assert "total_pages" in result
-        assert "successful_pages" in result
-        assert "low_confidence_pages" in result
-        assert "failed_pages" in result
-
-    @pytest.mark.asyncio
-    async def test_process_document_page_structure(self, ocr_client):
-        result = await ocr_client.process_document(file_id="file-test-001")
-        assert len(result["pages"]) > 0
-        page = result["pages"][0]
-        for field in ("page", "text", "confidence", "engine_used",
-                      "page_type_detected", "blocks", "status", "errors"):
-            assert field in page, f"Missing field: {field}"
-
-    @pytest.mark.asyncio
-    async def test_process_document_confidence_range(self, ocr_client):
-        result = await ocr_client.process_document(file_id="file-test-001")
-        for page in result["pages"]:
-            assert 0.0 <= page["confidence"] <= 1.0
-
-    @pytest.mark.asyncio
-    async def test_process_with_custom_pages(self, ocr_client):
-        result = await ocr_client.process_document(
-            file_id="file-test-001",
-            pages="1-3",
+    async def test_preview_returns_data(self, ocr_client):
+        """Preview returns a dict with data wrapper."""
+        result = await ocr_client.process(
+            file_key="file-test-001", draft_id=DRAFT_ID, mode="preview"
         )
-        assert result["total_pages"] > 0
+        assert "data" in result
+        data = result["data"]
+        assert "task_id" in data
+        assert "status" in data
+        assert "preview_not_supported" in data
+        assert "metadata" in data
 
     @pytest.mark.asyncio
-    async def test_process_with_options(self, ocr_client):
-        result = await ocr_client.process_document(
-            file_id="file-test-001",
-            options={"engine": "tesseract", "language": "ru"},
+    async def test_preview_has_full_metadata(self, ocr_client):
+        """Preview metadata contains all required fields."""
+        result = await ocr_client.process(
+            file_key="file-test-001", draft_id=DRAFT_ID, mode="preview"
         )
-        assert result is not None
+        metadata = result["data"]["metadata"]
+        expected_fields = [
+            "doc_code", "title", "document_type", "source_type",
+            "year", "revision", "era", "jurisdiction",
+            "mks_oks_code", "okstu_code", "issuing_body", "udk_code",
+        ]
+        for field in expected_fields:
+            assert field in metadata, f"Missing metadata field: {field}"
 
     @pytest.mark.asyncio
-    async def test_process_document_successful_pages_count(self, ocr_client):
-        result = await ocr_client.process_document(file_id="file-test-001")
-        assert result["successful_pages"] >= 0
-        assert result["successful_pages"] + result["failed_pages"] == result["total_pages"]
+    async def test_preview_passes_draft_id(self, ocr_client):
+        """Draft ID is passed in the request body."""
+        result = await ocr_client.process(
+            file_key="file-key", draft_id=999, mode="preview"
+        )
+        assert result["data"]["task_id"] is not None
+
+
+class TestOCRProcessFull:
+    """Tests for OCRServiceClient.process(mode=full)."""
+
+    @pytest.mark.asyncio
+    async def test_full_returns_data(self, ocr_client):
+        """Full process returns a dict with data wrapper."""
+        result = await ocr_client.process(
+            file_key="file-test-001", draft_id=DRAFT_ID, mode="full"
+        )
+        assert "data" in result
+        data = result["data"]
+        assert "task_id" in data
+        assert "status" in data
+
+    @pytest.mark.asyncio
+    async def test_full_contains_pages_processed(self, ocr_client):
+        """Full process response contains pages info."""
+        result = await ocr_client.process(
+            file_key="file-full-test", draft_id=DRAFT_ID, mode="full"
+        )
+        data = result.get("data", {})
+        assert "pages_processed" in data
 
 
 class TestOCREngines:

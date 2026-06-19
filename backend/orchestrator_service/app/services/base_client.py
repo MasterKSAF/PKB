@@ -287,9 +287,25 @@ class ServiceClient:
             method, url, http_cfg.MAX_RETRIES, **kwargs
         )
 
+    def _build_correlation_headers(self) -> dict:
+        """Build correlation headers from current trace context (CM-5).
+
+        Injects X-Trace-ID and X-Request-ID into every downstream request
+        for end-to-end tracing across services.
+        """
+        from app.core.trace import get_trace_id
+        tid = get_trace_id()
+        if tid:
+            return {
+                "X-Trace-ID": tid,
+                "X-Request-ID": tid,
+            }
+        return {}
+
     async def _request(self, method: str, url: str, **kwargs) -> httpx.Response:
         """Execute the actual HTTP request (no retry — use _request_with_retry).
 
+        Injects correlation headers from trace context for distributed tracing.
         Does NOT retry on any error — retry logic is in _request_with_retry.
         Must raise_for_status here so that tenacity can catch HTTPStatusError.
         """
@@ -298,6 +314,10 @@ class ServiceClient:
                 f"HTTP client not initialized for {self.service_name}. "
                 f"Service URL may be missing."
             )
+        # Inject correlation headers into every downstream call
+        headers = kwargs.pop("headers", {})
+        headers.update(self._build_correlation_headers())
+        kwargs["headers"] = headers
         response = await self._http_client.request(method, url, **kwargs)
         # Raise on HTTP errors so tenacity can catch them for retry
         response.raise_for_status()

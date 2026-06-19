@@ -16,14 +16,8 @@ os.environ["RAG_SERVICE_MOCK"] = "true"
 os.environ["OCR_SERVICE_MOCK"] = "true"
 os.environ["REGISTRY_SERVICE_MOCK"] = "true"
 
-# Use tempfile for SQLite — avoids polluting project dir with test.db.
-# File is created in system TEMP. On Windows it can't be deleted at
-# exit because the engine pool still holds connections, but TEMP
-# directories are periodically cleaned by the OS.
-import tempfile as _tf
-_tmp_db = _tf.NamedTemporaryFile(suffix=".db", delete=False)
-_tmp_db.close()
-os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{_tmp_db.name}"
+# Use local SQLite for tests — creates test_pipeline.db in project dir
+os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test_pipeline.db"
 os.environ["DEBUG"] = "false"
 
 # Celery: use in-memory transport + eager mode (no Redis needed)
