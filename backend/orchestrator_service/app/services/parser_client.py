@@ -47,6 +47,16 @@ class ParserServiceClient(ServiceClient):
                             "issuing_body": "Госстандарт",
                             "udk_code": "621.882",
                         },
+                        "quality": {
+                            "score": 0.92,
+                            "notifications": [
+                                {
+                                    "code": "low_confidence_pages",
+                                    "message": "1 page with low OCR confidence (<85%)",
+                                    "severity": "warning",
+                                }
+                            ],
+                        },
                     }
                 }
             return {

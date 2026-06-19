@@ -49,7 +49,7 @@ MOCK_RESULTS = [
 
 @router.post("/documents/search", response_model=SearchResponse)
 async def search(request: SearchRequest):
-    """Semantic search for fragments (stub)."""
+    """Semantic search for fragments."""
     start = time.monotonic()
 
     try:

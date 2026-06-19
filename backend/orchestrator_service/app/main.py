@@ -12,7 +12,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.config import settings
 from app.core.logging_config import setup_logging
-from app.core.trace import get_trace_id, set_trace_id, reset_trace_id
+from app.core.otel import setup_otel
+from app.core.trace import get_trace_id, set_trace_id, set_user_id, reset_trace_id
 from app.db.base import engine, Base
 
 
@@ -33,6 +34,11 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         # Create all tables if they don't exist
         await conn.run_sync(Base.metadata.create_all)
+    # Initialize OpenTelemetry
+    try:
+        setup_otel(app)
+    except Exception as otel_err:
+        logger.warning(f"OTEL init failed (non-fatal): {otel_err}")
     yield
     # Shutdown
     logger.info("Shutting down Orchestrator Service")
@@ -84,6 +90,10 @@ async def trace_middleware(request, call_next):
     """Middleware: inject trace ID from header or generate new one."""
     trace_id = request.headers.get("X-Trace-ID") or request.headers.get("X-Request-ID")
     set_trace_id(trace_id)
+    # Propagate X-User-ID from Gateway (CM-5)
+    user_id = request.headers.get("X-User-ID")
+    if user_id:
+        set_user_id(user_id)
     response = await call_next(request)
     response.headers["X-Trace-ID"] = get_trace_id()
     reset_trace_id()

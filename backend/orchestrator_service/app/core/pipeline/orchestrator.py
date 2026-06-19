@@ -243,10 +243,66 @@ class PipelineOrchestrator:
                 break
 
         preview_not_supported = False
+        quality_data = {}
         if preview_step and preview_step.output_data:
             preview_not_supported = preview_step.output_data.get(
                 "preview_not_supported", False
             )
+            quality_data = preview_step.output_data.get("quality", {})
+
+        # --- Save quality notifications from Parser/OCR (OR-6) ---
+        notifications = quality_data.get("notifications", [])
+        if notifications:
+            await self.task_repo.save_notifications(
+                task_id=task.id,
+                draft_id=task.draft_id,
+                notifications=notifications,
+            )
+            logger.info(
+                f"Saved {len(notifications)} quality notifications",
+                extra={
+                    "task_id": task.id,
+                    "draft_id": task.draft_id,
+                    "critical_count": sum(
+                        1 for n in notifications if n.get("severity") == "critical"
+                    ),
+                },
+            )
+
+        # --- Check converter validation status (P1F-2) ---
+        converter_step = next(
+            (s for s in steps if s.step_name == "preview_converter"), None
+        )
+        is_validated = True
+        if converter_step and converter_step.output_data:
+            is_validated = converter_step.output_data.get("validated", True)
+
+        if not is_validated:
+            logger.info(
+                "Converter validation failed — setting review_required",
+                extra={"task_id": task.id, "draft_id": task.draft_id},
+            )
+            try:
+                registry = RegistryServiceClient()
+                await registry.update_draft_status(
+                    draft_id=task.draft_id,
+                    status="review_required",
+                )
+                await registry.close()
+            except Exception as e:
+                logger.warning(
+                    f"Failed to set draft status to review_required: {e}",
+                    extra={"draft_id": task.draft_id},
+                )
+            await self.task_repo.update_task_status(
+                task_id=task.id,
+                stage=TaskStage.DECISION.value,
+                progress_percent=50,
+            )
+            return
+
+        # Check if there are critical notifications — block auto-approve
+        has_critical = await self.task_repo.has_critical_notifications(task.id)
 
         if preview_not_supported:
             logger.info(
@@ -263,15 +319,21 @@ class PipelineOrchestrator:
             task.full_completed = True
             await self.db.flush()
 
-            # Check auto-approve conditions
-            can_auto_approve = self._check_auto_approve(task, steps)
-            if can_auto_approve:
+            # Check auto-approve conditions (skip if critical notifications)
+            if not has_critical:
+                can_auto_approve = self._check_auto_approve(task, steps)
+                if can_auto_approve:
+                    logger.info(
+                        "Auto-approving draft after full preview",
+                        extra={"draft_id": task.draft_id, "task_id": task.id},
+                    )
+                    await self.approve_draft(task.draft_id, task.id)
+                    return
+            else:
                 logger.info(
-                    "Auto-approving draft after full preview",
+                    "Auto-approve blocked: critical quality notifications",
                     extra={"draft_id": task.draft_id, "task_id": task.id},
                 )
-                await self.approve_draft(task.draft_id, task.id)
-                return
 
         else:
             # Partial preview — always wait for decision
@@ -447,6 +509,39 @@ class PipelineOrchestrator:
         task.version_id = version_id
         await self.db.flush()
 
+        # --- Save preview snapshot to Registry (P1F-4 / CV-5) ---
+        try:
+            # Collect preview metadata from steps
+            steps = await self.task_repo.get_task_steps(task_id)
+            preview_step = next(
+                (s for s in steps if s.step_name == "preview_ocr"), None
+            )
+            converter_step = next(
+                (s for s in steps if s.step_name == "preview_converter"), None
+            )
+            # Use converter metadata (validated) first, fallback to OCR/Parser
+            snapshot_metadata = {}
+            if converter_step and converter_step.output_data:
+                snapshot_metadata = converter_step.output_data.get("metadata", {})
+            if not snapshot_metadata and preview_step and preview_step.output_data:
+                snapshot_metadata = preview_step.output_data.get("metadata", {})
+            # Merge metadata_overrides on top
+            if metadata_overrides:
+                snapshot_metadata.update(metadata_overrides)
+
+            registry_snap = RegistryServiceClient()
+            await registry_snap.create_draft_snapshot(draft_id, snapshot_metadata)
+            await registry_snap.close()
+            logger.info(
+                "Preview snapshot saved",
+                extra={"draft_id": draft_id, "task_id": task_id},
+            )
+        except Exception as snap_err:
+            logger.warning(
+                f"Failed to save preview snapshot: {snap_err}",
+                extra={"draft_id": draft_id, "task_id": task_id},
+            )
+
         await self.task_repo.update_task_status(
             task_id=task_id,
             stage=TaskStage.FULL.value,
@@ -469,9 +564,18 @@ class PipelineOrchestrator:
 
         current_trace_id = task.trace_id or ""
 
-        if not task.full_completed:
-            # Partial preview — need full OCR/Parser
-            # Create full_ocr step
+        # Determine full phase mode (P1F-9)
+        full_mode = settings.pipeline.FULL_PHASE_MODE
+        need_full_ocr = False
+        if full_mode == "partial":
+            need_full_ocr = True
+        elif full_mode == "full":
+            need_full_ocr = False
+        else:  # "auto" — use full_completed flag
+            need_full_ocr = not task.full_completed
+
+        if need_full_ocr:
+            # Partial preview or forced — need full OCR/Parser
             await self.task_repo.create_task_step(
                 task_id=task_id,
                 step_name="full_ocr",
@@ -501,7 +605,7 @@ class PipelineOrchestrator:
 
         # Start the first step
         steps = await self.task_repo.get_task_steps(task_id)
-        if not task.full_completed:
+        if need_full_ocr:
             full_ocr = next(
                 (
                     s

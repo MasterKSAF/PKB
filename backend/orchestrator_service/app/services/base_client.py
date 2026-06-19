@@ -26,7 +26,7 @@ from tenacity import (
 )
 
 from app.core.config import settings
-from app.core.trace import get_trace_id
+from app.core.trace import build_correlation_headers
 
 logger = logging.getLogger("services.base_client")
 
@@ -290,17 +290,11 @@ class ServiceClient:
     def _build_correlation_headers(self) -> dict:
         """Build correlation headers from current trace context (CM-5).
 
-        Injects X-Trace-ID and X-Request-ID into every downstream request
+        Injects X-Trace-ID, X-Request-ID, X-User-ID, X-Draft-ID,
+        X-Document-ID, X-Version-ID into every downstream request
         for end-to-end tracing across services.
         """
-        from app.core.trace import get_trace_id
-        tid = get_trace_id()
-        if tid:
-            return {
-                "X-Trace-ID": tid,
-                "X-Request-ID": tid,
-            }
-        return {}
+        return build_correlation_headers()
 
     async def _request(self, method: str, url: str, **kwargs) -> httpx.Response:
         """Execute the actual HTTP request (no retry — use _request_with_retry).

@@ -14,42 +14,42 @@ class ServiceConfig(BaseSettings):
 
     # Registry Service (port 8084)
     REGISTRY_SERVICE_URL: Optional[str] = Field(
-        default=None, description="URL for registry service"
+        default="http://registry-service:8084", description="URL for registry service"
     )
     REGISTRY_SERVICE_MOCK: bool = Field(
-        default=True, description="Use mock mode for registry service"
+        default=False, description="Use mock mode for registry service"
     )
 
-    # RAG Service (port 8087)
+    # RAG Builder Service (port 8087)
     RAG_SERVICE_URL: Optional[str] = Field(
-        default=None, description="URL for rag service"
+        default="http://rag-builder:8087", description="URL for rag builder service"
     )
     RAG_SERVICE_MOCK: bool = Field(
-        default=True, description="Use mock mode for rag service"
+        default=False, description="Use mock mode for rag service"
     )
 
     # OCR Service (port 8088)
     OCR_SERVICE_URL: Optional[str] = Field(
-        default=None, description="URL for OCR service"
+        default="http://ocr-service:8088", description="URL for OCR service"
     )
     OCR_SERVICE_MOCK: bool = Field(
-        default=True, description="Use mock mode for OCR service"
+        default=False, description="Use mock mode for OCR service"
     )
 
     # Parser Service (port 8089)
     PARSER_SERVICE_URL: Optional[str] = Field(
-        default=None, description="URL for parser service"
+        default="http://parser-service:8089", description="URL for parser service"
     )
     PARSER_SERVICE_MOCK: bool = Field(
-        default=True, description="Use mock mode for parser service"
+        default=False, description="Use mock mode for parser service"
     )
 
     # Converter-Validator Service (port 8090)
     CONVERTER_SERVICE_URL: Optional[str] = Field(
-        default=None, description="URL for converter-validator service"
+        default="http://converter-service:8090", description="URL for converter-validator service"
     )
     CONVERTER_SERVICE_MOCK: bool = Field(
-        default=True, description="Use mock mode for converter-validator service"
+        default=False, description="Use mock mode for converter-validator service"
     )
 
 
@@ -93,6 +93,15 @@ class PipelineConfig(BaseSettings):
     # Dead job detection: max time a job can be in "running" state
     MAX_JOB_RUNNING_TIME: int = Field(
         default=3600, description="Max seconds a job can stay running"
+    )
+
+    # Full phase mode (P1F-9): auto | partial | full
+    # auto  — full_completed (preview_not_supported) → skip OCR, else full OCR
+    # partial — always run full OCR/Parser even if full preview is available
+    # full   — skip full OCR/Parser entirely (full_completed must be True)
+    FULL_PHASE_MODE: str = Field(
+        default="auto",
+        description="Full phase strategy: auto | partial | full",
     )
 
 

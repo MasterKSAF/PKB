@@ -40,15 +40,16 @@ Orchestrator Service реализует API, описанный в `docs/api/orc
 
 Для каждого внешнего сервиса поддерживаются 2 режима:
 
-### 1. Mock/Stub режим (по умолчанию)
-- Сервис возвращает сгенерированные тестовые данные
-- Не требует подключения к реальным сервисам
-- Используется для разработки и тестирования
+### 1. Режим реальных API вызовов (по умолчанию)
+- Сервис выполняет HTTP-запросы к внешним микросервисам по Docker internal сети
+- Требует запущенных сервисов в Docker Compose
+- Default URL: `http://registry-service:8084`, `http://parser-service:8089` и т.д.
+- Для отключения реальных вызовов: `*_MOCK=true`
 
-### 2. Режим реальных API вызовов
-- Сервис выполняет HTTP-запросы к внешним микросервисам
-- Требует указания URL сервиса в конфигурации
-- Активируется при установке `*_MOCK=false` и указании `*_SERVICE_URL`
+### 2. Mock/Stub режим (только для тестов)
+- Возвращает сгенерированные тестовые данные без внешних сервисов
+- Форсируется в `tests/conftest.py` для всех тестов
+- Для локальной разработки без Docker: `export *_MOCK=true` в терминале
 
 ## Технический стек
 
@@ -76,27 +77,26 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-### Пример конфигурации для работы с реальными сервисами:
+### Real-режим (по умолчанию):
+
+Не требует .env для Docker Compose — default URL зашиты в `ServiceConfig`. Для локального запуска:
 
 ```env
-AUTH_SERVICE_URL=http://auth-service:8080
-AUTH_SERVICE_MOCK=false
-REGISTRY_SERVICE_URL=http://registry-service:8084
-REGISTRY_SERVICE_MOCK=false
-# ... остальные сервисы
+# .env — переопределить URL для локальной разработки
+REGISTRY_SERVICE_URL=http://localhost:8084
+PARSER_SERVICE_URL=http://localhost:8089
+OCR_SERVICE_URL=http://localhost:8088
+CONVERTER_SERVICE_URL=http://localhost:8090
+RAG_SERVICE_URL=http://localhost:8087
 ```
 
-### Для работы в mock-режиме (по умолчанию):
+### Для mock-режима (локальная разработка без Docker):
 
 ```env
-AUTH_SERVICE_MOCK=true
 REGISTRY_SERVICE_MOCK=true
 OCR_SERVICE_MOCK=true
 PARSER_SERVICE_MOCK=true
 CONVERTER_SERVICE_MOCK=true
-INTEGRATION_SERVICE_MOCK=true
-VALIDATE_SERVICE_MOCK=true
-QUERY_SERVICE_MOCK=true
 RAG_SERVICE_MOCK=true
 ```
 

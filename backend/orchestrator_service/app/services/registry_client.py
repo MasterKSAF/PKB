@@ -298,7 +298,16 @@ class RegistryServiceClient(ServiceClient):
     def _mock_create_document(storage: dict, body: dict) -> dict:
         storage["doc_seq"] += 1
         doc_id = storage["doc_seq"]
-        doc = {"document_id": doc_id, **body}
+        is_new = not any(
+            d.get("draft_id") == body.get("draft_id")
+            for d in storage["documents"].values()
+        )
+        doc = {
+            "document_id": doc_id,
+            "version_id": doc_id * 10 + 1,
+            "is_new_document": is_new,
+            **body,
+        }
         storage["documents"][doc_id] = doc
         return {"data": dict(doc)}
 
@@ -610,4 +619,21 @@ class RegistryServiceClient(ServiceClient):
                 }
             },
             json=body.model_dump(exclude_none=True),
+        )
+
+    async def create_draft_snapshot(self, draft_id: int, metadata: dict) -> dict:
+        """Save preview snapshot for a draft (P1F-4).
+
+        Called on approve to 'freeze' preview_metadata in Registry.
+        """
+        return await self.call(
+            "POST",
+            f"/registry/drafts/{draft_id}/snapshot",
+            mock_response={
+                "data": {
+                    "draft_id": draft_id,
+                    "snapshot_saved": True,
+                }
+            },
+            json={"preview_metadata": metadata},
         )

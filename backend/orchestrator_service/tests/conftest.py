@@ -12,9 +12,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 # Force mock mode for all external services before any imports
+os.environ["REGISTRY_SERVICE_MOCK"] = "true"
 os.environ["RAG_SERVICE_MOCK"] = "true"
 os.environ["OCR_SERVICE_MOCK"] = "true"
-os.environ["REGISTRY_SERVICE_MOCK"] = "true"
+os.environ["PARSER_SERVICE_MOCK"] = "true"
+os.environ["CONVERTER_SERVICE_MOCK"] = "true"
 
 # Use local SQLite for tests — creates test_pipeline.db in project dir
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test_pipeline.db"

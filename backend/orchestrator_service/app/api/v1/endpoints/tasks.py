@@ -17,6 +17,7 @@ from app.schemas.tasks import (
     TaskStatsResponse,
     TaskStatusResponse,
     TaskStepItem,
+    TaskStepsListResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -204,4 +205,54 @@ async def get_task_by_id(
     )
 
 
+@router.get(
+    "/{task_id}/steps",
+    response_model=TaskStepsListResponse,
+    responses={404: {"description": "Задача не найдена"}},
+)
+async def get_task_steps(
+    task_id: int,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> TaskStepsListResponse:
+    """Get list of steps for a task (read-only)."""
+    # Verify task exists
+    result = await db.execute(select(Task).where(Task.id == task_id))
+    task = result.scalar_one_or_none()
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": {
+                    "code": "NOT_FOUND",
+                    "message": f"Задача {task_id} не найдена",
+                }
+            },
+        )
+
+    steps_result = await db.execute(
+        select(TaskStep)
+        .where(TaskStep.task_id == task_id)
+        .order_by(TaskStep.step_index)
+    )
+    steps = list(steps_result.scalars().all())
+
+    step_items = [
+        TaskStepItem(
+            step_name=s.step_name,
+            service_name=s.service_name,
+            status=s.status,
+            input_data=s.input_data,
+            output_data=s.output_data,
+            started_at=s.started_at,
+            completed_at=s.completed_at,
+        )
+        for s in steps
+    ]
+
+    return TaskStepsListResponse(
+        task_id=task_id,
+        total=len(steps),
+        steps=step_items,
+    )
 

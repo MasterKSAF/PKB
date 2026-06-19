@@ -47,17 +47,23 @@ class TaskRepository:
         return task
 
     async def get_task(self, task_id: int) -> Optional[Task]:
-        """Get task by ID."""
+        """Get task by ID (excludes soft-deleted)."""
         result = await self.db.execute(
-            select(Task).where(Task.id == task_id)
+            select(Task).where(
+                Task.id == task_id,
+                Task.deleted_at.is_(None),
+            )
         )
         return result.scalar_one_or_none()
 
     async def get_task_for_update(self, task_id: int) -> Optional[Task]:
-        """Get task with FOR UPDATE lock."""
+        """Get task with FOR UPDATE lock (excludes soft-deleted)."""
         result = await self.db.execute(
             select(Task)
-            .where(Task.id == task_id)
+            .where(
+                Task.id == task_id,
+                Task.deleted_at.is_(None),
+            )
             .with_for_update()
         )
         return result.scalar_one_or_none()
@@ -124,6 +130,7 @@ class TaskRepository:
                 and_(
                     Task.status == "active",
                     Task.started_at < threshold,
+                    Task.deleted_at.is_(None),
                 )
             )
         )
@@ -240,10 +247,67 @@ class TaskRepository:
         return step
 
     async def get_task_steps(self, task_id: int) -> list[TaskStep]:
-        """Get all steps for a task, ordered by step index."""
+        """Get all steps for a task, ordered by step index (excludes soft-deleted)."""
         result = await self.db.execute(
             select(TaskStep)
-            .where(TaskStep.task_id == task_id)
+            .where(
+                TaskStep.task_id == task_id,
+                TaskStep.deleted_at.is_(None),
+            )
             .order_by(TaskStep.step_index)
         )
         return list(result.scalars().all())
+
+    # ------------------------------------------------------------------
+    # DraftNotification
+    # ------------------------------------------------------------------
+
+    async def save_notifications(
+        self, task_id: int, draft_id: int, notifications: list[dict]
+    ) -> list["DraftNotification"]:
+        """Save quality notifications for a draft from Parser/OCR.
+
+        Each notification dict:
+            service (str): "ocr" | "parser"
+            code (str): "low_quality", "missing_pages", etc.
+            message (str): human-readable description
+            severity (str): "critical" | "warning" | "info"
+        """
+        from app.models.pipeline import DraftNotification
+
+        saved = []
+        for n in notifications:
+            notif = DraftNotification(
+                task_id=task_id,
+                draft_id=draft_id,
+                service=n.get("service", "unknown"),
+                code=n.get("code", "unknown"),
+                message=n.get("message", ""),
+                severity=n.get("severity", "warning"),
+            )
+            self.db.add(notif)
+            saved.append(notif)
+        if saved:
+            await self.db.flush()
+        return saved
+
+    async def get_task_notifications(self, task_id: int) -> list["DraftNotification"]:
+        """Get all notifications for a task."""
+        from app.models.pipeline import DraftNotification
+
+        result = await self.db.execute(
+            select(DraftNotification).where(DraftNotification.task_id == task_id)
+        )
+        return list(result.scalars().all())
+
+    async def has_critical_notifications(self, task_id: int) -> bool:
+        """Check if task has any critical notifications."""
+        from app.models.pipeline import DraftNotification
+
+        result = await self.db.execute(
+            select(DraftNotification).where(
+                DraftNotification.task_id == task_id,
+                DraftNotification.severity == "critical",
+            ).limit(1)
+        )
+        return result.scalar_one_or_none() is not None

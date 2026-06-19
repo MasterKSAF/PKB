@@ -115,6 +115,11 @@ class Task(Base):
         DateTime(timezone=True), nullable=True
     )
 
+    # Soft-delete
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -172,6 +177,11 @@ class TaskStep(Base):
     # Error details
     error_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Soft-delete
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(

@@ -41,6 +41,10 @@ class TestRunOcrPreviewStep:
             "preview_not_supported": False,
             "pages_processed": 3,
             "metadata": {"doc_code": "&#1043;&#1054;&#1057;&#1058; 1234-56", "title": "Test doc"},
+            "quality": {
+                "score": 0.94,
+                "notifications": [],
+            },
         }
     }
 
@@ -86,6 +90,10 @@ class TestRunOcrPreviewStep:
             "preview_not_supported": False,
             "pages_processed": 3,
             "metadata": {"doc_code": "&#1043;&#1054;&#1057;&#1058; 1234-56", "title": "Test doc"},
+            "quality": {
+                "score": 0.94,
+                "notifications": [],
+            },
         }
 
         # Verify return value

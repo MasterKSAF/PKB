@@ -71,6 +71,7 @@ def run_ocr_preview_step(
             "preview_not_supported": result.get("data", {}).get("preview_not_supported", False),
             "pages_processed": result.get("data", {}).get("pages_processed", 0),
             "metadata": result.get("data", {}).get("metadata", {}),
+            "quality": result.get("data", {}).get("quality", {}),
         }
 
         _run_async(_notify_step_completed(task_id, "preview_ocr", input_data, output_data))
@@ -111,6 +112,7 @@ def run_parser_preview_step(
             "preview_not_supported": result.get("data", {}).get("preview_not_supported", False),
             "pages_processed": result.get("data", {}).get("pages_processed", 0),
             "metadata": result.get("data", {}).get("metadata", {}),
+            "quality": result.get("data", {}).get("quality", {}),
         }
 
         # The orchestrator uses "preview_ocr" as the step name for both OCR and Parser

@@ -50,6 +50,10 @@ class OCRServiceClient(ServiceClient):
                             "issuing_body": "Госстандарт",
                             "udk_code": "621.882",
                         },
+                        "quality": {
+                            "score": 0.94,
+                            "notifications": [],
+                        },
                     }
                 }
 

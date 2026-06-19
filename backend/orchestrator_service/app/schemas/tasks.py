@@ -69,3 +69,11 @@ class TaskStatsResponse(BaseModel):
     completed: int = Field(0, description="Завершённых")
     failed: int = Field(0, description="Упавших")
     by_type: Dict[str, int] = Field(default_factory=dict, description="По типу пайплайна")
+
+
+class TaskStepsListResponse(BaseModel):
+    """Response for GET /tasks/{id}/steps."""
+
+    task_id: int = Field(..., description="ID задачи")
+    total: int = Field(0, description="Всего шагов")
+    steps: List[TaskStepItem] = Field(default_factory=list, description="Список шагов")

@@ -22,6 +22,7 @@ from sqlalchemy.exc import IntegrityError
 from app.api.deps import CurrentUser, get_current_user
 from app.core.config import settings
 from app.core.pipeline.orchestrator import PipelineOrchestrator
+from app.core.trace import set_draft_id, set_document_id, set_version_id
 from app.db.base import get_db
 from app.schemas.drafts import (
     DecideRequest,
@@ -193,6 +194,9 @@ async def create_draft(
         )
     finally:
         await registry.close()
+
+    # Store draft_id in context for downstream correlation (CM-5)
+    set_draft_id(str(draft_id))
 
     # --- Check: Task for this draft_id already exists? ---
     from sqlalchemy import select
@@ -866,11 +870,18 @@ async def decide_draft(
             draft_id, task.id,
             metadata_overrides=request.metadata_overrides,
         )
+        # Set correlation IDs for downstream (CM-5)
+        doc_id = result_data.get("document_id")
+        ver_id = result_data.get("version_id")
+        if doc_id:
+            set_document_id(str(doc_id))
+        if ver_id:
+            set_version_id(str(ver_id))
         return DecideResponse(
             draft_id=draft_id,
             task_id=task.id,
-            document_id=result_data.get("document_id"),
-            version_id=result_data.get("version_id"),
+            document_id=doc_id,
+            version_id=ver_id,
             is_new_document=result_data.get("is_new_document", True),
             status="proceeding",
             action="approve",
@@ -892,11 +903,17 @@ async def decide_draft(
             draft_id, task.id,
             metadata_overrides=request.metadata_overrides,
         )
+        doc_id = result_data.get("document_id")
+        ver_id = result_data.get("version_id")
+        if doc_id:
+            set_document_id(str(doc_id))
+        if ver_id:
+            set_version_id(str(ver_id))
         return DecideResponse(
             draft_id=draft_id,
             task_id=task.id,
-            document_id=result_data.get("document_id"),
-            version_id=result_data.get("version_id"),
+            document_id=doc_id,
+            version_id=ver_id,
             is_new_document=result_data.get("is_new_document", True),
             status="proceeding",
             action="proceed",
@@ -915,11 +932,17 @@ async def decide_draft(
 
     elif request.action == "force_new_version":
         result_data = await orchestrator.force_new_version_draft(draft_id, task.id)
+        doc_id = result_data.get("document_id")
+        ver_id = result_data.get("version_id")
+        if doc_id:
+            set_document_id(str(doc_id))
+        if ver_id:
+            set_version_id(str(ver_id))
         return DecideResponse(
             draft_id=draft_id,
             task_id=task.id,
-            document_id=result_data.get("document_id"),
-            version_id=result_data.get("version_id"),
+            document_id=doc_id,
+            version_id=ver_id,
             is_new_document=False,
             status="proceeding",
             action="force_new_version",

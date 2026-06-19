@@ -31,28 +31,64 @@ def run_rag_index_step(self, job_id: str, document_id: str):
     """
     Step 1: RAG Index — chunk document and store embeddings.
 
-    In production: calls RAG Builder Service to chunk text,
-    generate embeddings, and store in pgvector.
-
-    Has side-effects (writes to vector DB), so Saga compensation needed.
+    Uses Redis advisory lock (P2I-7) to prevent double indexing.
+    In production: calls RAG Builder Service to chunk text.
+    Has side-effects, so Saga compensation needed.
     """
+    lock_key = f"indexation:lock:{document_id}"
+    lock_ttl = 3600  # 1 hour max
+
     try:
+        # Try to acquire advisory lock via Redis
+        import redis as sync_redis
+        r = sync_redis.from_url(settings.REDIS_URL)
+        acquired = r.setnx(lock_key, "1")
+        if acquired:
+            r.expire(lock_key, lock_ttl)
+        r.close()
+
+        if not acquired:
+            logger.warning(
+                f"Indexation already in progress for document {document_id}, "
+                f"skipping (advisory lock held)",
+            )
+            return {"status": "skipped", "reason": "lock_held", "document_id": document_id}
+
         logger.info(f"RAG Index step started: job={job_id} doc={document_id}")
 
-        # Mock: simulate indexing
-        mock_result = {
-            "document_id": document_id,
-            "chunks_indexed": 42,
-            "status": "indexed",
-        }
+        # --- Real RAG Builder call (not mock) ---
+        try:
+            from app.services.rag_client import RAGBuilderClient
+            client = RAGBuilderClient()
+            result = _run_async(client.index_document(document_id=document_id))
+            _run_async(client.close())
+        except Exception as svc_err:
+            logger.error(f"RAG Builder call failed: {svc_err}")
+            raise
 
-        _run_async(_notify_step_completed(job_id, "rag_index", mock_result))
+        _run_async(_notify_step_completed(job_id, "rag_index", result))
 
         logger.info(f"RAG Index step completed: job={job_id}")
+
+        # Release lock on success
+        try:
+            r = sync_redis.from_url(settings.REDIS_URL)
+            r.delete(lock_key)
+            r.close()
+        except Exception:
+            pass
+
         return {"status": "completed", "step": "rag_index", "job_id": job_id}
 
     except Exception as exc:
         logger.error(f"RAG Index step failed: {exc}")
+        # Release lock on failure too
+        try:
+            r = sync_redis.from_url(settings.REDIS_URL)
+            r.delete(lock_key)
+            r.close()
+        except Exception:
+            pass
         _run_async(
             _notify_step_failed(job_id, "rag_index", "RAG_INDEX_ERROR", str(exc))
         )
