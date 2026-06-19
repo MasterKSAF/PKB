@@ -168,8 +168,8 @@
 - [x] ✅ Deprecate POST /documents (уже удалён, upload только через POST /drafts)
 - [x] ✅ Monitor router — уже удалён
 - [x] ✅ Актуализирован readme.md под real-режим
-- [ ] 📖 Актуализировать orchestrator_service_api.md (сейчас устарела)
-- [ ] 📖 Зафиксировать архитектурные решения в specificity.md
+- [x] 📖 Актуализирован orchestrator_service_api.md (пользователь)
+- [x] 📖 Зафиксированы архитектурные решения в specificity.md (пользователь)
 - [ ] 📖 Обновить guide.md
 
 ---
@@ -211,3 +211,29 @@
 
 ### Тесты
 - [x] 386 passed (все тесты)
+
+---
+
+## 🟢 Блок 10. Синхронизация кода со спецификацией (20.06)
+
+### 10.1 GET /tasks — формат пагинации
+- [x] `TaskListResponse` — `total/page/page_size` → `meta: PaginationMeta`
+- [x] `list_tasks()` — сборка `meta` вместо плоских полей
+- [x] Тесты обновлены под `data["meta"]["total"]`
+
+### 10.2 GET /tasks/stats — структура ответа
+- [x] `TaskStatsResponse` — `active/completed/failed/by_type` → `by_status` + `by_stage`
+- [x] `get_task_stats()` — CASE-запрос с 8 статусами (uploaded, previewing, ready_for_approve, processing, created, indexing, indexed, failed) + 6 этапов
+- [x] Тесты обновлены под `data["by_status"]` / `data["by_stage"]`
+
+### 10.3 GET /drafts/{draft_id}/tasks — новый эндпоинт
+- [x] `DraftTasksResponse` + `DraftTaskItem` схемы
+- [x] `get_draft_tasks()` в drafts.py (фильтр по draft_id, сортировка)
+- [x] `created_by` поле добавлено в модель Task
+
+### 10.4 Инфраструктурные правки
+- [x] `Task.deleted_at.is_(None)` — фильтрация soft-delete во всех эндпоинтах задач
+- [x] `DraftNotification` import вынесен наверх (был внутри try)
+
+### Результат
+- [x] **435 passed** (все тесты)

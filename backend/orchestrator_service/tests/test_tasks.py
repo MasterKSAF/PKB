@@ -94,9 +94,10 @@ class TestTaskStatus:
         assert response.status_code == 200
         data = response.json()
         assert "items" in data
-        assert "total" in data
-        assert "page" in data
-        assert "page_size" in data
+        assert "meta" in data
+        assert "total" in data["meta"]
+        assert "page" in data["meta"]
+        assert "page_size" in data["meta"]
         assert isinstance(data["items"], list)
 
     def test_list_tasks_filters(self, client: TestClient, auth_header: dict):
@@ -110,6 +111,44 @@ class TestTaskStatus:
         data = response.json()
         assert all(item["status"] == "active" for item in data["items"])
 
+    def test_draft_tasks(self, client: TestClient, auth_header: dict):
+        """GET /drafts/{draft_id}/tasks returns task list for a draft."""
+        task_id = self._create_task(client, auth_header, "doc-draft-tasks-test")
+
+        # Get draft_id from task
+        task_resp = client.get(f"/api/v1/tasks/{task_id}", headers=auth_header)
+        assert task_resp.status_code == 200
+        draft_id = task_resp.json()["draft_id"]
+
+        response = client.get(
+            f"/api/v1/drafts/{draft_id}/tasks", headers=auth_header
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "draft_id" in data
+        assert data["draft_id"] == draft_id
+        assert "tasks" in data
+        assert isinstance(data["tasks"], list)
+        assert len(data["tasks"]) >= 1
+
+        task_item = data["tasks"][0]
+        assert "task_id" in task_item
+        assert task_item["task_id"] == task_id
+        assert "status" in task_item
+        assert "pipeline_stage" in task_item
+        assert "initiated_by" in task_item
+        assert "created_at" in task_item
+
+    def test_draft_tasks_not_found(self, client: TestClient, auth_header: dict):
+        """Non-existent draft returns empty task list (not 404)."""
+        response = client.get(
+            "/api/v1/drafts/99999/tasks", headers=auth_header
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["draft_id"] == 99999
+        assert data["tasks"] == []
+
     def test_task_stats(self, client: TestClient, auth_header: dict):
         """GET /tasks/stats returns statistics."""
         self._create_task(client, auth_header, "doc-stats-test")
@@ -118,10 +157,8 @@ class TestTaskStatus:
         assert response.status_code == 200
         data = response.json()
         assert "total" in data
-        assert "active" in data
-        assert "completed" in data
-        assert "failed" in data
-        assert "by_type" in data
+        assert "by_status" in data
+        assert "by_stage" in data
 
 
 class TestTaskWithoutAuth:

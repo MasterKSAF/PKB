@@ -13,6 +13,8 @@ docs/
 ├── README.md                         # ← Этот файл (навигация)
 │
 ├── api/                              # API-спецификации микросервисов
+│   ├── _schemas.md                   #   Общие схемы данных (source of truth)
+│   ├── _data_dictionary.md           #   Словарь данных: матрица полей и вхождений
 │   ├── common_api.md                 #   Общие положения (форматы, auth, rate limits, health check, edge cases)
 │   ├── gateway_service_api.md        #   Gateway (JWT, RBAC, маршрутизация)
 │   ├── orchestrator_service_api.md   #   Orchestrator (координатор пайплайнов)
@@ -45,22 +47,18 @@ docs/
 │   ├── schema_converter_preview.json  #   Preview от Converter-validator
 │   ├── schema_registry_for_rag.json  #   JSON для Registry / RAG Builder
 │
-├── audit/                            # Аудиты и анализ синхронизации
-│   ├── audit_06_06_2026.md           #   Аудит документации от 06.06.2026
-│   └── ui_gateway_sync_analysis.md   #   Анализ UI/Gateway-синхронизации
-│
-├── rules/                            # Правила и чек-листы
+├── checks/                           # Чек-листы и скрипты проверки
 │   ├── check_rule.md                 #   Чек-лист аудита документации
-│   └── check_consistency.md          #   Чек-лист целостности при изменениях
-├── scripts/                          # Скрипты проверки
-│   └── check_consistency.py          #   Проверка целостности документации
+│   ├── check_consistency.md          #   Чек-лист целостности при изменениях
+│   └── scripts/
+│       ├── check_consistency.py      #   Проверка целостности документации
+│       └── check_cross_references.py #   Кросс-проверка согласованности схем и полей
 │
 ├── specifications/                   # Технические спецификации
 │   ├── parsing_specifications.md       #   Спецификация парсинга (OCR + P3-6 Lama-риск)
 │   ├── normalizer_specification.md     #   Нормализатор: алгоритмы дедупликации и бизнес-ключ
 │   ├── converter_specification.md       #   Спецификация конвертера-валидатора (P8-10)
 │   ├── cas_storage_specification.md    #   CAS (Content-Addressable Storage) — два бакета (P5-9)
-│   ├── purgatory_scenario.md           #   Сценарии использования
 │   ├── registry_resolver_spec.md       #   Резолвер графа связей (P0-4)
 │   ├── mks_oks_classifier.csv          #   Справочник кодов МКС/ОКС (CSV)
 │   ├── classifier_roots.csv            #   Корневые узлы классификаторов (CSV)
@@ -73,20 +71,10 @@ docs/
 │   ├── monitoring.md                 #   Мониторинг, SigNoz, OpenTelemetry, SLO/SLI, алерты
 │   └── service_dependencies.md       #   Зависимости и сетевые взаимодействия сервисов
 │
-├── methodology/                      # RAG-методологии (P4-2)
-│   ├── rag_experiments_methodology.md   #   Методология экспериментов RAG
-│   └── rag_evaluation_methodology.md   #   Метрики и протоколы оценки
-│
-├── plans/                            # Планы и отчёты
-│   └── quality_report_sprint2.md      #   Отчёт о качестве (P4-1)
-│
 ├── glossary.md                       # Глоссарий терминов и сокращений
 ├── guide.md                          # Архитектурные решения и стиль
 ├── specificity.md                    # Журнал аномалий и трудных моментов
 ├── todo.md                           # План синхронизации документации
-├── analyse_alternative_project.md   # Анализ альтернативного проекта KB (13.06)
-├── 5.docs_action_plan_17_06.md     # План внедрения (P0-P13 + D1-D69, 17.06.2026) — полный
-└── 6.dev_tasks_17_06.md            # Только код: задачи разработчикам по сервисам (103 задачи, 17 🔴)
 ```
 
 > 📂 **Исторические обсуждения и протоколы встреч** хранятся в директории [`../docs_plans/`](../docs_plans/) на уровне корня проекта.
@@ -397,6 +385,8 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 - Сохранение истории чата и сбора обратной связи
 - Longpoll-механизм для асинхронного ожидания ответа
 - Текстовый поиск (`POST /text/search`) и вопрос-ответ (`POST /text/ask`)
+- Поиск документов по structured-запросу (`POST /documents/search`, `GET /documents/search`)
+- Вопрос по документам в свободной форме (`POST /ask`)
 
 ---
 

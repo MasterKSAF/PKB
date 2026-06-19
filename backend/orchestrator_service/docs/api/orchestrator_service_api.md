@@ -80,7 +80,8 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 
 > **Примечание:** `draft_id` назначается Registry при создании записи черновика. `document_id` назначается Registry при завершении черновика. Первичный внешний идентификатор на этапе загрузки и preview — `draft_id`. `task_id` — внутренний сквозной ID задачи (`pipeline.tasks`), используется только для межсервисного взаимодействия и администрирования.
 
-**Коды ошибок**:
+### Коды ошибок
+
 | HTTP | `error.code` | Когда возникает |
 |------|-------------|----------------|
 | 400 | VALIDATION_ERROR | Некорректные поля запроса |
@@ -110,10 +111,13 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 {
   "task_id": 420000,
   "draft_id": 420000,
-  "document_id": null,
+  "document_id": 1,
+  "version_id": 1,
   "status": "previewing",
   "pipeline_stage": "preview",
   "progress_percent": 45,
+  "has_notifications": false,
+  "critical_count": 0,
   "steps": [
     {
       "step_name": "upload",
@@ -144,12 +148,15 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 | `task_id` | bigint | Сквозной ID задачи |
 | `draft_id` | bigint \| null | ID черновика в Registry |
 | `document_id` | bigint \| null | ID документа в Registry (если создан) |
+| `version_id` | bigint \| null | ID версии документа (если создана) |
 | `status` | string | Текущий статус (`uploaded`, `previewing`, `ready_for_approve`, `processing`, `created`, `indexing`, `indexed`, `failed`) |
 | `pipeline_stage` | string | Этап конвейера: `upload`, `preview`, `decision`, `full`, `registry`, `indexation` |
 | `progress_percent` | int | Общий прогресс (0–100) |
+| `has_notifications` | bool | Есть ли уведомления у черновика |
+| `critical_count` | int | Количество critical-уведомлений |
 | `steps` | array | Массив этапов задачи с промежуточными данными (`step_name`, `service_name`, `status`, `input_data`, `output_data`, `started_at`, `completed_at`) |
-| `created_at` | string | Время создания задачи (ISO 8601) |
-| `updated_at` | string | Время последнего обновления (ISO 8601) |
+| `created_at` | datetime | Время создания задачи (ISO 8601) |
+| `updated_at` | datetime | Время последнего обновления (ISO 8601) |
 
 **Примечание:** `GET /tasks/{task_id}/status` — эндпоинт для сквозного отслеживания задачи админом. `task` — агрегатор этапов пайплайна, каждый этап хранит входные/выходные JSON-контейнеры сервисов. Внешним клиентам для статуса загрузки следует использовать `GET /drafts/{draft_id}/preview/status`, для статуса документа — `GET /documents/{document_id}/status`.
 
@@ -166,6 +173,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 ```json
 {
   "task_id": 420000,
+  "total": 2,
   "steps": [
     {
       "step_name": "upload",
@@ -192,6 +200,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 | Поле | Тип | Описание |
 |---|---|---|
 | `task_id` | bigint | Сквозной ID задачи |
+| `total` | int | Количество шагов |
 | `steps` | array | Массив этапов задачи (схема — см. `GET /tasks/{task_id}/status`) |
 
 ### GET /drafts/{draft_id}/tasks
@@ -223,7 +232,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 | Поле | Тип | Описание |
 |---|---|---|
 | `draft_id` | bigint | ID черновика |
-| `tasks` | array | Массив задач: `task_id`, `status`, `pipeline_stage`, `initiated_by`, `created_at`, `updated_at` |
+| `tasks` | array | Массив задач: `task_id`, `status`, `pipeline_stage`, `initiated_by` (субъект), `created_at`, `updated_at` |
 
 ### POST /documents/{doc_id}/versions
 
@@ -669,17 +678,18 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 ```json
 {
   "document_id": 1,
-  "deleted_at": "2026-05-15T10:30:00Z"
+  "deleted_at": "2026-06-05T10:05:00Z"
 }
 ```
 
-**Коды ошибок**:
+### Коды ошибок
+
 | HTTP | `error.code` | Когда возникает |
 |------|-------------|----------------|
-| 400 | VALIDATION_ERROR | Некорректный `doc_id` в пути |
 | 401 | UNAUTHORIZED | Отсутствует или невалидный JWT |
-| 403 | FORBIDDEN | Нет прав на удаление документа |
+| 403 | FORBIDDEN | Нет прав на удаление |
 | 404 | DOCUMENT_NOT_FOUND | Документ не найден или уже удалён |
+| 409 | DOCUMENT_IN_PROCESSING | Документ в обработке, удаление невозможно |
 | 409 | HAS_CHILDREN | Нельзя удалить: есть дочерние версии/секции |
 | 502 | BAD_GATEWAY | Ошибка вызова Registry |
 | 503 | SERVICE_UNAVAILABLE | БД недоступна |
@@ -768,6 +778,113 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 ```
 
 > **Примечание**: Поле `total` — общее количество документов в очереди. Используется стандартный формат пагинации (см. common_api.md).
+
+---
+
+### GET /tasks
+
+Список задач пайплайна. Возвращает задачи с фильтрацией по статусу, черновику и пагинацией.
+
+**Path:** `/api/v1/tasks`
+**Метод:** `GET`
+
+**Query-параметры**:
+
+| Параметр | Тип | Обязательность | По умолчанию | Описание |
+|----------|-----|---------------|-------------|----------|
+| `status` | string | Нет | — | Фильтр по статусу задачи: `uploaded`, `previewing`, `ready_for_approve`, `processing`, `created`, `indexing`, `indexed`, `failed` |
+| `draft_id` | bigint | Нет | — | Фильтр по ID черновика |
+| `pipeline_type` | string | Нет | — | Фильтр по типу пайплайна |
+| `page` | int | Нет | 1 | Номер страницы |
+| `page_size` | int | Нет | 50 | Размер страницы (макс. 100) |
+
+**Ответ `200`**:
+
+```json
+{
+  "items": [
+    {
+      "task_id": 420000,
+      "draft_id": 420000,
+      "document_id": null,
+      "status": "previewing",
+      "pipeline_stage": "preview",
+      "progress_percent": 45,
+      "created_at": "2026-06-05T10:00:00Z",
+      "updated_at": "2026-06-05T10:02:30Z"
+    }
+  ],
+  "meta": {
+    "total": 12,
+    "page": 1,
+    "page_size": 50
+  }
+}
+```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `items` | array | Массив задач |
+| `items[].task_id` | bigint | ID задачи |
+| `items[].draft_id` | bigint \| null | ID черновика |
+| `items[].document_id` | bigint \| null | ID документа |
+| `items[].status` | string | Статус задачи |
+| `items[].pipeline_stage` | string | Этап конвейера |
+| `items[].progress_percent` | int | Прогресс (0–100) |
+| `items[].created_at` | datetime | Время создания |
+| `items[].updated_at` | datetime | Время обновления |
+| `meta.total` | int | Всего задач |
+| `meta.page` | int | Текущая страница |
+| `meta.page_size` | int | Размер страницы |
+
+**Коды ошибок**: `401` — неавторизован, `403` — нет прав.
+
+> **Доступ:** `system_admin`. Эндпоинт предназначен для мониторинга. Для получения статуса конкретного черновика используйте `GET /drafts/{draft_id}/preview/status`.
+
+---
+
+### GET /tasks/stats
+
+Статистика по задачам пайплайна: количество задач в каждом статусе.
+
+**Path:** `/api/v1/tasks/stats`
+**Метод:** `GET`
+
+**Ответ `200`**:
+
+```json
+{
+  "total": 120,
+  "by_status": {
+    "uploaded": 0,
+    "previewing": 3,
+    "ready_for_approve": 5,
+    "processing": 2,
+    "created": 100,
+    "indexing": 1,
+    "indexed": 8,
+    "failed": 1
+  },
+  "by_stage": {
+    "upload": 0,
+    "preview": 8,
+    "decision": 5,
+    "full": 2,
+    "registry": 100,
+    "indexation": 10
+  }
+}
+```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `total` | int | Общее количество задач |
+| `by_status` | object | Количество задач по статусам |
+| `by_stage` | object | Количество задач по этапам конвейера |
+
+**Коды ошибок**: `401` — неавторизован, `403` — нет прав.
+
+> **Доступ:** `system_admin`.
 
 ---
 
@@ -993,24 +1110,7 @@ Orchestrator — **единая точка входа** для работы с �
       "document_key": "sha256:def456",
       "status": "approved",
       "confidence": 0.92,
-      "preview_metadata": {
-        "doc_code": "311-05-1950ц",
-        "title": "ЦИРКУЛЯРНОЕ ПИСЬМО № 311-05-1950ц от 09.06.2023",
-        "mks_oks_code": null,
-        "okstu_code": null,
-        "udk_code": null,
-        "pkb_codes": [],
-        "document_type": "normative",
-        "year": 2023,
-        "era": "CURRENT",
-        "validity_status": "active",
-        "issuing_body": "РОССИЙСКИЙ МОРСКОЙ РЕГИСТР СУДОХОДСТВА",
-        "jurisdiction": "RU",
-        "source_type": "RMRS",
-        "language": "ru",
-        "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
-        "title_key": "CURRENT|rmrs|||311-05-1950ц|циркулярное письмо № 311-05-1950ц от 09.06.2023"
-      },
+      "preview_metadata": { /* см. _schemas.md#PreviewMetadata */ },
       "document_id": 1300,
       "created_at": "2026-06-05T10:00:00Z",
       "updated_at": "2026-06-05T10:05:00Z"
@@ -1022,24 +1122,7 @@ Orchestrator — **единая точка входа** для работы с �
       "document_key": "sha256:def456",
       "status": "review_required",
       "confidence": 0.62,
-      "preview_metadata": {
-        "doc_code": "311-05-1950ц",
-        "title": "ЦИРКУЛЯРНОЕ ПИСЬМО № 311-05-1950ц от 09.06.2023",
-        "mks_oks_code": null,
-        "okstu_code": null,
-        "udk_code": null,
-        "pkb_codes": [],
-        "document_type": "normative",
-        "year": 2023,
-        "era": "CURRENT",
-        "validity_status": "active",
-        "issuing_body": "РОССИЙСКИЙ МОРСКОЙ РЕГИСТР СУДОХОДСТВА",
-        "jurisdiction": "RU",
-        "source_type": "RMRS",
-        "language": "ru",
-        "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
-        "title_key": "CURRENT|rmrs|||311-05-1950ц|циркулярное письмо № 311-05-1950ц от 09.06.2023"
-      },
+      "preview_metadata": { /* см. _schemas.md#PreviewMetadata */ },
       "has_notifications": true,
       "critical_count": 1,
       "document_id": null,
@@ -1055,6 +1138,8 @@ Orchestrator — **единая точка входа** для работы с �
 }
 ```
 
+> Схема полей `preview_metadata` — [_schemas.md](_schemas.md#PreviewMetadata).
+
 | Поле | Тип | Описание |
 |------|-----|----------|
 | `draft_id` | bigint | Уникальный идентификатор черновика |
@@ -1063,14 +1148,14 @@ Orchestrator — **единая точка входа** для работы с �
 | `document_key` | string | Бизнес-ключ документа (SHA-256) |
 | `status` | string | Статус черновика: `uploaded`, `previewing`, `ready_for_approve`, `review_required`, `validation`, `approved`, `discarded` |
 | `confidence` | float | Оценка качества распознавания (0..1) |
-| `preview_metadata` | object | Preview-метаданные: `doc_code`, `title`, `mks_oks_code`, `okstu_code`, `udk_code`, `pkb_codes`, `document_type`, `year`, `era`, `validity_status`, `issuing_body`, `jurisdiction`, `source_type`, `language`, `title_hash_sha256`, `title_key` |
+| `preview_metadata` | object | Preview-метаданные — см. [_schemas.md](_schemas.md#PreviewMetadata) |
 | `document_id` | bigint \| null | ID документа в Registry (FK → `registry.documents`), созданный по результатам черновика |
 | `has_notifications` | bool | **P12-3**: есть ли у черновика уведомления (для индикатора в UI) |
 | `critical_count` | int | **P12-3**: количество critical-уведомлений (для бейджа) |
 | `error_code` | string \| null | Код ошибки при `discarded` |
 | `error_message` | string \| null | Описание ошибки |
-| `created_at` | string | Время создания (ISO 8601) |
-| `updated_at` | string | Время последнего изменения (ISO 8601) |
+| `created_at` | datetime | Время создания (ISO 8601) |
+| `updated_at` | datetime | Время последнего изменения (ISO 8601) |
 
 **Терминальные и промежуточные статусы:**
 
@@ -1109,24 +1194,7 @@ Orchestrator — **единая точка входа** для работы с �
   "document_key": "sha256:def456",
   "status": "ready_for_approve",
   "confidence": 0.92,
-  "preview_metadata": {
-    "doc_code": "311-05-1950ц",
-    "title": "ЦИРКУЛЯРНОЕ ПИСЬМО № 311-05-1950ц от 09.06.2023",
-    "mks_oks_code": null,
-    "okstu_code": null,
-    "udk_code": null,
-    "pkb_codes": [],
-    "document_type": "normative",
-    "year": 2023,
-    "era": "CURRENT",
-    "validity_status": "active",
-    "issuing_body": "РОССИЙСКИЙ МОРСКОЙ РЕГИСТР СУДОХОДСТВА",
-    "jurisdiction": "RU",
-    "source_type": "RMRS",
-    "language": "ru",
-    "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
-    "title_key": "CURRENT|rmrs|||311-05-1950ц|циркулярное письмо № 311-05-1950ц от 09.06.2023"
-  },
+  "preview_metadata": { /* см. _schemas.md#PreviewMetadata */ },
   "raw_data": {
     "schema": "raw_ocr_v4",
     "pages": [
@@ -1186,14 +1254,14 @@ Orchestrator — **единая точка входа** для работы с �
 | `document_key` | string | Бизнес-ключ документа (SHA-256) |
 | `status` | string | Статус черновика |
 | `confidence` | float | Оценка качества распознавания (0..1) |
-| `preview_metadata` | object | Preview-метаданные: `doc_code`, `title`, `mks_oks_code`, `okstu_code`, `udk_code`, `pkb_codes`, `document_type`, `year`, `era`, `validity_status`, `issuing_body`, `jurisdiction`, `source_type`, `language`, `title_hash_sha256`, `title_key` |
+| `preview_metadata` | object | Preview-метаданные — см. [_schemas.md](_schemas.md#PreviewMetadata) |
 | `raw_data` | object | Сырые данные распознавания (`raw_ocr_v4`) — результат Parser или OCR |
 | `document_id` | bigint \| null | ID документа в Registry, созданный по результатам черновика |
 | `error_code` | string \| null | Код ошибки |
 | `error_message` | string \| null | Описание ошибки |
-| `created_by` | string | Кто создал черновик |
-| `created_at` | string | Время создания (ISO 8601) |
-| `updated_at` | string | Время последнего изменения (ISO 8601) |
+| `created_by` | string | Субъект (пользователь или сервис) |
+| `created_at` | datetime | Время создания (ISO 8601) |
+| `updated_at` | datetime | Время последнего изменения (ISO 8601) |
 
 **Возможные ошибки:**
 
@@ -1217,27 +1285,12 @@ Orchestrator — **единая точка входа** для работы с �
   "document_key": "sha256:def456",
   "status": "ready_for_approve",
   "confidence": 0.92,
-  "preview_metadata": {
-    "doc_code": "311-05-1950ц",
-    "title": "ЦИРКУЛЯРНОЕ ПИСЬМО № 311-05-1950ц от 09.06.2023",
-    "mks_oks_code": null,
-    "okstu_code": null,
-    "udk_code": null,
-    "pkb_codes": [],
-    "document_type": "normative",
-    "year": 2023,
-    "era": "CURRENT",
-    "validity_status": "active",
-    "issuing_body": "РОССИЙСКИЙ МОРСКОЙ РЕГИСТР СУДОХОДСТВА",
-    "jurisdiction": "RU",
-    "source_type": "RMRS",
-    "language": "ru",
-    "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
-    "title_key": "CURRENT|rmrs|||311-05-1950ц|циркулярное письмо № 311-05-1950ц от 09.06.2023"
-  },
+  "preview_metadata": { /* см. _schemas.md#PreviewMetadata */ },
   "created_at": "2026-06-18T10:00:00Z"
 }
 ```
+
+> Схема полей `preview_metadata` — [_schemas.md](_schemas.md#PreviewMetadata).
 
 | Поле | Тип | Описание |
 |------|-----|----------|
@@ -1247,8 +1300,8 @@ Orchestrator — **единая точка входа** для работы с �
 | `document_key` | string | Бизнес-ключ документа (SHA-256) |
 | `status` | string | Статус черновика |
 | `confidence` | float | Оценка качества распознавания (0..1) |
-| `preview_metadata` | object | Preview-метаданные: `doc_code`, `title`, `mks_oks_code`, `okstu_code`, `udk_code`, `pkb_codes`, `document_type`, `year`, `era`, `validity_status`, `issuing_body`, `jurisdiction`, `source_type`, `language`, `title_hash_sha256`, `title_key` |
-| `created_at` | string | Время создания (ISO 8601) |
+| `preview_metadata` | object | Preview-метаданные — см. [_schemas.md](_schemas.md#PreviewMetadata) |
+| `created_at` | datetime | Время создания (ISO 8601) |
 
 **Возможные ошибки:**
 
@@ -1279,7 +1332,7 @@ Orchestrator — **единая точка входа** для работы с �
 |---|---|---|
 | `draft_id` | bigint | ID черновика |
 | `status` | string | Статус: `previewing` |
-| `estimated_completion` | string | Предполагаемое время завершения |
+| `estimated_completion` | datetime | Предполагаемое время завершения (ISO 8601) |
 
 **Возможные ошибки:**
 
@@ -1319,37 +1372,22 @@ Orchestrator — **единая точка входа** для работы с �
   "status": "completed",
   "ocr_parser_status": "completed",
   "converter_validator_status": "completed",
-  "preview": {
-    "doc_code": "311-05-1950ц",
-    "title": "ЦИРКУЛЯРНОЕ ПИСЬМО № 311-05-1950ц от 09.06.2023",
-    "mks_oks_code": null,
-    "okstu_code": null,
-    "udk_code": null,
-    "pkb_codes": [],
-    "document_type": "normative",
-    "year": 2023,
-    "era": "CURRENT",
-    "validity_status": "active",
-    "issuing_body": "РОССИЙСКИЙ МОРСКОЙ РЕГИСТР СУДОХОДСТВА",
-    "jurisdiction": "RU",
-    "source_type": "RMRS",
-    "language": "ru",
-    "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
-    "title_key": "CURRENT|rmrs|||311-05-1950ц|циркулярное письмо № 311-05-1950ц от 09.06.2023"
-  },
+  "preview": { /* см. _schemas.md#PreviewMetadata */ },
   "duplicates": [],
   "decision_required": false
 }
 ```
 
+> 📖 **Схема полей `preview`** — [_schemas.md](_schemas.md#PreviewMetadata).
+
 | Поле | Тип | Описание |
 |---|---|---|
 | `draft_id` | bigint | ID черновика |
-| `status` | string | Статус превью (`pending`, `processing`, `completed`, `failed`) |
-| `ocr_parser_status` | string | Статус выбранного сервиса распознавания |
-| `converter_validator_status` | string | Статус converter-validator |
-| `preview` | object | Метаданные превью |
-| `duplicates` | array | Массив найденных дубликатов |
+| `status` | string | Статус обработки: `pending`, `processing`, `completed`, `failed` |
+| `ocr_parser_status` | string | Статус OCR/Parser: `pending`, `processing`, `completed`, `failed` |
+| `converter_validator_status` | string | Статус Converter-validator: `pending`, `processing`, `completed`, `failed` |
+| `preview` | object | Preview-метаданные — см. [_schemas.md](_schemas.md#PreviewMetadata) |
+| `duplicates` | array | Массив кандидатов в дубликаты |
 | `decision_required` | bool | Требуется ли решение пользователя |
 
 **Возможные ошибки:**
@@ -1474,8 +1512,8 @@ Orchestrator — **единая точка входа** для работы с �
 | `action` | string | Выполненное действие: `approve`, `confirm` или `reject` |
 | `document_id` | bigint \| null | ID документа в Registry (null при reject) |
 | `message` | string | Описание результата |
-| `decided_by` | string | Кто принял решение |
-| `decided_at` | string | Время решения (ISO 8601) |
+| `decided_by` | string | Субъект (пользователь или сервис) |
+| `decided_at` | datetime | Время решения (ISO 8601) |
 
 **Возможные ошибки:**
 
@@ -1561,7 +1599,7 @@ Orchestrator — **единая точка входа** для работы с �
 | `title_hash_sha256` | string | Пересчитанный бизнес-ключ (SHA-256) |
 | `title_key` | string | Исходная строка конкатенации (аудит) |
 | `message` | string | Описание результата |
-| `updated_at` | string | Время обновления (ISO 8601) |
+| `updated_at` | datetime | Время обновления (ISO 8601) |
 
 **Возможные ошибки:**
 
@@ -1590,7 +1628,7 @@ Orchestrator — **единая точка входа** для работы с �
 | Поле | Тип | Описание |
 |------|-----|----------|
 | `draft_id` | bigint | Идентификатор удалённого черновика |
-| `deleted_at` | string | Время удаления (ISO 8601) |
+| `deleted_at` | datetime | Время удаления (ISO 8601) |
 
 **Возможные ошибки:**
 
@@ -1614,31 +1652,18 @@ Orchestrator последовательно опрашивает `GET /health` �
 ```json
 {
   "status": "ok",
-  "version": "1.0.0",
-  "uptime_seconds": 234567,
-  "services": {
-    "auth": "ok",
-    "rag_builder": "ok",
-    "rag_search": "ok",
-    "ocr": "degraded",
-    "validation": "ok",
-    "integration": "ok"
-  },
-  "database": "online",
-  "search_index": "ready",
-  "ocr_queue": "idle",
-  "storage": "online"
+  "service": "orchestrator",
+  "version": "1.0.0"
 }
 ```
 
 | Поле | Тип | Описание |
 |------|-----|----------|
 | `status` | string | Общий статус системы: `ok`, `degraded`, `error` |
+| `service` | string | Идентификатор сервиса (`orchestrator`) |
 | `version` | string | Версия Orchestrator |
-| `uptime_seconds` | int | Время работы с момента запуска |
-| `services` | object | Статусы внутренних сервисов (ключ — имя сервиса, значение — `ok`, `degraded`, `error`) |
-| `database` | string | Статус подключения к БД |
-| `search_index` | string | Состояние поискового индекса |
-| `ocr_queue` | string | Состояние очереди OCR |
-| `storage` | string | Статус файлового хранилища (MinIO) |
+
+Формат соответствует общему стандарту health для внутренних сервисов (см. `common_api.md`).
+
+Агрегированные статусы зависимых сервисов, БД, индекса и очередей — не входят в health-ответ. Эти данные возвращаются через Gateway `/api/v1/system/health` (для внешнего мониторинга) и `/api/v1/monitor/metrics` (для метрик).
 

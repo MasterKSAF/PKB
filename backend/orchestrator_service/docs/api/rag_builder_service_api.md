@@ -175,7 +175,7 @@ Orchestrator получает JSON из Registry (через `GET /registry/docu
 |---|---|---|
 | `document_id` | bigint | ID документа |
 | `status` | string | Статус: `indexed`, `failed` |
-| `indexed_at` | string | Время завершения индексации |
+| `indexed_at` | datetime | Время завершения индексации |
 | `chunks_count` | int | Общее количество созданных чанков |
 | `index_stats.sections` | int | Количество секций (структурных единиц) |
 | `index_stats.chunks` | int | Количество чанков |

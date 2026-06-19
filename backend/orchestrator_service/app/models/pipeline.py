@@ -101,6 +101,11 @@ class Task(Base):
         String(32), nullable=True, index=True
     )
 
+    # Created by (user who initiated the task)
+    created_by: Mapped[Optional[str]] = mapped_column(
+        String(128), nullable=True, default=None
+    )
+
     # Preview result tracking
     full_completed: Mapped[bool] = mapped_column(Boolean, default=False)
 

@@ -7,6 +7,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
+from app.schemas.common import PaginationMeta
+
 
 class TaskStepItem(BaseModel):
     """Single step in task status response."""
@@ -56,19 +58,31 @@ class TaskListResponse(BaseModel):
     """Response for GET /tasks."""
 
     items: List[TaskListItem] = Field(default_factory=list, description="Список задач")
-    total: int = Field(0, description="Всего записей")
-    page: int = Field(1, description="Текущая страница")
-    page_size: int = Field(50, description="Записей на странице")
+    meta: PaginationMeta = Field(
+        default_factory=lambda: PaginationMeta(total=0, page=1, page_size=50),
+        description="Метаданные пагинации",
+    )
 
 
 class TaskStatsResponse(BaseModel):
     """Task statistics."""
 
     total: int = Field(0, description="Всего задач")
-    active: int = Field(0, description="Активных")
-    completed: int = Field(0, description="Завершённых")
-    failed: int = Field(0, description="Упавших")
-    by_type: Dict[str, int] = Field(default_factory=dict, description="По типу пайплайна")
+    by_status: Dict[str, int] = Field(
+        default_factory=dict,
+        description=(
+            "Количество задач по статусам: "
+            "uploaded, previewing, ready_for_approve, processing, "
+            "created, indexing, indexed, failed"
+        ),
+    )
+    by_stage: Dict[str, int] = Field(
+        default_factory=dict,
+        description=(
+            "Количество задач по этапам: "
+            "upload, preview, decision, full, registry, indexation"
+        ),
+    )
 
 
 class TaskStepsListResponse(BaseModel):
@@ -77,3 +91,21 @@ class TaskStepsListResponse(BaseModel):
     task_id: int = Field(..., description="ID задачи")
     total: int = Field(0, description="Всего шагов")
     steps: List[TaskStepItem] = Field(default_factory=list, description="Список шагов")
+
+
+class DraftTaskItem(BaseModel):
+    """Task item in draft tasks list (GET /drafts/{draft_id}/tasks)."""
+
+    task_id: int = Field(..., description="ID задачи")
+    status: str = Field(..., description="Статус задачи")
+    pipeline_stage: str = Field(..., description="Этап пайплайна")
+    initiated_by: Optional[str] = Field(None, description="Кто инициировал")
+    created_at: datetime = Field(..., description="Время создания")
+    updated_at: Optional[datetime] = Field(None, description="Время обновления")
+
+
+class DraftTasksResponse(BaseModel):
+    """Response for GET /drafts/{draft_id}/tasks."""
+
+    draft_id: int = Field(..., description="ID черновика")
+    tasks: List[DraftTaskItem] = Field(default_factory=list, description="Список задач")

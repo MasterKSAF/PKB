@@ -16,6 +16,7 @@ from fastapi import (
     status,
 )
 
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 
@@ -35,6 +36,8 @@ from app.schemas.drafts import (
     DraftPreviewStatusResponse,
     PreviewMetadata,
 )
+from app.models.pipeline import Task
+from app.schemas.tasks import DraftTaskItem, DraftTasksResponse
 from app.services.registry_client import RegistryServiceClient
 
 logger = logging.getLogger(__name__)
@@ -1004,3 +1007,44 @@ async def delete_draft(
         )
     finally:
         await registry.close()
+
+
+# ---------------------------------------------------------------------------
+#  GET /drafts/{draft_id}/tasks  — List tasks for a draft
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/{draft_id}/tasks",
+    response_model=DraftTasksResponse,
+    responses={404: {"description": "Черновик не найден"}},
+)
+async def get_draft_tasks(
+    draft_id: int,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> DraftTasksResponse:
+    """List pipeline tasks for a draft."""
+    result = await db.execute(
+        select(Task)
+        .where(Task.draft_id == draft_id, Task.deleted_at.is_(None))
+        .order_by(Task.created_at.desc())
+    )
+    tasks = list(result.scalars().all())
+
+    task_items = [
+        DraftTaskItem(
+            task_id=t.id,
+            status=t.status,
+            pipeline_stage=t.pipeline_stage,
+            initiated_by=t.created_by,
+            created_at=t.created_at,
+            updated_at=t.updated_at,
+        )
+        for t in tasks
+    ]
+
+    return DraftTasksResponse(
+        draft_id=draft_id,
+        tasks=task_items,
+    )

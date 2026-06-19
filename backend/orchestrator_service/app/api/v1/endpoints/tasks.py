@@ -5,12 +5,13 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from sqlalchemy import select, func
+from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser, get_current_user
 from app.db.base import get_db
-from app.models.pipeline import Task, TaskStep
+from app.models.pipeline import Task, TaskStep, DraftNotification
+from app.schemas.common import PaginationMeta
 from app.schemas.tasks import (
     TaskListResponse,
     TaskListItem,
@@ -40,7 +41,7 @@ async def list_tasks(
     db: AsyncSession = Depends(get_db),
 ) -> TaskListResponse:
     """List pipeline tasks with filtering and pagination (read-only)."""
-    conditions = []
+    conditions = [Task.deleted_at.is_(None)]
     if draft_id is not None:
         conditions.append(Task.draft_id == draft_id)
     if status is not None:
@@ -49,16 +50,12 @@ async def list_tasks(
         conditions.append(Task.pipeline_type == pipeline_type)
 
     # Count total
-    count_query = select(func.count(Task.id))
-    if conditions:
-        count_query = count_query.where(*conditions)
+    count_query = select(func.count(Task.id)).where(*conditions)
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
 
     # Fetch page
-    query = select(Task).order_by(Task.created_at.desc())
-    if conditions:
-        query = query.where(*conditions)
+    query = select(Task).where(*conditions).order_by(Task.created_at.desc())
     query = query.offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(query)
     tasks = list(result.scalars().all())
@@ -81,9 +78,7 @@ async def list_tasks(
 
     return TaskListResponse(
         items=items,
-        total=total,
-        page=page,
-        page_size=page_size,
+        meta=PaginationMeta(total=total, page=page, page_size=page_size),
     )
 
 
@@ -96,38 +91,58 @@ async def get_task_stats(
     db: AsyncSession = Depends(get_db),
 ) -> TaskStatsResponse:
     """Get task statistics (admin)."""
+    base_cond = [Task.deleted_at.is_(None)]
+
     # Total
-    total_result = await db.execute(select(func.count(Task.id)))
+    total_result = await db.execute(
+        select(func.count(Task.id)).where(*base_cond)
+    )
     total = total_result.scalar() or 0
 
-    # By status
-    active_result = await db.execute(
-        select(func.count(Task.id)).where(Task.status == "active")
-    )
-    active = active_result.scalar() or 0
+    # --- by_status: 8 counters ---
+    # uploaded:   active + stage=upload
+    # previewing: active + stage=preview
+    # ready_for_approve: active + stage=decision
+    # processing: active + stage IN (full, registry)
+    # created:    completed + formation
+    # indexing:   active + indexation
+    # indexed:    completed/partially_indexed + indexation
+    # failed:     failed
 
-    completed_result = await db.execute(
-        select(func.count(Task.id)).where(Task.status == "completed")
+    # Batch with CASE for efficiency
+    status_case = case(
+        (and_(Task.status == "active", Task.pipeline_stage == "upload"), "uploaded"),
+        (and_(Task.status == "active", Task.pipeline_stage == "preview"), "previewing"),
+        (and_(Task.status == "active", Task.pipeline_stage == "decision"), "ready_for_approve"),
+        (and_(Task.status == "active", Task.pipeline_stage.in_(["full", "registry"])), "processing"),
+        (and_(Task.status == "completed", Task.pipeline_type == "formation"), "created"),
+        (and_(Task.status == "active", Task.pipeline_type == "indexation"), "indexing"),
+        (and_(Task.status.in_(["completed", "partially_indexed"]), Task.pipeline_type == "indexation"), "indexed"),
+        (Task.status == "failed", "failed"),
+        else_=None,
     )
-    completed = completed_result.scalar() or 0
 
-    failed_result = await db.execute(
-        select(func.count(Task.id)).where(Task.status == "failed")
+    by_status_result = await db.execute(
+        select(status_case, func.count(Task.id))
+        .where(*base_cond)
+        .group_by(status_case)
     )
-    failed = failed_result.scalar() or 0
+    by_status = {}
+    for label, cnt in by_status_result.all():
+        if label:
+            by_status[label] = cnt
 
-    # By type
-    type_result = await db.execute(
-        select(Task.pipeline_type, func.count(Task.id)).group_by(Task.pipeline_type)
-    )
-    by_type = {row[0]: row[1] for row in type_result.all()}
+    # --- by_stage: 6 stages ---
+    stage_agg = select(Task.pipeline_stage, func.count(Task.id))
+    stage_agg = stage_agg.where(*base_cond)
+    stage_agg = stage_agg.group_by(Task.pipeline_stage)
+    stage_result = await db.execute(stage_agg)
+    by_stage = {row[0]: row[1] for row in stage_result.all()}
 
     return TaskStatsResponse(
         total=total,
-        active=active,
-        completed=completed,
-        failed=failed,
-        by_type=by_type,
+        by_status=by_status,
+        by_stage=by_stage,
     )
 
 
@@ -142,7 +157,9 @@ async def get_task_by_id(
     db: AsyncSession = Depends(get_db),
 ) -> TaskStatusResponse:
     """Get task by ID with full details."""
-    result = await db.execute(select(Task).where(Task.id == task_id))
+    result = await db.execute(
+        select(Task).where(Task.id == task_id, Task.deleted_at.is_(None))
+    )
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(
@@ -157,7 +174,7 @@ async def get_task_by_id(
 
     steps_result = await db.execute(
         select(TaskStep)
-        .where(TaskStep.task_id == task_id)
+        .where(TaskStep.task_id == task_id, TaskStep.deleted_at.is_(None))
         .order_by(TaskStep.step_index)
     )
     steps = list(steps_result.scalars().all())
@@ -166,7 +183,6 @@ async def get_task_by_id(
     has_notifications = False
     critical_count = 0
     try:
-        from app.models.pipeline import DraftNotification
         notif_result = await db.execute(
             select(DraftNotification).where(DraftNotification.task_id == task_id)
         )
@@ -217,7 +233,9 @@ async def get_task_steps(
 ) -> TaskStepsListResponse:
     """Get list of steps for a task (read-only)."""
     # Verify task exists
-    result = await db.execute(select(Task).where(Task.id == task_id))
+    result = await db.execute(
+        select(Task).where(Task.id == task_id, Task.deleted_at.is_(None))
+    )
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(
@@ -232,7 +250,7 @@ async def get_task_steps(
 
     steps_result = await db.execute(
         select(TaskStep)
-        .where(TaskStep.task_id == task_id)
+        .where(TaskStep.task_id == task_id, TaskStep.deleted_at.is_(None))
         .order_by(TaskStep.step_index)
     )
     steps = list(steps_result.scalars().all())
@@ -255,4 +273,3 @@ async def get_task_steps(
         total=len(steps),
         steps=step_items,
     )
-

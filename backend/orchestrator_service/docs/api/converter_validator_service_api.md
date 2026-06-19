@@ -44,7 +44,7 @@
 
 **Вход:** сырой JSON (результат Parser/OCR) — может содержать неполные данные.
 
-**Выход:** doc_code, title, mks_oks_code, okstu_code, udk_code, pkb_codes, document_type, year, era, validity_status, issuing_body, jurisdiction, source_type, language, title_hash_sha256, title_key.
+**Выход:** см. [_schemas.md](_schemas.md#PreviewMetadata) — preview-метаданные (16 полей).
 
 > **Полный формат данных:** [`docs/schema/schema_converter_preview.json`](../schema/schema_converter_preview.json) (схема `converter_validator_preview_v1`)
 
@@ -81,24 +81,7 @@
 }
 ```
 
-| Поле | Тип | Описание |
-|---|---|---|
-| `doc_code` | string | Обозначение документа |
-| `title` | string | Название документа |
-| `mks_oks_code` | string\|null | Код МКС/ОКС |
-| `okstu_code` | string\|null | Код ОКСТУ |
-| `udk_code` | string\|null | Код УДК |
-| `pkb_codes` | string[] | Коды предметных областей ПКБ (из `registry.categories`) |
-| `document_type` | string | Категория контента (`normative`, `technical`, `drawing`, `specification`, `archival_scan`) |
-| `year` | int | Год издания/утверждения |
-| `era` | string | Эпоха: `USSR`, `CIS`, `RF`, `CURRENT` |
-| `validity_status` | string | Статус действия: `active`, `superseded`, `cancelled`, `historical`, `draft` |
-| `issuing_body` | string | Издатель / утвердивший орган |
-| `jurisdiction` | string | Юрисдикция: `RU`, `EU`, `US`, `NO`, `INTL` |
-| `source_type` | string | Тип источника: `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `RMRS`, `OTHER` |
-| `language` | string | Основной язык документа (`ru`, `en`, ...) |
-| `title_hash_sha256` | string | Бизнес-ключ (SHA-256) |
-| `title_key` | string | Исходная строка конкатенации для `title_hash_sha256` (аудит/отладка) |
+> 📖 **Схема полей PreviewMetadata** — [_schemas.md](_schemas.md#PreviewMetadata).
 
 ---
 
@@ -217,7 +200,7 @@
 | Поле | Тип | Описание |
 |---|---|---|
 | `schema` | string | Идентификатор схемы ответа — `"validated_v3"` |
-| `created_at` | string (datetime) | Дата и время формирования ответа |
+| `created_at` | datetime | Дата и время формирования ответа (ISO 8601) |
 | `parser` | object | Информация о парсере, выполнившем первичную обработку |
 
 **Поля `document.source`:**
@@ -381,7 +364,7 @@
 
 | Метод | Путь | Режим | Описание | Запись в БД |
 |---|---|---|---|---|
-| `POST` | `/converter/preview/metadata` | Preview | Извлечение метаданных (doc_code, title, mks_oks_code, okstu_code, udk_code, pkb_codes, document_type, year, era, validity_status, issuing_body, jurisdiction, source_type, language, title_hash_sha256, title_key) | Нет |
+| `POST` | `/converter/preview/metadata` | Preview | Извлечение метаданных — см. [_schemas.md](_schemas.md#PreviewMetadata) | Нет |
 | `POST` | `/converter/convert` | Full | Полная конвертация + валидация + LLM + кросс-ссылки (схема `validated_v3`) | Нет |
 | `POST` | `/validate/document` | Standalone | Комплексная валидация документа без переконвертации | Нет |
 
