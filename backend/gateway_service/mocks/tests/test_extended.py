@@ -216,33 +216,35 @@ class TestOrchestratorExtended:
     def setup_method(self):
         _reset_rate_limiter()
 
-    def test_6_upload_response_has_task_and_version(self):
-        """Upload returns task_id, version_id, status, hash fields."""
+    def test_6_upload_draft_has_task_and_draft_id(self):
+        """Upload returns draft_id, task_id, status, hash fields (OR-11)."""
+        resp = client.post(
+            f"{ORCH}/drafts",
+            files={"file": ("ext_test.pdf", b"%PDF-1.4 test" + b"x" * 2000, "application/pdf")},
+        )
+        assert_ok(resp, 202)
+        data = resp.json()
+        # Upload response has draft_id, task_id, status, hashes
+        assert "draft_id" in data
+        assert "task_id" in data
+        assert "status" in data
+        assert data["status"] == "uploaded"
+        assert "file_hash_sha256" in data
+        assert "title_hash_sha256" in data
+
+    def test_6b_upload_document_deprecated(self):
+        """POST /documents returns 410 Gone (OR-11)."""
         resp = client.post(
             f"{ORCH}/documents",
             files={"file": ("ext_test.pdf", b"%PDF-1.4 test", "application/pdf")},
         )
-        assert_ok(resp, 202)
-        data = resp.json()
-        # Upload response has task_id, version_id, status, hashes — not document_id
-        assert "task_id" in data
-        assert "version_id" in data
-        assert "status" in data
-        assert "content_hash_sha256" in data
-        assert "is_duplicate_file" in data
-        assert "is_duplicate_document" in data
+        assert resp.status_code == 410
 
-    def test_7_approve_document(self):
-        """Approve document returns status=approved and previous_status."""
-        # Re-approve doc-001 (list endpoint shows latest)
-        doc_id = 1
-        resp = client.post(f"{ORCH}/documents/{doc_id}/approve")
-        assert_ok(resp, 202)
-        data = resp.json()
-        assert data["document_id"] == doc_id
-        assert data["status"] == "approved"
-        assert "approved_at" in data
-        assert "promotion_task_id" in data
+    def test_7_approve_document_deprecated(self):
+        """POST /documents/{doc_id}/approve returns 410 (OR-12)."""
+        resp = client.post(f"{ORCH}/documents/1/approve")
+        assert resp.status_code == 410
+        assert resp.json()["error"]["code"] == "ENDPOINT_DEPRECATED"
 
     def test_9_version_number_increments(self):
         """Adding a version increments version_number."""
@@ -869,46 +871,48 @@ class TestFixes:
         _reset_rate_limiter()
 
     def test_51_uploaded_document_has_no_hardcoded_user(self):
-        """После загрузки документа user_id не равен 'u-001'.
-
-        Проверка: загружаем документ → получаем его детали →
-        user_id и uploaded_by не должны быть хардкодными seed-значениями.
-        Используем petrova (knowledge_admin), т.к. engineer не может загружать.
-        """
+        """После загрузки черновика и approve user_id не хардкодный."""
         unique_filename = f"fix_{uuid.uuid4().hex}.pdf"
 
-        # Загружаем документ (с токеном petrova, у которой can_upload_documents=True)
         token = get_token("petrova@example.com", "secret456")
         headers = {"Authorization": f"Bearer {token}"}
+
+        # 1. POST /drafts — создаём черновик
         upload = client.post(
-            f"{ORCH}/documents",
-            files={"file": (unique_filename, b"fix test content", "application/pdf")},
+            f"{ORCH}/drafts",
+            files={"file": (unique_filename, b"fix test content" * 200, "application/pdf")},
             headers=headers,
         )
         assert_ok(upload, 202)
+        draft_id = upload.json()["draft_id"]
 
-        # Ищем наш документ по уникальному имени файла
-        resp = client.get(
-            f"{ORCH}/documents",
-            params={"search": unique_filename.replace(".pdf", "")},
+        # 2. PATCH /drafts/{id}/preview — запускаем preview
+        client.post(f"{ORCH}/drafts/{draft_id}/preview", headers=headers)
+        # Ждём завершения preview
+        client.get(f"{ORCH}/drafts/{draft_id}/preview/status", params={"longpoll": 5}, headers=headers)
+
+        # 3. Approve черновик → создаётся документ
+        decide = client.patch(
+            f"{ORCH}/drafts/{draft_id}/decide",
+            json={"action": "approve"},
             headers=headers,
         )
-        assert_ok(resp)
-        docs = resp.json()["items"]
-        assert len(docs) > 0, f"Документ {unique_filename} не найден"
-        doc = docs[0]
+        assert_ok(decide)
+        doc_id = decide.json()["approved_document_id"]
 
-        # user_id не должен быть хардкодным "u-001"
+        # 4. Проверяем созданный документ
+        doc_resp = client.get(f"{ORCH}/documents/{doc_id}", headers=headers)
+        assert_ok(doc_resp)
+        doc = doc_resp.json()
+
         assert doc["user_id"] != 1, (
             f"user_id всё ещё хардкодный: {doc['user_id']}"
         )
-        # uploaded_by не должен быть хардкодным "Иванов С.П."
-        assert doc["uploaded_by"] != "Иванов С.П.", (
-            f"uploaded_by всё ещё хардкодный: {doc['uploaded_by']}"
+        assert doc["created_by"] != "Иванов С.П.", (
+            f"created_by всё ещё хардкодный: {doc['created_by']}"
         )
-        # Должен совпадать с user_id пользователя, загрузившего документ
-        assert doc["uploaded_by"] == doc["user_id"], (
-            f"uploaded_by ({doc['uploaded_by']}) != user_id ({doc['user_id']})"
+        assert doc["created_by"] == doc["user_id"], (
+            f"created_by ({doc['created_by']}) != user_id ({doc['user_id']})"
         )
 
     def test_52_validate_classification_returns_uppercase_status(self):

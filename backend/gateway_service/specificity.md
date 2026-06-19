@@ -1,5 +1,93 @@
 # Specificity / Аномалии
 
+## 2026-06-19: Актуализация Gateway по документации (P11, маршрутизация, безопасность, CM, GW)
+
+### Изменения
+
+#### gateway/config.py
+- **Добавлены service_urls** для всех сервисов по документации: integration, converter_validator, parser, ocr, analyse, rag_builder, rag_search
+
+#### gateway/client.py
+- **Добавлены маршруты**: `/api/v1/registry/categories/`, `/api/v1/files/`, `/api/v1/external/`, `/api/v1/analyse/`
+- **Удалён маршрут**: `/api/v1/monitor/` (GW-12: перенесён в собственный эндпоинт Gateway)
+- **Проброс корреляционных заголовков**: X-Request-ID, X-Trace-ID, X-User-ID, X-Draft-ID, X-Document-ID, X-Version-ID (CM-5)
+
+#### gateway/logging_config.py
+- **Новый файл**. Структурированное JSON-логирование (P11-1) с JSONLogFormatter + PIIFilter
+
+#### gateway/main.py — базовые изменения (1-я итерация)
+- JSON-логирование, RequestIDMiddleware, RBAC /tasks/*, health security, request_id в ошибках
+
+#### gateway/main.py — финальные 5 задач (2-я итерация)
+- **CM-5**: `RequestIDMiddleware` → `RequestTracingMiddleware` (+ X-Trace-ID). Новый `CorrelationHeadersMiddleware` — извлекает X-Draft-ID/X-Document-ID/X-Version-ID из URL-пути + проброс в downstream через `client.py`
+- **CM-6**: OTEL SDK с graceful fallback (если пакет не установлен — OTEL не включается). `GET /api/v1/system/health/live` и `GET /api/v1/system/health/ready` (liveness/readiness probes)
+- **CM-7**: 408 → `REQUEST_TIMEOUT` в `_error_code_from_status`. Константы ERROR_TIMEOUT_INDEX_TRIGGER, ERROR_TIMEOUT_DECISION, ERROR_TIMEOUT_PREVIEW_TRIGGER, ERROR_TIMEOUT_LLM_GENERATION
+- **GW-7**: `PIIQueryValidatorMiddleware` — проверяет query-параметры на PII (password, token, email, inn, snils и т.д.), возвращает 400 PII_IN_QUERY_STRING. Regex для `_key` сужен (только api_key/apikey/secret_key — document_key/file_key не блокируются)
+- **GW-12**: `GET /api/v1/monitor/metrics` — собственный эндпоинт Gateway (пытается проксировать к Orchestrator, при недоступности — синтетические метрики)
+
+#### mocks/gateway.py
+- **Добавлены** `GET /api/v1/system/health/live`, `GET /api/v1/system/health/ready`
+- **Добавлен** `PIIQueryValidatorMiddleware` (аналогично production)
+- **Добавлен** `import re`
+
+#### mocks/handlers/orch_routes.py
+- **Task endpoints** (из 1-й итерации): `get_task_status` + steps, `get_task_steps`, `get_draft_tasks`
+- `_generate_task_steps` — исправлен баг с failed-статусом (stage→step_name маппинг)
+
+### Аномалии (обновлено)
+1. **Middleware order**: CORS → PIIQueryValidator → RequestTracing → CorrelationHeaders → RBAC → Idempotency → ProcessTime → StripTrailingSlash → Router
+2. **Health check security**: `{"status":"ok"}` для неаутентифицированных. Мониторинг должен передавать токен system_admin для полного ответа.
+3. ~~**/api/v1/monitor/metrics**: был проксируемым → теперь собственный эндпоинт Gateway (GW-12)~~ ✅. Orchestrator больше не имеет `/api/v1/monitor/metrics`. Удалён из `SERVICE_ROUTES` и из `orch_routes.py`.
+4. **OTEL graceful fallback**: если `opentelemetry-sdk` не установлен, OTEL не инициализируется (лог INFO). Для production требуется установка.
+5. **PII regex**: `^.+_key$` заменён на точные паттерны (`api_key`, `apikey`, `secret_key`), т.к. `document_key` и `file_key` — легитимные параметры API.
+
+### Статус тестов
+- **500 тестов проходит** (496 старых + 4 новых: PII check, health/live, health/ready, metrics)
+
+---
+
+## 2026-06-19: Синхронизация mock-сервисов с пулом задач
+
+### Изменения
+
+#### mocks/common.py
+- **DB-11**: `uploaded_by` → `created_by` в SEED_DOCUMENTS (3 документа)
+- **DB-28**: Добавлен `title_key` в SEED_REGISTRY_DOCUMENTS (формула: era|source_type|mks_oks_code||doc_code|title)
+- **DB-27**: `udc` → `udk_code` в metadata всех seed-документов
+- **GW-13**: `"checks"` удалён из `available_tabs` всех 5 seed-пользователей
+
+#### mocks/handlers/orch_routes.py
+- **OR-11**: `POST /api/v1/documents` заменён на `410 ENDPOINT_DEPRECATED` — единая точка входа `POST /drafts`
+- **OR-2**: `start_draft_preview` теперь возвращает 409 для статусов, отличных от `uploaded`
+- **OR-4**: `uploaded_by` → `created_by` во всех моделях документов и версий (+ `udc` → `udk_code`)
+- **OR-7**: `GET /drafts/{id}` теперь возвращает: draft_id, task_id, file_key, document_key, status, document_id, version_id, file_hash_sha256, is_new_document, created_at, updated_at
+- **OR-9**: `preview_metadata` расширен до 11 полей (добавлены: source_type, era, jurisdiction, issuing_body, mks_oks_code, okstu_code)
+
+#### mocks/tests/test_api.py
+- `test_42_upload_document` → `test_42_upload_draft` (POST /drafts)
+- Добавлен `test_42b_upload_document_deprecated` (POST /documents → 410)
+- `test_43_delete_document` упрощён (использует seed doc 1)
+
+#### mocks/tests/test_extended.py
+- `test_6_upload_response_has_task_and_version` → `test_6_upload_draft_has_task_and_draft_id` (POST /drafts)
+- Добавлен `test_6b_upload_document_deprecated` (POST /documents → 410)
+- `test_51_uploaded_document_has_no_hardcoded_user` переписан: draft → preview → approve → check document
+
+#### mocks/tests/test_tz_coverage.py
+- `test_upload_response_format` → `test_upload_draft_response_format` (POST /drafts)
+- `test_idempotency_key` → `test_idempotency_key_draft` (POST /drafts)
+- `test_upload_all_types` переключен на POST /drafts
+
+### Аномалии
+6. **POST /documents удалён**: код 410 с сообщением о миграции на POST /drafts. Старые тесты, вызывавшие POST /documents, обновлены.
+7. **get_draft response**: теперь возвращает строгий набор полей (OR-7), а не весь draft-словарь. Тест test_get_draft_returns_full_record обновлён.
+8. **checks вкладка**: удалена из available_tabs (GW-13). Если UI использует эту вкладку, нужно обновить клиентскую часть.
+
+### Статус тестов
+- **502 теста проходит** (+2 новых: deprecated endpoint для POST /documents)
+
+---
+
 ## 2026-06-14: Исправление 9 стоперов (проверка замечаний)
 
 ### Изменения
@@ -32,6 +120,8 @@
 ### Статус тестов
 - **487 тестов проходят** (было 470, добавлено 17 новых в TestStopperFixes, 4 обновлено под новый формат ответов).
 
+---
+
 ## 2026-06-15: Health endpoint возвращает 401 в Docker
 
 ### Проблема
@@ -61,6 +151,8 @@ Docker healthcheck может слать `/api/v1/system/health/` — слеш �
 - `mocks/gateway.py` — нормализация path
 - `mocks/tests/test_extended.py` — 4 новых теста (trailing slash, пустой/невалидный токен)
 
+---
+
 ## 2026-06-12: Унификация gateway — удаление сервисной архитектуры
 
 ### Изменения
@@ -82,6 +174,8 @@ Docker healthcheck может слать `/api/v1/system/health/` — слеш �
 3. **`test_404_document`** — mock авто-создаёт документы, поэтому 200 вместо 404
 4. **`test_search_without_query`** — FastAPI возвращает 422 (не 400)
 
+---
+
 ## 2026-06-12: Проверка замечаний checker coverage
 
 ### Результаты верификации (30 reported failures)
@@ -101,6 +195,8 @@ Docker healthcheck может слать `/api/v1/system/health/` — слеш �
 - 26 из 30 reported failures **уже исправлены** на момент проверки
 - 2 оставшиеся особенности — осознанные упрощения mock (JSON вместо multipart, `document_id` вместо `id`)
 - 2 из 30 (Registry drafts duplicate → 422, POST /drafts multipart) — не воспроизводятся, тесты проходят
+
+---
 
 ## 2026-06-13: Исправление 4 замечаний по синхронизации docs/mock
 

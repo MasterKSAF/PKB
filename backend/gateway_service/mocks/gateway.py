@@ -25,6 +25,7 @@ Routing map (see docs/gateway_service_api.md):
 import json
 import logging
 import os
+import re
 import sys
 import time
 from collections.abc import AsyncIterator
@@ -91,6 +92,43 @@ class StripTrailingSlashMiddleware(BaseHTTPMiddleware):
             raw = request.scope.get("raw_path")
             if raw is not None and len(raw) > 1 and raw.endswith(b"/"):
                 request.scope["raw_path"] = raw.rstrip(b"/")
+        return await call_next(request)
+
+
+class PIIQueryValidatorMiddleware(BaseHTTPMiddleware):
+    """Запрет PII в query-параметрах (GW-7)."""
+
+    _PII_PATTERNS = [
+        re.compile(r"^password$", re.I),
+        re.compile(r"^access_token$", re.I),
+        re.compile(r"^refresh_token$", re.I),
+        re.compile(r"^.+_token$", re.I),
+        re.compile(r"^.+_secret$", re.I),
+        # _key только для известных auth-ключей (не document_key/file_key и т.д.)
+        re.compile(r"^api_key$", re.I),
+        re.compile(r"^apikey$", re.I),
+        re.compile(r"^secret_key$", re.I),
+        re.compile(r"^email$", re.I),
+        re.compile(r"^phone$", re.I),
+        re.compile(r"^passport$", re.I),
+        re.compile(r"^inn$", re.I),
+        re.compile(r"^snils$", re.I),
+        re.compile(r"^ogrn$", re.I),
+    ]
+
+    async def dispatch(self, request: Request, call_next):
+        for param_name in request.query_params.keys():
+            for pattern in self._PII_PATTERNS:
+                if pattern.match(param_name):
+                    return JSONResponse(
+                        status_code=400,
+                        content={
+                            "error": {
+                                "code": "PII_IN_QUERY_STRING",
+                                "message": f"Запрещено передавать '{param_name}' в query-параметрах",
+                            }
+                        },
+                    )
         return await call_next(request)
 
 
@@ -172,8 +210,8 @@ class RBACMiddleware(BaseHTTPMiddleware):
         if user_context["is_authenticated"]:
             permissions = user_context.get("permissions", {})
 
-            # POST /drafts и POST /documents — can_upload_documents
-            if request.method == "POST" and path in ("/api/v1/drafts", "/api/v1/documents"):
+            # POST /drafts — can_upload_documents (OR-11: POST /documents deprecated)
+            if request.method == "POST" and path == "/api/v1/drafts":
                 if not permissions.get("can_upload_documents", False):
                     return JSONResponse(
                         status_code=403,
@@ -448,6 +486,7 @@ def _extract_message(detail: any) -> str:
 app.add_middleware(ProcessTimeMiddleware)
 app.add_middleware(IdempotencyMiddleware)
 app.add_middleware(RBACMiddleware)
+app.add_middleware(PIIQueryValidatorMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -482,6 +521,38 @@ async def gateway_health():
             1 for r in app.routes if hasattr(r, "methods") and r.path
         ),
     }
+
+
+@app.get("/api/v1/monitor/metrics")
+async def mock_metrics():
+    """Метрики качества — собственный эндпоинт Gateway (GW-12)."""
+    return {
+        "control_metrics": {
+            "ocr_quality": 0.98,
+            "retrieval_quality": 0.91,
+            "answers_with_sources": 0.96,
+            "avg_latency_ms": 1420,
+        },
+        "answer_metrics": {
+            "useful_rate": 0.84,
+            "rated_answers": 43,
+            "flagged_for_review": 5,
+            "open_questions": 3,
+        },
+        "logs": [],
+    }
+
+
+@app.get("/api/v1/system/health/live")
+async def health_live():
+    """Liveness probe."""
+    return {"status": "ok"}
+
+
+@app.get("/api/v1/system/health/ready")
+async def health_ready():
+    """Readiness probe."""
+    return {"status": "ok"}
 
 
 # ---------------------------------------------------------------------------

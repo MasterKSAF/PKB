@@ -61,30 +61,30 @@ class TestUC01_DocumentUpload:
     def test_upload_all_types(self):
         for fname in ["test_normative.pdf", "test_archival.pdf", "test_drawing.pdf", "test_spec.pdf"]:
             resp = orch_client.post(
-                f"{BASE}/documents",
-                files={"file": (fname, b"dummy content", "application/pdf")},
+                f"{BASE}/drafts",
+                files={"file": (fname, b"dummy content" + b"x" * 2000, "application/pdf")},
             )
             assert_ok(resp, 202)
-            assert resp.json()["status"] in ("uploaded",)
+            assert resp.json()["status"] == "uploaded"
 
-    def test_upload_response_format(self):
+    def test_upload_draft_response_format(self):
         resp = orch_client.post(
-            f"{BASE}/documents",
-            files={"file": ("test.pdf", b"format check", "application/pdf")},
+            f"{BASE}/drafts",
+            files={"file": ("test_draft.pdf", b"format check" + b"x" * 2000, "application/pdf")},
         )
         assert_ok(resp, 202)
         data = resp.json()
-        for field in ["task_id", "version_id", "status", "content_hash_sha256", "is_duplicate_file", "is_duplicate_document", "title_hash_sha256", "created_at"]:
-            assert field in data
+        for field in ["draft_id", "task_id", "status", "file_hash_sha256", "title_hash_sha256", "created_at"]:
+            assert field in data, f"missing field: {field}"
 
-    def test_idempotency_key(self):
+    def test_idempotency_key_draft(self):
         key = f"idem-{uuid.uuid4().hex[:8]}"
         r1 = orch_client.post(
-            f"{BASE}/documents",
-            files={"file": ("idem.pdf", b"idem", "application/pdf")},
+            f"{BASE}/drafts",
+            files={"file": ("idem_draft.pdf", b"idem" + b"x" * 2000, "application/pdf")},
             headers={"Idempotency-Key": key},
         )
-        assert r1.status_code in (202, 500)
+        assert r1.status_code == 202
 
 # ===========================================================================
 # UC-02: OCR AND STRUCTURAL PROCESSING
@@ -335,12 +335,10 @@ class TestUC06_DocumentPipeline:
         assert "versions" in data
         assert data["meta"]["total"] > 0
 
-    def test_approve_document(self):
+    def test_approve_document_deprecated(self):
         resp = orch_client.post(f"{BASE}/documents/1/approve")
-        assert_ok(resp, 202)
-        data = resp.json()
-        assert data["document_id"] == 1
-        assert data["status"] == "approved"
+        assert resp.status_code == 410
+        assert resp.json()["error"]["code"] == "ENDPOINT_DEPRECATED"
 
     def test_document_history(self):
         resp = orch_client.get(f"{BASE}/documents/1/history")
