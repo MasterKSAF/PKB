@@ -130,14 +130,13 @@ sudo ls \-la /home/user/monitoring\_demo/
      
    в файле  main.py (полный пошаговый пример приведен ниже):  
    3.1 настроить импорт функций из telemetry\_lib   
-   3.2 перед определением app вставить вызов setup\_observability    
-   3.3.получить логгер через logging.getLogger(service\_name).После вызова setup\_observability.  
+   3.2 получить главный логгер сервиса setup\_observability 
      
    в файле  всех остальных модулей где будет логирование:  
    добавить строки в начало каждого файла:   
    python  
    import logging  
-   logger \= logging.getLogger(\_\_name\_\_)
+   logger = logging.getLogger(__name__)
 
    
 
@@ -155,38 +154,35 @@ sudo ls \-la /home/user/monitoring\_demo/
 ```text
 python  
 ПРИМЕР (обратите внимание на последовательность шагов):   
-\# \==================== ШАГ 3.1: импорты \====================  
+# ==================== ШАГ 3.1: импорты ====================  
 import os  
 import logging  
 from fastapi import FastAPI, HTTPException  
-from telemetry\_lib.telemetry import setup\_observability, instrument\_fastapi  
-from opentelemetry import trace   \# для ручных спанов  
+from telemetry_lib.telemetry import setup_observability, instrument_fastapi  
+from opentelemetry import trace   # для ручных спанов  
 import uvicorn
 
-\# \==================== ШАГ 3.2: настройка observability \====================  
-app \= FastAPI()  
-service\_name \= "payment-service"  
-otlp\_endpoint \= os.getenv("OTEL\_EXPORTER\_OTLP\_ENDPOINT", "signoz-otel-collector:4317")
+# ==================== ШАГ 3.2: настройка observability ====================  
+app = FastAPI()  
+service_name = "payment-service"  
+otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "signoz-otel-collector:4317")
 
-tracer\_provider, meter\_provider, \_ \= setup\_observability(service\_name, otlp\_endpoint)
+tracer_provider, meter_provider, log = setup_observability(service_name, otlp_endpoint)
 
-\#\# \==================== ШАГ 4.1: инструментирование FastAPI для трейсов \====================  
-instrument\_fastapi(app, tracer\_provider)
+## ==================== ШАГ 4.1: инструментирование FastAPI для трейсов ====================  
+instrument_fastapi(app, tracer_provider)
 
-\# \==================== ШАГ 3.3: получение логгера \====================  
-log \= logging.getLogger(service\_name)   \# используйте этот логгер везде
-
-\# \==================== ШАГ 5.1: метрики (опционально и НЕ ОБЯЗАТЕЛЬНО т.е. можно удалить и не выполнять) \====================  
-meter \= meter\_provider.get\_meter(service\_name)  
-payment\_counter \= meter.create\_counter(  
-    "payment\_requests\_total",  
+# ==================== ШАГ 5.1: метрики (опционально и НЕ ОБЯЗАТЕЛЬНО т.е. можно удалить и не выполнять) ====================  
+meter = meter_provider.get_meter(service_name)  
+payment_counter = meter.create_counter(  
+    "payment_requests_total",  
     description="Total payment requests"  
 )
 
-\# \==================== ШАГ 4.2: ручной трейсер (опционально и НЕ ОБЯЗАТЕЛЬНО т.е. можно удалить и не выполнять) \====================  
-tracer \= trace.get\_tracer(service\_name)
+# ==================== ШАГ 4.2: ручной трейсер (опционально и НЕ ОБЯЗАТЕЛЬНО т.е. можно удалить и не выполнять) ====================  
+tracer = trace.get_tracer(service_name)
 
-\# \==================== ЭНДПОИНТЫ \====================  
+# ==================== ЭНДПОИНТЫ ====================  
 @app.get("/health")  
 async def health():  
     log.debug("Health check")  
@@ -194,14 +190,14 @@ async def health():
 
 @app.post("/pay")  
 async def pay(amount: float):  
-    with tracer.start\_as\_current\_span("process\_payment") as span:  
-        span.set\_attribute("payment.amount", amount)  
+    with tracer.start_as_current_span("process_payment") as span:  
+        span.set_attribute("payment.amount", amount)  
         log.info(f"Processing payment {amount}")  
-        payment\_counter.add(1, {"currency": "USD"})  
-        \# ... логика оплаты  
+        payment_counter.add(1, {"currency": "USD"})  
+        # ... логика оплаты  
         return {"status": "paid"}
 
-if \_\_name\_\_ \== "\_\_main\_\_":  
+if __name__ == "__main__":  
     uvicorn.run(app, host="0.0.0.0", port=8000)
 ```
 
