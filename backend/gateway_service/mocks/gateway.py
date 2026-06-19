@@ -3,7 +3,9 @@ Gateway Mock — unified entry point (nginx emulation).
 Combines all 5 routers on a single port 8081 with:
 - CORS (all origins)
 - RBAC (JWT validation, anonymous fallback)
+- Rate limiting (InMemory) + IDOR protection (CM-2, CM-3, GW-4, GW-6)
 - Idempotency-Key support for POST /drafts and POST /chat
+- PII query-params validation (GW-7)
 - X-Process-Time header
 - Lifespan context manager
 - Unified error format (Registry spec)
@@ -25,11 +27,12 @@ Routing map (see docs/gateway_service_api.md):
 import json
 import logging
 import os
+import re
 import sys
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -41,6 +44,11 @@ from pydantic import ValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from mocks.common import SEED_USERS, error_response, utcnow, _access_token_map
+from gateway.rate_limiter import (
+    RateLimitResult,
+    check_idor_rate_limit,
+    check_rate_limit,
+)
 from mocks.handlers import auth_router, orch_router, query_router, registry_router
 
 _MOCK_USERS: Dict[int, dict] = {u["user_id"]: u for u in SEED_USERS}
@@ -50,6 +58,9 @@ _MOCK_USERS: Dict[int, dict] = {u["user_id"]: u for u in SEED_USERS}
 # (используется в тестах, чтобы не переписывать каждый вызов с токеном)
 # ---------------------------------------------------------------------------
 ALLOW_ANONYMOUS = False
+
+# Rate limiting выключен по умолчанию (не мешает старым тестам), включается через RATE_LIMIT_ENABLED=1
+_RATE_LIMIT_ENABLED = os.getenv("RATE_LIMIT_ENABLED", "0").lower() in ("1", "true", "yes")
 
 
 # ---------------------------------------------------------------------------
@@ -91,6 +102,83 @@ class StripTrailingSlashMiddleware(BaseHTTPMiddleware):
             raw = request.scope.get("raw_path")
             if raw is not None and len(raw) > 1 and raw.endswith(b"/"):
                 request.scope["raw_path"] = raw.rstrip(b"/")
+        return await call_next(request)
+
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    """Rate limiting и IDOR protection (CM-2, CM-3, GW-4, GW-6)."""
+
+    async def dispatch(self, request: Request, call_next):
+        if not _RATE_LIMIT_ENABLED:
+            return await call_next(request)
+
+        client_ip = "127.0.0.1"
+        method = request.method
+        path = request.url.path
+
+        # 1. Общий rate limit
+        decision = await check_rate_limit(method, path, client_ip)
+        if decision.result == RateLimitResult.BLOCKED:
+            return JSONResponse(
+                status_code=429,
+                content=error_response(
+                    "TOO_MANY_REQUESTS",
+                    "Превышен лимит запросов. Попробуйте через %d секунд"
+                    % decision.retry_after_seconds,
+                ),
+                headers={"Retry-After": str(decision.retry_after_seconds)},
+            )
+
+        # 2. IDOR protection
+        idor_decision = await check_idor_rate_limit(method, path, client_ip)
+        if idor_decision and idor_decision.result == RateLimitResult.BLOCKED:
+            return JSONResponse(
+                status_code=429,
+                content=error_response(
+                    "TOO_MANY_REQUESTS",
+                    "Превышен лимит запросов к ресурсу. Попробуйте через %d секунд"
+                    % idor_decision.retry_after_seconds,
+                ),
+                headers={"Retry-After": str(idor_decision.retry_after_seconds)},
+            )
+
+        return await call_next(request)
+
+
+class PIIQueryValidatorMiddleware(BaseHTTPMiddleware):
+    """Запрет PII в query-параметрах (GW-7)."""
+
+    _PII_PATTERNS = [
+        re.compile(r"^password$", re.I),
+        re.compile(r"^access_token$", re.I),
+        re.compile(r"^refresh_token$", re.I),
+        re.compile(r"^.+_token$", re.I),
+        re.compile(r"^.+_secret$", re.I),
+        # _key только для известных auth-ключей (не document_key/file_key и т.д.)
+        re.compile(r"^api_key$", re.I),
+        re.compile(r"^apikey$", re.I),
+        re.compile(r"^secret_key$", re.I),
+        re.compile(r"^email$", re.I),
+        re.compile(r"^phone$", re.I),
+        re.compile(r"^passport$", re.I),
+        re.compile(r"^inn$", re.I),
+        re.compile(r"^snils$", re.I),
+        re.compile(r"^ogrn$", re.I),
+    ]
+
+    async def dispatch(self, request: Request, call_next):
+        for param_name in request.query_params.keys():
+            for pattern in self._PII_PATTERNS:
+                if pattern.match(param_name):
+                    return JSONResponse(
+                        status_code=400,
+                        content={
+                            "error": {
+                                "code": "PII_IN_QUERY_STRING",
+                                "message": f"Запрещено передавать '{param_name}' в query-параметрах",
+                            }
+                        },
+                    )
         return await call_next(request)
 
 
@@ -172,8 +260,8 @@ class RBACMiddleware(BaseHTTPMiddleware):
         if user_context["is_authenticated"]:
             permissions = user_context.get("permissions", {})
 
-            # POST /drafts и POST /documents — can_upload_documents
-            if request.method == "POST" and path in ("/api/v1/drafts", "/api/v1/documents"):
+            # POST /drafts — can_upload_documents (OR-11: POST /documents deprecated)
+            if request.method == "POST" and path == "/api/v1/drafts":
                 if not permissions.get("can_upload_documents", False):
                     return JSONResponse(
                         status_code=403,
@@ -183,8 +271,8 @@ class RBACMiddleware(BaseHTTPMiddleware):
                         ),
                     )
 
-            # POST/PUT/DELETE /classifiers — can_manage_classifiers
-            _classifier_path = path.startswith("/api/v1/classifiers") or path.startswith("/api/v1/registry/classifiers")
+            # POST/PUT/DELETE /registry/classifiers — can_manage_classifiers (CM-1)
+            _classifier_path = path.startswith("/api/v1/registry/classifiers")
             if request.method in ("POST", "PUT", "PATCH", "DELETE") and _classifier_path:
                 if not permissions.get("can_manage_classifiers", False):
                     return JSONResponse(
@@ -195,8 +283,8 @@ class RBACMiddleware(BaseHTTPMiddleware):
                         ),
                     )
 
-            # POST/PUT/DELETE /terminology — can_manage_terminology
-            _term_path = path.startswith("/api/v1/terminology") or path.startswith("/api/v1/registry/terminology")
+            # POST/PUT/DELETE /registry/terminology — can_manage_terminology (CM-1)
+            _term_path = path.startswith("/api/v1/registry/terminology")
             if request.method in ("POST", "PUT", "PATCH", "DELETE") and _term_path:
                 if not permissions.get("can_manage_terminology", False):
                     return JSONResponse(
@@ -217,6 +305,20 @@ class RBACMiddleware(BaseHTTPMiddleware):
                         content=error_response(
                             "FORBIDDEN",
                             "Недостаточно прав для управления реестром",
+                        ),
+                    )
+
+            # GET /registry/search — knowledge_admin / system_admin (CM-1)
+            if request.method == "GET" and path.startswith("/api/v1/registry/search"):
+                if not (
+                    permissions.get("can_manage_classifiers", False)
+                    or permissions.get("can_manage_registry", False)
+                ):
+                    return JSONResponse(
+                        status_code=403,
+                        content=error_response(
+                            "FORBIDDEN",
+                            "Недостаточно прав для поиска по реестру",
                         ),
                     )
 
@@ -443,20 +545,25 @@ def _extract_message(detail: any) -> str:
 
 # ---------------------------------------------------------------------------
 # Middleware stack
-# ---------------------------------------------------------------------------
+# Порядок middleware (внешний → внутренний):
+# CORS → PIIQueryValidator → RateLimit → RBAC →
+# Idempotency → ProcessTime → StripTrailingSlash → RequestLog → Router
 
-app.add_middleware(ProcessTimeMiddleware)
+app.add_middleware(ProcessTimeMiddleware)           # innermost
 app.add_middleware(IdempotencyMiddleware)
 app.add_middleware(RBACMiddleware)
+app.add_middleware(RateLimitMiddleware)             # CM-2, CM-3, GW-4, GW-6
+app.add_middleware(PIIQueryValidatorMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-)
+)                                                   # outermost
 app.add_middleware(StripTrailingSlashMiddleware)
 app.add_middleware(RequestLogMiddleware)
+
 
 
 # ---------------------------------------------------------------------------
@@ -482,6 +589,38 @@ async def gateway_health():
             1 for r in app.routes if hasattr(r, "methods") and r.path
         ),
     }
+
+
+@app.get("/api/v1/monitor/metrics")
+async def mock_metrics():
+    """Метрики качества — собственный эндпоинт Gateway (GW-12)."""
+    return {
+        "control_metrics": {
+            "ocr_quality": 0.98,
+            "retrieval_quality": 0.91,
+            "answers_with_sources": 0.96,
+            "avg_latency_ms": 1420,
+        },
+        "answer_metrics": {
+            "useful_rate": 0.84,
+            "rated_answers": 43,
+            "flagged_for_review": 5,
+            "open_questions": 3,
+        },
+        "logs": [],
+    }
+
+
+@app.get("/api/v1/system/health/live")
+async def health_live():
+    """Liveness probe."""
+    return {"status": "ok"}
+
+
+@app.get("/api/v1/system/health/ready")
+async def health_ready():
+    """Readiness probe."""
+    return {"status": "ok"}
 
 
 # ---------------------------------------------------------------------------

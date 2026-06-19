@@ -72,15 +72,42 @@ def error_response(code: str, message: str, details: Optional[dict] = None) -> d
 
 
 # ---------------------------------------------------------------------------
+# DB-1: 6-польная формула title_hash_sha256
+# Формула: era|source_type|mks_oks_code||doc_code|title → SHA-256
+# ---------------------------------------------------------------------------
+
+
+def compute_title_hash_sha256(doc: dict) -> str:
+    """Вычисляет title_hash_sha256 по 6-польной формуле.
+
+    Поля (разделитель |):
+      1. era        — эпоха (USSR, RF, CURRENT, ...)
+      2. source_type — тип документа (GOST, RD, ...)
+      3. mks_oks_code — код МКС (может быть пустым)
+      4. (пустое поле-резерв)
+      5. doc_code    — обозначение документа
+      6. title       — наименование
+    Если doc_code отсутствует — используется пустая строка.
+    """
+    era = doc.get("era", "") or ""
+    source_type = doc.get("source_type", "") or ""
+    mks = doc.get("mks_oks_code", "") or ""
+    doc_code = doc.get("doc_code", "") or ""
+    title = doc.get("title", "") or ""
+    formula = f"{era}|{source_type}|{mks}||{doc_code}|{title}"
+    return hashlib.sha256(formula.encode("utf-8")).hexdigest().upper()
+
+
+# ---------------------------------------------------------------------------
 # Seed-данные
 # ---------------------------------------------------------------------------
 
 SEED_USERS: List[Dict[str, Any]] = [
-    {"user_id":1,"email":"ivanov@example.com","full_name":"Иванов Иван Иванович","password":"secret123","position":"Инженер-конструктор","roles":["engineer"],"role":"engineer","role_title":"Инженер","is_active":True,"available_tabs":["chat","search","checks","history"],"permissions":{"can_upload_documents":False,"can_run_ocr":False,"can_manage_users":False,"can_manage_classifiers":False,"can_manage_terminology":False,"can_manage_registry":False},"last_login_at":"","created_at":"2025-12-01T08:00:00Z"},
-    {"user_id":2,"email":"petrova@example.com","full_name":"Петрова Анна Викторовна","password":"secret456","position":"Администратор НСИ","roles":["knowledge_admin"],"role":"knowledge_admin","role_title":"Администратор НСИ","is_active":True,"available_tabs":["chat","search","checks","history","registry","documents"],"permissions":{"can_upload_documents":True,"can_run_ocr":True,"can_manage_users":False,"can_manage_classifiers":True,"can_manage_terminology":True,"can_manage_registry":True},"last_login_at":"","created_at":"2025-11-15T10:00:00Z"},
-    {"user_id":3,"email":"admin@example.com","full_name":"Сидоров Павел Алексеевич","password":"admin123","position":"Системный администратор","roles":["system_admin"],"role":"system_admin","role_title":"Системный администратор","is_active":True,"available_tabs":["chat","search","checks","history","registry","documents","admin","monitor"],"permissions":{"can_upload_documents":True,"can_run_ocr":True,"can_manage_users":True,"can_manage_classifiers":True,"can_manage_terminology":True,"can_manage_registry":True},"last_login_at":"","created_at":"2025-10-01T08:00:00Z"},
-    {"user_id":4,"email":"kuznetsov@example.com","full_name":"Кузнецов Дмитрий Олегович","password":"secret789","position":"Инженер-технолог","roles":["engineer"],"role":"engineer","role_title":"Инженер","is_active":True,"available_tabs":["chat","search","checks","history"],"permissions":{"can_upload_documents":False,"can_run_ocr":False,"can_manage_users":False,"can_manage_classifiers":False,"can_manage_terminology":False,"can_manage_registry":False},"last_login_at":"","created_at":"2026-01-10T09:00:00Z"},
-    {"user_id":5,"email":"smirnova@example.com","full_name":"Смирнова Елена Игоревна","password":"secret000","position":"Ведущий инженер","roles":["engineer"],"role":"engineer","role_title":"Инженер","is_active":False,"available_tabs":["chat","search","checks","history"],"permissions":{"can_upload_documents":True,"can_run_ocr":True,"can_manage_users":False,"can_manage_classifiers":False,"can_manage_terminology":False,"can_manage_registry":False},"last_login_at":"","created_at":"2025-12-20T08:00:00Z"},
+    {"user_id":1,"email":"ivanov@example.com","full_name":"Иванов Иван Иванович","password":"secret123","position":"Инженер-конструктор","roles":["engineer"],"role":"engineer","role_title":"Инженер","is_active":True,"available_tabs":["chat","search","history"],"permissions":{"can_upload_documents":False,"can_run_ocr":False,"can_manage_users":False,"can_manage_classifiers":False,"can_manage_terminology":False,"can_manage_registry":False},"last_login_at":"","created_at":"2025-12-01T08:00:00Z"},
+    {"user_id":2,"email":"petrova@example.com","full_name":"Петрова Анна Викторовна","password":"secret456","position":"Администратор НСИ","roles":["knowledge_admin"],"role":"knowledge_admin","role_title":"Администратор НСИ","is_active":True,"available_tabs":["chat","search","history","registry","documents"],"permissions":{"can_upload_documents":True,"can_run_ocr":True,"can_manage_users":False,"can_manage_classifiers":True,"can_manage_terminology":True,"can_manage_registry":True},"last_login_at":"","created_at":"2025-11-15T10:00:00Z"},
+    {"user_id":3,"email":"admin@example.com","full_name":"Сидоров Павел Алексеевич","password":"admin123","position":"Системный администратор","roles":["system_admin"],"role":"system_admin","role_title":"Системный администратор","is_active":True,"available_tabs":["chat","search","history","registry","documents","admin","monitor"],"permissions":{"can_upload_documents":True,"can_run_ocr":True,"can_manage_users":True,"can_manage_classifiers":True,"can_manage_terminology":True,"can_manage_registry":True},"last_login_at":"","created_at":"2025-10-01T08:00:00Z"},
+    {"user_id":4,"email":"kuznetsov@example.com","full_name":"Кузнецов Дмитрий Олегович","password":"secret789","position":"Инженер-технолог","roles":["engineer"],"role":"engineer","role_title":"Инженер","is_active":True,"available_tabs":["chat","search","history"],"permissions":{"can_upload_documents":False,"can_run_ocr":False,"can_manage_users":False,"can_manage_classifiers":False,"can_manage_terminology":False,"can_manage_registry":False},"last_login_at":"","created_at":"2026-01-10T09:00:00Z"},
+    {"user_id":5,"email":"smirnova@example.com","full_name":"Смирнова Елена Игоревна","password":"secret000","position":"Ведущий инженер","roles":["engineer"],"role":"engineer","role_title":"Инженер","is_active":False,"available_tabs":["chat","search","history"],"permissions":{"can_upload_documents":True,"can_run_ocr":True,"can_manage_users":False,"can_manage_classifiers":False,"can_manage_terminology":False,"can_manage_registry":False},"last_login_at":"","created_at":"2025-12-20T08:00:00Z"},
 ]
 
 SEED_ROLES = [
@@ -116,9 +143,9 @@ SEED_TERMINOLOGY = [
 ]
 
 SEED_REGISTRY_DOCUMENTS = [
-    {"id": 1, "title": "Стойки установочные", "doc_code": "20868-81", "source_type": "GOST", "title_hash_sha256": None, "status": "approved", "era": "USSR", "validity_status": "active", "jurisdiction": "RU", "issuing_body": "Госстандарт СССР", "group": "ПО4", "mks_oks_code": "31.240", "mks_name": "Электроника. Монтажные изделия", "okstu_code": None, "okstu_name": None, "classification_status": {"mks": ["31.240"], "okstu": [], "udk": [], "subject_area": ["Электроника", "Монтажные изделия"]}, "successor_doc_id": None, "predecessor_doc_id": None, "total_versions": 2, "chunk_count": 34, "created_by": "system", "updated_by": "ivanov_ai", "created_at": "2026-04-27T10:00:00Z", "updated_at": "2026-04-27T14:00:00Z"},
-    {"id": 2, "title": "Правила классификации и постройки морских судов", "doc_code": "РД 31.11.21-96", "source_type": "RD", "title_hash_sha256": None, "status": "approved", "era": "RF", "validity_status": "active", "jurisdiction": "RU", "issuing_body": "Российский морской регистр судоходства", "group": "К4", "mks_oks_code": "47.020", "mks_name": "Конструкция корпуса", "okstu_code": "05.020", "okstu_name": "Документы технологические", "classification_status": {"mks": ["47.020"], "okstu": ["05.020"], "udk": [], "subject_area": ["Судостроение", "Корпусные конструкции"]}, "successor_doc_id": None, "predecessor_doc_id": None, "total_versions": 3, "chunk_count": 128, "created_by": "petrova_ai", "updated_by": "petrova_ai", "created_at": "2026-05-10T08:00:00Z", "updated_at": "2026-06-01T16:00:00Z"},
-    {"id": 3, "title": "Трубы стальные бесшовные горячедеформированные", "doc_code": "ГОСТ 8732-78", "source_type": "GOST", "title_hash_sha256": None, "status": "draft", "era": "USSR", "validity_status": "active", "jurisdiction": "RU", "issuing_body": "Госстандарт СССР", "group": "М1", "mks_oks_code": "47.020.30", "mks_name": "Судовые системы", "okstu_code": "12.000", "okstu_name": "Машиностроение", "classification_status": {"mks": ["47.020.30"], "okstu": ["12.000"], "udk": [], "subject_area": ["Судовые системы", "Машиностроение"]}, "successor_doc_id": None, "predecessor_doc_id": None, "total_versions": 1, "chunk_count": 56, "created_by": "system", "updated_by": "system", "created_at": "2026-06-10T09:00:00Z", "updated_at": "2026-06-11T11:00:00Z"},
+    {"id": 1, "title": "Стойки установочные", "doc_code": "20868-81", "source_type": "GOST", "title_hash_sha256": None, "title_key": "USSR|gost|31.240||20868-81|Стойки установочные", "status": "approved", "era": "USSR", "validity_status": "active", "jurisdiction": "RU", "issuing_body": "Госстандарт СССР", "group": "ПО4", "mks_oks_code": "31.240", "mks_name": "Электроника. Монтажные изделия", "okstu_code": None, "okstu_name": None, "classification_status": {"mks": ["31.240"], "okstu": [], "udk": [], "subject_area": ["Электроника", "Монтажные изделия"]}, "successor_doc_id": None, "predecessor_doc_id": None, "total_versions": 2, "chunk_count": 34, "created_by": "system", "updated_by": "ivanov_ai", "created_at": "2026-04-27T10:00:00Z", "updated_at": "2026-04-27T14:00:00Z", "valid_from": "1981-07-01", "valid_until": "9999-12-31", "current_version_id": 2, "preview_snapshot": None, "draft_id": None},
+    {"id": 2, "title": "Правила классификации и постройки морских судов", "doc_code": "РД 31.11.21-96", "source_type": "RD", "title_hash_sha256": None, "title_key": "RF|rd|47.020||РД 31.11.21-96|Правила классификации и постройки морских судов", "status": "approved", "era": "RF", "validity_status": "active", "jurisdiction": "RU", "issuing_body": "Российский морской регистр судоходства", "group": "К4", "mks_oks_code": "47.020", "mks_name": "Конструкция корпуса", "okstu_code": "05.020", "okstu_name": "Документы технологические", "classification_status": {"mks": ["47.020"], "okstu": ["05.020"], "udk": [], "subject_area": ["Судостроение", "Корпусные конструкции"]}, "successor_doc_id": None, "predecessor_doc_id": None, "total_versions": 3, "chunk_count": 128, "created_by": "petrova_ai", "updated_by": "petrova_ai", "created_at": "2026-05-10T08:00:00Z", "updated_at": "2026-06-01T16:00:00Z", "valid_from": "1996-01-01", "valid_until": "9999-12-31", "current_version_id": 3, "preview_snapshot": None, "draft_id": None},
+    {"id": 3, "title": "Трубы стальные бесшовные горячедеформированные", "doc_code": "ГОСТ 8732-78", "source_type": "GOST", "title_hash_sha256": None, "title_key": "USSR|gost|47.020.30||ГОСТ 8732-78|Трубы стальные бесшовные горячедеформированные", "status": "draft", "era": "USSR", "validity_status": "active", "jurisdiction": "RU", "issuing_body": "Госстандарт СССР", "group": "М1", "mks_oks_code": "47.020.30", "mks_name": "Судовые системы", "okstu_code": "12.000", "okstu_name": "Машиностроение", "classification_status": {"mks": ["47.020.30"], "okstu": ["12.000"], "udk": [], "subject_area": ["Судовые системы", "Машиностроение"]}, "successor_doc_id": None, "predecessor_doc_id": None, "total_versions": 1, "chunk_count": 56, "created_by": "system", "updated_by": "system", "created_at": "2026-06-10T09:00:00Z", "updated_at": "2026-06-11T11:00:00Z", "valid_from": "1978-01-01", "valid_until": "9999-12-31", "current_version_id": 1, "preview_snapshot": None, "draft_id": None},
 ]
 
 SEED_CLASSIFIER_PENDING = [
@@ -143,10 +170,10 @@ SEED_DOCUMENTS = [
      "successor_doc_id": None, "predecessor_doc_id": None, "chunk_container_id": None,
      "status": "completed", "file_size": 1024000, "pages_total": 12, "pages_processed": 12,
      "pages_failed": 0, "ocr_status": "completed", "index_status": "completed",
-     "user_id": 1, "uploaded_by": "Иванов И.И.",
+     "user_id": 1, "created_by": "Иванов И.И.",
      "created_at": "2026-04-27T10:00:00Z", "updated_at": "2026-04-27T14:00:00Z",
      "chunk_count": 34, "chunk_validation": None,
-     "metadata": {"year": 1981, "udc": "629.5.021", "tags": ["судостроение"]},
+     "metadata": {"year": 1981, "udk_code": "629.5.021", "tags": ["судостроение"]},
      "total_versions": 1,
     },
     {"document_id": 2, "title": "Правила классификации морских судов", "doc_code": "РД 31.11.21-96",
@@ -158,10 +185,10 @@ SEED_DOCUMENTS = [
      "successor_doc_id": None, "predecessor_doc_id": None, "chunk_container_id": None,
      "status": "review_required", "file_size": 2048000, "pages_total": 45, "pages_processed": 44,
      "pages_failed": 1, "ocr_status": "completed", "index_status": "pending",
-     "user_id": 2, "uploaded_by": "Петрова А.В.",
+     "user_id": 2, "created_by": "Петрова А.В.",
      "created_at": "2026-05-10T08:00:00Z", "updated_at": "2026-05-12T16:30:00Z",
      "chunk_count": 128, "chunk_validation": None,
-     "metadata": {"year": 1996, "udc": "629.5.011", "tags": ["классификация", "морские суда"]},
+     "metadata": {"year": 1996, "udk_code": "629.5.011", "tags": ["классификация", "морские суда"]},
      "total_versions": 2,
     },
     {"document_id": 3, "title": "Трубы стальные бесшовные. Технические условия", "doc_code": "ГОСТ 8732-78",
@@ -173,10 +200,10 @@ SEED_DOCUMENTS = [
      "successor_doc_id": None, "predecessor_doc_id": None, "chunk_container_id": None,
      "status": "failed", "file_size": 512000, "pages_total": 8, "pages_processed": 3,
      "pages_failed": 5, "ocr_status": "failed", "index_status": "pending",
-     "user_id": 1, "uploaded_by": "Иванов И.И.",
+     "user_id": 1, "created_by": "Иванов И.И.",
      "created_at": "2026-06-01T09:00:00Z", "updated_at": "2026-06-01T09:15:00Z",
      "chunk_count": 0, "chunk_validation": {"status": "error", "message": "OCR failed on pages 4-8"},
-     "metadata": {"year": 1978, "udc": "621.774.2", "tags": ["трубы", "сталь"]},
+     "metadata": {"year": 1978, "udk_code": "621.774.2", "tags": ["трубы", "сталь"]},
      "total_versions": 1,
     },
 ]
@@ -352,13 +379,19 @@ def init_all_data():
         ver = doc.get("total_versions", 1)
         _versions[doc_id] = []
         for v in range(ver):
+            # DB-25: revision, source_filename, file_path, updated_at
             _versions[doc_id].append({
                 "version_id": new_id(), "version_number": v+1, "document_id": doc_id,
                 "title": doc.get("title",""), "file_size": doc.get("file_size",0),
+                "revision": f"{v+1}.0",
+                "source_filename": f"doc_{doc_id}_v{v+1}.pdf",
+                "file_path": f"/storage/documents/{doc_id}/v{v+1}/source.pdf",
                 "content_hash_sha256": hashlib.sha256(f"{doc_id}-v{v+1}".encode()).hexdigest(),
-                "title_hash_sha256": hashlib.sha256(doc.get("title","").encode()).hexdigest(),
-                "status": "completed", "created_at": doc.get("created_at", utcnow()),
-                "uploaded_by": doc.get("uploaded_by","")
+                "title_hash_sha256": compute_title_hash_sha256(doc),
+                "status": "completed",
+                "created_at": doc.get("created_at", utcnow()),
+                "updated_at": doc.get("updated_at", utcnow()),
+                "created_by": doc.get("created_by","")
             })
         _versions[doc_id].reverse()
         _history[doc_id] = [
@@ -390,7 +423,12 @@ def init_all_data():
     # Registry
     _classifiers = {c["code"]: copy.deepcopy(c) for c in SEED_CLASSIFIERS}
     _terminology = {t["id"]: copy.deepcopy(t) for t in SEED_TERMINOLOGY}
-    _registry_docs = {d["id"]: copy.deepcopy(d) for d in SEED_REGISTRY_DOCUMENTS}
+    _registry_docs = {}
+    for d in SEED_REGISTRY_DOCUMENTS:
+        doc = copy.deepcopy(d)
+        # DB-1: вычисляем title_hash_sha256
+        doc["title_hash_sha256"] = compute_title_hash_sha256(doc)
+        _registry_docs[d["id"]] = doc
     _pending_classifiers = {p["id"]: copy.deepcopy(p) for p in SEED_CLASSIFIER_PENDING}
     _doc_history = {}
     for d in SEED_REGISTRY_DOCUMENTS:

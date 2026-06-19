@@ -1,27 +1,31 @@
-# Todo — Исправление 9 стоперов Gateway — ВЫПОЛНЕНО ✅
+# Сверка проекта с документацией
 
-## Результаты
+## Выполнено ✅
 
-| # | Стопер | Статус | Комментарий |
-|---|--------|:------:|-------------|
-| 1 | POST /registry/classifiers/import — CSV/XLSX | ✅ | Добавлен парсинг CSV (встроенный csv) и XLSX (openpyxl) с mapping, обратная совместимость с JSON |
-| 2 | POST /registry/terminology/import — CSV/XLSX | ✅ | Аналогично классификаторам |
-| 3 | POST /registry/classifiers/validate — `classification.*` wrapper | ✅ | Поддержан документированный wrapper + fallback на top-level поля |
-| 4 | POST /registry/classifiers/pending/{id}/accept — тело запроса | ✅ | Принимает body (parent_code, full_name, admin_comment), ответ: status "mapped" |
-| 5 | POST /registry/classifiers/pending/{id}/reject — admin_comment | ✅ | Принимает body (admin_comment), сохраняет в pending |
-| 6 | GET /registry/classifiers/pending — фильтр по system | ✅ | Добавлен query parameter system |
-| 7 | terminology.scope: str → list[str] | ✅ | Pydantic-модели принимают Union[str, List[str]], нормализуют к list. Seed-данные обновлены |
-| 8 | GET /registry/terminology/normalize — term_type unknown | ✅ | Для not found возвращается term_type: "unknown" |
-| 9 | /api/v1/health требует авторизацию | ✅ | Добавлен алиас /api/v1/health (публичный) |
+### README.md (vs фактическая структура)
+- [x] **Неполный список docs/**: добавлены mock_architecture.md, db_diagrams.md, diagrams.md, pipeline-файлы, JSON-схемы
+- [x] **Неполный список mocks/tests/**: добавлены все 8 файлов
+- [x] **Устаревшее количество тестов**: обновлено 496 → 530+
+- [x] **Не описаны mocks/__init__.py, mocks/requirements.txt, mocks/todo.md** — добавлены
 
-### Сопутствующие изменения
-- Добавлен `openpyxl` в requirements.txt
-- Обновлены seed-данные (scope как list)
-- Обновлены тесты test_api.py и start_service.py под новый формат ответов
-- Добавлены 17 новых тестов (TestStopperFixes)
+### guide.md (не существует)
+- [x] **guide.md создан** — архитектурные решения и ориентиры
 
-### Сопутствующие изменения
-- Health endpoint в Docker: починен 401 из-за порядка middleware (trailing slash не обрезался до RBACMiddleware)
+### run_all.py (сломан)
+- [x] **run_all.py исправлен** — теперь запускает единый mock-gateway (`mocks.gateway:app`)
 
-### Валидация
-- **491 тест проходит** (было 487, добавлено 4 новых на trailing slash health endpoints)
+### Пустые папки-остатки
+- [x] **Удалены** mocks/auth_service/, mocks/orchestrator_service/, mocks/query_service/, mocks/registry_service/
+
+### .rules
+- [x] **Синхронизировать readme.md → README.md** в .rules п.2.1
+
+---
+
+## Финальная проверка
+- [x] Протестировать run_all.py — импорт mocks.gateway OK, gateway.main OK
+- [x] Проверить целостность связей (gateway/, mocks/, docs/, tests/) — все 100% на месте
+- [x] Запущены тесты: 22/22 rate_limiting, 34/34 health+routing — все OK
+- [x] Найден и исправлен **`mocks/tests/start_service.py`** — импортировал удалённые модули
+- [x] Найден и исправлен устаревший раздел «Быстрый старт» в README — команды запуска отдельных сервисов
+- [ ] **Не требует правок**: specificity.md — аномалии релевантны

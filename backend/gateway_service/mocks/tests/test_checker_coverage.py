@@ -95,7 +95,7 @@ class TestAdminUsers:
             json={
                 "email": f"test.{unique}@example.com",
                 "full_name": f"Test User {unique}",
-                "password": "test123",
+                "password": "Test12345",
                 "roles": ["engineer"],
             },
             headers=auth_h(admin_token),

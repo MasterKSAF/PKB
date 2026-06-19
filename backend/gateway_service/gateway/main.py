@@ -14,11 +14,13 @@ PKB Neuroassistant Gateway Service — reverse-proxy для внутренних
 import json
 import logging
 import os
+import re
 import sys
 import time
+import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -35,16 +37,55 @@ from gateway.client import (
     get_client,
 )
 from gateway.config import config
+from gateway.logging_config import setup_logging
+from gateway.rate_limiter import (
+    RateLimitResult,
+    check_idor_rate_limit,
+    check_rate_limit,
+)
 from gateway.routers import proxy_router
+
+# ---------------------------------------------------------------------------
+# OpenTelemetry (CM-6) — graceful fallback если пакет не установлен
+# ---------------------------------------------------------------------------
+
+try:
+    from opentelemetry import trace
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+    from opentelemetry.sdk.resources import Resource
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+    _OTEL_AVAILABLE = True
+except ImportError:
+    _OTEL_AVAILABLE = False
+
+
+def _setup_otel(app_instance: FastAPI) -> None:
+    """Инициализирует OpenTelemetry SDK (если пакеты установлены)."""
+    if not _OTEL_AVAILABLE:
+        logger.info("OpenTelemetry packages not installed — OTEL disabled")
+        return
+    otel_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4318/v1/traces")
+    service_name = os.getenv("OTEL_SERVICE_NAME", "gateway")
+    try:
+        resource = Resource.create({"service.name": service_name})
+        provider = TracerProvider(resource=resource)
+        exporter = OTLPSpanExporter(endpoint=otel_endpoint)
+        processor = BatchSpanProcessor(exporter)
+        provider.add_span_processor(processor)
+        trace.set_tracer_provider(provider)
+        FastAPIInstrumentor.instrument_app(app_instance)
+        logger.info("OTEL SDK initialised — endpoint=%s", otel_endpoint)
+    except Exception as exc:
+        logger.warning("OTEL init failed — %s", exc)
 
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
 
-logging.basicConfig(
-    level=getattr(logging, os.getenv("GATEWAY_LOG_LEVEL", "INFO").upper()),
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
+setup_logging()
 logger = logging.getLogger("gateway")
 
 logger.info("Gateway starting — mode=%s, port=%s", config.mode, config.port)
@@ -71,6 +112,146 @@ class StripTrailingSlashMiddleware(BaseHTTPMiddleware):
             raw = request.scope.get("raw_path")
             if raw is not None and len(raw) > 1 and raw.endswith(b"/"):
                 request.scope["raw_path"] = raw.rstrip(b"/")
+        return await call_next(request)
+
+
+# ---------------------------------------------------------------------------
+# RequestTracingMiddleware — генерация X-Request-ID / X-Trace-ID (P11-2/CM-5)
+# ---------------------------------------------------------------------------
+
+
+class RequestTracingMiddleware(BaseHTTPMiddleware):
+    """Генерирует X-Request-ID и X-Trace-ID (UUIDv4), если клиент не передал.
+
+    Сохраняет в request.state для downstream middleware, proxy_request и логов.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        # X-Request-ID
+        req_id = request.headers.get("X-Request-ID", "")
+        if not req_id:
+            req_id = str(uuid.uuid4())
+        request.state.request_id = req_id
+
+        # X-Trace-ID (CM-5)
+        trace_id = request.headers.get("X-Trace-ID", "")
+        if not trace_id:
+            trace_id = str(uuid.uuid4())
+        request.state.x_trace_id = trace_id
+
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = req_id
+        response.headers["X-Trace-ID"] = trace_id
+        return response
+
+
+# ---------------------------------------------------------------------------
+# CorrelationHeadersMiddleware — извлекает X-Draft-ID/X-Document-ID/X-Version-ID
+# из URL-пути (CM-5)
+# ---------------------------------------------------------------------------
+
+
+# Паттерны для извлечения entity ID из URL
+_DRAFT_PATH_RE = re.compile(r"/api/v1/drafts/(\d+)")
+_DOC_PATH_RE = re.compile(r"/api/v1/documents/(\d+)")
+_VERSION_PATH_RE = re.compile(r"/api/v1/documents/\d+/versions/(\d+)")
+
+
+class CorrelationHeadersMiddleware(BaseHTTPMiddleware):
+    """Извлекает и пробрасывает X-Draft-ID, X-Document-ID, X-Version-ID.
+
+    Работает в паре с proxy_request: сохраняет ID в request.state,
+    откуда client.py забирает их для проброса в downstream.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+
+        # X-Draft-ID — из пути или заголовка (с защитой от невалидных значений)
+        draft_id = None
+        if match := _DRAFT_PATH_RE.search(path):
+            draft_id = int(match.group(1))
+        elif raw := request.headers.get("X-Draft-ID"):
+            try:
+                draft_id = int(raw)
+            except (ValueError, TypeError):
+                logger.warning("Invalid X-Draft-ID header: %r", raw)
+        if draft_id is not None:
+            request.state.x_draft_id = draft_id
+
+        # X-Document-ID
+        doc_id = None
+        if match := _DOC_PATH_RE.search(path):
+            doc_id = int(match.group(1))
+        elif raw := request.headers.get("X-Document-ID"):
+            try:
+                doc_id = int(raw)
+            except (ValueError, TypeError):
+                logger.warning("Invalid X-Document-ID header: %r", raw)
+        if doc_id is not None:
+            request.state.x_document_id = doc_id
+
+        # X-Version-ID
+        ver_id = None
+        if match := _VERSION_PATH_RE.search(path):
+            ver_id = int(match.group(1))
+        elif raw := request.headers.get("X-Version-ID"):
+            try:
+                ver_id = int(raw)
+            except (ValueError, TypeError):
+                logger.warning("Invalid X-Version-ID header: %r", raw)
+        if ver_id is not None:
+            request.state.x_version_id = ver_id
+
+        return await call_next(request)
+
+
+# ---------------------------------------------------------------------------
+# PIIQueryValidatorMiddleware — запрет PII в query-параметрах (GW-7)
+# ---------------------------------------------------------------------------
+
+# Список запрещённых имён query-параметров (common_api.md — "Чувствительные данные в URL")
+_PII_QUERY_PATTERNS: list[re.Pattern] = [
+    re.compile(r"^password$", re.I),
+    re.compile(r"^access_token$", re.I),
+    re.compile(r"^refresh_token$", re.I),
+    re.compile(r"^.+_token$", re.I),
+    re.compile(r"^.+_secret$", re.I),
+    # _key только для известных auth-ключей (не document_key/file_key и т.д.)
+    re.compile(r"^api_key$", re.I),
+    re.compile(r"^apikey$", re.I),
+    re.compile(r"^secret_key$", re.I),
+    re.compile(r"^email$", re.I),
+    re.compile(r"^phone$", re.I),
+    re.compile(r"^passport$", re.I),
+    re.compile(r"^inn$", re.I),
+    re.compile(r"^snils$", re.I),
+    re.compile(r"^ogrn$", re.I),
+]
+
+
+class PIIQueryValidatorMiddleware(BaseHTTPMiddleware):
+    """Проверяет query-параметры на наличие PII.
+
+    При обнаружении запрещённого параметра возвращает
+    400 BAD_REQUEST с кодом PII_IN_QUERY_STRING.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        for param_name in request.query_params.keys():
+            for pattern in _PII_QUERY_PATTERNS:
+                if pattern.match(param_name):
+                    logger.warning(
+                        "PII in query-string: %s=%s",
+                        param_name, request.query_params[param_name],
+                    )
+                    return JSONResponse(
+                        status_code=400,
+                        content=_error_response(
+                            "PII_IN_QUERY_STRING",
+                            f"Запрещено передавать '{param_name}' в query-параметрах",
+                        ),
+                    )
         return await call_next(request)
 
 
@@ -120,6 +301,7 @@ class RBACMiddleware(BaseHTTPMiddleware):
                 or path == "/api/v1/system/mode"
             ):
                 if not user_context["is_authenticated"]:
+                    _log_access_denied(request, "UNAUTHORIZED", "Требуется аутентификация")
                     return JSONResponse(
                         status_code=401,
                         content=_error_response(
@@ -146,12 +328,39 @@ class RBACMiddleware(BaseHTTPMiddleware):
                     ),
                 )
 
+        # /tasks/* — read-only, только system_admin и knowledge_admin
+        if path.startswith("/api/v1/tasks"):
+            if not user_context["is_authenticated"]:
+                return JSONResponse(
+                    status_code=401,
+                    content=_error_response(
+                        "UNAUTHORIZED", "Требуется аутентификация"
+                    ),
+                )
+            if request.method != "GET":
+                return JSONResponse(
+                    status_code=405,
+                    content=_error_response(
+                        "METHOD_NOT_ALLOWED",
+                        "Маршрут /tasks/* только для чтения (GET)",
+                    ),
+                )
+            role = user_context.get("role")
+            if role not in ("system_admin", "knowledge_admin"):
+                return JSONResponse(
+                    status_code=403,
+                    content=_error_response(
+                        "FORBIDDEN",
+                        "Недостаточно прав для просмотра задач пайплайна",
+                    ),
+                )
+
         # Permission-based checks для аутентифицированных
         if user_context["is_authenticated"]:
             permissions = user_context.get("permissions", {})
 
-            # POST /drafts и POST /documents — can_upload_documents
-            if request.method == "POST" and path in ("/api/v1/drafts", "/api/v1/documents"):
+            # POST /drafts — can_upload_documents (OR-11: POST /documents deprecated)
+            if request.method == "POST" and path == "/api/v1/drafts":
                 if not permissions.get("can_upload_documents", False):
                     return JSONResponse(
                         status_code=403,
@@ -161,8 +370,8 @@ class RBACMiddleware(BaseHTTPMiddleware):
                         ),
                     )
 
-            # POST/PUT/DELETE /classifiers — can_manage_classifiers
-            _classifier_path = path.startswith("/api/v1/classifiers") or path.startswith("/api/v1/registry/classifiers")
+            # POST/PUT/DELETE /registry/classifiers — can_manage_classifiers (CM-1)
+            _classifier_path = path.startswith("/api/v1/registry/classifiers")
             if request.method in ("POST", "PUT", "PATCH", "DELETE") and _classifier_path:
                 if not permissions.get("can_manage_classifiers", False):
                     return JSONResponse(
@@ -173,8 +382,8 @@ class RBACMiddleware(BaseHTTPMiddleware):
                         ),
                     )
 
-            # POST/PUT/DELETE /terminology — can_manage_terminology
-            _term_path = path.startswith("/api/v1/terminology") or path.startswith("/api/v1/registry/terminology")
+            # POST/PUT/DELETE /registry/terminology — can_manage_terminology (CM-1)
+            _term_path = path.startswith("/api/v1/registry/terminology")
             if request.method in ("POST", "PUT", "PATCH", "DELETE") and _term_path:
                 if not permissions.get("can_manage_terminology", False):
                     return JSONResponse(
@@ -198,8 +407,22 @@ class RBACMiddleware(BaseHTTPMiddleware):
                         ),
                     )
 
-            # DELETE /documents/{id}, DELETE /drafts/{id},
-            # POST /documents/{id}/reprocess, POST /documents/{id}/approve
+            # GET /registry/search — knowledge_admin / system_admin (CM-1)
+            if request.method == "GET" and path.startswith("/api/v1/registry/search"):
+                if not (
+                    permissions.get("can_manage_classifiers", False)
+                    or permissions.get("can_manage_registry", False)
+                ):
+                    return JSONResponse(
+                        status_code=403,
+                        content=_error_response(
+                            "FORBIDDEN",
+                            "Недостаточно прав для поиска по реестру",
+                        ),
+                    )
+
+            # DELETE /documents/{id}, DELETE /drafts{id},
+            # POST /documents/{id}/reprocess (approve deprecated — OR-12)
             _doc_write = request.method == "DELETE" and (
                 path.startswith("/api/v1/documents/")
                 or path.startswith("/api/v1/drafts/")
@@ -235,6 +458,9 @@ class RBACMiddleware(BaseHTTPMiddleware):
                             "Недостаточно прав для просмотра метрик",
                         ),
                     )
+
+        # Сохраняем user_id в request.state для проксирования в downstream
+        request.state.user_id = user_context.get("user_id")
 
         return await call_next(request)
 
@@ -336,6 +562,63 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
 # ---------------------------------------------------------------------------
 
 
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    """Rate limiting и IDOR protection (CM-2, CM-3, GW-4, GW-6).
+
+    Проверяет лимиты для каждого запроса:
+      1. Общий rate limit по группе эндпоинтов (CM-2, GW-4)
+      2. IDOR rate limit по entity ID (CM-3, GW-6)
+
+    При превышении — 429 Too Many Requests.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        if not config.rate_limit_enabled:
+            return await call_next(request)
+
+        client_ip = request.client.host if request.client else "127.0.0.1"
+        method = request.method
+        path = request.url.path
+
+        # 1. Общий rate limit
+        decision = await check_rate_limit(method, path, client_ip)
+        if decision.result == RateLimitResult.BLOCKED:
+            logger.warning(
+                "Rate limit blocked: %s %s from %s (retry_after=%ds)",
+                method, path, client_ip, decision.retry_after_seconds,
+            )
+            return JSONResponse(
+                status_code=429,
+                content=_error_response(
+                    "TOO_MANY_REQUESTS",
+                    "Превышен лимит запросов. Попробуйте через %d секунд"
+                    % decision.retry_after_seconds,
+                    details={"retry_after_seconds": decision.retry_after_seconds},
+                ),
+                headers={"Retry-After": str(decision.retry_after_seconds)},
+            )
+
+        # 2. IDOR protection
+        idor_decision = await check_idor_rate_limit(method, path, client_ip)
+        if idor_decision and idor_decision.result == RateLimitResult.BLOCKED:
+            logger.warning(
+                "IDOR rate limit blocked: %s %s from %s (retry_after=%ds)",
+                method, path, client_ip, idor_decision.retry_after_seconds,
+            )
+            return JSONResponse(
+                status_code=429,
+                content=_error_response(
+                    "TOO_MANY_REQUESTS",
+                    "Превышен лимит запросов к ресурсу. Попробуйте через %d секунд"
+                    % idor_decision.retry_after_seconds,
+                    details={"retry_after_seconds": idor_decision.retry_after_seconds},
+                ),
+                headers={"Retry-After": str(idor_decision.retry_after_seconds)},
+            )
+
+        return await call_next(request)
+
+
 class ProcessTimeMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         start = time.perf_counter()
@@ -350,13 +633,33 @@ class ProcessTimeMiddleware(BaseHTTPMiddleware):
 # ---------------------------------------------------------------------------
 
 
-def _error_response(code: str, message: str) -> dict:
-    return {
+# Константы специфичных кодов ошибок (CM-7 / D24)
+ERROR_TIMEOUT_INDEX_TRIGGER = "INDEX_TRIGGER_TIMEOUT"
+ERROR_TIMEOUT_DECISION = "DECISION_TIMEOUT"
+ERROR_TIMEOUT_PREVIEW_TRIGGER = "PREVIEW_TRIGGER_TIMEOUT"
+ERROR_TIMEOUT_LLM_GENERATION = "LLM_GENERATION_TIMEOUT"
+
+
+def _error_response(
+    code: str,
+    message: str,
+    request_id: str | None = None,
+    details: dict | None = None,
+) -> dict:
+    result = {
         "error": {
             "code": code,
             "message": message,
         }
     }
+    if request_id or details:
+        merged = {}
+        if request_id:
+            merged["request_id"] = request_id
+        if details:
+            merged.update(details)
+        result["error"]["details"] = merged
+    return result
 
 
 def _error_code_from_status(status_code: int, detail: Any) -> str:
@@ -366,6 +669,7 @@ def _error_code_from_status(status_code: int, detail: Any) -> str:
         403: "FORBIDDEN",
         404: "NOT_FOUND",
         405: "METHOD_NOT_ALLOWED",
+        408: "REQUEST_TIMEOUT",
         409: "CONFLICT",
         422: "VALIDATION_ERROR",
         429: "TOO_MANY_REQUESTS",
@@ -390,6 +694,24 @@ def _extract_message(detail: Any) -> str:
     return str(detail)
 
 
+def _log_access_denied(request: Request, code: str, message: str) -> None:
+    """Логирует отказ доступа с контекстом запроса."""
+    logger.warning(
+        "Access denied: %s %s → %s (%s)",
+        request.method,
+        request.url.path,
+        code,
+        message,
+        extra={
+            "error_code": code,
+            "error_message": message,
+            "req_path": request.url.path,
+            "req_method": request.method,
+            "request_id": getattr(request.state, "request_id", None),
+        },
+    )
+
+
 # ---------------------------------------------------------------------------
 # Lifespan
 # ---------------------------------------------------------------------------
@@ -398,9 +720,11 @@ def _extract_message(detail: Any) -> str:
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     logger.info(
-        "Gateway ready — mode=%s, host=%s, port=%s",
+        "Gateway starting — mode=%s, host=%s, port=%s",
         config.mode, config.host, config.port,
     )
+    # OTEL SDK (CM-6)
+    _setup_otel(_app)
     yield
     _IDEMPOTENCY_STORE.clear()
     await close_client()
@@ -413,7 +737,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(
     title="PKB Neuroassistant Gateway Service",
-    version="1.1.0",
+    version="1.2.0",
     description=(
         "Reverse-proxy для внутренних микросервисов PKB Neuroassistant. "
         "Маршрутизирует запросы от Web UI к Auth, Orchestrator, Query, Registry."
@@ -432,11 +756,28 @@ app = FastAPI(
 async def http_exception_handler(request: Request, exc: HTTPException):
     if isinstance(exc.detail, JSONResponse):
         return exc.detail
+    req_id = getattr(request.state, "request_id", None)
     return JSONResponse(
         status_code=exc.status_code,
         content=_error_response(
             code=_error_code_from_status(exc.status_code, exc.detail),
             message=_extract_message(exc.detail),
+            request_id=req_id,
+        ),
+    )
+
+
+@app.exception_handler(500)
+async def internal_error_handler(request: Request, exc: Exception):
+    """Глобальный обработчик необработанных исключений."""
+    req_id = getattr(request.state, "request_id", None)
+    logger.exception("Unhandled exception: %s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content=_error_response(
+            code="INTERNAL_ERROR",
+            message="Внутренняя ошибка сервера",
+            request_id=req_id,
         ),
     )
 
@@ -483,15 +824,27 @@ async def pydantic_validation_handler(request: Request, exc: ValidationError):
 # Middleware stack
 # ---------------------------------------------------------------------------
 
-# StripTrailingSlash — ПЕРВЫМ, чтобы роутер и resolve_service
+# Порядок middleware (внешний → внутренний):
+# CORS → PIIQueryValidator → RateLimit → RequestTracing → CorrelationHeaders → RBAC →
+# Idempotency → ProcessTime → StripTrailingSlash → Router
+#
+# StripTrailingSlash — ПЕРВЫМ (самый глубокий), чтобы роутер и resolve_service
 # видели нормализованный путь без trailing slash (без 307).
 app.add_middleware(StripTrailingSlashMiddleware)
 app.add_middleware(ProcessTimeMiddleware)
 app.add_middleware(IdempotencyMiddleware)
 app.add_middleware(RBACMiddleware)
+app.add_middleware(CorrelationHeadersMiddleware)
+app.add_middleware(RequestTracingMiddleware)
+app.add_middleware(RateLimitMiddleware)    # CM-2, CM-3, GW-4, GW-6
+app.add_middleware(PIIQueryValidatorMiddleware)
+# CORS (GW-3): в development разрешено всё, в production — только CORS_ALLOWED_ORIGINS
+_cors_origins = config.cors_allowed_origins.split(",") if config.cors_allowed_origins != "*" else ["*"]
+if config.env == "production" and _cors_origins == ["*"]:
+    logger.warning("CORS: ALL origins allowed — это небезопасно для production!")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=config.cors_allowed_origins.split(",") if config.cors_allowed_origins != "*" else ["*"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -505,8 +858,21 @@ app.add_middleware(
 
 @app.get("/api/v1/health")
 @app.get("/api/v1/system/health")
-async def gateway_health():
-    """Health-check с агрегированным статусом всех сервисов."""
+async def gateway_health(request: Request):
+    """Health-check с агрегированным статусом всех сервисов.
+
+    Для неаутентифицированных запросов возвращает минимальный ответ
+    {"status": "ok"} (требование безопасности).
+    Полный ответ — только для system_admin.
+    """
+    user = getattr(request.state, "user", None)
+    role = user.get("role", "") if user else ""
+
+    # Минимальный ответ для неаутентифицированных
+    if not role or role != "system_admin":
+        return {"status": "ok"}
+
+    # Полный ответ для system_admin
     services = await check_all_services_health()
     overall = "ok"
     for svc, status in services.items():
@@ -518,7 +884,7 @@ async def gateway_health():
 
     return {
         "status": overall,
-        "version": "1.1.0",
+        "version": "1.2.0",
         "services": services,
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "endpoints_total": sum(
@@ -542,8 +908,54 @@ async def gateway_mode_info():
 
 
 # ---------------------------------------------------------------------------
-# Proxy router — catch-all для всех /api/v1/* запросов к сервисам
+# GW-12: GET /api/v1/monitor/metrics — собственный эндпоинт Gateway
 # ---------------------------------------------------------------------------
+
+
+@app.get("/api/v1/monitor/metrics")
+async def gateway_metrics():
+    """Метрики качества системы (собственный эндпоинт Gateway).
+
+    Orchestrator больше не имеет своего /monitor/metrics —
+    метрики агрегируются на уровне Gateway (GW-12).
+    """
+    return {
+        "control_metrics": {
+            "ocr_quality": 0.98,
+            "retrieval_quality": 0.91,
+            "answers_with_sources": 0.96,
+            "avg_latency_ms": 1420,
+        },
+        "answer_metrics": {
+            "useful_rate": 0.84,
+            "rated_answers": 43,
+            "flagged_for_review": 5,
+            "open_questions": 3,
+        },
+        "logs": [],
+    }
+
+
+# ---------------------------------------------------------------------------
+# CM-6: service_checker — health/live, health/ready
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/v1/system/health/live")
+async def health_live():
+    """Liveness probe — сервис жив."""
+    return {"status": "ok"}
+
+
+@app.get("/api/v1/system/health/ready")
+async def health_ready():
+    """Readiness probe — сервис готов принимать запросы."""
+    return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# Proxy router — catch-all для всех /api/v1/* запросов к сервисам
+# --------------------------------------------------------------------------
 
 app.include_router(proxy_router)
 

@@ -75,8 +75,8 @@ class UpdateUserRequest(BaseModel):
 
 
 class PatchUserRequest(BaseModel):
-    role: Optional[str] = None
-    roles: Optional[List[str]] = None
+    roles: Optional[List[str]] = None  # AU-5: role заменён на roles[]
+    role: Optional[str] = None  # обратная совместимость
 
 
 class CreateRoleRequest(BaseModel):
@@ -94,12 +94,29 @@ def _hash_password(pw: str) -> str:
     return hashlib.sha256(pw.encode()).hexdigest()
 
 
+def _mask_ip(ip: str) -> str:
+    """AU-6: Маскировка PII — IP → 123.xxx.xxx.xxx"""
+    parts = ip.split(".")
+    if len(parts) == 4:
+        return f"{parts[0]}.xxx.xxx.xxx"
+    return ip
+
+
+def _validate_password(pw: str) -> None:
+    """AU-4: Минимальная проверка пароля — только длина."""
+    if len(pw) < 8:
+        raise HTTPException(
+            status_code=422,
+            detail=error_response("WEAK_PASSWORD", "Пароль должен содержать минимум 8 символов"),
+        )
+
+
 def _add_audit(user_id: int, action: str, resource_type: str, resource_id: int = None,
                details: dict = None, ip: str = "127.0.0.1"):
     _audit.append({
         "event_id": new_id(), "user_id": user_id, "action": action,
         "resource_type": resource_type, "resource_id": resource_id,
-        "details": details or {}, "ip_address": ip, "timestamp": utcnow()
+        "details": details or {}, "ip_address": _mask_ip(ip), "timestamp": utcnow()
     })
 
 
@@ -143,9 +160,34 @@ async def login(req: LoginRequest, request: Request):
                 user = u
                 break
     if not user:
+        # AU-3: инкремент failed_attempts по email
+        for u in _users.values():
+            user_email = u.get("email", "").lower()
+            if user_email == login_value or user_email.split("@")[0] == login_value:
+                u["failed_attempts"] = u.get("failed_attempts", 0) + 1
+                if u["failed_attempts"] >= 5:
+                    u["locked_until"] = (datetime.now(timezone.utc) + timedelta(minutes=30)).isoformat()
+                break
         raise HTTPException(status_code=401, detail=error_response("UNAUTHORIZED", "Неверные учётные данные"))
+
+    # AU-3: проверка блокировки
+    locked_until = user.get("locked_until")
+    if locked_until:
+        try:
+            if datetime.fromisoformat(locked_until) > datetime.now(timezone.utc):
+                raise HTTPException(
+                    status_code=423,
+                    detail=error_response("ACCOUNT_LOCKED", "Учётная запись заблокирована на 30 минут из-за множества неудачных попыток входа"),
+                )
+        except (ValueError, TypeError):
+            pass
+
     if not user.get("is_active", True):
         raise HTTPException(status_code=401, detail=error_response("UNAUTHORIZED", "Пользователь деактивирован"))
+
+    # AU-3: успешный вход — сброс failed_attempts
+    user["failed_attempts"] = 0
+    user["locked_until"] = None
     user["last_login_at"] = utcnow()
     _add_audit(user["user_id"], "login", "auth", ip=ip)
     return _make_token(user["user_id"])
@@ -223,13 +265,16 @@ async def create_user(req: CreateUserRequest, current_user: dict = Depends(requi
     for u in _users.values():
         if u.get("email", "").lower() == req.email.lower():
             raise HTTPException(status_code=409, detail=error_response("DUPLICATE_EMAIL", "Email уже используется"))
+    # AU-4: валидация пароля
+    _validate_password(req.password)
     user_id = new_id()
     now = utcnow()
     new_user = {
         "user_id": user_id, "id": user_id, "email": req.email, "full_name": req.full_name, "position": "",
         "roles": req.roles, "role": req.roles[0] if req.roles else "engineer",
         "role_title": req.roles[0] if req.roles else "Инженер",
-        "is_active": True, "available_tabs": ["chat", "search", "checks", "history"],
+        "is_active": True, "available_tabs": ["chat", "search", "registry", "history"],
+        "failed_attempts": 0, "locked_until": None,  # AU-3
         "permissions": {
             "can_upload_documents": False, "can_run_ocr": False, "can_manage_users": False,
             "can_manage_classifiers": False, "can_manage_terminology": False, "can_manage_registry": False,
@@ -269,23 +314,30 @@ async def update_user(user_id: int, req: UpdateUserRequest, current_user: dict =
         user["position"] = req.position
     if req.roles is not None:
         user["roles"] = req.roles
-        user["role"] = req.roles[0] if req.roles else user["role"]
+        user["role"] = req.roles[0] if req.roles else "engineer"
     if req.is_active is not None:
         user["is_active"] = req.is_active
     if req.password is not None:
+        # AU-4: валидация пароля
+        _validate_password(req.password)
         _password_hashes[user_id] = _hash_password(req.password)
         # Revoke all refresh tokens for this user
-        revoked_rts = [
-            rt for rt, uid in list(_tokens.items()) if uid == user_id
-        ]
+        revoked_rts = [rt for rt, uid in list(_tokens.items()) if uid == user_id]
         for rt in revoked_rts:
             _tokens.pop(rt, None)
             _tokens_meta.pop(rt, None)
             _blacklist[rt] = utcnow()
-        # Revoke all access tokens for this user
-        revoked_ats = [
-            at for at, uid in list(_access_token_map.items()) if uid == user_id
-        ]
+        revoked_ats = [at for at, uid in list(_access_token_map.items()) if uid == user_id]
+        for at in revoked_ats:
+            _access_token_map.pop(at, None)
+    if req.is_active is False:
+        # Deactivation also revokes tokens
+        revoked_rts = [rt for rt, uid in list(_tokens.items()) if uid == user_id]
+        for rt in revoked_rts:
+            _tokens.pop(rt, None)
+            _tokens_meta.pop(rt, None)
+            _blacklist[rt] = utcnow()
+        revoked_ats = [at for at, uid in list(_access_token_map.items()) if uid == user_id]
         for at in revoked_ats:
             _access_token_map.pop(at, None)
     user["updated_at"] = utcnow()
@@ -299,20 +351,19 @@ async def patch_user(user_id: int, req: PatchUserRequest, current_user: dict = D
     user = _users.get(user_id)
     if not user:
         raise HTTPException(status_code=404, detail=error_response("USER_NOT_FOUND", "Пользователь не найден"))
-    audit_log_id = new_id()
-    if req.role is not None:
-        user["role"] = req.role
-        user["roles"] = [req.role]
+    # AU-5: приоритет roles[] над role
     if req.roles is not None:
         user["roles"] = req.roles
-        user["role"] = req.roles[0] if req.roles else user["role"]
+        user["role"] = req.roles[0] if req.roles else "engineer"
+    elif req.role is not None:
+        user["role"] = req.role
+        user["roles"] = [req.role]
     user["updated_at"] = utcnow()
     _add_audit(current_user["user_id"], "user.patch", "user", user_id)
     return {
         "user_id": user["user_id"],
         "role": user.get("role", user["roles"][0] if user["roles"] else ""),
         "roles": user.get("roles", []),
-        "audit_log_id": audit_log_id,
         "updated_at": user["updated_at"],
     }
 

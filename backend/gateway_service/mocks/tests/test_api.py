@@ -542,38 +542,37 @@ class TestOrchestratorService:
         assert_ok(resp, 202)
         assert resp.json()["status"] == "parsing"
 
-    def test_42_upload_document(self):
-        """Upload document — new response format with task_id, version_id etc."""
+    def test_42_upload_draft(self):
+        """Upload draft via POST /drafts — single entry point (OR-11)."""
+        resp = client.post(
+            f"{ORCH}/drafts",
+            files={"file": ("test.pdf", b"%PDF-1.4 mock content" + b"x" * 2000, "application/pdf")},
+        )
+        assert_ok(resp, 202)
+        data = resp.json()
+        # Draft response fields
+        assert "draft_id" in data
+        assert "task_id" in data
+        assert "status" in data
+        assert data["status"] == "uploaded"
+        assert "file_hash_sha256" in data
+        assert "title_hash_sha256" in data
+        assert "created_at" in data
+
+    def test_42b_upload_document_deprecated(self):
+        """POST /documents returns 410 Gone (OR-11)."""
         resp = client.post(
             f"{ORCH}/documents",
             files={"file": ("test.pdf", b"%PDF-1.4 mock content", "application/pdf")},
         )
-        assert_ok(resp, 202)
+        assert resp.status_code == 410
         data = resp.json()
-        # New response fields
-        assert "task_id" in data
-        assert "version_id" in data
-        assert "status" in data
-        assert "content_hash_sha256" in data
-        assert "is_duplicate_file" in data
-        assert "is_duplicate_document" in data
-        assert "title_hash_sha256" in data
-        assert "created_at" in data
+        assert data["error"]["code"] == "ENDPOINT_DEPRECATED"
 
     def test_43_delete_document(self):
-        # Upload a doc first to have something to delete
-        create = client.post(
-            f"{ORCH}/documents",
-            files={"file": ("todel.pdf", b"delete me", "application/pdf")},
-        ).json()
-        # We need to get the document_id. Since the upload response doesn't have it,
-        # let's list documents and find the latest one
-        resp = client.get(f"{ORCH}/documents", params={"page": 1, "page_size": 1})
-        docs = resp.json()["items"]
-        if docs:
-            doc_id = docs[0]["document_id"]
-            resp = client.delete(f"{ORCH}/documents/{doc_id}")
-            assert_ok(resp)
+        # Use an existing seed document (id 1 always exists)
+        resp = client.delete(f"{ORCH}/documents/1")
+        assert_ok(resp)
 
     def test_44_health(self):
         # NOTE: Orchestrator health — /api/v1/monitor/health (см. common_api.md).
@@ -606,15 +605,11 @@ class TestOrchestratorService:
         assert "meta" in data
         assert data["meta"]["total"] > 0
 
-    def test_47_approve_document(self):
-        """POST /documents/{doc_id}/approve — approve document."""
+    def test_47_approve_document_deprecated(self):
+        """POST /documents/{doc_id}/approve returns 410 (OR-12)."""
         resp = client.post(f"{ORCH}/documents/1/approve")
-        assert_ok(resp, 202)
-        data = resp.json()
-        assert data["document_id"] == 1
-        assert data["status"] == "approved"
-        assert "approved_at" in data
-        assert "promotion_task_id" in data
+        assert resp.status_code == 410
+        assert resp.json()["error"]["code"] == "ENDPOINT_DEPRECATED"
 
     def test_50_get_document_history(self):
         """GET /documents/{doc_id}/history — status history."""
@@ -1822,3 +1817,151 @@ class TestDocumentRegistryLink:
             data = resp.json()
             if data["data"]:
                 assert data["data"][0].get("doc_code") == doc_code
+
+
+class TestTaskEndpoints:
+    """Tests for task-related endpoints: status, steps, draft tasks."""
+
+    def setup_method(self):
+        _reset_rate_limiter()
+
+    def test_147_task_status_has_steps(self):
+        """GET /tasks/{task_id}/status must include steps array."""
+        # Создаём draft, чтобы появилась задача
+        resp = client.post(
+            f"{ORCH}/drafts",
+            json={"title": "Task test doc", "source_type": "GOST"},
+        )
+        assert_ok(resp, 202)
+        data = resp.json()
+        task_id = data["task_id"]
+
+        # Проверяем статус задачи
+        resp = client.get(f"{ORCH}/tasks/{task_id}/status")
+        assert_ok(resp)
+        body = resp.json()
+        assert body["task_id"] == task_id
+        assert "steps" in body
+        assert isinstance(body["steps"], list)
+        assert len(body["steps"]) > 0
+        first_step = body["steps"][0]
+        assert "step_name" in first_step
+        assert "service_name" in first_step
+        assert "status" in first_step
+
+    def test_148_task_steps_endpoint(self):
+        """GET /tasks/{task_id}/steps returns only steps."""
+        resp = client.post(
+            f"{ORCH}/drafts",
+            json={"title": "Task steps test", "source_type": "GOST"},
+        )
+        assert_ok(resp, 202)
+        task_id = resp.json()["task_id"]
+
+        resp = client.get(f"{ORCH}/tasks/{task_id}/steps")
+        assert_ok(resp)
+        body = resp.json()
+        assert body["task_id"] == task_id
+        assert "steps" in body
+        assert isinstance(body["steps"], list)
+        assert len(body["steps"]) > 0
+        # Нет полей task status-эндпоинта (draft_id, document_id, pipeline_stage и т.д.)
+        assert "draft_id" not in body
+        assert "pipeline_stage" not in body
+
+    def test_149_draft_tasks_endpoint(self):
+        """GET /drafts/{draft_id}/tasks returns tasks for draft."""
+        resp = client.post(
+            f"{ORCH}/drafts",
+            json={"title": "Draft tasks test", "source_type": "GOST"},
+        )
+        assert_ok(resp, 202)
+        data = resp.json()
+        draft_id = data["draft_id"]
+        task_id = data["task_id"]
+
+        resp = client.get(f"{ORCH}/drafts/{draft_id}/tasks")
+        assert_ok(resp)
+        body = resp.json()
+        assert body["draft_id"] == draft_id
+        assert "tasks" in body
+        assert isinstance(body["tasks"], list)
+        assert len(body["tasks"]) >= 1
+        found = any(t["task_id"] == task_id for t in body["tasks"])
+        assert found, f"Task {task_id} not found in draft tasks"
+
+    def test_150_task_status_steps_match_pipeline_stage(self):
+        """Steps status should reflect current pipeline stage."""
+        resp = client.post(
+            f"{ORCH}/drafts",
+            json={"title": "Pipeline stage test", "source_type": "GOST"},
+        )
+        assert_ok(resp, 202)
+        task_id = resp.json()["task_id"]
+
+        resp = client.get(f"{ORCH}/tasks/{task_id}/status")
+        body = resp.json()
+        stage = body["pipeline_stage"]
+        steps = body["steps"]
+        # upload-шаг всегда completed
+        assert steps[0]["step_name"] == "upload"
+        assert steps[0]["status"] == "completed"
+
+    def test_151_task_not_found(self):
+        """GET /tasks/{non_existent_id}/status returns 404."""
+        resp = client.get(f"{ORCH}/tasks/999999/status")
+        assert resp.status_code == 404
+        data = resp.json()
+        assert "error" in data
+        assert data["error"]["code"] == "TASK_NOT_FOUND"
+
+        resp = client.get(f"{ORCH}/tasks/999999/steps")
+        assert resp.status_code == 404
+
+
+class TestGatewayNewEndpoints:
+    """Tests for new Gateway endpoints: PII check, health/live, health/ready, metrics."""
+
+    def setup_method(self):
+        _reset_rate_limiter()
+
+    def test_152_pii_query_string_blocked(self):
+        """GW-7: PII в query-параметрах возвращает 400."""
+        resp = client.get(f"{BASE}/system/health?password=secret")
+        assert resp.status_code == 400
+        data = resp.json()
+        assert data["error"]["code"] == "PII_IN_QUERY_STRING"
+
+        resp = client.get(f"{BASE}/system/health?access_token=abc")
+        assert resp.status_code == 400
+
+        resp = client.get(f"{BASE}/system/health?email=test@test.com")
+        assert resp.status_code == 400
+
+        resp = client.get(f"{BASE}/system/health?inn=1234567890")
+        assert resp.status_code == 400
+
+    def test_153_health_live_ready(self):
+        """CM-6: GET /system/health/live и /system/health/ready."""
+        resp = client.get(f"{BASE}/system/health/live")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "ok"
+
+        resp = client.get(f"{BASE}/system/health/ready")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "ok"
+
+    def test_154_monitor_metrics(self):
+        """GW-12: GET /monitor/metrics возвращает корректную структуру."""
+        resp = client.get(f"{BASE}/monitor/metrics")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "control_metrics" in data
+        assert "answer_metrics" in data
+        assert "ocr_quality" in data["control_metrics"]
+        assert "useful_rate" in data["answer_metrics"]
+
+    def test_155_regular_query_params_allowed(self):
+        """GW-7: Обычные query-параметры не блокируются."""
+        resp = client.get(f"{BASE}/system/health?page=1&search=test")
+        assert resp.status_code == 200

@@ -6,20 +6,20 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import pytest
 from fastapi.testclient import TestClient
 
-from mocks.auth_service.main import app as auth_app, _rate_limits as auth_rate_limits
-from mocks.orchestrator_service.main import app as orch_app
-from mocks.query_service.main import app as query_app
-from mocks.registry_service.main import app as reg_app
+from mocks.gateway import app
+from gateway.rate_limiter import reset_limiter
 
-auth_client = TestClient(auth_app)
-orch_client = TestClient(orch_app)
-query_client = TestClient(query_app)
-reg_client = TestClient(reg_app)
+client = TestClient(app)
+# Единый gateway на порту 8081 объединяет все сервисы
+auth_client = client
+orch_client = client
+query_client = client
+reg_client = client
 
 BASE = "/api/v1"
 
 def reset_rate_limiter():
-    auth_rate_limits.clear()
+    reset_limiter()
 
 def auth_header_admin():
     resp = auth_client.post(
