@@ -50,8 +50,8 @@
 | `status` | string | Статус черновика |
 | `confidence` | float \| null | Оценка качества распознавания (0..1) |
 | `preview_metadata` | object | PreviewMetadata |
-| `created_by` | string | Создатель (сервис или пользователь) |
-| `created_at` | string | Время создания (ISO 8601) |
+| `created_by` | string | Субъект (пользователь или сервис) |
+| `created_at` | datetime | Время создания (ISO 8601) |
 
 ### Orchestrator (публичный, расширенный)
 
@@ -66,7 +66,8 @@
 | `critical_count` | int | Количество critical-уведомлений |
 | `error_code` | string \| null | Код ошибки при `discarded` |
 | `error_message` | string \| null | Описание ошибки |
-| `updated_at` | string | Время обновления (ISO 8601) |
+| `created_at` | datetime | Время создания (ISO 8601) |
+| `updated_at` | datetime | Время обновления (ISO 8601) |
 
 ---
 
@@ -81,8 +82,8 @@
 | `action` | string | Выполненное действие: `approve`, `confirm`, `reject` |
 | `document_id` | bigint \| null | ID документа в Registry |
 | `message` | string | Описание результата |
-| `decided_by` | string | Кто принял решение |
-| `decided_at` | string | Время решения (ISO 8601) |
+| `decided_by` | string | Субъект (пользователь или сервис) |
+| `decided_at` | datetime | Время решения (ISO 8601) |
 
 ---
 

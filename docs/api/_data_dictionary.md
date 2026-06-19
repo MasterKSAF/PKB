@@ -38,6 +38,9 @@
 | `task_id` | orchestrator, gateway | overview | `pipeline.tasks.id` | — |
 | `document_id` | orchestrator, registry, query | overview | `registry.documents.id` | — |
 | `version_id` | orchestrator, registry | — | `registry.document_versions.id` | — |
+| `has_notifications` | orchestrator (GET /drafts, GET /tasks/{id}/status) | — | — | — |
+| `critical_count` | orchestrator (GET /drafts, GET /tasks/{id}/status) | — | — | — |
+| `pipeline_type` | orchestrator (GET /tasks query) | — | — | — |
 
 ---
 
@@ -55,5 +58,5 @@
 
 | Тип | Путь | Формат | Где описан |
 |-----|------|--------|-----------|
-| Внутренние сервисы | `GET /api/v1/health` | `status`, `service`, `version`, `uptime_seconds` | common_api.md |
+| Внутренние сервисы | `GET /api/v1/health` | `status`, `service`, `version` | common_api.md |
 | Gateway (внешний) | `GET /api/v1/system/health` | `status`, `version`, `services{}`, `timestamp`, `endpoints_total` | gateway_service_api.md |

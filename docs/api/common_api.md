@@ -56,8 +56,7 @@
 {
   "status": "ok",
   "service": "auth-service",
-  "version": "1.0.0",
-  "uptime_seconds": 123456
+  "version": "1.0.0"
 }
 ```
 
@@ -76,7 +75,6 @@
 | `status` | string | Статус сервиса: `ok`, `degraded`, `error` |
 | `service` | string | Идентификатор сервиса (см. таблицу портов) |
 | `version` | string | Версия сервиса |
-| `uptime_seconds` | int | Время работы с момента запуска |
 
 **Эндпоинты по сервисам:**
 
