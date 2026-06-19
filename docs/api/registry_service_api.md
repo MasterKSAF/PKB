@@ -803,23 +803,7 @@ GET /registry/documents/{doc_id}
     "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
     "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
     "title_key": "USSR|gost|31.240||20868-81|стойки установочные крепежные...",
-    "preview_snapshot": {
-      "doc_code": "ГОСТ 20868-81",
-      "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
-      "mks_oks_code": "31.240",
-      "okstu_code": null,
-      "udk_code": null,
-      "pkb_codes": ["Электроника", "Монтажные изделия"],
-      "document_type": "normative",
-      "year": 1981,
-      "era": "USSR",
-      "validity_status": "active",
-      "issuing_body": "Государственный Комитет СССР по стандартам",
-      "jurisdiction": "RU",
-      "source_type": "GOST",
-      "language": "ru",
-      "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
-    },
+    "preview_snapshot": { /* см. _schemas.md#PreviewMetadata */ },
     "document_type": "normative",
     "status": "indexed",
     "era": "USSR",
@@ -829,6 +813,7 @@ GET /registry/documents/{doc_id}
     "source_type": "GOST",
     "mks_oks_code": "31.240",
     "okstu_code": null,
+    "udk_code": null,
     "classification_status": {
       "mks": ["31.240"],
       "okstu": [],
@@ -855,6 +840,8 @@ GET /registry/documents/{doc_id}
   }
 }
 ```
+
+> 📖 **Схема полей `preview_snapshot`** — [_schemas.md](_schemas.md#PreviewMetadata).
 
 ---
 
@@ -1531,24 +1518,7 @@ POST /registry/documents/import
       "document_key": "sha256:def456",
       "status": "approved",
       "confidence": 0.92,
-      "preview_metadata": {
-        "doc_code": "311-05-1950ц",
-        "title": "ЦИРКУЛЯРНОЕ ПИСЬМО № 311-05-1950ц от 09.06.2023",
-        "mks_oks_code": null,
-        "okstu_code": null,
-        "udk_code": null,
-        "pkb_codes": [],
-        "document_type": "normative",
-        "year": 2023,
-        "era": "CURRENT",
-        "validity_status": "active",
-        "issuing_body": "РОССИЙСКИЙ МОРСКОЙ РЕГИСТР СУДОХОДСТВА",
-        "jurisdiction": "RU",
-        "source_type": "RMRS",
-        "language": "ru",
-        "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
-        "title_key": "CURRENT|rmrs|||311-05-1950ц|циркулярное письмо № 311-05-1950ц от 09.06.2023"
-      },
+      "preview_metadata": { /* см. [_schemas.md](_schemas.md#PreviewMetadata) */ },
       "created_by": "orchestrator",
       "created_at": "2026-06-18T10:00:00Z"
     }
@@ -1556,6 +1526,12 @@ POST /registry/documents/import
   "meta": { "total": 1, "page": 1, "page_size": 50 }
 }
 ```
+
+> Схема полей `preview_metadata` — [_schemas.md](_schemas.md#PreviewMetadata).
+
+> **Примечание:** Registry internal API возвращает базовый набор полей черновика. Публичный API (через Orchestrator) расширяет этот ответ полями: `task_id`, `has_notifications`, `critical_count`, `error_code`, `error_message`, `updated_at`. Orchestrator получает эти данные из `pipeline.tasks` и `pipeline.draft_notifications`, а не из Registry.
+> 
+> Поле `id` в Registry internal API маппится в `draft_id` в публичном API.
 
 ---
 
@@ -1571,34 +1547,22 @@ POST /registry/documents/import
     "document_key": "sha256:def456",
     "status": "ready_for_approve",
     "confidence": 0.92,
-    "preview_metadata": {
-      "doc_code": "311-05-1950ц",
-      "title": "ЦИРКУЛЯРНОЕ ПИСЬМО № 311-05-1950ц от 09.06.2023",
-      "mks_oks_code": null,
-      "okstu_code": null,
-      "udk_code": null,
-      "pkb_codes": [],
-      "document_type": "normative",
-      "year": 2023,
-      "era": "CURRENT",
-      "validity_status": "active",
-      "issuing_body": "РОССИЙСКИЙ МОРСКОЙ РЕГИСТР СУДОХОДСТВА",
-      "jurisdiction": "RU",
-      "source_type": "RMRS",
-      "language": "ru",
-      "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
-      "title_key": "CURRENT|rmrs|||311-05-1950ц|циркулярное письмо № 311-05-1950ц от 09.06.2023"
+    "preview_metadata": { /* см. [_schemas.md](_schemas.md#PreviewMetadata) */ },
+    "raw_data": {
+      "schema": "raw_ocr_v4",
+      "pages": []
     },
-    "raw_data": { "schema": "raw_ocr_v4", "pages": [...] },
     "error_code": null,
     "error_message": null,
     "created_by": "orchestrator",
     "updated_by": null,
     "created_at": "2026-06-18T10:00:00Z",
-    "updated_at": "2026-06-05T10:05:00Z"
+    "updated_at": "2026-06-18T10:02:00Z"
   }
 }
 ```
+
+> Схема полей `preview_metadata` — [_schemas.md](_schemas.md#PreviewMetadata).
 
 ---
 
@@ -1613,28 +1577,13 @@ POST /registry/documents/import
     "file_key": "f-abc123",
     "status": "ready_for_approve",
     "confidence": 0.92,
-    "preview_metadata": {
-      "doc_code": "311-05-1950ц",
-      "title": "ЦИРКУЛЯРНОЕ ПИСЬМО № 311-05-1950ц от 09.06.2023",
-      "mks_oks_code": null,
-      "okstu_code": null,
-      "udk_code": null,
-      "pkb_codes": [],
-      "document_type": "normative",
-      "year": 2023,
-      "era": "CURRENT",
-      "validity_status": "active",
-      "issuing_body": "РОССИЙСКИЙ МОРСКОЙ РЕГИСТР СУДОХОДСТВА",
-      "jurisdiction": "RU",
-      "source_type": "RMRS",
-      "language": "ru",
-      "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
-      "title_key": "CURRENT|rmrs|||311-05-1950ц|циркулярное письмо № 311-05-1950ц от 09.06.2023"
-    },
+    "preview_metadata": { /* см. [_schemas.md](_schemas.md#PreviewMetadata) */ },
     "created_at": "2026-06-18T10:00:00Z"
   }
 }
 ```
+
+> Схема полей `preview_metadata` — [_schemas.md](_schemas.md#PreviewMetadata).
 
 ---
 
@@ -1648,24 +1597,7 @@ POST /registry/documents/import
 {
   "status": "ready_for_approve",
   "confidence": 0.92,
-  "preview_metadata": {
-    "doc_code": "311-05-1950ц",
-    "title": "ЦИРКУЛЯРНОЕ ПИСЬМО № 311-05-1950ц от 09.06.2023",
-    "mks_oks_code": null,
-    "okstu_code": null,
-    "udk_code": null,
-    "pkb_codes": [],
-    "document_type": "normative",
-    "year": 2023,
-    "era": "CURRENT",
-    "validity_status": "active",
-    "issuing_body": "РОССИЙСКИЙ МОРСКОЙ РЕГИСТР СУДОХОДСТВА",
-    "jurisdiction": "RU",
-    "source_type": "RMRS",
-    "language": "ru",
-    "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
-    "title_key": "CURRENT|rmrs|||311-05-1950ц|циркулярное письмо № 311-05-1950ц от 09.06.2023"
-  },
+  "preview_metadata": { /* см. _schemas.md#PreviewMetadata */ },
   "error_code": null,
   "error_message": null,
   "updated_by": "orchestrator"
@@ -1687,6 +1619,8 @@ POST /registry/documents/import
 
 > **Примечание:** Для статуса `discarded` можно передать `error_code` и `error_message`.  
 > Для статусов `approved` и `discarded` дополнительно обновляется `updated_by`.
+> 
+> Поля `decided_by` и `decided_at` Registry **не хранит и не возвращает**. Они проставляются Orchestrator в `registry.document_history` (event_type = `decided`) при вызове `PATCH /drafts/{draft_id}/decide`.
 
 ---
 

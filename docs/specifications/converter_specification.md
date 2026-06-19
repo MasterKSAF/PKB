@@ -61,7 +61,7 @@ flowchart LR
 |-----|----------|------|-------|-------------|
 | 1 | **Построение иерархии** — плоские блоки `raw_ocr_v4` преобразуются в структуру разделов, подразделов, абзацев, списков, таблиц, изображений, формул | `raw_ocr_v4.content[]` (плоский массив блоков) | Иерархическая структура с `clause`, `level`, `parent_clause`, `path` | Нет |
 | 2 | **LLM-обработка** (если `use_llm = true`) — уточнение иерархии, классификация типов секций, нормализация сложных структур | Иерархия (шаг 1) | Уточнённая иерархия | Шаг 1 |
-| 3 | **Извлечение метаданных** — `doc_code`, `title`, `mks_oks_code`, `okstu_code`, `udk_code`, `pkb_codes`, `document_type`, `year`, `era`, `validity_status`, `issuing_body`, `jurisdiction`, `source_type`, `language`, `title_hash_sha256`, `title_key`, `adoption`, `replaces`, `amendments` | Иерархия (шаги 1–2) | `document.metadata` | Шаги 1–2 |
+| 3 | **Извлечение метаданных** — см. [_schemas.md](_schemas.md#PreviewMetadata), + `adoption`, `replaces`, `amendments` | Иерархия (шаги 1–2) | `document.metadata` | Шаги 1–2 |
 | 4 | **Валидация структуры** — проверка полноты данных, соответствия целевой схеме (`validated_v3`) | Иерархия (шаг 1) | `validation.structure_valid: bool` | Шаг 1 |
 | 5 | **Классификация** — определение `era` (USSR/CIS/RF/CURRENT), `source_type` (GOST/GOST_R/OST/RD/TU/ISO/DNV/ASTM/RMRS), `jurisdiction`, `validity_status` | `document.metadata` (шаг 3) | `classification` с кодами МКС/ОКС, ОКСТУ, УДК | Шаг 3 |
 | 6 | **Вычисление хэшей** — `file_hash_sha256` (SHA-256 от бинарного содержимого файла), `title_hash_sha256` (бизнес-ключ по формуле нормализатора) и `title_key` (исходная строка конкатенации для хеша) | `file_hash_sha256`: файл; `title_hash_sha256`, `title_key`: метаданные (шаг 3) | `validation.fingerprint` | Шаг 3 |
@@ -73,7 +73,7 @@ flowchart LR
 
 | Режим | Эндпоинт | Шаги | LLM | Запись в БД |
 |-------|----------|------|-----|-------------|
-| **Preview** | `POST /converter/preview/metadata` | Только шаг 3 (извлечение метаданных: `doc_code`, `title`, `mks_oks_code`, `okstu_code`, `udk_code`, `pkb_codes`, `document_type`, `year`, `era`, `validity_status`, `issuing_body`, `jurisdiction`, `source_type`, `language`, `title_hash_sha256`, `title_key`) | Нет (или быстрый вызов с ограничением) | Нет |
+| **Preview** | `POST /converter/preview/metadata` | Извлечение метаданных — см. [_schemas.md](_schemas.md#PreviewMetadata) + проверка дубликатов | Нет (или быстрый вызов с ограничением) | Нет |
 | **Full** | `POST /converter/convert` | Шаги 1–9 (полный цикл) | Да (управляется `use_llm`) | Нет |
 | **Standalone validate** | `POST /validate/document` | Шаги 4–8 (только валидация, без переконвертации) | Нет | Нет |
 
@@ -138,7 +138,7 @@ flowchart LR
 
 ### Сценарий В: Документ без метаданных (ручное заполнение)
 
-**Контекст:** Администратор вносит документ через `POST /registry/documents` без файла (Сценарий Б из `purgatory_scenario.md`). Converter-validator не участвует.
+**Контекст:** Администратор вносит документ через `POST /registry/documents` без файла. Converter-validator не участвует.
 
 > **Важно:** Converter-validator работает только с сырым JSON от OCR/Parser. Если метаданные вводятся вручную через Registry, конвертер не вызывается.
 
@@ -328,7 +328,6 @@ title_key = era | source_type | mks_oks_code | okstu_code | doc_code | normalize
 - `docs/pipelines/pipeline1-formation.md` — общая схема Пайплайна 1.
 - `docs/schema/schema_converter_result.json` — полная схема ответа `validated_v3`.
 - `docs/schema/schema_converter_preview.json` — схема ответа Preview.
-- `docs/specifications/purgatory_scenario.md` — сценарии загрузки и дедупликации документов.
 - `docs/specifications/registry_resolver_spec.md` — резолвер графа связей (использует `cross_references` из результата CV).
 - `docs/specifications/parsing_specifications.md` — архитектура OCR/Parser (входные данные для CV).
 - `docs/architecture/service_dependencies.md` — Python-пакеты и внешние сервисы.
