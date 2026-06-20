@@ -79,3 +79,52 @@
 ### T22. Конфиг LLM в Query Service (QS-13)
 - [x] Добавлена таблица параметров LLM (модель, temperature, max_tokens=8196, top_p) в секцию «Генерация ответа LLM» `query_service_api.md`
 - [x] Убраны дублирующиеся строки про max_tokens=1024 из `rag_search_service_api.md` — заменены ссылкой на Query Service
+
+---
+
+## 🔴 Приоритет 1 (новые) — Контракты RAG (по уточнению Павла, 20.06)
+
+### T23. RAG Search API — привести к RS-6
+- [x] **Запрос**: убрать `search_type`, `top_k`, `rerank`, `version_id` — только `query`, `valid_at`, `filters`
+- [x] **Ответ**: разделить на `source` (doc_id, section_id, clause, path, page, bbox, section_title, content, content_hash) и `retrieval` (chunk_id, score, mode)
+- [x] Убрать `search_type_used` и `confidence` как отдельные поля
+- [x] Добавить `context[]` (expansion — внутренний этап RAG Search)
+- [x] Зафиксировать: `top_k`, `search_type`, `rerank` — только из `app_settings`
+
+### T24. RAG Builder API — уточнить входной/выходной контракт
+- [x] Во входном контракте: добавить `parent_id`, `bbox` в секции
+- [x] Зафиксировать page: **1-based** (первая страница документа = 1)
+- [x] Зафиксировать bbox: нормализованный 0..1 (ссылка на `common_api.md`)
+- [x] `parent_id` ссылается на `section_id` (стабильный ID секции)
+- [x] `section_id` стабилен внутри документа (не меняется при переиндексации)
+- [x] Builder **полностью удаляет** старый индекс по doc_id перед новой индексацией
+- [x] `chunk_id` — только технический retrieval ID (не用于 цитирования)
+- [x] В финальный ответ: добавить `indexing_txn_id`
+- [x] Добавить `errors[]` / `warnings[]` в ответ
+- [x] Обновить пример JSON-запроса
+
+### T25. Query Service API — согласовать структуру источников
+- [x] В секцию «Именование полей источников»: добавить `clause`, `path`, `bbox`, `content_hash`
+- [x] В структуру `sources[]` longpoll-ответов: добавить `clause`, `path`
+- [x] Источники в ответе — плоская структура (для UI), но цитирование строится по `doc_id + section_id`
+- [x] Секция «Обогащение цитирований»: уточнить, что цитирование строится по `doc_id + section_id`, а не по `chunk_id`
+
+### T26. pipeline3-search.md — исправить валидацию цитирований
+- [x] Заменить `[source:N]` с chunk_id на `[source:N]` — ссылка на **индекс элемента массива sources** (не chunk_id)
+- [x] Этап 3b (LLM генерация): убрать chunk_id из валидации
+- [x] Этап 4 (обогащение цитирований): уточнить разделение source/retrieval
+
+### T27. `_data_dictionary.md` — добавить поля RAG
+- [x] Добавить `rag_documents`, `rag_document_chunks`
+- [x] Добавить `indexing_txn_id`, `chunk_id`, `search_mode`, `embedding_dim`
+
+### T28. README.md — актуализировать описания RAG Builder, RAG Search, Query Service
+- [x] Query Service: цитирование по doc_id + section_id
+- [x] RAG Builder: архитектурные принципы, chunk size 1024, indexing_txn_id
+- [x] RAG Search: source/retrieval разделение, app_settings
+
+### T29. specificity.md — зафиксировать аномалии
+- [x] A46: Старый контракт RAG Search конфликтовал с RS-6
+- [x] A47: chunk_id использовался как citation ID (исправлено)
+- [x] A48: page convention не была зафиксирована
+- [x] A49: bbox convention не была зафиксирована для RAG Builder
