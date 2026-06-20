@@ -42,6 +42,24 @@ class PostgresChunkRepository(ChunkRepository):
 
         return result == (1,)
 
+    def _embedding_dim_sql(self) -> sql.SQL:
+        embedding_dim = int(settings.EMBEDDING_DIM)
+
+        supported_dims = {
+            1536,
+            2048,
+            2560,
+            4096,
+        }
+
+        if embedding_dim not in supported_dims:
+            raise ValueError(
+                f"Unsupported EMBEDDING_DIM={embedding_dim}. "
+                f"Supported values: {sorted(supported_dims)}"
+            )
+
+        return sql.SQL(str(embedding_dim))
+
     def create_indexing_job(
         self,
         document_id: int,
@@ -241,6 +259,61 @@ class PostgresChunkRepository(ChunkRepository):
 
 # Создание схемы базы данных и таблиц
 
+    def _ensure_chunks_embedding_dim(self, cur) -> None:
+        embedding_dim = int(settings.EMBEDDING_DIM)
+
+        cur.execute(
+            """
+            SELECT atttypmod
+            FROM pg_attribute
+            WHERE attrelid = %s::regclass
+              AND attname = 'embedding'
+              AND NOT attisdropped
+            """,
+            (f"{settings.POSTGRES_SCHEMA}.chunks",),
+        )
+
+        row = cur.fetchone()
+
+        if row is None:
+            return
+
+        current_dim = row[0]
+
+        if current_dim == embedding_dim:
+            return
+
+        logger.warning(
+            "Changing chunks.embedding dimension from %s to %s. "
+            "Existing embeddings will be cleared; documents must be reindexed.",
+            current_dim,
+            embedding_dim,
+        )
+
+        cur.execute(
+            sql.SQL(
+                """
+                UPDATE {schema}.chunks
+                SET embedding = NULL
+                WHERE embedding IS NOT NULL
+                """
+            ).format(
+                schema=sql.Identifier(settings.POSTGRES_SCHEMA),
+            )
+        )
+
+        cur.execute(
+            sql.SQL(
+                """
+                ALTER TABLE {schema}.chunks
+                ALTER COLUMN embedding TYPE VECTOR({embedding_dim})
+                """
+            ).format(
+                schema=sql.Identifier(settings.POSTGRES_SCHEMA),
+                embedding_dim=self._embedding_dim_sql(),
+            )
+        )
+
     def ensure_schema(self) -> None:
         """
         Создаёт расширение vector, схему и таблицы  chunks,
@@ -359,7 +432,7 @@ class PostgresChunkRepository(ChunkRepository):
                 cur.execute(
                     sql.SQL(
                         """
-                        CREATE TABLE IF NOT EXISTS {}.chunks (
+                        CREATE TABLE IF NOT EXISTS {schema}.chunks (
                             id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
                             document_id BIGINT NOT NULL,
                             document_version_id BIGINT NOT NULL,
@@ -376,18 +449,18 @@ class PostgresChunkRepository(ChunkRepository):
                             content TEXT NOT NULL,
                             content_tsv TSVECTOR,
                             metadata JSONB,
-                            embedding VECTOR(1536),
+                            embedding VECTOR({embedding_dim}),
                             created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 
                             CONSTRAINT fk_chunks_document_section
                                 FOREIGN KEY (document_section_id)
-                                REFERENCES {}.document_sections(id)
+                                REFERENCES {schema}.document_sections(id)
                                 ON DELETE CASCADE
                         )
                         """
                     ).format(
-                        sql.Identifier(settings.POSTGRES_SCHEMA),
-                        sql.Identifier(settings.POSTGRES_SCHEMA),
+                        schema=sql.Identifier(settings.POSTGRES_SCHEMA),
+                        embedding_dim=self._embedding_dim_sql(),
                     )
                 )
 
@@ -400,6 +473,8 @@ class PostgresChunkRepository(ChunkRepository):
                         """
                     ).format(sql.Identifier(settings.POSTGRES_SCHEMA))
                 )
+
+                self._ensure_chunks_embedding_dim(cur)
 
                 cur.execute(
                     sql.SQL(
