@@ -41,9 +41,27 @@ class ClassificationResult(BaseModel):
     overall_status: str = "CONFIRMED"
 
 
+class ValidateMetadataRequest(BaseModel):
+    era: str = Field(..., min_length=1)
+    source_type: str = Field(..., min_length=1)
+    doc_code: str = Field(..., min_length=1)
+    title: str = Field(..., min_length=1)
+    mks_oks_code: str | None = None
+    okstu_code: str | None = None
+
+
+class ValidateMetadataResponse(BaseModel):
+    title_hash_sha256: str
+    title_key: str
+    normalized_title: str
+    source_type_normalized: str
+    era_normalized: str
+
+
 class FingerprintResult(BaseModel):
     file_hash_sha256: str
     title_hash_sha256: str
+    title_key: str
 
 
 class MatchingResult(BaseModel):

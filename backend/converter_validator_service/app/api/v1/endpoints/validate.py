@@ -1,11 +1,40 @@
 from fastapi import APIRouter, status
 
-from app.api.v1.schemas import RawJsonRequest, ValidateDocumentResponse
+from app.api.v1.schemas import (
+    RawJsonRequest,
+    ValidateDocumentResponse,
+    ValidateMetadataRequest,
+    ValidateMetadataResponse,
+)
 from app.services.document_validator import validate_document
 from app.services.hierarchy_builder import build_hierarchy
 from app.services.metadata_extractor import extract_preview_metadata
+from app.services.normalizer import compute_business_key
 
 router = APIRouter()
+
+
+@router.post(
+    "/metadata",
+    status_code=status.HTTP_200_OK,
+    response_model=ValidateMetadataResponse,
+)
+async def validate_metadata_endpoint(request: ValidateMetadataRequest):
+    result = compute_business_key(
+        era=request.era,
+        source_type=request.source_type,
+        doc_code=request.doc_code,
+        title=request.title,
+        mks_oks_code=request.mks_oks_code,
+        okstu_code=request.okstu_code,
+    )
+    return ValidateMetadataResponse(
+        title_hash_sha256=result.title_hash_sha256,
+        title_key=result.title_key,
+        normalized_title=result.normalized_title,
+        source_type_normalized=result.source_type_normalized,
+        era_normalized=result.era_normalized,
+    )
 
 
 @router.post(
