@@ -65,6 +65,7 @@ Query Service принимает запросы от UI, вызывает RAG Se
 | GET    | `/chat/sessions/{session_id}/messages/{message_id}` | Получить сообщение по ID (с longpoll)                                        |
 | POST   | `/chat/sessions/{session_id}/context`  | Управление контекстом                                                                    |
 | POST   | `/chat/sessions/{session_id}/export`   | Экспорт диалога                                                                          |
+| POST   | `/chat/sessions/{session_id}/messages/search` | Поиск по истории сообщений в сессии                                              |
 | POST   | `/chat/feedback`                       | Обратная связь по ответу                                                                 |
 | GET    | `/chat/history`                        | Журнал запросов (плоский список)                                                         |
 | GET    | `/chat/history/export`                 | Экспорт истории                                                                          |
@@ -79,6 +80,7 @@ Query Service принимает запросы от UI, вызывает RAG Se
 | Ожидание ответа на отправленное сообщение             | `GET /chat/sessions/{id}/messages/{message_id}?longpoll=15`                | **Longpoll**                  |
 | Проверка новых сообщений (синхронно, без longpoll)    | `GET /chat/sessions/{id}/messages?after={message_id}`                      | Polling / синхронизация вкладок |
 | Поиск по произвольному тексту                         | `POST /text/search`                                                        | Поисковый сценарий            |
+| Поиск по истории сообщений в сессии                   | `POST /chat/sessions/{id}/messages/search`                                 | Поиск в рамках сессии         |
 
 > UI обращается к Query Service напрямую. Orchestrator не проксирует чат-функции.
 
@@ -770,6 +772,80 @@ CRUD для судостроительных проектов (`chat.projects`).
 
 ---
 
+### POST /chat/sessions/{session_id}/messages/search
+
+Поиск по истории сообщений в сессии. Возвращает сообщения, `content` которых содержит искомый текст.
+
+> **Поиск ведётся только по финальным сообщениям.** Сообщения в промежуточных статусах (`pending`, `processing`) не участвуют в поиске.
+
+**Запрос:**
+
+```json
+{
+  "query": "толщина обшивки",
+  "limit": 20,
+  "offset": 0
+}
+```
+
+| Поле | Тип | Обязательность | Описание |
+| --- | --- | --- | --- |
+| `query` | string | Да | Текст для поиска по сообщениям сессии |
+| `limit` | int | Нет | Количество результатов (max 100, по умолчанию 20) |
+| `offset` | int | Нет | Смещение для пагинации (по умолчанию 0) |
+
+> `offset` + `limit` — постраничная пагинация (в отличие от cursor-based для `GET .../messages`), так как это поисковый запрос с ранжированием по релевантности.
+
+**Ответ `200`:**
+
+```json
+{
+  "session_id": 1001,
+  "results": [
+    {
+      "message_id": 420002,
+      "role": "assistant",
+      "status": "answered",
+      "content": "Согласно Правилам РС (Часть I, стр. 42), толщина обшивки ледового пояса для класса Arc4 должна быть не менее 12 мм.",
+      "timestamp": "2026-04-27T14:01:04Z",
+      "sources": [
+        {
+          "document_id": 1,
+          "document_title": "Правила РС, часть I",
+          "page": 42,
+          "section_id": 420042,
+          "excerpt": "Для ледового класса Arc4 толщина обшивки должна быть не менее 12 мм.",
+          "score": 0.94,
+          "confidence": 0.85
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "total": 5,
+    "page": 1,
+    "page_size": 20
+  }
+}
+```
+
+| Поле | Тип | Описание |
+| --- | --- | --- |
+| `session_id` | bigint | ID сессии |
+| `results` | array | Массив найденных сообщений |
+| `results[].message_id` | bigint | ID сообщения |
+| `results[].role` | string | Роль: `user` \| `assistant` |
+| `results[].status` | string \| null | Статус сообщения (только для ответов ассистента) |
+| `results[].content` | string | Текст сообщения |
+| `results[].sources` | array[Source] \| null | Источники (только для ответов ассистента) |
+| `results[].timestamp` | datetime | Время сообщения (ISO 8601) |
+| `meta` | object | Метаданные пагинации |
+| `meta.total` | int | Общее количество найденных |
+| `meta.page` | int | Текущая страница |
+| `meta.page_size` | int | Количество на странице |
+
+---
+
 ### Обогащение запроса через словарь терминов
 
 Перед отправкой в RAG Search Query Service нормализует запрос через словарь терминологии (Registry Service):
@@ -792,8 +868,18 @@ CRUD для судостроительных проектов (`chat.projects`).
 
 1. Отобрать top_k наиболее релевантных чанков
 2. Сформировать промпт: вопрос пользователя + тексты чанков (с указанием document_id, page, clause)
-3. Вызвать внутренний генеративный движок LLM для синтеза ответа
+3. Вызвать генеративный движок LLM для синтеза ответа
 4. Получить сгенерированный текст с базовыми ссылками на источники
+
+**Параметры LLM (P13-5, `app_settings.llm`):**
+
+| Параметр | Значение | Источник |
+|----------|----------|----------|
+| Модель | `deepseek 4 flash` (внешнее API) | `app_settings.llm.api_url` |
+| `temperature` | `0.2` | P13-5 |
+| `max_tokens` | `8196` | P13-5 (QS-13) |
+| `top_p` | `0.95` | P13-5 |
+| `system_prompt` | из каталога `prompts/` | P13-5 |
 
 LLM возвращает ответ вида:
 > ... не менее **12 мм** (источник: «Правила РС», раздел 4.2, стр. 42).

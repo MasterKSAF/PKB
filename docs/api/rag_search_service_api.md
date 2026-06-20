@@ -40,11 +40,6 @@
 | Стратегия поиска | **Vector+Rerank (S2)** | `app_settings.rag.search_strategy` — **единственный источник**, не переопределяется в запросе |
 | Rerank-модель | **bge-reranker-v2-m3-int8** (TEI, локальный) | `app_settings.rag.rerank_url` |
 
-| LLM для ответа | **deepseek 4 flash** (внешнее API) | `app_settings.llm.api_url` |
-| Temperature | 0.2 | `app_settings.llm.temperature` |
-| max_tokens | 1024 | `app_settings.llm.max_tokens` |
-| top_p | 0.95 | `app_settings.llm.top_p` |
-
 **Процесс внутри:**
 
 | Шаг | Действие | Результат |
