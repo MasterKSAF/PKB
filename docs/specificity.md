@@ -213,6 +213,74 @@ Enum: `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `RMRS`, `OTHER`
 
 ---
 
+### A46. Старый контракт RAG Search конфликтовал с RS-6
+
+**Обнаружено:** 20.06.2026
+
+**Проблема:** `rag_search_service_api.md` описывал API с полями `search_type`, `top_k`, `rerank`, `version_id` в запросе и `search_type_used`, `confidence` в ответе. Это противоречило RS-6, где все параметры поиска задаются только через `app_settings`, а `version_id` не передаётся в публичный response.
+
+**Решение (20.06.2026):** Контракт переписан:
+- Из запроса убраны `search_type`, `top_k`, `rerank`, `version_id` — остались только `query`, `valid_at`, `filters`
+- Из ответа убраны `search_type_used`, `confidence`
+- Ответ разделён на `source` (стабильный локатор для цитирования) и `retrieval` (технические метаданные поиска)
+- Все параметры поиска (`search_strategy`, `search_top_k`, `rerank_top_n`, `context_expansion`) — только из `app_settings`
+
+**Затронутые файлы:**
+- `docs/api/rag_search_service_api.md` — полная перезапись контракта
+- `docs/api/query_service_api.md` — обновление источников (clause, path, убран confidence)
+- `docs/pipelines/pipeline3-search.md` — валидация по индексу sources, не по chunk_id
+- `docs/README.md` — актуализация описания RAG Search
+
+---
+
+### A47. `chunk_id` использовался как citation ID (исправлено)
+
+**Обнаружено:** 20.06.2026
+
+**Проблема:** В `pipeline3-search.md` валидация цитирований на этапе 3b проверяла `[source:N]` по `chunk_id`, а этап 4 использовал `chunk_id` как идентификатор источника. Это неправильно: `chunk_id` — технический retrieval ID, который может меняться при переиндексации.
+
+**Решение (20.06.2026):**
+- Цитирование строится по `doc_id + section_id` — стабильные идентификаторы
+- `[source:N]` в ответе LLM ссылается на **индекс элемента массива sources** (0-based), а не на chunk_id
+- Валидация проверяет вхождение N в диапазон `[0, len(sources))`
+- `chunk_id` не включается в machine-readable сноски
+
+**Затронутые файлы:**
+- `docs/pipelines/pipeline3-search.md` — переписана валидация цитирований
+- `docs/api/query_service_api.md` — секция «Обогащение цитирований»
+- `docs/api/rag_search_service_api.md` — архитектурные принципы
+- `docs/api/rag_builder_service_api.md` — chunk_id только технический
+
+---
+
+### A48. Page convention не была зафиксирована
+
+**Обнаружено:** 20.06.2026
+
+**Проблема:** В спецификации RAG Builder и Query Service не было явно указано, в каком формате передаётся `page` — 0-based или 1-based.
+
+**Решение (20.06.2026):** `page` — **1-based** (первая страница документа = 1). Зафиксировано:
+- `docs/api/rag_builder_service_api.md` — таблица полей секций
+- `docs/api/rag_search_service_api.md` — поля source
+- `docs/api/query_service_api.md` — именование полей источников
+
+---
+
+### A49. Bbox convention не была зафиксирована для RAG Builder
+
+**Обнаружено:** 20.06.2026
+
+**Проблема:** Входной контракт RAG Builder не содержал поля `bbox` в секциях, и convention (нормализованный 0..1 vs пиксели) не была задокументирована.
+
+**Решение (20.06.2026):**
+- `bbox` добавлен во входной контракт RAG Builder (секции)
+- Формат: `[x1, y1, x2, y2]`, нормализованные 0..1
+- Ссылка на `common_api.md` § Координаты блоков (bbox)
+- Добавлен в пример JSON-запроса POST /rag/build
+
+
+---
+
 ## 🔴 Схема данных (требуют DDL)
 
 | Код | Проблема | Статус |
