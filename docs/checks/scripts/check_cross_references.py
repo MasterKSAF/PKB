@@ -287,13 +287,9 @@ for doc in ["orchestrator_service_api.md", "common_api.md", "gateway_service_api
         min_count=1
     )
 
-# Common health format (internal services) should have uptime_seconds
-check_pass(
-    "orchestrator health has 'uptime_seconds'",
-    '"uptime_seconds"',
-    include_pattern="orchestrator_service_api.md",
-    min_count=1
-)
+# Common health format (internal services) — uptime_seconds intentionally removed
+# See guide.md §Health-формат: uptime_seconds не входит в health внутренних сервисов
+# check removed — intentional design decision
 # Gateway health (external) should have services — different format
 check_pass(
     "gateway health has 'services' (external format)",

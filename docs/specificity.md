@@ -173,11 +173,43 @@ Enum: `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `RMRS`, `OTHER`
 
 **Решение:** UI берёт enum из `GET /registry/enums`, не хранит статически.
 
-### A41. Бизнес-ключ: `title_hash_sha256` vs `title_key` (S8, resolved)
+### A41. Бизнес-ключ: `title_hash_sha256` vs `title_key` (S8, superseded by A45)
 
 Главный бизнес-ключ — `title_hash_sha256`. `title_key` — технический UNIQUE-индекс для аудита. `DUPLICATE_DOCUMENT` (409) — код ошибки при конфликте.
 
 **Решение:** главный ключ зафиксирован, DDL-индексы добавлены, код ошибки специфицирован.
+
+**Замечание:** Аномалия решена частично — вопрос, кто вычисляет бизнес-ключ, передан в A45.
+
+---
+
+### A45. Бизнес-ключ: три точки вычисления → единая (Converter-validator)
+
+**Обнаружено:** 20.06.2026
+
+**Проблема:** бизнес-ключ `title_hash_sha256` вычислялся в трёх разных местах с разными входными данными:
+
+| Этап | Где вычислялся | Входные данные | Риск |
+|------|---------------|----------------|------|
+| `POST /drafts` | Оркестратор (из form-полей) | Сырой ввод пользователя, `title` не нормализован | Хеш не совпадёт с каноническим |
+| Converter preview | Converter-validator (из документа) | Нормализованные метаданные | Единственно верный |
+| `PATCH /metadata` | Оркестратор (локальный пересчёт) | Ручные правки пользователя | Хеш может отличаться из-за отсутствия нормализации |
+
+**Корень:** Оркестратор не имеет полного нормализатора (терминологический реестр, детект аватаров), но пытался вычислять бизнес-ключ локально.
+
+**Решение (20.06.2026):** Converter-validator — единственная точка вычисления бизнес-ключа:
+1. `POST /drafts` **не возвращает** `title_hash_sha256` / `title_key` — они будут вычислены на preview.
+2. Converter-validator preview (`POST /converter/preview`) извлекает метаданные.
+3. `PATCH /drafts/{id}/metadata` — Оркестратор отправляет данные в `POST /validate/metadata` для нормализации и вычисления бизнес-ключа.
+4. `PATCH /decide` с `metadata_overrides` — аналогично через Converter-validator.
+
+**Затронутые файлы:**
+- `docs/api/converter_validator_service_api.md` — новый endpoint `/validate/metadata`
+- `docs/api/orchestrator_service_api.md` — POST /drafts (убраны title_hash/title_key), PATCH /metadata (делегирование в CV), PATCH /decide (metadata_overrides через CV)
+- `docs/api/gateway_service_api.md` — синхронизация описания PATCH /metadata
+- `docs/specifications/normalizer_specification.md` — нормализатор только в CV
+- `docs/pipelines/pipeline1-formation.md` — бизнес-ключ только на preview
+- `docs/guide.md` — архитектурное решение
 
 ---
 
