@@ -20,6 +20,7 @@ from ..schemas import (
     ExportRequest,
     FeedbackRequest, FeedbackResponse,
     HistoryResponse, HistoryItem, HistoryMeta, HistoryExportResponse,
+    MessageSearchRequest, MessageSearchResponse, MessageSearchMeta,
 )
 from ..repositories import session_repo, message_repo, feedback_repo
 from ..services.auth import get_current_user
@@ -53,10 +54,13 @@ def _source_dict(src: ChatSource) -> dict:
         "section_id": src.section_id,
         "page": src.page_number,
         "clause": src.clause,
+        "path": src.path,
         "section_title": src.section_title,
         "excerpt": src.excerpt,
         "score": src.score,
         "confidence": src.confidence,
+        "bbox": src.bbox,
+        "content_hash": src.content_hash,
         "page_preview_url": src.page_preview_url,
         "document_url": src.document_url,
     }
@@ -248,6 +252,39 @@ async def get_message(
         "document_ids": s.document_ids or [],
         "message": _msg_dict(msg) if msg else None,
     }
+
+
+@router.post("/sessions/{session_id}/messages/search", response_model=MessageSearchResponse)
+async def search_messages(
+    session_id: int,
+    body: MessageSearchRequest,
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_current_user),
+):
+    s = await session_repo.get_session(db, session_id, user_id)
+    if not s:
+        raise HTTPException(status_code=404, detail={"error": {"code": "SESSION_NOT_FOUND", "message": "Сессия не найдена", "details": {}}})
+
+    q = (
+        select(ChatMessage)
+        .options(selectinload(ChatMessage.sources))
+        .where(
+            ChatMessage.session_id == session_id,
+            ChatMessage.status.in_(_FINAL_STATUSES),
+            ChatMessage.content.ilike(f"%{body.query}%"),
+        )
+        .order_by(ChatMessage.timestamp.desc())
+    )
+    all_rows = (await db.execute(q)).scalars().all()
+    total = len(all_rows)
+    page_rows = all_rows[body.offset: body.offset + body.limit]
+
+    page = body.offset // body.limit + 1 if body.limit else 1
+    return MessageSearchResponse(
+        session_id=session_id,
+        results=[_msg_dict(m) for m in page_rows],
+        meta=MessageSearchMeta(total=total, page=page, page_size=body.limit),
+    )
 
 
 @router.post("/sessions/{session_id}/messages", status_code=202, response_model=PendingMessageResponse)

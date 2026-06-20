@@ -30,14 +30,28 @@ def test_index_endpoint():
 
     response = client.post("/index", json=payload)
 
-    assert response.status_code == 200
+    assert response.status_code == 202
 
     data = response.json()
 
-    assert data["status"] == "indexed"
-    assert data["document_id"] == 420000
-    assert data["document_version_id"] == 420001
-    assert data["chunks_count"] == 3
+    assert data["status"] == "indexing"
+    assert data["document_id"] == payload["metadata"]["document_id"]
+    assert data["indexing_txn_id"]
+    assert "task_id" in data
 
-    assert data["embedding_tokens"] == 0
-    assert data["embedding_cost_usd"] == 0.0
+    status_response = client.get(
+        f"/index/status/{data['indexing_txn_id']}"
+    )
+
+    assert status_response.status_code == 200
+
+    status_data = status_response.json()
+
+    assert status_data["document_id"] == payload["metadata"]["document_id"]
+    assert status_data["indexing_txn_id"] == data["indexing_txn_id"]
+    assert status_data["status"] in {
+        "pending_index",
+        "indexing",
+        "indexed",
+        "failed",
+    }

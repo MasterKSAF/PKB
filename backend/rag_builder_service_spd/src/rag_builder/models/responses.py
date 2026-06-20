@@ -1,5 +1,8 @@
 # src/rag_builder/models/responses.py
-from pydantic import BaseModel
+from datetime import datetime
+
+from pydantic import BaseModel, Field
+
 
 class HealthResponse(BaseModel):
     status: str
@@ -8,13 +11,34 @@ class HealthResponse(BaseModel):
     error: str | None = None
 
 
+class IndexIssue(BaseModel):
+    code: str
+    message: str
+    section_id: int | None = None
+
+
+class IndexStats(BaseModel):
+    sections: int = 0
+    chunks: int = 0
+    embeddings: int = 0
+
+
 class IndexResponse(BaseModel):
     status: str
-
     document_id: int
-    document_version_id: int
+    indexing_txn_id: str
+    task_id: int | None = None
 
-    chunks_count: int
 
-    embedding_tokens: int
-    embedding_cost_usd: float
+class IndexStatusResponse(BaseModel):
+    document_id: int
+    status: str
+    indexing_txn_id: str | None = None
+
+    chunks_count: int = 0
+    has_embeddings: bool = False
+    indexed_at: datetime | None = None
+
+    index_stats: IndexStats = Field(default_factory=IndexStats)
+    warnings: list[IndexIssue] = Field(default_factory=list)
+    errors: list[IndexIssue] = Field(default_factory=list)

@@ -13,6 +13,7 @@ def test_validate_document_from_raw(client, raw_gost_sample):
     assert data["validation_id"].startswith("val-")
     assert data["document_id"] is None
     assert data["fingerprint"]["title_hash_sha256"]
+    assert data["fingerprint"]["title_key"]
 
 
 def test_health(client):

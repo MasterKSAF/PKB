@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     registry_timeout_sec: float = Field(10.0, alias="REGISTRY_TIMEOUT_SEC")
 
     openai_api_key: str | None = Field(None, alias="OPENAI_API_KEY")
+    openai_base_url: str | None = Field(None, alias="OPENAI_BASE_URL")
     default_llm_model: str = Field("gpt-4o-mini", alias="DEFAULT_LLM_MODEL")
     default_llm_max_tokens: int = Field(4096, alias="DEFAULT_LLM_MAX_TOKENS")
     default_llm_timeout: int = Field(60, alias="DEFAULT_LLM_TIMEOUT")

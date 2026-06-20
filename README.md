@@ -49,7 +49,7 @@ PKB_neuroassistant/
 ├── Fakhrutdinov_Roman/
 ├── Osipenko_Dmitrii/
 ├── Vitalyy_Novozhilov/
-├── UI-UX/
+├── UI-UX/                       # Актуальный UI Final и материалы UI/UX-команды
 │
 ├── Documents_Pipeline/          # Наработки по пайплайну документов
 └── .gitignore
@@ -59,6 +59,7 @@ PKB_neuroassistant/
 
 - **Начать здесь**: [`docs/README.md`](docs/README.md) — навигация по всей документации
 - **Глоссарий**: [`docs/glossary.md`](docs/glossary.md)
+- **Актуальный UI Final**: [`UI-UX/UI Final/README.md`](UI-UX/UI%20Final/README.md)
 - **План спринта**: [`docs/plans/sprint1_04_06_10_06.md`](docs/plans/sprint1_04_06_10_06.md)
 - **Сводный план реализации**: [`docs/plans/СВОДНЫЙ_ПЛАН_РЕАЛИЗАЦИИ.md`](docs/plans/СВОДНЫЙ_ПЛАН_РЕАЛИЗАЦИИ.md)
 

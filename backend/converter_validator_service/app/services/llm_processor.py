@@ -24,6 +24,7 @@ async def enrich_document(
 
         client = AsyncOpenAI(
             api_key=settings.openai_api_key,
+            base_url=settings.openai_base_url,
             timeout=timeout,
         )
         prompt = (
