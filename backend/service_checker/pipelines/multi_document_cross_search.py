@@ -118,6 +118,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
                 "task_id": TEST_TASK_ID_1,
                 "file_key": pdf_key_1,
                 "version_id": "1",
+                "mode": "full",
             },
             expected_status=202,
             extract_keys=["task_id"],
@@ -158,7 +159,6 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             port=8086,
             body={
                 "task_id": str(TEST_TASK_ID_1),
-                "version_id": "1",
                 "raw_json": {"pages": [], "blocks": [], "text": f"Текст документа 1 {ts}"},
             },
             expected_status=200,
@@ -240,6 +240,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
                 "task_id": TEST_TASK_ID_2,
                 "file_key": pdf_key_2,
                 "version_id": "1",
+                "mode": "full",
             },
             expected_status=202,
             extract_keys=["task_id_2"],
@@ -278,7 +279,6 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             port=8086,
             body={
                 "task_id": str(TEST_TASK_ID_2),
-                "version_id": "1",
                 "raw_json": {"pages": [], "blocks": [], "text": f"Текст документа 2 {ts}"},
             },
             expected_status=200,
@@ -327,7 +327,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             check=check_json_field("status", str),
         ))
 
-        # ── Шаг 17: Поиск ────────────────────────────────────────────
+        # ── Шаг 17: Поиск (RS-6: без top_k) ──────────────────────────
         steps.append(PipelineStep(
             name="Поиск по общему запросу",
             service="rag_search",
@@ -336,7 +336,8 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             port=8091,
             body={
                 "query": "тестовый документ multi-doc",
-                "top_k": 10,
+                "valid_at": "2026-06-19",
+                "filters": {"document_type": [], "category_ids": [], "document_ids": []},
             },
             expected_status=200,
             check=check_json_field("results", list),
@@ -353,7 +354,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             needs_auth=True,
         ))
 
-        # ── Шаг 19: Поиск после удаления ──────────────────────────────
+        # ── Шаг 19: Поиск после удаления (RS-6: без top_k) ────────────
         steps.append(PipelineStep(
             name="Поиск после удаления документа #1",
             service="rag_search",
@@ -362,7 +363,8 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             port=8091,
             body={
                 "query": "тестовый документ multi-doc",
-                "top_k": 10,
+                "valid_at": "2026-06-19",
+                "filters": {"document_type": [], "category_ids": [], "document_ids": []},
             },
             expected_status=200,
             check=check_json_field("results", list),

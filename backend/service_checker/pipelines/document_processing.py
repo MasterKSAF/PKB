@@ -129,7 +129,7 @@ class DocumentProcessingPipeline(PipelineDef):
             check=_check_minio_upload,
         ))
 
-        # -- Шаг 3: Запуск парсинга --
+        # -- Шаг 3: Запуск парсинга (PS-5: mode=full) --
         steps.append(PipelineStep(
             name="Запуск парсинга",
             service="parser",
@@ -139,7 +139,8 @@ class DocumentProcessingPipeline(PipelineDef):
             body={
                 "task_id": self.TEST_TASK_ID,
                 "file_key": self.TEST_PDF_KEY,
-                "version_id": "1",  # ⚠️ WORKAROUND: сервис требует version_id, docs API — нет
+                "version_id": "1",
+                "mode": "full",  # PS-5: единый эндпоинт
             },
             expected_status=202,
             extract_keys=["task_id"],
@@ -173,7 +174,46 @@ class DocumentProcessingPipeline(PipelineDef):
                 }),
         ))
 
-        # -- Шаг 6: Конвертация JSON --
+        # -- Шаг 5a (P1F-10): Валидация метаданных через /validate/metadata --
+        # Вычисление бизнес-ключа после извлечения метаданных
+        steps.append(PipelineStep(
+            name="Валидация метаданных (бизнес-ключ)",
+            service="converter_validator",
+            method="POST",
+            path="/api/v1/validate/metadata",
+            port=8086,
+            body={
+                "title": "Тестовый документ",
+                "doc_code": "TEST-P1F-10",
+                "source_type": "GOST",
+                "era": "RF",
+                "year": 2026,
+            },
+            expected_status=200,
+            check=check_json_fields({
+                "title_hash_sha256": str,
+                "title_key": str,
+            }),
+        ))
+
+        # -- Шаг 5b (RG): Проверка уникальности документа в Registry --
+        steps.append(PipelineStep(
+            name="Проверка уникальности документа",
+            service="registry",
+            method="POST",
+            path="/api/v1/registry/documents/import",
+            port=8084,
+            body={
+                "title": "Тестовый документ",
+                "doc_code": "TEST-P1F-10",
+                "source_type": "GOST",
+                "era": "RF",
+            },
+            expected_status={200, 422},  # 200=ok, 422=уже существует
+            needs_auth=True,
+        ))
+
+        # -- Шаг 6: Конвертация JSON (CV-9: без version_id) --
         steps.append(PipelineStep(
             name="Конвертация JSON",
             service="converter_validator",
@@ -181,8 +221,7 @@ class DocumentProcessingPipeline(PipelineDef):
             path="/api/v1/converter/convert",
             port=8086,
             body={
-                "task_id": str(self.TEST_TASK_ID),  # ⚠️ WORKAROUND: сервис ожидает str, docs API — int
-                "version_id": "1",                   # ⚠️ WORKAROUND: сервис ожидает str, docs API — int
+                "task_id": str(self.TEST_TASK_ID),
                 "raw_json": {"pages": [], "blocks": [], "text": "тестовый текст"},
             },
             expected_status=200,
@@ -227,11 +266,11 @@ class DocumentProcessingPipeline(PipelineDef):
                     "content": {"text": "Содержимое тестового документа"},
                 }],
             },
-            expected_status={200, 201},
+            expected_status={200, 202},  # RB-7: 202 для асинхронного запуска
             needs_auth=True,  # RAG Builder требует JWT (не отражено в docs)
         ))
 
-        # -- Шаг 9: Поиск по индексу RAG Search --
+        # -- Шаг 9: Поиск по индексу RAG Search (RS-6: без top_k, с valid_at) --
         steps.append(PipelineStep(
             name="Поиск по индексу RAG Search",
             service="rag_search",
@@ -240,7 +279,8 @@ class DocumentProcessingPipeline(PipelineDef):
             port=8091,
             body={
                 "query": "тестовый документ",
-                "top_k": 5,
+                "valid_at": "2026-06-19",
+                "filters": {"document_type": [], "category_ids": [], "document_ids": []},
             },
             expected_status=200,
             check=check_json_field("results", list),

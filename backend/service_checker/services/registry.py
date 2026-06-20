@@ -2,6 +2,14 @@
 PKB Neuroassistant — Registry Service API Definitions.
 
 Основано на: docs/api/registry_service_api.md
+Обновления (19.06.2026):
+- RG-2: current_version_id в ответе
+- RG-6/RG-7: valid_from/valid_until поля, ?valid_at фильтр
+- RG-8: GET /registry/search?q=... (BM25)
+- RG-9: source_draft_id, возвращать version_id
+- RG-10: preview_snapshot (JSONB)
+- RG-11: document_id назначается Registry
+- DB-1: title_hash_sha256, DB-28: title_key
 """
 
 from __future__ import annotations
@@ -18,11 +26,8 @@ SERVICE_KEY = "registry"
 PORT = 8084
 DISPLAY_NAME = "Registry Service"
 
-# ── Тестовые данные для prepare-шагов ──────────────────────────────────
-
 _ts = str(int(time.time()))[-6:]
 
-# Классификатор для prepare (создаётся перед CRUD-тестами)
 PREPARE_CLASSIFIER = {
     "classifier_system": "MKS",
     "code": f"99.{_ts}",
@@ -30,7 +35,6 @@ PREPARE_CLASSIFIER = {
     "status": "active",
 }
 
-# Данные классификатора для валидации (должен существовать в БД)
 VALIDATE_CLASSIFICATION = {
     "classification": {
         "mks_oks_code": "47.020",
@@ -39,21 +43,20 @@ VALIDATE_CLASSIFICATION = {
     }
 }
 
-# Документ для prepare
-# Важно: mks_oks_code и okstu_code — несуществующие коды, чтобы
-# create_document → check_and_quarantine_classifiers создал pending-записи
-# для тестирования accept/reject карантина
+# RG-9: source_draft_id в POST /documents + возвращает version_id
+# DB-1/DB-28: title_hash_sha256 и title_key (вычисляет Converter/Validate)
 PREPARE_DOCUMENT = {
     "title": f"Тестовый документ API Coverage {_ts}",
     "doc_code": f"ТЕСТ-{_ts}",
     "source_type": "GOST",
     "era": "RF",
     "validity_status": "active",
-    "mks_oks_code": f"98.{_ts}",  # не совпадает с PREPARE_CLASSIFIER.code (99.{_ts}), чтобы delete_classifier не падал с 409
+    "mks_oks_code": f"98.{_ts}",
     "okstu_code": f"88.{_ts}",
+    "source_draft_id": None,  # RG-9: связь с черновиком (опционально)
+    "title_key": f"GOST|RF|ТЕСТ-{_ts}|{_ts}",  # DB-28
 }
 
-# Термин для prepare
 PREPARE_TERM = {
     "raw_term": f"API Coverage тест {_ts}",
     "standard_term": f"API Coverage тест {_ts}",
@@ -70,9 +73,7 @@ def get_service_def() -> ServiceDef:
             "⚠️ Registry требует trailing slash на всех эндпоинтах /classifiers/, /documents/, /terminology/ (в т.ч. параметризованные). Документация — без /.",
         ]
 
-    # ── Prepare-эндпоинты (создают данные для тестов) ──────────────
     prepare_endpoints = [
-        # Создать классификатор → context.classifier_code
         EndpointDef("POST", f"{API_PREFIX}/registry/classifiers/", "classifiers",
             "Создать классификатор (prepare)",
             body=PREPARE_CLASSIFIER,
@@ -80,15 +81,14 @@ def get_service_def() -> ServiceDef:
             response_schema={"data": dict, "data.classifier_system": str, "data.code": str, "data.full_name": str, "data.status": str},
             is_preparation=True,
             expected_status={201, 409}),
-        # Создать документ → context.doc_id
         EndpointDef("POST", f"{API_PREFIX}/registry/documents/", "documents",
             "Создать документ (prepare)",
             body=PREPARE_DOCUMENT,
-            extract_keys=["doc_id"],
-            response_schema={"data": dict, "data.document_id": int, "data.version_id": int},
+            extract_keys=["doc_id", "version_id"],
+            response_schema={"data": dict, "data.document_id": int, "data.version_id": int,
+                             "data.current_version_id": int},  # RG-2
             is_preparation=True,
             expected_status={201, 409}),
-        # Создать термин → context.term_id
         EndpointDef("POST", f"{API_PREFIX}/registry/terminology/", "terminology",
             "Создать термин (prepare)",
             body=PREPARE_TERM,
@@ -96,9 +96,6 @@ def get_service_def() -> ServiceDef:
             response_schema={"data": dict, "data.raw_term": str, "data.standard_term": str, "data.normalized_value": str, "data.term_type": str},
             is_preparation=True,
             expected_status={201, 409}),
-        # Получить pending_id для accept/reject карантина
-        # После create_document (с mks_oks_code/okstu_code) check_and_quarantine_classifiers
-        # создаёт записи в classifier_pending. Забираем id первой из них.
         EndpointDef("GET", f"{API_PREFIX}/registry/classifiers/pending/", "classifiers",
             "Получить pending_id (prepare)",
             params={"page": 1, "page_size": 10},
@@ -106,13 +103,11 @@ def get_service_def() -> ServiceDef:
             is_preparation=True),
     ]
 
-    # ── Основные эндпоинты ──────────────────────────────────────────
     endpoints = [
         # Health
         EndpointDef("GET", f"{API_PREFIX}/health", "health", "Health check",
             response_schema={"status": str}),
         # ── Classifiers CRUD ──
-        # POST /classifiers/ — только в prepare_endpoints (чтобы избежать дубликата 409)
         EndpointDef("GET", f"{API_PREFIX}/registry/classifiers/", "classifiers",
             "Список классификаторов",
             params={"page": 1, "page_size": 10},
@@ -158,10 +153,8 @@ def get_service_def() -> ServiceDef:
         EndpointDef("POST", f"{API_PREFIX}/registry/classifiers/validate",
             "classifiers", "Валидация классификации",
             body=VALIDATE_CLASSIFICATION,
-            # docs: data.mks_status, data.mks_display_name, data.okstu_status, data.udk_valid, data.overall_status
             response_schema={"data": dict, "data.mks_status": str, "data.udk_valid": bool, "data.overall_status": str}),
         # ── Terminology CRUD ──
-        # POST /terminology/ — только в prepare_endpoints
         EndpointDef("GET", f"{API_PREFIX}/registry/terminology/", "terminology",
             "Список терминов",
             params={"page": 1, "page_size": 10},
@@ -172,7 +165,6 @@ def get_service_def() -> ServiceDef:
         EndpointDef("GET", f"{API_PREFIX}/registry/terminology/normalize/",
                     "terminology", "Нормализовать термин",
             params={"term": "API Coverage тест"},
-            # docs: data.raw_term, data.standard_term, data.normalized_value, data.term_type, data.is_blocked
             response_schema={"data": dict, "data.raw_term": str, "data.normalized_value": str}),
         EndpointDef("PUT", f"{API_PREFIX}/registry/terminology/{{term_id}}",
             "terminology", "Обновить термин",
@@ -187,21 +179,21 @@ def get_service_def() -> ServiceDef:
             is_preparation=True,
             expected_status={422}),
         # ── Documents CRUD ──
-        # POST /documents/ — только в prepare_endpoints
         EndpointDef("GET", f"{API_PREFIX}/registry/documents/", "documents",
             "Список документов",
             params={"page": 1, "page_size": 10},
             response_schema={"data": list, "meta": dict, "meta.total": int, "meta.page": int, "meta.page_size": int}),
         EndpointDef("GET", f"{API_PREFIX}/registry/documents/{{doc_id}}",
             "documents", "Получить документ",
-            # docs: data.id, data.title, data.doc_code, data.status, data.source_type, data.era
-            response_schema={"data": dict, "data.id": int, "data.title": str, "data.doc_code": str}),
+            # RG-2: current_version_id, RG-10: preview_snapshot
+            response_schema={"data": dict, "data.id": int, "data.title": str, "data.doc_code": str,
+                             "data.current_version_id": int}),
         EndpointDef("PUT", f"{API_PREFIX}/registry/documents/{{doc_id}}",
             "documents", "Обновить документ",
             body={"title": "Обновлённый документ"},
             response_schema={"data": dict}),
         EndpointDef("PATCH", f"{API_PREFIX}/registry/documents/{{doc_id}}/status",
-            "documents", "Обновить статус",
+            "documents", "Обновить статус (internal)",
             body={"status": "uploaded"},
             response_schema={"data": dict}),
         EndpointDef("GET", f"{API_PREFIX}/registry/documents/{{doc_id}}/history",
@@ -215,13 +207,17 @@ def get_service_def() -> ServiceDef:
             response_schema={"data": dict}),
         EndpointDef("GET", f"{API_PREFIX}/registry/documents/export",
             "documents", "Экспорт документов (CSV)",
-            # Возвращает CSV, а не JSON — валидация схемы не применяется
             response_schema=None),
         EndpointDef("POST", f"{API_PREFIX}/registry/documents/import",
             "documents", "Массовый импорт (file upload)",
             response_schema={"data": dict, "data.inserted": int},
             is_preparation=True,
             expected_status={422}),
+        # ── RG-8: Search (BM25) ──
+        EndpointDef("GET", f"{API_PREFIX}/registry/search", "search",
+            "Поиск по реестру (BM25, pg_trgm + tsvector)",
+            params={"q": "тест", "valid_at": "2026-06-19"},
+            response_schema={"data": list, "meta": dict}),
         # Common
         EndpointDef("GET", f"{API_PREFIX}/registry/stats", "common",
             "Статистика", response_schema={"data": dict}),

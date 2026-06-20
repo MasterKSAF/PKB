@@ -1220,3 +1220,151 @@ Warnings в отчёте могли устареть — сервисы изме
 ### Статус
 ✅ **Исправлено (checker + сервис, 2026-06-17)**
 
+---
+
+## 34. SC-1: Добавлен модуль observability_check (2026-06-19)
+
+### Суть
+Создан новый модуль `core/observability_check.py` для проверки инструментации сервисов.
+
+### Что проверяет
+1. **OTEL SDK** — инициализация OpenTelemetry, OTLPSpanExporter, BatchSpanProcessor, TracerProvider
+2. **OTLP-экспорт** — signoz-otel-collector endpoint
+3. **Span-атрибуты** — instrument_app, set_tracer_provider
+4. **Корреляционные заголовки** — X-Request-ID, X-Trace-ID, X-User-ID, X-Draft-ID, X-Document-ID, X-Version-ID (CM-5)
+5. **Структурированное логирование** — JSON-поля severity, timestamp, service, trace_id, span_id
+6. **Коды ошибок** — INDEX_TRIGGER_TIMEOUT (408), DECISION_TIMEOUT (408), PREVIEW_TRIGGER_TIMEOUT (408), LLM_GENERATION_TIMEOUT (408) (CM-7)
+
+### Режимы
+- **Динамическая проверка** — через HTTP API сервиса (health endpoint)
+- **Статический анализ** — поиск паттернов в исходном коде (`--source-dir`)
+
+### Статус
+✅ **Добавлено (checker, 2026-06-19)**
+
+---
+
+## 35. SC-2: CLI команда `check` с exit-code 0/1/2 (2026-06-19)
+
+### Суть
+Добавлена подкоманда `check` с флагом `--post-deploy` для CI-интеграции.
+
+### Использование
+```bash
+python -m service_checker check <service_name>
+python -m service_checker check <service> --post-deploy
+python -m service_checker check <service> --source-dir /path
+```
+
+### Exit codes
+- `0` — всё хорошо
+- `1` — ошибки (нет health, нет OTEL, сервис не отвечает)
+- `2` — предупреждения (только в `--post-deploy`; нет correlation-заголовков, нет структ.логов)
+
+### Статус
+✅ **Добавлено (checker, 2026-06-19)**
+
+---
+
+## 36. Обновление API-эндпоинтов сервисов по задачам 19.06.2026
+
+### Gateway (GW-12)
+- Убраны: `/api/v1/pages/*`, `/api/v1/monitor/*`
+- Добавлены: `/api/v1/analyse/*`, `/api/v1/health`, `/api/v1/meridian/*`, `/api/v1/files/*`, `/api/v1/external/*`, `/api/v1/registry/categories/*`
+- Префиксы переименованы → `/api/v1/registry/*`
+
+### Registry (RG-2/6/7/8/9/10/11, DB-1/28)
+- Добавлен `current_version_id` в ответ (RG-2)
+- Добавлены `valid_from`/`valid_until` поля (RG-6)
+- Добавлен фильтр `?valid_at` (RG-7)
+- Добавлен `GET /registry/search?q=...` BM25 (RG-8)
+- `source_draft_id` в POST /registry/documents (RG-9)
+- `preview_snapshot` (JSONB) в ответе (RG-10)
+- `document_id` назначается Registry (RG-11)
+- `title_hash_sha256` и `title_key` в контракте (DB-1/28)
+
+### Query Service (QS-3/7/8/10/12)
+- POST /chat/sessions: добавлены `document_ids`, `project_id` (QS-3)
+- POST /text/search: добавлены `valid_at`, `filters.category_ids[]`, `enrichment_skipped` (QS-7/8)
+- POST /chat/feedback: `rating: int` + `rating_status` (QS-10)
+- POST /chat/sessions/{id}/messages/search (QS-12)
+
+### Orchestrator (OR-3c/7/11/12)
+- POST /drafts — единая точка входа (OR-11)
+- GET /drafts/{id}: добавлены `document_id`, `version_id`, `is_new_document` (OR-7)
+- PATCH /drafts/{id}/decide: `action` вместо `decision` (OR-12)
+
+### Converter-Validator (CV-3/3a/8/9)
+- POST /converter/preview — вместо /converter/preview/metadata (CV-3)
+- POST /validate/metadata — единая точка вычисления бизнес-ключа (CV-3a)
+- Убраны `document_id`, `version_id` из ответов (CV-8/9)
+
+### Parser (PS-5/6/8)
+- POST /parser/process — единый с `mode=preview|full`
+- Добавлены `preview_not_supported` в ответ и код PREVIEW_NOT_SUPPORTED (422)
+
+### OCR Service (OC-8/9/11)
+- POST /ocr/process — единый с `mode=preview|full` (вместо /ocr/preview + /ocr/process)
+- Добавлены `preview_not_supported` в ответ и код PREVIEW_NOT_SUPPORTED (422)
+
+### RAG Builder (RB-7/8)
+- Код ответа 201 → 202 (асинхронный запуск)
+- "completed" → "indexed" (финальный статус)
+
+### RAG Search (RS-6/12)
+- Убраны `search_type`, `top_k`, `rerank` из API
+- Добавлены `valid_at`, `filters.document_type[]/category_ids[]/document_ids[]`
+- Коды ошибок EMPTY_QUERY (400), INVALID_PARAMETER (422)
+
+### Auth Service (AU-5, AU-2)
+- PATCH /admin/users/{id}: `roles[]` вместо `role` (AU-5)
+- GET /admin/roles: ROLES как таблица (AU-2)
+
+### Статус
+✅ **Актуализировано (checker, 2026-06-19)**
+
+---
+
+## 37. DB-23/24: Pipeline таблицы в db_check (2026-06-19)
+
+### Суть
+Добавлена проверка наличия схемы `pipeline` и таблиц `pipeline.tasks` / `pipeline.task_steps` в `db_check.py`.
+
+### Изменения
+- Добавлена `pipeline` в `EXPECTED_SCHEMAS`
+- Добавлен `EXPECTED_PIPELINE_TABLES: {pipeline.tasks, pipeline.task_steps}`
+- Добавлено `pipeline_ok` свойство в `DbCheckResult`
+- `pipeline_ok` включён в общий `healthy`
+- Секция в `format_db_report`
+
+### Статус
+✅ **Добавлено (checker, 2026-06-19)**
+
+---
+
+## 38. AU-3: Brute-force защита — тест в admin_user_lifecycle (2026-06-19)
+
+### Суть
+Добавлены 6 шагов в пайплайн `admin_user_lifecycle`:
+- 5 неудачных попыток аутентификации (wrong password)
+- Проверка блокировки/rate-limit на 6-й попытке
+
+Ожидаемые статусы: 401 (wrong), 429 (rate limit), 423 (locked).
+
+### Статус
+✅ **Добавлено (checker, 2026-06-19)**
+
+---
+
+## 39. P1F-10: Валидация метаданных и проверка уникальности в document_processing (2026-06-19)
+
+### Суть
+Добавлены 2 шага в пайплайн `document_processing` после парсинга:
+1. POST /validate/metadata — вычисление бизнес-ключа (title_hash_sha256, title_key)
+2. POST /registry/documents/import — проверка уникальности
+
+Шаги соответствуют P1F-10 (Preview → /validate/metadata → check-uniqueness).
+
+### Статус
+✅ **Добавлено (checker, 2026-06-19)**
+

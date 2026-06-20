@@ -254,7 +254,6 @@ class PipelineRunner:
             health_paths = [
                 "/api/v1/health",
                 "/api/v1/system/health",
-                "/api/v1/monitor/health",
             ]
         for path in health_paths:
             try:

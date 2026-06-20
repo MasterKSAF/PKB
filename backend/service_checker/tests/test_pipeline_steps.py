@@ -15,7 +15,7 @@ from pipelines.registry_lifecycle import RegistryLifecyclePipeline
 
 
 class TestDocumentProcessingPipeline:
-    """Пайплайн document_processing — 10 шагов."""
+    """Пайплайн document_processing — 12 шагов (+P1F-10, +check-uniqueness)."""
 
     def test_pipeline_attributes(self):
         p = DocumentProcessingPipeline()
@@ -26,8 +26,8 @@ class TestDocumentProcessingPipeline:
     def test_build_steps_count(self):
         p = DocumentProcessingPipeline()
         steps = p.build_steps(PipelineContext())
-        assert len(steps) == 10, (
-            f"Ожидалось 10 шагов, получено {len(steps)}\n"
+        assert len(steps) == 12, (
+            f"Ожидалось 12 шагов, получено {len(steps)}\n"
             f"Шаги: {[s.name for s in steps]}"
         )
 
@@ -41,6 +41,8 @@ class TestDocumentProcessingPipeline:
             "Запуск парсинга",
             "Статус парсинга (longpoll)",
             "Результат парсинга",
+            "Валидация метаданных (бизнес-ключ)",  # P1F-10
+            "Проверка уникальности документа",  # check-uniqueness
             "Конвертация JSON",
             "Сохранение документа в Registry",
             "Построение чанков и индексация",
@@ -72,7 +74,7 @@ class TestDocumentProcessingPipeline:
     def test_step_expected_status(self):
         p = DocumentProcessingPipeline()
         steps = p.build_steps(PipelineContext())
-        expected = [200, {200, 409}, 200, 202, 200, 200, 200, {201, 409}, {200, 201}, 200]
+        expected = [200, {200, 409}, 200, 202, 200, 200, 200, {200, 422}, 200, {201, 409}, {200, 202}, 200]
         actual = [s.expected_status for s in steps]
         assert actual == expected, f"Ожидаемые статусы не совпадают:\n{actual}"
 
@@ -109,7 +111,7 @@ class TestChatInferencePipeline:
             "Создание чат-сессии",
             "Отправка сообщения",
             "Текстовый поиск",
-            "Гибридный поиск RAG Search",
+            "Поиск RAG Search",
         ]
         actual_names = [s.name for s in steps]
         assert actual_names == expected_names, f"Порядок шагов не совпадает:\n{actual_names}"

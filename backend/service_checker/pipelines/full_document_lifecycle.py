@@ -161,7 +161,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             check=self._check_build_ok,
         ))
 
-        # ── Шаг 6: Поиск по индексу ──────────────────────────────────
+        # ── Шаг 6: Поиск по индексу (RS-6: valid_at + filters) ─────────
         steps.append(PipelineStep(
             name="Поиск по индексу RAG Search",
             service="rag_search",
@@ -170,7 +170,8 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             port=8091,
             body={
                 "query": "тестовый документ lifecycle",
-                "top_k": 5,
+                "valid_at": "2026-06-19",
+                "filters": {"document_type": [], "category_ids": [], "document_ids": []},
             },
             expected_status=200,
             check=check_json_field("results", list),
@@ -199,7 +200,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             needs_auth=True,
         ))
 
-        # ── Шаг 9: Поиск — проверить что результатов нет ──────────────
+        # ── Шаг 9: Поиск — проверить что результатов нет (P3S-5: fallback) ──
         steps.append(PipelineStep(
             name="Поиск — проверка пустого результата",
             service="rag_search",
@@ -208,7 +209,8 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             port=8091,
             body={
                 "query": "тестовый документ lifecycle",
-                "top_k": 5,
+                "valid_at": "2026-06-19",
+                "filters": {"document_type": [], "category_ids": [], "document_ids": []},
             },
             expected_status=200,
             check=check_json_field("results", list),
@@ -260,7 +262,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             on_error=self._on_build_error,
         ))
 
-        # ── Шаг 12: Финальный поиск ──────────────────────────────────
+        # ── Шаг 12: Финальный поиск (RS-6) ────────────────────────────
         steps.append(PipelineStep(
             name="Финальный поиск по индексу",
             service="rag_search",
@@ -269,7 +271,8 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             port=8091,
             body={
                 "query": "тестовый документ lifecycle",
-                "top_k": 5,
+                "valid_at": "2026-06-19",
+                "filters": {"document_type": [], "category_ids": [], "document_ids": []},
             },
             expected_status=200,
             check=check_json_field("results", list),

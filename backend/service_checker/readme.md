@@ -31,6 +31,7 @@ service_checker/
 │   ├── db_check.py           # Проверка состояния БД
 │   ├── docker.py             # Docker Compose управление
 │   ├── models.py             # Модели данных (Report, ServiceProcess, HealthResult...)
+│   ├── observability_check.py # SC-1: проверка OTEL, OTLP, correlation-id, логов, кодов ошибок
 │   ├── pipeline_test.py      # Pipeline Testing (сквозные сценарии)
 │   ├── reports.py            # Генерация full-отчёта (coverage + pipeline)
 │   ├── service_checker.py    # Точка входа (делегирует в cli.py)
@@ -90,7 +91,7 @@ service_checker/
 
 ## Текущий статус сервисов в Docker
 
-После фиксов (2026-06-17):
+После обновлений (19.06.2026):
 
 | Сервис | Порт | HTTP | supervisorctl | Проблемы |
 |--------|:----:|:----:|:-------------:|----------|
@@ -98,30 +99,29 @@ service_checker/
 | Redis | 16379 | — | — | здоров |
 | MinIO | 19000 | — | — | здоров |
 | TEI | 18092 | 200 | — | здоров |
-| Gateway (Mock) | 8080 | 401 | RUNNING | Логи в stderr (аном. N22) |
-| Orchestrator | 8081 | 200 | RUNNING | preview/status 500->404 (аном. N26); защита от дублей (аном. N29) |
-| Auth | 8082 | 200 | RUNNING | Ключ JWT короткий (предупреждение) |
-| Query | 8083 | 200 | RUNNING | Двойная транзакция (аном. N21) |
-| Registry | 8084 | 200 | RUNNING | create_all() есть в lifespan |
+| Gateway | 8080 | 200 | RUNNING | Новая маршрутизация (GW-12) |
+| Orchestrator | 8081 | 200 | RUNNING | Draft-first (OR-11), action вместо decision (OR-12) |
+| Auth | 8082 | 200 | RUNNING | roles[] (AU-5), ROLES таблица (AU-2) |
+| Query | 8083 | 200 | RUNNING | QS-3/7/10/12 — document_ids, valid_at, rating:int, search |
+| Registry | 8084 | 200 | RUNNING | RG-2/6/7/8/9/10 — current_version_id, BM25, valid_at |
 | Integration | 8085 | 200 | RUNNING | |
-| Converter-Validator | 8086 | 200 | RUNNING | |
-| Parser | 8087 | 200 | RUNNING | |
-| OCR | 8088 | — | RUNNING | |
-| RAG Builder | 8090 | 200 | RUNNING | Нет create_all() (аном. N25), JWT не синхронизирован |
-| RAG Search | 8091 | 200 | RUNNING | починился после создания rag.document_chunks |
+| Converter-Validator | 8086 | 200 | RUNNING | CV-3/3a — /converter/preview, /validate/metadata |
+| Parser | 8087 | 200 | RUNNING | PS-5 — единый /process с mode=preview|full |
+| OCR | 8088 | — | RUNNING | OC-8 — единый /process с mode=preview|full |
+| RAG Builder | 8090 | 200 | RUNNING | RB-7: 202 async, RB-8: indexed |
+| RAG Search | 8091 | 200 | RUNNING | RS-6: без top_k/search_type, valid_at+filters |
 
-**supervisorctl:** ✅ Все 11 процессов RUNNING (исправлен socket + symlink)
-**.env файлы:** ✅ Создаются автоматически (исправлен entrypoint.sh)
-**.err логи:** ✅ Health check проверяет ошибки, INFO/WARNING фильтруются
+**supervisorctl:** ✅ Все 11 процессов RUNNING
+**.env файлы:** ✅ Создаются автоматически
+**.err логи:** ✅ Health check проверяет ошибки
 
 > **Важно:** `recheck.bat` уже запускает **все проверки**:
-> 1. Health check (контейнеры + HTTP + supervisorctl + .err логи) ← теперь выводится
+> 1. Health check (контейнеры + HTTP + supervisorctl + .err логи)
 > 2. DB check
 > 3. API Coverage Test
 > 4. Pipeline Testing
-> 5. Сводный отчёт + сбор логов
->
-> Отдельный `docker --action health` после recheck **не нужен** — вся диагностика уже в начале `full-report`. Смотрите отчёты в `check_result/`.
+> 5. Observability Check (SC-1)
+> 6. Сводный отчёт + сбор логов
 
 > Подробности аномалий — в [`specificity.md`](specificity.md)
 
@@ -238,4 +238,7 @@ python -m service_checker docker --action full-report  # full-report включ�
 - **Статус-колонка отчёта** — ❌ если ping_ok=False или есть failed эндпоинты
 - **Пайплайны** — сквозные сценарии в отдельных файлах `pipelines/*.py`, запуск через `pipeline_test.py`
 - **Эмбеддинги через TEI** — локальный сервер эмбеддингов Hugging Face TEI с моделью `TrendHD/rubert-tiny2-int8` (312 dim, ONNX int8) на порту 18092
+- **Observability Check** — новая команда `check` (SC-1): проверка OTEL SDK, OTLP-экспорта, span-атрибутов, структуры логов, корреляционных заголовков (X-Request-ID, X-Trace-ID, X-User-ID, X-Draft-ID, X-Document-ID, X-Version-ID)
+- **Post-deploy (SC-2)** — `service_checker check <service> --post-deploy` с exit-code 0/1/2 для CI
+- **Draft-first (OR-11)** — POST /drafts — единая точка входа вместо POST /documents
 

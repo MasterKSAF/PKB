@@ -323,9 +323,9 @@ class WebEmulator:
     async def scenario_classifiers(self) -> bool:
         """Сценарий: просмотр классификаторов."""
         base = self._registry_base()
-        log_step(f"GET {base}/api/v1/classifiers — список классификаторов...")
+        log_step(f"GET {base}/api/v1/registry/classifiers/ — список классификаторов...")
         resp = await self._request(
-            "classifiers", "get", f"{base}/api/v1/classifiers",
+            "classifiers", "get", f"{base}/api/v1/registry/classifiers/",
             headers=self.headers,
         )
         if resp.status_code != 200:
@@ -348,9 +348,9 @@ class WebEmulator:
     async def scenario_terminology(self) -> bool:
         """Сценарий: просмотр терминологии."""
         base = self._registry_base()
-        log_step(f"GET {base}/api/v1/terminology — список терминов...")
+        log_step(f"GET {base}/api/v1/registry/terminology/ — список терминов...")
         resp = await self._request(
-            "terminology", "get", f"{base}/api/v1/terminology",
+            "terminology", "get", f"{base}/api/v1/registry/terminology/",
             headers=self.headers,
         )
         if resp.status_code != 200:
@@ -412,55 +412,27 @@ class WebEmulator:
 
         return True
 
-    # ── Upload document ─────────────────────────────────────────────
+    # ── Upload document (OR-11: draft-first) ────────────────────────
 
     async def scenario_upload(self) -> bool:
-        """Сценарий: загрузка документа (POST /documents)."""
+        """Сценарий: загрузка документа (POST /drafts — draft-first)."""
         base = self._base()
-        log_step(f"POST {base}/api/v1/documents — загрузка файла...")
+        log_step(f"POST {base}/api/v1/drafts/ — создание черновика (draft-first)...")
 
-        # Создаём тестовый файл
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".txt", delete=False, encoding="utf-8"
-        ) as f:
-            f.write(
-                "Пробный документ для тестирования системы ПКБ Нейроассистент.\n"
-                "Содержит тестовые данные для проверки работы сервисов."
+        resp = await self._request(
+            "upload", "post", f"{base}/api/v1/drafts/",
+            headers={"Authorization": self.headers.get("Authorization", "")},
+            json={"document_key": "emulator-doc-key", "title": "Тестовый документ (emulator)"},
+        )
+
+        if resp.status_code in (200, 201, 202):
+            log_ok(f"Черновик создан: HTTP {resp.status_code}")
+            resp_data = resp.json()
+            log_info(f"  draft_id={resp_data.get('draft_id', '?')}")
+        else:
+            log_warn(
+                f"Создание черновика не удалось: HTTP {resp.status_code}"
             )
-            tmp_path = Path(f.name)
-
-        try:
-            files = {
-                "file": ("test_document.txt", tmp_path.read_bytes(), "text/plain"),
-            }
-            data = {
-                "source_type": "OTHER",
-                "title": "Тестовый документ",
-            }
-
-            resp = await self._request(
-                "upload", "post", f"{base}/api/v1/documents",
-                headers={"Authorization": self.headers.get("Authorization", "")},
-                files=files,
-                data=data,
-            )
-
-            if resp.status_code in (200, 201, 202):
-                log_ok(f"Документ загружен: HTTP {resp.status_code}")
-                resp_data = resp.json()
-                log_info(f"  task_id={resp_data.get('task_id', '?')}")
-                log_info(f"  status={resp_data.get('status', '?')}")
-            else:
-                log_warn(
-                    f"Загрузка не удалась (ожидаемо при отсутствии реального MinIO): "
-                    f"HTTP {resp.status_code}"
-                )
-                if resp.status_code == 422:
-                    log_info("  (Mock-сервис может не поддерживать multipart-загрузку)")
-
-        finally:
-            if tmp_path.exists():
-                tmp_path.unlink()
 
         return True
 
@@ -469,11 +441,13 @@ class WebEmulator:
     async def scenario_search(self) -> bool:
         """Сценарий: текстовый поиск (POST /text/search)."""
         base = self._query_base()
-        log_step(f"POST {base}/api/v1/text/search — поиск по тексту...")
+        log_step(f"POST {base}/api/v1/text/search — поиск по тексту (QS-7)...")
         resp = await self._request(
             "search", "post", f"{base}/api/v1/text/search",
             headers=self.headers,
-            json={"text": "толщина обшивки ледового пояса"},
+            json={"text": "толщина обшивки ледового пояса",
+                   "valid_at": "2026-06-19",
+                   "filters": {"category_ids": []}},
         )
         if resp.status_code != 200:
             log_warn(f"Поиск не выполнен: HTTP {resp.status_code} — {resp.text[:200]}")
@@ -494,11 +468,11 @@ class WebEmulator:
     async def scenario_chat(self) -> bool:
         """Сценарий: чат-сессия (создать, отправить сообщение, longpoll)."""
         base = self._query_base()
-        log_step(f"POST {base}/api/v1/chat/sessions — создание чат-сессии...")
+        log_step(f"POST {base}/api/v1/chat/sessions — создание чат-сессии (QS-3)...")
         resp = await self._request(
             "chat", "post", f"{base}/api/v1/chat/sessions",
             headers=self.headers,
-            json={"title": "Тестовая сессия"},
+            json={"title": "Тестовая сессия", "document_ids": [], "project_id": 1},
         )
         if resp.status_code not in (200, 201):
             log_warn(f"Не удалось создать сессию: HTTP {resp.status_code}")
@@ -558,18 +532,18 @@ class WebEmulator:
 
         return True
 
-    # ── Monitor ────────────────────────────────────────────────────
+    # ── System Health (GW-12: /monitor/health убран) ───────────────
 
     async def scenario_monitor(self) -> bool:
-        """Сценарий: мониторинг Orchestrator."""
+        """Сценарий: health Orchestrator (GW-12: /monitor/* удалён, используем /system/health)."""
         base = self._base()
-        log_step(f"GET {base}/api/v1/monitor/health — health Orchestrator...")
+        log_step(f"GET {base}/api/v1/system/health — health Orchestrator...")
         resp = await self._request(
-            "monitor", "get", f"{base}/api/v1/monitor/health",
+            "monitor", "get", f"{base}/api/v1/system/health",
             headers=self.headers,
         )
         if resp.status_code != 200:
-            log_warn(f"Monitor health недоступен: HTTP {resp.status_code}")
+            log_warn(f"System health недоступен: HTTP {resp.status_code}")
             return False
 
         data = resp.json()

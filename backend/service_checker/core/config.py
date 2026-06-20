@@ -48,7 +48,7 @@ SERVICE_DEFS: Dict[str, Dict[str, Any]] = {
         "name": "Orchestrator Service",
         "type": "mock",
         "port": 8081,
-        "health_url": "http://127.0.0.1:8081/api/v1/monitor/health",
+        "health_url": "http://127.0.0.1:8081/api/v1/system/health",
         "cwd": GATEWAY_DIR,
         "run_cmd": lambda: [
             sys.executable, "-m", "uvicorn", "mocks.orchestrator_service.main:app",
@@ -70,7 +70,7 @@ SERVICE_DEFS: Dict[str, Dict[str, Any]] = {
         "name": "Registry Service",
         "type": "mock",
         "port": 8084,
-        "health_url": "http://127.0.0.1:8084/api/v1/classifiers",
+        "health_url": "http://127.0.0.1:8084/api/v1/registry/classifiers/",
         "cwd": GATEWAY_DIR,
         "run_cmd": lambda: [
             sys.executable, "-m", "uvicorn", "mocks.registry_service.main:app",

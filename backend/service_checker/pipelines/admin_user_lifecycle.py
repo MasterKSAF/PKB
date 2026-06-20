@@ -174,7 +174,30 @@ class AdminUserLifecyclePipeline(PipelineDef):
             needs_auth=True,
         ))
 
-        # ── Шаг 8: Аудит — список действий (admin) ───────────────────
+        # ── Шаг 8: AU-3 Брутфорс-защита: 5 неудачных попыток ────────
+        _wrong_creds = {"username": test_email, "password": "WrongPass1!"}
+        for attempt in range(5):
+            steps.append(PipelineStep(
+                name=f"Брутфорс попытка {attempt + 1}/5",
+                service="auth",
+                method="POST",
+                path="/api/v1/auth/token",
+                port=8082,
+                body=_wrong_creds,
+                expected_status={401, 429, 423},  # 401=wrong, 429=rate, 423=locked
+            ))
+        # После 5 неудачных — проверяем что аккаунт заблокирован (423) или rate-limit (429)
+        steps.append(PipelineStep(
+            name="Проверка блокировки после 5 неудач",
+            service="auth",
+            method="POST",
+            path="/api/v1/auth/token",
+            port=8082,
+            body=_wrong_creds,
+            expected_status={429, 423},  # ожидаем блокировку или rate-limit
+        ))
+
+        # ── Шаг 10: Аудит — список действий (admin) ──────────────────
         steps.append(PipelineStep(
             name="Журнал аудита",
             service="auth",
@@ -187,7 +210,7 @@ class AdminUserLifecyclePipeline(PipelineDef):
             check=check_json_field("events", list),
         ))
 
-        # ── Шаг 9: Деактивация пользователя (admin) ──────────────────
+        # ── Шаг 11: Деактивация пользователя (admin) ─────────────────
         steps.append(PipelineStep(
             name="Деактивация пользователя",
             service="auth",
@@ -199,7 +222,7 @@ class AdminUserLifecyclePipeline(PipelineDef):
             check=check_json_field("is_active", bool),
         ))
 
-        # ── Шаг 10: Попытка аутентификации деактивированного пользователя ──
+        # ── Шаг 12: Попытка аутентификации деактивированного пользователя ──
         # Ожидаем 401 — пользователь больше не может войти
         steps.append(PipelineStep(
             name="Проверка 401 после деактивации",

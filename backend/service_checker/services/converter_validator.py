@@ -2,6 +2,11 @@
 PKB Neuroassistant — Converter-Validator Service API Definitions.
 
 Основано на: docs/api/converter_validator_service_api.md
+Обновления (19.06.2026):
+- CV-3: POST /converter/preview/metadata → POST /converter/preview (без бизнес-ключа)
+- CV-3a: POST /validate/metadata — единая точка вычисления бизнес-ключа
+- CV-8: Убрать document_id из ответов convert/validate
+- CV-9: Убрать version_id из ответа convert
 """
 
 from __future__ import annotations
@@ -25,28 +30,32 @@ def get_service_def() -> ServiceDef:
     endpoints = [
         EndpointDef("GET", f"{API_PREFIX}/health", "health", "Health check сервиса",
             response_schema={"status": str}),
-        EndpointDef("POST", f"{API_PREFIX}/converter/preview/metadata", "converter",
+        # CV-3: POST /converter/preview (вместо /converter/preview/metadata)
+        # Без title_hash_sha256/title_key в ответе (14 полей, без бизнес-ключа)
+        EndpointDef("POST", f"{API_PREFIX}/converter/preview", "converter",
             "Предпросмотр метаданных",
             body={"task_id": "12345", "version_id": "1",
                   "raw_json": {"test": True}},
-            # docs: { doc_code, title, document_type, year, revision }
             response_schema={"doc_code": str, "title": str, "document_type": str}),
+        # CV-3a: POST /validate/metadata — единая точка вычисления бизнес-ключа
+        EndpointDef("POST", f"{API_PREFIX}/validate/metadata", "validate",
+            "Валидация метаданных (вычисление бизнес-ключа)",
+            body={"title": "Тестовый документ", "doc_code": "TEST-001",
+                  "source_type": "GOST", "era": "RF", "year": 2026},
+            response_schema={"title_hash_sha256": str, "title_key": str,
+                             "doc_code": str, "status": str}),
+        # CV-8/CV-9: convert без document_id и version_id
         EndpointDef("POST", f"{API_PREFIX}/converter/convert", "converter",
             "Конвертация документа",
             body={"task_id": "12345", "version_id": "1",
                   "raw_json": {"test": True}},
-            # docs: { task_id, version_id, document_id, metadata{}, document{}, validation{} }
-            # document_id теперь в registry, converter его не возвращает
-            response_schema={"task_id": str, "version_id": str,
-                             "validation": dict}),
+            response_schema={"task_id": str, "validation": dict}),
+        # validate/document — без document_id
         EndpointDef("POST", f"{API_PREFIX}/validate/document", "validate",
             "Валидация документа",
             body={"task_id": "12345", "version_id": "1",
                   "raw_json": {"test": True}},
-            # docs: { validation_id, document_id, structure_valid, classification{}, status }
-            # document_id теперь в registry
-            response_schema={"validation_id": str,
-                             "structure_valid": bool, "status": str}),
+            response_schema={"validation_id": str, "structure_valid": bool, "status": str}),
     ]
 
     return ServiceDef(

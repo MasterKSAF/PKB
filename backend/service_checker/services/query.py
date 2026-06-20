@@ -2,6 +2,12 @@
 PKB Neuroassistant — Query Service API Definitions.
 
 Основано на: docs/api/query_service_api.md
+Обновления (19.06.2026):
+- QS-3: POST /chat/sessions — document_ids, project_id
+- QS-7: valid_at filter в POST /text/search, category_ids[]
+- QS-8: enrichment_skipped в ответ
+- QS-10: rating: int + rating_status
+- QS-12: POST /chat/sessions/{session_id}/messages/search
 """
 
 from __future__ import annotations
@@ -21,16 +27,15 @@ def get_service_def() -> ServiceDef:
     """Вернуть полное описание Query Service."""
 
     prepare_endpoints = [
-        # Создать сессию → context.session_id
-        # Примечание: сервис может вернуть session_id как int или str
+        # QS-3: document_ids, project_id
         EndpointDef("POST", f"{API_PREFIX}/chat/sessions", "chat",
             "Создать сессию (prepare)",
-            body={"title": "Тестовая сессия API Coverage"},
+            body={"title": "Тестовая сессия API Coverage",
+                  "document_ids": [], "project_id": 1},
             extract_keys=["session_id"],
             response_schema={"session_id": int, "title": str},
             is_preparation=True,
             expected_status=201),
-        # Отправить сообщение → context.message_id
         EndpointDef("POST", f"{API_PREFIX}/chat/sessions/{{session_id}}/messages", "chat",
             "Отправить сообщение (prepare)",
             body={"text": "Тестовое сообщение для prepare", "content": "Тестовое сообщение"},
@@ -48,7 +53,7 @@ def get_service_def() -> ServiceDef:
             response_schema={"status": str}),
         # Chat sessions
         EndpointDef("POST", f"{API_PREFIX}/chat/sessions", "chat", "Создать сессию",
-            body={"title": "Тестовая сессия API"},
+            body={"title": "Тестовая сессия API", "document_ids": [], "project_id": 1},
             extract_keys=["session_id"],
             response_schema={"session_id": int, "title": str}),
         EndpointDef("GET", f"{API_PREFIX}/chat/sessions", "chat", "Список сессий",
@@ -75,6 +80,12 @@ def get_service_def() -> ServiceDef:
             f"{API_PREFIX}/chat/sessions/{{session_id}}/messages/{{message_id}}",
             "chat", "Детали сообщения",
             response_schema={"message": dict}),
+        # QS-12: Поиск по сессии
+        EndpointDef("POST",
+            f"{API_PREFIX}/chat/sessions/{{session_id}}/messages/search",
+            "chat", "Поиск по истории сессии",
+            body={"query": "тест"},
+            response_schema={"results": list}),
         EndpointDef("POST", f"{API_PREFIX}/chat/sessions/{{session_id}}/context",
             "chat", "Управление контекстом",
             body={"action": "add_documents", "params": {"document_ids": []}},
@@ -83,9 +94,10 @@ def get_service_def() -> ServiceDef:
             "chat", "Экспорт сессии",
             body={"format": "json"},
             response_schema={"status": str}),
+        # QS-10: rating: int + rating_status
         EndpointDef("POST", f"{API_PREFIX}/chat/feedback", "chat", "Отправить отзыв",
             body={"session_id": "{session_id}", "message_id": "{message_id}",
-                  "rating": "positive"},
+                  "rating": 5, "rating_status": "positive"},
             response_schema={"saved": bool, "feedback_id": int}),
         EndpointDef("DELETE", f"{API_PREFIX}/chat/sessions/{{session_id}}", "chat",
             "Удалить сессию",
@@ -94,17 +106,19 @@ def get_service_def() -> ServiceDef:
         EndpointDef("GET", f"{API_PREFIX}/chat/history", "chat", "История чатов",
             response_schema={"items": list, "meta": dict}),
         EndpointDef("GET", f"{API_PREFIX}/chat/history/export", "chat", "Экспорт истории"),
-        # Text search / ask
+        # Text search / ask — QS-7: valid_at + category_ids
         EndpointDef("POST", f"{API_PREFIX}/text/search", "text", "Поиск по тексту",
-            body={"text": "толщина обшивки ледового пояса", "top_k": 5},
-            response_schema={"results": list}),
+            body={"text": "толщина обшивки ледового пояса", "top_k": 5,
+                  "valid_at": "2026-06-19", "filters": {"category_ids": []}},
+            response_schema={"results": list, "enrichment_skipped": bool}),  # QS-8
         EndpointDef("POST", f"{API_PREFIX}/text/ask", "text", "Задать вопрос",
             body={"text": "Какая толщина обшивки?", "document_ids": []},
             response_schema={"answer": str, "sources": list}),
     ]
 
     _warnings = [
-        "⚠️ POST /chat/feedback: docs требует rating:int + rating_status:string, но сервис принимает только rating:string (без rating_status). Docs новее реализации.",
+        "⚠️ POST /chat/feedback: rating:int + rating_status:string (QS-10). "
+        "Ранее был rating:string без rating_status.",
     ]
 
     return ServiceDef(

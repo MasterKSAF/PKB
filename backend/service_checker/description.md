@@ -460,7 +460,48 @@ python setup_db.py --only-env         # только .env файлы
 
 ---
 
-### 7. Тесты (`tests/`)
+### 7. `observability_check.py` — Проверка инструментации (SC-1)
+
+Модуль для проверки observability-инструментации сервисов. Работает в двух режимах:
+
+1. **Динамическая проверка** — через API сервиса: health endpoint, заголовки ответа, структура логов
+2. **Статический анализ** — поиск OTEL-инициализации в исходном коде
+
+**Проверяемые аспекты:**
+
+| Аспект | Что проверяется | Метод |
+|--------|-----------------|-------|
+| OTEL SDK | Инициализация OpenTelemetry, OTLPSpanExporter, TracerProvider | Статический анализ (`re` по .py файлам) |
+| OTLP-экспорт | Наличие signoz-otel-collector в конфигурации | Статический анализ |
+| Span-атрибуты | instrument_app, BatchSpanProcessor | Статический анализ |
+| Корреляционные заголовки | X-Request-ID, X-Trace-ID, X-User-ID, X-Draft-ID, X-Document-ID, X-Version-ID в ответе /health | HTTP-запрос |
+| Структурированное логирование | JSON-поля severity, timestamp, service, trace_id, span_id | HTTP + статический анализ |
+| Коды ошибок | INDEX_TRIGGER_TIMEOUT (408), DECISION_TIMEOUT (408), PREVIEW_TRIGGER_TIMEOUT (408), LLM_GENERATION_TIMEOUT (408) | HTTP-запрос |
+
+**Использование:**
+
+```bash
+# Проверить все сервисы
+python -m service_checker check
+
+# Проверить конкретный сервис
+python -m service_checker check auth
+
+# CI-режим: exit-code 0/1/2
+python -m service_checker check auth --post-deploy
+
+# Статический анализ исходного кода
+python -m service_checker check auth_service --source-dir /path/to/auth_service
+```
+
+**Exit codes (SC-2):**
+- `0` — всё хорошо
+- `1` — ошибки (сервис не отвечает, нет OTEL)
+- `2` — предупреждения (только в `--post-deploy`; нет correlation-заголовков, нет структурированных логов)
+
+---
+
+### 8. Тесты (`tests/`)
 
 6 файлов, 71 тест:
 

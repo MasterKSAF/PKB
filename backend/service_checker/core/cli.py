@@ -43,6 +43,13 @@ from service_checker.core.docker import (
     _docker_run_pipeline,
 )
 from service_checker.core.reports import _generate_full_report
+from service_checker.services import SERVICE_KEYS, MODE_PORTS, SERVICE_REGISTRY
+from service_checker.core.observability_check import (
+    check_service_otel,
+    check_service_otel_by_source,
+    format_observability_report,
+    ObservabilityCheckResult,
+)
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -169,6 +176,28 @@ def parse_args() -> argparse.Namespace:
         "--db-only",
         action="store_true",
         help="Запустить только PostgreSQL",
+    )
+
+    # check — observability / post-deploy проверка
+    p_check = subparsers.add_parser(
+        "check",
+        help="Проверка observability: OTEL, логи, correlation-id, коды ошибок (SC-1)",
+    )
+    p_check.add_argument(
+        "service",
+        nargs="?",
+        default=None,
+        help="Имя сервиса для проверки (по умолч. все)",
+    )
+    p_check.add_argument(
+        "--post-deploy",
+        action="store_true",
+        help="Режим CI: exit-code 0/1/2 (SC-2)",
+    )
+    p_check.add_argument(
+        "--source-dir",
+        default=None,
+        help="Директория с исходным кодом для статического анализа OTEL",
     )
 
     # report (из сохранённых данных)
@@ -313,7 +342,7 @@ async def cmd_emulate(
     # Проверим, что gateway жив (пробуем системный health)
     health_endpoints = [
         f"{gateway_url}/api/v1/system/health",
-        f"{gateway_url}/api/v1/monitor/health",
+        f"{gateway_url}/api/v1/health",
         f"{gateway_url}/api/v1/",
     ]
     alive = False
@@ -628,6 +657,105 @@ async def cmd_all(
 # ──────────────────────────────────────────────────────────────────────
 
 
+async def cmd_check(
+    service_name: Optional[str] = None,
+    post_deploy: bool = False,
+    source_dir: Optional[str] = None,
+) -> int:
+    """
+    Команда `check` — проверка observability сервисов (SC-1, SC-2).
+
+    Возвращает exit-code:
+        0 — всё хорошо
+        1 — ошибки
+        2 — предупреждения (только в --post-deploy)
+    """
+    log_header(f"Observability Check{' (post-deploy)' if post_deploy else ''}")
+
+    if source_dir and service_name:
+        # Статический анализ исходного кода
+        log_info(f"Статический анализ OTEL: {service_name} -> {source_dir}")
+        result = await check_service_otel_by_source(service_name, source_dir)
+        report = format_observability_report([result])
+        print(report)
+        if result.errors:
+            return 1
+        if result.warnings and post_deploy:
+            return 2
+        return 0
+
+    # Динамическая проверка через API
+    targets = []
+    if service_name:
+        if service_name not in SERVICE_KEYS:
+            log_err(f"Неизвестный сервис: {service_name}. Доступны: {', '.join(sorted(SERVICE_KEYS))}")
+            return 1
+        svc_def_func = SERVICE_REGISTRY[service_name]()
+        targets.append((service_name, svc_def_func.display_name, MODE_PORTS[service_name]))
+    else:
+        for key in sorted(SERVICE_KEYS):
+            if key == "tei":
+                continue  # TEI не проверяем на OTEL
+            try:
+                svc_def = SERVICE_REGISTRY[key]()
+                targets.append((key, svc_def.display_name, MODE_PORTS[key]))
+            except Exception:
+                targets.append((key, key, MODE_PORTS.get(key, 0)))
+
+    if not targets:
+        log_err("Нет сервисов для проверки")
+        return 1
+
+    log_info(f"Проверяю {len(targets)} сервисов...")
+    results: List[ObservabilityCheckResult] = []
+    for key, name, port in targets:
+        if not port:
+            log_warn(f"Порт для {key} не указан, пропускаю")
+            continue
+        log_step(f"Проверка {name} (:{port})...")
+        try:
+            result = await check_service_otel(key, name, port)
+            results.append(result)
+            if result.passed:
+                log_ok(f"{name} — OTEL OK")
+            else:
+                log_warn(f"{name} — проблемы")
+                for e in result.errors:
+                    log_err(f"  {e}")
+                for w in result.warnings:
+                    log_warn(f"  {w}")
+        except Exception as e:
+            log_err(f"{name}: ошибка проверки — {e}")
+            results.append(ObservabilityCheckResult(name, key, port, passed=False,
+                                                     errors=[str(e)]))
+
+    # Вывод отчёта
+    print()
+    report_text = format_observability_report(results)
+    print(report_text)
+
+    # Сохраняем отчёт
+    from datetime import datetime
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    report_path = BACKEND_DIR / "check_result" / f"observability_{ts}.md"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(report_text, encoding="utf-8")
+    log_ok(f"Отчёт сохранён: {report_path}")
+
+    # Определяем exit-code
+    errors = sum(1 for r in results if r.errors)
+    warnings = sum(1 for r in results if r.warnings)
+    passed = sum(1 for r in results if r.passed)
+
+    log_info(f"Результаты: {passed}✅ / {warnings}⚠️ / {errors}❌")
+
+    if errors > 0:
+        return 1
+    if warnings > 0 and post_deploy:
+        return 2
+    return 0
+
+
 async def main():
     # ── Windows cp1251 → UTF-8 для Unicode box-drawing символов ──
     if sys.platform == "win32":
@@ -681,6 +809,16 @@ async def main():
             timeout=args.timeout,
             output=args.output,
         )
+        return
+
+    if args.command == "check":
+        exit_code = await cmd_check(
+            service_name=args.service,
+            post_deploy=args.post_deploy,
+            source_dir=args.source_dir,
+        )
+        if args.post_deploy:
+            sys.exit(exit_code)
         return
 
     if args.command == "docker":

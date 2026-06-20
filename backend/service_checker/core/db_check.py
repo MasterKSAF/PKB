@@ -46,6 +46,7 @@ EXPECTED_SCHEMAS: Set[str] = {
     "public",
     "registry",
     "rag",
+    "pipeline",  # DB-23: schema для pipeline.tasks / pipeline.task_steps
 }
 
 EXPECTED_REGISTRY_TABLES: Set[str] = {
@@ -57,6 +58,11 @@ EXPECTED_REGISTRY_TABLES: Set[str] = {
     "registry.document_references",
     "registry.document_versions",
     "registry.rs_enums",
+}
+
+EXPECTED_PIPELINE_TABLES: Set[str] = {
+    "pipeline.tasks",
+    "pipeline.task_steps",
 }
 
 EXPECTED_RAG_TABLES: Set[str] = {
@@ -131,6 +137,9 @@ class DbCheckResult:
     registry_tables: List[str] = field(default_factory=list)
     registry_missing: Set[str] = field(default_factory=set)
 
+    pipeline_tables: List[str] = field(default_factory=list)
+    pipeline_missing: Set[str] = field(default_factory=set)
+
     rag_tables: List[str] = field(default_factory=list)
     rag_has_embedding: bool = False
     rag_has_ivfflat: bool = False
@@ -162,12 +171,17 @@ class DbCheckResult:
                 self.rag_has_gin)
 
     @property
+    def pipeline_ok(self) -> bool:
+        return len(self.pipeline_missing) == 0
+
+    @property
     def healthy(self) -> bool:
         """БД полностью инициализирована."""
         return (self.db_exists and self.db_accessible
                 and self.extensions_ok
                 and self.schemas_ok
                 and self.registry_ok
+                and self.pipeline_ok
                 and self.rag_ok)
 
     @property
@@ -297,6 +311,15 @@ def run_db_check() -> DbCheckResult:
         rc, _, _ = _docker_exec(f"SELECT count(*) FROM {table_name}")
         result.can_select_registry = rc == 0
 
+    # ── 6. Pipeline таблицы (DB-23/24) ───────────────────────────
+    pipeline_tables = _query_single_column(
+        "SELECT schemaname || '.' || tablename "
+        "FROM pg_tables WHERE schemaname = 'pipeline' "
+        "ORDER BY tablename"
+    )
+    result.pipeline_tables = pipeline_tables
+    result.pipeline_missing = EXPECTED_PIPELINE_TABLES - set(pipeline_tables)
+
     # ── 7. Статический анализ: create_all в сервисах ────────────
     result.services_create_all = check_services_startup_create_all()
 
@@ -407,6 +430,13 @@ def format_db_report(result: DbCheckResult) -> str:
         found_count = len(result.registry_tables)
         w(f"| Registry таблицы | ❌ | отсутствуют: {missing} |")
         w(f"| | | создано: {found_count} из {len(EXPECTED_REGISTRY_TABLES)} ожидаемых |")
+
+    # Pipeline таблицы (DB-23/24)
+    if result.pipeline_ok:
+        w(f"| Pipeline таблицы | ✅ | {len(result.pipeline_tables)} таблиц |")
+    else:
+        missing_p = ", ".join(sorted(result.pipeline_missing))
+        w(f"| Pipeline таблицы | ❌ | отсутствуют: {missing_p} |")
 
     # RAG
     rag_checks = [

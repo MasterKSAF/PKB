@@ -82,7 +82,7 @@ class ChatInferencePipeline(PipelineDef):
             needs_auth=True,
         ))
 
-        # ── Шаг 4: Текстовый поиск ───────────────────────────────────
+        # ── Шаг 4: Текстовый поиск (QS-7: valid_at + category_ids, QS-8: enrichment_skipped) ──
         steps.append(PipelineStep(
             name="Текстовый поиск",
             service="query",
@@ -91,23 +91,26 @@ class ChatInferencePipeline(PipelineDef):
             port=8083,
             body={
                 "text": "толщина обшивки ледового пояса",
+                "valid_at": "2026-06-19",
                 "top_k": 5,
+                "filters": {"category_ids": []},
             },
             expected_status=200,
             check=check_json_field("results", list),
             needs_auth=True,
         ))
 
-        # ── Шаг 5: Гибридный поиск RAG Search ────────────────────────
+        # ── Шаг 5: Поиск RAG Search (RS-6: без top_k, с valid_at + filters) ──
         steps.append(PipelineStep(
-            name="Гибридный поиск RAG Search",
+            name="Поиск RAG Search",
             service="rag_search",
             method="POST",
             path="/api/v1/rag/search",
             port=8091,
             body={
                 "query": "ледовый класс Arc4",
-                "top_k": 5,
+                "valid_at": "2026-06-19",
+                "filters": {"document_type": [], "category_ids": [], "document_ids": []},
             },
             expected_status=200,
             check=check_json_field("results", list),

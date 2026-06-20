@@ -2,6 +2,9 @@
 PKB Neuroassistant — RAG Builder Service API Definitions.
 
 Основано на: docs/api/rag_builder_service_api.md
+Обновления (19.06.2026):
+- RB-7: Код ответа 201 → 202 (асинхронный запуск)
+- RB-8: "completed" → "indexed"
 """
 
 from __future__ import annotations
@@ -23,7 +26,6 @@ def get_service_def() -> ServiceDef:
     """Вернуть полное описание RAG Builder Service."""
 
     prepare_endpoints = [
-        # Получение JWT токена через Auth (prepare для авторизованных запросов)
         EndpointDef("POST", f"{API_PREFIX}/auth/token", "auth",
             "Получение JWT токена (prepare)",
             body=TEST_CREDENTIALS,
@@ -31,7 +33,6 @@ def get_service_def() -> ServiceDef:
             is_preparation=True,
             expected_status=200,
             override_port=8082),
-        # Создание документа через Registry — ID попадёт в контекст как doc_id
         EndpointDef("POST", f"{API_PREFIX}/registry/documents/", "documents",
             "Создать документ в Registry (prepare для build)",
             body={
@@ -59,12 +60,13 @@ def get_service_def() -> ServiceDef:
             },
             response_schema={"status": str},
             is_preparation=True,
-            expected_status={200, 201}),
+            expected_status={200, 202}),  # RB-7: 202 вместо 201
     ]
 
     endpoints = [
         EndpointDef("GET", f"{API_PREFIX}/health", "health", "Health check сервиса",
             response_schema={"status": str}),
+        # RB-7: 202 для асинхронного запуска
         EndpointDef("POST", f"{API_PREFIX}/rag/build", "rag",
             "Построение чанков и индексация",
             body={
@@ -80,6 +82,7 @@ def get_service_def() -> ServiceDef:
         EndpointDef("DELETE", f"{API_PREFIX}/rag/build/{{doc_id}}", "rag",
             "Удаление чанков из индекса",
             response_schema={"status": str}),
+        # RB-8: "indexed" вместо "completed"
         EndpointDef("GET", f"{API_PREFIX}/rag/build/{{doc_id}}/status", "rag",
             "Статус индексации (longpoll)",
             params={"longpoll": 0},
@@ -95,8 +98,5 @@ def get_service_def() -> ServiceDef:
         prepare_endpoints=prepare_endpoints,
         depends_on=["registry", "auth"],
         base_data={},
-        warnings=[
-            # RAG Builder не проверяет JWT — токен в supervisord передан, но сервис его игнорирует.
-            # Старый warning про JWT убран (2026-06-17).
-        ],
+        warnings=[],
     )

@@ -127,7 +127,7 @@ class OrchestratorDraftLifecyclePipeline(PipelineDef):
             needs_auth=True,
         ))
 
-        # ── Шаг 7: Принять решение по черновику ──────────────────────
+        # ── Шаг 7: Принять решение по черновику (OR-12: action=approve) ──
         steps.append(PipelineStep(
             name="Решение по черновику (approve)",
             service="orchestrator",
