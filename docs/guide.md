@@ -59,7 +59,7 @@ DB CHECK-ограничения, DDL-миграции и спецификаци�
 - [ ] `db_diagrams.md` — примечание enum в разделе `registry.documents`
 - [ ] `db_diagrams.md` — CHECK-ограничение (регистр должен совпадать с API)
 - [ ] `ddl_migrations_17_06.md` — DDL-Migration (список значений)
-- [ ] `converter_validator_service_api.md` — `POST /converter/preview/metadata` (поле `source_type`)
+- [ ] `converter_validator_service_api.md` — `POST /converter/preview` (поле `source_type`)
 - [ ] `converter_specification.md` — шаг 5 (классификация), если enum упомянут
 - [ ] `glossary.md` — определение термина (если enum перечислен)
 - [ ] `orchestrator_service_api.md` — `POST /drafts` (поле `source_type` обязательно при загрузке)
@@ -143,6 +143,30 @@ DB CHECK-ограничения, DDL-миграции и спецификаци�
 Вместо редактирования:
 - Пользователь может отправить новое сообщение с уточнением/исправлением
 - При необходимости — удалить сессию целиком (hard-delete) и начать новую
+
+---
+
+## Бизнес-ключ вычисляет только Converter-validator
+
+**Дата:** 20.06.2026
+**Решение:** Converter-validator — единственная точка вычисления `title_hash_sha256` и `title_key`.
+
+**Обоснование:**
+- Нормализатор (нормализация названия, терминологический реестр, детект аватаров, приведение регистра) — компонент Converter-validator. Оркестратор **не имеет** собственного нормализатора.
+- `POST /drafts` не возвращает бизнес-ключ — он будет вычислен на этапе preview.
+- `PATCH /drafts/{id}/metadata` и `metadata_overrides` в `PATCH /decide` отправляются в Converter-validator (`POST /validate/metadata`) для пересчёта бизнес-ключа и нормализации.
+- Registry проверяет уникальность (`check-uniqueness`), но не вычисляет бизнес-ключ.
+
+**Затронутые сервисы:**
+- Converter-validator: endpoint `POST /validate/metadata` — единая точка входа для пересчёта.
+- Orchestrator: удалена локальная логика вычисления бизнес-ключа.
+
+**Контракт:**
+```
+POST /validate/metadata
+Вход: метаданные (era, source_type, mks_oks_code, okstu_code, doc_code, title)
+Выход: title_hash_sha256, title_key, normalized_title
+```
 
 ---
 

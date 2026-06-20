@@ -7,7 +7,9 @@
 
 ## PreviewMetadata
 
-Извлекается Converter-validator на этапе preview. Возвращается во всех ответах, содержащих метаданные черновика.
+Извлекается Converter-validator на этапе preview (из сырого JSON). Возвращается во всех ответах, содержащих метаданные черновика.
+
+> **Примечание:** `title_hash_sha256` и `title_key` не входят в PreviewMetadata. Они вычисляются на этапе валидации/нормализации через `POST /validate/metadata`.
 
 | Поле | Тип | Описание |
 |------|-----|----------|
@@ -25,13 +27,11 @@
 | `jurisdiction` | string \| null | Юрисдикция: `RU`, `EU`, `US`, `NO`, `INTL` |
 | `source_type` | string \| null | Тип источника: `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `RMRS`, `OTHER` |
 | `language` | string \| null | Язык документа (`ru`, `en`) |
-| `title_hash_sha256` | string | SHA-256 бизнес-ключа (6-польная формула) |
-| `title_key` | string | Исходная строка конкатенации для аудита |
 
 **Используется в:**
 - `orchestrator_service_api.md` — GET /drafts (items.preview_metadata), GET /drafts/{id} (preview_metadata)
 - `registry_service_api.md` — GET /registry/drafts, GET /registry/drafts/{id}
-- `converter_validator_service_api.md` — POST /converter/preview/metadata
+- `converter_validator_service_api.md` — POST /converter/preview
 - `pipeline1-formation.md` — пример Preview-фазы
 
 ---

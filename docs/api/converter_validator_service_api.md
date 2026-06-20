@@ -38,13 +38,13 @@
 
 Эндпоинты предварительного просмотра. Выполняются быстро, без записи в БД, без полного цикла валидации.
 
-### POST /converter/preview/metadata
+### POST /converter/preview
 
 Извлечение метаданных из частичного сырого JSON (первые N страниц).
 
 **Вход:** сырой JSON (результат Parser/OCR) — может содержать неполные данные.
 
-**Выход:** см. [_schemas.md](_schemas.md#PreviewMetadata) — preview-метаданные (16 полей).
+**Выход:** см. [_schemas.md](_schemas.md#PreviewMetadata) — preview-метаданные (14 полей, без бизнес-ключа).
 
 > **Полный формат данных:** [`docs/schema/schema_converter_preview.json`](../schema/schema_converter_preview.json) (схема `converter_validator_preview_v1`)
 
@@ -75,9 +75,7 @@
   "issuing_body": "РОССИЙСКИЙ МОРСКОЙ РЕГИСТР СУДОХОДСТВА",
   "jurisdiction": "RU",
   "source_type": "RMRS",
-  "language": "ru",
-  "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
-  "title_key": "CURRENT|rmrs|||311-05-1950ц|циркулярное письмо № 311-05-1950ц от 09.06.2023"
+  "language": "ru"
 }
 ```
 
@@ -339,6 +337,69 @@
 | `decision` | string | `auto` — автоматическое завершение, `manual` — требуется ручное подтверждение |
 | `status` | string | Статус: `completed`, `failed` |
 
+---
+
+### POST /validate/metadata
+
+Валидация и нормализация метаданных. **Единственная точка вычисления `title_hash_sha256`/`title_key` при ручных правках метаданных.**
+
+Принимает поля метаданных напрямую (без `raw_json`), нормализует название (терминологический реестр, lowercasing, детект аватаров), приводит `source_type` и `era` к нижнему регистру, вычисляет бизнес-ключ.
+
+**Используется:**
+- Orchestrator при `PATCH /drafts/{id}/metadata` (ручные правки метаданных)
+- Orchestrator при `PATCH /drafts/{id}/decide` с `metadata_overrides`
+
+**Запрос:**
+
+```json
+{
+  "era": "USSR",
+  "source_type": "GOST",
+  "mks_oks_code": "47.020",
+  "okstu_code": null,
+  "doc_code": "20868-81",
+  "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ"
+}
+```
+
+| Поле | Тип | Обязательность | Описание |
+|------|-----|---------------|----------|
+| `era` | string | Да | `USSR`, `CIS`, `RF`, `CURRENT` |
+| `source_type` | string | Да | `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `RMRS`, `OTHER` |
+| `mks_oks_code` | string \| null | Нет | Код МКС/ОКС |
+| `okstu_code` | string \| null | Нет | Код ОКСТУ |
+| `doc_code` | string | Да | Регистрационный номер документа |
+| `title` | string | Да | Название документа (сырое, до нормализации) |
+
+**Ответ `200`:**
+
+```json
+{
+  "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+  "title_key": "USSR|gost|47.020||20868-81|стойки установочные крепежные",
+  "normalized_title": "стойки установочные крепежные",
+  "source_type_normalized": "gost",
+  "era_normalized": "ussr"
+}
+```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `title_hash_sha256` | string | SHA-256 бизнес-ключа (6-польная формула по `normalizer_specification.md` §2.1) |
+| `title_key` | string | Исходная строка конкатенации для аудита |
+| `normalized_title` | string | Нормализованное название (lowercase, аватары заменены) |
+| `source_type_normalized` | string | `source_type` в нижнем регистре (как используется в хеше) |
+| `era_normalized` | string | `era` в нижнем регистре |
+
+**Коды ошибок:**
+
+| HTTP | `error.code` | Описание |
+|------|-------------|----------|
+| 400 | `VALIDATION_ERROR` | Некорректные или отсутствующие обязательные поля |
+| 422 | `NORMALIZATION_FAILED` | Ошибка нормализации названия |
+
+---
+
 > **Внутренние функции валидации:**
 > - `/validate/classifiers` — валидация классификационных кодов по справочнику Registry.
 > - `/validate/check` — проверка текста на соответствие набору правил.
@@ -364,7 +425,8 @@
 
 | Метод | Путь | Режим | Описание | Запись в БД |
 |---|---|---|---|---|
-| `POST` | `/converter/preview/metadata` | Preview | Извлечение метаданных — см. [_schemas.md](_schemas.md#PreviewMetadata) | Нет |
+| `POST` | `/converter/preview` | Preview | Извлечение метаданных — см. [_schemas.md](_schemas.md#PreviewMetadata). **Без** бизнес-ключа | Нет |
 | `POST` | `/converter/convert` | Full | Полная конвертация + валидация + LLM + кросс-ссылки (схема `validated_v3`) | Нет |
 | `POST` | `/validate/document` | Standalone | Комплексная валидация документа без переконвертации | Нет |
+| `POST` | `/validate/metadata` | Validate | **Единая точка** нормализации метаданных и вычисления бизнес-ключа. Принимает поля напрямую, без `raw_json` | Нет |
 
