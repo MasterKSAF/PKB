@@ -244,7 +244,7 @@ Supported search types:
 | search_type | Description |
 |---|---|
 | `dense` | Vector search by `nsi.chunks.embedding` |
-| `sparse` | PostgreSQL full-text search by `nsi.chunks.content` with `ts_rank_cd` |
+| `sparse` | PostgreSQL full-text search by `nsi.chunks.content_tsv` with `ts_rank_cd` |
 | `hybrid` | RRF fusion of sparse and dense results, duplicates removed |
 
 Request example:
@@ -309,9 +309,13 @@ MVP limitations:
 
 Sparse search acceleration:
 
-- `nsi.chunks` has a GIN expression index:
-  - `idx_chunks_content_tsv`
+- `nsi.chunks` has a materialized `tsvector` column:
+  - `content_tsv`
+- `content_tsv` is filled during chunk indexing with:
   - `to_tsvector('russian'::regconfig, content)`
+- `nsi.chunks` has a GIN index:
+  - `idx_chunks_content_tsv`
+  - `USING GIN (content_tsv)`
 - The index accelerates PostgreSQL full-text sparse search.
 
 ---
@@ -370,7 +374,7 @@ sql/
 * path
 * path_ltree
 * GIST индекс для ltree
-* GIN expression index for sparse full-text search
+* content_tsv + GIN index for sparse full-text search
 
 #### Хранение чанков
 
@@ -483,7 +487,7 @@ document_sections
 
 * `POST /search`
 * dense vector search
-* sparse full-text search with `ts_rank_cd`
+* sparse full-text search with `content_tsv` and `ts_rank_cd`
 * hybrid RRF fusion with `k=60`
 * citation fields: `document_id`, `document_version_id`, `section_id`, `clause`, `path`, `page`, `content`
 * context expansion via `document_sections.path_ltree`

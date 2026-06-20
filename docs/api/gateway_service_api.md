@@ -110,7 +110,7 @@ Registry drafts — только internal, доступ к ним через Gat
 | `POST` | `/api/v1/drafts/{draft_id}/preview` | Запуск preview-фазы | `engineer`, `knowledge_admin`, `system_admin` | — |
 | `GET`  | `/api/v1/drafts/{draft_id}/preview/status` | Статус preview (longpoll) | `engineer`, `knowledge_admin`, `system_admin` | — |
 | `PATCH`| `/api/v1/drafts/{draft_id}/decide` | Решение: `approve` / `reject` / `confirm`. Опционально `metadata_overrides` (ручные правки метаданных) | `engineer`, `knowledge_admin`, `system_admin` | — |
-| `PATCH`| `/api/v1/drafts/{draft_id}/metadata` | **S5**: Сохранение ручных правок метаданных черновика (без принятия решения). Пересчёт бизнес-ключа и проверка уникальности | `engineer`, `knowledge_admin`, `system_admin` | — |
+| `PATCH`| `/api/v1/drafts/{draft_id}/metadata` | **S5**: Сохранение ручных правок метаданных черновика (без принятия решения). **Пересчёт бизнес-ключа через Converter-validator** (`POST /validate/metadata`) и проверка уникальности | `engineer`, `knowledge_admin`, `system_admin` | — |
 | `DELETE`| `/api/v1/drafts/{draft_id}` | Удаление черновика (soft) | `knowledge_admin`, `system_admin` | — |
 
 > Полное описание форматов запросов/ответов и FSM — см. [orchestrator_service_api.md](orchestrator_service_api.md#группа-drafts).
