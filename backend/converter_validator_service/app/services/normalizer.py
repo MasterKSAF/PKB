@@ -28,6 +28,7 @@ SOURCE_TYPE_TO_KEY: Final[dict[str, str]] = {
 
 _GOST_R_RE = re.compile(r"гост\s*р|gost\s*r", re.IGNORECASE)
 _GOST_RE = re.compile(r"гост|gost", re.IGNORECASE)
+_RMRS_RE = re.compile(r"морск\w*\s+регистр|rmrs", re.IGNORECASE)
 _USSR_MARKERS = ("ссср", "ussr")
 
 
@@ -133,6 +134,19 @@ def compute_business_key(
     )
 
 
+def era_from_year(year: int | None, *texts: str | None) -> str:
+    inferred = infer_era(*texts)
+    if inferred != "CURRENT":
+        return inferred
+    if year is None:
+        return "CURRENT"
+    if year < 1992:
+        return "USSR"
+    if year <= 1999:
+        return "CIS"
+    return "RF"
+
+
 def infer_era(*texts: str | None) -> str:
     combined = " ".join(t for t in texts if t).lower()
     if any(marker in combined for marker in _USSR_MARKERS):
@@ -144,6 +158,8 @@ def infer_era(*texts: str | None) -> str:
 
 def infer_source_type(*texts: str | None) -> str:
     combined = " ".join(t for t in texts if t)
+    if _RMRS_RE.search(combined):
+        return "RMRS"
     if _GOST_R_RE.search(combined):
         return "GOST_R"
     if _GOST_RE.search(combined):

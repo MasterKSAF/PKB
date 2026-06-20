@@ -6,6 +6,7 @@ from app.core.exceptions import MetadataValidationError, NormalizationFailedErro
 from app.services.normalizer import (
     build_title_key,
     compute_business_key,
+    era_from_year,
     infer_era,
     infer_source_type,
     normalize_title,
@@ -87,3 +88,11 @@ def test_infer_era_and_source_type():
     assert infer_era("Комитет СССР") == "USSR"
     assert infer_source_type("ГОСТ 20868-81") == "GOST"
     assert infer_source_type("ГОСТ Р 2.105-95") == "GOST_R"
+    assert infer_source_type("РОССИЙСКИЙ МОРСКОЙ РЕГИСТР") == "RMRS"
+
+
+def test_era_from_year():
+    assert era_from_year(1981, "документ") == "USSR"
+    assert era_from_year(1995, "документ") == "CIS"
+    assert era_from_year(2023, "документ") == "RF"
+    assert era_from_year(None, "Комитет СССР") == "USSR"

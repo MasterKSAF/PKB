@@ -51,8 +51,19 @@ async def validate_document_endpoint(request: RawJsonRequest):
         hierarchy = build_hierarchy(raw)
         hierarchy = hierarchy | {"metadata": hierarchy.get("metadata") or {}}
         meta = hierarchy["metadata"]
-        meta.setdefault("doc_code", preview_meta.get("doc_code"))
-        meta.setdefault("title", preview_meta.get("title"))
+        for field in (
+            "doc_code",
+            "title",
+            "mks_oks_code",
+            "okstu_code",
+            "era",
+            "source_type",
+            "udk_code",
+            "issuing_body",
+        ):
+            value = preview_meta.get(field)
+            if value is not None:
+                meta.setdefault(field, value)
         document = hierarchy
 
     validation = await validate_document(
