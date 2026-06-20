@@ -53,6 +53,7 @@ def get_service_def() -> ServiceDef:
                 "document_id": "{doc_id}",
                 "sections": [{
                     "section_id": "{section_id}",
+                    "document_id": "{doc_id}",
                     "clause": "1", "level": 1, "path": "1", "page": 1,
                     "type": "text",
                     "content": {"text": "Тестовое содержимое"},
@@ -73,6 +74,7 @@ def get_service_def() -> ServiceDef:
                 "document_id": "{doc_id}",
                 "sections": [{
                     "section_id": "{section_id}",
+                    "document_id": "{doc_id}",
                     "clause": "1", "level": 1, "path": "1", "page": 1,
                     "type": "text",
                     "content": {"text": "Тестовое содержимое"},

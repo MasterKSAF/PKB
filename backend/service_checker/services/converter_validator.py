@@ -36,7 +36,15 @@ def get_service_def() -> ServiceDef:
         EndpointDef("POST", f"{API_PREFIX}/converter/preview", "converter",
             "Предпросмотр метаданных",
             body={"task_id": "12345", "version_id": "1",
-                  "raw_json": {"test": True}},
+                  "raw_json": {
+                      "metadata": {"schema": "raw_ocr_v4"},
+                      "document": {
+                          "source": {"file_name": "test.pdf", "title": "Тестовый документ"},
+                          "pages": [{"page": 1, "width": 210, "height": 297}],
+                          "block": [{"number": 1, "type": "paragraph", "page": 1,
+                                      "content": "Тестовый документ ГОСТ 20868-81"}]
+                      }
+                  }},
             response_schema={
                 "doc_code": str,
                 "title": str,
@@ -48,7 +56,8 @@ def get_service_def() -> ServiceDef:
                 "okstu_code": (str, type(None)),
                 "udk_code": (str, type(None)),
                 "jurisdiction": (str, type(None)),
-                "processing_status": str,
+                "issuing_body": (str, type(None)),
+                "language": (str, type(None)),
             }),
         # CV-3a: POST /validate/metadata — единая точка вычисления бизнес-ключа
         # DB-1/DB-28: title_hash_sha256, title_key в ответе
@@ -57,18 +66,35 @@ def get_service_def() -> ServiceDef:
             body={"title": "Тестовый документ", "doc_code": "TEST-001",
                   "source_type": "GOST", "era": "RF", "year": 2026},
             response_schema={"title_hash_sha256": str, "title_key": str,
-                             "doc_code": str, "status": str}),
+                             "normalized_title": str, "source_type_normalized": str,
+                             "era_normalized": str}),
         # CV-8/CV-9: convert без document_id и version_id
         EndpointDef("POST", f"{API_PREFIX}/converter/convert", "converter",
             "Конвертация документа",
             body={"task_id": "12345", "version_id": "1",
-                  "raw_json": {"test": True}},
+                  "raw_json": {
+                      "metadata": {"schema": "raw_ocr_v4"},
+                      "document": {
+                          "source": {"file_name": "test.pdf", "title": "Тестовый документ"},
+                          "pages": [{"page": 1, "width": 210, "height": 297}],
+                          "block": [{"number": 1, "type": "paragraph", "page": 1,
+                                      "content": "Тестовый документ ГОСТ 20868-81"}]
+                      }
+                  }},
             response_schema={"task_id": str, "validation": dict}),
         # validate/document — без document_id
         EndpointDef("POST", f"{API_PREFIX}/validate/document", "validate",
             "Валидация документа",
             body={"task_id": "12345", "version_id": "1",
-                  "raw_json": {"test": True}},
+                  "raw_json": {
+                      "metadata": {"schema": "raw_ocr_v4"},
+                      "document": {
+                          "source": {"file_name": "test.pdf", "title": "Тестовый документ"},
+                          "pages": [{"page": 1, "width": 210, "height": 297}],
+                          "block": [{"number": 1, "type": "paragraph", "page": 1,
+                                      "content": "Тестовый документ ГОСТ 20868-81"}]
+                      }
+                  }},
             response_schema={"validation_id": str, "structure_valid": bool, "status": str}),
     ]
 

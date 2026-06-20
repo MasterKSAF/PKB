@@ -24,6 +24,24 @@ import httpx
 # ──────────────────────────────────────────────────────────────
 
 
+def save_parser_result_as(key: str):
+    """Вернуть check-функцию, сохраняющую результат парсинга в PipelineContext под указанным ключом.
+
+    Используется для передачи полного ParserResult из шага парсинга
+    в шаг конвертации (Converter-Validator требует документ целиком).
+    """
+    def _save(body: Optional[str], ctx: PipelineContext) -> Tuple[bool, str]:
+        if not body:
+            return True, "пустой ответ (пропущено)"
+        try:
+            data = json.loads(body)
+        except json.JSONDecodeError:
+            return True, "не JSON (пропущено)"
+        ctx.set(key, data)
+        return True, f"результат сохранён как {key}"
+    return _save
+
+
 def s3_sign_headers(
     method: str,
     url: str,
@@ -245,6 +263,47 @@ class PipelineRunner:
         self.timeout = timeout
         self.client = httpx.AsyncClient(timeout=timeout)
 
+    async def _ensure_project(self, ctx: PipelineContext, auth_token: Optional[str] = None) -> None:
+        """Создать или получить проект для чат-сессий (QS-3)."""
+        import json as _json
+        headers = {"Content-Type": "application/json", "Accept": "application/json"}
+        if auth_token:
+            headers["Authorization"] = f"Bearer {auth_token}"
+        base_url = f"http://{self.base_host}:8083/api/v1/chat/projects"
+
+        # Пытаемся создать проект
+        try:
+            body = _json.dumps({"code": "PIPELINE", "name": "Pipeline Test Project"}).encode()
+            resp = await self.client.post(base_url, content=body, headers=headers)
+            if resp.status_code == 201:
+                data = resp.json()
+                pid = data.get("project_id") or (data.get("data") or {}).get("id")
+                if pid:
+                    ctx.set("project_id", pid)
+                    print(f"     ℹ Создан проект project_id={pid}")
+                    return
+        except Exception:
+            pass
+
+        # Если не создан — получаем список
+        try:
+            resp = await self.client.get(base_url, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                items = data.get("items") or data.get("data") or []
+                if items:
+                    pid = items[0].get("project_id") or items[0].get("id")
+                    if pid:
+                        ctx.set("project_id", pid)
+                        print(f"     ℹ Получен проект project_id={pid} из списка")
+                        return
+        except Exception:
+            pass
+
+        # Fallback
+        ctx.set("project_id", 1)
+        print(f"     ⚠ Не удалось создать/получить проект, fallback project_id=1")
+
     async def close(self) -> None:
         await self.client.aclose()
 
@@ -280,14 +339,63 @@ class PipelineRunner:
     def _resolve_body(self, body: Optional[Dict], ctx: PipelineContext) -> Optional[Dict]:
         """Подставить контекстные переменные в тело.
 
-        Формат плейсхолдера: {key} (в значениях JSON).
+        Формат плейсхолдера:
+          "{key}" — строка (str(value))
+          __INLINE__{key} — inline-значение (dict/list → как JSON, str → как строка)
         """
         if body is None:
             return None
-        resolved = json.dumps(body)
-        for key, value in ctx.variables.items():
-            resolved = resolved.replace(f"{{{key}}}", str(value))
-        return json.loads(resolved)
+
+        # Заменяем __INLINE__ маркеры на уникальные ID до json.dumps,
+        # чтобы json.dumps не обернул их в кавычки как строки
+        _uid = 0
+        inline_map: Dict[str, Any] = {}
+
+        def _replace_inline(val: Any) -> Any:
+            nonlocal _uid
+            if isinstance(val, str) and val.startswith("__INLINE__"):
+                key = val[len("__INLINE__"):]
+                uid = f"__INLINE_{_uid}__"
+                _uid += 1
+                inline_map[uid] = key
+                return uid
+            return val
+
+        # Рекурсивно обходим dict/list
+        def _walk(node: Any) -> Any:
+            if isinstance(node, dict):
+                return {k: _walk(_replace_inline(v)) for k, v in node.items()}
+            elif isinstance(node, list):
+                return [_walk(_replace_inline(item)) for item in node]
+            return node
+
+        processed = _walk(body)
+        text = json.dumps(processed)
+
+        # Подставляем контекстные переменные в строковые плейсхолдеры
+        for ctx_key, ctx_value in ctx.variables.items():
+            # "{key}" → строка
+            quoted = '"' + "{" + ctx_key + "}" + '"'
+            if quoted in text:
+                text = text.replace(quoted, json.dumps(str(ctx_value)))
+
+        # Подставляем inline-значения (снимаем кавычки, которые добавил json.dumps)
+        for uid, ctx_key in inline_map.items():
+            ctx_value = ctx.variables.get(ctx_key)
+            if isinstance(ctx_value, (dict, list)):
+                replacement = json.dumps(ctx_value, ensure_ascii=False)
+            elif isinstance(ctx_value, bool):
+                replacement = "true" if ctx_value else "false"
+            elif isinstance(ctx_value, (int, float)):
+                replacement = str(ctx_value)
+            elif ctx_value is None:
+                replacement = "null"
+            else:
+                replacement = json.dumps(str(ctx_value))
+            # json.dumps обернул uid в кавычки: "__INLINE_0__" → убираем
+            text = text.replace('"' + uid + '"', replacement)
+
+        return json.loads(text)
 
     async def run_step(
         self,
@@ -494,7 +602,13 @@ class PipelineRunner:
         else:
             result.ping_ok = True
 
-        # 2. Построение шагов
+        # 2. Pre-prepare: создаём проект для чат-сессий (QS-3)
+        if "query" in pipeline.services:
+            # Пробуем взять токен из контекста, если auth уже был
+            pre_token = str(ctx.get("access_token")) if ctx.has("access_token") else None
+            await self._ensure_project(ctx, pre_token)
+
+        # 3. Построение шагов
         try:
             steps = pipeline.build_steps(ctx)
         except Exception as e:
@@ -505,7 +619,7 @@ class PipelineRunner:
         result.steps = steps
         result.total_steps = len(steps)
 
-        # 3. Выполнение шагов
+        # 4. Выполнение шагов
         auth_token: Optional[str] = None
         for i, step in enumerate(steps):
             # Проверяем, не требует ли шаг токен
@@ -546,7 +660,7 @@ class PipelineRunner:
                 detail = step.error
             print(f"     {icon} [{i+1}/{len(steps)}] {step.name} — HTTP {step.actual_status} ({step.elapsed_ms}ms) — {detail}")
 
-        # 4. Итог
+        # 5. Итог
         # ⏭️ Skipped — не ошибка (ветвление через skip_if).
         # Пайплайн пройден, если ping ок, нет failed шагов, и есть хоть один шаг.
         result.passed = (

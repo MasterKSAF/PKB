@@ -62,7 +62,7 @@ class ChatInferencePipeline(PipelineDef):
             body={
                 "title": f"Pipeline тестовая сессия {datetime.now().isoformat()}",
                 "document_ids": [],  # QS-3: пустой список документов
-                "project_id": 1,  # QS-3: идентификатор проекта
+                "project_id": "__INLINE__project_id",  # QS-3: идентификатор проекта
             },
             expected_status=201,
             extract_keys=["session_id"],

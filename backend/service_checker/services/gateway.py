@@ -282,7 +282,7 @@ def get_service_def() -> ServiceDef:
         # ── Query: Chat ──
         EndpointDef("POST", f"{API_PREFIX}/chat/sessions", "chat",
             "Создать сессию",
-            body={"title": "Тест", "document_ids": [], "project_id": 1},
+            body={"title": "Тест", "document_ids": [], "project_id": "{project_id}"},
             extract_keys=["session_id"],
             expected_status=201),
         EndpointDef("GET", f"{API_PREFIX}/chat/sessions", "chat",

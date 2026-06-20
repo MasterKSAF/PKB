@@ -703,6 +703,49 @@ class ApiCoverageTester:
                 # FK fk_rag_document_chunks_section_id удалён 3-й миграцией — psql не нужен
                 print(f"  ℹ RAG Builder: timestamp={self.context['timestamp']}")
 
+            # ── Pre-prepare: создание проекта для Query (QS-3) ─────────
+            if service_key == "query":
+                import json as _json
+                auth_token = self.context.get("access_token", "")
+                # Пробуем создать проект
+                create_url = f"http://{self.base_host}:8083/api/v1/chat/projects"
+                create_body = _json.dumps({"code": "CHECKER", "name": "Checker Test Project"}).encode()
+                create_headers = {"Content-Type": "application/json"}
+                if auth_token:
+                    create_headers["Authorization"] = f"Bearer {auth_token}"
+                try:
+                    resp = await self.client.post(
+                        create_url, content=create_body, headers=create_headers
+                    )
+                    if resp.status_code == 201:
+                        data = resp.json()
+                        pid = data.get("project_id") or (data.get("data") or {}).get("id")
+                        if pid:
+                            self.context["project_id"] = pid
+                            print(f"  ℹ Query: создан проект project_id={pid}")
+                except Exception:
+                    pass
+
+                # Если проект не создан — получаем список
+                if "project_id" not in self.context:
+                    try:
+                        resp = await self.client.get(create_url, headers=create_headers)
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            items = data.get("items") or data.get("data") or []
+                            if items:
+                                pid = items[0].get("project_id") or items[0].get("id")
+                                if pid:
+                                    self.context["project_id"] = pid
+                                    print(f"  ℹ Query: получен проект project_id={pid} из списка")
+                    except Exception:
+                        pass
+
+                if "project_id" not in self.context:
+                    # Fallback: хардкод 1 — если ничего не вышло
+                    self.context["project_id"] = 1
+                    print(f"  ⚠ Query: не удалось создать/получить проект, fallback project_id=1")
+
             # ── Pre-prepare: загрузка PDF в MinIO для Parser ────────────
             if service_key == "parser":
                 pdf_path = Path(__file__).resolve().parent.parent / "pdf" / "7bd97d737317a8a272bb18a405ab2d04.pdf"

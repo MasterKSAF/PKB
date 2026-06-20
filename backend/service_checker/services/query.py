@@ -31,7 +31,7 @@ def get_service_def() -> ServiceDef:
         EndpointDef("POST", f"{API_PREFIX}/chat/sessions", "chat",
             "Создать сессию (prepare)",
             body={"title": "Тестовая сессия API Coverage",
-                  "document_ids": [], "project_id": 1},
+                  "document_ids": [], "project_id": "{project_id}"},
             extract_keys=["session_id"],
             response_schema={"session_id": int, "title": str},
             is_preparation=True,
@@ -53,7 +53,7 @@ def get_service_def() -> ServiceDef:
             response_schema={"status": str}),
         # Chat sessions
         EndpointDef("POST", f"{API_PREFIX}/chat/sessions", "chat", "Создать сессию",
-            body={"title": "Тестовая сессия API", "document_ids": [], "project_id": 1},
+            body={"title": "Тестовая сессия API", "document_ids": [], "project_id": "{project_id}"},
             extract_keys=["session_id"],
             response_schema={"session_id": int, "title": str}),
         EndpointDef("GET", f"{API_PREFIX}/chat/sessions", "chat", "Список сессий",

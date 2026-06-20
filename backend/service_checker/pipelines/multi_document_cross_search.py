@@ -21,6 +21,7 @@ from .base import (
     check_json_fields,
     check_rag_search_results,
     s3_sign_headers,
+    save_parser_result_as,
 )
 
 MINIO_PORT = 19000
@@ -149,7 +150,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             retry_on={409},
             retry_delay=2.0,
             retry_max=30,
-            check=check_json_fields({"document": dict}),
+            check=save_parser_result_as("parser_result_1"),
         ))
 
         # ── Шаг 7: Конвертация #1 ─────────────────────────────────────
@@ -162,7 +163,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             body={
                 "task_id": str(TEST_TASK_ID_1),
                 "version_id": "1",  # CV-9: version_id обязателен
-                "raw_json": {"pages": [], "blocks": [], "text": f"Текст документа 1 {ts}"},
+                "raw_json": "__INLINE__parser_result_1",
             },
             expected_status=200,
         ))
@@ -200,6 +201,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
                 "document_id": "{doc_id_1}",
                 "sections": [{
                     "section_id": 1,
+                    "document_id": "{doc_id_1}",
                     "clause": "1",
                     "level": 1,
                     "path": "1",
@@ -273,7 +275,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             retry_on={409},
             retry_delay=2.0,
             retry_max=30,
-            check=check_json_fields({"document": dict}),
+            check=save_parser_result_as("parser_result_2"),
         ))
 
         # ── Шаг 14-16: Конвертация #2 + Registry #2 + Build #2 ────────
@@ -286,7 +288,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             body={
                 "task_id": str(TEST_TASK_ID_2),
                 "version_id": "1",  # CV-9: version_id обязателен
-                "raw_json": {"pages": [], "blocks": [], "text": f"Текст документа 2 {ts}"},
+                "raw_json": "__INLINE__parser_result_2",
             },
             expected_status=200,
         ))
@@ -323,6 +325,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
                 "document_id": "{doc_id_2}",
                 "sections": [{
                     "section_id": 1,
+                    "document_id": "{doc_id_2}",
                     "clause": "1",
                     "level": 1,
                     "path": "1",
