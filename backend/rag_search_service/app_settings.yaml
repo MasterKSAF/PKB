@@ -1,0 +1,57 @@
+# =============================================================================
+# RAG Search Service — иерархическая конфигурация
+# Источник: docs/api/rag_search_service_api.md (P13-1..P13-4)
+# =============================================================================
+# Env-переменные перезаписывают значения из этого файла (backward compatibility).
+
+service:
+  name: rag-search
+  version: "0.1.0"
+
+rag:
+  # Стратегия поиска (P13-4, rag_experiments_methodology.md)
+  # Доступные стратегии:
+  #   S1: dense              — только dense (векторный поиск)
+  #   S2: dense_rerank       — dense + cross-encoder rerank (ПРОДАКШН)
+  #   S3: sparse             — только sparse (BM25/pg_trgm)
+  #   S4: hybrid             — dense + sparse, простое слияние (среднее скоров)
+  #   S5: hybrid_rerank      — S4 + cross-encoder rerank
+  #   S6: hybrid_rrf         — dense + sparse, RRF (k=60) без rerank
+  #   S7: hybrid_rrf_rerank  — S6 + cross-encoder rerank
+  search_strategy: dense_rerank
+
+  # Размерность эмбеддингов (должна совпадать с VECTOR() в БД)
+  # Qwen3-Embedding-4B: 2560 / 2048 / 1536
+  # Текущий режим: 1024 (Qwen3-Embedding-0.6B для тестов)
+  embedding_dim: 1024
+
+  # Размер чанка в токенах
+  chunk_size: 1024
+
+  # Эмбеддинги через внешний OpenAI-compatible API (Infinity)
+  embedding_api:
+    mode: infinity
+    endpoint: "http://infinity:7997"
+    model: "Qwen/Qwen3-Embedding-0.6B"
+
+  # TEI reranker (локальный, int8-квантизация)
+  rerank_url: "http://tei-reranker:80"
+  rerank_model: "BAAI/bge-reranker-v2-m3-int8"
+  rerank_top_n: 50
+
+  # Количество результатов в ответе (фиксировано, не передаётся клиентом)
+  top_k: 10
+
+  # Context expansion: количество соседних чанков до/после
+  context_expansion: 2
+
+observability:
+  otel:
+    endpoint: "signoz-otel-collector:4317"
+    insecure: true
+
+logging:
+  pii_fields:
+    - password
+    - access_token
+    - refresh_token

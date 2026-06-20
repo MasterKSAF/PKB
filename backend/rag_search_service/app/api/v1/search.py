@@ -1,4 +1,4 @@
-"""POST /rag/search — гибридный поиск чанков."""
+"""POST /rag/search — поиск чанков (dense + rerank) с context expansion."""
 
 from __future__ import annotations
 
@@ -9,9 +9,10 @@ from fastapi.responses import JSONResponse
 
 from app.core.database import get_connection
 from app.core.logging import get_logger
+from app.core.search.context import expand_context_batch
 from app.core.search.hybrid import hybrid_search
 from app.models.request import SearchRequest
-from app.models.response import ChunkResult, SearchResponse
+from app.models.response import ContextChunk, RetrievalMeta, SearchResponse, SearchResult, SourceLocator
 
 logger = get_logger("search.api")
 router = APIRouter()
@@ -21,41 +22,44 @@ router = APIRouter()
     "/rag/search",
     response_model=SearchResponse,
     status_code=status.HTTP_200_OK,
-    summary="Hybrid chunk search",
+    summary="Chunk search (dense + rerank)",
     description=(
-        "Гибридный поиск релевантных чанков. Возвращает сырые чанки с полным содержимым "
-        "и метаданными. Без генерации LLM."
+        "Поиск релевантных чанков. Возвращает source-локаторы и retrieval-метаданные. "
+        "Без генерации LLM."
     ),
 )
 async def search_chunks(request: SearchRequest):
-    """
-    Полный цикл поиска:
-      1. Генерация эмбеддинга запроса
-      2. Dense + Sparse поиск
-      3. RRF-реранжирование
-      4. JOIN с метаданными документа и секции
-    """
+    """Поиск чанков: dense → rerank → context expansion → ответ."""
     start = time.monotonic()
-    logger.info(
-        "Search request: query=%r, top_k=%d, search_type=%s, rerank=%s",
-        request.query[:50],
-        request.top_k,
-        request.search_type,
-        request.rerank,
-    )
 
-    if request.filters:
-        logger.info("Filters received: %s", request.filters.model_dump())
+    if not request.query.strip():
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "code": "EMPTY_QUERY",
+                    "message": "Поисковый запрос не может быть пустым",
+                    "details": {},
+                }
+            },
+        )
+
+    settings = _get_settings()
+    logger.info(
+        "Search request: query=%r, valid_at=%s",
+        request.query[:50],
+        request.valid_at,
+    )
 
     try:
         async with get_connection() as conn:
-            # 1. Гибридный поиск (Dense + Sparse + RRF)
+            # 1. Поиск (dense + rerank)
             search_results, total_found = await hybrid_search(
                 conn=conn,
                 query=request.query,
-                top_k=request.top_k,
-                search_type=request.search_type,
-                rerank=request.rerank,
+                top_k=settings.search_top_k,
+                search_type=settings.search_strategy,
+                rerank=True,
             )
 
             if not search_results:
@@ -63,7 +67,6 @@ async def search_chunks(request: SearchRequest):
                 return SearchResponse(
                     query=request.query,
                     results=[],
-                    search_type_used=request.search_type,
                     processing_time_ms=elapsed_ms,
                     total_found=total_found,
                 )
@@ -71,93 +74,142 @@ async def search_chunks(request: SearchRequest):
             # 2. Подтягивание контента и метаданных (JOIN) с фильтрацией
             chunk_ids = list(search_results.keys())
 
-            # Динамически строим WHERE с фильтрами
             base_query = """
                 SELECT
                     c.id            AS chunk_id,
                     c.document_id   AS document_id,
-                    d.title         AS document_title,
-                    d.doc_code      AS doc_code,
                     c.section_id    AS section_id,
-                    s.title         AS section_title,
+                    c.chunk_index   AS chunk_index,
                     s.clause        AS clause,
+                    s.path          AS section_path,
+                    s.bbox          AS section_bbox,
+                    s.title         AS section_title,
                     c.page          AS page,
-                    c.content       AS content,
-                    c.confidence    AS confidence
+                    c.content       AS content
                 FROM rag.document_chunks c
                 JOIN registry.documents d ON d.id = c.document_id
                 LEFT JOIN registry.document_sections s ON s.id = c.section_id
                 WHERE c.id = ANY($1::bigint[])
+                  AND d.valid_from <= $2::date
+                  AND d.valid_until >= $2::date
             """
 
-            params: list = [chunk_ids]
+            params: list = [chunk_ids, request.valid_at]
             filter_clauses: list[str] = []
-            param_idx = 2  # следующий индекс после $1
+            param_idx = 3
 
             if request.filters:
                 if request.filters.document_type:
-                    placeholders = ",".join(f"${param_idx + i}::text" for i in range(len(request.filters.document_type)))
+                    placeholders = ",".join(
+                        f"${param_idx + i}::text"
+                        for i in range(len(request.filters.document_type))
+                    )
                     filter_clauses.append(f"d.document_type IN ({placeholders})")
                     params.extend(request.filters.document_type)
                     param_idx += len(request.filters.document_type)
 
-                if request.filters.date_from:
-                    filter_clauses.append(f"d.adoption_date >= ${param_idx}::date")
-                    params.append(request.filters.date_from)
-                    param_idx += 1
+                if request.filters.document_ids:
+                    placeholders = ",".join(
+                        f"${param_idx + i}::bigint"
+                        for i in range(len(request.filters.document_ids))
+                    )
+                    filter_clauses.append(f"d.id IN ({placeholders})")
+                    params.extend(request.filters.document_ids)
+                    param_idx += len(request.filters.document_ids)
 
-                if request.filters.date_to:
-                    filter_clauses.append(f"d.adoption_date <= ${param_idx}::date")
-                    params.append(request.filters.date_to)
-                    param_idx += 1
+                if request.filters.category_ids:
+                    placeholders = ",".join(
+                        f"${param_idx + i}::bigint"
+                        for i in range(len(request.filters.category_ids))
+                    )
+                    filter_clauses.append(
+                        f"d.id IN (SELECT document_id FROM registry.document_categories "
+                        f"WHERE category_id IN ({placeholders}))"
+                    )
+                    params.extend(request.filters.category_ids)
+                    param_idx += len(request.filters.category_ids)
 
             if filter_clauses:
                 base_query += " AND " + " AND ".join(filter_clauses)
 
             rows = await conn.fetch(base_query, *params)
-
-            # 3. Формирование ответа с сохранением порядка из RRF
             rows_map = {row["chunk_id"]: dict(row) for row in rows}
+
+            # 3. Context expansion
+            expansion_targets = []
+            for chunk_id, score in search_results.items():
+                row = rows_map.get(chunk_id)
+                if row:
+                    expansion_targets.append({
+                        "chunk_id": chunk_id,
+                        "section_id": row.get("section_id"),
+                        "chunk_index": row.get("chunk_index"),
+                    })
+
+            context_map = await expand_context_batch(
+                conn, expansion_targets, expansion=settings.context_expansion
+            )
+
+            # 4. Формирование ответа
             results = []
             for chunk_id, score in search_results.items():
                 row = rows_map.get(chunk_id)
                 if not row:
-                    # Чанк мог быть удален между поиском и JOIN (маловероятно, но защищаемся)
                     continue
-                
-                results.append(
-                    ChunkResult(
-                        chunk_id=row["chunk_id"],
-                        document_id=row["document_id"],
-                        document_title=row["document_title"] or "",
-                        doc_code=row.get("doc_code"),
-                        section_id=row["section_id"],
-                        section_title=row.get("section_title"),
-                        page=row.get("page"),
-                        content=row["content"],
-                        score=score,
-                        clause=row.get("clause"),
-                        confidence=row.get("confidence"),
-                    )
+
+                # Source locator
+                source = SourceLocator(
+                    document_id=row["document_id"],
+                    section_id=row.get("section_id"),
+                    clause=row.get("clause"),
+                    path=str(row["section_path"]) if row.get("section_path") else None,
+                    page=row.get("page"),
+                    bbox=row.get("section_bbox"),
+                    section_title=row.get("section_title"),
+                    content=row["content"],
                 )
+
+                # Retrieval metadata
+                retrieval = RetrievalMeta(
+                    chunk_id=chunk_id,
+                    score=score,
+                    mode=settings.search_strategy,
+                )
+
+                # Context chunks
+                raw_context = context_map.get(chunk_id, [])
+                context = [
+                    ContextChunk(
+                        chunk_id=c["chunk_id"],
+                        content=c["content"],
+                        page=c.get("page"),
+                    )
+                    for c in raw_context
+                ]
+
+                results.append(SearchResult(
+                    source=source,
+                    retrieval=retrieval,
+                    context=context,
+                ))
 
             elapsed_ms = int((time.monotonic() - start) * 1000)
             logger.info(
-                "Search completed: %d results, %d ms, search_type=%s",
-                len(results), elapsed_ms, request.search_type
+                "Search completed: %d results, %d ms, strategy=%s",
+                len(results),
+                elapsed_ms,
+                settings.search_strategy,
             )
 
             return SearchResponse(
                 query=request.query,
                 results=results,
-                search_type_used=request.search_type,
                 processing_time_ms=elapsed_ms,
                 total_found=total_found,
             )
 
     except Exception as e:
         logger.exception("Search failed: %s", e)
-        # Формат ошибки строго согласно rag_search_service_api.md и common_api.md
         return JSONResponse(
             status_code=500,
             content={
@@ -168,3 +220,8 @@ async def search_chunks(request: SearchRequest):
                 }
             },
         )
+
+
+def _get_settings():
+    from app.config import get_settings
+    return get_settings()
