@@ -26,6 +26,9 @@ if _is_sqlite:
 if _is_memory_sqlite:
     # In-memory SQLite: each connection must be the only one,
     # otherwise each pooled connection gets a separate DB.
+    # Support URI mode for shared cache (file::memory:?cache=shared)
+    if "uri=true" in settings.DATABASE_URL or "?" in settings.DATABASE_URL:
+        _connect_args["uri"] = True
     engine = create_async_engine(
         settings.DATABASE_URL,
         echo=settings.DEBUG,
