@@ -18,6 +18,7 @@ from .base import (
     PipelineStep,
     check_json_field,
     check_json_fields,
+    check_rag_search_results,
     s3_sign_headers,
 )
 
@@ -138,6 +139,7 @@ class DocumentProcessingPipeline(PipelineDef):
             port=8087,
             body={
                 "task_id": self.TEST_TASK_ID,
+                "draft_id": 1,  # PS-3: обязательный draft_id
                 "file_key": self.TEST_PDF_KEY,
                 "version_id": "1",
                 "mode": "full",  # PS-5: единый эндпоинт
@@ -213,7 +215,7 @@ class DocumentProcessingPipeline(PipelineDef):
             needs_auth=True,
         ))
 
-        # -- Шаг 6: Конвертация JSON (CV-9: без version_id) --
+        # -- Шаг 6: Конвертация JSON (CV-9: с version_id) --
         steps.append(PipelineStep(
             name="Конвертация JSON",
             service="converter_validator",
@@ -222,6 +224,7 @@ class DocumentProcessingPipeline(PipelineDef):
             port=8086,
             body={
                 "task_id": str(self.TEST_TASK_ID),
+                "version_id": "1",  # CV-9: version_id обязателен
                 "raw_json": {"pages": [], "blocks": [], "text": "тестовый текст"},
             },
             expected_status=200,
@@ -241,6 +244,9 @@ class DocumentProcessingPipeline(PipelineDef):
                 "source_type": "GOST",
                 "era": "RF",
                 "validity_status": "active",
+                "source_draft_id": 1,  # RG-9: связь с черновиком
+                "mks_oks_code": "47.020",  # DB-9: классификатор
+                "title_key": f"GOST|RF|PIPELINE-TEST-{int(time.time())}|2026",  # DB-28: бизнес-ключ
             },
             expected_status={201, 409},
             needs_auth=True,
@@ -297,7 +303,7 @@ class DocumentProcessingPipeline(PipelineDef):
                 "filters": {"document_type": [], "category_ids": [], "document_ids": []},
             },
             expected_status=200,
-            check=check_json_field("results", list),
+            check=check_rag_search_results(),
         ))
 
         return steps

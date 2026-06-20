@@ -20,6 +20,7 @@ from .base import (
     PipelineStep,
     check_json_field,
     check_json_fields,
+    check_rag_search_results,
 )
 
 
@@ -91,6 +92,9 @@ class FullDocumentLifecyclePipeline(PipelineDef):
                 "source_type": "GOST",
                 "era": "RF",
                 "validity_status": "active",
+                "source_draft_id": 1,
+                "mks_oks_code": "47.020",
+                "title_key": f"GOST|RF|LIFECYCLE-{ts}|2026",
             },
             expected_status={201, 409},
             needs_auth=True,
@@ -108,7 +112,6 @@ class FullDocumentLifecyclePipeline(PipelineDef):
                 "document_id": "{doc_id}",
                 "sections": [{
                     "section_id": 1,
-                    "document_id": "{doc_id}",
                     "clause": "1",
                     "level": 1,
                     "path": "1",
@@ -117,12 +120,12 @@ class FullDocumentLifecyclePipeline(PipelineDef):
                     "content": {"text": "Содержимое тестового документа lifecycle"},
                 }],
             },
-            expected_status={200, 201},
+            expected_status={200, 202},  # RB-7: 202 для асинхронного запуска
             needs_auth=True,
             check=self._check_build_ok,
         ))
 
-        # ── Шаг 4: Обновление метаданных документа (имитация «починки») ─────
+        # -- Шаг 4: Обновление метаданных документа (имитация «починки») --
         steps.append(PipelineStep(
             name="Обновление метаданных документа",
             service="registry",
@@ -130,7 +133,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             # ⚠️ trailing slash обязателен (FastAPI 307 redirect)
             path="/api/v1/registry/documents/{doc_id}/status/",
             port=8084,
-            body={"status": "uploaded"},
+            body={"processing_status": "uploaded"},  # RG-1: поле processing_status
             expected_status=200,
             needs_auth=True,
             check=check_json_field("data", dict),
@@ -147,7 +150,6 @@ class FullDocumentLifecyclePipeline(PipelineDef):
                 "document_id": "{doc_id}",
                 "sections": [{
                     "section_id": 1,
-                    "document_id": "{doc_id}",
                     "clause": "1",
                     "level": 1,
                     "path": "1",
@@ -156,7 +158,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
                     "content": {"text": "Содержимое тестового документа lifecycle"},
                 }],
             },
-            expected_status={200, 201},
+            expected_status={200, 202},
             needs_auth=True,
             check=self._check_build_ok,
         ))
@@ -174,7 +176,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
                 "filters": {"document_type": [], "category_ids": [], "document_ids": []},
             },
             expected_status=200,
-            check=check_json_field("results", list),
+            check=check_rag_search_results(),
         ))
 
         # ── Шаг 7: Удаление документа из Registry ────────────────────
@@ -213,7 +215,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
                 "filters": {"document_type": [], "category_ids": [], "document_ids": []},
             },
             expected_status=200,
-            check=check_json_field("results", list),
+            check=check_rag_search_results(),
         ))
 
         # ── Шаг 10: Воссоздание документа ─────────────────────────────
@@ -230,6 +232,9 @@ class FullDocumentLifecyclePipeline(PipelineDef):
                 "source_type": "GOST",
                 "era": "RF",
                 "validity_status": "active",
+                "source_draft_id": 1,
+                "mks_oks_code": "47.020",
+                "title_key": f"GOST|RF|LIFECYCLE-RECOVER-{ts2}|2026",
             },
             expected_status={201, 409},
             needs_auth=True,
@@ -247,7 +252,6 @@ class FullDocumentLifecyclePipeline(PipelineDef):
                 "document_id": "{doc_id_2}",
                 "sections": [{
                     "section_id": 1,
-                    "document_id": "{doc_id_2}",
                     "clause": "1",
                     "level": 1,
                     "path": "1",
@@ -256,7 +260,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
                     "content": {"text": "Содержимое восстановленного документа"},
                 }],
             },
-            expected_status={200, 201},
+            expected_status={200, 202},
             needs_auth=True,
             check=self._check_build_ok,
             on_error=self._on_build_error,
@@ -275,7 +279,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
                 "filters": {"document_type": [], "category_ids": [], "document_ids": []},
             },
             expected_status=200,
-            check=check_json_field("results", list),
+            check=check_rag_search_results(),
         ))
 
         return steps

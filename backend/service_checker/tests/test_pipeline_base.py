@@ -17,6 +17,7 @@ from service_checker.pipelines.base import (
     check_contains_text,
     check_json_field,
     check_json_fields,
+    check_rag_search_results,
 )
 
 
@@ -311,3 +312,129 @@ class TestCheckContainsText:
         check = check_contains_text("text")
         ok, msg = check(None, PipelineContext())
         assert not ok
+
+
+class TestCheckRagSearchResults:
+    """check_rag_search_results — валидация RAG Search по source-индексам."""
+
+    def test_empty_body(self):
+        check = check_rag_search_results()
+        ok, msg = check(None, PipelineContext())
+        assert not ok
+        assert "Пустой ответ" in msg
+
+    def test_not_json(self):
+        check = check_rag_search_results()
+        ok, msg = check("not json", PipelineContext())
+        assert not ok
+        assert "Невалидный JSON" in msg
+
+    def test_results_is_not_list(self):
+        check = check_rag_search_results()
+        ok, msg = check(json.dumps({"results": "not_a_list"}), PipelineContext())
+        assert not ok
+        assert "должен быть списком" in msg
+
+    def test_empty_results_is_ok(self):
+        check = check_rag_search_results()
+        ok, msg = check(json.dumps({"results": []}), PipelineContext())
+        assert ok
+        assert "results=[]" in msg
+
+    def test_empty_results_with_require_sources_fails(self):
+        check = check_rag_search_results(require_sources=True)
+        ok, msg = check(json.dumps({"results": []}), PipelineContext())
+        assert not ok
+        assert "требовались source-индексы" in msg
+
+    def test_valid_result_with_source_retrieval(self):
+        check = check_rag_search_results()
+        body = json.dumps({
+            "results": [
+                {
+                    "source": {
+                        "document_id": 420000,
+                        "section_id": 8,
+                        "clause": "6.1",
+                        "path": "6/6.1",
+                        "page": 2,
+                        "bbox": None,
+                        "section_title": "Допуск",
+                        "content": "Текст...",
+                        "content_hash": "sha256-abc",
+                    },
+                    "retrieval": {
+                        "chunk_id": 119,
+                        "score": 0.87,
+                        "mode": "dense_rerank",
+                    },
+                    "context": [
+                        {"chunk_id": 118, "content": "Контекст...", "score": 0.45, "page": 2}
+                    ],
+                }
+            ],
+            "processing_time_ms": 120,
+            "total_found": 1,
+        })
+        ok, msg = check(body, PipelineContext())
+        assert ok
+        assert "source-индексам" in msg
+
+    def test_missing_source_fails(self):
+        check = check_rag_search_results()
+        body = json.dumps({
+            "results": [
+                {
+                    "retrieval": {"chunk_id": 119, "score": 0.87, "mode": "dense_rerank"},
+                }
+            ],
+        })
+        ok, msg = check(body, PipelineContext())
+        assert not ok
+        assert "source отсутствует" in msg
+
+    def test_missing_document_id_fails(self):
+        check = check_rag_search_results()
+        body = json.dumps({
+            "results": [
+                {
+                    "source": {"section_id": 8},
+                    "retrieval": {"chunk_id": 119, "score": 0.87, "mode": "dense_rerank"},
+                }
+            ],
+        })
+        ok, msg = check(body, PipelineContext())
+        assert not ok
+        assert "document_id или section_id отсутствуют" in msg
+
+    def test_missing_retrieval_chunk_id_fails(self):
+        check = check_rag_search_results()
+        body = json.dumps({
+            "results": [
+                {
+                    "source": {"document_id": 1, "section_id": 8},
+                    "retrieval": {"score": 0.87, "mode": "dense_rerank"},  # нет chunk_id
+                }
+            ],
+        })
+        ok, msg = check(body, PipelineContext())
+        assert not ok
+        assert "chunk_id/score/mode обязательны" in msg
+
+    def test_multiple_results_all_valid(self):
+        check = check_rag_search_results()
+        body = json.dumps({
+            "results": [
+                {
+                    "source": {"document_id": 1, "section_id": 10},
+                    "retrieval": {"chunk_id": 1, "score": 0.9, "mode": "dense_rerank"},
+                },
+                {
+                    "source": {"document_id": 2, "section_id": 20},
+                    "retrieval": {"chunk_id": 2, "score": 0.8, "mode": "hybrid_rrf"},
+                },
+            ],
+        })
+        ok, msg = check(body, PipelineContext())
+        assert ok
+        assert "results[2/2]" in msg
