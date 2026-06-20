@@ -160,6 +160,9 @@ services:
     container_name: pkb-converter-validator
     expose:
       - "8086"
+    environment:
+      OPENAI_API_KEY: ${ROUTERAI_API_KEY}
+      OPENAI_BASE_URL: https://routerai.ru/api/v1
     networks:
       - internal
     restart: unless-stopped
