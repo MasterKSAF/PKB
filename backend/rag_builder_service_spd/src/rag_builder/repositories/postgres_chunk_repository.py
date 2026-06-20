@@ -124,6 +124,7 @@ class PostgresChunkRepository(ChunkRepository):
                             chunk_index INTEGER NOT NULL,
                             chunk_type TEXT NOT NULL,
                             content TEXT NOT NULL,
+                            content_tsv TSVECTOR,
                             metadata JSONB,
                             embedding VECTOR(1536),
                             created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -146,7 +147,7 @@ class PostgresChunkRepository(ChunkRepository):
                         """
                         CREATE INDEX IF NOT EXISTS idx_chunks_content_tsv
                         ON {}.chunks
-                        USING GIN (to_tsvector('russian'::regconfig, content))
+                        USING GIN (content_tsv)
                         """
                     ).format(
                         sql.Identifier(settings.POSTGRES_SCHEMA)
@@ -422,6 +423,7 @@ class PostgresChunkRepository(ChunkRepository):
                             chunk_index,
                             chunk_type,
                             content,
+                            content_tsv,
                             metadata,
                             embedding
                         )
@@ -429,6 +431,7 @@ class PostgresChunkRepository(ChunkRepository):
                             %s, %s, %s, %s,
                             %s, %s, %s, %s,
                             %s, %s, %s, %s,
+                            to_tsvector('russian'::regconfig, %s),
                             %s, %s
                         )
                         """,
@@ -444,6 +447,7 @@ class PostgresChunkRepository(ChunkRepository):
                             json.dumps(item.chunk.bbox),
                             item.chunk.chunk_index,
                             item.chunk.chunk_type,
+                            item.chunk.content,
                             item.chunk.content,
                             json.dumps(item.chunk.metadata),
                             json.dumps(item.embedding),

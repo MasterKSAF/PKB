@@ -116,8 +116,7 @@ class PostgresSearchRepository:
         where_clauses = [
             sql.SQL(
                 """
-                to_tsvector('russian', content)
-                @@ websearch_to_tsquery('russian', %s)
+                content_tsv @@ websearch_to_tsquery('russian', %s)
                 """
             )
         ]
@@ -162,7 +161,7 @@ class PostgresSearchRepository:
                 content,
                 NULL AS distance,
                 ts_rank_cd(
-                    to_tsvector('russian', content),
+                    content_tsv,
                     websearch_to_tsquery('russian', %s)
                 ) AS rank_score
             FROM {schema}.chunks
