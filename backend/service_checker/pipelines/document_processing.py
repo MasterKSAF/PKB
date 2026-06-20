@@ -290,6 +290,7 @@ class DocumentProcessingPipeline(PipelineDef):
             },
             expected_status={201, 409},
             needs_auth=True,
+            extract_keys=["doc_id"],
         ))
 
         # -- Шаг 7a (P1F-4/RG-10): Проверка preview_snapshot в документе --

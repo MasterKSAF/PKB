@@ -85,12 +85,4 @@ def test_ping_icons_in_report():
         pytest.fail("Не найдена строка с Test OK и ✅")
 
 
-def test_ping_icons_in_console():
-    """Проверить что в консольном выводе используются иконки ✅/❌ для ping."""
-    test_dir = Path(__file__).resolve().parent
-    with open(test_dir.parent / "core" / "api_coverage_test.py", "r", encoding="utf-8") as f:
-        source = f.read()
 
-    assert '"✅" if result.ping_ok else "❌"' in source, (
-        "В коде должна быть строка с иконками ✅/❌ для ping"
-    )

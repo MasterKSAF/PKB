@@ -141,6 +141,83 @@ class TestPipelineRunner:
         body = {"auth": "{token}"}
         assert runner._resolve_body(body, ctx) == {"auth": "abc"}
 
+    def test_resolve_body_inline_dict(self):
+        """__INLINE__ подставляет dict как есть (без обёртки в строку)."""
+        runner = PipelineRunner()
+        ctx = PipelineContext()
+        ctx.set("sections", [{"id": 1, "text": "test"}])
+        body = {"document_id": "{doc_id}", "sections": "__INLINE__sections"}
+        resolved = runner._resolve_body(body, ctx)
+        assert resolved["document_id"] == "{doc_id}"  # doc_id нет в контексте
+        assert isinstance(resolved["sections"], list)
+        assert resolved["sections"][0]["id"] == 1
+
+    def test_resolve_body_inline_int(self):
+        """__INLINE__ подставляет int как число."""
+        runner = PipelineRunner()
+        ctx = PipelineContext()
+        ctx.set("section_id", 42)
+        body = {"section_id": "__INLINE__section_id", "nested": {"val": "__INLINE__section_id"}}
+        resolved = runner._resolve_body(body, ctx)
+        assert resolved["section_id"] == 42
+        assert resolved["nested"]["val"] == 42
+
+    def test_resolve_body_inline_bool(self):
+        """__INLINE__ подставляет bool."""
+        runner = PipelineRunner()
+        ctx = PipelineContext()
+        ctx.set("flag", True)
+        body = {"flag": "__INLINE__flag"}
+        resolved = runner._resolve_body(body, ctx)
+        assert resolved["flag"] is True
+
+    def test_resolve_body_inline_none(self):
+        """__INLINE__ подставляет None как null."""
+        runner = PipelineRunner()
+        ctx = PipelineContext()
+        ctx.set("nothing", None)
+        body = {"value": "__INLINE__nothing"}
+        resolved = runner._resolve_body(body, ctx)
+        assert resolved["value"] is None
+
+    def test_resolve_body_mixed_regular_and_inline(self):
+        """Смешанные {key} строковые и __INLINE__ подстановки."""
+        runner = PipelineRunner()
+        ctx = PipelineContext()
+        ctx.set("doc_id", "42")
+        ctx.set("sections", [{"id": 1}])
+        body = {
+            "document_id": "{doc_id}",
+            "sections": "__INLINE__sections",
+        }
+        resolved = runner._resolve_body(body, ctx)
+        assert resolved["document_id"] == "42"
+        assert resolved["sections"] == [{"id": 1}]
+
+    def test_resolve_body_multiple_inline(self):
+        """Несколько __INLINE__ ключей в одном объекте."""
+        runner = PipelineRunner()
+        ctx = PipelineContext()
+        ctx.set("doc_id", 1)
+        ctx.set("section_id", 2)
+        body = {
+            "document_id": "__INLINE__doc_id",
+            "sections": [{"section_id": "__INLINE__section_id", "text": "test"}],
+        }
+        resolved = runner._resolve_body(body, ctx)
+        assert resolved["document_id"] == 1
+        assert resolved["sections"][0]["section_id"] == 2
+
+    def test_resolve_body_nested_dict_inline(self):
+        """__INLINE__ вложенного dict."""
+        runner = PipelineRunner()
+        ctx = PipelineContext()
+        ctx.set("content", {"text": "hello", "type": "text"})
+        body = {"content": "__INLINE__content"}
+        resolved = runner._resolve_body(body, ctx)
+        assert resolved["content"]["text"] == "hello"
+        assert resolved["content"]["type"] == "text"
+
     def test_extract_context_simple(self):
         runner = PipelineRunner()
         ctx = PipelineContext()
@@ -171,6 +248,87 @@ class TestPipelineRunner:
         runner._extract_context(response, ["doc_id"], ctx)
         # Не перезаписывает уже существующий
         assert ctx.get("doc_id") == "existing"
+
+    def test_extract_context_data_wrapper(self):
+        """Извлечение из обёртки data.key."""
+        runner = PipelineRunner()
+        ctx = PipelineContext()
+        response = json.dumps({"data": {"id": "42", "items": []}})
+        runner._extract_context(response, ["doc_id"], ctx)
+        # _search находит 'id' в data через alt_map: doc_id → ["id", "document_id", "docId"]
+        assert ctx.get("doc_id") == "42"
+
+    def test_extract_context_alt_name_session_id(self):
+        """session_id ищется как id/sessionId/session_id."""
+        runner = PipelineRunner()
+        ctx = PipelineContext()
+        response = json.dumps({"sessionId": "sess-001"})
+        runner._extract_context(response, ["session_id"], ctx)
+        assert ctx.get("session_id") == "sess-001"
+
+    def test_extract_context_alt_name_task_id(self):
+        """task_id ищется как task_id/taskId."""
+        runner = PipelineRunner()
+        ctx = PipelineContext()
+        response = json.dumps({"taskId": "task-42"})
+        runner._extract_context(response, ["task_id"], ctx)
+        assert ctx.get("task_id") == "task-42"
+
+    def test_extract_context_alt_name_message_id(self):
+        """message_id ищется как id/messageId/message_id."""
+        runner = PipelineRunner()
+        ctx = PipelineContext()
+        response = json.dumps({"messageId": "msg-001"})
+        runner._extract_context(response, ["message_id"], ctx)
+        assert ctx.get("message_id") == "msg-001"
+
+    def test_extract_context_alt_name_user_id(self):
+        """user_id ищется как id/userId/user_id."""
+        runner = PipelineRunner()
+        ctx = PipelineContext()
+        response = json.dumps({"userId": 5})
+        runner._extract_context(response, ["user_id"], ctx)
+        assert ctx.get("user_id") == 5
+
+    def test_extract_context_alt_name_classifier_code(self):
+        """classifier_code ищется как code/classifier_code."""
+        runner = PipelineRunner()
+        ctx = PipelineContext()
+        response = json.dumps({"code": "OKS-001"})
+        runner._extract_context(response, ["classifier_code"], ctx)
+        assert ctx.get("classifier_code") == "OKS-001"
+
+    def test_extract_context_nested_list(self):
+        """Поиск в списке объектов."""
+        runner = PipelineRunner()
+        ctx = PipelineContext()
+        response = json.dumps({"items": [{"id": 99}]})
+        runner._extract_context(response, ["doc_id"], ctx)
+        assert ctx.get("doc_id") == 99
+
+    def test_extract_context_returns_none_on_missing(self):
+        """Ключ не найден — контекст не меняется."""
+        runner = PipelineRunner()
+        ctx = PipelineContext()
+        response = json.dumps({"status": "ok"})
+        runner._extract_context(response, ["missing_key"], ctx)
+        assert ctx.has("missing_key") is False
+
+    def test_extract_context_invalid_json(self):
+        """Невалидный JSON — ничего не извлекается."""
+        runner = PipelineRunner()
+        ctx = PipelineContext()
+        runner._extract_context("not json", ["key"], ctx)
+        assert ctx.has("key") is False
+
+    def test_extract_context_empty_body(self):
+        """Пустое тело — ничего не извлекается."""
+        runner = PipelineRunner()
+        ctx = PipelineContext()
+        runner._extract_context(None, ["key"], ctx)
+        assert ctx.has("key") is False
+        runner._extract_context("", ["key"], ctx)
+        assert ctx.has("key") is False
 
     # ── skip_if: ветвление шагов ──────────────────────────────────
 

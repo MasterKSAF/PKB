@@ -510,11 +510,13 @@ class PipelineRunner:
 
     def _extract_context(
         self,
-        response_body: str,
+        response_body: Optional[str],
         extract_keys: List[str],
         ctx: PipelineContext,
     ) -> None:
         """Извлечь ID из ответа и сохранить в контекст."""
+        if not response_body:
+            return
         try:
             raw = json.loads(response_body)
         except json.JSONDecodeError:
@@ -686,6 +688,7 @@ class PipelineRunner:
             "registry": 8084,
             "converter_validator": 8086,
             "parser": 8087,
+            "ocr": 8088,
             "rag_builder": 8090,
             "rag_search": 8091,
             "minio": 19000,  # MinIO S3 API

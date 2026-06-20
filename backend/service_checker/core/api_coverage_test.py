@@ -71,7 +71,6 @@ SERVICES_WITH_REAL = {
 # В таком случае checker показывает warning, а не error.
 KNOWN_NEW_ENDPOINTS: Dict[str, set] = {
     "orchestrator": {
-        "POST /api/v1/drafts/",           # OR-11: draft-first
         "PATCH /api/v1/drafts/{draft_id}/metadata",  # OR-3b
         "PATCH /api/v1/drafts/{draft_id}/decide",    # OR-12: action вместо decision
         "GET /api/v1/drafts/{draft_id}",             # OR-7: document_id, version_id
@@ -92,12 +91,8 @@ KNOWN_NEW_ENDPOINTS: Dict[str, set] = {
         "POST /api/v1/converter/preview",             # CV-3: новый эндпоинт
         "POST /api/v1/validate/metadata",              # CV-3a: единая точка
     },
-    "parser": {
-        "POST /api/v1/parser/process",               # PS-5: mode=preview|full
-    },
-    "ocr": {
-        "POST /api/v1/ocr/process",                  # OC-8: mode=preview|full
-    },
+
+
     "rag_builder": {
         "POST /api/v1/rag/build/{doc_id}/reprocess",  # P2I-9: переиндексация
         "GET /api/v1/rag/build/{doc_id}/integrity",    # P2I-1: частичная

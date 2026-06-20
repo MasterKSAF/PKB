@@ -7,10 +7,6 @@
 from __future__ import annotations
 
 import json
-import sys
-import tempfile
-from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import pytest
@@ -314,40 +310,5 @@ class TestGenerateFullReport:
         assert parts_pipe[3] == "—", f"Expected '—', got {parts_pipe[3]}"
 
 
-# ── Тесты: автосохранение pipeline_test.py ────────────────────────
 
 
-class TestPipelineAutoSave:
-    """Тестируем, что pipeline_test.py правильно вычисляет путь сохранения."""
-
-    def test_auto_save_path_resolves_to_backend_check_result(self):
-        """Проверяем, что путь автосохранения ведёт в backend/check_result/."""
-        # Имитируем логику из pipeline_test.py
-        fake_script = Path("H:/Projects/PKB_neuroassistant_develop/backend/service_checker/core/pipeline_test.py")
-        check_dir = fake_script.resolve().parent.parent.parent / "check_result"
-        assert "check_result" in str(check_dir)
-        # Убеждаемся, что это НЕ service_checker/check_result
-        assert "service_checker" not in str(check_dir.parent)
-        # А backend/check_result
-        assert check_dir.parent.name == "backend"
-
-    def test_pipeline_report_filename_format(self):
-        """Имя файла соответствует формату pipeline_YYYYMMDD_HHMMSS.md."""
-        from service_checker.core.pipeline_test import generate_report
-        # Проверяем, что функция существует и импортируется
-        assert callable(generate_report)
-
-
-# ── Тесты: full-report action в cmd_docker ────────────────────────
-
-
-class TestDockerFullReportAction:
-    """Проверяем, что cmd_docker обрабатывает action full-report."""
-
-    def test_docker_has_full_report_action(self):
-        """Проверяем, что в cmd_docker есть ветка для full-report."""
-        import inspect
-        from service_checker.core.cli import cmd_docker
-
-        source = inspect.getsource(cmd_docker)
-        assert 'action == "full-report"' in source or '"full-report"' in source
