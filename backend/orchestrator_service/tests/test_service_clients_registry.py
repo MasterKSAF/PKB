@@ -122,3 +122,50 @@ class TestRegistryDrafts:
         assert "data" in result
         data = result["data"]
         assert isinstance(data.get("is_duplicate_file"), bool)
+
+    # ------------------------------------------------------------------
+    # Document status (RG-1)
+    # ------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_update_document_status(self, reg_client):
+        """update_document_status returns updated status."""
+        result = await reg_client.update_document_status(
+            document_id=1, status="indexed"
+        )
+        assert "data" in result
+        data = result["data"]
+        assert data["document_id"] == 1
+        assert data["status"] == "indexed"
+        assert "updated_at" in data
+
+    @pytest.mark.asyncio
+    async def test_update_document_status_with_updated_by(self, reg_client):
+        """update_document_status with optional updated_by."""
+        result = await reg_client.update_document_status(
+            document_id=1, status="failed", updated_by="system"
+        )
+        assert "data" in result
+        data = result["data"]
+        assert data["status"] == "failed"
+
+    @pytest.mark.asyncio
+    async def test_update_document_status_not_found(self, reg_client):
+        """update_document_status on non-existent doc returns error."""
+        result = await reg_client.update_document_status(
+            document_id=9999, status="indexed"
+        )
+        assert "error" in result
+
+    @pytest.mark.asyncio
+    async def test_update_document_status_roundtrip(self, reg_client):
+        """update_document_status persists in mock storage through multiple calls."""
+        result1 = await reg_client.update_document_status(
+            document_id=1, status="indexing"
+        )
+        assert result1["data"]["status"] == "indexing"
+
+        result2 = await reg_client.update_document_status(
+            document_id=1, status="indexed"
+        )
+        assert result2["data"]["status"] == "indexed"

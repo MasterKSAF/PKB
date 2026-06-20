@@ -6,8 +6,9 @@ Responsibilities:
 2. Advance through steps, enqueueing each via Celery
 3. Handle step completion: update Task/TaskStep, transition draft, enqueue next step
 4. Handle step failure: retry with backoff, or trigger Saga compensation
-5. Handle approve/reject decisions
-6. Detect and handle stale/running tasks
+5. Handle approve/reject decisions (external UI actions)
+6. Handle proceed/stop_duplicate/force_new_version (internal actions)
+7. Detect and handle stale/running tasks
 """
 
 import logging
@@ -67,11 +68,22 @@ class PipelineOrchestrator:
         )
 
         # Determine which service handles the preview based on mime_type
-        # For scanned/image → OCR Service; for digital PDF → Parser Service
-        is_scanned = mime_type in ("image/png", "image/jpeg", "image/tiff") or (
-            mime_type == "application/pdf"  # would need deeper check
+        # image/* → OCR Service; application/pdf with text layer → Parser Service
+        # For now: image/* → OCR, PDF → Parser (digital PDF detection via mime sub-type)
+        is_image = mime_type in ("image/png", "image/jpeg", "image/tiff")
+        is_digital_pdf = mime_type == "application/pdf"
+        is_scanned_pdf = mime_type in (
+            "application/pdf+scanned", "application/x-pdf-scanned"
         )
-        preview_service = "OCR Service" if is_scanned else "Parser Service"
+
+        if is_image or is_scanned_pdf:
+            preview_service = "OCR Service"
+            use_ocr = True
+        else:
+            # Digital PDF or unknown → Parser Service
+            preview_service = "Parser Service"
+            use_ocr = False
+
         preview_step = "preview_ocr"  # both use same step name
 
         # Create TaskSteps
@@ -81,7 +93,7 @@ class PipelineOrchestrator:
             step_name="upload",
             step_index=0,
             service_name="Orchestrator",
-            input_data={"file_key": file_key},
+            input_data={"file_key": file_key, "draft_id": draft_id},
         )
 
         # Step 1: preview OCR/Parser
@@ -90,7 +102,7 @@ class PipelineOrchestrator:
             step_name=preview_step,
             step_index=1,
             service_name=preview_service,
-            input_data={"file_key": file_key, "mode": "preview", "max_pages": 3},
+            input_data={"file_key": file_key, "mode": "preview", "max_pages": 3, "draft_id": draft_id},
         )
 
         # Step 2: preview Converter-validator
@@ -99,7 +111,7 @@ class PipelineOrchestrator:
             step_name="preview_converter",
             step_index=2,
             service_name="Converter-validator",
-            input_data={"file_key": file_key, "mode": "preview"},
+            input_data={"file_key": file_key, "mode": "preview", "draft_id": draft_id},
         )
 
         # Start the first step (upload) and enqueue it
@@ -117,13 +129,13 @@ class PipelineOrchestrator:
             run_converter_preview_step,
         )
 
-        trace_id = get_trace_id() or ""
-        if is_scanned:
-            run_ocr_preview_step.delay(task_id, draft_id, file_key, max_pages=3, trace_id=trace_id)
+        current_trace_id = get_trace_id() or ""
+        if use_ocr:
+            run_ocr_preview_step.delay(task_id, draft_id, file_key, max_pages=3, trace_id=current_trace_id)
         else:
-            run_parser_preview_step.delay(task_id, draft_id, file_key, max_pages=3, trace_id=trace_id)
+            run_parser_preview_step.delay(task_id, draft_id, file_key, max_pages=3, trace_id=current_trace_id)
 
-        run_converter_preview_step.delay(task_id, draft_id, file_key, trace_id=trace_id)
+        run_converter_preview_step.delay(task_id, draft_id, file_key, trace_id=current_trace_id)
 
         # Update progress
         await self.task_repo.update_task_status(
@@ -231,10 +243,66 @@ class PipelineOrchestrator:
                 break
 
         preview_not_supported = False
+        quality_data = {}
         if preview_step and preview_step.output_data:
             preview_not_supported = preview_step.output_data.get(
                 "preview_not_supported", False
             )
+            quality_data = preview_step.output_data.get("quality", {})
+
+        # --- Save quality notifications from Parser/OCR (OR-6) ---
+        notifications = quality_data.get("notifications", [])
+        if notifications:
+            await self.task_repo.save_notifications(
+                task_id=task.id,
+                draft_id=task.draft_id,
+                notifications=notifications,
+            )
+            logger.info(
+                f"Saved {len(notifications)} quality notifications",
+                extra={
+                    "task_id": task.id,
+                    "draft_id": task.draft_id,
+                    "critical_count": sum(
+                        1 for n in notifications if n.get("severity") == "critical"
+                    ),
+                },
+            )
+
+        # --- Check converter validation status (P1F-2) ---
+        converter_step = next(
+            (s for s in steps if s.step_name == "preview_converter"), None
+        )
+        is_validated = True
+        if converter_step and converter_step.output_data:
+            is_validated = converter_step.output_data.get("validated", True)
+
+        if not is_validated:
+            logger.info(
+                "Converter validation failed — setting review_required",
+                extra={"task_id": task.id, "draft_id": task.draft_id},
+            )
+            try:
+                registry = RegistryServiceClient()
+                await registry.update_draft_status(
+                    draft_id=task.draft_id,
+                    status="review_required",
+                )
+                await registry.close()
+            except Exception as e:
+                logger.warning(
+                    f"Failed to set draft status to review_required: {e}",
+                    extra={"draft_id": task.draft_id},
+                )
+            await self.task_repo.update_task_status(
+                task_id=task.id,
+                stage=TaskStage.DECISION.value,
+                progress_percent=50,
+            )
+            return
+
+        # Check if there are critical notifications — block auto-approve
+        has_critical = await self.task_repo.has_critical_notifications(task.id)
 
         if preview_not_supported:
             logger.info(
@@ -251,15 +319,21 @@ class PipelineOrchestrator:
             task.full_completed = True
             await self.db.flush()
 
-            # Check auto-approve conditions
-            can_auto_approve = self._check_auto_approve(task, steps)
-            if can_auto_approve:
+            # Check auto-approve conditions (skip if critical notifications)
+            if not has_critical:
+                can_auto_approve = self._check_auto_approve(task, steps)
+                if can_auto_approve:
+                    logger.info(
+                        "Auto-approving draft after full preview",
+                        extra={"draft_id": task.draft_id, "task_id": task.id},
+                    )
+                    await self.approve_draft(task.draft_id, task.id)
+                    return
+            else:
                 logger.info(
-                    "Auto-approving draft after full preview",
+                    "Auto-approve blocked: critical quality notifications",
                     extra={"draft_id": task.draft_id, "task_id": task.id},
                 )
-                await self.approve_draft(task.draft_id, task.id)
-                return
 
         else:
             # Partial preview — always wait for decision
@@ -286,11 +360,35 @@ class PipelineOrchestrator:
             )
 
     def _check_auto_approve(self, task, steps) -> bool:
-        """Check if conditions for auto-approve are met."""
-        # Auto-approve if preview was full and metadata is valid
-        # For now, return True if full_completed is set
-        # In production, check metadata validity and no duplicates
-        return True
+        """Check if conditions for auto-approve are met.
+
+        Auto-approve if:
+        - preview was full (preview_not_supported=True)
+        - metadata is valid (doc_code and title present)
+        - no duplicates detected
+        """
+        # Try to get metadata from converter step first (validated metadata)
+        # then fallback to OCR/Parser step
+        converter_step = None
+        preview_step = None
+        for step in steps:
+            if step.step_name == "preview_converter":
+                converter_step = step
+            elif step.step_name == "preview_ocr":
+                preview_step = step
+
+        metadata = {}
+        if converter_step and converter_step.output_data:
+            metadata = converter_step.output_data.get("metadata", {})
+        if not metadata and preview_step and preview_step.output_data:
+            metadata = preview_step.output_data.get("metadata", {})
+
+        has_valid_metadata = bool(metadata.get("doc_code") and metadata.get("title"))
+
+        # Check uniqueness — if no title_hash, it may be a new document
+        has_no_duplicates = not task.error_code or task.error_code != "DUPLICATE_DETECTED"
+
+        return bool(has_valid_metadata and has_no_duplicates and task.full_completed)
 
     async def _on_full_step_completed(
         self, task, step_name: str, steps
@@ -315,7 +413,10 @@ class PipelineOrchestrator:
             )
 
             from app.tasks.pipeline_formation import run_registry_step
-            run_registry_step.delay(task.id, task.draft_id, trace_id=trace_id)
+            # Pass document_id and version_id to registry step
+            document_id = getattr(task, 'document_id', None) or task.draft_id
+            version_id = getattr(task, 'version_id', None)
+            run_registry_step.delay(task.id, task.draft_id, document_id, version_id, trace_id=trace_id)
 
         elif step_name == "registry_creation":
             # Full pipeline complete
@@ -345,11 +446,15 @@ class PipelineOrchestrator:
                 extra={"task_id": task.id},
             )
 
-    async def approve_draft(self, draft_id: int, task_id: int) -> None:
-        """Handle user approve decision.
+    async def approve_draft(
+        self, draft_id: int, task_id: int,
+        metadata_overrides: Optional[dict] = None,
+    ) -> dict:
+        """Handle user approve decision (external action).
 
-        If preview was partial, creates full processing steps.
-        If preview was full, goes directly to registry creation.
+        Creates document in Registry first, then triggers full processing.
+
+        Returns dict with document_id and version_id.
         """
         task = await self.task_repo.get_task(task_id)
         if not task:
@@ -367,6 +472,75 @@ class PipelineOrchestrator:
             "Approving draft",
             extra={"draft_id": draft_id, "task_id": task_id},
         )
+
+        # Guard: prevent double-approve (defensive, also checked in endpoint)
+        if task.status in (TaskStatus.COMPLETED.value, TaskStatus.FAILED.value):
+            raise ValueError(
+                f"Cannot approve task {task_id}: already in terminal state {task.status}"
+            )
+
+        # --- Step 1: Create document in Registry (OR-13) ---
+        registry = RegistryServiceClient()
+        try:
+            doc_result = await registry.create_document({
+                "draft_id": draft_id,
+                "metadata_overrides": metadata_overrides or {},
+            })
+            doc_data = doc_result.get("data", {})
+            document_id: Optional[int] = doc_data.get("document_id")
+            if not document_id:
+                raise ValueError(
+                    f"Registry create_document returned no document_id. "
+                    f"Response: {doc_result}"
+                )
+            version_id: Optional[int] = doc_data.get("version_id")
+            is_new_document: bool = doc_data.get("is_new_document", True)
+        except Exception as exc:
+            logger.error(
+                f"Failed to create document in Registry: {exc}",
+                extra={"draft_id": draft_id, "task_id": task_id},
+            )
+            raise ValueError(f"Registry create_document failed: {exc}")
+        finally:
+            await registry.close()
+
+        # Store document_id and version_id on task for later steps
+        task.document_id = document_id
+        task.version_id = version_id
+        await self.db.flush()
+
+        # --- Save preview snapshot to Registry (P1F-4 / CV-5) ---
+        try:
+            # Collect preview metadata from steps
+            steps = await self.task_repo.get_task_steps(task_id)
+            preview_step = next(
+                (s for s in steps if s.step_name == "preview_ocr"), None
+            )
+            converter_step = next(
+                (s for s in steps if s.step_name == "preview_converter"), None
+            )
+            # Use converter metadata (validated) first, fallback to OCR/Parser
+            snapshot_metadata = {}
+            if converter_step and converter_step.output_data:
+                snapshot_metadata = converter_step.output_data.get("metadata", {})
+            if not snapshot_metadata and preview_step and preview_step.output_data:
+                snapshot_metadata = preview_step.output_data.get("metadata", {})
+            # Merge metadata_overrides on top
+            if metadata_overrides:
+                snapshot_metadata.update(metadata_overrides)
+
+            registry_snap = RegistryServiceClient()
+            await registry_snap.create_draft_snapshot(draft_id, snapshot_metadata)
+            await registry_snap.close()
+            logger.info(
+                "Preview snapshot saved",
+                extra={"draft_id": draft_id, "task_id": task_id},
+            )
+        except Exception as snap_err:
+            logger.warning(
+                f"Failed to save preview snapshot: {snap_err}",
+                extra={"draft_id": draft_id, "task_id": task_id},
+            )
 
         await self.task_repo.update_task_status(
             task_id=task_id,
@@ -388,19 +562,28 @@ class PipelineOrchestrator:
         if upload_step and upload_step.output_data:
             file_key = upload_step.output_data.get("file_key")
 
-        trace_id = task.trace_id or ""
+        current_trace_id = task.trace_id or ""
 
-        if not task.full_completed:
-            # Partial preview — need full OCR/Parser
-            # Create full_ocr step
+        # Determine full phase mode (P1F-9)
+        full_mode = settings.pipeline.FULL_PHASE_MODE
+        need_full_ocr = False
+        if full_mode == "partial":
+            need_full_ocr = True
+        elif full_mode == "full":
+            need_full_ocr = False
+        else:  # "auto" — use full_completed flag
+            need_full_ocr = not task.full_completed
+
+        if need_full_ocr:
+            # Partial preview or forced — need full OCR/Parser
             await self.task_repo.create_task_step(
                 task_id=task_id,
                 step_name="full_ocr",
                 step_index=3,
                 service_name="OCR Service",
-                input_data={"file_key": file_key, "mode": "full"},
+                input_data={"file_key": file_key, "mode": "full", "draft_id": draft_id},
             )
-            run_ocr_full_step.delay(task_id, draft_id, file_key, trace_id=trace_id)
+            run_ocr_full_step.delay(task_id, draft_id, file_key, trace_id=current_trace_id)
 
         # Create full_converter step (always)
         await self.task_repo.create_task_step(
@@ -408,21 +591,21 @@ class PipelineOrchestrator:
             step_name="full_converter",
             step_index=4,
             service_name="Converter-validator",
-            input_data={"file_key": file_key, "mode": "full"},
+            input_data={"file_key": file_key, "mode": "full", "draft_id": draft_id},
         )
 
-        # Create registry_creation step
+        # Create registry_creation step (now with document_id)
         await self.task_repo.create_task_step(
             task_id=task_id,
             step_name="registry_creation",
             step_index=5,
             service_name="Registry",
-            input_data={"draft_id": draft_id},
+            input_data={"draft_id": draft_id, "document_id": document_id},
         )
 
         # Start the first step
-        if not task.full_completed:
-            steps = await self.task_repo.get_task_steps(task_id)
+        steps = await self.task_repo.get_task_steps(task_id)
+        if need_full_ocr:
             full_ocr = next(
                 (
                     s
@@ -442,6 +625,83 @@ class PipelineOrchestrator:
                     "No pending full_ocr step found after approve",
                     extra={"task_id": task_id, "draft_id": draft_id},
                 )
+        else:
+            # Full preview — start full_converter step directly
+            full_converter = next(
+                (
+                    s
+                    for s in steps
+                    if s.step_name == "full_converter" and s.status == "pending"
+                ),
+                None,
+            )
+            if full_converter:
+                await self.task_repo.start_task_step(full_converter.id)
+                logger.info(
+                    "Enqueued full Converter step (full preview, no OCR)",
+                    extra={"task_id": task_id, "draft_id": draft_id},
+                )
+
+        return {
+            "document_id": document_id,
+            "version_id": version_id,
+            "is_new_document": is_new_document,
+        }
+
+    async def proceed_draft(
+        self, draft_id: int, task_id: int,
+        metadata_overrides: Optional[dict] = None,
+    ) -> dict:
+        """Internal action: proceed with processing (same as approve but internal)."""
+        return await self.approve_draft(draft_id, task_id, metadata_overrides)
+
+    async def stop_duplicate_draft(self, draft_id: int, task_id: int) -> dict:
+        """Internal action: mark as duplicate and stop processing."""
+        task = await self.task_repo.get_task(task_id)
+        if task and task.trace_id:
+            set_trace_id(task.trace_id)
+
+        logger.info(
+            "Stopping duplicate draft",
+            extra={"draft_id": draft_id, "task_id": task_id},
+        )
+
+        await self.task_repo.update_task_status(
+            task_id=task_id,
+            status=TaskStatus.FAILED.value,
+            stage=TaskStage.DECISION.value,
+        )
+
+        # Update draft status
+        try:
+            registry = RegistryServiceClient()
+            await registry.update_draft_status(
+                draft_id=draft_id,
+                status=DraftState.DISCARDED.value,
+            )
+            await registry.close()
+        except Exception as e:
+            logger.warning(
+                f"Failed to update draft status: {e}",
+                extra={"draft_id": draft_id},
+            )
+
+        return {
+            "document_id": None,
+            "version_id": None,
+            "is_new_document": False,
+            "status": "discarded",
+            "action": "stop_duplicate",
+            "message": "Черновик помечен как дубликат, обработка остановлена",
+        }
+
+    async def force_new_version_draft(self, draft_id: int, task_id: int) -> dict:
+        """Internal action: force create new version of existing document."""
+        # Same as approve but with explicit version flag
+        result = await self.approve_draft(draft_id, task_id)
+        result["action"] = "force_new_version"
+        result["message"] = "Принудительное создание новой версии"
+        return result
 
     async def reject_draft(self, draft_id: int, task_id: int) -> None:
         """Handle user reject decision."""
@@ -595,7 +855,12 @@ class PipelineOrchestrator:
             )
 
     async def cleanup_stale_tasks(self) -> int:
-        """Find and mark stale running tasks as failed."""
+        """Find and mark stale running tasks as failed.
+        
+        Also handles:
+        - Stale pending steps (P3S-1: per-state timeout)
+        - Absolute timeout tasks (P3S-1: 48h limit)
+        """
         max_time = settings.pipeline.MAX_JOB_RUNNING_TIME
         stale_tasks = await self.task_repo.get_stale_running_tasks(max_time)
 
@@ -612,7 +877,33 @@ class PipelineOrchestrator:
             )
             cleaned += 1
 
+        # Handle stale pending steps (P3S-1)
+        pending_timeout = settings.pipeline.PENDING_STATE_TIMEOUT
+        stale_steps = await self.task_repo.get_stale_pending_steps(pending_timeout)
+        for step in stale_steps:
+            await self.task_repo.fail_task_step(
+                step.id,
+                error_code="PENDING_TIMEOUT",
+                error_message=f"Step pending for >{pending_timeout}s",
+            )
+            cleaned += 1
+
+        # Handle absolute timeout tasks (P3S-1)
+        abs_timeout = settings.pipeline.ABSOLUTE_TASK_TIMEOUT_HOURS
+        timed_out_tasks = await self.task_repo.get_absolute_timeout_tasks(abs_timeout)
+        for task in timed_out_tasks:
+            await self.task_repo.update_task_status(
+                task.id,
+                status=TaskStatus.FAILED.value,
+            )
+            await self.task_repo.set_task_error(
+                task.id,
+                error_code="ABSOLUTE_TIMEOUT",
+                error_message=f"Task exceeded absolute timeout of {abs_timeout}h",
+            )
+            cleaned += 1
+
         if cleaned:
-            logger.warning(f"Cleaned up {cleaned} stale pipeline tasks")
+            logger.warning(f"Cleaned up {cleaned} stale pipeline items")
 
         return cleaned

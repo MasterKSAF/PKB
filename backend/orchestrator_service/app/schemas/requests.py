@@ -33,6 +33,16 @@ class UpdateDraftStatusRequest(BaseModel):
     document_id: Optional[int] = Field(None, description="ID документа (после approve)")
 
 
+class UpdateDocumentStatusRequest(BaseModel):
+    """Request body for PATCH /registry/documents/{id}/status.
+
+    Internal endpoint — only Orchestrator can call this.
+    """
+
+    status: str = Field(..., description="Новый статус документа")
+    updated_by: Optional[str] = Field(None, description="Кто обновил")
+
+
 class CheckUniquenessRequest(BaseModel):
     """Request body for POST /registry/documents/check-uniqueness."""
 
@@ -47,8 +57,10 @@ class CheckUniquenessRequest(BaseModel):
 class OcrProcessRequest(BaseModel):
     """Request body for POST /ocr/process."""
 
-    file_id: str = Field(..., description="ID файла для распознавания")
-    pages: Optional[str] = Field(None, description="Диапазон страниц (например '1-5')")
+    file_key: str = Field(..., description="Ключ файла")
+    draft_id: int = Field(..., description="ID черновика для привязки")
+    mode: str = Field("full", description="Режим: preview | full")
+    max_pages: Optional[int] = Field(None, description="Максимум страниц для preview")
     options: Dict[str, Any] = Field(default_factory=dict, description="Дополнительные опции")
 
 
@@ -56,17 +68,13 @@ class OcrProcessRequest(BaseModel):
 #  Parser Service
 # ---------------------------------------------------------------------------
 
-class ParserPreviewRequest(BaseModel):
-    """Request body for POST /parser/preview."""
-
-    file_key: str = Field(..., description="Ключ файла")
-    max_pages: int = Field(3, description="Максимальное количество страниц для превью")
-
-
 class ParserProcessRequest(BaseModel):
-    """Request body for POST /parser/process."""
+    """Request body for POST /parser/process (mode=preview|full)."""
 
     file_key: str = Field(..., description="Ключ файла")
+    draft_id: int = Field(..., description="ID черновика для привязки")
+    mode: str = Field("full", description="Режим: preview | full")
+    max_pages: Optional[int] = Field(None, description="Максимум страниц для preview")
 
 
 # ---------------------------------------------------------------------------

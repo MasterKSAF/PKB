@@ -99,3 +99,5 @@ grep -o '\b\(CM\|GW\|OR\|DB\|RG\|RS\|QS\)-\d\+' docs/ --include='*.md' \
 2. **Добавление задачи** → проверить, что не дублируется
 3. **Изменение технологии** (Redis → Nginx, OTEL только Gateway → все сервисы) → grep по всем .md
 4. **Проверить README.md** — changelog, структуру папок, описание сервисов
+5. **После правок в API/пайплайнах** — запустить `python checks/scripts/check_cross_references.py`
+6. **После правок схем** — сверить с `docs/api/_schemas.md` (source of truth)

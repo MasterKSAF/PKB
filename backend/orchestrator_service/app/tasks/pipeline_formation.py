@@ -59,16 +59,19 @@ def run_ocr_preview_step(
     try:
         logger.info(f"OCR preview started: task={task_id} draft={draft_id}")
 
-        # Call OCR service (mock in dev)
+        # Call OCR service with draft_id (mode=preview)
         client = OCRServiceClient()
-        result = _run_async(client.process_preview(file_key, max_pages=max_pages))
+        result = _run_async(client.process(
+            file_key=file_key, draft_id=draft_id, mode="preview", max_pages=max_pages
+        ))
         _run_async(client.close())
 
-        input_data = {"file_key": file_key, "mode": "preview", "max_pages": max_pages}
+        input_data = {"file_key": file_key, "mode": "preview", "max_pages": max_pages, "draft_id": draft_id}
         output_data = {
             "preview_not_supported": result.get("data", {}).get("preview_not_supported", False),
             "pages_processed": result.get("data", {}).get("pages_processed", 0),
             "metadata": result.get("data", {}).get("metadata", {}),
+            "quality": result.get("data", {}).get("quality", {}),
         }
 
         _run_async(_notify_step_completed(task_id, "preview_ocr", input_data, output_data))
@@ -99,14 +102,17 @@ def run_parser_preview_step(
         logger.info(f"Parser preview started: task={task_id} draft={draft_id}")
 
         client = ParserServiceClient()
-        result = _run_async(client.process_preview(file_key, max_pages=max_pages))
+        result = _run_async(client.process(
+            file_key=file_key, draft_id=draft_id, mode="preview", max_pages=max_pages
+        ))
         _run_async(client.close())
 
-        input_data = {"file_key": file_key, "mode": "preview", "max_pages": max_pages}
+        input_data = {"file_key": file_key, "mode": "preview", "max_pages": max_pages, "draft_id": draft_id}
         output_data = {
             "preview_not_supported": result.get("data", {}).get("preview_not_supported", False),
             "pages_processed": result.get("data", {}).get("pages_processed", 0),
             "metadata": result.get("data", {}).get("metadata", {}),
+            "quality": result.get("data", {}).get("quality", {}),
         }
 
         # The orchestrator uses "preview_ocr" as the step name for both OCR and Parser
@@ -138,10 +144,10 @@ def run_converter_preview_step(
         logger.info(f"Converter preview started: task={task_id} draft={draft_id}")
 
         client = ConverterValidatorClient()
-        result = _run_async(client.convert_preview({"file_key": file_key}))
+        result = _run_async(client.convert_preview({"file_key": file_key, "draft_id": draft_id}))
         _run_async(client.close())
 
-        input_data = {"file_key": file_key, "mode": "preview"}
+        input_data = {"file_key": file_key, "mode": "preview", "draft_id": draft_id}
         output_data = {
             "validated": result.get("data", {}).get("validated", True),
             "metadata": result.get("data", {}).get("metadata", {}),
@@ -175,13 +181,13 @@ def run_ocr_full_step(
     if trace_id:
         set_trace_id(trace_id)
     try:
-        logger.info(f"OCR full started: task={task_id}")
+        logger.info(f"OCR full started: task={task_id} draft={draft_id}")
 
         client = OCRServiceClient()
-        result = _run_async(client.process_full(file_key))
+        result = _run_async(client.process(file_key=file_key, draft_id=draft_id, mode="full"))
         _run_async(client.close())
 
-        input_data = {"file_key": file_key, "mode": "full"}
+        input_data = {"file_key": file_key, "mode": "full", "draft_id": draft_id}
         output_data = {
             "pages_processed": result.get("data", {}).get("pages_processed", 0),
             "status": "completed",
@@ -209,13 +215,13 @@ def run_parser_full_step(
     if trace_id:
         set_trace_id(trace_id)
     try:
-        logger.info(f"Parser full started: task={task_id}")
+        logger.info(f"Parser full started: task={task_id} draft={draft_id}")
 
         client = ParserServiceClient()
-        result = _run_async(client.process_full(file_key))
+        result = _run_async(client.process(file_key=file_key, draft_id=draft_id, mode="full"))
         _run_async(client.close())
 
-        input_data = {"file_key": file_key, "mode": "full"}
+        input_data = {"file_key": file_key, "mode": "full", "draft_id": draft_id}
         output_data = {
             "sections": result.get("data", {}).get("sections", []),
             "status": "completed",
@@ -244,13 +250,13 @@ def run_converter_full_step(
     if trace_id:
         set_trace_id(trace_id)
     try:
-        logger.info(f"Converter full started: task={task_id}")
+        logger.info(f"Converter full started: task={task_id} draft={draft_id}")
 
         client = ConverterValidatorClient()
-        result = _run_async(client.convert_full({"file_key": file_key}))
+        result = _run_async(client.convert_full({"file_key": file_key, "draft_id": draft_id}))
         _run_async(client.close())
 
-        input_data = {"file_key": file_key, "mode": "full"}
+        input_data = {"file_key": file_key, "mode": "full", "draft_id": draft_id}
         output_data = {
             "validated": result.get("data", {}).get("validated", True),
             "parameters": result.get("data", {}).get("parameters", {}),
@@ -271,22 +277,28 @@ def run_converter_full_step(
     name="tasks.pipeline.run_registry_step"
 )
 def run_registry_step(
-    self, task_id: int, draft_id: int,
+    self, task_id: int, draft_id: int, document_id: int, version_id: Optional[int] = None,
     trace_id: str = "",
 ):
     """Registry step — persist document in the registry."""
     if trace_id:
         set_trace_id(trace_id)
     try:
-        logger.info(f"Registry step started: task={task_id} draft={draft_id}")
+        logger.info(f"Registry step started: task={task_id} draft={draft_id} document={document_id}")
 
         client = RegistryServiceClient()
-        result = _run_async(client.create_document({"draft_id": draft_id}))
+        # Document already created in approve_draft — confirm status + attach version
+        _run_async(client.update_draft_status(
+            draft_id=draft_id,
+            status="approved",
+            document_id=document_id,
+        ))
         _run_async(client.close())
 
-        input_data = {"draft_id": draft_id}
+        input_data = {"draft_id": draft_id, "document_id": document_id}
         output_data = {
-            "registry_id": result.get("data", {}).get("document_id", draft_id),
+            "registry_id": document_id,
+            "version_id": version_id,
             "status": "registered",
         }
 

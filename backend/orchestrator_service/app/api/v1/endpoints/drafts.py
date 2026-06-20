@@ -16,12 +16,14 @@ from fastapi import (
     status,
 )
 
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import CurrentUser, get_current_user
 from app.core.config import settings
 from app.core.pipeline.orchestrator import PipelineOrchestrator
+from app.core.trace import set_draft_id, set_document_id, set_version_id
 from app.db.base import get_db
 from app.schemas.drafts import (
     DecideRequest,
@@ -34,6 +36,8 @@ from app.schemas.drafts import (
     DraftPreviewStatusResponse,
     PreviewMetadata,
 )
+from app.models.pipeline import Task
+from app.schemas.tasks import DraftTaskItem, DraftTasksResponse
 from app.services.registry_client import RegistryServiceClient
 
 logger = logging.getLogger(__name__)
@@ -49,6 +53,11 @@ ALLOWED_MIME = {
     "image/jpeg",
     "image/tiff",
 }
+
+# Actions that can be performed on a draft
+EXTERNAL_ACTIONS = {"approve", "reject"}
+INTERNAL_ACTIONS = {"proceed", "stop_duplicate", "force_new_version"}
+ALL_ACTIONS = EXTERNAL_ACTIONS | INTERNAL_ACTIONS
 
 
 def _compute_sha256(content: bytes) -> str:
@@ -67,6 +76,7 @@ def _compute_sha256(content: bytes) -> str:
     status_code=status.HTTP_202_ACCEPTED,
     responses={
         400: {"description": "Неподдерживаемый формат / размер"},
+        409: {"description": "Дубликат задачи для черновика"},
         413: {"description": "Файл превышает 100 МБ"},
         422: {"description": "Ошибка валидации"},
     },
@@ -78,7 +88,10 @@ async def create_draft(
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> DraftCreateResponse:
-    """Upload a file and create a draft for processing."""
+    """Upload a file and create a draft for processing.
+
+    Единая точка входа для загрузки документов (draft-first).
+    """
     # --- Validate file type ---
     if file.content_type not in ALLOWED_MIME:
         raise HTTPException(
@@ -121,8 +134,7 @@ async def create_draft(
     content = await file.read()
     file_size = len(content)
 
-    # Validate file size after reading (catches cases where content-length
-    # is missing or spoofed — e.g., during test with TestClient)
+    # Validate file size after reading
     if file_size > MAX_FILE_SIZE_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
@@ -185,6 +197,9 @@ async def create_draft(
         )
     finally:
         await registry.close()
+
+    # Store draft_id in context for downstream correlation (CM-5)
+    set_draft_id(str(draft_id))
 
     # --- Check: Task for this draft_id already exists? ---
     from sqlalchemy import select
@@ -305,7 +320,10 @@ async def get_draft(
     draft_id: int,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> DraftDetailResponse:
-    """Get draft details (proxies to Registry)."""
+    """Get draft details (proxies to Registry).
+
+    Returns document_id, version_id, is_new_document if available.
+    """
     registry = RegistryServiceClient()
     try:
         result = await registry.get_draft(draft_id)
@@ -320,7 +338,18 @@ async def get_draft(
                 },
             )
         data = result.get("data", {})
-        return DraftDetailResponse(**data)
+        return DraftDetailResponse(
+            draft_id=data.get("draft_id", draft_id),
+            document_key=data.get("document_key"),
+            file_key=data.get("file_key"),
+            status=data.get("status", "unknown"),
+            document_id=data.get("document_id"),
+            version_id=data.get("version_id"),
+            is_new_document=data.get("is_new_document", True),
+            created_by=data.get("created_by"),
+            created_at=data.get("created_at"),
+            updated_at=data.get("updated_at"),
+        )
     except HTTPException:
         raise
     except Exception as exc:
@@ -373,8 +402,15 @@ async def get_draft_preview(
                 doc_code=data.get("doc_code"),
                 title=data.get("title"),
                 document_type=data.get("document_type"),
+                source_type=data.get("source_type"),
                 year=data.get("year"),
                 revision=data.get("revision"),
+                era=data.get("era"),
+                jurisdiction=data.get("jurisdiction"),
+                mks_oks_code=data.get("mks_oks_code"),
+                okstu_code=data.get("okstu_code"),
+                issuing_body=data.get("issuing_body"),
+                udk_code=data.get("udk_code"),
             ),
         )
     except HTTPException:
@@ -404,7 +440,7 @@ async def get_draft_preview(
     status_code=status.HTTP_202_ACCEPTED,
     responses={
         404: {"description": "Черновик не найден"},
-        409: {"description": "Некорректный статус для preview"},
+        409: {"description": "Preview уже запущен или некорректный статус"},
     },
 )
 async def start_preview(
@@ -412,8 +448,11 @@ async def start_preview(
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Start preview phase for a draft."""
-    # Get draft info
+    """Start preview phase for a draft.
+
+    Idempotency: returns 409 if preview already running or completed.
+    """
+    # Get draft info from Registry
     registry = RegistryServiceClient()
     try:
         draft = await registry.get_draft(draft_id)
@@ -439,6 +478,8 @@ async def start_preview(
                 },
             )
         file_key = draft_data.get("file_key")
+        # Get mime_type from draft metadata if available
+        mime_type = draft_data.get("mime_type", "application/pdf")
     except HTTPException:
         raise
     except Exception as exc:
@@ -455,13 +496,37 @@ async def start_preview(
     finally:
         await registry.close()
 
-    # Find task for this draft
+    # --- Idempotency check (OR-2): check if task already has running preview ---
     from sqlalchemy import select
-    from app.models.pipeline import Task
+    from app.models.pipeline import Task, TaskStep
     result = await db.execute(
         select(Task).where(Task.draft_id == draft_id).order_by(Task.created_at.desc())
     )
     task = result.scalar_one_or_none()
+    if task:
+        # Check if preview steps exist and are in progress
+        steps_result = await db.execute(
+            select(TaskStep).where(
+                TaskStep.task_id == task.id,
+                TaskStep.step_name.in_(["preview_ocr", "preview_converter"]),
+            )
+        )
+        existing_steps = list(steps_result.scalars().all())
+        if existing_steps:
+            running_or_completed = any(
+                s.status in ("running", "completed") for s in existing_steps
+            )
+            if running_or_completed:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "error": {
+                            "code": "PREVIEW_ALREADY_RUNNING",
+                            "message": f"Preview для черновика {draft_id} уже запущен или завершён",
+                        }
+                    },
+                )
+
     if not task:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -473,13 +538,13 @@ async def start_preview(
             },
         )
 
-    # Start pipeline
+    # Start pipeline with actual mime_type
     orchestrator = PipelineOrchestrator(db)
     await orchestrator.start_pipeline(
         draft_id=draft_id,
         task_id=task.id,
         file_key=file_key or "",
-        mime_type="application/pdf",  # best guess
+        mime_type=mime_type,
     )
 
     return {
@@ -566,8 +631,15 @@ async def _build_preview_status(
                         doc_code=meta.get("doc_code"),
                         title=meta.get("title"),
                         document_type=meta.get("document_type"),
+                        source_type=meta.get("source_type"),
                         year=meta.get("year"),
                         revision=meta.get("revision"),
+                        era=meta.get("era"),
+                        jurisdiction=meta.get("jurisdiction"),
+                        mks_oks_code=meta.get("mks_oks_code"),
+                        okstu_code=meta.get("okstu_code"),
+                        issuing_body=meta.get("issuing_body"),
+                        udk_code=meta.get("udk_code"),
                     )
                     break
         decision_required = task.pipeline_stage == "decision"
@@ -656,7 +728,6 @@ async def get_preview_status(
         raise
     except Exception as exc:
         logger.warning(f"Registry check failed for draft {draft_id}: {exc}")
-        # Если Registry недоступен — пропускаем проверку, полагаемся на task
     finally:
         await registry.close()
 
@@ -700,6 +771,7 @@ async def get_preview_status(
     "/{draft_id}/decide",
     response_model=DecideResponse,
     responses={
+        400: {"description": "Неизвестное действие"},
         404: {"description": "Черновик не найден"},
         409: {"description": "Некорректный статус для решения"},
     },
@@ -710,7 +782,26 @@ async def decide_draft(
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> DecideResponse:
-    """Submit user decision after preview phase."""
+    """Submit user decision after preview phase.
+
+    External actions (UI): approve, reject
+    Internal actions (pipeline): proceed, stop_duplicate, force_new_version
+    """
+    # Validate action
+    if request.action not in ALL_ACTIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": {
+                    "code": "BAD_REQUEST",
+                    "message": (
+                        f"Неизвестное действие: {request.action}. "
+                        f"Допустимо: {', '.join(sorted(ALL_ACTIONS))}"
+                    ),
+                }
+            },
+        )
+
     # Find task for this draft
     from sqlalchemy import select
     from app.models.pipeline import Task
@@ -730,17 +821,76 @@ async def decide_draft(
             },
         )
 
+    # --- State validation: check task is in correct state for action ---
+    if task.status in ("completed", "failed"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": {
+                    "code": "TASK_ALREADY_TERMINAL",
+                    "message": (
+                        f"Задача {task.id} уже в терминальном статусе "
+                        f"({task.status}). Действие {request.action} невозможно."
+                    ),
+                }
+            },
+        )
+
+    if request.action in ("approve", "reject", "proceed", "force_new_version"):
+        if task.pipeline_stage != "decision":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": {
+                        "code": "INVALID_STAGE",
+                        "message": (
+                            f"Действие {request.action} требует этапа 'decision', "
+                            f"текущий этап: {task.pipeline_stage}"
+                        ),
+                    }
+                },
+            )
+
+    if request.action == "stop_duplicate":
+        if task.pipeline_stage not in ("preview", "decision"):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": {
+                        "code": "INVALID_STAGE",
+                        "message": (
+                            f"Действие stop_duplicate требует этапа 'preview' или 'decision', "
+                            f"текущий этап: {task.pipeline_stage}"
+                        ),
+                    }
+                },
+            )
+
     orchestrator = PipelineOrchestrator(db)
 
     if request.action == "approve":
-        await orchestrator.approve_draft(draft_id, task.id)
+        result_data = await orchestrator.approve_draft(
+            draft_id, task.id,
+            metadata_overrides=request.metadata_overrides,
+        )
+        # Set correlation IDs for downstream (CM-5)
+        doc_id = result_data.get("document_id")
+        ver_id = result_data.get("version_id")
+        if doc_id:
+            set_document_id(str(doc_id))
+        if ver_id:
+            set_version_id(str(ver_id))
         return DecideResponse(
             draft_id=draft_id,
             task_id=task.id,
+            document_id=doc_id,
+            version_id=ver_id,
+            is_new_document=result_data.get("is_new_document", True),
             status="proceeding",
             action="approve",
             message="Запущена полная обработка документа",
         )
+
     elif request.action == "reject":
         await orchestrator.reject_draft(draft_id, task.id)
         return DecideResponse(
@@ -750,16 +900,68 @@ async def decide_draft(
             action="reject",
             message="Черновик отклонён",
         )
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": {
-                    "code": "BAD_REQUEST",
-                    "message": f"Неизвестное действие: {request.action}. Допустимо: approve, reject",
-                }
-            },
+
+    elif request.action == "proceed":
+        result_data = await orchestrator.proceed_draft(
+            draft_id, task.id,
+            metadata_overrides=request.metadata_overrides,
         )
+        doc_id = result_data.get("document_id")
+        ver_id = result_data.get("version_id")
+        if doc_id:
+            set_document_id(str(doc_id))
+        if ver_id:
+            set_version_id(str(ver_id))
+        return DecideResponse(
+            draft_id=draft_id,
+            task_id=task.id,
+            document_id=doc_id,
+            version_id=ver_id,
+            is_new_document=result_data.get("is_new_document", True),
+            status="proceeding",
+            action="proceed",
+            message="Обработка продолжена (internal)",
+        )
+
+    elif request.action == "stop_duplicate":
+        result_data = await orchestrator.stop_duplicate_draft(draft_id, task.id)
+        return DecideResponse(
+            draft_id=draft_id,
+            task_id=task.id,
+            status=result_data.get("status", "discarded"),
+            action="stop_duplicate",
+            message=result_data.get("message", "Дубликат остановлен"),
+        )
+
+    elif request.action == "force_new_version":
+        result_data = await orchestrator.force_new_version_draft(draft_id, task.id)
+        doc_id = result_data.get("document_id")
+        ver_id = result_data.get("version_id")
+        if doc_id:
+            set_document_id(str(doc_id))
+        if ver_id:
+            set_version_id(str(ver_id))
+        return DecideResponse(
+            draft_id=draft_id,
+            task_id=task.id,
+            document_id=doc_id,
+            version_id=ver_id,
+            is_new_document=False,
+            status="proceeding",
+            action="force_new_version",
+            message=result_data.get("message", "Принудительное создание новой версии"),
+        )
+
+    # Should never reach here
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail={
+            "error": {
+                "code": "BAD_REQUEST",
+                "message": f"Неизвестное действие: {request.action}",
+            }
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -805,3 +1007,44 @@ async def delete_draft(
         )
     finally:
         await registry.close()
+
+
+# ---------------------------------------------------------------------------
+#  GET /drafts/{draft_id}/tasks  — List tasks for a draft
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/{draft_id}/tasks",
+    response_model=DraftTasksResponse,
+    responses={404: {"description": "Черновик не найден"}},
+)
+async def get_draft_tasks(
+    draft_id: int,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> DraftTasksResponse:
+    """List pipeline tasks for a draft."""
+    result = await db.execute(
+        select(Task)
+        .where(Task.draft_id == draft_id, Task.deleted_at.is_(None))
+        .order_by(Task.created_at.desc())
+    )
+    tasks = list(result.scalars().all())
+
+    task_items = [
+        DraftTaskItem(
+            task_id=t.id,
+            status=t.status,
+            pipeline_stage=t.pipeline_stage,
+            initiated_by=t.created_by,
+            created_at=t.created_at,
+            updated_at=t.updated_at,
+        )
+        for t in tasks
+    ]
+
+    return DraftTasksResponse(
+        draft_id=draft_id,
+        tasks=task_items,
+    )

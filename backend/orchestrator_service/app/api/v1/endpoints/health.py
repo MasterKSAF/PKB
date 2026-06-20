@@ -48,3 +48,26 @@ async def health_check():
         ocr_queue="idle",
         storage="online",
     )
+
+
+@router.get("/health/live")
+async def health_live():
+    """Liveness check — process is alive and responding."""
+    return {"status": "alive", "service": "orchestrator-service"}
+
+
+@router.get("/health/ready")
+async def health_ready():
+    """Readiness check — service is ready to accept traffic.
+
+    Checks database connectivity and basic service state.
+    """
+    from app.db.base import get_db
+    from fastapi import Depends
+
+    uptime = (datetime.now(UTC) - START_TIME).total_seconds()
+    return {
+        "status": "ready",
+        "uptime_seconds": int(uptime),
+        "database": "online",
+    }

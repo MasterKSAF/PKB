@@ -1,18 +1,25 @@
 ## API RAG Builder Service (rag-builder:8090)
 
 Сервис построения чанков, вычисления embeddings и создания векторного индекса.  
-**Внутренний сервис.** Запускается после успешного завершения Пайплайна 1 (Формирование документа). На вход получает обогащённый JSON от Registry (структура документа, ссылки на ресурсы), на выходе — статус завершения индексации.
+**Внутренний сервис.** Запускается после успешного завершения Пайплайна 1 (Формирование документа). На вход получает обогащённый JSON от Registry через Orchestrator (структура документа, секции, терминология, ссылки), на выходе — статус завершения индексации.
 
 **Базовый URL (внутренний)**: `http://127.0.0.1:8090/api/v1`
 
 ### Формат ответа
 
-Формат ответа и ошибок — см. [common_api.md](../common_api.md#формат-ответа).
+Формат ответа и ошибок — см. [common_api.md](common_api.md#формат-ответа).
 
 **Специфичные коды ошибок:**
 | HTTP | `error.code` | Описание |
 |------|-------------|----------|
-| 201 | — | Индексация запущена |
+
+---
+
+## Межсервисное взаимодействие
+
+Авторизацию контролирует только Gateway. Внутренние сервисы не имеют своей аутентификации — см. [common_api.md](common_api.md#межсервисное-взаимодействие).
+
+| 202 | — | Индексация запущена (асинхронно) |
 | 200 | — | Статус/результат |
 | 500 | `BUILD_FAILED` | Ошибка построения чанков или эмбеддингов |
 
@@ -32,7 +39,7 @@
 | 3 | Вычисление Embeddings | Векторные представления для каждого текстового чанка |
 | 4 | Построение векторного индекса | Сохранение чанков, эмбеддингов и индексов в БД |
 
-RAG Builder принимает JSON от Registry (через `GET /registry/documents/{doc_id}/sections`) — формат см. [`schema_registry_for_rag.json`](../schema/schema_registry_for_rag.json).
+Orchestrator получает JSON из Registry (через `GET /registry/documents/{doc_id}/sections`) и передаёт его в RAG Builder. Формат — см. [`schema_registry_for_rag.json`](../schema/schema_registry_for_rag.json).
 
 Каждая секция содержит объектный `content`, структура которого зависит от `type`:
 
@@ -46,7 +53,26 @@ RAG Builder принимает JSON от Registry (через `GET /registry/doc
 | `image` | Один чанк | `content.markdown` или `content.caption + content.description` |
 | `formula` | Один чанк | `content.markdown` или `content.latex + content.meaning` |
 
-**Запрос (получается из Registry без модификации):**
+**Защищённые span'ы (`protected_spans`):** участки текста внутри секций, которые нельзя разбивать при чанкинге (например, заголовки, важные термины). Задаются как массив `{section_id, start_offset, end_offset}`. Если не указаны — чанкинг выполняется без ограничений.
+
+**Параметры индексации (`options`) — P13-1 (конфигурация по умолчанию, решение 17.06):**
+
+| Параметр | Прод-значение | Описание |
+|----------|---------------|----------|
+| `options.strategy` | `semantic_1024` | Стратегия чанкинга. **Изменено с `semantic_512`** (17.06) — новый дефолт 1024 токена. Для экспериментов: `semantic_512`, `semantic_2048`, `fixed_256`, `fixed_512` |
+| `options.embedding_model` | `qwen3-embedding-4b` | **P13-1**: модель эмбеддингов (Qwen3-Embedding-4B, **внешнее API**). Endpoint и API-key — `app_settings.rag.embedding_api.endpoint` / `.api_key` |
+| `options.embedding_dim` | `2048` | **P13-1**: размерность эмбеддинга. Альтернативы (экспериментально): 1536, 2560, 4096 |
+| `options.embedding_quantization` | `int8` | **P13-1**: квантизация для ускорения инференса (через Infinity — см. D67) |
+| `options.rerank_model` | `bge-reranker-v2-m3-int8` | **P13-3**: модель rerank. URL TEI-сервера — `app_settings.rag.rerank_url` |
+| `options.protected_spans` | `[]` | Защищённые span'ы (не разбивать при чанкинге) |
+
+> **Не передавать `version_id` в RAG** (P12-6, уточнение 17.06): `rag_documents.doc_id` ссылается на **документ** (без версии), а сам чанк хранит `document_version_id` только для аудита. Убедитесь, что запрос к RAG Builder содержит `document_id`, но **не** `version_id`. См. `parser_service_api.md` — там `version_id` тоже не нужен.
+
+> **P4-3 (Qwen3, int8, сетка 2560/2048/1536)**: см. `docs_plans/methodology/rag_experiments_methodology.md` §2.5 — обоснование выбора модели и сетки размерностей.
+
+> **D67 (Infinity)**: для production-деплоя используется выделенный сервис эмбеддингов **Infinity** (OpenAI-совместимое API, локальный). Для тестирования и экспериментов — внешнее API Qwen3. Конфигурируется через `app_settings.rag.embedding_api.mode = "infinity" | "external"`.
+
+**Запрос (передаётся от Orchestrator, обогащённый JSON из Registry):**
 
 ```json
 {
@@ -100,17 +126,41 @@ RAG Builder принимает JSON от Registry (через `GET /registry/doc
 |------|-----|---------------|----------|
 | `document_id` | bigint | Да | ID документа в Registry |
 | `sections` | array | Да | Массив секций для индексации |
-| `sections[].id` | bigint | Да | ID секции |
+| `sections[].section_id` | bigint | Да | ID секции |
+| `sections[].document_id` | bigint | Да | ID документа (дублируется для удобства) |
+| `sections[].clause` | string | Нет | Номер пункта (напр. "6.1") |
+| `sections[].title` | string | Нет | Заголовок секции |
+| `sections[].level` | int | Нет | Уровень вложенности секции |
 | `sections[].path` | string | Да | Путь секции (напр. "1.2.3") |
-| `sections[].type` | string | Да | Тип секции: `text`, `textBlock`, `table`, `drawing` |
+| `sections[].page` | int | Нет | Номер страницы |
+| `sections[].type` | string | Да | Тип секции: `text`, `textBlock`, `table`, `image`, `list`, `formula`, `headerFooter` |
 | `sections[].content` | object/jsonb | Да | Содержимое секции (JSONB, см. `registry_for_rag_v2`) |
-| `sections[].chunk_index` | int | Нет | Порядковый номер чанка (если предварительно нарезан) |
+| `protected_spans` | array | Нет | Массив защищённых span'ов: `{section_id, start_offset, end_offset}` — участки, которые нельзя разбивать при чанкинге |
+| `options` | object | Нет | Дополнительные параметры индексации |
+| `options.strategy` | string | Нет | Стратегия чанкинга: `semantic_512` (по умолчанию)
 
-**Ответ `201`:**
+**Ответ `202` (асинхронный запуск):**
 ```json
 {
   "document_id": 1,
-  "status": "completed",
+  "task_id": 420000,
+  "status": "indexing"
+}
+```
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `document_id` | bigint | ID документа |
+| `task_id` | bigint | ID задачи для отслеживания прогресса |
+| `status` | string | Статус: `indexing` (индексация запущена) |
+
+Оркестратор отслеживает прогресс через `GET /rag/build/{doc_id}/status?longpoll=15`.
+
+**Финальный ответ** (возвращается через longpoll-статус):
+```json
+{
+  "document_id": 1,
+  "status": "indexed",
   "indexed_at": "2026-05-15T12:00:18Z",
   "chunks_count": 34,
   "index_stats": {
@@ -123,9 +173,9 @@ RAG Builder принимает JSON от Registry (через `GET /registry/doc
 
 | Поле | Тип | Описание |
 |---|---|---|
-| `document_id` | string | ID документа |
-| `status` | string | Статус: `completed`, `failed` |
-| `indexed_at` | string | Время завершения индексации |
+| `document_id` | bigint | ID документа |
+| `status` | string | Статус: `indexed`, `failed` |
+| `indexed_at` | datetime | Время завершения индексации |
 | `chunks_count` | int | Общее количество созданных чанков |
 | `index_stats.sections` | int | Количество секций (структурных единиц) |
 | `index_stats.chunks` | int | Количество чанков |

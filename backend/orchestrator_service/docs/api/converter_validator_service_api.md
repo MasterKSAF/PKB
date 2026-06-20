@@ -2,6 +2,8 @@
 
 Сервис конвертации и валидации документов. Объединяет конвейер преобразования сырого JSON (результат Parser/OCR) в иерархический типизированный JSON с опциональным использованием LLM.
 
+> **Спецификация сервиса (алгоритмы, сценарии, архитектура «чёрного ящика»):** [`docs/specifications/converter_specification.md`](../specifications/converter_specification.md)
+
 **Внутренний сервис.** Имеет два режима работы:
 1. **Preview** — быстрые операции без записи в БД и без LLM (если не указано иное).
 2. **Full** — полная конвертация с построением иерархии, LLM-обработкой, валидацией и кросс-ссылками.
@@ -11,7 +13,24 @@
 ### Формат ответа
 
 Успех — данные возвращаются напрямую.  
-При ошибке: `{ "error": { "code": "CONVERSION_FAILED", "message": "...", "details": {} } }`
+При ошибке: `{ "error": { "code": "...", "message": "...", "details": {} } }`
+
+**Специфичные коды ошибок:**
+| HTTP | `error.code` | Описание |
+|------|-------------|----------|
+
+---
+
+## Межсервисное взаимодействие
+
+Авторизацию контролирует только Gateway. Внутренние сервисы не имеют своей аутентификации — см. [common_api.md](common_api.md#межсервисное-взаимодействие).
+
+| 400 | `INVALID_INPUT` | Входной JSON не соответствует схеме `raw_ocr_v4` |
+| 422 | `METADATA_EXTRACTION_FAILED` | Не удалось извлечь обязательные метаданные (doc_code, title) |
+| 422 | `VALIDATION_FAILED` | Ошибка валидации структуры документа |
+| 500 | `CONVERSION_FAILED` | Ошибка конвертации (общая) |
+| 502 | `LLM_TIMEOUT` | Таймаут LLM-запроса |
+| 504 | `REGISTRY_TIMEOUT` | Таймаут при проверке классификаторов в Registry |
 
 ---
 
@@ -21,11 +40,11 @@
 
 ### POST /converter/preview/metadata
 
-Извлечение базовых метаданных из частичного сырого JSON.
+Извлечение метаданных из частичного сырого JSON (первые N страниц).
 
 **Вход:** сырой JSON (результат Parser/OCR) — может содержать неполные данные.
 
-**Выход:** doc_code, title, document_type, year, revision.
+**Выход:** см. [_schemas.md](_schemas.md#PreviewMetadata) — preview-метаданные (16 полей).
 
 > **Полный формат данных:** [`docs/schema/schema_converter_preview.json`](../schema/schema_converter_preview.json) (схема `converter_validator_preview_v1`)
 
@@ -43,21 +62,26 @@
 
 ```json
 {
-  "doc_code": "ГОСТ 20868-81",
-  "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
+  "doc_code": "311-05-1950ц",
+  "title": "ЦИРКУЛЯРНОЕ ПИСЬМО № 311-05-1950ц от 09.06.2023",
+  "mks_oks_code": null,
+  "okstu_code": null,
+  "udk_code": null,
+  "pkb_codes": [],
   "document_type": "normative",
-  "year": "1981",
-  "revision": null
+  "year": 2023,
+  "era": "CURRENT",
+  "validity_status": "active",
+  "issuing_body": "РОССИЙСКИЙ МОРСКОЙ РЕГИСТР СУДОХОДСТВА",
+  "jurisdiction": "RU",
+  "source_type": "RMRS",
+  "language": "ru",
+  "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+  "title_key": "CURRENT|rmrs|||311-05-1950ц|циркулярное письмо № 311-05-1950ц от 09.06.2023"
 }
 ```
 
-| Поле | Тип | Описание |
-|---|---|---|
-| `doc_code` | string | Обозначение документа |
-| `title` | string | Полное название документа |
-| `document_type` | string | Категория контента (`normative`, `technical`, `drawing`, `specification`, `archival_scan`) |
-| `year` | string | Год издания/утверждения |
-| `revision` | string\|null | Номер редакции, если применимо |
+> 📖 **Схема полей PreviewMetadata** — [_schemas.md](_schemas.md#PreviewMetadata).
 
 ---
 
@@ -84,7 +108,7 @@
 | 3 | Извлечение и валидация метаданных | Шаг 1–2 |
 | 4 | Валидация структуры JSON | Шаг 1 |
 | 5 | Классификация документа (тип, эра, юрисдикция) | Шаг 3 |
-| 6 | Вычисление хэшей SHA-256 (content_hash, title_hash) | Шаг 3 |
+| 6 | Вычисление хэшей SHA-256 (content_hash, title_hash, title_key) | Шаг 3 |
 | 7 | Сопоставление с существующими документами (predecessor/successor) | Шаг 3 |
 | 8 | Валидация классификационных кодов (через Registry) | Шаг 5 |
 | 9 | Построение кросс-ссылок | Шаг 1, 7 |
@@ -118,7 +142,6 @@
 {
   "task_id": 420000,
   "version_id": 420001,
-  "document_id": null,
   "metadata": {
     "schema": "validated_v3",
     "task_id": 420000,
@@ -149,7 +172,7 @@
     "validation_id": 1,
     "structure_valid": true,
     "classification": { "mks_oks_code": "47.020", "overall_status": "CONFIRMED" },
-    "fingerprint": { "file_hash_sha256": "...", "title_hash_sha256": "..." },
+    "fingerprint": { "file_hash_sha256": "...", "title_hash_sha256": "...", "title_key": "..." },
     "matching": { "predecessor_doc_id": null, "successor_doc_id": null },
     "decision": "auto",
     "status": "completed"
@@ -167,7 +190,6 @@
 |---|---|---|
 | `task_id` | bigint | ID задачи, переданный в запросе |
 | `version_id` | bigint | ID версии файла, переданный в запросе |
-| `document_id` | bigint | ID документа. Заполняется для дубликатов — передаётся от Оркестратора (получен на preview-этапе проверки уникальности). Для новых документов — null; будет назначен Registry при создании карточки |
 | `metadata` | object | Служебные метаданные ответа (схема, дата, информация о парсере) |
 | `document` | object | Полная структура документа: источник, метаданные, контент, терминология, ссылки |
 | `validation` | object | Результаты полной валидации (структура, классификация, fingerprint, сопоставление, кросс-ссылки) |
@@ -178,7 +200,7 @@
 | Поле | Тип | Описание |
 |---|---|---|
 | `schema` | string | Идентификатор схемы ответа — `"validated_v3"` |
-| `created_at` | string (datetime) | Дата и время формирования ответа |
+| `created_at` | datetime | Дата и время формирования ответа (ISO 8601) |
 | `parser` | object | Информация о парсере, выполнившем первичную обработку |
 
 **Поля `document.source`:**
@@ -200,7 +222,7 @@
 | `group` | string | Группа классификации (например, `ПО4`) |
 | `mks_oks_code` | string | Код МКС/ОКС |
 | `okstu_code` | string | Код ОКСТУ (может быть `null`) |
-| `udc` | string | Код УДК (может быть `null`) |
+| `udk_code` | string | **D-51**: переименовано из `udc`. Код УДК (может быть `null`) |
 | `era` | string | Историческая эра (`USSR`, `RF`, ...) |
 | `validity_status` | string | Статус действия (`active`, `superseded`, ...) |
 | `issuing_body` | string | Орган, утвердивший документ |
@@ -253,7 +275,7 @@
 | `validation_id` | string | ID валидации |
 | `structure_valid` | bool | Результат проверки структуры |
 | `classification` | object | Статусы классификационных кодов |
-| `fingerprint` | object | Хэши документа (`file_hash_sha256`, `title_hash_sha256`) |
+| `fingerprint` | object | Хэши документа (`file_hash_sha256`, `title_hash_sha256`, `title_key`) |
 | `matching` | object | Связи с существующими документами (`predecessor_doc_id`, `successor_doc_id`) |
 | `cross_references` | array | Список кросс-ссылок на другие документы |
 | `decision` | string | `auto` — автоматическое завершение, `manual` — требуется ручное подтверждение |
@@ -285,7 +307,6 @@
 ```json
 {
   "validation_id": 1,
-  "document_id": 1,
   "structure_valid": true,
   "classification": {
     "mks_oks_code": "47.020",
@@ -296,7 +317,8 @@
   },
   "fingerprint": {
     "file_hash_sha256": "abc123...",
-    "title_hash_sha256": "def456..."
+    "title_hash_sha256": "def456...",
+    "title_key": "USSR|gost|47.020||20868-81|стойки..."
   },
   "matching": {
     "predecessor_doc_id": null,
@@ -310,10 +332,9 @@
 | Поле | Тип | Описание |
 |---|---|---|
 | `validation_id` | string | ID валидации |
-| `document_id` | string | ID документа. Назначается валидацией: извлекается существующий для дубликата, либо генерируется новый. |
 | `structure_valid` | bool | Результат проверки структуры |
 | `classification` | object | Статусы классификационных кодов |
-| `fingerprint` | object | Хэши документа (`file_hash_sha256`, `title_hash_sha256`) |
+| `fingerprint` | object | Хэши документа (`file_hash_sha256`, `title_hash_sha256`, `title_key`) |
 | `matching` | object | Связи с существующими документами |
 | `decision` | string | `auto` — автоматическое завершение, `manual` — требуется ручное подтверждение |
 | `status` | string | Статус: `completed`, `failed` |
@@ -343,7 +364,7 @@
 
 | Метод | Путь | Режим | Описание | Запись в БД |
 |---|---|---|---|---|
-| `POST` | `/converter/preview/metadata` | Preview | Извлечение базовых метаданных (doc_code, title, document_type, year, revision) | Нет |
+| `POST` | `/converter/preview/metadata` | Preview | Извлечение метаданных — см. [_schemas.md](_schemas.md#PreviewMetadata) | Нет |
 | `POST` | `/converter/convert` | Full | Полная конвертация + валидация + LLM + кросс-ссылки (схема `validated_v3`) | Нет |
 | `POST` | `/validate/document` | Standalone | Комплексная валидация документа без переконвертации | Нет |
 

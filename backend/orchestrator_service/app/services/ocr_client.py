@@ -1,8 +1,9 @@
 """
 OCR Service Client with mock mode support.
+Unified endpoint: POST /ocr/process?mode=preview|full
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from app.core.config import settings
 from app.schemas.requests import OcrProcessRequest
@@ -25,32 +26,47 @@ class OCRServiceClient(ServiceClient):
         """Generate mock OCR responses."""
         if endpoint == "/ocr/process" and method == "POST":
             request_data = kwargs.get("json", {})
-            file_id = request_data.get("file_id", "file-mock")
-            pages_str = request_data.get("pages", "1-5")
+            file_key = request_data.get("file_key", "file-mock")
+            mode = request_data.get("mode", "full")
 
-            pages = []
-            total_pages = 5
-            for i in range(1, total_pages + 1):
-                pages.append(
-                    {
-                        "page": i,
-                        "text": f"Текст распознанной страницы {i} для файла {file_id}",
-                        "confidence": 0.95 - (i * 0.02),
-                        "engine_used": "paddleocr",
-                        "page_type_detected": "text" if i % 2 == 1 else "table",
-                        "blocks": [],
-                        "status": "success",
-                        "errors": [],
+            if mode == "preview":
+                return {
+                    "data": {
+                        "task_id": "ocr-mock-preview",
+                        "status": "completed",
+                        "preview_not_supported": False,
+                        "pages_processed": 3,
+                        "metadata": {
+                            "doc_code": "ГОСТ 20868-81",
+                            "title": "Стойки установочные крепежные",
+                            "document_type": "normative",
+                            "source_type": "GOST",
+                            "year": "1981",
+                            "revision": "1",
+                            "era": "USSR",
+                            "jurisdiction": "RU",
+                            "mks_oks_code": "21.060",
+                            "okstu_code": "",
+                            "issuing_body": "Госстандарт",
+                            "udk_code": "621.882",
+                        },
+                        "quality": {
+                            "score": 0.94,
+                            "notifications": [],
+                        },
                     }
-                )
+                }
 
             return {
-                "document_id": f"temp-doc-{file_id}",
-                "pages": pages,
-                "total_pages": total_pages,
-                "successful_pages": total_pages,
-                "low_confidence_pages": 0,
-                "failed_pages": 0,
+                "data": {
+                    "task_id": f"ocr-mock-{file_key}",
+                    "status": "completed",
+                    "pages_processed": 10,
+                    "total_pages": 10,
+                    "successful_pages": 10,
+                    "low_confidence_pages": 0,
+                    "failed_pages": 0,
+                }
             }
 
         if endpoint == "/ocr/engines" and method == "GET":
@@ -77,20 +93,21 @@ class OCRServiceClient(ServiceClient):
 
         return default_mock
 
-    async def process_document(
-        self, file_id: str, pages: Optional[str] = None, options: Optional[Dict] = None
+    async def process(
+        self, file_key: str, draft_id: int, mode: str = "full", max_pages: Optional[int] = None
     ) -> Dict[str, Any]:
-        """Process document with OCR."""
+        """Process a file with OCR (mode=preview|full)."""
         body = OcrProcessRequest(
-            file_id=file_id,
-            pages=pages,
-            options=options or {},
+            file_key=file_key,
+            draft_id=draft_id,
+            mode=mode,
+            max_pages=max_pages,
         )
         return await self.call(
             "POST",
             "/ocr/process",
             request_model=OcrProcessRequest,
-            mock_response={"pages": [], "total_pages": 0, "successful_pages": 0},
+            mock_response={"data": {}},
             json=body.model_dump(exclude_none=True),
         )
 

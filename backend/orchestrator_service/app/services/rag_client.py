@@ -43,6 +43,18 @@ class RAGServiceClient(ServiceClient):
                 "status": "completed",
             }
 
+        if endpoint.endswith("/check") and method == "GET":
+            # /rag/index/{document_id}/check
+            parts = endpoint.split("/")
+            doc_id = parts[-2] if len(parts) >= 4 else "unknown"
+            return {
+                "document_id": doc_id,
+                "indexed_count": 128,
+                "expected_count": 128,
+                "integrity_ok": True,
+                "status": "completed",
+            }
+
         if endpoint == "/rag/search" and method == "POST":
             request_data = kwargs.get("json", {})
             query = request_data.get("query", "")
@@ -109,6 +121,25 @@ class RAGServiceClient(ServiceClient):
             mock_response={"deleted_count": 0, "status": "completed"},
         )
 
+    async def check_index(self, document_id: str) -> Dict[str, Any]:
+        """
+        Check index integrity for a document (P2I-2).
+
+        Verifies that chunks are properly indexed and retrievable.
+        Returns indexed_count, expected_count, and integrity_ok flag.
+        """
+        return await self.call(
+            "GET",
+            f"/rag/index/{document_id}/check",
+            mock_response={
+                "document_id": document_id,
+                "indexed_count": 128,
+                "expected_count": 128,
+                "integrity_ok": True,
+                "status": "completed",
+            },
+        )
+
     async def search(
         self,
         query: str,
@@ -162,3 +193,7 @@ class RAGServiceClient(ServiceClient):
             },
             json=body.model_dump(exclude_none=True),
         )
+
+
+# Alias for Celery tasks that import RAGBuilderClient
+RAGBuilderClient = RAGServiceClient

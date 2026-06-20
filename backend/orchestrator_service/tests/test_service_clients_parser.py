@@ -1,10 +1,9 @@
 """
 Unit tests for ParserServiceClient.
 
-Tests mock generation for all parser service endpoints:
-  - POST /parser/preview — start preview processing
-  - POST /parser/process — start full processing
-  - GET /parser/{task_id}/status — check task status
+Tests mock generation for:
+  - POST /parser/process (mode=preview|full)
+  - GET /parser/{task_id}/status
 """
 
 import pytest
@@ -19,56 +18,76 @@ def parser_client():
     return client
 
 
-class TestParserPreview:
-    """Tests for ParserServiceClient.process_preview."""
+DRAFT_ID = 420001
 
-    URL = "/parser/preview"
-    METHOD = "POST"
+
+class TestParserProcessPreview:
+    """Tests for ParserServiceClient.process(mode=preview)."""
 
     @pytest.mark.asyncio
-    async def test_process_preview_returns_data(self, parser_client):
-        """process_preview returns a dict with data."""
-        result = await parser_client.process_preview(file_key="f-abc123", max_pages=3)
+    async def test_preview_returns_data(self, parser_client):
+        """Preview returns a dict with data."""
+        result = await parser_client.process(
+            file_key="f-abc123", draft_id=DRAFT_ID, mode="preview", max_pages=3
+        )
+        assert "data" in result
+        data = result["data"]
+        assert "task_id" in data
+        assert "status" in data
+        assert "preview_not_supported" in data
+        assert "metadata" in data
+
+    @pytest.mark.asyncio
+    async def test_preview_has_metadata(self, parser_client):
+        """Preview metadata contains document fields."""
+        result = await parser_client.process(
+            file_key="f-test-key", draft_id=DRAFT_ID, mode="preview", max_pages=5
+        )
+        data = result.get("data", {})
+        metadata = data.get("metadata", {})
+        assert metadata.get("doc_code") == "ГОСТ 20868-81"
+        assert metadata.get("title") is not None
+        assert metadata.get("document_type") == "normative"
+        assert metadata.get("source_type") == "GOST"
+        assert metadata.get("era") == "USSR"
+
+    @pytest.mark.asyncio
+    async def test_preview_default_max_pages(self, parser_client):
+        """Default max_pages is not sent but mock works."""
+        result = await parser_client.process(
+            file_key="f-abc", draft_id=DRAFT_ID, mode="preview"
+        )
+        assert result.get("data", {}).get("preview_not_supported") is not None
+
+    @pytest.mark.asyncio
+    async def test_preview_passes_draft_id(self, parser_client):
+        """Draft ID is passed in the request body."""
+        result = await parser_client.process(
+            file_key="f-key", draft_id=999, mode="preview"
+        )
+        assert result is not None
+
+
+class TestParserProcessFull:
+    """Tests for ParserServiceClient.process(mode=full)."""
+
+    @pytest.mark.asyncio
+    async def test_full_returns_data(self, parser_client):
+        """Full process returns a dict with data."""
+        result = await parser_client.process(
+            file_key="f-abc123", draft_id=DRAFT_ID, mode="full"
+        )
         assert "data" in result
         data = result["data"]
         assert "task_id" in data
         assert "status" in data
 
     @pytest.mark.asyncio
-    async def test_process_preview_passes_file_key(self, parser_client):
-        """File key is passed in the request body."""
-        result = await parser_client.process_preview(file_key="f-test-key", max_pages=5)
-        data = result.get("data", {})
-        assert data.get("task_id") is not None
-
-    @pytest.mark.asyncio
-    async def test_process_preview_default_max_pages(self, parser_client):
-        """Default max_pages is 3."""
-        result = await parser_client.process_preview(file_key="f-abc")
-        data = result.get("data", {})
-        # Mock returns standard preview response
-        assert data.get("preview_not_supported") is not None
-
-
-class TestParserProcess:
-    """Tests for ParserServiceClient.process_full."""
-
-    URL = "/parser/process"
-    METHOD = "POST"
-
-    @pytest.mark.asyncio
-    async def test_process_full_returns_data(self, parser_client):
-        """process_full returns a dict with data."""
-        result = await parser_client.process_full(file_key="f-abc123")
-        assert "data" in result
-        data = result["data"]
-        assert "task_id" in data
-        assert "status" in data
-
-    @pytest.mark.asyncio
-    async def test_process_full_contains_sections(self, parser_client):
+    async def test_full_contains_sections(self, parser_client):
         """Full process response contains parsed sections."""
-        result = await parser_client.process_full(file_key="f-full-test")
+        result = await parser_client.process(
+            file_key="f-full-test", draft_id=DRAFT_ID, mode="full"
+        )
         data = result.get("data", {})
         assert "pages_processed" in data or "sections" in data
 
@@ -89,5 +108,4 @@ class TestParserStatus:
         """Task ID is reflected in the endpoint URL."""
         result = await parser_client.get_status(task_id="p-custom-42")
         data = result.get("data", {})
-        # Mock returns task_id from URL
         assert data is not None

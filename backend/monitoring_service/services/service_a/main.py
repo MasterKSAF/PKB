@@ -8,10 +8,8 @@ app = FastAPI()
 service_name = "service-a"
 otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "signoz-otel-collector:4317")
 
-tracer_provider, meter_provider, _ = setup_observability(service_name, otlp_endpoint=otlp_endpoint)
+tracer_provider, meter_provider, log = setup_observability(service_name, otlp_endpoint=otlp_endpoint)
 instrument_fastapi(app, tracer_provider)
-
-log = logging.getLogger(service_name)
 
 @app.get("/health")
 async def health():

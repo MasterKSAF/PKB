@@ -35,6 +35,41 @@
 Ошибка выбрасывается как `TypeError` ДО ветвления mock/real, что
 исключает «тихие» ошибки в мок-режиме и крахи при HTTP-сериализации.
 
+### 1.6. partially_indexed статус (P2I-1)
+При индексации через RAG Builder, если `indexed_count < expected_count`,
+задача переводится в статус `partially_indexed`, а не `completed`.
+Это позволяет мониторингу обнаружить частичную индексацию.
+
+### 1.7. Таймауты pipeline (P3S-1/P3S-2)
+Два уровня таймаутов:
+- **Per-state timeout (30 с):** шаг, зависший в `pending` дольше 30 с,
+  помечается как `failed` с кодом `PENDING_TIMEOUT`.
+- **Absolute timeout (48 ч):** задача, активная дольше 48 ч,
+  принудительно завершается с кодом `ABSOLUTE_TIMEOUT`.
+Оба обрабатываются в `cleanup_stale_tasks()` scheduler'а (Celery Beat).
+
+### 1.8. Валидация цитирований [source:N] (P3S-4)
+LLM-ответы проверяются на корректность формата `[source:N]`.
+При несоответствии: retry (2 попытки с авто-фиксом), затем fallback
+(удаление невалидных цитирований).
+
+### 1.9. enrichment_skipped в ответе поиска (P3S-6)
+Ответ `POST /documents/search` содержит поле `enrichment_skipped: bool`.
+Показывает, был ли пропущен этап LLM-обогащения результатов.
+По умолчанию `false` — обогащение выполняется.
+
+### 1.10. Integrity check после индексации (P2I-2)
+После успешного вызова `index_document` в RAG Builder выполняется self-check:
+- Вызов `check_index()` проверяет `integrity_ok` флаг со стороны RAG
+- inline-проверка: если `expected_count > 0 && indexed_count == 0` — INTEGRITY_CHECK_FAILED
+- При провале — шаг помечается `failed` с кодом `INTEGRITY_CHECK_FAILED`
+- Фоновая задача `integrity_check` (scheduler) перепроверяет завершённые индексации раз в 6ч
+
+### 1.11. Document status update (RG-1)
+`PATCH /registry/documents/{id}/status` — internal-эндпоинт, доступный только Orchestrator.
+Используется для обновления статуса документа после индексции.
+Метод: `RegistryServiceClient.update_document_status()`.
+
 ## 2. Расхождения со спецификациями
 
 ### 2.1. `docs/api/orchestrator_service_api.md` — устарела
@@ -335,3 +370,229 @@ python backend/service_checker/service_checker.py docker --action health
 
 		**Статус:** не наша сторона. Если требуется прохождение чекера —
 		нужно добавлять поддержку JSON-тела как альтернативного формата.
+
+		---
+
+		## 6. Аномалии, обнаруженные при анализе task assignment (19.06.2026)
+
+		### 6.1. POST /drafts не передаёт mime_type в start_pipeline
+
+		**Файл:** `app/api/v1/endpoints/drafts.py`
+
+		В `create_draft()` есть `file.content_type`, но он не передаётся в `start_pipeline()`.
+		`start_pipeline()` вызывается без mime_type (строки 233-238), что приводит к тому,
+		что `start_pipeline()` определяет `is_scanned` без контекста — используется дефолт.
+
+		**Нужно:** передавать `mime_type=file.content_type` в `start_pipeline()`.
+
+		### 6.2. start_preview использует hardcoded "application/pdf"
+
+		**Файл:** `app/api/v1/endpoints/drafts.py`, строка 482
+
+		В `start_preview()` при вызове `start_pipeline()` всегда передаётся
+		`mime_type="application/pdf"`. Если файл — изображение (PNG/JPEG/TIFF),
+		это приведёт к неверному ветвлению OCR vs Parser.
+
+		**Нужно:** хранить mime_type в Task или получать из Registry.
+
+		### 6.3. _check_auto_approve всегда возвращает True
+
+		**Файл:** `app/core/pipeline/orchestrator.py`, строки 288-293
+
+		Метод `_check_auto_approve` всегда возвращает True, что означает auto-approve
+		после каждого preview. Это может быть нежелательно для production, где
+		требуется ручное подтверждение от пользователя.
+
+		**Нужно:** реализовать реальную проверку (наличие дубликатов, качество метаданных).
+
+		### 6.4. approve_draft не вызывает Registry.create_document()
+
+		**Файл:** `app/core/pipeline/orchestrator.py`, метод `approve_draft()`
+
+		При approve создаются TaskSteps и запускается full_phase, но document_id
+		не запрашивается из Registry до registry_creation шага. По заданию (OR-13),
+		document_id должен назначаться Registry при approve, а не Converter-validator.
+
+		**Нужно:** при approve вызывать `Registry.create_document()` и
+		возвращать document_id в ответе DecideResponse.
+
+		### 6.5. Ветвление OCR vs Parser некорректно для PDF
+
+		**Файл:** `app/core/pipeline/orchestrator.py`, строки 71-73
+
+		Логика `is_scanned`:
+		```python
+		is_scanned = mime_type in ("image/png", "image/jpeg", "image/tiff") or (
+		    mime_type == "application/pdf"  # would need deeper check
+		)
+		```
+
+		Все PDF считаются scanned → идут в OCR Service. Но digital PDF (с текстовым слоем)
+		должны идти в Parser Service. Нужна более глубокая проверка или явное указание
+		типа документа при загрузке.
+
+		**Нужно:** добавить параметр `document_type` (digital/scanned) в POST /drafts,
+		либо выполнять MIME-детекцию по содержимому (magic bytes).
+
+		### 6.6. Нет разделения внешних и внутренних действий в decide
+
+		**Файл:** `app/api/v1/endpoints/drafts.py`, `decide_draft()`
+
+		Сейчас поддерживаются только `approve` и `reject`. По заданию (OR-12):
+		- Внешние (UI): approve, reject
+		- Внутренние: proceed, stop_duplicate, force_new_version
+
+		**Нужно:** добавить внутренние экшены с проверкой RBAC.
+
+		### 6.7. Нет проверки идемпотентности preview
+
+		**Файл:** `app/api/v1/endpoints/drafts.py`, `start_preview()`
+
+		При повторном вызове `POST /drafts/{draft_id}/preview` не возвращается 409.
+		Запускается новый pipeline, создаётся дублирующая задача.
+
+		**Нужно:** проверять статус draft/task и возвращать 409 если preview уже запущен.
+
+		### 6.8. PreviewMetadata содержит только 5 полей из требуемых 8+
+
+		**Файл:** `app/schemas/drafts.py`, класс `PreviewMetadata`
+
+		Сейчас:
+		- doc_code
+		- title
+		- document_type
+		- year
+		- revision
+
+		По заданию (OR-9) требуется минимум 8 полей:
+		- source_type, era, jurisdiction, mks_oks_code, okstu_code, issuing_body, udk_code
+
+		### 6.9. Нет OTEL SDK
+
+		**Файл:** `app/main.py`
+
+		OpenTelemetry SDK не подключён. Нет инициализации tracer, meter, exporter.
+		По заданию (OR-8, CM-6) требуется OTEL интеграция с SigNoz.
+
+		### 6.10. Нет модели DraftNotification
+
+		По заданию (OR-6) требуется таблица `pipeline.draft_notifications`
+		для хранения quality.notifications[] от Parser/OCR.
+		Сейчас качество не отслеживается.
+
+	### 6.11. Двойное создание document_id (ИСПРАВЛЕНО)
+
+	**Проблема:** approve_draft вызывал Registry.create_document(), и затем
+	run_registry_step (Celery задача) снова вызывал create_document().
+	Документ создавался дважды.
+
+	**Исправлено:** run_registry_step теперь вызывает update_draft_status()
+	вместо create_document(), так как документ уже создан в approve_draft.
+
+	### 6.12. approve_draft не проверял ответ Registry (ИСПРАВЛЕНО)
+
+	**Проблема:** при ошибке Registry.create_document() без исключения,
+	document_id = doc_data.get("document_id", draft_id) давал fallback = draft_id,
+	и pipeline продолжался с некорректным ID.
+
+	**Исправлено:** добавлена явная проверка `if not document_id: raise ValueError`.
+
+	### 6.13. full_completed не запускал full_converter (ИСПРАВЛЕНО)
+
+	**Файл:** `app/core/pipeline/orchestrator.py`, approve_draft()
+
+	**Проблема:** при full_completed=True (preview вернул полный документ),
+	создавались full_converter и registry_creation шаги, но full_converter
+	не стартовался (не было start_task_step). Pipeline зависал.
+
+	**Исправлено:** добавлен запуск full_converter step при full_completed=True.
+
+	### 6.14. PDF всегда шёл в OCR (ИСПРАВЛЕНО)
+
+	**Файл:** `app/core/pipeline/orchestrator.py`, строки 71-73
+
+	**Проблема:** `is_scanned = ... or (mime_type == "application/pdf")` —
+	все PDF считались сканами и шли в OCR Service. Digital PDF должны
+	обрабатываться Parser Service.
+
+	**Исправлено:** логика разделена: image/* + scanned_pdf -> OCR,
+	application/pdf (digital) -> Parser.
+
+
+## Типичные ошибки при разработке
+
+Реальные проблемы, которые возникали в этом проекте. Проверяй перед комитом.
+
+### 1. Старая test_pipeline.db не удалена
+
+**Симптом:** `sqlite3.OperationalError: no such column: tasks.version_id`
+**Причина:** SQLAlchemy `create_all()` не добавляет колонки в существующую таблицу.
+**Лечение:** `rm -f test_pipeline.db && pytest -q`
+**Правило:** Если меняешь `models/pipeline.py` — сразу удаляй test БД.
+
+### 2. Метод переименован, а тесты/вызовы — нет
+
+**Симптом:** `AttributeError: 'OCRServiceClient' object has no attribute 'process_document'`
+**Причина:** renamed `process_document` → `process`, но grep не делали.
+**Поиск:** `grep -rn "process_preview\|process_full\|process_document" app/ tests/`
+**Правило:** После переименования метода — grep по всему проекту.
+
+### 3. Изменён response, старые тесты проверяют старые поля
+
+**Симптом:** `AssertionError: assert 'document_id' in {'data': {...}}'`
+**Причина:** ответ OCR изменился с `{"document_id": ..., "pages": [...]}`
+  на `{"data": {"task_id": ...}}`, а тесты проверяют старый формат.
+**Правило:** После смены структуры ответа — обнови все тесты, которые её проверяют.
+
+### 4. Новая валидация сломала существующие тесты
+
+**Симптом:** `assert response.status_code == 200 → 409`
+**Причина:** добавили проверку `pipeline_stage == "decision"` в decide,
+  а тесты вызывали approve сразу после create_draft (stage=upload).
+**Фикс:** Тест должен симулировать полный pipeline, а не резать углы.
+  Либо — поднять stage вручную через `db_session` перед вызовом.
+**Правило:** Новая валидация ломает тесты, которые ходили в обход логики.
+  Это нормально. Исправляй тесты, не ослабляй валидацию.
+
+### 5. Разные сессии БД в фикстуре и в endpoint'е
+
+**Симптом:** фикстура изменила task в БД, endpoint не видит изменений → 409.
+**Причина:** фикстура использует `db_session`, endpoint — `AsyncSessionLocal()`.
+  Изменения не видны пока не сделан `commit()`.
+**Фикс:** после `flush()` делать `await db_session.commit()`.
+**Правило:** Если фикстура меняет БД для endpoint'а — commit обязательно.
+
+### 6. Потерянная запятая в аргументах
+
+**Симптом:** `SyntaxError` при запуске.
+**Причина:** было `version_id=task.version_id` без запятой, следом `status=...`
+**Фикс:** всегда проверяй trailing comma после добавления/удаления параметров.
+
+### 7. orphan-assertions после рефакторинга тестов
+
+**Симптом:** `NameError: name 'data' is not defined`
+**Причина:** после переписывания теста остались assert'ы от старой версии,
+  которые ссылаются на переменные из удалённого контекста.
+**Правило:** после рефакторинга теста — удаляй все assert'ы, которые не
+  относятся к новому телу функции.
+
+### 8. Модель изменилась, а ответ API — нет
+
+**Симптом:** новое поле есть в БД, но не возвращается из endpoint'а.
+**Пример:** `version_id` добавили в модель Task, а `get_task_by_id`
+  возвращал `version_id=None` (хардкод).
+**Правило:** После добавления колонки — проверь что endpoint её читает.
+
+### 9. Двойной вызов create_document
+
+**Симптом:** Документ создаётся дважды.
+**Причина:** approve_draft вызвал `Registry.create_document()`, и потом
+  run_registry_step (Celery) снова вызвал `create_document()`.
+**Правило:** Если один слой уже создал ресурс — другой слой должен
+  обновлять, а не создавать заново.
+
+### 10. Кэш перед read_file
+
+Перед `read_file` проверь, загружен ли файл в кэш текущей сессии.
+Повторное чтение уже загруженных файлов — потеря токенов.
+Исключение: если файл гарантированно изменился между сессиями.

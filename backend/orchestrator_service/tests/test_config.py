@@ -13,22 +13,31 @@ import pytest
 from app.core.config import ServiceConfig, Settings, get_settings
 
 
+def _clean_env():
+    """Remove forced mock env vars from conftest so defaults are visible."""
+    for key in list(os.environ):
+        if key.endswith("_MOCK"):
+            del os.environ[key]
+
+
 class TestServiceConfig:
     """Tests for ServiceConfig (per-service settings)."""
 
     def test_default_mock_mode(self):
-        """All services default to mock=True."""
+        """All services default to mock=False in real mode."""
+        _clean_env()
         config = ServiceConfig()
-        assert config.REGISTRY_SERVICE_MOCK is True
-        assert config.RAG_SERVICE_MOCK is True
-        assert config.OCR_SERVICE_MOCK is True
+        assert config.REGISTRY_SERVICE_MOCK is False
+        assert config.RAG_SERVICE_MOCK is False
+        assert config.OCR_SERVICE_MOCK is False
 
     def test_default_service_urls(self):
-        """All service URLs default to None."""
+        """All services have default Docker internal URLs."""
+        _clean_env()
         config = ServiceConfig()
-        assert config.REGISTRY_SERVICE_URL is None
-        assert config.RAG_SERVICE_URL is None
-        assert config.OCR_SERVICE_URL is None
+        assert config.REGISTRY_SERVICE_URL == "http://registry-service:8084"
+        assert config.RAG_SERVICE_URL == "http://rag-builder:8087"
+        assert config.OCR_SERVICE_URL == "http://ocr-service:8088"
 
     def test_override_with_env(self):
         """Setting env vars should override defaults."""
@@ -46,12 +55,13 @@ class TestServiceConfig:
 
     def test_mixed_mock_and_real(self):
         """Some services mock, some real."""
+        _clean_env()
         with patch.dict(os.environ, {
-            "OCR_SERVICE_MOCK": "false",
+            "OCR_SERVICE_MOCK": "true",
         }, clear=False):
             config = ServiceConfig()
-            assert config.OCR_SERVICE_MOCK is False
-            assert config.REGISTRY_SERVICE_MOCK is True  # still default
+            assert config.OCR_SERVICE_MOCK is True
+            assert config.REGISTRY_SERVICE_MOCK is False  # still default
 
 
 class TestSettings:
@@ -96,9 +106,10 @@ class TestSettings:
             assert settings.JWT_ALGORITHM == "RS256"
 
     def test_nested_service_config(self):
+        _clean_env()
         settings = Settings()
         assert isinstance(settings.services, ServiceConfig)
-        assert settings.services.REGISTRY_SERVICE_MOCK is True
+        assert settings.services.REGISTRY_SERVICE_MOCK is False
 
     def test_flat_env_vars_do_not_crash(self):
         """
@@ -106,6 +117,7 @@ class TestSettings:
         ValidationError on Settings init.
         ServiceConfig (nested BaseSettings) reads them independently.
         """
+        _clean_env()
         with patch.dict(os.environ, {
             "REGISTRY_SERVICE_URL": "http://registry:8084",
             "REGISTRY_SERVICE_MOCK": "false",
@@ -143,3 +155,19 @@ class TestEnvFileLoading:
     def test_env_nested_delimiter(self):
         """Verify nested env delimiter is configured."""
         assert Settings.model_config.get("env_nested_delimiter") == "__"
+
+
+class TestPipelineConfig:
+    """Tests for PipelineConfig (P3S-1/P3S-2)."""
+
+    def test_pending_state_timeout_default(self):
+        """PENDING_STATE_TIMEOUT defaults to 30 seconds."""
+        from app.core.config import PipelineConfig
+        config = PipelineConfig()
+        assert config.PENDING_STATE_TIMEOUT == 30
+
+    def test_absolute_task_timeout_default(self):
+        """ABSOLUTE_TASK_TIMEOUT_HOURS defaults to 48 hours."""
+        from app.core.config import PipelineConfig
+        config = PipelineConfig()
+        assert config.ABSOLUTE_TASK_TIMEOUT_HOURS == 48

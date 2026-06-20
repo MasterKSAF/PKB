@@ -86,6 +86,37 @@ class TestHealthEndpoint:
         assert cors_origin is not None
 
 
+class TestHealthLivenessReadiness:
+    """Tests for /health/live and /health/ready (T-12)."""
+
+    def test_health_live_returns_alive(self, client: TestClient):
+        """Liveness endpoint returns alive status."""
+        response = client.get("/api/v1/health/live")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "alive"
+        assert data["service"] == "orchestrator-service"
+
+    def test_health_live_public_no_auth(self, client: TestClient):
+        """Liveness is public."""
+        response = client.get("/api/v1/health/live", headers={})
+        assert response.status_code == 200
+
+    def test_health_ready_returns_ready(self, client: TestClient):
+        """Readiness endpoint returns ready with uptime."""
+        response = client.get("/api/v1/health/ready")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ready"
+        assert "uptime_seconds" in data
+        assert "database" in data
+
+    def test_health_ready_public_no_auth(self, client: TestClient):
+        """Readiness is public."""
+        response = client.get("/api/v1/health/ready", headers={})
+        assert response.status_code == 200
+
+
 class TestOpenAPIEndpoints:
     """Tests for OpenAPI documentation endpoints (public)."""
 
