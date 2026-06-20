@@ -595,7 +595,7 @@ class TestOnStepFailedRetryExhausted:
 
         # Verify Saga compensation was triggered
         mock_saga.compensate.assert_awaited_once_with(
-            task.id, "preview_ocr",
+            task.id, "preview_ocr", task=task,
         )
 
         # Verify step was marked as failed

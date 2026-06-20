@@ -200,6 +200,10 @@ class RegistryServiceClient(ServiceClient):
             draft["file_hash_sha256"] = body["file_hash_sha256"]
         if body.get("title_hash_sha256"):
             draft["title_hash_sha256"] = body["title_hash_sha256"]
+        if body.get("title_key"):
+            draft["title_key"] = body["title_key"]
+        if body.get("metadata_fields"):
+            draft["metadata_fields"] = body["metadata_fields"]
         storage["drafts"][draft_id] = draft
         return {"data": dict(draft)}
 
@@ -542,6 +546,8 @@ class RegistryServiceClient(ServiceClient):
         created_by: str,
         file_hash_sha256: Optional[str] = None,
         title_hash_sha256: Optional[str] = None,
+        title_key: Optional[str] = None,
+        metadata_fields: Optional[Dict[str, Any]] = None,
     ) -> dict:
         """Create a draft in Registry. Returns draft_id."""
         body = CreateDraftRequest(
@@ -550,6 +556,8 @@ class RegistryServiceClient(ServiceClient):
             created_by=created_by,
             file_hash_sha256=file_hash_sha256,
             title_hash_sha256=title_hash_sha256,
+            title_key=title_key,
+            metadata_fields=metadata_fields,
         )
         return await self.call(
             "POST",

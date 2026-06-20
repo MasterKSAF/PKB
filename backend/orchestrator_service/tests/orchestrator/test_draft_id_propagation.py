@@ -83,7 +83,7 @@ class TestDraftIdInApiResponse:
             "/api/v1/drafts/",
             headers=auth_header,
             files={"file": ("test.pdf", b"%PDF-1.4 mock " * 50, "application/pdf")},
-            data={"document_key": "doc-draft-id-test"},
+            data={"document_key": "doc-draft-id-test", "source_type": "GOST"},
         )
         assert response.status_code == 202
         data = response.json()
@@ -96,7 +96,7 @@ class TestDraftIdInApiResponse:
         response = client.post(
             "/api/v1/drafts/",
             headers=auth_header,
-            data={"document_key": "doc-no-file"},
+            data={"document_key": "doc-no-file", "source_type": "GOST"},
         )
         assert response.status_code == 422
 

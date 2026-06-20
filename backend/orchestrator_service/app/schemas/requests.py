@@ -24,6 +24,10 @@ class CreateDraftRequest(BaseModel):
     created_by: str = Field(..., description="Кто создал (UUID пользователя)")
     file_hash_sha256: Optional[str] = Field(None, description="SHA-256 хэш файла")
     title_hash_sha256: Optional[str] = Field(None, description="SHA-256 хэш названия")
+    title_key: Optional[str] = Field(None, description="Исходная строка конкатенации для title_hash_sha256 (DB-28)")
+    metadata_fields: Optional[Dict[str, Any]] = Field(
+        None, description="Метаданные из формы POST /drafts: source_type, doc_code, mks_oks_code и др."
+    )
 
 
 class UpdateDraftStatusRequest(BaseModel):

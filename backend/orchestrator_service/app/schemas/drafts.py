@@ -23,6 +23,9 @@ class DraftCreateResponse(BaseModel):
     title_hash_sha256: Optional[str] = Field(
         None, description="SHA-256 хэш названия (бизнес-ключ)"
     )
+    title_key: Optional[str] = Field(
+        None, description="Исходная строка конкатенации для title_hash_sha256 (DB-28)"
+    )
     created_at: datetime = Field(..., description="Время создания")
 
 

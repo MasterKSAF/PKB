@@ -777,7 +777,6 @@ class ReprocessResponse(BaseModel):
 
     mode: ReprocessMode = Field(..., description="Режим переобработки")
     document_id: str = Field(..., description="UUID документа")
-    user_id: str = Field(..., description="UUID пользователя")
     task_id: str = Field(..., description="ID задачи")
     status: str = Field(..., description="Статус")
     created_at: datetime = Field(..., description="Время создания")

@@ -24,7 +24,7 @@ class TestDraftToDocumentChain:
             "/api/v1/drafts/",
             headers=auth_header,
             files={"file": ("test.pdf", b"%PDF-1.4 mock " * 50, "application/pdf")},
-            data={"document_key": "doc-chain-test", "title": "Chain Test Doc"},
+            data={"document_key": "doc-chain-test", "title": "Chain Test Doc", "source_type": "GOST"},
         )
         assert create_resp.status_code == 202
         data = create_resp.json()

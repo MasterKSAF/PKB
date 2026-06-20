@@ -1,6 +1,7 @@
 """Drafts API endpoints — upload, list, view, preview, decide, delete."""
 
 import hashlib
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Optional
@@ -47,6 +48,14 @@ router = APIRouter()
 MOCK_USER_ID = "u-mock-001"
 MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024  # 100 MB
 
+ALLOWED_SOURCE_TYPES = {
+    "GOST", "GOST_R", "OST", "RD", "TU", "ISO", "DNV", "ASTM", "RMRS", "OTHER",
+}
+
+ALLOWED_ERA = {"USSR", "CIS", "RF", "CURRENT"}
+
+ALLOWED_JURISDICTIONS = {"RU", "EU", "US", "NO", "INTL"}
+
 ALLOWED_MIME = {
     "application/pdf",
     "image/png",
@@ -84,7 +93,15 @@ def _compute_sha256(content: bytes) -> str:
 async def create_draft(
     file: UploadFile = File(..., description="Бинарный файл (PDF, PNG, JPG, TIFF)"),
     document_key: str = Form(..., description="Ключ документа (business key)"),
+    source_type: str = Form(..., description="Тип источника: GOST, GOST_R, OST, RD, TU, ISO, DNV, ASTM, RMRS, OTHER"),
     title: Optional[str] = Form(None, description="Название документа"),
+    doc_code: Optional[str] = Form(None, description="Регистрационный номер (напр. 20868-81)"),
+    mks_oks_code: Optional[str] = Form(None, description="Код МКС/ОКС"),
+    okstu_code: Optional[str] = Form(None, description="Код ОКСТУ"),
+    era: Optional[str] = Form(None, description="Эпоха: USSR, CIS, RF, CURRENT"),
+    jurisdiction: Optional[str] = Form(None, description="Юрисдикция: RU, EU, US, NO, INTL"),
+    issuing_body: Optional[str] = Form(None, description="Организация-издатель"),
+    metadata: Optional[str] = Form(None, description="JSON-строка с доп. данными"),
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> DraftCreateResponse:
@@ -104,6 +121,63 @@ async def create_draft(
                 }
             },
         )
+
+    # --- Validate source_type ---
+    if source_type not in ALLOWED_SOURCE_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": f"Недопустимый source_type: {source_type}",
+                    "details": {"allowed_values": sorted(ALLOWED_SOURCE_TYPES)},
+                }
+            },
+        )
+
+    # --- Validate era ---
+    if era is not None and era not in ALLOWED_ERA:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": f"Недопустимый era: {era}",
+                    "details": {"allowed_values": sorted(ALLOWED_ERA)},
+                }
+            },
+        )
+
+    # --- Validate jurisdiction ---
+    if jurisdiction is not None and jurisdiction not in ALLOWED_JURISDICTIONS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": f"Недопустимый jurisdiction: {jurisdiction}",
+                    "details": {"allowed_values": sorted(ALLOWED_JURISDICTIONS)},
+                }
+            },
+        )
+
+    # --- Parse metadata JSON if provided ---
+    parsed_metadata: Dict[str, Any] = {}
+    if metadata:
+        try:
+            parsed_metadata = json.loads(metadata)
+            if not isinstance(parsed_metadata, dict):
+                raise ValueError("metadata must be a JSON object")
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": f"Некорректный JSON в поле metadata: {exc}",
+                    }
+                },
+            )
 
     # --- Validate file size ---
     content_length: Optional[int] = None
@@ -156,6 +230,42 @@ async def create_draft(
     # --- Generate file key (no external storage) ---
     file_key = f"f-{file_hash[:12]}"
 
+    # --- Compute title_key (DB-28): конкатенация ключевых полей ---
+    title_key_parts = []
+    if era:
+        title_key_parts.append(era)
+    title_key_parts.append(source_type)
+    if jurisdiction:
+        title_key_parts.append(jurisdiction)
+    if doc_code:
+        title_key_parts.append(doc_code)
+    if mks_oks_code:
+        title_key_parts.append(mks_oks_code)
+    if title:
+        title_key_parts.append(title)
+    title_key = "|".join(title_key_parts) if title_key_parts else None
+
+    # --- Build metadata_fields from form data ---
+    metadata_fields: Dict[str, Any] = {}
+    if source_type:
+        metadata_fields["source_type"] = source_type
+    if title:
+        metadata_fields["title"] = title
+    if doc_code:
+        metadata_fields["doc_code"] = doc_code
+    if mks_oks_code:
+        metadata_fields["mks_oks_code"] = mks_oks_code
+    if okstu_code:
+        metadata_fields["okstu_code"] = okstu_code
+    if era:
+        metadata_fields["era"] = era
+    if jurisdiction:
+        metadata_fields["jurisdiction"] = jurisdiction
+    if issuing_body:
+        metadata_fields["issuing_body"] = issuing_body
+    # Merge any parsed metadata on top
+    metadata_fields.update(parsed_metadata)
+
     # --- Check duplicates via Registry ---
     registry = RegistryServiceClient()
     is_duplicate_file = False
@@ -182,6 +292,8 @@ async def create_draft(
             created_by=current_user.user_id if current_user else MOCK_USER_ID,
             file_hash_sha256=file_hash,
             title_hash_sha256=title_hash,
+            title_key=title_key,
+            metadata_fields=metadata_fields if metadata_fields else None,
         )
         draft_id = draft_result.get("data", {}).get("draft_id", 0)
     except Exception as exc:
@@ -250,6 +362,7 @@ async def create_draft(
         task_id=task.id,
         file_key=file_key,
         mime_type=mime_type,
+        metadata_fields=metadata_fields if metadata_fields else None,
     )
 
     return DraftCreateResponse(
@@ -261,6 +374,7 @@ async def create_draft(
         is_duplicate_file=is_duplicate_file,
         is_duplicate_document=is_duplicate_document,
         title_hash_sha256=title_hash,
+        title_key=title_key,
         created_at=datetime.now(timezone.utc),
     )
 

@@ -38,7 +38,7 @@ class TestCreateDraft:
             self.URL,
             headers=auth_header,
             files={"file": ("test.pdf", io.BytesIO(file_content), "application/pdf")},
-            data={"document_key": "doc-001", "title": "Test Document"},
+            data={"document_key": "doc-001", "title": "Test Document", "source_type": "GOST"},
         )
         assert response.status_code == 202
         data = response.json()
@@ -59,7 +59,7 @@ class TestCreateDraft:
             self.URL,
             headers=auth_header,
             files={"file": ("test.txt", io.BytesIO(b"plain text"), "text/plain")},
-            data={"document_key": "doc-001"},
+            data={"document_key": "doc-001", "source_type": "GOST"},
         )
         assert response.status_code == 400
         data = response.json()
@@ -81,9 +81,9 @@ class TestCreateDraft:
                 self.URL,
                 headers=auth_header,
                 files={"file": ("big.pdf", io.BytesIO(small_content), "application/pdf")},
-                data={"document_key": "doc-too-large"},
+                data={"document_key": "doc-too-large", "source_type": "GOST"},
             )
-        assert response.status_code == 413
+            assert response.status_code == 413
         data = response.json()
         assert "error" in data.get("detail", data)
 
@@ -92,7 +92,7 @@ class TestCreateDraft:
         response = client.post(
             self.URL,
             files={"file": ("test.pdf", io.BytesIO(b"pdf content"), "application/pdf")},
-            data={"document_key": "doc-001"},
+            data={"document_key": "doc-001", "source_type": "GOST"},
         )
         # Mock mode returns mock user, so 202
         assert response.status_code == 202
@@ -102,12 +102,95 @@ class TestCreateDraft:
         response = client.post(
             self.URL,
             headers=auth_header,
-            data={"document_key": "doc-001"},
+            data={"document_key": "doc-001", "source_type": "GOST"},
         )
         assert response.status_code == 422
 
+    # --- New field validations (Блок 11) ---
+
+    def test_create_draft_without_source_type_returns_422(self, client: TestClient, auth_header: dict):
+        """Missing required source_type returns 422."""
+        response = client.post(
+            self.URL,
+            headers=auth_header,
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock"), "application/pdf")},
+            data={"document_key": "doc-no-source"},
+        )
+        assert response.status_code == 422
+
+    def test_create_draft_invalid_source_type_returns_422(self, client: TestClient, auth_header: dict):
+        """Invalid source_type value returns 422."""
+        response = client.post(
+            self.URL,
+            headers=auth_header,
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock"), "application/pdf")},
+            data={"document_key": "doc-bad-source", "source_type": "INVALID"},
+        )
+        assert response.status_code == 422
+        data = response.json()
+        detail = data.get("detail", data)
+        error = detail.get("error", detail)
+        assert "INVALID" in error.get("message", "")
+
+    def test_create_draft_invalid_era_returns_422(self, client: TestClient, auth_header: dict):
+        """Invalid era value returns 422."""
+        response = client.post(
+            self.URL,
+            headers=auth_header,
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock"), "application/pdf")},
+            data={"document_key": "doc-bad-era", "source_type": "GOST", "era": "ANCIENT"},
+        )
+        assert response.status_code == 422
+
+    def test_create_draft_invalid_jurisdiction_returns_422(self, client: TestClient, auth_header: dict):
+        """Invalid jurisdiction value returns 422."""
+        response = client.post(
+            self.URL,
+            headers=auth_header,
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock"), "application/pdf")},
+            data={"document_key": "doc-bad-jur", "source_type": "GOST", "jurisdiction": "MOON"},
+        )
+        assert response.status_code == 422
+
+    def test_create_draft_response_has_title_key(self, client: TestClient, auth_header: dict):
+        """Successful upload returns title_key in response (DB-28)."""
+        response = client.post(
+            self.URL,
+            headers=auth_header,
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock"), "application/pdf")},
+            data={
+                "document_key": "doc-title-key",
+                "source_type": "GOST",
+                "title": "Test Doc",
+                "era": "RF",
+                "doc_code": "12345",
+            },
+        )
+        assert response.status_code == 202
+        data = response.json()
+        assert "title_key" in data
+        assert data["title_key"] is not None
+        # title_key should contain the key fields concatenated
+        assert "RF" in data["title_key"]
+        assert "GOST" in data["title_key"]
+        assert "Test Doc" in data["title_key"]
+
+    def test_create_draft_title_key_none_when_no_fields(self, client: TestClient, auth_header: dict):
+        """Without era/doc_code/title, title_key only has source_type."""
+        response = client.post(
+            self.URL,
+            headers=auth_header,
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock"), "application/pdf")},
+            data={"document_key": "doc-key-none", "source_type": "GOST"},
+        )
+        assert response.status_code == 202
+        data = response.json()
+        assert "title_key" in data
+        assert data["title_key"] == "GOST"
+
 
 # ---------------------------------------------------------------------------
+#  GET /drafts  — List drafts
 #  GET /drafts
 # ---------------------------------------------------------------------------
 
@@ -221,7 +304,7 @@ class TestStartPreview:
             "/api/v1/drafts/",
             headers=auth_header,
             files={"file": ("test.pdf", io.BytesIO(b"%PDF mock content"), "application/pdf")},
-            data={"document_key": "doc-start-preview", "title": "Test"},
+            data={"document_key": "doc-start-preview", "title": "Test", "source_type": "GOST"},
         )
         assert response.status_code == 202
         return response.json()["draft_id"]
@@ -251,7 +334,7 @@ class TestStartPreview:
         response = client.post(
             "/api/v1/drafts/",
             files={"file": ("test.pdf", io.BytesIO(b"%PDF content"), "application/pdf")},
-            data={"document_key": "doc-no-auth-preview"},
+            data={"document_key": "doc-no-auth-preview", "source_type": "GOST"},
         )
         assert response.status_code == 202
         draft_id = response.json()["draft_id"]
@@ -283,7 +366,7 @@ class TestPreviewStatus:
             "/api/v1/drafts/",
             headers=auth_header,
             files={"file": ("test.pdf", io.BytesIO(b"%PDF mock"), "application/pdf")},
-            data={"document_key": "doc-preview-status", "title": "Test"},
+            data={"document_key": "doc-preview-status", "title": "Test", "source_type": "GOST"},
         )
         assert response.status_code == 202
         return response.json()["draft_id"]
@@ -364,7 +447,7 @@ class TestPreviewStatus:
         response = client.post(
             "/api/v1/drafts/",
             files={"file": ("test.pdf", io.BytesIO(b"%PDF content"), "application/pdf")},
-            data={"document_key": "doc-no-auth-status"},
+            data={"document_key": "doc-no-auth-status", "source_type": "GOST"},
         )
         assert response.status_code == 202
         draft_id = response.json()["draft_id"]
@@ -406,7 +489,7 @@ class TestDecideDraft:
             "/api/v1/drafts/",
             headers=auth_header,
             files={"file": ("test.pdf", io.BytesIO(b"%PDF mock"), "application/pdf")},
-            data={"document_key": "doc-decide", "title": "Test"},
+            data={"document_key": "doc-decide", "title": "Test", "source_type": "GOST"},
         )
         assert response.status_code == 202
         draft_id = response.json()["draft_id"]
@@ -543,7 +626,7 @@ class TestDecideDraft:
         response = client.post(
             "/api/v1/drafts/",
             files={"file": ("test.pdf", io.BytesIO(b"%PDF content"), "application/pdf")},
-            data={"document_key": "doc-no-auth-decide"},
+            data={"document_key": "doc-no-auth-decide", "source_type": "GOST"},
         )
         assert response.status_code == 202
         draft_id = response.json()["draft_id"]

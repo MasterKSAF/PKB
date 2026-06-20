@@ -8,7 +8,7 @@ POST /documents больше не используется для загрузк
 from fastapi import APIRouter, Depends
 
 from app.api.deps import get_current_user
-from app.api.v1.endpoints import documents, drafts, health, search, tasks
+from app.api.v1.endpoints import documents, drafts, health, tasks
 
 api_router = APIRouter(
     dependencies=[Depends(get_current_user)],
@@ -35,12 +35,6 @@ api_router.include_router(
     tags=["tasks"],
 )
 
-# Search and RAG endpoints
-api_router.include_router(
-    search.router,
-    prefix="",
-    tags=["search"],
-)
 
 # Health check
 api_router.include_router(

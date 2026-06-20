@@ -18,7 +18,7 @@ os.environ["OCR_SERVICE_MOCK"] = "true"
 os.environ["PARSER_SERVICE_MOCK"] = "true"
 os.environ["CONVERTER_SERVICE_MOCK"] = "true"
 
-# Use local SQLite for tests — creates test_pipeline.db in project dir
+# Local SQLite for tests — pooled, fast
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test_pipeline.db"
 os.environ["DEBUG"] = "false"
 
