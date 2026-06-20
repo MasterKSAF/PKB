@@ -35,6 +35,7 @@ class IndexingService:
     def index_document(
             self,
             request: BuildRequest,
+            indexing_txn_id: str | None = None,
     ) -> IndexingResult:
         """
         Индексирует документ.
@@ -71,7 +72,10 @@ class IndexingService:
         total_cost = embedding_result.cost_usd
 
         if self.repository is not None:
-            self.repository.save_chunks(embedded_chunks)
+            self.repository.save_chunks(
+                embedded_chunks,
+                indexing_txn_id=indexing_txn_id,
+            )
 
         return IndexingResult(
             chunks=embedded_chunks,
