@@ -113,7 +113,9 @@ async def run_pipeline(
                     await asyncio.sleep(0.3)
                     llm_text = _build_llm_mock(enriched_query, chunks)
                     break
-                # TODO: LLM call
+                # LLM: settings.LLM_API_URL, model=settings.LLM_MODEL,
+                #       temperature=settings.LLM_TEMPERATURE, max_tokens=settings.LLM_MAX_TOKENS,
+                #       top_p=settings.LLM_TOP_P
                 llm_text = _build_llm_mock(enriched_query, chunks)
                 break
             except Exception:
