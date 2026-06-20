@@ -68,33 +68,14 @@
 
 ---
 
-## Gateway route table
+## 🔵 Новая задача: Поиск по истории сообщений в сессии
 
-✅ Добавлены маршруты:
-- `/api/v1/search/*` → Query Service (8083)
-- `/api/v1/ask` → Query Service (8083)
-- `/api/v1/tasks` + `/api/v1/tasks/stats` → Orchestrator (8081)
+- [x] **T17.** Добавить endpoint `POST /chat/sessions/{session_id}/messages/search` в `query_service_api.md`
+- [x] **T18.** Обновить `README.md` — добавить в функции Query Service: поиск по истории сообщений
+- [x] **T19.** Зафиксировать в `guide.md` решение: редактирование сообщений не поддерживается (ответ консультанта становится устаревшим)
+- [x] **T20.** Проверить `_data_dictionary.md` и `_schemas.md` — нужны ли изменения (не требуются — поля специфичны для Query Service)
+- [x] **T21.** Финальная проверка целостности и связности
 
-## README.md
-
-✅ Обновлено описание Query Service — добавлены поисковые эндпоинты.
-
-## Скрипт кросс-проверки
-
-✅ `check_cross_references.py` — 62 проверки, все проходят.
-
-## Что остаётся сделать (когда появится доступ к коду)
-
-1. Сверить реализацию этих эндпоинтов со спеками:
-   - POST/GET /documents/search — структура запроса/ответа
-   - POST /ask — структура запроса/ответа
-2. Проверить reprocess response — нет ли `user_id` в теле
-3. Проверить POST /drafts — реальное количество form-полей
-4. Проверить `estimated_completion` в POST /drafts/{draft_id}/preview
-
-## Принятые архитектурные решения (без правок кода)
-
-По результатам сверки с кодом (20.06):
-- `GET /tasks` — формат пагинации `meta: {}` оставлен как целевой дизайн (common_api.md). Код должен быть приведён к стандарту.
-- `GET /tasks/stats` — формат `by_status` + `by_stage` оставлен как целевой дизайн. Код использует `active/completed/failed/by_type` — требуется доработка кода.
-- `GET /drafts/{draft_id}/tasks` — подтверждён как необходимый эндпоинт. Ожидает реализации.
+### T22. Конфиг LLM в Query Service (QS-13)
+- [x] Добавлена таблица параметров LLM (модель, temperature, max_tokens=8196, top_p) в секцию «Генерация ответа LLM» `query_service_api.md`
+- [x] Убраны дублирующиеся строки про max_tokens=1024 из `rag_search_service_api.md` — заменены ссылкой на Query Service
