@@ -37,7 +37,7 @@ class TestCorrelationHeadersApi:
             "/api/v1/drafts/",
             headers=auth_header,
             files={"file": ("test.pdf", b"%PDF mock", "application/pdf")},
-            data={"document_key": "doc-correlation"},
+            data={"document_key": "doc-correlation", "source_type": "GOST"},
         )
         assert "X-Trace-ID" in response.headers
 

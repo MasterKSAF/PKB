@@ -255,7 +255,7 @@ export const History: React.FC = () => {
 
         downloadBlob(buildHistoryCsvBlob(filteredData), filename);
       } catch (error: any) {
-        setExportError(error?.message ?? 'Не удалось экспортировать историю через Gateway.');
+        setExportError(error?.message ?? 'Не удалось экспортировать историю через сервер.');
       } finally {
         setExportLoading(false);
       }
@@ -301,9 +301,9 @@ export const History: React.FC = () => {
   };
 
   return (
-    <Box sx={{ display: 'flex', height: 'calc(100vh - 142px)', minHeight: 0 }}>
+    <Box sx={{ display: 'flex', height: '100%', minHeight: 0 }}>
       <Box sx={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
-        <Container maxWidth="xl" sx={{ py: 3.2 }}>
+        <Container maxWidth={false} disableGutters sx={{ py: 3, width: '100%' }}>
           <Stack spacing={2.4}>
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(4, 1fr)' }, gap: 1.25 }}>
               {historySlices.map((slice) => (

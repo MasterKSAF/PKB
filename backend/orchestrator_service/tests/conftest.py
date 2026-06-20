@@ -18,7 +18,8 @@ os.environ["OCR_SERVICE_MOCK"] = "true"
 os.environ["PARSER_SERVICE_MOCK"] = "true"
 os.environ["CONVERTER_SERVICE_MOCK"] = "true"
 
-# Use local SQLite for tests — creates test_pipeline.db in project dir
+# Local SQLite for tests — file with PRAGMA optimizations (near-RAM speed)
+# PRAGMA journal_mode=MEMORY + synchronous=OFF eliminates disk I/O bottleneck
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test_pipeline.db"
 os.environ["DEBUG"] = "false"
 
@@ -50,6 +51,26 @@ celery_app.conf.update(
 _delay_patcher = patch("celery.app.task.Task.delay", autospec=True, return_value=None)
 _delay_patcher.start()
 
+# --- Block all real HTTP requests (prevent network timeouts in tests) ---
+# When mock_mode=False, tests like test_real_mode_* try to connect to
+# non-existent servers and wait seconds for connect timeout.
+# This patch makes httpx.AsyncClient.request instantly raise ConnectError.
+import httpx
+
+# Also replace AsyncClient with a fast fake — on Windows, creating a real
+# httpx.AsyncClient takes ~0.4s due to connection pool setup, which adds up
+# across all real-mode tests.
+class _FakeHttpxClient:
+    """Duck-typed fake that avoids slow httpx.AsyncClient.__init__."""
+    def __init__(self, *args, **kwargs):
+        pass
+    async def aclose(self):
+        pass
+    async def request(self, method, url, **kwargs):
+        raise httpx.ConnectError(f"Blocked by test: {method} {url}")
+
+httpx.AsyncClient = _FakeHttpxClient  # type: ignore[misc]
+
 
 @pytest.fixture(scope="session")
 def app():
@@ -57,7 +78,7 @@ def app():
     return create_application()
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def client(app) -> Generator:
     """Provide a TestClient for API endpoint testing."""
     with TestClient(app) as c:
@@ -77,7 +98,10 @@ def auth_header() -> dict:
 
 @pytest.fixture(scope="session")
 def db_engine():
-    """Create a fresh SQLAlchemy engine for the test session."""
+    """Create a fresh SQLAlchemy engine for the test session.
+
+    Uses tempfile + PRAGMA optimizations for near-RAM speed.
+    """
     from app.db.base import engine, Base
 
     # Ensure all models are imported/registered with Base.metadata
@@ -87,6 +111,11 @@ def db_engine():
 
     async def _init():
         async with engine.begin() as conn:
+            # Performance pragmas — skip disk flush, use memory journal
+            from sqlalchemy import text
+            await conn.execute(text("PRAGMA journal_mode=MEMORY"))
+            await conn.execute(text("PRAGMA synchronous=OFF"))
+            await conn.execute(text("PRAGMA cache_size=-64000"))  # 64MB cache
             await conn.run_sync(Base.metadata.create_all)
 
     asyncio.run(_init())

@@ -42,8 +42,15 @@ export interface Document {
   updatedAt: string;
   sectionId?: string;
   group?: string;
+  docCode?: string;
+  status?: string;
+  validityStatus?: string;
   sourceType?: string;
   documentKey?: string;
+  titleKey?: string;
+  titleHashSha256?: string;
+  validFrom?: string;
+  validUntil?: string;
 }
 
 export interface SystemMetrics {
@@ -96,7 +103,7 @@ export interface ProcessingLogItem {
   id: string;
   time: string;
   document: string;
-  stage: 'Загрузка' | 'OCR' | 'Parsing' | 'Indexing' | 'Answer generation';
+  stage: string;
   event: string;
   retryStatus: 'Не требуется' | 'Запланирована' | 'Выполнена' | 'Ошибка';
   visibility: 'Инженер' | 'Администратор';
@@ -114,7 +121,7 @@ export interface KnowledgeSection {
 export interface ProcessingQueueItem {
   id: string;
   document: string;
-  stage: 'OCR' | 'Индексация' | 'Разбор таблиц';
+  stage: string;
   progress: number;
   status: 'в очереди' | 'в работе' | 'ошибка';
 }
@@ -547,7 +554,7 @@ export const MOCK_PROCESSING_QUEUE: ProcessingQueueItem[] = [
   {
     id: 'q1',
     document: 'ГОСТ 2.103-2013',
-    stage: 'OCR',
+    stage: 'Распознавание текста',
     progress: 82,
     status: 'в работе',
   },
@@ -568,7 +575,7 @@ export const MOCK_PROCESSING_QUEUE: ProcessingQueueItem[] = [
   {
     id: 'q4',
     document: 'Архивный скан РКО',
-    stage: 'OCR',
+    stage: 'Распознавание текста',
     progress: 100,
     status: 'ошибка',
   },
@@ -579,7 +586,7 @@ export const MOCK_PROCESSING_LOGS: ProcessingLogItem[] = [
     id: 'log1',
     time: '12:34:02',
     document: 'Правила РС. Часть I',
-    stage: 'OCR',
+    stage: 'Распознавание текста',
     event: 'Страница 45 распознана с пониженной уверенностью, требуется повторная обработка.',
     retryStatus: 'Запланирована',
     visibility: 'Администратор',
@@ -588,7 +595,7 @@ export const MOCK_PROCESSING_LOGS: ProcessingLogItem[] = [
     id: 'log2',
     time: '12:35:11',
     document: 'Спецификация 21900M2.362135.0903',
-    stage: 'Parsing',
+    stage: 'Разбор документа',
     event: 'Таблица параметров извлечена, структура сохранена в карточке документа.',
     retryStatus: 'Не требуется',
     visibility: 'Инженер',
@@ -597,7 +604,7 @@ export const MOCK_PROCESSING_LOGS: ProcessingLogItem[] = [
     id: 'log3',
     time: '12:36:20',
     document: 'ГОСТ 2.103-2013',
-    stage: 'Indexing',
+    stage: 'Индексация',
     event: 'Индекс обновлен после повторной обработки документа.',
     retryStatus: 'Выполнена',
     visibility: 'Инженер',
@@ -606,7 +613,7 @@ export const MOCK_PROCESSING_LOGS: ProcessingLogItem[] = [
     id: 'log4',
     time: '12:38:47',
     document: 'Архивный скан РКО',
-    stage: 'OCR',
+    stage: 'Распознавание текста',
     event: 'Не удалось прочитать 3 страницы из-за качества скана.',
     retryStatus: 'Ошибка',
     visibility: 'Администратор',

@@ -36,14 +36,26 @@ class SagaCoordinator:
         "full_ocr": None,
         "full_converter": None,
         "registry_creation": "delete_registry_document",
+        "rag_index": "delete_from_vector_index",
+        "reprocess": "delete_from_vector_index",
     }
 
     def __init__(self, db: AsyncSession):
         self.db = db
         self.task_repo = TaskRepository(db)
 
-    async def compensate(self, task_id: int, failed_step: str) -> None:
-        """Run compensation for all completed steps before the failed one."""
+    async def compensate(
+        self, task_id: int, failed_step: str, task=None
+    ) -> None:
+        """Run compensation for all completed steps before the failed one.
+
+        Args:
+            task_id: ID задачи
+            failed_step: Имя шага, на котором произошла ошибка
+            task: Объект Task (опционально). Если передан, используется для
+                  получения draft_id/document_id вместо lazy-load через step.task
+                  (предотвращает MissingGreenlet в async SQLAlchemy).
+        """
         logger.info(
             f"Starting compensation for task after {failed_step} failure",
             extra={"task_id": task_id, "failed_step": failed_step},
@@ -81,7 +93,7 @@ class SagaCoordinator:
                 continue
 
             try:
-                await self._execute_compensation(action, step)
+                await self._execute_compensation(action, step, task=task)
                 await self.task_repo.compensate_task_step(step.id)
                 logger.info(
                     f"Compensated step {step.step_name} via {action}",
@@ -106,8 +118,23 @@ class SagaCoordinator:
             extra={"failed_step": failed_step, "compensated_steps": len(completed_steps)},
         )
 
-    async def _execute_compensation(self, action: str, step) -> None:
-        """Execute a single compensation action."""
+    async def _execute_compensation(
+        self, action: str, step, task=None
+    ) -> None:
+        """Execute a single compensation action synchronously.
+
+        Вызывает API напрямую (не через Celery), чтобы гарантировать
+        выполнение компенсации независимо от состояния Celery workers.
+
+        Actions:
+        - delete_registry_document  → удаление документа из Registry
+        - delete_from_vector_index  → удаление чанков из векторного индекса
+
+        Args:
+            task: Объект Task (опционально). Используется для получения
+                  draft_id/document_id без lazy-load через step.task,
+                  который вызывает MissingGreenlet в async SQLAlchemy.
+        """
         logger.info(
             f"Executing compensation: {action} for step {step.step_name}",
             extra={
@@ -115,8 +142,46 @@ class SagaCoordinator:
                 "action": action,
             },
         )
-        # In production:
-        # if action == "delete_registry_document":
-        #     client = RegistryServiceClient()
-        #     await client.delete_registry_document(registry_doc_id)
+
+        try:
+            if action == "delete_registry_document":
+                registry_doc_id = None
+                if step.output_data:
+                    registry_doc_id = step.output_data.get("registry_id")
+                if not registry_doc_id:
+                    registry_doc_id = str(
+                        getattr(task, "document_id", "0") if task else "0"
+                    )
+
+                from app.services.registry_client import RegistryServiceClient
+                client = RegistryServiceClient()
+                try:
+                    await client.delete_document(int(registry_doc_id))
+                finally:
+                    await client.close()
+
+            elif action == "delete_from_vector_index":
+                doc_id = None
+                if step.output_data:
+                    doc_id = step.output_data.get("document_id")
+                if not doc_id:
+                    doc_id = str(
+                        getattr(task, "document_id", "0") if task else "0"
+                    )
+
+                from app.services.rag_client import RAGBuilderClient
+                client = RAGBuilderClient()
+                try:
+                    await client.delete_index(doc_id)
+                finally:
+                    await client.close()
+
+        except Exception as exc:
+            logger.error(
+                f"Compensation {action} failed: {exc}",
+                extra={"task_id": step.task_id, "step": step.step_name},
+            )
+            # Пробрасываем исключение — caller решит, фатально ли это
+            raise
+
         await self.db.flush()

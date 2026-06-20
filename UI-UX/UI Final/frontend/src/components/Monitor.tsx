@@ -275,7 +275,7 @@ export const Monitor: React.FC = () => {
   }));
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Container maxWidth={false} disableGutters sx={{ py: 3, width: '100%' }}>
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' }, gap: 3 }}>
         <Paper sx={{ ...cardSurface, p: 2.4 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, mb: 1.6 }}>

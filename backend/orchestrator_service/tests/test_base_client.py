@@ -105,20 +105,29 @@ class TestServiceClientRealMode:
     """Tests for real (non-mock) mode behavior.
 
     In non-mock mode without HTTP client, call() returns mock_response as-is.
+    httpx.AsyncClient creation is slow on Windows, so we use a class-level
+    fixture to create the client once.
     """
 
+    @pytest.fixture
+    def real_client(self):
+        """Create a real-mode client once per test."""
+        return SimpleTestClient(
+            service_url="http://localhost:9999", mock_mode=False
+        )
+
     @pytest.mark.asyncio
-    async def test_real_mode_returns_mock_response(self):
+    async def test_real_mode_returns_mock_response(self, real_client):
         """When mock_mode=False, call returns mock_response directly."""
-        client = SimpleTestClient(service_url="http://localhost:9999", mock_mode=False)
-        result = await client.call("GET", "/api/test", mock_response={"real": "data"})
+        result = await real_client.call(
+            "GET", "/api/test", mock_response={"real": "data"}
+        )
         assert result == {"real": "data"}
 
     @pytest.mark.asyncio
-    async def test_real_mode_empty_response(self):
+    async def test_real_mode_empty_response(self, real_client):
         """When mock_mode=False and no mock_response, returns empty dict."""
-        client = SimpleTestClient(service_url="http://localhost:9999", mock_mode=False)
-        result = await client.call("GET", "/api/test")
+        result = await real_client.call("GET", "/api/test")
         assert result == {}
 
 

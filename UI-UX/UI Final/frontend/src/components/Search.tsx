@@ -343,9 +343,9 @@ export const Search: React.FC = () => {
   };
 
   return (
-    <Box sx={{ display: 'flex', height: 'calc(100vh - 142px)', minHeight: 0 }}>
+    <Box sx={{ display: 'flex', height: '100%', minHeight: 0 }}>
       <Box sx={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
-        <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Container maxWidth={false} disableGutters sx={{ py: 3, width: '100%' }}>
           <Paper
             variant="outlined"
             sx={{
@@ -508,7 +508,7 @@ export const Search: React.FC = () => {
 
           {knowledgeSectionsQuery.isError && (
             <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2.5, mb: 2 }}>
-              Gateway не вернул дерево разделов базы знаний. Фильтрация по разделам временно недоступна.
+              Сервер не вернул дерево разделов базы знаний. Фильтрация по разделам временно недоступна.
             </Alert>
           )}
 

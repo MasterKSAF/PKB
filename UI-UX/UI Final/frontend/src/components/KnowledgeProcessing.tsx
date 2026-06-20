@@ -39,11 +39,11 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUIStore } from '../store/uiStore';
 import { DocumentRegistryPanel } from './DocumentRegistryPanel';
-import { adminApi, draftsApi, documentsApi } from '../utils/http';
+import { adminApi, draftsApi, documentsApi, tasksApi, type DraftMetadataOverrides } from '../utils/http';
 import { downloadPreviewFile } from '../utils/downloadPreview';
-import { MOCK_DOCUMENTS, MOCK_PROCESSING_LOGS, MOCK_PROCESSING_QUEUE } from '../utils/mockData';
+import { MOCK_DOCUMENTS, MOCK_PROCESSING_LOGS, MOCK_PROCESSING_QUEUE, type ProcessingLogItem } from '../utils/mockData';
 
-type DraftStatus = 'uploaded' | 'previewing' | 'ready_for_approve' | 'approved' | 'discarded' | 'failed';
+type DraftStatus = 'uploaded' | 'previewing' | 'ready_for_approve' | 'review_required' | 'validation' | 'approved' | 'discarded' | 'failed';
 
 type DraftPreview = {
   docCode: string;
@@ -64,8 +64,18 @@ type DraftDuplicate = {
   similarity: number;
 };
 
+type DraftNotification = {
+  code: string;
+  severity: 'info' | 'warning' | 'error' | 'critical' | string;
+  category?: string;
+  message: string;
+  location?: string;
+  suggestedAction?: string;
+};
+
 type DraftSort = 'updated_desc' | 'name_asc' | 'status';
 type MetadataReviewStatus = 'manual' | 'extracted' | 'review' | 'empty';
+type KnowledgeProcessingSection = 'upload' | 'drafts' | 'registry' | 'journal';
 
 type DraftItem = {
   id: string;
@@ -79,11 +89,14 @@ type DraftItem = {
   era: string;
   jurisdiction: string;
   issuingBody: string;
+  validFrom?: string;
+  validUntil?: string;
   status: DraftStatus;
   progress: number;
   confidence: number;
   preview: DraftPreview | null;
   duplicates: DraftDuplicate[];
+  notifications?: DraftNotification[];
   createdAt: string;
   updatedAt: string;
   note?: string;
@@ -93,10 +106,12 @@ type DraftItem = {
   gatewayDocumentKey?: string;
   gatewayFileHashSha256?: string;
   gatewayTitleHashSha256?: string;
+  gatewayTitleKey?: string;
   gatewayPromotedDocumentId?: string | null;
   gatewayErrorCode?: string | null;
   gatewayErrorMessage?: string | null;
   gatewayRawData?: unknown;
+  gatewayMetadataOverrides?: DraftMetadataOverrides;
 };
 
 type DraftForm = {
@@ -109,12 +124,20 @@ type DraftForm = {
   era: string;
   jurisdiction: string;
   issuingBody: string;
+  validFrom: string;
+  validUntil: string;
 };
 
-const SOURCE_TYPE_OPTIONS = ['GOST', 'GOST_R', 'OST', 'RD', 'TU', 'ISO', 'DNV', 'ASTM', 'OTHER'];
+type DraftMetadataValidationErrors = Partial<Record<keyof DraftForm, string>>;
+
+const SOURCE_TYPE_OPTIONS = ['GOST', 'GOST_R', 'OST', 'RD', 'TU', 'ISO', 'DNV', 'ASTM', 'RMRS', 'OTHER'];
 const ERA_OPTIONS = ['USSR', 'CIS', 'RF', 'CURRENT'];
 const JURISDICTION_OPTIONS = ['RU', 'EU', 'US', 'NO', 'INTL'];
 const DRAFT_DOCUMENT_KEYS_STORAGE = 'pkb_gateway_draft_document_keys_v1';
+const TITLE_MAX_LENGTH = 180;
+const DOC_CODE_MAX_LENGTH = 80;
+const CLASSIFIER_CODE_MAX_LENGTH = 64;
+const ISSUING_BODY_MAX_LENGTH = 120;
 
 const createDefaultDraftForm = (): DraftForm => ({
   title: '',
@@ -126,7 +149,82 @@ const createDefaultDraftForm = (): DraftForm => ({
   era: 'CURRENT',
   jurisdiction: 'RU',
   issuingBody: '',
+  validFrom: '',
+  validUntil: '',
 });
+
+const trimLength = (value: string, maxLength: number) => value.slice(0, maxLength);
+const sanitizeDocumentCode = (value: string) => trimLength(value.replace(/[^\p{L}\p{N}\s./_№()\-]/gu, ''), DOC_CODE_MAX_LENGTH);
+const sanitizeClassifierCode = (value: string) => trimLength(value.replace(/[^\d.,;\s]/g, ''), CLASSIFIER_CODE_MAX_LENGTH);
+const sanitizeOkstuCode = (value: string) => trimLength(value.replace(/[^\d,;\s]/g, ''), CLASSIFIER_CODE_MAX_LENGTH);
+
+const validateDraftMetadata = (form: DraftForm): DraftMetadataValidationErrors => {
+  const errors: DraftMetadataValidationErrors = {};
+  const year = form.year.trim();
+  const docCode = form.docCode.trim();
+  const mksOksCode = form.mksOksCode.trim();
+  const okstuCode = form.okstuCode.trim();
+  const validFrom = form.validFrom.trim();
+  const validUntil = form.validUntil.trim();
+
+  if (form.title.trim().length > TITLE_MAX_LENGTH) {
+    errors.title = `Не больше ${TITLE_MAX_LENGTH} символов.`;
+  }
+
+  if (docCode && !/^[\p{L}\p{N}\s./_№()\-]+$/u.test(docCode)) {
+    errors.docCode = 'Только буквы, цифры, пробелы и символы . / _ - № ().';
+  }
+
+  if (year) {
+    if (!/^\d{4}$/.test(year)) {
+      errors.year = 'Год должен быть в формате YYYY.';
+    } else {
+      const numericYear = Number(year);
+      if (numericYear < 1900 || numericYear > 2099) {
+        errors.year = 'Год должен быть от 1900 до 2099.';
+      }
+    }
+  }
+
+  if (
+    mksOksCode &&
+    mksOksCode
+      .split(/[,;]/)
+      .map((code) => code.trim())
+      .some((code) => !/^\d+(?:\.\d+)*$/.test(code) || code.replace(/\D/g, '').length < 1 || code.replace(/\D/g, '').length > 15)
+  ) {
+    errors.mksOksCode = 'От 1 до 15 цифр, можно с точками; несколько кодов через запятую.';
+  }
+
+  if (okstuCode && !/^\d{3,10}([,;]\s*\d{3,10})*$/.test(okstuCode)) {
+    errors.okstuCode = 'Только цифры, 3-10 знаков; несколько кодов через запятую.';
+  }
+
+  if (form.issuingBody.trim().length > ISSUING_BODY_MAX_LENGTH) {
+    errors.issuingBody = `Не больше ${ISSUING_BODY_MAX_LENGTH} символов.`;
+  }
+
+  if (validFrom && !/^\d{4}-\d{2}-\d{2}$/.test(validFrom)) {
+    errors.validFrom = 'Дата должна быть в формате YYYY-MM-DD.';
+  }
+
+  if (validUntil && !/^\d{4}-\d{2}-\d{2}$/.test(validUntil)) {
+    errors.validUntil = 'Дата должна быть в формате YYYY-MM-DD или пустой для бессрочного документа.';
+  }
+
+  if (!errors.validFrom && !errors.validUntil && validFrom && validUntil) {
+    const fromTime = new Date(validFrom).getTime();
+    const untilTime = new Date(validUntil).getTime();
+    if (!Number.isNaN(fromTime) && !Number.isNaN(untilTime) && fromTime > untilTime) {
+      errors.validUntil = 'Дата окончания не может быть раньше даты начала.';
+    }
+  }
+
+  return errors;
+};
+
+const getFirstMetadataError = (errors: DraftMetadataValidationErrors) =>
+  Object.values(errors).find((message): message is string => Boolean(message)) ?? '';
 
 const buildDraftFormFromDraft = (draft: DraftItem | null): DraftForm => {
   if (!draft) return createDefaultDraftForm();
@@ -141,6 +239,8 @@ const buildDraftFormFromDraft = (draft: DraftItem | null): DraftForm => {
     era: draft.era ?? 'CURRENT',
     jurisdiction: draft.jurisdiction ?? 'RU',
     issuingBody: draft.issuingBody ?? '',
+    validFrom: draft.validFrom ?? '',
+    validUntil: draft.validUntil ?? '',
   };
 };
 
@@ -157,6 +257,8 @@ const buildDraftFormFromExtracted = (draft: DraftItem | null): DraftForm => {
     era: draft.era ?? 'CURRENT',
     jurisdiction: draft.jurisdiction ?? 'RU',
     issuingBody: draft.issuingBody ?? '',
+    validFrom: draft.validFrom ?? '',
+    validUntil: draft.validUntil ?? '',
   };
 };
 
@@ -172,6 +274,8 @@ const buildWorkspaceDraft = (form: DraftForm, fileName: string): DraftItem => ({
   era: form.era,
   jurisdiction: form.jurisdiction,
   issuingBody: form.issuingBody.trim(),
+  validFrom: form.validFrom.trim(),
+  validUntil: form.validUntil.trim(),
   status: 'uploaded',
   progress: 0,
   confidence: 0,
@@ -199,12 +303,11 @@ const PANEL_SX = {
 } as const;
 
 const TABLE_SX = {
-  borderRadius: 3,
-  bgcolor: 'rgba(7, 14, 22, 0.94)',
-  borderWidth: 1.5,
-  borderColor: 'rgba(198, 216, 240, 0.52)',
-  boxShadow:
-    '0 0 0 1px rgba(198, 216, 240, 0.32), 0 0 0 3px rgba(102, 142, 198, 0.14), inset 0 1px 0 rgba(255,255,255,0.03)',
+  borderRadius: 2,
+  bgcolor: 'transparent',
+  borderWidth: 0,
+  borderColor: 'transparent',
+  boxShadow: 'none',
 } as const;
 
 const createDemoDrafts = (): DraftItem[] => [
@@ -238,7 +341,7 @@ const createDemoDrafts = (): DraftItem[] => [
     ],
     createdAt: '12:04',
     updatedAt: '12:11',
-    note: 'Предпросмотр готов, можно принять в базу знаний.',
+    note: 'Проверка готова, можно принять в базу знаний.',
   },
   {
     id: 'draft-demo-2',
@@ -258,7 +361,7 @@ const createDemoDrafts = (): DraftItem[] => [
     duplicates: [],
     createdAt: '12:18',
     updatedAt: '12:19',
-    note: 'Идёт первичный предпросмотр.',
+    note: 'Идёт первичная проверка.',
   },
   {
     id: 'draft-demo-3',
@@ -278,7 +381,7 @@ const createDemoDrafts = (): DraftItem[] => [
     duplicates: [],
     createdAt: '12:35',
     updatedAt: '12:35',
-    note: 'Файл загружен, предпросмотр еще не запускался.',
+    note: 'Файл загружен, проверка еще не завершена.',
   },
 ];
 
@@ -287,9 +390,13 @@ const getStatusLabel = (status: DraftStatus) => {
     case 'uploaded':
       return 'Загружен';
     case 'previewing':
-      return 'Предпросмотр';
+      return 'Проверяется';
     case 'ready_for_approve':
       return 'Нужна проверка';
+    case 'review_required':
+      return 'Требуется проверка';
+    case 'validation':
+      return 'Повторная проверка';
     case 'approved':
       return 'Принят';
     case 'discarded':
@@ -307,6 +414,10 @@ const getStatusColor = (status: DraftStatus) => {
       return 'success';
     case 'ready_for_approve':
       return 'info';
+    case 'review_required':
+      return 'warning';
+    case 'validation':
+      return 'secondary';
     case 'previewing':
       return 'warning';
     case 'discarded':
@@ -323,6 +434,10 @@ const getStatusDotColor = (status: DraftStatus) => {
       return '#22c55e';
     case 'ready_for_approve':
       return '#eab308';
+    case 'review_required':
+      return '#f97316';
+    case 'validation':
+      return '#a78bfa';
     case 'previewing':
       return '#38bdf8';
     case 'discarded':
@@ -339,6 +454,13 @@ const getQueueColor = (status: string) => {
   if (status === 'в очереди') return 'default';
   if (status === 'ошибка') return 'error';
   return 'success';
+};
+
+const getLogDotColor = (retryStatus: ProcessingLogItem['retryStatus']) => {
+  if (retryStatus === 'Ошибка') return '#ef4444';
+  if (retryStatus === 'Запланирована') return '#f97316';
+  if (retryStatus === 'Выполнена') return '#22c55e';
+  return '#38bdf8';
 };
 
 const buildPreviewPages = (draft: DraftItem): PreviewPage[] => {
@@ -376,8 +498,8 @@ const buildPreviewPages = (draft: DraftItem): PreviewPage[] => {
     {
       title: 'Проверка',
       lines: [
-        preview ? `Предпросмотр готов: ${preview.title}` : 'Предпросмотр еще не создан.',
-        preview ? `Год: ${preview.year}` : 'Сначала запустите предпросмотр черновика.',
+        preview ? `Проверка готова: ${preview.title}` : 'Проверка еще не завершена.',
+        preview ? `Год: ${preview.year}` : 'Данные появятся после обработки черновика.',
         preview ? `Редакция: ${preview.revision ?? 'не указана'}` : 'После проверки здесь появится сводка.',
         draft.duplicates.length ? `Похожих документов: ${draft.duplicates.length}` : 'Похожих документов не найдено.',
         draft.note ? `Комментарий: ${draft.note}` : 'Комментарий по черновику отсутствует.',
@@ -485,11 +607,30 @@ const buildMetadataReviewRows = (draft: DraftItem, form: DraftForm) => [
     current: draft.issuingBody ?? '',
     status: resolveMetadataStatus(form.issuingBody, draft.issuingBody),
   },
+  {
+    label: 'Дата начала действия',
+    manual: form.validFrom,
+    current: draft.validFrom ?? '',
+    status: resolveMetadataStatus(form.validFrom, draft.validFrom),
+  },
+  {
+    label: 'Дата окончания действия',
+    manual: form.validUntil,
+    current: draft.validUntil ?? '',
+    status: resolveMetadataStatus(form.validUntil, draft.validUntil),
+  },
 ];
 
 const displayValue = (value: unknown) => {
   const text = String(value ?? '').trim();
   return text || 'не передано';
+};
+
+const getNotificationAlertSeverity = (severity?: string): 'info' | 'warning' | 'error' => {
+  const normalized = String(severity ?? '').toLowerCase();
+  if (normalized === 'critical' || normalized === 'error') return 'error';
+  if (normalized === 'warning') return 'warning';
+  return 'info';
 };
 
 const countTextMatches = (text: string, query: string) => {
@@ -556,9 +697,12 @@ const buildDraftRawJson = (draft: DraftItem, form: DraftForm) => ({
     document_key: draft.gatewayDocumentKey || null,
     document_id: draft.gatewayPromotedDocumentId || null,
     version_id: draft.gatewayVersionId || null,
+    title_key: draft.gatewayTitleKey || null,
+    title_hash_sha256: draft.gatewayTitleHashSha256 || null,
     status: draft.status,
     confidence: draft.confidence || null,
     preview_metadata: draft.preview,
+    notifications: draft.notifications ?? [],
     duplicates: draft.duplicates,
   },
   manual_metadata: {
@@ -571,7 +715,10 @@ const buildDraftRawJson = (draft: DraftItem, form: DraftForm) => ({
     era: form.era || null,
     jurisdiction: form.jurisdiction || null,
     issuing_body: form.issuingBody || null,
+    valid_from: form.validFrom || null,
+    valid_until: form.validUntil || null,
   },
+  metadata_overrides: draft.gatewayMetadataOverrides ?? null,
   gateway_error: draft.gatewayErrorCode || draft.gatewayErrorMessage
     ? {
         code: draft.gatewayErrorCode,
@@ -583,11 +730,13 @@ const buildDraftRawJson = (draft: DraftItem, form: DraftForm) => ({
 const sortDrafts = (items: DraftItem[], sort: DraftSort) => {
   const statusRank: Record<DraftStatus, number> = {
     ready_for_approve: 0,
-    previewing: 1,
-    uploaded: 2,
-    approved: 3,
-    discarded: 4,
-    failed: 5,
+    review_required: 1,
+    validation: 2,
+    previewing: 3,
+    uploaded: 4,
+    approved: 5,
+    discarded: 6,
+    failed: 7,
   };
 
   const compareUpdated = (left: DraftItem, right: DraftItem) =>
@@ -634,16 +783,22 @@ const draftProgressByStatus: Record<DraftStatus, number> = {
   uploaded: 14,
   previewing: 38,
   ready_for_approve: 72,
+  review_required: 72,
+  validation: 88,
   approved: 100,
   discarded: 100,
   failed: 100,
 };
 
 const isActiveDraftStatus = (status: DraftStatus) => status !== 'approved' && status !== 'discarded';
+const shouldPollDraftDetails = (status?: DraftStatus | null) => status === 'previewing' || status === 'validation';
 
 const normalizeDraftStatusFromGateway = (status?: string): DraftStatus => {
   const normalized = String(status ?? '').toLowerCase();
   if (normalized === 'preview_ready' || normalized === 'ready_for_approve') return 'ready_for_approve';
+  if (normalized === 'review_required') return 'review_required';
+  if (normalized === 'validation') return 'validation';
+  if (normalized === 'processing' || normalized === 'proceeding') return 'validation';
   if (normalized === 'previewing' || normalized === 'uploaded') return normalized as DraftStatus;
   if (normalized === 'new') return 'uploaded';
   if (normalized === 'promoted') return 'approved';
@@ -667,7 +822,8 @@ const mapGatewayPreviewMetadata = (payload: any): DraftPreview | null => {
 };
 
 const mapGatewayDuplicates = (payload: any): DraftDuplicate[] => {
-  const duplicates = Array.isArray(payload?.duplicates) ? payload.duplicates : [];
+  const candidates = payload?.duplicates ?? payload?.duplicate_candidates ?? payload?.uniqueness?.candidates ?? [];
+  const duplicates = Array.isArray(candidates) ? candidates : [];
   return duplicates.map((duplicate: any) => ({
     title: String(duplicate.title ?? duplicate.document_title ?? duplicate.document_id ?? 'Похожий документ'),
     reason: String(duplicate.reason ?? duplicate.message ?? 'Похожее содержание'),
@@ -675,10 +831,45 @@ const mapGatewayDuplicates = (payload: any): DraftDuplicate[] => {
   }));
 };
 
+const mapGatewayNotifications = (payload: any): DraftNotification[] => {
+  const source = Array.isArray(payload?.notifications)
+    ? payload.notifications
+    : Array.isArray(payload?.quality?.notifications)
+      ? payload.quality.notifications
+      : [];
+
+  return source.map((item: any) => ({
+    code: String(item.code ?? item.id ?? 'notification'),
+    severity: String(item.severity ?? 'info'),
+    category: item.category ? String(item.category) : undefined,
+    message: String(item.message ?? item.text ?? item.code ?? 'Уведомление обработки'),
+    location: item.location ? String(item.location) : undefined,
+    suggestedAction: item.suggested_action ?? item.suggestedAction ? String(item.suggested_action ?? item.suggestedAction) : undefined,
+  }));
+};
+
+const pickMetadataSource = (payload: any) => payload?.metadata_overrides ?? payload?.metadataOverrides ?? {};
+
+const buildMetadataOverridesFromForm = (form: DraftForm): DraftMetadataOverrides => ({
+  title: form.title.trim() || null,
+  source_type: form.sourceType || null,
+  doc_code: form.docCode.trim() || null,
+  year: form.year.trim() || null,
+  mks_oks_code: form.mksOksCode.trim() || null,
+  okstu_code: form.okstuCode.trim() || null,
+  era: form.era || null,
+  jurisdiction: form.jurisdiction || null,
+  issuing_body: form.issuingBody.trim() || null,
+  valid_from: form.validFrom.trim() || null,
+  valid_until: form.validUntil.trim() || null,
+});
+
 const mapGatewayDraftRecordToUi = (payload: any, fallback?: Partial<DraftItem>): DraftItem => {
   const status = normalizeDraftStatusFromGateway(payload?.status ?? fallback?.status);
   const preview = mapGatewayPreviewMetadata(payload) ?? fallback?.preview ?? null;
   const duplicates = mapGatewayDuplicates(payload);
+  const notifications = mapGatewayNotifications(payload);
+  const metadataOverrides = pickMetadataSource(payload);
   const progress = draftProgressByStatus[status] ?? fallback?.progress ?? 0;
   const confidence = payload?.confidence ?? fallback?.confidence ?? 0;
   const createdAt = payload?.created_at ?? payload?.createdAt ?? fallback?.createdAt ?? nextClock();
@@ -686,21 +877,24 @@ const mapGatewayDraftRecordToUi = (payload: any, fallback?: Partial<DraftItem>):
 
   return {
     id: String(fallback?.id ?? payload?.draft_id ?? payload?.id ?? `draft-${Date.now()}`),
-    fileName: fallback?.fileName ?? payload?.filename ?? payload?.file_name ?? payload?.title ?? 'Документ',
-    title: fallback?.title ?? payload?.title ?? payload?.preview_metadata?.title ?? payload?.filename ?? 'Документ',
-    sourceType: fallback?.sourceType ?? payload?.source_type ?? 'OTHER',
-    docCode: fallback?.docCode ?? payload?.doc_code ?? payload?.preview_metadata?.doc_code ?? '',
-    year: fallback?.year ?? payload?.year ?? payload?.preview_metadata?.year ?? preview?.year ?? '',
-    mksOksCode: fallback?.mksOksCode ?? payload?.mks_oks_code ?? '',
-    okstuCode: fallback?.okstuCode ?? payload?.okstu_code ?? '',
-    era: fallback?.era ?? payload?.era ?? 'CURRENT',
-    jurisdiction: fallback?.jurisdiction ?? payload?.jurisdiction ?? 'RU',
-    issuingBody: fallback?.issuingBody ?? payload?.issuing_body ?? '',
+    fileName: payload?.filename ?? payload?.file_name ?? fallback?.fileName ?? payload?.title ?? 'Документ',
+    title: payload?.title ?? metadataOverrides.title ?? payload?.preview_metadata?.title ?? fallback?.title ?? payload?.filename ?? 'Документ',
+    sourceType: payload?.source_type ?? metadataOverrides.source_type ?? payload?.preview_metadata?.source_type ?? fallback?.sourceType ?? 'OTHER',
+    docCode: payload?.doc_code ?? metadataOverrides.doc_code ?? payload?.preview_metadata?.doc_code ?? fallback?.docCode ?? '',
+    year: payload?.year ?? metadataOverrides.year ?? payload?.preview_metadata?.year ?? preview?.year ?? fallback?.year ?? '',
+    mksOksCode: payload?.mks_oks_code ?? metadataOverrides.mks_oks_code ?? payload?.preview_metadata?.mks_oks_code ?? fallback?.mksOksCode ?? '',
+    okstuCode: payload?.okstu_code ?? metadataOverrides.okstu_code ?? payload?.preview_metadata?.okstu_code ?? fallback?.okstuCode ?? '',
+    era: payload?.era ?? metadataOverrides.era ?? payload?.preview_metadata?.era ?? fallback?.era ?? 'CURRENT',
+    jurisdiction: payload?.jurisdiction ?? metadataOverrides.jurisdiction ?? payload?.preview_metadata?.jurisdiction ?? fallback?.jurisdiction ?? 'RU',
+    issuingBody: payload?.issuing_body ?? metadataOverrides.issuing_body ?? payload?.preview_metadata?.issuing_body ?? fallback?.issuingBody ?? '',
+    validFrom: payload?.valid_from ?? metadataOverrides.valid_from ?? payload?.preview_metadata?.valid_from ?? fallback?.validFrom ?? '',
+    validUntil: payload?.valid_until ?? metadataOverrides.valid_until ?? payload?.preview_metadata?.valid_until ?? fallback?.validUntil ?? '',
     status,
     progress,
     confidence: Number(confidence ?? 0),
     preview,
     duplicates: duplicates.length ? duplicates : fallback?.duplicates ?? [],
+    notifications: notifications.length ? notifications : fallback?.notifications ?? [],
     createdAt,
     updatedAt,
     note: fallback?.note ?? payload?.message ?? '',
@@ -710,6 +904,7 @@ const mapGatewayDraftRecordToUi = (payload: any, fallback?: Partial<DraftItem>):
     gatewayDocumentKey: String(payload?.document_key ?? payload?.documentKey ?? fallback?.gatewayDocumentKey ?? ''),
     gatewayFileHashSha256: String(payload?.file_hash_sha256 ?? payload?.fileHashSha256 ?? fallback?.gatewayFileHashSha256 ?? ''),
     gatewayTitleHashSha256: String(payload?.title_hash_sha256 ?? payload?.titleHashSha256 ?? fallback?.gatewayTitleHashSha256 ?? ''),
+    gatewayTitleKey: String(payload?.title_key ?? payload?.titleKey ?? fallback?.gatewayTitleKey ?? ''),
     gatewayPromotedDocumentId:
       payload?.document_id ??
       payload?.promoted_document_id ??
@@ -719,6 +914,7 @@ const mapGatewayDraftRecordToUi = (payload: any, fallback?: Partial<DraftItem>):
     gatewayErrorCode: payload?.error_code ?? fallback?.gatewayErrorCode ?? null,
     gatewayErrorMessage: payload?.error_message ?? fallback?.gatewayErrorMessage ?? null,
     gatewayRawData: payload?.raw_data ?? fallback?.gatewayRawData ?? null,
+    gatewayMetadataOverrides: Object.keys(metadataOverrides).length ? metadataOverrides : fallback?.gatewayMetadataOverrides,
   };
 };
 
@@ -736,11 +932,14 @@ const draftPatchFromGateway = (payload: any, fallback?: Partial<DraftItem>): Par
     era: normalized.era,
     jurisdiction: normalized.jurisdiction,
     issuingBody: normalized.issuingBody,
+    validFrom: normalized.validFrom,
+    validUntil: normalized.validUntil,
     status: normalized.status,
     progress: normalized.progress,
     confidence: normalized.confidence,
     preview: normalized.preview,
     duplicates: normalized.duplicates,
+    notifications: normalized.notifications,
     note: normalized.note,
     gatewayTaskId: normalized.gatewayTaskId,
     gatewayVersionId: normalized.gatewayVersionId,
@@ -748,22 +947,24 @@ const draftPatchFromGateway = (payload: any, fallback?: Partial<DraftItem>): Par
     gatewayDocumentKey: normalized.gatewayDocumentKey,
     gatewayFileHashSha256: normalized.gatewayFileHashSha256,
     gatewayTitleHashSha256: normalized.gatewayTitleHashSha256,
+    gatewayTitleKey: normalized.gatewayTitleKey,
     gatewayPromotedDocumentId: normalized.gatewayPromotedDocumentId,
     gatewayErrorCode: normalized.gatewayErrorCode,
     gatewayErrorMessage: normalized.gatewayErrorMessage,
     gatewayRawData: normalized.gatewayRawData,
+    gatewayMetadataOverrides: normalized.gatewayMetadataOverrides,
   };
 };
 
 export const KnowledgeProcessing: React.FC = () => {
-  const { themeMode, workMode, activeTab, setActiveTab } = useUIStore();
+  const { activeKnowledgeProcessingSection, themeMode, workMode, activeTab, setActiveTab } = useUIStore();
   const queryClient = useQueryClient();
   const isLight = themeMode === 'light';
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const previewTimersRef = useRef<number[]>([]);
+  const activeDraftDetailsRequestRef = useRef('');
 
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [selectedFileName, setSelectedFileName] = useState('');
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [notice, setNotice] = useState('');
   const [selectedDraftId, setSelectedDraftId] = useState<string>('');
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
@@ -774,6 +975,7 @@ export const KnowledgeProcessing: React.FC = () => {
   const [classificationOpen, setClassificationOpen] = useState(false);
   const [gatewayDetailsOpen, setGatewayDetailsOpen] = useState(false);
   const [rawJsonOpen, setRawJsonOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [duplicatesOpen, setDuplicatesOpen] = useState(false);
   const [processingStatusOpen, setProcessingStatusOpen] = useState(false);
   const [previewPanelOpen, setPreviewPanelOpen] = useState(false);
@@ -822,6 +1024,7 @@ export const KnowledgeProcessing: React.FC = () => {
     },
     enabled: workMode === 'prod',
     staleTime: 20_000,
+    refetchInterval: workMode === 'prod' && activeTab === 'knowledgeProcessing' ? 5_000 : false,
   });
 
   useEffect(() => {
@@ -829,8 +1032,7 @@ export const KnowledgeProcessing: React.FC = () => {
     previewTimersRef.current = [];
     setDrafts(workMode === 'demo' ? createDemoDrafts() : []);
     setSelectedDraftId('');
-    setSelectedFile(null);
-    setSelectedFileName('');
+    setSelectedFiles([]);
     setPreviewDialogOpen(false);
     setPreviewPageIndex(0);
     setPreviewLoading(false);
@@ -839,6 +1041,7 @@ export const KnowledgeProcessing: React.FC = () => {
     setClassificationOpen(false);
     setGatewayDetailsOpen(false);
     setRawJsonOpen(false);
+    setNotificationsOpen(false);
     setDuplicatesOpen(false);
     setProcessingStatusOpen(false);
     setPreviewPanelOpen(false);
@@ -906,6 +1109,23 @@ export const KnowledgeProcessing: React.FC = () => {
     setDraftForm(draft ? buildDraftFormFromDraft(draft) : createDefaultDraftForm());
   }, [selectedDraftId]);
 
+  const sortedDrafts = useMemo(() => sortDrafts(drafts, draftSort), [drafts, draftSort]);
+  const selectedDraft = drafts.find((draft) => draft.id === selectedDraftId) ?? null;
+  const selectedGatewayDraftId = workMode === 'prod' ? selectedDraft?.gatewayDraftId || selectedDraft?.id || '' : '';
+  const draftTasksQuery = useQuery({
+    queryKey: ['gateway-draft-tasks', workMode, selectedGatewayDraftId],
+    queryFn: () => tasksApi.forDraft(selectedGatewayDraftId),
+    enabled: workMode === 'prod' && activeTab === 'knowledgeProcessing' && Boolean(selectedGatewayDraftId),
+    staleTime: 10_000,
+    refetchInterval:
+      workMode === 'prod' &&
+      activeTab === 'knowledgeProcessing' &&
+      selectedDraft &&
+      shouldPollDraftDetails(selectedDraft.status)
+        ? 5_000
+        : false,
+  });
+
   const publishedDocuments = workMode === 'demo' ? publishedDocumentsQuery.data ?? MOCK_DOCUMENTS : publishedDocumentsQuery.data ?? [];
   const gatewayQueue =
     workMode === 'demo'
@@ -918,11 +1138,20 @@ export const KnowledgeProcessing: React.FC = () => {
       ? processingAuditQuery.data?.length
         ? processingAuditQuery.data
         : MOCK_PROCESSING_LOGS
-      : processingAuditQuery.data ?? [];
-  const sortedDrafts = useMemo(() => sortDrafts(drafts, draftSort), [drafts, draftSort]);
-  const selectedDraft = drafts.find((draft) => draft.id === selectedDraftId) ?? null;
+      : draftTasksQuery.data?.length
+        ? draftTasksQuery.data
+        : processingAuditQuery.data ?? [];
+  const selectedFilesLabel =
+    selectedFiles.length === 1 ? selectedFiles[0]?.name ?? '' : selectedFiles.length > 1 ? `Выбрано файлов: ${selectedFiles.length}` : '';
+  const metadataValidationErrors = useMemo(() => validateDraftMetadata(draftForm), [draftForm]);
+  const firstMetadataError = getFirstMetadataError(metadataValidationErrors);
+  const hasMetadataValidationErrors = Boolean(firstMetadataError);
   const queueHasError = workMode === 'prod' && gatewayQueueQuery.isError;
-  const journalHasError = workMode === 'prod' && processingAuditQuery.isError;
+  const journalHasError =
+    workMode === 'prod' &&
+    (selectedGatewayDraftId
+      ? draftTasksQuery.isError && processingAuditQuery.isError
+      : processingAuditQuery.isError);
 
   const getSelectedDraft = (id = selectedDraftId) => drafts.find((draft) => draft.id === id) ?? null;
 
@@ -940,25 +1169,94 @@ export const KnowledgeProcessing: React.FC = () => {
     );
   };
 
+  const getGatewayDraftId = (draft: DraftItem | null) =>
+    workMode === 'prod' ? draft?.gatewayDraftId || draft?.id || '' : '';
+
+  const refreshGatewayDraftDetails = async (draftId: string, fallbackDraft?: DraftItem | null) => {
+    const draft = fallbackDraft ?? getSelectedDraft(draftId);
+    const gatewayDraftId = getGatewayDraftId(draft);
+    if (!draft || !gatewayDraftId) return;
+
+    try {
+      let details = await draftsApi.get(gatewayDraftId);
+      if (
+        !details.preview_metadata &&
+        ['ready_for_approve', 'review_required', 'validation', 'approved'].includes(String(details.status ?? ''))
+      ) {
+        try {
+          const previewDetails = await draftsApi.getPreview(gatewayDraftId);
+          details = {
+            ...details,
+            ...previewDetails,
+            preview_metadata: previewDetails.preview_metadata ?? details.preview_metadata,
+            raw_data: details.raw_data ?? previewDetails.raw_data,
+          };
+        } catch {
+          // Full draft detail is still usable; preview endpoint may be absent on older Gateway builds.
+        }
+      }
+      const patch = draftPatchFromGateway(details, getSelectedDraft(draftId) ?? draft);
+      const mergedDraft = { ...draft, ...patch };
+      updateDraft(draftId, patch);
+
+      if (activeDraftDetailsRequestRef.current === draftId) {
+        setDraftForm(buildDraftFormFromDraft(mergedDraft));
+      }
+    } catch (error: any) {
+      updateDraft(draftId, {
+        gatewayErrorMessage: error?.message ?? 'Не удалось загрузить полную карточку черновика с сервера.',
+      });
+    }
+  };
+
+  const handleSelectDraft = (draftId: string) => {
+    const draft = getSelectedDraft(draftId);
+    activeDraftDetailsRequestRef.current = draftId;
+    setSelectedDraftId(draftId);
+    setDraftForm(draft ? buildDraftFormFromDraft(draft) : createDefaultDraftForm());
+
+    if (workMode === 'prod') {
+      void refreshGatewayDraftDetails(draftId, draft);
+    }
+  };
+
+  useEffect(() => {
+    if (
+      workMode !== 'prod' ||
+      activeTab !== 'knowledgeProcessing' ||
+      !selectedDraft ||
+      !shouldPollDraftDetails(selectedDraft.status)
+    ) {
+      return;
+    }
+
+    activeDraftDetailsRequestRef.current = selectedDraft.id;
+    void refreshGatewayDraftDetails(selectedDraft.id, selectedDraft);
+
+    const timer = window.setInterval(() => {
+      void refreshGatewayDraftDetails(selectedDraft.id);
+    }, 5_000);
+
+    return () => window.clearInterval(timer);
+  }, [activeTab, selectedDraft?.id, selectedDraft?.status, workMode]);
+
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+    const files = Array.from(event.target.files ?? []);
     event.target.value = '';
 
-    if (!file) return;
+    if (!files.length) return;
 
-    setSelectedFile(file);
-    setSelectedFileName(file.name);
+    setSelectedFiles(files);
   };
 
   const clearSourceInputs = () => {
-    setSelectedFile(null);
-    setSelectedFileName('');
+    setSelectedFiles([]);
   };
 
-  const createLocalDraft = (sourceName: string) => {
-    const id = `draft-${Date.now()}`;
+  const createLocalDraft = (sourceName: string, useManualTitle = true) => {
+    const id = createIdempotencyKey();
     const now = nextClock();
-    const title = draftForm.title.trim() || sourceName.replace(/\.[^.]+$/, '');
+    const title = useManualTitle && draftForm.title.trim() ? draftForm.title.trim() : sourceName.replace(/\.[^.]+$/, '');
     const newDraft: DraftItem = {
       id,
       fileName: sourceName,
@@ -971,6 +1269,8 @@ export const KnowledgeProcessing: React.FC = () => {
       era: draftForm.era,
       jurisdiction: draftForm.jurisdiction,
       issuingBody: draftForm.issuingBody.trim(),
+      validFrom: draftForm.validFrom.trim(),
+      validUntil: draftForm.validUntil.trim(),
       status: 'uploaded',
       progress: 14,
       confidence: 0,
@@ -984,23 +1284,32 @@ export const KnowledgeProcessing: React.FC = () => {
     setDrafts((current) => [newDraft, ...current]);
     setSelectedDraftId(id);
     setNotice(`Черновик «${title}» создан.`);
-    return { id, title };
+    return { id, title, draft: newDraft };
   };
 
-  const uploadDraftFile = async (draftId: string, file: File, sourceLabel: string) => {
+  const uploadDraftFile = async (
+    draftId: string,
+    file: File,
+    sourceLabel: string,
+    fallbackDraft?: DraftItem,
+    titleOverride?: string,
+  ) => {
+    const uploadTitle = titleOverride || draftForm.title.trim() || sourceLabel.replace(/\.[^.]+$/, '');
     const response = await draftsApi.create(file, {
       sourceType: draftForm.sourceType,
-      title: draftForm.title.trim() || sourceLabel.replace(/\.[^.]+$/, ''),
+      title: uploadTitle,
       docCode: draftForm.docCode.trim() || undefined,
       mksOksCode: draftForm.mksOksCode.trim() || undefined,
       okstuCode: draftForm.okstuCode.trim() || undefined,
       era: draftForm.era,
       jurisdiction: draftForm.jurisdiction,
       issuingBody: draftForm.issuingBody.trim() || undefined,
+      validFrom: draftForm.validFrom.trim() || undefined,
+      validUntil: draftForm.validUntil.trim() || null,
       metadata: {
         manual: true,
         source_type: draftForm.sourceType,
-        title: draftForm.title.trim() || undefined,
+        title: uploadTitle || undefined,
         doc_code: draftForm.docCode.trim() || undefined,
         year: draftForm.year.trim() || undefined,
         mks_oks_code: draftForm.mksOksCode.trim() || undefined,
@@ -1008,11 +1317,14 @@ export const KnowledgeProcessing: React.FC = () => {
         era: draftForm.era,
         jurisdiction: draftForm.jurisdiction,
         issuing_body: draftForm.issuingBody.trim() || undefined,
+        valid_from: draftForm.validFrom.trim() || undefined,
+        valid_until: draftForm.validUntil.trim() || null,
       },
       idempotencyKey: createIdempotencyKey(),
     });
 
-    updateDraft(draftId, draftPatchFromGateway(response, getSelectedDraft(draftId) ?? undefined));
+    const patch = draftPatchFromGateway(response, getSelectedDraft(draftId) ?? fallbackDraft ?? undefined);
+    updateDraft(draftId, patch);
     if (response.document_key) {
       setDraftDocumentKeys((current) => {
         const next = Array.from(new Set([response.document_key, ...current]));
@@ -1023,47 +1335,108 @@ export const KnowledgeProcessing: React.FC = () => {
     await queryClient.invalidateQueries({ queryKey: ['gateway-drafts', workMode] });
     await queryClient.invalidateQueries({ queryKey: ['gateway-documents', workMode] });
     await queryClient.invalidateQueries({ queryKey: ['gateway-documents-queue', workMode] });
-    return response;
+    return { response, patch };
   };
 
-  const handleCreateDraftFromFile = async () => {
-    if (!selectedFile) {
-      setNotice('Сначала выберите файл для обработки.');
+  const handleCreateDraftFromFiles = async () => {
+    if (!selectedFiles.length) {
+      setNotice('Сначала выберите файлы для обработки.');
       return;
     }
 
-    const { id, title } = createLocalDraft(selectedFile.name);
+    if (hasMetadataValidationErrors) {
+      setNotice(`Черновики не созданы: ${firstMetadataError}`);
+      return;
+    }
 
-    if (workMode === 'prod') {
-      try {
-        await uploadDraftFile(id, selectedFile, selectedFile.name);
-        setNotice(`Файл «${selectedFile.name}» отправлен в Gateway на обработку.`);
-      } catch (error: any) {
-        updateDraft(id, {
-          status: 'failed',
-          progress: 100,
-          note: 'Gateway не принял файл. Черновик помечен как failed.',
-          gatewayErrorMessage: error?.message ?? 'Не удалось отправить файл в Gateway.',
-        });
-        setNotice(`Черновик «${title}» не удалось отправить в Gateway.`);
+    const filesToUpload = selectedFiles;
+    const useManualTitle = filesToUpload.length === 1;
+    let failedCount = 0;
+
+    for (const file of filesToUpload) {
+      const { id, title, draft } = createLocalDraft(file.name, useManualTitle);
+
+      if (workMode === 'prod') {
+        try {
+          const { patch } = await uploadDraftFile(id, file, file.name, draft, title);
+          handleRunDraftChecks(id, { ...draft, ...patch });
+        } catch (error: any) {
+          failedCount += 1;
+          updateDraft(id, {
+            status: 'failed',
+            progress: 100,
+            note: 'Сервер не принял файл. Черновик помечен как failed.',
+            gatewayErrorMessage: error?.message ?? 'Не удалось отправить файл на сервер.',
+          });
+          setNotice(`Черновик «${title}» не удалось отправить на сервер.`);
+        }
+      } else {
+        handleRunDraftChecks(id, draft);
       }
     }
 
     clearSourceInputs();
+    setNotice(
+      filesToUpload.length === 1
+        ? failedCount
+          ? 'Файл не удалось отправить на сервер.'
+          : 'Черновик создан и отправлен на проверку.'
+        : `Черновики созданы: ${filesToUpload.length - failedCount} из ${filesToUpload.length}.`,
+    );
   };
 
   const handleCreateDraft = async () => {
-    if (selectedFile) {
-      await handleCreateDraftFromFile();
+    if (selectedFiles.length) {
+      await handleCreateDraftFromFiles();
       return;
     }
 
-    setNotice('Сначала выберите файл для обработки.');
+    setNotice('Сначала выберите файлы для обработки.');
   };
 
-  const handleSaveDraftMetadata = () => {
+  const handleSaveDraftMetadata = async () => {
     if (!selectedDraft) {
       setNotice('Сначала выберите черновик слева или создайте новый из выбранного файла.');
+      return;
+    }
+
+    if (hasMetadataValidationErrors) {
+      setNotice(`Метаданные не сохранены: ${firstMetadataError}`);
+      return;
+    }
+
+    const metadataOverrides = buildMetadataOverridesFromForm(draftForm);
+
+    if (workMode === 'prod') {
+      const gatewayDraftId = selectedDraft.gatewayDraftId;
+      if (!gatewayDraftId) {
+        setNotice(`Метаданные для «${selectedDraft.title}» не сохранены: нет gateway id черновика.`);
+        return;
+      }
+
+      try {
+        await draftsApi.updateMetadata(gatewayDraftId, metadataOverrides);
+        const refreshedDraft = await draftsApi.get(gatewayDraftId);
+        const patch = draftPatchFromGateway(refreshedDraft, selectedDraft);
+        updateDraft(selectedDraft.id, {
+          ...patch,
+          note: 'Метаданные сохранены на сервере и перечитаны из черновика.',
+        });
+        await queryClient.invalidateQueries({ queryKey: ['gateway-drafts', workMode] });
+        setNotice(`Метаданные для «${selectedDraft.title}» сохранены на сервере.`);
+      } catch (error: any) {
+        updateDraft(selectedDraft.id, {
+          note: 'Сервер пока не подтвердил сохранение метаданных.',
+          gatewayErrorMessage:
+            error?.message ??
+            'PATCH /drafts/{id}/metadata не выполнен. Контракт описан в документации, но текущий backend мог еще не реализовать endpoint.',
+        });
+        setNotice(
+          `Метаданные не сохранены на сервере: ${
+            error?.message ?? 'endpoint сохранения метаданных пока недоступен в текущем backend.'
+          }`,
+        );
+      }
       return;
     }
 
@@ -1077,6 +1450,9 @@ export const KnowledgeProcessing: React.FC = () => {
       era: draftForm.era,
       jurisdiction: draftForm.jurisdiction,
       issuingBody: draftForm.issuingBody.trim(),
+      validFrom: draftForm.validFrom.trim(),
+      validUntil: draftForm.validUntil.trim(),
+      gatewayMetadataOverrides: metadataOverrides,
       note: 'Метаданные черновика сохранены вручную.',
     });
     setNotice(`Метаданные для «${selectedDraft.title}» сохранены.`);
@@ -1093,16 +1469,26 @@ export const KnowledgeProcessing: React.FC = () => {
     setNotice('Форма черновика очищена.');
   };
 
-  const handleStartPreview = (draftId: string) => {
-    const draft = getSelectedDraft(draftId);
-    if (!draft || draft.status === 'previewing' || draft.status === 'approved' || draft.status === 'discarded') return;
+  const handleRunDraftChecks = (draftId: string, draftOverride?: DraftItem) => {
+    const draft = draftOverride ?? getSelectedDraft(draftId);
+    if (
+      !draft ||
+      draft.status === 'previewing' ||
+      draft.status === 'ready_for_approve' ||
+      draft.status === 'review_required' ||
+      draft.status === 'validation' ||
+      draft.status === 'approved' ||
+      draft.status === 'discarded'
+    ) {
+      return;
+    }
 
     updateDraft(draftId, {
       status: 'previewing',
       progress: 38,
       note: 'Проверяем метаданные и ищем дубликаты.',
     });
-    setNotice(`Предпросмотр для «${draft.title}» запущен.`);
+    setNotice(`Проверка черновика «${draft.title}» запущена.`);
 
     if (workMode === 'demo') {
       const timer = window.setTimeout(() => {
@@ -1135,10 +1521,10 @@ export const KnowledgeProcessing: React.FC = () => {
           preview,
           duplicates,
           note: duplicates.length
-            ? 'Предпросмотр готов. Есть кандидаты на дубликаты.'
-            : 'Предпросмотр готов. Можно принимать документ.',
+            ? 'Проверка готова. Есть кандидаты на дубликаты.'
+            : 'Проверка готова. Можно принимать документ.',
         });
-        setNotice(`Предпросмотр для «${draftAfterPreview.title}» завершён.`);
+        setNotice(`Проверка черновика «${draftAfterPreview.title}» завершена.`);
       }, 1100);
 
       previewTimersRef.current.push(timer);
@@ -1150,9 +1536,9 @@ export const KnowledgeProcessing: React.FC = () => {
       updateDraft(draftId, {
         status: 'failed',
         progress: 100,
-        note: 'У черновика нет gateway id для запуска предпросмотра.',
+        note: 'У черновика нет gateway id для запуска проверки.',
       });
-      setNotice(`Предпросмотр для «${draft.title}» не удалось запустить.`);
+      setNotice(`Проверку черновика «${draft.title}» не удалось запустить.`);
       return;
     }
 
@@ -1171,10 +1557,11 @@ export const KnowledgeProcessing: React.FC = () => {
             }))
           : [];
 
+        const nextStatus = normalizeDraftStatusFromGateway(previewResponse?.status);
         updateDraft(draftId, {
           ...draftPatchFromGateway(previewResponse, draftAfterPreview),
-          status: normalizeDraftStatusFromGateway(previewResponse?.status) === 'previewing' ? 'previewing' : 'ready_for_approve',
-          progress: normalizeDraftStatusFromGateway(previewResponse?.status) === 'previewing' ? 38 : 72,
+          status: nextStatus === 'uploaded' ? 'ready_for_approve' : nextStatus,
+          progress: nextStatus === 'previewing' ? 38 : draftProgressByStatus[nextStatus] ?? 72,
           confidence: Number(previewResponse?.confidence ?? draftAfterPreview.confidence ?? 0),
           preview:
             mapGatewayPreviewMetadata(previewResponse) ??
@@ -1186,37 +1573,53 @@ export const KnowledgeProcessing: React.FC = () => {
               revision: draftAfterPreview.sourceType === 'GOST' ? '1' : null,
             },
           duplicates,
-          note: previewResponse?.decision_required
-            ? 'Предпросмотр готов. Требуется решение.'
-            : 'Предпросмотр готов. Можно принимать документ.',
+          note: nextStatus === 'review_required' || previewResponse?.decision_required
+            ? 'Проверка готова. Требуется решение.'
+            : 'Проверка готова. Можно принимать документ.',
         });
-        setNotice(`Предпросмотр для «${draftAfterPreview.title}» завершён.`);
+        setNotice(`Проверка черновика «${draftAfterPreview.title}» завершена.`);
       } catch (error: any) {
         updateDraft(draftId, {
           status: 'failed',
           progress: 100,
-          note: 'Gateway не завершил предпросмотр.',
-          gatewayErrorMessage: error?.message ?? 'Не удалось получить статус предпросмотра.',
+          note: 'Сервер не завершил проверку черновика.',
+          gatewayErrorMessage: error?.message ?? 'Не удалось получить статус проверки черновика.',
         });
-        setNotice(`Предпросмотр для «${draft.title}» завершить не удалось.`);
+        setNotice(`Проверку черновика «${draft.title}» завершить не удалось.`);
       }
     })();
   };
 
-  const handleDecision = async (draftId: string, action: 'approve' | 'reject', comment?: string) => {
+  const handleDecision = async (draftId: string, action: 'approve' | 'reject' | 'confirm', comment?: string) => {
     const draft = getSelectedDraft(draftId);
     if (!draft) return;
 
     if (action === 'approve' && draft.status !== 'ready_for_approve') {
-      setNotice('Сначала нужно завершить предпросмотр и получить карточку черновика.');
+      setNotice('Сначала нужно дождаться завершения проверки черновика.');
       return;
     }
 
-    if (action === 'reject' && draft.status === 'approved') {
+    if (action === 'confirm' && draft.status !== 'review_required') {
+      setNotice('Подтверждение доступно только для черновиков со статусом «Требуется проверка».');
+      return;
+    }
+
+    if (action === 'reject' && !['ready_for_approve', 'review_required'].includes(draft.status)) {
       return;
     }
 
     if (workMode === 'demo') {
+      if (action === 'confirm') {
+        updateDraft(draftId, {
+          status: 'validation',
+          progress: 88,
+          gatewayMetadataOverrides: buildMetadataOverridesFromForm(draftForm),
+          note: 'Черновик подтверждён. Запущена повторная проверка.',
+        });
+        setNotice(`Черновик «${draft.title}» подтверждён и отправлен на повторную проверку.`);
+        return;
+      }
+
       setDrafts((current) => current.filter((item) => item.id !== draftId));
       setSelectedDraftId('');
       setPreviewPanelOpen(false);
@@ -1235,44 +1638,73 @@ export const KnowledgeProcessing: React.FC = () => {
         progress: 100,
         note: 'У черновика нет gateway id для принятия решения.',
       });
-      setNotice(`Решение по «${draft.title}» не удалось отправить в Gateway.`);
+      setNotice(`Решение по «${draft.title}» не удалось отправить на сервер.`);
       return;
     }
 
     try {
-      const response = await draftsApi.decide(
-        gatewayDraftId,
+      const metadataOverrides = action === 'reject' ? undefined : buildMetadataOverridesFromForm(draftForm);
+      const response = await draftsApi.decide(gatewayDraftId, {
         action,
-        comment || (action === 'approve' ? 'Метаданные проверены.' : 'Черновик отклонён администратором.'),
-      );
-      setDrafts((current) => current.filter((item) => item.id !== draftId));
-      setSelectedDraftId('');
-      setPreviewPanelOpen(false);
+        comment:
+          comment ||
+          (action === 'approve'
+            ? 'Метаданные проверены.'
+            : action === 'confirm'
+              ? 'Замечания просмотрены, черновик подтверждён.'
+              : 'Черновик отклонён администратором.'),
+        metadataOverrides,
+      });
+      const nextStatus = normalizeDraftStatusFromGateway(response?.status);
+      const shouldRemoveDraft = action === 'reject' || nextStatus === 'approved' || nextStatus === 'discarded' || Boolean(response?.document_id);
+
+      if (shouldRemoveDraft) {
+        setDrafts((current) => current.filter((item) => item.id !== draftId));
+        setSelectedDraftId('');
+        setPreviewPanelOpen(false);
+      } else {
+        updateDraft(draftId, {
+          ...draftPatchFromGateway(response, draft),
+          status: nextStatus,
+          progress: draftProgressByStatus[nextStatus] ?? draft.progress,
+          gatewayMetadataOverrides: metadataOverrides,
+          note:
+            action === 'confirm'
+              ? 'Черновик подтверждён. Запущена повторная проверка.'
+              : response?.message ?? draft.note,
+        });
+      }
+
       const gatewayMessage = typeof response?.message === 'string' && response.message.trim() ? ` ${response.message}` : '';
       setNotice(
         action === 'approve'
           ? `Документ «${draft.title}» принят в базу знаний.${gatewayMessage}`
-          : `Документ «${draft.title}» отклонён.${gatewayMessage}`,
+          : action === 'confirm'
+            ? `Черновик «${draft.title}» подтверждён.${gatewayMessage}`
+            : `Документ «${draft.title}» отклонён.${gatewayMessage}`,
       );
-      if (action === 'approve') {
-        await queryClient.invalidateQueries({ queryKey: ['gateway-documents', workMode] });
-        await queryClient.invalidateQueries({ queryKey: ['gateway-documents-queue', workMode] });
-        await queryClient.invalidateQueries({ queryKey: ['gateway-knowledge-sections', workMode] });
-        await queryClient.invalidateQueries({ queryKey: ['gateway-drafts', workMode] });
-      }
+      await queryClient.invalidateQueries({ queryKey: ['gateway-drafts', workMode] });
+      await queryClient.invalidateQueries({ queryKey: ['gateway-documents', workMode] });
+      await queryClient.invalidateQueries({ queryKey: ['gateway-documents-queue', workMode] });
+      await queryClient.invalidateQueries({ queryKey: ['gateway-knowledge-sections', workMode] });
     } catch (error: any) {
       updateDraft(draftId, {
-        status: 'failed',
-        progress: 100,
-        note: 'Gateway не принял решение по черновику.',
-        gatewayErrorMessage: error?.message ?? 'Не удалось отправить решение в Gateway.',
+        note:
+          action === 'confirm'
+            ? 'Сервер пока не принял подтверждение по черновику.'
+            : 'Сервер не принял решение по черновику.',
+        gatewayErrorMessage:
+          error?.message ??
+          (action === 'confirm'
+            ? 'PATCH /drafts/{id}/decide action=confirm описан в документации, но текущий backend мог еще не реализовать этот сценарий.'
+            : 'Не удалось отправить решение на сервер.'),
       });
-      setNotice(`Не удалось отправить решение по «${draft.title}» в Gateway.`);
+      setNotice(`Не удалось отправить решение по «${draft.title}» на сервер: ${error?.message ?? 'контракт пока не реализован в коде backend.'}`);
     }
   };
 
   const handleOpenRejectDialog = () => {
-    if (!selectedDraft || !canDecideDraft) return;
+    if (!selectedDraft || !canRejectDraft) return;
     setRejectComment('');
     setRejectDialogOpen(true);
   };
@@ -1320,25 +1752,28 @@ export const KnowledgeProcessing: React.FC = () => {
         setDrafts((current) => current.filter((item) => item.id !== draftId));
         await queryClient.invalidateQueries({ queryKey: ['gateway-drafts', workMode] });
         await queryClient.invalidateQueries({ queryKey: ['gateway-documents-queue', workMode] });
-        setNotice(`Черновик «${draft.title}» удалён из Gateway.`);
+        setNotice(`Черновик «${draft.title}» удалён на сервере.`);
       })
       .catch((error: any) => {
         updateDraft(draftId, {
           status: 'failed',
           progress: 100,
-          note: 'Gateway не удалил черновик.',
-          gatewayErrorMessage: error?.message ?? 'Не удалось удалить черновик в Gateway.',
+          note: 'Сервер не удалил черновик.',
+          gatewayErrorMessage: error?.message ?? 'Не удалось удалить черновик на сервере.',
         });
-        setNotice(`Черновик «${draft.title}» не удалось удалить из Gateway.`);
+        setNotice(`Черновик «${draft.title}» не удалось удалить на сервере.`);
       });
   };
 
   const handleOpenPreviewDialog = (draftId: string) => {
     const draft = getSelectedDraft(draftId);
-    setSelectedDraftId(draftId);
+    handleSelectDraft(draftId);
     setPreviewPageIndex(0);
     setPreviewError('');
-    setPreviewLoading(draft?.status === 'previewing');
+    if (draft?.status === 'uploaded') {
+      handleRunDraftChecks(draftId, draft);
+    }
+    setPreviewLoading(draft?.status === 'uploaded' || draft?.status === 'previewing');
     setPreviewDialogOpen(true);
   };
 
@@ -1352,11 +1787,14 @@ export const KnowledgeProcessing: React.FC = () => {
     const draft = getSelectedDraft(draftId);
     if (!draft) return;
 
-    setSelectedDraftId(draftId);
+    handleSelectDraft(draftId);
     setPreviewPanelOpen(true);
     setPreviewPageIndex(0);
     setPreviewError('');
-    setPreviewLoading(draft.status === 'previewing');
+    if (draft.status === 'uploaded') {
+      handleRunDraftChecks(draftId, draft);
+    }
+    setPreviewLoading(draft.status === 'uploaded' || draft.status === 'previewing');
   };
 
   const previewPages = selectedDraft ? buildPreviewPages(selectedDraft) : [];
@@ -1364,10 +1802,10 @@ export const KnowledgeProcessing: React.FC = () => {
   const currentPreviewText = currentPreviewPage?.lines.join('\n') ?? '';
   const normalizedPreviewSearch = previewSearch.trim().toLowerCase();
   const previewSearchMatchCount = countTextMatches(currentPreviewText, normalizedPreviewSearch);
-  const workspaceDraft = selectedDraft ?? buildWorkspaceDraft(draftForm, selectedFileName || '');
+  const workspaceDraft = selectedDraft ?? buildWorkspaceDraft(draftForm, selectedFilesLabel || '');
   const hasWorkspaceInput = Boolean(
     selectedDraft ||
-      selectedFileName ||
+      selectedFiles.length ||
       draftForm.title ||
       draftForm.docCode ||
       draftForm.year ||
@@ -1376,26 +1814,26 @@ export const KnowledgeProcessing: React.FC = () => {
       draftForm.issuingBody,
   );
   const workspacePreviewPage = hasWorkspaceInput ? buildPreviewPages(workspaceDraft)[0] ?? null : null;
-  const canStartPreview = Boolean(
-    selectedDraft &&
-      selectedDraft.status !== 'previewing' &&
-      selectedDraft.status !== 'ready_for_approve' &&
-      selectedDraft.status !== 'approved' &&
-      selectedDraft.status !== 'discarded',
-  );
-  const canDecideDraft = selectedDraft?.status === 'ready_for_approve';
+  const canApproveDraft = selectedDraft?.status === 'ready_for_approve';
+  const canConfirmDraft = selectedDraft?.status === 'review_required';
+  const canRejectDraft = selectedDraft?.status === 'ready_for_approve' || selectedDraft?.status === 'review_required';
   const canOpenKnowledgeBase = selectedDraft?.status === 'approved';
+  const getFieldError = (field: keyof DraftForm) => metadataValidationErrors[field] ?? '';
   const renderMetadataFieldInput = (label: string) => {
     const commonSx = { minWidth: 0 };
 
     switch (label) {
       case 'Название':
+        const titleError = getFieldError('title');
         return (
           <TextField
             size="small"
             fullWidth
             value={draftForm.title}
-            onChange={(event) => setDraftForm((current) => ({ ...current, title: event.target.value }))}
+            onChange={(event) => setDraftForm((current) => ({ ...current, title: trimLength(event.target.value, TITLE_MAX_LENGTH) }))}
+            error={Boolean(titleError)}
+            helperText={titleError}
+            slotProps={{ htmlInput: { maxLength: TITLE_MAX_LENGTH } }}
             sx={commonSx}
           />
         );
@@ -1417,42 +1855,58 @@ export const KnowledgeProcessing: React.FC = () => {
           </TextField>
         );
       case 'Код документа':
+        const docCodeError = getFieldError('docCode');
         return (
           <TextField
             size="small"
             fullWidth
             value={draftForm.docCode}
-            onChange={(event) => setDraftForm((current) => ({ ...current, docCode: event.target.value }))}
+            onChange={(event) => setDraftForm((current) => ({ ...current, docCode: sanitizeDocumentCode(event.target.value) }))}
+            error={Boolean(docCodeError)}
+            helperText={docCodeError}
+            slotProps={{ htmlInput: { maxLength: DOC_CODE_MAX_LENGTH } }}
             sx={commonSx}
           />
         );
       case 'Год':
+        const yearError = getFieldError('year');
         return (
           <TextField
             size="small"
             fullWidth
             value={draftForm.year}
-            onChange={(event) => setDraftForm((current) => ({ ...current, year: event.target.value }))}
+            onChange={(event) => setDraftForm((current) => ({ ...current, year: event.target.value.replace(/\D/g, '').slice(0, 4) }))}
+            error={Boolean(yearError)}
+            helperText={yearError}
+            slotProps={{ htmlInput: { inputMode: 'numeric', pattern: '[0-9]*', maxLength: 4 } }}
             sx={commonSx}
           />
         );
       case 'МКС / ОКС':
+        const mksOksError = getFieldError('mksOksCode');
         return (
           <TextField
             size="small"
             fullWidth
             value={draftForm.mksOksCode}
-            onChange={(event) => setDraftForm((current) => ({ ...current, mksOksCode: event.target.value }))}
+            onChange={(event) => setDraftForm((current) => ({ ...current, mksOksCode: sanitizeClassifierCode(event.target.value) }))}
+            error={Boolean(mksOksError)}
+            helperText={mksOksError}
+            slotProps={{ htmlInput: { maxLength: CLASSIFIER_CODE_MAX_LENGTH } }}
             sx={commonSx}
           />
         );
       case 'ОКСТУ':
+        const okstuError = getFieldError('okstuCode');
         return (
           <TextField
             size="small"
             fullWidth
             value={draftForm.okstuCode}
-            onChange={(event) => setDraftForm((current) => ({ ...current, okstuCode: event.target.value }))}
+            onChange={(event) => setDraftForm((current) => ({ ...current, okstuCode: sanitizeOkstuCode(event.target.value) }))}
+            error={Boolean(okstuError)}
+            helperText={okstuError}
+            slotProps={{ htmlInput: { maxLength: CLASSIFIER_CODE_MAX_LENGTH } }}
             sx={commonSx}
           />
         );
@@ -1491,12 +1945,46 @@ export const KnowledgeProcessing: React.FC = () => {
           </TextField>
         );
       case 'Издатель':
+        const issuingBodyError = getFieldError('issuingBody');
         return (
           <TextField
             size="small"
             fullWidth
             value={draftForm.issuingBody}
-            onChange={(event) => setDraftForm((current) => ({ ...current, issuingBody: event.target.value }))}
+            onChange={(event) =>
+              setDraftForm((current) => ({ ...current, issuingBody: trimLength(event.target.value, ISSUING_BODY_MAX_LENGTH) }))
+            }
+            error={Boolean(issuingBodyError)}
+            helperText={issuingBodyError}
+            slotProps={{ htmlInput: { maxLength: ISSUING_BODY_MAX_LENGTH } }}
+            sx={commonSx}
+          />
+        );
+      case 'Дата начала действия':
+        const validFromError = getFieldError('validFrom');
+        return (
+          <TextField
+            size="small"
+            fullWidth
+            type="date"
+            value={draftForm.validFrom}
+            onChange={(event) => setDraftForm((current) => ({ ...current, validFrom: event.target.value }))}
+            error={Boolean(validFromError)}
+            helperText={validFromError}
+            sx={commonSx}
+          />
+        );
+      case 'Дата окончания действия':
+        const validUntilError = getFieldError('validUntil');
+        return (
+          <TextField
+            size="small"
+            fullWidth
+            type="date"
+            value={draftForm.validUntil}
+            onChange={(event) => setDraftForm((current) => ({ ...current, validUntil: event.target.value }))}
+            error={Boolean(validUntilError)}
+            helperText={validUntilError || 'Пусто = бессрочно'}
             sx={commonSx}
           />
         );
@@ -1516,18 +2004,69 @@ export const KnowledgeProcessing: React.FC = () => {
   const tableSx = {
     ...TABLE_SX,
     ...(isLight && {
-      bgcolor: 'rgba(255, 255, 255, 0.94)',
-      borderColor: 'rgba(14, 116, 144, 0.28)',
-      boxShadow: '0 0 0 1px rgba(14, 116, 144, 0.14), 0 14px 34px rgba(15,23,42,0.06)',
+      bgcolor: 'transparent',
+      borderColor: 'transparent',
+      boxShadow: 'none',
     }),
   };
+  const headerDividerSx = {
+    mx: 0.75,
+    borderBottomWidth: 2,
+    borderColor: isLight ? 'rgba(14, 116, 144, 0.24)' : 'rgba(198, 214, 236, 0.26)',
+  };
+  const draftSectionButtonSx = {
+    justifyContent: 'space-between',
+    minHeight: 38,
+    px: 1.2,
+    py: 0.72,
+    color: isLight ? 'rgba(15, 23, 42, 0.72)' : 'rgba(233, 237, 243, 0.74)',
+    textTransform: 'none',
+    '& .MuiButton-endIcon': {
+      color: isLight ? 'rgba(15, 23, 42, 0.48)' : 'rgba(233, 237, 243, 0.5)',
+    },
+  };
+  const draftSectionTitleSx = {
+    fontSize: '0.82rem',
+    fontWeight: 520,
+    letterSpacing: '0.01em',
+    color: isLight ? 'rgba(15, 23, 42, 0.72)' : 'rgba(233, 237, 243, 0.74)',
+  };
+  const metadataColumnTitleSx = {
+    display: { xs: 'none', lg: 'block' },
+    fontSize: '0.68rem',
+    fontWeight: 620,
+    letterSpacing: '0.045em',
+    textTransform: 'uppercase',
+    color: isLight ? 'rgba(15, 23, 42, 0.48)' : 'rgba(233, 237, 243, 0.5)',
+  };
+  const metadataRowTitleSx = {
+    pt: 1,
+    fontSize: '0.72rem',
+    fontWeight: 610,
+    letterSpacing: '0.012em',
+    color: isLight ? 'rgba(15, 23, 42, 0.58)' : 'rgba(233, 237, 243, 0.58)',
+  };
+  const metadataValueSx = {
+    overflowWrap: 'anywhere',
+    pt: 1.05,
+    fontSize: '0.82rem',
+    fontWeight: 450,
+    color: isLight ? 'rgba(15, 23, 42, 0.88)' : 'rgba(233, 237, 243, 0.88)',
+  };
+  const activeProcessingSection = activeKnowledgeProcessingSection as KnowledgeProcessingSection;
+  const showUploadSection = activeProcessingSection === 'upload';
+  const showDraftsSection = activeProcessingSection === 'drafts';
+  const showRegistrySection = activeProcessingSection === 'registry';
+  const showJournalSection = activeProcessingSection === 'journal';
 
   return (
-    <Container maxWidth="xl" sx={{ py: 3 }}>
+    <Container maxWidth={false} disableGutters sx={{ py: 3, width: '100%' }}>
       <Stack spacing={2}>
+        {showUploadSection && (
         <Paper variant="outlined" sx={{ p: 1.45, borderRadius: 3, ...panelSx }}>
           <Stack spacing={1.1}>
-            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            <Stack spacing={0.85}>
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                 <FilePlus2 size={18} color={isLight ? '#0284c7' : '#98d9d8'} />
                 <Box>
                   <Typography sx={{ fontWeight: 560, color: isLight ? '#0f172a' : 'rgba(233, 237, 243, 0.92)' }}>
@@ -1535,21 +2074,8 @@ export const KnowledgeProcessing: React.FC = () => {
                   </Typography>
                 </Box>
               </Stack>
-
-            <Stack direction="row" spacing={1.2} sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
-              <Button
-                className="app-action-button"
-                variant="contained"
-                startIcon={<FileDown size={16} />}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                Выбрать файл
-              </Button>
-              {selectedFileName && <Chip label={selectedFileName} size="small" variant="outlined" />}
-              <input ref={fileInputRef} type="file" hidden accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff" onChange={handleFileSelect} />
+              <Divider sx={headerDividerSx} />
             </Stack>
-
-            <Divider sx={{ borderColor: 'rgba(198, 214, 236, 0.18)' }} />
 
             <Stack
               direction="row"
@@ -1560,18 +2086,58 @@ export const KnowledgeProcessing: React.FC = () => {
               <Button
                 className="app-action-button"
                 variant="contained"
+                startIcon={<FileDown size={16} />}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                Выбрать файлы
+              </Button>
+              {selectedFilesLabel && <Chip label={selectedFilesLabel} size="small" variant="outlined" />}
+              <input
+                ref={fileInputRef}
+                type="file"
+                hidden
+                multiple
+                accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff"
+                onChange={handleFileSelect}
+              />
+              <Button
+                className="app-action-button"
+                variant="outlined"
                 startIcon={<PlayCircle size={16} />}
                 onClick={() => void handleCreateDraft()}
-                disabled={!selectedFile}
+                disabled={!selectedFiles.length || hasMetadataValidationErrors}
               >
-                Создать черновик
+                {selectedFiles.length > 1 ? 'Создать черновики' : 'Создать черновик'}
               </Button>
+            </Stack>
+          </Stack>
+        </Paper>
+        )}
+
+        {showDraftsSection && (
+        <Paper variant="outlined" sx={{ p: 1.45, borderRadius: 3, ...panelSx }}>
+          <Stack spacing={1.1}>
+            <Stack spacing={0.85}>
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                <CheckCircle2 size={18} color={isLight ? '#0284c7' : '#98d9d8'} />
+                <Typography sx={{ fontWeight: 560, color: isLight ? '#0f172a' : 'rgba(233, 237, 243, 0.92)' }}>
+                  Действия с черновиком
+                </Typography>
+              </Stack>
+              <Divider sx={headerDividerSx} />
+            </Stack>
+            <Stack
+              direction="row"
+              spacing={1}
+              useFlexGap
+              sx={{ flexWrap: 'wrap', alignItems: 'center', '& .app-action-button': { whiteSpace: 'nowrap' } }}
+            >
               <Button
                 className="app-action-button"
                 variant="outlined"
                 startIcon={<CheckCircle2 size={16} />}
-                onClick={handleSaveDraftMetadata}
-                disabled={!selectedDraft}
+                onClick={() => void handleSaveDraftMetadata()}
+                disabled={!selectedDraft || hasMetadataValidationErrors}
               >
                 Сохранить изменения
               </Button>
@@ -1586,22 +2152,23 @@ export const KnowledgeProcessing: React.FC = () => {
               </Button>
               <Button
                 className="app-action-button"
-                variant="outlined"
-                startIcon={<PlayCircle size={16} />}
-                onClick={() => selectedDraft && handleStartPreview(selectedDraft.id)}
-                disabled={!canStartPreview}
-              >
-                Запустить предпросмотр
-              </Button>
-              <Button
-                className="app-action-button"
                 variant="contained"
                 color="success"
                 startIcon={<CheckCircle2 size={16} />}
                 onClick={() => selectedDraft && void handleDecision(selectedDraft.id, 'approve')}
-                disabled={!canDecideDraft}
+                disabled={!canApproveDraft || hasMetadataValidationErrors}
               >
                 Принять в базу знаний
+              </Button>
+              <Button
+                className="app-action-button"
+                variant="contained"
+                color="warning"
+                startIcon={<CheckCircle2 size={16} />}
+                onClick={() => selectedDraft && void handleDecision(selectedDraft.id, 'confirm')}
+                disabled={!canConfirmDraft || hasMetadataValidationErrors}
+              >
+                Подтвердить проверку
               </Button>
               <Button
                 className="app-action-button"
@@ -1609,7 +2176,7 @@ export const KnowledgeProcessing: React.FC = () => {
                 color="error"
                 startIcon={<XCircle size={16} />}
                 onClick={handleOpenRejectDialog}
-                disabled={!canDecideDraft}
+                disabled={!canRejectDraft}
               >
                 Отклонить черновик
               </Button>
@@ -1636,7 +2203,9 @@ export const KnowledgeProcessing: React.FC = () => {
             </Stack>
           </Stack>
         </Paper>
+        )}
 
+        {showDraftsSection && (
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: '320px minmax(0, 1fr)' }, gap: 2 }}>
           <Paper variant="outlined" sx={{ p: 1.45, borderRadius: 3, ...panelSx }}>
             <Stack spacing={1.05}>
@@ -1660,58 +2229,87 @@ export const KnowledgeProcessing: React.FC = () => {
                   <Chip label={drafts.length} size="small" variant="outlined" sx={{ flexShrink: 0 }} />
                 </Stack>
 
-                <Divider
-                  sx={{
-                    mx: 0.75,
-                    borderBottomWidth: 2,
-                    borderColor: isLight ? 'rgba(14, 116, 144, 0.24)' : 'rgba(198, 214, 236, 0.26)',
-                  }}
-                />
+                <Divider sx={headerDividerSx} />
 
                 <Stack direction="row" sx={{ justifyContent: 'flex-end' }}>
                   <TextField
                     select
                     size="small"
-                    label="Сортировка"
+                    label="Сорт."
                     value={draftSort}
                     onChange={(event) => setDraftSort(event.target.value as DraftSort)}
-                    sx={{ minWidth: 168 }}
+                    sx={{
+                      width: 104,
+                      '& .MuiOutlinedInput-root': {
+                        minHeight: 30,
+                        height: 30,
+                        borderRadius: 1.4,
+                      },
+                      '& .MuiInputBase-input': {
+                        py: 0.25,
+                        pr: '22px !important',
+                        fontSize: '0.72rem',
+                      },
+                      '& .MuiInputLabel-root': {
+                        fontSize: '0.68rem',
+                        transform: 'translate(14px, 6px) scale(1)',
+                      },
+                      '& .MuiInputLabel-shrink': {
+                        transform: 'translate(14px, -7px) scale(0.76)',
+                      },
+                      '& .MuiSelect-icon': {
+                        right: 4,
+                        fontSize: '1rem',
+                      },
+                    }}
                   >
-                    <MenuItem value="updated_desc">По обновлению</MenuItem>
-                    <MenuItem value="name_asc">По названию</MenuItem>
-                    <MenuItem value="status">По статусу</MenuItem>
+                    <MenuItem value="updated_desc">Обновление</MenuItem>
+                    <MenuItem value="name_asc">Название</MenuItem>
+                    <MenuItem value="status">Статус</MenuItem>
                   </TextField>
                 </Stack>
               </Stack>
 
               {workMode === 'prod' && gatewayDraftsQuery.isError && (
                 <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2 }}>
-                  Не удалось загрузить черновики из Gateway.
+                  Не удалось загрузить черновики с сервера.
                 </Alert>
               )}
 
               <Box sx={{ overflow: 'hidden' }}>
-                <Stack divider={<Divider flexItem sx={{ borderColor: 'rgba(198, 214, 236, 0.18)' }} />} sx={{ maxHeight: 460, overflow: 'auto' }}>
+                <Stack divider={<Divider flexItem sx={{ borderColor: 'rgba(198, 214, 236, 0.16)' }} />} sx={{ maxHeight: 460, overflow: 'auto' }}>
                   {sortedDrafts.map((draft, index) => {
                     const isSelected = selectedDraftId === draft.id;
+                    const hasSelection = Boolean(selectedDraftId);
+                    const selectedBg = isLight ? 'rgba(14, 116, 144, 0.08)' : 'rgba(152, 217, 216, 0.08)';
+                    const hoverBg = isLight ? 'rgba(14, 116, 144, 0.06)' : 'rgba(152, 217, 216, 0.06)';
+                    const rowBg = isSelected ? selectedBg : index % 2 === 0 ? 'rgba(255,255,255,0.012)' : 'transparent';
 
                     return (
                       <Box
                         key={draft.id}
-                        onClick={() => setSelectedDraftId(draft.id)}
+                        onClick={() => handleSelectDraft(draft.id)}
                         sx={{
                           px: 1,
                           py: 0.65,
                           cursor: 'pointer',
-                          bgcolor: isSelected ? 'rgba(123, 166, 227, 0.12)' : 'transparent',
-                          transition: 'background-color 160ms ease',
-                          '&:hover': { bgcolor: 'rgba(123, 166, 227, 0.08)' },
+                          opacity: hasSelection && !isSelected ? 0.48 : 1,
+                          bgcolor: rowBg,
+                          borderLeft: `3px solid ${
+                            isSelected ? (isLight ? 'rgba(2, 132, 199, 0.72)' : 'rgba(152, 217, 216, 0.72)') : 'transparent'
+                          }`,
+                          borderRadius: '10px',
+                          transition: 'opacity 160ms ease, background-color 160ms ease, border-color 160ms ease',
+                          '&:hover': {
+                            opacity: 1,
+                            bgcolor: hoverBg,
+                          },
                         }}
                       >
                         <Box
                           sx={{
                             display: 'grid',
-                            gridTemplateColumns: 'minmax(0, 1fr) auto auto',
+                            gridTemplateColumns: 'minmax(0, 1fr) auto auto auto',
                             gap: 1,
                             alignItems: 'center',
                           }}
@@ -1741,6 +2339,29 @@ export const KnowledgeProcessing: React.FC = () => {
                               boxShadow: `0 0 0 3px ${getStatusDotColor(draft.status)}24`,
                             }}
                           />
+                          <Box
+                            title={draft.notifications?.length ? `Уведомлений: ${draft.notifications.length}` : 'Уведомлений нет'}
+                            aria-label={draft.notifications?.length ? `Уведомлений: ${draft.notifications.length}` : 'Уведомлений нет'}
+                            sx={{
+                              minWidth: 18,
+                              height: 18,
+                              px: 0.45,
+                              borderRadius: 999,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '0.68rem',
+                              lineHeight: 1,
+                              color: draft.notifications?.length ? '#fff' : 'transparent',
+                              bgcolor: draft.notifications?.some((item) => String(item.severity).toLowerCase() === 'critical')
+                                ? '#dc2626'
+                                : draft.notifications?.length
+                                  ? '#f97316'
+                                  : 'transparent',
+                            }}
+                          >
+                            {draft.notifications?.length || ''}
+                          </Box>
                           <IconButton
                             aria-label={`Предпросмотр ${draft.title}`}
                             title="Предпросмотр документа"
@@ -1790,9 +2411,6 @@ export const KnowledgeProcessing: React.FC = () => {
                     <Typography sx={{ fontWeight: 560, color: isLight ? '#0f172a' : 'rgba(233, 237, 243, 0.92)' }}>
                       Рабочая область черновика
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Метаданные, JSON, классификация и предпросмотр документа.
-                    </Typography>
                   </Box>
                 </Stack>
                 <Chip
@@ -1802,19 +2420,29 @@ export const KnowledgeProcessing: React.FC = () => {
                   sx={{ flexShrink: 0 }}
                 />
               </Stack>
+              <Divider sx={headerDividerSx} />
 
-              {!selectedDraft && (
-                <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
-                  Выберите черновик слева, чтобы открыть правку метаданных, Raw JSON, данные Gateway и предпросмотр.
-                </Alert>
-              )}
-
+              {!selectedDraft ? (
+                <Box
+                  sx={{
+                    minHeight: 180,
+                    display: 'grid',
+                    placeItems: 'center',
+                    borderRadius: 2.2,
+                    bgcolor: isLight ? 'rgba(248, 250, 252, 0.55)' : 'rgba(255,255,255,0.022)',
+                  }}
+                >
+                  <Typography variant="body2" color="text.secondary">
+                    Черновик не выбран.
+                  </Typography>
+                </Box>
+              ) : (
               <Box
                 sx={{
                   display: 'grid',
                   gridTemplateColumns: {
                     xs: '1fr',
-                    lg: previewPanelOpen && selectedDraft ? 'minmax(0, 1fr) minmax(360px, 0.86fr)' : '1fr',
+                    lg: previewPanelOpen ? 'minmax(0, 1fr) minmax(360px, 0.86fr)' : '1fr',
                   },
                   gap: 1.25,
                   alignItems: 'start',
@@ -1826,15 +2454,15 @@ export const KnowledgeProcessing: React.FC = () => {
                       fullWidth
                       onClick={() => setMetadataOpen((current) => !current)}
                       endIcon={metadataOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                      sx={{ justifyContent: 'space-between', px: 1.25, py: 1, color: 'text.primary', textTransform: 'none' }}
+                      sx={draftSectionButtonSx}
                     >
                       <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
-                        <Typography sx={{ fontWeight: 560 }}>Сверка и правка метаданных</Typography>
+                        <Typography sx={draftSectionTitleSx}>Сверка и правка метаданных</Typography>
                         <Chip label="первый шаг" size="small" variant="outlined" />
                       </Stack>
                     </Button>
+                    <Divider sx={headerDividerSx} />
                     <Collapse in={metadataOpen}>
-                      <Divider sx={{ borderColor: 'rgba(198, 214, 236, 0.18)' }} />
                       <Box
                         sx={{
                           display: 'grid',
@@ -1844,22 +2472,22 @@ export const KnowledgeProcessing: React.FC = () => {
                           p: 1.25,
                         }}
                       >
-                        <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', lg: 'block' } }} />
-                        <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', lg: 'block' }, fontWeight: 560 }}>
+                        <Typography sx={metadataColumnTitleSx} />
+                        <Typography sx={metadataColumnTitleSx}>
                           Текущее значение
                         </Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', lg: 'block' }, fontWeight: 560 }}>
+                        <Typography sx={metadataColumnTitleSx}>
                           Новое значение
                         </Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', lg: 'block' }, fontWeight: 560 }}>
+                        <Typography sx={metadataColumnTitleSx}>
                           Статус
                         </Typography>
                         {buildMetadataReviewRows(workspaceDraft, draftForm).map((row) => (
                           <React.Fragment key={row.label}>
-                            <Typography variant="caption" color="text.secondary" sx={{ pt: 1 }}>
+                            <Typography sx={metadataRowTitleSx}>
                               {row.label}
                             </Typography>
-                            <Typography variant="caption" sx={{ overflowWrap: 'anywhere', pt: 1.05 }}>
+                            <Typography sx={metadataValueSx}>
                               {row.current || 'не заполнено'}
                             </Typography>
                             {renderMetadataFieldInput(row.label)}
@@ -1878,22 +2506,69 @@ export const KnowledgeProcessing: React.FC = () => {
                   <Paper variant="outlined" sx={{ borderRadius: 2.2, overflow: 'hidden', ...panelSx }}>
                     <Button
                       fullWidth
+                      onClick={() => setNotificationsOpen((current) => !current)}
+                      endIcon={notificationsOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      disabled={!selectedDraft}
+                      sx={draftSectionButtonSx}
+                    >
+                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
+                        <Typography sx={draftSectionTitleSx}>Уведомления обработки</Typography>
+                        <Chip label={selectedDraft?.notifications?.length ?? 0} size="small" variant="outlined" />
+                      </Stack>
+                    </Button>
+                    <Divider sx={headerDividerSx} />
+                    <Collapse in={notificationsOpen}>
+                      <Stack spacing={1} sx={{ p: 1.25 }}>
+                        {selectedDraft?.notifications?.length ? (
+                          selectedDraft.notifications.map((notification) => (
+                            <Alert
+                              key={`${notification.code}-${notification.message}`}
+                              severity={getNotificationAlertSeverity(notification.severity)}
+                              variant="outlined"
+                              sx={{ borderRadius: 2 }}
+                            >
+                              <Typography sx={{ fontWeight: 560 }}>
+                                {notification.code}
+                                {notification.category ? ` · ${notification.category}` : ''}
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                {notification.message}
+                              </Typography>
+                              {(notification.location || notification.suggestedAction) && (
+                                <Typography variant="caption" color="text.secondary">
+                                  {[notification.location, notification.suggestedAction].filter(Boolean).join(' · ')}
+                                </Typography>
+                              )}
+                            </Alert>
+                          ))
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            Уведомления по черновику не переданы.
+                          </Typography>
+                        )}
+                      </Stack>
+                    </Collapse>
+                  </Paper>
+
+                  <Paper variant="outlined" sx={{ borderRadius: 2.2, overflow: 'hidden', ...panelSx }}>
+                    <Button
+                      fullWidth
                       onClick={() => setRawJsonOpen((current) => !current)}
                       endIcon={rawJsonOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                       disabled={!selectedDraft}
-                      sx={{ justifyContent: 'space-between', px: 1.25, py: 1, color: 'text.primary', textTransform: 'none' }}
+                      sx={draftSectionButtonSx}
                     >
                       <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
-                        <Typography sx={{ fontWeight: 560 }}>Raw JSON</Typography>
-                        <Chip label={workspaceDraft.gatewayRawData ? 'Gateway raw' : 'нормализованный снимок'} size="small" variant="outlined" />
+                        <Typography sx={draftSectionTitleSx}>Raw JSON</Typography>
+                        <Chip label={workspaceDraft.gatewayRawData ? 'исходный JSON' : 'нормализованный снимок'} size="small" variant="outlined" />
                       </Stack>
                     </Button>
+                    <Divider sx={headerDividerSx} />
                     <Collapse in={rawJsonOpen}>
-                      <Divider sx={{ borderColor: 'rgba(198, 214, 236, 0.18)' }} />
                       <Stack spacing={1} sx={{ p: 1.25 }}>
                         {!workspaceDraft.gatewayRawData && (
                           <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
-                            Gateway не передал исходный raw JSON. Ниже показан нормализованный снимок черновика.
+                            Исходный raw JSON не передан. Ниже показан нормализованный снимок черновика.
                           </Alert>
                         )}
                         <Box
@@ -1924,15 +2599,15 @@ export const KnowledgeProcessing: React.FC = () => {
                       onClick={() => setGatewayDetailsOpen((current) => !current)}
                       endIcon={gatewayDetailsOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                       disabled={!selectedDraft}
-                      sx={{ justifyContent: 'space-between', px: 1.25, py: 1, color: 'text.primary', textTransform: 'none' }}
+                      sx={draftSectionButtonSx}
                     >
                       <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
-                        <Typography sx={{ fontWeight: 560 }}>Данные Gateway</Typography>
+                        <Typography sx={draftSectionTitleSx}>Данные обработки</Typography>
                         <Chip label={workspaceDraft.gatewayDraftId ? 'есть draft_id' : 'локальный черновик'} size="small" variant="outlined" />
                       </Stack>
                     </Button>
+                    <Divider sx={headerDividerSx} />
                     <Collapse in={gatewayDetailsOpen}>
-                      <Divider sx={{ borderColor: 'rgba(198, 214, 236, 0.18)' }} />
                       <Box
                         sx={{
                           display: 'grid',
@@ -1948,8 +2623,9 @@ export const KnowledgeProcessing: React.FC = () => {
                           ['document_key', workspaceDraft.gatewayDocumentKey],
                           ['document_id', workspaceDraft.gatewayPromotedDocumentId],
                           ['file_hash_sha256', workspaceDraft.gatewayFileHashSha256],
+                          ['title_key', workspaceDraft.gatewayTitleKey],
                           ['title_hash_sha256', workspaceDraft.gatewayTitleHashSha256],
-                          ['ошибка Gateway', workspaceDraft.gatewayErrorMessage || workspaceDraft.gatewayErrorCode],
+                          ['ошибка обработки', workspaceDraft.gatewayErrorMessage || workspaceDraft.gatewayErrorCode],
                         ].map(([label, value]) => (
                           <React.Fragment key={label}>
                             <Typography variant="caption" color="text.secondary">
@@ -1970,15 +2646,15 @@ export const KnowledgeProcessing: React.FC = () => {
                       onClick={() => setClassificationOpen((current) => !current)}
                       endIcon={classificationOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                       disabled={!selectedDraft}
-                      sx={{ justifyContent: 'space-between', px: 1.25, py: 1, color: 'text.primary', textTransform: 'none' }}
+                      sx={draftSectionButtonSx}
                     >
                       <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
-                        <Typography sx={{ fontWeight: 560 }}>Классификация</Typography>
+                        <Typography sx={draftSectionTitleSx}>Классификация</Typography>
                         <Chip label={workspaceDraft.mksOksCode || workspaceDraft.okstuCode ? 'заполнено частично' : 'не заполнено'} size="small" variant="outlined" />
                       </Stack>
                     </Button>
+                    <Divider sx={headerDividerSx} />
                     <Collapse in={classificationOpen}>
-                      <Divider sx={{ borderColor: 'rgba(198, 214, 236, 0.18)' }} />
                       <Box
                         sx={{
                           display: 'grid',
@@ -1994,7 +2670,7 @@ export const KnowledgeProcessing: React.FC = () => {
                           ['Эра', workspaceDraft.era],
                           ['Юрисдикция', workspaceDraft.jurisdiction],
                           ['Издатель', workspaceDraft.issuingBody],
-                          ['Категории', 'не переданы Gateway'],
+                          ['Категории', 'не переданы'],
                           ['Confidence', workspaceDraft.confidence ? `${Math.round(workspaceDraft.confidence * 100)}%` : 'не передано'],
                         ].map(([label, value]) => (
                           <React.Fragment key={label}>
@@ -2016,15 +2692,15 @@ export const KnowledgeProcessing: React.FC = () => {
                       onClick={() => setDuplicatesOpen((current) => !current)}
                       endIcon={duplicatesOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                       disabled={!selectedDraft}
-                      sx={{ justifyContent: 'space-between', px: 1.25, py: 1, color: 'text.primary', textTransform: 'none' }}
+                      sx={draftSectionButtonSx}
                     >
                       <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
-                        <Typography sx={{ fontWeight: 560 }}>Дубликаты</Typography>
+                        <Typography sx={draftSectionTitleSx}>Дубликаты</Typography>
                         <Chip label={selectedDraft?.duplicates.length ?? 0} size="small" variant="outlined" />
                       </Stack>
                     </Button>
+                    <Divider sx={headerDividerSx} />
                     <Collapse in={duplicatesOpen}>
-                      <Divider sx={{ borderColor: 'rgba(198, 214, 236, 0.18)' }} />
                       <Stack spacing={1} sx={{ p: 1.25 }}>
                         {selectedDraft?.duplicates.length ? (
                           selectedDraft.duplicates.map((duplicate) => (
@@ -2037,7 +2713,7 @@ export const KnowledgeProcessing: React.FC = () => {
                           ))
                         ) : (
                           <Typography variant="body2" color="text.secondary">
-                            Кандидаты на дубликаты не переданы Gateway.
+                            Кандидаты на дубликаты не переданы.
                           </Typography>
                         )}
                       </Stack>
@@ -2050,15 +2726,15 @@ export const KnowledgeProcessing: React.FC = () => {
                       onClick={() => setProcessingStatusOpen((current) => !current)}
                       endIcon={processingStatusOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                       disabled={!selectedDraft}
-                      sx={{ justifyContent: 'space-between', px: 1.25, py: 1, color: 'text.primary', textTransform: 'none' }}
+                      sx={draftSectionButtonSx}
                     >
                       <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
-                        <Typography sx={{ fontWeight: 560 }}>Статус обработки</Typography>
+                        <Typography sx={draftSectionTitleSx}>Статус обработки</Typography>
                         <Chip label={getStatusLabel(workspaceDraft.status)} size="small" variant="outlined" />
                       </Stack>
                     </Button>
+                    <Divider sx={headerDividerSx} />
                     <Collapse in={processingStatusOpen}>
-                      <Divider sx={{ borderColor: 'rgba(198, 214, 236, 0.18)' }} />
                       <Box
                         sx={{
                           display: 'grid',
@@ -2106,6 +2782,7 @@ export const KnowledgeProcessing: React.FC = () => {
                           </IconButton>
                         </Stack>
                       </Stack>
+                      <Divider sx={headerDividerSx} />
 
                       <TextField
                         size="small"
@@ -2178,26 +2855,31 @@ export const KnowledgeProcessing: React.FC = () => {
                   </Paper>
                 )}
               </Box>
+              )}
             </Stack>
           </Paper>
         </Box>
+        )}
 
-        <DocumentRegistryPanel documents={publishedDocuments} />
+        {showRegistrySection && <DocumentRegistryPanel documents={publishedDocuments} />}
 
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 3 }}>
+        {(showUploadSection || showJournalSection) && (
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: showUploadSection && showJournalSection ? '1fr 1fr' : '1fr' }, gap: 3 }}>
+          {showUploadSection && (
           <Paper variant="outlined" sx={{ p: 1.9, borderRadius: 3, ...panelSx }}>
-            <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 1.4 }}>
-              <RotateCw size={18} color={isLight ? '#0284c7' : '#98d9d8'} />
-              <Box>
+            <Stack spacing={1.1} sx={{ mb: 1.4 }}>
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                <RotateCw size={18} color={isLight ? '#0284c7' : '#98d9d8'} />
                 <Typography sx={{ fontWeight: 560, color: isLight ? '#0f172a' : 'rgba(233, 237, 243, 0.92)' }}>
                   Очередь обработки
                 </Typography>
-              </Box>
+              </Stack>
+              <Divider sx={headerDividerSx} />
             </Stack>
 
             {queueHasError && (
               <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2, mb: 1.2 }}>
-                Не удалось загрузить очередь обработки из Gateway.
+                Не удалось загрузить очередь обработки с сервера.
               </Alert>
             )}
             {!queueHasError && gatewayQueue.length === 0 && (
@@ -2206,49 +2888,58 @@ export const KnowledgeProcessing: React.FC = () => {
               </Alert>
             )}
             {gatewayQueue.length > 0 && (
-              <Paper variant="outlined" sx={{ overflow: 'hidden', borderRadius: 2.4, ...tableSx }}>
+              <Paper variant="outlined" sx={{ overflow: 'hidden', borderRadius: 1.8, ...tableSx }}>
                 <Box
                   sx={{
                     display: 'grid',
                     gridTemplateColumns: { xs: '1.6fr 0.9fr 0.6fr 0.7fr' },
-                    gap: 0,
+                    gap: 1,
                     alignItems: 'center',
-                    px: 1.4,
-                    py: 1,
-                    borderBottom: '1px solid rgba(198, 214, 236, 0.16)',
+                    px: 1.2,
+                    py: 0.75,
+                    borderBottom: '1px solid rgba(198, 214, 236, 0.24)',
+                    bgcolor: isLight ? 'rgba(15, 23, 42, 0.035)' : 'rgba(255,255,255,0.025)',
                   }}
                 >
-                  <Typography variant="caption" color="text.secondary">
-                    Документ
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Этап
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Прогресс
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'right' }}>
-                    Статус
-                  </Typography>
+                  {['Документ', 'Этап', 'Прогресс', 'Статус'].map((label, index) => (
+                    <Typography
+                      key={label}
+                      variant="caption"
+                      sx={{
+                        fontSize: '0.68rem',
+                        fontWeight: 620,
+                        letterSpacing: '0.025em',
+                        textTransform: 'uppercase',
+                        color: isLight ? 'rgba(15, 23, 42, 0.56)' : 'rgba(230, 236, 244, 0.74)',
+                        textAlign: index === 3 ? 'right' : 'left',
+                      }}
+                    >
+                      {label}
+                    </Typography>
+                  ))}
                 </Box>
                 <Stack divider={<Divider flexItem sx={{ borderColor: 'rgba(198, 214, 236, 0.12)' }} />}>
-                  {gatewayQueue.map((item) => (
+                  {gatewayQueue.map((item, index) => (
                     <Box
                       key={item.id}
                       sx={{
                         display: 'grid',
                         gridTemplateColumns: { xs: '1.6fr 0.9fr 0.6fr 0.7fr' },
-                        gap: 0,
+                        gap: 1,
                         alignItems: 'center',
-                        px: 1.4,
-                        py: 1.05,
+                        px: 1.2,
+                        py: 0.85,
+                        bgcolor: index % 2 === 0 ? 'rgba(255,255,255,0.012)' : 'transparent',
+                        '&:hover': {
+                          bgcolor: isLight ? 'rgba(14, 116, 144, 0.05)' : 'rgba(123, 166, 227, 0.055)',
+                        },
                       }}
                     >
-                      <Typography sx={{ fontSize: '0.84rem', pr: 1 }}>{item.document}</Typography>
-                      <Typography variant="caption" color="text.secondary">
+                      <Typography sx={{ fontSize: '0.84rem', fontWeight: 520, pr: 1 }}>{item.document}</Typography>
+                      <Typography variant="caption" sx={{ color: isLight ? 'rgba(15, 23, 42, 0.64)' : 'rgba(222, 230, 241, 0.68)' }}>
                         {item.stage}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary">
+                      <Typography variant="caption" sx={{ color: isLight ? 'rgba(15, 23, 42, 0.64)' : 'rgba(222, 230, 241, 0.68)' }}>
                         {item.progress}%
                       </Typography>
                       <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -2260,20 +2951,26 @@ export const KnowledgeProcessing: React.FC = () => {
               </Paper>
             )}
           </Paper>
+          )}
 
+          {showJournalSection && (
           <Paper variant="outlined" sx={{ p: 1.9, borderRadius: 3, ...panelSx }}>
-            <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 1.4 }}>
-              <ShieldCheck size={18} color={isLight ? '#0284c7' : '#98d9d8'} />
-              <Box sx={{ minWidth: 0 }}>
-                <Typography sx={{ fontWeight: 560, color: isLight ? '#0f172a' : 'rgba(233, 237, 243, 0.92)' }}>
-                  Журнал обработки
-                </Typography>
-              </Box>
+            <Stack spacing={1.1} sx={{ mb: 1.4 }}>
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
+                <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
+                  <ShieldCheck size={18} color={isLight ? '#0284c7' : '#98d9d8'} />
+                  <Typography sx={{ fontWeight: 560, color: isLight ? '#0f172a' : 'rgba(233, 237, 243, 0.92)' }}>
+                    Журнал обработки
+                  </Typography>
+                </Stack>
+                <Chip label={gatewayProcessingLogs.length} size="small" variant="outlined" />
+              </Stack>
+              <Divider sx={headerDividerSx} />
             </Stack>
 
             {journalHasError && (
               <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2 }}>
-                Не удалось загрузить журнал обработки из Gateway.
+                Не удалось загрузить журнал обработки с сервера.
               </Alert>
             )}
             {!journalHasError && gatewayProcessingLogs.length === 0 && (
@@ -2282,27 +2979,88 @@ export const KnowledgeProcessing: React.FC = () => {
               </Alert>
             )}
             {gatewayProcessingLogs.length > 0 && (
-              <Stack spacing={1.1} sx={{ maxHeight: 320, overflow: 'auto', pr: 0.4 }}>
-                {gatewayProcessingLogs.map((log) => (
-                  <Paper key={log.id} variant="outlined" sx={{ p: 1.25, borderRadius: 2, ...panelSx }}>
-                    <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                      <Box sx={{ minWidth: 0 }}>
-                        <Typography sx={{ fontWeight: 560, lineHeight: 1.35 }}>{log.document}</Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {log.time} · {log.stage}
-                        </Typography>
-                      </Box>
-                      <Chip label={log.retryStatus} size="small" variant="outlined" />
-                    </Stack>
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.6, lineHeight: 1.4 }}>
-                      {log.event}
+              <Paper variant="outlined" sx={{ overflow: 'hidden', borderRadius: 1.8, ...tableSx }}>
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: { xs: '28px 82px 1fr 110px 2.1fr 126px 104px' },
+                    gap: 1,
+                    alignItems: 'center',
+                    px: 1.2,
+                    py: 0.75,
+                    borderBottom: '1px solid rgba(198, 214, 236, 0.24)',
+                    bgcolor: isLight ? 'rgba(15, 23, 42, 0.035)' : 'rgba(255,255,255,0.025)',
+                  }}
+                >
+                  <Box />
+                  {['Время', 'Объект', 'Этап', 'Событие', 'Статус', 'Доступ'].map((label) => (
+                    <Typography
+                      key={label}
+                      variant="caption"
+                      sx={{
+                        fontSize: '0.68rem',
+                        fontWeight: 620,
+                        letterSpacing: '0.025em',
+                        textTransform: 'uppercase',
+                        color: isLight ? 'rgba(15, 23, 42, 0.56)' : 'rgba(230, 236, 244, 0.74)',
+                      }}
+                    >
+                      {label}
                     </Typography>
-                  </Paper>
-                ))}
-              </Stack>
+                  ))}
+                </Box>
+                <Stack divider={<Divider flexItem sx={{ borderColor: 'rgba(198, 214, 236, 0.22)', borderBottomWidth: 1 }} />} sx={{ maxHeight: 'calc(100vh - 250px)', overflow: 'auto' }}>
+                  {gatewayProcessingLogs.map((log, index) => (
+                    <Box
+                      key={log.id}
+                      sx={{
+                        display: 'grid',
+                        gridTemplateColumns: { xs: '28px 82px 1fr 110px 2.1fr 126px 104px' },
+                        gap: 1,
+                        alignItems: 'center',
+                        px: 1.2,
+                        py: 0.7,
+                        bgcolor: index % 2 === 0 ? 'rgba(255,255,255,0.012)' : 'transparent',
+                        '&:hover': {
+                          bgcolor: isLight ? 'rgba(14, 116, 144, 0.05)' : 'rgba(123, 166, 227, 0.055)',
+                        },
+                      }}
+                    >
+                      <Box
+                        title={log.retryStatus}
+                        sx={{
+                          width: 10,
+                          height: 10,
+                          borderRadius: '50%',
+                          bgcolor: getLogDotColor(log.retryStatus),
+                          boxShadow: `0 0 0 3px ${getLogDotColor(log.retryStatus)}24`,
+                        }}
+                      />
+                      <Typography variant="caption" color="text.secondary">
+                        {log.time || '—'}
+                      </Typography>
+                      <Typography variant="caption" title={log.document} sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 560 }}>
+                        {log.document}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {log.stage}
+                      </Typography>
+                      <Typography variant="caption" title={log.event} sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {log.event}
+                      </Typography>
+                      <Chip label={log.retryStatus} size="small" variant="outlined" />
+                      <Typography variant="caption" color="text.secondary">
+                        {log.visibility}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Stack>
+              </Paper>
             )}
           </Paper>
+          )}
         </Box>
+        )}
 
         <Dialog open={previewDialogOpen && Boolean(selectedDraft)} onClose={handleClosePreviewDialog} maxWidth="lg" fullWidth>
           <DialogTitle sx={{ pb: 1.2 }}>

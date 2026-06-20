@@ -558,11 +558,37 @@ export const KnowledgeBase: React.FC = () => {
     border: '1px solid',
     borderColor: isLight ? 'rgba(14,116,144,0.18)' : 'rgba(198,216,240,0.22)',
   } as const;
+  const searchFieldSx = {
+    '& .MuiOutlinedInput-root': {
+      borderRadius: 2,
+      bgcolor: isLight ? 'rgba(248, 250, 252, 0.82)' : 'rgba(255,255,255,0.026)',
+      '& fieldset': {
+        borderWidth: '1.6px',
+        borderColor: isLight ? 'rgba(14, 116, 144, 0.36)' : 'rgba(152, 217, 216, 0.42)',
+      },
+      '&:hover fieldset': {
+        borderColor: isLight ? 'rgba(2, 132, 199, 0.58)' : 'rgba(152, 217, 216, 0.58)',
+      },
+      '&.Mui-focused fieldset': {
+        borderWidth: '1.8px',
+        borderColor: isLight ? 'rgba(2, 132, 199, 0.72)' : 'rgba(152, 217, 216, 0.72)',
+      },
+    },
+  } as const;
 
   return (
-    <Container maxWidth="xl" sx={{ py: 3 }}>
+    <Container maxWidth={false} disableGutters sx={{ py: 3, width: '100%' }}>
       <Stack spacing={2.4}>
-        <Paper variant="outlined" sx={{ p: 1.35, borderRadius: 2.4, ...panelSx }}>
+        <Paper
+          variant="outlined"
+          sx={{
+            p: 1.35,
+            borderRadius: 2.4,
+            bgcolor: 'transparent',
+            borderColor: 'transparent',
+            boxShadow: 'none',
+          }}
+        >
           <Stack spacing={1.2}>
             <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.2} sx={{ alignItems: { md: 'center' } }}>
               <TextField
@@ -572,6 +598,7 @@ export const KnowledgeBase: React.FC = () => {
                 value={knowledgeSearch}
                 onChange={(event) => setKnowledgeSearch(event.target.value)}
                 placeholder="Название документа, код, раздел или фраза"
+                sx={searchFieldSx}
                 slotProps={{
                   input: {
                     startAdornment: <Search size={16} style={{ marginRight: 8, opacity: 0.72 }} />,
@@ -584,7 +611,7 @@ export const KnowledgeBase: React.FC = () => {
                 label="Где искать"
                 value={knowledgeSearchScope}
                 onChange={(event) => handleSearchScopeChange(event.target.value as SearchScope)}
-                sx={{ minWidth: { xs: '100%', md: 240 } }}
+                sx={{ minWidth: { xs: '100%', md: 240 }, ...searchFieldSx }}
               >
                 <MenuItem value="all">Везде</MenuItem>
                 {selectedSection && <MenuItem value="current">Текущий раздел</MenuItem>}
@@ -598,13 +625,13 @@ export const KnowledgeBase: React.FC = () => {
 
             {normalizedKnowledgeSearch.length > 0 && normalizedKnowledgeSearch.length < 3 && (
               <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
-                Для поиска через Gateway нужно минимум 3 символа.
+                Для поиска нужно минимум 3 символа.
               </Alert>
             )}
 
             {knowledgeSearchQuery.isError && (
               <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2 }}>
-                Gateway не вернул результаты поиска по базе знаний.
+                Сервер не вернул результаты поиска по базе знаний.
               </Alert>
             )}
 
@@ -639,7 +666,7 @@ export const KnowledgeBase: React.FC = () => {
                         {item.name ?? item.document ?? item.document_title ?? 'Документ базы знаний'}
                       </Typography>
                       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.35, lineHeight: 1.35 }}>
-                        {item.fragment ?? item.content ?? item.section ?? 'Фрагмент найден Gateway-поиском.'}
+                        {item.fragment ?? item.content ?? item.section ?? 'Фрагмент найден поиском по базе знаний.'}
                       </Typography>
                     </Paper>
                   );
@@ -652,15 +679,18 @@ export const KnowledgeBase: React.FC = () => {
         {(documentsQuery.isError || knowledgeSectionsQuery.isError) && (
           <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2 }}>
             {documentsQuery.isError && knowledgeSectionsQuery.isError
-              ? 'Gateway не вернул список документов и дерево разделов.'
+              ? 'Сервер не вернул список документов и дерево разделов.'
               : documentsQuery.isError
-                ? 'Gateway не вернул список документов.'
-                : 'Gateway не вернул дерево разделов.'}
+                ? 'Сервер не вернул список документов.'
+                : 'Сервер не вернул дерево разделов.'}
           </Alert>
         )}
 
         {!selectedSection && (
-        <Paper variant="outlined" sx={{ p: 1.6, borderRadius: 3, ...panelSx }}>
+        <Paper
+          variant="outlined"
+          sx={{ p: 1.6, borderRadius: 3, bgcolor: 'transparent', borderColor: 'transparent', boxShadow: 'none' }}
+        >
           <Box
             sx={{
               display: 'grid',
@@ -690,22 +720,28 @@ export const KnowledgeBase: React.FC = () => {
                     borderRadius: 2.1,
                     cursor: 'pointer',
                     bgcolor: isLight ? 'rgba(248, 250, 252, 0.76)' : 'rgba(255,255,255,0.028)',
+                    borderWidth: 1.6,
                     borderColor: isSelected
                       ? isLight
-                        ? 'rgba(2,132,199,0.42)'
-                        : 'rgba(152,217,216,0.42)'
+                        ? 'rgba(2,132,199,0.58)'
+                        : 'rgba(152,217,216,0.58)'
                       : isLight
-                        ? 'rgba(14,116,144,0.18)'
-                        : 'rgba(198,216,240,0.22)',
+                        ? 'rgba(14,116,144,0.34)'
+                        : 'rgba(198,216,240,0.38)',
                     boxShadow: isSelected
                       ? isLight
-                        ? '0 10px 20px rgba(15,23,42,0.08)'
-                        : '0 10px 20px rgba(0,0,0,0.15)'
-                      : 'none',
+                        ? '0 10px 20px rgba(15,23,42,0.08), inset 0 0 0 1px rgba(2,132,199,0.10)'
+                        : '0 10px 20px rgba(0,0,0,0.18), inset 0 0 0 1px rgba(152,217,216,0.12)'
+                      : isLight
+                        ? 'inset 0 0 0 1px rgba(255,255,255,0.52)'
+                        : 'inset 0 0 0 1px rgba(255,255,255,0.025)',
                     transition: 'transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease',
                     '&:hover': {
                       transform: 'translateY(-1px)',
-                      borderColor: isLight ? 'rgba(2,132,199,0.38)' : 'rgba(152,217,216,0.38)',
+                      borderColor: isLight ? 'rgba(2,132,199,0.58)' : 'rgba(152,217,216,0.56)',
+                      boxShadow: isLight
+                        ? '0 10px 20px rgba(15,23,42,0.07), inset 0 0 0 1px rgba(2,132,199,0.10)'
+                        : '0 10px 20px rgba(0,0,0,0.18), inset 0 0 0 1px rgba(152,217,216,0.10)',
                     },
                   }}
                 >
@@ -956,7 +992,7 @@ export const KnowledgeBase: React.FC = () => {
                       <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2.2, ...documentListSx }}>
                         <Stack spacing={1.25}>
                           <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
-                            <Typography sx={{ fontWeight: 560 }}>Сведения Gateway</Typography>
+                            <Typography sx={{ fontWeight: 560 }}>Служебные сведения</Typography>
                             <Chip
                               size="small"
                               variant="outlined"
@@ -972,7 +1008,7 @@ export const KnowledgeBase: React.FC = () => {
 
                           {workMode === 'prod' && documentDetailQuery.isLoading ? (
                             <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
-                              Получаем документ, его статус и историю из Gateway...
+                              Получаем документ, его статус и историю...
                             </Alert>
                           ) : workMode === 'prod' ? (
                             <Stack spacing={1.2}>
@@ -1021,7 +1057,7 @@ export const KnowledgeBase: React.FC = () => {
                                       gatewayDocumentDetail?.jurisdiction ? `Юрисдикция: ${gatewayDocumentDetail.jurisdiction}` : '',
                                     ]
                                       .filter(Boolean)
-                                      .join(' · ') || 'Gateway не вернул метаданные документа.'}
+                                      .join(' · ') || 'Метаданные документа не получены.'}
                                   </Typography>
                                 </Paper>
 
@@ -1060,7 +1096,7 @@ export const KnowledgeBase: React.FC = () => {
 
                               {gatewayDocumentErrors.length > 0 && (
                                 <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2 }}>
-                                  Последняя ошибка: {(gatewayDocumentErrors[0] as any)?.error_message ?? 'Gateway вернул список ошибок'}.
+                                  Последняя ошибка: {(gatewayDocumentErrors[0] as any)?.error_message ?? 'Сервер вернул список ошибок'}.
                                 </Alert>
                               )}
                             </Stack>

@@ -237,3 +237,34 @@
 
 ### Результат
 - [x] **435 passed** (все тесты)
+
+---
+
+## 🟢 Блок 11. Устранение недочётов (отчёт 20.06)
+
+### 11.1 POST /drafts — добавить поля (🔴)
+- [x] ✅ Добавлены Form-параметры: source_type, doc_code, mks_oks_code, okstu_code, era, jurisdiction, issuing_body, metadata
+- [x] ✅ Проброс метаданных в Registry через create_draft() + title_key
+- [x] ✅ Валидация source_type/era/jurisdiction
+- [x] ✅ title_key вычисляется и возвращается в ответе
+- [x] ✅ Метаданные сохраняются в upload step input_data
+
+### 11.2 Saga compensation — реализовать (🟠)
+- [x] ✅ `_execute_compensation()` реально вызывает Celery-задачи delete_registry_document / delete_from_vector_index
+- [x] ✅ Добавлены компенсации для rag_index и reprocess
+
+### 11.3 documents/search — удалить dead code (⚪)
+- [x] ✅ Удалён `app/api/v1/endpoints/search.py`
+- [x] ✅ Убран search из `app/api/v1/api.py`
+- [x] ✅ Удалён `tests/test_search.py`
+- [x] ✅ Удалены неиспользуемые схемы `app/schemas/search.py`
+- [x] ✅ Убран `/api/v1/documents/search` из OpenAPI проверки в test_health.py
+- [x] ✅ Убран test_search_top_k_exceeds_max_returns_422 из test_error_handling.py
+
+### 11.4 ReprocessResponse.user_id — убрать (⚪)
+- [x] ✅ Удалён user_id из ReprocessResponse схемы
+- [x] ✅ Убран user_id из ответа reprocess_document()
+- [x] ✅ Убраны проверки user_id из тестов
+
+### Результат
+- [x] **408 passed** (все тесты)

@@ -1215,13 +1215,11 @@ class TestDocumentReprocess:
         data = response.json()
         assert "mode" in data
         assert "document_id" in data
-        assert "user_id" in data
         assert "task_id" in data
         assert "status" in data
         assert "created_at" in data
         assert data["document_id"] == "doc-test-001"
         assert data["mode"] == "full"
-        assert isinstance(data["user_id"], str)
         assert isinstance(data["task_id"], str)
         assert isinstance(data["status"], str)
 

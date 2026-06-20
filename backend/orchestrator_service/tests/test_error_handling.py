@@ -166,7 +166,7 @@ class TestEndpointErrorResponses:
         response = client.post(
             "/api/v1/drafts",
             files={"file": ("test.txt", b"test content", "text/plain")},
-            data={"document_key": "test-key"},
+            data={"document_key": "test-key", "source_type": "GOST"},
             headers=auth_header,
         )
         assert response.status_code == 400
@@ -181,20 +181,21 @@ class TestEndpointErrorResponses:
         """Draft upload without file returns 422."""
         response = client.post(
             "/api/v1/drafts",
+            data={"source_type": "GOST"},
             headers=auth_header,
         )
         assert response.status_code == 422
         data = response.json()
         assert "detail" in data
 
-    def test_search_top_k_exceeds_max_returns_422(self, client: TestClient, auth_header: dict):
-        """Search with top_k > 100 returns 422."""
+    def test_documents_search_no_longer_returns_search_results(self, client: TestClient):
+        """POST /documents/search was removed — no longer returns 200 with results."""
         response = client.post(
             "/api/v1/documents/search",
-            json={"query": "test", "top_k": 200},
-            headers=auth_header,
+            json={"query": "test"},
         )
-        assert response.status_code == 422
+        # Matches /documents/{doc_id} route with doc_id="search" → 405 or 404
+        assert response.status_code in (404, 405)
 
 
 

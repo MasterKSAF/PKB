@@ -658,6 +658,7 @@ POST /registry/terminology/import
 | Метод | Путь | Описание |
 |-------|------|----------|
 | GET | `/registry/documents` | Список |
+| GET | `/registry/documents/search` | **Полнотекстовый поиск (BM25)** — поиск по `doc_code`, `title`, `classifier_links` |
 | GET | `/registry/documents/{doc_id}` | Один документ (описание) |
 | GET | `/registry/documents/{doc_id}/sections` | Секции документа |
 | POST | `/registry/documents/check-uniqueness` | Проверить уникальность |
@@ -751,6 +752,52 @@ GET /registry/documents
   "meta": { "total": 56, "page": 1, "page_size": 50 }
 }
 ```
+
+---
+
+### 3.1a. Полнотекстовый поиск (BM25)
+
+```
+GET /registry/documents/search
+```
+
+Поиск по `doc_code`, `title`, `classifier_links` с использованием `ts_rank` + `pg_trgm`. 
+
+> **Внутренний эндпоинт.** Используется для межсервисного взаимодействия (RAG Search → Registry). Не предназначен для прямого вызова из UI. RBAC не применяется — запросы идут напрямую между сервисами, минуя Gateway.
+
+**Query-параметры:**
+
+| Параметр | Тип | Обязательность | Описание |
+|----------|-----|---------------|----------|
+| `q` | string | Да | Поисковый запрос (BM25 по `doc_code`, `title`, `classifier_links`) |
+| `limit` | int | Нет | Количество результатов (max 50, по умолчанию 10) |
+| `offset` | int | Нет | Смещение (по умолчанию 0) |
+
+**Ответ `200`:**
+
+```json
+{
+  "data": [
+    {
+      "document_id": 1,
+      "title": "Стойки установочные",
+      "doc_code": "20868-81",
+      "source_type": "GOST",
+      "score": 0.85
+    }
+  ],
+  "meta": { "total": 5, "page": 1, "page_size": 10 }
+}
+```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `data[].document_id` | bigint | ID документа |
+| `data[].title` | string | Название документа |
+| `data[].doc_code` | string \| null | Код документа |
+| `data[].source_type` | string \| null | Тип источника |
+| `data[].score` | float | Релевантность (BM25) |
+| `meta` | object | Пагинация (`total`, `page`, `page_size`) |
 
 ---
 

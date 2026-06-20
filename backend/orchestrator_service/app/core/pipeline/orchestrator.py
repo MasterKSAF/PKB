@@ -37,13 +37,17 @@ class PipelineOrchestrator:
         self.task_repo = TaskRepository(db)
 
     async def start_pipeline(
-        self, draft_id: int, task_id: int, file_key: str, mime_type: str
+        self, draft_id: int, task_id: int, file_key: str, mime_type: str,
+        metadata_fields: Optional[dict] = None,
     ) -> None:
         """Start the pipeline for a draft (preview phase).
 
         1. Validates task exists
         2. Creates TaskSteps for preview phase
         3. Enqueues preview Celery tasks
+
+        Args:
+            metadata_fields: Initial metadata from POST /drafts form (source_type, doc_code, etc.)
         """
         task = await self.task_repo.get_task(task_id)
         if not task:
@@ -88,12 +92,15 @@ class PipelineOrchestrator:
 
         # Create TaskSteps
         # Step 0: upload
+        upload_input = {"file_key": file_key, "draft_id": draft_id}
+        if metadata_fields:
+            upload_input["metadata_fields"] = metadata_fields
         upload_step = await self.task_repo.create_task_step(
             task_id=task_id,
             step_name="upload",
             step_index=0,
             service_name="Orchestrator",
-            input_data={"file_key": file_key, "draft_id": draft_id},
+            input_data=upload_input,
         )
 
         # Step 1: preview OCR/Parser
@@ -513,19 +520,37 @@ class PipelineOrchestrator:
         try:
             # Collect preview metadata from steps
             steps = await self.task_repo.get_task_steps(task_id)
+            # Priority (low → high):
+            #   0. Upload step: form-provided metadata_fields (POST /drafts)
+            #   1. OCR/Parser extracted metadata
+            #   2. Converter validated metadata
+            #   3. User metadata_overrides (PATCH /decide)
+            upload_step = next(
+                (s for s in steps if s.step_name == "upload"), None
+            )
             preview_step = next(
                 (s for s in steps if s.step_name == "preview_ocr"), None
             )
             converter_step = next(
                 (s for s in steps if s.step_name == "preview_converter"), None
             )
-            # Use converter metadata (validated) first, fallback to OCR/Parser
+            # Start with metadata_fields from upload form (if any)
             snapshot_metadata = {}
+            if upload_step and upload_step.input_data:
+                form_meta = upload_step.input_data.get("metadata_fields", {})
+                if form_meta:
+                    snapshot_metadata.update(form_meta)
+            # Then OCR/Parser extracted metadata (overrides form fields)
+            if preview_step and preview_step.output_data:
+                ocr_meta = preview_step.output_data.get("metadata", {})
+                if ocr_meta:
+                    snapshot_metadata.update(ocr_meta)
+            # Then Converter validated metadata (highest from processing)
             if converter_step and converter_step.output_data:
-                snapshot_metadata = converter_step.output_data.get("metadata", {})
-            if not snapshot_metadata and preview_step and preview_step.output_data:
-                snapshot_metadata = preview_step.output_data.get("metadata", {})
-            # Merge metadata_overrides on top
+                conv_meta = converter_step.output_data.get("metadata", {})
+                if conv_meta:
+                    snapshot_metadata.update(conv_meta)
+            # Finally, user metadata_overrides on top
             if metadata_overrides:
                 snapshot_metadata.update(metadata_overrides)
 
@@ -829,7 +854,7 @@ class PipelineOrchestrator:
 
             # Run Saga compensation (rollback completed steps)
             saga = SagaCoordinator(self.db)
-            await saga.compensate(task_id, step_name)
+            await saga.compensate(task_id, step_name, task=task)
 
             # Update draft status
             try:

@@ -381,6 +381,7 @@ GET .../{doc_id}/status?longpoll=15
 | `POST /chat/sessions`, `GET /chat/sessions` (+ `/{id}`)   | ✓          | ✓                 | ✓              |
 | `PUT /chat/sessions/{id}`, `DELETE /chat/sessions/{id}`   | ✓          | ✓                 | ✓              |
 | `POST /chat/sessions/{id}/messages`                        | ✓          | ✓                 | ✓              |
+| `POST /chat/sessions/{id}/messages/search`                 | ✓          | ✓                 | ✓              |
 | `POST /chat/sessions/{id}/context`                         | ✓          | ✓                 | ✓              |
 | `POST /chat/sessions/{id}/export`                          | ✓          | ✓                 | ✓              |
 | `POST /chat/feedback`                                      | ✓          | ✓                 | ✓              |
@@ -439,7 +440,7 @@ GET .../{doc_id}/status?longpoll=15
 | `POST /auth/refresh`                  | 20 запросов / мин         | 5 мин               |                                    |
 | `POST /drafts`                        | 10 запросов / мин         | 1 мин               | Загрузка документов                |
 | `GET /documents` (+ `/{id}`, `/status`, `/file`, `/pages`) | 100 запросов / мин | 1 мин |                                    |
-| `POST /chat/sessions`, `POST /chat/sessions/{id}/messages`      | 30 запросов / мин         | 1 мин               | Чат и текстовые запросы            |
+| `POST /chat/sessions`, `POST /chat/sessions/{id}/messages`, `POST /chat/sessions/{id}/messages/search`      | 30 запросов / мин         | 1 мин               | Чат и текстовые запросы            |
 | `POST /chat/sessions/{id}/context`, `POST /chat/sessions/{id}/export` | 30 запросов / мин | 1 мин |
 | `POST /chat/feedback` | 30 запросов / мин | 1 мин |
 | `POST /text/search` | 30 запросов / мин | 1 мин | Текстовый поиск |

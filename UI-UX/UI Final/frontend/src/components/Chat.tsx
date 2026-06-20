@@ -358,7 +358,7 @@ export const Chat: React.FC = () => {
   };
 
   return (
-    <Box sx={{ display: 'flex', height: 'calc(100vh - 142px)', minHeight: 0 }}>
+    <Box sx={{ display: 'flex', height: '100%', minHeight: 0 }}>
       <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
         <Box sx={{ flexGrow: 1, overflowY: 'auto', py: 3 }}>
           <Container maxWidth="md">

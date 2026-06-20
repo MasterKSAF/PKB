@@ -22,7 +22,7 @@ class TestTaskStatus:
             "/api/v1/drafts/",
             headers=auth_header,
             files={"file": ("test.pdf", b"%PDF-1.4 mock content", "application/pdf")},
-            data={"document_key": key},
+            data={"document_key": key, "source_type": "GOST"},
         )
         assert response.status_code == 202
         return response.json()["task_id"]
@@ -173,7 +173,7 @@ class TestTaskWithoutAuth:
             "/api/v1/drafts/",
             headers=auth_header,
             files={"file": ("test.pdf", b"%PDF mock", "application/pdf")},
-            data={"document_key": "doc-task-no-auth", "title": "Test"},
+            data={"document_key": "doc-task-no-auth", "title": "Test", "source_type": "GOST"},
         )
         assert response.status_code == 202
         return response.json()["task_id"]

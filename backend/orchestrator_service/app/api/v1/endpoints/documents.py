@@ -917,7 +917,6 @@ async def reprocess_document(
     return ReprocessResponse(
         mode=request.mode,
         document_id=doc_id,
-        user_id=current_user.user_id,
         task_id=str(task.id),
         status="reprocessing_queued",
         created_at=datetime.now(UTC),

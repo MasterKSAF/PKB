@@ -323,6 +323,100 @@ body[data-pkb-theme='light'] .app-action-button.Mui-disabled {
   border-color: rgba(14, 116, 144, 0.12) !important;
 }
 
+.MuiButton-root.MuiButton-colorError {
+  color: #ee8f80 !important;
+  border-color: rgba(238, 143, 128, 0.48) !important;
+}
+
+.MuiButton-root.MuiButton-colorError.MuiButton-outlined,
+.MuiButton-root.MuiButton-colorError.MuiButton-text,
+.app-action-button.MuiButton-colorError {
+  background-color: rgba(238, 143, 128, 0.10) !important;
+  color: #ee8f80 !important;
+  border-color: rgba(238, 143, 128, 0.48) !important;
+}
+
+.MuiButton-root.MuiButton-colorError.MuiButton-outlined:hover,
+.MuiButton-root.MuiButton-colorError.MuiButton-text:hover,
+.app-action-button.MuiButton-colorError:hover {
+  background-color: rgba(238, 143, 128, 0.16) !important;
+  border-color: rgba(238, 143, 128, 0.62) !important;
+}
+
+.MuiButton-root.MuiButton-colorError.MuiButton-contained {
+  background-color: rgba(176, 61, 52, 0.88) !important;
+  color: #fff7f5 !important;
+  border: 1px solid rgba(238, 143, 128, 0.38) !important;
+}
+
+.MuiButton-root.MuiButton-colorError.MuiButton-contained:hover {
+  background-color: rgba(191, 73, 62, 0.94) !important;
+  border-color: rgba(238, 143, 128, 0.52) !important;
+}
+
+.MuiButton-root.MuiButton-colorError.Mui-disabled {
+  background-color: rgba(238, 143, 128, 0.06) !important;
+  color: rgba(238, 143, 128, 0.34) !important;
+  border-color: rgba(238, 143, 128, 0.13) !important;
+}
+
+.MuiMenuItem-root.app-danger-menu-item {
+  color: #ee8f80 !important;
+}
+
+.MuiMenuItem-root.app-danger-menu-item:hover,
+.MuiMenuItem-root.app-danger-menu-item.Mui-focusVisible {
+  background-color: rgba(238, 143, 128, 0.12) !important;
+  color: #f0a196 !important;
+}
+
+body[data-pkb-theme='light'] .MuiButton-root.MuiButton-colorError {
+  color: #991b1b !important;
+  border-color: rgba(153, 27, 27, 0.38) !important;
+}
+
+body[data-pkb-theme='light'] .MuiButton-root.MuiButton-colorError.MuiButton-outlined,
+body[data-pkb-theme='light'] .MuiButton-root.MuiButton-colorError.MuiButton-text,
+body[data-pkb-theme='light'] .app-action-button.MuiButton-colorError {
+  background-color: #fee2e2 !important;
+  color: #991b1b !important;
+  border-color: rgba(153, 27, 27, 0.40) !important;
+}
+
+body[data-pkb-theme='light'] .MuiButton-root.MuiButton-colorError.MuiButton-outlined:hover,
+body[data-pkb-theme='light'] .MuiButton-root.MuiButton-colorError.MuiButton-text:hover,
+body[data-pkb-theme='light'] .app-action-button.MuiButton-colorError:hover {
+  background-color: #fecaca !important;
+  border-color: rgba(153, 27, 27, 0.54) !important;
+}
+
+body[data-pkb-theme='light'] .MuiButton-root.MuiButton-colorError.MuiButton-contained {
+  background-color: #b91c1c !important;
+  color: #fff7f7 !important;
+  border-color: rgba(127, 29, 29, 0.40) !important;
+}
+
+body[data-pkb-theme='light'] .MuiButton-root.MuiButton-colorError.MuiButton-contained:hover {
+  background-color: #991b1b !important;
+  border-color: rgba(127, 29, 29, 0.52) !important;
+}
+
+body[data-pkb-theme='light'] .MuiButton-root.MuiButton-colorError.Mui-disabled {
+  background-color: rgba(153, 27, 27, 0.06) !important;
+  color: rgba(153, 27, 27, 0.34) !important;
+  border-color: rgba(153, 27, 27, 0.14) !important;
+}
+
+body[data-pkb-theme='light'] .MuiMenuItem-root.app-danger-menu-item {
+  color: #991b1b !important;
+}
+
+body[data-pkb-theme='light'] .MuiMenuItem-root.app-danger-menu-item:hover,
+body[data-pkb-theme='light'] .MuiMenuItem-root.app-danger-menu-item.Mui-focusVisible {
+  background-color: #fee2e2 !important;
+  color: #7f1d1d !important;
+}
+
 .app-action-button {
   min-height: 40px !important;
   border-radius: 8px !important;
