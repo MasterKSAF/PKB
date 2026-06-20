@@ -24,9 +24,18 @@ services:
       MOCK_RAG_ENABLED: "true"
       MOCK_REGISTRY_ENABLED: "true"
       MOCK_LLM_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "signoz-otel-collector:4317"
+      OTEL_EXPORTER_OTLP_INSECURE: "true"
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - default
+      - signoz-net
 
 volumes:
   pgdata:
+
+networks:
+  signoz-net:
+    external: true
