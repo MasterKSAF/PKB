@@ -272,7 +272,7 @@
 ║  ┌──────────────────────────────────────────────────────────┐    ║
 ║  │           sections — массив                              │    ║
 ║  │                                                          │    ║
-║  │  Общие поля: section_id, document_id, parent_id,         │    ║
+║  │  Общие поля: section_id, document_id, parent_id,         │
 ║  │  clause, title, level, path, page, type, created_at      │    ║
 ║  │  (bbox — ❌ удалён, не нужен для индексации)             │    ║
 ║  │                            │                             │    ║

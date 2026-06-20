@@ -56,8 +56,7 @@
 {
   "status": "ok",
   "service": "auth-service",
-  "version": "1.0.0",
-  "uptime_seconds": 123456
+  "version": "1.0.0"
 }
 ```
 
@@ -76,7 +75,6 @@
 | `status` | string | Статус сервиса: `ok`, `degraded`, `error` |
 | `service` | string | Идентификатор сервиса (см. таблицу портов) |
 | `version` | string | Версия сервиса |
-| `uptime_seconds` | int | Время работы с момента запуска |
 
 **Эндпоинты по сервисам:**
 
@@ -111,8 +109,8 @@
 | `document_id` | bigint (sequence) | Registry при создании карточки документа | `/documents/{document_id}/...` (после записи в Registry) |
 | `version_id` | bigint (sequence) | Оркестратором при создании новой версии | В ответах `POST /documents/{doc_id}/versions` |
 | `project_id` | bigint (sequence) | Query Service при создании проекта | `/chat/projects/{project_id}/...` |
-| `section_id` | bigint | Registry (sequence) при сохранении секции | В ответах Registry, RAG Builder |
-| `chunk_id` | bigint | RAG Builder при индексации | В ответах RAG Search |
+| `section_id` | bigint | Registry (sequence) при сохранении секции (стабилен внутри документа) | В ответах Registry, RAG Builder, **цитирование** |
+| `chunk_id` | bigint | RAG Builder при индексации (технический retrieval ID) | В ответах RAG Search, **не для цитирования** |
 | `session_id` | bigint | Query Service при создании сессии чата | `/chat/sessions/{session_id}/...` |
 | `message_id` | bigint | Query Service при создании сообщения | `/chat/sessions/{session_id}/messages/{message_id}` |
 | `history_id` | bigint (sequence) | Registry при записи события аудита | В ответах API аудита/истории |
@@ -383,6 +381,7 @@ GET .../{doc_id}/status?longpoll=15
 | `POST /chat/sessions`, `GET /chat/sessions` (+ `/{id}`)   | ✓          | ✓                 | ✓              |
 | `PUT /chat/sessions/{id}`, `DELETE /chat/sessions/{id}`   | ✓          | ✓                 | ✓              |
 | `POST /chat/sessions/{id}/messages`                        | ✓          | ✓                 | ✓              |
+| `POST /chat/sessions/{id}/messages/search`                 | ✓          | ✓                 | ✓              |
 | `POST /chat/sessions/{id}/context`                         | ✓          | ✓                 | ✓              |
 | `POST /chat/sessions/{id}/export`                          | ✓          | ✓                 | ✓              |
 | `POST /chat/feedback`                                      | ✓          | ✓                 | ✓              |
@@ -429,15 +428,9 @@ GET .../{doc_id}/status?longpoll=15
 
 ### Rate Limiting (ограничение запросов)
 
-> **✅ Реализовано**: Rate limiting middleware в Gateway (`gateway/rate_limiter.py`).
+> **⚠️ Статус реализации**: Лимиты, описанные ниже, вступают в силу после настройки Nginx (`limit_req`) в production. В текущей (мок) реализации rate limiting не применяется.
 >
-> **Бэкенд**: InMemory (достаточно для single-instance Gateway, состояние живёт в процессе).
->
-> **IDOR protection** (CM-3, GW-6): дополнительный лимит 30 запросов/мин к одному draft_id / document_id / session_id (блокировка 5 мин).
->
-> **Конфигурация**: `RATE_LIMIT_ENABLED=1`.
->
-> **429 ответ**: `{"error": {"code": "TOO_MANY_REQUESTS", "message": "...", "details": {"retry_after_seconds": N}}}` + заголовок `Retry-After`.
+> **⏳ Требует реализации в коде**: настройка Nginx `limit_req` модуль. Ответ `429 Too Many Requests` в мок-режиме не возвращается.
 
 Для защиты от перегрузок и DoS-атак на все эндпоинты через Gateway действуют следующие лимиты:
 
@@ -447,7 +440,7 @@ GET .../{doc_id}/status?longpoll=15
 | `POST /auth/refresh`                  | 20 запросов / мин         | 5 мин               |                                    |
 | `POST /drafts`                        | 10 запросов / мин         | 1 мин               | Загрузка документов                |
 | `GET /documents` (+ `/{id}`, `/status`, `/file`, `/pages`) | 100 запросов / мин | 1 мин |                                    |
-| `POST /chat/sessions`, `POST /chat/sessions/{id}/messages`      | 30 запросов / мин         | 1 мин               | Чат и текстовые запросы            |
+| `POST /chat/sessions`, `POST /chat/sessions/{id}/messages`, `POST /chat/sessions/{id}/messages/search`      | 30 запросов / мин         | 1 мин               | Чат и текстовые запросы            |
 | `POST /chat/sessions/{id}/context`, `POST /chat/sessions/{id}/export` | 30 запросов / мин | 1 мин |
 | `POST /chat/feedback` | 30 запросов / мин | 1 мин |
 | `POST /text/search` | 30 запросов / мин | 1 мин | Текстовый поиск |
