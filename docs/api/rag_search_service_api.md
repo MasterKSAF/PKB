@@ -47,7 +47,7 @@
 | 1 | Dense-поиск (Qwen3-Embedding-4B, VECTOR(2048), cosine) → top-N кандидатов | N=50 кандидатов |
 | 2 | Rerank (bge-reranker-v2-m3-int8) | top_k=10 результатов |
 
-> **P13-2 (разделение ролей BM25)**: В этом эндпоинте (RAG Search) **используется только dense + rerank**. BM25 применяется **только** для Registry Search (поиск по `doc_code` / `title` / `classifier_links`) — см. `registry_service_api.md` §«`GET /registry/search`». Реализация BM25 = `ts_rank` + `pg_trgm`.
+> **P13-2 (разделение ролей BM25)**: В этом эндпоинте (RAG Search) **используется только dense + rerank**. BM25 применяется **только** для Registry Search (поиск по `doc_code` / `title` / `classifier_links`) — см. `registry_service_api.md` §3.1a (`GET /registry/documents/search`). Реализация BM25 = `ts_rank` + `pg_trgm`.
 
 > **P13-3 (TEI rerank)**: rerank выполняется через **TEI-сервер** (text-embeddings-inference, локальный) с int8-квантизацией. URL — `app_settings.rag.rerank_url`.
 
