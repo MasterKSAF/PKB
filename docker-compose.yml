@@ -1,0 +1,653 @@
+# =============================================================================
+# PKB Neuroassistant — единый Docker Compose (корень репозитория)
+#
+# Запуск основного стека (12 микросервисов + инфраструктура):
+#   docker compose up -d --build
+#
+# Запуск с демо monitoring_service (SigNoz tutorial, НЕ production):
+#   docker compose --profile monitoring up -d --build
+#
+# Остановка:
+#   docker compose down
+#
+# Production (по docs/specifications/deployment.md и gateway_service/docker-compose.yml):
+#   - Точка входа: gateway_service (GATEWAY_MODE=real, :8080)
+#   - Отдельные контейнеры, сеть dmz/internal/data
+#   - analyse (:8089) — заморожен, не включён
+#   - monitoring_service — только demo/observability tutorial, не PKB prod
+#   - Embeddings: Infinity (локально) или внешний Qwen3 API
+#
+# Порядок запуска (depends_on):
+#
+#   [1] postgres, redis, minio, infinity
+#         │
+#   [2] db-init, minio-init  (one-shot)
+#         │
+#   [3] auth, registry, integration, parser, converter-validator
+#         │
+#   [4] rag-builder, rag-search  (→ postgres + infinity)
+#         │
+#   [5] query  (→ postgres + registry + rag-search)
+#         │
+#   [6] orchestrator  (→ postgres + redis + minio + parser + converter + registry + rag-*)
+#         │
+#   [7] gateway  (→ auth + все backend-сервисы)
+#
+# Порты сервисов (внутри сети = снаружи):
+#   gateway :8080   auth :8082        orchestrator :8081   query :8083
+#   registry :8084  integration :8085  converter-validator :8086
+#   parser :8087    rag-builder :8090  rag-search :8091
+#   infinity :7997
+# =============================================================================
+
+name: pkb
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+# --- Общие переменные БД ---
+x-env-db: &env-db
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DB_USERNAME: pkb
+  DB_PASSWORD: pkb
+  DB_SUPERUSER: pkb
+  DB_DATABASE: pkb_neuro
+  DATABASE_URL: postgresql+asyncpg://pkb:pkb@postgres:5432/pkb_neuro
+
+# --- MinIO ---
+x-env-minio: &env-minio
+  MINIO_ENDPOINT: minio:9000
+  MINIO_ACCESS_KEY: minioadmin
+  MINIO_SECRET_KEY: minioadmin
+  MINIO_BUCKET: documents
+  MINIO_IMAGE_BUCKET: images
+  MINIO_SECURE: "false"
+
+# --- JWT / admin ---
+x-env-auth: &env-auth
+  JWT_SECRET_KEY: ${JWT_SECRET_KEY:-pkb-neuroassistant-jwt-secret-key-2026-dev}
+  JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+  DEFAULT_ADMIN_EMAIL: ${DEFAULT_ADMIN_EMAIL:-admin@example.com}
+  DEFAULT_ADMIN_PASSWORD: ${DEFAULT_ADMIN_PASSWORD:-Admin1234!}
+
+# --- Embeddings (Infinity) ---
+x-env-embeddings: &env-embeddings
+  EMBEDDING_PROVIDER: openai_compatible
+  EMBEDDING_BASE_URL: http://infinity:7997
+  EMBEDDING_API_URL: http://infinity:7997
+  EMBEDDING_MODEL: ${INFINITY_MODEL_ID:-Qwen/Qwen3-Embedding-0.6B}
+  EMBEDDING_DIM: "1024"
+  VECTOR_DIMENSION: "1024"
+  EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-sk-noop}
+  EMBEDDING_TIMEOUT: "60"
+
+# --- Межсервисные URL (Docker DNS) ---
+x-env-service-urls: &env-service-urls
+  AUTH_SERVICE_URL: http://auth:8082
+  ORCHESTRATOR_SERVICE_URL: http://orchestrator:8081
+  QUERY_SERVICE_URL: http://query:8083
+  REGISTRY_SERVICE_URL: http://registry:8084/api/v1
+  INTEGRATION_SERVICE_URL: http://integration:8085/api/v1
+  CONVERTER_VALIDATOR_SERVICE_URL: http://converter-validator:8086
+  CONVERTER_SERVICE_URL: http://converter-validator:8086
+  VALIDATE_SERVICE_URL: http://converter-validator:8086/api/v1
+  PARSER_SERVICE_URL: http://parser:8087
+  OCR_SERVICE_URL: http://parser:8087
+  RAG_BUILDER_SERVICE_URL: http://rag-builder:8090
+  RAG_SEARCH_SERVICE_URL: http://rag-search:8091
+  RAG_SERVICE_URL: http://rag-search:8091/api/v1
+
+services:
+
+  # ===========================================================================
+  # L4: Инфраструктура
+  # ===========================================================================
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: pkb-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pkb
+      POSTGRES_PASSWORD: pkb
+      POSTGRES_DB: pkb_neuro
+    ports:
+      - "${POSTGRES_PORT:-15432}:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pkb -d pkb_neuro"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - pkb-net
+    logging: *default-logging
+
+  redis:
+    image: redis:7-alpine
+    container_name: pkb-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-16379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - pkb-net
+    logging: *default-logging
+
+  minio:
+    # Не понижать версию: volume minio_data несовместим со старыми релизами
+    # (ошибка «Unknown xl meta version 3»). При смене major — удалить volume:
+    #   docker compose down && docker volume rm pkb_minio_data
+    image: minio/minio:latest
+    container_name: pkb-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "${MINIO_API_PORT:-19000}:9000"
+      - "${MINIO_CONSOLE_PORT:-19001}:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - pkb-net
+    logging: *default-logging
+
+  infinity:
+    build:
+      context: ./backend/infinity
+      dockerfile: Dockerfile.infinity
+    image: pkb/infinity:local
+    container_name: pkb-infinity
+    restart: unless-stopped
+    ports:
+      - "${INFINITY_PORT:-7997}:7997"
+    volumes:
+      - infinity_cache:/app/.cache
+    command: >
+      v2
+      --model-id ${INFINITY_MODEL_ID:-Qwen/Qwen3-Embedding-0.6B}
+      --port 7997
+      --engine ${INFINITY_ENGINE:-torch}
+      --device ${INFINITY_DEVICE:-cpu}
+      --no-bettertransformer
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:7997/health || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 1200s
+    networks:
+      - pkb-net
+    logging: *default-logging
+
+  # ===========================================================================
+  # Init jobs (one-shot)
+  # ===========================================================================
+
+  db-init:
+    build:
+      context: ./backend/service_checker/docker
+      dockerfile: Dockerfile.base
+    image: pkb/db-init:local
+    container_name: pkb-db-init
+    environment:
+      <<: [*env-db]
+    volumes:
+      - ./backend:/app/backend
+    entrypoint:
+      - /bin/bash
+      - -lc
+      - >-
+        sed -i 's/\r$//' /app/backend/service_checker/core/setup_db.py 2>/dev/null || true;
+        python /app/backend/service_checker/core/setup_db.py --docker
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - pkb-net
+    restart: "no"
+    logging: *default-logging
+
+  minio-init:
+    build:
+      context: ./backend/service_checker/docker
+      dockerfile: Dockerfile.base
+    image: pkb/minio-init:local
+    container_name: pkb-minio-init
+    environment:
+      <<: [*env-minio]
+    volumes:
+      - ./backend:/app/backend
+    entrypoint: ["python", "/app/backend/service_checker/docker/init_minio.py"]
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - pkb-net
+    restart: "no"
+    logging: *default-logging
+
+  # ===========================================================================
+  # L3: Микросервисы (production stack)
+  # ===========================================================================
+
+  auth:
+    build:
+      context: ./backend/auth_service
+      dockerfile: Dockerfile
+    image: pkb/auth:local
+    container_name: pkb-auth
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+    environment:
+      <<: [*env-db, *env-auth]
+      DATABASE_URL: postgresql+asyncpg://pkb:pkb@postgres:5432/pkb_neuro
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8082"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/api/v1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - pkb-net
+    logging: *default-logging
+
+  registry:
+    build:
+      context: ./backend/registry_service
+      dockerfile: Dockerfile
+    image: pkb/registry:local
+    container_name: pkb-registry
+    restart: unless-stopped
+    ports:
+      - "8084:8084"
+    environment:
+      <<: [*env-db]
+      DATABASE_URL: postgresql+asyncpg://pkb:pkb@postgres:5432/pkb_neuro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8084/api/v1/health/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - pkb-net
+    logging: *default-logging
+
+  integration:
+    build:
+      context: ./backend/integration_service
+      dockerfile: Dockerfile
+    image: pkb/integration:local
+    container_name: pkb-integration
+    restart: unless-stopped
+    ports:
+      - "8085:8085"
+    environment:
+      <<: [*env-db]
+    volumes:
+      - integration_data:/app/files1
+      - integration_data2:/app/files2
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8085/api/v1/integration/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - pkb-net
+    logging: *default-logging
+
+  parser:
+    build:
+      context: ./backend/parser_service
+      dockerfile: Dockerfile
+    image: pkb/parser:local
+    container_name: pkb-parser
+    restart: unless-stopped
+    ports:
+      - "8087:8087"
+    environment:
+      <<: [*env-minio]
+    depends_on:
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8087/api/v1/health', timeout=3)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - pkb-net
+    logging: *default-logging
+
+  converter-validator:
+    build:
+      context: ./backend/converter_validator_service
+      dockerfile: Dockerfile
+    image: pkb/converter-validator:local
+    container_name: pkb-converter-validator
+    restart: unless-stopped
+    ports:
+      - "8086:8086"
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://routerai.ru/api/v1}
+      REGISTRY_SERVICE_URL: http://registry:8084/api/v1
+    depends_on:
+      registry:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8086/health', timeout=3)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - pkb-net
+    logging: *default-logging
+
+  rag-builder:
+    build:
+      context: ./backend/rag_builder_service
+      dockerfile: Dockerfile
+    image: pkb/rag-builder:local
+    container_name: pkb-rag-builder
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    environment:
+      <<: [*env-db, *env-embeddings]
+      APP_PORT: "8090"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+      infinity:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/api/v1/health', timeout=3)\""]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    networks:
+      - pkb-net
+    logging: *default-logging
+
+  rag-search:
+    build:
+      context: ./backend/rag_search_service
+      dockerfile: Dockerfile
+    image: pkb/rag-search:local
+    container_name: pkb-rag-search
+    restart: unless-stopped
+    ports:
+      - "8091:8091"
+    environment:
+      <<: [*env-db, *env-embeddings]
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: pkb
+      POSTGRES_PASSWORD: pkb
+      POSTGRES_DB: pkb_neuro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+      infinity:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8091/api/v1/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - pkb-net
+    logging: *default-logging
+
+  query:
+    build:
+      context: ./backend/query_service
+      dockerfile: Dockerfile
+    image: pkb/query:local
+    container_name: pkb-query
+    restart: unless-stopped
+    ports:
+      - "8083:8083"
+    environment:
+      <<: [*env-db, *env-service-urls]
+      DEV_AUTH_MODE: ${DEV_AUTH_MODE:-true}
+      MOCK_RAG_ENABLED: ${MOCK_RAG_ENABLED:-false}
+      MOCK_REGISTRY_ENABLED: ${MOCK_REGISTRY_ENABLED:-false}
+      MOCK_LLM_ENABLED: ${MOCK_LLM_ENABLED:-true}
+      LLM_API_URL: ${LLM_API_URL:-https://routerai.ru/api/v1}
+      LLM_API_KEY: ${OPENAI_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+      registry:
+        condition: service_healthy
+      rag-search:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8083/api/v1/health', timeout=3)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - pkb-net
+    logging: *default-logging
+
+  orchestrator:
+    build:
+      context: ./backend/orchestrator_service
+      dockerfile: Dockerfile
+    image: pkb/orchestrator:local
+    container_name: pkb-orchestrator
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      <<: [*env-db, *env-minio, *env-auth, *env-service-urls]
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      REGISTRY_SERVICE_URL: http://registry:8084
+      PARSER_SERVICE_URL: http://parser:8087
+      OCR_SERVICE_URL: http://parser:8087
+      CONVERTER_SERVICE_URL: http://converter-validator:8086
+      RAG_SERVICE_URL: http://rag-builder:8090
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+      parser:
+        condition: service_healthy
+      converter-validator:
+        condition: service_healthy
+      registry:
+        condition: service_healthy
+      rag-builder:
+        condition: service_healthy
+      rag-search:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/api/v1/system/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - pkb-net
+    logging: *default-logging
+
+  gateway:
+    build:
+      context: ./backend/gateway_service
+      dockerfile: Dockerfile
+    image: pkb/gateway:local
+    container_name: pkb-gateway
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      <<: [*env-service-urls]
+      GATEWAY_MODE: real
+      GATEWAY_HOST: 0.0.0.0
+      GATEWAY_PORT: "8080"
+      ENV: ${ENV:-development}
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-0}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-*}
+    depends_on:
+      auth:
+        condition: service_healthy
+      orchestrator:
+        condition: service_healthy
+      query:
+        condition: service_healthy
+      registry:
+        condition: service_healthy
+      integration:
+        condition: service_healthy
+      converter-validator:
+        condition: service_healthy
+      parser:
+        condition: service_healthy
+      rag-builder:
+        condition: service_healthy
+      rag-search:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/system/health/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - pkb-net
+    logging: *default-logging
+
+  # ===========================================================================
+  # monitoring_service — НЕ production PKB, demo для SigNoz/OpenTelemetry
+  # Запуск: docker compose --profile monitoring up -d
+  # Требует внешнюю сеть signoz-net (SigNoz stack)
+  # ===========================================================================
+
+  monitoring-service-a:
+    profiles: [monitoring]
+    build:
+      context: ./backend/monitoring_service/services
+      dockerfile: service_a/Dockerfile
+    container_name: pkb-monitoring-a
+    ports:
+      - "8100:8000"
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-signoz-otel-collector:4317}
+      OTEL_EXPORTER_OTLP_INSECURE: "true"
+    networks:
+      - pkb-net
+      - signoz-net
+    logging: *default-logging
+
+  monitoring-service-b:
+    profiles: [monitoring]
+    build:
+      context: ./backend/monitoring_service/services
+      dockerfile: service_b/Dockerfile
+    container_name: pkb-monitoring-b
+    ports:
+      - "8101:8001"
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-signoz-otel-collector:4317}
+      OTEL_EXPORTER_OTLP_INSECURE: "true"
+    networks:
+      - pkb-net
+      - signoz-net
+    logging: *default-logging
+
+  monitoring-service-c:
+    profiles: [monitoring]
+    build:
+      context: ./backend/monitoring_service/services
+      dockerfile: service_c/Dockerfile
+    container_name: pkb-monitoring-c
+    ports:
+      - "8102:8002"
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-signoz-otel-collector:4317}
+      OTEL_EXPORTER_OTLP_INSECURE: "true"
+      SERVICE_A_URL: http://monitoring-service-a:8000
+      SERVICE_B_URL: http://monitoring-service-b:8001
+    depends_on:
+      - monitoring-service-a
+      - monitoring-service-b
+    networks:
+      - pkb-net
+      - signoz-net
+    logging: *default-logging
+
+networks:
+  pkb-net:
+    driver: bridge
+  signoz-net:
+    external: true
+    name: signoz-net
+
+volumes:
+  pg_data:
+  minio_data:
+  infinity_cache:
+  integration_data:
+  integration_data2:
