@@ -23,7 +23,6 @@
 **Специфичные коды ошибок:**
 | HTTP | `error.code` | Описание |
 |------|-------------|----------|
-| 500 | `BUILD_FAILED` | Ошибка построения чанков, эмбеддингов или очистки старого индекса |
 
 ---
 
@@ -44,7 +43,7 @@
 Построение чанков, вычисление embeddings и индексация документа.  
 Вызывается Orchestrator после завершения Пайплайна 1.
 
-**Proцесс внутри:**
+**Процесс внутри:**
 
 | Шаг | Действие | Результат |
 |---|---|---|
@@ -160,7 +159,7 @@ Orchestrator получает JSON из Registry (через `GET /registry/docu
 | `sections[].title` | string | Нет | Заголовок секции |
 | `sections[].level` | int | Нет | Уровень вложенности секции (1 — корневой) |
 | `sections[].path` | string | Да | Путь секции (напр. "1.2.3") |
-| `sections[].page` | int | Hет | Номер страницы (**1-based** — первая страница документа = 1) |
+| `sections[].page` | int | Нет | Номер страницы (**1-based** — первая страница документа = 1) |
 | `sections[].bbox` | array[float] | Нет | Координаты на странице: `[x1, y1, x2, y2]` (**нормализованные 0..1**). См. [common_api.md](common_api.md#координаты-блоков-bbox) |
 | `sections[].type` | string | Да | Тип секции: `text`, `textBlock`, `table`, `image`, `list`, `formula`, `headerFooter` |
 | `sections[].content` | object/jsonb | Да | Содержимое секции (JSONB, см. `registry_for_rag_v2`) |
@@ -207,13 +206,7 @@ Orchestrator получает JSON из Registry (через `GET /registry/docu
       "section_id": 420010
     }
   ],
-  "errors": [
-    {
-      "code": "CHUNKING_FAILED",
-      "message": "Ошибка разбивки секции 420015: превышен лимит токенов",
-      "section_id": 420015
-    }
-  ]
+  "errors": []
 }
 ```
 
@@ -234,7 +227,6 @@ Orchestrator получает JSON из Registry (через `GET /registry/docu
 | `errors` | array | Массив критических ошибок (индексация не завершена) |
 | `errors[].code` | string | Код ошибки |
 | `errors[].message` | string | Описание |
-| `errors[].section_id` | bigint \| null | ID секции, к которой относится ошибка |
 
 ---
 

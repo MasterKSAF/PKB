@@ -41,6 +41,12 @@
 | `has_notifications` | orchestrator (GET /drafts, GET /tasks/{id}/status) | — | — | — |
 | `critical_count` | orchestrator (GET /drafts, GET /tasks/{id}/status) | — | — | — |
 | `pipeline_type` | orchestrator (GET /tasks query) | — | — | — |
+| `rag_documents` | rag_builder, rag_search | pipeline2-indexation | `rag.document_chunks` | — |
+| `rag_document_chunks` | rag_builder, rag_search | pipeline2-indexation, pipeline3-search | `rag.document_chunks` | — |
+| `indexing_txn_id` | rag_builder | pipeline2-indexation | `rag.document_chunks.indexing_txn_id` | — |
+| `chunk_id` | rag_search | pipeline3-search | `rag.document_chunks.id` | — |
+| `search_mode` | rag_search | pipeline3-search | `app_settings.rag.search_strategy` | — |
+| `embedding_dim` | rag_builder, rag_search | pipeline2-indexation | `app_settings.rag.embedding_dim` | — |
 
 ---
 

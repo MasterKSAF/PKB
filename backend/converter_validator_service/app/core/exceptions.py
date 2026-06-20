@@ -36,7 +36,7 @@ class ConversionFailedError(ConverterValidatorError):
 class ValidationFailedError(ConverterValidatorError):
     def __init__(self, message: str, details: dict | None = None):
         super().__init__(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             error_code="VALIDATION_FAILED",
             message=message,
             details=details,
@@ -46,7 +46,7 @@ class ValidationFailedError(ConverterValidatorError):
 class MetadataExtractionFailedError(ConverterValidatorError):
     def __init__(self, message: str, details: dict | None = None):
         super().__init__(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             error_code="METADATA_EXTRACTION_FAILED",
             message=message,
             details=details,
@@ -66,7 +66,7 @@ class MetadataValidationError(ConverterValidatorError):
 class NormalizationFailedError(ConverterValidatorError):
     def __init__(self, message: str, details: dict | None = None):
         super().__init__(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             error_code="NORMALIZATION_FAILED",
             message=message,
             details=details,

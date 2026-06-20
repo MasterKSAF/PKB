@@ -268,3 +268,69 @@
 
 ### Результат
 - [x] **408 passed** (все тесты)
+
+---
+
+## 🔴 Блок 12. Синхронизация документации с новыми фиксами API (20.06)
+
+### 12.1 rag_builder_service_api.md
+- [x] ✅ Заполнить пустую таблицу error codes (добавить BUILD_FAILED)
+- [x] ✅ Добавить пример errors в финальный ответ JSON
+- [x] ✅ Проверить, что все поля sections корректно описаны
+
+### 12.2 rag_search_service_api.md
+- [x] ✅ Проверить соответствие RS-6 (query/valid_at/filters — без search_type/top_k/rerank/version_id) — уже соответствует
+- [x] ✅ Убедиться, что source + retrieval + context[] полностью описаны — уже описаны
+
+### 12.3 query_service_api.md
+- [x] ✅ POST /ask: таблица полей sources — добавить `clause` и `path` (в JSON есть, в таблице нет)
+- [x] ✅ Проверить, что везде sources — плоская структура (без retrieval-метаданных) — везде соответствует
+
+### 12.4 pipeline3-search.md
+- [x] ✅ Проверить валидацию по индексу sources (не chunk_id) — уже соответствует
+- [x] ✅ Исправлен citation_validator.py: 0-based (idx >= 0 вместо idx >= 1)
+
+### 12.5 glossary.md
+- [x] ✅ Проверить определения section_id/chunk_id — уточнены
+
+### 12.6 specificity.md
+- [x] ✅ Зафиксировать новые архитектурные решения по API фиксам
+- [x] ✅ Обновить раздел расхождений (добавлен 2.4)
+
+### 12.7 guide.md
+- [x] ✅ Проверить актуальность относительно новых API-контрактов — актуален (высокоуровневые принципы, не требует правок)
+
+---
+
+## 🟠 Блок 13. Правки кода под новые API-контракты (20.06)
+
+### 13.1 requests.py
+- [x] ✅ `RagIndexRequest` → `RagBuildRequest` (sections вместо chunks + protected_spans + options)
+- [x] ✅ Добавлен `RagBuildResponse` (202 Accepted: document_id + indexing_txn_id + status)
+- [x] ✅ `RagSearchRequest`: убраны `top_k`/`search_type`, добавлен `valid_at`
+- [x] ✅ Обновлён `__init__.py` (импорты)
+
+### 13.2 rag_client.py
+- [x] ✅ endpoint `/rag/index` → `/rag/build`
+- [x] ✅ `index_document()`: sections вместо chunks, async 202 + polling
+- [x] ✅ Добавлен `get_build_status()` (GET /rag/build/{doc_id}/status)
+- [x] ✅ `search()`: убраны top_k/search_type, добавлен valid_at
+- [x] ✅ Mock-ответы под новый формат (source + retrieval + context)
+- [x] ✅ DELETE `/rag/index/` → `/rag/build/`
+- [x] ✅ check_index `/rag/index/` → `/rag/build/`
+
+### 13.3 pipeline_indexation.py
+- [x] ✅ Обработка 202 Accepted (async build)
+- [x] ✅ Polling статуса через `get_build_status()`
+- [x] ✅ `chunks_count` вместо `indexed_count`
+- [x] ✅ Integrity check по `final_status == "failed"`
+- [x] ✅ Фетчинг sections из Registry (`GET /registry/documents/{doc_id}/sections`) перед `index_document()`
+- [x] ✅ `run_reprocess_step` — тоже фетчит sections из Registry
+
+### 13.4 citation_validator.py
+- [x] ✅ 1-based → 0-based (idx >= 0)
+
+### 13.5 tests
+- [x] ✅ `test_service_clients_rag.py` — новые тесты под RS-6/RS-7 контракты
+- [x] ✅ `test_integrity_check.py` — тесты под новую логику integrity
+- [x] ✅ `test_citation_validator.py` — `test_invalid_zero_index` → `test_valid_zero_index`

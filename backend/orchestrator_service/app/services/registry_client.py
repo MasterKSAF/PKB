@@ -167,6 +167,10 @@ class RegistryServiceClient(ServiceClient):
                     storage, doc_id, kwargs.get("json", {})
                 )
 
+            # --- Document sections for RAG Builder (RS-6/RS-7) ---
+            if sub == "sections" and method == "GET":
+                return self._mock_get_document_sections(storage, doc_id)
+
             if sub is None:
                 if method == "GET":
                     return self._mock_get_document(storage, doc_id)
@@ -412,6 +416,57 @@ class RegistryServiceClient(ServiceClient):
         return {"data": {"deleted": True, "document_id": doc_id}}
 
     @classmethod
+    def _mock_get_document_sections(cls, storage: dict, doc_id: int) -> dict:
+        """Mock for GET /registry/documents/{doc_id}/sections.
+
+        Returns document metadata + sections[] as expected by RAG Builder.
+        """
+        doc = storage["documents"].get(doc_id)
+        if doc is None and doc_id in cls._SEED_DOCUMENTS:
+            doc = dict(cls._SEED_DOCUMENTS[doc_id])
+        if doc is None:
+            return {
+                "error": {
+                    "code": "NOT_FOUND",
+                    "message": f"Document {doc_id} not found",
+                }
+            }
+        # Return sections from stored doc body or generate mock sections
+        sections = doc.get("sections", [])
+        if not sections:
+            sections = [
+                {
+                    "section_id": doc_id * 100 + 1,
+                    "document_id": doc_id,
+                    "parent_id": None,
+                    "clause": "1",
+                    "title": None,
+                    "level": 1,
+                    "path": "1",
+                    "page": 1,
+                    "type": "text",
+                    "content": {
+                        "text": f"Mock section content for document {doc_id}.",
+                        "amendments": [],
+                    },
+                }
+            ]
+        return {
+            "data": {
+                "document": {
+                    "id": doc_id,
+                    "doc_code": doc.get("doc_code", ""),
+                    "title": doc.get("title", ""),
+                    "era": doc.get("era", "CURRENT"),
+                    "validity_status": doc.get("status", "active"),
+                },
+                "sections": sections,
+                "terminology": doc.get("terminology", []),
+                "references": doc.get("references", []),
+            }
+        }
+
+    @classmethod
     def _mock_check_uniqueness(cls, storage: dict, body: dict) -> dict:
         file_hash = body.get("file_hash_sha256", "")
         is_duplicate = False
@@ -515,6 +570,47 @@ class RegistryServiceClient(ServiceClient):
             "DELETE",
             f"/registry/documents/{document_id}",
             mock_response={"data": {"deleted": True, "document_id": document_id}},
+        )
+
+    async def get_document_sections(self, document_id: int) -> dict:
+        """Get document with sections for RAG Builder.
+
+        GET /registry/documents/{doc_id}/sections
+        Returns document metadata + sections[] + terminology + references.
+        """
+        return await self.call(
+            "GET",
+            f"/registry/documents/{document_id}/sections",
+            mock_response={
+                "data": {
+                    "document": {
+                        "id": document_id,
+                        "doc_code": "",
+                        "title": f"Document {document_id}",
+                        "era": "CURRENT",
+                        "validity_status": "active",
+                    },
+                    "sections": [
+                        {
+                            "section_id": document_id * 100 + 1,
+                            "document_id": document_id,
+                            "parent_id": None,
+                            "clause": "1",
+                            "title": None,
+                            "level": 1,
+                            "path": "1",
+                            "page": 1,
+                            "type": "text",
+                            "content": {
+                                "text": f"Mock section content for document {document_id}.",
+                                "amendments": [],
+                            },
+                        }
+                    ],
+                    "terminology": [],
+                    "references": [],
+                }
+            },
         )
 
     async def list_documents(

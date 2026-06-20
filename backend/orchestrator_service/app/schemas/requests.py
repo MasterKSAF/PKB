@@ -82,23 +82,57 @@ class ParserProcessRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-#  RAG (Vector Search) Service
+#  RAG (Vector Search) Service — RS-6/RS-7 контракты (20.06)
 # ---------------------------------------------------------------------------
 
-class RagIndexRequest(BaseModel):
-    """Request body for POST /rag/index."""
+class RagBuildRequest(BaseModel):
+    """Request body for POST /rag/build.
+
+    Соответствует спецификации rag_builder_service_api.md (RS-6/RS-7):
+    - document_id + sections[] (типизированная структура секций)
+    - section_id стабилен, старый индекс удаляется перед переиндексацией
+    - chunk_id — технический retrieval ID, не用于 цитирования
+    """
+
+    document_id: str = Field(..., description="ID документа в Registry")
+    sections: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Секции документа для индексации: section_id, parent_id, clause, title, level, path, page (1-based), bbox (0..1), type, content",
+    )
+    protected_spans: Optional[List[Dict[str, Any]]] = Field(
+        None,
+        description="Защищённые span'ы: {section_id, start_offset, end_offset}",
+    )
+    options: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Параметры индексации: strategy (semantic_1024)",
+    )
+
+
+class RagBuildResponse(BaseModel):
+    """Response from POST /rag/build (202 Accepted)."""
 
     document_id: str = Field(..., description="ID документа")
-    chunks: List[Dict[str, Any]] = Field(..., description="Чанки для индексации")
+    task_id: Optional[str] = Field(None, description="ID задачи")
+    indexing_txn_id: Optional[str] = Field(None, description="ID транзакции индексации")
+    status: str = Field("indexing", description="Статус: indexing")
 
 
 class RagSearchRequest(BaseModel):
-    """Request body for POST /rag/search."""
+    """Request body for POST /rag/search.
+
+    RS-6: только query + valid_at + filters.
+    search_type, top_k, rerank, version_id — ТОЛЬКО из app_settings.
+    """
 
     query: str = Field(..., description="Поисковый запрос")
-    top_k: int = Field(5, description="Количество результатов")
-    filters: Dict[str, Any] = Field(default_factory=dict, description="Фильтры поиска")
-    search_type: str = Field("hybrid", description="Тип поиска (vector/hybrid/keyword)")
+    valid_at: Optional[str] = Field(
+        None, description="Дата, на которую документы active (YYYY-MM-DD)"
+    )
+    filters: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Фильтры: document_type[], category_ids[], document_ids[]",
+    )
 
 
 class RagGenerateRequest(BaseModel):

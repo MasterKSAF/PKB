@@ -41,7 +41,7 @@ def validate_citation_format(text: Optional[str]) -> bool:
             idx_str = SOURCE_PATTERN.match(citation).group(1)
             try:
                 idx = int(idx_str)
-                if idx < 1:
+                if idx < 0:
                     logger.warning(f"Citation index out of range: {idx}")
                     return False
             except ValueError:

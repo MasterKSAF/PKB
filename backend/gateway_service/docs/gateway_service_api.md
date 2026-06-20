@@ -46,6 +46,8 @@ Gateway объединяет API всех внутренних сервисов 
 | `/api/v1/drafts/*` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md) |
 | `/api/v1/chat/*` | Query Service | `8083` | [query_service_api.md](query_service_api.md) |
 | `/api/v1/text/*` | Query Service | `8083` | [query_service_api.md](query_service_api.md) |
+| `/api/v1/search/*` | Query Service | `8083` | [query_service_api.md](query_service_api.md) — группа search |
+| `/api/v1/ask` | Query Service | `8083` | [query_service_api.md](query_service_api.md) — POST /ask |
 | `/api/v1/registry/classifiers/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
 | `/api/v1/registry/terminology/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
 | `/api/v1/registry/common/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
@@ -76,6 +78,8 @@ Gateway объединяет API всех внутренних сервисов 
 
 | Метод | Путь | Описание | RBAC |
 |-------|------|----------|------|
+| `GET` | `/api/v1/tasks` | Список задач с фильтрацией | `system_admin` |
+| `GET` | `/api/v1/tasks/stats` | Статистика по задачам | `system_admin` |
 | `GET` | `/api/v1/tasks/{task_id}/status` | Статус задачи с этапами и промежуточными данными | `system_admin`, `knowledge_admin` |
 | `GET` | `/api/v1/tasks/{task_id}/steps` | Детальные шаги задачи с input/output JSON | `system_admin`, `knowledge_admin` |
 
@@ -101,11 +105,12 @@ Registry drafts — только internal, доступ к ним через Gat
 | `POST` | `/api/v1/drafts` | Загрузка файла, создание черновика | `engineer` + `can_upload_documents` | ✅ `Idempotency-Key` |
 | `GET`  | `/api/v1/drafts` | Список черновиков (фильтр: `draft_id`, `document_key`, `status`). Без фильтров — все черновики (admin) | `engineer`, `knowledge_admin`, `system_admin` | — |
 | `GET`  | `/api/v1/drafts/{draft_id}` | Полная информация о черновике (с `raw_data`) | `engineer`, `knowledge_admin`, `system_admin` | — |
+| `GET`  | `/api/v1/drafts/{draft_id}/tasks` | Список задач для черновика (история reprocess) | `system_admin`, `knowledge_admin` | — |
 | `GET`  | `/api/v1/drafts/{draft_id}/preview` | Preview-метаданные (без `raw_data`) | `engineer`, `knowledge_admin`, `system_admin` | — |
 | `POST` | `/api/v1/drafts/{draft_id}/preview` | Запуск preview-фазы | `engineer`, `knowledge_admin`, `system_admin` | — |
 | `GET`  | `/api/v1/drafts/{draft_id}/preview/status` | Статус preview (longpoll) | `engineer`, `knowledge_admin`, `system_admin` | — |
 | `PATCH`| `/api/v1/drafts/{draft_id}/decide` | Решение: `approve` / `reject` / `confirm`. Опционально `metadata_overrides` (ручные правки метаданных) | `engineer`, `knowledge_admin`, `system_admin` | — |
-| `PATCH`| `/api/v1/drafts/{draft_id}/metadata` | **S5**: Сохранение ручных правок метаданных черновика (без принятия решения). Пересчёт бизнес-ключа и проверка уникальности | `engineer`, `knowledge_admin`, `system_admin` | — |
+| `PATCH`| `/api/v1/drafts/{draft_id}/metadata` | **S5**: Сохранение ручных правок метаданных черновика (без принятия решения). **Пересчёт бизнес-ключа через Converter-validator** (`POST /validate/metadata`) и проверка уникальности | `engineer`, `knowledge_admin`, `system_admin` | — |
 | `DELETE`| `/api/v1/drafts/{draft_id}` | Удаление черновика (soft) | `knowledge_admin`, `system_admin` | — |
 
 > Полное описание форматов запросов/ответов и FSM — см. [orchestrator_service_api.md](orchestrator_service_api.md#группа-drafts).
