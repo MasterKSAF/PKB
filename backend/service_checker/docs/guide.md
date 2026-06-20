@@ -171,6 +171,51 @@ DB CHECK-ограничения, DDL-миграции и спецификаци�
 - Ссылки на файлы: полный относительный путь от `docs/`.
 - DDL-миграции описываются в табличном/списочном виде, без SQL-кода. CHECK-ограничения, FK, индексы — списком или таблицей. Для DBA эквивалентный SQL восстанавливается из описания однозначно (см. `docs/database/ddl_migrations_17_06.md`).
 
+## Ориентир при тестировании сервисов в Docker
+
+**Дата:** 20.06.2026
+
+При проверке работоспособности сервисов в Docker **единственным ориентиром**
+являются интеграционные тесты (`recheck.bat`), а не unit-тесты (`pytest tests/`).
+
+### Почему
+
+- Unit-тесты проверяют логику самого checker'а (парсинг, отчёты, pipeline-шаги).
+  Они не требуют Docker и не проверяют сервисы.
+- Интеграционные тесты (`recheck.bat`) реально запускают контейнеры,
+  выполняют health check всех сервисов, API Coverage Test и Pipeline Testing.
+- Только `recheck.bat` показывает, работают ли сервисы в Docker корректно.
+
+### Что это значит на практике
+
+1. **После изменений в checker'е** — `python -m pytest tests/` (216 тестов) — базовая проверка.
+2. **После изменений в сервисах** — `docker/recheck.bat` — эталонная проверка.
+3. **При несовпадении результатов** — истиной считается `recheck.bat`.
+   Если unit-тесты проходят, а `recheck.bat` падает — проблема в сервисах или Docker, не в checker'е.
+4. **Добавление нового сервиса в Docker** — он должен быть отражён в:
+   - `DOCKER_SUPERVISOR_SERVICES` (core/docker.py) — HTTP health check
+   - `.err` log files (core/docker.py) — мониторинг ошибок
+   - `supervisord.conf` (docker/) — запуск процесса
+   - `services/*.py` — эндпоинты для API Coverage Test
+   - `MODE_PORTS` (services/__init__.py) — порт сервиса
+
+### Команды для проверки
+
+```bash
+# Unit-тесты (быстрая проверка checker'а, без Docker)
+python -m pytest tests/ -q
+
+# Полная проверка сервисов в Docker
+docker/recheck.bat
+
+# Или пошагово:
+python -m service_checker docker --action health       # Health check
+python -m service_checker docker --action db-check     # БД
+python -m service_checker docker --action full-report  # Полный отчёт
+```
+
+---
+
 ## Конвенция нейминга полей
 
 | Суффикс | Семантика | Тип | Описание |

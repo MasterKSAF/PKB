@@ -150,7 +150,7 @@ DOCKER_SERVICE_NAMES = {
     "redis": "Redis (cache + broker)",
     "minio": "MinIO (S3-совместимое хранилище)",
     "tei": "TEI (Text Embeddings Inference)",
-    "app": "Python-сервисы (10 процессов под supervisord)",
+    "app": "Python-сервисы (11 процессов под supervisord)",
 }
 
 # ── Pipeline -> service mapping для сводной таблицы ─────────────────

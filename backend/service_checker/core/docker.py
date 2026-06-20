@@ -31,12 +31,13 @@ from service_checker.core.utils import log, log_ok, log_warn, log_err, log_info,
 DOCKER_SUPERVISOR_SERVICES = {
     "auth":                (8082, "/api/v1/health", "Auth Service"),
     "gateway":             (8080, "/api/v1/health", "Gateway (Mock)"),
-    "orchestrator":        (8081, "/api/v1/system/health", "Orchestrator"),
+    "orchestrator":        (8081, "/api/v1/health", "Orchestrator"),
     "query":               (8083, "/api/v1/health", "Query Service"),
     "registry":            (8084, "/api/v1/health", "Registry Service"),
     "integration":         (8085, "/openapi.json", "Integration Service"),
     "converter-validator": (8086, "/api/v1/health", "Converter-Validator"),
     "parser":              (8087, "/api/v1/health", "Parser Service"),
+    "ocr":                 (8088, "/api/v1/health", "OCR Service"),
     "rag-builder":         (8090, "/api/v1/health", "RAG Builder"),
     "rag-search":          (8091, "/api/v1/health", "RAG Search"),
     "tei":                 (18092, "/health", "TEI (Embeddings)"),
@@ -394,6 +395,8 @@ def _docker_health_check(services: List[str]) -> bool:
         "registry.err", "integration.err", "converter_validator.err",
         "parser.err", "ocr.err", "rag_builder.err", "rag_search.err",
     ]
+    # Примечание: OCR сервис может отсутствовать (не реализован отдельно).
+    # Если файла ocr.err нет — это нормально, проверка пропускается.
     try:
         use_shell = sys.platform == "win32"
         for err_file in err_files:

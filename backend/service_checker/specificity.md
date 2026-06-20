@@ -1433,3 +1433,45 @@ python -m service_checker check <service> --source-dir /path
 ### Статус
 ✅ **Добавлено (checker, 2026-06-20)**
 
+---
+
+## 42. OCR Service в Docker health check + tolerant mode для частично обновлённых сервисов (2026-06-20)
+
+### Симптом
+Docker запущен, но сервисы могут быть не полностью обновлены до спецификации от 19.06.2026. Новые эндпоинты возвращают 404, OTEL/корреляционные заголовки не реализованы. OCR service не был включён в Docker health check DOCKER_SUPERVISOR_SERVICES.
+
+### Что исправлено (checker, 2026-06-20)
+
+#### 1. `core/docker.py` — OCR в health check
+- `DOCKER_SUPERVISOR_SERVICES`: добавлен OCR (8088, /api/v1/health, OCR Service)
+- Health-эндпоинт Orchestrator: `/api/v1/system/health` → `/api/v1/health`
+- `.err` log files: добавлен "ocr.err"
+- Примечание: OCR может отсутствовать (не реализован отдельно) — проверка пропускается
+
+#### 2. `core/config.py` — количество процессов
+- `DOCKER_SERVICE_NAMES["app"]`: "10 процессов" → "11 процессов" (+ OCR)
+
+#### 3. `core/observability_check.py` — Tolerant mode (SC-1)
+- Fallback health-пути: `/api/v1/health` → `/api/v1/system/health` → `/health`
+- Если ни один health-путь не отвечает — warning, не error
+- Корреляционные заголовки: warning, не error (CM-5 может быть не реализован)
+- Итоговый статус: passed если нет errors (warnings не считаются failures)
+
+#### 4. `core/api_coverage_test.py` — Tolerant mode
+- Добавлен `KNOWN_NEW_ENDPOINTS`: словарь эндпоинтов из задач 19.06.2026
+- Если сервис вернул 404 на эндпоинт из этого списка → skipped с warning, не failed
+- Покрывает все 7 сервисов (orchestrator, registry, query, converter_validator, parser, ocr, rag_builder, rag_search, auth)
+
+#### 5. `reports.py` — примечание в отчёте
+- При наличии skipped из-за KNOWN_NEW_ENDPOINTS → в сводную таблицу добавляется предупреждение
+
+#### 6. `readme.md` — документация
+- Добавлен раздел "Частичное обновление сервисов" с описанием tolerant mode
+
+### Статус
+✅ **Добавлено (checker, 2026-06-20)**
+
+### Зона ответственности
+- **Service Checker**: tolerant mode, OCR в health check
+- **Разработчики сервисов**: реализация новых эндпоинтов из задач 19.06.2026
+

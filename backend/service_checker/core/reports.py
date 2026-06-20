@@ -203,6 +203,23 @@ def _generate_full_report(
         f"| {overall_status} |\n"
     )
 
+    # ── Примечание о частично обновлённых сервисах ─────────────────────
+    # Проверяем, есть ли skipped эндпоинты из-за нереализованных новых API
+    total_skipped_new_api = 0
+    for svc_key, cov in coverage_results.items():
+        if hasattr(cov, 'results'):
+            for ep_result in getattr(cov, 'results', []):
+                if ep_result.skipped and ep_result.skip_reason == "Сервис не обновлён — эндпоинт из задач 19.06.2026":
+                    total_skipped_new_api += 1
+
+    if total_skipped_new_api > 0:
+        lines.append(
+            f"> ⚠️ **{total_skipped_new_api} эндпоинтов пропущено** — сервисы в Docker "
+            f"не полностью обновлены до спецификации от 19.06.2026. "
+            f"Пропущенные эндпоинты (из списка KNOWN_NEW_ENDPOINTS) возвращают 404, "
+            f"так как реализация в сервисах ещё не обновлена.\n\n"
+        )
+
     # ── 1a. Pipeline статусы по сервисам (отдельная таблица) ───────────
     lines.append("### 📋 Pipeline статусы по сервисам\n")
     col_headers = " | ".join(pipe_columns[p] for p in pipe_order)

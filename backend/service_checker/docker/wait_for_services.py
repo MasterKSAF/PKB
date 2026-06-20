@@ -24,6 +24,7 @@ PYTHON_SERVICES = {
     "rag_builder": (8090, ["/api/v1/rag/", "/api/v1/health", "/health"]),
     "rag_search":  (8091, ["/", "/api/v1/health", "/health"]),
     "gateway":     (8080, ["/api/v1/system/health", "/api/v1/health", "/health"]),
+    "ocr":        (8088, ["/api/v1/health", "/health"]),
 }
 
 POLL_INTERVAL = 1
@@ -100,10 +101,10 @@ def main():
                 except Exception:
                     continue
         if alive >= 3:
-            log(f"  ✓ {alive}/9 сервисов отвечают")
+            log(f"  ✓ {alive}/10 сервисов отвечают")
             return True
         time.sleep(1)
-    log(f"  ⚠ {alive}/9 сервисов ответили, продолжаем...")
+    log(f"  ⚠ {alive}/10 сервисов ответили, продолжаем...")
     return True
 
 
