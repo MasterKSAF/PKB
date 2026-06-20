@@ -150,15 +150,20 @@ export default function App() {
             sx={{
               flexGrow: 1,
               minWidth: 0,
+              minHeight: 0,
               display: 'flex',
               flexDirection: 'column',
               p: focusMode ? 0 : 2,
               pt: focusMode ? 0 : 2,
               pl: focusMode ? 0 : 2.6,
+              background:
+                focusMode || themeMode === 'light'
+                  ? 'transparent'
+                  : 'linear-gradient(180deg, rgba(7, 9, 12, 0.32) 0%, rgba(9, 11, 15, 0.20) 100%)',
               boxShadow:
                 focusMode || themeMode === 'light'
                   ? 'none'
-                  : 'inset 1px 0 0 rgba(121, 191, 193, 0.08)',
+                  : 'inset 1px 0 0 rgba(152, 217, 216, 0.10)',
             }}
           >
             {focusMode && (
@@ -380,6 +385,8 @@ export default function App() {
             <Box
               sx={{
                 flexGrow: 1,
+                minHeight: 0,
+                width: '100%',
                 overflowY: activeTab === 'chat' ? 'hidden' : 'auto',
                 position: 'relative',
                 border: 'none',

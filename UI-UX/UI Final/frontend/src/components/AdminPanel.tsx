@@ -255,7 +255,7 @@ export const AdminPanel: React.FC = () => {
       })
       .catch(() => {
         if (alive && workMode === 'prod') {
-          setAdminUsersError('Не удалось загрузить пользователей из Gateway.');
+          setAdminUsersError('Не удалось загрузить пользователей с сервера.');
         }
       });
 
@@ -270,7 +270,7 @@ export const AdminPanel: React.FC = () => {
       .catch(() => {
         if (alive && workMode === 'prod') {
           setGatewayProcessingLogs([]);
-          setAdminAuditError('Не удалось загрузить административный журнал из Gateway.');
+          setAdminAuditError('Не удалось загрузить административный журнал с сервера.');
         }
       });
 
@@ -332,6 +332,14 @@ export const AdminPanel: React.FC = () => {
   const hasChanges = Boolean(selectedUser) && (draftRole !== selectedUser.role || !sameAccess(draftAccess, savedAccess));
   const enabledUsersCount = adminUsers.filter((user) => user.status === 'Активен').length;
   const editingOwnSystemRole = currentRole === 'systemAdmin' && selectedUser?.id === currentUserId;
+  const adminSectionHeaderSx = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 1,
+    pb: 0.85,
+    borderBottom: `2px solid ${isLight ? 'rgba(14, 116, 144, 0.24)' : 'rgba(198, 214, 236, 0.26)'}`,
+  };
 
   const handleRoleChange = (role: RoleLabel) => {
     if (editingOwnSystemRole) return;
@@ -389,9 +397,11 @@ export const AdminPanel: React.FC = () => {
 
   return (
     <Container
-      maxWidth="lg"
+      maxWidth={false}
+      disableGutters
       sx={{
-        py: 4,
+        py: 3,
+        width: '100%',
         ...(isLight && {
           '& .MuiPaper-root': {
             bgcolor: 'rgba(255,255,255,0.86) !important',
@@ -520,7 +530,7 @@ export const AdminPanel: React.FC = () => {
             }}
           >
             <Stack spacing={1.6}>
-              <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.2} sx={{ alignItems: { md: 'center' } }}>
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.2} sx={{ ...adminSectionHeaderSx, alignItems: { xs: 'stretch', md: 'center' } }}>
                 <Typography sx={{ flex: 1, fontWeight: 540, color: 'rgba(233, 237, 243, 0.92)' }}>
                   Пользователи и роли
                 </Typography>
@@ -602,7 +612,7 @@ export const AdminPanel: React.FC = () => {
             }}
           >
             <Stack spacing={1.8}>
-              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+              <Stack direction="row" spacing={1} sx={adminSectionHeaderSx}>
                 <SlidersHorizontal size={18} color="#98d9d8" />
                 <Box sx={{ flex: 1 }}>
                   <Typography sx={{ fontWeight: 540, color: 'rgba(233, 237, 243, 0.92)' }}>
@@ -691,9 +701,11 @@ export const AdminPanel: React.FC = () => {
 
         <Stack spacing={1.25}>
           <Box>
-            <Typography sx={{ mb: 0.85, fontWeight: 540, color: 'rgba(233, 237, 243, 0.92)' }}>
-              Административный журнал изменений
-            </Typography>
+            <Box sx={{ ...adminSectionHeaderSx, mb: 1 }}>
+              <Typography sx={{ fontWeight: 540, color: 'rgba(233, 237, 243, 0.92)' }}>
+                Административный журнал изменений
+              </Typography>
+            </Box>
             <TableContainer component={Paper} variant="outlined" sx={TABLE_SX}>
               <Table size="small" sx={tableCellSx}>
                 <TableHead>
@@ -721,9 +733,11 @@ export const AdminPanel: React.FC = () => {
           </Box>
 
           <Box sx={{ mt: 0.7 }}>
-            <Typography sx={{ mb: 0.85, fontWeight: 540, color: 'rgba(233, 237, 243, 0.92)' }}>
-              Журнал обработки документов
-            </Typography>
+            <Box sx={{ ...adminSectionHeaderSx, mb: 1 }}>
+              <Typography sx={{ fontWeight: 540, color: 'rgba(233, 237, 243, 0.92)' }}>
+                Журнал обработки документов
+              </Typography>
+            </Box>
             <TableContainer component={Paper} variant="outlined" sx={TABLE_SX}>
               <Table size="small" sx={tableCellSx}>
                 <TableHead>

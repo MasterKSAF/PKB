@@ -86,6 +86,15 @@ const panelSx = (isLight: boolean) => ({
   boxShadow: isLight ? '0 8px 22px rgba(15,23,42,0.05)' : 'inset 0 1px 0 rgba(255,255,255,0.045)',
 } as const);
 
+const sectionHeaderSx = (isLight: boolean) => ({
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 1,
+  pb: 0.85,
+  borderBottom: `2px solid ${isLight ? 'rgba(14, 116, 144, 0.24)' : 'rgba(198, 214, 236, 0.26)'}`,
+} as const);
+
 const tableSx = {
   '& .MuiTableCell-root': {
     borderBottomColor: 'rgba(198, 216, 240, 0.22)',
@@ -561,8 +570,8 @@ export const RegistryEditors: React.FC = () => {
 
   const classifierStatusLabel = useMemo(() => {
     if (classifiersListQuery.isFetching || classifiersTreeQuery.isFetching || pendingQuery.isFetching) return 'Загрузка данных Registry...';
-    if (isDemo) return 'Demo: данные справочников не загружаются из Gateway';
-    return 'Gateway подключен к редакторам справочников';
+    if (isDemo) return 'Demo: данные справочников не загружаются с сервера';
+    return 'Сервер подключен к редакторам справочников';
   }, [classifiersListQuery.isFetching, classifiersTreeQuery.isFetching, isDemo, pendingQuery.isFetching]);
 
   const classifierListCount = Number(classifierListMeta?.total ?? classifierRows.length);
@@ -583,7 +592,7 @@ export const RegistryEditors: React.FC = () => {
 
   const handleClassifierSave = async () => {
     if (!canEdit || isDemo) {
-      setClassifierError('Редактирование классификаторов доступно только в Gateway-режиме для администратора.');
+      setClassifierError('Редактирование классификаторов доступно только в продуктивном режиме для администратора.');
       return;
     }
 
@@ -623,7 +632,7 @@ export const RegistryEditors: React.FC = () => {
 
   const handleClassifierImport = async () => {
     if (!classifierImportFile || !canEdit || isDemo) {
-      setClassifierError('Для импорта нужен файл и Gateway-режим.');
+      setClassifierError('Для импорта нужен файл и продуктивный режим.');
       return;
     }
 
@@ -638,7 +647,7 @@ export const RegistryEditors: React.FC = () => {
 
   const handlePendingAction = async () => {
     if (!pendingAction || !canEdit || isDemo) {
-      setPendingError('Действие по неизвестному коду доступно только в Gateway-режиме для администратора.');
+      setPendingError('Действие по неизвестному коду доступно только в продуктивном режиме для администратора.');
       return;
     }
 
@@ -663,7 +672,7 @@ export const RegistryEditors: React.FC = () => {
 
   const handleValidateClassification = async () => {
     if (isDemo) {
-      setValidateError('Проверка классификации доступна в Gateway-режиме.');
+      setValidateError('Проверка классификации доступна в продуктивном режиме.');
       return;
     }
 
@@ -695,7 +704,7 @@ export const RegistryEditors: React.FC = () => {
 
   const handleTermSave = async () => {
     if (!canEdit || isDemo) {
-      setTermError('Редактирование терминологии доступно только в Gateway-режиме для администратора.');
+      setTermError('Редактирование терминологии доступно только в продуктивном режиме для администратора.');
       return;
     }
 
@@ -735,7 +744,7 @@ export const RegistryEditors: React.FC = () => {
 
   const handleTermImport = async () => {
     if (!termImportFile || !canEdit || isDemo) {
-      setTermError('Для импорта нужен файл и Gateway-режим.');
+      setTermError('Для импорта нужен файл и продуктивный режим.');
       return;
     }
 
@@ -780,7 +789,7 @@ export const RegistryEditors: React.FC = () => {
       return (
         <Paper variant="outlined" sx={{ p: 2, ...panelSx(isLight) }}>
           <Stack spacing={2}>
-            <Box>
+            <Box sx={sectionHeaderSx(isLight)}>
               <Typography sx={{ fontWeight: 600 }}>Проверка классификации</Typography>
               <Typography variant="caption" color="text.secondary">
                 Запрос к `POST /registry/classifiers/validate`
@@ -847,7 +856,7 @@ export const RegistryEditors: React.FC = () => {
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1.3fr 0.9fr' }, gap: 2 }}>
           <Paper variant="outlined" sx={{ p: 2, ...panelSx(isLight) }}>
             <Stack spacing={1.5}>
-              <Box>
+              <Box sx={sectionHeaderSx(isLight)}>
                 <Typography sx={{ fontWeight: 600 }}>Неизвестные коды</Typography>
                 <Typography variant="caption" color="text.secondary">
                   Фильтры вынесены в верхнюю строку, здесь остается только обработка.
@@ -920,7 +929,7 @@ export const RegistryEditors: React.FC = () => {
 
           <Paper variant="outlined" sx={{ p: 2, ...panelSx(isLight) }}>
             <Stack spacing={1.5}>
-              <Box>
+              <Box sx={sectionHeaderSx(isLight)}>
                 <Typography sx={{ fontWeight: 600 }}>Панель обработки</Typography>
                 <Typography variant="caption" color="text.secondary">
                   Коды связаны с классификатором. Можно обрабатывать в одной форме.
@@ -1005,7 +1014,7 @@ export const RegistryEditors: React.FC = () => {
     const treeSection = (
       <Paper variant="outlined" sx={{ p: 2, ...panelSx(isLight), height: '100%', overflow: 'hidden' }}>
         <Stack spacing={1.5} sx={{ height: '100%' }}>
-          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.1} sx={{ alignItems: { md: 'center' } }}>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.1} sx={{ ...sectionHeaderSx(isLight), alignItems: { xs: 'stretch', md: 'center' } }}>
             <Typography sx={{ flex: 1, fontWeight: 600 }}>
               {classifierView === 'tree' ? 'Дерево классификаторов' : 'Список классификаторов'}
             </Typography>
@@ -1039,7 +1048,7 @@ export const RegistryEditors: React.FC = () => {
 
           {classifierError && <Alert severity="error">{classifierError}</Alert>}
           {classifierNotice && <Alert severity="success">{classifierNotice}</Alert>}
-          {isDemo && <Alert severity="info">Редактор работает в Gateway-режиме. В demo данные справочников не подгружаются.</Alert>}
+          {isDemo && <Alert severity="info">Редактор работает в продуктивном режиме. В demo данные справочников не подгружаются.</Alert>}
 
           {classifierView === 'tree' ? (
             <Stack spacing={1} sx={{ flex: 1, overflow: 'auto', pr: 0.5 }}>
@@ -1221,7 +1230,7 @@ export const RegistryEditors: React.FC = () => {
     const editorSection = (
       <Paper variant="outlined" sx={{ p: 2, ...panelSx(isLight), height: '100%' }}>
         <Stack spacing={1.5} sx={{ height: '100%' }}>
-          <Box>
+          <Box sx={sectionHeaderSx(isLight)}>
             <Typography sx={{ fontWeight: 600 }}>{selectedLabel}</Typography>
             <Typography variant="caption" color="text.secondary">
               {selectedClassifier ? 'Редактирование выбранного узла' : 'Создание нового узла'}
@@ -1351,7 +1360,7 @@ export const RegistryEditors: React.FC = () => {
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1.35fr) minmax(320px, 0.75fr)' }, gap: 2 }}>
         <Paper variant="outlined" sx={{ p: 2, ...panelSx(isLight), height: '100%' }}>
           <Stack spacing={1.5} sx={{ height: '100%' }}>
-            <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.1} sx={{ alignItems: { md: 'center' } }}>
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.1} sx={{ ...sectionHeaderSx(isLight), alignItems: { xs: 'stretch', md: 'center' } }}>
               <Typography sx={{ flex: 1, fontWeight: 600 }}>Терминология</Typography>
               <Button variant="outlined" startIcon={<Plus size={15} />} onClick={handleTermNew} disabled={!canEdit || isDemo}>
                 Новый
@@ -1366,7 +1375,7 @@ export const RegistryEditors: React.FC = () => {
 
             {termError && <Alert severity="error">{termError}</Alert>}
             {termNotice && <Alert severity="success">{termNotice}</Alert>}
-            {isDemo && <Alert severity="info">Редактор работает в Gateway-режиме. В demo терминология не подгружается.</Alert>}
+            {isDemo && <Alert severity="info">Редактор работает в продуктивном режиме. В demo терминология не подгружается.</Alert>}
 
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 1 }}>
               <TextField
@@ -1489,7 +1498,7 @@ export const RegistryEditors: React.FC = () => {
 
         <Paper variant="outlined" sx={{ p: 2, ...panelSx(isLight), height: '100%' }}>
           <Stack spacing={1.5} sx={{ height: '100%' }}>
-            <Box>
+            <Box sx={sectionHeaderSx(isLight)}>
               <Typography sx={{ fontWeight: 600 }}>
                 {selectedTermId ? `Термин ${selectedTermId}` : 'Новый термин'}
               </Typography>
@@ -1649,7 +1658,7 @@ export const RegistryEditors: React.FC = () => {
     <Stack spacing={2.1}>
       <Paper variant="outlined" sx={{ p: 2, ...panelSx(isLight) }}>
         <Stack spacing={1}>
-          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.2} sx={{ alignItems: { md: 'center' } }}>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.2} sx={{ ...sectionHeaderSx(isLight), alignItems: { xs: 'stretch', md: 'center' } }}>
             <Box sx={{ flex: 1 }}>
               <Typography sx={{ fontWeight: 650 }}>Справочники НСИ</Typography>
               <Typography variant="caption" color="text.secondary">
@@ -1667,7 +1676,7 @@ export const RegistryEditors: React.FC = () => {
           {classifierNotice && registryTab === 'classifiers' && <Alert severity="success">{classifierNotice}</Alert>}
           {termError && registryTab === 'terminology' && <Alert severity="error">{termError}</Alert>}
           {termNotice && registryTab === 'terminology' && <Alert severity="success">{termNotice}</Alert>}
-          {isDemo && <Alert severity="info">Режим demo не содержит реальных данных Registry. Для проверки нужен Gateway-режим.</Alert>}
+          {isDemo && <Alert severity="info">Режим demo не содержит реальных данных Registry. Для проверки нужен продуктивный режим.</Alert>}
         </Stack>
       </Paper>
 
@@ -1915,6 +1924,7 @@ export const RegistryEditors: React.FC = () => {
           <Button onClick={() => setPendingAction(null)}>Отмена</Button>
           <Button
             variant="contained"
+            color={pendingAction?.mode === 'accept' ? 'primary' : 'error'}
             onClick={() => void handlePendingAction()}
             startIcon={pendingAction?.mode === 'accept' ? <CheckCircle2 size={15} /> : <X size={15} />}
           >

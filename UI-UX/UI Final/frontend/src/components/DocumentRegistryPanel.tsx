@@ -5,11 +5,15 @@ import {
   Button,
   Chip,
   Checkbox,
+  Collapse,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   IconButton,
+  Menu,
+  MenuItem,
   Paper,
   Stack,
   Table,
@@ -21,12 +25,12 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { Download, FileText, History, Layers3, Maximize2, Search, X } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Download, FileText, History, Layers3, Maximize2, MoreVertical, Save, Search, Trash2, X } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUIStore } from '../store/uiStore';
 import { downloadPreviewFile } from '../utils/downloadPreview';
 import { type Document } from '../utils/mockData';
-import { documentsApi, registryApi } from '../utils/http';
+import { apiClient, documentsApi } from '../utils/http';
 
 type DocumentVersionSummary = {
   id: string;
@@ -52,15 +56,53 @@ const PANEL_SX = {
 } as const;
 
 const TABLE_SX = {
-  borderRadius: 3,
-  bgcolor: 'rgba(7, 14, 22, 0.94)',
-  borderWidth: 1.5,
-  borderColor: 'rgba(198, 216, 240, 0.52)',
-  boxShadow:
-    '0 0 0 1px rgba(198, 216, 240, 0.32), 0 0 0 3px rgba(102, 142, 198, 0.14), inset 0 1px 0 rgba(255,255,255,0.03)',
+  borderRadius: 2,
+  bgcolor: 'transparent',
+  borderWidth: 0,
+  borderColor: 'transparent',
+  boxShadow: 'none',
 } as const;
 
 const normalizeText = (value: unknown) => String(value ?? '').trim();
+const GATEWAY_API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8081/api/v1';
+
+const displayValue = (value: unknown) => {
+  const text = normalizeText(value);
+  return text || 'не передано';
+};
+
+const normalizeValidUntil = (value: unknown) => {
+  const text = normalizeText(value);
+  if (!text) return '';
+  if (text === '9999-12-31') return 'бессрочно';
+  return text;
+};
+
+const resolveGatewayAssetUrl = (url: unknown) => {
+  const text = normalizeText(url);
+  if (!text) return '';
+  if (/^https?:\/\//i.test(text)) return text;
+
+  const apiBase = GATEWAY_API_BASE_URL.replace(/\/+$/, '');
+  const originBase = apiBase.replace(/\/api\/v\d+$/i, '');
+  return `${originBase}${text.startsWith('/') ? text : `/${text}`}`;
+};
+
+const getLatestVersionId = (detail: any, versions: DocumentVersionSummary[]) => {
+  const latest = detail?.latest_version ?? {};
+  return normalizeText(latest.version_id ?? latest.versionId ?? detail?.version_id ?? detail?.current_version_id ?? versions[0]?.id);
+};
+
+const getTodayDateInput = () => {
+  const date = new Date();
+  const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return offsetDate.toISOString().slice(0, 10);
+};
+
+const openNativeDatePicker = (event: React.MouseEvent<HTMLInputElement> | React.FocusEvent<HTMLInputElement>) => {
+  const input = event.currentTarget as HTMLInputElement & { showPicker?: () => void };
+  input.showPicker?.();
+};
 
 const normalizeDocumentVersion = (item: any, index: number): DocumentVersionSummary => {
   const raw = item && typeof item === 'object' ? item : {};
@@ -265,6 +307,10 @@ const buildPreviewText = (
     `Обновлен: ${document.updatedAt || 'не указано'}`,
     detail?.doc_code ? `Код: ${detail.doc_code}` : '',
     detail?.source_type ? `Тип источника: ${detail.source_type}` : '',
+    detail?.title_key ? `title_key: ${detail.title_key}` : '',
+    detail?.title_hash_sha256 ? `title_hash_sha256: ${detail.title_hash_sha256}` : '',
+    detail?.valid_from ? `Действует с: ${detail.valid_from}` : '',
+    detail?.valid_until ? `Действует до: ${normalizeValidUntil(detail.valid_until)}` : '',
     detail?.jurisdiction ? `Юрисдикция: ${detail.jurisdiction}` : '',
     detail?.validity_status ? `Статус действия: ${detail.validity_status}` : '',
     detail?.issuing_body ? `Издатель: ${detail.issuing_body}` : '',
@@ -276,6 +322,39 @@ const buildPreviewText = (
   ];
 
   return previewLines.filter(Boolean).join('\n');
+};
+
+const renderHighlightedText = (text: string, query: string, isLight: boolean) => {
+  if (!query) return text;
+
+  const lowerText = text.toLowerCase();
+  const lowerQuery = query.toLowerCase();
+  const parts: React.ReactNode[] = [];
+  let cursor = 0;
+  let matchIndex = lowerText.indexOf(lowerQuery);
+
+  while (matchIndex !== -1) {
+    if (matchIndex > cursor) parts.push(text.slice(cursor, matchIndex));
+    parts.push(
+      <Box
+        key={`${matchIndex}-${query}`}
+        component="mark"
+        sx={{
+          px: 0.25,
+          borderRadius: 0.4,
+          bgcolor: isLight ? 'rgba(250, 204, 21, 0.42)' : 'rgba(250, 204, 21, 0.36)',
+          color: 'inherit',
+        }}
+      >
+        {text.slice(matchIndex, matchIndex + query.length)}
+      </Box>,
+    );
+    cursor = matchIndex + query.length;
+    matchIndex = lowerText.indexOf(lowerQuery, cursor);
+  }
+
+  if (cursor < text.length) parts.push(text.slice(cursor));
+  return parts;
 };
 
 const panelSxFor = (isLight: boolean) => ({
@@ -290,22 +369,89 @@ const panelSxFor = (isLight: boolean) => ({
 const tableSxFor = (isLight: boolean) => ({
   ...TABLE_SX,
   ...(isLight && {
-    bgcolor: 'rgba(255, 255, 255, 0.94)',
-    borderColor: 'rgba(14, 116, 144, 0.28)',
-    boxShadow: '0 0 0 1px rgba(14, 116, 144, 0.14), 0 14px 34px rgba(15,23,42,0.06)',
+    bgcolor: 'transparent',
+    borderColor: 'transparent',
+    boxShadow: 'none',
   }),
 });
 
+const sectionHeaderSxFor = (isLight: boolean) => ({
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 1,
+  pb: 0.8,
+  borderBottom: `2px solid ${isLight ? 'rgba(14, 116, 144, 0.24)' : 'rgba(198, 214, 236, 0.26)'}`,
+});
+
+const compactHeadSx = {
+  fontSize: '0.68rem',
+  fontWeight: 620,
+  letterSpacing: '0.02em',
+  textTransform: 'uppercase',
+  color: 'text.secondary',
+} as const;
+
+const detailLabelSx = {
+  fontSize: '0.69rem',
+  fontWeight: 620,
+  letterSpacing: '0.025em',
+  textTransform: 'uppercase',
+  color: 'text.secondary',
+} as const;
+
+const detailValueSx = {
+  fontSize: '0.8rem',
+  fontWeight: 500,
+  overflowWrap: 'anywhere',
+} as const;
+
+const formatCompactDateTime = (value?: string) => {
+  if (!value) return 'без даты';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+};
+
 export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ documents }) => {
   const { themeMode, workMode } = useUIStore();
+  const queryClient = useQueryClient();
   const isLight = themeMode === 'light';
   const [search, setSearch] = useState('');
+  const [sourceFilter, setSourceFilter] = useState('all');
+  const [validityFilter, setValidityFilter] = useState('all');
+  const [validAt, setValidAt] = useState(() => getTodayDateInput());
   const [selectedDocumentId, setSelectedDocumentId] = useState('');
   const [previewOpen, setPreviewOpen] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [previewPageIndex, setPreviewPageIndex] = useState(0);
   const [previewSearch, setPreviewSearch] = useState('');
   const [selectedVersionIds, setSelectedVersionIds] = useState<string[]>([]);
+  const [downloadError, setDownloadError] = useState('');
+  const [validFromDraft, setValidFromDraft] = useState('');
+  const [validUntilDraft, setValidUntilDraft] = useState('');
+  const [registryNotice, setRegistryNotice] = useState('');
+  const [registryError, setRegistryError] = useState('');
+  const [validityOpen, setValidityOpen] = useState(false);
+  const [metadataOpen, setMetadataOpen] = useState(false);
+  const [technicalOpen, setTechnicalOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [actionsAnchorEl, setActionsAnchorEl] = useState<null | HTMLElement>(null);
+
+  const sourceFilterOptions = useMemo(
+    () =>
+      Array.from(new Set(documents.map((document) => document.sourceType || document.type).filter(Boolean))).sort((left, right) =>
+        left.localeCompare(right, 'ru'),
+      ),
+    [documents],
+  );
 
   const filteredDocuments = useMemo(() => {
     const normalized = search.trim().toLowerCase();
@@ -315,14 +461,33 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
       return rightTime - leftTime || left.name.localeCompare(right.name, 'ru');
     });
 
-    if (!normalized) return sorted;
-
-    return sorted.filter((document) =>
-      [document.id, document.name, document.type, document.source, document.version, document.sectionId, document.group]
+    return sorted.filter((document) => {
+      const matchesSearch =
+        !normalized ||
+        [
+          document.id,
+          document.name,
+          document.docCode,
+          document.type,
+          document.source,
+          document.sourceType,
+          document.version,
+          document.sectionId,
+          document.group,
+          document.validityStatus,
+        ]
         .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(normalized)),
-    );
-  }, [documents, search]);
+          .some((value) => String(value).toLowerCase().includes(normalized));
+      const matchesSource = sourceFilter === 'all' || document.sourceType === sourceFilter || document.type === sourceFilter;
+      const matchesValidity = validityFilter === 'all' || document.validityStatus === validityFilter || document.status === validityFilter;
+      const matchesValidAt =
+        !validAt ||
+        ((!document.validFrom || document.validFrom <= validAt) &&
+          (!document.validUntil || document.validUntil === '9999-12-31' || document.validUntil >= validAt));
+
+      return matchesSearch && matchesSource && matchesValidity && matchesValidAt;
+    });
+  }, [documents, search, sourceFilter, validAt, validityFilter]);
 
   useEffect(() => {
     if (!selectedDocumentId && filteredDocuments[0]) {
@@ -339,7 +504,7 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
 
   const detailQuery = useQuery({
     queryKey: ['document-registry-detail', workMode, selectedDocument?.id],
-    queryFn: () => registryApi.document(selectedDocument!.id),
+    queryFn: () => documentsApi.get(selectedDocument!.id),
     enabled: workMode === 'prod' && Boolean(selectedDocument),
     staleTime: 30_000,
   });
@@ -375,6 +540,7 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
   });
 
   const detail = workMode === 'prod' ? detailQuery.data : buildDemoDetail(selectedDocument);
+  const detailRecord = (detail ?? {}) as Record<string, any>;
   const versions = workMode === 'prod' ? extractVersionItems(versionsQuery.data) : buildDemoVersions(selectedDocument);
   const history = workMode === 'prod' ? (historyQuery.data ?? []) : buildDemoHistory(selectedDocument);
   const errors = workMode === 'prod' ? (errorsQuery.data ?? []) : buildDemoErrors(selectedDocument);
@@ -384,12 +550,13 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
       if (workMode !== 'prod') return buildDemoPages(selectedDocument, detail);
 
       const pages = extractPageEntries(pagesQuery.data);
-      return pages.length ? pages : buildDemoPages(selectedDocument, detail);
+      return pages;
     },
     [detail, pagesQuery.data, selectedDocument, workMode],
   );
   const selectedPreviewPage = previewPages[Math.min(previewPageIndex, Math.max(previewPages.length - 1, 0))] ?? null;
   const previewText = buildPreviewText(selectedDocument, detail, versions, history, errors, parameters);
+  const currentPreviewText = selectedPreviewPage?.lines.join('\n') ?? '';
   const compareVersions = versions.filter((version) => selectedVersionIds.includes(version.id)).slice(0, 2);
   const totalVersions = Number(detail?.total_versions ?? versions.length ?? 0);
   const selectedVersionRows = useMemo(() => {
@@ -400,8 +567,8 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
     const normalized = previewSearch.trim().toLowerCase();
     if (!normalized || !selectedPreviewPage) return 0;
 
-    return selectedPreviewPage.lines.join('\n').toLowerCase().split(normalized).length - 1;
-  }, [previewSearch, selectedPreviewPage]);
+    return currentPreviewText.toLowerCase().split(normalized).length - 1;
+  }, [currentPreviewText, previewSearch]);
 
   useEffect(() => {
     if (versionsOpen && !selectedVersionIds.length && selectedVersionRows.length) {
@@ -414,8 +581,18 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
     setVersionsOpen(false);
     setPreviewPageIndex(0);
     setPreviewSearch('');
+    setDownloadError('');
+    setRegistryNotice('');
+    setRegistryError('');
     setSelectedVersionIds([]);
+    setActionsAnchorEl(null);
   }, [selectedDocumentId]);
+
+  useEffect(() => {
+    setValidFromDraft(normalizeText(detailRecord.valid_from ?? selectedDocument?.validFrom) || getTodayDateInput());
+    const validUntil = normalizeText(detailRecord.valid_until ?? selectedDocument?.validUntil);
+    setValidUntilDraft(validUntil === '9999-12-31' ? '' : validUntil);
+  }, [detailRecord.valid_from, detailRecord.valid_until, selectedDocument?.validFrom, selectedDocument?.validUntil]);
 
   useEffect(() => {
     if (previewOpen && previewPages.length === 0) {
@@ -429,83 +606,332 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
     { label: `Ошибки: ${errors.length}`, value: errors.length },
     { label: `Страниц: ${previewPages.length}`, value: previewPages.length },
   ];
+  const latestVersionRecord = (detailRecord.latest_version ?? {}) as Record<string, unknown>;
+  const latestVersionId = getLatestVersionId(detailRecord, versions);
+  const latestVersionLabel =
+    normalizeText(latestVersionRecord.version ?? latestVersionRecord.version_number ?? latestVersionRecord.version_id) ||
+    versions[0]?.label ||
+    selectedDocument?.version;
+  const businessKeyRows: Array<[string, unknown]> = [
+    ['document_id', detailRecord.document_id ?? selectedDocument?.id],
+    ['version_id', latestVersionId],
+    ['title_key', detailRecord.title_key ?? selectedDocument?.titleKey],
+    ['title_hash_sha256', detailRecord.title_hash_sha256 ?? selectedDocument?.titleHashSha256],
+  ];
+  const validityRows: Array<[string, unknown]> = [
+    ['valid_from', detailRecord.valid_from ?? selectedDocument?.validFrom],
+    ['valid_until', normalizeValidUntil(detailRecord.valid_until ?? selectedDocument?.validUntil)],
+    ['validity_status', detailRecord.validity_status ?? selectedDocument?.validityStatus],
+    ['status', detailRecord.status ?? selectedDocument?.status],
+  ];
+  const handleDownloadOriginal = async () => {
+    if (!selectedDocument) return;
+
+    setDownloadError('');
+    try {
+      const fileInfo = await documentsApi.file(selectedDocument.id);
+      const fileUrl = resolveGatewayAssetUrl(fileInfo?.file_url ?? fileInfo?.url ?? fileInfo?.download_url);
+
+      if (!fileUrl) {
+        throw new Error('Сервер не передал ссылку на файл.');
+      }
+
+      const response = await apiClient.get(fileUrl, { responseType: 'blob' });
+      const blob = response.data instanceof Blob ? response.data : new Blob([response.data]);
+      const objectUrl = URL.createObjectURL(blob);
+      window.open(objectUrl, '_blank', 'noopener,noreferrer');
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    } catch (error) {
+      const status = (error as { response?: { status?: number } })?.response?.status;
+      setDownloadError(
+        status === 404
+          ? 'Сервер передал ссылку на файл, но файл по ней не найден (404).'
+          : error instanceof Error
+            ? error.message
+            : 'Не удалось получить файл через сервер.',
+      );
+    }
+  };
+
+  const handleSaveValidity = async () => {
+    if (!selectedDocument) return;
+
+    setRegistryError('');
+    setRegistryNotice('');
+
+    if (validFromDraft && validUntilDraft && new Date(validFromDraft).getTime() > new Date(validUntilDraft).getTime()) {
+      setRegistryError('Дата окончания не может быть раньше даты начала.');
+      return;
+    }
+
+    try {
+      await documentsApi.updateValidity(selectedDocument.id, {
+        valid_from: validFromDraft || undefined,
+        valid_until: validUntilDraft || null,
+      });
+      await queryClient.invalidateQueries({ queryKey: ['gateway-documents', workMode] });
+      await queryClient.invalidateQueries({ queryKey: ['document-registry-detail', workMode, selectedDocument.id] });
+      setRegistryNotice('Срок действия отправлен на сервер.');
+    } catch (error) {
+      const status = (error as { response?: { status?: number } })?.response?.status;
+      setRegistryError(
+        status === 404
+          ? 'Сервер не нашел документ в registry endpoint. Срок действия не сохранен.'
+          : error instanceof Error
+            ? error.message
+            : 'Не удалось сохранить срок действия через сервер.',
+      );
+    }
+  };
+
+  const handleDeleteDocument = async () => {
+    if (!selectedDocument) return;
+
+    setRegistryError('');
+    setRegistryNotice('');
+
+    try {
+      await documentsApi.archive(selectedDocument.id);
+      setDeleteDialogOpen(false);
+      setSelectedDocumentId('');
+      await queryClient.invalidateQueries({ queryKey: ['gateway-documents', workMode] });
+      setRegistryNotice('Документ удален на сервере.');
+    } catch (error) {
+      setRegistryError(error instanceof Error ? error.message : 'Не удалось удалить документ через сервер.');
+    }
+  };
 
   return (
     <Stack spacing={2.2}>
-      <Paper variant="outlined" sx={{ p: 1.9, borderRadius: 3, ...panelSxFor(isLight) }}>
-        <Stack spacing={1.4}>
-          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-            <Layers3 size={18} color={isLight ? '#0284c7' : '#98d9d8'} />
-            <Box>
+      <Paper variant="outlined" sx={{ p: 1.45, borderRadius: 3, ...panelSxFor(isLight) }}>
+        <Stack spacing={1.2}>
+          <Box sx={sectionHeaderSxFor(isLight)}>
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
+              <Layers3 size={18} color={isLight ? '#0284c7' : '#98d9d8'} />
               <Typography sx={{ fontWeight: 560, color: isLight ? '#0f172a' : 'rgba(233, 237, 243, 0.92)' }}>
                 Реестр документов
               </Typography>
-            </Box>
-          </Stack>
+            </Stack>
+            <Chip size="small" label={`${filteredDocuments.length}`} variant="outlined" />
+          </Box>
 
-          <TextField
-            fullWidth
-            size="small"
-            label="Поиск по реестру"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Название, код, источник, версия, раздел"
-            slotProps={{
-              input: {
-                startAdornment: <Search size={16} style={{ marginRight: 8, opacity: 0.72 }} />,
-              },
-            }}
-          />
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) 180px 180px 170px' }, gap: 1 }}>
+            <TextField
+              fullWidth
+              size="small"
+              label="Поиск по реестру"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              slotProps={{
+                input: {
+                  startAdornment: <Search size={16} style={{ marginRight: 8, opacity: 0.72 }} />,
+                },
+              }}
+            />
+            <TextField size="small" select label="Источник" value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}>
+              <MenuItem value="all">Все источники</MenuItem>
+              {sourceFilterOptions.map((source) => (
+                <MenuItem key={source} value={source}>
+                  {source}
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              size="small"
+              select
+              label="Статус действия"
+              value={validityFilter}
+              onChange={(event) => setValidityFilter(event.target.value)}
+            >
+              <MenuItem value="all">Все статусы</MenuItem>
+              <MenuItem value="active">active</MenuItem>
+              <MenuItem value="pending">pending</MenuItem>
+              <MenuItem value="expired">expired</MenuItem>
+              <MenuItem value="created">created</MenuItem>
+              <MenuItem value="completed">completed</MenuItem>
+              <MenuItem value="failed">failed</MenuItem>
+            </TextField>
+            <TextField
+              size="small"
+              type="date"
+              label="Действует на"
+              value={validAt}
+              onChange={(event) => setValidAt(event.target.value)}
+              slotProps={{
+                inputLabel: { shrink: true },
+                htmlInput: {
+                  onClick: openNativeDatePicker,
+                  onFocus: openNativeDatePicker,
+                },
+              }}
+            />
+          </Box>
 
           {workMode === 'prod' && detailQuery.isError && (
             <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2 }}>
-              Gateway не вернул сведения по выбранному документу.
+              Сервер не вернул сведения по выбранному документу.
+            </Alert>
+          )}
+          {workMode === 'prod' && (versionsQuery.isError || historyQuery.isError || errorsQuery.isError || parametersQuery.isError || pagesQuery.isError) && (
+            <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
+              Часть данных реестра недоступна через сервер:{' '}
+              {[
+                versionsQuery.isError ? 'версии' : '',
+                historyQuery.isError ? 'история' : '',
+                errorsQuery.isError ? 'ошибки' : '',
+                parametersQuery.isError ? 'параметры' : '',
+                pagesQuery.isError ? 'страницы/preview' : '',
+              ]
+                .filter(Boolean)
+                .join(', ')}
+              .
             </Alert>
           )}
 
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: 'minmax(280px, 360px) minmax(0, 1fr)' }, gap: 2 }}>
+          {(registryError || registryNotice || downloadError) && (
+            <Alert severity={registryError || downloadError ? 'warning' : 'success'} variant="outlined" sx={{ borderRadius: 2 }}>
+              {registryError || downloadError || registryNotice}
+            </Alert>
+          )}
+
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', lg: 'minmax(520px, 1.08fr) minmax(400px, 0.92fr)' },
+              gap: 1.4,
+              alignItems: 'start',
+            }}
+          >
             <Paper variant="outlined" sx={{ p: 1, borderRadius: 2.2, ...tableSxFor(isLight) }}>
               <Stack spacing={1}>
-                <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Typography sx={{ fontWeight: 560 }}>Документы</Typography>
-                  <Chip size="small" label={`${filteredDocuments.length}`} variant="outlined" />
-                </Stack>
-
-                <TableContainer sx={{ maxHeight: 560, overflow: 'auto' }}>
-                  <Table size="small" stickyHeader sx={{ '& .MuiTableCell-root': { borderBottomColor: 'rgba(198, 214, 236, 0.12)' } }}>
+                <TableContainer sx={{ maxHeight: 'calc(100vh - 245px)', minHeight: 520, overflow: 'auto' }}>
+                  <Table
+                    size="small"
+                    stickyHeader
+                    sx={{
+                      tableLayout: 'fixed',
+                      width: '100%',
+                      '& .MuiTableCell-root': {
+                        borderBottomColor: 'rgba(198, 214, 236, 0.14)',
+                        py: 0.72,
+                      },
+                      '& .MuiTableHead-root .MuiTableCell-root': {
+                        ...compactHeadSx,
+                        bgcolor: isLight ? 'rgba(15, 23, 42, 0.035)' : 'rgba(255,255,255,0.025)',
+                        borderBottom: '1px solid rgba(198, 214, 236, 0.24)',
+                      },
+                      '& .MuiTableBody-root .MuiTableRow-root:nth-of-type(odd)': {
+                        bgcolor: 'rgba(255,255,255,0.012)',
+                      },
+                      borderCollapse: 'separate',
+                      borderSpacing: '0 2px',
+                    }}
+                  >
                     <TableHead>
                       <TableRow>
                         <TableCell>Документ</TableCell>
-                        <TableCell>Версия</TableCell>
-                        <TableCell>Источник</TableCell>
+                        <TableCell sx={{ width: 104 }}>Источник</TableCell>
+                        <TableCell sx={{ width: 82 }}>Статус</TableCell>
+                        <TableCell sx={{ width: 42 }} />
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {filteredDocuments.map((document) => {
+                      {filteredDocuments.map((document, index) => {
                         const selected = selectedDocument?.id === document.id;
+                        const hasSelection = Boolean(selectedDocument);
+                        const selectedBg = isLight ? 'rgba(14, 116, 144, 0.08)' : 'rgba(152, 217, 216, 0.08)';
+                        const hoverBg = isLight ? 'rgba(14, 116, 144, 0.06)' : 'rgba(152, 217, 216, 0.06)';
+                        const rowBg = selected ? selectedBg : index % 2 === 0 ? 'rgba(255,255,255,0.012)' : 'transparent';
                         return (
                           <TableRow
                             key={document.id}
                             hover
-                            selected={selected}
                             onClick={() => setSelectedDocumentId(document.id)}
-                            sx={{ cursor: 'pointer' }}
+                            sx={{
+                              cursor: 'pointer',
+                              opacity: hasSelection && !selected ? 0.48 : 1,
+                              transition: 'opacity 160ms ease, background-color 160ms ease, border-color 160ms ease',
+                              '& > .MuiTableCell-root': {
+                                bgcolor: rowBg,
+                                transition: 'background-color 160ms ease, border-color 160ms ease',
+                              },
+                              '&:hover > .MuiTableCell-root': {
+                                bgcolor: hoverBg,
+                              },
+                              '&:hover': {
+                                opacity: 1,
+                              },
+                              '& > .MuiTableCell-root:first-of-type': {
+                                borderLeft: `3px solid ${
+                                  selected ? (isLight ? 'rgba(2, 132, 199, 0.72)' : 'rgba(152, 217, 216, 0.72)') : 'transparent'
+                                }`,
+                                borderTopLeftRadius: 10,
+                                borderBottomLeftRadius: 10,
+                              },
+                              '& > .MuiTableCell-root:last-of-type': {
+                                borderTopRightRadius: 10,
+                                borderBottomRightRadius: 10,
+                              },
+                            }}
                           >
                             <TableCell>
-                              <Typography sx={{ fontWeight: 560, lineHeight: 1.3 }}>{document.name}</Typography>
+                              <Typography
+                                title={document.name}
+                                sx={{
+                                  fontWeight: selected ? 620 : 540,
+                                  lineHeight: 1.25,
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  maxWidth: '100%',
+                                }}
+                              >
+                                {document.name}
+                              </Typography>
                               <Typography variant="caption" color="text.secondary">
-                                {document.type} · {document.updatedAt || 'без даты'}
+                                {[document.docCode || document.id, document.version, formatCompactDateTime(document.updatedAt)].filter(Boolean).join(' · ')}
                               </Typography>
                             </TableCell>
-                            <TableCell>{document.version}</TableCell>
-                            <TableCell>{document.source}</TableCell>
+                            <TableCell>
+                              <Typography variant="body2" sx={{ fontSize: '0.78rem', lineHeight: 1.25 }}>
+                                {document.sourceType || document.type}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {document.group || document.sectionId || 'категория не передана'}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <Chip
+                                size="small"
+                                variant="outlined"
+                                label={document.validityStatus || document.status || document.indexStatus}
+                                sx={{
+                                  maxWidth: 78,
+                                  '& .MuiChip-label': { px: 0.7, overflow: 'hidden', textOverflow: 'ellipsis' },
+                                }}
+                              />
+                            </TableCell>
+                            <TableCell sx={{ px: 0.4 }}>
+                              <IconButton
+                                size="small"
+                                aria-label={`Действия с документом ${document.name}`}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setSelectedDocumentId(document.id);
+                                  setActionsAnchorEl(event.currentTarget);
+                                }}
+                                sx={{ width: 28, height: 28 }}
+                              >
+                                <MoreVertical size={16} />
+                              </IconButton>
+                            </TableCell>
                           </TableRow>
                         );
                       })}
 
                       {filteredDocuments.length === 0 && (
                         <TableRow>
-                          <TableCell colSpan={3} sx={{ py: 3, textAlign: 'center' }}>
+                          <TableCell colSpan={4} sx={{ py: 3, textAlign: 'center' }}>
                             <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
                               По фильтру ничего не найдено.
                             </Alert>
@@ -518,143 +944,293 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
               </Stack>
             </Paper>
 
-            <Paper variant="outlined" sx={{ p: 1.35, borderRadius: 2.2, ...panelSxFor(isLight) }}>
+            <Paper variant="outlined" sx={{ p: 1.15, borderRadius: 2.2, ...panelSxFor(isLight) }}>
               {selectedDocument ? (
-                <Stack spacing={1.3}>
-                  <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
-                    <Box sx={{ minWidth: 0 }}>
-                      <Typography sx={{ fontWeight: 560, lineHeight: 1.3 }}>{selectedDocument.name}</Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {selectedDocument.id} · {selectedDocument.type} · {selectedDocument.source}
-                      </Typography>
-                    </Box>
-                    <Stack direction="row" spacing={0.8} useFlexGap sx={{ flexWrap: 'wrap' }}>
-                      <Button variant="outlined" size="small" startIcon={<Maximize2 size={15} />} onClick={() => setPreviewOpen(true)}>
-                        Preview
-                      </Button>
-                      <Button variant="outlined" size="small" startIcon={<FileText size={15} />} onClick={() => setVersionsOpen(true)}>
-                        Версии
-                      </Button>
-                    </Stack>
-                  </Stack>
-
-                  <Stack direction="row" spacing={0.8} useFlexGap sx={{ flexWrap: 'wrap' }}>
-                    <Chip label={selectedDocument.version} size="small" variant="outlined" />
-                    <Chip label={selectedDocument.ocrStatus} size="small" variant="outlined" />
-                    <Chip label={selectedDocument.indexStatus} size="small" variant="outlined" />
-                    <Chip label={`Обновлен: ${selectedDocument.updatedAt || 'не указано'}`} size="small" variant="outlined" />
-                  </Stack>
-
-                  <Box
-                    sx={{
-                      display: 'grid',
-                      gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' },
-                      gap: 1,
-                    }}
-                  >
-                    {summaryChips.map((item) => (
-                      <Paper key={item.label} variant="outlined" sx={{ p: 1, borderRadius: 2, ...panelSxFor(isLight) }}>
-                        <Typography variant="caption" color="text.secondary">
-                          {item.label}
-                        </Typography>
-                        <Typography sx={{ fontWeight: 560, mt: 0.25 }}>{item.value}</Typography>
-                      </Paper>
-                    ))}
-                  </Box>
-
-                  <Box
-                    sx={{
-                      display: 'grid',
-                      gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' },
-                      gap: 1,
-                    }}
-                  >
-                    <Paper variant="outlined" sx={{ p: 1.1, borderRadius: 2, ...panelSxFor(isLight) }}>
-                      <Typography variant="caption" color="text.secondary">
-                        Метаданные
-                      </Typography>
-                      <Stack spacing={0.35} sx={{ mt: 0.5 }}>
-                        <Typography sx={{ fontWeight: 560 }}>{detail?.title ?? selectedDocument.name}</Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {detail?.doc_code ? `Код: ${detail.doc_code}` : 'Код не передан'}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {detail?.source_type ? `Тип источника: ${detail.source_type}` : 'Тип источника не передан'}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {detail?.jurisdiction ? `Юрисдикция: ${detail.jurisdiction}` : 'Юрисдикция не передана'}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {detail?.issuing_body ? `Издатель: ${detail.issuing_body}` : 'Издатель не передан'}
-                        </Typography>
-                      </Stack>
-                    </Paper>
-
-                    <Paper variant="outlined" sx={{ p: 1.1, borderRadius: 2, ...panelSxFor(isLight) }}>
-                      <Typography variant="caption" color="text.secondary">
-                        Контроль и статусы
-                      </Typography>
-                      <Stack spacing={0.35} sx={{ mt: 0.5 }}>
-                        <Typography sx={{ fontWeight: 560 }}>
-                          {typeof parameters?.extraction_confidence === 'number'
-                            ? `Точность извлечения: ${Math.round(parameters.extraction_confidence * 100)}%`
-                            : 'Точность извлечения не указана'}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {parameters?.unconfirmed_fields?.length
-                            ? `Неподтвержденные поля: ${parameters.unconfirmed_fields.join(', ')}`
-                            : 'Неподтвержденные поля не переданы.'}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {detail?.validity_status ? `Статус действия: ${detail.validity_status}` : 'Статус действия не передан'}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {detail?.classification_status
-                            ? `Классификация: ${JSON.stringify(detail.classification_status)}`
-                            : 'Статус классификации не передан'}
-                        </Typography>
-                      </Stack>
-                    </Paper>
-                  </Box>
-
-                  <Box>
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.8 }}>
-                      Последние версии
-                    </Typography>
-                    <Stack direction="row" spacing={0.8} useFlexGap sx={{ flexWrap: 'wrap' }}>
-                      {versions.slice(0, 4).map((version) => (
-                        <Chip key={version.id} label={version.label} variant="outlined" size="small" />
-                      ))}
-                    </Stack>
-                  </Box>
-
-                  {history.length > 0 && (
-                    <Paper variant="outlined" sx={{ p: 1.1, borderRadius: 2, ...panelSxFor(isLight) }}>
-                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 0.9 }}>
-                        <History size={16} color={isLight ? '#0284c7' : '#98d9d8'} />
-                        <Typography sx={{ fontWeight: 560 }}>История</Typography>
-                      </Stack>
-                      <Stack spacing={0.7}>
-                        {history.slice(0, 4).map((item: any, index: number) => (
-                          <Box key={item.id ?? index} sx={{ borderBottom: index < 3 ? '1px solid rgba(198,214,236,0.12)' : 'none', pb: 0.7 }}>
-                            <Typography sx={{ fontWeight: 560, lineHeight: 1.3 }}>{item.action ?? item.event ?? 'Событие'}</Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              {[item.at ?? item.created_at ?? '', item.user ?? item.user_name ?? ''].filter(Boolean).join(' · ')}
+                <Stack spacing={1.05}>
+                  <Paper variant="outlined" sx={{ p: 1.05, borderRadius: 2.2, ...panelSxFor(isLight) }}>
+                    <Stack spacing={1}>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        placeholder="Поиск по открытому документу"
+                        value={previewSearch}
+                        onChange={(event) => setPreviewSearch(event.target.value)}
+                        slotProps={{
+                          input: {
+                            startAdornment: <Search size={16} style={{ marginRight: 8, opacity: 0.72 }} />,
+                            endAdornment: (
+                              <IconButton size="small" aria-label="Развернуть предпросмотр" onClick={() => setPreviewOpen(true)} sx={{ width: 28, height: 28 }}>
+                                <Maximize2 size={15} />
+                              </IconButton>
+                            ),
+                          },
+                        }}
+                      />
+                      {previewSearch.trim() && (
+                        <Chip
+                          size="small"
+                          variant="outlined"
+                          label={previewSearchMatchCount ? `${previewSearchMatchCount} совп.` : 'Нет совпадений'}
+                          sx={{ width: 'fit-content' }}
+                        />
+                      )}
+                      <Paper
+                        variant="outlined"
+                        sx={{
+                          minHeight: 500,
+                          maxHeight: 'calc(100vh - 315px)',
+                          overflow: 'auto',
+                          p: 2,
+                          borderRadius: 2,
+                          bgcolor: '#f4f1e8',
+                          color: '#202020',
+                          fontFamily: 'Georgia, serif',
+                        }}
+                      >
+                        {selectedPreviewPage ? (
+                          <Stack spacing={1}>
+                            <Typography component="pre" sx={{ m: 0, whiteSpace: 'pre-wrap', lineHeight: 1.7, fontFamily: 'inherit' }}>
+                              {renderHighlightedText(currentPreviewText, previewSearch.trim(), isLight)}
                             </Typography>
-                            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.35 }}>
+                          </Stack>
+                        ) : (
+                          <Typography color="text.secondary">Текст предпросмотра не получен.</Typography>
+                        )}
+                      </Paper>
+                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          startIcon={<ChevronLeft size={16} />}
+                          onClick={() => setPreviewPageIndex((current) => Math.max(current - 1, 0))}
+                          disabled={previewPageIndex === 0 || previewPages.length === 0}
+                        >
+                          Назад
+                        </Button>
+                        <Typography variant="caption" color="text.secondary">
+                          Страница {previewPages.length ? previewPageIndex + 1 : 0} из {previewPages.length}
+                        </Typography>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          endIcon={<ChevronRight size={16} />}
+                          onClick={() => setPreviewPageIndex((current) => Math.min(current + 1, previewPages.length - 1))}
+                          disabled={previewPages.length === 0 || previewPageIndex >= previewPages.length - 1}
+                        >
+                          Вперед
+                        </Button>
+                      </Stack>
+                    </Stack>
+                  </Paper>
+
+                  <Paper variant="outlined" sx={{ borderRadius: 2.2, overflow: 'hidden', ...panelSxFor(isLight) }}>
+                    <Button
+                      fullWidth
+                      onClick={() => setValidityOpen((current) => !current)}
+                      endIcon={validityOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      sx={{ justifyContent: 'space-between', px: 1.2, py: 0.9, color: 'text.primary', textTransform: 'none' }}
+                    >
+                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                        <Typography sx={{ fontWeight: 560 }}>Срок действия</Typography>
+                        <Chip size="small" variant="outlined" label={normalizeValidUntil(validUntilDraft) || 'бессрочно'} />
+                      </Stack>
+                    </Button>
+                    <Divider sx={{ borderColor: 'rgba(198,214,236,0.16)' }} />
+                    <Collapse in={validityOpen}>
+                      <Stack spacing={1} sx={{ p: 1.1 }}>
+                        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1 }}>
+                          <TextField
+                            size="small"
+                            type="date"
+                            label="Действует с"
+                            value={validFromDraft}
+                            onChange={(event) => setValidFromDraft(event.target.value)}
+                            slotProps={{
+                              inputLabel: { shrink: true },
+                              htmlInput: {
+                                onClick: openNativeDatePicker,
+                                onFocus: openNativeDatePicker,
+                              },
+                            }}
+                          />
+                          <TextField
+                            size="small"
+                            type="date"
+                            label="Действует до"
+                            value={validUntilDraft}
+                            onChange={(event) => setValidUntilDraft(event.target.value)}
+                            slotProps={{
+                              inputLabel: { shrink: true },
+                              htmlInput: {
+                                onClick: openNativeDatePicker,
+                                onFocus: openNativeDatePicker,
+                              },
+                            }}
+                            helperText="Пусто = бессрочно"
+                          />
+                        </Box>
+                        <Box
+                          sx={{
+                            display: 'grid',
+                            gridTemplateColumns: { xs: '1fr', sm: '0.55fr 1fr 0.55fr 1fr' },
+                            gap: 0.8,
+                            alignItems: 'baseline',
+                          }}
+                        >
+                          {[
+                            ['Статус', detailRecord.status ?? selectedDocument.status],
+                            ['Действие', detailRecord.validity_status ?? selectedDocument.validityStatus],
+                            ['Обновлен', formatCompactDateTime(selectedDocument.updatedAt)],
+                          ].map(([label, value]) => (
+                            <React.Fragment key={label}>
+                              <Typography sx={detailLabelSx}>{label}</Typography>
+                              <Typography sx={detailValueSx}>{displayValue(value)}</Typography>
+                            </React.Fragment>
+                          ))}
+                        </Box>
+                        <Box>
+                          <Button size="small" variant="outlined" startIcon={<Save size={15} />} onClick={() => void handleSaveValidity()}>
+                            Сохранить срок
+                          </Button>
+                        </Box>
+                      </Stack>
+                    </Collapse>
+                  </Paper>
+
+                  <Paper variant="outlined" sx={{ borderRadius: 2.2, overflow: 'hidden', ...panelSxFor(isLight) }}>
+                    <Button
+                      fullWidth
+                      onClick={() => setMetadataOpen((current) => !current)}
+                      endIcon={metadataOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      sx={{ justifyContent: 'space-between', px: 1.2, py: 0.9, color: 'text.primary', textTransform: 'none' }}
+                    >
+                      <Typography sx={{ fontWeight: 560 }}>Метаданные и статусы</Typography>
+                    </Button>
+                    <Divider sx={{ borderColor: 'rgba(198,214,236,0.16)' }} />
+                    <Collapse in={metadataOpen}>
+                      <Box
+                        sx={{
+                          display: 'grid',
+                          gridTemplateColumns: { xs: '1fr', md: '0.7fr 1fr 0.7fr 1fr' },
+                          gap: 0.8,
+                          p: 1.1,
+                        }}
+                      >
+                        {[
+                          ['Название', detailRecord.title ?? selectedDocument.name],
+                          ['Код', detailRecord.doc_code ?? selectedDocument.docCode],
+                          ['Тип источника', detailRecord.source_type ?? selectedDocument.sourceType ?? selectedDocument.type],
+                          ['Юрисдикция', detailRecord.jurisdiction],
+                          ['Издатель', detailRecord.issuing_body],
+                          ['OCR', selectedDocument.ocrStatus],
+                          ['Индекс', selectedDocument.indexStatus],
+                          ['Точность', typeof parameters?.extraction_confidence === 'number' ? `${Math.round(parameters.extraction_confidence * 100)}%` : 'не передано'],
+                        ].map(([label, value]) => (
+                          <React.Fragment key={label}>
+                            <Typography sx={detailLabelSx}>
+                              {label}
+                            </Typography>
+                            <Typography sx={detailValueSx}>
+                              {displayValue(value)}
+                            </Typography>
+                          </React.Fragment>
+                        ))}
+                      </Box>
+                    </Collapse>
+                  </Paper>
+
+                  <Paper variant="outlined" sx={{ borderRadius: 2.2, overflow: 'hidden', ...panelSxFor(isLight) }}>
+                    <Button
+                      fullWidth
+                      onClick={() => setTechnicalOpen((current) => !current)}
+                      endIcon={technicalOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      sx={{ justifyContent: 'space-between', px: 1.2, py: 0.9, color: 'text.primary', textTransform: 'none' }}
+                    >
+                      <Typography sx={{ fontWeight: 560 }}>Технические сведения</Typography>
+                    </Button>
+                    <Divider sx={{ borderColor: 'rgba(198,214,236,0.16)' }} />
+                    <Collapse in={technicalOpen}>
+                      <Box
+                        sx={{
+                          display: 'grid',
+                          gridTemplateColumns: { xs: '1fr', md: '0.7fr 1fr 0.7fr 1fr' },
+                          gap: 0.8,
+                          p: 1.1,
+                        }}
+                      >
+                        {[...businessKeyRows, ...validityRows, ['версий', totalVersions], ['страниц', previewPages.length], ['ошибок', errors.length]].map(
+                          ([label, value]) => (
+                            <React.Fragment key={label}>
+                              <Typography sx={detailLabelSx}>
+                                {label}
+                              </Typography>
+                              <Typography sx={detailValueSx}>
+                                {displayValue(value)}
+                              </Typography>
+                            </React.Fragment>
+                          ),
+                        )}
+                      </Box>
+                    </Collapse>
+                  </Paper>
+
+                  <Paper variant="outlined" sx={{ borderRadius: 2.2, overflow: 'hidden', ...panelSxFor(isLight) }}>
+                    <Button
+                      fullWidth
+                      onClick={() => setHistoryOpen((current) => !current)}
+                      endIcon={historyOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      sx={{ justifyContent: 'space-between', px: 1.2, py: 0.9, color: 'text.primary', textTransform: 'none' }}
+                    >
+                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                        <History size={16} color={isLight ? '#0284c7' : '#98d9d8'} />
+                        <Typography sx={{ fontWeight: 560 }}>История и ошибки</Typography>
+                        <Chip size="small" variant="outlined" label={history.length + errors.length} />
+                      </Stack>
+                    </Button>
+                    <Divider sx={{ borderColor: 'rgba(198,214,236,0.16)' }} />
+                    <Collapse in={historyOpen}>
+                      <Stack spacing={0.5} sx={{ p: 1.1 }}>
+                        {history.slice(0, 6).map((item: any, index: number) => (
+                          <Box
+                            key={item.id ?? index}
+                            sx={{
+                              display: 'grid',
+                              gridTemplateColumns: { xs: '1fr', md: '110px 1fr 1fr' },
+                              gap: 1,
+                              py: 0.55,
+                              borderBottom: '1px solid rgba(198,214,236,0.1)',
+                            }}
+                          >
+                            <Typography sx={detailLabelSx}>
+                              {item.at ?? item.created_at ?? 'без даты'}
+                            </Typography>
+                            <Typography sx={detailValueSx}>
+                              {item.action ?? item.event ?? 'Событие'}
+                            </Typography>
+                            <Typography sx={{ ...detailValueSx, color: 'text.secondary' }}>
                               {item.note ?? item.message ?? item.description ?? 'Комментарий не передан.'}
                             </Typography>
                           </Box>
                         ))}
+                        {errors.length > 0 && (
+                          <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2 }}>
+                            Последняя ошибка: {(errors[0] as any)?.error_message ?? 'Сервер вернул список ошибок.'}
+                          </Alert>
+                        )}
+                        {!history.length && !errors.length && (
+                          <Typography variant="body2" color="text.secondary">
+                            История и ошибки по документу не переданы.
+                          </Typography>
+                        )}
                       </Stack>
-                    </Paper>
-                  )}
+                    </Collapse>
+                  </Paper>
 
-                  {errors.length > 0 && (
-                    <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2 }}>
-                      Последняя ошибка: {(errors[0] as any)?.error_message ?? 'Gateway вернул список ошибок.'}
-                    </Alert>
-                  )}
+                  <Stack direction="row" spacing={0.8} useFlexGap sx={{ flexWrap: 'wrap' }}>
+                    {summaryChips.map((item) => (
+                      <Chip key={item.label} label={item.label} size="small" variant="outlined" />
+                    ))}
+                  </Stack>
                 </Stack>
               ) : (
                 <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
@@ -663,6 +1239,49 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
               )}
             </Paper>
           </Box>
+          <Menu
+            anchorEl={actionsAnchorEl}
+            open={Boolean(actionsAnchorEl)}
+            onClose={() => setActionsAnchorEl(null)}
+            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+            transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+          >
+            <MenuItem
+              onClick={() => {
+                setActionsAnchorEl(null);
+                void handleDownloadOriginal();
+              }}
+            >
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                <Download size={15} />
+                <span>Скачать</span>
+              </Stack>
+            </MenuItem>
+            <MenuItem
+              onClick={() => {
+                setActionsAnchorEl(null);
+                setVersionsOpen(true);
+              }}
+            >
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                <FileText size={15} />
+                <span>Версии</span>
+              </Stack>
+            </MenuItem>
+            <MenuItem
+              className="app-danger-menu-item"
+              onClick={() => {
+                setActionsAnchorEl(null);
+                setDeleteDialogOpen(true);
+              }}
+              sx={{ color: 'error.main' }}
+            >
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                <Trash2 size={15} />
+                <span>Удалить</span>
+              </Stack>
+            </MenuItem>
+          </Menu>
         </Stack>
       </Paper>
 
@@ -670,9 +1289,9 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
         <DialogTitle sx={{ pb: 1.2 }}>
           <Stack direction="row" spacing={1.2} sx={{ alignItems: 'flex-start', justifyContent: 'space-between' }}>
             <Box sx={{ minWidth: 0 }}>
-              <Typography sx={{ fontWeight: 600, lineHeight: 1.2 }}>Preview документа</Typography>
+              <Typography sx={{ fontWeight: 600, lineHeight: 1.2 }}>Предпросмотр документа</Typography>
               <Typography variant="caption" color="text.secondary">
-                {selectedDocument?.name ?? 'Документ'} · лист {previewPageIndex + 1} из {previewPages.length}
+                {selectedDocument?.name ?? 'Документ'} · лист {previewPages.length ? previewPageIndex + 1 : 0} из {previewPages.length}
               </Typography>
             </Box>
             <IconButton aria-label="Закрыть предпросмотр" onClick={() => setPreviewOpen(false)} size="small">
@@ -721,7 +1340,7 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
                     </Typography>
                   </Box>
                   <Typography component="pre" sx={{ m: 0, whiteSpace: 'pre-wrap', lineHeight: 1.75, fontFamily: 'inherit' }}>
-                    {selectedPreviewPage.lines.join('\n')}
+                    {renderHighlightedText(currentPreviewText, previewSearch.trim(), isLight)}
                   </Typography>
                 </Stack>
               ) : (
@@ -730,21 +1349,21 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
             </Paper>
 
             <Stack direction="row" spacing={1} sx={{ justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
-              <Button
-                variant="outlined"
-                onClick={() => setPreviewPageIndex((current) => Math.max(current - 1, 0))}
-                disabled={previewPageIndex === 0}
-              >
+                <Button
+                  variant="outlined"
+                  onClick={() => setPreviewPageIndex((current) => Math.max(current - 1, 0))}
+                disabled={previewPageIndex === 0 || previewPages.length === 0}
+                >
                 Назад
               </Button>
               <Typography variant="caption" color="text.secondary">
-                Страница {previewPageIndex + 1} из {previewPages.length}
+                Страница {previewPages.length ? previewPageIndex + 1 : 0} из {previewPages.length}
               </Typography>
               <Button
-                variant="outlined"
-                onClick={() => setPreviewPageIndex((current) => Math.min(current + 1, previewPages.length - 1))}
-                disabled={previewPageIndex >= previewPages.length - 1}
-              >
+                  variant="outlined"
+                  onClick={() => setPreviewPageIndex((current) => Math.min(current + 1, previewPages.length - 1))}
+                disabled={previewPages.length === 0 || previewPageIndex >= previewPages.length - 1}
+                >
                 Вперед
               </Button>
             </Stack>
@@ -760,6 +1379,26 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
             </Button>
           )}
           <Button onClick={() => setPreviewOpen(false)}>Закрыть</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={deleteDialogOpen && Boolean(selectedDocument)} onClose={() => setDeleteDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Удалить документ</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={1.2}>
+            <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2 }}>
+              Удаление отправляется на сервер через DELETE /documents/{selectedDocument?.id}. Ожидается, что backend удалит документ и связанные данные.
+            </Alert>
+            <Typography variant="body2" color="text.secondary">
+              Документ: {selectedDocument?.name}
+            </Typography>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(false)}>Отмена</Button>
+          <Button color="error" variant="contained" startIcon={<Trash2 size={16} />} onClick={() => void handleDeleteDocument()}>
+            Удалить документ
+          </Button>
         </DialogActions>
       </Dialog>
 

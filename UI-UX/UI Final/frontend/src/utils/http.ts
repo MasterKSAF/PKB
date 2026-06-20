@@ -80,6 +80,8 @@ type DraftCreateInput = {
   era?: string;
   jurisdiction?: string;
   issuingBody?: string;
+  validFrom?: string | null;
+  validUntil?: string | null;
   metadata?: Record<string, unknown> | string;
   idempotencyKey?: string;
 };
@@ -90,6 +92,39 @@ type DraftPreviewMetadata = {
   document_type?: string;
   year?: string | number | null;
   revision?: string | number | null;
+  source_type?: string | null;
+  mks_oks_code?: string | null;
+  okstu_code?: string | null;
+  era?: string | null;
+  jurisdiction?: string | null;
+  issuing_body?: string | null;
+  validity_status?: string | null;
+  valid_from?: string | null;
+  valid_until?: string | null;
+  title_key?: string | null;
+  title_hash_sha256?: string | null;
+};
+
+export type DraftMetadataOverrides = {
+  title?: string | null;
+  source_type?: string | null;
+  doc_code?: string | null;
+  year?: string | number | null;
+  mks_oks_code?: string | null;
+  okstu_code?: string | null;
+  era?: string | null;
+  jurisdiction?: string | null;
+  issuing_body?: string | null;
+  valid_from?: string | null;
+  valid_until?: string | null;
+};
+
+type DraftDecisionAction = 'approve' | 'reject' | 'confirm';
+
+type DraftDecisionInput = {
+  action: DraftDecisionAction;
+  comment?: string;
+  metadataOverrides?: DraftMetadataOverrides;
 };
 
 type GatewayDocumentDetail = {
@@ -98,9 +133,13 @@ type GatewayDocumentDetail = {
   title?: string;
   doc_code?: string;
   source_type?: string;
+  title_key?: string;
+  title_hash_sha256?: string;
   status?: string;
   era?: string;
   validity_status?: string;
+  valid_from?: string;
+  valid_until?: string | null;
   jurisdiction?: string;
   issuing_body?: string;
   mks_oks_code?: string | null;
@@ -228,7 +267,7 @@ function deriveDocumentKey(fileHashSha256?: string) {
 
 function normalizeDraftStatus(status?: string) {
   const normalized = String(status ?? '').toLowerCase();
-  if (['preview_ready', 'ready_for_approve', 'previewing', 'uploaded', 'new'].includes(normalized)) {
+  if (['preview_ready', 'ready_for_approve', 'previewing', 'uploaded', 'new', 'review_required', 'validation'].includes(normalized)) {
     return normalized === 'preview_ready' ? 'ready_for_approve' : normalized;
   }
   if (['promoted', 'approved'].includes(normalized)) return 'approved';
@@ -246,6 +285,17 @@ function normalizePreviewMetadata(payload?: DraftPreviewMetadata | null) {
     document_type: payload.document_type ?? 'normative',
     year: payload.year ?? null,
     revision: payload.revision ?? null,
+    source_type: payload.source_type ?? null,
+    mks_oks_code: payload.mks_oks_code ?? null,
+    okstu_code: payload.okstu_code ?? null,
+    era: payload.era ?? null,
+    jurisdiction: payload.jurisdiction ?? null,
+    issuing_body: payload.issuing_body ?? null,
+    validity_status: payload.validity_status ?? null,
+    valid_from: payload.valid_from ?? null,
+    valid_until: payload.valid_until ?? null,
+    title_key: payload.title_key ?? null,
+    title_hash_sha256: payload.title_hash_sha256 ?? null,
   };
 }
 
@@ -582,8 +632,15 @@ function mapGatewayDocumentsResponse(payload: any): Document[] {
       updatedAt: doc.updated_at ?? doc.created_at ?? '',
       sectionId: toGatewayStringId(doc.section_id ?? group),
       group,
+      docCode: doc.doc_code ?? '',
+      status: doc.status ?? '',
+      validityStatus: doc.validity_status ?? '',
       sourceType: doc.source_type ?? doc.document_type ?? doc.type ?? '',
       documentKey: doc.document_key ?? doc.file_hash_sha256 ?? '',
+      titleKey: doc.title_key ?? '',
+      titleHashSha256: doc.title_hash_sha256 ?? '',
+      validFrom: doc.valid_from ?? '',
+      validUntil: doc.valid_until ?? '',
       classifierCode,
       classifierSystem: doc.classifier_system ?? (mksOksCode ? 'MKS' : okstuCode ? 'OKSTU' : ''),
       mksOksCode,
@@ -601,9 +658,13 @@ function mapGatewayDocumentDetailResponse(payload: any): GatewayDocumentDetail {
     title: data.title ?? '',
     doc_code: data.doc_code ?? '',
     source_type: data.source_type ?? '',
+    title_key: data.title_key ?? '',
+    title_hash_sha256: data.title_hash_sha256 ?? '',
     status: data.status ?? '',
     era: data.era ?? '',
     validity_status: data.validity_status ?? '',
+    valid_from: data.valid_from ?? '',
+    valid_until: data.valid_until ?? null,
     jurisdiction: data.jurisdiction ?? '',
     issuing_body: data.issuing_body ?? '',
     mks_oks_code: data.mks_oks_code ?? null,
@@ -841,7 +902,7 @@ function mapGatewayQueueResponse(payload: any): ProcessingQueueItem[] {
         ? 'Разбор таблиц'
         : ['indexing', 'indexed', 'completed', 'approved', 'failed'].includes(status)
           ? 'Индексация'
-          : 'OCR';
+          : 'Распознавание текста';
 
     return {
       id: toGatewayStringId(item.document_id ?? item.draft_id ?? item.id, `gateway-queue-${index}`),
@@ -997,38 +1058,171 @@ function mapGatewayAuditResponse(payload: any): ProcessingLogItem[] {
       id: toGatewayStringId(event?.event_id ?? event?.id, `gateway-audit-${index}`),
       time: toUiTimestamp(event?.timestamp ?? event?.created_at),
       document: String(resource),
-      stage: event?.resource_type ? String(event.resource_type) : 'Gateway audit',
-      event: `${action}${event?.ip_address ? `, ${event.ip_address}` : ''}`,
+      stage: mapGatewayTaskStage(event?.resource_type, 'audit'),
+      event: formatAuditEvent(action, event?.ip_address),
       retryStatus: action.includes('error') || action.includes('delete') ? 'Запланирована' : 'Не требуется',
       visibility: action.includes('admin') || action.includes('user') || action.includes('role') ? 'Администратор' : 'Инженер',
     };
   });
 }
 
+function normalizeGatewayCode(value?: unknown) {
+  return String(value ?? '').trim().toLowerCase();
+}
+
+function mapGatewayTaskStage(stage?: unknown, serviceName?: unknown): ProcessingLogItem['stage'] {
+  const value = `${normalizeGatewayCode(stage)} ${normalizeGatewayCode(serviceName)}`;
+  if (value.includes('ocr') || value.includes('recogn')) return 'Распознавание текста';
+  if (value.includes('parse') || value.includes('parser') || value.includes('table') || value.includes('extract')) return 'Разбор документа';
+  if (value.includes('index') || value.includes('rag') || value.includes('embedding') || value.includes('vector')) return 'Индексация';
+  if (value.includes('upload') || value.includes('import') || value.includes('draft') || value.includes('create')) return 'Загрузка';
+  if (value.includes('classif') || value.includes('registry') || value.includes('metadata')) return 'Сверка метаданных';
+  if (value.includes('answer') || value.includes('generat') || value.includes('llm') || value.includes('chat')) return 'Генерация ответа';
+  if (value.includes('audit') || value.includes('auth') || value.includes('admin') || value.includes('role') || value.includes('user')) {
+    return 'Аудит системы';
+  }
+  return 'Обработка';
+}
+
+function mapGatewayTaskStatusLabel(status?: unknown) {
+  const value = normalizeGatewayCode(status);
+  if (!value || value === 'unknown') return 'Неизвестно';
+  if (['queued', 'queue', 'pending', 'waiting'].includes(value)) return 'В очереди';
+  if (['uploaded', 'created', 'new'].includes(value)) return 'Создано';
+  if (['running', 'processing', 'in_progress', 'started', 'active'].includes(value)) return 'В обработке';
+  if (['retry', 'retrying'].includes(value)) return 'Повторная попытка';
+  if (['completed', 'done', 'success', 'succeeded', 'answered', 'approved', 'indexed'].includes(value)) return 'Завершено';
+  if (['failed', 'error', 'failure'].includes(value)) return 'Ошибка';
+  if (['cancelled', 'canceled', 'discarded', 'rejected'].includes(value)) return 'Отменено';
+  return 'Неизвестно';
+}
+
+function mapGatewayServiceLabel(serviceName?: unknown) {
+  const value = normalizeGatewayCode(serviceName);
+  if (!value || value === 'pipeline') return 'Конвейер обработки';
+  if (value.includes('ocr')) return 'Распознавание текста';
+  if (value.includes('parse') || value.includes('parser')) return 'Разбор документа';
+  if (value.includes('index') || value.includes('rag')) return 'Индексация';
+  if (value.includes('registry')) return 'Реестр';
+  if (value.includes('gateway') || value.includes('query')) return 'Контур запросов';
+  if (value.includes('audit')) return 'Аудит';
+  return 'Сервис обработки';
+}
+
+function formatAuditEvent(action?: unknown, ipAddress?: unknown) {
+  const value = normalizeGatewayCode(action);
+  const label =
+    value.includes('login') || value.includes('auth') || value.includes('token')
+      ? 'Авторизация пользователя'
+      : value.includes('logout')
+        ? 'Выход пользователя'
+        : value.includes('role') || value.includes('permission') || value.includes('access')
+          ? 'Изменение прав доступа'
+          : value.includes('user') || value.includes('admin')
+            ? 'Административное действие'
+            : value.includes('delete') || value.includes('remove') || value.includes('archive')
+              ? 'Удаление записи'
+              : value.includes('create') || value.includes('add') || value.includes('post') || value.includes('upload') || value.includes('import')
+                ? 'Создание записи'
+                : value.includes('update') || value.includes('edit') || value.includes('change') || value.includes('patch') || value.includes('put')
+                  ? 'Изменение записи'
+                  : value.includes('error') || value.includes('fail')
+                    ? 'Ошибка операции'
+                    : 'Системное событие';
+  const ip = String(ipAddress ?? '').trim();
+  return ip ? `${label}. IP: ${ip}` : label;
+}
+
+function formatTaskEvent(taskId: string, stage?: unknown, status?: unknown, progress?: unknown) {
+  return `Задача ${taskId}: ${mapGatewayTaskStage(stage)}; статус: ${mapGatewayTaskStatusLabel(status)}; прогресс: ${Number(progress ?? 0)}%.`;
+}
+
+function formatTaskStepEvent(step: any, index: number) {
+  return `${mapGatewayServiceLabel(step?.service_name)}: ${mapGatewayTaskStage(step?.step_name, step?.service_name)}; статус: ${mapGatewayTaskStatusLabel(
+    step?.status,
+  )}; шаг ${index + 1}.`;
+}
+
+function mapGatewayTaskRetryStatus(status?: string): ProcessingLogItem['retryStatus'] {
+  const value = String(status ?? '').toLowerCase();
+  if (value === 'failed' || value === 'error') return 'Ошибка';
+  if (value === 'retry' || value === 'retrying') return 'Запланирована';
+  if (value === 'completed' || value === 'done' || value === 'success') return 'Выполнена';
+  return 'Не требуется';
+}
+
+function mapGatewayTaskStatusResponse(payload: any): ProcessingLogItem[] {
+  const data = payload?.data ?? payload ?? {};
+  const taskId = toGatewayStringId(data.task_id ?? data.id, 'task');
+  const draftLabel = data.draft_id ? `draft ${data.draft_id}` : data.document_id ? `document ${data.document_id}` : `task ${taskId}`;
+  const logs: ProcessingLogItem[] = [
+    {
+      id: `gateway-task-${taskId}`,
+      time: toUiTimestamp(data.updated_at ?? data.created_at),
+      document: draftLabel,
+      stage: mapGatewayTaskStage(data.pipeline_stage),
+      event: formatTaskEvent(taskId, data.pipeline_stage, data.status, data.progress_percent),
+      retryStatus: mapGatewayTaskRetryStatus(data.status),
+      visibility: 'Администратор',
+    },
+  ];
+
+  const steps = Array.isArray(data.steps) ? data.steps : [];
+  steps.forEach((step: any, index: number) => {
+    logs.push({
+      id: `gateway-task-${taskId}-step-${step.step_name ?? index}`,
+      time: toUiTimestamp(step.completed_at ?? step.started_at ?? data.updated_at ?? data.created_at),
+      document: draftLabel,
+      stage: mapGatewayTaskStage(step.step_name, step.service_name),
+      event: formatTaskStepEvent(step, index),
+      retryStatus: mapGatewayTaskRetryStatus(step.status),
+      visibility: 'Администратор',
+    });
+  });
+
+  return logs;
+}
+
 function mapGatewayDraftRecord(payload: any) {
-  const previewMetadata = normalizePreviewMetadata(payload.preview_metadata ?? payload.preview ?? null);
-  const rawData = payload.raw_data ?? payload.raw ?? payload;
+  const data = payload?.data ?? payload ?? {};
+  const previewMetadata = normalizePreviewMetadata(data.preview_metadata ?? data.preview ?? null);
+  const rawData = data.raw_data ?? data.raw ?? data;
+  const metadataOverrides = data.metadata_overrides ?? data.metadataOverrides ?? {};
+  const notifications = Array.isArray(data.notifications)
+    ? data.notifications
+    : Array.isArray(data.quality?.notifications)
+      ? data.quality.notifications
+      : [];
 
   return {
-    ...payload,
-    draft_id: payload.draft_id ?? payload.id,
-    task_id: payload.task_id ?? payload.taskId,
-    version_id: payload.version_id ?? payload.versionId,
-    file_key: payload.file_key ?? payload.fileKey,
-    document_key: payload.document_key ?? payload.documentKey ?? deriveDocumentKey(payload.file_hash_sha256 ?? payload.fileHashSha256),
-    file_hash_sha256: payload.file_hash_sha256 ?? payload.fileHashSha256,
-    title_hash_sha256: payload.title_hash_sha256 ?? payload.titleHashSha256,
-    status: normalizeDraftStatus(payload.status),
-    confidence: payload.confidence ?? null,
+    ...data,
+    draft_id: data.draft_id ?? data.id,
+    task_id: data.task_id ?? data.taskId,
+    version_id: data.version_id ?? data.versionId,
+    file_key: data.file_key ?? data.fileKey,
+    document_key: data.document_key ?? data.documentKey ?? deriveDocumentKey(data.file_hash_sha256 ?? data.fileHashSha256),
+    file_hash_sha256: data.file_hash_sha256 ?? data.fileHashSha256,
+    title_hash_sha256: data.title_hash_sha256 ?? data.titleHashSha256 ?? previewMetadata?.title_hash_sha256,
+    title_key: data.title_key ?? data.titleKey ?? previewMetadata?.title_key,
+    status: normalizeDraftStatus(data.status),
+    confidence: data.confidence ?? null,
     preview_metadata: previewMetadata,
-    document_id: payload.document_id ?? payload.promoted_document_id ?? payload.approved_document_id ?? null,
-    promoted_document_id: payload.document_id ?? payload.promoted_document_id ?? payload.approved_document_id ?? null,
-    approved_document_id: payload.document_id ?? payload.approved_document_id ?? payload.promoted_document_id ?? null,
-    error_code: payload.error_code ?? null,
-    error_message: payload.error_message ?? null,
+    metadata_overrides: metadataOverrides,
+    notifications,
+    has_notifications: Boolean(data.has_notifications ?? notifications.length),
+    critical_count:
+      data.critical_count ??
+      notifications.filter((item: any) => String(item?.severity ?? '').toLowerCase() === 'critical').length,
+    valid_from: data.valid_from ?? metadataOverrides.valid_from ?? previewMetadata?.valid_from ?? null,
+    valid_until: data.valid_until ?? metadataOverrides.valid_until ?? previewMetadata?.valid_until ?? null,
+    document_id: data.document_id ?? data.promoted_document_id ?? data.approved_document_id ?? null,
+    promoted_document_id: data.document_id ?? data.promoted_document_id ?? data.approved_document_id ?? null,
+    approved_document_id: data.document_id ?? data.approved_document_id ?? data.promoted_document_id ?? null,
+    error_code: data.error_code ?? null,
+    error_message: data.error_message ?? null,
     raw_data: rawData,
-    created_at: payload.created_at ?? payload.createdAt ?? '',
-    updated_at: payload.updated_at ?? payload.updatedAt ?? '',
+    created_at: data.created_at ?? data.createdAt ?? '',
+    updated_at: data.updated_at ?? data.updatedAt ?? '',
   };
 }
 
@@ -1453,6 +1647,8 @@ export const draftsApi = {
     appendFormValue(form, 'era', input.era?.trim());
     appendFormValue(form, 'jurisdiction', input.jurisdiction?.trim());
     appendFormValue(form, 'issuing_body', input.issuingBody?.trim());
+    appendFormValue(form, 'valid_from', input.validFrom);
+    appendFormValue(form, 'valid_until', input.validUntil);
     if (input.metadata !== undefined && input.metadata !== null && input.metadata !== '') {
       form.append('metadata', typeof input.metadata === 'string' ? input.metadata : JSON.stringify(input.metadata));
     }
@@ -1480,7 +1676,9 @@ export const draftsApi = {
       }),
     );
 
-    const items = Array.isArray(response.data?.items) ? response.data.items : [];
+    const items = Array.isArray(response.data)
+      ? response.data
+      : response.data?.items ?? response.data?.drafts ?? response.data?.data ?? [];
     return items.map((item: any) => mapGatewayDraftRecord(item));
   },
   get: async (draftId: string) => {
@@ -1503,18 +1701,60 @@ export const draftsApi = {
     );
     return response.data;
   },
-  decide: async (draftId: string, action: 'approve' | 'reject', comment?: string) => {
+  updateMetadata: async (draftId: string, metadataOverrides: DraftMetadataOverrides) => {
+    const response = await gatewayRequest<any>(() => apiClient.patch(`/drafts/${draftId}/metadata`, metadataOverrides));
+    return mapGatewayDraftRecord(response.data);
+  },
+  decide: async (draftId: string, actionOrInput: DraftDecisionAction | DraftDecisionInput, comment?: string) => {
+    const input: DraftDecisionInput =
+      typeof actionOrInput === 'string'
+        ? { action: actionOrInput, comment }
+        : actionOrInput;
+    const payload = {
+      action: input.action,
+      comment: input.comment,
+      ...(input.metadataOverrides ? { metadata_overrides: input.metadataOverrides } : {}),
+    };
     const response = await gatewayRequest<any>(() =>
-      apiClient.patch(`/drafts/${draftId}/decide`, {
-        action,
-        comment,
-      }),
+      apiClient.patch(`/drafts/${draftId}/decide`, payload),
     );
     return response.data;
   },
   delete: async (draftId: string) => {
     const response = await gatewayRequest<any>(() => apiClient.delete(`/drafts/${draftId}`));
     return response.data;
+  },
+};
+
+export const tasksApi = {
+  status: async (taskId: string) => {
+    const response = await gatewayRequest<any>(() => apiClient.get(`/tasks/${taskId}/status`));
+    return mapGatewayTaskStatusResponse(response.data);
+  },
+  forDraft: async (draftId: string) => {
+    const response = await gatewayRequest<any>(() => apiClient.get(`/drafts/${draftId}/tasks`));
+    const tasks = Array.isArray(response.data?.tasks)
+      ? response.data.tasks
+      : Array.isArray(response.data?.items)
+        ? response.data.items
+        : Array.isArray(response.data?.data)
+          ? response.data.data
+          : [];
+
+    const taskLogs = await Promise.all(
+      tasks
+        .filter((task: any) => task?.task_id ?? task?.id)
+        .slice(0, 8)
+        .map(async (task: any) => {
+          try {
+            return await tasksApi.status(String(task.task_id ?? task.id));
+          } catch {
+            return mapGatewayTaskStatusResponse(task);
+          }
+        }),
+    );
+
+    return taskLogs.flat();
   },
 };
 
@@ -1557,6 +1797,10 @@ export const documentsApi = {
   },
   file: async (documentId: string) => {
     const response = await gatewayRequest<any>(() => apiClient.get(`/documents/${documentId}/file`));
+    return response.data;
+  },
+  updateValidity: async (documentId: string, payload: { valid_from?: string; valid_until?: string | null }) => {
+    const response = await gatewayRequest<any>(() => apiClient.patch(`/registry/documents/${documentId}`, payload));
     return response.data;
   },
   queue: async () => {

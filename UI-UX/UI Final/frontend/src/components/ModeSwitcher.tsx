@@ -37,7 +37,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { useUIStore, AppTab } from '../store/uiStore';
+import { useUIStore, AppTab, type KnowledgeProcessingSection } from '../store/uiStore';
 import { ROLE_TAB_ACCESS } from '../utils/access';
 import { MOCK_CHAT_THREADS } from '../utils/mockData';
 import { chatApi, clearGatewayTokens, projectsApi, type GatewayChatProject } from '../utils/http';
@@ -50,6 +50,13 @@ const NAV_ITEMS: Array<{ value: AppTab; label: string; icon: React.ReactNode }> 
   { value: 'history', label: 'История', icon: <History size={18} /> },
   { value: 'qa', label: 'QA', icon: <BarChart3 size={18} /> },
   { value: 'admin', label: 'Администрирование', icon: <Settings size={18} /> },
+];
+
+const KNOWLEDGE_PROCESSING_SECTIONS: Array<{ value: KnowledgeProcessingSection; label: string; description: string }> = [
+  { value: 'upload', label: 'Загрузка', description: 'файлы и очередь' },
+  { value: 'drafts', label: 'Черновики', description: 'метаданные и решения' },
+  { value: 'registry', label: 'Реестр', description: 'принятые документы' },
+  { value: 'journal', label: 'Журналы', description: 'pipeline и мониторинг' },
 ];
 
 const CHAT_PROJECTS = [
@@ -81,10 +88,12 @@ const CHAT_PROJECTS = [
 export const ModeSwitcher: React.FC = () => {
   const {
     activeProjectId,
+    activeKnowledgeProcessingSection,
     activeTab,
     currentRole,
     themeMode,
     setActiveProjectId,
+    setActiveKnowledgeProcessingSection,
     setActiveTab,
     setChatMessages,
     setThemeMode,
@@ -98,6 +107,7 @@ export const ModeSwitcher: React.FC = () => {
   const availableTabs = ROLE_TAB_ACCESS[currentRole];
   const visibleNavItems = NAV_ITEMS.filter((item) => availableTabs.includes(item.value));
   const [chatTreeOpen, setChatTreeOpen] = React.useState(false);
+  const [knowledgeProcessingTreeOpen, setKnowledgeProcessingTreeOpen] = React.useState(false);
   const [expandedProjects, setExpandedProjects] = React.useState<Record<string, boolean>>({});
   const [chatProjects, setChatProjects] = React.useState<GatewayChatProject[]>(CHAT_PROJECTS);
   const [activeThreadId, setActiveThreadId] = React.useState('chat-hull');
@@ -206,11 +216,27 @@ export const ModeSwitcher: React.FC = () => {
     if (tab === 'chat') {
       setActiveTab('chat');
       setChatTreeOpen((open) => !open);
+      setKnowledgeProcessingTreeOpen(false);
+      return;
+    }
+
+    if (tab === 'knowledgeProcessing') {
+      setActiveTab('knowledgeProcessing');
+      setKnowledgeProcessingTreeOpen((open) => !open);
+      setChatTreeOpen(false);
       return;
     }
 
     setChatTreeOpen(false);
+    setKnowledgeProcessingTreeOpen(false);
     setActiveTab(tab);
+  };
+
+  const selectKnowledgeProcessingSection = (section: KnowledgeProcessingSection) => {
+    setActiveTab('knowledgeProcessing');
+    setActiveKnowledgeProcessingSection(section);
+    setKnowledgeProcessingTreeOpen(true);
+    setChatTreeOpen(false);
   };
 
   const selectThread = async (projectId: string, chatId: string) => {
@@ -485,8 +511,11 @@ export const ModeSwitcher: React.FC = () => {
         minWidth: 316,
         flexBasis: 316,
         flexShrink: 0,
-        borderRight: isLight ? '2px solid rgba(14, 116, 144, 0.26)' : '2px solid rgba(198, 216, 240, 0.40)',
-        bgcolor: isLight ? '#f8fafc' : 'rgba(16, 17, 21, 0.96)',
+        borderRight: isLight ? '2px solid rgba(14, 116, 144, 0.26)' : '2px solid rgba(152, 217, 216, 0.52)',
+        bgcolor: isLight ? '#f8fafc' : '#2a2f30',
+        background: isLight
+          ? '#f8fafc'
+          : 'linear-gradient(180deg, #303637 0%, #292f30 46%, #222829 100%)',
         display: 'flex',
         flexDirection: 'column',
         overflowY: 'auto',
@@ -497,7 +526,7 @@ export const ModeSwitcher: React.FC = () => {
         gap: 2.5,
         boxShadow: isLight
           ? '14px 0 36px rgba(15, 23, 42, 0.08), inset -1px 0 0 rgba(255,255,255,0.72)'
-          : '16px 0 42px rgba(0,0,0,0.24), inset -1px 0 0 rgba(198, 216, 240, 0.18)',
+          : '30px 0 72px rgba(0,0,0,0.58), inset -1px 0 0 rgba(152, 217, 216, 0.34), inset 1px 0 0 rgba(255,255,255,0.07), inset 0 0 0 1px rgba(255,255,255,0.025)',
       }}
     >
       <Box
@@ -1016,6 +1045,97 @@ export const ModeSwitcher: React.FC = () => {
                   </Box>
                 </Collapse>
               )}
+
+              {item.value === 'knowledgeProcessing' && (
+                <Collapse in={knowledgeProcessingTreeOpen} timeout={220} unmountOnExit>
+                  <Box
+                    sx={{
+                      mt: 0.8,
+                      ml: 0.6,
+                      pl: 1.1,
+                      borderLeft: isLight ? '2px solid #bae6fd' : '2px solid rgba(198, 216, 240, 0.24)',
+                    }}
+                  >
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        display: 'block',
+                        mb: 0.6,
+                        color: isLight ? '#64748b' : 'rgba(198,208,222,0.72)',
+                        letterSpacing: '0.06em',
+                      }}
+                    >
+                      Рабочие зоны
+                    </Typography>
+                    <Stack spacing={0.35}>
+                      {KNOWLEDGE_PROCESSING_SECTIONS.map((section) => {
+                        const isSectionActive =
+                          activeTab === 'knowledgeProcessing' && activeKnowledgeProcessingSection === section.value;
+
+                        return (
+                          <Button
+                            key={section.value}
+                            size="small"
+                            onClick={() => selectKnowledgeProcessingSection(section.value)}
+                            sx={{
+                              justifyContent: 'flex-start',
+                              minHeight: 34,
+                              px: 0.75,
+                              py: 0.42,
+                              borderRadius: 1.5,
+                              textTransform: 'none',
+                              color: isSectionActive ? (isLight ? '#0f172a' : '#edf2ea') : 'text.secondary',
+                              bgcolor: isSectionActive
+                                ? isLight
+                                  ? '#e0f2fe'
+                                  : 'rgba(152, 217, 216, 0.10)'
+                                : 'transparent',
+                              border: '1px solid',
+                              borderColor: isSectionActive
+                                ? isLight
+                                  ? '#bae6fd'
+                                  : 'rgba(152, 217, 216, 0.20)'
+                                : 'transparent',
+                              '&:hover': {
+                                bgcolor: isLight ? 'rgba(224, 242, 254, 0.68)' : 'rgba(152, 217, 216, 0.08)',
+                              },
+                            }}
+                          >
+                            <Box sx={{ minWidth: 0, textAlign: 'left' }}>
+                              <Typography
+                                component="span"
+                                sx={{
+                                  display: 'block',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                  fontSize: '0.74rem',
+                                  fontWeight: isSectionActive ? 650 : 520,
+                                }}
+                              >
+                                {section.label}
+                              </Typography>
+                              <Typography
+                                component="span"
+                                sx={{
+                                  display: 'block',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                  fontSize: '0.64rem',
+                                  color: isLight ? 'rgba(71, 85, 105, 0.82)' : 'rgba(198,208,222,0.64)',
+                                }}
+                              >
+                                {section.description}
+                              </Typography>
+                            </Box>
+                          </Button>
+                        );
+                      })}
+                    </Stack>
+                  </Box>
+                </Collapse>
+              )}
             </Box>
           );
         })}
@@ -1093,6 +1213,7 @@ export const ModeSwitcher: React.FC = () => {
           Редактировать проект
         </MenuItem>
         <MenuItem
+          className="app-danger-menu-item"
           onClick={handleProjectMenuDelete}
           sx={{ gap: 1.1, fontSize: '0.86rem', color: isLight ? '#991b1b' : '#ee8f80' }}
         >
@@ -1126,6 +1247,7 @@ export const ModeSwitcher: React.FC = () => {
           Редактировать чат
         </MenuItem>
         <MenuItem
+          className="app-danger-menu-item"
           onClick={handleChatMenuDelete}
           sx={{ gap: 1.1, fontSize: '0.86rem', color: isLight ? '#991b1b' : '#ee8f80' }}
         >

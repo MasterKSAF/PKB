@@ -7,6 +7,8 @@ import type { ChatMessage } from '../utils/mockData';
 
 export type { AppTab, UserRole };
 
+export type KnowledgeProcessingSection = 'upload' | 'drafts' | 'registry' | 'journal';
+
 const getInitialThemeMode = (): 'dark' | 'light' => {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
     return 'dark';
@@ -30,6 +32,8 @@ interface UIState {
   logout: () => void;
   activeTab: AppTab;
   setActiveTab: (tab: AppTab) => void;
+  activeKnowledgeProcessingSection: KnowledgeProcessingSection;
+  setActiveKnowledgeProcessingSection: (section: KnowledgeProcessingSection) => void;
   currentUserId: string;
   setCurrentUserId: (userId: string) => void;
   currentRole: UserRole;
@@ -82,6 +86,8 @@ export const useUIStore = create<UIState>((set) => ({
     set({ isAuthenticated: false, activeTab: 'chat', focusMode: false, currentGatewaySessionId: null, currentPermissions: {} }),
   activeTab: 'chat',
   setActiveTab: (activeTab) => set({ activeTab }),
+  activeKnowledgeProcessingSection: 'upload',
+  setActiveKnowledgeProcessingSection: (activeKnowledgeProcessingSection) => set({ activeKnowledgeProcessingSection }),
   currentUserId: 'u1',
   setCurrentUserId: (currentUserId) => set({ currentUserId }),
   currentRole: 'user',
