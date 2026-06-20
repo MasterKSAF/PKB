@@ -246,6 +246,20 @@ class DocumentProcessingPipeline(PipelineDef):
             needs_auth=True,
         ))
 
+        # -- Шаг 7a (P1F-4/RG-10): Проверка preview_snapshot в документе --
+        steps.append(PipelineStep(
+            name="Проверка preview_snapshot в документе",
+            service="registry",
+            method="GET",
+            path="/api/v1/registry/documents/{doc_id}",
+            port=8084,
+            expected_status=200,
+            check=check_json_fields({
+                "data.preview_snapshot": (dict, type(None)),
+            }),
+            needs_auth=True,
+        ))
+
         # -- Шаг 8: Построение чанков + индексация RAG Builder --
         steps.append(PipelineStep(
             name="Построение чанков и индексация",

@@ -1368,3 +1368,68 @@ python -m service_checker check <service> --source-dir /path
 ### Статус
 ✅ **Добавлено (checker, 2026-06-19)**
 
+## 40. Учёт недостающих задач от 19.06.2026 (2026-06-20)
+
+### Что добавлено
+
+#### DB check — новые таблицы и схемы
+- `registry.drafts` (DB-19), `registry.classifier_registry` (DB-20),
+  `registry.categories`, `registry.document_categories` (DB-21)
+- Схема `auth` + таблица `auth.users` (DB-29)
+- `pipeline.draft_notifications` (OR-6)
+- Проверка `auth_ok` добавлена в `healthy`
+
+#### API endpoint definitions
+- **Parser (PS-3)**: добавлен `draft_id` в body POST /parser/process (prepare + main)
+- **OCR (OC-4)**: добавлен `draft_id` в body POST /ocr/process (prepare + main)
+- **Orchestrator (OR-1)**: добавлен `GET /api/v1/tasks/` и `GET /api/v1/health`
+
+#### Observability check
+- **GW-9**: проверка X-User-ID в ответах (помимо X-Request-ID)
+- **health_endpoint_exists**: отдельная проверка наличия /api/v1/health
+- **Error codes**: добавлены PREVIEW_NOT_SUPPORTED (422), EMPTY_QUERY (400), INVALID_PARAMETER (422)
+- Проверка X-Trace-ID (OTEL correlation)
+
+#### Pipeline chat_inference
+- **QS-8**: добавлен шаг проверки поля `enrichment_skipped` в ответе text/search
+
+### Статус
+✅ **Добавлено (checker, 2026-06-20)**
+
+## 41. Дополнение: OR-13, CV-4/CV-5, P1F-1/DB-4, OR-3b, P2I-1/9 (2026-06-20)
+
+### Что добавлено
+
+#### OR-13: Проверка document_id после approve
+- В `orchestrator_draft_lifecycle` после шага approve добавлены 2 шага:
+  1. GET /drafts/{id} — проверка полей document_id, version_id, is_new_document (OR-7)
+  2. GET /registry/documents/{approved_doc_id} — проверка существования документа в Registry
+- Если после approve черновик удалён (404) — проверка пропускается через skip_if
+
+#### CV-4/CV-5: Preview-поля
+- `converter_validator`: response_schema для POST /converter/preview расширена до 11 полей
+- `document_processing`: добавлен шаг проверки `preview_snapshot` (JSONB, nullable) в ответе Registry
+
+#### P1F-1/DB-4: UNIQUE-индексы
+- Добавлены константы EXPECTED_UNIQUE_INDEXES (6 индексов)
+- SQL-запрос проверяет наличие уникальных индексов в pg_indexes
+- unique_indexes_ok добавлен в healthy (влияет на общий статус БД)
+
+#### OR-3b: PATCH /drafts/{id}/metadata
+- Добавлен эндпоинт в orchestrator.py
+- Ожидает ответ с draft_id, title, status
+
+#### P2I-1/9: Статусы и переиндексация RAG Builder
+- Добавлен GET /rag/build/{doc_id}/integrity (проверка целостности)
+- Добавлен POST /rag/build/{doc_id}/reprocess (переиндексация)
+
+#### OR-14: MIME-ветвление OCR vs Parser
+- В `orchestrator_draft_lifecycle` добавлены 2 шага:
+  1. Создание черновика с `image/png` (минимальный 1x1 PNG, генерируется на лету)
+  2. Проверка статуса задачи image-черновика (200 OK)
+- Проверяется, что Orchestrator принимает разные MIME-типы и создаёт задачи
+- В `orchestrator.py` endpoint POST /drafts/ документирован как "MIME-ветвление OCR/Parser"
+
+### Статус
+✅ **Добавлено (checker, 2026-06-20)**
+

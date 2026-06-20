@@ -12,6 +12,8 @@
 | Health Check | Проверка `/health` каждого сервиса — жив ли, отвечает ли |
 | API Coverage | Вызов каждого эндпоинта из API-документации (~150 шт.) — проверка HTTP-статуса и JSON-схемы |
 | Pipeline Testing | Сквозные сценарии: загрузка → парсинг → индексация → поиск, чат-сессия, CRUD классификаторов |
+| DB Check | Проверка БД: расширения, схемы, таблицы (registry, rag, pipeline, auth), индексы |
+| Observability Check | SC-1: проверка OTEL SDK, OTLP-экспорт, correlation-id, structured logging, error codes |
 | Сбор логов | Чтение supervisor-логов каждого сервиса, поиск ошибок |
 | Генерация отчёта | Сводная таблица по всем сервисам (Markdown / HTML) |
 
@@ -57,13 +59,13 @@ service_checker/
 ├── pipelines/               # Модули пайплайнов
 │   ├── __init__.py                      # Реестр пайплайнов (8 шт.)
 │   ├── base.py                          # Базовые классы (PipelineStep, PipelineRunner и др.)
-│   ├── document_processing.py           # Пайплайн обработки документов (10 шагов)
-│   ├── chat_inference.py                # Пайплайн чат-инференса (5 шагов)
+│   ├── document_processing.py           # Пайплайн обработки документов (12 шагов)
+│   ├── chat_inference.py                # Пайплайн чат-инференса (6 шагов, с enrichment_skipped)
 │   ├── registry_lifecycle.py            # Пайплайн жизненного цикла Registry (11 шагов)
 │   ├── full_document_lifecycle.py       # Полный цикл: создание → ошибка → восстановление (12 шагов)
-│   ├── admin_user_lifecycle.py          # Admin управление пользователем (10 шагов)
+│   ├── admin_user_lifecycle.py          # Admin управление пользователем (16 шагов, AU-3)
 │   ├── registry_quarantine.py           # Карантин классификаторов (10 шагов)
-│   ├── orchestrator_draft_lifecycle.py  # Черновик Orchestrator (8 шагов)
+│   ├── orchestrator_draft_lifecycle.py  # Черновик Orchestrator (11 шагов, OR-13/14)
 │   └── multi_document_cross_search.py   # Мульти-документный поиск (19 шагов)
 ├── docker/                  # Docker-конфигурация
 │   ├── docker-compose.yml               # 5 контейнеров: postgres, redis, minio, tei, app
@@ -106,8 +108,8 @@ service_checker/
 | Registry | 8084 | 200 | RUNNING | RG-2/6/7/8/9/10 — current_version_id, BM25, valid_at |
 | Integration | 8085 | 200 | RUNNING | |
 | Converter-Validator | 8086 | 200 | RUNNING | CV-3/3a — /converter/preview, /validate/metadata |
-| Parser | 8087 | 200 | RUNNING | PS-5 — единый /process с mode=preview|full |
-| OCR | 8088 | — | RUNNING | OC-8 — единый /process с mode=preview|full |
+| Parser | 8087 | 200 | RUNNING | PS-5 — единый /process с mode=preview|full, PS-3: draft_id |
+| OCR | 8088 | — | RUNNING | OC-8 — единый /process с mode=preview|full, OC-4: draft_id |
 | RAG Builder | 8090 | 200 | RUNNING | RB-7: 202 async, RB-8: indexed |
 | RAG Search | 8091 | 200 | RUNNING | RS-6: без top_k/search_type, valid_at+filters |
 

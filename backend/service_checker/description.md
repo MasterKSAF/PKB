@@ -476,7 +476,10 @@ python setup_db.py --only-env         # только .env файлы
 | Span-атрибуты | instrument_app, BatchSpanProcessor | Статический анализ |
 | Корреляционные заголовки | X-Request-ID, X-Trace-ID, X-User-ID, X-Draft-ID, X-Document-ID, X-Version-ID в ответе /health | HTTP-запрос |
 | Структурированное логирование | JSON-поля severity, timestamp, service, trace_id, span_id | HTTP + статический анализ |
-| Коды ошибок | INDEX_TRIGGER_TIMEOUT (408), DECISION_TIMEOUT (408), PREVIEW_TRIGGER_TIMEOUT (408), LLM_GENERATION_TIMEOUT (408) | HTTP-запрос |
+| Health endpoint | Наличие /api/v1/health (собственный, не /system/health) | HTTP-запрос |
+| X-User-ID | Проверка заголовка X-User-ID в ответе (GW-9) | HTTP-запрос |
+| X-Trace-ID | Проверка заголовка X-Trace-ID в ответе (OTEL correlation) | HTTP-запрос |
+| Коды ошибок | INDEX_TRIGGER_TIMEOUT (408), DECISION_TIMEOUT (408), PREVIEW_TRIGGER_TIMEOUT (408), LLM_GENERATION_TIMEOUT (408), PREVIEW_NOT_SUPPORTED (422), EMPTY_QUERY (400), INVALID_PARAMETER (422) | HTTP-запрос |
 
 **Использование:**
 
@@ -511,8 +514,9 @@ python -m service_checker check auth_service --source-dir /path/to/auth_service
 | `test_override_logic.py` | 4 | all_404 оверрайд: с JSON, без JSON, откат health-результатов, mixed-режим |
 | `test_report_generation.py` | 3 | Статус-колонка ❌ при ping_ok=False, иконки ✅/❌ в отчёте и в консоли |
 | `test_no_restarts.py` | 1 (integration) | /auth/refresh не должен крашить Auth Service |
+| `test_observability_check.py` | 11 | Модель ObservabilityCheckResult, формат отчёта, константы KNOWN_ERROR_CODES (7 кодов), CORRELATION_HEADERS |
 | `test_pipeline_base.py` | 29 | Базовые классы Pipeline Testing: PipelineContext, PipelineStep, PipelineResult, PipelineDef, PipelineRunner, StepStatus, функции проверки |
-| `test_pipeline_steps.py` | 28 | Шаги пайплайнов: document_processing (7), chat_inference (7), registry_lifecycle (7), реестр пайплайнов (3) |
+| `test_pipeline_steps.py` | 28 | Шаги пайплайнов: document_processing (7), chat_inference (7→8 шагов с enrichment_skipped), registry_lifecycle (7), реестр пайплайнов (3) |
 
 > 🔹 **Особенность:** тесты покрывают только логику service_checker (success/fail, all_404, отчёт). Интеграционный тест  требует Docker. Юнит-тесты сервисов (auth_service и др.) находятся в самих сервисах, не в checker.
 

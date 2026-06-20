@@ -32,12 +32,26 @@ def get_service_def() -> ServiceDef:
             response_schema={"status": str}),
         # CV-3: POST /converter/preview (вместо /converter/preview/metadata)
         # Без title_hash_sha256/title_key в ответе (14 полей, без бизнес-ключа)
+        # CV-4: проверка 8+ полей preview_metadata
         EndpointDef("POST", f"{API_PREFIX}/converter/preview", "converter",
             "Предпросмотр метаданных",
             body={"task_id": "12345", "version_id": "1",
                   "raw_json": {"test": True}},
-            response_schema={"doc_code": str, "title": str, "document_type": str}),
+            response_schema={
+                "doc_code": str,
+                "title": str,
+                "document_type": str,
+                "source_type": str,
+                "era": str,
+                "validity_status": str,
+                "mks_oks_code": (str, type(None)),
+                "okstu_code": (str, type(None)),
+                "udk_code": (str, type(None)),
+                "jurisdiction": (str, type(None)),
+                "processing_status": str,
+            }),
         # CV-3a: POST /validate/metadata — единая точка вычисления бизнес-ключа
+        # DB-1/DB-28: title_hash_sha256, title_key в ответе
         EndpointDef("POST", f"{API_PREFIX}/validate/metadata", "validate",
             "Валидация метаданных (вычисление бизнес-ключа)",
             body={"title": "Тестовый документ", "doc_code": "TEST-001",

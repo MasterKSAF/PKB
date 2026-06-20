@@ -26,8 +26,8 @@ class TestDocumentProcessingPipeline:
     def test_build_steps_count(self):
         p = DocumentProcessingPipeline()
         steps = p.build_steps(PipelineContext())
-        assert len(steps) == 12, (
-            f"Ожидалось 12 шагов, получено {len(steps)}\n"
+        assert len(steps) == 13, (
+            f"Ожидалось 13 шагов, получено {len(steps)}\n"
             f"Шаги: {[s.name for s in steps]}"
         )
 
@@ -45,6 +45,7 @@ class TestDocumentProcessingPipeline:
             "Проверка уникальности документа",  # check-uniqueness
             "Конвертация JSON",
             "Сохранение документа в Registry",
+            "Проверка preview_snapshot в документе",  # P1F-4/RG-10
             "Построение чанков и индексация",
             "Поиск по индексу RAG Search",
         ]
@@ -74,7 +75,7 @@ class TestDocumentProcessingPipeline:
     def test_step_expected_status(self):
         p = DocumentProcessingPipeline()
         steps = p.build_steps(PipelineContext())
-        expected = [200, {200, 409}, 200, 202, 200, 200, 200, {200, 422}, 200, {201, 409}, {200, 202}, 200]
+        expected = [200, {200, 409}, 200, 202, 200, 200, 200, {200, 422}, 200, {201, 409}, 200, {200, 202}, 200]
         actual = [s.expected_status for s in steps]
         assert actual == expected, f"Ожидаемые статусы не совпадают:\n{actual}"
 
@@ -98,8 +99,8 @@ class TestChatInferencePipeline:
     def test_build_steps_count(self):
         p = ChatInferencePipeline()
         steps = p.build_steps(PipelineContext())
-        assert len(steps) == 5, (
-            f"Ожидалось 5 шагов, получено {len(steps)}\n"
+        assert len(steps) == 6, (
+            f"Ожидалось 6 шагов, получено {len(steps)}\n"
             f"Шаги: {[s.name for s in steps]}"
         )
 
@@ -111,6 +112,7 @@ class TestChatInferencePipeline:
             "Создание чат-сессии",
             "Отправка сообщения",
             "Текстовый поиск",
+            "Проверка enrichment_skipped",  # QS-8: новый шаг
             "Поиск RAG Search",
         ]
         actual_names = [s.name for s in steps]

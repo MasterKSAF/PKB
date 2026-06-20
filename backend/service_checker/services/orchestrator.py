@@ -58,8 +58,15 @@ def get_service_def() -> ServiceDef:
         EndpointDef("GET", f"{API_PREFIX}/monitor/metrics", "monitor",
             "Метрики",
             response_schema={"control_metrics": dict}),
+        EndpointDef("GET", f"{API_PREFIX}/health", "health",
+            "Health check Orchestrator",
+            response_schema={"status": str}),
 
         # Tasks
+        # OR-1: список задач (админка, read-only)
+        EndpointDef("GET", f"{API_PREFIX}/tasks/", "tasks",
+            "Список задач (админка read-only)",
+            response_schema={"tasks": list, "meta": dict}),
         EndpointDef("GET", f"{_TASK}/status", "tasks",
             "Статус задачи",
             response_schema={"status": str}),
@@ -84,8 +91,9 @@ def get_service_def() -> ServiceDef:
             "Файл документа"),
 
         # OR-11: Draft-first — единая точка входа
+        # OR-14: MIME-ветвление — image/* → OCR, application/pdf → Parser
         EndpointDef("POST", f"{API_PREFIX}/drafts/", "drafts",
-            "Создать черновик (единая точка входа)",
+            "Создать черновик (единая точка входа, MIME-ветвление OCR/Parser)",
             form_body={"document_key": "test-doc-key", "title": "Тестовый черновик"},
             response_schema={"draft_id": int}),
         EndpointDef("GET", f"{API_PREFIX}/drafts/", "drafts",
@@ -104,6 +112,12 @@ def get_service_def() -> ServiceDef:
             "Решение по черновику",
             body={"action": "approve", "comment": "OK"},
             expected_status={200, 409, 422}),
+        # OR-3b: PATCH /drafts/{id}/metadata — обновление метаданных
+        # Вместо локального пересчёта вызывает /validate/metadata
+        EndpointDef("PATCH", f"{_DRAFT}/metadata", "drafts",
+            "Обновление метаданных черновика",
+            body={"title": "Обновлённый заголовок", "doc_code": "UPD-001"},
+            response_schema={"draft_id": int, "title": str, "status": str}),
         EndpointDef("GET", f"{_DRAFT}/preview", "drafts",
             "Превью черновика",
             expected_status={200, 404}),

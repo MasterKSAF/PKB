@@ -122,8 +122,18 @@ class TestConstants:
         assert "DECISION_TIMEOUT" in KNOWN_ERROR_CODES
         assert "PREVIEW_TRIGGER_TIMEOUT" in KNOWN_ERROR_CODES
         assert "LLM_GENERATION_TIMEOUT" in KNOWN_ERROR_CODES
-        for code in KNOWN_ERROR_CODES.values():
-            assert code == 408  # все таймауты — 408
+        assert "PREVIEW_NOT_SUPPORTED" in KNOWN_ERROR_CODES
+        assert "EMPTY_QUERY" in KNOWN_ERROR_CODES
+        assert "INVALID_PARAMETER" in KNOWN_ERROR_CODES
+        # Таймауты — 408
+        assert KNOWN_ERROR_CODES["INDEX_TRIGGER_TIMEOUT"] == 408
+        assert KNOWN_ERROR_CODES["DECISION_TIMEOUT"] == 408
+        assert KNOWN_ERROR_CODES["PREVIEW_TRIGGER_TIMEOUT"] == 408
+        assert KNOWN_ERROR_CODES["LLM_GENERATION_TIMEOUT"] == 408
+        # Специфичные коды
+        assert KNOWN_ERROR_CODES["PREVIEW_NOT_SUPPORTED"] == 422
+        assert KNOWN_ERROR_CODES["EMPTY_QUERY"] == 400
+        assert KNOWN_ERROR_CODES["INVALID_PARAMETER"] == 422
 
     def test_correlation_headers(self):
         expected = [

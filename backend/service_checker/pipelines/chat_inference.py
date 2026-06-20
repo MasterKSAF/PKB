@@ -100,6 +100,23 @@ class ChatInferencePipeline(PipelineDef):
             needs_auth=True,
         ))
 
+        # ── Шаг 4a: Проверка enrichment_skipped (QS-8) в ответе text/search ──
+        steps.append(PipelineStep(
+            name="Проверка enrichment_skipped",
+            service="query",
+            method="POST",
+            path="/api/v1/text/search",
+            port=8083,
+            body={
+                "text": "толщина обшивки",
+                "valid_at": "2026-06-19",
+                "filters": {"category_ids": []},
+            },
+            expected_status=200,
+            check=check_json_field("enrichment_skipped", bool),
+            needs_auth=True,
+        ))
+
         # ── Шаг 5: Поиск RAG Search (RS-6: без top_k, с valid_at + filters) ──
         steps.append(PipelineStep(
             name="Поиск RAG Search",

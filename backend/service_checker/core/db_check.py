@@ -47,6 +47,7 @@ EXPECTED_SCHEMAS: Set[str] = {
     "registry",
     "rag",
     "pipeline",  # DB-23: schema для pipeline.tasks / pipeline.task_steps
+    "auth",      # DB-29: schema для auth.users
 }
 
 EXPECTED_REGISTRY_TABLES: Set[str] = {
@@ -58,15 +59,41 @@ EXPECTED_REGISTRY_TABLES: Set[str] = {
     "registry.document_references",
     "registry.document_versions",
     "registry.rs_enums",
+    "registry.drafts",                # DB-19: черновики в Registry
+    "registry.classifier_registry",   # DB-20: классификаторы (mks|oks|okstu|udk)
+    "registry.categories",            # DB-21: категории
+    "registry.document_categories",   # DB-21: M:N документы-категории
 }
 
 EXPECTED_PIPELINE_TABLES: Set[str] = {
     "pipeline.tasks",
     "pipeline.task_steps",
+    "pipeline.draft_notifications",  # OR-6: уведомления pipeline
 }
 
 EXPECTED_RAG_TABLES: Set[str] = {
     "rag.document_chunks",
+}
+
+# Таблицы схемы auth (DB-29)
+EXPECTED_AUTH_TABLES: Set[str] = {
+    "auth.users",
+}
+
+# Ожидаемые UNIQUE-индексы (DB-4, P1F-1)
+EXPECTED_UNIQUE_INDEXES: Dict[str, str] = {
+    "registry.documents_doc_code_era_key":
+        "CREATE UNIQUE INDEX ON registry.documents (doc_code, era)",
+    "registry.documents_title_hash_sha256_key":
+        "CREATE UNIQUE INDEX ON registry.documents (title_hash_sha256)",
+    "registry.document_versions_doc_id_path_key":
+        "CREATE UNIQUE INDEX ON registry.document_versions (document_id, path)",
+    "registry.document_versions_doc_id_version_key":
+        "CREATE UNIQUE INDEX ON registry.document_versions (document_id, version_number)",
+    "registry.documents_title_key_key":
+        "CREATE UNIQUE INDEX ON registry.documents (title_key)",  # DB-29
+    "rag.document_chunks_section_chunk_key":
+        "CREATE UNIQUE INDEX ON rag.document_chunks (section_id, chunk_index)",  # DB-4
 }
 
 # Список сервисов — кто должен создавать таблицы при старте
@@ -146,6 +173,13 @@ class DbCheckResult:
     rag_has_gin: bool = False
     rag_has_created_at: bool = False
 
+    auth_tables: List[str] = field(default_factory=list)
+    auth_missing: Set[str] = field(default_factory=set)
+
+    # UNIQUE-индексы (DB-4, P1F-1)
+    unique_indexes_found: Set[str] = field(default_factory=set)
+    unique_indexes_missing: Set[str] = field(default_factory=set)
+
     can_select_registry: bool = False
     error: str | None = None
 
@@ -175,6 +209,14 @@ class DbCheckResult:
         return len(self.pipeline_missing) == 0
 
     @property
+    def auth_ok(self) -> bool:
+        return len(self.auth_missing) == 0
+
+    @property
+    def unique_indexes_ok(self) -> bool:
+        return len(self.unique_indexes_missing) == 0
+
+    @property
     def healthy(self) -> bool:
         """БД полностью инициализирована."""
         return (self.db_exists and self.db_accessible
@@ -182,6 +224,8 @@ class DbCheckResult:
                 and self.schemas_ok
                 and self.registry_ok
                 and self.pipeline_ok
+                and self.auth_ok
+                and self.unique_indexes_ok
                 and self.rag_ok)
 
     @property
@@ -320,7 +364,38 @@ def run_db_check() -> DbCheckResult:
     result.pipeline_tables = pipeline_tables
     result.pipeline_missing = EXPECTED_PIPELINE_TABLES - set(pipeline_tables)
 
-    # ── 7. Статический анализ: create_all в сервисах ────────────
+    # ── 7. Auth таблицы (DB-29) ─────────────────────────────────
+    auth_tables = _query_single_column(
+        "SELECT schemaname || '.' || tablename "
+        "FROM pg_tables WHERE schemaname = 'auth' "
+        "ORDER BY tablename"
+    )
+    result.auth_tables = auth_tables
+    result.auth_missing = EXPECTED_AUTH_TABLES - set(auth_tables)
+
+    # ── 8. UNIQUE-индексы (DB-4, P1F-1) ────────────────────────
+    all_indexes = _query_single_column(
+        "SELECT indexname FROM pg_indexes "
+        "WHERE schemaname IN ('registry', 'rag') "
+        "AND indexdef LIKE '%UNIQUE INDEX%' "
+        "ORDER BY indexname"
+    )
+    result.unique_indexes_found = set(all_indexes)
+    # Проверка по ключевым словам в имени индекса
+    result.unique_indexes_missing = set()
+    for expected_name in EXPECTED_UNIQUE_INDEXES:
+        parts = expected_name.replace("registry.", "").replace("rag.", "").split("_")
+        # Берём первые 3-4 значимых слова (таблица + ключевые колонки)
+        significant = [p for p in parts if p not in ("key", "idx", "ix")][:4]
+        found = False
+        for idx_name in all_indexes:
+            if all(p in idx_name.lower() for p in significant):
+                found = True
+                break
+        if not found:
+            result.unique_indexes_missing.add(expected_name)
+
+    # ── 9. Статический анализ: create_all в сервисах ────────────
     result.services_create_all = check_services_startup_create_all()
 
     return result
@@ -437,6 +512,20 @@ def format_db_report(result: DbCheckResult) -> str:
     else:
         missing_p = ", ".join(sorted(result.pipeline_missing))
         w(f"| Pipeline таблицы | ❌ | отсутствуют: {missing_p} |")
+
+    # Auth таблицы (DB-29)
+    if result.auth_ok:
+        w(f"| Auth таблицы | ✅ | {len(result.auth_tables)} таблиц |")
+    else:
+        missing_a = ", ".join(sorted(result.auth_missing))
+        w(f"| Auth таблицы | ❌ | отсутствуют: {missing_a} |")
+
+    # UNIQUE-индексы (DB-4, P1F-1)
+    if result.unique_indexes_ok:
+        w(f"| UNIQUE-индексы | ✅ | {len(result.unique_indexes_found)} найдено |")
+    else:
+        missing_u = ", ".join(sorted(result.unique_indexes_missing))
+        w(f"| UNIQUE-индексы | ❌ | отсутствуют: {missing_u} |")
 
     # RAG
     rag_checks = [

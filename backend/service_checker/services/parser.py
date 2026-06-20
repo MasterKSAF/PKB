@@ -28,9 +28,10 @@ def get_service_def() -> ServiceDef:
 
     prepare_endpoints = [
         # PS-5: mode=preview|full
+        # PS-3: обязательный draft_id
         EndpointDef("POST", f"{API_PREFIX}/parser/process", "parser",
             "Запуск обработки (prepare)",
-            body={"task_id": 12345, "version_id": "1",
+            body={"task_id": 12345, "draft_id": 1, "version_id": "1",
                   "file_key": "test-file-key.pdf", "mode": "preview"},
             extract_keys=["task_id"],
             response_schema={"task_id": int, "status": str, "mode": str},
@@ -46,7 +47,7 @@ def get_service_def() -> ServiceDef:
         # PS-8: PREVIEW_NOT_SUPPORTED (422)
         EndpointDef("POST", f"{API_PREFIX}/parser/process", "parser",
             "Запуск обработки (mode=preview|full)",
-            body={"task_id": 12345, "version_id": "1",
+            body={"task_id": 12345, "draft_id": 1, "version_id": "1",
                   "file_key": "test-file-key.pdf", "mode": "full"},
             response_schema={"task_id": int, "status": str, "mode": str,
                              "preview_not_supported": bool}),

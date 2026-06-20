@@ -48,13 +48,16 @@ class ObservabilityCheckResult:
         }
 
 
-# ─── Known error codes (CM-7) ───────────────────────────────────────────
+# ─── Known error codes (CM-7, RG-3, AU-1, RS-12) ──────────────────────
 
 KNOWN_ERROR_CODES = {
     "INDEX_TRIGGER_TIMEOUT": 408,
     "DECISION_TIMEOUT": 408,
     "PREVIEW_TRIGGER_TIMEOUT": 408,
     "LLM_GENERATION_TIMEOUT": 408,
+    "PREVIEW_NOT_SUPPORTED": 422,
+    "EMPTY_QUERY": 400,
+    "INVALID_PARAMETER": 422,
 }
 
 # ─── Correlation header names (CM-5) ────────────────────────────────────
@@ -152,10 +155,13 @@ async def check_service_otel(
             result.passed = False
             return result
 
-    # 2. Проверка X-Request-ID в ответе (на любом эндпоинте)
+    # 2. Проверка health endpoint'a (свой /health, не /system/health)
+    await _check_health_endpoint(result, service_key, port, base_host)
+
+    # 3. Проверка X-Request-ID в ответе (на любом эндпоинте)
     await _check_request_id_header(result, service_key, port, base_host)
 
-    # 3. Проверка кодов ошибок
+    # 4. Проверка кодов ошибок
     await _check_error_codes(result, service_key, port, base_host)
 
     # Итоговый статус
@@ -166,13 +172,46 @@ async def check_service_otel(
     return result
 
 
+async def _check_health_endpoint(
+    result: ObservabilityCheckResult,
+    service_key: str,
+    port: int,
+    base_host: str,
+) -> None:
+    """Проверить, что сервис имеет собственный /health endpoint."""
+    async with httpx.AsyncClient(timeout=10) as client:
+        try:
+            resp = await client.get(
+                f"http://{base_host}:{port}/api/v1/health",
+                headers={"Accept": "application/json"},
+            )
+            if resp.status_code < 500:
+                result.checks["health_endpoint_exists"] = True
+                result.details["health_url"] = "/api/v1/health"
+            else:
+                result.checks["health_endpoint_exists"] = False
+                result.warnings.append(
+                    f"/api/v1/health вернул {resp.status_code}"
+                )
+        except Exception:
+            result.checks["health_endpoint_exists"] = False
+            result.warnings.append(
+                f"/api/v1/health недоступен на {base_host}:{port}"
+            )
+
+
 async def _check_request_id_header(
     result: ObservabilityCheckResult,
     service_key: str,
     port: int,
     base_host: str,
 ) -> None:
-    """Проверить, что сервис генерирует X-Request-ID и возвращает его."""
+    """Проверить, что сервис генерирует корреляционные заголовки в ответе.
+    
+    Проверяет (GW-9):
+    - X-Request-ID (UUIDv4)
+    - X-User-ID (после JWT-валидации)
+    """
     async with httpx.AsyncClient(timeout=10) as client:
         try:
             # Пробуем health endpoint — он должен быть без токена
@@ -189,8 +228,28 @@ async def _check_request_id_header(
                 result.warnings.append(
                     "Сервис не генерирует X-Request-ID в ответе"
                 )
+
+            # GW-9: X-User-ID проверяем отдельно
+            xuid = resp.headers.get("X-User-ID") or resp.headers.get("x-user-id")
+            if xuid:
+                result.checks["x_user_id_generated"] = True
+                result.details["x_user_id"] = xuid
+            else:
+                result.checks["x_user_id_generated"] = False
+                # Не все сервисы имеют JWT — только warning
+                result.warnings.append(
+                    "Сервис не возвращает X-User-ID (возможно, не требуется)"
+                )
+
+            # Проверка X-Trace-ID (OTEL)
+            xtid = resp.headers.get("X-Trace-ID") or resp.headers.get("x-trace-id")
+            if xtid:
+                result.checks["x_trace_id_generated"] = True
+                result.details["x_trace_id"] = xtid
+
         except Exception:
             result.checks["x_request_id_generated"] = False
+            result.checks["x_user_id_generated"] = False
 
 
 async def _check_error_codes(
@@ -199,15 +258,33 @@ async def _check_error_codes(
     port: int,
     base_host: str,
 ) -> None:
-    """Проверить, что сервис возвращает известные коды ошибок."""
+    """Проверить, что сервис возвращает известные коды ошибок.
+    
+    Проверяет таймауты (CM-7) и специфичные коды (PS-8, OC-11, RS-12).
+    """
     error_endpoints = [
         ("POST", "/api/v1/drafts/{draft_id}/preview", "DECISION_TIMEOUT"),
+        ("POST", "/api/v1/parser/process", "PREVIEW_NOT_SUPPORTED"),
+        ("POST", "/api/v1/ocr/process", "PREVIEW_NOT_SUPPORTED"),
+        ("POST", "/api/v1/rag/search", "EMPTY_QUERY"),
     ]
     async with httpx.AsyncClient(timeout=10) as client:
         for method, path, error_code in error_endpoints:
             try:
-                url = f"http://{base_host}:{port}{path.replace('{draft_id}', '999999')}"
-                resp = await client.request(method, url, json={})
+                url = f"http://{base_host}:{port}"
+                # Подставляем path-параметры
+                url_path = path.replace('{draft_id}', '999999')
+                url = f"http://{base_host}:{port}{url_path}"
+                
+                # Для разных эндпоинтов — разное тело
+                if error_code == "PREVIEW_NOT_SUPPORTED":
+                    body_data = {"file_key": "unsupported.docx", "mode": "full"}
+                elif error_code == "EMPTY_QUERY":
+                    body_data = {"query": "", "valid_at": "2026-06-19", "filters": {}}
+                else:
+                    body_data = {}
+                
+                resp = await client.request(method, url, json=body_data)
                 body = resp.text
                 if error_code in body:
                     result.checks[f"error_code_{error_code}"] = True
