@@ -29,7 +29,11 @@ class ChunkRepository:
     в PostgreSQL (nsi.chunks).
     """
 
-    def save_chunks(self, chunks: list[EmbeddedChunk]) -> None:
+    def save_chunks(
+            self,
+            chunks: list[EmbeddedChunk],
+            indexing_txn_id: str | None = None,
+    ) -> None:
         """
         Сохраняет список чанков с эмбеддингами.
 
@@ -80,7 +84,11 @@ class InMemoryChunkRepository(ChunkRepository):
     def __init__(self) -> None:
         self._chunks: list[EmbeddedChunk] = []
 
-    def save_chunks(self, chunks: list[EmbeddedChunk]) -> None:
+    def save_chunks(
+            self,
+            chunks: list[EmbeddedChunk],
+            indexing_txn_id: str | None = None,
+    ) -> None:
         self._chunks.extend(chunks)
 
     def list_chunks(self) -> list[EmbeddedChunk]:
