@@ -42,6 +42,203 @@ class PostgresChunkRepository(ChunkRepository):
 
         return result == (1,)
 
+    def create_indexing_job(
+        self,
+        document_id: int,
+        indexing_txn_id: str,
+        status: str = "indexing",
+    ) -> int:
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    INSERT INTO {settings.POSTGRES_SCHEMA}.indexing_jobs (
+                        indexing_txn_id,
+                        document_id,
+                        status
+                    )
+                    VALUES (%s, %s, %s)
+                    RETURNING id
+                    """,
+                    (
+                        indexing_txn_id,
+                        document_id,
+                        status,
+                    ),
+                )
+
+                task_id = cur.fetchone()[0]
+
+            conn.commit()
+
+        return task_id
+
+    def mark_indexing_job_indexing(
+        self,
+        indexing_txn_id: str,
+    ) -> None:
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    UPDATE {settings.POSTGRES_SCHEMA}.indexing_jobs
+                    SET
+                        status = 'indexing',
+                        updated_at = now()
+                    WHERE indexing_txn_id = %s
+                    """,
+                    (indexing_txn_id,),
+                )
+
+            conn.commit()
+
+    def mark_indexing_job_indexed(
+        self,
+        indexing_txn_id: str,
+        chunks_count: int,
+        index_stats: dict,
+        warnings: list[dict] | None = None,
+        errors: list[dict] | None = None,
+    ) -> None:
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    UPDATE {settings.POSTGRES_SCHEMA}.indexing_jobs
+                    SET
+                        status = 'indexed',
+                        chunks_count = %s,
+                        has_embeddings = %s,
+                        indexed_at = now(),
+                        index_stats = %s,
+                        warnings = %s,
+                        errors = %s,
+                        updated_at = now()
+                    WHERE indexing_txn_id = %s
+                    """,
+                    (
+                        chunks_count,
+                        chunks_count > 0,
+                        json.dumps(index_stats),
+                        json.dumps(warnings or []),
+                        json.dumps(errors or []),
+                        indexing_txn_id,
+                    ),
+                )
+
+            conn.commit()
+
+    def mark_indexing_job_failed(
+        self,
+        indexing_txn_id: str,
+        errors: list[dict],
+        warnings: list[dict] | None = None,
+    ) -> None:
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    UPDATE {settings.POSTGRES_SCHEMA}.indexing_jobs
+                    SET
+                        status = 'failed',
+                        errors = %s,
+                        warnings = %s,
+                        updated_at = now()
+                    WHERE indexing_txn_id = %s
+                    """,
+                    (
+                        json.dumps(errors),
+                        json.dumps(warnings or []),
+                        indexing_txn_id,
+                    ),
+                )
+
+            conn.commit()
+
+    def get_indexing_job(
+        self,
+        indexing_txn_id: str,
+    ) -> dict | None:
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    SELECT
+                        document_id,
+                        status,
+                        indexing_txn_id::text,
+                        chunks_count,
+                        has_embeddings,
+                        indexed_at,
+                        index_stats,
+                        warnings,
+                        errors
+                    FROM {settings.POSTGRES_SCHEMA}.indexing_jobs
+                    WHERE indexing_txn_id = %s
+                    """,
+                    (indexing_txn_id,),
+                )
+
+                row = cur.fetchone()
+
+        if row is None:
+            return None
+
+        return {
+            "document_id": row[0],
+            "status": row[1],
+            "indexing_txn_id": row[2],
+            "chunks_count": row[3],
+            "has_embeddings": row[4],
+            "indexed_at": row[5],
+            "index_stats": row[6] or {},
+            "warnings": row[7] or [],
+            "errors": row[8] or [],
+        }
+
+    def get_latest_indexing_job_for_document(
+        self,
+        document_id: int,
+    ) -> dict | None:
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    SELECT
+                        document_id,
+                        status,
+                        indexing_txn_id::text,
+                        chunks_count,
+                        has_embeddings,
+                        indexed_at,
+                        index_stats,
+                        warnings,
+                        errors
+                    FROM {settings.POSTGRES_SCHEMA}.indexing_jobs
+                    WHERE document_id = %s
+                    ORDER BY created_at DESC, id DESC
+                    LIMIT 1
+                    """,
+                    (document_id,),
+                )
+
+                row = cur.fetchone()
+
+        if row is None:
+            return None
+
+        return {
+            "document_id": row[0],
+            "status": row[1],
+            "indexing_txn_id": row[2],
+            "chunks_count": row[3],
+            "has_embeddings": row[4],
+            "indexed_at": row[5],
+            "index_stats": row[6] or {},
+            "warnings": row[7] or [],
+            "errors": row[8] or [],
+        }
+
 # Создание схемы базы данных и таблиц
 
     def ensure_schema(self) -> None:
@@ -65,6 +262,58 @@ class PostgresChunkRepository(ChunkRepository):
                     sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(
                         sql.Identifier(settings.POSTGRES_SCHEMA)
                     )
+                )
+
+                logger.info("ensure_schema: before create table indexing_jobs")
+                cur.execute(
+                    sql.SQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS {}.indexing_jobs (
+                            id BIGINT GENERATED ALWAYS AS IDENTITY UNIQUE,
+
+                            indexing_txn_id UUID PRIMARY KEY,
+                            document_id BIGINT NOT NULL,
+
+                            status TEXT NOT NULL,
+                            chunks_count INTEGER NOT NULL DEFAULT 0,
+                            has_embeddings BOOLEAN NOT NULL DEFAULT false,
+                            indexed_at TIMESTAMPTZ,
+
+                            index_stats JSONB NOT NULL DEFAULT jsonb_build_object(),
+                            warnings JSONB NOT NULL DEFAULT jsonb_build_array(),
+                            errors JSONB NOT NULL DEFAULT jsonb_build_array(),
+
+                            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                            updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+                            CONSTRAINT chk_indexing_jobs_status
+                                CHECK (status IN (
+                                    'pending_index',
+                                    'indexing',
+                                    'indexed',
+                                    'failed'
+                                ))
+                        )
+                        """
+                    ).format(sql.Identifier(settings.POSTGRES_SCHEMA))
+                )
+
+                cur.execute(
+                    sql.SQL(
+                        """
+                        CREATE INDEX IF NOT EXISTS idx_indexing_jobs_document_id
+                        ON {}.indexing_jobs(document_id)
+                        """
+                    ).format(sql.Identifier(settings.POSTGRES_SCHEMA))
+                )
+
+                cur.execute(
+                    sql.SQL(
+                        """
+                        CREATE INDEX IF NOT EXISTS idx_indexing_jobs_status
+                        ON {}.indexing_jobs(status)
+                        """
+                    ).format(sql.Identifier(settings.POSTGRES_SCHEMA))
                 )
 
                 logger.info("ensure_schema: before create table document_sections")
@@ -114,6 +363,7 @@ class PostgresChunkRepository(ChunkRepository):
                             id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
                             document_id BIGINT NOT NULL,
                             document_version_id BIGINT NOT NULL,
+                            indexing_txn_id UUID,
                             document_section_id BIGINT NOT NULL,
                             section_id BIGINT NOT NULL,
                             parent_id BIGINT,
@@ -139,6 +389,25 @@ class PostgresChunkRepository(ChunkRepository):
                         sql.Identifier(settings.POSTGRES_SCHEMA),
                         sql.Identifier(settings.POSTGRES_SCHEMA),
                     )
+                )
+
+                logger.info("ensure_schema: before alter chunks add indexing_txn_id")
+                cur.execute(
+                    sql.SQL(
+                        """
+                        ALTER TABLE {}.chunks
+                        ADD COLUMN IF NOT EXISTS indexing_txn_id UUID
+                        """
+                    ).format(sql.Identifier(settings.POSTGRES_SCHEMA))
+                )
+
+                cur.execute(
+                    sql.SQL(
+                        """
+                        CREATE INDEX IF NOT EXISTS idx_chunks_indexing_txn_id
+                        ON {}.chunks(indexing_txn_id)
+                        """
+                    ).format(sql.Identifier(settings.POSTGRES_SCHEMA))
                 )
 
                 logger.info("ensure_schema: before create index chunks_content_tsv")
@@ -362,7 +631,11 @@ class PostgresChunkRepository(ChunkRepository):
 
 # Конец создания схемы базы данных и таблиц
 
-    def save_chunks(self, chunks: list[EmbeddedChunk]) -> None:
+    def save_chunks(
+            self,
+            chunks: list[EmbeddedChunk],
+            indexing_txn_id: str | None = None,
+    ) -> None:
         """
         Сохраняет чанки в PostgreSQL.
         """
@@ -413,6 +686,7 @@ class PostgresChunkRepository(ChunkRepository):
                         INSERT INTO {settings.POSTGRES_SCHEMA}.chunks (
                             document_id,
                             document_version_id,
+                            indexing_txn_id,
                             document_section_id,
                             section_id,
                             parent_id,
@@ -431,6 +705,7 @@ class PostgresChunkRepository(ChunkRepository):
                             %s, %s, %s, %s,
                             %s, %s, %s, %s,
                             %s, %s, %s, %s,
+                            %s,
                             to_tsvector('russian'::regconfig, %s),
                             %s, %s
                         )
@@ -438,6 +713,7 @@ class PostgresChunkRepository(ChunkRepository):
                         (
                             item.chunk.document_id,
                             item.chunk.document_version_id,
+                            indexing_txn_id,
                             document_section_id,
                             item.chunk.section_id,
                             item.chunk.parent_id,
