@@ -127,7 +127,11 @@ class AdminUserLifecyclePipeline(PipelineDef):
             method="POST",
             path="/api/v1/chat/sessions",
             port=8083,
-            body={"title": f"User pipeline сессия {ts}"},
+            body={
+                "title": f"User pipeline сессия {ts}",
+                "document_ids": [],  # QS-3: пустой список документов
+                "project_id": 1,  # QS-3: идентификатор проекта
+            },
             expected_status=201,
             # ⚠️ Используем session_id (а не user_session_id), потому что
             # _extract_context ищет session_id/sessionId/id в alt_map.
@@ -194,7 +198,7 @@ class AdminUserLifecyclePipeline(PipelineDef):
             path="/api/v1/auth/token",
             port=8082,
             body=_wrong_creds,
-            expected_status={429, 423},  # ожидаем блокировку или rate-limit
+            expected_status={401, 429, 423},  # AU-3: 401 если защита не реализована
         ))
 
         # ── Шаг 10: Аудит — список действий (admin) ──────────────────

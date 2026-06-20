@@ -59,7 +59,7 @@ DB CHECK-ограничения, DDL-миграции и спецификаци�
 - [ ] `db_diagrams.md` — примечание enum в разделе `registry.documents`
 - [ ] `db_diagrams.md` — CHECK-ограничение (регистр должен совпадать с API)
 - [ ] `ddl_migrations_17_06.md` — DDL-Migration (список значений)
-- [ ] `converter_validator_service_api.md` — `POST /converter/preview/metadata` (поле `source_type`)
+- [ ] `converter_validator_service_api.md` — `POST /converter/preview` (поле `source_type`)
 - [ ] `converter_specification.md` — шаг 5 (классификация), если enum упомянут
 - [ ] `glossary.md` — определение термина (если enum перечислен)
 - [ ] `orchestrator_service_api.md` — `POST /drafts` (поле `source_type` обязательно при загрузке)
@@ -134,6 +134,42 @@ DB CHECK-ограничения, DDL-миграции и спецификаци�
 
 ---
 
+## Редактирование сообщений не поддерживается
+
+**Дата:** 20.06.2026
+
+Редактирование сообщений в чате **не реализуется**. Причина: ответ ассистента строится на основе всей предшествующей истории сессии. Если пользователь изменит ранее отправленное сообщение, контекст нарушается и ответ ассистента становится устаревшим/некорректным.
+
+Вместо редактирования:
+- Пользователь может отправить новое сообщение с уточнением/исправлением
+- При необходимости — удалить сессию целиком (hard-delete) и начать новую
+
+---
+
+## Бизнес-ключ вычисляет только Converter-validator
+
+**Дата:** 20.06.2026
+**Решение:** Converter-validator — единственная точка вычисления `title_hash_sha256` и `title_key`.
+
+**Обоснование:**
+- Нормализатор (нормализация названия, терминологический реестр, детект аватаров, приведение регистра) — компонент Converter-validator. Оркестратор **не имеет** собственного нормализатора.
+- `POST /drafts` не возвращает бизнес-ключ — он будет вычислен на этапе preview.
+- `PATCH /drafts/{id}/metadata` и `metadata_overrides` в `PATCH /decide` отправляются в Converter-validator (`POST /validate/metadata`) для пересчёта бизнес-ключа и нормализации.
+- Registry проверяет уникальность (`check-uniqueness`), но не вычисляет бизнес-ключ.
+
+**Затронутые сервисы:**
+- Converter-validator: endpoint `POST /validate/metadata` — единая точка входа для пересчёта.
+- Orchestrator: удалена локальная логика вычисления бизнес-ключа.
+
+**Контракт:**
+```
+POST /validate/metadata
+Вход: метаданные (era, source_type, mks_oks_code, okstu_code, doc_code, title)
+Выход: title_hash_sha256, title_key, normalized_title
+```
+
+---
+
 ## Рабочие практики
 
 - **Кэш перед чтением.** Перед `read_file` проверять, загружен ли файл в кэш текущей сессии. Повторное чтение уже загруженных файлов — потеря токенов и времени. Исключение — если файл гарантированно изменился между сессиями.
@@ -170,51 +206,6 @@ DB CHECK-ограничения, DDL-миграции и спецификаци�
 - Ссылки на P#-задачи: `**P#**` в тексте.
 - Ссылки на файлы: полный относительный путь от `docs/`.
 - DDL-миграции описываются в табличном/списочном виде, без SQL-кода. CHECK-ограничения, FK, индексы — списком или таблицей. Для DBA эквивалентный SQL восстанавливается из описания однозначно (см. `docs/database/ddl_migrations_17_06.md`).
-
-## Ориентир при тестировании сервисов в Docker
-
-**Дата:** 20.06.2026
-
-При проверке работоспособности сервисов в Docker **единственным ориентиром**
-являются интеграционные тесты (`recheck.bat`), а не unit-тесты (`pytest tests/`).
-
-### Почему
-
-- Unit-тесты проверяют логику самого checker'а (парсинг, отчёты, pipeline-шаги).
-  Они не требуют Docker и не проверяют сервисы.
-- Интеграционные тесты (`recheck.bat`) реально запускают контейнеры,
-  выполняют health check всех сервисов, API Coverage Test и Pipeline Testing.
-- Только `recheck.bat` показывает, работают ли сервисы в Docker корректно.
-
-### Что это значит на практике
-
-1. **После изменений в checker'е** — `python -m pytest tests/` (216 тестов) — базовая проверка.
-2. **После изменений в сервисах** — `docker/recheck.bat` — эталонная проверка.
-3. **При несовпадении результатов** — истиной считается `recheck.bat`.
-   Если unit-тесты проходят, а `recheck.bat` падает — проблема в сервисах или Docker, не в checker'е.
-4. **Добавление нового сервиса в Docker** — он должен быть отражён в:
-   - `DOCKER_SUPERVISOR_SERVICES` (core/docker.py) — HTTP health check
-   - `.err` log files (core/docker.py) — мониторинг ошибок
-   - `supervisord.conf` (docker/) — запуск процесса
-   - `services/*.py` — эндпоинты для API Coverage Test
-   - `MODE_PORTS` (services/__init__.py) — порт сервиса
-
-### Команды для проверки
-
-```bash
-# Unit-тесты (быстрая проверка checker'а, без Docker)
-python -m pytest tests/ -q
-
-# Полная проверка сервисов в Docker
-docker/recheck.bat
-
-# Или пошагово:
-python -m service_checker docker --action health       # Health check
-python -m service_checker docker --action db-check     # БД
-python -m service_checker docker --action full-report  # Полный отчёт
-```
-
----
 
 ## Конвенция нейминга полей
 

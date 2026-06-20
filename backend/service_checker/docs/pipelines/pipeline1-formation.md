@@ -67,16 +67,43 @@ sequenceDiagram
     Orch->>Orch: Завершение task_step "preview_ocr"
     Orch->>Orch: Проверка preview_not_supported — full-фаза будет пропущена
     Orch->>Orch: Создание task_step "preview_converter"
-    Orch->>Conv: POST /converter/preview/metadata
+    Orch->>Conv: POST /converter/preview
     activate Conv
-    Conv-->>Orch: Первичные метаданные
+    Conv-->>Orch: Первичные метаданные (14 полей)
     deactivate Conv
     Orch->>Orch: Завершение task_step "preview_converter"
-    Orch->>Reg: PATCH /registry/drafts/{draft_id}/status (status: "ready_for_approve", preview_metadata)
+    Orch->>Orch: Создание task_step "preview_validation"
+    Orch->>Conv: POST /validate/metadata (по извлечённым метаданным)
+    activate Conv
+    Conv-->>Orch: title_hash_sha256, title_key, normalized_title
+    deactivate Conv
+    Orch->>Orch: Завершение task_step "preview_validation"
+    Orch->>Reg: POST /registry/documents/check-uniqueness (title_hash_sha256 + file_size_bytes)
     activate Reg
-    Reg-->>Orch: { status: "ready_for_approve", updated_at }
+    Reg-->>Orch: { is_duplicate, candidates }
     deactivate Reg
-    Orch-->>UI: Preview-данные (метаданные, дубликаты)
+    alt is_duplicate = true
+        Orch->>Reg: PATCH /registry/drafts/{draft_id}/status (status: "discarded", error_code: DUPLICATE)
+        activate Reg
+        Reg-->>Orch: { status: "discarded" }
+        deactivate Reg
+        Orch-->>UI: duplicate_detected
+    else
+        Orch->>Orch: Проверка авто-апрува (app_settings.parser.auto_approve)
+        alt auto_approve = true И critical <= max_critical И warning <= max_warning
+            Orch->>Reg: PATCH /registry/drafts/{draft_id}/status (status: "approved", preview_metadata)
+            activate Reg
+            Reg-->>Orch: { status: "approved", document_id }
+            deactivate Reg
+            Orch-->>UI: 202 { status: "approved" }
+        else
+            Orch->>Reg: PATCH /registry/drafts/{draft_id}/status (status: "ready_for_approve", preview_metadata)
+            activate Reg
+            Reg-->>Orch: { status: "ready_for_approve", updated_at }
+            deactivate Reg
+            Orch-->>UI: Preview-данные (метаданные, дубликаты)
+        end
+    end
     deactivate Orch
 
     Note over UI,Orch: Пользователь принимает решение
@@ -84,6 +111,19 @@ sequenceDiagram
     UI->>Orch: PATCH /drafts/{draft_id}/decide
     activate Orch
     alt action = approve
+        Note over Orch: Финальный пересчёт бизнес-ключа и проверка уникальности
+        Orch->>Orch: Сбор финального снимка метаданных
+        Orch->>Conv: POST /validate/metadata (финальный снимок)
+        activate Conv
+        Conv-->>Orch: title_hash_sha256
+        deactivate Conv
+        Orch->>Reg: POST /registry/documents/check-uniqueness (title_hash_sha256 + file_size_bytes)
+        activate Reg
+        Reg-->>Orch: { is_duplicate, candidates }
+        deactivate Reg
+        alt is_duplicate = true
+            Orch-->>UI: 409 DUPLICATE_DOCUMENT
+        else
         Orch->>Reg: PATCH /registry/drafts/{draft_id}/status (status: "approved")
         activate Reg
         Reg-->>Orch: { status: "approved" }
@@ -134,6 +174,7 @@ sequenceDiagram
             Orch->>Orch: Завершение task_step "registry_creation"
             Orch-->>UI: status: completed
         end
+        end
     else action = reject (duplicate)
         Orch->>Reg: PATCH /registry/drafts/{draft_id}/status (status: "discarded")
         Reg-->>Orch: { status: "discarded" }
@@ -155,11 +196,14 @@ sequenceDiagram
 |-----|----------|--------|-----------|
 | P.1 | Определение типа файла (скан/цифровой) | Оркестратор | Выбор OCR или Parser |
 | P.2 | Preview-распознавание (первые N страниц) | OCR-сервис или Parser-сервис | Частичный сырой JSON (или полный, если движок не умеет постранично) |
-| P.3 | Извлечение первичных метаданных | Converter-validator (preview API) | Обозначение, наименование, тип, даты |
+| P.3 | Извлечение первичных метаданных (14 полей, без бизнес-ключа) | Converter-validator — `POST /converter/preview` | Обозначение, наименование, тип, даты |
+| P.3a | Нормализация метаданных и вычисление бизнес-ключа | Оркестратор → `POST /validate/metadata` | `title_hash_sha256`, `title_key`, `normalized_title` |
 | P.4 | Проверка уникальности (по метаданным + размеру) | Оркестратор → `POST /registry/documents/check-uniqueness` | Список кандидатов-дубликатов |
 | P.5 | Отображение preview пользователю | UI | Метаданные + дубликаты |
 | P.6 | Решение пользователя | UI → Оркестратор (`PATCH /drafts/{draft_id}/decide`) | approve / reject |
 | P.6a | Пропуск full-фазы (если `preview_not_supported=true`) | Оркестратор | OCR/Parser не запускается повторно — JSON уже полный |
+
+> **Бизнес-ключ вычисляется только Converter-validator.** При создании черновика (`POST /drafts`) бизнес-ключ не вычисляется. При ручных правках метаданных (`PATCH /drafts/{id}/metadata`) или `metadata_overrides` в `PATCH /decide` — Оркестратор отправляет данные в `POST /validate/metadata` для пересчёта.
 
 **Параметры preview:**
 
@@ -261,7 +305,7 @@ sequenceDiagram
 
 **Вход Converter-validator (preview):** частичный сырой JSON (первые N страниц).
 
-**Выход preview/metadata:**
+**Выход `POST /converter/preview`:**
 ```json
 {
   "doc_code": "311-05-1950ц",
@@ -302,7 +346,11 @@ sequenceDiagram
 
 **Компенсирующий механизм (стадия `approved → created`):**
 
-1. Оркестратор при `PATCH /drafts/{draft_id}/decide action=approve` повторно вызывает `POST /registry/documents/check-uniqueness` (актуальный снимок) и фиксирует `file_hash_sha256` + `title_hash_sha256` в локальном контексте задачи.
+1. Оркестратор при `PATCH /drafts/{draft_id}/decide action=approve`:
+   - собирает финальный снимок метаданных (form-поля + OCR/Parser + Converter + overrides),
+   - отправляет его в `POST /validate/metadata` для пересчёта бизнес-ключа (защита от изменения БД),
+   - вызывает `POST /registry/documents/check-uniqueness` с актуальным `title_hash_sha256` и `file_size_bytes`,
+   - фиксирует `file_hash_sha256` + `title_hash_sha256` в локальном контексте задачи.
 2. Registry при `POST /registry/documents` (создание карточки) выполняет вставку через `INSERT ... ON CONFLICT (file_hash_sha256) DO NOTHING RETURNING id`. 
    - **Конфликта нет** → строка создана, возвращён `document_id`.
    - **Конфликт по `file_hash_sha256`** → запись не вставлена, Registry возвращает HTTP `409 DUPLICATE_FILE` с телом:
@@ -356,8 +404,8 @@ stateDiagram-v2
         previewing --> review_required : low confidence / quality issues
         review_required --> validation : оператор подтвердил
         review_required --> discarded : оператор отклонил
-        ready_for_approve --> approved : approve
-        ready_for_approve --> discarded : reject / автозавершение не прошло
+        ready_for_approve --> approved : approve / авто-апрув
+        ready_for_approve --> discarded : reject
         validation --> approved : validation passed
         validation --> discarded : validation failed
         approved --> created : запись в Registry
@@ -381,7 +429,7 @@ stateDiagram-v2
 |---|---|---|
 | `uploaded` | Черновик | Файл загружен в MinIO, ожидание запуска preview |
 | `previewing` | Черновик | Выполняется preview-фаза |
-| `ready_for_approve` | Черновик | Preview завершён, ожидание решения |
+| `ready_for_approve` | Черновик | Preview завершён. Если включён **авто-апрув** (`app_settings.parser.auto_approve.enabled`) и количество уведомлений не превышает пороги — черновик автоматически переводится в `approved`. Иначе — ожидание решения оператора |
 | `review_required` | Черновик | **P1-20**: Preview показал низкое качество (пороги из P12-2 в `app_settings.parser.quality_thresholds`). Требуется ручная проверка оператором. UI отображает замечания из `notifications[]` (P12-3) |
 | `validation` | Черновик | Оператор подтвердил черновик, выполняется повторная валидация (полный OCR/Parser → Converter-validator) с `metadata_overrides` (см. D13) |
 | `approved` | Черновик | Оператор подтвердил, документ создаётся в Registry |
@@ -397,7 +445,12 @@ stateDiagram-v2
 1. На стадии `previewing` Parser/OCR возвращает raw-метрики качества (`avg_confidence`, `pages_failed`, `per_page[].status`). Оркестратор применяет пороги из `app_settings.parser.quality_thresholds`:
    - `avg_confidence < reprocess_avg_confidence_below` → orchestrator запускает повторную обработку
    - `avg_confidence < operator_avg_confidence_below` ИЛИ `pages_failed > 0` ИЛИ `lama_fallback_used == true` → черновик переходит в `review_required` (а не `ready_for_approve`).
-3. На стадии `review_required` Orchestrator фиксирует замечания в `pipeline.draft_notifications` (P12-3 / P3-5) и отдаёт UI список с `code, severity, category, message, location, suggested_action`.
+2. Если качество в норме — черновик переходит в `ready_for_approve`. Далее Оркестратор проверяет условия **авто-апрува**:
+   - Параметр `app_settings.parser.auto_approve.enabled` (по умолчанию `false`)
+   - Количество `severity: critical` в `notifications[]` ≤ `app_settings.parser.auto_approve.max_critical` (по умолчанию `0`)
+   - Количество `severity: warning` в `notifications[]` ≤ `app_settings.parser.auto_approve.max_warning` (по умолчанию `0`)
+   Если все условия выполнены → черновик автоматически переводится в `approved`. Документ создаётся в Registry, запускается Пайплайн 2.
+3. Если авто-апрув выключен или превышены пороги → черновик остаётся в `ready_for_approve`, ожидание решения оператора.
 4. Оператор может отредактировать метаданные черновика через `PATCH /drafts/{draft_id}/metadata` (S5) — это опциональный шаг, выполняется до или после просмотра замечаний.
 5. Оператор через `PATCH /drafts/{draft_id}/decide` с `action: "confirm"` подтверждает черновик → статус `validation`. Если метаданные редактировались через шаг 4, `metadata_overrides` в `decide` не обязательны — они уже сохранены в черновике.
 6. На стадии `validation` Orchestrator запускает полный цикл (OCR/Parser full + Converter-validator), используя `metadata_overrides` оператора (сохранённые ранее или переданные в `decide`).
@@ -425,7 +478,7 @@ stateDiagram-v2
     previewing --> review_required : low confidence / quality issues
     review_required --> validation : confirm (PATCH /decide)
     review_required --> discarded : reject (PATCH /decide)
-    ready_for_approve --> approved : approve (PATCH /decide)
+    ready_for_approve --> approved : approve (PATCH /decide) / авто-апрув
     ready_for_approve --> discarded : reject (PATCH /decide)
     validation --> approved : validation passed
     validation --> discarded : validation failed

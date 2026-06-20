@@ -287,13 +287,9 @@ for doc in ["orchestrator_service_api.md", "common_api.md", "gateway_service_api
         min_count=1
     )
 
-# Common health format (internal services) should have uptime_seconds
-check_pass(
-    "orchestrator health has 'uptime_seconds'",
-    '"uptime_seconds"',
-    include_pattern="orchestrator_service_api.md",
-    min_count=1
-)
+# Common health format (internal services) — uptime_seconds intentionally removed
+# See guide.md §Health-формат: uptime_seconds не входит в health внутренних сервисов
+# check removed — intentional design decision
 # Gateway health (external) should have services — different format
 check_pass(
     "gateway health has 'services' (external format)",
@@ -338,6 +334,92 @@ check_pass(
     include_pattern="orchestrator_service_api.md",
     min_count=0  # Informational
 )
+
+# ------------------------------------------------------------------
+# 11. POST /drafts should NOT return business key (title_hash_sha256)
+# ------------------------------------------------------------------
+print("[11] POST /drafts — business key NOT in response")
+print("-" * 40)
+
+# Orchestrator does NOT compute business key; POST /drafts response must NOT
+# contain title_hash_sha256/title_key. Legitimate occurrences are in:
+#   - POST /drafts notes (explaining absence) — 2
+#   - GET /documents/{doc_id} response — 1
+#   - PATCH /decide description — 2
+#   - PATCH /metadata response/table — 4
+# Total expected ~9. If > 10, likely leaked into POST /drafts response example/table.
+bk_count = len(find("title_hash_sha256", include_pattern="orchestrator_service_api.md"))
+if bk_count > 10:
+    print(f"  FAIL: title_hash_sha256 appears {bk_count} times — may have leaked into POST /drafts response")
+    errors += 1
+else:
+    print(f"  OK: title_hash_sha256 appears {bk_count} times in orchestrator_service_api.md (threshold ≤ 10)")
+
+print()
+
+# ------------------------------------------------------------------
+# 12. PreviewMetadata in _schemas.md — no business key field
+# ------------------------------------------------------------------
+print("[12] PreviewMetadata — no business key field")
+print("-" * 40)
+
+# title_hash_sha256 should appear ONLY in the note explaining it is NOT part of
+# PreviewMetadata (exactly 1 occurrence). If 0 → note missing. If > 1 → in table.
+pm_count = len(find("title_hash_sha256", include_pattern="_schemas.md"))
+if pm_count == 0:
+    print("  FAIL: title_hash_sha256 not found in _schemas.md — note about exclusion may be missing")
+    errors += 1
+elif pm_count > 1:
+    print(f"  FAIL: title_hash_sha256 appears {pm_count} times in _schemas.md — likely in PreviewMetadata table")
+    errors += 1
+else:
+    print("  OK: title_hash_sha256 appears once in _schemas.md (expected: only in exclusion note)")
+
+print()
+
+# ------------------------------------------------------------------
+# 13. POST /validate/metadata documented in Converter-validator
+# ------------------------------------------------------------------
+print("[13] POST /validate/metadata — documented in Converter-validator")
+print("-" * 40)
+
+check_pass(
+    "POST /validate/metadata endpoint in converter_validator_service_api.md",
+    "validate/metadata",
+    include_pattern="converter_validator_service_api.md",
+    min_count=1
+)
+
+print()
+
+# ------------------------------------------------------------------
+# 14. Orchestrator delegates business key calculation, does not compute locally
+# ------------------------------------------------------------------
+print("[14] Orchestrator delegates to POST /validate/metadata")
+print("-" * 40)
+
+check_pass(
+    "PATCH /metadata and PATCH /decide reference validate/metadata",
+    "validate/metadata",
+    include_pattern="orchestrator_service_api.md",
+    min_count=2
+)
+
+print()
+
+# ------------------------------------------------------------------
+# 15. Old path /converter/preview/metadata is removed
+# ------------------------------------------------------------------
+print("[15] Old path /converter/preview/metadata — removed")
+print("-" * 40)
+
+check_fail(
+    "Old path /converter/preview/metadata still referenced somewhere",
+    "converter/preview/metadata",
+    exclude=["check_cross_references.py"]
+)
+
+print()
 
 # ------------------------------------------------------------------
 # Summary

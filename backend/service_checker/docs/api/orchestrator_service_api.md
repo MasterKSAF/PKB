@@ -40,6 +40,8 @@
 
 Orchestrator вычисляет SHA-256 содержимого, определяет формат, создаёт задачу (`pipeline.tasks`) и запись черновика в Registry (`POST /registry/drafts`), помещает в очередь Celery. Двухфазный конвейер: **Preview** (OCR/Parser preview → Converter-validator preview → решение пользователя) → **Full** (OCR/Parser → Converter-validator → Registry → RAG Builder).
 
+> **Бизнес-ключ не вычисляется на этом этапе.** `title_hash_sha256` и `title_key` будут вычислены Converter-validator на этапе preview (см. `POST /converter/preview`). Оркестратор не имеет собственного нормализатора и не вычисляет бизнес-ключ.
+
 `user_id` определяется из контекста аутентификации.
 
 > **Черновик — точка входа:** При загрузке всегда создаётся черновик в статусе `uploaded`. Все последующие операции (preview, решение, конвертация, завершение черновика) привязаны к черновику. Без черновика документ не может существовать в системе.
@@ -72,11 +74,11 @@ Orchestrator вычисляет SHA-256 содержимого, определя
   "file_size_bytes": 2048576,
   "is_duplicate_file": false,
   "is_duplicate_document": false,
-  "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
-  "title_key": "USSR|gost|47.020||20868-81|стойки установочные...",
   "created_at": "2026-05-15T10:00:00Z"
 }
 ```
+
+> **Примечание:** `title_hash_sha256` и `title_key` не возвращаются на этом этапе. Бизнес-ключ будет вычислен Converter-validator при вызове `POST /drafts/{draft_id}/preview` (см. `pipeline1-formation.md` §Preview-фаза).
 
 > **Примечание:** `draft_id` назначается Registry при создании записи черновика. `document_id` назначается Registry при завершении черновика. Первичный внешний идентификатор на этапе загрузки и preview — `draft_id`. `task_id` — внутренний сквозной ID задачи (`pipeline.tasks`), используется только для межсервисного взаимодействия и администрирования.
 
@@ -1243,8 +1245,9 @@ Orchestrator — **единая точка входа** для работы с �
 1. Parser/OCR возвращает `quality.notifications[]` в ответе `/process/{task_id}/result`.
 2. Orchestrator читает массив и вставляет записи в `pipeline.draft_notifications` (`INSERT ... RETURNING id`).
 3. Если среди уведомлений есть `severity >= warning` (или по порогам `app_settings.parser.quality_thresholds`) — черновик переводится в `review_required`.
-4. UI получает уведомления через `GET /drafts/{draft_id}` (поле `notifications`).
-5. Оператор просматривает уведомления, принимает решение через `PATCH /drafts/{draft_id}/decide`.
+4. Если уведомления отсутствуют или их уровень ниже порогов — Оркестратор проверяет **авто-апрув** (`app_settings.parser.auto_approve`). Если включён и количество уведомлений не превышает пороги — черновик автоматически утверждается (`approved`), запускается Пайплайн 2.
+5. UI получает уведомления через `GET /drafts/{draft_id}` (поле `notifications`).
+6. Оператор просматривает уведомления, принимает решение через `PATCH /drafts/{draft_id}/decide`.
 
 | Поле | Тип | Описание |
 |------|-----|----------|
@@ -1445,7 +1448,18 @@ Orchestrator — **единая точка входа** для работы с �
 |------|-----|-------------|----------|
 | `action` | string | Да | Решение: `approve` (→ `approved`), `reject` (→ `discarded`), `confirm` (→ `validation`, только для `review_required`) |
 | `comment` | string | Нет | Комментарий оператора |
-| `metadata_overrides` | object | Нет | **D13**: ручные правки метаданных оператора. Может быть передан при `action: confirm` или `approve`. Если метаданные уже сохранены через `PATCH /metadata`, это поле можно не передавать — Orchestrator использует ранее сохранённые значения. Если поле передано — перезаписывает сохранённые. Orchestrator использует эти значения при создании документа в Registry вместо автоматически извлечённых. Допустимые поля — см. таблицу ниже |
+| `metadata_overrides` | object | Нет | **D13**: ручные правки метаданных оператора. Может быть передан при `action: confirm` или `approve`. Если метаданные уже сохранены через `PATCH /metadata`, это поле можно не передавать — Orchestrator использует ранее сохранённые значения. Если поле передано — перезаписывает сохранённые. Допустимые поля — см. таблицу ниже |
+
+**Логика обработки при approve/confirm:**
+1. Orchestrator собирает **финальный снимок метаданных** с приоритетом:
+   - `metadata_fields` из `POST /drafts` (база)
+   - OCR/Parser извлечённые метаданные (перезаписывают)
+   - Converter-validator валидированные метаданные (перезаписывают)
+   - `metadata_overrides` пользователя (перезаписывают)
+2. Orchestrator отправляет финальный снимок в **единую точку** вычисления бизнес-ключа — `POST /validate/metadata` — для нормализации названия и пересчёта `title_hash_sha256`.
+3. После пересчёта — **повторная проверка уникальности** через `POST /registry/documents/check-uniqueness` (защита от race condition: между preview и approve БД могла измениться).
+4. Если найден конфликт — `409 DUPLICATE_DOCUMENT`, черновик не завершается.
+5. Если уникальность подтверждена — черновик завершается, документ создаётся в Registry.
 
 **Поля `metadata_overrides`:**
 
@@ -1571,11 +1585,12 @@ Orchestrator — **единая точка входа** для работы с �
 | `jurisdiction` | string \| null | Юрисдикция: `RU`, `EU`, `US`, `NO`, `INTL` |
 
 **Логика обработки (S5):**
-1. При изменении любого из полей, участвующих в бизнес-ключе (`era`, `source_type`, `mks_oks_code`, `okstu_code`, `doc_code`, `title`) — Orchestrator **пересчитывает** `title_hash_sha256` и `title_key` по формуле нормализатора (см. `specifications/normalizer_specification.md` §2.1).
-2. После пересчёта бизнес-ключа Orchestrator выполняет **проверку уникальности** через `POST /registry/documents/check-uniqueness`.
-3. Если найден конфликт — возвращается ошибка `409 DUPLICATE_DOCUMENT`, правки не сохраняются.
-4. Если уникальность подтверждена — новые значения `preview_metadata`, `title_hash_sha256`, `title_key` сохраняются в `registry.drafts`.
-5. `valid_from` / `valid_until` при необходимости выводятся из `year`: если `year = 2023`, а `valid_from` не задан → `valid_from = 2023-01-01`.
+1. Оркестратор собирает все поля метаданных (текущие из черновика + переданные в запросе) и отправляет в Converter-validator — **единую точку** нормализации и вычисления бизнес-ключа: `POST /validate/metadata`.
+2. Converter-validator нормализует название, приводит `source_type` и `era` к нижнему регистру, вычисляет `title_hash_sha256` и `title_key`, возвращает результат.
+3. Orchestrator выполняет **проверку уникальности** через `POST /registry/documents/check-uniqueness` с полученным `title_hash_sha256`.
+4. Если найден конфликт — возвращается ошибка `409 DUPLICATE_DOCUMENT`, правки не сохраняются.
+5. Если уникальность подтверждена — новые значения `preview_metadata`, `title_hash_sha256`, `title_key` сохраняются в `registry.drafts`.
+6. `valid_from` / `valid_until` при необходимости выводятся из `year`: если `year = 2023`, а `valid_from` не задан → `valid_from = 2023-01-01`.
 
 **Ответ `200`:**
 
@@ -1586,7 +1601,7 @@ Orchestrator — **единая точка входа** для работы с �
   "preview_metadata": { ... },
   "title_hash_sha256": "<новый-хеш>",
   "title_key": "<новая-строка>",
-  "message": "Метаданные обновлены. Бизнес-ключ пересчитан, уникальность подтверждена.",
+  "message": "Метаданные обновлены. Бизнес-ключ пересчитан через Converter-validator, уникальность подтверждена.",
   "updated_at": "2026-06-05T10:03:00Z"
 }
 ```
@@ -1596,8 +1611,8 @@ Orchestrator — **единая точка входа** для работы с �
 | `draft_id` | bigint | ID черновика |
 | `status` | string | Текущий статус черновика (не меняется) |
 | `preview_metadata` | object | Обновлённые метаданные |
-| `title_hash_sha256` | string | Пересчитанный бизнес-ключ (SHA-256) |
-| `title_key` | string | Исходная строка конкатенации (аудит) |
+| `title_hash_sha256` | string | Пересчитанный бизнес-ключ (SHA-256) — вычислен Converter-validator |
+| `title_key` | string | Исходная строка конкатенации (аудит) — вычислена Converter-validator |
 | `message` | string | Описание результата |
 | `updated_at` | datetime | Время обновления (ISO 8601) |
 

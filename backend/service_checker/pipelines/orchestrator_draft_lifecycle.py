@@ -86,6 +86,7 @@ class OrchestratorDraftLifecyclePipeline(PipelineDef):
             form_body={
                 "document_key": f"pipeline-draft-key-{ts}",
                 "title": f"Pipeline черновик {ts}",
+                "source_type": "GOST",  # OR-11: обязательное поле
             },
             form_files={
                 "file": (pdf_name, TEST_PDF_BYTES, "application/pdf"),
@@ -108,7 +109,7 @@ class OrchestratorDraftLifecyclePipeline(PipelineDef):
             needs_auth=True,
         ))
 
-        # ── Шаг 4: Детали черновика ──────────────────────────────────
+        # ── Шаг 4: Детали черновика (OR-7: document_id, version_id, is_new_document) ──
         steps.append(PipelineStep(
             name="Детали черновика",
             service="orchestrator",
@@ -116,7 +117,12 @@ class OrchestratorDraftLifecyclePipeline(PipelineDef):
             path="/api/v1/drafts/{draft_id}",
             port=8081,
             expected_status=200,
-            check=check_json_field("draft_id", int),
+            check=check_json_fields({
+                "draft_id": int,
+                "document_id": (int, type(None)),  # OR-7: может быть None до approve
+                "version_id": (int, type(None)),   # OR-7: может быть None до approve
+                "is_new_document": bool,            # OR-7: флаг нового документа
+            }),
             needs_auth=True,
         ))
 
@@ -224,6 +230,7 @@ class OrchestratorDraftLifecyclePipeline(PipelineDef):
             form_body={
                 "document_key": f"pipeline-img-{ts}",
                 "title": f"Pipeline image черновик {ts}",
+                "source_type": "GOST",  # OR-11: обязательное поле
             },
             form_files={
                 "file": (f"image-{ts}.png", MINIMAL_PNG, "image/png"),

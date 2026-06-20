@@ -1,7 +1,17 @@
 ## API RAG Search Service (rag-search:8091)
 
-Сервис гибридного поиска релевантных чанков.  
-**Внутренний сервис.** Отвечает только за поиск и выдачу чанков. **Без генерации ответа LLM** — генерация выполняется в Query Service.
+Сервис поиска релевантных чанков по векторному индексу.  
+**Внутренний сервис.** Отвечает только за поиск и выдачу source-локаторов с retrieval-метаданными. **Без генерации ответа LLM** — генерация выполняется в Query Service.
+
+**Архитектурные принципы (RS-6, уточнение 20.06):**
+
+| Принцип | Описание |
+|---------|----------|
+| RAG хранит только актуальный индекс | version_id в публичный response не передаётся |
+| chunk_id — технический retrieval ID | Цитирование строится по document_id + section_id |
+| Параметры поиска — только из app_settings | search_type, top_k, rerank не переопределяются в запросе |
+| context expansion — внутренний этап | Не публичное поле запроса |
+| sparse/BM25 не удаляется | Остаётся как переключаемый режим в app_settings |
 
 **Базовый URL (внутренний)**: `http://127.0.0.1:8091/api/v1`
 
@@ -12,6 +22,8 @@
 **Специфичные коды ошибок:**
 | HTTP | `error.code` | Описание |
 |------|-------------|----------|
+| 400 | `EMPTY_QUERY` | Пустой поисковый запрос |
+| 500 | `SEARCH_FAILED` | Ошибка поиска чанков |
 
 ---
 
@@ -19,54 +31,58 @@
 
 Авторизацию контролирует только Gateway. Внутренние сервисы не имеют своей аутентификации — см. [common_api.md](common_api.md#межсервисное-взаимодействие).
 
-| 200 | — | Результаты поиска |
-| 400 | `EMPTY_QUERY` | Пустой поисковый запрос |
-| 422 | `INVALID_PARAMETER` | `top_k` вне диапазона [1, 100] |
-| 500 | `SEARCH_FAILED` | Ошибка поиска чанков |
+| HTTP | Описание |
+|------|----------|
+| 200 | Результаты поиска |
+| 400 | `EMPTY_QUERY` |
+| 500 | `SEARCH_FAILED` |
 
 ---
 
 ### POST /rag/search
 
-Поиск релевантных чанков по запросу. Возвращает сырые чанки с полным содержимым и метаданными. Без генерации LLM.
+Поиск релевантных чанков по запросу. Возвращает source-локаторы (для цитирования) и retrieval-метаданные. Без генерации LLM.
 
-**RAG-конфигурация по умолчанию (P13-1, решение 17.06):**
+**RAG-конфигурация — только из app_settings (P13-1, уточнение 20.06):**
 
-| Параметр | Прод-значение | Источник |
-|----------|---------------|----------|
-| Embedding | **Qwen3-Embedding-4B** (внешнее API) | `app_settings.rag.embedding_api.endpoint` |
-| Размерность | **2048** | `app_settings.rag.embedding_dim` |
-| Chunk size | **1024 токенов** | `app_settings.rag.chunk_size` |
-| Стратегия поиска | **Vector+Rerank (S2)** | `app_settings.rag.search_strategy` — **единственный источник**, не переопределяется в запросе |
-| Rerank-модель | **bge-reranker-v2-m3-int8** (TEI, локальный) | `app_settings.rag.rerank_url` |
+| Параметр | Прод-значение | Ключ app_settings | Примечание |
+|----------|---------------|-------------------|------------|
+| Embedding model | Qwen3-Embedding-4B | `rag.embedding_api.endpoint` | Внешнее API / Infinity |
+| Размерность | 2048 | `rag.embedding_dim` | 1536 / 2560 / 4096 — экспериментально |
+| Chunk size | 1024 токенов | `rag.chunk_size` | По умолчанию `semantic_1024` |
+| **search_type / mode** | `dense_rerank` | `rag.search_strategy` | **Единственный источник.** S1–S9 |
+| **top_k** | 10 | `rag.search_top_k` | Количество результатов пользователю |
+| **rerank_top_n** | 50 | `rag.rerank_top_n` | Кандидатов до rerank |
+| **context_expansion** | 2 | `rag.context_expansion` | Соседние чанки до/после |
+| Rerank model | bge-reranker-v2-m3-int8 | `rag.rerank_url` | TEI, локальный |
 
-| LLM для ответа | **deepseek 4 flash** (внешнее API) | `app_settings.llm.api_url` |
-| Temperature | 0.2 | `app_settings.llm.temperature` |
-| max_tokens | 1024 | `app_settings.llm.max_tokens` |
-| top_p | 0.95 | `app_settings.llm.top_p` |
+> `search_type`, `top_k`, `rerank`, `context_expansion` **не передаются в запросе** — стратегия фиксирована конфигом сервиса. Динамическое переключение через API требует отдельной проработки (не поддерживается).
 
 **Процесс внутри:**
 
 | Шаг | Действие | Результат |
 |---|---|---|
-| 1 | Dense-поиск (Qwen3-Embedding-4B, VECTOR(2048), cosine) → top-N кандидатов | N=50 кандидатов |
-| 2 | Rerank (bge-reranker-v2-m3-int8) | top_k=10 результатов |
+| 1 | Dense-поиск (Qwen3-Embedding-4B, VECTOR(2048), cosine) → top-N кандидатов | N = `app_settings.rag.rerank_top_n` (по умолч. 50) |
+| 2 | Rerank (bge-reranker-v2-m3-int8) → top-k результатов | k = `app_settings.rag.search_top_k` (по умолч. 10) |
+| 3 | Context expansion: для каждого top-k чанка добавить соседние чанки (если есть) | `context[]` — массив соседних чанков |
+| 4 | Сборка ответа: source-локаторы (document_id + section_id) + retrieval-метаданные (chunk_id + score + mode) | Финальный JSON |
 
-> **P13-2 (разделение ролей BM25)**: В этом эндпоинте (RAG Search) **используется только dense + rerank**. BM25 применяется **только** для Registry Search (поиск по `doc_code` / `title` / `classifier_links`) — см. `registry_service_api.md` §«`GET /registry/search`». Реализация BM25 = `ts_rank` + `pg_trgm`.
+> **P13-2 (разделение ролей BM25)**: В этом эндпоинте (RAG Search) **используется только dense + rerank**. BM25 применяется **только** для Registry Search (поиск по `doc_code` / `title` / `classifier_links`) — см. `registry_service_api.md` §3.1a (`GET /registry/documents/search`). Реализация BM25 = `ts_rank` + `pg_trgm`.
 
 > **P13-3 (TEI rerank)**: rerank выполняется через **TEI-сервер** (text-embeddings-inference, локальный) с int8-квантизацией. URL — `app_settings.rag.rerank_url`.
 
-> **P13-4 (экспериментальные стратегии)**: поисковые стратегии S1–S9 (см. `docs_plans/methodology/rag_experiments_methodology.md`) задаются **только** в `app_settings.rag.search_strategy`. `search_type` **не передаётся** в запросе — стратегия фиксирована конфигом на уровне сервиса. Динамическое переключение стратегий через API требует отдельной проработки и в текущей версии не поддерживается.
-
+> **P13-4 (экспериментальные стратегии)**: поисковые стратегии S1–S9 (см. `docs_plans/methodology/rag_experiments_methodology.md`) задаются **только** в `app_settings.rag.search_strategy`.
 
 **Запрос:**
+
 ```json
 {
-  "query": "ледовый класс Arc4",
-  "valid_at": "2026-06-18",
+  "query": "допуск соосности",
+  "valid_at": "2026-06-20",
   "filters": {
-    "document_type": ["normative"],
-    "category_ids": [5, 12]
+    "document_type": ["gost"],
+    "category_ids": [1, 2],
+    "document_ids": [420000]
   }
 }
 ```
@@ -75,45 +91,91 @@
 |---|---|---|---|
 | `query` | string | Да | Поисковый запрос |
 | `valid_at` | date | Да | Дата, на которую документы active |
-| `filters` | object | Нет | Фильтры (все поля опциональны): `document_type[]` — типы документов, `category_ids[]` — ID категорий, `document_ids[]` — ограничить поиск конкретными документами |
+| `filters` | object | Нет | Фильтры: `document_type[]` — типы документов, `category_ids[]` — ID категорий, `document_ids[]` — конкретные ID |
 
-**Ответ `200`:** массив релевантных чанков с полным содержимым.
+**Ответ `200`:** объект с массивом результатов.
 
 ```json
 {
-  "query": "ледовый класс Arc4",
+  "query": "допуск соосности",
   "results": [
     {
-      "chunk_id": 420001,
-      "document_id": 1,
-      "document_title": "Правила РС",
-      "section_id": 420001,
-      "page": 42,
-      "content": "Для ледового класса Arc4 толщина обшивки должна быть не менее 12 мм.",
-      "score": 0.92,
-      "clause": "4.2 Требования к обшивке",
-      "section_title": "Ледовые усиления",
-      "confidence": 0.85
+      "source": {
+        "document_id": 420000,
+        "section_id": 8,
+        "clause": "6.1",
+        "path": "6/6.1",
+        "page": 2,
+        "bbox": null,
+        "section_title": "Допуск соосности при степени точности",
+        "content": "Для ледового класса Arc4 толщина обшивки должна быть не менее 12 мм.",
+        "content_hash": "sha256-abcdef..."
+      },
+      "retrieval": {
+        "chunk_id": 119,
+        "score": 0.87,
+        "mode": "dense_rerank"
+      },
+      "context": [
+        {
+          "chunk_id": 118,
+          "content": "Предшествующий контекст...",
+          "score": 0.45,
+          "page": 2
+        },
+        {
+          "chunk_id": 120,
+          "content": "Последующий контекст...",
+          "score": 0.44,
+          "page": 2
+        }
+      ]
     }
   ],
-  "search_type_used": "vector_rerank",
   "processing_time_ms": 120,
   "total_found": 15
 }
 ```
 
+#### Поля `source` (стабильный локатор для цитирования)
+
 | Поле | Тип | Описание |
 |---|---|---|
-| `chunk_id` | bigint | ID чанка |
-| `document_id` | bigint | ID документа |
-| `document_title` | string | Название документа |
-| `section_id` | bigint | ID секции в БД |
-| `page` | int | Номер страницы |
-| `content` | string | Полное текстовое содержимое чанка |
+| `document_id` | bigint | ID документа в Registry |
+| `section_id` | bigint | ID секции (стабилен внутри документа, **не** chunk_id) |
+| `clause` | string \| null | Номер пункта (напр. "6.1") |
+| `path` | string | Путь секции (напр. "6/6.1") |
+| `page` | int | Номер страницы (1-based) |
+| `bbox` | array[float] \| null | Координаты на странице: `[x1, y1, x2, y2]`, нормализованные 0..1 |
+| `section_title` | string \| null | Название раздела |
+| `content` | string | Текст чанка (excerpt для ответа) |
+| `content_hash` | string \| null | SHA-256 содержимого для дедупликации |
+
+#### Поля `retrieval` (технические метаданные поиска)
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `chunk_id` | bigint | ID чанка в БД (технический, **не用于 цитирования**) |
+| `score` | float | Итоговая оценка релевантности (0..1) |
+| `mode` | string | Режим поиска: `dense_rerank`, `hybrid_rerank`, `hybrid_rrf` |
+
+#### Поля `context[]` (context expansion — соседние чанки)
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `chunk_id` | bigint | ID соседнего чанка |
+| `content` | string | Содержимое соседнего чанка |
 | `score` | float | Оценка релевантности |
-| `clause` | string | Пункт/раздел документа |
-| `section_title` | string | Название раздела |
-| `confidence` | float | Уверенность в релевантности |
+| `page` | int | Номер страницы |
+
+#### Корневые поля ответа
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `query` | string | Исходный поисковый запрос |
+| `results` | array | Массив результатов (каждый: source + retrieval + context) |
+| `processing_time_ms` | int | Время обработки запроса |
+| `total_found` | int | Общее количество найденных чанков (до фильтрации) |
 
 ---
 
@@ -121,7 +183,7 @@
 
 | Метод | Путь | Описание | Доступ к БД |
 |---|---|---|---|
-| `POST` | `/rag/search` | Гибридный поиск чанков (без генерации LLM) | **Читает** |
+| `POST` | `/rag/search` | Поиск чанков (без генерации LLM) | **Читает** |
 
 ---
 
@@ -132,4 +194,5 @@
 | Доступ к БД | **Читает** (поиск) |
 | Пайплайн | 3 (Поиск) |
 | Вход | Поисковый запрос |
-| Выход | Массив чанков с полным содержимым |
+| Выход | Source-локаторы + retrieval-метаданные + context expansion |
+
