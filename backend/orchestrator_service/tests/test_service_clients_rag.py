@@ -2,9 +2,10 @@
 Unit tests for RAGServiceClient.
 
 Tests mock generation for:
-  - index_document — индексация чанков
+  - index_document — индексация секций (POST /rag/build)
   - delete_index — удаление из индекса
-  - search — гибридный поиск
+  - check_index — проверка целостности
+  - search — поиск (RS-6: только query + valid_at + filters)
   - generate — генерация LLM
 """
 
@@ -20,28 +21,35 @@ def rag_client():
     return client
 
 
-class TestRAGIndex:
-    """Tests for document indexing."""
+class TestRAGBuild:
+    """Tests for document indexing via POST /rag/build."""
 
     @pytest.mark.asyncio
     async def test_index_document(self, rag_client):
-        chunks = [
-            {"chunk_id": "chk-001", "text": "Test content", "page": 1},
-            {"chunk_id": "chk-002", "text": "More content", "page": 2},
+        sections = [
+            {"section_id": 1, "type": "text", "content": {"text": "Test content"}, "page": 1},
+            {"section_id": 2, "type": "text", "content": {"text": "More content"}, "page": 2},
         ]
         result = await rag_client.index_document(
             document_id="doc-test-001",
-            chunks=chunks,
+            sections=sections,
         )
         assert result["document_id"] == "doc-test-001"
-        assert result["indexed_count"] == len(chunks)
-        assert result["status"] == "completed"
+        assert result["indexing_txn_id"] == "txn-mock-001"
+        assert result["status"] == "indexing"
 
     @pytest.mark.asyncio
-    async def test_index_empty_chunks(self, rag_client):
-        result = await rag_client.index_document(document_id="doc-empty", chunks=[])
-        assert result["indexed_count"] == 0
-        assert result["status"] == "completed"
+    async def test_index_empty_sections(self, rag_client):
+        """Should handle empty sections gracefully."""
+        result = await rag_client.index_document(document_id="doc-empty", sections=[])
+        assert result["document_id"] == "doc-empty"
+        assert result["status"] == "indexing"
+
+    @pytest.mark.asyncio
+    async def test_index_no_sections_defaults_to_empty(self, rag_client):
+        """sections defaults to [] when not provided."""
+        result = await rag_client.index_document(document_id="doc-default")
+        assert result["status"] == "indexing"
 
     @pytest.mark.asyncio
     async def test_delete_index(self, rag_client):
@@ -82,47 +90,79 @@ class TestRAGCheckIndex:
 
 
 class TestRAGSearch:
-    """Tests for semantic search."""
+    """Tests for semantic search (RS-6 contract)."""
 
     @pytest.mark.asyncio
     async def test_search_basic(self, rag_client):
-        result = await rag_client.search(query="толщина обшивки", top_k=5)
+        """Basic search with only query."""
+        result = await rag_client.search(query="толщина обшивки")
         assert "results" in result
-        assert "search_type_used" in result
+        assert "query" in result
         assert "processing_time_ms" in result
-        assert len(result["results"]) > 0
+        assert "total_found" in result
 
     @pytest.mark.asyncio
     async def test_search_result_structure(self, rag_client):
+        """Each result has source + retrieval + context structure."""
         result = await rag_client.search(query="тест")
         for item in result["results"]:
-            assert "chunk_id" in item
-            assert "document_id" in item
-            assert "text" in item
-            assert "score" in item
-            assert "metadata" in item
-            assert 0.0 <= item["score"] <= 1.0
+            # source block with stable locators
+            assert "source" in item
+            assert "document_id" in item["source"]
+            assert "section_id" in item["source"]
+            assert "content" in item["source"]
+            # retrieval block with technical metadata
+            assert "retrieval" in item
+            assert "chunk_id" in item["retrieval"]
+            assert "score" in item["retrieval"]
+            assert "mode" in item["retrieval"]
+            assert 0.0 <= item["retrieval"]["score"] <= 1.0
+            # context expansion
+            assert "context" in item
 
     @pytest.mark.asyncio
-    async def test_search_with_filters(self, rag_client):
+    async def test_search_with_valid_at(self, rag_client):
+        """Search with valid_at date filter."""
         result = await rag_client.search(
             query="сталь 09Г2С",
-            filters={"document_type": ["normative"]},
+            valid_at="2026-06-20",
         )
         assert len(result["results"]) > 0
 
     @pytest.mark.asyncio
-    async def test_search_metadata_structure(self, rag_client):
-        result = await rag_client.search(query="параметр")
-        for item in result["results"]:
-            meta = item["metadata"]
-            assert "document_type" in meta
-            assert "title" in meta
+    async def test_search_with_filters(self, rag_client):
+        """Search with document filters."""
+        result = await rag_client.search(
+            query="допуск соосности",
+            filters={"document_type": ["gost"], "category_ids": [1, 2]},
+        )
+        assert len(result["results"]) > 0
 
     @pytest.mark.asyncio
-    async def test_search_top_k_respected(self, rag_client):
-        result = await rag_client.search(query="test", top_k=2)
-        assert len(result["results"]) <= 2
+    async def test_search_no_search_type_param(self, rag_client):
+        """search_type must NOT be in the method signature (RS-6)."""
+        import inspect
+        sig = inspect.signature(rag_client.search)
+        params = list(sig.parameters.keys())
+        assert "search_type" not in params, "search_type must be from app_settings only"
+        assert "top_k" not in params, "top_k must be from app_settings only"
+        assert "filters" in params
+        assert "valid_at" in params
+
+    @pytest.mark.asyncio
+    async def test_search_source_retrieval_separation(self, rag_client):
+        """source and retrieval must be separate blocks."""
+        result = await rag_client.search(query="параметр")
+        for item in result["results"]:
+            # source should NOT contain retrieval metadata
+            src = item["source"]
+            assert "score" not in src
+            assert "mode" not in src
+            assert "chunk_id" not in src
+            # retrieval should NOT contain source locators
+            ret = item["retrieval"]
+            assert "document_id" not in ret
+            assert "section_id" not in ret
 
 
 class TestRAGGenerate:

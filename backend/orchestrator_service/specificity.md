@@ -70,6 +70,25 @@ LLM-ответы проверяются на корректность форма
 Используется для обновления статуса документа после индексции.
 Метод: `RegistryServiceClient.update_document_status()`.
 
+### 1.12. RAG Builder API: sections-модель (RS-6/RS-7, уточнение 20.06)
+- Эндпоинт: `POST /rag/build` (не `/rag/index`).
+- Вход: `document_id` + `sections[]` (типизированная структура: `section_id`, `parent_id`, `clause`, `title`, `level`, `path`, `page` 1-based, `bbox` 0..1, `type`, `content`).
+- `section_id` стабилен внутри документа, старый индекс удаляется перед переиндексацией.
+- `chunk_id` — технический retrieval ID, цитирование НЕ по нему.
+- Выход: `202 Accepted` + `indexing_txn_id`. Финальный ответ через longpoll: `indexed`/`failed` + `chunks_count`, `indexed_at`, `warnings[]`, `errors[]`.
+- Оркестратор получает sections из Registry (`GET /registry/documents/{doc_id}/sections`) перед вызовом RAG Builder.
+
+### 1.13. RAG Search API: только query/valid_at/filters (RS-6, уточнение 20.06)
+- Запрос содержит только `query`, `valid_at`, `filters`.
+- `search_type`, `top_k`, `rerank`, `version_id` **не передаются** — все параметры поиска только из `app_settings`.
+- Ответ: `source{}` (document_id, section_id, clause, path, page, bbox, section_title, content, content_hash) + `retrieval{}` (chunk_id, score, mode) + `context[]`.
+
+### 1.14. Query Service: плоская структура sources (RS-6, уточнение 20.06)
+- Для UI источники возвращаются плоской структурой: `document_id`, `document_title`, `section_id`, `clause`, `path`, `page`, `excerpt`, `score`.
+- Без `chunk_id`, `mode` и прочих retrieval-метаданных.
+- Цитирование — только `document_id` + `section_id`.
+- В историю чата сохраняется плоский `sources[]` без `chunk_id`/`mode`.
+
 ## 2. Расхождения со спецификациями
 
 ### 2.1. `docs/api/orchestrator_service_api.md` — устарела
@@ -88,6 +107,12 @@ LLM-ответы проверяются на корректность форма
 ### 2.3. `file_key` в `approve_draft` — исправлен `UnboundLocalError`
 При `full_completed=True` переменная `file_key` была не определена вне блока `if not task.full_completed:`,
 что вызывало `UnboundLocalError`. Исправлено: инициализация `file_key` вынесена до условного оператора.
+
+### 2.4. Код не синхронизирован с новыми API-контрактами RAG (20.06)
+Документация (`docs/api/rag_builder_service_api.md`, `rag_search_service_api.md`) обновлена под RS-6/RS-7, но код оркестратора ещё использует старые контракты:
+- `requests.py`: `RagIndexRequest.chunks` вместо `sections`, `RagSearchRequest` содержит `top_k`/`search_type`.
+- `rag_client.py`: эндпоинт `/rag/index` вместо `/rag/build`, старая структура ответа.
+- `citation_validator.py`: проверяет `idx >= 1` (1-based), а спецификация требует 0-based `[0, len(sources))`.
 
 ## 3. Технические долги
 

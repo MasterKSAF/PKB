@@ -56,9 +56,9 @@ class TestValidateCitationFormat:
         """[source:1,2] comma list is invalid."""
         assert validate_citation_format("[source:1,2]") is False
 
-    def test_invalid_zero_index(self):
-        """[source:0] index 0 is invalid."""
-        assert validate_citation_format("[source:0]") is False
+    def test_valid_zero_index(self):
+        """[source:0] index 0 is valid (0-based, RS-6)."""
+        assert validate_citation_format("[source:0]") is True
 
 
 class TestExtractSourceIndices:

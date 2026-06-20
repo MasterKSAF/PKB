@@ -73,7 +73,7 @@ flowchart LR
 
 | Режим | Эндпоинт | Шаги | LLM | Запись в БД |
 |-------|----------|------|-----|-------------|
-| **Preview** | `POST /converter/preview/metadata` | Извлечение метаданных — см. [_schemas.md](_schemas.md#PreviewMetadata) + проверка дубликатов | Нет (или быстрый вызов с ограничением) | Нет |
+| **Preview** | `POST /converter/preview` | Извлечение метаданных — см. [_schemas.md](_schemas.md#PreviewMetadata). Без проверки дубликатов (бизнес-ключ вычисляется отдельно через `POST /validate/metadata`) | Нет (или быстрый вызов с ограничением) | Нет |
 | **Full** | `POST /converter/convert` | Шаги 1–9 (полный цикл) | Да (управляется `use_llm`) | Нет |
 | **Standalone validate** | `POST /validate/document` | Шаги 4–8 (только валидация, без переконвертации) | Нет | Нет |
 
@@ -282,7 +282,7 @@ title_hash_sha256 = SHA-256(era | source_type | mks_oks_code | okstu_code | doc_
 title_key = era | source_type | mks_oks_code | okstu_code | doc_code | normalized_title
 ```
 
-**Converter-validator** вычисляет `title_hash_sha256` и `title_key` на шаге 6 и передаёт в `validation.fingerprint`. **Оркестратор** использует хэш для проверки уникальности через `POST /registry/documents/check-uniqueness`.
+**Converter-validator** — единственная точка вычисления `title_hash_sha256` и `title_key` (см. [`guide.md`](../guide.md#бизнес-ключ-вычисляет-только-converter-validator)). На шаге 6 (Full) или через `POST /validate/metadata` (пересчёт по явным метаданным). В preview-фазе бизнес-ключ вычисляется через `POST /validate/metadata` после `POST /converter/preview`. **Оркестратор** использует хэш для проверки уникальности через `POST /registry/documents/check-uniqueness`, но никогда не вычисляет его самостоятельно.
 
 ### 6.2. Нормализация `doc_code` для кросс-ссылок
 
@@ -316,7 +316,7 @@ title_key = era | source_type | mks_oks_code | okstu_code | doc_code | normalize
 | **Маппинг типов через CV** | Converter-validator отвечает за преобразование типов блоков OCR/Parser → Registry | А, Б | `pipeline1-formation_detail.md` |
 | **Кросс-ссылки извлекаются на шаге 9** | Ссылки на другие документы извлекаются после построения иерархии, перед отдачей результата | А, Б | `normalizer_specification.md` §8 |
 | **Обнаружение аватаров → manual** | Латинские аватары в названии переводят `decision` в `manual` | Е | `normalizer_specification.md` §3.3 |
-| **Preview-метаданные сохраняются** | Весь JSON ответа preview (`POST /converter/preview/metadata`) сохраняется в черновике (`registry.drafts.preview_metadata`) и при approve копируется в карточку документа (`registry.documents.preview_snapshot`) для истории и аудита | А, Б, Е | `db_diagrams.md` §0, §1 |
+| **Preview-метаданные сохраняются** | Весь JSON ответа preview (`POST /converter/preview`) сохраняется в черновике (`registry.drafts.preview_metadata`) и при approve копируется в карточку документа (`registry.documents.preview_snapshot`) для истории и аудита | А, Б, Е | `db_diagrams.md` §0, §1 |
 
 ---
 

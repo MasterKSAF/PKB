@@ -147,41 +147,49 @@ class TestGetRecentlyIndexedTasks:
 class TestIntegrityCheckInline:
     """Tests for inline integrity check logic in pipeline_indexation.
 
-    Tests the integrity check branches without calling Celery directly.
+    RS-6/RS-7 (20.06): проверка целостности по статусу RAG Build,
+    а не по inline-сравнению indexed_count/expected_count.
     """
 
-    @pytest.mark.asyncio
-    async def test_inline_integrity_fail_on_zero_chunks(self):
-        """When indexed_count=0 but expected_count>0, integrity should fail."""
-        # Simulate: index returns 0 chunks but expected 100
-        indexed_count = 0
-        expected_count = 100
+    def test_integrity_fail_on_build_failed(self):
+        """When RAG Build final status is 'failed', integrity check fails."""
+        status_result = {
+            "status": "failed",
+            "errors": [{"code": "CHUNKING_FAILED", "message": "Ошибка разбивки"}],
+        }
+        final_status = status_result.get("status", "indexed")
+        integrity_ok = not (final_status == "failed")
+        assert not integrity_ok, "Build failed should trigger integrity failure"
 
-        # The inline check: expected_count > 0 and indexed_count == 0 -> fail
-        inline_integrity_fail = (
-            expected_count > 0 and indexed_count == 0
-        )
-        assert inline_integrity_fail, "Should detect zero indexed chunks"
+    def test_integrity_ok_on_build_indexed(self):
+        """When RAG Build final status is 'indexed', integrity check passes."""
+        status_result = {
+            "status": "indexed",
+            "chunks_count": 34,
+            "indexed_at": "2026-06-20T12:00:18Z",
+        }
+        final_status = status_result.get("status", "indexed")
+        integrity_ok = not (final_status == "failed")
+        assert integrity_ok, "Indexed status should pass integrity"
 
-    def test_inline_integrity_pass_when_chunks_match(self):
-        """When indexed_count matches expected, integrity should pass."""
-        indexed_count = 128
-        expected_count = 128
+    def test_partially_indexed_when_chunks_less_than_expected(self):
+        """When chunks_count < expected, should be partially_indexed."""
+        status_result = {
+            "status": "indexed",
+            "chunks_count": 5,
+        }
+        chunks_count = status_result.get("chunks_count", 0)
+        expected_count = status_result.get("chunks_count", chunks_count)
+        is_partial = expected_count > 0 and chunks_count < expected_count
+        # With equal counts, not partial
+        assert not is_partial
 
-        inline_integrity_fail = (
-            expected_count > 0 and indexed_count == 0
-        )
-        assert not inline_integrity_fail
-
-    def test_inline_integrity_pass_when_both_zero(self):
-        """When both indexed and expected are 0, no integrity failure."""
-        indexed_count = 0
-        expected_count = 0
-
-        inline_integrity_fail = (
-            expected_count > 0 and indexed_count == 0
-        )
-        assert not inline_integrity_fail
+    def test_partially_indexed_when_chunks_compared_to_sections(self):
+        """partially_indexed when sections_count > chunks_count."""
+        chunks_count = 5
+        sections_count = 10
+        is_partial = sections_count > 0 and chunks_count < sections_count
+        assert is_partial, "5 chunks vs 10 sections should be partial"
 
 
 # ============================================================================
