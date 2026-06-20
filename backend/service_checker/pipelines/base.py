@@ -655,3 +655,62 @@ def check_contains_text(expected_substring: str) -> Callable:
             return True, f"Ответ содержит '{expected_substring}'"
         return False, f"Ответ не содержит '{expected_substring}'"
     return _check
+
+
+def check_rag_search_results(
+    require_sources: bool = False,
+) -> Callable[[Optional[str], PipelineContext], Tuple[bool, str]]:
+    """Проверить ответ RAG Search по source-индексам (document_id + section_id).
+
+    Валидация по source (document_id + section_id), не по chunk_id.
+    chunk_id — технический retrieval ID, не используется для цитирования.
+
+    :param require_sources: если True — хотя бы один результат должен содержать source
+    """
+    def _check(body: Optional[str], ctx: PipelineContext) -> Tuple[bool, str]:
+        if not body:
+            return False, "Пустой ответ"
+        try:
+            data = json.loads(body)
+        except json.JSONDecodeError as e:
+            return False, f"Невалидный JSON: {e}"
+
+        results = data.get("results", [])
+        if not isinstance(results, list):
+            return False, f"'results' должен быть списком, получен {type(results).__name__}"
+
+        if not results:
+            if require_sources:
+                return False, "Нет результатов поиска (требовались source-индексы)"
+            return True, "results=[] (нет результатов, валидация по source не требуется)"
+
+        # Валидация по source-индексам (document_id + section_id)
+        checked = 0
+        for i, result in enumerate(results):
+            if not isinstance(result, dict):
+                return False, f"results[{i}] не объект: {type(result).__name__}"
+
+            source = result.get("source")
+            if not isinstance(source, dict):
+                return False, f"results[{i}].source отсутствует или не объект"
+
+            doc_id = source.get("document_id")
+            sec_id = source.get("section_id")
+            if doc_id is None or sec_id is None:
+                return False, f"results[{i}].source: document_id или section_id отсутствуют"
+
+            # Проверка retrieval-метаданных (технические, не用于 цитирования)
+            retrieval = result.get("retrieval")
+            if retrieval is not None:
+                if not isinstance(retrieval, dict):
+                    return False, f"results[{i}].retrieval не объект: {type(retrieval).__name__}"
+                chunk_id = retrieval.get("chunk_id")
+                score = retrieval.get("score")
+                mode = retrieval.get("mode")
+                if chunk_id is None or score is None or mode is None:
+                    return False, f"results[{i}].retrieval: chunk_id/score/mode обязательны"
+
+            checked += 1
+
+        return True, f"results[{checked}/{len(results)}]: валидация по source-индексам (document_id+section_id) пройдена"
+    return _check

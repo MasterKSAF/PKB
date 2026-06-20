@@ -46,7 +46,7 @@
 - **`full`** — полный парсинг всех страниц, сохранение изображений в MinIO
 - **`preview`** — быстрый предпросмотр первых N страниц, **без** сохранения изображений в MinIO (`image_key` отсутствует)
 
-Если движок не поддерживает постраничный парсинг, а запрошен `mode: "preview"`, сервис возвращает полный документ с отметкой `preview_not_supported: true` в метаданных результата. Далее Оркестратор передаёт данные в Converter-validator preview (`/converter/preview/metadata`), после чего пользователь принимает решение (approve/reject). Full-фаза OCR/Parser пропускается, так как JSON уже полный.
+Если движок не поддерживает постраничный парсинг, а запрошен `mode: "preview"`, сервис возвращает полный документ с отметкой `preview_not_supported: true` в метаданных результата. Далее Оркестратор передаёт данные в Converter-validator preview (`/converter/preview`), после чего пользователь принимает решение (approve/reject). Full-фаза OCR/Parser пропускается, так как JSON уже полный.
 
 **Важно:** идентификатор задачи (`task_id`) генерирует Оркестратор и передаёт в запросе. Parser-сервис использует его для всех последующих операций (статус, результат).
 
@@ -95,7 +95,7 @@
 | `task_id` | bigint | Идентификатор задачи |
 | `status` | string | `"accepted"` |
 | `mode` | enum | Проброшенный режим из запроса: `"preview"` / `"full"` |
-| `estimated_completion` | datetime | Ориентировочное время завершения |
+| `estimated_completion` | datetime | Ориентировочное время завершения (ISO 8601) |
 
 ---
 
@@ -145,8 +145,8 @@
 | `avg_confidence`   | float  | Средняя уверенность извлечения                          |
 | `step`             | string | Текущий шаг обработки (см. таблицу ниже)                |
 | `step_detail`      | string | Детализация шага (человекочитаемая)                     |
-| `started_at`       | string | Время начала обработки                                  |
-| `completed_at`     | string | Время завершения (null, если не завершён)               |
+| `started_at`       | datetime | Время начала обработки                                  |
+| `completed_at`     | datetime | Время завершения (null, если не завершён)               |
 
 **Значения `step`:**
 
@@ -207,7 +207,7 @@
 | `metadata.schema`                            | string | Идентификатор схемы (напр. `"raw_ocr_v4"`)                          |
 | `metadata.mode`                              | enum   | Режим обработки: `"preview"` / `"full"`                              |
 | `metadata.preview_not_supported`             | bool   | `true`, если движок не поддерживает постраничный парсинг и вернул полный документ |
-| `metadata.created_at`                        | string | Время создания результата (ISO 8601)                                 |
+| `metadata.created_at`                        | datetime | Время создания результата (ISO 8601)                                 |
 | `metadata.parser`                            | object | Информация о парсере                                                 |
 | `metadata.parser.name`                       | string | Название парсера (напр. `"docling"`)                                 |
 | `metadata.parser.version`                    | string | Версия парсера (напр. `"2.1.0"`)                                    |
@@ -287,7 +287,7 @@
 | `progress_percent` | int    | Процент выполнения               |
 | `pages_processed`  | int    | Обработано страниц               |
 | `pages_total`      | int    | Всего страниц                    |
-| `started_at`       | string | Время начала обработки           |
+| `started_at`       | datetime | Время начала обработки           |
 
 ---
 

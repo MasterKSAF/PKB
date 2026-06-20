@@ -19,6 +19,7 @@ from .base import (
     PipelineStep,
     check_json_field,
     check_json_fields,
+    check_rag_search_results,
     s3_sign_headers,
 )
 
@@ -116,6 +117,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             port=8087,
             body={
                 "task_id": TEST_TASK_ID_1,
+                "draft_id": 1,  # PS-3: обязательный draft_id
                 "file_key": pdf_key_1,
                 "version_id": "1",
                 "mode": "full",
@@ -159,6 +161,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             port=8086,
             body={
                 "task_id": str(TEST_TASK_ID_1),
+                "version_id": "1",  # CV-9: version_id обязателен
                 "raw_json": {"pages": [], "blocks": [], "text": f"Текст документа 1 {ts}"},
             },
             expected_status=200,
@@ -177,6 +180,9 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
                 "source_type": "GOST",
                 "era": "RF",
                 "validity_status": "active",
+                "source_draft_id": 1,
+                "mks_oks_code": "47.020",
+                "title_key": f"GOST|RF|MULTI1-{ts}|2026",
             },
             expected_status={201, 409},
             needs_auth=True,
@@ -194,7 +200,6 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
                 "document_id": "{doc_id_1}",
                 "sections": [{
                     "section_id": 1,
-                    "document_id": "{doc_id_1}",
                     "clause": "1",
                     "level": 1,
                     "path": "1",
@@ -203,7 +208,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
                     "content": {"text": f"Содержимое документа 1 {ts}"},
                 }],
             },
-            expected_status={200, 201},
+            expected_status={200, 202},  # RB-7: 202 для асинхронного запуска
             needs_auth=True,
             check=check_json_field("status", str),
         ))
@@ -238,6 +243,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             port=8087,
             body={
                 "task_id": TEST_TASK_ID_2,
+                "draft_id": 1,  # PS-3: обязательный draft_id
                 "file_key": pdf_key_2,
                 "version_id": "1",
                 "mode": "full",
@@ -279,6 +285,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             port=8086,
             body={
                 "task_id": str(TEST_TASK_ID_2),
+                "version_id": "1",  # CV-9: version_id обязателен
                 "raw_json": {"pages": [], "blocks": [], "text": f"Текст документа 2 {ts}"},
             },
             expected_status=200,
@@ -296,6 +303,9 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
                 "source_type": "GOST",
                 "era": "RF",
                 "validity_status": "active",
+                "source_draft_id": 1,
+                "mks_oks_code": "47.020",
+                "title_key": f"GOST|RF|MULTI2-{ts}|2026",
             },
             expected_status={201, 409},
             needs_auth=True,
@@ -313,7 +323,6 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
                 "document_id": "{doc_id_2}",
                 "sections": [{
                     "section_id": 1,
-                    "document_id": "{doc_id_2}",
                     "clause": "1",
                     "level": 1,
                     "path": "1",
@@ -322,7 +331,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
                     "content": {"text": f"Содержимое документа 2 {ts}"},
                 }],
             },
-            expected_status={200, 201},
+            expected_status={200, 202},  # RB-7: 202 для асинхронного запуска
             needs_auth=True,
             check=check_json_field("status", str),
         ))
@@ -340,7 +349,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
                 "filters": {"document_type": [], "category_ids": [], "document_ids": []},
             },
             expected_status=200,
-            check=check_json_field("results", list),
+            check=check_rag_search_results(),
         ))
 
         # ── Шаг 18: Удаление первого документа ────────────────────────
@@ -367,7 +376,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
                 "filters": {"document_type": [], "category_ids": [], "document_ids": []},
             },
             expected_status=200,
-            check=check_json_field("results", list),
+            check=check_rag_search_results(),
         ))
 
         return steps

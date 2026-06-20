@@ -127,10 +127,13 @@ class SourceResponse(BaseModel):
     section_id: int | None = None
     page: int | None = None
     clause: str | None = None
+    path: str | None = None
     section_title: str | None = None
     excerpt: str | None = None
     score: float | None = None
     confidence: float | None = None
+    bbox: list | None = None
+    content_hash: str | None = None
     page_preview_url: str | None = None
     document_url: str | None = None
 
@@ -351,6 +354,24 @@ class TextAskResponse(BaseModel):
     disclaimer: str
     processing_time_ms: int
     model_used: str
+
+
+class MessageSearchRequest(BaseModel):
+    query: str
+    limit: int = Field(default=20, ge=1, le=100)
+    offset: int = Field(default=0, ge=0)
+
+
+class MessageSearchMeta(BaseModel):
+    total: int
+    page: int
+    page_size: int
+
+
+class MessageSearchResponse(BaseModel):
+    session_id: int
+    results: list[dict]
+    meta: MessageSearchMeta
 
 
 class ErrorDetail(BaseModel):

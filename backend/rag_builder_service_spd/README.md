@@ -207,9 +207,12 @@ docker compose down
 
 ### POST /index
 
-Принимает JSON-контейнер документа.
+Запускает индексацию документа в асинхронном режиме.
 
-Пример:
+Текущий MVP-вход всё ещё использует `BuildRequest` / chunk-container.
+`document_version_id` временно остаётся во входном контейнере как legacy/audit-поле до отдельного PR по синхронизации полного контракта Builder.
+
+Пример запроса:
 
 ```json
 {
@@ -220,16 +223,45 @@ docker compose down
 }
 ```
 
-Пример ответа:
+Пример ответа 202 Accepted:
 
-```json
+```
 {
-  "status": "indexed",
+  "status": "indexing",
   "document_id": 420000,
-  "document_version_id": 420001,
-  "chunks_count": 3
+  "task_id": 1,
+  "indexing_txn_id": "2f7b0a2e-5b7f-4a45-8f87-9f3c5a9b1e2d"
 }
 ```
+
+Индексация выполняется в фоне. Результат проверяется через:
+
+GET /index/status/{indexing_txn_id}
+
+Пример ответа статуса:
+
+```
+{
+  "document_id": 420000,
+  "status": "indexed",
+  "indexing_txn_id": "2f7b0a2e-5b7f-4a45-8f87-9f3c5a9b1e2d",
+  "chunks_count": 18,
+  "has_embeddings": true,
+  "indexed_at": "2026-06-20T12:00:00Z",
+  "index_stats": {
+    "sections": 8,
+    "chunks": 18,
+    "embeddings": 18
+  },
+  "warnings": [],
+  "errors": []
+}
+```
+Дополнительно поддерживается совместимый endpoint:
+
+POST /rag/build
+GET /rag/build/{document_id}/status
+
 
 ---
 
@@ -441,6 +473,7 @@ sql/
 На текущем этапе сервис записывает данные в следующие таблицы:
 
 ```text
+nsi.indexing_jobs
 nsi.document_sections
 nsi.chunks
 nsi.cross_references
@@ -455,6 +488,8 @@ nsi.formula_parameters
 ## Knowledge Base Schema
 
 ```text
+indexing_jobs
+
 document_sections
 │
 ├── chunks
@@ -489,7 +524,8 @@ document_sections
 * dense vector search
 * sparse full-text search with `content_tsv` and `ts_rank_cd`
 * hybrid RRF fusion with `k=60`
-* citation fields: `document_id`, `document_version_id`, `section_id`, `clause`, `path`, `page`, `content`
+* citation/source fields: `document_id`, `section_id`, `clause`, `path`, `page`, `bbox`, `content`
+* retrieval metadata: `chunk_id`, `score`, `mode`
 * context expansion via `document_sections.path_ltree`
 * parent + direct children context
 * partial context deduplication by `document_section_id`

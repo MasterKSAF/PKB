@@ -43,7 +43,7 @@
 Построение чанков, вычисление embeddings и индексация документа.  
 Вызывается Orchestrator после завершения Пайплайна 1.
 
-**Proцесс внутри:**
+**Процесс внутри:**
 
 | Шаг | Действие | Результат |
 |---|---|---|
@@ -102,6 +102,7 @@ Orchestrator получает JSON из Registry (через `GET /registry/docu
   "sections": [
     {
       "section_id": 420001,
+      "document_id": 1,
       "parent_id": null,
       "clause": "1",
       "title": null,
@@ -117,6 +118,7 @@ Orchestrator получает JSON из Registry (через `GET /registry/docu
     },
     {
       "section_id": 420005,
+      "document_id": 1,
       "parent_id": 420001,
       "clause": "6.1",
       "title": "Допуск соосности при степени точности",
@@ -151,12 +153,13 @@ Orchestrator получает JSON из Registry (через `GET /registry/docu
 | `document_id` | bigint | Да | ID документа в Registry |
 | `sections` | array | Да | Массив секций для индексации |
 | `sections[].section_id` | bigint | Да | ID секции (стабилен внутри документа) |
+| `sections[].document_id` | bigint | Да | ID документа (дублируется для удобства) |
 | `sections[].parent_id` | bigint \| null | Нет | ID родительской секции. `null` для корневых секций |
 | `sections[].clause` | string | Нет | Номер пункта (напр. "6.1") |
 | `sections[].title` | string | Нет | Заголовок секции |
 | `sections[].level` | int | Нет | Уровень вложенности секции (1 — корневой) |
 | `sections[].path` | string | Да | Путь секции (напр. "1.2.3") |
-| `sections[].page` | int | Hет | Номер страницы (**1-based** — первая страница документа = 1) |
+| `sections[].page` | int | Нет | Номер страницы (**1-based** — первая страница документа = 1) |
 | `sections[].bbox` | array[float] | Нет | Координаты на странице: `[x1, y1, x2, y2]` (**нормализованные 0..1**). См. [common_api.md](common_api.md#координаты-блоков-bbox) |
 | `sections[].type` | string | Да | Тип секции: `text`, `textBlock`, `table`, `image`, `list`, `formula`, `headerFooter` |
 | `sections[].content` | object/jsonb | Да | Содержимое секции (JSONB, см. `registry_for_rag_v2`) |

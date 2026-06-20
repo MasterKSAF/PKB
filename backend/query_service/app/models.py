@@ -83,6 +83,9 @@ class ChatSource(Base):
     text: Mapped[str | None] = mapped_column(Text)
     score: Mapped[float | None] = mapped_column(Float)
     confidence: Mapped[float | None] = mapped_column(Float)
+    path: Mapped[str | None] = mapped_column(String(256))
+    bbox: Mapped[list | None] = mapped_column(JSON)
+    content_hash: Mapped[str | None] = mapped_column(String(64))
     page_preview_url: Mapped[str | None] = mapped_column(String(512))
     document_url: Mapped[str | None] = mapped_column(String(512))
 
