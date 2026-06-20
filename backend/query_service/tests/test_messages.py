@@ -134,10 +134,6 @@ async def test_messages_session_not_found(client):
     assert r.status_code == 404
 
 
-# ──────────────────────────────────────────────
-# QS-12: POST /chat/sessions/{sid}/messages/search
-# ──────────────────────────────────────────────
-
 @pytest.mark.asyncio
 async def test_search_messages_session_not_found(client):
     r = await client.post("/api/v1/chat/sessions/999999/messages/search", json={"query": "test"})
