@@ -13,6 +13,8 @@ docs/
 ├── README.md                         # ← Этот файл (навигация)
 │
 ├── api/                              # API-спецификации микросервисов
+│   ├── _schemas.md                   #   Общие схемы данных (source of truth)
+│   ├── _data_dictionary.md           #   Словарь данных: матрица полей и вхождений
 │   ├── common_api.md                 #   Общие положения (форматы, auth, rate limits, health check, edge cases)
 │   ├── gateway_service_api.md        #   Gateway (JWT, RBAC, маршрутизация)
 │   ├── orchestrator_service_api.md   #   Orchestrator (координатор пайплайнов)
@@ -25,15 +27,15 @@ docs/
 │   ├── parser_service_api.md         #   Parser Service (парсинг цифровых PDF/DOC)
 │   ├── analyse_service_api.md        #   Analyse Service (анализ проектных решений)
 │   ├── rag_builder_service_api.md    #   RAG Builder (чанкинг, embeddings, индексация)
-│   ├── rag_search_service_api.md     #   RAG Search (гибридный поиск)
-│   └── validate_service_api.md       #   (deprecated — см. converter_validator_service_api.md)
+│   └── rag_search_service_api.md     #   RAG Search (гибридный поиск)
 │
 ├── pipelines/                        # Логические пайплайны обработки документов
 │   ├── overview.md                   #   Общая схема, FSM, матрица ответственности
 │   ├── pipeline1-formation.md        #   Пайплайн 1: Формирование документа (preview + full)
 │   ├── pipeline1-formation_detail.md #   Пайплайн 1: детальное описание (microservices, field mapping)
 │   ├── pipeline2-indexation.md       #   Пайплайн 2: Индексация (RAG Builder)
-│   └── pipeline3-search.md           #   Пайплайн 3: Поиск и генерация ответов
+│   ├── pipeline3-search.md           #   Пайплайн 3: Поиск и генерация ответов
+│   └── todo.md                       #   Todo по пайплайнам
 │
 ├── database/                         # Модели базы данных
 │   └── db_diagrams.md                #   ER-диаграмма базы данных
@@ -45,22 +47,37 @@ docs/
 │   ├── schema_converter_preview.json  #   Preview от Converter-validator
 │   ├── schema_registry_for_rag.json  #   JSON для Registry / RAG Builder
 │
-├── audit/                            # Аудиты и анализ синхронизации
-│   ├── audit_06_06_2026.md           #   Аудит документации от 06.06.2026
-│   └── ui_gateway_sync_analysis.md   #   Анализ UI/Gateway-синхронизации
-│
-├── rules/                            # Правила и чек-листы
-│   └── check_rule.md                 #   Чек-лист аудита документации
+├── checks/                           # Чек-листы и скрипты проверки
+│   ├── check_rule.md                 #   Чек-лист аудита документации
+│   ├── check_consistency.md          #   Чек-лист целостности при изменениях
+│   └── scripts/
+│       ├── check_consistency.py      #   Проверка целостности документации
+│       └── check_cross_references.py #   Кросс-проверка согласованности схем и полей
 │
 ├── specifications/                   # Технические спецификации
-│   ├── parsing_specifications.md     #   Спецификация парсинга для разработчиков
-│   └── справочник_предметных_областей_ПКБ.md  #   Справочник разделов ПКБ
+│   ├── parsing_specifications.md       #   Спецификация парсинга (OCR + P3-6 Lama-риск)
+│   ├── normalizer_specification.md     #   Нормализатор: алгоритмы дедупликации и бизнес-ключ
+│   ├── converter_specification.md       #   Спецификация конвертера-валидатора (P8-10)
+│   ├── cas_storage_specification.md    #   CAS (Content-Addressable Storage) — два бакета (P5-9)
+│   ├── registry_resolver_spec.md       #   Резолвер графа связей (P0-4)
+│   ├── mks_oks_classifier.csv          #   Справочник кодов МКС/ОКС (CSV)
+│   ├── classifier_roots.csv            #   Корневые узлы классификаторов (CSV)
+│   ├── pkb_domains.md                  #   Справочник предметных областей ПКБ (P10-1, UTF-8)
+│   ├── pkb_domains_classifier.csv      #   CSV-версия справочника ПКБ (P10-2)
+│   ├── deployment.md                   #   Развёртывание (P8-6)
+│   └── справочник_предметных_областей_ПКБ.md  #   (legacy, CP1251, оставлен для истории)
+│
+├── architecture/                     # Архитектурные описания
+│   ├── monitoring.md                 #   Мониторинг, SigNoz, OpenTelemetry, SLO/SLI, алерты
+│   └── service_dependencies.md       #   Зависимости и сетевые взаимодействия сервисов
 │
 ├── glossary.md                       # Глоссарий терминов и сокращений
-└── specificity.md                    # Журнал аномалий и трудных моментов
+├── guide.md                          # Архитектурные решения и стиль
+├── specificity.md                    # Журнал аномалий и трудных моментов
+├── todo.md                           # План синхронизации документации
 ```
 
-> 📂 **Исторические обсуждения и протоколы встреч** хранятся в директории [`../docs_discussions/`](../docs_discussions/) на уровне корня проекта.
+> 📂 **Исторические обсуждения и протоколы встреч** хранятся в директории [`../docs_plans/`](../docs_plans/) на уровне корня проекта.
 
 ---
 
@@ -128,7 +145,7 @@ Web UI состоит из двух основных экранов, соотв�
 
 | Экран | Назначение | Ключевые элементы |
 |-------|-----------|-------------------|
-| **1. Загрузка документа** | Загрузка файла, просмотр preview, принятие решения по черновику (approve/reject) | Drag-and-drop зона, статус-бар обработки, карточка preview-метаданных, список дубликатов, кнопки «Утвердить» / «Отклонить», история черновиков (`GET /drafts?document_key=...`) |
+| **1. Загрузка документа** | Загрузка файла, просмотр preview, принятие решения по черновику (approve/reject) | Drag-and-drop зона, статус-бар обработки, карточка preview-метаданных, список дубликатов, кнопки «Утвердить» / «Отклонить», история черновиков (`GET /drafts?draft_id=... & document_key=...`) |
 | **2. База знаний** | Просмотр прошедших обработку документов, навигация по категориям, поиск | Дерево категорий (Спринт 2), сетка/список документов, фильтры (тип, дата, статус), карточка документа с метаданными, кнопка «Задать вопрос» (переход в чат) |
 
 **Поток пользователя:**
@@ -144,6 +161,51 @@ flowchart LR
 ```
 
 > **Примечание:** пользовательские категории документов (many-to-many) — спроектированы. API и модель данных документированы в [`registry_service_api.md`](api/registry_service_api.md#группа-categories) и [`db_diagrams.md`](database/db_diagrams.md#13-категории-документов-registrycategories-registrydocument_categories). Реализация — приоритет Спринта 3.
+
+### Статус UI-интеграции (P1)
+
+> Сверка UI ↔ API на 17.06.2026. Источник: `docs_plans/audit/ui_gateway_sync_analysis.md`, обсуждения 16.06.
+
+| API-возможность | Документировано | UI подключено | Комментарий |
+|-----------------|-----------------|----------------|-------------|
+| `GET /api/v1/drafts` (список черновиков) | ✅ | ❌ UI использует mock-цикл (P1-3) | Подключить через Gateway |
+| `POST /api/v1/chat/sessions/{id}/messages` (longpoll) | ✅ | ❌ UI polling без longpoll (P1-4) | Подключить FSM longpoll |
+| `GET /chat/history/export`, `POST /chat/sessions/{id}/export` (stream) | ✅ | ❌ | P1-7 |
+| `GET /registry/classifiers/*`, `/terminology/*`, `/stats`, `/enums` (CRUD) | ✅ | ❌ | P1-8 |
+| `GET /tasks/*` (read-only admin) | ✅ | ❌ нет UI-раздела (P1-9) | Добавить «Артефакты и журналы обработки» |
+| `POST /documents/{doc_id}/reprocess` | ✅ | ❌ кнопка «Повторить OCR» (P1-10) | Доработать UI-логику |
+| `GET /admin/roles` (отдельная таблица ROLES) | ✅ | ❌ | P1-12 |
+| Карточка документа: `detail / status / history / errors` | ✅ частично | ❌ не все поля (P1-13) | Дополнить UI |
+| `POST /drafts/{draft_id}/preview` (повторный запуск) | ✅ idempotency | ❌ | P1-19 (idempotency 409 описан) |
+| `DocumentRegistry.tsx` (legacy) | ❌ | deprecated (P1-11) | Удалить в UI; зафиксировать в README |
+
+### RBAC-структура UI (P1-2, уточнение 16.06)
+
+> Вкладки UI соответствуют RBAC-матрице в [`common_api.md`](api/common_api.md#матрица-доступа-rbac).
+
+| Вкладка UI | Permission | Доступно ролям |
+|------------|-----------|----------------|
+| **Загрузка документа** (drafts) | `can_upload_documents` | engineer, knowledge_admin, system_admin |
+| **База знаний** (registry) | `can_view_documents` | engineer, knowledge_admin, system_admin |
+| **Поиск** (search) | `can_search` | engineer, knowledge_admin, system_admin |
+| **Черновики** (drafts) | `can_view_drafts` | engineer, knowledge_admin, system_admin |
+| **Очередь** (queue) | `can_view_queue` | engineer, knowledge_admin, system_admin |
+| **Классификаторы** | `can_manage_classifiers` | knowledge_admin, system_admin |
+| **Терминология** | `can_manage_terminology` | knowledge_admin, system_admin |
+| **Неизвестные коды** | `can_view_unknown_codes` | knowledge_admin, system_admin |
+| **Пользователи** (admin) | `can_manage_users` | system_admin |
+| **Роли** (admin) | `can_manage_roles` | system_admin |
+| **Аудит** (admin) | `can_view_audit` | system_admin |
+
+> **Вкладка `checks` убрана** из требований (обсуждение 03.06: «нет API, не планируется»). D11 подтверждён ✅.
+
+### Demo/Prod режим Gateway (P1-5)
+
+> **Решение**: Gateway работает в двух режимах, переключаемых через `ENV` env-переменную:
+> - `ENV=development` (демо/mock): мок-данные возвращаются явно с `X-Mock-Source: true` заголовком. Ошибки mock-сервисов возвращаются как есть (без маскировки).
+> - `ENV=production`: маршрутизация в реальные сервисы, без fallback на mock.
+>
+> **Запрещено** (P1-5): маскировать ошибки mock-данными в demo-режиме. Если сервис вернул `502`, клиент должен видеть `502`, а не синтетический ответ.
 
 ---
 
@@ -183,6 +245,23 @@ flowchart LR
 
 ## 🚀 Быстрый старт (для интегратора)
 
+### 🔍 Запуск проверки целостности документации
+
+Перед фиксацией любых изменений в `docs/` — запустить скрипт:
+
+```bash
+python docs/checks/scripts/check_consistency.py
+```
+
+Скрипт проверяет:
+- Нет ли упоминаний удалённых концепций (IDOR, Redis+rate limiting)
+- Нет ли `service_checker` в post-deploy (dev-only)
+- Нет ли ссылок на несуществующие task-ID
+- Нет ли файлов, не упомянутых в README.md
+- Не осталось ли устаревших утверждений (маскировка IP, OTEL только Gateway)
+
+При ошибках (красный) — исправить перед коммитом. Предупреждения (жёлтый) — некритично.
+
 > **Примечание:** API — внутренний, доступен только через Gateway (:8080).
 > Примеры ниже — для вызовов из Web UI (серверный код) по внутренней сети.
 
@@ -221,25 +300,6 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 
 ---
 
-## 📌 Последние изменения документации
-
-| Дата | Изменение |
-|------|-----------|
-| 04.06.2026 | **Методика экспериментов RAG**: полный перечень параметров, матрица запусков (3 фазы), метрики, псевдокод утилиты. См. [`../docs_discussions/features/rag_experiments_methodology.md`](../docs_discussions/features/rag_experiments_methodology.md). |
-| 04.06.2026 | **Переход на bigint**: все ID (`task_id`, `session_id`, `message_id`, `document_id`, `version_id`) — bigint (sequence). |
-| 04.06.2026 | **bbox**: нормализован [0,1] на всех этапах. `common_api.md` исправлен. |
-| 04.06.2026 | **UUID → bigint**: JSON-примеры во всех API-файлах синхронизированы с bigint-спецификациями. |
-| 04.06.2026 | Добавлены `specificity.md` (журнал аномалий) и `plans/` в структуру документации. |
-| 04–05.06.2026 | **Полная синхронизация документации Спринта 1**: все API, схемы, ER-диаграмма, глоссарий и пайплайны приведены к bigint; исправлены единицы bbox; `glossary.md` дополнен (`comparison_id`, `batch_id`, `Проект`); структура `docs/README.md` исправлена; UUID в `registry_service_api.md` заменены на bigint; `diagrams.md` и спринт-план актуализированы. См. `specificity.md` A1–A13 и `plans/sprint1_04_06_10_06.md`. |
-| 05.06.2026 | **Новый функционал**: группа `drafts` в API Оркестратора (5 эндпоинтов), FSM черновиков в `pipeline1-formation.md`, архитектура двух экранов UI (Загрузка / База знаний), маршрут `/api/v1/drafts/*` в Gateway. |
-| 05.06.2026 | **Комплексный аудит документации**: проверка API (13 файлов), пайплайнов (5 файлов), схемы данных (6 файлов), кросс-проверка, security review, тупиковые состояния. Найдено 112+ проблем (23 критических). Результаты: `docs/specificity.md` (аномалии A15–A34, S1–S12, C1–C16), `docs/database/db_audit_report.md` (43 замечания). |
-| 12.06.2026 | **Анализ UI/Gateway-синхронизации**: разбор 10 вопросов к backend, 5 UI-задач, ожидающих подтверждения контрактов, и 4 веток-кандидатов на удаление. Результаты: `docs/audit/ui_gateway_sync_analysis.md`. Добавлены аномалии A25–A33 в `specificity.md`. |
-| Текущая | **Схема БД**: все FK на bigint, добавлены `chat.projects`, `project_id`, `document_type`. |
-| v3.0 | Разделение RAG-сервиса на Builder и Search. |
-| v2.3 | Двухфазный пайплайн (preview + full). |
-
----
-
 ## 🧩 Сервисы (микросервисная архитектура)
 
 ---
@@ -260,7 +320,7 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 - Проверка JWT Bearer-токена — невалидный/отсутствующий токен → `401`
 - RBAC — проверка прав доступа на основе роли → недостаточно прав → `403`
 - Маршрутизация запросов к внутренним сервисам (Auth, Orchestrator, Query, Registry и др.)
-- Иденпотентность для критичных POST-операций (`Idempotency-Key`, TTL: 1 час)
+- Идемпотентность для критичных POST-операций (`Idempotency-Key`, TTL: 1 час)
 - Единый формат ошибок для всех HTTP-исключений
 - Health-check endpoint `/api/v1/system/health` с агрегированным статусом всех сервисов
 - CORS и `X-Process-Time` заголовок
@@ -325,6 +385,8 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 - Сохранение истории чата и сбора обратной связи
 - Longpoll-механизм для асинхронного ожидания ответа
 - Текстовый поиск (`POST /text/search`) и вопрос-ответ (`POST /text/ask`)
+- Поиск документов по structured-запросу (`POST /documents/search`, `GET /documents/search`)
+- Вопрос по документам в свободной форме (`POST /ask`)
 
 ---
 
@@ -351,7 +413,7 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 ### Сервис конвертации и валидации (Converter-validator Service)
 **Порт:** `8086`
 **Документация:** [`docs/api/converter_validator_service_api.md`](api/converter_validator_service_api.md)
-**Описание также в:** [`pipelines/pipeline1-formation.md`](pipelines/pipeline1-formation.md), [`pipelines/pipeline1-formation_detail.md`](pipelines/pipeline1-formation_detail.md), [`schema/schema_converter_result.json`](schema/schema_converter_result.json), [`schema/schema_converter_preview.json`](schema/schema_converter_preview.json)
+**Описание также в:** [`specifications/converter_specification.md`](specifications/converter_specification.md), [`pipelines/pipeline1-formation.md`](pipelines/pipeline1-formation.md), [`pipelines/pipeline1-formation_detail.md`](pipelines/pipeline1-formation_detail.md), [`schema/schema_converter_result.json`](schema/schema_converter_result.json), [`schema/schema_converter_preview.json`](schema/schema_converter_preview.json)
 
 **Назначение:**
 Принять сырые извлечённые данные, полученные от OCR или Parser, и превратить их в полноценный структурированный документ, полностью готовый к сохранению в базе данных. Не сохраняет данные в БД — только готовит структурированное представление.
@@ -493,9 +555,19 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 | Спецификация парсинга для разработчиков | [`docs/specifications/parsing_specifications.md`](specifications/parsing_specifications.md) |
 | **Справочники** | |
 | Глоссарий терминов и сокращений | [`docs/glossary.md`](glossary.md) |
+| Журнал аномалий и трудных моментов | [`docs/specificity.md`](specificity.md) (D44) |
+| **Модели базы данных** | |
+| ER-диаграмма и типы данных | [`docs/database/db_diagrams.md`](database/db_diagrams.md) (D47) |
+| DDL-миграции 17.06 | [`docs/database/ddl_migrations_17_06.md`](database/ddl_migrations_17_06.md) |
 | **JSON-схемы (контракты)** | |
 | Структуры данных (диаграммы) | [`docs/schema/diagrams.md`](schema/diagrams.md) |
 | Результат Parser (сырой) | [`docs/schema/schema_parser_result.json`](schema/schema_parser_result.json) |
 | Результат Converter-validator | [`docs/schema/schema_converter_result.json`](schema/schema_converter_result.json) |
 | Preview от Converter-validator | [`docs/schema/schema_converter_preview.json`](schema/schema_converter_preview.json) |
 | JSON для Registry / RAG Builder | [`docs/schema/schema_registry_for_rag.json`](schema/schema_registry_for_rag.json) |
+
+---
+
+## ❓ Open Questions (P6-4)
+
+Актуальный список открытых вопросов, аномалий и несоответствий — в [`docs/specificity.md`](specificity.md) (раздел «🟡 Открытые вопросы»).

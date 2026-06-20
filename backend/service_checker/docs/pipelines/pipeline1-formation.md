@@ -65,7 +65,7 @@ sequenceDiagram
         deactivate Pars
     end
     Orch->>Orch: Завершение task_step "preview_ocr"
-    Orch->>Orch: Проверка preview_not_supported + решение об auto-approve
+    Orch->>Orch: Проверка preview_not_supported — full-фаза будет пропущена
     Orch->>Orch: Создание task_step "preview_converter"
     Orch->>Conv: POST /converter/preview/metadata
     activate Conv
@@ -158,8 +158,8 @@ sequenceDiagram
 | P.3 | Извлечение первичных метаданных | Converter-validator (preview API) | Обозначение, наименование, тип, даты |
 | P.4 | Проверка уникальности (по метаданным + размеру) | Оркестратор → `POST /registry/documents/check-uniqueness` | Список кандидатов-дубликатов |
 | P.5 | Отображение preview пользователю | UI | Метаданные + дубликаты |
-| P.6 | Решение пользователя (или auto-approve) | UI → Оркестратор (`PATCH /drafts/{draft_id}/decide`) | approve / reject |
-| P.6a | Auto-approve (если `preview_not_supported=true`, метаданные корректны, дубликатов нет) | Оркестратор | Пропуск шага P.6, переход к full-фазе |
+| P.6 | Решение пользователя | UI → Оркестратор (`PATCH /drafts/{draft_id}/decide`) | approve / reject |
+| P.6a | Пропуск full-фазы (если `preview_not_supported=true`) | Оркестратор | OCR/Parser не запускается повторно — JSON уже полный |
 
 **Параметры preview:**
 
@@ -167,7 +167,7 @@ sequenceDiagram
 |----------|----------------------|----------|
 | `max_pages` | 3 | Количество страниц для preview-обработки |
 | `preview_timeout` | 60с (OCR) / 30с (Parser) | Таймаут на preview-этап |
-| `preview_not_supported_fallback` | — | Если `preview_not_supported: true` + метаданные корректны + нет дубликатов → auto-approve (пропуск шага подтверждения) |
+| `preview_not_supported_fallback` | — | Если `preview_not_supported: true` → full-фаза OCR/Parser пропускается, решение принимает пользователь |
 | `preview_llm_timeout` | 15с | Таймаут на LLM-вызов при извлечении метаданных |
 
 ---
@@ -229,7 +229,7 @@ sequenceDiagram
 | 2.3 | Извлечение метаданных (LLM, эвристики) | Обозначение, наименование, тип, даты, редакция |
 | 2.4 | Распознавание перекрёстных ссылок | Нормализованные ссылки на ГОСТ/ТУ |
 | 2.5 | Валидация структуры и полноты | Проверка соответствия схеме |
-| 2.6 | — | Вычисление хэшей SHA-256 (content_hash, title_hash). Проверка уникальности выполняется Оркестратором после получения JSON (через `POST /registry/documents/check-uniqueness`) |
+| 2.6 | — | Вычисление хэшей SHA-256 (content_hash, title_hash) и `title_key` (исходная строка конкатенации). Проверка уникальности выполняется Оркестратором после получения JSON (через `POST /registry/documents/check-uniqueness`) |
 
 **Особенность:** использует LLM для иерархии, классификации и метаданных.  
 **Выход:** иерархический типизированный JSON, близкий к итоговому документу.
@@ -244,6 +244,7 @@ sequenceDiagram
 
 | Шаг | Действие | Результат |
 |-----|----------|-----------|
+| 3.0 | **Копирование preview-слепка** — Registry копирует `preview_metadata` из `registry.drafts` в `preview_snapshot` карточки документа | Исходный JSON ответа Converter-validator preview сохранён для истории |
 | 3.1 | Сохранение карточки документа в `registry.documents` | `document_id`, ссылки на ресурсы |
 | 3.2 | **Сегментирование:** разбиение на секции (`registry.document_sections`) | Каждая секция получает DB-идентификатор |
 | 3.3 | Сохранение перекрёстных ссылок в `registry.document_references` | Связи между элементами документа |
@@ -263,13 +264,13 @@ sequenceDiagram
 **Выход preview/metadata:**
 ```json
 {
-  "doc_code": "ГОСТ 20868-81",
-  "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
-  "document_type": "normative",
-  "year": "1981",
-  "revision": null
+  "doc_code": "311-05-1950ц",
+  "title": "ЦИРКУЛЯРНОЕ ПИСЬМО № 311-05-1950ц от 09.06.2023",
+  /* ... полный набор полей см. _schemas.md#PreviewMetadata */
 }
 ```
+
+> 📖 **Схема полей preview_metadata** — [_schemas.md](_schemas.md#PreviewMetadata).
 
 ##### Проверка уникальности (Оркестратор → Registry)
 
@@ -285,12 +286,51 @@ sequenceDiagram
 }
 ```
 
-**title_hash_sha256** = SHA-256(`era` | `source_type` | `doc_code` | `normalized_title`)
+**title_hash_sha256** = SHA-256(`era` | `source_type` | `mks_oks_code` | `okstu_code` | `doc_code` | `normalized_title`)
+**title_key** = `era` | `source_type` | `mks_oks_code` | `okstu_code` | `doc_code` | `normalized_title`
 
-где `normalized_title` — `title` в нижнем регистре с удалёнными лишними пробелами.
+где `normalized_title` — `title` в нижнем регистре с удалёнными лишними пробелами. Коды классификации включены в формулу для разграничения документов с одинаковым номером, но разной тематикой. Детальный алгоритм нормализации — в `specifications/normalizer_specification.md`.
 
 > **⚠️ Race condition**: Проверка уникальности через `check-uniqueness` неатомарна с последующей записью. Между check и write может быть вставлен другой документ. 
 > **Решение**: использовать уникальный индекс `UNIQUE (file_hash_sha256)` в БД + `INSERT ... ON CONFLICT DO NOTHING` для атомарной проверки при записи.
+
+##### Компенсация race condition между `check-uniqueness` и `approve`-записью
+
+Полная атомарность операции «проверить уникальность + записать документ» на уровне единой БД-транзакции невозможна по двум причинам:
+1. Между `POST /registry/documents/check-uniqueness` (вызывается Оркестратором на preview-фазе) и финальной записью в `registry.documents` (на фазе `approve` → `created`) проходит **время принятия решения пользователем** (минуты–часы). В течение этого окна другой пользователь может загрузить идентичный документ.
+2. Конвертация занимает секунды–минуты; удерживать распределённую блокировку на этом интервале недопустимо (потеря доступности сервиса при сбое).
+
+**Компенсирующий механизм (стадия `approved → created`):**
+
+1. Оркестратор при `PATCH /drafts/{draft_id}/decide action=approve` повторно вызывает `POST /registry/documents/check-uniqueness` (актуальный снимок) и фиксирует `file_hash_sha256` + `title_hash_sha256` в локальном контексте задачи.
+2. Registry при `POST /registry/documents` (создание карточки) выполняет вставку через `INSERT ... ON CONFLICT (file_hash_sha256) DO NOTHING RETURNING id`. 
+   - **Конфликта нет** → строка создана, возвращён `document_id`.
+   - **Конфликт по `file_hash_sha256`** → запись не вставлена, Registry возвращает HTTP `409 DUPLICATE_FILE` с телом:
+     ```json
+     {
+       "error": {
+         "code": "DUPLICATE_FILE",
+         "message": "Документ с таким file_hash_sha256 уже зарегистрирован",
+         "details": { "conflict_document_id": 42 }
+       }
+     }
+     ```
+3. Оркестратор при получении `409 DUPLICATE_FILE`:
+   - переводит черновик в статус `discarded` с `error_code = "DUPLICATE_FILE_AFTER_APPROVE"`,
+   - записывает событие в `pipeline.task_steps.error_code` / `error_message` (уровень `CRITICAL` — потеря консистентности между preview-решением и фактической записью),
+   - отдаёт пользователю HTTP `409 DUPLICATE_FILE` через Gateway, указывая `conflict_document_id` для перехода к существующему документу.
+4. **Связанный черновик** (`pipeline.tasks.draft_id`) помечается флагом `superseded_by_document_id = 42` в задаче пайплайна (только для аудита).
+5. **Уведомление пользователя**: UI получает `409` с `conflict_document_id` и предлагает перейти к существующему документу или отклонить дубликат (`reject`).
+
+**Аудит и логирование:**
+- Событие `DUPLICATE_FILE_AFTER_APPROVE` фиксируется в `registry.document_history` с `event_type="failed_duplicate"` и в `audit.events` (см. P11-4) с уровнем `CRITICAL`.
+- В лог пишется warning: `"Дубликат обнаружен после approve — черновик discarded"`, `draft_id`, `task_id`, `conflict_document_id`.
+
+**Идемпотентность решения:** повторный `PATCH /drafts/{draft_id}/decide` для уже `discarded` черновика возвращает `409 INVALID_STATE_TRANSITION` (см. `common_api.md`).
+
+**Альтернативы (отвергнуты):**
+- **pg_advisory_xact_lock** на `title_hash_sha256` — снижает конкурентность и не покрывает окно между preview и approve.
+- **Saga с распределённой транзакцией** — не используется (дополнительная инфраструктура, eventual consistency).
 
 ##### Этап 1 → 2: OCR/Parser → Converter-validator (обогащение)
 
@@ -313,8 +353,13 @@ stateDiagram-v2
         uploaded --> previewing : запуск preview
         previewing --> ready_for_approve : preview завершён
         previewing --> discarded : ошибка preview
+        previewing --> review_required : low confidence / quality issues
+        review_required --> validation : оператор подтвердил
+        review_required --> discarded : оператор отклонил
         ready_for_approve --> approved : approve
         ready_for_approve --> discarded : reject / автозавершение не прошло
+        validation --> approved : validation passed
+        validation --> discarded : validation failed
         approved --> created : запись в Registry
         
         created --> pending_index : запуск RAG Builder
@@ -337,6 +382,8 @@ stateDiagram-v2
 | `uploaded` | Черновик | Файл загружен в MinIO, ожидание запуска preview |
 | `previewing` | Черновик | Выполняется preview-фаза |
 | `ready_for_approve` | Черновик | Preview завершён, ожидание решения |
+| `review_required` | Черновик | **P1-20**: Preview показал низкое качество (пороги из P12-2 в `app_settings.parser.quality_thresholds`). Требуется ручная проверка оператором. UI отображает замечания из `notifications[]` (P12-3) |
+| `validation` | Черновик | Оператор подтвердил черновик, выполняется повторная валидация (полный OCR/Parser → Converter-validator) с `metadata_overrides` (см. D13) |
 | `approved` | Черновик | Оператор подтвердил, документ создаётся в Registry |
 | `discarded` | Черновик | Черновик отклонён |
 | `created` | Registry | Документ записан в реестр |
@@ -344,6 +391,17 @@ stateDiagram-v2
 | `indexing` | Пайплайн 2 | Выполняется чанкинг, эмбеддинги |
 | `indexed` | Пайплайн 2 | Документ проиндексирован |
 | `failed` | 1/2 | Ошибка на одном из этапов |
+
+**Триггер перехода `review_required → validation` (P1-20):**
+
+1. На стадии `previewing` Parser/OCR возвращает raw-метрики качества (`avg_confidence`, `pages_failed`, `per_page[].status`). Оркестратор применяет пороги из `app_settings.parser.quality_thresholds`:
+   - `avg_confidence < reprocess_avg_confidence_below` → orchestrator запускает повторную обработку
+   - `avg_confidence < operator_avg_confidence_below` ИЛИ `pages_failed > 0` ИЛИ `lama_fallback_used == true` → черновик переходит в `review_required` (а не `ready_for_approve`).
+3. На стадии `review_required` Orchestrator фиксирует замечания в `pipeline.draft_notifications` (P12-3 / P3-5) и отдаёт UI список с `code, severity, category, message, location, suggested_action`.
+4. Оператор может отредактировать метаданные черновика через `PATCH /drafts/{draft_id}/metadata` (S5) — это опциональный шаг, выполняется до или после просмотра замечаний.
+5. Оператор через `PATCH /drafts/{draft_id}/decide` с `action: "confirm"` подтверждает черновик → статус `validation`. Если метаданные редактировались через шаг 4, `metadata_overrides` в `decide` не обязательны — они уже сохранены в черновике.
+6. На стадии `validation` Orchestrator запускает полный цикл (OCR/Parser full + Converter-validator), используя `metadata_overrides` оператора (сохранённые ранее или переданные в `decide`).
+7. Если `validation` проходит — `approved` → `created`. Если нет — `discarded` с `error_code`.
 
 **Процесс создания новой версии:**
 Версии создаются через `POST /documents/{doc_id}/versions` напрямую. При создании новой версии:
@@ -354,9 +412,9 @@ stateDiagram-v2
 
 **Архивация документов:** Документ может быть помечен как архивный (неактивный) автоматически через N дней после создания новой версии (настраиваемый параметр, по умолчанию 365 дней). Также архивация может быть инициирована вручную `system_admin`. Архивированный документ доступен только для чтения. Архивация — административная операция, не связанная с FSM пайплайна.
 
-> **Черновики (drafts):** Черновик — основной элемент управления загрузкой документа. Данные черновиков хранятся в `registry.drafts` (БД Registry). `file_key` — у черновика (`registry.drafts.file_key`). `raw_data` — в `registry.drafts.raw_data` (JSONB, результат Parser или OCR). MinIO — только для бинарных файлов (PDF, изображения). OCR/Parser выполняется **полностью** уже в черновике; Converter-validator — только извлечение метаданных. Полная конвертация (validated_v3) запускается при approve, после чего документ записывается в Registry. Решение пользователя принимается через `PATCH /drafts/{draft_id}/decide`. `task_id` — внутренний сквозной ID задачи (`pipeline.tasks`, БД Orchestrator). Этапы задачи с входными/выходными данными сервисов — в `pipeline.task_steps`.
+> **Черновики (drafts):** Черновик — основной элемент управления загрузкой документа. Данные черновиков хранятся в `registry.drafts` (БД Registry). `file_key` — у черновика (`registry.drafts.file_key`). `raw_data` — в `registry.drafts.raw_data` (JSONB, результат Parser или OCR). MinIO — только для бинарных файлов (PDF, изображения). OCR/Parser выполняется **полностью** уже в черновике; Converter-validator — только извлечение метаданных. Полная конвертация (validated_v3) запускается при approve, после чего документ записывается в Registry. Решение пользователя принимается через `PATCH /drafts/{draft_id}/decide` с опциональным `metadata_overrides` (ручные правки метаданных). `task_id` — внутренний сквозной ID задачи (`pipeline.tasks`, БД Orchestrator). Этапы задачи с входными/выходными данными сервисов — в `pipeline.task_steps`.
 
-**Новая Draft FSM:**
+**Draft FSM (объединённая):**
 
 ```mermaid
 stateDiagram-v2
@@ -364,8 +422,13 @@ stateDiagram-v2
     uploaded --> previewing : запуск preview
     previewing --> ready_for_approve : preview завершён
     previewing --> discarded : ошибка preview
-    ready_for_approve --> approved : approve
-    ready_for_approve --> discarded : reject / автозавершение не прошло
+    previewing --> review_required : low confidence / quality issues
+    review_required --> validation : confirm (PATCH /decide)
+    review_required --> discarded : reject (PATCH /decide)
+    ready_for_approve --> approved : approve (PATCH /decide)
+    ready_for_approve --> discarded : reject (PATCH /decide)
+    validation --> approved : validation passed
+    validation --> discarded : validation failed
     approved --> [*] : документ в Registry
     discarded --> [*]
 ```
@@ -377,6 +440,8 @@ stateDiagram-v2
 | `uploaded` | Черновик создан при загрузке файла, ожидание preview |
 | `previewing` | Выполняется preview-фаза |
 | `ready_for_approve` | Preview завершён. Если уникально и чисто — автозавершение; иначе — ожидание решения человека |
+| `review_required` | Preview показал низкое качество. Требуется ручная проверка оператором |
+| `validation` | Оператор подтвердил черновик, выполняется повторная валидация с metadata_overrides |
 | `approved` | Черновик утверждён. Документ записывается в Registry |
 | `discarded` | Черновик отклонён (человеком или автоматом) |
 

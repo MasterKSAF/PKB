@@ -85,6 +85,51 @@ API черновиков и FSM документированы, но **UI сра
 
 `task_id` теперь ID задачи в `pipeline.tasks` (БД Orchestrator). Агрегирует этапы (`task_steps`) с входными/выходными данными сервисов. Внешние клиенты используют `draft_id`.
 
+### A35. `GET /drafts` — поддержка `draft_id` и `document_key` как опциональных фильтров
+
+Ранее `GET /drafts` требовал `document_key` как обязательный параметр, что не позволяло администратору получить полный список всех черновиков. Также нельзя было найти черновик по `draft_id` через список.
+
+**Решение (13.06):**
+- `document_key` — опциональный фильтр (история попыток обработки одного документа)
+- Добавлен `draft_id` — опциональный фильтр по ID черновика
+- Без параметров — возвращаются все черновики (доступно `system_admin`, `knowledge_admin`)
+- Добавлены параметры пагинации `page`, `page_size`
+
+Синхронизированы:
+- `orchestrator_service_api.md` — публичный `GET /drafts`
+- `gateway_service_api.md` — таблица маршрутов
+- `registry_service_api.md` — internal `GET /registry/drafts`
+- `README.md` — описание экрана загрузки
+
+### A37. Резолвер графа связей — не реализован
+
+В `registry.document_references` есть поля `is_resolved` и `resolved_document_id`, но не описан сервис или механизм, который их проставляет. При загрузке нового документа все ссылки создаются с `is_resolved = FALSE` и остаются в этом состоянии.
+
+**Что нужно:**
+- Спецификация резолвера в `registry_service_api.md`.
+- Триггеры: по событию (создание документа) + CRON-задача.
+- SQL: `UPDATE ref SET is_resolved=TRUE, resolved_document_id=d.id FROM registry.documents d WHERE d.doc_code=ref.target_doc_code AND ref.is_resolved=FALSE`.
+- Частичный индекс `WHERE is_resolved = FALSE`.
+- Единый нормализатор `doc_code` в Converter-validator и Registry.
+
+**Статус:** требуется реализация. См. `analyse_alternative_project.md` (п. 1.1).
+
+
+
+### A36. Классификация ПКБ — расширение `categories` вместо отдельной таблицы
+
+В `registry_document` обнаружены два конкурирующих набора полей классификации:
+- **Новые:** `mks_oks_code`, `okstu_code` — используются в API
+- **Старые:** `classifier_code`, `industry_code` — есть в модели данных, но не используются в API (архитектурный запах, неполная миграция)
+
+Поле `group` использовалось в API, но отсутствовало в модели данных.
+`PKB_DOMAIN` как `classifier_system` enum не существует.
+
+**Решение (13.06, уточнено):** Вместо отдельной таблицы `pkb_domains` — используются существующие `categories` (M:N):
+- `classifier_code`, `industry_code`, `group` — удалены из модели
+- Предметные области ПКБ — это категории, привязанные к документам через `document_category`
+- `classifier_system` enum остаётся без изменений: `MKS, OKSTU, UDC, EXTERNAL`
+
 ### A34. Битый путь к sprint-плану в README.md + отсутствие документации пользовательских категорий
 
 В `docs/README.md` строка 151 ссылалась на `plans/sprint1_04_06_10_06.md` — файл не существовал по указанному пути (фактически находился в `docs_plans/features/`). Пользовательские категории документов (many-to-many) были спроектированы в вопросе 4.5 спринт-плана, но не были отражены в основной документации (`registry_service_api.md`, `db_diagrams.md`).
@@ -94,6 +139,46 @@ API черновиков и FSM документированы, но **UI сра
 - Добавлены API и модель данных для категорий в `registry_service_api.md` (группа categories) и `db_diagrams.md` (раздел 11)
 - Реализация — приоритет Спринта 3
 
+### A38. `PATCH /drafts/{id}/metadata` — сохранение правок метаданных (S5, resolved)
+
+Добавлен endpoint `PATCH /drafts/{draft_id}/metadata` для сохранения ручных правок метаданных черновика без confirm. Описана логика пересчёта `title_hash_sha256`/`title_key` и проверки уникальности.
+
+**Решение:** endpoint специфицирован, Gateway маршрут добавлен, Registry internal endpoint описан.
+
+### A42. Статусы задач — целевая модель vs код (20.06)
+
+Спецификация `task.status` задаёт 8 статусов: `uploaded`, `previewing`, `ready_for_approve`, `processing`, `created`, `indexing`, `indexed`, `failed` (зафиксировано в `guide.md`). Код использует упрощённую модель: `active`, `completed`, `failed`, `partially_indexed`. 
+
+**Решение:** целевая модель спеки верна. Код должен быть доработан.
+
+### A43. `GET /drafts/{draft_id}/tasks` — не реализован (20.06)
+
+Эндпоинт спроектирован, специфицирован, подтверждён как необходимый. Ожидает реализации.
+
+### A44. Формат пагинации `GET /tasks` — не соответствует common_api.md (20.06)
+
+`GET /tasks` код возвращает плоские `total`, `page`, `page_size`, а стандарт API (`common_api.md`) требует `meta: { total, page, page_size }`. 
+
+**Решение:** формат `meta: {}` оставлен как целевой. Код должен быть приведён к стандарту.
+
+### A39. `valid_from`/`valid_until` в черновике (S6, resolved)
+
+Даты действия возвращаются в `GET /drafts/{id}` после передачи через `PATCH /metadata`. `valid_until = dateMax` в API возвращается как `null`. `valid_from` выводится из `year` (01-01-{year}) если не задан явно.
+
+**Решение:** конвертация `dateMax` ↔ `null` описана во всех слоях (БД, internal API, public API, glossary).
+
+### A40. `source_type` enum — канонический (S7, resolved)
+
+Enum: `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `RMRS`, `OTHER`. Присутствует во всех документах.
+
+**Решение:** UI берёт enum из `GET /registry/enums`, не хранит статически.
+
+### A41. Бизнес-ключ: `title_hash_sha256` vs `title_key` (S8, resolved)
+
+Главный бизнес-ключ — `title_hash_sha256`. `title_key` — технический UNIQUE-индекс для аудита. `DUPLICATE_DOCUMENT` (409) — код ошибки при конфликте.
+
+**Решение:** главный ключ зафиксирован, DDL-индексы добавлены, код ошибки специфицирован.
+
 ---
 
 ## 🔴 Схема данных (требуют DDL)
@@ -101,11 +186,11 @@ API черновиков и FSM документированы, но **UI сра
 | Код | Проблема | Статус |
 |-----|----------|--------|
 | A15 (DB-E4) | Нет UNIQUE-ограничений для 6 бизнес-ключей | 🔄 DDL |
-| A16 (DB-E5) | Нет ON DELETE (NO ACTION по умолч.) | 🔄 DDL |
+| A16 (DB-E5) | Нет ON DELETE (NO ACTION по умолч.) | ✅ не нужно — soft-delete через deleted_at, DELETE не происходит |
 | A17 | Нет таблиц `auth.users`, `registry.terminology` | 🔄 исправлено: таблицы есть, но не были описаны в db_diagrams.md. Добавлены в ER-диаграмму и примечания |
 | A18 (DB-E10) | Нет soft-delete и `updated_at` | 🔄 решение |
 | A19 (DB-E1) | VARCHAR для ENUM без CHECK | 🔄 DDL |
-| A20 (DB-E8) | `document_chunks.document_id` денормализация без синхронизации | 🟡 открыто |
+| A20 (DB-E8) | `document_chunks.document_id` денормализация — логика простановки в RAG Builder | 🔄 решено: проставляет RAG Builder |
 | A21 (DB-E2) | `file_hash_sha256` как `text` вместо `CHAR(64)` | 🟡 открыто |
 | A22 | `sessions.message_count` без триггера синхронизации | 🔄 исправлено: поле удалено из схемы БД и API. Количество сообщений вычисляется по факту через COUNT |
 
@@ -115,8 +200,8 @@ API черновиков и FSM документированы, но **UI сра
 
 | Код | Проблема | Статус |
 |-----|----------|--------|
-| S3 | Rate limiting не реализован (Nginx + Redis) | 🔄 код |
-| S10 | `/internal/auth/validate` без сетевой изоляции (mTLS) | 🔄 код |
+| S3 | Rate limiting не реализован (Nginx) | 🔄 код |
+| S10 | `/internal/auth/validate` без сетевой изоляции | ✅ не нужно — межсервисная авторизация отсутствует |
 
 ---
 
@@ -148,13 +233,20 @@ API черновиков и FSM документированы, но **UI сра
 | API-S18 | Common: bbox описан как нормализованный [0,1] на всех этапах, но OCR/Parser — пиксели | 🔄 исправлено |
 | API-S19 | Integration `POST /meridian/export`: `document_id` тип string вместо bigint | ⬜ заморожено — интеграции не в MVP |
 | API-S20 | Все internal-сервисы: не описана аутентификация service-to-service | 🔄 исправлено — внутренние вызовы изолированы Gateway |
+| API-S21 | `review_required` → `validation`: `PATCH /decide` vs `operator-confirm`. Решение: единый `PATCH /decide` с действием `confirm` | 🔄 исправлено 19.06 |
+| API-S22 | `metadata_overrides` не было в публичном API Gateway. Решение: добавлено в `PATCH /drafts/{id}/decide` | 🔄 исправлено 19.06 |
+| API-S23 | `notifications[]` vs `issues[]`: stale-ссылка в pipeline1-formation.md. Решение: `issues[]` → `notifications[]` | 🔄 исправлено 19.06 |
+| API-S24 | `validation` отсутствовал в enum статусов черновика в Orchestrator API. Решение: добавлен | 🔄 исправлено 19.06 |
+| API-S25 | `valid_from`/`valid_until` — не указано, что доступны только в Registry. Решение: добавлено примечание | 🔄 исправлено 19.06 |
+| API-S26 | `source_type` enum: `RMRS` отсутствовал в `/registry/enums` и `db_diagrams.md`. Решение: добавлен | 🔄 исправлено 19.06 |
+| API-S27 | Gateway `/tasks/*` — нет формального read-only контракта. Решение: добавлена секция маршрутизации | 🔄 исправлено 19.06 |
 
 ## 🔴 Пайплайны (критичные — блокируют корректную реализацию)
 
 | Код | Проблема | Статус |
 |-----|----------|--------|
-| LP-C1 | Потеря бинарных объектов на страницах preview при переходе к full-фазе | 🔄 решено: preview/full — единый эндпоинт с `mode`; если движок не поддерживает постраничный парсинг — full сразу с флагом `preview_not_supported: true`; auto-approve только при успешном извлечении метаданных и отсутствии дубликатов |
-| LP-C2 | Противоречие в назначении `document_id`: Converter-validator vs Registry | ⬜ открыто |
+| LP-C1 | Потеря бинарных объектов на страницах preview при переходе к full-фазе | 🔄 решено: preview/full — единый эндпоинт с `mode`; если движок не поддерживает постраничный парсинг — full сразу с флагом `preview_not_supported: true`; решение принимает пользователь, full-фаза пропускается |
+| LP-C2 | Противоречие в назначении `document_id`: Converter-validator vs Registry | 🔄 исправлено: `document_id` полностью удалён из Converter-validator API (16.06) |
 | LP-C3 | Неатомарность проверки уникальности — нет компенсации при дубликате после `approve` | ⬜ открыто |
 | LP-C4 | `discarded` (черновик) отсутствует в FSM документа — корректно, так как `discarded` — статус черновика, `failed` — статус документа | 🔄 исправлено |
 
@@ -172,7 +264,8 @@ API черновиков и FSM документированы, но **UI сра
 | PL-E2 | Идемпотентность сообщений (Idempotency-Key) | 🔄 код |
 | PL-E3 | TTL preview-артефактов — не определён | 🔄 решено: preview-режим не сохраняет бинарные объекты (`image_key` отсутствует), артефактов нет |
 | B6 | `chat.messages.status` — значения не формализованы в БД | ⬜ DBA |
-| B7 | Auth Service, RAG Builder, RAG Search — API-спецификации | ⬜ аналитик |
+| B7 | RAG Builder — API-спецификация | 🔄 синхронизирована с пайплайнами (15.06) |
+| B7a | Auth Service, RAG Search — API-спецификации | ⬜ открыто (P1-1, 17.06): фактического аудита RAG Search не проводилось. Документация RAG Search в `rag_search_service_api.md` дополнена секциями (конфигурация, стратегии, метрики) в рамках P13, но **это не заменяет полноценный аудит**. Auth Service: спецификация актуальна (12.06), но детальный аудит не проводился. Приоритет: 🟠 |
 
 ## 🟡 Перекрёстные несоответствия (кросс-проверка)
 
@@ -198,6 +291,47 @@ API черновиков и FSM документированы, но **UI сра
 - **bbox** — пиксели (px) в OCR/Parser, нормализованные [0,1] в Converter-validator.
 - **Двухфазный пайплайн**: preview → full (от 23.05).
 - **OCR и Parser — два независимых сервиса** (от 23.05).
+- **Унификация health-эндпоинта Orchestrator** (13.06): `/api/v1/monitor/health` → `/api/v1/health` как у всех внутренних сервисов. Health Orchestrator больше не проксируется через Gateway (внутренний, как Auth и др.). Gateway предоставляет `/api/v1/system/health` для внешнего мониторинга.
+- **Перенос `/api/v1/monitor/metrics` в Gateway** (13.06): эндпоинт метрик качества пайплайнов перенесён из Orchestrator в Gateway как собственный (не проксируемый). Спецификация удалена из `orchestrator_service_api.md` и добавлена в `gateway_service_api.md`.
+
+### 🔄 Добавление `title_key` в `registry.documents` (19.06)
+
+**Проблема:** `title_hash_sha256` — бизнес-ключ, но без исходной строки конкатенации невозможно восстановить, из каких именно полей он вычислен. Это затрудняет аудит и отладку при расхождении хешей.
+
+**Решение:** добавлено поле `title_key` (text) в `registry.documents` — исходная строка конкатенации 6 полей: `era | source_type | mks_oks_code | okstu_code | doc_code | normalized_title`. Хранится для аудита и отладки. Возвращается в API-ответах где присутствует `title_hash_sha256`.
+
+**Затронутые документы:**
+- `docs/glossary.md` — новый термин
+- `docs/specifications/normalizer_specification.md` — описание title_key
+- `docs/specifications/converter_specification.md` — шаг 6, раздел 6.1
+- `docs/database/db_diagrams.md` — ER-диаграмма, описание registry.documents
+- `docs/api/converter_validator_service_api.md` — preview, fingerprint, validate
+- `docs/api/orchestrator_service_api.md` — drafts, documents
+- `docs/api/registry_service_api.md` — документы, check-uniqueness, примечания
+- `docs_plans/plans/6.dev_tasks_17_06.md` — DB-28
+
+### 🔄 Схлопывание `quality.warnings[]` + `quality.issues[]` в `quality.notifications[]` (18.06)
+
+**Проблема:** два параллельных массива в `quality` с почти одинаковой структурой, но разной семантикой (P3-5 security vs P12-3 операторские замечания). Разделение усложняет контракт и UI.
+
+**Решение:** единый массив `quality.notifications[]` с полем `category: security | quality`. БД-таблица `pipeline.draft_notifications` (единая, без history).
+
+**Обоснование:**
+- Оба массива адресованы оператору — сервисы лишь передают данные
+- Security-предупреждения тоже требуют внимания оператора (critical → подтверждение перед approve)
+- Единый контракт проще для UI и consumer'ов
+- Система новая — нет необходимости в патчах и обратной совместимости
+- P3-5 поглощён P12-3: отдельный `warnings[]` не создаётся
+
+**Затронутые документы:**
+- `docs/api/parser_service_api.md` — `warnings[]` + `issues[]` → `notifications[]`
+- `docs/api/ocr_service_api.md` — зеркальное изменение
+- `docs/specifications/parsing_specifications.md` — `warnings` → `notifications`
+- `docs/database/ddl_migrations_17_06.md` — `draft_issues` → `draft_notifications`
+- `docs/pipelines/pipeline1-formation.md` — `draft_issues` → `draft_notifications`
+- `docs/glossary.md` — `draft_issues` → `draft_notifications`
+- `docs/5.docs_action_plan_17_06.md` — P12-3 актуализирован, P3-5 помечен поглощённым
+- `docs/guide.md` — new: зафиксировано решение
 
 ### 🔄 Схлопывание `/parser/preview` и `/parser/process` (08.06)
 
@@ -205,12 +339,7 @@ API черновиков и FSM документированы, но **UI сра
 
 **Решение:** единый эндпоинт `POST /{parser|ocr}/process` с полем `mode: "preview" | "full"`. Ответ всегда асинхронный (202). Если движок не поддерживает постраничный парсинг при `mode=preview` — возвращается полный документ с флагом `preview_not_supported: true` в метаданных. 
 
-**Важно:** auto-approve (пропуск шага подтверждения) происходит только если:
-1. `preview_not_supported: true`
-2. Converter-validator preview успешно извлёк метаданные
-3. Дубликатов не найдено
-
-Иначе пользователь всё равно видит результат preview и принимает решение.
+**Важно:** при `preview_not_supported: true` full-фаза OCR/Parser пропускается (JSON уже полный), но решение принимает пользователь как обычно. Все стадии preview (Converter-validator, проверка уникальности, отображение пользователю) выполняются в полном объёме.
 
 **Затронутые документы:**
 - `docs/api/parser_service_api.md` — схлопнут preview в process
@@ -218,5 +347,21 @@ API черновиков и FSM документированы, но **UI сра
 - `docs/schema/schema_converter_preview.json` (бывш. schema_parser_preview.json) — переименован, добавлены `mode`, `preview_not_supported`
 - `docs/pipelines/{overview,pipeline1-formation,pipeline1-formation_detail}.md` — обновлены диаграммы и описания
 - `docs/specifications/parsing_specifications.md` — обновлён контракт
+
+---
+
+## ⚙ Особенности рабочего окружения
+
+### G1. Git-репозиторий выше корня документации
+
+Корень проекта в Zed — `docs/`, а git-репозиторий находится на уровень выше (`H:/Projects/PKB_neuroassistant_docs`). Из-за этого прямые git-команды через `cd`, ограниченный `docs/`, не работают. Требуется `git -C <путь к корню репозитория>` или `--git-dir`/`--work-tree` с абсолютным путём.
+
+**Важно:** терминал Zed на Windows использует Unix-стиль путей (`/h/Projects/...`), не Windows (`H:\...`). Команды с Windows-путями завершаются ошибкой.
+
+### G2. Мусорный файл `nul` в репозитории
+
+Обнаружен пустой файл `docs/nul` (19.06.2026). На Windows `nul` — зарезервированное имя устройства, из-за чего Git не может индексировать этот файл и прерывает `git add -A` с ошибкой. Файл удалён. Причина появления не установлена (возможно, артефакт работы одного из инструментов).
+
+**Рекомендация:** при ошибке `unable to index file 'docs/nul'` — удалить файл и повторить `git add`.
 
 

@@ -12,6 +12,12 @@
 
 ---
 
+---
+
+## Межсервисное взаимодействие
+
+Авторизацию контролирует только Gateway. Внутренние сервисы не имеют своей аутентификации — см. [common_api.md](common_api.md#межсервисное-взаимодействие).
+
 ### Контракт API (финальный)
 
 #### Формат ответа
@@ -40,7 +46,7 @@
 - **`full`** — полный парсинг всех страниц, сохранение изображений в MinIO
 - **`preview`** — быстрый предпросмотр первых N страниц, **без** сохранения изображений в MinIO (`image_key` отсутствует)
 
-Если движок не поддерживает постраничный парсинг, а запрошен `mode: "preview"`, сервис возвращает полный документ с отметкой `preview_not_supported: true` в метаданных результата. Далее Оркестратор передаёт данные в Converter-validator preview (`/converter/preview/metadata`): если метаданные извлечены успешно и дубликатов нет — auto-approve (шаг подтверждения пользователя пропускается); если есть проблемы — пользователь всё равно видит результат и принимает решение.
+Если движок не поддерживает постраничный парсинг, а запрошен `mode: "preview"`, сервис возвращает полный документ с отметкой `preview_not_supported: true` в метаданных результата. Далее Оркестратор передаёт данные в Converter-validator preview (`/converter/preview/metadata`), после чего пользователь принимает решение (approve/reject). Full-фаза OCR/Parser пропускается, так как JSON уже полный.
 
 **Важно:** идентификатор задачи (`task_id`) генерирует Оркестратор и передаёт в запросе. OCR-сервис использует его для всех последующих операций (статус, результат).
 
@@ -49,6 +55,7 @@
 ```json
 {
   "task_id": 420000,
+  "draft_id": 12345,
   "file_key": "file-abc123",
   "mode": "preview",
   "max_pages": 3,
@@ -62,6 +69,7 @@
 | Поле | Тип | По умолчанию | Обязательность | Описание |
 | ---- | --- | ------------ | -------------- | -------- |
 | `task_id` | bigint | — | Да | Идентификатор задачи (генерируется Оркестратором) |
+| `draft_id` | bigint | — | **Да (P12-1)** | Идентификатор черновика в Registry. Обязателен с 17.06 |
 | `file_key` | string | — | Да | Ключ файла в MinIO |
 | `mode` | enum | `"full"` | Нет | Режим обработки: `"preview"` / `"full"` |
 | `max_pages` | int | `3` | Нет | Количество страниц для предпросмотра (только для `mode: "preview"`) |
@@ -85,7 +93,7 @@
 | `task_id` | bigint | Идентификатор задачи |
 | `status` | string | `"accepted"` |
 | `mode` | enum | Проброшенный режим из запроса: `"preview"` / `"full"` |
-| `estimated_completion` | datetime | Ориентировочное время завершения |
+| `estimated_completion` | datetime | Ориентировочное время завершения (ISO 8601) |
 
 ---
 
@@ -94,7 +102,7 @@
 > - Поле `font` (объект) может отсутствовать у text-блоков
 > - Отсутствует детализация `quality.per_page`
 > - Возвращаются только первые N страниц документа
-> - Если движок не поддерживает постраничный парсинг — возвращается полный документ с флагом `preview_not_supported: true`. Решение об auto-approve принимает Оркестратор после проверки метаданных Converter-validator
+> - Если движок не поддерживает постраничный парсинг — возвращается полный документ с флагом `preview_not_supported: true`. Full-фаза OCR/Parser пропускается, решение принимает пользователь
 
 ---
 
@@ -135,8 +143,8 @@
 | `avg_confidence`   | float  | Средняя уверенность распознавания                       |
 | `step`             | string | **Текущий шаг** обработки (см. таблицу ниже)            |
 | `step_detail`      | string | Детализация шага (человекочитаемая)                     |
-| `started_at`       | string | Время начала обработки                                  |
-| `completed_at`     | string | Время завершения (null, если не завершён)               |
+| `started_at`       | datetime | Время начала обработки                                  |
+| `completed_at`     | datetime | Время завершения (null, если не завершён)               |
 
 **Значения `step`:**
 
@@ -197,7 +205,7 @@
 | `metadata.schema`                            | string | Идентификатор схемы (напр. `"raw_ocr_v4"`)                          |
 | `metadata.mode`                              | enum   | Режим обработки: `"preview"` / `"full"`                              |
 | `metadata.preview_not_supported`             | bool   | `true`, если движок не поддерживает постраничный парсинг и вернул полный документ |
-| `metadata.created_at`                        | string | Время создания результата (ISO 8601)                                 |
+| `metadata.created_at`                        | datetime | Время создания результата (ISO 8601)                                 |
 | `metadata.parser`                            | object | Информация о парсере                                                 |
 | `metadata.parser.name`                       | string | Название парсера (напр. `"docling"`)                                 |
 | `metadata.parser.version`                    | string | Версия парсера (напр. `"2.1.0"`)                                    |
@@ -221,8 +229,15 @@
 | `quality`                                    | object | Общая оценка качества + `per_page` — детализация по страницам        |
 | `quality.per_page[].status`                  | string | `ok`, `low_confidence`, `failed`                                     |
 | `quality.per_page[].error`                   | string | Код ошибки страницы (только при `status: failed`)                    |
-| `errors`                                     | array  | Массив некритичных ошибок и предупреждений                           |
+| `quality.notifications[]`                    | array  | **P12-3 / P3-5**: уведомления для оператора (см. parser_service_api.md) — единый массив `{code, severity, category, message, location, suggested_action}` |
+| `errors`                                     | array  | Массив **системных** ошибок OCR                                      |
 | `status`                                     | string | `completed`, `failed`                                                |
+
+**P12-3 / P3-5 — поле `quality.notifications[]`:**
+
+Единый массив уведомлений для оператора — полностью аналогичен Parser-сервису (см. [parser_service_api.md](parser_service_api.md#p12-3--p3-5--qualitynotifications-уведомления-оператора)).
+
+Коды OCR-специфичных уведомлений: `BLURRED_REGION`, `LOW_RESOLUTION`, `INVERTED_COLORS`, `MULTILINGUAL_CONTENT`, `LAMA_FALLBACK_USED` (см. P3-6). Все — с `category: quality`.
 
 ---
 
@@ -254,7 +269,7 @@
 | `progress_percent` | int    | Процент выполнения               |
 | `pages_processed`  | int    | Обработано страниц               |
 | `pages_total`      | int    | Всего страниц                    |
-| `started_at`       | string | Время начала обработки           |
+| `started_at`       | datetime | Время начала обработки           |
 
 ---
 
