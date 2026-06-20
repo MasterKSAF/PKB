@@ -23,12 +23,18 @@ class Settings(BaseSettings):
     POSTGRES_SCHEMA: str = "nsi"
 
     EMBEDDING_PROVIDER: str = "stub"
-    EMBEDDING_MODEL: str = "text-embedding-3-small"
-    EMBEDDING_PRICE_PER_1M_TOKENS_USD: float = 0.02
-    EMBEDDING_DIM: int = 1536
+    EMBEDDING_MODEL: str = "qwen3-embedding-4b"
+    EMBEDDING_PRICE_PER_1M_TOKENS_USD: float = 0.0
+    EMBEDDING_DIM: int = 2048
+
+    EMBEDDING_API_MODE: str = "infinity"
+    EMBEDDING_API_BASE_URL: str | None = None
+    EMBEDDING_API_KEY: str | None = None
 
     OPENAI_API_KEY: str | None = None
-    
+
+    CHUNK_STRATEGY: str = "semantic_1024"
+
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,
         env_file_encoding="utf-8",

@@ -1,10 +1,11 @@
-# tests/unit/test_indexing.py
+﻿# tests/unit/test_indexing.py
 
 import json
 from pathlib import Path
 
 from rag_builder.models.contracts import BuildRequest
 from rag_builder.services.indexing_service import IndexingService
+from rag_builder.core.config import settings
 
 
 def test_index_document_returns_embedded_chunks():
@@ -28,5 +29,5 @@ def test_index_document_returns_embedded_chunks():
     assert first.chunk.document_version_id == 420001
     assert first.chunk.clause == "1"
 
-    assert len(first.embedding) == 1536
+    assert len(first.embedding) == settings.EMBEDDING_DIM
     assert first.embedding[:3] == [0.0, 0.0, 0.0]

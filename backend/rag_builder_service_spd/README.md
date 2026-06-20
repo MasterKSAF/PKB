@@ -1,4 +1,4 @@
-# RAG Builder SPD
+﻿# RAG Builder SPD
 
 ## 1. Назначение сервиса
 
@@ -84,8 +84,14 @@ POSTGRES_PASSWORD=SecureP@ssw0rd_2026_Dev
 POSTGRES_SCHEMA=nsi
 
 EMBEDDING_PROVIDER=stub
-EMBEDDING_MODEL=text-embedding-3-small
-EMBEDDING_DIM=1536
+EMBEDDING_MODEL=qwen3-embedding-4b
+EMBEDDING_DIM=2048
+
+EMBEDDING_API_MODE=infinity
+EMBEDDING_API_BASE_URL=
+EMBEDDING_API_KEY=
+
+CHUNK_STRATEGY=semantic_1024
 ```
 
 Проверить настройки:
