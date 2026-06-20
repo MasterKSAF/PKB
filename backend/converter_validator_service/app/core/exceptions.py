@@ -51,3 +51,23 @@ class MetadataExtractionFailedError(ConverterValidatorError):
             message=message,
             details=details,
         )
+
+
+class MetadataValidationError(ConverterValidatorError):
+    def __init__(self, message: str, details: dict | None = None):
+        super().__init__(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            error_code="VALIDATION_ERROR",
+            message=message,
+            details=details,
+        )
+
+
+class NormalizationFailedError(ConverterValidatorError):
+    def __init__(self, message: str, details: dict | None = None):
+        super().__init__(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            error_code="NORMALIZATION_FAILED",
+            message=message,
+            details=details,
+        )

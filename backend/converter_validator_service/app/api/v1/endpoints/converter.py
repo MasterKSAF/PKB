@@ -11,14 +11,28 @@ from app.services import converter_service
 router = APIRouter()
 
 
+def _preview_response(request: RawJsonRequest) -> PreviewMetadataResponse:
+    meta = converter_service.extract_metadata(request.raw_json)
+    return PreviewMetadataResponse(**meta)
+
+
+@router.post(
+    "/preview",
+    status_code=status.HTTP_200_OK,
+    response_model=PreviewMetadataResponse,
+)
+async def preview(request: RawJsonRequest):
+    return _preview_response(request)
+
+
 @router.post(
     "/preview/metadata",
     status_code=status.HTTP_200_OK,
     response_model=PreviewMetadataResponse,
+    deprecated=True,
 )
-async def preview_metadata(request: RawJsonRequest):
-    meta = converter_service.extract_metadata(request.raw_json)
-    return PreviewMetadataResponse(**meta)
+async def preview_metadata_legacy(request: RawJsonRequest):
+    return _preview_response(request)
 
 
 @router.post(

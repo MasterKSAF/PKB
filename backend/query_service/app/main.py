@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import logging.config
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,23 +16,17 @@ from .services.pending_watchdog import run_watchdog
 
 settings = get_settings()
 
-logging.config.dictConfig({
-    "version": 1,
-    "disable_existing_loggers": False,
-    "formatters": {
-        "json": {"format": "%(message)s"},
-    },
-    "handlers": {
-        "console": {
-            "class": "logging.StreamHandler",
-            "formatter": "json",
-        }
-    },
-    "root": {"handlers": ["console"], "level": "INFO"},
-    "loggers": {
-        "query_service": {"handlers": ["console"], "level": "INFO", "propagate": False},
-    },
-})
+try:
+    from telemetry_lib.telemetry import setup_observability, instrument_fastapi as _instrument_fastapi
+    _tracer_provider, _meter_provider, _log = setup_observability(
+        "query-service", settings.OTEL_EXPORTER_OTLP_ENDPOINT
+    )
+    _otel_enabled = True
+except Exception:
+    logging.basicConfig(level=logging.INFO)
+    _otel_enabled = False
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -48,6 +41,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="PKB Query Service", version="1.0.0", lifespan=lifespan)
+
+if _otel_enabled:
+    _instrument_fastapi(app, _tracer_provider)
 
 app.add_middleware(CorrelationMiddleware)
 app.add_middleware(

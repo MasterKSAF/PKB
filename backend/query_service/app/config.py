@@ -19,8 +19,14 @@ class Settings:
 
     RAG_SERVICE_URL: str = os.getenv("RAG_SERVICE_URL", "http://localhost:8091/api/v1")
     REGISTRY_SERVICE_URL: str = os.getenv("REGISTRY_SERVICE_URL", "http://localhost:8084/api/v1")
+    LLM_API_URL: str = os.getenv("LLM_API_URL", "http://localhost:11434/v1")
     LLM_API_KEY: str = os.getenv("LLM_API_KEY", "")
-    LLM_MODEL: str = os.getenv("LLM_MODEL", "claude-sonnet-4-6")
+    LLM_MODEL: str = os.getenv("LLM_MODEL", "deepseek-chat")
+    LLM_TEMPERATURE: float = float(os.getenv("LLM_TEMPERATURE", "0.2"))
+    LLM_MAX_TOKENS: int = int(os.getenv("LLM_MAX_TOKENS", "8196"))
+    LLM_TOP_P: float = float(os.getenv("LLM_TOP_P", "0.95"))
+
+    OTEL_EXPORTER_OTLP_ENDPOINT: str = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "signoz-otel-collector:4317")
 
     DEV_USER_ID: str = "u-001"
     DEV_USER_NAME: str = "Инженер-конструктор"

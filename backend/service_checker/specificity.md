@@ -1475,3 +1475,79 @@ Docker запущен, но сервисы могут быть не полнос
 - **Service Checker**: tolerant mode, OCR в health check
 - **Разработчики сервисов**: реализация новых эндпоинтов из задач 19.06.2026
 
+## 43. Pipeline-шаги синхронизированы со спецификацией 19.06.2026 (2026-06-20)
+
+### Что исправлено
+
+#### 1. `pipelines/document_processing.py` — новые поля в body
+- Парсинг: добавлен `draft_id: 1` (PS-3)
+- Конвертация: добавлен `version_id: "1"` (CV-9)
+- Registry: добавлены `source_draft_id: 1`, `mks_oks_code: "47.020"`, `title_key: "GOST|RF|...|2026"` (RG-9, DB-9, DB-28)
+
+#### 2. `pipelines/chat_inference.py` — новые поля + tolerant check
+- Создание сессии: добавлены `document_ids: []`, `project_id: 1` (QS-3)
+- Текстовый поиск: убран `top_k` (RS-6)
+- `enrichment_skipped`: жёсткая проверка заменена на tolerant — если поля нет, warning, не error (QS-8)
+
+#### 3. `pipelines/orchestrator_draft_lifecycle.py` — проверка OR-7
+- Детали черновика: добавлена проверка полей `document_id`, `version_id`, `is_new_document` (OR-7)
+
+#### 4. `pipelines/full_document_lifecycle.py` — новые поля + статусы
+- Создание документа: добавлены `source_draft_id`, `mks_oks_code`, `title_key`
+- Build steps: ожидаемый статус `{200, 201}` → `{200, 202}` (RB-7)
+- Обновление метаданных: body `{"status": ...}` → `{"processing_status": ...}` (RG-1)
+
+#### 5. `pipelines/admin_user_lifecycle.py` — новые поля + tolerant статус
+- Создание сессии: добавлены `document_ids: []`, `project_id: 1` (QS-3)
+- Проверка блокировки: ожидаемый статус `{429, 423}` → `{401, 429, 423}` (AU-3)
+
+#### 6. `pipelines/multi_document_cross_search.py` — новые поля + статусы
+- Парсинг #1/#2: добавлен `draft_id: 1` (PS-3)
+- Конвертация #1/#2: добавлен `version_id: "1"` (CV-9)
+- Registry #1/#2: добавлены `source_draft_id`, `mks_oks_code`, `title_key`
+- Build #1/#2: ожидаемый статус `{200, 201}` → `{200, 202}` (RB-7)
+
+### Результаты тестирования в Docker
+Все 216 unit-тестов passed. Pipeline-тесты в Docker:
+
+| Пайплайн | Результат | Замечания |
+|----------|-----------|-----------|
+| document_processing | 9/13 | Registry ✅, Parser ✅, Converter ✅; RAG Builder 500 (известная проблема) |
+| chat_inference | 4/6 | Text search ✅, enrichment_skipped ✅; Query Service 500/422 |
+| admin_user_lifecycle | 13/16 | Создание/блокировка ✅; Query Service 500/422 |
+| full_document_lifecycle | 8/12 | Registry ✅; RAG Builder 500, metadata 422 (RG-1 не реализован) |
+| multi_document_cross_search | 15/19 | Registry/Parser/Converter ✅; RAG Builder 500 |
+| orchestrator_draft_lifecycle | 1/11 | Только auth; Orchestrator 422 (сервис не обновлён) |
+| registry_lifecycle | 11/11 | ✅ Полный проход |
+| registry_quarantine | 10/10 | ✅ Полный проход |
+
+### Статус
+✅ **Добавлено (checker, 2026-06-20)**
+
+## 44. API Fixes: document_id убран из sections, валидация по source-индексам (2026-06-20)
+### Что сделано
+
+#### 1. RAG Builder — секции без document_id
+- `docs/api/rag_builder_service_api.md`: убран `sections[].document_id` из спецификации (document_id только на верхнем уровне)
+- `services/rag_builder.py`: убран `document_id` из секций в body prepare- и основного эндпоинта
+- `pipelines/document_processing.py`, `full_document_lifecycle.py`, `multi_document_cross_search.py`: убран `document_id` из секций
+
+#### 2. RAG Search — сверка с RS-6
+- `docs/api/rag_search_service_api.md` соответствует RS-6: только query/valid_at/filters, без search_type/top_k/rerank/version_id
+- `services/rag_search.py` — body и response_schema корректны
+
+#### 3. Query Service — сверка плоских sources
+- `docs/api/query_service_api.md` — sources без chunk_id/mode, плоская структура ✅
+
+#### 4. Pipeline 3 — валидация по индексу sources
+- `pipelines/base.py`: добавлена `check_rag_search_results()` — валидация по source (document_id + section_id), не по chunk_id
+- Функция проверяет: results — список, каждый result.source с document_id + section_id, retrieval с chunk_id/score/mode
+- Применена ко всем RAG Search шагам в `full_document_lifecycle`, `document_processing`, `chat_inference`, `multi_document_cross_search`
+
+### Тесты
+- 11 тестов для `check_rag_search_results` в `test_pipeline_base.py`
+- 226/226 тестов проходят
+
+### Статус
+✅ **Добавлено (checker, 2026-06-20)**
+

@@ -22,20 +22,39 @@ def _merge_document_metadata(
     raw_json: dict[str, Any],
 ) -> dict[str, Any]:
     meta = hierarchy.setdefault("metadata", {})
-    meta.setdefault("doc_code", preview_meta.get("doc_code") or "")
-    meta.setdefault("title", preview_meta.get("title") or "")
+    for field in (
+        "doc_code",
+        "title",
+        "mks_oks_code",
+        "okstu_code",
+        "document_type",
+        "era",
+        "validity_status",
+        "issuing_body",
+        "source_type",
+        "language",
+        "jurisdiction",
+    ):
+        value = preview_meta.get(field)
+        if value is not None:
+            meta.setdefault(field, value)
+
+    meta.setdefault("doc_code", "")
+    meta.setdefault("title", "")
     meta["normalized_title"] = " ".join(
         (meta.get("title") or "").lower().split()
     )
+    udk = preview_meta.get("udk_code")
+    if udk:
+        meta.setdefault("udk_code", udk)
+        meta.setdefault("udc", udk)
     meta.setdefault("group", raw_json.get("group"))
-    meta.setdefault("mks_oks_code", raw_json.get("mks_oks_code"))
-    meta.setdefault("okstu_code", raw_json.get("okstu_code"))
-    meta.setdefault("udc", raw_json.get("udc"))
-    meta.setdefault("era", "USSR" if "СССР" in meta.get("title", "") else "RF")
-    meta.setdefault("validity_status", "active")
-    meta.setdefault("issuing_body", (raw_json.get("document") or {}).get(
-        "source", {}
-    ).get("author"))
+    if raw_json.get("mks_oks_code"):
+        meta.setdefault("mks_oks_code", raw_json["mks_oks_code"])
+    if raw_json.get("okstu_code"):
+        meta.setdefault("okstu_code", raw_json["okstu_code"])
+    if raw_json.get("udc"):
+        meta.setdefault("udc", raw_json["udc"])
     return hierarchy
 
 
@@ -114,4 +133,9 @@ async def convert(
 def extract_metadata(raw_json: dict[str, Any]) -> dict[str, Any]:
     if not raw_json:
         raise MetadataExtractionFailedError("raw_json is empty")
-    return extract_preview_metadata(raw_json)
+    meta = extract_preview_metadata(raw_json)
+    if not meta.get("doc_code") or not meta.get("title"):
+        raise MetadataExtractionFailedError(
+            "Failed to extract required metadata: doc_code and title"
+        )
+    return meta

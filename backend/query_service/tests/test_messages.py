@@ -1,3 +1,4 @@
+import asyncio
 import pytest
 
 
@@ -131,3 +132,72 @@ async def test_messages_session_not_found(client):
     assert r.status_code == 404
     r = await client.get("/api/v1/chat/sessions/999999/messages")
     assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_search_messages_session_not_found(client):
+    r = await client.post("/api/v1/chat/sessions/999999/messages/search", json={"query": "test"})
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_search_messages_no_results(client):
+    sid = await _make_session(client, "search empty")
+    r = await client.post(f"/api/v1/chat/sessions/{sid}/messages/search", json={"query": "xyzнесуществующийтерминqwerty"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["session_id"] == sid
+    assert data["results"] == []
+    assert data["meta"]["total"] == 0
+
+
+@pytest.mark.asyncio
+async def test_search_messages_finds_answered(client):
+    sid = await _make_session(client, "search content")
+    await _send(client, sid, "Arc4 толщина?")
+    # ждём завершения фонового пайплайна
+    await asyncio.sleep(2.5)
+
+    # мок-ответ содержит "12 мм"
+    r = await client.post(f"/api/v1/chat/sessions/{sid}/messages/search", json={"query": "мм"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["session_id"] == sid
+    assert data["meta"]["total"] >= 1
+    assert any("мм" in (m.get("content") or "").lower() for m in data["results"])
+
+
+@pytest.mark.asyncio
+async def test_search_messages_response_structure(client):
+    sid = await _make_session(client, "search struct")
+    r = await client.post(f"/api/v1/chat/sessions/{sid}/messages/search", json={"query": "test"})
+    assert r.status_code == 200
+    data = r.json()
+    assert "session_id" in data
+    assert "results" in data
+    assert "meta" in data
+    meta = data["meta"]
+    assert "total" in meta
+    assert "page" in meta
+    assert "page_size" in meta
+
+
+@pytest.mark.asyncio
+async def test_search_messages_pagination(client):
+    sid = await _make_session(client, "search pagination")
+    for i in range(3):
+        await _send(client, sid, f"Arc4 вопрос {i}")
+    await asyncio.sleep(3.5)
+
+    r_all = await client.post(f"/api/v1/chat/sessions/{sid}/messages/search", json={"query": "мм", "limit": 100})
+    total = r_all.json()["meta"]["total"]
+    if total < 2:
+        return  # недостаточно совпадений для теста пагинации
+
+    r_page1 = await client.post(f"/api/v1/chat/sessions/{sid}/messages/search", json={"query": "мм", "limit": 1, "offset": 0})
+    r_page2 = await client.post(f"/api/v1/chat/sessions/{sid}/messages/search", json={"query": "мм", "limit": 1, "offset": 1})
+    assert len(r_page1.json()["results"]) == 1
+    assert len(r_page2.json()["results"]) == 1
+    ids1 = {m["message_id"] for m in r_page1.json()["results"]}
+    ids2 = {m["message_id"] for m in r_page2.json()["results"]}
+    assert ids1.isdisjoint(ids2)

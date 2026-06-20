@@ -3,15 +3,16 @@ import uuid
 from typing import Any
 
 from app.services.metadata_extractor import extract_preview_metadata
+from app.services.normalizer import (
+    compute_business_key,
+    infer_era,
+    infer_source_type,
+)
 from app.services.registry_client import validate_classifiers
 
 
 def _sha256_hex(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
-
-
-def _normalize_title(title: str) -> str:
-    return " ".join(title.lower().split())
 
 
 def _extract_classification(
@@ -62,6 +63,41 @@ def _decision(
     return "review_required"
 
 
+def _compute_fingerprint(
+    document: dict[str, Any],
+    preview_meta: dict[str, Any],
+    *,
+    task_id: int,
+    version_id: int,
+) -> dict[str, str]:
+    meta = document.get("metadata") or {}
+    source = document.get("source") or {}
+    title = meta.get("title") or preview_meta.get("title") or ""
+    doc_code = meta.get("doc_code") or preview_meta.get("doc_code") or ""
+    issuing_body = meta.get("issuing_body") or source.get("author")
+    era = meta.get("era") or infer_era(title, issuing_body, source.get("title"))
+    source_type = meta.get("source_type") or infer_source_type(
+        doc_code,
+        title,
+        source.get("title"),
+    )
+    key_result = compute_business_key(
+        era=era,
+        source_type=source_type,
+        doc_code=doc_code,
+        title=title,
+        mks_oks_code=meta.get("mks_oks_code"),
+        okstu_code=meta.get("okstu_code"),
+    )
+
+    file_hash = source.get("file_hash_sha256") or ""
+    return {
+        "file_hash_sha256": file_hash or _sha256_hex(f"{task_id}:{version_id}"),
+        "title_hash_sha256": key_result.title_hash_sha256,
+        "title_key": key_result.title_key,
+    }
+
+
 async def validate_document(
     document: dict[str, Any],
     *,
@@ -71,10 +107,12 @@ async def validate_document(
 ) -> dict[str, Any]:
     preview_meta = extract_preview_metadata({"document": document})
     structure_ok = _structure_valid(document)
-
-    title = (document.get("metadata") or {}).get("title") or preview_meta["title"]
-    file_hash = (document.get("source") or {}).get("file_hash_sha256") or ""
-    title_hash = _sha256_hex(_normalize_title(title))
+    fingerprint = _compute_fingerprint(
+        document,
+        preview_meta,
+        task_id=task_id,
+        version_id=version_id,
+    )
 
     class_input = _extract_classification(document, preview_meta)
     classification = await validate_classifiers(class_input)
@@ -96,10 +134,7 @@ async def validate_document(
         "document_id": document_id,
         "structure_valid": structure_ok,
         "classification": classification,
-        "fingerprint": {
-            "file_hash_sha256": file_hash or _sha256_hex(f"{task_id}:{version_id}"),
-            "title_hash_sha256": title_hash,
-        },
+        "fingerprint": fingerprint,
         "matching": matching,
         "cross_references": _build_cross_references(
             document.get("references") or []
