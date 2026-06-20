@@ -26,6 +26,8 @@ class Settings:
     LLM_MAX_TOKENS: int = int(os.getenv("LLM_MAX_TOKENS", "8196"))
     LLM_TOP_P: float = float(os.getenv("LLM_TOP_P", "0.95"))
 
+    OTEL_EXPORTER_OTLP_ENDPOINT: str = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "signoz-otel-collector:4317")
+
     DEV_USER_ID: str = "u-001"
     DEV_USER_NAME: str = "Инженер-конструктор"
 

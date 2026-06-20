@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import re
 from datetime import datetime, timezone
 
@@ -8,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from ..clients import registry_client, rag_client
 from ..config import get_settings
 from ..models import ChatMessage, ChatSource
+
+logger = logging.getLogger(__name__)
 
 
 def _utcnow() -> datetime:
@@ -57,6 +60,7 @@ async def run_pipeline(
     user_query: str,
 ) -> None:
     settings = get_settings()
+    logger.info("pipeline started", extra={"message_id": message_id, "session_id": session_id})
 
     try:
         await _set_status(session_factory, message_id, "enriching")
@@ -68,6 +72,7 @@ async def run_pipeline(
         except Exception:
             enriched_query = user_query
             enrichment_skipped = True
+            logger.warning("query enrichment skipped", extra={"message_id": message_id})
 
         await _set_status(session_factory, message_id, "searching")
         try:
@@ -76,6 +81,7 @@ async def run_pipeline(
                 timeout=60.0,
             )
         except Exception:
+            logger.error("rag search failed", extra={"message_id": message_id}, exc_info=True)
             await _set_status(session_factory, message_id, "failed")
             async with session_factory() as db:
                 async with db.begin():
@@ -91,6 +97,7 @@ async def run_pipeline(
             return
 
         if not chunks:
+            logger.info("no chunks found", extra={"message_id": message_id})
             await _set_status(session_factory, message_id, "answered")
             async with session_factory() as db:
                 async with db.begin():
@@ -125,6 +132,7 @@ async def run_pipeline(
                     await asyncio.sleep(2 ** attempt * 2)
 
         if llm_text is None:
+            logger.error("llm generation failed after retries", extra={"message_id": message_id})
             await _set_status(session_factory, message_id, "failed")
             return
 
@@ -165,5 +173,8 @@ async def run_pipeline(
                         confidence=chunk.confidence,
                     ))
 
+        logger.info("pipeline finished", extra={"message_id": message_id, "chunks": len(chunks)})
+
     except Exception:
+        logger.error("pipeline error", extra={"message_id": message_id}, exc_info=True)
         await _set_status(session_factory, message_id, "failed")
