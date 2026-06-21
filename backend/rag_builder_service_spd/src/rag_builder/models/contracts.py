@@ -78,8 +78,60 @@ class BuildRequest(BaseModel):
     sections: list[Section]
 
     terminology: list[dict[str, Any]] = Field(default_factory=list)
+    protected_spans: list[dict[str, Any]] = Field(default_factory=list)
 
     options: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def accept_flat_registry_payload(cls, data: Any) -> Any:
+        """
+        Новый контракт RAG Builder принимает плоский JSON:
+
+        {
+            "document_id": 1,
+            "sections": [...],
+            "protected_spans": [],
+            "options": {}
+        }
+
+        Внутри нормализуем его к legacy BuildRequest,
+        чтобы не переписывать весь indexing pipeline.
+        """
+        if not isinstance(data, dict):
+            return data
+
+        if "metadata" in data and "document" in data:
+            return data
+
+        document_id = data.get("document_id")
+
+        if document_id is None:
+            return data
+
+        normalized = dict(data)
+
+        normalized["metadata"] = {
+            "schema": data.get("schema", "schema_registry_for_rag_v2"),
+            "document_id": document_id,
+            "document_version_id": data.get("document_version_id"),
+        }
+
+        normalized["document"] = {
+            "id": document_id,
+            "document_version_id": data.get("document_version_id"),
+            "pkb_code": data.get("pkb_code", ""),
+            "doc_code": data.get("doc_code", ""),
+            "title": data.get("title", ""),
+            "full_title": data.get("full_title"),
+            "normalized_title": data.get("normalized_title"),
+            "validity_status": data.get("validity_status"),
+            "era": data.get("era"),
+            "page_count": data.get("page_count"),
+            "file_hash_sha256": data.get("file_hash_sha256"),
+        }
+
+        return normalized
 
     @model_validator(mode="after")
     def fill_legacy_document_version_id(self) -> "BuildRequest":
@@ -94,7 +146,6 @@ class BuildRequest(BaseModel):
         2. document.document_version_id
         3. metadata.document_id
         """
-
         document_version_id = self.metadata.document_version_id
 
         if document_version_id is None:

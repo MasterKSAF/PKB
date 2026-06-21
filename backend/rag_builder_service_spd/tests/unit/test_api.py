@@ -126,3 +126,53 @@ def test_index_endpoint_persists_no_indexable_content_warning():
     assert status_data["warnings"][0]["code"] == "NO_INDEXABLE_CONTENT"
     assert status_data["warnings"][0]["section_id"] is None
     assert status_data["errors"] == []
+
+
+def test_api_v1_rag_build_accepts_flat_registry_payload():
+    payload = {
+        "document_id": 420000,
+        "sections": [
+            {
+                "section_id": 1,
+                "document_id": 420000,
+                "parent_id": None,
+                "clause": "1",
+                "title": None,
+                "level": 1,
+                "path": "1",
+                "page": 1,
+                "bbox": None,
+                "type": "text",
+                "content": {
+                    "text": "Настоящий стандарт распространяется...",
+                },
+                "references": [],
+            }
+        ],
+        "protected_spans": [],
+        "options": {
+            "strategy": "semantic_1024",
+        },
+    }
+
+    response = client.post("/api/v1/rag/build", json=payload)
+
+    assert response.status_code == 202
+
+    data = response.json()
+
+    assert data["status"] == "indexing"
+    assert data["document_id"] == payload["document_id"]
+    assert data["indexing_txn_id"]
+
+
+def test_api_v1_rag_build_delete_index():
+    response = client.delete("/api/v1/rag/build/420000")
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["document_id"] == 420000
+    assert data["status"] == "completed"
+    assert "deleted_count" in data
