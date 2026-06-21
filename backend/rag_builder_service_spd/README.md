@@ -216,15 +216,17 @@ docker compose down
 Запускает индексацию документа в асинхронном режиме.
 
 Текущий MVP-вход всё ещё использует `BuildRequest` / chunk-container.
-`document_version_id` временно остаётся во входном контейнере как legacy/audit-поле до отдельного PR по синхронизации полного контракта Builder.
+`document_version_id` больше не является обязательным входным полем.
+Если legacy-контейнер всё ещё передаёт `document_version_id`, Builder принимает его для обратной совместимости.
+Если поле отсутствует, Builder временно использует `document_id` как legacy/audit `document_version_id` внутри Chunk/DB/Search.
 
 Пример запроса:
 
 ```json
 {
   "metadata": {
-    "document_id": 420000,
-    "document_version_id": 420001
+    "schema": "schema_registry_for_rag_v2",
+    "document_id": 420000
   }
 }
 ```
