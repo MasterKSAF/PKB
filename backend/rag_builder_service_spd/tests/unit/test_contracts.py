@@ -42,7 +42,7 @@ def test_document_id_is_required():
         BuildRequest.model_validate(payload)
 
 
-def test_document_version_id_is_required():
+def test_document_version_id_is_optional_for_input_contract():
     payload = {
         "metadata": {
             "schema": "schema_registry_for_rag_v2",
@@ -50,7 +50,6 @@ def test_document_version_id_is_required():
         },
         "document": {
             "id": 420000,
-            "version_id": 420001,
             "pkb_code": "04",
             "doc_code": "ГОСТ 20868-81",
             "title": "Test",
@@ -58,8 +57,10 @@ def test_document_version_id_is_required():
         "sections": [],
     }
 
-    with pytest.raises(ValidationError):
-        BuildRequest.model_validate(payload)
+    request = BuildRequest.model_validate(payload)
+
+    assert request.metadata.document_version_id == 420000
+    assert request.document.document_version_id == 420000
 
 
 def test_sections_are_required():
