@@ -113,7 +113,7 @@ pytest
 Текущее состояние:
 
 ```text
-39 passed
+44 passed
 ```
 
 ---
@@ -498,7 +498,7 @@ EMBEDDING_API_KEY=
 Текущее состояние:
 
 ```text
-39 passed
+44 passed
 ```
 
 ---
@@ -541,7 +541,7 @@ document_sections
 
 Текущее состояние:
 
-- 39 тестов проходят
+- 44 тестов проходят
 - PostgreSQL persistence реализован
 - pgvector поддерживается
 - ltree поддерживается
