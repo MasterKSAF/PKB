@@ -81,3 +81,40 @@ def test_sections_are_required():
 
     with pytest.raises(ValidationError):
         BuildRequest.model_validate(payload)
+
+
+def test_build_request_accepts_flat_registry_payload():
+    payload = {
+        "document_id": 420000,
+        "sections": [
+            {
+                "section_id": 1,
+                "document_id": 420000,
+                "parent_id": None,
+                "clause": "1",
+                "title": None,
+                "level": 1,
+                "path": "1",
+                "page": 1,
+                "bbox": None,
+                "type": "text",
+                "content": {
+                    "text": "Настоящий стандарт распространяется...",
+                },
+            }
+        ],
+        "protected_spans": [],
+        "options": {
+            "strategy": "semantic_1024",
+        },
+    }
+
+    request = BuildRequest.model_validate(payload)
+
+    assert request.metadata.document_id == 420000
+    assert request.metadata.document_version_id == 420000
+    assert request.document.id == 420000
+    assert request.document.document_version_id == 420000
+    assert request.sections[0].section_id == 1
+    assert request.protected_spans == []
+    assert request.options["strategy"] == "semantic_1024"

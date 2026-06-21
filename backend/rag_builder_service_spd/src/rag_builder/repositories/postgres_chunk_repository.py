@@ -761,6 +761,66 @@ class PostgresChunkRepository(ChunkRepository):
 
             conn.commit()
 
+    def delete_document_index(
+            self,
+            document_id: int,
+    ) -> int:
+        """
+        Удаляет индекс документа по document_id.
+
+        Возвращает количество удалённых chunks.
+        Используется API endpoint:
+        DELETE /rag/build/{document_id}
+        """
+        logger.info(
+            "Deleting index for document_id=%s",
+            document_id,
+        )
+
+        deleted_chunks_count = 0
+
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    DELETE FROM {settings.POSTGRES_SCHEMA}.formula_parameters
+                    WHERE formula_id IN (
+                        SELECT id
+                        FROM {settings.POSTGRES_SCHEMA}.formulas
+                        WHERE document_id = %s
+                    )
+                    """,
+                    (document_id,),
+                )
+
+                for table_name in (
+                    "formulas",
+                    "extracted_tables",
+                    "images",
+                    "cross_references",
+                    "chunks",
+                    "document_sections",
+                ):
+                    cur.execute(
+                        sql.SQL(
+                            """
+                            DELETE FROM {schema}.{table}
+                            WHERE document_id = %s
+                            """
+                        ).format(
+                            schema=sql.Identifier(settings.POSTGRES_SCHEMA),
+                            table=sql.Identifier(table_name),
+                        ),
+                        (document_id,),
+                    )
+
+                    if table_name == "chunks":
+                        deleted_chunks_count = cur.rowcount
+
+            conn.commit()
+
+        return deleted_chunks_count
+
     def save_chunks(
             self,
             chunks: list[EmbeddedChunk],
