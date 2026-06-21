@@ -15,6 +15,16 @@ class Settings(BaseSettings):
     default_admin_email: str = "admin@example.com"
     default_admin_password: str = "Admin1234!"
 
+    otel_endpoint: str = "signoz-otel-collector:4317"
+
+    # Brute-force protection
+    max_failed_attempts: int = 5
+    lockout_duration_seconds: int = 30 * 60  # 30 minutes
+
+    # Rate limiting for /auth/token
+    rate_limit_requests: int = 10
+    rate_limit_window_seconds: int = 60
+
     class Config:
         env_file = ".env"
 

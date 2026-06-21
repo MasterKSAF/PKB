@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.logger import get_logger
-from app.core.security import hash_password
+from app.core.security import hash_password, validate_password
 from app.models.models import Role, RolePermission, User
 
 logger = get_logger(__name__)
@@ -49,6 +49,11 @@ async def create_user(db: AsyncSession, email: str, full_name: str, password: st
     if existing:
         logger.warning("Attempt to create duplicate user: %s", email)
         raise DuplicateError("Пользователь с таким email уже существует")
+
+    try:
+        validate_password(password)
+    except ValueError:
+        raise
 
     role_objects = await get_roles_by_names(db, roles)
     if len(role_objects) != len(set(roles)):
@@ -119,7 +124,9 @@ async def list_users(db: AsyncSession, role: str | None, search: str | None, lim
     if search:
         pattern = f"%{search.lower()}%"
         query = query.where(func.lower(User.email).like(pattern) | func.lower(User.full_name).like(pattern))
-        count_query = count_query.where(func.lower(User.email).like(pattern) | func.lower(User.full_name).like(pattern))
+        count_query = count_query.where(
+            func.lower(User.email).like(pattern) | func.lower(User.full_name).like(pattern)
+        )
 
     total_result = await db.execute(count_query)
     total = total_result.scalar_one()

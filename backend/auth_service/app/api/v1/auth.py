@@ -1,7 +1,12 @@
+import time
+from collections import defaultdict
+
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.deps import get_current_user
+from app.core.errors import api_error
 from app.db.session import get_db
 from app.schemas.schemas import RefreshRequest, RevokeRequest, RevokeResponse, TokenRequest, TokenResponse, UserMeResponse, UserPermissions
 from app.services.audit_service import create_audit_event
@@ -10,6 +15,8 @@ from app.services.user_service import get_permissions, role_names
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+_rate_buckets: dict[str, list[float]] = defaultdict(list)
+
 _ROLE_TITLES = {
     "engineer": "Инженер-конструктор",
     "knowledge_admin": "Администратор НСИ",
@@ -17,10 +24,23 @@ _ROLE_TITLES = {
 }
 
 _ROLE_TABS = {
-    "engineer": ["chat", "search", "checks", "history"],
-    "knowledge_admin": ["chat", "search", "checks", "history"],
-    "system_admin": ["chat", "search", "checks", "history"],
+    "engineer": ["chat", "search", "history"],
+    "knowledge_admin": ["chat", "search", "history"],
+    "system_admin": ["chat", "search", "history"],
 }
+
+
+def _check_rate_limit(client_ip: str) -> tuple[bool, int]:
+    now = time.time()
+    cutoff = now - settings.rate_limit_window_seconds
+    bucket = _rate_buckets[client_ip]
+    while bucket and bucket[0] < cutoff:
+        bucket.pop(0)
+    if len(bucket) >= settings.rate_limit_requests:
+        retry_after = int(bucket[0] + settings.rate_limit_window_seconds - now) + 1
+        return False, retry_after
+    bucket.append(now)
+    return True, 0
 
 
 def _to_bool_permissions(string_permissions: list[str]) -> UserPermissions:
@@ -53,9 +73,22 @@ async def me(current_user=Depends(get_current_user)):
 
 @router.post("/token", response_model=TokenResponse)
 async def token(payload: TokenRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    client_ip = request.client.host if request.client else "unknown"
+    allowed, retry_after = _check_rate_limit(client_ip)
+    if not allowed:
+        api_error(
+            429,
+            "RATE_LIMIT_EXCEEDED",
+            "Слишком много запросов. Повторите позже.",
+            {"retry_after_seconds": retry_after},
+        )
+
     user = await authenticate(db, payload.username, payload.password)
     tokens = await issue_tokens(db, user)
-    await create_audit_event(db, "auth.login", user.user_id, "auth", user.user_id, ip_address=request.client.host if request.client else None)
+    await create_audit_event(
+        db, "auth.login", user.user_id, "auth", user.user_id,
+        ip_address=client_ip,
+    )
     return tokens
 
 
@@ -67,5 +100,8 @@ async def refresh(payload: RefreshRequest, db: AsyncSession = Depends(get_db)):
 @router.post("/revoke", response_model=RevokeResponse)
 async def revoke(payload: RevokeRequest, request: Request, db: AsyncSession = Depends(get_db)):
     db_token = await revoke_refresh_token(db, payload.refresh_token)
-    await create_audit_event(db, "auth.revoke", db_token.user_id, "auth", db_token.token_id, ip_address=request.client.host if request.client else None)
+    await create_audit_event(
+        db, "auth.revoke", db_token.user_id, "auth", db_token.token_id,
+        ip_address=request.client.host if request.client else None,
+    )
     return {"message": "Токен отозван", "revoked_at": db_token.revoked_at}

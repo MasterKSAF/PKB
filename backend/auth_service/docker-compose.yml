@@ -6,10 +6,15 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql+asyncpg://auth_user:auth_password@db:5432/auth_db
+      OTEL_EXPORTER_OTLP_ENDPOINT: signoz-otel-collector:4317
+      OTEL_EXPORTER_OTLP_INSECURE: "true"
     ports:
-      - "8000:8000"
+      - "8082:8000"
     depends_on:
       - db
+    networks:
+      - signoz-net
+      - default
     restart: unless-stopped
 
   db:
@@ -27,3 +32,7 @@ services:
 
 volumes:
   auth_pgdata:
+
+networks:
+  signoz-net:
+    external: true
