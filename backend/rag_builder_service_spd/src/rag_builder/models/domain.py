@@ -35,8 +35,17 @@ class EmbeddingResult:
     cost_usd: float
 
 @dataclass(frozen=True)
+class IndexIssue:
+    code: str
+    message: str
+    section_id: int | None = None
+
+@dataclass(frozen=True)
 class IndexingResult:
     chunks: list[EmbeddedChunk]
 
     embedding_tokens: int
     embedding_cost_usd: float
+
+    warnings: list[IndexIssue]
+    errors: list[IndexIssue]

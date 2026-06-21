@@ -28,7 +28,11 @@ class ChunkRepository:
     В будущем будет реализовано сохранение
     в PostgreSQL (nsi.chunks).
     """
-
+    def cleanup_document_index(
+            self,
+            request: BuildRequest,
+    ) -> None:
+        raise NotImplementedError
     def save_chunks(
             self,
             chunks: list[EmbeddedChunk],
@@ -83,6 +87,12 @@ class InMemoryChunkRepository(ChunkRepository):
 
     def __init__(self) -> None:
         self._chunks: list[EmbeddedChunk] = []
+
+    def cleanup_document_index(
+            self,
+            request: BuildRequest,
+    ) -> None:
+        self._chunks.clear()
 
     def save_chunks(
             self,

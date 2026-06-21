@@ -4,6 +4,8 @@ import time
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
+from dataclasses import asdict
+
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, status
 
 from rag_builder.api.search_routes import router as search_router
@@ -95,8 +97,14 @@ def _run_indexing_job(
                 "chunks": chunks_count,
                 "embeddings": chunks_count,
             },
-            warnings=[],
-            errors=[],
+            warnings=[
+                asdict(issue)
+                for issue in result.warnings
+            ],
+            errors=[
+                asdict(issue)
+                for issue in result.errors
+            ],
         )
 
         logger.info(
