@@ -113,7 +113,7 @@ pytest
 Текущее состояние:
 
 ```text
-45 passed
+46 passed
 ```
 
 ---
@@ -500,7 +500,7 @@ EMBEDDING_API_KEY=
 Текущее состояние:
 
 ```text
-45 passed
+46 passed
 ```
 
 ---
@@ -543,7 +543,7 @@ document_sections
 
 Текущее состояние:
 
-- 45 тестов проходят
+- 46 тестов проходят
 - PostgreSQL persistence реализован
 - pgvector поддерживается
 - ltree поддерживается
@@ -566,6 +566,19 @@ document_sections
 * context expansion via `document_sections.path_ltree`
 * parent + direct children context
 * partial context deduplication by `document_section_id`
+
+---
+
+### POST /rag/search
+
+Совместимый endpoint поиска чанков.
+
+Использует тот же `SearchRequest` и `SearchResponse`, что legacy endpoint `POST /search`.
+
+Legacy/local alias:
+
+```text
+POST /search
 
 ---
 
