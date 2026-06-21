@@ -88,8 +88,12 @@ async def get_task_result(task_id: int):
         errors = result_data.get("errors", [])
         result_status = result_data.get("status", "completed")
 
+    # Извлекаем draft_id из task_info (для совместимости со старыми задачами) 
+    draft_id = getattr(task_info, 'draft_id', 0) 
+
     return ResultResponse(
         task_id=task_id,
+        draft_id=draft_id,  
         metadata=ResultMetadata(
             schema_version=metadata.get("schema", settings.parsing_schema),
             mode=metadata.get("mode", "full"),

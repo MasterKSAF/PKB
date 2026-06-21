@@ -49,7 +49,7 @@ async def test_pipeline_create_preview():
 
 @pytest.mark.asyncio
 async def test_pipeline_run_success():
-    ctx = ProcessingContext(task_id=1, version_id="v1", file_key="test.pdf")
+    ctx = ProcessingContext(task_id=1, draft_id=1, version_id="v1", file_key="test.pdf")
     step1 = DummyStep()
     step2 = DummyStep()
     pipeline = Pipeline([step1, step2])
@@ -64,7 +64,7 @@ async def test_pipeline_run_success():
 
 @pytest.mark.asyncio
 async def test_pipeline_run_error():
-    ctx = ProcessingContext(task_id=1, version_id="v1", file_key="test.pdf")
+    ctx = ProcessingContext(task_id=1, draft_id=1, version_id="v1", file_key="test.pdf")
     step1 = DummyStep()
     step2 = DummyStep(raise_error=True)
     pipeline = Pipeline([step1, step2])
@@ -83,7 +83,7 @@ async def test_pipeline_run_error():
 @pytest.mark.asyncio
 async def test_pipeline_cancelled_by_shutdown():
     ctx = ProcessingContext(
-        task_id=1, version_id="v1", file_key="test.pdf",
+        task_id=1, draft_id=1, version_id="v1", file_key="test.pdf",
         shutdown_event=MagicMock()
     )
     ctx.shutdown_event.is_set = MagicMock(return_value=True)
@@ -95,10 +95,9 @@ async def test_pipeline_cancelled_by_shutdown():
         with pytest.raises(asyncio.CancelledError):
             await pipeline.run(ctx)
 
-    # Проверяем, что update_task был вызван с параметром completed_at
     call_args = mock_task_store.update_task.call_args
     assert call_args is not None
     args, kwargs = call_args
     assert kwargs["status"] == TaskStatus.FAILED
     assert kwargs["error"]["code"] == "CANCELLED"
-    assert "completed_at" in kwargs  # теперь в update_task передаётся completed_at
+    assert "completed_at" in kwargs

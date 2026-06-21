@@ -129,8 +129,9 @@ class UploadImagesStep(PipelineStep):
                 continue
             with open(file_path, "rb") as f:
                 img_bytes = f.read()
-            file_hash = hashlib.md5(img_bytes).hexdigest()[:16]
-            suggested_key = f"{ctx.task_id}/{ctx.task_id}_{idx}_{file_hash}{ext}"
+            # замена MD5 на SHA-256 и новый формат ключа
+            hash_sha256 = hashlib.sha256(img_bytes).hexdigest()  
+            suggested_key = f"{hash_sha256}{ext}"                
             returned_key = await minio_client.upload_image(
                 img_bytes, ctx.task_id, page_num, ext, custom_key=suggested_key
             )
@@ -222,6 +223,7 @@ class StoreResultStep(PipelineStep):
         mode = "preview" if ctx.max_pages is not None else "full"
         result_payload = ResultBuilder.build(
             task_id=ctx.task_id,
+            draft_id=ctx.draft_id,  
             final_json=ctx.final_json,
             mode=mode,
             preview_not_supported=ctx.preview_not_supported

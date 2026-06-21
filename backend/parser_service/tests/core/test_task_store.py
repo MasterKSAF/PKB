@@ -17,5 +17,6 @@ def test_task_store_singleton():
 
 
 def test_task_info_creation():
-    info = TaskInfo(1, "v", "key", {})
+    info = TaskInfo(1, 1, "v", "key", {})
     assert info.task_id == 1
+    assert info.draft_id == 1

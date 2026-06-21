@@ -3,7 +3,7 @@ from app.core.task_models import TaskInfo, TaskStatus
 
 
 def test_v1_result_success_v1_format(client, clear_task_store):
-    task = TaskInfo(300, "", "f", {})
+    task = TaskInfo(300, 1, "", "f", {})
     task.status = TaskStatus.COMPLETED
     task.result = {
         "api_version": 2,
@@ -21,7 +21,7 @@ def test_v1_result_success_v1_format(client, clear_task_store):
 
 
 def test_v1_result_success_v1_format_converted(client, clear_task_store):
-    task = TaskInfo(301, "", "f", {})
+    task = TaskInfo(301, 1, "", "f", {})
     task.status = TaskStatus.COMPLETED
     task.result = {
         "document": {"text": "old"},
@@ -37,7 +37,7 @@ def test_v1_result_success_v1_format_converted(client, clear_task_store):
 
 
 def test_v1_result_not_completed(client, clear_task_store):
-    task = TaskInfo(200, "", "f", {})
+    task = TaskInfo(200, 1, "", "f", {})
     task.status = TaskStatus.PROCESSING
     task_store.add(task)
     response = client.get("/api/v1/parser/process/200/result")
@@ -45,7 +45,7 @@ def test_v1_result_not_completed(client, clear_task_store):
 
 
 def test_v1_result_failed(client, clear_task_store):
-    task = TaskInfo(400, "", "f", {})
+    task = TaskInfo(400, 1, "", "f", {})
     task.status = TaskStatus.FAILED
     task.error = {"code": "PARSER_FAILED", "message": "error"}
     task_store.add(task)

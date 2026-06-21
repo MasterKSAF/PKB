@@ -25,8 +25,9 @@ class TaskInfo:
     Все изменения должны производиться через метод update(), который увеличивает версию.
     """
 
-    def __init__(self, task_id: int, version_id: str, file_key: str, options: dict):
+    def __init__(self, task_id: int, draft_id: int, version_id: str, file_key: str, options: dict):  # <-- ИЗМЕНЕНИЕ
         self.task_id = task_id
+        self.draft_id = draft_id  # <-- ИЗМЕНЕНИЕ
         self.version_id = version_id
         self.file_key = file_key
         self.options = options
