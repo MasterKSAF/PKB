@@ -397,6 +397,17 @@ sql/
 * разбиение по предложениям
 * fallback-разбиение по пробелам
 
+Supported chunk strategies:
+
+- `semantic_512` — approximately 512 tokens, sentence-aware split, 20% overlap.
+- `semantic_1024` — default strategy, approximately 1024 tokens, sentence-aware split, 20% overlap.
+- `semantic_2048` — approximately 2048 tokens, sentence-aware split, 20% overlap.
+- `fixed_256` — approximately 256 tokens, fixed-size split, 10% overlap.
+- `fixed_512` — approximately 512 tokens, fixed-size split, 10% overlap.
+
+MVP uses character-based approximation until tokenizer-based chunking is added.
+
+
 #### Embeddings
 
 * OpenAI Embeddings

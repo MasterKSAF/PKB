@@ -1,5 +1,6 @@
 # tests/unit/test_chunking.py
 
+import pytest
 import json
 from pathlib import Path
 
@@ -146,3 +147,36 @@ def test_long_text_is_split_into_multiple_chunks():
     )
 
     assert chunks[0].content != chunks[1].content
+
+def test_chunking_uses_semantic_1024_by_default(monkeypatch):
+    monkeypatch.setattr(
+        "rag_builder.chunking.service.settings.CHUNK_STRATEGY",
+        "semantic_1024",
+    )
+
+    service = ChunkingService()
+
+    assert service.chunk_strategy == "semantic_1024"
+    assert service.MAX_CHUNK_CHARS == 4000
+    assert service.OVERLAP_RATIO == 0.2
+    assert service.prefer_sentence_boundary is True
+
+def test_chunking_supports_semantic_512():
+    service = ChunkingService(chunk_strategy="semantic_512")
+
+    assert service.chunk_strategy == "semantic_512"
+    assert service.MAX_CHUNK_CHARS == 2000
+    assert service.OVERLAP_RATIO == 0.2
+    assert service.prefer_sentence_boundary is True
+
+def test_chunking_supports_fixed_256():
+    service = ChunkingService(chunk_strategy="fixed_256")
+
+    assert service.chunk_strategy == "fixed_256"
+    assert service.MAX_CHUNK_CHARS == 1000
+    assert service.OVERLAP_RATIO == 0.1
+    assert service.prefer_sentence_boundary is False
+
+def test_chunking_rejects_unknown_strategy():
+    with pytest.raises(ValueError, match="Unsupported CHUNK_STRATEGY"):
+        ChunkingService(chunk_strategy="unknown_strategy")
