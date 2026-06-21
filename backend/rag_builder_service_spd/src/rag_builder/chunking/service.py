@@ -96,8 +96,13 @@ class ChunkingService:
     def _split_text(
             self,
             text: str,
+            protected_spans: list[dict[str, Any]] | None = None,
     ) -> list[str]:
         text = text.strip()
+        protected_spans = self._normalize_protected_spans(
+            protected_spans=protected_spans,
+            text_length=len(text),
+        )
 
         if len(text) <= self.MAX_CHUNK_CHARS:
             return [text]
@@ -122,6 +127,13 @@ class ChunkingService:
                 hard_end=hard_end,
             )
 
+            split_pos = self._move_boundary_outside_protected_span(
+                boundary=split_pos,
+                chunk_start=start,
+                text_length=len(text),
+                protected_spans=protected_spans,
+            )
+
             chunk_text = text[start:split_pos].strip()
 
             if chunk_text:
@@ -132,6 +144,13 @@ class ChunkingService:
                 start + 1,
             )
 
+            next_start = self._move_start_outside_protected_span(
+                boundary=next_start,
+                chunk_start=start,
+                text_length=len(text),
+                protected_spans=protected_spans,
+            )
+
             # Сдвигаем старт к ближайшему пробелу,
             # чтобы не начинать новый чанк с середины слова.
             while (
@@ -140,6 +159,13 @@ class ChunkingService:
                     and not text[next_start - 1].isspace()
             ):
                 next_start += 1
+
+            next_start = self._move_start_outside_protected_span(
+                boundary=next_start,
+                chunk_start=start,
+                text_length=len(text),
+                protected_spans=protected_spans,
+            )
 
             start = next_start
 
@@ -181,6 +207,141 @@ class ChunkingService:
 
         return hard_end
 
+    def _protected_spans_for_section(
+            self,
+            request: BuildRequest,
+            section: Section,
+            text_length: int,
+    ) -> list[dict[str, Any]]:
+        spans = []
+
+        for span in request.protected_spans:
+            if str(span.get("section_id")) != str(section.section_id):
+                continue
+
+            spans.append(span)
+
+        return self._normalize_protected_spans(
+            protected_spans=spans,
+            text_length=text_length,
+        )
+
+    def _normalize_protected_spans(
+            self,
+            protected_spans: list[dict[str, Any]] | None,
+            text_length: int,
+    ) -> list[dict[str, Any]]:
+        normalized: list[dict[str, Any]] = []
+
+        for span in protected_spans or []:
+            try:
+                start_offset = int(
+                    span.get("start_offset", span.get("start", -1))
+                )
+                end_offset = int(
+                    span.get("end_offset", span.get("end", -1))
+                )
+            except (TypeError, ValueError):
+                continue
+
+            start_offset = max(0, min(start_offset, text_length))
+            end_offset = max(0, min(end_offset, text_length))
+
+            if start_offset >= end_offset:
+                continue
+
+            normalized.append(
+                {
+                    **span,
+                    "start_offset": start_offset,
+                    "end_offset": end_offset,
+                }
+            )
+
+        return sorted(
+            normalized,
+            key=lambda item: (
+                item["start_offset"],
+                item["end_offset"],
+            ),
+        )
+
+    def _find_protected_span_containing_boundary(
+            self,
+            boundary: int,
+            protected_spans: list[dict[str, Any]],
+    ) -> dict[str, Any] | None:
+        for span in protected_spans:
+            start_offset = span["start_offset"]
+            end_offset = span["end_offset"]
+
+            if start_offset < boundary < end_offset:
+                return span
+
+        return None
+
+    def _move_boundary_outside_protected_span(
+            self,
+            boundary: int,
+            chunk_start: int,
+            text_length: int,
+            protected_spans: list[dict[str, Any]],
+    ) -> int:
+        span = self._find_protected_span_containing_boundary(
+            boundary=boundary,
+            protected_spans=protected_spans,
+        )
+
+        if span is None:
+            return boundary
+
+        span_start = span["start_offset"]
+        span_end = span["end_offset"]
+
+        min_reasonable_end = chunk_start + max(
+            1,
+            int(self.MAX_CHUNK_CHARS * 0.25),
+        )
+
+        if (
+                span_start > chunk_start
+                and span_start >= min_reasonable_end
+        ):
+            return span_start
+
+        return min(
+            max(span_end, chunk_start + 1),
+            text_length,
+        )
+
+    def _move_start_outside_protected_span(
+            self,
+            boundary: int,
+            chunk_start: int,
+            text_length: int,
+            protected_spans: list[dict[str, Any]],
+    ) -> int:
+        while True:
+            span = self._find_protected_span_containing_boundary(
+                boundary=boundary,
+                protected_spans=protected_spans,
+            )
+
+            if span is None:
+                return boundary
+
+            span_start = span["start_offset"]
+            span_end = span["end_offset"]
+
+            if span_start > chunk_start:
+                boundary = span_start
+            else:
+                boundary = span_end
+
+            boundary = min(
+                max(boundary, chunk_start + 1),
+                text_length,
+            )
 
     def build_chunks(self, request: BuildRequest) -> list[Chunk]:
         """
@@ -206,7 +367,16 @@ class ChunkingService:
 
             # Переносим все данные,
             # необходимые для будущего цитирования.
-            subchunks = self._split_text(content)
+            protected_spans = self._protected_spans_for_section(
+                request=request,
+                section=section,
+                text_length=len(content),
+            )
+
+            subchunks = self._split_text(
+                content,
+                protected_spans=protected_spans,
+            )
 
             for chunk_index, subcontent in enumerate(subchunks):
                 chunk = Chunk(
