@@ -180,3 +180,151 @@ def test_chunking_supports_fixed_256():
 def test_chunking_rejects_unknown_strategy():
     with pytest.raises(ValueError, match="Unsupported CHUNK_STRATEGY"):
         ChunkingService(chunk_strategy="unknown_strategy")
+
+
+def test_protected_span_is_not_split_between_chunks():
+    prefix = "A " * 450
+    protected_block = (
+            "BEGIN_PROTECTED "
+            + ("Z " * 125)
+            + "END_PROTECTED"
+    )
+    suffix = "B " * 600
+
+    text = prefix + protected_block + suffix
+
+    span_start = len(prefix)
+    span_end = span_start + len(protected_block)
+
+    data = {
+        "metadata": {
+            "schema": "schema_registry_for_rag_v2",
+            "document_id": 1,
+            "document_version_id": 1,
+        },
+        "document": {
+            "id": 1,
+            "document_version_id": 1,
+            "pkb_code": "04",
+            "doc_code": "TEST",
+            "title": "Test",
+        },
+        "sections": [
+            {
+                "section_id": 1,
+                "parent_id": None,
+                "clause": "1",
+                "title": None,
+                "level": 1,
+                "path": "1",
+                "page": 1,
+                "bbox": None,
+                "type": "text",
+                "content": {
+                    "text": text,
+                },
+                "references": [],
+            }
+        ],
+        "protected_spans": [
+            {
+                "section_id": 1,
+                "start_offset": span_start,
+                "end_offset": span_end,
+                "reason": "test protected block",
+            }
+        ],
+        "terminology": [],
+        "options": {},
+    }
+
+    request = BuildRequest.model_validate(data)
+
+    service = ChunkingService(chunk_strategy="fixed_256")
+    service.MAX_CHUNK_CHARS = 1000
+    service.OVERLAP_RATIO = 0.0
+
+    chunks = service.build_chunks(request)
+
+    assert len(chunks) > 1
+    assert any(protected_block in chunk.content for chunk in chunks)
+
+    for chunk in chunks:
+        contains_start = "BEGIN_PROTECTED" in chunk.content
+        contains_end = "END_PROTECTED" in chunk.content
+
+        if contains_start or contains_end:
+            assert protected_block in chunk.content
+
+
+def test_protected_span_from_other_section_is_ignored():
+    prefix = "A " * 450
+    protected_block = (
+            "BEGIN_PROTECTED "
+            + ("Z " * 125)
+            + "END_PROTECTED"
+    )
+    suffix = "B " * 600
+
+    text = prefix + protected_block + suffix
+
+    span_start = len(prefix)
+    span_end = span_start + len(protected_block)
+
+    data = {
+        "metadata": {
+            "schema": "schema_registry_for_rag_v2",
+            "document_id": 1,
+            "document_version_id": 1,
+        },
+        "document": {
+            "id": 1,
+            "document_version_id": 1,
+            "pkb_code": "04",
+            "doc_code": "TEST",
+            "title": "Test",
+        },
+        "sections": [
+            {
+                "section_id": 1,
+                "parent_id": None,
+                "clause": "1",
+                "title": None,
+                "level": 1,
+                "path": "1",
+                "page": 1,
+                "bbox": None,
+                "type": "text",
+                "content": {
+                    "text": text,
+                },
+                "references": [],
+            }
+        ],
+        "protected_spans": [
+            {
+                "section_id": 2,
+                "start_offset": span_start,
+                "end_offset": span_end,
+                "reason": "span belongs to another section",
+            }
+        ],
+        "terminology": [],
+        "options": {},
+    }
+
+    request = BuildRequest.model_validate(data)
+
+    service = ChunkingService(chunk_strategy="fixed_256")
+    service.MAX_CHUNK_CHARS = 1000
+    service.OVERLAP_RATIO = 0.0
+
+    chunks = service.build_chunks(request)
+
+    assert len(chunks) > 1
+    assert not any(protected_block in chunk.content for chunk in chunks)
+    assert any(
+        "BEGIN_PROTECTED" in chunk.content
+        and "END_PROTECTED" not in chunk.content
+        for chunk in chunks
+    )
