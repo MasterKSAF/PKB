@@ -36,7 +36,6 @@ class GatewayConfig:
         "orchestrator":        os.getenv("ORCHESTRATOR_SERVICE_URL",        "http://127.0.0.1:8081"),
         "query":               os.getenv("QUERY_SERVICE_URL",               "http://127.0.0.1:8083"),
         "registry":            os.getenv("REGISTRY_SERVICE_URL",            "http://127.0.0.1:8084"),
-        "integration":         os.getenv("INTEGRATION_SERVICE_URL",         "http://127.0.0.1:8085"),
         "converter_validator": os.getenv("CONVERTER_VALIDATOR_SERVICE_URL","http://127.0.0.1:8086"),
         "parser":              os.getenv("PARSER_SERVICE_URL",              "http://127.0.0.1:8087"),
         "ocr":                 os.getenv("OCR_SERVICE_URL",                 "http://127.0.0.1:8088"),

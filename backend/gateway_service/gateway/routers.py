@@ -11,7 +11,7 @@ import logging
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 
-from gateway.client import proxy_request, resolve_service
+from gateway.client import proxy_request, resolve_service, is_deprecated_integration_route
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,17 @@ def _error(code: str, message: str) -> dict:
 async def gateway_catch_all(request: Request, path: str) -> Response:
     """Проксирует запрос к внутреннему сервису на основе префикса пути."""
     full_path = f"/api/v1/{path}"
+
+    if is_deprecated_integration_route(full_path):
+        return JSONResponse(
+            status_code=410,
+            content=_error(
+                "SERVICE_REMOVED",
+                "Integration Service отключён; маршруты "
+                "meridian/files/external недоступны",
+            ),
+        )
+
     service_name = resolve_service(full_path)
 
     if not service_name:

@@ -1,7 +1,7 @@
 # =============================================================================
 # PKB Neuroassistant — единый Docker Compose (корень репозитория)
 #
-# Запуск основного стека (12 микросервисов + инфраструктура):
+# Запуск основного стека (10 микросервисов + инфраструктура):
 #   docker compose up -d --build
 #
 # Запуск с демо monitoring_service (SigNoz tutorial, НЕ production):
@@ -15,29 +15,28 @@
 #   - Отдельные контейнеры, сеть dmz/internal/data
 #   - analyse (:8089) — заморожен, не включён
 #   - monitoring_service — только demo/observability tutorial, не PKB prod
-#   - Embeddings: Infinity (локально) или внешний Qwen3 API
+#   - Embeddings: TEI (локально, rubert-tiny2-onnx)
 #
 # Порядок запуска (depends_on):
 #
-#   [1] postgres, redis, minio, infinity
+#   [1] postgres, redis, minio, tei
 #         │
 #   [2] db-init, minio-init  (one-shot)
 #         │
-#   [3] auth, registry, integration, parser, converter-validator
+#   [3] auth, registry, parser, converter-validator
 #         │
-#   [4] rag-builder, rag-search  (→ postgres + infinity)
+#   [4] rag-builder, rag-search  (→ postgres + tei)
 #         │
 #   [5] query  (→ postgres + registry + rag-search)
 #         │
 #   [6] orchestrator  (→ postgres + redis + minio + parser + converter + registry + rag-*)
 #         │
-#   [7] gateway  (→ auth + все backend-сервисы)
+#   [7] gateway  (→ auth + backend-сервисы, без integration)
 #
 # Порты сервисов (внутри сети = снаружи):
 #   gateway :8080   auth :8082        orchestrator :8081   query :8083
-#   registry :8084  integration :8085  converter-validator :8086
-#   parser :8087    rag-builder :8090  rag-search :8091
-#   infinity :7997
+#   registry :8084  converter-validator :8086  parser :8087
+#   rag-builder :8090  rag-search :8091   tei :18092 (host)
 # =============================================================================
 
 name: pkb
@@ -74,14 +73,14 @@ x-env-auth: &env-auth
   DEFAULT_ADMIN_EMAIL: ${DEFAULT_ADMIN_EMAIL:-admin@example.com}
   DEFAULT_ADMIN_PASSWORD: ${DEFAULT_ADMIN_PASSWORD:-Admin1234!}
 
-# --- Embeddings (Infinity) ---
+# --- Embeddings (TEI) ---
 x-env-embeddings: &env-embeddings
-  EMBEDDING_PROVIDER: openai_compatible
-  EMBEDDING_BASE_URL: http://infinity:7997
-  EMBEDDING_API_URL: http://infinity:7997
-  EMBEDDING_MODEL: ${INFINITY_MODEL_ID:-Qwen/Qwen3-Embedding-0.6B}
-  EMBEDDING_DIM: "1024"
-  VECTOR_DIMENSION: "1024"
+  EMBEDDING_PROVIDER: tei
+  EMBEDDING_BASE_URL: http://tei:80
+  EMBEDDING_API_URL: http://tei:80
+  EMBEDDING_MODEL: Vuy/rubert-tiny2-onnx
+  EMBEDDING_DIM: "312"
+  VECTOR_DIMENSION: "312"
   EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-sk-noop}
   EMBEDDING_TIMEOUT: "60"
 
@@ -91,7 +90,6 @@ x-env-service-urls: &env-service-urls
   ORCHESTRATOR_SERVICE_URL: http://orchestrator:8081
   QUERY_SERVICE_URL: http://query:8083
   REGISTRY_SERVICE_URL: http://registry:8084/api/v1
-  INTEGRATION_SERVICE_URL: http://integration:8085/api/v1
   CONVERTER_VALIDATOR_SERVICE_URL: http://converter-validator:8086
   CONVERTER_SERVICE_URL: http://converter-validator:8086
   VALIDATE_SERVICE_URL: http://converter-validator:8086/api/v1
@@ -170,30 +168,21 @@ services:
       - pkb-net
     logging: *default-logging
 
-  infinity:
-    build:
-      context: ./backend/infinity
-      dockerfile: Dockerfile.infinity
-    image: pkb/infinity:local
-    container_name: pkb-infinity
+  tei:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-latest
+    container_name: pkb-tei
     restart: unless-stopped
+    entrypoint: ["text-embeddings-router", "--model-id", "/data"]
     ports:
-      - "${INFINITY_PORT:-7997}:7997"
+      - "${TEI_PORT:-18092}:80"
     volumes:
-      - infinity_cache:/app/.cache
-    command: >
-      v2
-      --model-id ${INFINITY_MODEL_ID:-Qwen/Qwen3-Embedding-0.6B}
-      --port 7997
-      --engine ${INFINITY_ENGINE:-torch}
-      --device ${INFINITY_DEVICE:-cpu}
-      --no-bettertransformer
+      - ./backend/service_checker/docker/tei_model:/data:ro
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:7997/health || exit 1"]
-      interval: 10s
-      timeout: 10s
-      retries: 30
-      start_period: 1200s
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     networks:
       - pkb-net
     logging: *default-logging
@@ -304,35 +293,6 @@ services:
       - pkb-net
     logging: *default-logging
 
-  integration:
-    build:
-      context: ./backend/integration_service
-      dockerfile: Dockerfile
-    image: pkb/integration:local
-    container_name: pkb-integration
-    restart: unless-stopped
-    ports:
-      - "8085:8085"
-    environment:
-      <<: [*env-db]
-    volumes:
-      - integration_data:/app/files1
-      - integration_data2:/app/files2
-    depends_on:
-      postgres:
-        condition: service_healthy
-      db-init:
-        condition: service_completed_successfully
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8085/api/v1/integration/"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
-    networks:
-      - pkb-net
-    logging: *default-logging
-
   parser:
     build:
       context: ./backend/parser_service
@@ -402,7 +362,7 @@ services:
         condition: service_healthy
       db-init:
         condition: service_completed_successfully
-      infinity:
+      tei:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/api/v1/health', timeout=3)\""]
@@ -435,7 +395,7 @@ services:
         condition: service_healthy
       db-init:
         condition: service_completed_successfully
-      infinity:
+      tei:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:8091/api/v1/health"]
@@ -559,8 +519,6 @@ services:
         condition: service_healthy
       registry:
         condition: service_healthy
-      integration:
-        condition: service_healthy
       converter-validator:
         condition: service_healthy
       parser:
@@ -570,7 +528,7 @@ services:
       rag-search:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/system/health/live"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -648,6 +606,3 @@ networks:
 volumes:
   pg_data:
   minio_data:
-  infinity_cache:
-  integration_data:
-  integration_data2:

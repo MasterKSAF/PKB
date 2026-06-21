@@ -18,6 +18,6 @@ COPY gateway ./gateway
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=15s \
-    CMD curl -f http://127.0.0.1:8080/api/v1/system/health/live || exit 1
+    CMD curl -f http://127.0.0.1:8080/api/v1/health || exit 1
 
 CMD ["uvicorn", "gateway.main:app", "--host", "0.0.0.0", "--port", "8080"]

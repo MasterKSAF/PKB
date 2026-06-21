@@ -45,13 +45,26 @@ SERVICE_ROUTES: Dict[str, str] = {
     # Registry Service (:8084)
     "/api/v1/registry/": "registry",
     "/api/v1/registry/categories/": "registry",
-    # Integration Service (:8085)
-    "/api/v1/meridian/": "integration",
-    "/api/v1/files/": "integration",
-    "/api/v1/external/": "integration",
     # Analyse Service (:8089)
     "/api/v1/analyse/": "analyse",
 }
+
+
+DEPRECATED_INTEGRATION_PREFIXES = (
+    "/api/v1/meridian",
+    "/api/v1/files",
+    "/api/v1/external",
+)
+
+
+def is_deprecated_integration_route(path: str) -> bool:
+    """True для legacy-маршрутов снятого Integration Service."""
+    normalized = path.rstrip("/")
+    for prefix in DEPRECATED_INTEGRATION_PREFIXES:
+        p = prefix.rstrip("/")
+        if normalized == p or normalized.startswith(p + "/"):
+            return True
+    return False
 
 
 def resolve_service(path: str) -> Optional[str]:
