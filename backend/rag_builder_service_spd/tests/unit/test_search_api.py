@@ -82,6 +82,46 @@ def test_search_endpoint_returns_chunks(monkeypatch):
     assert result["page"] == 2
     assert result["content"]
 
+def test_rag_search_alias_returns_chunks(monkeypatch):
+    monkeypatch.setattr(
+        search_routes,
+        "SearchService",
+        lambda: FakeSearchService(),
+    )
+
+    client = TestClient(app)
+
+    response = client.post(
+        "/rag/search",
+        json={
+            "query": "допуск соосности",
+            "top_k": 5,
+        },
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["query"] == "допуск соосности"
+    assert data["search_type_used"] == "dense"
+    assert data["total_found"] == 1
+    assert "results" in data
+    assert "processing_time_ms" in data
+    assert "embedding_tokens" in data
+    assert "embedding_cost_usd" in data
+    assert "context_expanded" in data
+
+    result = data["results"][0]
+
+    assert result["document_id"] == 420000
+    assert result["document_version_id"] == 420001
+    assert result["document_section_id"] == 10
+    assert result["section_id"] == 8
+    assert result["clause"] == "6.1"
+    assert result["page"] == 2
+    assert result["content"]
+
 
 def test_search_endpoint_maps_service_error_to_422(monkeypatch):
     monkeypatch.setattr(
