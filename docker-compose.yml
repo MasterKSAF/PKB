@@ -19,7 +19,7 @@
 #
 # Порядок запуска (depends_on):
 #
-#   [1] postgres, redis, minio, tei
+#   [1] postgres, redis, minio, tei-init → tei
 #         │
 #   [2] db-init, minio-init  (one-shot)
 #         │
@@ -177,6 +177,9 @@ services:
       - "${TEI_PORT:-18092}:80"
     volumes:
       - ./backend/service_checker/docker/tei_model:/data:ro
+    depends_on:
+      tei-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:80/health"]
       interval: 30s
@@ -229,6 +232,22 @@ services:
     depends_on:
       minio:
         condition: service_healthy
+    networks:
+      - pkb-net
+    restart: "no"
+    logging: *default-logging
+
+  tei-init:
+    build:
+      context: ./backend/service_checker/docker
+      dockerfile: Dockerfile.base
+    image: pkb/tei-init:local
+    container_name: pkb-tei-init
+    volumes:
+      - ./backend:/app/backend
+    entrypoint:
+      - python
+      - /app/backend/service_checker/docker/prepare_tei_model.py
     networks:
       - pkb-net
     restart: "no"
