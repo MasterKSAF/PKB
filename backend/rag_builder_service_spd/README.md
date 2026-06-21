@@ -113,7 +113,7 @@ pytest
 Текущее состояние:
 
 ```text
-29 passed
+39 passed
 ```
 
 ---
@@ -405,6 +405,24 @@ sql/
 * Usage Accounting
 * batch embeddings для всех чанков документа
 
+Supported embedding providers:
+
+- `stub` — local zero-vector provider for tests and offline development.
+- `openai` — official OpenAI API, uses `OPENAI_API_KEY`.
+- `openai_compatible` — OpenAI-compatible embeddings endpoint, uses `EMBEDDING_API_BASE_URL` and `EMBEDDING_API_KEY`.
+- `infinity` — alias for OpenAI-compatible local Infinity embeddings service.
+- `external` — alias for external OpenAI-compatible embeddings API.
+
+Example for local Infinity:
+
+```env
+EMBEDDING_PROVIDER=infinity
+EMBEDDING_MODEL=qwen3-embedding-4b
+EMBEDDING_DIM=2048
+EMBEDDING_API_BASE_URL=http://localhost:7997/v1
+EMBEDDING_API_KEY=
+```
+
 #### Хранение структуры документа
 
 * nsi.document_sections
@@ -469,7 +487,7 @@ sql/
 Текущее состояние:
 
 ```text
-29 passed
+39 passed
 ```
 
 ---
@@ -512,7 +530,7 @@ document_sections
 
 Текущее состояние:
 
-- 29 тестов проходят
+- 39 тестов проходят
 - PostgreSQL persistence реализован
 - pgvector поддерживается
 - ltree поддерживается
