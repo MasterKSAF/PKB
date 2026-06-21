@@ -66,11 +66,9 @@ def test_index_endpoint_persists_no_indexable_content_warning():
         "metadata": {
             "schema": "schema_registry_for_rag_v2",
             "document_id": 990001,
-            "document_version_id": 990002,
         },
         "document": {
             "id": 990001,
-            "document_version_id": 990002,
             "pkb_code": "04",
             "doc_code": "SMOKE-EMPTY",
             "title": "Smoke empty document",
