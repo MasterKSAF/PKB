@@ -3,11 +3,11 @@ from app.core.task_models import TaskInfo
 
 
 def test_v1_list_processes(client, clear_task_store):
-    t1 = TaskInfo(1, "", "f1", {})
+    t1 = TaskInfo(1, 1, "", "f1", {})
     t1.status = "accepted"
-    t2 = TaskInfo(2, "", "f2", {})
+    t2 = TaskInfo(2, 1, "", "f2", {})
     t2.status = "processing"
-    t3 = TaskInfo(3, "", "f3", {})
+    t3 = TaskInfo(3, 1, "", "f3", {})
     t3.status = "completed"
     for t in [t1, t2, t3]:
         task_store.add(t)

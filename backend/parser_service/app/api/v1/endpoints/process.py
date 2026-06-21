@@ -49,6 +49,7 @@ def set_shutdown_event(event: asyncio.Event) -> None:
 
 async def _run_full_pipeline(
     task_id: int,
+    draft_id: int, 
     file_key: str,
     options: dict,
     shutdown_event: asyncio.Event = None
@@ -58,6 +59,7 @@ async def _run_full_pipeline(
 
     Args:
         task_id: ID задачи.
+        draft_id: ID черновика. 
         file_key: Ключ файла в MinIO.
         options: Опции парсинга.
         shutdown_event: Событие для отслеживания сигнала завершения.
@@ -65,6 +67,7 @@ async def _run_full_pipeline(
     logger.info("Starting full pipeline for task %d, file %s", task_id, file_key)
     ctx = ProcessingContext(
         task_id=task_id,
+        draft_id=draft_id, 
         version_id="",
         file_key=file_key,
         options=options,
@@ -138,6 +141,7 @@ async def start_processing(request: ProcessRequest, background_tasks: Background
 
     task_info = TaskInfo(
         task_id=request.task_id,
+        draft_id=request.draft_id,  
         version_id="",
         file_key=request.file_key,
         options=request.options or {}
@@ -147,6 +151,7 @@ async def start_processing(request: ProcessRequest, background_tasks: Background
     background_tasks.add_task(
         _run_full_pipeline,
         request.task_id,
+        request.draft_id,
         request.file_key,
         request.options or {},
         _shutdown_event
@@ -184,6 +189,7 @@ async def _sync_preview(request: ProcessRequest) -> ResultResponse:
 
         ctx = ProcessingContext(
             task_id=request.task_id,
+            draft_id=request.draft_id,  
             version_id="",
             file_key=request.file_key,
             options=request.options or {},
@@ -202,6 +208,7 @@ async def _sync_preview(request: ProcessRequest) -> ResultResponse:
 
         result_payload = ResultBuilder.build(
             task_id=request.task_id,
+            draft_id=request.draft_id, 
             final_json=ctx.final_json,
             mode="preview",
             preview_not_supported=getattr(ctx, 'preview_not_supported', False)

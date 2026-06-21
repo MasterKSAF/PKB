@@ -16,6 +16,7 @@ class ResultBuilder:
     @staticmethod
     def build(
         task_id: int,
+        draft_id: int, 
         final_json: Optional[Dict[str, Any]],
         mode: str,
         preview_not_supported: bool = False
@@ -25,13 +26,14 @@ class ResultBuilder:
 
         Args:
             task_id: ID задачи.
+            draft_id: ID черновика.  
             final_json: Нормализованный JSON (с полями document_info, content, metadata).
                          Может быть None – тогда используется пустая структура.
             mode: "full" или "preview".
             preview_not_supported: Флаг, что предпросмотр не поддерживается (для v2).
 
         Returns:
-            Словарь с полями task_id, metadata, document, quality, errors, status.
+            Словарь с полями task_id, draft_id, metadata, document, quality, errors, status.
         """
         # Защита от None
         if final_json is None:
@@ -56,6 +58,7 @@ class ResultBuilder:
 
         result = {
             "task_id": task_id,
+            "draft_id": draft_id, 
             "metadata": {
                 "schema": settings.parsing_schema,
                 "mode": mode,
