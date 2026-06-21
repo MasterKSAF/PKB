@@ -112,8 +112,21 @@ services:
       - pkb-net
 
   # ============================================================================
-  # Hugging Face Text Embeddings Inference (TEI) — CPU-only, локальная модель
+  # TEI model download (one-shot) + Hugging Face TEI — CPU-only
   # ============================================================================
+  tei-init:
+    build:
+      context: .
+      dockerfile: Dockerfile.base
+    image: pkb/tei-init:local
+    container_name: pkb-tei-init
+    volumes:
+      - .:/work
+    entrypoint: ["python", "/work/prepare_tei_model.py"]
+    networks:
+      - pkb-net
+    restart: "no"
+
   tei:
     image: ghcr.io/huggingface/text-embeddings-inference:cpu-latest
     container_name: pkb-tei
@@ -123,6 +136,9 @@ services:
       - "18092:80"
     volumes:
       - ./tei_model:/data
+    depends_on:
+      tei-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:80/health"]
       interval: 30s
