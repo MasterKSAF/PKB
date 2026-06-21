@@ -1,10 +1,47 @@
 # src/rag_builder/chunking/service.py
 
+from dataclasses import dataclass
 from typing import Any
+
+from rag_builder.core.config import settings
 
 from rag_builder.models.contracts import BuildRequest, Section
 from rag_builder.models.domain import Chunk
 
+@dataclass(frozen=True)
+class ChunkStrategyConfig:
+    max_chunk_chars: int
+    overlap_ratio: float
+    prefer_sentence_boundary: bool
+
+
+CHUNK_STRATEGIES: dict[str, ChunkStrategyConfig] = {
+    "semantic_512": ChunkStrategyConfig(
+        max_chunk_chars=2000,
+        overlap_ratio=0.2,
+        prefer_sentence_boundary=True,
+    ),
+    "semantic_1024": ChunkStrategyConfig(
+        max_chunk_chars=4000,
+        overlap_ratio=0.2,
+        prefer_sentence_boundary=True,
+    ),
+    "semantic_2048": ChunkStrategyConfig(
+        max_chunk_chars=8000,
+        overlap_ratio=0.2,
+        prefer_sentence_boundary=True,
+    ),
+    "fixed_256": ChunkStrategyConfig(
+        max_chunk_chars=1000,
+        overlap_ratio=0.1,
+        prefer_sentence_boundary=False,
+    ),
+    "fixed_512": ChunkStrategyConfig(
+        max_chunk_chars=2000,
+        overlap_ratio=0.1,
+        prefer_sentence_boundary=False,
+    ),
+}
 
 class ChunkingService:
     """
@@ -33,8 +70,28 @@ class ChunkingService:
         - bbox
         - references
     """
-    MAX_CHUNK_CHARS = 2000
+    MAX_CHUNK_CHARS = 4000
     OVERLAP_RATIO = 0.2
+
+    def __init__(self, chunk_strategy: str | None = None) -> None:
+        self.chunk_strategy = chunk_strategy or settings.CHUNK_STRATEGY
+        self._apply_chunk_strategy(self.chunk_strategy)
+
+    def _apply_chunk_strategy(self, chunk_strategy: str) -> None:
+        strategy = chunk_strategy.strip().lower()
+
+        if strategy not in CHUNK_STRATEGIES:
+            raise ValueError(
+                f"Unsupported CHUNK_STRATEGY={chunk_strategy}. "
+                f"Supported values: {sorted(CHUNK_STRATEGIES)}"
+            )
+
+        config = CHUNK_STRATEGIES[strategy]
+
+        self.chunk_strategy = strategy
+        self.MAX_CHUNK_CHARS = config.max_chunk_chars
+        self.OVERLAP_RATIO = config.overlap_ratio
+        self.prefer_sentence_boundary = config.prefer_sentence_boundary
 
     def _split_text(
             self,
@@ -94,6 +151,14 @@ class ChunkingService:
             start: int,
             hard_end: int,
     ) -> int:
+        if not self.prefer_sentence_boundary:
+            space_pos = text.rfind(" ", start, hard_end)
+
+            if space_pos > start:
+                return space_pos
+
+            return hard_end
+
         sentence_endings = [". ", "! ", "? ", ".\n", "!\n", "?\n"]
 
         best_sentence_pos = -1
