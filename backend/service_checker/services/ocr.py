@@ -28,7 +28,7 @@ def get_service_def() -> ServiceDef:
     prepare_endpoints = [
         EndpointDef("POST", f"{API_PREFIX}/ocr/process", "ocr",
             "Запуск OCR обработки (prepare)",
-            body={"task_id": 12345, "draft_id": 1,  # OC-4: обязательный draft_id
+            body={"task_id": "{task_id}", "draft_id": "{draft_id}",  # OC-4: обязательный draft_id
                   "file_key": "test-file-key", "mode": "preview"},
             extract_keys=["task_id"],
             response_schema={"task_id": int, "status": str, "mode": str},
@@ -44,7 +44,7 @@ def get_service_def() -> ServiceDef:
         # OC-11: PREVIEW_NOT_SUPPORTED (422)
         EndpointDef("POST", f"{API_PREFIX}/ocr/process", "ocr",
             "Запуск OCR обработки (mode=preview|full)",
-            body={"task_id": 12345, "draft_id": 1,  # OC-4: обязательный draft_id
+            body={"task_id": "{task_id}", "draft_id": "{draft_id}",  # OC-4: обязательный draft_id
                   "file_key": "test-file-key", "mode": "full"},
             response_schema={"task_id": int, "status": str, "mode": str,
                              "preview_not_supported": bool}),

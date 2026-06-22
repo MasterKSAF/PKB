@@ -1,38 +1,27 @@
-# TODO: 6 новых пайплайнов оркестратора + тесты
+# Устранение всех фиксированных ID
 
-## Подготовка
-- [x] Создать план в todo.md
+## Принцип
+Каждый ID должен либо динамически создаваться через pre-prepare, либо получаться из ответа предыдущего шага. Хардкодные ID удаляются.
 
-## 1. orchestrator_document_reject — Reject черновика
-- [x] Создать `pipelines/orchestrator_document_reject.py`
-- [x] Создать `tests/test_pipeline_orchestrator_document_reject.py`
+## 1. `draft_id` — fallback в API Coverage
+- [x] заменён на Gateway draft creation (retry + raise)
 
-## 2. orchestrator_metadata_update — Обновление метаданных
-- [x] Создать `pipelines/orchestrator_metadata_update.py`
-- [x] Создать `tests/test_pipeline_orchestrator_metadata_update.py`
+## 2. `task_id` — был хардкор 12345
+- [x] добавлен pre-prepare Gateway draft → `task_id` для converter/parser/ocr
+- [x] `{task_id}` резолвится из контекста, как и остальные ID
 
-## 3. orchestrator_draft_delete — Удаление черновика
-- [x] Создать `pipelines/orchestrator_draft_delete.py`
-- [x] Создать `tests/test_pipeline_orchestrator_draft_delete.py`
+## 3. `draft_id`, `version_id`, `doc_id` — хардкоры в service defs
+- [x] все заменены на `{variable}` с источниками в контексте
 
-## 4. orchestrator_document_reprocess — Переиндексация
-- [x] Создать `pipelines/orchestrator_document_reprocess.py`
-- [x] Создать `tests/test_pipeline_orchestrator_document_reprocess.py`
+## 4. `base_data` — Gateway и Orchestrator
+- [x] очищен до `{}`
 
-## 5. orchestrator_document_versions — Версионирование
-- [x] Создать `pipelines/orchestrator_document_versions.py`
-- [x] Создать `tests/test_pipeline_orchestrator_document_versions.py`
+## 5. `section_id` — API Coverage
+- [x] динамический timestamp-based
 
-## 6. orchestrator_full_document_lifecycle — Полный сквозной цикл через оркестратор
-- [x] Создать `pipelines/orchestrator_full_document_lifecycle.py`
-- [x] Создать `tests/test_pipeline_orchestrator_full_document_lifecycle.py`
+## 6. Pipeline definitions
+- [x] `draft_id`, `section_id`, `version_id` — payload-значения (не FK), оставлены литералами
 
-## Регистрация и обновление
-- [x] Зарегистрировать в `pipelines/__init__.py`
-- [x] Обновить `core/config.py` (PIPELINE_SERVICE_MAP, PIPELINE_SERVICE_COLUMNS)
-- [x] Обновить `readme.md`
-
-## Проверка
-- [x] Запустить все тесты — 533 passed
-- [x] Добавить отдельную таблицу Orchestrator Pipelines в `core/reports.py`
-- [x] Финальный обзор (см. ниже)
+## 7. Проверка
+- [x] Все тесты — **537 passed**
+- [x] `specificity.md` — запись #48

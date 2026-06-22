@@ -7,6 +7,7 @@ PKB Neuroassistant — Base classes for Pipeline Testing.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import json
@@ -275,45 +276,52 @@ class PipelineRunner:
         self._client = value
 
     async def _ensure_project(self, ctx: PipelineContext, auth_token: Optional[str] = None) -> None:
-        """Создать или получить проект для чат-сессий (QS-3)."""
+        """Create or get a project. Raises RuntimeError if impossible."""
         import json as _json
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
         if auth_token:
             headers["Authorization"] = f"Bearer {auth_token}"
         base_url = f"http://{self.base_host}:8083/api/v1/chat/projects"
 
-        # Пытаемся создать проект
-        try:
-            body = _json.dumps({"code": "PIPELINE", "name": "Pipeline Test Project"}).encode()
-            resp = await self.client.post(base_url, content=body, headers=headers)
-            if resp.status_code == 201:
-                data = resp.json()
-                pid = data.get("project_id") or (data.get("data") or {}).get("id")
-                if pid:
-                    ctx.set("project_id", pid)
-                    print(f"     ℹ Создан проект project_id={pid}")
-                    return
-        except Exception:
-            pass
-
-        # Если не создан — получаем список
-        try:
-            resp = await self.client.get(base_url, headers=headers)
-            if resp.status_code == 200:
-                data = resp.json()
-                items = data.get("items") or data.get("data") or []
-                if items:
-                    pid = items[0].get("project_id") or items[0].get("id")
+        # 1. Пытаемся создать проект (retry 3 раза)
+        for attempt in range(3):
+            try:
+                body = _json.dumps({"code": "PIPELINE", "name": "Pipeline Test Project"}).encode()
+                resp = await self.client.post(base_url, content=body, headers=headers)
+                if resp.status_code == 201:
+                    data = resp.json()
+                    pid = data.get("project_id") or (data.get("data") or {}).get("id")
                     if pid:
                         ctx.set("project_id", pid)
-                        print(f"     ℹ Получен проект project_id={pid} из списка")
+                        print(f"     ℹ Создан проект project_id={pid}")
                         return
-        except Exception:
-            pass
+                elif resp.status_code == 409:
+                    # Проект уже существует — переходим к GET
+                    break
+            except Exception:
+                if attempt < 2:
+                    await asyncio.sleep(1)
+                continue
 
-        # Fallback
-        ctx.set("project_id", 1)
-        print(f"     ⚠ Не удалось создать/получить проект, fallback project_id=1")
+        # 2. Если не создан — получаем список (retry 3 раза)
+        for attempt in range(3):
+            try:
+                resp = await self.client.get(base_url, headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    items = data.get("items") or data.get("data") or []
+                    if items:
+                        pid = items[0].get("project_id") or items[0].get("id")
+                        if pid:
+                            ctx.set("project_id", pid)
+                            print(f"     ℹ Получен проект project_id={pid} из списка")
+                            return
+            except Exception:
+                if attempt < 2:
+                    await asyncio.sleep(1)
+                continue
+
+        raise RuntimeError("Cannot create or fetch project for chat sessions")
 
     async def close(self) -> None:
         if self._client is not None:

@@ -35,7 +35,7 @@ def get_service_def() -> ServiceDef:
         # CV-4: проверка 8+ полей preview_metadata
         EndpointDef("POST", f"{API_PREFIX}/converter/preview", "converter",
             "Предпросмотр метаданных",
-            body={"task_id": "12345", "version_id": "1",
+            body={"task_id": "{task_id}", "version_id": "{version_id}",
                   "raw_json": {
                       "metadata": {"schema": "raw_ocr_v4"},
                       "document": {
@@ -71,7 +71,7 @@ def get_service_def() -> ServiceDef:
         # CV-8/CV-9: convert без document_id и version_id
         EndpointDef("POST", f"{API_PREFIX}/converter/convert", "converter",
             "Конвертация документа",
-            body={"task_id": "12345", "version_id": "1",
+            body={"task_id": "{task_id}", "version_id": "{version_id}",
                   "raw_json": {
                       "metadata": {"schema": "raw_ocr_v4"},
                       "document": {
@@ -85,7 +85,7 @@ def get_service_def() -> ServiceDef:
         # validate/document — без document_id
         EndpointDef("POST", f"{API_PREFIX}/validate/document", "validate",
             "Валидация документа",
-            body={"task_id": "12345", "version_id": "1",
+            body={"task_id": "{task_id}", "version_id": "{version_id}",
                   "raw_json": {
                       "metadata": {"schema": "raw_ocr_v4"},
                       "document": {

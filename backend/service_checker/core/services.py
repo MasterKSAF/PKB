@@ -209,43 +209,52 @@ class WebEmulator:
         self.client = httpx.AsyncClient(timeout=30)
 
     async def _ensure_project(self) -> None:
-        """Создать или получить проект для чат-сессий (QS-3)."""
+        """Create or get a project. Raises RuntimeError if impossible."""
         import json as _json
         headers = {**HEADERS_JSON}
         if self.access_token:
             headers["Authorization"] = f"Bearer {self.access_token}"
         base_url = f"{self.QUERY_URL}/api/v1/chat/projects"
 
-        # Пытаемся создать проект
-        try:
-            body = _json.dumps({"code": "WEBEMU", "name": "WebEmulator Project"}).encode()
-            resp = await self.client.post(base_url, content=body, headers=headers)
-            if resp.status_code == 201:
-                data = resp.json()
-                pid = data.get("project_id") or (data.get("data") or {}).get("id")
-                if pid:
-                    self.project_id = int(pid)
-                    log_ok(f"Создан проект project_id={self.project_id}")
-                    return
-        except Exception:
-            pass
-
-        # Если не создан — получаем список
-        try:
-            resp = await self.client.get(base_url, headers=headers)
-            if resp.status_code == 200:
-                data = resp.json()
-                items = data.get("items") or data.get("data") or []
-                if items:
-                    pid = items[0].get("project_id") or items[0].get("id")
+        # 1. Пытаемся создать проект (retry 3 раза)
+        for attempt in range(3):
+            try:
+                body = _json.dumps({"code": "WEBEMU", "name": "WebEmulator Project"}).encode()
+                resp = await self.client.post(base_url, content=body, headers=headers)
+                if resp.status_code == 201:
+                    data = resp.json()
+                    pid = data.get("project_id") or (data.get("data") or {}).get("id")
                     if pid:
                         self.project_id = int(pid)
-                        log_ok(f"Получен проект project_id={self.project_id} из списка")
+                        log_ok(f"Создан проект project_id={self.project_id}")
                         return
-        except Exception:
-            pass
+                elif resp.status_code == 409:
+                    # Проект уже существует — переходим к GET
+                    break
+            except Exception:
+                if attempt < 2:
+                    await asyncio.sleep(1)
+                continue
 
-        log_warn(f"Не удалось создать/получить проект, используется project_id={self.project_id}")
+        # 2. Если не создан — получаем список (retry 3 раза)
+        for attempt in range(3):
+            try:
+                resp = await self.client.get(base_url, headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    items = data.get("items") or data.get("data") or []
+                    if items:
+                        pid = items[0].get("project_id") or items[0].get("id")
+                        if pid:
+                            self.project_id = int(pid)
+                            log_ok(f"Получен проект project_id={self.project_id} из списка")
+                            return
+            except Exception:
+                if attempt < 2:
+                    await asyncio.sleep(1)
+                continue
+
+        raise RuntimeError("Не удалось создать или получить проект для чат-сессий")
 
     async def __aenter__(self):
         return self

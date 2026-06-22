@@ -254,7 +254,7 @@ def get_service_def() -> ServiceDef:
         # ── Drafts CRUD (internal, для Orchestrator) ──
         EndpointDef("POST", f"{API_PREFIX}/registry/drafts/", "drafts",
             "Создать запись черновика",
-            body={"document_id": 1, "title": "Тестовый черновик"},
+            body={"document_id": "{doc_id}", "title": "Тестовый черновик"},
             expected_status={201, 409}),
         EndpointDef("GET", f"{API_PREFIX}/registry/drafts/", "drafts",
             "Список черновиков",
