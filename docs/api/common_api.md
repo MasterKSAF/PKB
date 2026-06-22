@@ -414,7 +414,8 @@ GET .../{doc_id}/status?longpoll=15
 | `GET /registry/terminology/*` | ✓ | ✓ | ✓ |
 | `POST /PUT /PATCH /DELETE /registry/terminology/*` | ✗ | ✓ | ✓ |
 | `GET /registry/documents/*` | ✓ | ✓ | ✓ |
-| `POST /PUT /PATCH /DELETE /registry/documents/*` | ✗ | ✓ | ✓ |
+| `POST /registry/documents/search` | ✓ | ✓ | ✓ |
+| `POST /PUT /PATCH /DELETE /registry/documents/*` (кроме search) | ✗ | ✓ | ✓ |
 | `GET /registry/common/*` | ✓ | ✓ | ✓ |
 | `GET /registry/categories/*` | ✓ | ✓ | ✓ |
 | `POST /PUT /DELETE /registry/categories/*` | ✗ | ✓ | ✓ |

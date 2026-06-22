@@ -46,8 +46,6 @@ Gateway объединяет API всех внутренних сервисов 
 | `/api/v1/drafts/*` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md) |
 | `/api/v1/chat/*` | Query Service | `8083` | [query_service_api.md](query_service_api.md) |
 | `/api/v1/text/*` | Query Service | `8083` | [query_service_api.md](query_service_api.md) |
-| `/api/v1/search/*` | Query Service | `8083` | [query_service_api.md](query_service_api.md) — группа search |
-| `/api/v1/ask` | Query Service | `8083` | [query_service_api.md](query_service_api.md) — POST /ask |
 | `/api/v1/registry/classifiers/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
 | `/api/v1/registry/terminology/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
 | `/api/v1/registry/common/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |

@@ -387,9 +387,7 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 - Сохранение истории чата и сбора обратной связи
 - Поиск по истории сообщений внутри сессии (`POST /chat/sessions/{id}/messages/search`)
 - Longpoll-механизм для асинхронного ожидания ответа
-- Текстовый поиск (`POST /text/search`) и вопрос-ответ (`POST /text/ask`)
-- Поиск документов по structured-запросу (`POST /documents/search`, `GET /documents/search`)
-- Вопрос по документам в свободной форме (`POST /ask`)
+- Текстовый поиск (`POST /text/search`)
 
 ---
 
@@ -409,6 +407,7 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 - Реестр терминов с нормализацией, синонимами и поиском
 - Быстрая проверка уникальности документа по метаданным (`POST /registry/documents/check-uniqueness`)
 - Экспорт и массовый импорт документов
+- Семантический поиск документов по structured-запросу (`POST /registry/documents/search`)
 - Статистика по документам, классификаторам, терминологии
 
 ---
