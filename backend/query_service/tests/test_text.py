@@ -16,6 +16,7 @@ async def test_text_search(client):
     assert "content" in result
     assert "score" in result
     assert "section_id" in result
+    assert "enrichment_skipped" in data
 
 
 @pytest.mark.asyncio
