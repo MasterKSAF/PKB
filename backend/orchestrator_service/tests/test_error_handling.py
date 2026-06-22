@@ -189,13 +189,14 @@ class TestEndpointErrorResponses:
         assert "detail" in data
 
     def test_documents_search_no_longer_returns_search_results(self, client: TestClient):
-        """POST /documents/search was removed — no longer returns 200 with results."""
+        """GET /documents/* перенесены в registry-service. В оркестраторе
+        остался только POST /documents/{id}/reprocess, поэтому
+        /documents/search не маршрутизируется → 404."""
         response = client.post(
             "/api/v1/documents/search",
             json={"query": "test"},
         )
-        # Matches /documents/{doc_id} route with doc_id="search" → 405 or 404
-        assert response.status_code in (404, 405)
+        assert response.status_code == 404
 
 
 

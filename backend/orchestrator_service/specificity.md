@@ -114,6 +114,17 @@ LLM-ответы проверяются на корректность форма
 - `rag_client.py`: эндпоинт `/rag/index` вместо `/rag/build`, старая структура ответа.
 - `citation_validator.py`: проверяет `idx >= 1` (1-based), а спецификация требует 0-based `[0, len(sources))`.
 
+### 2.5. GET /documents/* в оркестраторе — лишние эндпоинты (22.06)
+В `app/api/v1/endpoints/documents.py` находилось ~700 LOC мок-эндпоинтов для чтения документов (list, get, status, file, history, errors, parameters, queue, pages/*, versions, approve, delete). Эти операции — зона `registry-service` (см. `docs/api/registry_service_api.md`, группа `documents`).
+
+**Причина появления:** исторически оркестратор проектировался как прокси, но позже был перепроектирован на draft-first с Registry как источником правды. GET-эндпоинты остались как неиспользуемый код.
+
+**Решение (22.06):**
+- Удалены все GET /documents/*, POST /documents/{id}/versions, POST /documents/{id}/approve, DELETE /documents/{id} из orchestrator.
+- Сохранён только `POST /documents/{id}/reprocess` (P2I-9) — pipeline-операция, требующая управления Celery-задачей.
+- `app/schemas/documents.py` сокращён до `ReprocessRequest/Response/Mode`.
+- Тесты `tests/test_documents_api.py` — удалены классы для удалённых эндпоинтов, оставлен только `TestDocumentReprocess`.
+
 ## 3. Технические долги
 
 ### 3.1. Integration tests (✅ переписаны)

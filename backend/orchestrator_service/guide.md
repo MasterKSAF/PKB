@@ -14,6 +14,17 @@
 - Черновики и документы живут в Registry.
 - Orchestrator обращается к Registry через RegistryServiceClient.
 
+### 2.1. Scope эндпоинтов оркестратора (22.06.2026)
+Orchestrator **не выставляет** GET-операции над документами. Чтение/CRUD документов — зона Registry (`/registry/documents/*`, см. `docs/api/registry_service_api.md`).
+
+В оркестраторе остаются только:
+- `/drafts/*` — управление черновиками (proxy к Registry + логика пайплайна)
+- `/tasks/*` — мониторинг pipeline-задач (внутреннее, для админов)
+- `/system/health`, `/health/live`, `/health/ready` — health-check
+- `POST /documents/{id}/reprocess` — pipeline-операция переиндексации (P2I-9), единственная оставшаяся операция над документами, т.к. требует управления Celery-задачей.
+
+> Не путать с POST `/drafts` — это основная точка входа для загрузки документов. Документы в реестре создаются автоматически через `Registry.create_document()` при `approve`.
+
 ### 3. Двухфазный pipeline
 - **Preview фаза:** быстрая обработка первых страниц (OCR/Parser → Converter-validator) → решение пользователя.
 - **Full фаза:** полная обработка (OCR/Parser → Converter-validator → Registry → RAG Builder).

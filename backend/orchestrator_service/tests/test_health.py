@@ -146,5 +146,7 @@ class TestOpenAPIEndpoints:
         data = response.json()
         paths = data.get("paths", {})
         assert "/api/v1/system/health" in paths
-        assert "/api/v1/documents/" in paths
+        # Документы — зона registry-service. В оркестраторе остался только
+        # POST /documents/{id}/reprocess (P2I-9).
+        assert "/api/v1/documents/{doc_id}/reprocess" in paths
 
