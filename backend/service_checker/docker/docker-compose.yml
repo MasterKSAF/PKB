@@ -44,6 +44,9 @@ x-env-common: &env-common
   EMBEDDING_API_KEY: sk-noop
   SEARCH_DEFAULT_TOP_K: 10
   SEARCH_MAX_TOP_K: 100
+  # LLM (converter-validator)
+  OPENAI_API_KEY: ${ROUTERAI_API_KEY:-}
+  OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://routerai.ru/api/v1}
 
 services:
   # ============================================================================
@@ -109,8 +112,21 @@ services:
       - pkb-net
 
   # ============================================================================
-  # Hugging Face Text Embeddings Inference (TEI) — CPU-only, локальная модель
+  # TEI model download (one-shot) + Hugging Face TEI — CPU-only
   # ============================================================================
+  tei-init:
+    build:
+      context: .
+      dockerfile: Dockerfile.base
+    image: pkb/tei-init:local
+    container_name: pkb-tei-init
+    volumes:
+      - .:/work
+    entrypoint: ["python", "/work/prepare_tei_model.py"]
+    networks:
+      - pkb-net
+    restart: "no"
+
   tei:
     image: ghcr.io/huggingface/text-embeddings-inference:cpu-latest
     container_name: pkb-tei
@@ -120,6 +136,9 @@ services:
       - "18092:80"
     volumes:
       - ./tei_model:/data
+    depends_on:
+      tei-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:80/health"]
       interval: 30s

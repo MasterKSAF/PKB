@@ -1,6 +1,5 @@
 """Unit-тесты для алгоритма Reciprocal Rank Fusion (RRF)."""
 
-
 from app.core.search.rrf import reciprocal_rank_fusion
 
 

@@ -8,8 +8,9 @@ from app.core.task_models import TaskInfo, TaskStatus
 
 class TestTaskInfo:
     def test_create_task_info(self):
-        task = TaskInfo(task_id=42, version_id="v1", file_key="test.pdf", options={"opt": True})
+        task = TaskInfo(task_id=42, draft_id=1, version_id="v1", file_key="test.pdf", options={"opt": True})
         assert task.task_id == 42
+        assert task.draft_id == 1
         assert task.version_id == "v1"
         assert task.file_key == "test.pdf"
         assert task.options == {"opt": True}
@@ -21,7 +22,7 @@ class TestTaskInfo:
         assert task.started_at.tzinfo is not None
 
     def test_update_changes_version(self):
-        task = TaskInfo(1, "v", "k", {})
+        task = TaskInfo(1, 1, "v", "k", {})
         old_version = task.get_version()
         task.update(progress_percent=50, step="parsing")
         assert task.progress_percent == 50
@@ -29,15 +30,14 @@ class TestTaskInfo:
         assert task.get_version() == old_version + 1
 
     def test_update_ignores_non_existent_fields(self):
-        """Обновление с несуществующим полем не вызывает ошибку и не изменяет версию."""
-        task = TaskInfo(1, "v", "k", {})
+        task = TaskInfo(1, 1, "v", "k", {})
         old_version = task.get_version()
         task.update(non_existent_field="value", another=123)
-        assert task.get_version() == old_version  # версия не увеличилась
+        assert task.get_version() == old_version
         assert not hasattr(task, "non_existent_field")
 
     def test_multiple_updates(self):
-        task = TaskInfo(1, "v", "k", {})
+        task = TaskInfo(1, 1, "v", "k", {})
         versions = []
         for i in range(3):
             task.update(pages_total=i + 1)

@@ -23,7 +23,7 @@ from app.config import settings
 # ===================== DownloadStep =====================
 @pytest.mark.asyncio
 async def test_download_step_success():
-    ctx = ProcessingContext(task_id=1, version_id="v1", file_key="folder/test.pdf")
+    ctx = ProcessingContext(task_id=1, draft_id=1, version_id="v1", file_key="folder/test.pdf")
     mock_minio = AsyncMock()
     mock_minio.download_file.return_value = b"pdfdata"
 
@@ -37,7 +37,7 @@ async def test_download_step_success():
 
 @pytest.mark.asyncio
 async def test_download_step_storage_error():
-    ctx = ProcessingContext(task_id=1, version_id="v1", file_key="missing.pdf")
+    ctx = ProcessingContext(task_id=1, draft_id=1, version_id="v1", file_key="missing.pdf")
     mock_minio = AsyncMock()
     mock_minio.download_file.side_effect = StorageError("download missing.pdf")
 
@@ -50,7 +50,7 @@ async def test_download_step_storage_error():
 # ===================== ValidateStep =====================
 @pytest.mark.asyncio
 async def test_validate_step_success():
-    ctx = ProcessingContext(task_id=1, version_id="v1", file_key="test.pdf", file_bytes=b"fake")
+    ctx = ProcessingContext(task_id=1, draft_id=1, version_id="v1", file_key="test.pdf", file_bytes=b"fake")
     with patch("app.services.pipeline.steps.Validator.validate", new_callable=AsyncMock) as mock_validate:
         mock_validate.return_value = "application/pdf"
         step = ValidateStep()
@@ -62,7 +62,7 @@ async def test_validate_step_success():
 # ===================== PagesTotalStep =====================
 @pytest.mark.asyncio
 async def test_pages_total_step_pdf():
-    ctx = ProcessingContext(task_id=1, version_id="v1", file_key="test.pdf", file_bytes=b"%PDF-1.4")
+    ctx = ProcessingContext(task_id=1, draft_id=1, version_id="v1", file_key="test.pdf", file_bytes=b"%PDF-1.4")
     ctx.mime_type = "application/pdf"
     ctx.track_progress = True
     with patch("app.services.pipeline.steps.PdfReader") as mock_reader:
@@ -78,7 +78,7 @@ async def test_pages_total_step_pdf():
 # ===================== ParseStep =====================
 @pytest.mark.asyncio
 async def test_parse_step_success():
-    ctx = ProcessingContext(task_id=1, version_id="v1", file_key="test.pdf",
+    ctx = ProcessingContext(task_id=1, draft_id=1, version_id="v1", file_key="test.pdf",
                             mime_type="application/pdf", file_bytes=b"fake")
     ctx.track_progress = True
 
@@ -95,7 +95,7 @@ async def test_parse_step_success():
 # ===================== NormalizeStep =====================
 @pytest.mark.asyncio
 async def test_normalize_step_success():
-    ctx = ProcessingContext(task_id=1, version_id="v1", file_key="test.pdf",
+    ctx = ProcessingContext(task_id=1, draft_id=1, version_id="v1", file_key="test.pdf",
                             parse_result=ParseResult(full_json={}, total_pages=1))
     mock_normalizer = AsyncMock()
     mock_normalizer.normalize.return_value = {"normalized": "json"}
@@ -107,7 +107,7 @@ async def test_normalize_step_success():
 # ===================== StoreResultStep =====================
 @pytest.mark.asyncio
 async def test_store_result_step():
-    ctx = ProcessingContext(task_id=1, version_id="v1", file_key="test.pdf",
+    ctx = ProcessingContext(task_id=1, draft_id=1, version_id="v1", file_key="test.pdf",
                             parse_result=ParseResult(full_json={}, total_pages=10),
                             final_json={"result": "ok"})
     ctx.track_progress = True
@@ -132,7 +132,7 @@ async def test_store_result_step():
 
 @pytest.mark.asyncio
 async def test_store_result_step_with_preview_not_supported():
-    ctx = ProcessingContext(task_id=1, version_id="v1", file_key="test.pdf", track_progress=True,
+    ctx = ProcessingContext(task_id=1, draft_id=1, version_id="v1", file_key="test.pdf", track_progress=True,
                             max_pages=2, preview_not_supported=True,
                             parse_result=ParseResult(full_json={}, total_pages=10))
     ctx.final_json = {"content": {}}
@@ -154,7 +154,7 @@ async def test_store_result_step_with_preview_not_supported():
 # ===================== UploadImagesStep =====================
 @pytest.mark.asyncio
 async def test_upload_images_step_full_mode():
-    ctx = ProcessingContext(task_id=1, version_id="v1", file_key="test.pdf", track_progress=True)
+    ctx = ProcessingContext(task_id=1, draft_id=1, version_id="v1", file_key="test.pdf", track_progress=True)
     parse_result = ParseResult(
         full_json={"pages": [{"image": {"_temp_path": "/tmp/img.png"}}]},
         images=[(1, "/tmp/img.png", ".png")],
@@ -163,10 +163,9 @@ async def test_upload_images_step_full_mode():
     ctx.parse_result = parse_result
     ctx.temp_dir = "/tmp"
 
-    # Мокаем minio_client в пространстве имён steps
     mock_minio = AsyncMock()
     mock_minio.upload_image.return_value = "minio_key_123"
-    mock_minio._ensure_bucket = AsyncMock()  # заглушка, чтобы не было реальных вызовов
+    mock_minio._ensure_bucket = AsyncMock()
 
     with patch("app.services.pipeline.steps.minio_client", mock_minio):
         with patch("os.path.exists", return_value=True):
@@ -185,20 +184,19 @@ async def test_upload_images_step_full_mode():
     assert new_ctx.parse_result.full_json["pages"][0]["image"]["image_key"] == "minio_key_123"
 
 
-
 @pytest.mark.asyncio
 async def test_upload_images_step_preview_mode():
-    ctx = ProcessingContext(task_id=1, version_id="v1", file_key="test.pdf", track_progress=False)
+    ctx = ProcessingContext(task_id=1, draft_id=1, version_id="v1", file_key="test.pdf", track_progress=False)
     ctx.temp_dir = "/tmp"
     step = UploadImagesStep()
     with patch("shutil.rmtree") as mock_rmtree:
         new_ctx = await step.execute(ctx)
-    mock_rmtree.assert_not_called()  # в preview директория НЕ удаляется
+    mock_rmtree.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_upload_images_step_full_mode_with_images():
-    ctx = ProcessingContext(task_id=1, version_id="v1", file_key="test.pdf", track_progress=True)
+    ctx = ProcessingContext(task_id=1, draft_id=1, version_id="v1", file_key="test.pdf", track_progress=True)
     parse_result = ParseResult(
         full_json={"pages": [{"image": {"_temp_path": "/tmp/img.png"}}]},
         images=[(1, "/tmp/img.png", ".png")],
@@ -234,7 +232,7 @@ async def test_truncate_pdf_step_reduces_pages():
     writer.write(pdf_bytes)
     pdf_bytes.seek(0)
 
-    ctx = ProcessingContext(task_id=1, version_id="v1", file_key="test.pdf",
+    ctx = ProcessingContext(task_id=1, draft_id=1, version_id="v1", file_key="test.pdf",
                             max_pages=3, file_bytes=pdf_bytes.read())
     step = TruncatePdfStep()
     new_ctx = await step.execute(ctx)
@@ -245,7 +243,7 @@ async def test_truncate_pdf_step_reduces_pages():
 # ===================== StandardizeStep =====================
 @pytest.mark.asyncio
 async def test_standardize_step():
-    ctx = ProcessingContext(task_id=1, version_id="v1", file_key="test.pdf",
+    ctx = ProcessingContext(task_id=1, draft_id=1, version_id="v1", file_key="test.pdf",
                             final_json={"content": "raw"}, original_file_name="orig.pdf")
     mock_std = MagicMock()
     mock_std.transform.return_value = {"content": "standardized"}
@@ -259,7 +257,7 @@ async def test_standardize_step():
 async def test_save_json_to_file_step_enabled():
     with patch.object(settings, 'save_json_to_dir', True):
         with patch.object(settings, 'json_output_dir', './output'):
-            ctx = ProcessingContext(task_id=123, version_id="v1", file_key="test.pdf",
+            ctx = ProcessingContext(task_id=123, draft_id=1, version_id="v1", file_key="test.pdf",
                                     final_json={"result": "data"})
             with patch("builtins.open", MagicMock()) as mock_open:
                 with patch("json.dump") as mock_dump:

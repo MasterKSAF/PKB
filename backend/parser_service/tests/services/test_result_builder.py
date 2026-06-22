@@ -15,8 +15,9 @@ def test_result_builder_full():
             "status": "completed"
         }
     }
-    result = ResultBuilder.build(task_id=123, final_json=final_json, mode="full")
+    result = ResultBuilder.build(task_id=123, draft_id=1, final_json=final_json, mode="full")
     assert result["task_id"] == 123
+    assert result["draft_id"] == 1
     assert result["metadata"]["mode"] == "full"
     assert result["metadata"]["preview_not_supported"] is False
     assert result["metadata"]["schema"] == settings.parsing_schema
@@ -36,7 +37,7 @@ def test_result_builder_preview_with_flag():
         }
     }
     result = ResultBuilder.build(
-        task_id=456, final_json=final_json, mode="preview", preview_not_supported=True
+        task_id=456, draft_id=1, final_json=final_json, mode="preview", preview_not_supported=True
     )
     assert result["metadata"]["mode"] == "preview"
     assert result["metadata"]["preview_not_supported"] is True
@@ -45,8 +46,8 @@ def test_result_builder_preview_with_flag():
 
 
 def test_result_builder_missing_fields():
-    final_json = {}  # нет content
-    result = ResultBuilder.build(task_id=1, final_json=final_json, mode="full")
+    final_json = {}
+    result = ResultBuilder.build(task_id=1, draft_id=1, final_json=final_json, mode="full")
     assert result["document"] == {}
     assert result["quality"] == {}
     assert result["errors"] == []

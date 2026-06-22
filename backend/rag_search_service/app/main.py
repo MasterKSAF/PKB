@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from contextlib import asynccontextmanager
 
@@ -32,7 +33,7 @@ async def lifespan(app: FastAPI):
         settings.service_version,
         settings.service_port,
     )
-    
+
     # Инициализируем пул БД
     try:
         await init_db_pool()
@@ -40,16 +41,16 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error("Failed to initialize database pool: %s", e)
         # Продолжаем запуск, health check покажет ошибку
-    
+
     logger.info("Service ready")
 
     yield
 
     logger.info("Shutting down %s", settings.service_name)
-    
+
     # Закрываем пул БД
     await close_db_pool()
-    
+
     logger.info("Shutdown complete")
 
 
@@ -61,6 +62,17 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+
+# --- OpenTelemetry instrumentation ---
+otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+if otlp_endpoint:
+    from opentelemetry import trace
+
+    from app.core.telemetry import instrument_fastapi
+
+    tracer_provider = trace.get_tracer_provider()
+    instrument_fastapi(app, tracer_provider)
+    logger.info("OTLP export enabled → %s", otlp_endpoint)
 
 # CORS для локальной разработки
 app.add_middleware(
@@ -76,6 +88,7 @@ add_request_logging_middleware(app)
 
 
 # --- Exception handlers (согласно common_api.md) ---
+
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:

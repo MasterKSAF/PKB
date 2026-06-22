@@ -6,7 +6,7 @@ from app.core.task_models import TaskInfo, TaskStatus
 
 @pytest.mark.asyncio
 async def test_v1_status_immediate_for_completed(async_client, clear_task_store):
-    task = TaskInfo(201, "", "f", {})
+    task = TaskInfo(201, 1, "", "f", {})
     task.status = TaskStatus.COMPLETED
     task.progress_percent = 100
     task_store.add(task)
@@ -19,7 +19,7 @@ async def test_v1_status_immediate_for_completed(async_client, clear_task_store)
 @pytest.mark.asyncio
 async def test_v1_status_longpoll_waits_for_change(async_client, clear_task_store):
     task_id = 202
-    task = TaskInfo(task_id, "", "f", {})
+    task = TaskInfo(task_id, 1, "", "f", {})
     task.status = TaskStatus.ACCEPTED
     task_store.add(task)
 

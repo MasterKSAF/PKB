@@ -11,7 +11,9 @@ class EmbeddingProvider(Protocol):
     Реализации:
     - stub
     - openai
-    - local
+    - openai_compatible
+    - infinity
+    - external
     """
     def create_embedding(self, text: str) -> list[float]:
         ...

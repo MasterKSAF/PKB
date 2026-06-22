@@ -1,5 +1,6 @@
 # tests/unit/test_chunking.py
 
+import pytest
 import json
 from pathlib import Path
 
@@ -146,3 +147,184 @@ def test_long_text_is_split_into_multiple_chunks():
     )
 
     assert chunks[0].content != chunks[1].content
+
+def test_chunking_uses_semantic_1024_by_default(monkeypatch):
+    monkeypatch.setattr(
+        "rag_builder.chunking.service.settings.CHUNK_STRATEGY",
+        "semantic_1024",
+    )
+
+    service = ChunkingService()
+
+    assert service.chunk_strategy == "semantic_1024"
+    assert service.MAX_CHUNK_CHARS == 4000
+    assert service.OVERLAP_RATIO == 0.2
+    assert service.prefer_sentence_boundary is True
+
+def test_chunking_supports_semantic_512():
+    service = ChunkingService(chunk_strategy="semantic_512")
+
+    assert service.chunk_strategy == "semantic_512"
+    assert service.MAX_CHUNK_CHARS == 2000
+    assert service.OVERLAP_RATIO == 0.2
+    assert service.prefer_sentence_boundary is True
+
+def test_chunking_supports_fixed_256():
+    service = ChunkingService(chunk_strategy="fixed_256")
+
+    assert service.chunk_strategy == "fixed_256"
+    assert service.MAX_CHUNK_CHARS == 1000
+    assert service.OVERLAP_RATIO == 0.1
+    assert service.prefer_sentence_boundary is False
+
+def test_chunking_rejects_unknown_strategy():
+    with pytest.raises(ValueError, match="Unsupported CHUNK_STRATEGY"):
+        ChunkingService(chunk_strategy="unknown_strategy")
+
+
+def test_protected_span_is_not_split_between_chunks():
+    prefix = "A " * 450
+    protected_block = (
+            "BEGIN_PROTECTED "
+            + ("Z " * 125)
+            + "END_PROTECTED"
+    )
+    suffix = "B " * 600
+
+    text = prefix + protected_block + suffix
+
+    span_start = len(prefix)
+    span_end = span_start + len(protected_block)
+
+    data = {
+        "metadata": {
+            "schema": "schema_registry_for_rag_v2",
+            "document_id": 1,
+            "document_version_id": 1,
+        },
+        "document": {
+            "id": 1,
+            "document_version_id": 1,
+            "pkb_code": "04",
+            "doc_code": "TEST",
+            "title": "Test",
+        },
+        "sections": [
+            {
+                "section_id": 1,
+                "parent_id": None,
+                "clause": "1",
+                "title": None,
+                "level": 1,
+                "path": "1",
+                "page": 1,
+                "bbox": None,
+                "type": "text",
+                "content": {
+                    "text": text,
+                },
+                "references": [],
+            }
+        ],
+        "protected_spans": [
+            {
+                "section_id": 1,
+                "start_offset": span_start,
+                "end_offset": span_end,
+                "reason": "test protected block",
+            }
+        ],
+        "terminology": [],
+        "options": {},
+    }
+
+    request = BuildRequest.model_validate(data)
+
+    service = ChunkingService(chunk_strategy="fixed_256")
+    service.MAX_CHUNK_CHARS = 1000
+    service.OVERLAP_RATIO = 0.0
+
+    chunks = service.build_chunks(request)
+
+    assert len(chunks) > 1
+    assert any(protected_block in chunk.content for chunk in chunks)
+
+    for chunk in chunks:
+        contains_start = "BEGIN_PROTECTED" in chunk.content
+        contains_end = "END_PROTECTED" in chunk.content
+
+        if contains_start or contains_end:
+            assert protected_block in chunk.content
+
+
+def test_protected_span_from_other_section_is_ignored():
+    prefix = "A " * 450
+    protected_block = (
+            "BEGIN_PROTECTED "
+            + ("Z " * 125)
+            + "END_PROTECTED"
+    )
+    suffix = "B " * 600
+
+    text = prefix + protected_block + suffix
+
+    span_start = len(prefix)
+    span_end = span_start + len(protected_block)
+
+    data = {
+        "metadata": {
+            "schema": "schema_registry_for_rag_v2",
+            "document_id": 1,
+            "document_version_id": 1,
+        },
+        "document": {
+            "id": 1,
+            "document_version_id": 1,
+            "pkb_code": "04",
+            "doc_code": "TEST",
+            "title": "Test",
+        },
+        "sections": [
+            {
+                "section_id": 1,
+                "parent_id": None,
+                "clause": "1",
+                "title": None,
+                "level": 1,
+                "path": "1",
+                "page": 1,
+                "bbox": None,
+                "type": "text",
+                "content": {
+                    "text": text,
+                },
+                "references": [],
+            }
+        ],
+        "protected_spans": [
+            {
+                "section_id": 2,
+                "start_offset": span_start,
+                "end_offset": span_end,
+                "reason": "span belongs to another section",
+            }
+        ],
+        "terminology": [],
+        "options": {},
+    }
+
+    request = BuildRequest.model_validate(data)
+
+    service = ChunkingService(chunk_strategy="fixed_256")
+    service.MAX_CHUNK_CHARS = 1000
+    service.OVERLAP_RATIO = 0.0
+
+    chunks = service.build_chunks(request)
+
+    assert len(chunks) > 1
+    assert not any(protected_block in chunk.content for chunk in chunks)
+    assert any(
+        "BEGIN_PROTECTED" in chunk.content
+        and "END_PROTECTED" not in chunk.content
+        for chunk in chunks
+    )

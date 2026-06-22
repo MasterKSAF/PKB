@@ -4,12 +4,14 @@ import time
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
+from dataclasses import asdict
+
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, status
 
-from rag_builder.api.search_routes import router as search_router
 from rag_builder.core.logger import logger
 from rag_builder.models.contracts import BuildRequest
 from rag_builder.models.responses import (
+    DeleteIndexResponse,
     HealthResponse,
     IndexResponse,
     IndexStatusResponse,
@@ -39,8 +41,6 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
-
-app.include_router(search_router)
 
 
 @app.get(
@@ -95,8 +95,14 @@ def _run_indexing_job(
                 "chunks": chunks_count,
                 "embeddings": chunks_count,
             },
-            warnings=[],
-            errors=[],
+            warnings=[
+                asdict(issue)
+                for issue in result.warnings
+            ],
+            errors=[
+                asdict(issue)
+                for issue in result.errors
+            ],
         )
 
         logger.info(
@@ -126,6 +132,12 @@ def _run_indexing_job(
         )
 
 
+@app.post(
+    "/api/v1/rag/build",
+    response_model=IndexResponse,
+    response_model_exclude_none=True,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 @app.post(
     "/index",
     response_model=IndexResponse,
@@ -171,6 +183,39 @@ def index_document(
     )
 
 
+@app.delete(
+    "/api/v1/rag/build/{document_id}",
+    response_model=DeleteIndexResponse,
+)
+@app.delete(
+    "/rag/build/{document_id}",
+    response_model=DeleteIndexResponse,
+)
+def delete_document_index(document_id: int) -> DeleteIndexResponse:
+    repository = PostgresChunkRepository()
+
+    try:
+        deleted_count = repository.delete_document_index(document_id)
+    except Exception as exc:
+        logger.exception(
+            "Failed to delete index for document_id=%s",
+            document_id,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "BUILD_FAILED",
+                "message": str(exc),
+            },
+        ) from exc
+
+    return DeleteIndexResponse(
+        document_id=document_id,
+        deleted_count=deleted_count,
+        status="completed",
+    )
+
+
 @app.get(
     "/index/status/{indexing_txn_id}",
     response_model=IndexStatusResponse,
@@ -191,6 +236,10 @@ def get_indexing_status(
     return IndexStatusResponse(**job)
 
 
+@app.get(
+    "/api/v1/rag/build/{document_id}/status",
+    response_model=IndexStatusResponse,
+)
 @app.get(
     "/rag/build/{document_id}/status",
     response_model=IndexStatusResponse,

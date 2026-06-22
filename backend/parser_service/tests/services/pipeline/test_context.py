@@ -13,12 +13,11 @@ from app.services.parsers.base import ParseResult
 
 class TestProcessingContext:
     def test_create_with_required_only(self):
-        """Только обязательные поля (task_id, version_id, file_key)."""
-        ctx = ProcessingContext(task_id=123, version_id="ver-1", file_key="doc.pdf")
+        ctx = ProcessingContext(task_id=123, draft_id=1, version_id="ver-1", file_key="doc.pdf")
         assert ctx.task_id == 123
+        assert ctx.draft_id == 1
         assert ctx.version_id == "ver-1"
         assert ctx.file_key == "doc.pdf"
-        # Опциональные поля имеют значения по умолчанию
         assert ctx.options == {}
         assert ctx.file_bytes is None
         assert ctx.mime_type is None
@@ -28,10 +27,10 @@ class TestProcessingContext:
         assert ctx.original_file_name == ""
 
     def test_create_with_all_fields(self):
-        """Контекст со всеми возможными полями."""
         parse_res = ParseResult(full_json={"a": 1})
         ctx = ProcessingContext(
             task_id=456,
+            draft_id=2,
             version_id="ver-2",
             file_key="report.pdf",
             options={"extract_tables": True},
@@ -51,18 +50,15 @@ class TestProcessingContext:
         assert ctx.original_file_name == "original.pdf"
 
     def test_options_default_factory(self):
-        """Проверка, что options является отдельным словарём для каждого экземпляра."""
-        ctx1 = ProcessingContext(task_id=1, version_id="v1", file_key="a.pdf")
-        ctx2 = ProcessingContext(task_id=2, version_id="v2", file_key="b.pdf")
+        ctx1 = ProcessingContext(task_id=1, draft_id=1, version_id="v1", file_key="a.pdf")
+        ctx2 = ProcessingContext(task_id=2, draft_id=1, version_id="v2", file_key="b.pdf")
         ctx1.options["test"] = 42
         assert "test" not in ctx2.options
 
     def test_original_file_name_default_empty_string(self):
-        """original_file_name по умолчанию – пустая строка."""
-        ctx = ProcessingContext(task_id=1, version_id="v", file_key="f")
+        ctx = ProcessingContext(task_id=1, draft_id=1, version_id="v", file_key="f")
         assert ctx.original_file_name == ""
 
     def test_max_pages_optional_none(self):
-        """max_pages по умолчанию None."""
-        ctx = ProcessingContext(task_id=1, version_id="v", file_key="f")
+        ctx = ProcessingContext(task_id=1, draft_id=1, version_id="v", file_key="f")
         assert ctx.max_pages is None

@@ -113,7 +113,7 @@ pytest
 Текущее состояние:
 
 ```text
-29 passed
+46 passed
 ```
 
 ---
@@ -216,15 +216,17 @@ docker compose down
 Запускает индексацию документа в асинхронном режиме.
 
 Текущий MVP-вход всё ещё использует `BuildRequest` / chunk-container.
-`document_version_id` временно остаётся во входном контейнере как legacy/audit-поле до отдельного PR по синхронизации полного контракта Builder.
+`document_version_id` больше не является обязательным входным полем.
+Если legacy-контейнер всё ещё передаёт `document_version_id`, Builder принимает его для обратной совместимости.
+Если поле отсутствует, Builder временно использует `document_id` как legacy/audit `document_version_id` внутри Chunk/DB/Search.
 
 Пример запроса:
 
 ```json
 {
   "metadata": {
-    "document_id": 420000,
-    "document_version_id": 420001
+    "schema": "schema_registry_for_rag_v2",
+    "document_id": 420000
   }
 }
 ```
@@ -397,6 +399,17 @@ sql/
 * разбиение по предложениям
 * fallback-разбиение по пробелам
 
+Supported chunk strategies:
+
+- `semantic_512` — approximately 512 tokens, sentence-aware split, 20% overlap.
+- `semantic_1024` — default strategy, approximately 1024 tokens, sentence-aware split, 20% overlap.
+- `semantic_2048` — approximately 2048 tokens, sentence-aware split, 20% overlap.
+- `fixed_256` — approximately 256 tokens, fixed-size split, 10% overlap.
+- `fixed_512` — approximately 512 tokens, fixed-size split, 10% overlap.
+
+MVP uses character-based approximation until tokenizer-based chunking is added.
+
+
 #### Embeddings
 
 * OpenAI Embeddings
@@ -404,6 +417,24 @@ sql/
 * Batch Embeddings
 * Usage Accounting
 * batch embeddings для всех чанков документа
+
+Supported embedding providers:
+
+- `stub` — local zero-vector provider for tests and offline development.
+- `openai` — official OpenAI API, uses `OPENAI_API_KEY`.
+- `openai_compatible` — OpenAI-compatible embeddings endpoint, uses `EMBEDDING_API_BASE_URL` and `EMBEDDING_API_KEY`.
+- `infinity` — alias for OpenAI-compatible local Infinity embeddings service.
+- `external` — alias for external OpenAI-compatible embeddings API.
+
+Example for local Infinity:
+
+```env
+EMBEDDING_PROVIDER=infinity
+EMBEDDING_MODEL=qwen3-embedding-4b
+EMBEDDING_DIM=2048
+EMBEDDING_API_BASE_URL=http://localhost:7997/v1
+EMBEDDING_API_KEY=
+```
 
 #### Хранение структуры документа
 
@@ -469,7 +500,7 @@ sql/
 Текущее состояние:
 
 ```text
-29 passed
+46 passed
 ```
 
 ---
@@ -512,7 +543,7 @@ document_sections
 
 Текущее состояние:
 
-- 29 тестов проходят
+- 46 тестов проходят
 - PostgreSQL persistence реализован
 - pgvector поддерживается
 - ltree поддерживается
@@ -535,6 +566,19 @@ document_sections
 * context expansion via `document_sections.path_ltree`
 * parent + direct children context
 * partial context deduplication by `document_section_id`
+
+---
+
+### POST /rag/search
+
+Совместимый endpoint поиска чанков.
+
+Использует тот же `SearchRequest` и `SearchResponse`, что legacy endpoint `POST /search`.
+
+Legacy/local alias:
+
+```text
+POST /search
 
 ---
 

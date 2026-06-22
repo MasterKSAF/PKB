@@ -5,6 +5,7 @@ from rag_builder.chunking.service import ChunkingService
 from rag_builder.models.contracts import BuildRequest
 from rag_builder.models.domain import (
     EmbeddedChunk,
+    IndexIssue,
     IndexingResult,
 )
 from rag_builder.repositories.chunk_repository import ChunkRepository
@@ -48,7 +49,11 @@ class IndexingService:
             request.metadata.document_id,
         )
 
+        warnings: list[IndexIssue] = []
+        errors: list[IndexIssue] = []
+
         if self.repository is not None:
+            self.repository.cleanup_document_index(request)
             self.repository.save_sections(request)
             self.repository.save_cross_references(request)
             self.repository.save_images(request)
@@ -63,13 +68,27 @@ class IndexingService:
             request.metadata.document_id,
         )
 
-        embedding_result = (
-            self.embedding_service.enrich_chunks(chunks)
-        )
+        if not chunks:
+            warnings.append(
+                IndexIssue(
+                    code="NO_INDEXABLE_CONTENT",
+                    message="No indexable chunks were produced",
+                    section_id=None,
+                )
+            )
 
-        embedded_chunks = embedding_result.chunks
-        total_tokens = embedding_result.token_count
-        total_cost = embedding_result.cost_usd
+            embedded_chunks: list[EmbeddedChunk] = []
+            total_tokens = 0
+            total_cost = 0.0
+
+        else:
+            embedding_result = (
+                self.embedding_service.enrich_chunks(chunks)
+            )
+
+            embedded_chunks = embedding_result.chunks
+            total_tokens = embedding_result.token_count
+            total_cost = embedding_result.cost_usd
 
         if self.repository is not None:
             self.repository.save_chunks(
@@ -81,4 +100,6 @@ class IndexingService:
             chunks=embedded_chunks,
             embedding_tokens=total_tokens,
             embedding_cost_usd=total_cost,
+            warnings=warnings,
+            errors=errors,
         )

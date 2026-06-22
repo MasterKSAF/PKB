@@ -20,6 +20,7 @@ from app.core.search.hybrid import hybrid_search
 # Вспомогательные моки
 # ──────────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture
 def mock_conn():
     """Мок подключения к БД."""
@@ -43,6 +44,8 @@ def mock_settings():
         settings = AsyncMock()
         settings.search_fetch_multiplier = 2
         settings.search_rrf_k = 60
+        settings.rerank_top_n = 50
+        settings.search_top_k = 10
         mock.return_value = settings
         yield mock
 
@@ -50,6 +53,7 @@ def mock_settings():
 # ──────────────────────────────────────────────────────────────────────
 # Тесты _run_with_retry (через hybrid_search с моками dense/sparse)
 # ──────────────────────────────────────────────────────────────────────
+
 
 class TestRetryMechanism:
     """Проверка retry-логики: 2 попытки, exponential backoff."""
@@ -65,7 +69,10 @@ class TestRetryMechanism:
             ]
 
             results, total_found = await hybrid_search(
-                mock_conn, query="test", top_k=5, search_type="dense",
+                mock_conn,
+                query="test",
+                top_k=5,
+                search_type="dense_rerank",
             )
 
             assert len(results) == 1
@@ -81,7 +88,10 @@ class TestRetryMechanism:
 
             with pytest.raises(Exception, match="Persistent DB error"):
                 await hybrid_search(
-                    mock_conn, query="test", top_k=5, search_type="dense",
+                    mock_conn,
+                    query="test",
+                    top_k=5,
+                    search_type="dense_rerank",
                 )
 
             # Должен быть вызван 3 раза (1 оригинал + 2 retry)
@@ -98,7 +108,10 @@ class TestRetryMechanism:
             ]
 
             results, total_found = await hybrid_search(
-                mock_conn, query="test", top_k=5, search_type="dense",
+                mock_conn,
+                query="test",
+                top_k=5,
+                search_type="dense_rerank",
             )
 
             assert len(results) == 1
@@ -111,7 +124,10 @@ class TestRetryMechanism:
             mock_dense.return_value = [1, 2]
 
             results, total_found = await hybrid_search(
-                mock_conn, query="test", top_k=5, search_type="dense",
+                mock_conn,
+                query="test",
+                top_k=5,
+                search_type="dense_rerank",
             )
 
             assert len(results) == 2
@@ -121,6 +137,7 @@ class TestRetryMechanism:
 # ──────────────────────────────────────────────────────────────────────
 # Тесты fallback
 # ──────────────────────────────────────────────────────────────────────
+
 
 class TestFallbackMechanism:
     """Проверка fallback: dense→sparse, sparse→dense, оба упали."""
@@ -136,7 +153,10 @@ class TestFallbackMechanism:
             mock_sparse.return_value = [1, 2]
 
             results, total_found = await hybrid_search(
-                mock_conn, query="test", top_k=5, search_type="hybrid",
+                mock_conn,
+                query="test",
+                top_k=5,
+                search_type="hybrid_rrf_rerank",
             )
 
             # Должны быть результаты от sparse
@@ -155,7 +175,10 @@ class TestFallbackMechanism:
             mock_sparse.side_effect = Exception("Sparse crashed")
 
             results, total_found = await hybrid_search(
-                mock_conn, query="test", top_k=5, search_type="hybrid",
+                mock_conn,
+                query="test",
+                top_k=5,
+                search_type="hybrid_rrf_rerank",
             )
 
             # Должны быть результаты от dense
@@ -175,7 +198,10 @@ class TestFallbackMechanism:
 
             with pytest.raises(Exception, match="Sparse error"):
                 await hybrid_search(
-                    mock_conn, query="test", top_k=5, search_type="hybrid",
+                    mock_conn,
+                    query="test",
+                    top_k=5,
+                    search_type="hybrid_rrf_rerank",
                 )
 
             # Оба должны быть вызваны по 3 раза
@@ -183,7 +209,9 @@ class TestFallbackMechanism:
             assert mock_sparse.call_count == 3
 
     @pytest.mark.asyncio
-    async def test_fallback_dense_fails_sparse_succeeds_rerank(self, mock_conn, mock_embedding, mock_settings):
+    async def test_fallback_dense_fails_sparse_succeeds_rerank(
+        self, mock_conn, mock_embedding, mock_settings
+    ):
         """Dense падает, sparse успешен — RRF работает с одним списком."""
         with (
             patch("app.core.search.hybrid.dense_search") as mock_dense,
@@ -193,7 +221,11 @@ class TestFallbackMechanism:
             mock_sparse.return_value = [1, 2]
 
             results, total_found = await hybrid_search(
-                mock_conn, query="test", top_k=5, search_type="hybrid", rerank=True,
+                mock_conn,
+                query="test",
+                top_k=5,
+                search_type="hybrid_rrf_rerank",
+                rerank=True,
             )
 
             # RRF с одним списком: скоры должны быть 1/(k+rank)
@@ -203,8 +235,10 @@ class TestFallbackMechanism:
             assert scores[0] > scores[1]
 
     @pytest.mark.asyncio
-    async def test_fallback_sparse_fails_dense_succeeds_no_rerank(self, mock_conn, mock_embedding, mock_settings):
-        """Sparse падает, dense успешен, rerank=False — результаты от dense."""
+    async def test_fallback_sparse_fails_dense_succeeds_no_rerank(
+        self, mock_conn, mock_embedding, mock_settings
+    ):
+        """Sparse падает, dense успешен, S6 hybrid_rrf — RRF с одним списком."""
         with (
             patch("app.core.search.hybrid.dense_search") as mock_dense,
             patch("app.core.search.hybrid.sparse_search") as mock_sparse,
@@ -213,9 +247,13 @@ class TestFallbackMechanism:
             mock_sparse.side_effect = Exception("Sparse error")
 
             results, total_found = await hybrid_search(
-                mock_conn, query="test", top_k=5, search_type="hybrid", rerank=False,
+                mock_conn,
+                query="test",
+                top_k=5,
+                search_type="hybrid_rrf",
+                rerank=False,
             )
 
-            # Без RRF все скоры = 1.0
+            # RRF с одним списком: score = 1/(k+1)
             assert len(results) == 1
-            assert all(score == 1.0 for score in results.values())
+            assert 1 in results
