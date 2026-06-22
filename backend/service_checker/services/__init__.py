@@ -57,6 +57,7 @@ MODE_PORTS: Dict[str, int] = {
     "rag_builder": 8090,
     "rag_search": 8091,
     "tei": 18092,
+    "minio": 19000,  # MinIO S3 API (для pipeline)
 }
 
 # Зависимости между сервисами: если сервис не отвечает, зависящие от него

@@ -13,6 +13,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
+COPY telemetry_lib ./telemetry_lib
+
+ENV OTEL_EXPORTER_OTLP_ENDPOINT=signoz-otel-collector:4317
+ENV OTEL_EXPORTER_OTLP_INSECURE=true
 
 EXPOSE 8000
 

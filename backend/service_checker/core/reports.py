@@ -128,17 +128,25 @@ def _generate_full_report(
     for pipe_name, result in pipeline_results.items():
         pipeline_passed[pipe_name] = getattr(result, "passed", False)
 
-    # Строки по каждому сервису (только из coverage)
-    for svc_key in sorted(coverage_results.keys()):
-        display_name = SERVICE_DISPLAY_NAMES.get(svc_key, svc_key)
-        cov = coverage_results[svc_key]
-        port = cov.port
-        ping_icon = "✅" if cov.ping_ok else "❌"
-        passed_ratio = f"{cov.endpoints_passed}/{cov.endpoints_total}" if cov.endpoints_total > 0 else "0/0"
-        has_failures = cov.endpoints_failed > 0 or cov.endpoints_skipped > 0
-
-        # Pipeline columns — per-service шаги в каждом пайплайне
+    # Строки по каждому сервису (все из SERVICE_DISPLAY_NAMES)
+    for svc_key, display_name in sorted(SERVICE_DISPLAY_NAMES.items()):
+        if svc_key not in MODE_PORTS:
+            continue
+        port = MODE_PORTS[svc_key]
+        cov = coverage_results.get(svc_key)
         svc_pipe_status = pipe_service_status.get(svc_key, {})
+
+        if cov:
+            ping_icon = "✅" if cov.ping_ok else "❌"
+            has_failures = cov.endpoints_failed > 0 or cov.endpoints_skipped > 0
+            passed_icon = "✅" if not has_failures else "❌"
+            svc_checkdb = _get_service_checkdb_icon(db_result, svc_key)
+        else:
+            ping_icon = "—"
+            passed_icon = "—"
+            svc_checkdb = _get_service_checkdb_icon(db_result, svc_key) if db_result else "—"
+
+        # Pipeline columns
         pipe_icons: List[str] = []
         for pname in pipe_order:
             if pname in PIPELINE_SERVICE_MAP and svc_key in PIPELINE_SERVICE_MAP[pname]:
@@ -151,38 +159,26 @@ def _generate_full_report(
             else:
                 pipe_icons.append("—")
 
-        # Overall status — все колонки зелёные или прочерк
-        all_green = cov.ping_ok and not has_failures
-        for icon in pipe_icons:
-            if icon not in ("—", "✅"):
-                all_green = False
-                break
-        status_icon = "✅" if all_green else "❌"
+        has_pipe_failures = any(icon not in ("—", "✅") for icon in pipe_icons)
+        if cov:
+            all_green = cov.ping_ok and not has_failures and not has_pipe_failures
+            status_icon = "✅" if all_green else "❌"
+        else:
+            if svc_pipe_status:
+                status_icon = "❌" if has_pipe_failures else "✅"
+            else:
+                status_icon = "🟡 dev"
 
-        # ✅ Passed column — true/false вместо 10/10
-        passed_icon = "✅" if not has_failures else "❌"
-
-        svc_checkdb = _get_service_checkdb_icon(db_result, svc_key)
         pipe_col = _service_pipeline_summary_icon(svc_pipe_status, pipe_order)
         lines.append(f"| {display_name} | {port} | {ping_icon} | {svc_checkdb} | {passed_icon} | {pipe_col} | {status_icon} |")
-
-    # Сервисы в глубокой разработке (не тестируются, с прочерками)
-    for svc_key, display_name in SERVICE_DISPLAY_NAMES.items():
-        if svc_key not in coverage_results and svc_key in MODE_PORTS:
-            port = MODE_PORTS[svc_key]
-            lines.append(f"| {display_name} | {port} | — | — | — | — | 🟡 dev |")
 
     # Итоговая строка — количества по всем столбцам
     total_services = len(coverage_results)
     cov_alive = sum(1 for r in coverage_results.values() if r.ping_ok)
-
-    # ✅ Passed: кол-во сервисов без ошибок (endpoints)
     cov_ok_count = sum(
         1 for r in coverage_results.values()
         if r.ping_ok and r.endpoints_failed == 0 and r.endpoints_skipped == 0
     )
-
-    # CheckDb: кол-во сервисов у которых есть create_all (или consumer)
     svcs_with_db = [k for k in coverage_results if k in COVERAGE_TO_STARTUP_KEY]
     svcs_checkdb_ok = sum(
         1 for k in svcs_with_db
@@ -190,7 +186,7 @@ def _generate_full_report(
     )
     svcs_checkdb_total = len(svcs_with_db)
 
-    all_cov_ok = cov_ok_count == total_services
+    all_cov_ok = cov_ok_count == total_services if total_services > 0 else True
     all_pipe_ok = all(pipeline_passed.values()) if pipeline_passed else True
     overall_status = "✅" if (all_cov_ok and all_pipe_ok) else "❌"
     pipe_total_icon = "✅" if all_pipe_ok else "❌"
@@ -227,8 +223,9 @@ def _generate_full_report(
     lines.append(f"| Service | {col_headers} | Status |")
     lines.append(f"|---------|{col_aligns}|:------:|")
 
-    for svc_key in sorted(coverage_results.keys()):
-        display_name = SERVICE_DISPLAY_NAMES.get(svc_key, svc_key)
+    for svc_key, display_name in sorted(SERVICE_DISPLAY_NAMES.items()):
+        if svc_key not in MODE_PORTS:
+            continue
         svc_pipe_status = pipe_service_status.get(svc_key, {})
         pipe_icons: List[str] = []
         for pname in pipe_order:
@@ -242,16 +239,13 @@ def _generate_full_report(
             else:
                 pipe_icons.append("—")
 
-        ps_all_green = all(icon in ("—", "✅") for icon in pipe_icons)
-        ps_status = "✅" if ps_all_green else "❌"
+        if svc_pipe_status:
+            ps_all_green = all(icon in ("—", "✅") for icon in pipe_icons)
+            ps_status = "✅" if ps_all_green else "❌"
+        else:
+            ps_status = "🟡 dev"
         pipe_cols = " | ".join(pipe_icons)
         lines.append(f"| {display_name} | {pipe_cols} | {ps_status} |")
-
-    # Dev-сервисы в pipeline-таблице
-    for svc_key, display_name in SERVICE_DISPLAY_NAMES.items():
-        if svc_key not in coverage_results and svc_key in MODE_PORTS:
-            dev_cols = " | ".join("—" for _ in pipe_order)
-            lines.append(f"| {display_name} | {dev_cols} | 🟡 dev |")
 
     # Totals row for pipeline table
     pipe_totals: List[str] = []

@@ -1,20 +1,24 @@
 import logging
-import sys
-
-
-def setup_logging() -> None:
-    """Configure root logger to stdout at INFO level. No-op if handlers already registered."""
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(logging.Formatter(
-        fmt="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    ))
-    handler.setLevel(logging.INFO)
-    root = logging.getLogger()
-    root.setLevel(logging.INFO)
-    if not root.handlers:
-        root.addHandler(handler)
 
 
 def get_logger(name: str) -> logging.Logger:
     return logging.getLogger(name)
+
+
+def setup_logging() -> None:
+    """Fallback plain-text logging used only if OTEL is not initialized."""
+    import sys
+
+    root = logging.getLogger()
+    if root.handlers:
+        return
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(
+        logging.Formatter(
+            fmt="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+    )
+    handler.setLevel(logging.INFO)
+    root.setLevel(logging.INFO)
+    root.addHandler(handler)

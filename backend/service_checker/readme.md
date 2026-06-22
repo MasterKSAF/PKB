@@ -73,7 +73,11 @@ service_checker/
 │   ├── Dockerfile.base / .full          # Образы
 │   ├── entrypoint.sh                    # Точка входа
 │   ├── prepare_tei_model.py             # Скачивание и подготовка модели TEI
-│   ├── recheck.bat                      # Быстрый re-check: сброс БД + restat + full-report
+│   ├── recheck.bat                      # Быстрый re-check: сброс БД + restart + full-report
+│   ├── recheck_spd.bat                  # Re-check для rag_builder_service_spd: сброс БД + restart + --spd
+│   ├── docker-compose.spd.yml           # Override для SPD-компоновки (supervisord.spd.conf + entrypoint.spd.sh)
+│   ├── supervisord.spd.conf             # supervisor.conf для SPD (rag-builder-spk вместо rag-builder + rag-search)
+│   ├── entrypoint.spd.sh                # entrypoint для SPD (.env для rag_builder_service_spd)
 │   └── requirements.txt                 # Python-зависимости всех сервисов
 ├── tests/
 │   ├── conftest.py                        # Общие фикстуры
@@ -113,9 +117,10 @@ service_checker/
 | RAG Builder | 8090 | 200 | RUNNING | RB-7: 202 async, RB-8: indexed |
 | RAG Search | 8091 | 200 | RUNNING | RS-6: без top_k/search_type, valid_at+filters |
 
-**supervisorctl:** ✅ Все 11 процессов RUNNING
+**supervisorctl (обычный):** ✅ 11 процессов RUNNING
+**supervisorctl (SPD):** ✅ 10 процессов (rag-builder-spk вместо rag-builder + rag-search)
 **.env файлы:** ✅ Создаются автоматически
-**.err логи:** ✅ Health check проверяет ошибки (ocr.err добавлен)
+**.err логи:** ✅ Health check проверяет ошибки
 
 > **⚠️ Частичное обновление сервисов.**
 > Docker запущен, но некоторые сервисы могут быть не полностью обновлены
@@ -177,6 +182,21 @@ docker/recheck.bat
 
 > **Внимание:** удаляет volumes с БД — каждый запуск начинается с чистого состояния.
 
+### Вариант C (SPD) — `recheck_spd.bat`
+
+```bash
+docker/recheck_spd.bat
+```
+Отличается от `recheck.bat` только компоновкой Docker:
+`rag_builder_service_spd` объединяет API rag_builder + rag_search на одном порту 8090.
+Checker подменяет порт `rag_search` → 8090 — никакой отдельной логики не требуется.
+Отчёты сохраняются с суффиксом `_spd`:
+- `check_result/api_coverage_spd.md`
+- `check_result/full_report_spd.md`
+
+Docker-композиция: `docker compose -f docker-compose.yml -f docker-compose.spd.yml`
+(с `supervisord.spd.conf` и `entrypoint.spd.sh`).
+
 ### Вариант D — вручную
 
 ```bash
@@ -219,6 +239,27 @@ python -m pytest tests/test_no_restarts.py -v         # Проверка restart
 #    прямой запуск python pipeline_test.py не работает из-за конфликта имён
 python -m service_checker docker --action full-report  # Coverage + все пайплайны + сводка
 
+# Фильтрация по сервисам (--services):
+python -m service_checker docker --action full-report --services gateway          # Только Gateway
+python -m service_checker docker --action full-report --services registry         # Только Registry
+python -m service_checker docker --action full-report --services rag_builder,rag_search  # RAG Builder + RAG Search
+python -m service_checker docker --action full-report --services auth,registry,query     # Несколько сервисов
+
+# Фильтрация по пайплайнам (--pipelines):
+python -m service_checker docker --action full-report --pipelines registry_lifecycle          # Только один пайплайн
+python -m service_checker docker --action full-report --pipelines registry_lifecycle,registry_quarantine  # Несколько
+
+# Пропустить coverage или pipelines:
+python -m service_checker docker --action full-report --skip-coverage     # Только pipelines
+python -m service_checker docker --action full-report --skip-pipelines    # Только coverage
+
+# То же через recheck.bat:
+recheck.bat --api gateway                      # Только Gateway
+recheck.bat --api rag_builder,rag_search       # RAG Builder + RAG Search
+recheck.bat --pipeline registry_lifecycle      # Только один пайплайн
+recheck.bat --skip-coverage                    # Без coverage, только pipelines
+recheck.bat --skip-pipelines                   # Без pipelines, только coverage
+
 # Coverage test в Docker
 python -m service_checker docker --action coverage     # Только coverage
 
@@ -252,6 +293,7 @@ python -m service_checker docker --action full-report  # full-report включ�
 | `registry_quarantine` | Карантин классификаторов: accept/reject + валидация | Auth → Registry | 10 |
 | `orchestrator_draft_lifecycle` | Черновик Orchestrator: создание → превью → решение → 404 | Auth → Orchestrator | 8 |
 | `multi_document_cross_search` | 2 документа → индексация → кросс-поиск → удаление → фильтрация | Auth → MinIO → Parser → Converter → Registry → RAG Builder → RAG Search | 19 |
+| `document_approval` | Подтверждение документа: черновик → preview → approve → full → индексация | Auth → Orchestrator → Registry → RAG Builder | 11 |
 
 ## Ключевые решения
 

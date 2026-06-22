@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user, require_permission
+from app.core.errors import api_error
 from app.db.session import get_db
 from app.schemas.schemas import MetaPagination, UserCreate, UserListItem, UserListResponse, UserPublic, UserUpdate
 from app.services.audit_service import create_audit_event
@@ -30,7 +31,7 @@ async def users(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(require_permission("users:manage")),
+    current_user=Depends(require_permission("users:manage")),
 ):
     offset = (page - 1) * page_size
     found, total = await list_users(db, role, search, page_size, offset)
@@ -43,72 +44,85 @@ async def users(
                 roles=role_names(u),
                 is_active=u.is_active,
                 created_at=u.created_at,
-            ) for u in found
+            )
+            for u in found
         ],
         "meta": MetaPagination(total=total, page=page, page_size=page_size),
     }
 
 
 @router.post("", response_model=UserPublic, status_code=status.HTTP_201_CREATED)
-async def create(payload: UserCreate, request: Request, db: AsyncSession = Depends(get_db), current_user = Depends(require_permission("users:manage"))):
+async def create(payload: UserCreate, request: Request, db: AsyncSession = Depends(get_db), current_user=Depends(require_permission("users:manage"))):
     try:
         user = await create_user(db, payload.email, payload.full_name, payload.password, payload.roles)
-    except DuplicateError as exc:
-        raise HTTPException(status_code=409, detail=str(exc))
+    except DuplicateError:
+        api_error(409, "DUPLICATE_EMAIL", "Пользователь с таким email уже существует")
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        api_error(400, "VALIDATION_ERROR", str(exc))
 
-    await create_audit_event(db, "user.create", current_user.user_id, "user", user.user_id, {"email": user.email}, request.client.host if request.client else None)
+    await create_audit_event(
+        db, "user.create", current_user.user_id, "user", user.user_id,
+        {"email": user.email}, request.client.host if request.client else None,
+    )
     return to_public(user)
 
 
 @router.get("/{user_id}", response_model=UserPublic)
-async def get_one(user_id: str, db: AsyncSession = Depends(get_db), current_user = Depends(get_current_user)):
+async def get_one(user_id: str, db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
     if current_user.user_id != user_id and "users:manage" not in get_permissions(current_user):
-        raise HTTPException(status_code=403, detail="Недостаточно прав")
+        api_error(403, "FORBIDDEN", "Недостаточно прав")
 
     user = await get_user_by_id(db, user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
+        api_error(404, "USER_NOT_FOUND", "Пользователь не найден")
     return to_public(user)
 
 
 @router.put("/{user_id}", response_model=UserPublic)
-async def replace_one(user_id: str, payload: UserUpdate, request: Request, db: AsyncSession = Depends(get_db), current_user = Depends(require_permission("users:manage"))):
+async def replace_one(user_id: str, payload: UserUpdate, request: Request, db: AsyncSession = Depends(get_db), current_user=Depends(require_permission("users:manage"))):
     user = await get_user_by_id(db, user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
+        api_error(404, "USER_NOT_FOUND", "Пользователь не найден")
 
     try:
         updated = await update_user(db, user, **payload.model_dump(exclude_unset=True))
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        api_error(400, "VALIDATION_ERROR", str(exc))
 
-    await create_audit_event(db, "user.update", current_user.user_id, "user", user_id, payload.model_dump(exclude_unset=True), request.client.host if request.client else None)
+    await create_audit_event(
+        db, "user.update", current_user.user_id, "user", user_id,
+        payload.model_dump(exclude_unset=True), request.client.host if request.client else None,
+    )
     return to_public(updated)
 
 
 @router.patch("/{user_id}", response_model=UserPublic)
-async def update_one(user_id: str, payload: UserUpdate, request: Request, db: AsyncSession = Depends(get_db), current_user = Depends(require_permission("users:manage"))):
+async def update_one(user_id: str, payload: UserUpdate, request: Request, db: AsyncSession = Depends(get_db), current_user=Depends(require_permission("users:manage"))):
     user = await get_user_by_id(db, user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
+        api_error(404, "USER_NOT_FOUND", "Пользователь не найден")
 
     try:
         updated = await update_user(db, user, **payload.model_dump(exclude_unset=True))
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        api_error(400, "VALIDATION_ERROR", str(exc))
 
-    await create_audit_event(db, "user.update", current_user.user_id, "user", user_id, payload.model_dump(exclude_unset=True), request.client.host if request.client else None)
+    await create_audit_event(
+        db, "user.update", current_user.user_id, "user", user_id,
+        payload.model_dump(exclude_unset=True), request.client.host if request.client else None,
+    )
     return to_public(updated)
 
 
 @router.delete("/{user_id}")
-async def deactivate(user_id: str, request: Request, db: AsyncSession = Depends(get_db), current_user = Depends(require_permission("users:manage"))):
+async def deactivate(user_id: str, request: Request, db: AsyncSession = Depends(get_db), current_user=Depends(require_permission("users:manage"))):
     user = await get_user_by_id(db, user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
+        api_error(404, "USER_NOT_FOUND", "Пользователь не найден")
 
     updated = await update_user(db, user, is_active=False)
-    await create_audit_event(db, "user.deactivate", current_user.user_id, "user", user_id, None, request.client.host if request.client else None)
+    await create_audit_event(
+        db, "user.deactivate", current_user.user_id, "user", user_id,
+        None, request.client.host if request.client else None,
+    )
     return {"user_id": updated.user_id, "is_active": updated.is_active, "deactivated_at": updated.updated_at}

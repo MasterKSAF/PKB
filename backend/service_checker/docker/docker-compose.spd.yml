@@ -1,0 +1,33 @@
+# =============================================================================
+# PKB Neuroassistant — Docker Compose SPD Override
+#
+# Отличия от docker-compose.yml:
+# - Вместо rag-builder (8090) + rag-search (8091) запускается rag-builder-spk (8090),
+#   объединяющий API обоих сервисов.
+# - Порт 8091 исключён.
+# - Используется supervisord.spd.conf и entrypoint.spd.sh
+# =============================================================================
+
+services:
+  # ============================================================================
+  # Backend (SPD-версия: rag_builder_spk вместо rag_builder + rag_search)
+  # ============================================================================
+  app:
+    ports:
+      - "8081:8081"   # Orchestrator
+      - "8080:8080"   # Gateway
+      - "8082:8082"   # Auth
+      - "8083:8083"   # Query
+      - "8084:8084"   # Registry
+      - "8085:8085"   # Integration
+      - "8086:8086"   # Converter/Validator
+      - "8087:8087"   # Parser
+      - "8088:8088"   # OCR
+      - "8090:8090"   # RAG Builder SPD (объединяет rag_builder + rag_search)
+      # 8091 — RAG Search не нужен отдельно
+    volumes:
+      - ./supervisord.spd.conf:/etc/supervisor/conf.d/supervisord.conf
+    entrypoint:
+      - /bin/bash
+      - -lc
+      - sed -i 's/\r$//' /app/backend/service_checker/docker/entrypoint.spd.sh 2>/dev/null || true; chmod +x /app/backend/service_checker/docker/entrypoint.spd.sh; exec /app/backend/service_checker/docker/entrypoint.spd.sh

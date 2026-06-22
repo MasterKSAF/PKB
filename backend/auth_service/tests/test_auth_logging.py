@@ -24,6 +24,7 @@ async def test_authenticate_logs_info_on_success(caplog):
     mock_db = AsyncMock()
     mock_user = MagicMock()
     mock_user.is_active = True
+    mock_user.locked_until = None
     with patch("app.services.auth_service.get_user_by_email", return_value=mock_user), \
          patch("app.services.auth_service.verify_password", return_value=True):
         with caplog.at_level(logging.INFO, logger="app.services.auth_service"):

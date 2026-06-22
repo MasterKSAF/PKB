@@ -170,12 +170,33 @@ def parse_args() -> argparse.Namespace:
         "--services",
         nargs="*",
         default=[],
-        help="Список конкретных сервисов (по умолч. все)",
+        help="Список конкретных сервисов для coverage (по умолч. все)",
+    )
+    p_docker.add_argument(
+        "--pipelines",
+        nargs="*",
+        default=[],
+        help="Список конкретных пайплайнов (по умолч. все)",
+    )
+    p_docker.add_argument(
+        "--skip-coverage",
+        action="store_true",
+        help="Пропустить API Coverage",
+    )
+    p_docker.add_argument(
+        "--skip-pipelines",
+        action="store_true",
+        help="Пропустить Pipeline тесты",
     )
     p_docker.add_argument(
         "--db-only",
         action="store_true",
         help="Запустить только PostgreSQL",
+    )
+    p_docker.add_argument(
+        "--spd",
+        action="store_true",
+        help="Режим SPD: подмена порта rag_search на 8090 (объединённый rag_builder + rag_search)",
     )
 
     # check — observability / post-deploy проверка
@@ -379,10 +400,30 @@ async def cmd_docker(
     build: bool = False,
     detach: bool = False,
     services: Optional[List[str]] = None,
+    pipelines: Optional[List[str]] = None,
+    skip_coverage: bool = False,
+    skip_pipelines: bool = False,
     db_only: bool = False,
+    spd: bool = False,
 ):
     """Развернуть систему через Docker Compose."""
     services = services or []
+    pipelines = pipelines or []
+
+    # Нормализация: split по запятой (recheck.bat шлёт "--services a,b" как один элемент)
+    _flat = []
+    for s in services:
+        _flat.extend(x.strip() for x in s.split(",") if x.strip())
+    services = sorted(_flat)
+    _flat = []
+    for p in pipelines:
+        _flat.extend(x.strip() for x in p.split(",") if x.strip())
+    pipelines = sorted(_flat)
+
+    # Режим SPD: подмена порта rag_search на 8090 (объединённый сервис)
+    if spd:
+        from service_checker.services import MODE_PORTS
+        MODE_PORTS["rag_search"] = 8090
 
     log_header("Развёртывание PKB Neuroassistant через Docker")
 
@@ -443,14 +484,29 @@ async def cmd_docker(
         ok = await _docker_run_coverage()
         if ok:
             log_info("Собираем логи ошибок...")
-            await _docker_collect_logs(target_services)
+            log_suffix = "_spd" if spd else ""
+            await _docker_collect_logs(target_services, suffix=log_suffix)
         return
 
     if action == "full-report":
         log_header("📋 Полный отчёт: Coverage + Pipeline + Сводная таблица")
+
+        if spd:
+            log_info("Режим SPD: rag_search=8090 (подмена в MODE_PORTS)")
+
         check_result_dir = BACKEND_DIR / "check_result"
         check_result_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # Суффикс для имён файлов при фильтрации по сервисам/пайплайнам
+        report_suffix_parts = []
+        if spd:
+            report_suffix_parts.append("spd")
+        if services:
+            report_suffix_parts.append("services_" + "_".join(services))
+        if pipelines:
+            report_suffix_parts.append("pipelines_" + "_".join(pipelines))
+        report_suffix = ("_" + "_".join(report_suffix_parts)) if report_suffix_parts else ""
 
         # 0. Docker health check (статус контейнеров + HTTP + supervisorctl + .err логи)
         _docker_health_check(target_services)
@@ -475,71 +531,81 @@ async def cmd_docker(
         # 2. Coverage
         cov_results: Optional[Dict[str, Any]] = None
         tester = None
-        try:
-            sys.path.insert(0, str(BACKEND_DIR))
-            from service_checker.core.api_coverage_test import ApiCoverageTester
-
-            log_info("Очистка supervisor-логов...")
+        if not skip_coverage:
             try:
-                subprocess.run(
-                    ["docker", "exec", "pkb-neuro", "bash", "-c",
-                     "truncate -s 0 /var/log/supervisor/*.log /var/log/supervisor/*.err 2>/dev/null || true"],
-                    capture_output=True, timeout=15,
-                )
-            except Exception:
-                pass
+                sys.path.insert(0, str(BACKEND_DIR))
+                from service_checker.core.api_coverage_test import ApiCoverageTester
 
-            log_info("Запуск API Coverage Test...")
-            tester = ApiCoverageTester(base_host="127.0.0.1")
-            cov_results = await tester.run_all()
-            cov_report = tester.generate_report(db_result=db_result)
-            cov_path = check_result_dir / "api_coverage.md"
-            cov_path.write_text(cov_report, encoding="utf-8")
-            log_ok(f"API Coverage отчёт сохранён: {cov_path}")
-        except Exception as e:
-            log_err(f"Ошибка coverage: {e}")
-        finally:
-            if tester:
-                await tester.close()
+                log_info("Очистка supervisor-логов...")
+                try:
+                    subprocess.run(
+                        ["docker", "exec", "pkb-neuro", "bash", "-c",
+                         "truncate -s 0 /var/log/supervisor/*.log /var/log/supervisor/*.err 2>/dev/null || true"],
+                        capture_output=True, timeout=15,
+                    )
+                except Exception:
+                    pass
+
+                cov_services = services or None
+                log_info(f"Запуск API Coverage Test..." + (f' (сервисы: {cov_services})' if cov_services else ''))
+                tester = ApiCoverageTester(services=cov_services, base_host="127.0.0.1")
+                cov_results = await tester.run_all()
+                cov_report = tester.generate_report(db_result=db_result)
+                cov_path = check_result_dir / f"api_coverage{report_suffix}.md"
+                cov_path.write_text(cov_report, encoding="utf-8")
+                log_ok(f"API Coverage отчёт сохранён: {cov_path}")
+            except Exception as e:
+                log_err(f"Ошибка coverage: {e}")
+            finally:
+                if tester:
+                    await tester.close()
+        else:
+            log_info("API Coverage пропущен (--skip-coverage)")
 
         # 3. Pipeline
         pipe_results: Dict[str, Any] = {}
         runner = None
-        try:
-            sys.path.insert(0, str(BACKEND_DIR))
-            from service_checker.pipelines import PIPELINE_REGISTRY, PipelineRunner
+        if not skip_pipelines:
+            try:
+                sys.path.insert(0, str(BACKEND_DIR))
+                from service_checker.pipelines import PIPELINE_REGISTRY, PipelineRunner
 
-            log_info("Запуск Pipeline Testing...")
-            runner = PipelineRunner(base_host="127.0.0.1")
-            for name, cls in sorted(PIPELINE_REGISTRY.items()):
-                pipeline = cls()
-                result = await runner.run(pipeline, skip_ping=False)
-                pipe_results[name] = result
+                log_info("Запуск Pipeline Testing...")
+                runner = PipelineRunner(base_host="127.0.0.1")
+                for name, cls in sorted(PIPELINE_REGISTRY.items()):
+                    if pipelines and name not in pipelines:
+                        continue
+                    pipeline = cls()
+                    result = await runner.run(pipeline, skip_ping=False)
+                    pipe_results[name] = result
 
-            if pipe_results:
-                log_ok(f"Pipeline тесты завершены: {len(pipe_results)} пайплайнов")
-        except Exception as e:
-            log_err(f"Ошибка pipeline: {e}")
-        finally:
-            if runner:
-                await runner.close()
+                if pipe_results:
+                    log_ok(f"Pipeline тесты завершены: {len(pipe_results)} пайплайнов")
+            except Exception as e:
+                log_err(f"Ошибка pipeline: {e}")
+            finally:
+                if runner:
+                    await runner.close()
+        else:
+            log_info("Pipeline тесты пропущены (--skip-pipelines)")
 
         # 4. Full report
         if cov_results or pipe_results:
             if cov_results is None:
                 cov_results = {}
             full_report = _generate_full_report(cov_results, pipe_results, timestamp, db_result=db_result)
-            full_path = check_result_dir / "full_report.md"
+            full_path = check_result_dir / f"full_report{report_suffix}.md"
             full_path.write_text(full_report, encoding="utf-8")
             log_ok(f"Сводный отчёт сохранён: {full_path}")
 
             # Собираем логи ошибок
             log_info("Собираем логи ошибок...")
-            await _docker_collect_logs(target_services)
+            await _docker_collect_logs(target_services, suffix=report_suffix)
         return
 
     if action == "logs":
-        await _docker_collect_logs(target_services)
+        log_suffix = "_spd" if spd else ""
+        await _docker_collect_logs(target_services, suffix=log_suffix)
         return
 
     success = _docker_action(action, target_services, build=build, detach=detach)
@@ -827,7 +893,11 @@ async def main():
             build=args.build,
             detach=args.detach,
             services=args.services,
+            pipelines=args.pipelines,
+            skip_coverage=args.skip_coverage,
+            skip_pipelines=args.skip_pipelines,
             db_only=args.db_only,
+            spd=args.spd,
         )
         return
 

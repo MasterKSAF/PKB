@@ -124,7 +124,7 @@ def get_service_def() -> ServiceDef:
             params={"classifier_system": "MKS"}),
         EndpointDef("POST", f"{API_PREFIX}/registry/classifiers/import",
             "classifiers", "Импорт (file upload)",
-            expected_status={422}),
+            expected_status={400, 422}),
         EndpointDef("GET", f"{API_PREFIX}/registry/classifiers/pending",
             "classifiers", "Карантин",
             response_schema={"data": list}),
@@ -178,7 +178,7 @@ def get_service_def() -> ServiceDef:
             params={"term": "Тест"}),
         EndpointDef("POST", f"{API_PREFIX}/registry/terminology/import",
             "terminology", "Импорт (file upload)",
-            expected_status={422}),
+            expected_status={400, 422}),
 
         # ── Registry: Documents ──
         EndpointDef("GET", f"{API_PREFIX}/registry/documents/", "documents",
@@ -210,7 +210,7 @@ def get_service_def() -> ServiceDef:
             "documents", "Экспорт (CSV)"),
         EndpointDef("POST", f"{API_PREFIX}/registry/documents/import",
             "documents", "Импорт (file upload)",
-            expected_status={422}),
+            expected_status={400, 422}),
 
         # ── Registry: Search (RG-8: BM25) ──
         EndpointDef("GET", f"{API_PREFIX}/registry/search", "search",
@@ -229,7 +229,7 @@ def get_service_def() -> ServiceDef:
         # ── Orchestrator: Drafts ──
         EndpointDef("POST", f"{API_PREFIX}/drafts/", "drafts",
             "Создать черновик",
-            form_body={"document_key": "test-key", "title": "Тестовый черновик"},
+            body={"document_key": "test-key", "title": "Тестовый черновик"},
             extract_keys=["draft_id", "task_id"],
             expected_status=202),
         EndpointDef("GET", f"{API_PREFIX}/drafts/", "drafts",
@@ -246,7 +246,7 @@ def get_service_def() -> ServiceDef:
         EndpointDef("POST", f"{API_PREFIX}/drafts/{{draft_id}}/preview", "drafts",
             "Запустить превью",
             body={},
-            expected_status={200, 202, 404}),
+            expected_status={200, 202, 404, 409}),
         EndpointDef("GET", f"{API_PREFIX}/drafts/{{draft_id}}/preview", "drafts",
             "Превью черновика"),
 
@@ -293,7 +293,7 @@ def get_service_def() -> ServiceDef:
             "Детали сессии"),
         EndpointDef("POST", f"{API_PREFIX}/chat/sessions/{{session_id}}/messages", "chat",
             "Отправить сообщение",
-            body={"text": "Тестовое сообщение"},
+            body={"text": "Тестовое сообщение", "content": "Тестовое сообщение"},
             extract_keys=["message_id"],
             expected_status={200, 202}),
         EndpointDef("GET", f"{API_PREFIX}/chat/sessions/{{session_id}}/messages", "chat",

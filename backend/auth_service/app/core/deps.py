@@ -1,43 +1,44 @@
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.errors import api_error
 from app.core.security import decode_token
 from app.db.session import get_db
-from app.services.user_service import get_user_by_id, get_permissions, role_names
+from app.services.user_service import get_permissions, get_user_by_id, role_names
 
 
 async def get_current_user(authorization: str | None = Header(default=None), db: AsyncSession = Depends(get_db)):
     if not authorization or not authorization.lower().startswith("bearer "):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Нет access token")
+        api_error(status.HTTP_401_UNAUTHORIZED, "INVALID_TOKEN", "Отсутствует access token")
 
     token = authorization.split(" ", 1)[1]
     try:
         payload = decode_token(token)
     except Exception:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Недействительный токен")
+        api_error(status.HTTP_401_UNAUTHORIZED, "INVALID_TOKEN", "Токен недействителен или истёк")
 
     if payload.get("type") != "access":
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверный тип токена")
+        api_error(status.HTTP_401_UNAUTHORIZED, "INVALID_TOKEN", "Неверный тип токена")
 
     user = await get_user_by_id(db, payload.get("sub"))
     if not user or not user.is_active:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Пользователь недоступен")
+        api_error(status.HTTP_401_UNAUTHORIZED, "INVALID_TOKEN", "Пользователь недоступен")
     return user
 
 
 def require_permission(permission: str):
-    async def checker(user = Depends(get_current_user)):
+    async def checker(user=Depends(get_current_user)):
         if permission not in get_permissions(user):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Недостаточно прав")
+            api_error(status.HTTP_403_FORBIDDEN, "FORBIDDEN", "Недостаточно прав")
         return user
     return checker
 
 
 def require_any_permission(permissions: list[str]):
-    async def checker(user = Depends(get_current_user)):
+    async def checker(user=Depends(get_current_user)):
         user_permissions = set(get_permissions(user))
         if not any(p in user_permissions for p in permissions):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Недостаточно прав")
+            api_error(status.HTTP_403_FORBIDDEN, "FORBIDDEN", "Недостаточно прав")
         return user
     return checker
 

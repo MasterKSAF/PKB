@@ -65,3 +65,23 @@ async def test_session_not_found(client):
     assert r.status_code == 404
     data = r.json()
     assert "detail" in data or "error" in data
+
+
+@pytest.mark.asyncio
+async def test_export_session_returns_export_response(client):
+    r = await client.post("/api/v1/chat/sessions", json={"title": "Экспорт тест"})
+    sid = r.json()["session_id"]
+    r = await client.post(f"/api/v1/chat/sessions/{sid}/export", json={"format": "json"})
+    assert r.status_code == 200
+    data = r.json()
+    assert "export_id" in data
+    assert data["session_id"] == sid
+    assert data["format"] == "json"
+    assert data["status"] == "completed"
+    assert "url" in data
+
+
+@pytest.mark.asyncio
+async def test_export_session_not_found(client):
+    r = await client.post("/api/v1/chat/sessions/999999/export", json={"format": "json"})
+    assert r.status_code == 404

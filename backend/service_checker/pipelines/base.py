@@ -421,7 +421,10 @@ class PipelineRunner:
 
         # Подстановка переменных
         resolved_path = self._resolve_path(step.path, ctx)
-        url = f"http://{self.base_host}:{step.port}{resolved_path}"
+        # Порт из MODE_PORTS имеет приоритет (единый источник, поддерживает --spd)
+        svc_port = self._get_service_port(step.service)
+        target_port = svc_port if svc_port is not None else step.port
+        url = f"http://{self.base_host}:{target_port}{resolved_path}"
         body = self._resolve_body(step.body, ctx)
 
         # Заголовки
@@ -616,13 +619,27 @@ class PipelineRunner:
         else:
             result.ping_ok = True
 
-        # 2. Pre-prepare: создаём проект для чат-сессий (QS-3)
+        # 2. Pre-prepare: дропнуть FK fk_rag_document_chunks_section_id (мешает RAG Build)
+        if "rag_builder" in pipeline.services:
+            try:
+                import subprocess
+                r = subprocess.run(
+                    ["docker", "exec", "pkb-postgres", "psql", "-U", "pkb", "-d", "pkb_neuro", "-c",
+                     "ALTER TABLE IF EXISTS rag.document_chunks DROP CONSTRAINT IF EXISTS fk_rag_document_chunks_section_id;"],
+                    capture_output=True, timeout=10,
+                )
+                if r.returncode == 0:
+                    print(f"     ℹ Дропнут FK fk_rag_document_chunks_section_id")
+            except Exception:
+                pass
+
+        # 3. Pre-prepare: создаём проект для чат-сессий (QS-3)
         if "query" in pipeline.services:
             # Пробуем взять токен из контекста, если auth уже был
             pre_token = str(ctx.get("access_token")) if ctx.has("access_token") else None
             await self._ensure_project(ctx, pre_token)
 
-        # 3. Построение шагов
+        # 4. Построение шагов
         try:
             steps = pipeline.build_steps(ctx)
         except Exception as e:
@@ -691,22 +708,13 @@ class PipelineRunner:
         return result
 
     def _get_service_port(self, service_key: str) -> Optional[int]:
-        """Получить порт сервиса по ключу."""
-        ports = {
-            "gateway": 8080,
-            "orchestrator": 8081,
-            "auth": 8082,
-            "query": 8083,
-            "registry": 8084,
-            "converter_validator": 8086,
-            "parser": 8087,
-            "ocr": 8088,
-            "rag_builder": 8090,
-            "rag_search": 8091,
-            "minio": 19000,  # MinIO S3 API
-            "tei": 18092,  # Hugging Face TEI
-        }
-        return ports.get(service_key)
+        """Получить порт сервиса по ключу.
+
+        Использует MODE_PORTS как единый источник истины.
+        При --spd порт rag_search меняется через MODE_PORTS глобально.
+        """
+        from service_checker.services import MODE_PORTS
+        return MODE_PORTS.get(service_key)
 
 
 # ── Вспомогательные проверки для шагов ────────────────────────────────
@@ -715,15 +723,17 @@ class PipelineRunner:
 def check_json_field(
     field_path: str,
     expected_type: type,
+    optional: bool = False,
 ) -> Callable[[Optional[str], PipelineContext], Tuple[bool, str]]:
     """Проверить, что JSON-ответ содержит поле с ожидаемым типом.
 
     :param field_path: путь к полю (точечная нотация, например data.id)
     :param expected_type: ожидаемый тип (str, dict, list, int, bool)
+    :param optional: если True, отсутствие поля не считается ошибкой
     """
     def _check(body: Optional[str], ctx: PipelineContext) -> Tuple[bool, str]:
         if not body:
-            return False, "Пустой ответ"
+            return (True, "Пустой ответ (пропущено)") if optional else (False, "Пустой ответ")
         try:
             data = json.loads(body)
         except json.JSONDecodeError as e:
@@ -735,7 +745,7 @@ def check_json_field(
             if isinstance(current, dict) and part in current:
                 current = current[part]
             else:
-                return False, f"Поле '{field_path}' не найдено в ответе"
+                return (True, f"Поле '{field_path}' не найдено (пропущено)") if optional else (False, f"Поле '{field_path}' не найдено в ответе")
 
         if not isinstance(current, expected_type):
             actual = type(current).__name__

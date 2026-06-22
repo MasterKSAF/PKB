@@ -320,14 +320,12 @@ def run_db_check() -> DbCheckResult:
     result.registry_tables = tables
     result.registry_missing = EXPECTED_REGISTRY_TABLES - set(tables)
 
-    # ── 5. RAG таблицы (с retry — миграции могут не успеть накатиться) ──
-    import time
-    for attempt in range(15):
-        rag_tables = set(_query_single_column(
-            "SELECT schemaname || '.' || tablename "
-            "FROM pg_tables WHERE schemaname = 'rag'"
-        ))
-        result.rag_tables = sorted(rag_tables)
+    # ── 5. RAG таблицы (миграции могут не успеть накатиться) ──
+    result.rag_tables = sorted(set(_query_single_column(
+        "SELECT schemaname || '.' || tablename "
+        "FROM pg_tables WHERE schemaname = 'rag'"
+    )))
+    if result.rag_tables:
         result.rag_has_embedding = bool(_query_single_column(
             "SELECT column_name FROM information_schema.columns "
             "WHERE table_schema = 'rag' AND table_name = 'document_chunks' "
@@ -344,10 +342,6 @@ def run_db_check() -> DbCheckResult:
             "WHERE table_schema = 'rag' AND table_name = 'document_chunks' "
             "AND column_name = 'created_at'"
         ))
-        # Триггер tsv не используется — tsv это колонка TSVECTOR
-        if result.rag_ok:
-            break
-        time.sleep(1)
 
     # ── 6. Проверка прав (SELECT) ───────────────────────────────
     if tables:

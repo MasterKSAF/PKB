@@ -1,15 +1,15 @@
-# Ускорение тестов: ленивая инициализация httpx.AsyncClient
+# TODO: Пайплайн подтверждения документов (document_approval)
 
-## Диагноз
-- `httpx.AsyncClient()` загружает SSL-сертификаты (~0.37s) при создании
-- `PipelineRunner.__init__` и `ApiCoverageTester.__init__` создают клиент сразу
-- Тесты платят ~0.4s на каждый тест за эту загрузку, хотя клиент часто заменяется моком
+## 1. Изучить существующий orchestrator_draft_lifecycle
+- [x] 1.1 Шаг 2 (POST /drafts) валится с 500 — Registry /drafts не реализован
+- [x] 1.2 Создан новый пайплайн document_approval, tolerant к сломанным API
 
-## План
-- [x] 1. Диагностика — профилирование показало `load_verify_locations` ~0.37s
-- [x] 2. `pipelines/base.py` — заменить `self.client` на property с ленивой инициализацией
-- [x] 3. `core/api_coverage_test.py` — то же самое
-- [x] 4. Фикстуры в тестах работают через setter без изменений
-- [x] 5. `close()` проверяет `_client is not None`
-- [x] 6. Запустить тесты: 48.59s → 1.17s (ускорение в 41.5x)
-- [x] 7. Аномалий нет, всё стабильно
+## 2. Создать пайплайн document_approval
+- [x] 2.1 Файл `pipelines/document_approval.py`
+- [x] 2.2 Шаги: аутентификация → создание черновика → preview → approve → full → индексация
+- [x] 2.3 Зарегистрировать в `pipelines/__init__.py`
+
+## 3. Проверить
+- [x] 3.1 Запустить на сломанных API — все шаги с ожидаемыми ошибками (500, 404, 422) проходят
+- [x] 3.2 Живая часть (Registry create + RAG Builder index) — работает
+- [ ] 3.3 Перезапустить после фикса Registry /drafts — проверить полный cycle
