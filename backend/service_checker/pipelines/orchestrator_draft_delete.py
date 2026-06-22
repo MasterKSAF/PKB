@@ -1,0 +1,144 @@
+#!/usr/bin/env python3
+"""
+PKB Neuroassistant — Pipeline: orchestrator_draft_delete
+
+Удаление черновика: создание → удаление → проверка 404.
+
+Проверяет DELETE /drafts/{id} и подтверждение удаления.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+from pathlib import Path
+from typing import List, Optional, Tuple
+
+from .base import (
+    PipelineContext,
+    PipelineDef,
+    PipelineStep,
+    check_json_field,
+    check_json_fields,
+)
+
+TEST_CREDENTIALS = {
+    "username": "admin@example.com",
+    "password": "Admin1234!",
+}
+
+_HERE = Path(__file__).resolve().parent.parent
+TEST_PDF_PATH = _HERE / "pdf" / "7bd97d737317a8a272bb18a405ab2d04.pdf"
+TEST_PDF_BYTES = TEST_PDF_PATH.read_bytes()
+
+
+def _on_draft_failed(body: Optional[str], ctx: PipelineContext) -> None:
+    ctx.set("draft_failed", True)
+
+
+def _draft_skipped(ctx: PipelineContext) -> bool:
+    return ctx.get("draft_failed", False)
+
+
+class OrchestratorDraftDeletePipeline(PipelineDef):
+    """Пайплайн: удаление черновика — создание → удаление → 404."""
+
+    name = "orchestrator_draft_delete"
+    description = "Удаление черновика Orchestrator (создание → удаление → проверка 404)"
+    services = ["auth", "orchestrator"]
+
+    def build_steps(self, context: PipelineContext) -> List[PipelineStep]:
+        steps: List[PipelineStep] = []
+        ts = datetime.now().strftime("%Y%m%d%H%M%S%f")
+
+        # ── Шаг 1: Аутентификация ────────────────────────────────────
+        steps.append(PipelineStep(
+            name="Аутентификация",
+            service="auth",
+            method="POST",
+            path="/api/v1/auth/token",
+            port=8082,
+            body=TEST_CREDENTIALS,
+            expected_status=200,
+            extract_keys=["access_token", "refresh_token"],
+            check=check_json_field("access_token", str),
+        ))
+
+        # ── Шаг 2: Создание черновика ────────────────────────────────
+        pdf_name = f"delete-draft-{ts}.pdf"
+        steps.append(PipelineStep(
+            name="Создание черновика",
+            service="orchestrator",
+            method="POST",
+            path="/api/v1/drafts/",
+            port=8081,
+            form_body={
+                "document_key": f"delete-key-{ts}",
+                "title": f"Delete тест {ts}",
+                "source_type": "GOST",
+            },
+            form_files={
+                "file": (pdf_name, TEST_PDF_BYTES, "application/pdf"),
+            },
+            expected_status=202,
+            extract_keys=["draft_id", "task_id"],
+            check=check_json_field("draft_id", int),
+            needs_auth=True,
+            on_error=_on_draft_failed,
+        ))
+
+        # ── Шаг 3: Статус задачи ─────────────────────────────────────
+        steps.append(PipelineStep(
+            name="Статус задачи (longpoll)",
+            service="orchestrator",
+            method="GET",
+            path="/api/v1/tasks/{task_id}/status",
+            port=8081,
+            expected_status=200,
+            check=check_json_field("status", str),
+            needs_auth=True,
+            skip_if=_draft_skipped,
+        ))
+
+        # ── Шаг 4: Детали черновика ──────────────────────────────────
+        steps.append(PipelineStep(
+            name="Детали черновика",
+            service="orchestrator",
+            method="GET",
+            path="/api/v1/drafts/{draft_id}",
+            port=8081,
+            expected_status=200,
+            check=check_json_fields({
+                "draft_id": int,
+                "document_id": (int, type(None)),
+                "version_id": (int, type(None)),
+                "is_new_document": bool,
+            }),
+            needs_auth=True,
+            skip_if=_draft_skipped,
+        ))
+
+        # ── Шаг 5: Удаление черновика ────────────────────────────────
+        steps.append(PipelineStep(
+            name="Удаление черновика",
+            service="orchestrator",
+            method="DELETE",
+            path="/api/v1/drafts/{draft_id}",
+            port=8081,
+            expected_status={200, 204},
+            needs_auth=True,
+            skip_if=_draft_skipped,
+        ))
+
+        # ── Шаг 6: Проверка 404 после удаления ───────────────────────
+        steps.append(PipelineStep(
+            name="Проверка 404 после удаления",
+            service="orchestrator",
+            method="GET",
+            path="/api/v1/drafts/{draft_id}",
+            port=8081,
+            expected_status=404,
+            needs_auth=True,
+            skip_if=_draft_skipped,
+        ))
+
+        return steps

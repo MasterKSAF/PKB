@@ -37,7 +37,6 @@ class SagaCoordinator:
         "full_converter": None,
         "registry_creation": "delete_registry_document",
         "rag_index": "delete_from_vector_index",
-        "reprocess": "delete_from_vector_index",
     }
 
     def __init__(self, db: AsyncSession):

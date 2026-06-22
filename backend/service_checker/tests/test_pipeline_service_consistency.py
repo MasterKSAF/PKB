@@ -194,7 +194,12 @@ class TestPipelineContextChain:
 
             # Ключи, устанавливаемые check-функциями (не через extract_keys)
             if step.check and hasattr(step.check, '__name__'):
-                if pipeline_name == "orchestrator_draft_lifecycle":
+                if pipeline_name in (
+                    "orchestrator_draft_lifecycle",
+                    "orchestrator_document_reprocess",
+                    "orchestrator_document_versions",
+                    "orchestrator_full_document_lifecycle",
+                ):
                     extracted.add("approved_doc_id")
                     extracted.add("approved_version_id")
 

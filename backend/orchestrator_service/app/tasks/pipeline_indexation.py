@@ -221,73 +221,7 @@ async def _notify_step_completed(job_id: str, step_name: str, result: dict):
         await orchestrator.on_step_completed(job_id, step_name, result)
 
 
-@celery_app.task(
-    bind=True, max_retries=2, default_retry_delay=30,
-    name="tasks.pipeline.run_reprocess_step"
-)
-def run_reprocess_step(self, task_id: int, document_id: str):
-    """
-    Reprocess a document (P2I-9).
 
-    Triggers re-indexation of an already-processed document.
-    """
-    logger.info(f"Reprocess step started: task={task_id} doc={document_id}")
-    try:
-        from app.services.rag_client import RAGBuilderClient
-        client = RAGBuilderClient()
-        # Delete existing index first
-        _run_async(client.delete_index(document_id))
-        _run_async(client.close())
-
-        # Resolve document_id to int
-        try:
-            doc_id_int = int(document_id)
-        except (ValueError, TypeError):
-            logger.error(f"Invalid document_id format for reprocess: {document_id}")
-            raise ValueError(f"document_id must be an integer, got: {document_id}")
-
-        # Fetch sections from Registry
-        try:
-            from app.services.registry_client import RegistryServiceClient
-            reg_client = RegistryServiceClient()
-            sections_response = _run_async(
-                reg_client.get_document_sections(document_id=doc_id_int)
-            )
-            _run_async(reg_client.close())
-        except Exception as reg_err:
-            logger.warning(f"Failed to fetch sections from Registry for reprocess: {reg_err}")
-            sections_response = {"data": {"sections": []}}
-
-        sections = sections_response.get("data", {}).get("sections", [])
-
-        # Trigger re-index via RAG Builder
-        rag = RAGBuilderClient()
-        build_result = _run_async(
-            rag.index_document(
-                document_id=document_id,
-                sections=sections,
-            )
-        )
-
-        # Poll for final status (async contract: 202 → polling)
-        if build_result.get("status") == "indexing":
-            status_result = _run_async(
-                rag.get_build_status(document_id=document_id)
-            )
-        else:
-            status_result = build_result
-
-        _run_async(rag.close())
-
-        final_status = status_result.get("status", "indexed")
-        _run_async(_notify_step_completed(task_id, "reprocess", status_result))
-        logger.info(f"Reprocess completed: task={task_id} status={final_status}")
-        return {"status": final_status, "step": "reprocess", "task_id": task_id}
-
-    except Exception as exc:
-        logger.error(f"Reprocess failed: {exc}")
-        _run_async(_notify_step_failed(task_id, "reprocess", "REPROCESS_ERROR", str(exc)))
-        raise self.retry(exc=exc)
 
 
 async def _notify_step_failed(

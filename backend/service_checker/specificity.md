@@ -1551,7 +1551,7 @@ Docker запущен, но сервисы могут быть не полнос
 ### Статус
 ✅ **Добавлено (checker, 2026-06-20)**
 
-## 45. Динамический `project_id` вместо хардкода (2026-06-20)
+## 45. Динамический `project_id` вместо хардкода (2026-06-20 → 2026-06-22)
 
 ### Проблема
 Checker хардкодил `project_id: 1` при создании чат-сессий (QS-3).
@@ -1585,17 +1585,39 @@ Query Service не создаёт проект при старте — табл�
 - Вызывается в `scenario_chat()` перед созданием сессии
 - Использует `self.project_id` вместо хардкода
 
+### Ужесточение: fallback `project_id=1` → RuntimeError (2026-06-22)
+
+Все три `_ensure_project()` были переписаны:
+- **Retry 3 раза** с паузой 1с для POST и GET
+- **HTTP 409 Conflict** от POST трактуется как «проект существует» → break к GET
+- **Fallback `project_id=1` удалён** — вместо него `RuntimeError` с сообщением
+- `_ensure_project()` стал guaranteed pre-condition: либо проект создан/получен, либо ошибка
+
+#### Изменения в коде
+1. `core/services.py` — `WebEmulator._ensure_project()`: retry 3 + raise
+2. `pipelines/base.py` — `PipelineRunner._ensure_project()`: retry 3 + raise
+3. `core/api_coverage_test.py` — pre-prepare query: retry 3 + raise
+
+Добавлены тесты для `PipelineRunner._ensure_project()` в `tests/test_pipeline_base.py`:
+- `test_ensure_project_raises_on_connection_error`
+- `test_ensure_project_succeeds_on_post_201`
+- `test_ensure_project_succeeds_on_get_list` (POST failed → GET)
+- `test_ensure_project_raises_on_empty_get_list`
+
 ### Затронутые файлы
-- `core/api_coverage_test.py` — pre-prepare блок для query
-- `pipelines/base.py` — `_ensure_project()` в `PipelineRunner`
+- `core/api_coverage_test.py` — pre-prepare блок для query (retry + raise)
+- `pipelines/base.py` — `_ensure_project()` в `PipelineRunner` (retry + raise)
 - `services/query.py` — `project_id` → `"{project_id}"`
 - `services/gateway.py` — `project_id` → `"{project_id}"`
 - `pipelines/chat_inference.py` — `project_id` → `"{project_id}"`
 - `pipelines/admin_user_lifecycle.py` — `project_id` → `"{project_id}"`
-- `core/services.py` — `_ensure_project()` + `self.project_id`
+- `core/services.py` — `_ensure_project()` + `self.project_id` (retry + raise)
+- `tests/test_pipeline_base.py` — 4 теста для `_ensure_project()`
 
 ### Статус
-✅ **Исправлено (checker, 2026-06-20)**
+✅ **Исправлено (checker, 2026-06-22)**
+- Fallback `project_id=1` полностью удалён
+- `_ensure_project()` гарантированно создаёт проект или бросает RuntimeError
 
 ## 46. Converter-Validator — `/validate/metadata` возвращает не те поля, preview требует полный ParserResult (2026-06-20)
 
@@ -1609,6 +1631,76 @@ Query Service не создаёт проект при старте — табл�
 
 ### Статус
 🟡 **Задокументировано (checker, 2026-06-20) — сервис не соответствует спецификации**
+
+## 48. Удаление хардкорных ID из сервисных определений API Coverage (2026-06-22)
+
+### Проблема
+В `services/*.py` (определения эндпоинтов для API Coverage) и отдельных местах checker'а
+использовались хардкорные числовые ID (`draft_id=1`, `task_id=12345`, `document_id=1`,
+`version_id="1"`, `project_id=1`, и т.д.).
+
+При запуске API Coverage против реальных Docker-сервисов эти ID передавались в запросах
+как есть. Если в БД не было соответствующих записей — сервисы возвращали FK violation → 500.
+
+Дополнительно: `base_data` в Gateway и Orchestrator содержал набор хардкорных ID,
+которые автоматически размазывались в контекст, вызывая те же проблемы.
+
+### Что сделано (checker, 2026-06-22)
+
+#### 1. `services/gateway.py` — очищен `base_data`
+- Убран `{"doc_id": 1, "user_id": "1", "page_num": 1, "category_id": 1, "file_id": 1, "project_id": 1, "pending_id": 1}`
+- Все ID теперь приходят только из prepare-шагов или pre-prepare
+
+#### 2. `services/orchestrator.py` — очищен `base_data`
+- Убран `{"doc_id": "1", "page_num": 1}`
+
+#### 3. Хардкорные ID → `{variable}` плейсхолдеры
+| Файл | Было | Стало |
+|---|---|---|
+| `services/registry.py` | `"document_id": 1` | `"document_id": "{doc_id}"` |
+| `services/ocr.py` | `"task_id": 12345` | `"task_id": "{task_id}"` |
+| | `"draft_id": 1` | `"draft_id": "{draft_id}"` |
+| | `"version_id": "1"` | `"version_id": "{version_id}"` |
+| `services/parser.py` | `"task_id": 12345` | `"task_id": "{task_id}"` |
+| | `"version_id": "1"` | `"version_id": "{version_id}"` |
+| `services/converter_validator.py` | `"task_id": "12345"` | `"task_id": "{task_id}"` |
+| | `"version_id": "1"` | `"version_id": "{version_id}"` |
+
+#### 4. `core/api_coverage_test.py` — `draft_id` fallback + `task_id` через Gateway
+- Registry document creation заменён на Gateway draft creation:
+  `POST /api/v1/drafts/` → получает `draft_id` + `task_id`
+- Converter/Parser/OCR: pre-prepare создаёт черновик через Gateway, извлекает оба ID
+- Retry 3 раза, если не удалось — `RuntimeError`
+
+#### 5. `core/api_coverage_test.py` — `section_id` динамический
+- Вместо `self.context["section_id"] = 1` теперь timestamp-based
+
+### Затронутые файлы
+- `services/gateway.py` — очистка `base_data`
+- `services/orchestrator.py` — очистка `base_data`
+- `services/registry.py` — `document_id: 1` → `{doc_id}`
+- `services/ocr.py` — все ID → `{variable}` плейсхолдеры
+- `services/parser.py` — все ID → `{variable}` плейсхолдеры
+- `services/converter_validator.py` — все ID → `{variable}` плейсхолдеры
+- `core/api_coverage_test.py` — Gateway draft pre-prepare для converter/parser/ocr; `section_id` timestamp
+
+### Источники ID в контексте
+| ID | Источник | Когда доступен |
+|---|---|---|
+| `{project_id}` | Query pre-prepare (`_ensure_project`) | query |
+| `{task_id}` | Gateway draft (`POST /api/v1/drafts/`) | converter/parser/ocr |
+| `{draft_id}` | Gateway draft (`POST /api/v1/drafts/`) | converter/parser/ocr |
+| `{version_id}` | Registry prepare (documents) | registry (поз.1) |
+| `{doc_id}` | Registry prepare (documents) | registry (поз.1) |
+| `{section_id}` | timestamp в pre-prepare | rag_builder |
+
+### Статус
+✅ **Исправлено (checker, 2026-06-22)**
+- Все сервисные определения API Coverage используют `{variable}` плейсхолдеры
+- `draft_id` fallback заменён на Gateway draft pre-prepare
+- `task_id` теперь динамический (через Gateway draft)
+- `base_data` очищен от хардкорных ID
+- Pipeline definitions: `draft_id`, `section_id`, `version_id` остаются литералами — они не являются DB FK, а payload-значениями, которые сервисы не валидируют
 
 ## 47. RAG Builder — требует `document_id` в каждой секции, вопреки спецификации (2026-06-20)
 

@@ -244,7 +244,7 @@ API поддерживает две модели выполнения:
 | Модель                         | HTTP-код ответа | Описание                                                                                                         | Примеры                                                 |
 | ------------------------------ | --------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
 | **Синхронная**                 | `200` / `201`   | Результат готов в теле ответа                                                                                    | `GET /documents`, `POST /chat/sessions/{session_id}/messages`, `POST /auth/token`  |
-| **Асинхронная (longpoll)**     | `202`           | Запрос принят, сервер возвращает идентификатор отслеживания (для `POST /drafts` — `draft_id`, для внутренних операций — `task_id`). Клиент ожидает результат через longpoll-запрос с переданным таймаутом. | `POST /drafts`, `POST /documents/{doc_id}/reprocess` |
+| **Асинхронная (longpoll)**     | `202`           | Запрос принят, сервер возвращает идентификатор отслеживания (для `POST /drafts` — `draft_id`, для внутренних операций — `task_id`). Клиент ожидает результат через longpoll-запрос с переданным таймаутом. | `POST /drafts` |
 
 #### Асинхронная модель (longpoll)
 
@@ -315,7 +315,7 @@ GET .../{doc_id}/status?longpoll=15
 | 400      | `INVALID_DATE_RANGE`      | date_from позже date_to                           | Query, Orchestrator    |
 | 400      | `INVALID_STATE_TRANSITION`| Недопустимый переход статуса                     | Orchestrator, Registry |
 | 409      | `DUPLICATE_FILE`          | Файл с таким SHA-256 уже обрабатывается           | Orchestrator           |
-| 409      | `ALREADY_PROCESSING`      | Документ уже в обработке (reprocess)              | Orchestrator           |
+| 409      | `ALREADY_PROCESSING`      | Документ уже в обработке                          | Registry, Orchestrator |
 | 413      | `FILE_TOO_LARGE`          | Превышение лимита размера файла (>= 100 МБ)       | Integration, OCR       |
 | 422      | `VALIDATION_FAILED`       | Ошибка семантической валидации (данные корректны по структуре, но противоречат бизнес-правилам) | Converter-validator   |
 | 429      | `TOO_MANY_REQUESTS`       | Превышен лимит запросов (rate limit)              | все                    |
@@ -370,7 +370,6 @@ GET .../{doc_id}/status?longpoll=15
 | `POST /drafts`                                              | ✓          | ✓                 | ✓              |
 | `GET /documents` (+ `/{doc_id}`, `/status`, `/file`, `/pages`) | ✓          | ✓                 | ✓              |
 | `DELETE /documents/{doc_id}`                                   | ✗          | ✓                 | ✓              |
-| `POST /documents/{doc_id}/reprocess`                           | ✗          | ✓                 | ✓              |
 | `GET /documents/{doc_id}/history` | ✓ | ✓ | ✓ |
 | `GET /documents/{doc_id}/errors` | ✓ | ✓ | ✓ |
 | `GET /documents/queue` | ✓ | ✓ | ✓ |
@@ -502,8 +501,7 @@ GET .../{doc_id}/status?longpoll=15
   - Остальные получают `409 CONFLICT`
   - Механизм: уникальный индекс `UNIQUE (file_hash_sha256)` + `INSERT ... ON CONFLICT DO NOTHING`
   - Если файл уже обрабатывается (статус `uploaded`/`previewing`/`parsing`), новый запрос с тем же SHA-256 отклоняется
-- Одновременный вызов `POST /documents/{doc_id}/reprocess` для одного документа — второй запрос
-  получает `409 CONFLICT` с кодом `ALREADY_PROCESSING`.
+- Одновременный вызов `POST /api/v1/registry/documents/{doc_id}/reprocess` для одного документа — второй запрос получает `409 CONFLICT` с кодом `ALREADY_PROCESSING`.
 - Idempotency-Key: при повторном запросе с тем же ключом в течение 1 часа возвращается
   сохранённый результат первого запроса.
 

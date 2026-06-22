@@ -14,6 +14,14 @@
 - Черновики и документы живут в Registry.
 - Orchestrator обращается к Registry через RegistryServiceClient.
 
+### 2.1. Scope эндпоинтов оркестратора (22.06.2026)
+Orchestrator **не выставляет** GET-операции над документами. Чтение/CRUD документов — зона Registry (`/registry/documents/*`, см. `docs/api/registry_service_api.md`).
+
+В оркестраторе остаются только:
+- `/drafts/*` — управление черновиками (proxy к Registry + логика пайплайна)
+- `/tasks/*` — мониторинг pipeline-задач (внутреннее, для админов)
+- `/system/health`, `/health/live`, `/health/ready` — health-check
+
 ### 3. Двухфазный pipeline
 - **Preview фаза:** быстрая обработка первых страниц (OCR/Parser → Converter-validator) → решение пользователя.
 - **Full фаза:** полная обработка (OCR/Parser → Converter-validator → Registry → RAG Builder).
@@ -21,7 +29,7 @@
 - Preview_not_supported → пропуск full-фазы.
 
 ### 4. Task как агрегатор шагов
-- Один Task = одна pipeline-задача (formation/indexation/reprocess).
+- Один Task = одна pipeline-задача (formation/indexation).
 - TaskStep = шаг выполнения с input/output JSON-контейнерами.
 - Шаги исполняются в Celery workers.
 
@@ -140,7 +148,6 @@ uploaded → previewing → ready_for_approve → approved → [formation comple
 - ✅ P2I-2 — Integrity check после индексации (self-check + background)
 - ✅ P2I-3 — Компенсация через Saga
 - ✅ P2I-7 — Advisory lock
-- ✅ P2I-9 — POST /documents/{id}/reprocess
 - ✅ P3S-1/P3S-2 — Таймауты pending 30с + абсолютный 48ч
 - ✅ P3S-4 — Валидация [source:N] (retry 2, fallback)
 - ✅ P3S-5 — Fallback при пустом результате

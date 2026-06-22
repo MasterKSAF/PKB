@@ -146,5 +146,4 @@ class TestOpenAPIEndpoints:
         data = response.json()
         paths = data.get("paths", {})
         assert "/api/v1/system/health" in paths
-        assert "/api/v1/documents/" in paths
 

@@ -319,5 +319,5 @@ def get_service_def() -> ServiceDef:
         endpoints=endpoints,
         prepare_endpoints=prepare_endpoints,
         depends_on=["auth", "orchestrator", "query", "registry"],
-        base_data={"doc_id": 1, "user_id": "1", "page_num": 1, "category_id": 1, "file_id": 1, "project_id": 1, "pending_id": 1},
+        base_data={},
     )

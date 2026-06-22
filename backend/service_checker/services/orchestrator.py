@@ -198,6 +198,6 @@ def get_service_def() -> ServiceDef:
         endpoints=endpoints,
         prepare_endpoints=prepare_endpoints,
         depends_on=["auth", "registry", "query", "converter_validator", "parser", "rag_search"],
-        base_data={"doc_id": "1", "page_num": 1},
+        base_data={},
         warnings=[],
     )

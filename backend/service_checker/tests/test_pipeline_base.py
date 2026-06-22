@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 from typing import Any, Dict, List, Optional, Tuple
+from unittest.mock import AsyncMock, MagicMock
 
+import httpx
 import pytest
 
 from service_checker.pipelines.base import (
@@ -363,6 +365,99 @@ class TestPipelineRunner:
         step = PipelineStep(name="normal", service="auth", method="GET", path="/health", port=8082)
         # Нет skip_if — выполняется всегда (не пропускается)
         assert step.skip_if is None
+
+    # ── _ensure_project ────────────────────────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_ensure_project_raises_on_connection_error(self):
+        """_ensure_project raises RuntimeError when it can't connect."""
+        runner = PipelineRunner()
+        ctx = PipelineContext()
+        # Mock client to raise exception on both post and get
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(side_effect=httpx.ConnectError("Connection refused"))
+        mock_client.get = AsyncMock(side_effect=httpx.ConnectError("Connection refused"))
+        runner.client = mock_client
+
+        with pytest.raises(RuntimeError, match="Cannot create or fetch project"):
+            await runner._ensure_project(ctx)
+
+        # Neither project_id should be set
+        assert ctx.has("project_id") is False
+
+    @pytest.mark.asyncio
+    async def test_ensure_project_succeeds_on_post_201(self):
+        """_ensure_project succeeds when POST returns 201."""
+        runner = PipelineRunner()
+        ctx = PipelineContext()
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 201
+        mock_resp.json.return_value = {"project_id": 42}
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_resp)
+        runner.client = mock_client
+
+        await runner._ensure_project(ctx)
+
+        assert ctx.get("project_id") == 42
+        # GET should not be called
+        mock_client.get.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_ensure_project_succeeds_on_get_list(self):
+        """_ensure_project succeeds when GET list returns items (POST failed)."""
+        runner = PipelineRunner()
+        ctx = PipelineContext()
+
+        # POST fails with 500 (all 3 attempts)
+        mock_post_resp = MagicMock()
+        mock_post_resp.status_code = 500
+
+        # GET returns items on first attempt
+        mock_get_resp = MagicMock()
+        mock_get_resp.status_code = 200
+        mock_get_resp.json.return_value = {"items": [{"project_id": 99}]}
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_post_resp)
+        mock_client.get = AsyncMock(return_value=mock_get_resp)
+        runner.client = mock_client
+
+        await runner._ensure_project(ctx)
+
+        assert ctx.get("project_id") == 99
+        # POST should have been called 3 times
+        assert mock_client.post.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_ensure_project_raises_on_empty_get_list(self):
+        """_ensure_project raises when GET list returns empty."""
+        runner = PipelineRunner()
+        ctx = PipelineContext()
+
+        # POST fails with 500 (all 3 attempts)
+        mock_post_resp = MagicMock()
+        mock_post_resp.status_code = 500
+
+        # GET returns empty list (all 3 attempts)
+        mock_get_resp = MagicMock()
+        mock_get_resp.status_code = 200
+        mock_get_resp.json.return_value = {"items": []}
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_post_resp)
+        mock_client.get = AsyncMock(return_value=mock_get_resp)
+        runner.client = mock_client
+
+        with pytest.raises(RuntimeError, match="Cannot create or fetch project"):
+            await runner._ensure_project(ctx)
+
+        assert ctx.has("project_id") is False
+        # POST should have been called 3 times, GET 3 times
+        assert mock_client.post.call_count == 3
+        assert mock_client.get.call_count == 3
 
 
 class TestStepStatus:

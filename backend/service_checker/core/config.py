@@ -187,6 +187,12 @@ PIPELINE_SERVICE_MAP = {
     "orchestrator_draft_lifecycle": ["auth", "orchestrator", "registry"],
     "multi_document_cross_search": ["minio", "parser", "converter_validator", "registry", "rag_builder", "rag_search"],
     "document_approval": ["orchestrator", "registry", "rag_builder", "rag_search"],
+    "orchestrator_document_reject": ["auth", "orchestrator"],
+    "orchestrator_metadata_update": ["auth", "orchestrator"],
+    "orchestrator_draft_delete": ["auth", "orchestrator"],
+    "orchestrator_document_reprocess": ["auth", "orchestrator", "registry"],
+    "orchestrator_document_versions": ["auth", "orchestrator", "registry"],
+    "orchestrator_full_document_lifecycle": ["auth", "orchestrator", "registry", "rag_builder", "rag_search"],
 }
 
 PIPELINE_SERVICE_COLUMNS = {
@@ -198,6 +204,12 @@ PIPELINE_SERVICE_COLUMNS = {
     "registry_quarantine": "Quarantine",
     "orchestrator_draft_lifecycle": "Orchestrator",
     "multi_document_cross_search": "MultiDoc",
+    "orchestrator_document_reject": "OrchReject",
+    "orchestrator_metadata_update": "OrchMetadata",
+    "orchestrator_draft_delete": "OrchDelete",
+    "orchestrator_document_reprocess": "OrchReprocess",
+    "orchestrator_document_versions": "OrchVersions",
+    "orchestrator_full_document_lifecycle": "OrchFull",
 }
 
 SERVICE_DISPLAY_NAMES = {

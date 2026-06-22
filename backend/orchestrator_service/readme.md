@@ -144,52 +144,12 @@ ReDoc: `http://localhost:8081/redoc`
 
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
+| GET | `/tasks` | Список задач пайплайна с фильтрацией и пагинацией |
+| GET | `/tasks/stats` | Статистика по задачам (по статусам и этапам) |
+| GET | `/tasks/{task_id}` | Детальная информация о задаче |
 | GET | `/tasks/{task_id}/status` | Статус задачи с детализацией шагов |
-
-### Документы (`/api/v1/documents`)
-
-| Метод | Endpoint | Описание |
-|-------|----------|----------|
-| POST | `/documents` | Загрузка версии документа |
-| GET | `/documents` | Список документов с пагинацией |
-| GET | `/documents/queue` | Очередь обработки документов |
-| GET | `/documents/{doc_id}` | Информация о документе |
-| GET | `/documents/{doc_id}/file` | Скачивание файла документа |
-| GET | `/documents/{doc_id}/status` | Статус обработки |
-| GET | `/documents/{doc_id}/pages` | Список страниц документа |
-| GET | `/documents/{doc_id}/pages/{page_num}` | Просмотр страницы с блоками |
-| GET | `/documents/{doc_id}/pages/{page_num}/text` | Текст страницы |
-| GET | `/documents/{doc_id}/pages/{page_num}/preview` | Превью страницы |
-| GET | `/documents/{doc_id}/parameters` | Извлечённые параметры |
-| GET | `/documents/{doc_id}/errors` | Журнал ошибок обработки |
-| DELETE | `/documents/{doc_id}` | Удаление документа |
-| POST | `/documents/{doc_id}/reprocess` | Повторная обработка |
-
-### Поиск и RAG (`/api/v1/documents/search`, `/api/v1/ask`)
-
-| Метод | Endpoint | Описание |
-|-------|----------|----------|
-| POST | `/documents/search` | Семантический поиск по фрагментам |
-| GET | `/documents/search?q=...` | Быстрый поиск (GET-вариант) |
-| POST | `/ask` | Генерация ответа с источниками (RAG) |
-
-### Валидация и проверки (`/api/v1/validate`)
-
-| Метод | Endpoint | Описание |
-|-------|----------|----------|
-| POST | `/validate/compare` | Запуск сопоставления нормативных и проектных данных |
-| GET | `/validate/compare/{comparison_id}` | Результат сопоставления |
-| POST | `/validate/compare/batch` | Массовое сопоставление пар фрагментов |
-| POST | `/validate/checks` | Запуск проверки проектных параметров |
-| GET | `/validate/checks/{check_run_id}` | Статус проверки |
-| GET | `/validate/checks/{check_run_id}/export` | Экспорт результатов проверки |
-
-### Мониторинг (`/api/v1/monitor`)
-
-| Метод | Endpoint | Описание |
-|-------|----------|----------|
-| GET | `/monitor/metrics` | Метрики качества системы |
-
+| GET | `/tasks/{task_id}/steps` | Список шагов задачи |
+| GET | `/drafts/{draft_id}/tasks` | Список задач для черновика |
 ### Служебные
 
 | Метод | Endpoint | Описание |
@@ -221,12 +181,9 @@ orchestrator_service/
 │   │       ├── api.py                 # Конфигурация роутеров
 │   │       └── endpoints/
 │   │           ├── __init__.py
-│   │           ├── documents.py       # CRUD документов, страницы, параметры, очередь
-	│   │           ├── drafts.py          # Черновики: upload, preview, decide
-	│   │           ├── tasks.py           # Статус задач пайплайна
-	│   │           ├── search.py          # Поиск
-	│   │           ├── health.py          # Health check
-	│   │           └── monitor.py         # Метрики и мониторинг
+│   │           ├── drafts.py          # Черновики: upload, preview, decide
+│   │           ├── tasks.py           # Статус задач пайплайна
+│   │           └── health.py          # Health check
 │   ├── core/
 │   │   ├── __init__.py
 │   │   ├── config.py                  # Настройки (Pydantic Settings)
@@ -244,11 +201,10 @@ orchestrator_service/
 │   ├── schemas/
 │   │   ├── __init__.py
 │   │   ├── common.py                  # Общие схемы (Error, Pagination)
-	│   │   ├── documents.py               # Схемы документов
-	│   │   ├── drafts.py                  # Схемы черновиков
-	│   │   ├── tasks.py                   # Схемы задач пайплайна
-	│   │   ├── search.py                  # Схемы поиска
-	│   │   └── validation.py              # Схемы валидации
+│   │   ├── drafts.py                  # Схемы черновиков
+│   │   ├── tasks.py                   # Схемы задач пайплайна
+│   │   ├── requests.py                # Схемы запросов к сервисам (RAG, registry)
+│   │   └── validation.py              # Схемы валидации и health
 	│   ├── services/
 	│   │   ├── __init__.py
 	│   │   ├── base_client.py             # Базовый клиент с dual-mode (mock/real)
