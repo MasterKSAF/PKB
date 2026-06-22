@@ -268,7 +268,10 @@ class PipelineRunner:
     def client(self) -> httpx.AsyncClient:
         """Ленивая инициализация HTTP-клиента (SSL certs загружаются только при первом использовании)."""
         if self._client is None:
-            self._client = httpx.AsyncClient(timeout=self.timeout)
+            self._client = httpx.AsyncClient(
+                timeout=self.timeout,
+                trust_env=False,
+            )
         return self._client
 
     @client.setter
@@ -331,8 +334,11 @@ class PipelineRunner:
         """Проверить, отвечает ли сервис на health-эндпоинты."""
         if health_paths is None:
             health_paths = [
+                "/health",
                 "/api/v1/health",
                 "/api/v1/system/health",
+                "/api/v1/",
+                "/",
             ]
         for path in health_paths:
             try:

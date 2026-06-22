@@ -42,7 +42,10 @@ class OpenApiLoader:
         """Загрузить /openapi.json. Вернуть True при успехе."""
         url = f"{self.base_url}/openapi.json"
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with httpx.AsyncClient(
+                    timeout=self.timeout,
+                    trust_env=False,
+            ) as client:
                 resp = await client.get(url)
                 if resp.status_code != 200:
                     self.errors.append(f"HTTP {resp.status_code} при загрузке {url}")

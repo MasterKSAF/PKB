@@ -2,7 +2,7 @@
 REM =============================================================================
 REM PKB Neuroassistant — re-check SPD: RAG Builder SPD
 REM
-REM Использует docker-compose.spd.yml (rag-builder-spk вместо rag-builder + rag-search).
+REM Использует docker-compose.spd.yml (rag-builder-spd вместо rag-builder + rag-search).
 REM Отчёты с суффиксом _spd.
 REM =============================================================================
 REM Параметры:
@@ -147,16 +147,16 @@ if %ERRORLEVEL% neq 0 (
     goto wait_supervisor
 )
 
-REM ── Проверка, что развёрнут SPD-режим (rag-builder-spk RUNNING, без rag-search) ──
-docker exec %SPD_CTR% supervisorctl status 2>nul | findstr /C:"rag-builder-spk" | findstr "RUNNING" >nul 2>&1
-if %ERRORLEVEL% neq 0 (
-    echo     ⚠ Предупреждение: rag-builder-spk не в RUNNING — возможно, развёрнут обычный режим?
+REM ── Проверка, что развёрнут SPD-режим (rag-builder-spd RUNNING, без rag-search) ──
+docker exec %SPD_CTR% supervisorctl status 2>nul | findstr /C:"rag-builder-spd" | findstr "RUNNING" >nul 2>&1
+if errorlevel 1 (
+    echo     ⚠ Предупреждение: rag-builder-spd не в RUNNING — возможно, развёрнут обычный режим?
 ) else (
     docker exec %SPD_CTR% supervisorctl status 2>nul | findstr /C:"rag-search" >nul 2>&1
-    if %ERRORLEVEL% equ 0 (
+    if not errorlevel 1 (
         echo     ⚠ Предупреждение: rag-search найден — возможно, развёрнут обычный режим?
     ) else (
-        echo     ✅ SPD-режим: rag-builder-spk RUNNING (без rag-search)
+        echo     ✅ SPD-режим: rag-builder-spd RUNNING (без rag-search)
     )
 )
 
