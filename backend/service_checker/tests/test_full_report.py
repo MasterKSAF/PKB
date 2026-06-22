@@ -309,6 +309,46 @@ class TestGenerateFullReport:
         assert parts_pipe[2] == "—", f"Expected '—', got {parts_pipe[2]}"
         assert parts_pipe[3] == "—", f"Expected '—', got {parts_pipe[3]}"
 
+    def test_full_report_api_stats_in_summary(self):
+        """В сводной таблице в колонке API отображается числовая статистика (passed/total/failed)."""
+        from service_checker.core.reports import _generate_full_report
+
+        cov_results = {
+            "auth": MockCoverageResult("Auth Service", 8082, ping_ok=True,
+                                        endpoints_total=10, endpoints_passed=10,
+                                        endpoints_failed=0, endpoints_skipped=0),
+        }
+        pipe_results = {
+            "document_processing": make_mock_pipeline_result(name="doc", passed=True),
+        }
+        report = _generate_full_report(cov_results, pipe_results, "t")
+        lines = report.split("\n")
+
+        # Строка сервиса в сводной таблице: колонка API должна содержать "✅ 10/10/0"
+        auth_line = [l for l in lines if "Auth Service" in l][0]
+        parts = [p.strip() for p in auth_line.split("|")]
+        # Колонка API (index 5): "✅ 10/10/0"
+        assert "10/10/0" in parts[5], f"Expected '10/10/0' in API column, got: {parts[5]}"
+        assert "✅" in parts[5], f"Expected ✅ in API column, got: {parts[5]}"
+
+    def test_full_report_no_orchestrator_duplicate(self):
+        """Секция 'Orchestrator Pipelines' удалена — нет дублирования с Pipeline Testing детализацией."""
+        from service_checker.core.reports import _generate_full_report
+
+        cov_results = {
+            "auth": MockCoverageResult("Auth Service", 8082, ping_ok=True),
+            "orchestrator": MockCoverageResult("Orchestrator", 8081, ping_ok=True),
+        }
+        pipe_results = {
+            "orchestrator_draft_lifecycle": make_mock_pipeline_result(
+                name="orchestrator_draft_lifecycle", passed=True, services=["orchestrator"]
+            ),
+        }
+        report = _generate_full_report(cov_results, pipe_results, "t")
+        assert "### 🔄 Orchestrator Pipelines" not in report, \
+            "Секция Orchestrator Pipelines должна быть удалена"
+        assert "### 📋 Pipeline статусы по сервисам" in report
+
 
 
 

@@ -93,8 +93,6 @@ def _generate_full_report(
     lines.append(f"**Generated:** {now}\n")
     lines.append("---\n")
 
-    db_icon = _get_db_icon(db_result)
-
     # ── 1. Итоговая сводная таблица ─────────────────────────────────
     pipe_columns = PIPELINE_SERVICE_COLUMNS  # имя → заголовок колонки
     pipe_order = [p for p in pipe_columns if p in pipeline_results]
@@ -142,9 +140,10 @@ def _generate_full_report(
             has_skips = cov.endpoints_skipped > 0
             passed_icon = "❌" if has_failures else ("⏭️" if has_skips else "✅")
             svc_checkdb = _get_service_checkdb_icon(db_result, svc_key)
+            api_cell = f"{passed_icon} {cov.endpoints_passed}/{cov.endpoints_total}/{cov.endpoints_failed}"
         else:
             ping_icon = "—"
-            passed_icon = "—"
+            api_cell = "—"
             svc_checkdb = _get_service_checkdb_icon(db_result, svc_key) if db_result else "—"
 
         # Pipeline columns
@@ -171,7 +170,7 @@ def _generate_full_report(
                 status_icon = "🟡 dev"
 
         pipe_col = _service_pipeline_summary_icon(svc_pipe_status, pipe_order)
-        lines.append(f"| {display_name} | {port} | {ping_icon} | {svc_checkdb} | {passed_icon} | {pipe_col} | {status_icon} |")
+        lines.append(f"| {display_name} | {port} | {ping_icon} | {svc_checkdb} | {api_cell} | {pipe_col} | {status_icon} |")
 
     # Итоговая строка — количества по всем столбцам
     total_services = len(coverage_results)
@@ -180,6 +179,10 @@ def _generate_full_report(
         1 for r in coverage_results.values()
         if r.ping_ok and r.endpoints_failed == 0
     )
+    all_total_ok = sum(r.endpoints_passed for r in coverage_results.values())
+    all_total_ep = sum(r.endpoints_total for r in coverage_results.values())
+    all_failed = sum(r.endpoints_failed for r in coverage_results.values())
+    all_skipped = sum(r.endpoints_skipped for r in coverage_results.values())
     svcs_with_db = [k for k in coverage_results if k in COVERAGE_TO_STARTUP_KEY]
     svcs_checkdb_ok = sum(
         1 for k in svcs_with_db
@@ -195,35 +198,10 @@ def _generate_full_report(
     lines.append(
         f"| **Total** | | **{cov_alive}/{total_services}** "
         f"| **{svcs_checkdb_ok}/{svcs_checkdb_total}** "
-        f"| **{cov_ok_count}/{total_services}** "
+        f"| **{all_total_ok}/{all_total_ep}/{all_failed}** "
         f"| {pipe_total_icon} "
         f"| {overall_status} |\n"
     )
-
-    # ── 1a. Orchestrator Pipelines (отдельная таблица) ──────────────────
-    orchestrator_pipelines = {
-        name for name, services in PIPELINE_SERVICE_MAP.items()
-        if "orchestrator" in services
-    }
-    orch_pipe_order = [p for p in pipe_order if p in orchestrator_pipelines]
-
-    if orch_pipe_order:
-        lines.append("### 🔄 Orchestrator Pipelines\n")
-        lines.append("| Pipeline | Описание | Шаги | ✅ Passed | ❌ Failed | Статус |")
-        lines.append("|----------|----------|:----:|:---------:|:---------:|:------:|")
-        for pipe_name in orch_pipe_order:
-            result = pipeline_results.get(pipe_name)
-            if result:
-                total = getattr(result, "total_steps", 0)
-                passed = getattr(result, "passed_steps", 0)
-                failed = getattr(result, "failed_steps", 0)
-                ok = getattr(result, "passed", False)
-                desc = getattr(result, "description", "")
-                status_icon = "✅" if ok else "❌"
-                lines.append(f"| `{pipe_name}` | {desc} | {total} | {passed} | {failed} | {status_icon} |")
-            else:
-                lines.append(f"| `{pipe_name}` | — | — | — | — | ⏳ |")
-        lines.append("")
 
     # ── 1b. Pipeline статусы по сервисам (отдельная таблица) ───────────
     lines.append("### 📋 Pipeline статусы по сервисам\n")
@@ -270,7 +248,7 @@ def _generate_full_report(
     totals_cols = " | ".join(pipe_totals)
     lines.append(f"| **Total** | {totals_cols} | {pipe_total_icon} |\n")
 
-    # ── 1b. Пояснения к ❌ / ⏭️ в сводной таблице ─────────────────
+    # ── 1a. Пояснения к ❌ / ⏭️ в сводной таблице ─────────────────
     lines.append("#### 🔍 Пояснения к результатам\n")
     has_notes = False
     for svc_key in sorted(coverage_results.keys()):

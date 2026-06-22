@@ -1,27 +1,14 @@
-# Устранение всех фиксированных ID
+# Исправление full_report.md
 
-## Принцип
-Каждый ID должен либо динамически создаваться через pre-prepare, либо получаться из ответа предыдущего шага. Хардкодные ID удаляются.
+## Проблемы
+1. Статистика по API не выводилась в сводной таблице (только иконка, без чисел)
+2. Таблица по оркестратору вылезла выше, чем таблица пайплайнов по сервисам
+3. Coverage падал на Gateway draft → пустой API Coverage
+4. Дублирование секции Orchestrator Pipelines с Pipeline Testing детализацией
 
-## 1. `draft_id` — fallback в API Coverage
-- [x] заменён на Gateway draft creation (retry + raise)
-
-## 2. `task_id` — был хардкор 12345
-- [x] добавлен pre-prepare Gateway draft → `task_id` для converter/parser/ocr
-- [x] `{task_id}` резолвится из контекста, как и остальные ID
-
-## 3. `draft_id`, `version_id`, `doc_id` — хардкоры в service defs
-- [x] все заменены на `{variable}` с источниками в контексте
-
-## 4. `base_data` — Gateway и Orchestrator
-- [x] очищен до `{}`
-
-## 5. `section_id` — API Coverage
-- [x] динамический timestamp-based
-
-## 6. Pipeline definitions
-- [x] `draft_id`, `section_id`, `version_id` — payload-значения (не FK), оставлены литералами
-
-## 7. Проверка
-- [x] Все тесты — **537 passed**
-- [x] `specificity.md` — запись #48
+## План
+- [x] Поменять местами секции 1a (Orchestrator Pipelines) и 1b (Pipeline статусы по сервисам)
+- [x] Добавить числовую статистику по API в сводную таблицу (passed/total/failed)
+- [x] Исправить pre-prepare Gateway draft — заменить JSON на form-data, убрать RuntimeError
+- [x] Удалить дублирующуюся секцию Orchestrator Pipelines
+- [x] Обновить тесты — 12 passed
