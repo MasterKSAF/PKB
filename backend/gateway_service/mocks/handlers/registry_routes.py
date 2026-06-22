@@ -410,7 +410,7 @@ async def import_classifiers(request: Request):
                 errors.append({"row": row.code, "message": str(e)})
         return {"data": {"inserted": inserted, "updated": updated, "errors": errors}}
 
-    # Handle file-based import (CSV/XLSX/JSON)
+    # Handle file-based import (CSV/XLSX/JSON) — создаёт pending entries для карантина
     if not file_bytes:
         raise HTTPException(400, detail=error_response("VALIDATION_ERROR", "Файл не передан"))
 
@@ -429,7 +429,7 @@ async def import_classifiers(request: Request):
     except Exception as e:
         raise HTTPException(400, detail=error_response("VALIDATION_ERROR", f"Ошибка парсинга файла: {e}"))
 
-    inserted = updated = 0
+    pending_ids = []
     errors = []
     for i, rd in enumerate(raw_rows):
         try:
@@ -439,21 +439,25 @@ async def import_classifiers(request: Request):
                 row = ClassifierCreate(**rd)
             else:
                 row = rd
-            if row.code in _classifiers:
-                node = _classifiers[row.code]
-                node.update({"classifier_system": row.classifier_system, "full_name": row.full_name,
-                             "status": row.status, "effective_date": row.effective_date,
-                             "parent_code": row.parent_code, "updated_at": utcnow()})
-                updated += 1
-            else:
-                _classifiers[row.code] = {"classifier_system": row.classifier_system, "code": row.code,
-                                          "parent_code": row.parent_code, "full_name": row.full_name,
-                                          "status": row.status, "effective_date": row.effective_date,
-                                          "replaced_by": None, "created_at": utcnow(), "updated_at": utcnow()}
-                inserted += 1
+            pending_id = new_id()
+            pending_entry = {
+                "id": pending_id,
+                "system": row.classifier_system,
+                "code": row.code,
+                "full_name": row.full_name,
+                "status": "new",
+                "found_in_document_id": None,
+                "found_in_document_title": row.full_name,
+                "suggested_parent_code": row.parent_code,
+                "suggested_parent_name": None,
+                "admin_comment": None,
+                "created_at": utcnow(),
+            }
+            _pending_classifiers[pending_id] = pending_entry
+            pending_ids.append(pending_id)
         except Exception as e:
             errors.append({"row": i + 1, "code": rd.get("code", "?"), "message": str(e)})
-    return {"data": {"inserted": inserted, "updated": updated, "errors": errors}}
+    return {"data": {"pending_created": len(pending_ids), "pending_ids": pending_ids, "errors": errors}}
 
 
 @router.get("/classifiers/quarantine")
@@ -473,7 +477,7 @@ async def accept_quarantine(pending_id: int, req: Optional[AcceptPendingRequest]
         req = AcceptPendingRequest()
     code = pending.get("code", f"auto-{new_id()}")
     parent_code = req.parent_code or pending.get("suggested_parent_code")
-    full_name = req.full_name or pending.get("found_in_document_title", "")
+    full_name = req.full_name or pending.get("full_name") or pending.get("found_in_document_title", "")
     admin_comment = req.admin_comment
     if admin_comment is not None:
         pending["admin_comment"] = admin_comment

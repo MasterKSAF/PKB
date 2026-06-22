@@ -8,6 +8,7 @@
 
 ## Дополнительно (обнаружено по ходу)
 - [x] **POST /auth/login** — отсутствовал (только `/auth/token`), добавлен алиас
+- [x] **pending_id** — файловый импорт `/classifiers/import` теперь создаёт pending в карантине вместо прямой вставки (checker-совместимость)
 - [x] **Порт mock-gateway** — 8081 конфликтовал с Orchestrator, переведён на 8099
 - [x] **MOCK_PORT константа** — вынесена в `mocks/common.py` (единая точка)
 - [x] **test_91_update_registry_doc** — падал с 422 (`jurisdiction='RF'` невалиден), добавлен `RF` в `VALID_JURISDICTIONS`

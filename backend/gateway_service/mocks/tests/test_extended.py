@@ -1148,7 +1148,7 @@ class TestStopperFixes:
     # ── Stopper 1 & 2: CSV/XLSX import ─────────────────────────────────
 
     def test_62_import_classifiers_csv(self):
-        """POST /classifiers/import с CSV-файлом + mapping → 200."""
+        """POST /classifiers/import с CSV-файлом + mapping → 200 (создаёт pending)."""
         csv_content = "code,full_name\nCSV.001,Test CSV Import\nCSV.002,Another CSV"
         mapping = _json.dumps({"code": "code", "full_name": "full_name"})
         resp = client.post(
@@ -1158,7 +1158,8 @@ class TestStopperFixes:
         )
         assert_ok(resp)
         data = resp.json()["data"]
-        assert data["inserted"] >= 1
+        assert data["pending_created"] >= 1
+        assert len(data["pending_ids"]) >= 1
 
     def test_63_import_terminology_csv(self):
         """POST /terminology/import с CSV-файлом + mapping → 200."""

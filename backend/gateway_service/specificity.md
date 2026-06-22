@@ -352,3 +352,12 @@ Docker healthcheck может слать `/api/v1/system/health/` — слеш �
 - **orch_routes.py**: Добавлен роут `/api/v1/drafts/` со слешем для совместимости
 ### Аномалии
 - **test_91_update_registry_doc** — падает с 422: `jurisdiction='RF'` недопустимо (список: RU/BY/KZ/...). Ошибка в тесте или в seed-данных, не связана с правками.
+
+## 2026-06-22: pending_id — файловый импорт классификаторов создаёт карантин
+### Изменения
+- **registry_routes.py**: Файловый импорт `POST /classifiers/import` (multipart) больше не вставляет напрямую в `_classifiers`, а создаёт записи в `_pending_classifiers` (карантин). JSON-body (inline) остался без изменений — прямая вставка.
+- **accept_quarantine**: Учтён `full_name` из pending-записи (для импортированных строк, у которых нет `found_in_document_title`).
+- **test_api.py test_78**: Ассерт исправлен на `data.pending_created`.
+- **test_extended.py test_62**: Ассерт исправлен на `data.pending_created` + проверка `pending_ids`.
+### Статус тестов
+- Все 551 тест проходят

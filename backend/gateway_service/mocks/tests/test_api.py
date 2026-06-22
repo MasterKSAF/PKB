@@ -963,7 +963,8 @@ class TestRegistryService:
             files={"file": ("data.json", payload, "application/json")},
         )
         assert_ok(resp)
-        assert resp.json()["data"]["inserted"] >= 1
+        data = resp.json()["data"]
+        assert data["pending_created"] >= 1
 
     def test_79_list_terminology(self):
         resp = client.get(f"{REG}/terminology")
