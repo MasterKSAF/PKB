@@ -12,6 +12,12 @@
 
 ---
 
+---
+
+## Межсервисное взаимодействие
+
+Авторизацию контролирует только Gateway. Внутренние сервисы не имеют своей аутентификации — см. [common_api.md](common_api.md#межсервисное-взаимодействие).
+
 ### Контракт API (финальный)
 
 #### Формат ответа
@@ -34,59 +40,24 @@
 
 ### POST /ocr/process — запуск обработки
 
-Асинхронная обработка отсканированных изображений/фотографий: распознавание текста (OCR), очистка, нормализация, выделение структуры, извлечение таблиц/изображений и классификация.
+Асинхронное распознавание сканов и изображений (скан/фото/PDF без текстового слоя).
+
+Поддерживает два режима через поле `mode`:
+- **`full`** — полный парсинг всех страниц, сохранение изображений в MinIO
+- **`preview`** — быстрый предпросмотр первых N страниц, **без** сохранения изображений в MinIO (`image_key` отсутствует)
+
+Если движок не поддерживает постраничный парсинг, а запрошен `mode: "preview"`, сервис возвращает полный документ с отметкой `preview_not_supported: true` в метаданных результата. Далее Оркестратор передаёт данные в Converter-validator preview (`/converter/preview`), после чего пользователь принимает решение (approve/reject). Full-фаза OCR/Parser пропускается, так как JSON уже полный.
 
 **Важно:** идентификатор задачи (`task_id`) генерирует Оркестратор и передаёт в запросе. OCR-сервис использует его для всех последующих операций (статус, результат).
 
-**Вход:** ссылка на файл в MinIO.
-
 **Запрос:**
 
 ```json
 {
   "task_id": 420000,
-  "version_id": "c4b9f2d3-...",
+  "draft_id": 12345,
   "file_key": "file-abc123",
-  "options": {
-    "extract_tables": true,
-    "extract_images": true
-  }
-}
-```
-
-| Поле | Тип | Обязательность | Описание |
-| ---- | --- | -------------- | -------- |
-| `task_id` | bigint | Да | Идентификатор задачи (генерируется Оркестратором) |
-| `version_id` | string | Да | ID версии документа (ссылка на `document_versions`) |
-| `file_key` | string | Да | Ключ файла в MinIO |
-| `options` | object | Нет | Параметры обработки |
-| `options.extract_tables` | bool | Нет | Извлекать таблицы в структурированном виде |
-| `options.extract_images` | bool | Нет | Извлекать изображения в MinIO |
-
-**Ответ `202`**:
-
-```json
-{
-  "task_id": 420000,
-  "status": "accepted",
-  "version_id": "c4b9f2d3-...",
-  "estimated_completion": "2026-05-15T10:02:00Z"
-}
-```
-
----
-
-### POST /ocr/preview — быстрый предпросмотр
-
-Синхронный/полусинхронный предпросмотр первых N страниц документа. Бинарные объекты (изображения) **не сохраняются** в MinIO, `image_key` в ответе отсутствует.
-
-**Запрос:**
-
-```json
-{
-  "task_id": 420000,
-  "version_id": "c4b9f2d3-...",
-  "file_key": "file-abc123",
+  "mode": "preview",
   "max_pages": 3,
   "options": {
     "extract_tables": false,
@@ -98,40 +69,40 @@
 | Поле | Тип | По умолчанию | Обязательность | Описание |
 | ---- | --- | ------------ | -------------- | -------- |
 | `task_id` | bigint | — | Да | Идентификатор задачи (генерируется Оркестратором) |
-| `version_id` | string | — | Да | ID версии документа |
+| `draft_id` | bigint | — | **Да (P12-1)** | Идентификатор черновика в Registry. Обязателен с 17.06 |
 | `file_key` | string | — | Да | Ключ файла в MinIO |
-| `max_pages` | int | `3` | Нет | Количество страниц для предпросмотра |
+| `mode` | enum | `"full"` | Нет | Режим обработки: `"preview"` / `"full"` |
+| `max_pages` | int | `3` | Нет | Количество страниц для предпросмотра (только для `mode: "preview"`) |
 | `options` | object | — | Нет | Параметры обработки |
+| `options.extract_tables` | bool | `false` | Нет | Извлекать таблицы в структурированном виде |
+| `options.extract_images` | bool | `false` | Нет | Извлекать изображения в MinIO (только для `mode: "full"`) |
 
-**Ответ `200`** (предпросмотр):
+**Ответ `202`** (всегда):
 
 ```json
 {
   "task_id": 420000,
-  "version_id": "c4b9f2d3-...",
-  "preview": true,
-  "max_pages": 3,
-  "metadata": {
-    "schema": "raw_ocr_v4",
-    "created_at": "2026-05-17T09:15:00Z"
-  },
-  "document": {
-    "source": {
-      "file_name": "GOST_20868-81_scan.pdf",
-      "page_count": 2
-    }
-  }
+  "status": "accepted",
+  "mode": "preview",
+  "estimated_completion": "2026-05-15T10:02:00Z"
 }
 ```
 
-> **Полный формат данных** (схема `raw_ocr_v4`) — см.  
-> [`docs/schema/schema_parser_result.json`](../schema/schema_parser_result.json)
+| Поле | Тип | Описание |
+| ---- | --- | -------- |
+| `task_id` | bigint | Идентификатор задачи |
+| `status` | string | `"accepted"` |
+| `mode` | enum | Проброшенный режим из запроса: `"preview"` / `"full"` |
+| `estimated_completion` | datetime | Ориентировочное время завершения (ISO 8601) |
 
-> **Важно:** в режиме предпросмотра:
+---
+
+> **Ограничения режима `preview`:**
 > - Поле `image_key` **отсутствует** у блоков (не сохраняется в MinIO)
 > - Поле `font` (объект) может отсутствовать у text-блоков
 > - Отсутствует детализация `quality.per_page`
 > - Возвращаются только первые N страниц документа
+> - Если движок не поддерживает постраничный парсинг — возвращается полный документ с флагом `preview_not_supported: true`. Full-фаза OCR/Parser пропускается, решение принимает пользователь
 
 ---
 
@@ -149,7 +120,7 @@
 
 ```json
 {
-  "task_id": "ocr-task-001",
+  "task_id": 420000,
   "status": "processing",
   "progress_percent": 45,
   "pages_processed": 5,
@@ -172,8 +143,8 @@
 | `avg_confidence`   | float  | Средняя уверенность распознавания                       |
 | `step`             | string | **Текущий шаг** обработки (см. таблицу ниже)            |
 | `step_detail`      | string | Детализация шага (человекочитаемая)                     |
-| `started_at`       | string | Время начала обработки                                  |
-| `completed_at`     | string | Время завершения (null, если не завершён)               |
+| `started_at`       | datetime | Время начала обработки                                  |
+| `completed_at`     | datetime | Время завершения (null, если не завершён)               |
 
 **Значения `step`:**
 
@@ -201,9 +172,10 @@
 ```json
 {
   "task_id": 420000,
-  "version_id": "c4b9f2d3-...",
   "metadata": {
     "schema": "raw_ocr_v4",
+    "mode": "preview",
+    "preview_not_supported": false,
     "created_at": "2026-05-17T09:15:00Z",
     "parser": { "name": "docling", "version": "2.1.0", "ocr_engine": "paddleocr", "ocr_fallback": false }
   },
@@ -229,10 +201,11 @@
 | Поле                                         | Тип    | Описание                                                             |
 | -------------------------------------------- | ------ | -------------------------------------------------------------------- |
 | `task_id`                                    | bigint | ID задачи оркестратора                                               |
-| `version_id`                                 | string | UUID версии                                                          |
 | `metadata`                                   | object | Метаданные обработки                                                 |
 | `metadata.schema`                            | string | Идентификатор схемы (напр. `"raw_ocr_v4"`)                          |
-| `metadata.created_at`                        | string | Время создания результата (ISO 8601)                                 |
+| `metadata.mode`                              | enum   | Режим обработки: `"preview"` / `"full"`                              |
+| `metadata.preview_not_supported`             | bool   | `true`, если движок не поддерживает постраничный парсинг и вернул полный документ |
+| `metadata.created_at`                        | datetime | Время создания результата (ISO 8601)                                 |
 | `metadata.parser`                            | object | Информация о парсере                                                 |
 | `metadata.parser.name`                       | string | Название парсера (напр. `"docling"`)                                 |
 | `metadata.parser.version`                    | string | Версия парсера (напр. `"2.1.0"`)                                    |
@@ -245,19 +218,26 @@
 | `document.source.page_count`                 | int    | Общее количество страниц в документе                                 |
 | `document.pages`                             | array  | Массив страниц документа (только геометрия)                          |
 | `document.pages[].page`                      | int    | Номер страницы (начиная с 1)                                         |
-| `document.pages[].width`                     | float  | Ширина страницы в мм                                                 |
-| `document.pages[].height`                    | float  | Высота страницы в мм                                                 |
+| `document.pages[].width`                     | float  | Ширина страницы в пикселях (сырые, px) — для нормирования bbox      |
+| `document.pages[].height`                    | float  | Высота страницы в пикселях (сырые, px) — для нормирования bbox                                                 |
 | `document.block`                             | array  | **Единый** массив всех элементов в reading order (сквозная нумерация)|
 | `block[].number`                             | int    | Порядковый номер элемента в reading order                            |
 | `block[].type`                               | string | Тип элемента: `headerFooter`, `heading`, `paragraph`, `text_block`, `list`, `table`, `image`, `caption`, `formula` |
 | `block[].page`                               | int    | Номер страницы                                                       |
-| `block[].bbox`                               | array  | Координаты `[left, bottom, right, top]` в мм                         |
+| `block[].bbox`                               | array  | Координаты `[left, bottom, right, top]` в пикселях (сырые, px)       |
 | `block[].font`                               | object | Объект шрифта: `{ size: float, color: string, bold: bool, italic: bool, underline: bool }` |
 | `quality`                                    | object | Общая оценка качества + `per_page` — детализация по страницам        |
 | `quality.per_page[].status`                  | string | `ok`, `low_confidence`, `failed`                                     |
 | `quality.per_page[].error`                   | string | Код ошибки страницы (только при `status: failed`)                    |
-| `errors`                                     | array  | Массив некритичных ошибок и предупреждений                           |
+| `quality.notifications[]`                    | array  | **P12-3 / P3-5**: уведомления для оператора (см. parser_service_api.md) — единый массив `{code, severity, category, message, location, suggested_action}` |
+| `errors`                                     | array  | Массив **системных** ошибок OCR                                      |
 | `status`                                     | string | `completed`, `failed`                                                |
+
+**P12-3 / P3-5 — поле `quality.notifications[]`:**
+
+Единый массив уведомлений для оператора — полностью аналогичен Parser-сервису (см. [parser_service_api.md](parser_service_api.md#p12-3--p3-5--qualitynotifications-уведомления-оператора)).
+
+Коды OCR-специфичных уведомлений: `BLURRED_REGION`, `LOW_RESOLUTION`, `INVERTED_COLORS`, `MULTILINGUAL_CONTENT`, `LAMA_FALLBACK_USED` (см. P3-6). Все — с `category: quality`.
 
 ---
 
@@ -271,9 +251,8 @@
 {
   "processes": [
     {
-      "task_id": "ocr-task-001",
-      "version_id": "c4b9f2d3-...",
-      "status": "processing",
+          "task_id": 420000,
+          "status": "processing",
       "progress_percent": 45,
       "pages_processed": 5,
       "pages_total": 12,
@@ -286,12 +265,11 @@
 | Поле               | Тип    | Описание                         |
 | ------------------ | ------ | -------------------------------- |
 | `task_id`          | bigint | ID задачи                        |
-| `version_id`       | string | ID версии документа              |
 | `status`           | string | Статус: `accepted`, `processing` |
 | `progress_percent` | int    | Процент выполнения               |
 | `pages_processed`  | int    | Обработано страниц               |
 | `pages_total`      | int    | Всего страниц                    |
-| `started_at`       | string | Время начала обработки           |
+| `started_at`       | datetime | Время начала обработки           |
 
 ---
 
@@ -304,6 +282,7 @@
 | `UNSUPPORTED_FORMAT` | 415  | Не изображение (не scan/image)   |
 | `ENGINE_UNAVAILABLE` | 503  | Запрошенный OCR-движок недоступен |
 | `OCR_FAILED`         | 500  | Критическая ошибка распознавания |
+| `PREVIEW_NOT_SUPPORTED` | 422 | Движок не поддерживает постраничный парсинг (возвращается в metadata результата, не HTTP) |
 | `STORAGE_ERROR`      | 502  | Ошибка доступа к MinIO           |
 | `TASK_NOT_FOUND`     | 404  | task_id не существует или протух |
 | `TASK_EXPIRED`       | 410  | Результат удалён (старше N дней) |
@@ -327,7 +306,7 @@
 | ------------------------------------ | --------------------------------------------------------------------------------------- |
 | **Автономность OCR-сервиса**         | Сам ходит в MinIO, сам складывает изображения, сам управляет своим стейтом              |
 | **Тестируемость без инфраструктуры** | Storage, OCR, State — адаптеры. Тесты на фейках, без внешних зависимостей (MinIO, MemoryCache и т.д.) |
-| **Управляемость Оркестратором**      | 4 эндпоинта (`process`, `preview`, `status`, `result`); JSON-контейнер как чёрный ящик |
+| **Управляемость Оркестратором**      | 3 эндпоинта (`process`, `status`, `result`); режим `mode` управляет preview/full; JSON-контейнер как чёрный ящик |
 | **Большие документы**                | Celery-воркер вне API-процесса, параллелизм страниц, потоковая загрузка из MinIO        |
 | **Готовые ссылки на изображения**    | OCR сам выгружает в MinIO, отдаёт `image_key` в ответе                                   |
 | **Независимая разработка**           | Другая группа может писать и тестировать OCR-сервис, имея только контракт API           |

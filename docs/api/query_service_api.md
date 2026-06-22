@@ -12,23 +12,30 @@ Query Service принимает запросы от UI, вызывает RAG Se
 5. Query Service вызывает `POST /rag/search` (RAG Search) — поиск чанков
 6. RAG возвращает массив релевантных чанков с полным содержимым
 7. Query Service формирует контекст из чанков и вызывает LLM для генерации ответа
-8. Query Service обогащает цитирования — добавляет `%[document_id:…]%`, `%[section_id:…]%` в текст ответа
+8. Query Service обогащает цитирования — добавляет `%[document_id:…, section_id:…]%` в текст ответа
 9. Результат сохраняется в истории чата (статус `answered`)
 10. UI ожидает ответ через longpoll на конкретное сообщение: `GET /chat/sessions/{session_id}/messages/{message_id}?longpoll=15`
 
 **Базовый URL (внутренний)**: `http://127.0.0.1:8083/api/v1`
-**Базовый URL (публичный через Orchestrator)**: `https://{host}/api/v1`
+**Базовый URL (через Gateway)**: `http://127.0.0.1:8080/api/v1`
 
 ### Группы
 
 | Группа | Описание                                                       |
 | ------ | -------------------------------------------------------------- |
-| `chat` | Диалоговые сессии, сообщения, обратная связь, история запросов |
+
+---
+
+## Межсервисное взаимодействие
+
+Авторизацию контролирует только Gateway. Внутренние сервисы не имеют своей аутентификации — см. [common_api.md](common_api.md#межсервисное-взаимодействие).
+
+| `chat` | Диалоговые сессии, сообщения, обратная связь, история запросов, проекты |
 | `text` | Обработка произвольного текста (нормализация, поиск)           |
 
 ### Формат ответа
 
-Формат ответа и ошибок — см. [common_api.md](../common_api.md#формат-ответа).
+Формат ответа и ошибок — см. [common_api.md](common_api.md#формат-ответа).
 
 **Специфичные коды ошибок Query-сервиса:**
 | HTTP | `error.code` | Описание |
@@ -42,6 +49,11 @@ Query Service принимает запросы от UI, вызывает RAG Se
 
 | Метод  | Путь                                   | Описание                                                                                 |
 | ------ | -------------------------------------- | ---------------------------------------------------------------------------------------- |
+| POST   | `/chat/projects`                      | Создать проект                                                                           |
+| GET    | `/chat/projects`                      | Список проектов                                                                          |
+| GET    | `/chat/projects/{project_id}`         | Получить проект по ID                                                                    |
+| PUT    | `/chat/projects/{project_id}`         | Обновить проект                                                                          |
+| DELETE | `/chat/projects/{project_id}`         | Удалить проект                                                                           |
 | POST   | `/chat/sessions`                       | Создать новую диалоговую сессию                                                          |
 | GET    | `/chat/sessions`                       | Список сессий пользователя                                                               |
 | GET    | `/chat/sessions/{session_id}`          | История сообщений в сессии                                                               |
@@ -53,6 +65,7 @@ Query Service принимает запросы от UI, вызывает RAG Se
 | GET    | `/chat/sessions/{session_id}/messages/{message_id}` | Получить сообщение по ID (с longpoll)                                        |
 | POST   | `/chat/sessions/{session_id}/context`  | Управление контекстом                                                                    |
 | POST   | `/chat/sessions/{session_id}/export`   | Экспорт диалога                                                                          |
+| POST   | `/chat/sessions/{session_id}/messages/search` | Поиск по истории сообщений в сессии                                              |
 | POST   | `/chat/feedback`                       | Обратная связь по ответу                                                                 |
 | GET    | `/chat/history`                        | Журнал запросов (плоский список)                                                         |
 | GET    | `/chat/history/export`                 | Экспорт истории                                                                          |
@@ -67,6 +80,7 @@ Query Service принимает запросы от UI, вызывает RAG Se
 | Ожидание ответа на отправленное сообщение             | `GET /chat/sessions/{id}/messages/{message_id}?longpoll=15`                | **Longpoll**                  |
 | Проверка новых сообщений (синхронно, без longpoll)    | `GET /chat/sessions/{id}/messages?after={message_id}`                      | Polling / синхронизация вкладок |
 | Поиск по произвольному тексту                         | `POST /text/search`                                                        | Поисковый сценарий            |
+| Поиск по истории сообщений в сессии                   | `POST /chat/sessions/{id}/messages/search`                                 | Поиск в рамках сессии         |
 
 > UI обращается к Query Service напрямую. Orchestrator не проксирует чат-функции.
 
@@ -102,7 +116,7 @@ sequenceDiagram
 **Шаг 1 — Открытие чата**
 - Запрос: `GET /chat/sessions/{session_id}/messages/last?limit=20`
 - UI получает последние 20 сообщений (хвост диалога).
-- Если `has_older: true` — UI может подгрузить более старые сообщения через `GET .../messages?before=msg-XXX`.
+- Если `has_older: true` — UI может подгрузить более старые сообщения через `GET .../messages?before=42000XXX`.
 
 **Шаг 2 — Отправка сообщения**
 - Запрос: `POST /chat/sessions/{session_id}/messages`
@@ -125,15 +139,17 @@ sequenceDiagram
 
 | Концепция            | Единое имя поля    | Примечание                                    |
 | -------------------- | ------------------ | --------------------------------------------- |
-| ID документа         | `document_id`      |                                               |
-| Номер страницы       | `page`             |                                               |
-| ID раздела           | `section_id`       | Тип int (bigint), соответствует `registry.document_sections.id` |
-| Цитата из источника  | `excerpt`          | До 300 символов, публичный API                |
-| Полное содержимое    | `content`          | Сырой чанк от RAG (внутренний)            |
-| Раздел документа     | `clause`           |                                               |
-| URL превью страницы  | `page_preview_url` |                                               |
-| URL документа        | `document_url`     |                                               |
-| Оценка релевантности | `score`            |                                               |
+| ID документа         | `document_id`      |                                                          |
+| Номер страницы       | `page`             | **1-based** (первая страница = 1) |
+| ID раздела           | `section_id`       | Тип int (bigint), соответствует `registry.document_sections.id`. Стабилен внутри документа |
+| Раздел документа     | `clause`           | Номер пункта (напр. "6.1") |
+| Путь секции          | `path`             | Иерархический путь (напр. "6/6.1") |
+| Цитата из источника  | `excerpt`          | До 300 символов, для UI |
+| Полное содержимое    | `content`          | Сырой чанк от RAG Search (внутренний) |
+| Координаты блока     | `bbox`             | `[x1, y1, x2, y2]`, нормализованные 0..1 |
+| URL превью страницы  | `page_preview_url` | |
+| URL документа        | `document_url`     | |
+| Оценка релевантности | `score`            | Итоговая оценка 0..1 из RAG Search |
 
 ---
 
@@ -180,7 +196,7 @@ longpoll-запрос к конкретному сообщению: `GET /chat/s
 ```json
 {
   "session_id": 1001,
-  "document_ids": ["doc-norm-001"],
+  "document_ids": [1],
   "message": {
     "message_id": 420002,
     "role": "assistant",
@@ -188,10 +204,13 @@ longpoll-запрос к конкретному сообщению: `GET /chat/s
     "content": "Для ледового класса Arc4 толщина обшивки должна быть не менее 12 мм...",
     "sources": [
       {
-        "document_id": "doc-norm-001",
+        "document_id": 1,
         "document_title": "Правила РС",
-        "page": 42,
         "section_id": 420042,
+        "clause": "4.2",
+        "path": "4/4.2",
+        "page": 42,
+        "bbox": [0.1, 0.2, 0.9, 0.3],
         "excerpt": "Для ледового класса Arc4 толщина обшивки должна быть не менее 12 мм.",
         "score": 0.92
       }
@@ -205,10 +224,10 @@ longpoll-запрос к конкретному сообщению: `GET /chat/s
 **Промежуточный статус (`pending` / `enriching` / `searching` / `generating` / `enriching_citations`):**
 ```json
 {
-  "session_id": "s-001",
-  "document_ids": ["doc-norm-001"],
+  "session_id": 1001,
+  "document_ids": [1],
   "message": {
-    "message_id": "msg-002",
+    "message_id": 420002,
     "role": "assistant",
     "status": "searching",
     "content": null,
@@ -220,10 +239,10 @@ longpoll-запрос к конкретному сообщению: `GET /chat/s
 **Статус `failed`:**
 ```json
 {
-  "session_id": "s-001",
-  "document_ids": ["doc-norm-001"],
+  "session_id": 1001,
+  "document_ids": [1],
   "message": {
-    "message_id": "msg-002",
+    "message_id": 420002,
     "role": "assistant",
     "status": "failed",
     "content": null,
@@ -234,17 +253,20 @@ longpoll-запрос к конкретному сообщению: `GET /chat/s
 
 Полное описание FSM сообщения — в [pipeline3-search.md](../pipelines/pipeline3-search.md#статусная-модель-fsm).
 
----
-
 ### Обогащение цитирований
 
-Query Service выполняет постобработку ответов от RAG Search (`document_id`, `section_id`).
+Query Service выполняет постобработку ответов от RAG Search — преобразует retrieval-метаданные в machine-readable citations.
+
+**Архитектурное правило (RS-6, уточнение 20.06):**
+- **Цитирование строится по `document_id + section_id`** — это стабильные идентификаторы, не меняющиеся при переиндексации.
+- `chunk_id` — **только технический retrieval ID**, не используется для цитирования. Запрещено использовать `chunk_id` в machine-readable сносках.
+- Для UI источники возвращаются плоской структурой (поля `document_id`, `section_id`, `page`, `clause`, `path`, `excerpt`, `score`), без разделения на `source`/`retrieval` — UI не нужны технические метаданные поиска.
 
 **Алгоритм:**
 
 1. Получить текстовый ответ от LLM (без `section_id` и `document_id` в machine-readable формате).
-2. Пройти по массиву `sources` (извлечённому из поиска) и для каждого источника сформировать строку-сноску с идентификаторами, например: `(источник: «Правила РС» %[document_id:doc-norm-001]%, §4.2 %[section_id:sec-4.2]%, стр. 42)`.
-3. Добавить эти сноски в конец ответа или в то место, где уже стоит базовая ссылка. Если модель уже выдала `(источник: «Правила РС», раздел 4.2, стр. 42)`, заменить её на вариант с `section_id` через регулярное выражение или просто дописать идентификатор после пункта.
+2. Пройти по массиву `sources` (извлечённому из поиска) и для каждого источника сформировать строку-сноску с идентификаторами, например: `(источник: «Правила РС» [document_id:42, section_id:420042], стр. 42)`.
+3. Добавить эти сноски в конец ответа или в то место, где уже стоит базовая ссылка. Если модель уже выдала подобную ссылку, заменить её на вариант с `section_id` через регулярное выражение или просто дописать идентификатор после пункта.
 
 **Пример:**
 
@@ -252,11 +274,120 @@ Query Service выполняет постобработку ответов от 
 > ... не менее **12 мм** (источник: «Правила РС», раздел 4.2, стр. 42).
 
 После обработки Query Service:
-> ... не менее **12 мм** (источник: «Правила РС» %[document_id:doc-norm-001]%, §4.2 %[section_id:sec-4.2]%, стр. 42).
+> ... не менее **12 мм** (источник: «Правила РС» [document_id:42, section_id:420042], стр. 42).
+
+**Что сохраняется в историю чата:** Для каждого сообщения в статусе `answered` Query Service сохраняет:
+- `sources[]` — **плоская структура** (без разделения source/retrieval): `document_id`, `document_title`, `section_id`, `clause`, `path`, `page`, `bbox`, `excerpt`, `score`
+- `chunk_id` и `mode` **не сохраняются** в истории — это технические метаданные поиска, не нужные для replay
+- Полный набор retrieval-метаданных доступен только в момент запроса (в ответе RAG Search) и не кешируется
 
 ---
 
 ## Группа chat
+
+### Управление проектами
+
+CRUD для судостроительных проектов (`chat.projects`). Проект группирует сессии чата по заказам.
+
+#### POST /chat/projects
+
+Создать новый проект.
+
+**Запрос**:
+
+```json
+{
+  "code": "21900M2",
+  "name": "Ледокол проекта 21900М2",
+  "description": "Строительство ледокола для Арктики",
+  "status": "active"
+}
+```
+
+| Поле          | Тип    | Обязательность | Описание                                              |
+| ------------- | ------ | -------------- | ----------------------------------------------------- |
+| `code`        | string | Да             | Уникальный код проекта (напр. `21900M2`, `Arc4`)     |
+| `name`        | string | Да             | Человекочитаемое название                             |
+| `description` | string | Нет            | Описание / примечания                                 |
+| `status`      | string | Нет            | `active` (по умолчанию), `archived`, `draft`         |
+
+**Ответ `201`**:
+
+```json
+{
+  "project_id": 42,
+  "code": "21900M2",
+  "name": "Ледокол проекта 21900М2",
+  "description": "Строительство ледокола для Арктики",
+  "status": "active",
+  "created_at": "2026-06-05T10:00:00Z",
+  "updated_at": "2026-06-05T10:00:00Z"
+}
+```
+
+#### GET /chat/projects
+
+Список проектов.
+
+**Параметры query**: `status` (фильтр: `active`, `archived`), `page`, `page_size`.
+
+**Ответ `200`**:
+
+```json
+{
+  "items": [
+    {
+      "project_id": 42,
+      "code": "21900M2",
+      "name": "Ледокол проекта 21900М2",
+      "status": "active",
+      "created_at": "2026-01-15T08:00:00Z"
+    }
+  ],
+  "meta": { "total": 3, "page": 1, "page_size": 20 }
+}
+```
+
+#### GET /chat/projects/{project_id}
+
+Получить проект по ID.
+
+**Ответ `200`**:
+
+```json
+{
+  "project_id": 42,
+  "code": "21900M2",
+  "name": "Ледокол проекта 21900М2",
+  "description": "Строительство ледокола для Арктики",
+  "status": "active",
+  "created_at": "2026-01-15T08:00:00Z",
+  "updated_at": "2026-06-05T10:00:00Z"
+}
+```
+
+#### PUT /chat/projects/{project_id}
+
+Обновить проект.
+
+**Запрос** (все поля опциональны):
+
+```json
+{
+  "name": "Ледокол проекта 21900М2 (мод. 2)",
+  "status": "archived"
+}
+```
+
+**Ответ `200`**: обновлённый объект проекта.
+
+#### DELETE /chat/projects/{project_id}
+
+Удалить проект. Сессии, привязанные к проекту, **не удаляются** — их `project_id` становится `NULL`.
+
+**Ответ `204`** (без тела).
+
+---
 
 ### POST /chat/sessions
 
@@ -267,27 +398,28 @@ Query Service выполняет постобработку ответов от 
 ```json
 {
   "title": "Проверка требований Arc4 для проекта 21900M2",
-  "document_ids": ["doc-norm-001", "doc-draw-001", "doc-spec-001"],
-  "options": {}
+  "project_id": 42,
+  "document_ids": [1, 2, 3]
 }
 ```
 
 | Поле           | Тип      | Обязательность | Описание                                 |
 | -------------- | -------- | -------------- | ---------------------------------------- |
 | `title`        | string   | Нет            | Человекочитаемое название сессии         |
-| `document_ids` | string[] | Нет            | Документы, ограничивающие область поиска |
-| `options`      | object   | Нет            | Дополнительные параметры сессии          |
+| `project_id`   | bigint   | Да             | ID проекта (судостроительный заказ)      |
+| `document_ids` | bigint[] | Нет            | Документы, ограничивающие область поиска (P1-6) |
+| `options`      | object   | Нет            | Зарезервировано. Пока не используется. Все параметры LLM (модель, temperature, max_tokens, top_p) задаются в `app_settings` — см. P13-5 |
 
 **Ответ `201`**:
 
 ```json
 {
-  "session_id": "sess-a1b2c3",
+  "session_id": 1001,
   "title": "Проверка требований Arc4 для проекта 21900M2",
   "user_id": "u-001",
-  "document_ids": ["doc-norm-001", "doc-draw-001", "doc-spec-001"],
+  "project_id": 42,
+  "document_ids": [1, 2, 3],
   "options": {},
-  "message_count": 0,
   "created_at": "2026-04-27T14:00:00Z",
   "updated_at": "2026-04-27T14:00:00Z"
 }
@@ -297,7 +429,7 @@ Query Service выполняет постобработку ответов от 
 
 Список сессий текущего пользователя.
 
-**Параметры query**: `page`, `page_size`, `search` (по title).
+**Параметры query**: `page`, `page_size`, `search` (по title), `project_id` (фильтр по проекту).
 
 **Ответ `200`**:
 
@@ -305,10 +437,10 @@ Query Service выполняет постобработку ответов от 
 {
   "sessions": [
     {
-      "session_id": "sess-a1b2c3",
+      "session_id": 1001,
       "title": "Проверка требований Arc4",
-      "document_ids": ["doc-norm-001"],
-      "message_count": 12,
+      "project_id": 42,
+      "document_ids": [1],
       "last_message_preview": "Согласно Правилам РС, толщина обшивки...",
       "created_at": "2026-04-27T14:00:00Z",
       "updated_at": "2026-04-27T14:30:00Z"
@@ -320,10 +452,9 @@ Query Service выполняет постобработку ответов от 
 
 ### GET /chat/sessions/{session_id}
 
-История сообщений в сессии с пагинацией. Endpoint поддерживает два режима работы:
-- **Пагинация** (без `longpoll`) — получение порции истории сообщений.
-- **Longpoll** (с `longpoll`) — ожидание нового сообщения. **Устаревший режим.**
-  Рекомендуется использовать `GET /chat/sessions/{session_id}/messages/{message_id}?longpoll=15`.
+История сообщений в сессии с пагинацией.
+
+> ⚠️ **Longpoll удалён.** Ранее поддерживался параметр `longpoll` для ожидания новых сообщений, но он удалён. Для longpoll-ожидания используйте `GET /chat/sessions/{session_id}/messages/{message_id}?longpoll=15`.
 
 **Параметры query**:
 
@@ -331,44 +462,43 @@ Query Service выполняет постобработку ответов от 
 | -------- | --- | ------------ | -------- |
 | `limit` | int | `50` | Максимальное количество сообщений |
 | `before` | string | — | Cursor для пагинации назад (ID сообщения, до которого вернуть) |
-| `longpoll` | int | — | Время ожидания в секундах. Только для обратной совместимости. |
-
-> **Важно:** Для longpoll-ожидания ответа используйте
-> `GET /chat/sessions/{session_id}/messages/{message_id}?longpoll=15` —
-> это возвращает только одно сообщение, а не всю историю сессии.
+| `longpoll` | int | — | **Удалён.** Не используется. |
 
 **Ответ `200`**:
 
 ```json
 {
-  "session_id": "sess-a1b2c3",
+  "session_id": 1001,
   "title": "Проверка требований Arc4",
-  "document_ids": ["doc-norm-001"],
+  "project_id": 42,
+  "document_ids": [1],
   "messages": [
     {
-      "message_id": "msg-001",
+      "message_id": 420001,
       "role": "user",
       "content": "Какая толщина обшивки для Arc4?",
       "timestamp": "2026-04-27T14:01:00Z"
     },
     {
-      "message_id": "msg-002",
+      "message_id": 420002,
       "role": "assistant",
       "status": "answered",
-      "content": "Согласно Правилам РС (Часть I, стр. 42), толщина обшивки ледового пояса для класса Arc4 должна быть не менее 12 мм.",
+      "content": "Согласно Правилам РС (Часть I), толщина обшивки ледового пояса для класса Arc4 должна быть не менее 12 мм.",
       "sources": [
         {
-          "document_id": "doc-norm-001",
+          "document_id": 1,
           "document_title": "Правила РС, часть I",
-          "page": 42,
           "section_id": 420042,
+          "clause": "4.2",
+          "path": "4/4.2",
+          "page": 42,
           "excerpt": "Для ледового класса Arc4 толщина обшивки...",
           "score": 0.94
         }
       ],
       "processing_time_ms": 3200,
       "feedback": null,
-      "timestamp": "2026-04-27T14:01:04Z"
+            "timestamp": "2026-04-27T14:01:04Z"
     }
   ],
   "has_more": false
@@ -384,7 +514,8 @@ Query Service выполняет постобработку ответов от 
 ```json
 {
   "title": "Новое название",
-  "document_ids": ["doc-norm-001"]
+  "project_id": 42,
+  "document_ids": [1]
 }
 ```
 
@@ -394,16 +525,20 @@ Query Service выполняет постобработку ответов от 
 
 **Hard-delete:** сессия и все её сообщения удаляются из БД необратимо. Восстановление невозможно.
 
+> **⚠️ Ограничение**: `engineer` может удалять только собственные сессии (проверка `user_id` из JWT). `system_admin` может удалять любые сессии (с записью в audit-log). Удаление необратимо (hard-delete).
+
 **Ответ `200`**:
 
 ```json
 {
-  "session_id": "sess-a1b2c3",
+  "session_id": 1001,
   "deleted_at": "2026-04-27T14:30:00Z"
 }
 ```
 
 ### POST /chat/sessions/{session_id}/messages
+
+> **⏳ Требует реализации в коде**: дедупликация сообщений через `Idempotency-Key` на уровне Gateway (см. `common_api.md`). Без этого механизма повторная отправка при сетевой ошибке создаёт дубликаты сообщений. Не входит в объём документации.
 
 Отправка нового сообщения в сессию. Основной метод общения в чате.
 
@@ -416,7 +551,7 @@ Query Service выполняет постобработку ответов от 
     {
       "type": "text_fragment",
       "text": "Обшивка ледового пояса t=14 мм",
-      "source_document_id": "doc-draw-001",
+      "source_document_id": 2,
       "source_page_number": 1
     }
   ],
@@ -439,8 +574,8 @@ Query Service выполняет постобработку ответов от 
 
 ```json
 {
-  "message_id": "msg-005",
-  "session_id": "sess-a1b2c3",
+  "message_id": 420005,
+  "session_id": 1001,
   "role": "user",
   "status": "pending",
   "content": "Проверь, соответствует ли толщина обшивки 14 мм в чертеже 21900M2 этому требованию",
@@ -480,30 +615,32 @@ Query Service выполняет постобработку ответов от 
 
 ```json
 {
-  "session_id": "sess-a1b2c3",
-  "document_ids": ["doc-norm-001"],
-  "messages": [
-    {
-      "message_id": "msg-005",
-      "role": "assistant",
-      "status": "answered",
-      "content": "Согласно Правилам РС, толщина обшивки...",
-      "sources": [
-        {
-          "document_id": "doc-norm-001",
-          "document_title": "Правила РС, часть I",
-          "page": 42,
-          "section_id": 420042,
-          "excerpt": "Для ледового класса Arc4 толщина обшивки...",
-          "score": 0.94
-        }
-      ],
-      "timestamp": "2026-04-27T14:03:10Z"
-    },
-    {
-      "message_id": "msg-004",
-      "role": "user",
-      "content": "Проверь, соответствует ли толщина обшивки 14 мм...",
+  "session_id": 1001,
+  "document_ids": [1],
+    "messages": [
+      {
+        "message_id": 420005,
+        "role": "assistant",
+        "status": "answered",
+        "content": "Согласно Правилам РС, толщина обшивки...",
+        "sources": [
+          {
+            "document_id": 1,
+            "document_title": "Правила РС, часть I",
+            "section_id": 420042,
+            "clause": "4.2",
+            "path": "4/4.2",
+            "page": 42,
+            "excerpt": "Для ледового класса Arc4 толщина обшивки...",
+            "score": 0.94
+          }
+        ],
+        "timestamp": "2026-04-27T14:03:10Z"
+      },
+      {
+        "message_id": 420004,
+        "role": "user",
+        "content": "Проверь, соответствует ли толщина обшивки 14 мм...",
       "timestamp": "2026-04-27T14:03:05Z"
     }
   ],
@@ -541,17 +678,17 @@ Query Service выполняет постобработку ответов от 
 
 ```json
 {
-  "session_id": "sess-a1b2c3",
-  "document_ids": ["doc-norm-001"],
+  "session_id": 1001,
+  "document_ids": [1],
   "messages": [
     {
-      "message_id": "msg-006",
+      "message_id": 420006,
       "role": "user",
       "content": "А какова минимальная толщина для ледового пояса?",
       "timestamp": "2026-04-27T14:04:00Z"
     },
     {
-      "message_id": "msg-007",
+      "message_id": 420007,
       "role": "assistant",
       "status": "answered",
       "content": "Минимальная толщина обшивки...",
@@ -567,11 +704,11 @@ Query Service выполняет постобработку ответов от 
 
 ```json
 {
-  "session_id": "sess-a1b2c3",
-  "document_ids": ["doc-norm-001"],
+  "session_id": 1001,
+  "document_ids": [1],
   "messages": [
     {
-      "message_id": "msg-003",
+      "message_id": 420003,
       "role": "user",
       "content": "Старое сообщение...",
       "timestamp": "2026-04-27T14:02:00Z"
@@ -610,25 +747,27 @@ Query Service выполняет постобработку ответов от 
 
 ```json
 {
-  "session_id": "sess-a1b2c3",
-  "document_ids": ["doc-norm-001"],
+  "session_id": 1001,
+  "document_ids": [1],
   "message": {
-    "message_id": "msg-005",
-    "role": "assistant",
-    "status": "answered",
-    "content": "Согласно Правилам РС (Часть I, стр. 42), толщина обшивки ледового пояса для класса Arc4 должна быть не менее 12 мм.",
-    "sources": [
-      {
-        "document_id": "doc-norm-001",
-        "document_title": "Правила РС, часть I",
-        "page": 42,
-        "section_id": 420042,
-        "excerpt": "Для ледового класса Arc4 толщина обшивки...",
-        "score": 0.94
-      }
-    ],
-    "processing_time_ms": 3200,
-    "timestamp": "2026-04-27T14:03:10Z"
+    "message_id": 420005,
+        "role": "assistant",
+        "status": "answered",
+        "content": "Согласно Правилам РС (Часть I), толщина обшивки ледового пояса для класса Arc4 должна быть не менее 12 мм.",
+        "sources": [
+          {
+            "document_id": 1,
+            "document_title": "Правила РС, часть I",
+            "section_id": 420042,
+            "clause": "4.2",
+            "path": "4/4.2",
+            "page": 42,
+            "excerpt": "Для ледового класса Arc4 толщина обшивки...",
+            "score": 0.94
+          }
+        ],
+        "processing_time_ms": 3200,
+        "timestamp": "2026-04-27T14:03:10Z"
   }
 }
 ```
@@ -644,6 +783,81 @@ Query Service выполняет постобработку ответов от 
   }
 }
 ```
+
+---
+
+### POST /chat/sessions/{session_id}/messages/search
+
+Поиск по истории сообщений в сессии. Возвращает сообщения, `content` которых содержит искомый текст.
+
+> **Поиск ведётся только по финальным сообщениям.** Сообщения в промежуточных статусах (`pending`, `processing`) не участвуют в поиске.
+
+**Запрос:**
+
+```json
+{
+  "query": "толщина обшивки",
+  "limit": 20,
+  "offset": 0
+}
+```
+
+| Поле | Тип | Обязательность | Описание |
+| --- | --- | --- | --- |
+| `query` | string | Да | Текст для поиска по сообщениям сессии |
+| `limit` | int | Нет | Количество результатов (max 100, по умолчанию 20) |
+| `offset` | int | Нет | Смещение для пагинации (по умолчанию 0) |
+
+> `offset` + `limit` — постраничная пагинация (в отличие от cursor-based для `GET .../messages`), так как это поисковый запрос с ранжированием по релевантности.
+
+**Ответ `200`:**
+
+```json
+{
+  "session_id": 1001,
+  "results": [
+    {
+      "message_id": 420002,
+      "role": "assistant",
+      "status": "answered",
+      "content": "Согласно Правилам РС (Часть I, стр. 42), толщина обшивки ледового пояса для класса Arc4 должна быть не менее 12 мм.",
+      "timestamp": "2026-04-27T14:01:04Z",
+      "sources": [
+        {
+          "document_id": 1,
+          "document_title": "Правила РС, часть I",
+          "section_id": 420042,
+          "clause": "4.2",
+          "path": "4/4.2",
+          "page": 42,
+          "excerpt": "Для ледового класса Arc4 толщина обшивки должна быть не менее 12 мм.",
+          "score": 0.94
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "total": 5,
+    "page": 1,
+    "page_size": 20
+  }
+}
+```
+
+| Поле | Тип | Описание |
+| --- | --- | --- |
+| `session_id` | bigint | ID сессии |
+| `results` | array | Массив найденных сообщений |
+| `results[].message_id` | bigint | ID сообщения |
+| `results[].role` | string | Роль: `user` \| `assistant` |
+| `results[].status` | string \| null | Статус сообщения (только для ответов ассистента) |
+| `results[].content` | string | Текст сообщения |
+| `results[].sources` | array[Source] \| null | Источники (только для ответов ассистента) |
+| `results[].timestamp` | datetime | Время сообщения (ISO 8601) |
+| `meta` | object | Метаданные пагинации |
+| `meta.total` | int | Общее количество найденных |
+| `meta.page` | int | Текущая страница |
+| `meta.page_size` | int | Количество на странице |
 
 ---
 
@@ -669,8 +883,18 @@ Query Service выполняет постобработку ответов от 
 
 1. Отобрать top_k наиболее релевантных чанков
 2. Сформировать промпт: вопрос пользователя + тексты чанков (с указанием document_id, page, clause)
-3. Вызвать внутренний генеративный движок LLM для синтеза ответа
+3. Вызвать генеративный движок LLM для синтеза ответа
 4. Получить сгенерированный текст с базовыми ссылками на источники
+
+**Параметры LLM (P13-5, `app_settings.llm`):**
+
+| Параметр | Значение | Источник |
+|----------|----------|----------|
+| Модель | `deepseek 4 flash` (внешнее API) | `app_settings.llm.api_url` |
+| `temperature` | `0.2` | P13-5 |
+| `max_tokens` | `8196` | P13-5 (QS-13) |
+| `top_p` | `0.95` | P13-5 |
+| `system_prompt` | из каталога `prompts/` | P13-5 |
 
 LLM возвращает ответ вида:
 > ... не менее **12 мм** (источник: «Правила РС», раздел 4.2, стр. 42).
@@ -703,7 +927,7 @@ LLM возвращает ответ вида:
 
 ```json
 {
-  "session_id": "sess-a1b2c3",
+  "session_id": 1001,
   "action": "clear",
   "status": "completed",
   "message": "История диалога очищена.",
@@ -739,7 +963,7 @@ LLM возвращает ответ вида:
 ```json
 {
   "export_id": "exp-001",
-  "session_id": "sess-a1b2c3",
+  "session_id": 1001,
   "format": "pdf",
   "status": "completed",
   "url": "/files/exports/exp-001/download",
@@ -750,15 +974,16 @@ LLM возвращает ответ вида:
 
 ### POST /chat/feedback
 
-Обратная связь по ответу ассистента. Поддерживает два формата запроса.
+Обратная связь по ответу ассистента. Сервер определяет формат по наличию поля `session_id` (формат с привязкой к сессии) или `answer_id` (формат полезности). Поля взаимоисключающие — передавать оба набора нельзя.
 
-**Запрос (с привязкой к сессии)**:
+**Формат 1 — Оценка ответа в сессии** (по `session_id` + `message_id`):
 
 ```json
 {
   "session_id": 1001,
   "message_id": 420004,
-  "rating": "positive",
+  "rating": 5,
+  "rating_status": "positive",
   "comment": "Точно указал страницу и марку стали, отлично",
   "aspects": [
     {"aspect": "accuracy", "rating": 5},
@@ -767,43 +992,42 @@ LLM возвращает ответ вида:
 }
 ```
 
-**Запрос** (UI-формат):
+| Поле           | Тип    | Обязательность | Описание                          |
+| -------------- | ------ | -------------- | --------------------------------- |
+| `session_id`   | bigint | Да             | ID сессии                         |
+| `message_id`   | bigint | Да             | ID сообщения                      |
+| `rating`       | int    | Да             | Числовая оценка (1–5)             |
+| `rating_status`| string | Да             | `positive`, `negative`, `neutral` |
+| `comment`      | string | Нет            | Комментарий                       |
+| `aspects`      | array  | Нет            | Оценка по аспектам (0–5)          |
+
+**Формат 2 — Оценка полезности ответа** (по `answer_id`):
 
 ```json
 {
-  "answer_id": "ans-001",
+  "answer_id": 1,
   "useful": true,
   "comment": "Ответ точный, источник подходит",
   "opened_citation_ids": ["cit-001"]
 }
 ```
 
-**Поля (формат с сессией)**:
-
-| Поле         | Тип    | Обязательность | Описание                          |
-| ------------ | ------ | -------------- | --------------------------------- |
-| `session_id` | bigint | Да             | ID сессии                         |
-| `message_id` | bigint | Да             | ID сообщения                      |
-| `rating`     | string | Да             | `positive`, `negative`, `neutral` |
-| `comment`    | string | Нет            | Комментарий                       |
-| `aspects`    | array  | Нет            | Оценка по аспектам (0–5)          |
-
-**Поля (формат с answer_id)**:
-
 | Поле                  | Тип      | Обязательность | Описание                 |
 | --------------------- | -------- | -------------- | ------------------------ |
-| `answer_id`           | string   | Да             | ID ответа                |
+| `answer_id`           | bigint   | Да             | ID ответа                |
 | `useful`              | bool     | Да             | Полезен ли ответ         |
 | `comment`             | string   | Нет            | Комментарий              |
 | `opened_citation_ids` | string[] | Нет            | Какие источники открывал |
 
+> **Детекция режима:** если в теле присутствует `session_id` — Формат 1; если `answer_id` — Формат 2. Передача обоих полей одновременно возвращает `400` с кодом `AMBIGUOUS_FEEDBACK_FORMAT`.
 > `user_id` не передаётся в теле — извлекается из контекста аутентификации.
+> Невалидный `rating` (вне диапазона 1–5) или недопустимый `rating_status` — возвращает `422` с кодом `INVALID_RATING`.
 
-**Ответ `200`** (оба формата):
+**Ответ `200`** (единый для обоих форматов):
 
 ```json
 {
-  "feedback_id": "fb-001",
+  "feedback_id": 1,
   "saved": true,
   "metrics_changed": {
     "rated_answers": 43,
@@ -821,10 +1045,11 @@ LLM возвращает ответ вида:
 
 | Параметр    | Тип    | Описание                                             |
 | ----------- | ------ | ---------------------------------------------------- |
-| `user_id`   | string | Фильтр по пользователю                               |
-| `status`    | string | `answered`, `needs_clarification`, `source_conflict` |
-| `date_from` | string | Дата начала (ISO 8601)                               |
-| `date_to`   | string | Дата окончания                                       |
+| `user_id`   | string | Фильтр по пользователю. `engineer` может фильтровать только по собственному `user_id` (извлекается из JWT). `knowledge_admin` и `system_admin` могут фильтровать по любому `user_id`. |
+| `status`     | string | `answered`, `needs_clarification`, `source_conflict` |
+| `project_id` | bigint | Фильтр по проекту                                    |
+| `date_from`  | string | Дата начала (ISO 8601)                               |
+| `date_to`    | string | Дата окончания                                       |
 | `page`      | int    | Номер страницы                                       |
 | `page_size` | int    | Записей на странице                                  |
 
@@ -834,8 +1059,8 @@ LLM возвращает ответ вида:
 {
   "items": [
     {
-      "history_id": "hist-001",
-      "session_id": "sess-a1b2c3",
+      "history_id": 1,
+      "session_id": 1001,
       "created_at": "2026-04-27T14:01:04Z",
       "user_id": "u-001",
       "user_name": "Иванов Сергей Петрович",
@@ -843,7 +1068,7 @@ LLM возвращает ответ вида:
       "answer_preview": "Минимальная толщина зависит от...",
       "status": "answered",
       "source_count": 2,
-      "answer_id": "ans-001"
+      "answer_id": 1
     }
   ],
   "meta": { "total": 42, "page": 1, "page_size": 20 }
@@ -856,17 +1081,17 @@ LLM возвращает ответ вида:
 
 **Параметры query**: Аналогично `GET /chat/history`.
 
-**Ответ `200`**:
+**Ответ `200`**: файл экспорта возвращается напрямую (stream) в запрошенном формате.
 
-```json
-{
-  "export_id": "exp-hist-001",
-  "format": "xlsx",
-  "url": "/files/exports/exp-hist-001/download",
-  "created_at": "2026-04-27T14:35:00Z"
-}
-```
+| Заголовок ответа | Значение |
+|-----------------|----------|
+| `Content-Type` | `text/csv` / `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` (xlsx) |
+| `Content-Disposition` | `attachment; filename="history-export-{date}.csv"` |
 
+Тело ответа — поток (stream) содержимого файла. Промежуточное хранение на сервере не предусмотрено — генерация и передача выполняются онлайн.
+
+
+---
 
 ---
 
@@ -881,14 +1106,10 @@ LLM возвращает ответ вида:
 ```json
 {
   "text": "В письме заказчика просят подтвердить, что обшивка ледового пояса 14 мм соответствует Arc4.",
-  "document_ids": null,
-  "top_k": 10,
+  "valid_at": "2026-06-18",
   "filters": {
-    "document_type": ["normative", "drawing"]
-  },
-  "options": {
-    "auto_decompose": true,
-    "max_subqueries": 3
+    "document_type": ["normative", "drawing"],
+    "category_ids": [5, 12]
   }
 }
 ```
@@ -896,11 +1117,8 @@ LLM возвращает ответ вида:
 | Поле                     | Тип      | Обязательность | Описание                      |
 | ------------------------ | -------- | -------------- | ----------------------------- |
 | `text`                   | string   | Да             | Произвольный текст для поиска |
-| `document_ids`           | string[] | Нет            | Ограничить поиск документами  |
-| `top_k`                  | int      | Нет            | Количество результатов        |
-| `filters`                | object   | Нет            | Фильтры                       |
-| `options.auto_decompose` | bool     | Нет            | Авто-декомпозиция             |
-| `options.max_subqueries` | int      | Нет            | Макс. подзапросов             |
+| `valid_at`               | date     | Да             | Дата, на которую документы active |
+| `filters`                | object   | Нет            | Фильтры (все поля опциональны): `document_type[]`, `category_ids[]` |
 
 **Ответ `200`**:
 
@@ -916,19 +1134,20 @@ LLM возвращает ответ вида:
     "subqueries": ["толщина обшивки ледового пояса Arc4"]
   },
   "results": [
-    {
-      "section_id": 420042,
-      "document_id": "doc-norm-001",
-      "document_title": "Правила РС, часть I",
-      "page": 42,
-      "content": "Для ледового класса Arc4 толщина обшивки...",
-      "score": 0.94,
-      "document_type": "normative",
-      "matched_subquery": "толщина обшивки ледового пояса Arc4"
-    }
-  ],
-  "total_found": 7,
-  "processing_time_ms": 1850
+      {
+        "section_id": 420042,
+        "document_id": 1,
+        "document_title": "Правила РС, часть I",
+        "page": 42,
+        "content": "Для ледового класса Arc4 толщина обшивки...",
+        "score": 0.94,
+        "confidence": 0.85,
+        "document_type": "normative",
+        "matched_subquery": "толщина обшивки ледового пояса Arc4"
+      }
+    ],
+    "total_found": 7,
+    "processing_time_ms": 1850
 }
 ```
 

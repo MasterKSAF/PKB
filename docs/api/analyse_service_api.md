@@ -12,12 +12,22 @@
 Успех — данные возвращаются напрямую.
 При ошибке: `{ "error": { "code": "ANALYSIS_FAILED", "message": "...", "details": {} } }`
 
-> Полный формат ответа и ошибок — см. [common_api.md](../common_api.md#формат-ответа).
+> Полный формат ответа и ошибок — см. [common_api.md](common_api.md#формат-ответа).
 
 ### Группы
 
 | Группа | Описание |
 |--------|----------|
+
+---
+
+## Межсервисное взаимодействие
+
+Межсервисная аутентификация отсутствует — см. [common_api.md](common_api.md#межсервисное-взаимодействие).
+
+Краткая выжимка:
+- Внешние запросы проходят через Gateway (:8080).
+- Внутренние сервисы общаются напрямую, без авторизации.
 | `compare` | Сопоставление норм и проектных данных |
 | `calculate` | Арифметический движок для вычислений |
 | `recommend` | Рекомендации по исправлению ошибок |
@@ -34,25 +44,25 @@
 
 ```json
 {
-  "comparison_id": "cmp-007",
+  "comparison_id": 700007,
   "normative_query": "Толщина обшивки ледового пояса ≥ 12 мм",
-  "project_document_id": "doc-proj-001",
+  "project_document_id": 100001,
   "document_type": "drawing"
 }
 ```
 
 | Поле | Тип | Обязательность | Описание |
 |------|-----|----------------|----------|
-| `comparison_id` | string | Да | Идентификатор сравнения (генерируется Оркестратором) |
+| `comparison_id` | bigint | Да | **D37**: Идентификатор сравнения (генерируется Оркестратором, TBD — не MVP, см. `glossary.md`) |
 | `normative_query` | string | Да | Нормативный запрос |
-| `project_document_id` | string | Да | ID проектного документа |
-| `document_type` | string | Нет | Тип документа (`normative`, `drawing`, `specification`) |
+| `project_document_id` | bigint | Да | **D37**: ID проектного документа |
+| `document_type` | string | Нет | Категория контента (`normative`, `technical`, `drawing`, `specification`, `archival_scan`) |
 
 **Ответ `202`:**
 
 ```json
 {
-  "comparison_id": "cmp-007",
+  "comparison_id": 700007,
   "status": "processing",
   "created_at": "2026-05-15T12:00:00Z"
 }
@@ -74,7 +84,7 @@
 
 ```json
 {
-  "comparison_id": "cmp-007",
+  "comparison_id": 700007,
   "status": "completed",
   "match_status": "match",
   "summary": "Толщина 14 мм соответствует требованию ≥12 мм",
@@ -104,9 +114,9 @@
 
 ```json
 {
-  "batch_id": "batch-001",
+  "batch_id": 100001,
   "comparisons": [
-    { "comparison_id": "cmp-007", "match_status": "match", "summary": "..." }
+    { "comparison_id": 700007, "match_status": "match", "summary": "..." }
   ],
   "total_pairs": 1,
   "matched": 1,
@@ -165,7 +175,7 @@
       "failure_ref": "min_thickness_12mm",
       "recommendation_text": "Увеличить толщину обшивки до 12 мм согласно Правилам РС, часть I, стр.42.",
       "severity": "critical",
-      "reference_document": "doc-norm-001"
+      "reference_document": 420042
     }
   ]
 }
