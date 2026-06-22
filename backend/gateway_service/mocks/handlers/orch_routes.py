@@ -203,6 +203,7 @@ async def monitor_health():
 # ===========================================================================
 
 @router.post("/api/v1/drafts", status_code=202)
+@router.post("/api/v1/drafts/", status_code=202)
 async def create_draft(request: Request):
     now = utcnow()
     user_id = "anonymous"

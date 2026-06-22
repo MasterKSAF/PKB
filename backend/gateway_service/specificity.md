@@ -343,3 +343,12 @@ Docker healthcheck может слать `/api/v1/system/health/` — слеш �
 
 ### Статус тестов
 - **470 тестов проходят** (было 468 + 2 упавших исправлены)
+
+## 2026-06-22: Исправление 4 проблем API (messages/search, import_docs, drafts/, messages form-data)
+### Изменения
+- **query_routes.py**: Добавлен эндпоинт `POST .../messages/search` (отсутствовал → 405)
+- **query_routes.py**: `send_message` теперь принимает и JSON, и form-data (было 422 для form-data)
+- **registry_routes.py**: `import_docs` переписан — добавлен парсинг CSV/XLSX, multipart (был только JSON)
+- **orch_routes.py**: Добавлен роут `/api/v1/drafts/` со слешем для совместимости
+### Аномалии
+- **test_91_update_registry_doc** — падает с 422: `jurisdiction='RF'` недопустимо (список: RU/BY/KZ/...). Ошибка в тесте или в seed-данных, не связана с правками.

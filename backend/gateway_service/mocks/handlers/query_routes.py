@@ -74,6 +74,12 @@ class SendMessageRequest(BaseModel):
     options: Optional[Dict[str, Any]] = None
 
 
+class MessageSearchRequest(BaseModel):
+    query: str
+    limit: int = 20
+    offset: int = 0
+
+
 class ContextActionRequest(BaseModel):
     action: str
     params: Optional[Dict[str, Any]] = None
@@ -278,10 +284,22 @@ async def delete_project(project_id: int):
 # ── Chat Messages ─────────────────────────────────────────────────────────────
 
 @router.post("/api/v1/chat/sessions/{session_id}/messages")
-async def send_message(session_id: int, req: SendMessageRequest):
+async def send_message(session_id: int, request: Request):
     session = _sessions.get(session_id)
     if not session:
         raise HTTPException(status_code=404, detail=error_response("SESSION_NOT_FOUND", "Сессия не найдена"))
+
+    content_type = request.headers.get("content-type", "")
+    if "application/json" in content_type:
+        body = await request.json()
+        req = SendMessageRequest(**body)
+    else:
+        form = await request.form()
+        content = form.get("content")
+        if not content:
+            raise HTTPException(status_code=400, detail=error_response("VALIDATION_ERROR", "Поле content обязательно"))
+        req = SendMessageRequest(content=content)
+
     now = utcnow()
     user_msg = {"message_id": new_id(), "role": "user", "content": req.content,
                 "timestamp": now, "status": "completed"}
@@ -398,6 +416,36 @@ async def get_message(
         "session_id": session_id,
         "document_ids": document_ids,
         "message": message,
+    }
+
+
+@router.post("/api/v1/chat/sessions/{session_id}/messages/search")
+async def search_messages(session_id: int, req: MessageSearchRequest):
+    session = _sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail=error_response("SESSION_NOT_FOUND", "Сессия не найдена"))
+    messages = session.get("messages", [])
+    query = req.query.lower()
+    # Только финальные сообщения (не pending/processing)
+    final_statuses = {"completed", "answered", "failed"}
+    matching = []
+    for m in messages:
+        if m.get("status") not in final_statuses:
+            continue
+        if query in m.get("content", "").lower():
+            matching.append(m)
+    total = len(matching)
+    offset = max(0, req.offset)
+    limit = max(1, min(100, req.limit))
+    page = matching[offset:offset + limit]
+    return {
+        "session_id": session_id,
+        "results": page,
+        "meta": {
+            "total": total,
+            "page": offset // limit + 1 if limit > 0 else 1,
+            "page_size": limit,
+        },
     }
 
 

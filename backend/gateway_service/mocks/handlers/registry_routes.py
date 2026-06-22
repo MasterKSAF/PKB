@@ -792,46 +792,96 @@ async def export_docs(format: str = "json"):
 
 @router.post("/documents/import")
 async def import_docs(request: Request):
-    content = await _read_body_or_file(request)
-    raw_data = json.loads(content)
-    if isinstance(raw_data, dict):
-        raw_data = raw_data.get("data") or raw_data.get("documents") or []
-    rows = [RegistryDocCreate(**r) if isinstance(r, dict) else r for r in raw_data]
+    content_type = request.headers.get("content-type", "")
+    file_bytes = None
+    filename = ""
+    mode = "upsert"
+
+    if "multipart" in content_type:
+        form = await request.form()
+        upload = form.get("file")
+        if upload and hasattr(upload, "read"):
+            file_bytes = await upload.read()
+            filename = upload.filename or ""
+        mode = form.get("mode", "upsert")
+    else:
+        file_bytes = await request.body()
+        try:
+            raw_data = json.loads(file_bytes)
+        except json.JSONDecodeError:
+            raise HTTPException(400, detail=error_response("VALIDATION_ERROR", "Тело запроса должно быть JSON или multipart/form-data"))
+        if isinstance(raw_data, dict):
+            raw_data = raw_data.get("data") or raw_data.get("documents") or []
+        rows = [RegistryDocCreate(**r) if isinstance(r, dict) else r for r in raw_data]
+        return _process_doc_import(rows, mode)
+
+    if not file_bytes:
+        raise HTTPException(400, detail=error_response("VALIDATION_ERROR", "Файл не передан"))
+
+    fmt = _detect_format(filename, content_type)
+    try:
+        if fmt == "csv":
+            raw_rows = _parse_csv(file_bytes, mapping=None)
+        elif fmt == "xlsx":
+            raw_rows = _parse_xlsx(file_bytes, mapping=None)
+        else:
+            raw_data = json.loads(file_bytes)
+            if isinstance(raw_data, dict):
+                raw_data = raw_data.get("data") or raw_data.get("documents") or []
+            raw_rows = raw_data
+    except Exception as e:
+        raise HTTPException(400, detail=error_response("VALIDATION_ERROR", f"Ошибка парсинга файла: {e}"))
+
+    rows = [RegistryDocCreate(**r) if isinstance(r, dict) else r for r in raw_rows]
+    return _process_doc_import(rows, mode)
+
+
+def _process_doc_import(rows: list, mode: str = "upsert") -> dict:
+    if mode not in ("create", "update", "upsert"):
+        raise HTTPException(
+            status_code=400,
+            detail=error_response("VALIDATION_ERROR", f"Недопустимый mode: '{mode}'. Ожидается: create, update, upsert"),
+        )
     inserted = updated = 0
     errors = []
     for item in rows:
         try:
             existing = next((d for d in _registry_docs.values() if d.get("doc_code") == item.doc_code), None)
             if existing:
-                existing.update({"title": item.title, "source_type": item.source_type, "status": item.status,
-                                 "era": item.era, "validity_status": item.validity_status,
-                                 "jurisdiction": item.jurisdiction, "issuing_body": item.issuing_body,
-                                 "mks_oks_code": item.mks_oks_code, "okstu_code": item.okstu_code,
-                                 "updated_at": utcnow()})
-                updated += 1
+                if mode in ("update", "upsert"):
+                    existing.update({"title": item.title, "source_type": item.source_type, "status": item.status,
+                                     "era": item.era, "validity_status": item.validity_status,
+                                     "jurisdiction": item.jurisdiction, "issuing_body": item.issuing_body,
+                                     "mks_oks_code": item.mks_oks_code, "okstu_code": item.okstu_code,
+                                     "updated_at": utcnow()})
+                    updated += 1
+                elif mode == "create":
+                    errors.append({"row": item.title, "message": "Документ с таким doc_code уже существует"})
             else:
-                doc_id = new_id()
-                version_id = new_id()
-                new_doc = {"id": doc_id, "title": item.title, "doc_code": item.doc_code, "source_type": item.source_type,
-                           "status": item.status, "era": item.era, "validity_status": item.validity_status,
-                           "jurisdiction": item.jurisdiction, "issuing_body": item.issuing_body,
-                           "mks_oks_code": item.mks_oks_code, "okstu_code": item.okstu_code,
-                           "valid_from": item.valid_from or utcnow()[:10], "valid_until": item.valid_until or "9999-12-31",
-                           "source_draft_id": item.source_draft_id,
-                           "draft_id": item.draft_id,  # DB-26
-                           "current_version_id": version_id, "preview_snapshot": None,
-                           "title_hash_sha256": None, "classification_status": {}, "successor_doc_id": None,
-                           "predecessor_doc_id": None, "total_versions": 1, "chunk_count": 0,
-                           "created_by": "system", "updated_by": "system", "created_at": utcnow(), "updated_at": utcnow()}
-                # DB-1: title_hash_sha256
-                new_doc["title_hash_sha256"] = compute_title_hash_sha256(new_doc)
-                _registry_docs[doc_id] = new_doc
-                _doc_history[doc_id] = [{"history_id": new_id(), "doc_id": doc_id, "previous_status": None,
-                                         "new_status": item.status, "comment": "Created", "changed_by": "system", "changed_at": utcnow()}]
-                inserted += 1
+                if mode in ("create", "upsert"):
+                    doc_id = new_id()
+                    version_id = new_id()
+                    new_doc = {"id": doc_id, "title": item.title, "doc_code": item.doc_code, "source_type": item.source_type,
+                               "status": item.status, "era": item.era, "validity_status": item.validity_status,
+                               "jurisdiction": item.jurisdiction, "issuing_body": item.issuing_body,
+                               "mks_oks_code": item.mks_oks_code, "okstu_code": item.okstu_code,
+                               "valid_from": item.valid_from or utcnow()[:10], "valid_until": item.valid_until or "9999-12-31",
+                               "source_draft_id": item.source_draft_id,
+                               "draft_id": item.draft_id,
+                               "current_version_id": version_id, "preview_snapshot": None,
+                               "title_hash_sha256": None, "classification_status": {}, "successor_doc_id": None,
+                               "predecessor_doc_id": None, "total_versions": 1, "chunk_count": 0,
+                               "created_by": "system", "updated_by": "system", "created_at": utcnow(), "updated_at": utcnow()}
+                    new_doc["title_hash_sha256"] = compute_title_hash_sha256(new_doc)
+                    _registry_docs[doc_id] = new_doc
+                    _doc_history[doc_id] = [{"history_id": new_id(), "doc_id": doc_id, "previous_status": None,
+                                             "new_status": item.status, "comment": "Created", "changed_by": "system", "changed_at": utcnow()}]
+                    inserted += 1
+                elif mode == "update":
+                    errors.append({"row": item.title, "message": "Документ с таким doc_code не найден"})
         except Exception as e:
             errors.append({"row": item.title, "message": str(e)})
-    return {"data": {"inserted": inserted, "updated": updated, "errors": errors}}
+    return {"data": {"imported": inserted, "updated": updated, "errors": errors}}
 
 
 @router.get("/documents/{doc_id}")
