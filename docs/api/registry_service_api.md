@@ -655,23 +655,34 @@ POST /registry/terminology/import
 
 ## Группа documents
 
-| Метод | Путь | Описание |
-|-------|------|----------|
-| GET | `/registry/documents` | Список |
-| GET | `/registry/documents/search` | **Полнотекстовый поиск (BM25)** — поиск по `doc_code`, `title`, `classifier_links` |
-| POST | `/registry/documents/search` | **Семантический поиск** — поиск документов по structured-запросу |
-| GET | `/registry/documents/{doc_id}` | Один документ (описание) |
-| GET | `/registry/documents/{doc_id}/sections` | Секции документа |
-| POST | `/registry/documents/check-uniqueness` | Проверить уникальность |
-| POST | `/registry/documents` | Создать |
-| PUT | `/registry/documents/{doc_id}` | Обновить |
-| PATCH | `/registry/documents/{doc_id}` | Частичное обновление |
-| PATCH | `/registry/documents/{doc_id}/status` | Обновить статус (internal — только для Оркестратора) |
-| GET | `/registry/documents/{doc_id}/succession` | Цепочка преемственности |
-| DELETE | `/registry/documents/{doc_id}` | Удалить |
-| POST | `/registry/documents/{doc_id}/reprocess` | Переобработка документа (reprocess) |
-| GET | `/registry/documents/export` | Экспорт |
-| POST | `/registry/documents/import` | Массовый импорт |
+| Метод | Путь | Описание | Доступ |
+|-------|------|----------|--------|
+| GET | `/registry/documents` | Список документов | public |
+| GET | `/registry/documents/search` | **Полнотекстовый поиск (BM25)** — поиск по `doc_code`, `title`, `classifier_links` | public |
+| POST | `/registry/documents/search` | **Семантический поиск** — поиск документов по structured-запросу | public |
+| GET | `/registry/documents/{doc_id}` | Один документ (описание) | public |
+| GET | `/registry/documents/{doc_id}/sections` | Секции документа (для RAG Builder) | public |
+| GET | `/registry/documents/{doc_id}/pages` | Список страниц документа | public |
+| GET | `/registry/documents/{doc_id}/pages/{page_num}` | Конкретная страница (bbox) | public |
+| GET | `/registry/documents/{doc_id}/pages/{page_num}/text` | Текстовый слой страницы | public |
+| GET | `/registry/documents/{doc_id}/pages/{page_num}/preview` | Превью страницы (изображение + blocks) | public |
+| GET | `/registry/documents/{doc_id}/file` | Скачивание файла документа | public |
+| GET | `/registry/documents/{doc_id}/history` | История статусов документа | public |
+| GET | `/registry/documents/{doc_id}/versions` | Список версий документа | public |
+| GET | `/registry/documents/{doc_id}/parameters` | Извлечённые параметры (формулы) | public |
+| GET | `/registry/documents/{doc_id}/succession` | Цепочка преемственности | public |
+| POST | `/registry/documents/check-uniqueness` | Проверить уникальность | public |
+| POST | `/registry/documents` | Создать (из Пайплайна 1 или вручную) | **internal** (только Orchestrator) |
+| PUT | `/registry/documents/{doc_id}` | Полное обновление карточки | public |
+| PATCH | `/registry/documents/{doc_id}` | Частичное обновление карточки | public |
+| PATCH | `/registry/documents/{doc_id}/status` | Обновить FSM-статус | **internal** (только Orchestrator) |
+| DELETE | `/registry/documents/{doc_id}` | Мягкое удаление | public |
+| POST | `/registry/documents/{doc_id}/reprocess` | Переобработка документа (reprocess) | public |
+| GET | `/registry/documents/export` | Экспорт карточек | public |
+| POST | `/registry/documents/import` | Массовый импорт | public |
+
+> **public** — Gateway проксирует запрос напрямую в Registry.
+> **internal** — недоступен через Gateway, вызывается только Orchestratorом по внутренней сети.
 
 ### 3.1. Список
 
@@ -1047,7 +1058,347 @@ GET /registry/documents/{doc_id}/sections
 
 ---
 
-### 3.2.5. Проверить уникальность документа
+### 3.2.2. Страницы документа
+
+```
+GET /registry/documents/{doc_id}/pages
+```
+
+Список страниц документа с размерами и статусом OCR.
+
+**Ответ `200`:**
+
+```json
+{
+  "data": {
+    "document_id": 1,
+    "pages_total": 10,
+    "pages": [
+      {
+        "page": 1,
+        "width": 595.0,
+        "height": 842.0,
+        "ocr_status": "completed",
+        "confidence": 0.98,
+        "has_text_layer": true
+      }
+    ]
+  },
+  "meta": { "total": 10, "page": 1, "page_size": 50 }
+}
+```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `document_id` | bigint | ID документа |
+| `pages_total` | int | Общее количество страниц |
+| `pages[].page` | int | Номер страницы |
+| `pages[].width` | float | Ширина страницы в пунктах (pt) |
+| `pages[].height` | float | Высота страницы в пунктах (pt) |
+| `pages[].ocr_status` | string | Статус OCR: `pending`, `processing`, `completed`, `failed` |
+| `pages[].confidence` | float | Уверенность распознавания (0..1) |
+| `pages[].has_text_layer` | bool | Есть ли текстовый слой в PDF |
+
+---
+
+### 3.2.3. Конкретная страница
+
+```
+GET /registry/documents/{doc_id}/pages/{page_num}
+```
+
+Метаданные одной страницы (bbox-координаты блоков).
+
+**Ответ `200`:**
+
+```json
+{
+  "data": {
+    "document_id": 1,
+    "page": 1,
+    "width": 595.0,
+    "height": 842.0,
+    "blocks": [
+      {
+        "number": 1,
+        "type": "text",
+        "bbox": [56.7, 70.9, 481.9, 18.0],
+        "content": "ГОСТ 20868-81",
+        "confidence": 0.99
+      }
+    ]
+  }
+}
+```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `document_id` | bigint | ID документа |
+| `page` | int | Номер страницы |
+| `width` | float | Ширина страницы в pt |
+| `height` | float | Высота страницы в pt |
+| `blocks[].number` | int | Порядковый номер блока на странице |
+| `blocks[].type` | string | Тип блока: `text`, `table`, `image`, `header`, `footer` |
+| `blocks[].bbox` | array | Координаты [x1, y1, x2, y2] (0..1) |
+| `blocks[].content` | string | Содержимое блока |
+| `blocks[].confidence` | float | Уверенность (0..1) |
+
+---
+
+### 3.2.4. Текст страницы
+
+```
+GET /registry/documents/{doc_id}/pages/{page_num}/text
+```
+
+Детальный текстовый слой страницы: блоки с bbox, таблицы и формулы.
+
+**Ответ `200`:**
+
+```json
+{
+  "data": {
+    "document_id": 1,
+    "page": 1,
+    "width": 595.0,
+    "height": 842.0,
+    "blocks": [
+      {
+        "number": 1,
+        "type": "text",
+        "bbox": [56.7, 70.9, 481.9, 18.0],
+        "content": "ГОСТ 20868-81",
+        "confidence": 0.99
+      },
+      {
+        "number": 2,
+        "type": "table",
+        "bbox": [56.7, 100.0, 481.9, 200.0],
+        "content": { "columns": [], "rows": [] },
+        "confidence": 0.95
+      }
+    ]
+  }
+}
+```
+
+Формат `blocks[].content` соответствует типу блока (см. `_schemas.md`).
+
+---
+
+### 3.2.5. Превью страницы
+
+```
+GET /registry/documents/{doc_id}/pages/{page_num}/preview
+```
+
+Изображение превью страницы с наложенными bbox-блоками.
+
+**Ответ `200`:**
+
+```json
+{
+  "data": {
+    "document_id": 1,
+    "page": 1,
+    "image_url": "http://minio:9000/pkb/previews/1/p1.png",
+    "blocks": [
+      {
+        "number": 1,
+        "type": "text",
+        "bbox": [56.7, 70.9, 481.9, 18.0],
+        "content": "ГОСТ 20868-81"
+      }
+    ],
+    "text_layer": "ГОСТ 20868-81\nНастоящий стандарт..."
+  }
+}
+```
+
+---
+
+### 3.2.6. Файл документа
+
+```
+GET /registry/documents/{doc_id}/file
+```
+
+Скачивание файла последней версии документа (или конкретной версии, если передан `?version_id=`).
+
+**Query-параметры:**
+
+| Параметр | Тип | Описание |
+|----------|-----|----------|
+| `version_id` | bigint | ID конкретной версии (если не указан — последняя) |
+| `format` | string | Формат ответа: `json` (по умолчанию, возвращает URL), `binary` (поток) |
+
+**Ответ `200` (format=json):**
+
+```json
+{
+  "data": {
+    "file_url": "http://minio:9000/pkb/documents/f-abc123.pdf",
+    "file_size": 2048576,
+    "content_type": "application/pdf"
+  }
+}
+```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `file_url` | string | Прямая ссылка на файл в MinIO (pre-signed URL) |
+| `file_size` | int | Размер файла в байтах |
+| `content_type` | string | MIME-тип файла |
+
+---
+
+### 3.2.7. История статусов
+
+```
+GET /registry/documents/{doc_id}/history
+```
+
+История изменения статусов документа.
+
+**Ответ `200`:**
+
+```json
+{
+  "data": {
+    "document_id": 1,
+    "history": [
+      {
+        "history_id": 1,
+        "event_type": "created",
+        "old_status": null,
+        "new_status": "created",
+        "comment": "Документ создан из черновика",
+        "changed_by": "orchestrator",
+        "event_at": "2026-05-17T09:15:00Z"
+      },
+      {
+        "history_id": 2,
+        "event_type": "status_changed",
+        "old_status": "pending_index",
+        "new_status": "indexed",
+        "comment": "Индексация завершена",
+        "changed_by": "orchestrator",
+        "event_at": "2026-05-17T09:20:00Z"
+      }
+    ]
+  },
+  "meta": { "total": 2 }
+}
+```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `history[].history_id` | bigint | ID записи истории |
+| `history[].event_type` | string | Тип события: `created`, `status_changed`, `decided`, `reprocessed` |
+| `history[].old_status` | string | Предыдущий статус |
+| `history[].new_status` | string | Новый статус |
+| `history[].comment` | string | Комментарий |
+| `history[].changed_by` | string | Субъект (пользователь или сервис) |
+| `history[].event_at` | datetime | Время события (ISO 8601) |
+
+---
+
+### 3.2.8. Версии документа
+
+```
+GET /registry/documents/{doc_id}/versions
+```
+
+Список версий документа.
+
+**Ответ `200`:**
+
+```json
+{
+  "data": {
+    "document_id": 1,
+    "versions": [
+      {
+        "version_id": 1,
+        "version_number": 1,
+        "format_code": "pdf",
+        "format_label": "PDF/A",
+        "file_key": "f-abc123",
+        "file_hash_sha256": "e3b0c442...",
+        "size_bytes": 2048576,
+        "created_at": "2026-05-17T09:15:00Z",
+        "created_by": "orchestrator"
+      }
+    ]
+  },
+  "meta": { "total": 1 }
+}
+```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `versions[].version_id` | bigint | ID версии |
+| `versions[].version_number` | int | Номер версии (начиная с 1) |
+| `versions[].format_code` | string | Код формата: `pdf`, `pdfa`, `tiff`, `png` |
+| `versions[].format_label` | string | Человекочитаемое название формата |
+| `versions[].file_key` | string | Ключ файла в MinIO |
+| `versions[].file_hash_sha256` | string | SHA-256 хеш файла |
+| `versions[].size_bytes` | int | Размер файла в байтах |
+| `versions[].created_at` | datetime | Время создания версии |
+| `versions[].created_by` | string | Субъект-создатель |
+
+---
+
+### 3.2.9. Параметры документа
+
+```
+GET /registry/documents/{doc_id}/parameters
+```
+
+Извлечённые из документа параметры (символы, формулы с единицами измерения).
+
+**Ответ `200`:**
+
+```json
+{
+  "data": {
+    "document_id": 1,
+    "parameters": [
+      {
+        "symbol": "t",
+        "description": "Толщина обшивки",
+        "unit": "mm",
+        "value": 12.5,
+        "source_clause": "2.3.1",
+        "source_page": 5
+      },
+      {
+        "symbol": "σ_y",
+        "description": "Предел текучести",
+        "unit": "MPa",
+        "range": { "min": 235, "max": 355 },
+        "source_clause": "2.3.5",
+        "source_page": 6
+      }
+    ]
+  },
+  "total": 2
+}
+```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `parameters[].symbol` | string | Символ/обозначение параметра |
+| `parameters[].description` | string | Описание |
+| `parameters[].unit` | string | Единица измерения |
+| `parameters[].value` | number | Значение параметра |
+| `parameters[].range` | object | Диапазон значений: `{ min, max }` |
+| `parameters[].source_clause` | string | Пункт документа-источника |
+| `parameters[].source_page` | int | Страница источника |
+
+---
+
+### 3.2.10. Проверить уникальность документа
 
 ```
 POST /registry/documents/check-uniqueness
@@ -1621,14 +1972,19 @@ Registry регистрирует задачу на переобработку. 
 
 **Доступ:** GET-эндпоинты (чтение) — доступны через Gateway для просмотра. PATCH/DELETE — internal, доступны только Orchestrator.
 
-| Метод | Путь | Описание |
-|-------|------|----------|
-| POST | `/registry/drafts` | Создать запись черновика |
-| GET  | `/registry/drafts` | Список черновиков |
-| GET  | `/registry/drafts/{draft_id}` | Полная информация |
-| GET  | `/registry/drafts/{draft_id}/preview` | Preview-метаданные |
-| PATCH| `/registry/drafts/{draft_id}/status` | Обновить статус |
-| DELETE| `/registry/drafts/{draft_id}` | Удалить запись |
+| Метод | Путь | Описание | Доступ |
+|-------|------|----------|--------|
+| GET  | `/registry/drafts` | Список черновиков | public |
+| GET  | `/registry/drafts/{draft_id}` | Полная информация о черновике | public |
+| GET  | `/registry/drafts/{draft_id}/preview` | Preview-метаданные | public |
+| POST | `/registry/drafts` | Создать запись черновика | **internal** |
+| PATCH| `/registry/drafts/{draft_id}/status` | Обновить статус (FSM) | **internal** |
+| PATCH| `/registry/drafts/{draft_id}/metadata` | Обновить метаданные черновика | **internal** |
+| DELETE| `/registry/drafts/{draft_id}` | Удалить запись черновика | **internal** |
+
+> **public** — Gateway проксирует запрос напрямую в Registry.
+> **internal** — недоступен через Gateway, вызывается только Orchestratorом.
+> Registry не имеет публичных write-эндпоинтов для черновиков. Создание и смена статуса — только через Orchestrator.
 
 **Канонический список статусов черновика** (владелец — Registry, все остальные сервисы синхронизируются с этим списком):
 
