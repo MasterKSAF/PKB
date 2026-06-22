@@ -527,6 +527,20 @@ async def reject_pending(pending_id: int, req: Optional[RejectPendingRequest] = 
     return await reject_quarantine(pending_id, req)
 
 
+# Bare aliases (без префикса /classifiers/) — для совместимости с путями вида /pending/{id}/accept
+
+@router.post("/pending/{pending_id}/accept")
+async def accept_pending_bare(pending_id: int, req: Optional[AcceptPendingRequest] = None):
+    logger.info("accept_pending_bare: id=%d", pending_id)
+    return await accept_quarantine(pending_id, req)
+
+
+@router.post("/pending/{pending_id}/reject")
+async def reject_pending_bare(pending_id: int, req: Optional[RejectPendingRequest] = None):
+    logger.info("reject_pending_bare: id=%d", pending_id)
+    return await reject_quarantine(pending_id, req)
+
+
 @router.post("/classifiers/validate")
 async def validate_classification(req: dict):
     # Support both classification.* wrapper and top-level

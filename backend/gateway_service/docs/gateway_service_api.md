@@ -56,6 +56,7 @@ Gateway объединяет API всех внутренних сервисов 
 | `/api/v1/system/health` | Gateway (собственный) | `8080` | — |
 | `/api/v1/analyse/*` | Analyse Service | `8089` | [analyse_service_api.md](analyse_service_api.md) |
 | `/api/v1/health` | Gateway (собственный) | `8080` | — |
+| `/api/v1/rag/*` | RAG Search Service | `8091` | [rag_search_service_api.md](rag_search_service_api.md) |
 | `/api/v1/meridian/*` | Integration Service | `8085` | [integration_service_api.md](integration_service_api.md) |
 | `/api/v1/files/*` | Integration Service | `8085` | [integration_service_api.md](integration_service_api.md) (D25: добавлен в routing table) |
 | `/api/v1/external/*` | Integration Service | `8085` | [integration_service_api.md](integration_service_api.md) (D25: добавлен в routing table) |

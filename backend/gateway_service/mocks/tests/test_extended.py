@@ -41,6 +41,7 @@ QUERY = f"{BASE}"
 REG_DOCS = f"{BASE}/registry"
 REG = f"{BASE}/registry"
 COMMON = f"{BASE}/registry/common"
+RAG = f"{BASE}/rag"
 
 TEST_USER = "ivanov@example.com"
 TEST_PASS = "secret123"
@@ -1452,3 +1453,143 @@ class TestStopperFixes:
             )
         finally:
             gw.ALLOW_ANONYMOUS = old_value
+
+
+# ===========================================================================
+# Bare pending aliases — /pending/{id}/accept, /pending/{id}/reject
+# ===========================================================================
+
+
+class TestBarePendingEndpoints:
+    """Bare /pending/{id}/accept and /pending/{id}/reject (без /classifiers/)."""
+
+    def setup_method(self):
+        _reset_rate_limiter()
+
+    def test_83_pending_bare_accept(self):
+        """POST /registry/pending/{id}/accept → статус mapped."""
+        resp = client.post(f"{REG}/pending/1/accept")
+        assert_ok(resp)
+        data = resp.json()["data"]
+        assert data["status"] == "mapped"
+        assert "pending_id" in data
+        assert "code" in data
+
+    def test_84_pending_bare_reject(self):
+        """POST /registry/pending/{id}/reject → статус rejected."""
+        resp = client.post(f"{REG}/pending/1/reject")
+        assert_ok(resp)
+        data = resp.json()["data"]
+        assert data["status"] == "rejected"
+        assert data["pending_id"] == 1
+
+    def test_85_pending_bare_accept_with_body(self):
+        """POST /registry/pending/{id}/accept с body → mapped + registry_created."""
+        resp = client.post(
+            f"{REG}/pending/1/accept",
+            json={
+                "parent_code": "47.020",
+                "full_name": "Тест bare alias",
+                "admin_comment": "Через bare alias",
+            },
+        )
+        assert_ok(resp)
+        data = resp.json()["data"]
+        assert data["status"] == "mapped"
+        assert "registry_created" in data
+
+    def test_86_pending_bare_reject_with_comment(self):
+        """POST /registry/pending/{id}/reject с admin_comment → комментарий сохранён."""
+        resp = client.post(
+            f"{REG}/pending/1/reject",
+            json={"admin_comment": "Отклонён через bare alias"},
+        )
+        assert_ok(resp)
+        data = resp.json()["data"]
+        assert data["status"] == "rejected"
+
+    def test_87_pending_bare_accept_nonexistent_returns_404(self):
+        """Accept несуществующего pending возвращает 404."""
+        resp = client.post(f"{REG}/pending/999/accept")
+        assert resp.status_code == 404
+        assert "error" in resp.json()
+
+    def test_88_pending_bare_reject_nonexistent_returns_404(self):
+        """Reject несуществующего pending возвращает 404."""
+        resp = client.post(f"{REG}/pending/999/reject")
+        assert resp.status_code == 404
+        assert "error" in resp.json()
+
+
+# ===========================================================================
+# RAG Search — POST /rag/search
+# ===========================================================================
+
+
+class TestRagSearch:
+    """POST /api/v1/rag/search endpoint."""
+
+    def setup_method(self):
+        _reset_rate_limiter()
+
+    def test_90_rag_search_returns_results(self):
+        """POST /rag/search с query → 200 с results[] и метаданными."""
+        resp = client.post(
+            f"{RAG}/search",
+            json={"query": "допуск соосности", "valid_at": "2026-06-20"},
+        )
+        assert_ok(resp)
+        data = resp.json()
+        assert "query" in data
+        assert "results" in data
+        assert isinstance(data["results"], list)
+        assert len(data["results"]) > 0
+        assert "processing_time_ms" in data
+        assert "total_found" in data
+
+    def test_91_rag_search_result_structure(self):
+        """Каждый результат содержит source, retrieval, context."""
+        resp = client.post(
+            f"{RAG}/search",
+            json={"query": "сварной шов", "valid_at": "2026-06-20"},
+        )
+        assert_ok(resp)
+        data = resp.json()
+        for result in data["results"]:
+            assert "source" in result
+            assert "retrieval" in result
+            assert "context" in result
+            src = result["source"]
+            assert "document_id" in src
+            assert "section_id" in src
+            assert "content" in src
+            ret = result["retrieval"]
+            assert "chunk_id" in ret
+            assert "score" in ret
+            assert "mode" in ret
+
+    def test_92_rag_search_empty_query_returns_400(self):
+        """Пустой query → 400 EMPTY_QUERY."""
+        resp = client.post(
+            f"{RAG}/search",
+            json={"query": "", "valid_at": "2026-06-20"},
+        )
+        assert resp.status_code == 400
+        data = resp.json()
+        assert "error" in data
+        assert data["error"]["code"] == "EMPTY_QUERY"
+
+    def test_93_rag_search_filters_document_ids(self):
+        """Фильтр document_ids сужает результаты."""
+        resp = client.post(
+            f"{RAG}/search",
+            json={
+                "query": "допуск",
+                "valid_at": "2026-06-20",
+                "filters": {"document_ids": [999]},
+            },
+        )
+        assert_ok(resp)
+        data = resp.json()
+        # document_id=999 нет в мок-данных → результатов нет (но total_found берётся из candidates)
+        assert len(data["results"]) == 0

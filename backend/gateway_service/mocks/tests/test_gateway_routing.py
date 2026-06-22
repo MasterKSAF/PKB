@@ -77,6 +77,11 @@ class TestOtherServices:
     def test_chat_sessions(self):
         assert resolve_service("/api/v1/chat/sessions") == "query"
 
+    def test_rag_search(self):
+        """RAG Search paths must resolve to 'rag_search'."""
+        assert resolve_service("/api/v1/rag/search") == "rag_search"
+        assert resolve_service("/api/v1/rag/") == "rag_search"
+
 
 # ===========================================================================
 # Edge cases

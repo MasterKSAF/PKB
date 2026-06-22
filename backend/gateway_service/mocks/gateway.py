@@ -49,7 +49,7 @@ from gateway.rate_limiter import (
     check_idor_rate_limit,
     check_rate_limit,
 )
-from mocks.handlers import auth_router, orch_router, query_router, registry_router
+from mocks.handlers import auth_router, orch_router, query_router, registry_router, rag_search_router
 
 _MOCK_USERS: Dict[int, dict] = {u["user_id"]: u for u in SEED_USERS}
 
@@ -631,6 +631,7 @@ app.include_router(auth_router)
 app.include_router(orch_router)
 app.include_router(query_router)
 app.include_router(registry_router, prefix="/api/v1/registry")
+app.include_router(rag_search_router, prefix="/api/v1/rag")
 
 
 # ---------------------------------------------------------------------------

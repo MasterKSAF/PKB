@@ -47,6 +47,8 @@ SERVICE_ROUTES: Dict[str, str] = {
     "/api/v1/registry/categories/": "registry",
     # Analyse Service (:8089)
     "/api/v1/analyse/": "analyse",
+    # RAG Search Service (:8091)
+    "/api/v1/rag/": "rag_search",
 }
 
 

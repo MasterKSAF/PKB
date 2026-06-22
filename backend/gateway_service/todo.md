@@ -20,3 +20,11 @@
 - [x] auth_service_api.md — путь `/auth/token` → `/auth/login`
 - [x] registry_service_api.md — jurisdiction enums синхронизированы
 - [x] specificy.md — запись об аномалии test_91 + изменения
+
+## Новые эндпоинты (22.06)
+- [x] **POST /pending/{id}/accept** — bare-алиас (без /classifiers/) в mock Registry
+- [x] **POST /pending/{id}/reject** — bare-алиас (без /classifiers/) в mock Registry
+- [x] **POST /api/v1/rag/search** — Gateway proxy-маршрут (`/api/v1/rag/` → rag_search)
+- [x] **POST /rag/search** — mock-обработчик RAG Search (mocks/handlers/rag_search_routes.py)
+- [x] Gateway routing table docs — обновлена gateway_service_api.md
+- [x] Тесты — 11 новых (bare pending + rag search + resolve_service)
