@@ -27,6 +27,14 @@ _ts = str(int(time.time()))[-6:]
 def get_service_def() -> ServiceDef:
     """Вернуть полное описание Auth Service."""
 
+    _warnings: list = []
+
+    # docs/api/auth_service_api.md: PATCH /admin/users/{id} ожидает audit_log_id в ответе,
+    # но сервис пока не возвращает это поле
+    _warnings.append(
+        "PATCH /admin/users/{id}: docs ожидает audit_log_id, но сервис его не возвращает"
+    )
+
     prepare_endpoints = [
         EndpointDef("POST", f"{API_PREFIX}/auth/token", "auth", "Получение JWT токена",
             body=TEST_CREDENTIALS,
@@ -45,6 +53,12 @@ def get_service_def() -> ServiceDef:
             response_schema={"user_id": str, "email": str},
             is_preparation=True,
             expected_status={201, 409}),
+        # AU-5: создаём роль knowledge_admin для PATCH (per docs)
+        EndpointDef("POST", f"{API_PREFIX}/admin/roles", "admin", "Создать роль knowledge_admin",
+            body={"name": "knowledge_admin", "permissions": ["documents:read", "documents:write", "users:manage", "roles:manage", "audit:read", "search"]},
+            expected_status={201, 409},
+            response_schema={"role_id": str, "name": str},
+            is_preparation=True),
     ]
 
     endpoints = [
@@ -78,10 +92,11 @@ def get_service_def() -> ServiceDef:
         EndpointDef("PUT", f"{API_PREFIX}/admin/users/{{user_id}}", "admin", "Обновить пользователя",
             body={"full_name": "Updated User", "position": "Engineer", "roles": ["engineer"], "is_active": True},
             response_schema={"user_id": str, "email": str, "is_active": bool}),
-        # AU-5: roles[] вместо role
+        # AU-5: roles[] вместо role (per docs: knowledge_admin)
+        # docs: ожидается audit_log_id, но сервис пока не возвращает
         EndpointDef("PATCH", f"{API_PREFIX}/admin/users/{{user_id}}", "admin", "Изменить роли",
-            body={"roles": ["admin"]},
-            response_schema={"user_id": str, "roles": list}),
+            body={"roles": ["knowledge_admin"]},
+            response_schema={"user_id": str, "roles": list, "updated_at": str}),
         EndpointDef("DELETE", f"{API_PREFIX}/admin/users/{{user_id}}", "admin", "Деактивировать пользователя",
             expected_status={200, 307},
             response_schema={"user_id": str, "is_active": bool}),
@@ -110,4 +125,5 @@ def get_service_def() -> ServiceDef:
         prepare_endpoints=prepare_endpoints,
         depends_on=[],
         base_data={},
+        warnings=_warnings,
     )

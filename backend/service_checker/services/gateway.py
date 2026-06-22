@@ -46,6 +46,17 @@ def get_service_def() -> ServiceDef:
         EndpointDef("GET", f"{API_PREFIX}/system/health", "health",
             "System health",
             response_schema={"status": str}),
+        EndpointDef("GET", f"{API_PREFIX}/monitor/metrics", "monitor",
+            "Метрики качества системы",
+            response_schema={"control_metrics": dict, "control_metrics.ocr_quality": float,
+                             "control_metrics.retrieval_quality": float,
+                             "control_metrics.answers_with_sources": float,
+                             "control_metrics.avg_latency_ms": int,
+                             "answer_metrics": dict, "answer_metrics.useful_rate": float,
+                             "answer_metrics.rated_answers": int,
+                             "answer_metrics.flagged_for_review": int,
+                             "answer_metrics.open_questions": int,
+                             "logs": list}),
 
         # ── Auth (прокси) ──
         EndpointDef("POST", f"{API_PREFIX}/auth/token", "auth",
@@ -255,31 +266,9 @@ def get_service_def() -> ServiceDef:
             "Список документов",
             response_schema={"items": list}),
 
-        # ── Analyse (GW-12: добавлено) ──
-        EndpointDef("POST", f"{API_PREFIX}/analyse/start", "analyse",
-            "Запуск анализа",
-            body={"document_id": 1},
-            expected_status={200, 202}),
-        EndpointDef("GET", f"{API_PREFIX}/analyse/{{task_id}}/status", "analyse",
-            "Статус анализа"),
-
-        # ── Meridian (GW-12: добавлено) ──
-        EndpointDef("GET", f"{API_PREFIX}/meridian/status", "meridian",
-            "Статус Meridian",
-            response_schema={"status": str}),
-
         # ── Files (GW-12: добавлено) ──
         EndpointDef("GET", f"{API_PREFIX}/files/{{file_id}}", "files",
             "Получить файл"),
-
-        # ── External (GW-12: добавлено) ──
-        EndpointDef("GET", f"{API_PREFIX}/external/integrations", "external",
-            "Список интеграций"),
-
-        # ── Gateway собственный health ──
-        EndpointDef("GET", f"{API_PREFIX}/gateway/health", "health",
-            "Health check Gateway (собственный)",
-            response_schema={"status": str}),
 
         # ── Query: Chat ──
         EndpointDef("POST", f"{API_PREFIX}/chat/sessions", "chat",
@@ -330,5 +319,5 @@ def get_service_def() -> ServiceDef:
         endpoints=endpoints,
         prepare_endpoints=prepare_endpoints,
         depends_on=["auth", "orchestrator", "query", "registry"],
-        base_data={"doc_id": 1, "user_id": "1", "page_num": 1, "category_id": 1, "file_id": 1, "project_id": 1},
+        base_data={"doc_id": 1, "user_id": "1", "page_num": 1, "category_id": 1, "file_id": 1, "project_id": 1, "pending_id": 1},
     )

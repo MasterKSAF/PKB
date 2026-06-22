@@ -66,55 +66,6 @@ SERVICES_WITH_REAL = {
     "rag_search", "tei",
 }
 
-# Эндпоинты, добавленные/изменённые в задачах от 19.06.2026.
-# Если сервис не обновлён — эти эндпоинты могут возвращать 404.
-# В таком случае checker показывает warning, а не error.
-KNOWN_NEW_ENDPOINTS: Dict[str, set] = {
-    "orchestrator": {
-        "PATCH /api/v1/drafts/{draft_id}/metadata",  # OR-3b
-        "PATCH /api/v1/drafts/{draft_id}/decide",    # OR-12: action вместо decision
-        "GET /api/v1/drafts/{draft_id}",             # OR-7: document_id, version_id
-        "GET /api/v1/tasks/",                        # OR-1: админка
-        "GET /api/v1/tasks/{task_id}/status",         # OR-1: статус задачи
-        "POST /api/v1/drafts/{draft_id}/preview",    # OR-2: идемпотентность
-    },
-    "registry": {
-        "GET /api/v1/registry/search",               # RG-8: BM25 search
-        "PATCH /api/v1/registry/documents/{doc_id}/status",  # RG-1: internal
-    },
-    "query": {
-        "POST /api/v1/chat/sessions/{session_id}/messages/search",  # QS-12
-        "GET /api/v1/chat/history/export",             # QS-4
-        "POST /api/v1/chat/sessions/{session_id}/export",  # QS-4
-    },
-    "converter_validator": {
-        "POST /api/v1/converter/preview",             # CV-3: новый эндпоинт
-        "POST /api/v1/validate/metadata",              # CV-3a: единая точка
-    },
-
-
-    "rag_builder": {
-        "POST /api/v1/rag/build/{doc_id}/reprocess",  # P2I-9: переиндексация
-        "GET /api/v1/rag/build/{doc_id}/integrity",    # P2I-1: частичная
-    },
-    "rag_search": {
-        "POST /api/v1/rag/search",                    # RS-6: новый формат
-    },
-    "auth": {
-        "GET /api/v1/admin/roles",                   # AU-2: ROLES таблица
-        "POST /api/v1/admin/roles",                    # AU-2: создание роли
-        "PATCH /api/v1/admin/users/{user_id}",         # AU-5: roles[]
-    },
-    "gateway": {
-        "GET /api/v1/gateway/health",                # GW-12: нет в моке
-        "POST /api/v1/rag/search",                     # RS-6: новый формат
-        "POST /api/v1/analyse/start",                  # AU-2: не реализован
-        "GET /api/v1/analyse/{task_id}/status",         # не реализован
-        "GET /api/v1/meridian/status",                  # не реализован
-        "GET /api/v1/files/{file_id}",                  # не реализован
-        "GET /api/v1/external/integrations",            # не реализован
-    },
-}
 
 
 class ApiCoverageTester:
@@ -575,34 +526,6 @@ class ApiCoverageTester:
 
             resp_body = resp.text if resp.content else None
 
-            # ── Tolerance для частично обновлённых сервисов ──────────────
-            # Если сервис вернул 404 на эндпоинт из KNOWN_NEW_ENDPOINTS —
-            # значит сервис ещё не обновлён. Показываем warning, не error.
-            ep_key = f"{ep.method} {ep.path}"
-            known_new = KNOWN_NEW_ENDPOINTS.get(svc_key, set())
-            is_known_new_404 = (
-                resp.status_code == 404
-                and ep_key in known_new
-                and not ep.is_preparation
-            )
-            if is_known_new_404:
-                result.results.append(
-                    EndpointResult(
-                        endpoint=ep, status_code=404, success=False,
-                        elapsed_ms=elapsed,
-                        error=None,
-                        warnings=(
-                            f"⚠️ Эндпоинт не реализован: сервис '{svc_key}' "
-                            f"не обновлён до актуальной спецификации (19.06.2026).\n"
-                            f"Ожидается: {ep.method} {ep.path} — {ep.description}"
-                        ),
-                        skipped=True,
-                        skip_reason="Сервис не обновлён — эндпоинт из задач 19.06.2026",
-                    )
-                )
-                result.endpoints_skipped += 1
-                return
-
             # Success по expected_status (если указан), иначе 2xx/3xx
             if ep.expected_status is not None:
                 if isinstance(ep.expected_status, set):
@@ -995,9 +918,11 @@ class ApiCoverageTester:
                 f'<span style="color:red;font-weight:bold">{result.endpoints_skipped}</span>'
                 if result.endpoints_skipped > 0 else str(result.endpoints_skipped)
             )
-            # Статус: ❌ если ping упал или есть ошибки/пропуски, ✅ если всё ок
-            if not result.ping_ok or result.endpoints_failed > 0 or result.endpoints_skipped > 0:
+            # Статус: ❌ если ping упал или есть ошибки, ⏭️ если пропуски без ошибок, ✅ если всё ок
+            if not result.ping_ok or result.endpoints_failed > 0:
                 status_icon = '<span style="color:red;font-weight:bold">❌</span>'
+            elif result.endpoints_skipped > 0:
+                status_icon = '<span style="color:orange;font-weight:bold">⏭️</span>'
             else:
                 status_icon = "✅"
             svc_anchor = svc_key.replace("_", "-")

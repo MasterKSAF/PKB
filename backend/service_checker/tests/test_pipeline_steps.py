@@ -77,7 +77,7 @@ class TestDocumentProcessingPipeline:
     def test_step_expected_status(self):
         p = DocumentProcessingPipeline()
         steps = p.build_steps(PipelineContext())
-        expected = [200, {200, 409}, 200, 202, 200, 200, 200, 200, {200, 422}, 200, 200, {201, 409}, 200, {200, 202}, 200]
+        expected = [200, {200, 409}, 200, 202, 200, 200, 200, 200, {200, 422}, 200, 200, {201, 409}, 200, {200, 201, 202}, 200]
         actual = [s.expected_status for s in steps]
         assert actual == expected, f"Ожидаемые статусы не совпадают:\n{actual}"
 
@@ -216,7 +216,7 @@ class TestPipelineRegistry:
         assert "registry_quarantine" in PIPELINE_REGISTRY
         assert "orchestrator_draft_lifecycle" in PIPELINE_REGISTRY
         assert "multi_document_cross_search" in PIPELINE_REGISTRY
-        assert len(PIPELINE_REGISTRY) == 8
+        assert len(PIPELINE_REGISTRY) == 9
 
     def test_registry_classes(self):
         from pipelines import PIPELINE_REGISTRY

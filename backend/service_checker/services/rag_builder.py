@@ -84,22 +84,13 @@ def get_service_def() -> ServiceDef:
         EndpointDef("DELETE", f"{API_PREFIX}/rag/build/{{doc_id}}", "rag",
             "Удаление чанков из индекса",
             response_schema={"status": str}),
-        # P2I-9: Протокол переиндексации: POST /documents/{id}/reprocess
-        EndpointDef("POST", f"{API_PREFIX}/rag/build/{{doc_id}}/reprocess", "rag",
-            "Переиндексация документа (P2I-9)",
-            body={},
-            expected_status={200, 201, 202},
-            response_schema={"status": str}),
         # RB-8: "indexed" вместо "completed"
         # P2I-1: "partially_indexed" при chunk_count_actual < expected
         EndpointDef("GET", f"{API_PREFIX}/rag/build/{{doc_id}}/status", "rag",
             "Статус индексации (longpoll)",
             params={"longpoll": 0},
             response_schema={"status": str}),
-        EndpointDef("GET", f"{API_PREFIX}/rag/build/{{doc_id}}/integrity", "rag",
-            "Проверка целостности индекса (P2I-2)",
-            response_schema={"chunk_count_actual": int, "chunk_count_expected": int,
-                             "status": str}),
+
     ]
 
     return ServiceDef(

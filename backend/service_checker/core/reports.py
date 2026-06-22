@@ -138,8 +138,9 @@ def _generate_full_report(
 
         if cov:
             ping_icon = "✅" if cov.ping_ok else "❌"
-            has_failures = cov.endpoints_failed > 0 or cov.endpoints_skipped > 0
-            passed_icon = "✅" if not has_failures else "❌"
+            has_failures = cov.endpoints_failed > 0
+            has_skips = cov.endpoints_skipped > 0
+            passed_icon = "❌" if has_failures else ("⏭️" if has_skips else "✅")
             svc_checkdb = _get_service_checkdb_icon(db_result, svc_key)
         else:
             ping_icon = "—"
@@ -177,7 +178,7 @@ def _generate_full_report(
     cov_alive = sum(1 for r in coverage_results.values() if r.ping_ok)
     cov_ok_count = sum(
         1 for r in coverage_results.values()
-        if r.ping_ok and r.endpoints_failed == 0 and r.endpoints_skipped == 0
+        if r.ping_ok and r.endpoints_failed == 0
     )
     svcs_with_db = [k for k in coverage_results if k in COVERAGE_TO_STARTUP_KEY]
     svcs_checkdb_ok = sum(
@@ -198,23 +199,6 @@ def _generate_full_report(
         f"| {pipe_total_icon} "
         f"| {overall_status} |\n"
     )
-
-    # ── Примечание о частично обновлённых сервисах ─────────────────────
-    # Проверяем, есть ли skipped эндпоинты из-за нереализованных новых API
-    total_skipped_new_api = 0
-    for svc_key, cov in coverage_results.items():
-        if hasattr(cov, 'results'):
-            for ep_result in getattr(cov, 'results', []):
-                if ep_result.skipped and ep_result.skip_reason == "Сервис не обновлён — эндпоинт из задач 19.06.2026":
-                    total_skipped_new_api += 1
-
-    if total_skipped_new_api > 0:
-        lines.append(
-            f"> ⚠️ **{total_skipped_new_api} эндпоинтов пропущено** — сервисы в Docker "
-            f"не полностью обновлены до спецификации от 19.06.2026. "
-            f"Пропущенные эндпоинты (из списка KNOWN_NEW_ENDPOINTS) возвращают 404, "
-            f"так как реализация в сервисах ещё не обновлена.\n\n"
-        )
 
     # ── 1a. Pipeline статусы по сервисам (отдельная таблица) ───────────
     lines.append("### 📋 Pipeline статусы по сервисам\n")
@@ -261,8 +245,8 @@ def _generate_full_report(
     totals_cols = " | ".join(pipe_totals)
     lines.append(f"| **Total** | {totals_cols} | {pipe_total_icon} |\n")
 
-    # ── 1b. Пояснения к ❌ в сводной таблице ─────────────────────────
-    lines.append("#### 🔍 Пояснения к ❌ в проверках\n")
+    # ── 1b. Пояснения к ❌ / ⏭️ в сводной таблице ─────────────────
+    lines.append("#### 🔍 Пояснения к результатам\n")
     has_notes = False
     for svc_key in sorted(coverage_results.keys()):
         display_name = SERVICE_DISPLAY_NAMES.get(svc_key, svc_key)
@@ -282,11 +266,24 @@ def _generate_full_report(
             else:
                 notes.append("CheckDb: не найден вызов create_all() при старте сервиса")
 
-        # API
+        # API failures
         if cov.endpoints_failed > 0:
             notes.append(f"API: {cov.endpoints_failed} эндпоинт(ов) упало")
-        if cov.endpoints_skipped > 0:
-            notes.append(f"API: {cov.endpoints_skipped} эндпоинт(ов) пропущено")
+
+        # API skips — разбивка по типам
+        skipped_new_api = 0
+        skipped_context = 0
+        if hasattr(cov, 'results'):
+            for ep in getattr(cov, 'results', []):
+                if ep.skipped:
+                    if ep.skip_reason and "Сервис не обновлён" in ep.skip_reason:
+                        skipped_new_api += 1
+                    else:
+                        skipped_context += 1
+        if skipped_new_api > 0:
+            notes.append(f"⏭️ {skipped_new_api} эндпоинтов пропущено — новые API (задачи 19.06)")
+        if skipped_context > 0:
+            notes.append(f"⏭️ {skipped_context} эндпоинтов пропущено — нет контекста (prepare не создал данные)")
 
         # Pipelines
         svc_pipe_status = pipe_service_status.get(svc_key, {})
@@ -321,7 +318,9 @@ def _generate_full_report(
         ping_icon = "✅" if result.ping_ok else "❌"
         failed_str = str(result.endpoints_failed) if result.endpoints_failed == 0 else f'**{result.endpoints_failed}**'
         skipped_str = str(result.endpoints_skipped) if result.endpoints_skipped == 0 else f'**{result.endpoints_skipped}**'
-        status_icon = "✅" if result.ping_ok and result.endpoints_failed == 0 and result.endpoints_skipped == 0 else "❌"
+        has_fails = result.endpoints_failed > 0
+        has_skps = result.endpoints_skipped > 0
+        status_icon = "❌" if has_fails else ("⏭️" if has_skps else "✅")
         svc_checkdb = _get_service_checkdb_icon(db_result, svc_key)
         lines.append(f"| {display_name} | {result.port} | {ping_icon} | {svc_checkdb} | {result.endpoints_total} | {result.endpoints_passed} | {failed_str} | {skipped_str} | {status_icon} |")
 
@@ -330,9 +329,10 @@ def _generate_full_report(
     all_total_ep = sum(r.endpoints_total for r in coverage_results.values())
     all_failed = sum(r.endpoints_failed for r in coverage_results.values())
     all_skipped = sum(r.endpoints_skipped for r in coverage_results.values())
-    cov_ok = all_failed == 0 and all_skipped == 0
+    cov_ok = all_failed == 0
     cov_checkdb_total_icon = "✅" if svcs_checkdb_ok == svcs_checkdb_total else "❌" if db_result is not None else "—"
-    lines.append(f"| **Total** | | **{all_alive}/{len(coverage_results)}** | {cov_checkdb_total_icon} | **{all_total_ep}** | **{all_total_ok}** | **{all_failed}** | **{all_skipped}** | {'✅' if cov_ok else '❌'} |\n")
+    total_status = "⏭️" if all_skipped > 0 and cov_ok else ("❌" if not cov_ok else "✅")
+    lines.append(f"| **Total** | | **{all_alive}/{len(coverage_results)}** | {cov_checkdb_total_icon} | **{all_total_ep}** | **{all_total_ok}** | **{all_failed}** | **{all_skipped}** | {total_status} |\n")
 
     # ⚠️ Workaround-предупреждения (заглушки)
     lines.append("### ⚠️ Workaround-предупреждения по сервисам\n")

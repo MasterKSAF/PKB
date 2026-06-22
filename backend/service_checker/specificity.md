@@ -1683,3 +1683,27 @@ Gateway Coverage: **4/76 → 53/76** passed.
 
 ### Статус
 ✅ **Исправлено (checker, 2026-06-22)**
+
+## 51. Аномалия: BucketAlreadyOwnedByYou в init_minio.py (2026-06-22)
+
+### Симптом
+В отчёте checker'а появляется ошибка MinIO:
+```
+<Error><Code>BucketAlreadyOwnedByYou</Code><Message>Your previous request to create the named bucket succeeded and you already own it.</Message><BucketName>documents</BucketName>
+```
+
+### Причина
+`create_buckets_botocore()` в `docker/init_minio.py` ловил все исключения от `head_bucket` широким `except Exception:`. Если `head_bucket` падал по причине, отличной от 404 (например, временная недоступность MinIO), код шёл создавать bucket → `BucketAlreadyOwnedByYou`.
+
+Также на уровне модуля происходил `sys.exit(1)` при отсутствии библиотек, что мешало импорту в тестах.
+
+### Что исправлено (checker, 2026-06-22)
+1. `create_buckets_botocore()` — проверка duck-typing: если у исключения есть `response["Error"]["Code"]`, то create_bucket вызывается только для `404`/`NoSuchBucket`
+2. Для других ошибок (403, 500, ConnectionError) — исключение пробрасывается
+3. Детект backend вынесен в `_detect_backend()` — больше не вызывает `sys.exit(1)` на уровне модуля
+4. Импорты `Minio`/`botocore` сделаны ленивыми (только при client is None)
+5. Добавлен тест `tests/test_init_minio.py` (7 тестов: MinIO SDK + botocore)
+
+### Статус
+✅ **Исправлено (checker, 2026-06-22)**
+

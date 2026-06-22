@@ -186,6 +186,7 @@ PIPELINE_SERVICE_MAP = {
     "registry_quarantine": ["auth", "registry"],
     "orchestrator_draft_lifecycle": ["auth", "orchestrator", "registry"],
     "multi_document_cross_search": ["minio", "parser", "converter_validator", "registry", "rag_builder", "rag_search"],
+    "document_approval": ["orchestrator", "registry", "rag_builder", "rag_search"],
 }
 
 PIPELINE_SERVICE_COLUMNS = {

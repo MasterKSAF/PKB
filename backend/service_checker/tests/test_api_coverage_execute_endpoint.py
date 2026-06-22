@@ -154,40 +154,16 @@ class TestExecuteDeadService:
 
 
 # ────────────────────────────────────────────────────────────────
-#  5.3 known new 404
+#  5.3 404 is error
 # ────────────────────────────────────────────────────────────────
 
 
-class TestExecuteKnownNew404:
-    """Tolerant mode для новых эндпоинтов."""
+class Test404IsError:
+    """Любой 404 — error (tolerant mode удалён)."""
 
     @pytest.mark.asyncio
-    async def test_known_new_404_skipped(self, tester, make_endpoint):
-        """Known new endpoint → 404 → skipped, не error."""
-        ep = make_endpoint("/api/v1/drafts/", "drafts", method="POST")
-        ep.is_preparation = False
-        result = ServiceResult(name="orchestrator", port=8081)
-
-        # Подменяем KNOWN_NEW_ENDPOINTS для теста
-        from service_checker.core import api_coverage_test as act_module
-        original = act_module.KNOWN_NEW_ENDPOINTS.get("orchestrator", set())
-        act_module.KNOWN_NEW_ENDPOINTS["orchestrator"] = {"POST /api/v1/drafts/"}
-        try:
-            tester.client.post = AsyncMock(
-                return_value=_mock_response(404, {"error": "Not Found"})
-            )
-
-            await tester._execute_endpoint("orchestrator", ep, 8081, result, alive=True)
-        finally:
-            act_module.KNOWN_NEW_ENDPOINTS["orchestrator"] = original
-
-        assert result.results[0].skipped is True
-        assert "не обновлён" in (result.results[0].skip_reason or "")
-        assert result.endpoints_skipped == 1
-
-    @pytest.mark.asyncio
-    async def test_unknown_404_is_error(self, tester, make_endpoint):
-        """Не-known endpoint 404 → error."""
+    async def test_404_is_error(self, tester, make_endpoint):
+        """404 → error."""
         ep = make_endpoint("/api/v1/health", "health", method="GET")
         ep.is_preparation = False
         result = ServiceResult(name="auth", port=8082)

@@ -334,45 +334,4 @@ class TestServiceRegistryConsistency:
             )
 
 
-# ────────────────────────────────────────────────────────────────
-#  8. KNOWN_NEW_ENDPOINTS не устарел
-# ────────────────────────────────────────────────────────────────
 
-
-class TestKnownNewEndpointsConsistency:
-    """KNOWN_NEW_ENDPOINTS ссылаются на реальные эндпоинты в SERVICE_REGISTRY."""
-
-    def test_known_new_endpoints_exist_in_registry(self):
-        """Каждый endpoint в KNOWN_NEW_ENDPOINTS есть в SERVICE_REGISTRY."""
-        from core.api_coverage_test import KNOWN_NEW_ENDPOINTS
-
-        for svc_key, ep_set in KNOWN_NEW_ENDPOINTS.items():
-            assert svc_key in SERVICE_REGISTRY, (
-                f"KNOWN_NEW_ENDPOINTS содержит '{svc_key}', "
-                f"которого нет в SERVICE_REGISTRY"
-            )
-            svc_def = SERVICE_REGISTRY[svc_key]()
-            existing = {f"{ep.method} {ep.path}" for ep in svc_def.endpoints}
-
-            for ep_key in ep_set:
-                assert ep_key in existing, (
-                    f"KNOWN_NEW_ENDPOINTS['{svc_key}'] содержит '{ep_key}', "
-                    f"но такого эндпоинта нет в SERVICE_REGISTRY.\n"
-                    f"Доступные: {sorted(existing)}"
-                )
-
-    def test_known_new_endpoints_not_in_prepare(self):
-        """KNOWN_NEW_ENDPOINTS не должны быть prepare-эндпоинтами (там они не имеют смысла)."""
-        from core.api_coverage_test import KNOWN_NEW_ENDPOINTS
-
-        for svc_key, ep_set in KNOWN_NEW_ENDPOINTS.items():
-            if svc_key not in SERVICE_REGISTRY:
-                continue
-            svc_def = SERVICE_REGISTRY[svc_key]()
-            prepare_paths = {f"{ep.method} {ep.path}" for ep in svc_def.prepare_endpoints}
-
-            for ep_key in ep_set:
-                assert ep_key not in prepare_paths, (
-                    f"KNOWN_NEW_ENDPOINTS['{svc_key}'] содержит "
-                    f"'{ep_key}', но это prepare-эндпоинт"
-                )
