@@ -278,6 +278,22 @@ Enum: `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `RMRS`, `OTHER`
 - Ссылка на `common_api.md` § Координаты блоков (bbox)
 - Добавлен в пример JSON-запроса POST /rag/build
 
+### A50. `content_hash` и `context.score` в RAG Search отсутствуют в БД
+
+**Обнаружено:** 20.06.2026
+
+**Проблема:**
+- `content_hash` указан в `source` ответа RAG Search, но отсутствует в схеме `rag.document_chunks` и не вычисляется RAG Builder'ом при чанкинге
+- `context[].score` для соседних чанков не вычисляется — dense-поиск и reranker не обрабатывают соседние чанки
+
+**Решение (20.06.2026):**
+- `content_hash` убран из `source` в RAG Search API и из Query Service API (нечем заполнять, дедупликация выполняется на уровне документа)
+- `score` убран из `context[]` (соседние чанки не проходят rerank, score не вычисляется)
+
+**Затронутые файлы:**
+- `docs/api/rag_search_service_api.md` — удалены `content_hash` из source и `score` из context[]
+- `docs/api/query_service_api.md` — удалён `content_hash` из таблицы полей источников
+
 
 ---
 
