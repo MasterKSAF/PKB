@@ -42,23 +42,41 @@ class PostgresChunkRepository(ChunkRepository):
 
         return result == (1,)
 
+    # def _embedding_dim_sql(self) -> sql.SQL:
+    #     embedding_dim = int(settings.EMBEDDING_DIM)
+    #
+    #     supported_dims = {
+    #         1536,
+    #         2048,
+    #         2560,
+    #         4096,
+    #     }
+    #
+    #     if embedding_dim not in supported_dims:
+    #         raise ValueError(
+    #             f"Unsupported EMBEDDING_DIM={embedding_dim}. "
+    #             f"Supported values: {sorted(supported_dims)}"
+    #         )
+    #
+    #     return sql.SQL(str(embedding_dim))
+
     def _embedding_dim_sql(self) -> sql.SQL:
         embedding_dim = int(settings.EMBEDDING_DIM)
 
-        supported_dims = {
-            1536,
-            2048,
-            2560,
-            4096,
-        }
-
-        if embedding_dim not in supported_dims:
+        if embedding_dim <= 0:
             raise ValueError(
-                f"Unsupported EMBEDDING_DIM={embedding_dim}. "
-                f"Supported values: {sorted(supported_dims)}"
+                f"Invalid EMBEDDING_DIM={embedding_dim}. "
+                "EMBEDDING_DIM must be a positive integer."
+            )
+
+        if embedding_dim > 16000:
+            raise ValueError(
+                f"Invalid EMBEDDING_DIM={embedding_dim}. "
+                "EMBEDDING_DIM is too large for pgvector VECTOR."
             )
 
         return sql.SQL(str(embedding_dim))
+
 
     def create_indexing_job(
         self,
