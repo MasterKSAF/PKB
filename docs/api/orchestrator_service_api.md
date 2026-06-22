@@ -207,7 +207,7 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 
 ### GET /drafts/{draft_id}/tasks
 
-Список задач для черновика. У черновика может быть несколько задач при повторных обработках (reprocess).
+Список задач для черновика.
 
 **Путь:** `/api/v1/drafts/{draft_id}/tasks`
 **Метод:** `GET`
@@ -621,53 +621,6 @@ Orchestrator вычисляет SHA-256 содержимого, определя
   "meta": { "total": 5 }
 }
 ```
-
----
-
----
-
-### POST /documents/{doc_id}/reprocess
-
-Асинхронная переобработка документа без создания нового черновика. `user_id` из контекста аутентификации.
-Перезапускает указанный этап обработки для существующего документа. Новый `draft_id` **не создаётся**.
-
-**Запрос**:
-
-```json
-{
-  "mode": "full",
-  "options": { "ocr_engine": "paddleocr", "language": "ru", "pages": "1-5" }
-}
-```
-
-| Поле | Тип | Описание |
-|------|-----|----------|
-| `mode` | string | Режим переобработки: `full`, `ocr_only`, `chunking_only`, `validation_only`, `reindex` |
-| `options` | object | Опциональные параметры обработки (см. таблицу ниже) |
-
-**Поле `options`** (опционально):
-| Поле | Тип | Описание | Допустимые значения |
-|------|-----|----------|-------------------|
-| `ocr_engine` | string | Движок OCR | `paddleocr`, `tesseract` |
-| `parser_engine` | string | Движок парсинга | `docling` |
-| `language` | string | Язык OCR | `rus` (по умолчанию), `eng` |
-| `pages` | string | Диапазон страниц | `"1-5"`, `"1,3,5"`, `"all"` (по умолчанию) |
-
-**Ответ `202`**:
-```json
-{
-  "task_id": 420002,
-  "document_id": 1,
-  "mode": "full",
-  "status": "processing",
-  "message": "Переобработка запущена. Новый черновик не создаётся — используется существующий документ."
-}
-```
-
-**Особенности переиндексации (`mode: reindex`):**
-Перед повторным чанкингом Оркестратор вызывает `DELETE /rag/build/{doc_id}` для очистки существующих чанков документа из векторного индекса. Только после успешного удаления запускается новый `POST /rag/build`. Если `DELETE` вернул ошибку, переиндексация отменяется с кодом `CLEANUP_FAILED`.
-
-**Ошибки**: `404` — документ не найден, `409` — документ в обработке.
 
 ---
 
@@ -1168,17 +1121,15 @@ Orchestrator — **единая точка входа** для работы с �
 
 **Допустимые операции по статусам:**
 
-| Статус | `approve` | `reject` | `delete` | `reprocess` |
-|--------|:---------:|:--------:|:--------:|:-----------:|
-| `uploaded` | ❌ | ❌ | ❌ | ❌ |
-| `previewing` | ❌ | ❌ | ❌ | ❌ |
-| `ready_for_approve` | ✅ | ✅ | ❌ | ❌ |
-| `review_required` | ❌ | ✅ | ❌ | ❌ |
-| `validation` | ❌ | ❌ | ❌ | ❌ |
-| `approved` | ❌ | ❌ | ❌ | ❌ |
-| `discarded` | ❌ | ❌ | ✅ | ✅ (через новую загрузку) |
-
-> `reprocess` для `discarded` — оператор загружает файл заново (создаётся новый черновик). Прямого reprocess для discarded нет.
+| Статус | `approve` | `reject` | `delete` |
+|--------|:---------:|:--------:|:--------:|
+| `uploaded` | ❌ | ❌ | ❌ |
+| `previewing` | ❌ | ❌ | ❌ |
+| `ready_for_approve` | ✅ | ✅ | ❌ |
+| `review_required` | ❌ | ✅ | ❌ |
+| `validation` | ❌ | ❌ | ❌ |
+| `approved` | ❌ | ❌ | ❌ |
+| `discarded` | ❌ | ❌ | ✅ |
 
 ---
 
@@ -1351,7 +1302,7 @@ Orchestrator — **единая точка входа** для работы с �
 - С заголовком `Idempotency-Key: <uuid>` — повторный POST в течение 1 часа возвращает кешированный ответ 202.
 - Без `Idempotency-Key`:
   - Если preview **выполняется** (`status=previewing`) — `409 PREVIEW_IN_PROGRESS`.
-  - Если preview **завершён** (`status=ready_for_approve` или `review_required`) — `409 DRAFT_ALREADY_PREVIEWED`. Для запуска заново используйте `POST /drafts/{draft_id}/reprocess` или `DELETE /drafts/{draft_id}` с повторной загрузкой.
+  - Если preview **завершён** (`status=ready_for_approve` или `review_required`) — `409 DRAFT_ALREADY_PREVIEWED`. Для запуска заново удалите черновик и загрузите файл повторно.
   - Если preview **ошибся** (`status=discarded`) — `409 DRAFT_ALREADY_PREVIEWED` (черновик терминальный).
 
 ### GET /drafts/{draft_id}/preview/status

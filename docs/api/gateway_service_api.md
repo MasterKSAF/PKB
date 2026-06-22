@@ -103,7 +103,7 @@ Registry drafts — только internal, доступ к ним через Gat
 | `POST` | `/api/v1/drafts` | Загрузка файла, создание черновика | `engineer` + `can_upload_documents` | ✅ `Idempotency-Key` |
 | `GET`  | `/api/v1/drafts` | Список черновиков (фильтр: `draft_id`, `document_key`, `status`). Без фильтров — все черновики (admin) | `engineer`, `knowledge_admin`, `system_admin` | — |
 | `GET`  | `/api/v1/drafts/{draft_id}` | Полная информация о черновике (с `raw_data`) | `engineer`, `knowledge_admin`, `system_admin` | — |
-| `GET`  | `/api/v1/drafts/{draft_id}/tasks` | Список задач для черновика (история reprocess) | `system_admin`, `knowledge_admin` | — |
+| `GET`  | `/api/v1/drafts/{draft_id}/tasks` | Список задач для черновика | `system_admin`, `knowledge_admin` | — |
 | `GET`  | `/api/v1/drafts/{draft_id}/preview` | Preview-метаданные (без `raw_data`) | `engineer`, `knowledge_admin`, `system_admin` | — |
 | `POST` | `/api/v1/drafts/{draft_id}/preview` | Запуск preview-фазы | `engineer`, `knowledge_admin`, `system_admin` | — |
 | `GET`  | `/api/v1/drafts/{draft_id}/preview/status` | Статус preview (longpoll) | `engineer`, `knowledge_admin`, `system_admin` | — |
