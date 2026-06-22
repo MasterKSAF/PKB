@@ -102,6 +102,7 @@ Orchestrator получает JSON из Registry (через `GET /registry/docu
   "sections": [
     {
       "section_id": 420001,
+      "document_id": 1,
       "parent_id": null,
       "clause": "1",
       "title": null,
@@ -117,6 +118,7 @@ Orchestrator получает JSON из Registry (через `GET /registry/docu
     },
     {
       "section_id": 420005,
+      "document_id": 1,
       "parent_id": 420001,
       "clause": "6.1",
       "title": "Допуск соосности при степени точности",
@@ -151,6 +153,7 @@ Orchestrator получает JSON из Registry (через `GET /registry/docu
 | `document_id` | bigint | Да | ID документа в Registry |
 | `sections` | array | Да | Массив секций для индексации |
 | `sections[].section_id` | bigint | Да | ID секции (стабилен внутри документа) |
+| `sections[].document_id` | bigint | Да | ID документа (дублируется для удобства) |
 | `sections[].parent_id` | bigint \| null | Нет | ID родительской секции. `null` для корневых секций |
 | `sections[].clause` | string | Нет | Номер пункта (напр. "6.1") |
 | `sections[].title` | string | Нет | Заголовок секции |

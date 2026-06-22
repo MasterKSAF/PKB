@@ -723,15 +723,17 @@ class PipelineRunner:
 def check_json_field(
     field_path: str,
     expected_type: type,
+    optional: bool = False,
 ) -> Callable[[Optional[str], PipelineContext], Tuple[bool, str]]:
     """Проверить, что JSON-ответ содержит поле с ожидаемым типом.
 
     :param field_path: путь к полю (точечная нотация, например data.id)
     :param expected_type: ожидаемый тип (str, dict, list, int, bool)
+    :param optional: если True, отсутствие поля не считается ошибкой
     """
     def _check(body: Optional[str], ctx: PipelineContext) -> Tuple[bool, str]:
         if not body:
-            return False, "Пустой ответ"
+            return (True, "Пустой ответ (пропущено)") if optional else (False, "Пустой ответ")
         try:
             data = json.loads(body)
         except json.JSONDecodeError as e:
@@ -743,7 +745,7 @@ def check_json_field(
             if isinstance(current, dict) and part in current:
                 current = current[part]
             else:
-                return False, f"Поле '{field_path}' не найдено в ответе"
+                return (True, f"Поле '{field_path}' не найдено (пропущено)") if optional else (False, f"Поле '{field_path}' не найдено в ответе")
 
         if not isinstance(current, expected_type):
             actual = type(current).__name__

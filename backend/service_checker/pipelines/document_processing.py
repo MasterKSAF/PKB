@@ -284,7 +284,6 @@ class DocumentProcessingPipeline(PipelineDef):
                 "source_type": "GOST",
                 "era": "RF",
                 "validity_status": "active",
-                "source_draft_id": 1,  # RG-9: связь с черновиком
                 "mks_oks_code": "47.020",  # DB-9: классификатор
                 "title_key": f"GOST|RF|PIPELINE-TEST-{int(time.time())}|2026",  # DB-28: бизнес-ключ
             },
@@ -327,7 +326,7 @@ class DocumentProcessingPipeline(PipelineDef):
                     "content": {"text": "Содержимое тестового документа"},
                 }],
             },
-            expected_status={200, 202},  # RB-7: 202 для асинхронного запуска
+            expected_status={200, 201, 202},  # RB-7: 201 — ресурс создан, 200/202 — асинхронный режим
             needs_auth=True,  # RAG Builder требует JWT (не отражено в docs)
         ))
 

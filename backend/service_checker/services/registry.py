@@ -53,7 +53,6 @@ PREPARE_DOCUMENT = {
     "validity_status": "active",
     "mks_oks_code": f"98.{_ts}",
     "okstu_code": f"88.{_ts}",
-    "source_draft_id": None,  # RG-9: связь с черновиком (опционально)
     "title_key": f"GOST|RF|ТЕСТ-{_ts}|{_ts}",  # DB-28
 }
 

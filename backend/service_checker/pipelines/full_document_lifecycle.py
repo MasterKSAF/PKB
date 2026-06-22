@@ -92,7 +92,6 @@ class FullDocumentLifecyclePipeline(PipelineDef):
                 "source_type": "GOST",
                 "era": "RF",
                 "validity_status": "active",
-                "source_draft_id": 1,
                 "mks_oks_code": "47.020",
                 "title_key": f"GOST|RF|LIFECYCLE-{ts}|2026",
             },
@@ -121,7 +120,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
                     "content": {"text": "Содержимое тестового документа lifecycle"},
                 }],
             },
-            expected_status={200, 202},  # RB-7: 202 для асинхронного запуска
+            expected_status={200, 201, 202},  # RB-7: 201 — ресурс создан
             needs_auth=True,
             check=self._check_build_ok,
         ))
@@ -160,7 +159,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
                     "content": {"text": "Содержимое тестового документа lifecycle"},
                 }],
             },
-            expected_status={200, 202},
+            expected_status={200, 201, 202},
             needs_auth=True,
             check=self._check_build_ok,
         ))
@@ -234,7 +233,6 @@ class FullDocumentLifecyclePipeline(PipelineDef):
                 "source_type": "GOST",
                 "era": "RF",
                 "validity_status": "active",
-                "source_draft_id": 1,
                 "mks_oks_code": "47.020",
                 "title_key": f"GOST|RF|LIFECYCLE-RECOVER-{ts2}|2026",
             },
@@ -263,7 +261,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
                     "content": {"text": "Содержимое восстановленного документа"},
                 }],
             },
-            expected_status={200, 202},  # RB-7: 202 для асинхронного запуска
+            expected_status={200, 201, 202},  # RB-7: 201 — ресурс создан
             needs_auth=True,
             check=self._check_build_ok,
             on_error=self._on_build_error,

@@ -42,6 +42,9 @@ EXTRA_VARS: dict[str, str] = {
     "MINIO_BUCKET": "documents",
     "MINIO_IMAGE_BUCKET": "images",
     "MINIO_SECURE": "false",
+    # ── Auth: Rate Limit ────────────────────────────────────────────────
+    "RATE_LIMIT_REQUESTS": "200",
+    "RATE_LIMIT_WINDOW_SECONDS": "60",
     # ── Auth Mock ─────────────────────────────────────────────────────────
     "AUTH_SERVICE_MOCK": "true",
     "DEV_AUTH_MODE": "true",

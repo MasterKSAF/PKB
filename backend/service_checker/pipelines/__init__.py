@@ -24,6 +24,7 @@ from .admin_user_lifecycle import AdminUserLifecyclePipeline
 from .registry_quarantine import RegistryQuarantinePipeline
 from .orchestrator_draft_lifecycle import OrchestratorDraftLifecyclePipeline
 from .multi_document_cross_search import MultiDocumentCrossSearchPipeline
+from .document_approval import DocumentApprovalPipeline
 
 # Реестр доступных пайплайнов: имя → класс
 PIPELINE_REGISTRY: dict[str, type[PipelineDef]] = {
@@ -35,6 +36,7 @@ PIPELINE_REGISTRY: dict[str, type[PipelineDef]] = {
     "registry_quarantine": RegistryQuarantinePipeline,
     "orchestrator_draft_lifecycle": OrchestratorDraftLifecyclePipeline,
     "multi_document_cross_search": MultiDocumentCrossSearchPipeline,
+    "document_approval": DocumentApprovalPipeline,
 }
 
 __all__ = [

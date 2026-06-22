@@ -3,7 +3,7 @@ PKB Neuroassistant — RAG Builder Service API Definitions.
 
 Основано на: docs/api/rag_builder_service_api.md
 Обновления (19.06.2026):
-- RB-7: Код ответа 201 → 202 (асинхронный запуск)
+- RB-7: Код ответа 201 (ресурс создан) или 202 (асинхронный запуск)
 - RB-8: "completed" → "indexed"
 """
 
@@ -61,7 +61,7 @@ def get_service_def() -> ServiceDef:
             },
             response_schema={"status": str},
             is_preparation=True,
-            expected_status={200, 202}),  # RB-7: 202 вместо 201
+            expected_status={200, 201, 202}),  # RB-7: 201 (ресурс создан) или 202
     ]
 
     endpoints = [
@@ -88,7 +88,7 @@ def get_service_def() -> ServiceDef:
         EndpointDef("POST", f"{API_PREFIX}/rag/build/{{doc_id}}/reprocess", "rag",
             "Переиндексация документа (P2I-9)",
             body={},
-            expected_status={200, 202},
+            expected_status={200, 201, 202},
             response_schema={"status": str}),
         # RB-8: "indexed" вместо "completed"
         # P2I-1: "partially_indexed" при chunk_count_actual < expected

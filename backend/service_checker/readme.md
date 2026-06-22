@@ -239,6 +239,27 @@ python -m pytest tests/test_no_restarts.py -v         # Проверка restart
 #    прямой запуск python pipeline_test.py не работает из-за конфликта имён
 python -m service_checker docker --action full-report  # Coverage + все пайплайны + сводка
 
+# Фильтрация по сервисам (--services):
+python -m service_checker docker --action full-report --services gateway          # Только Gateway
+python -m service_checker docker --action full-report --services registry         # Только Registry
+python -m service_checker docker --action full-report --services rag_builder,rag_search  # RAG Builder + RAG Search
+python -m service_checker docker --action full-report --services auth,registry,query     # Несколько сервисов
+
+# Фильтрация по пайплайнам (--pipelines):
+python -m service_checker docker --action full-report --pipelines registry_lifecycle          # Только один пайплайн
+python -m service_checker docker --action full-report --pipelines registry_lifecycle,registry_quarantine  # Несколько
+
+# Пропустить coverage или pipelines:
+python -m service_checker docker --action full-report --skip-coverage     # Только pipelines
+python -m service_checker docker --action full-report --skip-pipelines    # Только coverage
+
+# То же через recheck.bat:
+recheck.bat --api gateway                      # Только Gateway
+recheck.bat --api rag_builder,rag_search       # RAG Builder + RAG Search
+recheck.bat --pipeline registry_lifecycle      # Только один пайплайн
+recheck.bat --skip-coverage                    # Без coverage, только pipelines
+recheck.bat --skip-pipelines                   # Без pipelines, только coverage
+
 # Coverage test в Docker
 python -m service_checker docker --action coverage     # Только coverage
 
@@ -272,6 +293,7 @@ python -m service_checker docker --action full-report  # full-report включ�
 | `registry_quarantine` | Карантин классификаторов: accept/reject + валидация | Auth → Registry | 10 |
 | `orchestrator_draft_lifecycle` | Черновик Orchestrator: создание → превью → решение → 404 | Auth → Orchestrator | 8 |
 | `multi_document_cross_search` | 2 документа → индексация → кросс-поиск → удаление → фильтрация | Auth → MinIO → Parser → Converter → Registry → RAG Builder → RAG Search | 19 |
+| `document_approval` | Подтверждение документа: черновик → preview → approve → full → индексация | Auth → Orchestrator → Registry → RAG Builder | 11 |
 
 ## Ключевые решения
 

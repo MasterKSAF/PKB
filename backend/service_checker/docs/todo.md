@@ -86,10 +86,12 @@
 
 ### T23. RAG Search API — привести к RS-6
 - [x] **Запрос**: убрать `search_type`, `top_k`, `rerank`, `version_id` — только `query`, `valid_at`, `filters`
-- [x] **Ответ**: разделить на `source` (doc_id, section_id, clause, path, page, bbox, section_title, content, content_hash) и `retrieval` (chunk_id, score, mode)
+- [x] **Ответ**: разделить на `source` (doc_id, section_id, clause, path, page, bbox, section_title, content) и `retrieval` (chunk_id, score, mode)
 - [x] Убрать `search_type_used` и `confidence` как отдельные поля
 - [x] Добавить `context[]` (expansion — внутренний этап RAG Search)
 - [x] Зафиксировать: `top_k`, `search_type`, `rerank` — только из `app_settings`
+- [x] **Убрано**: `content_hash` из `source` (нет в БД, нечем заполнять)
+- [x] **Убрано**: `score` из `context[]` (соседние чанки не проходят rerank, score не вычисляется)
 
 ### T24. RAG Builder API — уточнить входной/выходной контракт
 - [x] Во входном контракте: добавить `parent_id`, `bbox` в секции
@@ -104,7 +106,8 @@
 - [x] Обновить пример JSON-запроса
 
 ### T25. Query Service API — согласовать структуру источников
-- [x] В секцию «Именование полей источников»: добавить `clause`, `path`, `bbox`, `content_hash`
+- [x] В секцию «Именование полей источников»: добавить `clause`, `path`, `bbox`
+- [x] `content_hash` **не добавлен** — нет в БД чанков, нечем заполнять
 - [x] В структуру `sources[]` longpoll-ответов: добавить `clause`, `path`
 - [x] Источники в ответе — плоская структура (для UI), но цитирование строится по `doc_id + section_id`
 - [x] Секция «Обогащение цитирований»: уточнить, что цитирование строится по `doc_id + section_id`, а не по `chunk_id`
@@ -128,3 +131,4 @@
 - [x] A47: chunk_id использовался как citation ID (исправлено)
 - [x] A48: page convention не была зафиксирована
 - [x] A49: bbox convention не была зафиксирована для RAG Builder
+- [x] A50: content_hash и context.score в RAG Search отсутствуют в БД

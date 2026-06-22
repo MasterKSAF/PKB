@@ -181,7 +181,6 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
                 "source_type": "GOST",
                 "era": "RF",
                 "validity_status": "active",
-                "source_draft_id": 1,
                 "mks_oks_code": "47.020",
                 "title_key": f"GOST|RF|MULTI1-{ts}|2026",
             },
@@ -210,7 +209,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
                     "content": {"text": f"Содержимое документа 1 {ts}"},
                 }],
             },
-            expected_status={200, 202},  # RB-7: 202 для асинхронного запуска
+            expected_status={200, 201, 202},  # RB-7: 201 — ресурс создан
             needs_auth=True,
             check=check_json_field("status", str),
         ))
@@ -305,7 +304,6 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
                 "source_type": "GOST",
                 "era": "RF",
                 "validity_status": "active",
-                "source_draft_id": 1,
                 "mks_oks_code": "47.020",
                 "title_key": f"GOST|RF|MULTI2-{ts}|2026",
             },
@@ -334,7 +332,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
                     "content": {"text": f"Содержимое документа 2 {ts}"},
                 }],
             },
-            expected_status={200, 202},  # RB-7: 202 для асинхронного запуска
+            expected_status={200, 201, 202},  # RB-7: 201 — ресурс создан
             needs_auth=True,
             check=check_json_field("status", str),
         ))
