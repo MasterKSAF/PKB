@@ -76,6 +76,41 @@ definitions — только fallback. Реальный порт всегда и
 
 ---
 
+## Registry: URL без trailing slash
+
+**Проблема**: Registry service редиректит 307 Temporary Redirect при запросе с trailing slash.
+`POST /api/v1/registry/classifiers/` → 307 → `/api/v1/registry/classifiers`.
+Redirect теряет body → сервис получает пустой запрос.
+
+**Ориентир**: все endpoint-ы registry (`/classifiers`, `/documents`, `/terminology`,
+`/categories`, `/drafts` и их подпути) указывать **без** `/` в конце.
+Исключение — ни одного, даже параметризованные пути.
+
+**Где закреплено**:
+- `services/registry.py` — service definition (api_coverage)
+- Все registry-пайплайны (registry_lifecycle, registry_quarantine, full_document_lifecycle, document_processing, multi_document_cross_search, orchestrator_document_versions, document_approval)
+
+---
+
+## Orchestrator: POST /drafts — registry не имеет эндпоинта
+
+**Проблема**: Orchestrator вызывает `POST /api/v1/registry/drafts`, но
+registry service **не реализует** REST-эндпоинты для черновиков.
+Эндпоинты `/drafts` есть только в mock-клиенте Orchestrator'а
+(`RegistryServiceClient._generate_mock`).
+
+При `REGISTRY_SERVICE_MOCK=false` клиент реально ходит в registry
+и получает 404 → Orchestrator возвращает 500.
+
+**Статус**: пайплайны с черновиками (`document_approval`,
+`orchestrator_draft_lifecycle` и др.) не работают, пока registry
+не добавит эндпоинты `/drafts`.
+
+**Тестовый PDF** лежит в `pdf/7bd97d737317a8a272bb18a405ab2d04.pdf`,
+во всех пайплайнах уже подключен через `form_files`.
+
+---
+
 ## Процедура валидации после изменений
 
 После любых изменений, затрагивающих Docker или SPD, необходимо прогнать **оба** режима:
