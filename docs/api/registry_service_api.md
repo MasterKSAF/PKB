@@ -659,6 +659,7 @@ POST /registry/terminology/import
 |-------|------|----------|
 | GET | `/registry/documents` | Список |
 | GET | `/registry/documents/search` | **Полнотекстовый поиск (BM25)** — поиск по `doc_code`, `title`, `classifier_links` |
+| POST | `/registry/documents/search` | **Семантический поиск** — поиск документов по structured-запросу |
 | GET | `/registry/documents/{doc_id}` | Один документ (описание) |
 | GET | `/registry/documents/{doc_id}/sections` | Секции документа |
 | POST | `/registry/documents/check-uniqueness` | Проверить уникальность |
@@ -764,6 +765,89 @@ GET /registry/documents/search
 Поиск по `doc_code`, `title`, `classifier_links` с использованием `ts_rank` + `pg_trgm`. 
 
 > **Внутренний эндпоинт.** Используется для межсервисного взаимодействия (RAG Search → Registry). Не предназначен для прямого вызова из UI. RBAC не применяется — запросы идут напрямую между сервисами, минуя Gateway.
+
+---
+
+### 3.1b. Семантический поиск документов (POST)
+
+```
+POST /registry/documents/search
+```
+
+Поиск документов по structured-запросу с семантическим поиском по содержимому. Возвращает документы с релевантными фрагментами.
+
+**Запрос**:
+
+```json
+{
+  "query": "толщина обшивки ледового пояса Arc4",
+  "filters": {
+    "source_type": ["GOST", "RMRS"],
+    "document_type": ["normative"],
+    "era": ["RF", "CURRENT"],
+    "valid_at": "2026-06-18"
+  },
+  "page": 1,
+  "page_size": 20
+}
+```
+
+| Поле | Тип | Обязательность | Описание |
+|------|-----|-------------|----------|
+| `query` | string | Да | Поисковый запрос |
+| `filters` | object | Нет | Фильтры (все поля опциональны): `source_type[]`, `document_type[]`, `era[]`, `valid_at` |
+| `page` | int | Нет | Номер страницы (по умолчанию 1) |
+| `page_size` | int | Нет | Размер страницы (по умолчанию 20) |
+
+**Ответ `200`**:
+
+```json
+{
+  "items": [
+    {
+      "document_id": 1,
+      "title": "Правила РС, часть I",
+      "doc_code": "20868-81",
+      "source_type": "RMRS",
+      "era": "CURRENT",
+      "score": 0.94,
+      "fragments": [
+        {
+          "page": 42,
+          "section_id": 420042,
+          "content": "Для ледового класса Arc4 толщина обшивки...",
+          "score": 0.94
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "total": 7,
+    "page": 1,
+    "page_size": 20
+  }
+}
+```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `items` | array | Массив результатов поиска |
+| `items[].document_id` | bigint | ID документа в Registry |
+| `items[].title` | string | Название документа |
+| `items[].doc_code` | string | Код документа |
+| `items[].source_type` | string | Тип источника |
+| `items[].era` | string | Эра |
+| `items[].score` | float | Релевантность (0..1) |
+| `items[].fragments` | array | Совпадающие фрагменты |
+| `items[].fragments[].page` | int | Номер страницы |
+| `items[].fragments[].section_id` | bigint | ID секции |
+| `items[].fragments[].content` | string | Текст фрагмента |
+| `items[].fragments[].score` | float | Релевантность фрагмента |
+| `meta.total` | int | Общее количество результатов |
+| `meta.page` | int | Текущая страница |
+| `meta.page_size` | int | Размер страницы |
+
+---
 
 **Query-параметры:**
 
