@@ -689,7 +689,7 @@ GET /registry/documents
 | `status` | string | FSM-статус документа (управляется Оркестратором, фильтр read-only) |
 | `era` | string | `USSR`, `CIS`, `RF`, `CURRENT` |
 | `validity_status` | string | `active`, `superseded`, `cancelled`, `historical`, `draft` |
-| `jurisdiction` | string | `RU`, `EU`, `US`, `NO`, `INTL` |
+| `jurisdiction` | string | `RU`, `RF`, `BY`, `KZ`, `AM`, `KG`, `OTHER`, `INTERNATIONAL` |
 | `issuing_body` | string | Организация-издатель |
 | `document_type` | string | Категория контента: `normative`, `technical`, `drawing`, `specification`, `archival_scan` |
 | `title_hash_sha256` | string | Точный поиск по бизнес-ключу |
@@ -820,7 +820,7 @@ GET /registry/documents/{doc_id}
 - `status` — FSM-статус обработки (управляется Оркестратором, Registry — read-only)
 - `era` — эпоха (`USSR`, `CIS`, `RF`, `CURRENT`)
 - `validity_status` — юридический статус (`active`, `superseded`, `cancelled`, `historical`, `draft`)
-- `jurisdiction` — юрисдикция (`RU`, `EU`, `US`, `NO`, `INTL`)
+- `jurisdiction` — юрисдикция (`RU`, `RF`, `BY`, `KZ`, `AM`, `KG`, `OTHER`, `INTERNATIONAL`)
 - `issuing_body` — организация-издатель
 - `source_type` — тип источника (`GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `RMRS`, `OTHER`)
 - `document_type` — категория контента (`normative`, `technical`, `drawing`, `specification`, `archival_scan`)
@@ -1815,7 +1815,7 @@ GET /registry/enums
     "document_status": ["created", "pending_index", "indexing", "indexed", "failed"],
     "era": ["USSR", "CIS", "RF", "CURRENT"],
     "validity_status": ["active", "superseded", "cancelled", "historical", "draft"],
-    "jurisdiction": ["RU", "EU", "US", "NO", "INTL"],
+    "jurisdiction": ["RU", "RF", "BY", "KZ", "AM", "KG", "OTHER", "INTERNATIONAL"],
     "term_type": ["acronym", "foreign_term", "standard_code", "avatar", "symbol"],
     "classification_status_code": ["CONFIRMED", "PENDING_REVIEW", "NOT_FOUND", "NOT_USED", "UNASSIGNED"],
     "pending_status": ["new", "mapped", "rejected"],
@@ -2075,7 +2075,7 @@ DELETE /registry/categories/{category_id}
 | `valid_from` | date | NOT NULL DEFAULT `'1000-01-01'` — дата начала действия |
 | `valid_until` | date | NOT NULL DEFAULT `'9999-12-31'` — дата окончания действия, CHECK ≥ valid_from |
 | `deleted_at` | timestamptz | nullable — soft-delete |
-| `jurisdiction` | varchar(10) | nullable — `RU`, `EU`, `US`, `NO`, `INTL` |
+| `jurisdiction` | varchar(10) | nullable — `RU`, `RF`, `BY`, `KZ`, `AM`, `KG`, `OTHER`, `INTERNATIONAL` |
 | `issuing_body` | text | nullable |
 | `adoption_date` | date | nullable — дата принятия из документа |
 | `effective_from` | date | nullable — дата введения в действие из документа |

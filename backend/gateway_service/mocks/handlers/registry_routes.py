@@ -32,7 +32,7 @@ from mocks.common import (
 VALID_SOURCE_TYPES = {"GOST", "RD", "SNIP", "SANPIN", "TU", "OST", "STO", "ISO", "IEC", "GOST_R", "GOST_ISO", "OTHER"}
 VALID_ERAS = {"USSR", "RF", "CURRENT", "FUTURE"}
 VALID_VALIDITY_STATUSES = {"active", "superseded", "canceled", "draft"}
-VALID_JURISDICTIONS = {"RU", "BY", "KZ", "AM", "KG", "OTHER", "INTERNATIONAL"}
+VALID_JURISDICTIONS = {"RU", "RF", "BY", "KZ", "AM", "KG", "OTHER", "INTERNATIONAL"}
 VALID_DOC_STATUSES = {"draft", "approved", "rejected", "archived"}
 VALID_PROCESSING_STATUSES = {"pending", "processing", "completed", "failed", "review_required"}
 
@@ -1317,7 +1317,7 @@ async def enums():
         "document_status": ["draft", "uploaded", "parsing", "validation", "review_required", "ready_for_promotion", "approved", "failed", "archived"],
         "era": ["USSR", "CIS", "RF", "CURRENT"],
         "validity_status": ["active", "superseded", "cancelled", "historical", "draft"],
-        "jurisdiction": ["RU", "EU", "US", "NO", "INTL"],
+        "jurisdiction": ["RU", "RF", "BY", "KZ", "AM", "KG", "OTHER", "INTERNATIONAL"],
         "term_type": ["acronym", "foreign_term", "standard_code", "avatar", "symbol"],
         "classification_status_code": ["CONFIRMED", "PENDING_REVIEW", "NOT_FOUND", "NOT_USED", "UNASSIGNED"],
         "pending_status": ["new", "mapped", "rejected"],

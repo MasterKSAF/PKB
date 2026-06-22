@@ -43,7 +43,7 @@
 
 | Метод | Путь | Описание |
 |-------|------|----------|
-| POST | `/auth/token` | username, password — получить JWT-токены доступа |
+| POST | `/auth/login` | username, password — получить JWT-токены доступа |
 | POST | `/auth/refresh` | refresh_token — обновить access-токен |
 | POST | `/auth/revoke` | refresh_token — отозвать refresh-токен |
 | GET | `/auth/me` | Профиль текущего пользователя (формат: snake_case) |

@@ -16,6 +16,8 @@ from typing import Any, Dict, List, Optional, TypeVar
 # Утилиты
 # ---------------------------------------------------------------------------
 
+MOCK_PORT = 8099  # Порт mock-gateway (единая точка для всех скриптов)
+
 T = TypeVar("T")
 _id_counter = 10
 

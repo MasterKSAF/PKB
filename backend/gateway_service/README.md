@@ -67,7 +67,7 @@ python -m gateway.main
 ### Mock-сервер (для разработки/тестирования)
 
 ```bash
-# Запустить единый шлюз (все сервисы на порту 8081)
+# Запустить единый шлюз (все сервисы на порту 8099)
 python backend/gateway_service/mocks/gateway.py
 
 # Или через утилиту
@@ -75,9 +75,9 @@ python backend/gateway_service/mocks/run_all.py
 python backend/gateway_service/mocks/start_service.py
 ```
 
-После запуска откройте `http://127.0.0.1:8081/docs` — интерактивная Swagger-документация.
+После запуска откройте `http://127.0.0.1:8099/docs` — интерактивная Swagger-документация.
 
-> **Единый Gateway** (порт 8081) объединяет все 5 сервисов: Auth, Orchestrator, Query, Registry, Integration.
+> **Единый Gateway** (порт 8099) объединяет все 5 сервисов: Auth, Orchestrator, Query, Registry, Integration.
 > Отдельный запуск каждого сервиса больше не поддерживается (унифицированная архитектура mock).
 
 ---
@@ -171,7 +171,7 @@ backend/gateway_service/
 ├── mocks/                          # Mock-сервер для тестирования/разработки
 │   ├── __init__.py
 │   ├── common.py                   # Seed-данные, in-memory хранилища, модели
-│   ├── gateway.py                  # Единый шлюз (порт 8081) + middleware
+│   ├── gateway.py                  # Единый шлюз (порт 8099) + middleware
 │   ├── handlers/                   # Хендлеры мок-сервисов
 │   │   ├── __init__.py
 │   │   ├── auth_routes.py

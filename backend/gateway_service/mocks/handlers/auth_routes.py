@@ -138,6 +138,7 @@ def _make_token(user_id: int) -> dict:
 
 # ── Маршруты ─────────────────────────────────────────────────────────────────
 
+@router.post("/api/v1/auth/login", status_code=200)
 @router.post("/api/v1/auth/token", status_code=200)
 async def login(req: LoginRequest, request: Request):
     ip = request.client.host if request.client else "127.0.0.1"

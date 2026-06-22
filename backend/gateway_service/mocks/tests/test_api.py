@@ -1,6 +1,6 @@
 """
 Comprehensive API tests for PKB Neuroassistant Mock Services.
-Tests all 4 services through the unified gateway (port 8081).
+Tests all 4 services through the unified gateway (port 8099).
 Updated for new API specifications — seed data, models, endpoints.
 """
 

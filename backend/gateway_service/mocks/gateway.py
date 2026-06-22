@@ -1,6 +1,6 @@
 """
 Gateway Mock — unified entry point (nginx emulation).
-Combines all 5 routers on a single port 8081 with:
+Combines all 5 routers on a single port 8099 with:
 - CORS (all origins)
 - RBAC (JWT validation, anonymous fallback)
 - Rate limiting (InMemory) + IDOR protection (CM-2, CM-3, GW-4, GW-6)
@@ -43,7 +43,7 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import ValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from mocks.common import SEED_USERS, error_response, utcnow, _access_token_map
+from mocks.common import SEED_USERS, error_response, utcnow, _access_token_map, MOCK_PORT
 from gateway.rate_limiter import (
     RateLimitResult,
     check_idor_rate_limit,
@@ -640,4 +640,4 @@ app.include_router(registry_router, prefix="/api/v1/registry")
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="127.0.0.1", port=8081)
+    uvicorn.run(app, host="127.0.0.1", port=MOCK_PORT)

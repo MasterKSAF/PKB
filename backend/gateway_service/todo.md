@@ -1,23 +1,21 @@
-# Правки по проблемам API (из таблицы)
+# Правки по проблемам API
 
-## План
+## Основные проблемы (из таблицы)
+- [x] **POST /chat/sessions/{session_id}/messages/search** → 405 — эндпоинт отсутствовал, добавлен
+- [x] **POST /registry/documents/import** → 400/500 — добавлен парсинг CSV/XLSX, mode create/update/upsert
+- [x] **POST /drafts/** → 400 — добавлен путь со слешем `/drafts/`
+- [x] **POST .../messages** → 422 — добавлен fallback на form-data
 
-### 1. POST /chat/sessions/{session_id}/messages/search → 405
-- [x] Реализовать эндпоинт в `query_routes.py` по документации
+## Дополнительно (обнаружено по ходу)
+- [x] **POST /auth/login** — отсутствовал (только `/auth/token`), добавлен алиас
+- [x] **Порт mock-gateway** — 8081 конфликтовал с Orchestrator, переведён на 8099
+- [x] **MOCK_PORT константа** — вынесена в `mocks/common.py` (единая точка)
+- [x] **test_91_update_registry_doc** — падал с 422 (`jurisdiction='RF'` невалиден), добавлен `RF` в `VALID_JURISDICTIONS`
+- [x] **jurisdiction enums** — код и документация синхронизированы (RU, RF, BY, KZ, AM, KG, OTHER, INTERNATIONAL)
+- [x] **rule в guide.md** — добавлено: Checker исправляет проблему на своей стороне сразу
 
-### 2. POST /registry/documents/import → 400/500 (CSV вместо JSON)
-- [x] Добавить парсинг CSV/XLSX аналогично `import_classifiers` и `import_terms`
-
-### 3. POST /drafts → 400 (trailing slash / form compatibility)
-- [x] Разобраться и исправить — добавлен путь `/drafts/`
-
-### 4. POST .../messages → 422 (session_id / form compatibility)
-- [x] Разобраться и исправить — добавлен fallback на form-data
-
----
-
-### Финальная проверка
-- [x] Сверка с todo.md — все 4 пункта выполнены
-- [x] Перепросмотр правок — мусора, затираний нет
-- [x] Оценка целостности — изменения изолированы, не затрагивают смежные модули
-- [x] Покрытие тестами — 550/550 тестов пройдено, 1 предсуществующий баг (test_91, не связан с правками)
+## Документация
+- [x] README.md — порт mock 8081→8099 (5 вхождений)
+- [x] auth_service_api.md — путь `/auth/token` → `/auth/login`
+- [x] registry_service_api.md — jurisdiction enums синхронизированы
+- [x] specificy.md — запись об аномалии test_91 + изменения

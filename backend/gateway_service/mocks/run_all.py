@@ -1,22 +1,26 @@
 #!/usr/bin/env python3
 """
 Mock Gateway Runner
-Запускает единый mock-gateway на порту 8081.
+Запускает единый mock-gateway на порту MOCK_PORT (см. mocks/common.py).
 """
 
+import os
 import subprocess
 import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from mocks.common import MOCK_PORT
 
 if __name__ == "__main__":
     print("=" * 60)
     print("  PKB Neuroassistant — Mock Gateway")
-    print("  Swagger UI: http://127.0.0.1:8081/docs")
+    print(f"  Swagger UI: http://127.0.0.1:{MOCK_PORT}/docs")
     print("=" * 60)
     print()
 
     proc = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "mocks.gateway:app",
-         "--host", "127.0.0.1", "--port", "8081", "--reload"],
+         "--host", "127.0.0.1", "--port", str(MOCK_PORT), "--reload"],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,

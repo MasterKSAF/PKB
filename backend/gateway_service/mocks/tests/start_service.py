@@ -10,7 +10,7 @@ from mocks.gateway import app
 from gateway.rate_limiter import reset_limiter
 
 client = TestClient(app)
-# Единый gateway на порту 8081 объединяет все сервисы
+# Единый gateway на порту 8099 объединяет все сервисы
 auth_client = client
 orch_client = client
 query_client = client
