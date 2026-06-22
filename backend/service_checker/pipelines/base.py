@@ -261,7 +261,18 @@ class PipelineRunner:
     ):
         self.base_host = base_host
         self.timeout = timeout
-        self.client = httpx.AsyncClient(timeout=timeout)
+        self._client: Optional[httpx.AsyncClient] = None
+
+    @property
+    def client(self) -> httpx.AsyncClient:
+        """Ленивая инициализация HTTP-клиента (SSL certs загружаются только при первом использовании)."""
+        if self._client is None:
+            self._client = httpx.AsyncClient(timeout=self.timeout)
+        return self._client
+
+    @client.setter
+    def client(self, value: httpx.AsyncClient) -> None:
+        self._client = value
 
     async def _ensure_project(self, ctx: PipelineContext, auth_token: Optional[str] = None) -> None:
         """Создать или получить проект для чат-сессий (QS-3)."""
@@ -305,7 +316,8 @@ class PipelineRunner:
         print(f"     ⚠ Не удалось создать/получить проект, fallback project_id=1")
 
     async def close(self) -> None:
-        await self.client.aclose()
+        if self._client is not None:
+            await self._client.aclose()
 
     async def ping_service(self, port: int, health_paths: Optional[List[str]] = None) -> bool:
         """Проверить, отвечает ли сервис на health-эндпоинты."""

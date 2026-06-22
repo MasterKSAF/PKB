@@ -163,15 +163,32 @@ class ApiCoverageTester:
 
         self.context: Dict[str, Any] = {}  # shared context между вызовами
         self.results: Dict[str, ServiceResult] = {}
-        self.client = httpx.AsyncClient(timeout=15, follow_redirects=True)
+        self._client_timeout = 15
+        self._client_follow_redirects = True
+        self._client: Optional[httpx.AsyncClient] = None
         # Для тестов: можно подставить свои endpoint'ы (ключ → List[EndpointDef])
         self._test_endpoints: Dict[str, List[EndpointDef]] = {}
         # OpenAPI схемы сервисов: service_key → {path: {method: OpenApiEndpoint}}
         self.openapi_schemas: Dict[str, Dict[str, Dict[str, Any]]] = {}
         self._current_svc_key: str = ""
 
+    @property
+    def client(self) -> httpx.AsyncClient:
+        """Ленивая инициализация HTTP-клиента (SSL certs загружаются только при первом использовании)."""
+        if self._client is None:
+            self._client = httpx.AsyncClient(
+                timeout=self._client_timeout,
+                follow_redirects=self._client_follow_redirects,
+            )
+        return self._client
+
+    @client.setter
+    def client(self, value: httpx.AsyncClient) -> None:
+        self._client = value
+
     async def close(self) -> None:
-        await self.client.aclose()
+        if self._client is not None:
+            await self._client.aclose()
 
     async def ping_service(self, port: int, fast: bool = False) -> bool:
         """Проверить, отвечает ли сервис.
