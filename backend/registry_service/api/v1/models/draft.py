@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Text, BigInteger, DateTime
+from sqlalchemy import Column, String, Text, BigInteger, DateTime, Float
 from sqlalchemy.dialects.postgresql import JSONB
 from .base import Base
 
@@ -12,6 +12,14 @@ class Draft(Base):
     preview_metadata = Column('preview_metadata', JSONB, default=dict, server_default='{}')
     source_draft_id = Column('source_draft_id', BigInteger)
     document_key = Column('document_key', Text)
+    
+    file_key = Column('file_key', Text)
+    confidence = Column('confidence', Float)
+    raw_data = Column('raw_data', JSONB)
+    error_code = Column('error_code', Text)
+    error_message = Column('error_message', Text)
+    
     created_at = Column('created_at', DateTime)
     updated_at = Column('updated_at', DateTime)
     created_by = Column('created_by', Text)
+    updated_by = Column('updated_by', Text)
