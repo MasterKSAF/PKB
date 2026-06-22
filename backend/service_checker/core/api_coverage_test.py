@@ -719,14 +719,26 @@ class ApiCoverageTester:
                 if k not in self.context:
                     self.context[k] = v
 
-            # ── Pre-prepare: timestamp + гарантировать существование секции в БД ──
+            # ── Pre-prepare: timestamp + дропнуть FK, если ещё висит ──
             if service_key == "rag_builder":
                 import time
                 self.context["timestamp"] = str(int(time.time()))
                 self.context["section_id"] = 1
-                # Создаём секцию в registry.document_sections, если её нет
-                # (workaround для FK fk_rag_document_chunks_section_id)
-                # FK fk_rag_document_chunks_section_id удалён 3-й миграцией — psql не нужен
+                # FK fk_rag_document_chunks_section_id должен был быть удалён
+                # 3-й миграцией, но не был. Дропаем, чтобы RAG Build не падал с 500.
+                try:
+                    import subprocess
+                    r = subprocess.run(
+                        ["docker", "exec", "pkb-postgres", "psql", "-U", "pkb", "-d", "pkb_neuro", "-c",
+                         "ALTER TABLE IF EXISTS rag.document_chunks DROP CONSTRAINT IF EXISTS fk_rag_document_chunks_section_id;"],
+                        capture_output=True, timeout=10,
+                    )
+                    if r.returncode == 0:
+                        print(f"  ℹ RAG Builder: дропнут FK fk_rag_document_chunks_section_id")
+                    else:
+                        print(f"  ⚠ RAG Builder: не удалось дропнуть FK: {r.stderr.decode().strip()}")
+                except Exception as ex:
+                    print(f"  ⚠ RAG Builder: ошибка при дропе FK: {ex}")
                 print(f"  ℹ RAG Builder: timestamp={self.context['timestamp']}")
 
             # ── Pre-prepare: создание проекта для Query (QS-3) ─────────

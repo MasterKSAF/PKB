@@ -616,13 +616,27 @@ class PipelineRunner:
         else:
             result.ping_ok = True
 
-        # 2. Pre-prepare: создаём проект для чат-сессий (QS-3)
+        # 2. Pre-prepare: дропнуть FK fk_rag_document_chunks_section_id (мешает RAG Build)
+        if "rag_builder" in pipeline.services:
+            try:
+                import subprocess
+                r = subprocess.run(
+                    ["docker", "exec", "pkb-postgres", "psql", "-U", "pkb", "-d", "pkb_neuro", "-c",
+                     "ALTER TABLE IF EXISTS rag.document_chunks DROP CONSTRAINT IF EXISTS fk_rag_document_chunks_section_id;"],
+                    capture_output=True, timeout=10,
+                )
+                if r.returncode == 0:
+                    print(f"     ℹ Дропнут FK fk_rag_document_chunks_section_id")
+            except Exception:
+                pass
+
+        # 3. Pre-prepare: создаём проект для чат-сессий (QS-3)
         if "query" in pipeline.services:
             # Пробуем взять токен из контекста, если auth уже был
             pre_token = str(ctx.get("access_token")) if ctx.has("access_token") else None
             await self._ensure_project(ctx, pre_token)
 
-        # 3. Построение шагов
+        # 4. Построение шагов
         try:
             steps = pipeline.build_steps(ctx)
         except Exception as e:

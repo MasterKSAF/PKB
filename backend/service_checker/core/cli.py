@@ -402,6 +402,17 @@ async def cmd_docker(
 ):
     """Развернуть систему через Docker Compose."""
     services = services or []
+    pipelines = pipelines or []
+
+    # Нормализация: split по запятой (recheck.bat шлёт "--services a,b" как один элемент)
+    _flat = []
+    for s in services:
+        _flat.extend(x.strip() for x in s.split(",") if x.strip())
+    services = sorted(_flat)
+    _flat = []
+    for p in pipelines:
+        _flat.extend(x.strip() for x in p.split(",") if x.strip())
+    pipelines = sorted(_flat)
 
     log_header("Развёртывание PKB Neuroassistant через Docker")
 
@@ -471,6 +482,14 @@ async def cmd_docker(
         check_result_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
+        # Суффикс для имён файлов при фильтрации по сервисам/пайплайнам
+        report_suffix_parts = []
+        if services:
+            report_suffix_parts.append("services_" + "_".join(services))
+        if pipelines:
+            report_suffix_parts.append("pipelines_" + "_".join(pipelines))
+        report_suffix = ("_" + "_".join(report_suffix_parts)) if report_suffix_parts else ""
+
         # 0. Docker health check (статус контейнеров + HTTP + supervisorctl + .err логи)
         _docker_health_check(target_services)
         print()
@@ -514,7 +533,7 @@ async def cmd_docker(
                 tester = ApiCoverageTester(services=cov_services, base_host="127.0.0.1")
                 cov_results = await tester.run_all()
                 cov_report = tester.generate_report(db_result=db_result)
-                cov_path = check_result_dir / "api_coverage.md"
+                cov_path = check_result_dir / f"api_coverage{report_suffix}.md"
                 cov_path.write_text(cov_report, encoding="utf-8")
                 log_ok(f"API Coverage отчёт сохранён: {cov_path}")
             except Exception as e:
@@ -557,7 +576,7 @@ async def cmd_docker(
             if cov_results is None:
                 cov_results = {}
             full_report = _generate_full_report(cov_results, pipe_results, timestamp, db_result=db_result)
-            full_path = check_result_dir / "full_report.md"
+            full_path = check_result_dir / f"full_report{report_suffix}.md"
             full_path.write_text(full_report, encoding="utf-8")
             log_ok(f"Сводный отчёт сохранён: {full_path}")
 
