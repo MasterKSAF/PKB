@@ -8,6 +8,10 @@ from .file import FileSchema
 from .export import ExportSchema
 from .terminology import TerminologySchema
 from .format_registry import FormatRegistrySchema
+from .draft import DraftSchema
+from .classifier_registry import ClassifierRegistrySchema
+from .category import CategorySchema
+from .document_terminology import DocumentTerminologySchema
 
 __all__ = [
     'ClassifierSchema',
@@ -20,5 +24,9 @@ __all__ = [
     'ExportSchema',
     'TerminologySchema',
     'FormatRegistrySchema',
+    'DraftSchema',
+    'ClassifierRegistrySchema',
+    'CategorySchema',
+    'DocumentTerminologySchema',
 ]
 

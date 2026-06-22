@@ -105,7 +105,7 @@ def delete_classifier(db: Session, classifier_system: str, code: str, force: boo
     elif classifier_system == 'OKSTU':
         doc_count = db.query(Document).filter(Document.okstu_code == code).count()
     elif classifier_system == 'UDC':
-        doc_count = db.query(Document).filter(Document.udc == code).count()
+        doc_count = db.query(Document).filter(Document.udk_code == code).count()
     elif classifier_system == 'EXTERNAL':
         doc_count = db.query(Document).filter(Document.classifier_code == code).count()
     
@@ -125,7 +125,7 @@ def delete_classifier(db: Session, classifier_system: str, code: str, force: boo
         elif classifier_system == 'OKSTU':
             db.query(Document).filter(Document.okstu_code == code).update({Document.okstu_code: None}, synchronize_session=False)
         elif classifier_system == 'UDC':
-            db.query(Document).filter(Document.udc == code).update({Document.udc: None}, synchronize_session=False)
+            db.query(Document).filter(Document.udk_code == code).update({Document.udk_code: None}, synchronize_session=False)
         elif classifier_system == 'EXTERNAL':
             db.query(Document).filter(Document.classifier_code == code).update({Document.classifier_code: None}, synchronize_session=False)
 

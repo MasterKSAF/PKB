@@ -15,8 +15,12 @@ class DocumentVersionSchema(BaseModel):
     format_code: Optional[str] = None
     format_label: Optional[str] = None
     file_key: Optional[str] = None
-    uploaded_by: Optional[str] = None
-    uploaded_at: Optional[datetime] = None
+    revision: Optional[int] = 1
+    source_filename: Optional[str] = None
+    file_path: Optional[str] = None
+    created_by: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     model_config = {
         'extra': 'ignore',
