@@ -297,12 +297,7 @@ class TestPortConsistency:
                 f"_get_service_port={rp}"
             )
 
-        # minio/tei есть в _get_service_port, но не в MODE_PORTS
-        runner_extra = {"minio": 19000, "tei": 18092}
-        for svc, port in runner_extra.items():
-            assert runner._get_service_port(svc) == port, (
-                f"{svc}: ожидается порт {port} в _get_service_port"
-            )
+        # minio/tei теперь тоже в MODE_PORTS — проверены выше
 
     def test_service_defs_ports_match(self):
         """SERVICE_DEFS порты == MODE_PORTS для пересекающихся ключей."""

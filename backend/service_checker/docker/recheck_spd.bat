@@ -1,27 +1,13 @@
 @echo off
 REM =============================================================================
-REM PKB Neuroassistant — re-check: clean DB + restart + full report
+REM PKB Neuroassistant — re-check SPD: RAG Builder SPD
 REM
-REM Автоматически:
-REM   0. Проверяет, запущен ли Docker
-REM   1. Создаёт .env (если нет — генерирует из create_env.py)
-REM   2. Проверяет наличие base-образа — если нет, собирает
-REM   3. Проверяет наличие модели TEI — если нет, скачивает
-REM   4. Проверяет, запущен ли контейнер TEI — если нет, запускает
-REM   5. Дропает схемы БД, сбрасывает Redis, перезапускает app
-REM   6. Запускает отчёт (health + coverage + pipeline)
-REM
+REM Использует docker-compose.spd.yml (rag-builder-spk вместо rag-builder + rag-search).
+REM Отчёты с суффиксом _spd.
+REM =============================================================================
 REM Параметры:
-REM   --api service1,service2    Только указанные сервисы (через запятую)
-REM   --pipeline name1,name2     Только указанные пайплайны
+REM   --api service1,service2    Только указанные сервисы
 REM   --skip-coverage            Пропустить API Coverage
-REM   --skip-pipelines           Пропустить Pipeline тесты
-REM
-REM Примеры:
-REM   recheck.bat                                Полный прогон
-REM   recheck.bat --api gateway                  Только Gateway
-REM   recheck.bat --api gateway --skip-pipelines Только Gateway, без пайплайнов
-REM   recheck.bat --pipeline registry_lifecycle  Только один пайплайн
 REM =============================================================================
 
 cd /d "%~dp0"
@@ -37,12 +23,6 @@ if /i "%1"=="--api" (
     shift
     goto parse_args
 )
-if /i "%1"=="--pipeline" (
-    set "CLI_ARGS=%CLI_ARGS% --pipelines %2"
-    shift
-    shift
-    goto parse_args
-)
 if /i "%1"=="--skip-coverage" (
     set "CLI_ARGS=%CLI_ARGS% --skip-coverage"
     shift
@@ -53,12 +33,13 @@ if /i "%1"=="--skip-pipelines" (
     shift
     goto parse_args
 )
-REM Неизвестный параметр — игнорируем
 shift
 goto parse_args
 :end_parse
 
-echo === PKB Neuroassistant: Re-check ===
+set "COMPOSE=docker compose -f docker-compose.yml -f docker-compose.spd.yml"
+
+echo === PKB Neuroassistant: Re-check SPD (RAG Builder SPD) ===
 echo.
 
 REM ── 0. Проверка Docker ─────────────────────────────────────────────────────
@@ -110,14 +91,14 @@ echo.
 
 REM ── 4. Проверка контейнера TEI ────────────────────────────────────────────
 echo [4/7] Checking TEI container status...
-docker compose --progress quiet ps --format "{{.State}}" tei 2>nul | findstr /C:"running" > nul 2>&1
+%COMPOSE% --progress quiet ps --format "{{.State}}" tei 2>nul | findstr /C:"running" > nul 2>&1
 if %ERRORLEVEL% equ 0 (
     echo     TEI container is already running, skipping restart.
 ) else (
     echo     TEI container is NOT running — starting...
-    docker compose --progress quiet up -d tei
+    %COMPOSE% --progress quiet up -d tei
     timeout /t 3 /nobreak >nul
-    docker compose --progress quiet ps --format "{{.State}}" tei 2>nul | findstr /C:"running" > nul 2>&1
+    %COMPOSE% --progress quiet ps --format "{{.State}}" tei 2>nul | findstr /C:"running" > nul 2>&1
     if %ERRORLEVEL% equ 0 (
         echo     TEI container started.
     ) else (
@@ -137,58 +118,52 @@ docker exec pkb-postgres psql -U pkb -d postgres -c "CREATE DATABASE pkb_neuro;"
 echo     Flushing Redis...
 docker exec pkb-redis redis-cli FLUSHALL 2>nul
 
-docker compose --progress quiet kill app 2>&1
-docker compose --progress quiet rm -f -v app 2>&1
+%COMPOSE% --progress quiet kill app 2>&1
+%COMPOSE% --progress quiet rm -f -v app 2>&1
 echo.
 
 REM ── 6. Запуск app + отчёт ─────────────────────────────────────────────
 echo [6/7] Starting app...
-docker compose up -d app
+%COMPOSE% up -d app
 if %ERRORLEVEL% neq 0 (
     echo.
     echo ERROR: Failed to start app container!
     pause
     exit /b 1
 )
-echo     App started. Running full report...
+echo     App started. Running SPD report...
 echo.
 
 cd /d "%~dp0..\.."
 set PYTHONIOENCODING=utf-8
 
+set "SPD_CTR=pkb-neuro"
+
 echo     Waiting for supervisor...
 :wait_supervisor
-docker exec pkb-neuro supervisorctl status 2>nul | findstr "RUNNING" >nul 2>&1
+docker exec %SPD_CTR% supervisorctl status 2>nul | findstr "RUNNING" >nul 2>&1
 if %ERRORLEVEL% neq 0 (
     ping -n 2 127.0.0.1 >nul
     goto wait_supervisor
 )
 
-REM ── Проверка, что развёрнут обычный режим (rag-builder + rag-search) ──
-docker exec pkb-neuro supervisorctl status 2>nul | findstr /C:"rag-builder" | findstr "RUNNING" >nul 2>&1
+REM ── Проверка, что развёрнут SPD-режим (rag-builder-spk RUNNING, без rag-search) ──
+docker exec %SPD_CTR% supervisorctl status 2>nul | findstr /C:"rag-builder-spk" | findstr "RUNNING" >nul 2>&1
 if %ERRORLEVEL% neq 0 (
-    echo     ⚠ Предупреждение: rag-builder не в RUNNING — возможно, развёрнут SPK?
+    echo     ⚠ Предупреждение: rag-builder-spk не в RUNNING — возможно, развёрнут обычный режим?
 ) else (
-    docker exec pkb-neuro supervisorctl status 2>nul | findstr /C:"rag-search" | findstr "RUNNING" >nul 2>&1
-    if %ERRORLEVEL% neq 0 (
-        echo     ⚠ Предупреждение: rag-search не в RUNNING — возможно, развёрнут SPK?
+    docker exec %SPD_CTR% supervisorctl status 2>nul | findstr /C:"rag-search" >nul 2>&1
+    if %ERRORLEVEL% equ 0 (
+        echo     ⚠ Предупреждение: rag-search найден — возможно, развёрнут обычный режим?
     ) else (
-        echo     ✅ Обычный режим: rag-builder + rag-search RUNNING
+        echo     ✅ SPD-режим: rag-builder-spk RUNNING (без rag-search)
     )
 )
 
-echo     RAG Builder tables are now handled by Alembic migrations (no patching needed).
-
 echo.
-if defined CLI_ARGS (
-    echo     Running: python -m service_checker docker --action full-report%CLI_ARGS%
-    echo.
-    python -m service_checker docker --action full-report%CLI_ARGS%
-) else (
-    echo     Running full report...
-    echo.
-    python -m service_checker docker --action full-report
-)
+echo     Running: python -m service_checker docker --action full-report --spd%CLI_ARGS%
+echo.
+python -m service_checker docker --action full-report --spd%CLI_ARGS%
 if %ERRORLEVEL% neq 0 (
     echo.
     echo WARNING: Some checks failed, check the report above.
@@ -196,5 +171,5 @@ if %ERRORLEVEL% neq 0 (
 
 echo.
 echo === Done ===
-echo Reports: check_result/
+echo Reports: check_result/api_coverage_spd.md, check_result/full_report_spd.md
 echo.

@@ -73,7 +73,11 @@ service_checker/
 │   ├── Dockerfile.base / .full          # Образы
 │   ├── entrypoint.sh                    # Точка входа
 │   ├── prepare_tei_model.py             # Скачивание и подготовка модели TEI
-│   ├── recheck.bat                      # Быстрый re-check: сброс БД + restat + full-report
+│   ├── recheck.bat                      # Быстрый re-check: сброс БД + restart + full-report
+│   ├── recheck_spd.bat                  # Re-check для rag_builder_service_spd: сброс БД + restart + --spd
+│   ├── docker-compose.spd.yml           # Override для SPD-компоновки (supervisord.spd.conf + entrypoint.spd.sh)
+│   ├── supervisord.spd.conf             # supervisor.conf для SPD (rag-builder-spk вместо rag-builder + rag-search)
+│   ├── entrypoint.spd.sh                # entrypoint для SPD (.env для rag_builder_service_spd)
 │   └── requirements.txt                 # Python-зависимости всех сервисов
 ├── tests/
 │   ├── conftest.py                        # Общие фикстуры
@@ -113,9 +117,10 @@ service_checker/
 | RAG Builder | 8090 | 200 | RUNNING | RB-7: 202 async, RB-8: indexed |
 | RAG Search | 8091 | 200 | RUNNING | RS-6: без top_k/search_type, valid_at+filters |
 
-**supervisorctl:** ✅ Все 11 процессов RUNNING
+**supervisorctl (обычный):** ✅ 11 процессов RUNNING
+**supervisorctl (SPD):** ✅ 10 процессов (rag-builder-spk вместо rag-builder + rag-search)
 **.env файлы:** ✅ Создаются автоматически
-**.err логи:** ✅ Health check проверяет ошибки (ocr.err добавлен)
+**.err логи:** ✅ Health check проверяет ошибки
 
 > **⚠️ Частичное обновление сервисов.**
 > Docker запущен, но некоторые сервисы могут быть не полностью обновлены
@@ -176,6 +181,21 @@ docker/recheck.bat
 Подходит для повторных проверок после изменений в сервисах.
 
 > **Внимание:** удаляет volumes с БД — каждый запуск начинается с чистого состояния.
+
+### Вариант C (SPD) — `recheck_spd.bat`
+
+```bash
+docker/recheck_spd.bat
+```
+Отличается от `recheck.bat` только компоновкой Docker:
+`rag_builder_service_spd` объединяет API rag_builder + rag_search на одном порту 8090.
+Checker подменяет порт `rag_search` → 8090 — никакой отдельной логики не требуется.
+Отчёты сохраняются с суффиксом `_spd`:
+- `check_result/api_coverage_spd.md`
+- `check_result/full_report_spd.md`
+
+Docker-композиция: `docker compose -f docker-compose.yml -f docker-compose.spd.yml`
+(с `supervisord.spd.conf` и `entrypoint.spd.sh`).
 
 ### Вариант D — вручную
 

@@ -62,8 +62,8 @@ from service_checker.core.openapi_loader import OpenApiLoader
 # Сервисы, имеющие реальную реализацию
 SERVICES_WITH_REAL = {
     "gateway", "auth", "orchestrator", "query", "registry",
-    "converter_validator", "parser", "rag_builder", "rag_search",
-    "tei",
+    "converter_validator", "parser", "rag_builder",
+    "rag_search", "tei",
 }
 
 # Эндпоинты, добавленные/изменённые в задачах от 19.06.2026.
@@ -137,12 +137,13 @@ class ApiCoverageTester:
         self.skip_prepare = skip_prepare
         self.schema_check = schema_check
 
-        available_services = set(MODE_PORTS.keys())
         self.services_with_impl = SERVICES_WITH_REAL
 
         if services:
-            self.services_to_test = [s for s in services if s in available_services]
+            # Для явно переданных сервисов проверяем наличие в SERVICE_REGISTRY
+            self.services_to_test = [s for s in services if s in SERVICE_REGISTRY]
         else:
+            available_services = set(MODE_PORTS.keys())
             # Сортируем так, чтобы сервисы-зависимости шли до зависимых от них
             # (контекст prepare-шагов накапливается для downstream сервисов)
             _ORDER = {
@@ -713,7 +714,8 @@ class ApiCoverageTester:
             svc_def = SERVICE_REGISTRY[service_key]()
             svc_endpoints = svc_def.endpoints
             svc_prepare = svc_def.prepare_endpoints
-            port = svc_def.port
+            # Порт из MODE_PORTS имеет приоритет (может быть переопределён, например --spd)
+            port = MODE_PORTS.get(service_key, svc_def.port)
             svc_name = svc_def.display_name
             for k, v in svc_def.base_data.items():
                 if k not in self.context:
@@ -734,12 +736,12 @@ class ApiCoverageTester:
                         capture_output=True, timeout=10,
                     )
                     if r.returncode == 0:
-                        print(f"  ℹ RAG Builder: дропнут FK fk_rag_document_chunks_section_id")
+                        print(f"  ℹ {svc_name}: дропнут FK fk_rag_document_chunks_section_id")
                     else:
-                        print(f"  ⚠ RAG Builder: не удалось дропнуть FK: {r.stderr.decode().strip()}")
+                        print(f"  ⚠ {svc_name}: не удалось дропнуть FK: {r.stderr.decode().strip()}")
                 except Exception as ex:
-                    print(f"  ⚠ RAG Builder: ошибка при дропе FK: {ex}")
-                print(f"  ℹ RAG Builder: timestamp={self.context['timestamp']}")
+                    print(f"  ⚠ {svc_name}: ошибка при дропе FK: {ex}")
+                print(f"  ℹ {svc_name}: timestamp={self.context['timestamp']}")
 
             # ── Pre-prepare: создание проекта для Query (QS-3) ─────────
             if service_key == "query":

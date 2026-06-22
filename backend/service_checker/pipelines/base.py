@@ -421,7 +421,10 @@ class PipelineRunner:
 
         # Подстановка переменных
         resolved_path = self._resolve_path(step.path, ctx)
-        url = f"http://{self.base_host}:{step.port}{resolved_path}"
+        # Порт из MODE_PORTS имеет приоритет (единый источник, поддерживает --spd)
+        svc_port = self._get_service_port(step.service)
+        target_port = svc_port if svc_port is not None else step.port
+        url = f"http://{self.base_host}:{target_port}{resolved_path}"
         body = self._resolve_body(step.body, ctx)
 
         # Заголовки
@@ -705,22 +708,13 @@ class PipelineRunner:
         return result
 
     def _get_service_port(self, service_key: str) -> Optional[int]:
-        """Получить порт сервиса по ключу."""
-        ports = {
-            "gateway": 8080,
-            "orchestrator": 8081,
-            "auth": 8082,
-            "query": 8083,
-            "registry": 8084,
-            "converter_validator": 8086,
-            "parser": 8087,
-            "ocr": 8088,
-            "rag_builder": 8090,
-            "rag_search": 8091,
-            "minio": 19000,  # MinIO S3 API
-            "tei": 18092,  # Hugging Face TEI
-        }
-        return ports.get(service_key)
+        """Получить порт сервиса по ключу.
+
+        Использует MODE_PORTS как единый источник истины.
+        При --spd порт rag_search меняется через MODE_PORTS глобально.
+        """
+        from service_checker.services import MODE_PORTS
+        return MODE_PORTS.get(service_key)
 
 
 # ── Вспомогательные проверки для шагов ────────────────────────────────

@@ -27,21 +27,33 @@ from service_checker.core.config import (
 from service_checker.core.utils import log, log_ok, log_warn, log_err, log_info, log_header, log_step
 
 
-# ── Docker: HTTP health-check endpoint'ы для каждого сервиса внутри контейнера ──
-DOCKER_SUPERVISOR_SERVICES = {
-    "auth":                (8082, "/api/v1/health", "Auth Service"),
-    "gateway":             (8080, "/api/v1/health", "Gateway (Mock)"),
-    "orchestrator":        (8081, "/api/v1/health", "Orchestrator"),
-    "query":               (8083, "/api/v1/health", "Query Service"),
-    "registry":            (8084, "/api/v1/health", "Registry Service"),
-    "integration":         (8085, "/openapi.json", "Integration Service"),
-    "converter-validator": (8086, "/api/v1/health", "Converter-Validator"),
-    "parser":              (8087, "/api/v1/health", "Parser Service"),
-    "ocr":                 (8088, "/api/v1/health", "OCR Service"),
-    "rag-builder":         (8090, "/api/v1/health", "RAG Builder"),
-    "rag-search":          (8091, "/api/v1/health", "RAG Search"),
-    "tei":                 (18092, "/health", "TEI (Embeddings)"),
+# ── HTTP health-check: собирается динамически из MODE_PORTS + SERVICE_DEFS ──
+# Для сервисов, не описанных в SERVICE_DEFS (например tei), указываются вручную.
+_EXTRA_HEALTH = {
+    "tei":  (18092, "/health", "TEI (Embeddings)"),
 }
+
+def _get_health_services() -> Dict[str, tuple]:
+    """Собрать словарь {ключ: (порт, health_url, display_name)}.
+
+    Использует MODE_PORTS как единый источник портов,
+    SERVICE_DEFS для health_url и display_name.
+    Позволяет динамически подменять порты (например, при --spd).
+    """
+    from urllib.parse import urlparse
+    from service_checker.services import MODE_PORTS
+    from service_checker.core.config import SERVICE_DEFS
+    result = {}
+    for svc_key, port in MODE_PORTS.items():
+        if svc_key in SERVICE_DEFS:
+            info = SERVICE_DEFS[svc_key]
+            raw_url = info.get("health_url", "/api/v1/health")
+            # Извлекаем path из полного URL (http://host:port/path → /path)
+            parsed = urlparse(raw_url)
+            path = parsed.path or raw_url
+            result[svc_key] = (port, path, info.get("name", svc_key))
+    result.update(_EXTRA_HEALTH)
+    return result
 
 
 def _check_docker() -> bool:
@@ -301,11 +313,12 @@ def _docker_health_check(services: List[str]) -> bool:
                     log_err(f"{display_name:<25} :{port} — {e}")
         return False
 
+    health_services = _get_health_services()
     from concurrent.futures import ThreadPoolExecutor, as_completed
-    with ThreadPoolExecutor(max_workers=len(DOCKER_SUPERVISOR_SERVICES)) as executor:
+    with ThreadPoolExecutor(max_workers=len(health_services)) as executor:
         fut_map = {
             executor.submit(_ping_one, svc_key, port, path, display_name): svc_key
-            for svc_key, (port, path, display_name) in DOCKER_SUPERVISOR_SERVICES.items()
+            for svc_key, (port, path, display_name) in health_services.items()
         }
         for future in as_completed(fut_map):
             if not future.result():
@@ -390,10 +403,13 @@ def _docker_health_check(services: List[str]) -> bool:
     # ── Supervisor .err log check ──
     log_header("Docker Health Check: ошибки в supervisor .err логах")
     has_errors = False
+    # Собираем .err файлы динамически из supervisorctl или используем полный список
+    # (в SPD режиме есть rag_builder_spk.err, нет rag_builder.err + rag_search.err)
     err_files = [
         "auth.err", "gateway.err", "orchestrator.err", "query.err",
         "registry.err", "integration.err", "converter_validator.err",
-        "parser.err", "ocr.err", "rag_builder.err", "rag_search.err",
+        "parser.err", "ocr.err",
+        "rag_builder.err", "rag_search.err", "rag_builder_spk.err",
     ]
     # Примечание: OCR сервис может отсутствовать (не реализован отдельно).
     # Если файла ocr.err нет — это нормально, проверка пропускается.
@@ -447,14 +463,19 @@ def _docker_health_check(services: List[str]) -> bool:
     return all_ok
 
 
-async def _docker_collect_logs(services: List[str] = None) -> bool:
-    """Собрать все логи (info + error) из supervisor в отчёт."""
+async def _docker_collect_logs(services: List[str] = None, suffix: str = "") -> bool:
+    """Собрать все логи (info + error) из supervisor в отчёт.
+
+    Args:
+        services: Список сервисов для фильтрации.
+        suffix: Суффикс для файла отчёта (например, '_spd').
+    """
     log_header("Docker: сбор логов (info + error)")
 
     check_result_dir = BACKEND_DIR / "check_result"
     check_result_dir.mkdir(parents=True, exist_ok=True)
 
-    report_path = check_result_dir / "errors.md"
+    report_path = check_result_dir / f"errors{suffix}.md"
 
     container_name = "pkb-neuro"
     docker_cmd_prefix = ["docker", "exec", container_name]

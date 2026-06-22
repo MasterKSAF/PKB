@@ -193,6 +193,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Запустить только PostgreSQL",
     )
+    p_docker.add_argument(
+        "--spd",
+        action="store_true",
+        help="Режим SPD: подмена порта rag_search на 8090 (объединённый rag_builder + rag_search)",
+    )
 
     # check — observability / post-deploy проверка
     p_check = subparsers.add_parser(
@@ -399,6 +404,7 @@ async def cmd_docker(
     skip_coverage: bool = False,
     skip_pipelines: bool = False,
     db_only: bool = False,
+    spd: bool = False,
 ):
     """Развернуть систему через Docker Compose."""
     services = services or []
@@ -413,6 +419,11 @@ async def cmd_docker(
     for p in pipelines:
         _flat.extend(x.strip() for x in p.split(",") if x.strip())
     pipelines = sorted(_flat)
+
+    # Режим SPD: подмена порта rag_search на 8090 (объединённый сервис)
+    if spd:
+        from service_checker.services import MODE_PORTS
+        MODE_PORTS["rag_search"] = 8090
 
     log_header("Развёртывание PKB Neuroassistant через Docker")
 
@@ -473,17 +484,24 @@ async def cmd_docker(
         ok = await _docker_run_coverage()
         if ok:
             log_info("Собираем логи ошибок...")
-            await _docker_collect_logs(target_services)
+            log_suffix = "_spd" if spd else ""
+            await _docker_collect_logs(target_services, suffix=log_suffix)
         return
 
     if action == "full-report":
         log_header("📋 Полный отчёт: Coverage + Pipeline + Сводная таблица")
+
+        if spd:
+            log_info("Режим SPD: rag_search=8090 (подмена в MODE_PORTS)")
+
         check_result_dir = BACKEND_DIR / "check_result"
         check_result_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         # Суффикс для имён файлов при фильтрации по сервисам/пайплайнам
         report_suffix_parts = []
+        if spd:
+            report_suffix_parts.append("spd")
         if services:
             report_suffix_parts.append("services_" + "_".join(services))
         if pipelines:
@@ -582,11 +600,12 @@ async def cmd_docker(
 
             # Собираем логи ошибок
             log_info("Собираем логи ошибок...")
-            await _docker_collect_logs(target_services)
+            await _docker_collect_logs(target_services, suffix=report_suffix)
         return
 
     if action == "logs":
-        await _docker_collect_logs(target_services)
+        log_suffix = "_spd" if spd else ""
+        await _docker_collect_logs(target_services, suffix=log_suffix)
         return
 
     success = _docker_action(action, target_services, build=build, detach=detach)
@@ -878,6 +897,7 @@ async def main():
             skip_coverage=args.skip_coverage,
             skip_pipelines=args.skip_pipelines,
             db_only=args.db_only,
+            spd=args.spd,
         )
         return
 

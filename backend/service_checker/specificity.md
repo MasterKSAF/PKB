@@ -1618,6 +1618,23 @@ Query Service не создаёт проект при старте — табл�
 ### Статус
 🟡 **Задокументировано (checker, 2026-06-20) — сервис отстаёт от документации**
 
+## 49. SPD-режим: только подмена порта rag_search → 8090 (2026-06-22 → 2026-06-22, v3)
+
+### Суть
+`rag_builder_service_spd` — объединённый сервис (rag_builder + rag_search на порту 8090).
+Для coverage тестов не нужен отдельный ServiceDef: `rag_builder` и `rag_search`
+проверяются как обычно, но `rag_search` порт подменяется на 8090.
+
+### Изменения
+- `--spk` → `--spd`, файлы переименованы `_spk` → `_spd`.
+- Удалён `services/rag_builder_spk.py` — избыточен.
+- `--spd` теперь делает только: `MODE_PORTS["rag_search"] = 8090`.
+- Pipeline `run_step()` использует `_get_service_port(step.service)` как приоритет
+  над `step.port`.
+
+### Статус
+✅ Переименовано в SPD (2026-06-22)
+
 ## 48. Gateway Mock не принимает JWT от реального Auth Service (2026-06-22)
 
 ### Симптом
