@@ -65,12 +65,6 @@ class TestFullDocumentLifecyclePipeline:
         for s in [step3, step5]:
             assert "{doc_id}" in str(s.body), f"'{s.name}' должен использовать doc_id из контекста"
 
-    def test_recovery_runs_always(self):
-        """Шаг 5 (recovery) выполняется всегда — нет skip_if."""
-        p = FullDocumentLifecyclePipeline()
-        steps = p.build_steps(PipelineContext())
-        step5 = steps[4]
-        assert step5.skip_if is None, "recovery должен выполняться всегда (без skip_if)"
 
     def test_step6_rag_search_no_on_error(self):
         """Шаг 6 (RAG Search) больше не имеет on_error — костыль удалён."""

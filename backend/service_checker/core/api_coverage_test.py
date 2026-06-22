@@ -105,6 +105,15 @@ KNOWN_NEW_ENDPOINTS: Dict[str, set] = {
         "POST /api/v1/admin/roles",                    # AU-2: создание роли
         "PATCH /api/v1/admin/users/{user_id}",         # AU-5: roles[]
     },
+    "gateway": {
+        "GET /api/v1/gateway/health",                # GW-12: нет в моке
+        "POST /api/v1/rag/search",                     # RS-6: новый формат
+        "POST /api/v1/analyse/start",                  # AU-2: не реализован
+        "GET /api/v1/analyse/{task_id}/status",         # не реализован
+        "GET /api/v1/meridian/status",                  # не реализован
+        "GET /api/v1/files/{file_id}",                  # не реализован
+        "GET /api/v1/external/integrations",            # не реализован
+    },
 }
 
 

@@ -129,6 +129,13 @@ TEST_ADMIN_CREDENTIALS: Dict[str, str] = {
     "password": "Admin1234!",
 }
 
+# Креды для Gateway Mock — пароль из SEED_USERS (mocks/common.py),
+# не из DEFAULT_ADMIN_PASSWORD (env), т.к. Gateway Mock не читает env.
+GATEWAY_CREDENTIALS: Dict[str, str] = {
+    "username": "admin@example.com",
+    "password": "admin123",
+}
+
 HEADERS_JSON: Dict[str, str] = {
     "Content-Type": "application/json",
     "Accept": "application/json",

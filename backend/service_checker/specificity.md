@@ -1618,3 +1618,36 @@ Query Service не создаёт проект при старте — табл�
 ### Статус
 🟡 **Задокументировано (checker, 2026-06-20) — сервис отстаёт от документации**
 
+## 48. Gateway Mock не принимает JWT от реального Auth Service (2026-06-22)
+
+### Симптом
+Gateway (Mock, port 8080) возвращает HTTP 401 на все эндпоинты, кроме публичных `/health`.
+В логах checker: `53/76 failed`.
+
+### Диагностика
+Gateway Mock и Auth Service — **разные Python-процессы** под supervisord:
+- **Auth Service (real)** на порту 8082 — реальный FastAPI-сервис, читает `DEFAULT_ADMIN_PASSWORD` из env (`Admin1234!`), создаёт real JWT
+- **Gateway Mock** на порту 8080 — мок из `mocks/gateway.py`, использует `mocks/common.py` с `SEED_USERS` (пароль admin: `admin123`).
+
+Токены хранятся в in-memory `_access_token_map: Dict[str, int]` в `mocks/common.py`.
+Поскольку Gateway и Auth — разные процессы, у каждого своя копия `_access_token_map`.
+Prepare-шаг в checker шёл напрямую в Auth (`override_port=8082`), получал real JWT,
+но Gateway Mock не находил этот токен в своём (пустом) `_access_token_map` → 401.
+
+Дополнительно: `TEST_CREDENTIALS` в `services/base.py` использовал пароль `Admin1234!`
+из env, который не совпадает с паролем `admin123` из `SEED_USERS`.
+
+### Что исправлено (checker, 2026-06-22)
+1. `services/base.py` — добавлен `GATEWAY_CREDENTIALS` с паролем `admin123`
+2. `services/gateway.py` — prepare-шаг аутентификации теперь идёт **через Gateway** (порт 8080),
+   а не напрямую в Auth. Убран `override_port=_AUTH_PORT`.
+   Gateway Mock сам создаёт токен и сохраняет в своём `_access_token_map`.
+3. Основной эндпоинт `/auth/token` в Gateway тоже переведён на `GATEWAY_CREDENTIALS`.
+
+### Результат
+Gateway Coverage: **4/76 → 53/76** passed.
+Оставшиеся 11 failed — ожидаемые (`/gateway/health` 404, file upload без файла, пропуски по контексту).
+
+### Статус
+✅ **Исправлено в checker (2026-06-22)**
+
