@@ -329,6 +329,7 @@ class TextSearchResponse(BaseModel):
     results: list[TextSearchResult]
     total_found: int
     processing_time_ms: int
+    enrichment_skipped: bool = False
 
 
 class TextAskRequest(BaseModel):

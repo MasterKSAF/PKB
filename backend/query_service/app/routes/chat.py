@@ -17,7 +17,7 @@ from ..schemas import (
     UpdateSessionRequest, DeleteSessionResponse,
     SendMessageRequest, MessageResponse, PendingMessageResponse, SourceResponse, SessionMessagesResponse,
     ContextRequest, ContextResponse,
-    ExportRequest,
+    ExportRequest, ExportResponse,
     FeedbackRequest, FeedbackResponse,
     HistoryResponse, HistoryItem, HistoryMeta, HistoryExportResponse,
     MessageSearchRequest, MessageSearchResponse, MessageSearchMeta,
@@ -383,30 +383,37 @@ async def manage_context(
     )
 
 
-@router.post("/sessions/{session_id}/export")
+@router.post("/sessions/{session_id}/export", response_model=ExportResponse)
 async def export_session(
     session_id: int,
     body: ExportRequest,
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(get_current_user),
 ):
-    s = await session_repo.get_session(db, session_id, user_id)
-    if not s:
-        raise HTTPException(status_code=404, detail={"error": {"code": "SESSION_NOT_FOUND", "message": "Сессия не найдена", "details": {}}})
+    async with db.begin():
+        s = await session_repo.get_session(db, session_id, user_id)
+        if not s:
+            raise HTTPException(status_code=404, detail={"error": {"code": "SESSION_NOT_FOUND", "message": "Сессия не найдена", "details": {}}})
 
-    msgs, _ = await message_repo.get_session_messages(db, session_id, limit=1000, before=None)
+        export = ChatExport(
+            session_id=session_id,
+            format=body.format,
+            status="completed",
+            url=f"/files/exports/session_{session_id}.{body.format}",
+            expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+        )
+        db.add(export)
+        await db.flush()
+        export_id = export.export_id
 
-    async def _stream():
-        yield json.dumps({"session_id": session_id, "title": s.title, "format": body.format}) + "\n"
-        for m in msgs:
-            yield json.dumps(_msg_dict(m)) + "\n"
-
-    media_type = "application/json" if body.format == "json" else "text/plain"
-    filename = f"session_{session_id}.{body.format}"
-    return StreamingResponse(
-        _stream(),
-        media_type=media_type,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    return ExportResponse(
+        export_id=export_id,
+        session_id=session_id,
+        format=body.format,
+        status="completed",
+        url=f"/files/exports/session_{session_id}.{body.format}",
+        expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+        created_at=datetime.now(timezone.utc),
     )
 
 
@@ -449,7 +456,7 @@ async def post_feedback(
             db, user_id,
             message_id=_to_int(body.message_id),
             answer_id=_to_int(body.answer_id),
-            rating=rating,
+            rating=str(rating) if isinstance(rating, int) else rating,
             useful=body.useful,
             comment=body.comment,
             aspects=[a.model_dump() for a in body.aspects] if body.aspects else None,
