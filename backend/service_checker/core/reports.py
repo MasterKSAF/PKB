@@ -200,7 +200,32 @@ def _generate_full_report(
         f"| {overall_status} |\n"
     )
 
-    # ── 1a. Pipeline статусы по сервисам (отдельная таблица) ───────────
+    # ── 1a. Orchestrator Pipelines (отдельная таблица) ──────────────────
+    orchestrator_pipelines = {
+        name for name, services in PIPELINE_SERVICE_MAP.items()
+        if "orchestrator" in services
+    }
+    orch_pipe_order = [p for p in pipe_order if p in orchestrator_pipelines]
+
+    if orch_pipe_order:
+        lines.append("### 🔄 Orchestrator Pipelines\n")
+        lines.append("| Pipeline | Описание | Шаги | ✅ Passed | ❌ Failed | Статус |")
+        lines.append("|----------|----------|:----:|:---------:|:---------:|:------:|")
+        for pipe_name in orch_pipe_order:
+            result = pipeline_results.get(pipe_name)
+            if result:
+                total = getattr(result, "total_steps", 0)
+                passed = getattr(result, "passed_steps", 0)
+                failed = getattr(result, "failed_steps", 0)
+                ok = getattr(result, "passed", False)
+                desc = getattr(result, "description", "")
+                status_icon = "✅" if ok else "❌"
+                lines.append(f"| `{pipe_name}` | {desc} | {total} | {passed} | {failed} | {status_icon} |")
+            else:
+                lines.append(f"| `{pipe_name}` | — | — | — | — | ⏳ |")
+        lines.append("")
+
+    # ── 1b. Pipeline статусы по сервисам (отдельная таблица) ───────────
     lines.append("### 📋 Pipeline статусы по сервисам\n")
     col_headers = " | ".join(pipe_columns[p] for p in pipe_order)
     col_aligns = " | ".join(":---:" for _ in pipe_order)

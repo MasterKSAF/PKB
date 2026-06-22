@@ -216,7 +216,14 @@ class TestPipelineRegistry:
         assert "registry_quarantine" in PIPELINE_REGISTRY
         assert "orchestrator_draft_lifecycle" in PIPELINE_REGISTRY
         assert "multi_document_cross_search" in PIPELINE_REGISTRY
-        assert len(PIPELINE_REGISTRY) == 9
+        assert "document_approval" in PIPELINE_REGISTRY
+        assert "orchestrator_document_reject" in PIPELINE_REGISTRY
+        assert "orchestrator_metadata_update" in PIPELINE_REGISTRY
+        assert "orchestrator_draft_delete" in PIPELINE_REGISTRY
+        assert "orchestrator_document_reprocess" in PIPELINE_REGISTRY
+        assert "orchestrator_document_versions" in PIPELINE_REGISTRY
+        assert "orchestrator_full_document_lifecycle" in PIPELINE_REGISTRY
+        assert len(PIPELINE_REGISTRY) == 15
 
     def test_registry_classes(self):
         from pipelines import PIPELINE_REGISTRY

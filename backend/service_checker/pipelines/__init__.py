@@ -25,6 +25,12 @@ from .registry_quarantine import RegistryQuarantinePipeline
 from .orchestrator_draft_lifecycle import OrchestratorDraftLifecyclePipeline
 from .multi_document_cross_search import MultiDocumentCrossSearchPipeline
 from .document_approval import DocumentApprovalPipeline
+from .orchestrator_document_reject import OrchestratorDocumentRejectPipeline
+from .orchestrator_metadata_update import OrchestratorMetadataUpdatePipeline
+from .orchestrator_draft_delete import OrchestratorDraftDeletePipeline
+from .orchestrator_document_reprocess import OrchestratorDocumentReprocessPipeline
+from .orchestrator_document_versions import OrchestratorDocumentVersionsPipeline
+from .orchestrator_full_document_lifecycle import OrchestratorFullDocumentLifecyclePipeline
 
 # Реестр доступных пайплайнов: имя → класс
 PIPELINE_REGISTRY: dict[str, type[PipelineDef]] = {
@@ -37,6 +43,12 @@ PIPELINE_REGISTRY: dict[str, type[PipelineDef]] = {
     "orchestrator_draft_lifecycle": OrchestratorDraftLifecyclePipeline,
     "multi_document_cross_search": MultiDocumentCrossSearchPipeline,
     "document_approval": DocumentApprovalPipeline,
+    "orchestrator_document_reject": OrchestratorDocumentRejectPipeline,
+    "orchestrator_metadata_update": OrchestratorMetadataUpdatePipeline,
+    "orchestrator_draft_delete": OrchestratorDraftDeletePipeline,
+    "orchestrator_document_reprocess": OrchestratorDocumentReprocessPipeline,
+    "orchestrator_document_versions": OrchestratorDocumentVersionsPipeline,
+    "orchestrator_full_document_lifecycle": OrchestratorFullDocumentLifecyclePipeline,
 }
 
 __all__ = [
@@ -54,5 +66,11 @@ __all__ = [
     "RegistryQuarantinePipeline",
     "OrchestratorDraftLifecyclePipeline",
     "MultiDocumentCrossSearchPipeline",
+    "OrchestratorDocumentRejectPipeline",
+    "OrchestratorMetadataUpdatePipeline",
+    "OrchestratorDraftDeletePipeline",
+    "OrchestratorDocumentReprocessPipeline",
+    "OrchestratorDocumentVersionsPipeline",
+    "OrchestratorFullDocumentLifecyclePipeline",
     "PIPELINE_REGISTRY",
 ]

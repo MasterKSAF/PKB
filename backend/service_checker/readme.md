@@ -90,7 +90,14 @@ service_checker/
 │   ├── test_pipeline_admin_user_lifecycle.py      # Admin управление пользователем (10 шагов)
 │   ├── test_pipeline_registry_quarantine.py       # Карантин классификаторов (10 шагов)
 │   ├── test_pipeline_orchestrator_draft_lifecycle.py # Черновик Orchestrator (8 шагов)
-│   └── test_pipeline_multi_document_cross_search.py  # Мульти-документный поиск (19 шагов)
+│   ├── test_pipeline_document_approval.py                        # Подтверждение документа (10 шагов)
+│   ├── test_pipeline_orchestrator_document_reject.py              # Reject черновика Orchestrator (6 шагов)
+│   ├── test_pipeline_orchestrator_metadata_update.py              # Обновление метаданных (6 шагов)
+│   ├── test_pipeline_orchestrator_draft_delete.py                 # Удаление черновика (6 шагов)
+│   ├── test_pipeline_orchestrator_document_reprocess.py           # Переиндексация (9 шагов)
+│   ├── test_pipeline_orchestrator_document_versions.py            # Версионирование (9 шагов)
+│   ├── test_pipeline_orchestrator_full_document_lifecycle.py      # Полный цикл через Orchestrator (12 шагов)
+│   └── test_pipeline_multi_document_cross_search.py               # Мульти-документный поиск (19 шагов)
 ├── specificity.md           # Аномалии и архитектурные решения
 └── readme.md                # Точка входа (этот файл)
 ```
@@ -294,6 +301,12 @@ python -m service_checker docker --action full-report  # full-report включ�
 | `orchestrator_draft_lifecycle` | Черновик Orchestrator: создание → превью → решение → 404 | Auth → Orchestrator | 8 |
 | `multi_document_cross_search` | 2 документа → индексация → кросс-поиск → удаление → фильтрация | Auth → MinIO → Parser → Converter → Registry → RAG Builder → RAG Search | 19 |
 | `document_approval` | Подтверждение документа: черновик → preview → approve → full → индексация | Auth → Orchestrator → Registry → RAG Builder | 11 |
+| `orchestrator_document_reject` | Reject черновика: создание → reject → проверка статуса | Auth → Orchestrator | 6 |
+| `orchestrator_metadata_update` | Обновление метаданных черновика (PATCH /metadata) | Auth → Orchestrator | 6 |
+| `orchestrator_draft_delete` | Удаление черновика: создание → удаление → 404 | Auth → Orchestrator | 6 |
+| `orchestrator_document_reprocess` | Переиндексация: черновик → approve → reprocess | Auth → Orchestrator → Registry | 9 |
+| `orchestrator_document_versions` | Версионирование: черновик → approve → новая версия | Auth → Orchestrator → Registry | 9 |
+| `orchestrator_full_document_lifecycle` | Полный цикл через Orchestrator: создание → preview → approve → Registry → индексация → удаление | Auth → Orchestrator → Registry → RAG Builder → RAG Search | 12 |
 
 ## Ключевые решения
 
