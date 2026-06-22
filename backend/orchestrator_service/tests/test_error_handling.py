@@ -189,8 +189,7 @@ class TestEndpointErrorResponses:
         assert "detail" in data
 
     def test_documents_search_no_longer_returns_search_results(self, client: TestClient):
-        """GET /documents/* перенесены в registry-service. В оркестраторе
-        остался только POST /documents/{id}/reprocess, поэтому
+        """GET /documents/* перенесены в registry-service.
         /documents/search не маршрутизируется → 404."""
         response = client.post(
             "/api/v1/documents/search",

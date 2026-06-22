@@ -150,16 +150,6 @@ ReDoc: `http://localhost:8081/redoc`
 | GET | `/tasks/{task_id}/status` | Статус задачи с детализацией шагов |
 | GET | `/tasks/{task_id}/steps` | Список шагов задачи |
 | GET | `/drafts/{draft_id}/tasks` | Список задач для черновика |
-
-### Документы (`/api/v1/documents`)
-
-> Все CRUD-операции над документами перенесены в `registry-service` (см. `docs/api/registry_service_api.md`, группа `documents`).
-> В оркестраторе осталась только pipeline-операция переиндексации.
-
-| Метод | Endpoint | Описание |
-|-------|----------|----------|
-| POST | `/documents/{doc_id}/reprocess` | Повторная обработка (P2I-9) |
-
 ### Служебные
 
 | Метод | Endpoint | Описание |
@@ -191,10 +181,9 @@ orchestrator_service/
 │   │       ├── api.py                 # Конфигурация роутеров
 │   │       └── endpoints/
 │   │           ├── __init__.py
-│   │           ├── documents.py       # Только POST /documents/{id}/reprocess (P2I-9)
-	│   │           ├── drafts.py          # Черновики: upload, preview, decide
-	│   │           ├── tasks.py           # Статус задач пайплайна
-	│   │           └── health.py          # Health check
+│   │           ├── drafts.py          # Черновики: upload, preview, decide
+│   │           ├── tasks.py           # Статус задач пайплайна
+│   │           └── health.py          # Health check
 │   ├── core/
 │   │   ├── __init__.py
 │   │   ├── config.py                  # Настройки (Pydantic Settings)
@@ -209,14 +198,13 @@ orchestrator_service/
 │   │   └── session.py                 # get_db_context() для Celery
 │   ├── models/
 │   │   └── pipeline.py                # Task + TaskStep ORM модели
-	│   ├── schemas/
-	│   │   ├── __init__.py
-	│   │   ├── common.py                  # Общие схемы (Error, Pagination)
-	│   │   ├── documents.py               # Схемы документов (только reprocess)
-	│   │   ├── drafts.py                  # Схемы черновиков
-	│   │   ├── tasks.py                   # Схемы задач пайплайна
-	│   │   ├── requests.py                # Схемы запросов к сервисам (RAG, registry)
-	│   │   └── validation.py              # Схемы валидации и health
+│   ├── schemas/
+│   │   ├── __init__.py
+│   │   ├── common.py                  # Общие схемы (Error, Pagination)
+│   │   ├── drafts.py                  # Схемы черновиков
+│   │   ├── tasks.py                   # Схемы задач пайплайна
+│   │   ├── requests.py                # Схемы запросов к сервисам (RAG, registry)
+│   │   └── validation.py              # Схемы валидации и health
 	│   ├── services/
 	│   │   ├── __init__.py
 	│   │   ├── base_client.py             # Базовый клиент с dual-mode (mock/real)
