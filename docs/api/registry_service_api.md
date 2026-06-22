@@ -59,7 +59,7 @@
 
 ---
 
-### Содержание
+### Группы
 
 | Группа | Описание |
 |--------|----------|
@@ -69,6 +69,67 @@
 | `drafts` | Управление данными черновиков |
 | `common` | Статистика и справочные значения |
 | `categories` | Пользовательские категории документов (many-to-many) |
+
+### Содержание
+
+| Метод | Путь | Описание |
+|-------|------|----------|
+| GET | `/registry/classifiers` | Список классификаторов (плоский) |
+| GET | `/registry/classifiers/tree` | Дерево классификаторов (иерархический) |
+| GET | `/registry/classifiers/{code}` | Один узел классификатора |
+| POST | `/registry/classifiers` | Создать узел классификатора |
+| PUT | `/registry/classifiers/{code}` | Обновить узел классификатора |
+| PATCH | `/registry/classifiers/{code}` | Частичное обновление узла |
+| DELETE | `/registry/classifiers/{code}` | Удалить узел классификатора |
+| POST | `/registry/classifiers/import` | Импорт классификаторов |
+| GET | `/registry/classifiers/pending` | Неизвестные коды классификатора |
+| POST | `/registry/classifiers/pending/{id}/accept` | Принять неизвестный код |
+| POST | `/registry/classifiers/pending/{id}/reject` | Отклонить неизвестный код |
+| POST | `/registry/classifiers/validate` | Валидация классификации |
+| GET | `/registry/terminology` | Список терминов |
+| GET | `/registry/terminology/{id}` | Один термин |
+| POST | `/registry/terminology` | Создать термин |
+| PUT | `/registry/terminology/{id}` | Обновить термин |
+| DELETE | `/registry/terminology/{id}` | Удалить термин |
+| POST | `/registry/terminology/normalize` | Поиск нормализованной формы |
+| POST | `/registry/terminology/import` | Импорт терминов |
+| GET | `/registry/documents` | Список документов |
+| GET | `/registry/documents/search` | Полнотекстовый поиск (BM25) |
+| POST | `/registry/documents/search` | Семантический поиск документов |
+| GET | `/registry/documents/{id}` | Карточка документа |
+| GET | `/registry/documents/{id}/sections` | Секции документа (для RAG Builder) |
+| GET | `/registry/documents/{id}/pages` | Список страниц |
+| GET | `/registry/documents/{id}/pages/{num}` | Конкретная страница |
+| GET | `/registry/documents/{id}/pages/{num}/text` | Текст страницы |
+| GET | `/registry/documents/{id}/pages/{num}/preview` | Превью страницы |
+| GET | `/registry/documents/{id}/file` | Скачивание файла |
+| GET | `/registry/documents/{id}/history` | История статусов |
+| GET | `/registry/documents/{id}/versions` | Список версий |
+| GET | `/registry/documents/{id}/parameters` | Параметры документа |
+| POST | `/registry/documents/check-duplicate` | Проверка уникальности документа |
+| POST | `/registry/documents` | Создать документ |
+| PUT | `/registry/documents/{id}` | Обновить документ |
+| PATCH | `/registry/documents/{id}` | Частичное обновление документа |
+| PATCH | `/registry/documents/{id}/status` | Обновить статус (internal) |
+| GET | `/registry/documents/{id}/succession` | Цепочка преемственности |
+| DELETE | `/registry/documents/{id}` | Удалить документ |
+| POST | `/registry/documents/export` | Экспорт документов |
+| POST | `/registry/documents/import` | Массовый импорт |
+| POST | `/registry/documents/{doc_id}/reprocess` | Переобработка документа |
+| POST | `/registry/drafts` | Создать запись черновика |
+| GET | `/registry/drafts` | Список черновиков |
+| GET | `/registry/drafts/{draft_id}` | Полная информация о черновике |
+| GET | `/registry/drafts/{draft_id}/preview` | Preview-метаданные черновика |
+| PATCH | `/registry/drafts/{draft_id}/status` | Обновить статус черновика |
+| PATCH | `/registry/drafts/{draft_id}/metadata` | Обновить метаданные черновика (internal) |
+| DELETE | `/registry/drafts/{draft_id}` | Удалить запись черновика |
+| GET | `/registry/stats` | Статистика реестра |
+| GET | `/registry/enums` | Допустимые значения |
+| GET | `/registry/categories` | Список категорий |
+| GET | `/registry/categories/{id}` | Одна категория |
+| POST | `/registry/categories` | Создать категорию |
+| PUT | `/registry/categories/{id}` | Обновить категорию |
+| DELETE | `/registry/categories/{id}` | Удалить категорию |
 
 ---
 

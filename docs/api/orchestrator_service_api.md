@@ -36,6 +36,28 @@ Orchestrator отвечает только за:
 
 > **Примечание:** Группа `tasks` — внутренняя (internal). Эндпоинты `/tasks/{task_id}/...` используются только для межсервисного взаимодействия и админского анализа. `task` — агрегатор этапов пайплайна, каждый этап хранит входные/выходные JSON-контейнеры сервисов.
 
+### Содержание
+
+| Метод | Путь | Описание |
+|-------|------|----------|
+| POST | `/drafts` | Загрузка файла (создание черновика) |
+| POST | `/drafts/{draft_id}/preview` | Запуск preview-обработки черновика |
+| GET | `/drafts/{draft_id}/preview/status` | Статус preview черновика |
+| PATCH | `/drafts/{draft_id}/decide` | Решение по черновику (approve/reject) |
+| PATCH | `/drafts/{draft_id}/metadata` | Обновление метаданных черновика |
+| DELETE | `/drafts/{draft_id}` | Удаление черновика |
+| GET | `/drafts/{draft_id}/tasks` | Связь черновика с задачами |
+| GET | `/documents/{doc_id}/tasks` | Связь документа с задачами |
+| POST | `/documents/{doc_id}/versions` | Создание версии документа |
+| GET | `/documents/{doc_id}/status` | Статус обработки документа |
+| GET | `/documents/{doc_id}/errors` | Ошибки обработки документа |
+| GET | `/documents/queue` | Очередь обработки документов |
+| GET | `/tasks` | Список всех задач |
+| GET | `/tasks/stats` | Статистика задач |
+| GET | `/tasks/{task_id}/status` | Статус задачи (longpoll) |
+| GET | `/tasks/{task_id}/steps` | Шаги задачи |
+| GET | `/health` | Health-check сервиса |
+
 ---
 
 ## Группа documents
