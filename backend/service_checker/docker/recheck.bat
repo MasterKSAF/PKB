@@ -9,13 +9,54 @@ REM   2. Проверяет наличие base-образа — если нет
 REM   3. Проверяет наличие модели TEI — если нет, скачивает
 REM   4. Проверяет, запущен ли контейнер TEI — если нет, запускает
 REM   5. Дропает схемы БД, сбрасывает Redis, перезапускает app
-REM   6. Запускает полный отчёт (health + coverage + pipeline)
+REM   6. Запускает отчёт (health + coverage + pipeline)
 REM
-REM PostgreSQL и Redis не перезапускаются — только чистим данные.
-REM TEI контейнер не перезапускается (тяжёлая модель), только если не запущен.
+REM Параметры:
+REM   --api service1,service2    Только указанные сервисы (через запятую)
+REM   --pipeline name1,name2     Только указанные пайплайны
+REM   --skip-coverage            Пропустить API Coverage
+REM   --skip-pipelines           Пропустить Pipeline тесты
+REM
+REM Примеры:
+REM   recheck.bat                                Полный прогон
+REM   recheck.bat --api gateway                  Только Gateway
+REM   recheck.bat --api gateway --skip-pipelines Только Gateway, без пайплайнов
+REM   recheck.bat --pipeline registry_lifecycle  Только один пайплайн
 REM =============================================================================
 
 cd /d "%~dp0"
+
+REM ── Парсинг параметров ─────────────────────────────────────────────────────
+set "CLI_ARGS="
+
+:parse_args
+if "%1"=="" goto end_parse
+if /i "%1"=="--api" (
+    set "CLI_ARGS=%CLI_ARGS% --services %2"
+    shift
+    shift
+    goto parse_args
+)
+if /i "%1"=="--pipeline" (
+    set "CLI_ARGS=%CLI_ARGS% --pipelines %2"
+    shift
+    shift
+    goto parse_args
+)
+if /i "%1"=="--skip-coverage" (
+    set "CLI_ARGS=%CLI_ARGS% --skip-coverage"
+    shift
+    goto parse_args
+)
+if /i "%1"=="--skip-pipelines" (
+    set "CLI_ARGS=%CLI_ARGS% --skip-pipelines"
+    shift
+    goto parse_args
+)
+REM Неизвестный параметр — игнорируем
+shift
+goto parse_args
+:end_parse
 
 echo === PKB Neuroassistant: Re-check ===
 echo.
@@ -126,8 +167,15 @@ if %ERRORLEVEL% neq 0 (
 echo     RAG Builder tables are now handled by Alembic migrations (no patching needed).
 
 echo.
-echo     Running full report...
-python -m service_checker docker --action full-report
+if defined CLI_ARGS (
+    echo     Running: python -m service_checker docker --action full-report%CLI_ARGS%
+    echo.
+    python -m service_checker docker --action full-report%CLI_ARGS%
+) else (
+    echo     Running full report...
+    echo.
+    python -m service_checker docker --action full-report
+)
 if %ERRORLEVEL% neq 0 (
     echo.
     echo WARNING: Some checks failed, check the report above.

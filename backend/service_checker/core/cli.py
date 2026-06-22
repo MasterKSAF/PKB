@@ -170,7 +170,23 @@ def parse_args() -> argparse.Namespace:
         "--services",
         nargs="*",
         default=[],
-        help="Список конкретных сервисов (по умолч. все)",
+        help="Список конкретных сервисов для coverage (по умолч. все)",
+    )
+    p_docker.add_argument(
+        "--pipelines",
+        nargs="*",
+        default=[],
+        help="Список конкретных пайплайнов (по умолч. все)",
+    )
+    p_docker.add_argument(
+        "--skip-coverage",
+        action="store_true",
+        help="Пропустить API Coverage",
+    )
+    p_docker.add_argument(
+        "--skip-pipelines",
+        action="store_true",
+        help="Пропустить Pipeline тесты",
     )
     p_docker.add_argument(
         "--db-only",
@@ -379,6 +395,9 @@ async def cmd_docker(
     build: bool = False,
     detach: bool = False,
     services: Optional[List[str]] = None,
+    pipelines: Optional[List[str]] = None,
+    skip_coverage: bool = False,
+    skip_pipelines: bool = False,
     db_only: bool = False,
 ):
     """Развернуть систему через Docker Compose."""
@@ -475,54 +494,63 @@ async def cmd_docker(
         # 2. Coverage
         cov_results: Optional[Dict[str, Any]] = None
         tester = None
-        try:
-            sys.path.insert(0, str(BACKEND_DIR))
-            from service_checker.core.api_coverage_test import ApiCoverageTester
-
-            log_info("Очистка supervisor-логов...")
+        if not skip_coverage:
             try:
-                subprocess.run(
-                    ["docker", "exec", "pkb-neuro", "bash", "-c",
-                     "truncate -s 0 /var/log/supervisor/*.log /var/log/supervisor/*.err 2>/dev/null || true"],
-                    capture_output=True, timeout=15,
-                )
-            except Exception:
-                pass
+                sys.path.insert(0, str(BACKEND_DIR))
+                from service_checker.core.api_coverage_test import ApiCoverageTester
 
-            log_info("Запуск API Coverage Test...")
-            tester = ApiCoverageTester(base_host="127.0.0.1")
-            cov_results = await tester.run_all()
-            cov_report = tester.generate_report(db_result=db_result)
-            cov_path = check_result_dir / "api_coverage.md"
-            cov_path.write_text(cov_report, encoding="utf-8")
-            log_ok(f"API Coverage отчёт сохранён: {cov_path}")
-        except Exception as e:
-            log_err(f"Ошибка coverage: {e}")
-        finally:
-            if tester:
-                await tester.close()
+                log_info("Очистка supervisor-логов...")
+                try:
+                    subprocess.run(
+                        ["docker", "exec", "pkb-neuro", "bash", "-c",
+                         "truncate -s 0 /var/log/supervisor/*.log /var/log/supervisor/*.err 2>/dev/null || true"],
+                        capture_output=True, timeout=15,
+                    )
+                except Exception:
+                    pass
+
+                cov_services = services or None
+                log_info(f"Запуск API Coverage Test..." + (f' (сервисы: {cov_services})' if cov_services else ''))
+                tester = ApiCoverageTester(services=cov_services, base_host="127.0.0.1")
+                cov_results = await tester.run_all()
+                cov_report = tester.generate_report(db_result=db_result)
+                cov_path = check_result_dir / "api_coverage.md"
+                cov_path.write_text(cov_report, encoding="utf-8")
+                log_ok(f"API Coverage отчёт сохранён: {cov_path}")
+            except Exception as e:
+                log_err(f"Ошибка coverage: {e}")
+            finally:
+                if tester:
+                    await tester.close()
+        else:
+            log_info("API Coverage пропущен (--skip-coverage)")
 
         # 3. Pipeline
         pipe_results: Dict[str, Any] = {}
         runner = None
-        try:
-            sys.path.insert(0, str(BACKEND_DIR))
-            from service_checker.pipelines import PIPELINE_REGISTRY, PipelineRunner
+        if not skip_pipelines:
+            try:
+                sys.path.insert(0, str(BACKEND_DIR))
+                from service_checker.pipelines import PIPELINE_REGISTRY, PipelineRunner
 
-            log_info("Запуск Pipeline Testing...")
-            runner = PipelineRunner(base_host="127.0.0.1")
-            for name, cls in sorted(PIPELINE_REGISTRY.items()):
-                pipeline = cls()
-                result = await runner.run(pipeline, skip_ping=False)
-                pipe_results[name] = result
+                log_info("Запуск Pipeline Testing...")
+                runner = PipelineRunner(base_host="127.0.0.1")
+                for name, cls in sorted(PIPELINE_REGISTRY.items()):
+                    if pipelines and name not in pipelines:
+                        continue
+                    pipeline = cls()
+                    result = await runner.run(pipeline, skip_ping=False)
+                    pipe_results[name] = result
 
-            if pipe_results:
-                log_ok(f"Pipeline тесты завершены: {len(pipe_results)} пайплайнов")
-        except Exception as e:
-            log_err(f"Ошибка pipeline: {e}")
-        finally:
-            if runner:
-                await runner.close()
+                if pipe_results:
+                    log_ok(f"Pipeline тесты завершены: {len(pipe_results)} пайплайнов")
+            except Exception as e:
+                log_err(f"Ошибка pipeline: {e}")
+            finally:
+                if runner:
+                    await runner.close()
+        else:
+            log_info("Pipeline тесты пропущены (--skip-pipelines)")
 
         # 4. Full report
         if cov_results or pipe_results:
@@ -827,6 +855,9 @@ async def main():
             build=args.build,
             detach=args.detach,
             services=args.services,
+            pipelines=args.pipelines,
+            skip_coverage=args.skip_coverage,
+            skip_pipelines=args.skip_pipelines,
             db_only=args.db_only,
         )
         return

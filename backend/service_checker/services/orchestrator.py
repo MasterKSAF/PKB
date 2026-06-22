@@ -44,7 +44,8 @@ def get_service_def() -> ServiceDef:
         # 2. OR-11: POST /drafts — единая точка входа
         EndpointDef("POST", f"{API_PREFIX}/drafts/", "drafts",
             "Создать черновик (prepare)",
-            form_body={"document_key": "coverage-doc-key", "title": "Coverage черновик"},
+            form_body={"document_key": "coverage-doc-key", "title": "Coverage черновик",
+                      "source_type": "GOST"},
             extract_keys=["draft_id", "task_id"],
             is_preparation=True,
             expected_status=202),
@@ -94,7 +95,8 @@ def get_service_def() -> ServiceDef:
         # OR-14: MIME-ветвление — image/* → OCR, application/pdf → Parser
         EndpointDef("POST", f"{API_PREFIX}/drafts/", "drafts",
             "Создать черновик (единая точка входа, MIME-ветвление OCR/Parser)",
-            form_body={"document_key": "test-doc-key", "title": "Тестовый черновик"},
+            form_body={"document_key": "test-doc-key", "title": "Тестовый черновик",
+                      "source_type": "GOST"},
             response_schema={"draft_id": int}),
         EndpointDef("GET", f"{API_PREFIX}/drafts/", "drafts",
             "Список черновиков",

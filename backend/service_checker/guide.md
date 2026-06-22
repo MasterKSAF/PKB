@@ -26,3 +26,20 @@ def client(self, value: httpx.AsyncClient) -> None:
 **Где применяется**:
 - `pipelines/base.py` — `PipelineRunner`
 - `core/api_coverage_test.py` — `ApiCoverageTester`
+
+---
+
+## Проверка состояния сервисов в Docker
+
+Любая проверка Docker (статус сервисов, coverage, pipeline-тесты) запускается **только** через:
+
+```
+cd docker && recheck.bat
+```
+
+**Что делает**: чистит БД → перезапускает app → ждёт supervisor → запускает полный отчёт.
+
+**Почему**: checker подразумевает, что внутри контейнера все 11 сервисов под supervisor работают с чистыми данными. Нельзя запускать checker напрямую (`python _run_gateway_coverage.py`), потому что:
+- supervisor может быть не готов
+- данные могут быть неконсистентны
+- prepare-шаги ожидают чистую БД
