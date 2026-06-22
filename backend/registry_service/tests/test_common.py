@@ -1,7 +1,7 @@
 import pytest
 
 def test_get_enums(client):
-    response = client.get("/api/v1/registry/enums/")
+    response = client.get("/api/v1/registry/enums")
     assert response.status_code == 200
     data = response.json()
     assert "data" in data
@@ -11,7 +11,7 @@ def test_get_enums(client):
     assert "era" in data["data"]
 
 def test_get_enums_structure(client):
-    response = client.get("/api/v1/registry/enums/")
+    response = client.get("/api/v1/registry/enums")
     assert response.status_code == 200
     data = response.json()
 
@@ -22,7 +22,7 @@ def test_get_enums_structure(client):
     assert "draft" in data["data"]["document_status"]
 
 def test_get_stats_empty(client):
-    response = client.get("/api/v1/registry/stats/")
+    response = client.get("/api/v1/registry/stats")
     assert response.status_code == 200
     data = response.json()
     assert "data" in data
@@ -36,36 +36,36 @@ def test_get_stats_empty(client):
     assert data["data"]["documents_total"] == 0
 
 def test_get_stats_with_data(client):
-    client.post("/api/v1/registry/classifiers/", json={
+    client.post("/api/v1/registry/classifiers", json={
         "classifier_system": "MKS",
         "code": "STATS_01",
         "full_name": "Stats Classifier"
     })
-    client.post("/api/v1/registry/classifiers/", json={
+    client.post("/api/v1/registry/classifiers", json={
         "classifier_system": "MKS",
         "code": "STATS_02",
         "full_name": "Stats Classifier 2"
     })
 
-    client.post("/api/v1/registry/terminology/", json={
+    client.post("/api/v1/registry/terminology", json={
         "raw_term": "Stats Term",
         "standard_term": "Stats Term",
         "normalized_value": "stats term",
         "term_type": "term"
     })
 
-    client.post("/api/v1/registry/documents/", json={
+    client.post("/api/v1/registry/documents", json={
         "title": "Stats Document",
         "status": "draft",
         "classifier_system": "MKS"
     })
-    client.post("/api/v1/registry/documents/", json={
+    client.post("/api/v1/registry/documents", json={
         "title": "Stats Document 2",
         "status": "approved",
         "classifier_system": "MKS"
     })
 
-    response = client.get("/api/v1/registry/stats/")
+    response = client.get("/api/v1/registry/stats")
     assert response.status_code == 200
     data = response.json()
 
@@ -75,12 +75,12 @@ def test_get_stats_with_data(client):
     assert isinstance(data["data"]["documents_by_status"], dict)
 
 def test_get_stats_status_breakdown(client):
-    client.post("/api/v1/registry/documents/", json={"title": "Draft Doc Status", "status": "draft", "classifier_system": "MKS"})
-    client.post("/api/v1/registry/documents/", json={"title": "Draft Doc Status 2", "status": "draft", "classifier_system": "MKS"})
-    client.post("/api/v1/registry/documents/", json={"title": "Approved Doc Status", "status": "approved", "classifier_system": "MKS"})
-    client.post("/api/v1/registry/documents/", json={"title": "Processing Doc Status", "status": "processing", "classifier_system": "MKS"})
+    client.post("/api/v1/registry/documents", json={"title": "Draft Doc Status", "status": "draft", "classifier_system": "MKS"})
+    client.post("/api/v1/registry/documents", json={"title": "Draft Doc Status 2", "status": "draft", "classifier_system": "MKS"})
+    client.post("/api/v1/registry/documents", json={"title": "Approved Doc Status", "status": "approved", "classifier_system": "MKS"})
+    client.post("/api/v1/registry/documents", json={"title": "Processing Doc Status", "status": "processing", "classifier_system": "MKS"})
 
-    response = client.get("/api/v1/registry/stats/")
+    response = client.get("/api/v1/registry/stats")
     assert response.status_code == 200
     data = response.json()
 

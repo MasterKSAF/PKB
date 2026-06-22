@@ -15,6 +15,7 @@ def get_classifiers(
     status: Optional[str] = None,
     full_name: Optional[str] = None,
     parent_code: Optional[str] = None,
+    code: Optional[str] = None,
 ) -> tuple[List[Classifier], int]:
     query = db.query(Classifier)
 
@@ -29,6 +30,9 @@ def get_classifiers(
 
     if parent_code:
         query = query.filter(Classifier.parent_code == parent_code)
+
+    if code:
+        query = query.filter(Classifier.code.ilike(f'%{code}%'))
 
     total = query.count()
     skip = (page - 1) * page_size
@@ -74,7 +78,7 @@ def update_classifier(db: Session, classifier_system: str, code: str, **kwargs) 
         return None
 
     for key, value in kwargs.items():
-        if value is not None and hasattr(classifier, key):
+        if hasattr(classifier, key):
             setattr(classifier, key, value)
 
     db.commit()
@@ -100,9 +104,30 @@ def delete_classifier(db: Session, classifier_system: str, code: str, force: boo
         doc_count = db.query(Document).filter(Document.mks_oks_code == code).count()
     elif classifier_system == 'OKSTU':
         doc_count = db.query(Document).filter(Document.okstu_code == code).count()
+    elif classifier_system == 'UDC':
+        doc_count = db.query(Document).filter(Document.udc == code).count()
+    elif classifier_system == 'EXTERNAL':
+        doc_count = db.query(Document).filter(Document.classifier_code == code).count()
     
     if doc_count and not force:
         raise ValueError('HAS_DOCUMENTS')
+
+    if force:
+        # Nullify parent_code for direct children to avoid FK violation
+        db.query(Classifier).filter(
+            Classifier.classifier_system == classifier_system,
+            Classifier.parent_code == classifier.code
+        ).update({Classifier.parent_code: None}, synchronize_session=False)
+
+        # Nullify document references
+        if classifier_system == 'MKS':
+            db.query(Document).filter(Document.mks_oks_code == code).update({Document.mks_oks_code: None}, synchronize_session=False)
+        elif classifier_system == 'OKSTU':
+            db.query(Document).filter(Document.okstu_code == code).update({Document.okstu_code: None}, synchronize_session=False)
+        elif classifier_system == 'UDC':
+            db.query(Document).filter(Document.udc == code).update({Document.udc: None}, synchronize_session=False)
+        elif classifier_system == 'EXTERNAL':
+            db.query(Document).filter(Document.classifier_code == code).update({Document.classifier_code: None}, synchronize_session=False)
 
     db.delete(classifier)
     db.commit()
@@ -169,12 +194,16 @@ def get_classifier_tree(
         if parent:
             parent_to_children.setdefault(parent, []).append(node)
 
+    max_depth_reached_flag = [False]
+
     # Recursive build function
     def build_tree(node, depth):
+        children_nodes = parent_to_children.get(node.code, [])
         if depth >= max_depth:
+            if children_nodes:
+                max_depth_reached_flag[0] = True
             node.children = []
             return node
-        children_nodes = parent_to_children.get(node.code, [])
         children_nodes.sort(key=lambda x: x.code)
         node.children = []
         for child in children_nodes:
@@ -196,7 +225,7 @@ def get_classifier_tree(
     for root in roots:
         tree_roots.append(build_tree(root, 1))
 
-    return tree_roots
+    return tree_roots, max_depth_reached_flag[0]
 
 
 def _classifier_lookup_status(db: Session, classifier_system: str, code: Optional[str]) -> str:

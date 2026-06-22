@@ -10,7 +10,7 @@ def test_document_creation_quarantines_missing_codes(client, db_session):
         "okstu_code": "8888",      # missing
         "udc": "555.5"             # missing
     }
-    response = client.post("/api/v1/registry/documents/", json=payload)
+    response = client.post("/api/v1/registry/documents", json=payload)
     assert response.status_code == 201
     
     # Verify that the missing codes were quarantined
@@ -30,7 +30,7 @@ def test_document_creation_quarantines_missing_codes(client, db_session):
 
 def test_document_creation_does_not_quarantine_existing_codes(client, db_session):
     # Add an existing MKS classifier
-    client.post("/api/v1/registry/classifiers/", json={
+    client.post("/api/v1/registry/classifiers", json={
         "classifier_system": "MKS",
         "code": "12.345",
         "full_name": "Existing Classifier"
@@ -43,7 +43,7 @@ def test_document_creation_does_not_quarantine_existing_codes(client, db_session
         "mks_oks_code": "12.345",  # existing
         "okstu_code": "9999",      # missing
     }
-    response = client.post("/api/v1/registry/documents/", json=payload)
+    response = client.post("/api/v1/registry/documents", json=payload)
     assert response.status_code == 201
     
     # Only the missing one should be in quarantine
@@ -58,7 +58,7 @@ def test_document_update_quarantines_new_missing_codes(client, db_session):
         "title": "Initial Doc",
         "doc_code": "INIT-001",
     }
-    response = client.post("/api/v1/registry/documents/", json=payload)
+    response = client.post("/api/v1/registry/documents", json=payload)
     assert response.status_code == 201
     doc_id = response.json()["data"]["id"]
     
@@ -69,7 +69,7 @@ def test_document_update_quarantines_new_missing_codes(client, db_session):
     update_payload = {
         "mks_oks_code": "77.777"
     }
-    response = client.put(f"/api/v1/registry/documents/{doc_id}/", json=update_payload)
+    response = client.put(f"/api/v1/registry/documents/{doc_id}", json=update_payload)
     assert response.status_code == 200
     
     # Verify that the missing code was quarantined

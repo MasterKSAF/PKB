@@ -20,7 +20,7 @@ routes = APIRouter()
 # Documents - Group 3
 # ============================================================================
 
-@routes.get('/registry/documents/')
+@routes.get('/registry/documents')
 def list_documents(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
@@ -96,7 +96,7 @@ def list_documents(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.get('/registry/documents/export/')
+@routes.get('/registry/documents/export')
 def export_documents(
     page: int = Query(1, ge=1),
     page_size: int = Query(1000, ge=1, le=10000),
@@ -129,8 +129,8 @@ def export_documents(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.post('/registry/documents/import/')
-def import_documents(
+@routes.post('/registry/documents/import')
+async def import_documents(
     mapping: str = Query(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
@@ -149,8 +149,69 @@ def import_documents(
                 detail={'error': {'code': 'INVALID_FILE', 'message': 'No file uploaded'}},
             )
 
+        import csv
+        import json
+        import io
+
+        try:
+            col_map = json.loads(mapping)
+        except Exception:
+            col_map = {}
+
+        contents = await file.read()
+        text_data = contents.decode('utf-8')
+        f = io.StringIO(text_data)
+        reader = csv.DictReader(f)
+        
+        inserted = 0
+        updated = 0
+        errors = []
+        
+        for idx, row in enumerate(reader, start=2):
+            title_col = col_map.get('title')
+            code_col = col_map.get('doc_code')
+            era_col = col_map.get('era')
+            
+            title_val = row.get(title_col) if title_col else None
+            code_val = row.get(code_col) if code_col else None
+            era_val = row.get(era_col) if era_col else None
+            
+            if not title_val or not code_val:
+                errors.append({"row": idx, "code": code_val or "", "message": "Missing title or doc_code"})
+                continue
+                
+            kwargs = {}
+            for schema_key, csv_col in col_map.items():
+                if schema_key not in ('title', 'doc_code') and csv_col in row:
+                    kwargs[schema_key] = row.get(csv_col)
+                    
+            try:
+                from api.v1.crud.document import compute_title_hash_sha256
+                title_hash = compute_title_hash_sha256(
+                    era_val,
+                    kwargs.get('source_type'),
+                    kwargs.get('mks_oks_code'),
+                    kwargs.get('okstu_code'),
+                    code_val,
+                    title_val.strip().lower()
+                )
+                
+                existing = db.query(Document).filter(Document.title_hash_sha256 == title_hash).first()
+                if existing:
+                    document_crud.update_document(db, str(existing.id), title=title_val, **kwargs)
+                    updated += 1
+                else:
+                    document_crud.create_document(db, doc_code=code_val, title=title_val, **kwargs)
+                    inserted += 1
+            except Exception as e:
+                errors.append({"row": idx, "code": code_val, "message": str(e)})
+
         return {
-            'data': {'message': 'Import accepted'},
+            'data': {
+                'inserted': inserted,
+                'updated': updated,
+                'errors': errors
+            },
         }
     except HTTPException:
         raise
@@ -159,7 +220,7 @@ def import_documents(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.post('/registry/documents/check-uniqueness/')
+@routes.post('/registry/documents/check-uniqueness')
 def check_documents_uniqueness(
     payload: dict,
     db: Session = Depends(get_db),
@@ -193,7 +254,7 @@ def check_documents_uniqueness(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.get('/registry/documents/{document_id}/')
+@routes.get('/registry/documents/{document_id}')
 def get_document(
     document_id: str,
     db: Session = Depends(get_db),
@@ -225,7 +286,7 @@ def get_document(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.get('/registry/documents/{document_id}/sections/')
+@routes.get('/registry/documents/{document_id}/sections')
 def document_sections(
     document_id: str,
     db: Session = Depends(get_db),
@@ -250,7 +311,7 @@ def document_sections(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.post('/registry/documents/')
+@routes.post('/registry/documents')
 def create_document(
     payload: dict,
     db: Session = Depends(get_db),
@@ -305,6 +366,7 @@ def create_document(
             'adoption_date', 'effective_from', 'replaces', 'status_note', 'file_hash_sha256',
             'title_hash_sha256', 'file_size_bytes', 'processing_status', 'chunk_count',
             'successor_doc_id', 'predecessor_doc_id', 'created_by', 'updated_by',
+            'classifier_code', 'industry_code', 'enterprise_id',
         }}
 
         existing_hash = clean_payload.get('title_hash_sha256')
@@ -339,7 +401,7 @@ def create_document(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.put('/registry/documents/{document_id}/')
+@routes.put('/registry/documents/{document_id}')
 def update_document(
     document_id: str,
     payload: dict,
@@ -374,7 +436,7 @@ def update_document(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.patch('/registry/documents/{document_id}/status/')
+@routes.patch('/registry/documents/{document_id}/status')
 def patch_document_status(
     document_id: str,
     payload: dict,
@@ -435,7 +497,7 @@ def patch_document_status(
 
 
 
-@routes.patch('/registry/documents/{document_id}/')
+@routes.patch('/registry/documents/{document_id}')
 def patch_document(
     document_id: str,
     payload: dict,
@@ -470,7 +532,7 @@ def patch_document(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.delete('/registry/documents/{document_id}/')
+@routes.delete('/registry/documents/{document_id}')
 def delete_document(
     document_id: str,
     db: Session = Depends(get_db),
@@ -502,7 +564,7 @@ def delete_document(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.get('/registry/documents/{document_id}/history/')
+@routes.get('/registry/documents/{document_id}/history')
 def document_history(
     document_id: str,
     db: Session = Depends(get_db),
@@ -542,7 +604,7 @@ def document_history(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.get('/registry/documents/{document_id}/succession/')
+@routes.get('/registry/documents/{document_id}/succession')
 def document_succession(
     document_id: str,
     db: Session = Depends(get_db),
@@ -570,7 +632,7 @@ def document_succession(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.post('/registry/classifiers/')
+@routes.post('/registry/classifiers')
 def create_classifier(
     payload: dict,
     db: Session = Depends(get_db),
@@ -606,6 +668,20 @@ def create_classifier(
                 detail={'error': {'code': 'DUPLICATE_CODE', 'message': 'Classifier already exists'}},
             )
 
+        if parent_code:
+            parent = classifier_crud.get_classifier(db, classifier_system, parent_code)
+            if not parent:
+                parent_in_any = db.query(Classifier).filter(Classifier.code == parent_code).first()
+                if parent_in_any:
+                    raise HTTPException(
+                        status_code=409,
+                        detail={'error': {'code': 'CROSS_SYSTEM_PARENT', 'message': f'Parent classifier exists in another system: {parent_in_any.classifier_system}'}},
+                    )
+                raise HTTPException(
+                    status_code=404,
+                    detail={'error': {'code': 'PARENT_NOT_FOUND', 'message': 'Parent classifier not found'}},
+                )
+
         classifier = classifier_crud.create_classifier(
             db,
             classifier_system=classifier_system,
@@ -629,7 +705,7 @@ def create_classifier(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.get('/registry/classifiers/')
+@routes.get('/registry/classifiers')
 def list_classifiers(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
@@ -637,6 +713,7 @@ def list_classifiers(
     status: Optional[str] = None,
     full_name: Optional[str] = None,
     parent_code: Optional[str] = None,
+    code: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
     log_event('INFO', '/registry/classifiers/', None, None)
@@ -652,6 +729,7 @@ def list_classifiers(
             status=status,
             full_name=full_name,
             parent_code=parent_code,
+            code=code,
         )
 
         data = [ClassifierSchema.model_validate(item).model_dump(mode='json', by_alias=True, exclude_none=True) for item in classifiers]
@@ -669,7 +747,7 @@ def list_classifiers(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.get('/registry/classifiers/tree/')
+@routes.get('/registry/classifiers/tree')
 def classifier_tree(
     classifier_system: str = Query(...),
     root_code: Optional[str] = None,
@@ -683,20 +761,24 @@ def classifier_tree(
     Docs: docs/api/registry_service_api.md §1.2 - Дерево (иерархическое)
     """
     try:
-        classifiers = classifier_crud.get_classifier_tree(
+        classifiers, max_depth_reached = classifier_crud.get_classifier_tree(
             db, classifier_system, root_code=root_code, search=search, max_depth=max_depth, status=status
         )
         data = [ClassifierSchema.model_validate(item).model_dump(mode='json', by_alias=True, exclude_none=True) for item in classifiers]
         return {
             'data': data,
+            'meta': {
+                'total': len(data),
+                'max_depth_reached': max_depth_reached,
+            }
         }
     except Exception as e:
         log_event('ERROR', '/registry/classifiers/tree/', None, None, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.post('/registry/classifiers/import/')
-def import_classifiers(
+@routes.post('/registry/classifiers/import')
+async def import_classifiers(
     classifier_system: str = Query(...),
     mapping: str = Query(...),
     file: UploadFile = File(...),
@@ -713,8 +795,55 @@ def import_classifiers(
                 detail={'error': {'code': 'INVALID_FILE', 'message': 'No file uploaded'}},
             )
 
+        import csv
+        import json
+        import io
+
+        try:
+            col_map = json.loads(mapping)
+        except Exception:
+            col_map = {}
+
+        contents = await file.read()
+        text_data = contents.decode('utf-8')
+        f = io.StringIO(text_data)
+        reader = csv.DictReader(f)
+        
+        inserted = 0
+        updated = 0
+        errors = []
+        
+        for idx, row in enumerate(reader, start=2):
+            code_col = col_map.get('code')
+            name_col = col_map.get('full_name')
+            parent_col = col_map.get('parent_code')
+            
+            code_val = row.get(code_col) if code_col else None
+            name_val = row.get(name_col) if name_col else None
+            parent_val = row.get(parent_col) if parent_col else None
+            
+            if not code_val or not name_val:
+                errors.append({"row": idx, "code": code_val or "", "message": "Missing code or full_name"})
+                continue
+                
+            existing = classifier_crud.get_classifier(db, classifier_system, code_val)
+            if existing:
+                classifier_crud.update_classifier(db, classifier_system, code_val, full_name=name_val, parent_code=parent_val)
+                updated += 1
+            else:
+                try:
+                    classifier_crud.create_classifier(db, classifier_system, code_val, full_name=name_val, parent_code=parent_val)
+                    inserted += 1
+                except Exception as e:
+                    errors.append({"row": idx, "code": code_val, "message": str(e)})
+
         return {
-            'data': {'message': 'File for Import accepted - not implemented yet'},
+            'data': {
+                'classifier_system': classifier_system,
+                'inserted': inserted,
+                'updated': updated,
+                'errors': errors
+            },
         }
     except HTTPException:
         raise
@@ -723,7 +852,7 @@ def import_classifiers(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.get('/registry/classifiers/pending/')
+@routes.get('/registry/classifiers/pending')
 def list_classifier_pending(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
@@ -776,7 +905,7 @@ def list_classifier_pending(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.post('/registry/classifiers/pending/{pending_id}/accept/')
+@routes.post('/registry/classifiers/pending/{pending_id}/accept')
 def accept_classifier_pending(
     pending_id: str,
     payload: dict,
@@ -824,7 +953,7 @@ def accept_classifier_pending(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.post('/registry/classifiers/pending/{pending_id}/reject/')
+@routes.post('/registry/classifiers/pending/{pending_id}/reject')
 def reject_classifier_pending(
     pending_id: str,
     payload: dict,
@@ -853,7 +982,7 @@ def reject_classifier_pending(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.post('/registry/classifiers/validate/')
+@routes.post('/registry/classifiers/validate')
 def validate_classifiers(
     payload: dict,
     db: Session = Depends(get_db),
@@ -877,7 +1006,7 @@ def validate_classifiers(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.get('/registry/classifiers/{code}/')
+@routes.get('/registry/classifiers/{code}')
 def get_classifier(
     code: str,
     classifier_system: str = Query(...),
@@ -895,6 +1024,13 @@ def get_classifier(
                 detail={'error': {'code': 'CLASSIFIER_NOT_FOUND', 'message': 'Classifier not found'}},
             )
 
+        # Retrieve first-level children
+        children = db.query(Classifier).filter(
+            Classifier.classifier_system == classifier_system,
+            Classifier.parent_code == code
+        ).all()
+        classifier.children = children
+
         return {
             'data': ClassifierSchema.model_validate(classifier).model_dump(mode='json', by_alias=True, exclude_none=True),
         }
@@ -905,7 +1041,7 @@ def get_classifier(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.put('/registry/classifiers/{code}/')
+@routes.put('/registry/classifiers/{code}')
 def update_classifier(
     code: str,
     payload: dict,
@@ -917,6 +1053,21 @@ def update_classifier(
     Docs: docs/api/registry_service_api.md §1.5 - Обновить
     """
     try:
+        parent_code = payload.get('parent_code')
+        if parent_code:
+            parent = classifier_crud.get_classifier(db, classifier_system, parent_code)
+            if not parent:
+                parent_in_any = db.query(Classifier).filter(Classifier.code == parent_code).first()
+                if parent_in_any:
+                    raise HTTPException(
+                        status_code=409,
+                        detail={'error': {'code': 'CROSS_SYSTEM_PARENT', 'message': f'Parent classifier exists in another system: {parent_in_any.classifier_system}'}},
+                    )
+                raise HTTPException(
+                    status_code=404,
+                    detail={'error': {'code': 'PARENT_NOT_FOUND', 'message': 'Parent classifier not found'}},
+                )
+
         classifier = classifier_crud.update_classifier(db, classifier_system, code, **payload)
         if not classifier:
             raise HTTPException(
@@ -934,7 +1085,7 @@ def update_classifier(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.patch('/registry/classifiers/{code}/')
+@routes.patch('/registry/classifiers/{code}')
 def patch_classifier(
     code: str,
     payload: dict,
@@ -946,6 +1097,21 @@ def patch_classifier(
     Docs: docs/api/registry_service_api.md §1.6 - Частичное обновление
     """
     try:
+        parent_code = payload.get('parent_code')
+        if parent_code:
+            parent = classifier_crud.get_classifier(db, classifier_system, parent_code)
+            if not parent:
+                parent_in_any = db.query(Classifier).filter(Classifier.code == parent_code).first()
+                if parent_in_any:
+                    raise HTTPException(
+                        status_code=409,
+                        detail={'error': {'code': 'CROSS_SYSTEM_PARENT', 'message': f'Parent classifier exists in another system: {parent_in_any.classifier_system}'}},
+                    )
+                raise HTTPException(
+                    status_code=404,
+                    detail={'error': {'code': 'PARENT_NOT_FOUND', 'message': 'Parent classifier not found'}},
+                )
+
         classifier = classifier_crud.update_classifier(db, classifier_system, code, **payload)
         if not classifier:
             raise HTTPException(
@@ -963,7 +1129,7 @@ def patch_classifier(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.delete('/registry/classifiers/{code}/')
+@routes.delete('/registry/classifiers/{code}')
 def delete_classifier(
     code: str,
     classifier_system: str = Query(...),
@@ -1003,7 +1169,7 @@ def delete_classifier(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.post('/registry/terminology/')
+@routes.post('/registry/terminology')
 def create_terminology(
     payload: dict,
     db: Session = Depends(get_db),
@@ -1062,7 +1228,7 @@ def create_terminology(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.get('/registry/terminology/')
+@routes.get('/registry/terminology')
 def list_terminology(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
@@ -1107,7 +1273,7 @@ def list_terminology(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.get('/registry/terminology/normalize/')
+@routes.get('/registry/terminology/normalize')
 def normalize_terminology(
     term: str = Query(...),
     db: Session = Depends(get_db),
@@ -1136,8 +1302,8 @@ def normalize_terminology(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.post('/registry/terminology/import/')
-def import_terminology(
+@routes.post('/registry/terminology/import')
+async def import_terminology(
     mapping: str = Query(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
@@ -1153,8 +1319,60 @@ def import_terminology(
                 detail={'error': {'code': 'INVALID_FILE', 'message': 'No file uploaded'}},
             )
 
+        import csv
+        import json
+        import io
+
+        try:
+            col_map = json.loads(mapping)
+        except Exception:
+            col_map = {}
+
+        contents = await file.read()
+        text_data = contents.decode('utf-8')
+        f = io.StringIO(text_data)
+        reader = csv.DictReader(f)
+        
+        inserted = 0
+        updated = 0
+        errors = []
+        
+        for idx, row in enumerate(reader, start=2):
+            raw_col = col_map.get('raw_term')
+            std_col = col_map.get('standard_term') or raw_col
+            type_col = col_map.get('term_type')
+            
+            raw_val = row.get(raw_col) if raw_col else None
+            std_val = row.get(std_col) if std_col else raw_val
+            type_val = row.get(type_col) if type_col else 'term'
+            
+            if not raw_val:
+                errors.append({"row": idx, "code": "", "message": "Missing raw_term"})
+                continue
+                
+            existing = terminology_crud.get_terminology_by_raw_term(db, raw_val)
+            if existing:
+                terminology_crud.update_terminology(db, str(existing.id), standard_term=std_val, term_type=type_val)
+                updated += 1
+            else:
+                try:
+                    terminology_crud.create_terminology(
+                        db,
+                        raw_term=raw_val,
+                        standard_term=std_val,
+                        normalized_value=raw_val.lower(),
+                        term_type=type_val
+                    )
+                    inserted += 1
+                except Exception as e:
+                    errors.append({"row": idx, "code": raw_val, "message": str(e)})
+
         return {
-            'data': {'message': 'Import accepted'},
+            'data': {
+                'inserted': inserted,
+                'updated': updated,
+                'errors': errors
+            },
         }
     except HTTPException:
         raise
@@ -1163,7 +1381,7 @@ def import_terminology(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.get('/registry/terminology/{term_id}/')
+@routes.get('/registry/terminology/{term_id}')
 def get_terminology(
     term_id: str,
     db: Session = Depends(get_db),
@@ -1190,7 +1408,7 @@ def get_terminology(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.put('/registry/terminology/{term_id}/')
+@routes.put('/registry/terminology/{term_id}')
 def update_terminology(
     term_id: str,
     payload: dict,
@@ -1218,7 +1436,7 @@ def update_terminology(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.patch('/registry/terminology/{term_id}/')
+@routes.patch('/registry/terminology/{term_id}')
 def patch_terminology(
     term_id: str,
     payload: dict,
@@ -1246,7 +1464,7 @@ def patch_terminology(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.delete('/registry/terminology/{term_id}/')
+@routes.delete('/registry/terminology/{term_id}')
 def delete_terminology(
     term_id: str,
     db: Session = Depends(get_db),
@@ -1272,7 +1490,7 @@ def delete_terminology(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.get('/registry/enums/')
+@routes.get('/registry/enums')
 def get_enums(db: Session = Depends(get_db)):
     """
     Docs: docs/api/registry_service_api.md — GET /registry/enums/ (Enums / reference values)
@@ -1287,7 +1505,7 @@ def get_enums(db: Session = Depends(get_db)):
     return {'data': data}
 
 
-@routes.get('/registry/stats/')
+@routes.get('/registry/stats')
 def get_stats(db: Session = Depends(get_db)):
     """
     Docs: docs/api/registry_service_api.md — GET /registry/stats/ (Statistics)
@@ -1348,7 +1566,7 @@ def get_stats(db: Session = Depends(get_db)):
     }
 
 
-@routes.get('/health/')
+@routes.get('/health')
 def health_check():
     """Health check endpoint.
 

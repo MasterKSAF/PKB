@@ -96,7 +96,7 @@ def update_terminology(db: Session, term_id: str, **kwargs) -> Optional[Terminol
         return None
 
     for key, value in kwargs.items():
-        if value is not None and hasattr(term, key):
+        if hasattr(term, key):
             setattr(term, key, value)
 
     db.commit()

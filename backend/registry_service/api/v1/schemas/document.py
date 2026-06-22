@@ -17,6 +17,9 @@ class DocumentSchema(BaseModel):
     mks_oks_code: Optional[str] = None
     status: Optional[str] = None
     okstu_code: Optional[str] = None
+    mks_name: Optional[str] = None
+    okstu_name: Optional[str] = None
+    total_versions: Optional[int] = None
     udc: Optional[str] = None
     era: Optional[str] = None
     validity_status: Optional[str] = None
