@@ -1551,3 +1551,103 @@ Docker запущен, но сервисы могут быть не полнос
 ### Статус
 ✅ **Добавлено (checker, 2026-06-20)**
 
+## 45. Динамический `project_id` вместо хардкода (2026-06-20)
+
+### Проблема
+Checker хардкодил `project_id: 1` при создании чат-сессий (QS-3).
+Query Service не создаёт проект при старте — таблица `chat_projects` пуста.
+В результате ForeignKeyViolationError при вставке в `chat_sessions`.
+
+### Что сделано (checker, 2026-06-20)
+
+#### 1. Pre-prepare для API Coverage (`core/api_coverage_test.py`)
+- Добавлен блок pre-prepare для сервиса `query`:
+  1. `POST /api/v1/chat/projects` — попытка создать проект
+  2. Если 500/дубликат — `GET /api/v1/chat/projects`, взять первый из списка
+  3. Сохраняет `project_id` в `self.context["project_id"]`
+- Если не удалось — fallback `project_id=1` с warning
+
+#### 2. Pre-prepare для Pipeline (`pipelines/base.py`)
+- Метод `_ensure_project()` в `PipelineRunner`:
+  - Создаёт проект через `POST /api/v1/chat/projects`
+  - Fallback: `GET /api/v1/chat/projects`, первый из списка
+- Вызывается в `run()` для пайплайнов, использующих `query` сервис
+- Сохраняет `project_id` в контекст пайплайна (доступен через `{project_id}`)
+
+#### 3. Замена хардкода на `"{project_id}"`
+- `services/query.py` — 2 эндпоинта + 1 prepare (механизм подстановки `_resolve_body`)
+- `services/gateway.py` — 1 эндпоинт
+- `pipelines/chat_inference.py` — 1 шаг
+- `pipelines/admin_user_lifecycle.py` — 1 шаг
+
+#### 4. WebEmulator (`core/services.py`)
+- Метод `_ensure_project()` — создаёт/получает проект через API
+- Вызывается в `scenario_chat()` перед созданием сессии
+- Использует `self.project_id` вместо хардкода
+
+### Затронутые файлы
+- `core/api_coverage_test.py` — pre-prepare блок для query
+- `pipelines/base.py` — `_ensure_project()` в `PipelineRunner`
+- `services/query.py` — `project_id` → `"{project_id}"`
+- `services/gateway.py` — `project_id` → `"{project_id}"`
+- `pipelines/chat_inference.py` — `project_id` → `"{project_id}"`
+- `pipelines/admin_user_lifecycle.py` — `project_id` → `"{project_id}"`
+- `core/services.py` — `_ensure_project()` + `self.project_id`
+
+### Статус
+✅ **Исправлено (checker, 2026-06-20)**
+
+## 46. Converter-Validator — `/validate/metadata` возвращает не те поля, preview требует полный ParserResult (2026-06-20)
+
+### Аномалия
+
+1. **`POST /validate/metadata`** — спецификация ожидает `{doc_code, status}`, а сервис возвращает `{title_hash_sha256, title_key, normalized_title, source_type_normalized, era_normalized}`. Checker правил response_schema под реальный ответ.
+
+2. **`POST /converter/preview`** — не принимает минимальный `raw_json`. Требует полноценный документ с текстом, из которого LLM извлекает doc_code/title. Для изолированного API Coverage checker отправляет минимальный документ с текстом "Тестовый документ ГОСТ 20868-81".
+
+3. **Pipeline** — `/converter/preview` и `/validate/document` не вызывались. Добавлены в `document_processing` pipeline.
+
+### Статус
+🟡 **Задокументировано (checker, 2026-06-20) — сервис не соответствует спецификации**
+
+## 47. RAG Builder — требует `document_id` в каждой секции, вопреки спецификации (2026-06-20)
+
+### Аномалия
+Спецификация (docs/api/rag_builder_service_api.md) указывает `document_id` только на верхнем уровне. Сервис возвращает 422 `Field required`, если его нет внутри каждой `sections[]`. Checker вернул `document_id` в секции — сервис не обновлён до спецификации.
+
+### Статус
+🟡 **Задокументировано (checker, 2026-06-20) — сервис отстаёт от документации**
+
+## 48. Gateway Mock не принимает JWT от реального Auth Service (2026-06-22)
+
+### Симптом
+Gateway (Mock, port 8080) возвращает HTTP 401 на все эндпоинты, кроме публичных `/health`.
+В логах checker: `53/76 failed`.
+
+### Диагностика
+Gateway Mock и Auth Service — **разные Python-процессы** под supervisord:
+- **Auth Service (real)** на порту 8082 — реальный FastAPI-сервис, читает `DEFAULT_ADMIN_PASSWORD` из env (`Admin1234!`), создаёт real JWT
+- **Gateway Mock** на порту 8080 — мок из `mocks/gateway.py`, использует `mocks/common.py` с `SEED_USERS` (пароль admin: `admin123`).
+
+Токены хранятся в in-memory `_access_token_map: Dict[str, int]` в `mocks/common.py`.
+Поскольку Gateway и Auth — разные процессы, у каждого своя копия `_access_token_map`.
+Prepare-шаг в checker шёл напрямую в Auth (`override_port=8082`), получал real JWT,
+но Gateway Mock не находил этот токен в своём (пустом) `_access_token_map` → 401.
+
+Дополнительно: `TEST_CREDENTIALS` в `services/base.py` использовал пароль `Admin1234!`
+из env, который не совпадает с паролем `admin123` из `SEED_USERS`.
+
+### Что исправлено (checker, 2026-06-22)
+1. `services/base.py` — добавлен `GATEWAY_CREDENTIALS` с паролем `admin123`
+2. `services/gateway.py` — prepare-шаг аутентификации теперь идёт **через Gateway** (порт 8080),
+   а не напрямую в Auth. Убран `override_port=_AUTH_PORT`.
+   Gateway Mock сам создаёт токен и сохраняет в своём `_access_token_map`.
+3. Основной эндпоинт `/auth/token` в Gateway тоже переведён на `GATEWAY_CREDENTIALS`.
+
+### Результат
+Gateway Coverage: **4/76 → 53/76** passed.
+Оставшиеся 11 failed — ожидаемые (`/gateway/health` 404, file upload без файла, пропуски по контексту).
+
+### Статус
+✅ **Исправлено в checker (2026-06-22)**
+

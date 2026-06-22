@@ -14,27 +14,28 @@ from .base import (
     ServiceDef,
     API_PREFIX,
     TEST_CREDENTIALS,
+    GATEWAY_CREDENTIALS,
 )
 
 SERVICE_KEY = "gateway"
 PORT = 8080
 DISPLAY_NAME = "Gateway Service"
 
-_AUTH_PORT = 8082
-
 
 def get_service_def() -> ServiceDef:
     """Вернуть полное описание Gateway Service (агрегирующий прокси)."""
 
     prepare_endpoints = [
-        # 1. Получаем JWT токен от Auth Service
+        # 1. Получаем JWT токен через Gateway (не напрямую Auth),
+        #    чтобы Gateway Mock сохранил токен в своём _access_token_map.
+        #    Пароль из SEED_USERS (admin123), а не из env (Admin1234!),
+        #    т.к. Gateway Mock не читает DEFAULT_ADMIN_PASSWORD.
         EndpointDef("POST", f"{API_PREFIX}/auth/token", "auth",
             "Получение JWT токена (prepare)",
-            body=TEST_CREDENTIALS,
+            body=GATEWAY_CREDENTIALS,
             extract_keys=["access_token", "refresh_token"],
             is_preparation=True,
-            expected_status=200,
-            override_port=_AUTH_PORT),
+            expected_status=200),
     ]
 
     endpoints = [
@@ -49,7 +50,7 @@ def get_service_def() -> ServiceDef:
         # ── Auth (прокси) ──
         EndpointDef("POST", f"{API_PREFIX}/auth/token", "auth",
             "Получение JWT токена",
-            body=TEST_CREDENTIALS,
+            body=GATEWAY_CREDENTIALS,
             extract_keys=["access_token", "refresh_token"],
             response_schema={"access_token": str}),
         EndpointDef("GET", f"{API_PREFIX}/auth/me", "auth",
@@ -188,6 +189,7 @@ def get_service_def() -> ServiceDef:
             "Создать документ",
             body={"title": "Тестовый документ", "doc_code": "TEST-001",
                   "source_type": "GOST", "era": "RF", "validity_status": "active"},
+            extract_keys=["doc_id"],
             expected_status={201, 409}),
         EndpointDef("GET", f"{API_PREFIX}/registry/documents/{{doc_id}}",
             "documents", "Получить документ",
@@ -282,7 +284,7 @@ def get_service_def() -> ServiceDef:
         # ── Query: Chat ──
         EndpointDef("POST", f"{API_PREFIX}/chat/sessions", "chat",
             "Создать сессию",
-            body={"title": "Тест", "document_ids": [], "project_id": 1},
+            body={"title": "Тест", "document_ids": [], "project_id": "{project_id}"},
             extract_keys=["session_id"],
             expected_status=201),
         EndpointDef("GET", f"{API_PREFIX}/chat/sessions", "chat",
@@ -328,5 +330,5 @@ def get_service_def() -> ServiceDef:
         endpoints=endpoints,
         prepare_endpoints=prepare_endpoints,
         depends_on=["auth", "orchestrator", "query", "registry"],
-        base_data={"doc_id": 1, "user_id": "1", "page_num": 1, "category_id": 1, "file_id": 1},
+        base_data={"doc_id": 1, "user_id": "1", "page_num": 1, "category_id": 1, "file_id": 1, "project_id": 1},
     )

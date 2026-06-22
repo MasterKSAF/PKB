@@ -20,6 +20,7 @@ from .base import (
     check_json_fields,
     check_rag_search_results,
     s3_sign_headers,
+    save_parser_result_as,
 )
 
 # Порт MinIO S3 API (обычно 9000)
@@ -45,6 +46,9 @@ def _check_minio_upload(body: Optional[str], ctx: PipelineContext) -> Tuple[bool
     """Проверка загрузки в MinIO: сохраняем file_key в контекст."""
     ctx.set("file_key", TEST_PDF_KEY)
     return True, f"file_key = {TEST_PDF_KEY}"
+
+
+_save_parser_result = save_parser_result_as("parser_result")
 
 
 def _check_converter(body: Optional[str], ctx: PipelineContext) -> Tuple[bool, str]:
@@ -171,12 +175,29 @@ class DocumentProcessingPipeline(PipelineDef):
             retry_on={409},
             retry_delay=2.0,
             retry_max=30,
-            check=check_json_fields({
-                    "document": dict,
-                }),
+            check=_save_parser_result,
         ))
 
-        # -- Шаг 5a (P1F-10): Валидация метаданных через /validate/metadata --
+        # -- Шаг 5a: Предпросмотр метаданных (CV-3) --
+        steps.append(PipelineStep(
+            name="Предпросмотр метаданных",
+            service="converter_validator",
+            method="POST",
+            path="/api/v1/converter/preview",
+            port=8086,
+            body={
+                "task_id": str(self.TEST_TASK_ID),
+                "version_id": "1",
+                "raw_json": "__INLINE__parser_result",
+            },
+            expected_status=200,
+            check=check_json_fields({
+                "doc_code": str,
+                "title": str,
+            }),
+        ))
+
+        # -- Шаг 5b (P1F-10): Валидация метаданных через /validate/metadata --
         # Вычисление бизнес-ключа после извлечения метаданных
         steps.append(PipelineStep(
             name="Валидация метаданных (бизнес-ключ)",
@@ -225,13 +246,32 @@ class DocumentProcessingPipeline(PipelineDef):
             body={
                 "task_id": str(self.TEST_TASK_ID),
                 "version_id": "1",  # CV-9: version_id обязателен
-                "raw_json": {"pages": [], "blocks": [], "text": "тестовый текст"},
+                "raw_json": "__INLINE__parser_result",
             },
             expected_status=200,
             check=_check_converter,
         ))
 
-        # -- Шаг 7: Сохранение документа в Registry --
+        # -- Шаг 7: Валидация документа (CV-8) --
+        steps.append(PipelineStep(
+            name="Валидация документа",
+            service="converter_validator",
+            method="POST",
+            path="/api/v1/validate/document",
+            port=8086,
+            body={
+                "task_id": str(self.TEST_TASK_ID),
+                "version_id": "1",
+                "raw_json": "__INLINE__parser_result",
+            },
+            expected_status=200,
+            check=check_json_fields({
+                "structure_valid": bool,
+                "status": str,
+            }),
+        ))
+
+        # -- Шаг 8: Сохранение документа в Registry --
         steps.append(PipelineStep(
             name="Сохранение документа в Registry",
             service="registry",
@@ -250,6 +290,7 @@ class DocumentProcessingPipeline(PipelineDef):
             },
             expected_status={201, 409},
             needs_auth=True,
+            extract_keys=["doc_id"],
         ))
 
         # -- Шаг 7a (P1F-4/RG-10): Проверка preview_snapshot в документе --

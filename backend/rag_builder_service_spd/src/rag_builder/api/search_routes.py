@@ -9,9 +9,14 @@ router = APIRouter()
 
 
 @router.post(
+    "/rag/search",
+    response_model=SearchResponse,
+)
+@router.post(
     "/search",
     response_model=SearchResponse,
 )
+
 def search_chunks(request: SearchRequest) -> SearchResponse:
     """
     Search relevant chunks.

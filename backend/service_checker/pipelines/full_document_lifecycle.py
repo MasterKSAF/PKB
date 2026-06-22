@@ -112,6 +112,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
                 "document_id": "{doc_id}",
                 "sections": [{
                     "section_id": 1,
+                    "document_id": "{doc_id}",
                     "clause": "1",
                     "level": 1,
                     "path": "1",
@@ -150,6 +151,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
                 "document_id": "{doc_id}",
                 "sections": [{
                     "section_id": 1,
+                    "document_id": "{doc_id}",
                     "clause": "1",
                     "level": 1,
                     "path": "1",
@@ -252,6 +254,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
                 "document_id": "{doc_id_2}",
                 "sections": [{
                     "section_id": 1,
+                    "document_id": "{doc_id_2}",
                     "clause": "1",
                     "level": 1,
                     "path": "1",
@@ -260,7 +263,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
                     "content": {"text": "Содержимое восстановленного документа"},
                 }],
             },
-            expected_status={200, 202},
+            expected_status={200, 202},  # RB-7: 202 для асинхронного запуска
             needs_auth=True,
             check=self._check_build_ok,
             on_error=self._on_build_error,

@@ -23,16 +23,21 @@ CREATE TABLE IF NOT EXISTS registry.documents (
     title TEXT NOT NULL,
     document_type TEXT,
     adoption_date DATE,
+    valid_from DATE NOT NULL DEFAULT '1000-01-01',
+    valid_until DATE NOT NULL DEFAULT '9999-12-31',
     validity_status TEXT DEFAULT 'active',
     era TEXT DEFAULT 'CURRENT',
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    CHECK (valid_until >= valid_from)
 );
 
 CREATE INDEX IF NOT EXISTS idx_reg_docs_document_type
     ON registry.documents(document_type);
 CREATE INDEX IF NOT EXISTS idx_reg_docs_validity
     ON registry.documents(validity_status);
+CREATE INDEX IF NOT EXISTS idx_reg_docs_validity_range
+    ON registry.documents(valid_from, valid_until);
 
 -- Иерархия разделов документов
 CREATE TABLE IF NOT EXISTS registry.document_sections (
@@ -57,6 +62,25 @@ CREATE INDEX IF NOT EXISTS idx_reg_sections_path
     ON registry.document_sections USING GIST (path);
 CREATE INDEX IF NOT EXISTS idx_reg_sections_document
     ON registry.document_sections(document_id);
+
+-- Категории документов (M:N)
+CREATE TABLE IF NOT EXISTS registry.categories (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL UNIQUE,
+    description TEXT,
+    color VARCHAR(7),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS registry.document_categories (
+    document_id BIGINT NOT NULL REFERENCES registry.documents(id) ON DELETE CASCADE,
+    category_id BIGINT NOT NULL REFERENCES registry.categories(id) ON DELETE CASCADE,
+    PRIMARY KEY (document_id, category_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_doc_categories_category
+    ON registry.document_categories(category_id);
 
 -- =============================================================================
 -- rag: чанки с векторным и полнотекстовым поиском

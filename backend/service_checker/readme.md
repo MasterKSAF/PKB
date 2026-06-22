@@ -190,18 +190,29 @@ python setup.py
 ## Запуск тестов
 
 ```bash
-# Unit-тесты
+# Все unit-тесты (281 тестов, ~32с)
 python -m pytest tests/ -v
 
-# По файлам
+# По файлам — юнит-тесты (без Docker):
+# API Coverage — логика выполнения эндпоинтов
+python -m pytest tests/test_api_coverage_execute_endpoint.py -v
+python -m pytest tests/test_api_coverage_test_service.py -v
 python -m pytest tests/test_success_determination.py -v
 python -m pytest tests/test_override_logic.py -v
 python -m pytest tests/test_report_generation.py -v
+
+# Pipeline Runner — логика выполнения шагов и пайплайнов
+python -m pytest tests/test_pipeline_runner_run_step.py -v
+python -m pytest tests/test_pipeline_runner_run.py -v
 python -m pytest tests/test_pipeline_base.py -v
 python -m pytest tests/test_pipeline_steps.py -v
-python -m pytest tests/test_db_setup.py -v          # Статический анализ SQL (без Docker)
 
-# Integration-тест (требует Docker)
+# Прочее
+python -m pytest tests/test_db_setup.py -v          # Статический анализ SQL (без Docker)
+python -m pytest tests/test_md_parser.py -v          # Парсинг MD-документации API
+python -m pytest tests/test_observability_check.py -v # Наблюдаемость
+
+# ⚠️ Интеграционные тесты (требуют Docker):
 python -m pytest tests/test_no_restarts.py -v         # Проверка restart-циклов
 
 # ⚠️ Pipeline Testing — только через модуль (см. 15-ю аномалию в specificity.md):

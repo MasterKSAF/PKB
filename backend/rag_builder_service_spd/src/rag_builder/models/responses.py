@@ -42,3 +42,8 @@ class IndexStatusResponse(BaseModel):
     index_stats: IndexStats = Field(default_factory=IndexStats)
     warnings: list[IndexIssue] = Field(default_factory=list)
     errors: list[IndexIssue] = Field(default_factory=list)
+
+class DeleteIndexResponse(BaseModel):
+    document_id: int
+    deleted_count: int
+    status: str

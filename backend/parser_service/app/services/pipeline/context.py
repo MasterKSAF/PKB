@@ -13,6 +13,7 @@ class ProcessingContext:
 
     Attributes:
         task_id: ID задачи
+        draft_id: ID черновика 
         version_id: Версия документа (v1) или пустая строка (v2)
         file_key: Ключ файла в MinIO
         options: Опции парсинга (extract_tables, extract_images и т.д.)
@@ -30,6 +31,7 @@ class ProcessingContext:
         api_version: Версия API (1 или 2), влияет на формат результата
     """
     task_id: int
+    draft_id: int 
     version_id: str
     file_key: str
     options: Dict[str, bool] = field(default_factory=dict)

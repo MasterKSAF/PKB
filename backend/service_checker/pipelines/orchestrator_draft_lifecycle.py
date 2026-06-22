@@ -55,7 +55,7 @@ class OrchestratorDraftLifecyclePipeline(PipelineDef):
 
     name = "orchestrator_draft_lifecycle"
     description = "Жизненный цикл черновика Orchestrator (создание → превью → решение → удаление)"
-    services = ["auth", "orchestrator"]
+    services = ["auth", "orchestrator", "registry"]
 
     def build_steps(self, context: PipelineContext) -> List[PipelineStep]:
         """Построить 8 шагов пайплайна orchestrator_draft_lifecycle."""

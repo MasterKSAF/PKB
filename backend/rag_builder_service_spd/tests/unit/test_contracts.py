@@ -42,7 +42,7 @@ def test_document_id_is_required():
         BuildRequest.model_validate(payload)
 
 
-def test_document_version_id_is_required():
+def test_document_version_id_is_optional_for_input_contract():
     payload = {
         "metadata": {
             "schema": "schema_registry_for_rag_v2",
@@ -50,7 +50,6 @@ def test_document_version_id_is_required():
         },
         "document": {
             "id": 420000,
-            "version_id": 420001,
             "pkb_code": "04",
             "doc_code": "ГОСТ 20868-81",
             "title": "Test",
@@ -58,8 +57,10 @@ def test_document_version_id_is_required():
         "sections": [],
     }
 
-    with pytest.raises(ValidationError):
-        BuildRequest.model_validate(payload)
+    request = BuildRequest.model_validate(payload)
+
+    assert request.metadata.document_version_id == 420000
+    assert request.document.document_version_id == 420000
 
 
 def test_sections_are_required():
@@ -80,3 +81,40 @@ def test_sections_are_required():
 
     with pytest.raises(ValidationError):
         BuildRequest.model_validate(payload)
+
+
+def test_build_request_accepts_flat_registry_payload():
+    payload = {
+        "document_id": 420000,
+        "sections": [
+            {
+                "section_id": 1,
+                "document_id": 420000,
+                "parent_id": None,
+                "clause": "1",
+                "title": None,
+                "level": 1,
+                "path": "1",
+                "page": 1,
+                "bbox": None,
+                "type": "text",
+                "content": {
+                    "text": "Настоящий стандарт распространяется...",
+                },
+            }
+        ],
+        "protected_spans": [],
+        "options": {
+            "strategy": "semantic_1024",
+        },
+    }
+
+    request = BuildRequest.model_validate(payload)
+
+    assert request.metadata.document_id == 420000
+    assert request.metadata.document_version_id == 420000
+    assert request.document.id == 420000
+    assert request.document.document_version_id == 420000
+    assert request.sections[0].section_id == 1
+    assert request.protected_spans == []
+    assert request.options["strategy"] == "semantic_1024"

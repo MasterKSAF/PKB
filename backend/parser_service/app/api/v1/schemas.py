@@ -25,6 +25,7 @@ class ProcessRequest(BaseModel):
     Запрос на обработку документа.
     """
     task_id: int = Field(..., ge=1, description="Идентификатор задачи")
+    draft_id: int = Field(..., ge=1, description="Идентификатор черновика")  
     file_key: str = Field(..., min_length=1, description="Ключ файла в MinIO")
     mode: ProcessingMode = Field(default=ProcessingMode.FULL, description="Режим обработки")
     max_pages: Optional[int] = Field(None, ge=1, le=100, description="Максимальное количество страниц (обязательно для preview)")
@@ -134,6 +135,7 @@ class ResultResponse(BaseModel):
     Полный ответ на запрос результата.
     """
     task_id: int = Field(..., description="ID задачи")
+    draft_id: int = Field(..., description="ID черновика") 
     metadata: ResultMetadata = Field(..., description="Метаданные")
     document: Dict[str, Any] = Field(..., description="Стандартизированный документ")
     quality: Dict[str, Any] = Field(..., description="Метрики качества")

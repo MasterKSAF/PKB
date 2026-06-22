@@ -130,7 +130,7 @@ class AdminUserLifecyclePipeline(PipelineDef):
             body={
                 "title": f"User pipeline сессия {ts}",
                 "document_ids": [],  # QS-3: пустой список документов
-                "project_id": 1,  # QS-3: идентификатор проекта
+                "project_id": "__INLINE__project_id",  # QS-3: идентификатор проекта
             },
             expected_status=201,
             # ⚠️ Используем session_id (а не user_session_id), потому что

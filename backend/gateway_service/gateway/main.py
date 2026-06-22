@@ -35,6 +35,7 @@ from gateway.client import (
     check_all_services_health,
     close_client,
     get_client,
+    is_deprecated_integration_route,
 )
 from gateway.config import config
 from gateway.logging_config import setup_logging
@@ -273,6 +274,16 @@ class RBACMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         auth = request.headers.get("Authorization", "")
         path = request.url.path.rstrip("/") if request.url.path != "/" else "/"
+
+        if is_deprecated_integration_route(path):
+            return JSONResponse(
+                status_code=410,
+                content=_error_response(
+                    "SERVICE_REMOVED",
+                    "Integration Service отключён; маршруты "
+                    "meridian/files/external недоступны",
+                ),
+            )
 
         user_context: Dict[str, Any] = {
             "user_id": None,

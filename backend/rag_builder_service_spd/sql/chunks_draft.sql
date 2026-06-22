@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS nsi.chunks (
     content TEXT NOT NULL,
     metadata JSONB,
 
-    embedding VECTOR(1536),
+    embedding VECTOR(2048), -- Must match EMBEDDING_DIM
 
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

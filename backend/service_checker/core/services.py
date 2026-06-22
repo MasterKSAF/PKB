@@ -205,7 +205,47 @@ class WebEmulator:
         self.access_token: Optional[str] = None
         self.headers: Dict[str, str] = {**HEADERS_JSON}
         self.documents: List[Dict[str, Any]] = []
+        self.project_id: int = 1
         self.client = httpx.AsyncClient(timeout=30)
+
+    async def _ensure_project(self) -> None:
+        """Создать или получить проект для чат-сессий (QS-3)."""
+        import json as _json
+        headers = {**HEADERS_JSON}
+        if self.access_token:
+            headers["Authorization"] = f"Bearer {self.access_token}"
+        base_url = f"{self.QUERY_URL}/api/v1/chat/projects"
+
+        # Пытаемся создать проект
+        try:
+            body = _json.dumps({"code": "WEBEMU", "name": "WebEmulator Project"}).encode()
+            resp = await self.client.post(base_url, content=body, headers=headers)
+            if resp.status_code == 201:
+                data = resp.json()
+                pid = data.get("project_id") or (data.get("data") or {}).get("id")
+                if pid:
+                    self.project_id = int(pid)
+                    log_ok(f"Создан проект project_id={self.project_id}")
+                    return
+        except Exception:
+            pass
+
+        # Если не создан — получаем список
+        try:
+            resp = await self.client.get(base_url, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                items = data.get("items") or data.get("data") or []
+                if items:
+                    pid = items[0].get("project_id") or items[0].get("id")
+                    if pid:
+                        self.project_id = int(pid)
+                        log_ok(f"Получен проект project_id={self.project_id} из списка")
+                        return
+        except Exception:
+            pass
+
+        log_warn(f"Не удалось создать/получить проект, используется project_id={self.project_id}")
 
     async def __aenter__(self):
         return self
@@ -468,11 +508,13 @@ class WebEmulator:
     async def scenario_chat(self) -> bool:
         """Сценарий: чат-сессия (создать, отправить сообщение, longpoll)."""
         base = self._query_base()
+        # Создаём/получаем проект для сессии
+        await self._ensure_project()
         log_step(f"POST {base}/api/v1/chat/sessions — создание чат-сессии (QS-3)...")
         resp = await self._request(
             "chat", "post", f"{base}/api/v1/chat/sessions",
             headers=self.headers,
-            json={"title": "Тестовая сессия", "document_ids": [], "project_id": 1},
+            json={"title": "Тестовая сессия", "document_ids": [], "project_id": self.project_id},
         )
         if resp.status_code not in (200, 201):
             log_warn(f"Не удалось создать сессию: HTTP {resp.status_code}")

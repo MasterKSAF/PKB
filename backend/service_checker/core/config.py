@@ -132,6 +132,28 @@ SERVICE_DEFS: Dict[str, Dict[str, Any]] = {
             "--host", "127.0.0.1", "--port", "8091",
         ],
     },
+    "converter_validator": {
+        "name": "Converter-Validator Service",
+        "type": "real",
+        "port": 8086,
+        "health_url": "http://127.0.0.1:8086/api/v1/converter/",
+        "cwd": BACKEND_DIR / "converter_validator_service",
+        "run_cmd": lambda: [
+            sys.executable, "-m", "uvicorn", "main:app",
+            "--host", "127.0.0.1", "--port", "8086",
+        ],
+    },
+    "ocr": {
+        "name": "OCR Service",
+        "type": "real",
+        "port": 8088,
+        "health_url": "http://127.0.0.1:8088/api/v1/",
+        "cwd": BACKEND_DIR / "ocr_service",
+        "run_cmd": lambda: [
+            sys.executable, "-m", "uvicorn", "main:app",
+            "--host", "127.0.0.1", "--port", "8088",
+        ],
+    },
 }
 
 # ── Test data ────────────────────────────────────────────────────────
@@ -162,7 +184,7 @@ PIPELINE_SERVICE_MAP = {
     "full_document_lifecycle": ["auth", "registry", "rag_builder", "rag_search"],
     "admin_user_lifecycle": ["auth", "query"],
     "registry_quarantine": ["auth", "registry"],
-    "orchestrator_draft_lifecycle": ["auth", "orchestrator"],
+    "orchestrator_draft_lifecycle": ["auth", "orchestrator", "registry"],
     "multi_document_cross_search": ["minio", "parser", "converter_validator", "registry", "rag_builder", "rag_search"],
 }
 

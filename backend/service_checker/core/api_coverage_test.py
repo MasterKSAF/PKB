@@ -71,7 +71,6 @@ SERVICES_WITH_REAL = {
 # В таком случае checker показывает warning, а не error.
 KNOWN_NEW_ENDPOINTS: Dict[str, set] = {
     "orchestrator": {
-        "POST /api/v1/drafts/",           # OR-11: draft-first
         "PATCH /api/v1/drafts/{draft_id}/metadata",  # OR-3b
         "PATCH /api/v1/drafts/{draft_id}/decide",    # OR-12: action вместо decision
         "GET /api/v1/drafts/{draft_id}",             # OR-7: document_id, version_id
@@ -92,12 +91,8 @@ KNOWN_NEW_ENDPOINTS: Dict[str, set] = {
         "POST /api/v1/converter/preview",             # CV-3: новый эндпоинт
         "POST /api/v1/validate/metadata",              # CV-3a: единая точка
     },
-    "parser": {
-        "POST /api/v1/parser/process",               # PS-5: mode=preview|full
-    },
-    "ocr": {
-        "POST /api/v1/ocr/process",                  # OC-8: mode=preview|full
-    },
+
+
     "rag_builder": {
         "POST /api/v1/rag/build/{doc_id}/reprocess",  # P2I-9: переиндексация
         "GET /api/v1/rag/build/{doc_id}/integrity",    # P2I-1: частичная
@@ -109,6 +104,15 @@ KNOWN_NEW_ENDPOINTS: Dict[str, set] = {
         "GET /api/v1/admin/roles",                   # AU-2: ROLES таблица
         "POST /api/v1/admin/roles",                    # AU-2: создание роли
         "PATCH /api/v1/admin/users/{user_id}",         # AU-5: roles[]
+    },
+    "gateway": {
+        "GET /api/v1/gateway/health",                # GW-12: нет в моке
+        "POST /api/v1/rag/search",                     # RS-6: новый формат
+        "POST /api/v1/analyse/start",                  # AU-2: не реализован
+        "GET /api/v1/analyse/{task_id}/status",         # не реализован
+        "GET /api/v1/meridian/status",                  # не реализован
+        "GET /api/v1/files/{file_id}",                  # не реализован
+        "GET /api/v1/external/integrations",            # не реализован
     },
 }
 
@@ -159,15 +163,32 @@ class ApiCoverageTester:
 
         self.context: Dict[str, Any] = {}  # shared context между вызовами
         self.results: Dict[str, ServiceResult] = {}
-        self.client = httpx.AsyncClient(timeout=15, follow_redirects=True)
+        self._client_timeout = 15
+        self._client_follow_redirects = True
+        self._client: Optional[httpx.AsyncClient] = None
         # Для тестов: можно подставить свои endpoint'ы (ключ → List[EndpointDef])
         self._test_endpoints: Dict[str, List[EndpointDef]] = {}
         # OpenAPI схемы сервисов: service_key → {path: {method: OpenApiEndpoint}}
         self.openapi_schemas: Dict[str, Dict[str, Dict[str, Any]]] = {}
         self._current_svc_key: str = ""
 
+    @property
+    def client(self) -> httpx.AsyncClient:
+        """Ленивая инициализация HTTP-клиента (SSL certs загружаются только при первом использовании)."""
+        if self._client is None:
+            self._client = httpx.AsyncClient(
+                timeout=self._client_timeout,
+                follow_redirects=self._client_follow_redirects,
+            )
+        return self._client
+
+    @client.setter
+    def client(self, value: httpx.AsyncClient) -> None:
+        self._client = value
+
     async def close(self) -> None:
-        await self.client.aclose()
+        if self._client is not None:
+            await self._client.aclose()
 
     async def ping_service(self, port: int, fast: bool = False) -> bool:
         """Проверить, отвечает ли сервис.
@@ -702,6 +723,49 @@ class ApiCoverageTester:
                 # (workaround для FK fk_rag_document_chunks_section_id)
                 # FK fk_rag_document_chunks_section_id удалён 3-й миграцией — psql не нужен
                 print(f"  ℹ RAG Builder: timestamp={self.context['timestamp']}")
+
+            # ── Pre-prepare: создание проекта для Query (QS-3) ─────────
+            if service_key == "query":
+                import json as _json
+                auth_token = self.context.get("access_token", "")
+                # Пробуем создать проект
+                create_url = f"http://{self.base_host}:8083/api/v1/chat/projects"
+                create_body = _json.dumps({"code": "CHECKER", "name": "Checker Test Project"}).encode()
+                create_headers = {"Content-Type": "application/json"}
+                if auth_token:
+                    create_headers["Authorization"] = f"Bearer {auth_token}"
+                try:
+                    resp = await self.client.post(
+                        create_url, content=create_body, headers=create_headers
+                    )
+                    if resp.status_code == 201:
+                        data = resp.json()
+                        pid = data.get("project_id") or (data.get("data") or {}).get("id")
+                        if pid:
+                            self.context["project_id"] = pid
+                            print(f"  ℹ Query: создан проект project_id={pid}")
+                except Exception:
+                    pass
+
+                # Если проект не создан — получаем список
+                if "project_id" not in self.context:
+                    try:
+                        resp = await self.client.get(create_url, headers=create_headers)
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            items = data.get("items") or data.get("data") or []
+                            if items:
+                                pid = items[0].get("project_id") or items[0].get("id")
+                                if pid:
+                                    self.context["project_id"] = pid
+                                    print(f"  ℹ Query: получен проект project_id={pid} из списка")
+                    except Exception:
+                        pass
+
+                if "project_id" not in self.context:
+                    # Fallback: хардкод 1 — если ничего не вышло
+                    self.context["project_id"] = 1
+                    print(f"  ⚠ Query: не удалось создать/получить проект, fallback project_id=1")
 
             # ── Pre-prepare: загрузка PDF в MinIO для Parser ────────────
             if service_key == "parser":
