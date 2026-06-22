@@ -147,7 +147,7 @@ async def run_pipeline(
 
         async with session_factory() as db:
             async with db.begin():
-                await db.execute(
+                result = await db.execute(
                     update(ChatMessage)
                     .where(ChatMessage.message_id == message_id)
                     .values(
@@ -157,6 +157,9 @@ async def run_pipeline(
                         enrichment_skipped=enrichment_skipped,
                     )
                 )
+                if result.rowcount == 0:
+                    logger.warning("pipeline: message deleted before finish, skipping sources", extra={"message_id": message_id})
+                    return
                 for chunk in chunks:
                     db.add(ChatSource(
                         message_id=message_id,
