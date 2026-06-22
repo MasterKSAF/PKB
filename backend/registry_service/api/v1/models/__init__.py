@@ -10,6 +10,10 @@ from .exports import Export
 from .files import File
 from .terminology import Terminology
 from .format_registry import FormatRegistry
+from .draft import Draft
+from .classifier_registry import ClassifierRegistry
+from .category import Category
+from .document_terminology import DocumentTerminology
 
 __all__ = [
     'Base',
@@ -24,5 +28,9 @@ __all__ = [
     'File',
     'Terminology',
     'FormatRegistry',
+    'Draft',
+    'ClassifierRegistry',
+    'Category',
+    'DocumentTerminology',
 ]
 

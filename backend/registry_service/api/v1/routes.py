@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, Header
 from starlette.responses import JSONResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -15,6 +15,47 @@ from services.logger import log_event, log_payload
 
 routes = APIRouter()
 
+
+@routes.get('/registry/search')
+def search_registry(
+    q: str = Query(..., min_length=3),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    """
+    GET /registry/search
+    BM25 Registry search
+    """
+    log_event('INFO', '/registry/search', None, {'q': q})
+    try:
+        from sqlalchemy import text
+        skip = (page - 1) * page_size
+        
+        query = text("""
+            SELECT id::text, 'document' as type, title as match_text, 
+                   ts_rank(to_tsvector('russian', title), plainto_tsquery('russian', :q)) as rank
+            FROM registry.documents
+            WHERE to_tsvector('russian', title) @@ plainto_tsquery('russian', :q)
+            UNION ALL
+            SELECT code as id, 'classifier' as type, full_name as match_text, 
+                   ts_rank(to_tsvector('russian', full_name), plainto_tsquery('russian', :q)) as rank
+            FROM registry.classifiers
+            WHERE to_tsvector('russian', full_name) @@ plainto_tsquery('russian', :q)
+            ORDER BY rank DESC
+            OFFSET :skip LIMIT :limit
+        """)
+        
+        result = db.execute(query, {'q': q, 'skip': skip, 'limit': page_size})
+        data = [
+            {'id': row[0], 'type': row[1], 'match_text': row[2], 'rank': row[3]}
+            for row in result
+        ]
+        
+        return {'data': data, 'meta': {'page': page, 'page_size': page_size}}
+    except Exception as e:
+        log_event('ERROR', '/registry/search', None, None, str(e))
+        raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 # ============================================================================
 # Documents - Group 3
@@ -37,6 +78,7 @@ def list_documents(
     title_hash_sha256: Optional[str] = Query(None),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
+    valid_at: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
     """
@@ -62,6 +104,14 @@ def list_documents(
             except ValueError:
                 pass
 
+        dt_valid_at = None
+        if valid_at:
+            try:
+                from datetime import datetime
+                dt_valid_at = datetime.fromisoformat(valid_at)
+            except ValueError:
+                pass
+
         documents, total = document_crud.get_documents(
             db,
             page=page,
@@ -79,6 +129,7 @@ def list_documents(
             title_hash_sha256=title_hash_sha256,
             date_from=dt_from,
             date_to=dt_to,
+            valid_at=dt_valid_at,
         )
         
         data = [DocumentSchema.model_validate(doc).model_dump(mode='json', by_alias=True, exclude_none=True) for doc in documents]
@@ -362,12 +413,16 @@ def create_document(
 
         clean_payload = {k: v for k, v in payload.items() if k in {
             'normalized_title', 'source_type', 'group', 'mks_oks_code', 'okstu_code',
-            'udc', 'era', 'validity_status', 'status', 'jurisdiction', 'issuing_body',
+            'udk_code', 'era', 'validity_status', 'status', 'jurisdiction', 'issuing_body',
             'adoption_date', 'effective_from', 'replaces', 'status_note', 'file_hash_sha256',
             'title_hash_sha256', 'file_size_bytes', 'processing_status', 'chunk_count',
             'successor_doc_id', 'predecessor_doc_id', 'created_by', 'updated_by',
-            'classifier_code', 'industry_code', 'enterprise_id',
+            'classifier_code', 'industry_code', 'enterprise_id', 'draft_id', 'valid_from', 'valid_until',
+            'current_version_id', 'preview_snapshot',
         }}
+        
+        if 'source_draft_id' in payload:
+            clean_payload['draft_id'] = payload['source_draft_id']
 
         existing_hash = clean_payload.get('title_hash_sha256')
         if not existing_hash:
@@ -390,9 +445,12 @@ def create_document(
         
         log_event('INFO', '/registry/documents/', None, {'doc_code': doc_code}, 'Document created')
         
+        response_data = DocumentSchema.model_validate(document).model_dump(mode='json', by_alias=True, exclude_none=True)
+        response_data['version_id'] = f"v1-{document.id}"
+        
         return JSONResponse(
             status_code=201,
-            content={'data': DocumentSchema.model_validate(document).model_dump(mode='json', by_alias=True, exclude_none=True)},
+            content={'data': response_data},
         )
     except HTTPException:
         raise
@@ -440,6 +498,7 @@ def update_document(
 def patch_document_status(
     document_id: str,
     payload: dict,
+    x_service_id: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ):
     """
@@ -450,6 +509,9 @@ def patch_document_status(
     """
     log_event('INFO', f'/registry/documents/{document_id}/status/', None, log_payload(payload))
     try:
+        if x_service_id != 'orchestrator':
+            raise HTTPException(status_code=403, detail={'error': {'code': 'FORBIDDEN', 'message': 'Only Orchestrator can change document status directly'}})
+
         status = payload.get('status')
         comment = payload.get('comment')
         changed_by = payload.get('changed_by')
@@ -511,6 +573,11 @@ def patch_document(
     """
     log_event('INFO', f'/registry/documents/{document_id}/', None, log_payload(payload))
     try:
+        immutable_fields = {'id', 'created_at', 'updated_at', 'title_hash_sha256', 'file_hash_sha256', 'document_id', 'total_versions'}
+        for field in immutable_fields:
+            if field in payload:
+                raise HTTPException(status_code=422, detail={'error': {'code': 'VALIDATION_ERROR', 'message': f'Field {field} is immutable'}})
+
         document = document_crud.update_document(db, document_id, **payload)
         
         if not document:

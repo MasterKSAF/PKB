@@ -122,7 +122,7 @@ def test_patch_document_status(client):
     doc_id = create_res.json()["data"]["id"]
     
     # Valid transition: draft -> uploaded
-    response = client.patch(f"/api/v1/registry/documents/{doc_id}/status", json={"status": "uploaded", "comment": "moving to uploaded", "changed_by": "test_user"})
+    response = client.patch(f"/api/v1/registry/documents/{doc_id}/status", json={"status": "uploaded", "comment": "moving to uploaded", "changed_by": "test_user"}, headers={"x-service-id": "orchestrator"})
     assert response.status_code == 200
     data = response.json()["data"]
     assert data["status"] == "uploaded"
@@ -130,16 +130,16 @@ def test_patch_document_status(client):
     assert "history_id" in data
     
     # Invalid transition: uploaded -> approved
-    response_invalid = client.patch(f"/api/v1/registry/documents/{doc_id}/status", json={"status": "approved"})
+    response_invalid = client.patch(f"/api/v1/registry/documents/{doc_id}/status", json={"status": "approved"}, headers={"x-service-id": "orchestrator"})
     assert response_invalid.status_code == 400
     
     # Invalid status
-    response_bad_status = client.patch(f"/api/v1/registry/documents/{doc_id}/status", json={"status": "unknown_status"})
+    response_bad_status = client.patch(f"/api/v1/registry/documents/{doc_id}/status", json={"status": "unknown_status"}, headers={"x-service-id": "orchestrator"})
     assert response_bad_status.status_code == 400
 
 
 def test_patch_document_status_not_found(client):
-    response = client.patch("/api/v1/registry/documents/00000000-0000-0000-0000-000000000000/status", json={"status": "approved"})
+    response = client.patch("/api/v1/registry/documents/00000000-0000-0000-0000-000000000000/status", json={"status": "approved"}, headers={"x-service-id": "orchestrator"})
     assert response.status_code == 404
 
 def test_export_documents(client):
@@ -243,4 +243,109 @@ def test_get_documents_with_additional_filters(client):
     res_data = response.json()
     assert len(res_data["data"]) >= 1
     assert any(doc["doc_code"] == "FDA-01" for doc in res_data["data"])
+
+
+
+def test_pipeline_document_terminology_linking(client):
+    pipeline_payload = {
+        "document": {
+            "metadata": {
+                "title": "Pipeline Doc Term Test",
+                "doc_code": "PIPE-TERM-01",
+                "era": "USSR"
+            },
+            "content": [],
+            "terminology": [
+                {
+                    "term": "test pipeline term",
+                    "definition": "Pipeline Term Definition",
+                    "normalized_term": "test pipeline term"
+                }
+            ],
+            "references": []
+        }
+    }
+    
+    create_response = client.post("/api/v1/registry/documents", json=pipeline_payload)
+    assert create_response.status_code == 201
+    doc_id = create_response.json()["document_id"]
+    
+    # Fetch sections bundle and verify terminology is populated
+    sections_response = client.get(f"/api/v1/registry/documents/{doc_id}/sections")
+    assert sections_response.status_code == 200
+    sections_data = sections_response.json()
+    assert "terminology" in sections_data
+    assert len(sections_data["terminology"]) == 1
+    assert sections_data["terminology"][0]["term"] == "test pipeline term"
+
+
+
+def test_document_mks_okstu_name_resolution(client):
+    # 1. Create classifiers for MKS and OKSTU
+    client.post("/api/v1/registry/classifiers", json={"classifier_system": "MKS", "code": "MKS_RESOLVE", "full_name": "MKS Resolved Name"})
+    client.post("/api/v1/registry/classifiers", json={"classifier_system": "OKSTU", "code": "OKSTU_RESOLVE", "full_name": "OKSTU Resolved Name"})
+
+    # 2. Create document referencing both
+    doc_payload = {
+        "title": "Doc Resolve Name Test",
+        "doc_code": "RESOLVE-01",
+        "mks_oks_code": "MKS_RESOLVE",
+        "okstu_code": "OKSTU_RESOLVE"
+    }
+    create_res = client.post("/api/v1/registry/documents", json=doc_payload)
+    assert create_res.status_code == 201
+    doc_id = create_res.json()["data"]["id"]
+
+    # 3. Retrieve document and check populated fields
+    get_res = client.get(f"/api/v1/registry/documents/{doc_id}")
+    assert get_res.status_code == 200
+    doc_data = get_res.json()["data"]
+    assert doc_data.get("mks_name") == "MKS Resolved Name"
+    assert doc_data.get("okstu_name") == "OKSTU Resolved Name"
+
+
+
+
+def test_document_total_versions_count(client):
+    # Create document
+    doc_payload = {
+        "title": "Doc Versions Test",
+        "doc_code": "VERSIONS-01"
+    }
+    create_res = client.post("/api/v1/registry/documents", json=doc_payload)
+    assert create_res.status_code == 201
+    doc_id = create_res.json()["data"]["id"]
+
+    # At first, total_versions should be 0 because no version is linked
+    get_res = client.get(f"/api/v1/registry/documents/{doc_id}")
+    assert get_res.status_code == 200
+    assert get_res.json()["data"].get("total_versions") == 0
+
+    # Create a pipeline document (which automatically saves a file version record)
+    pipeline_payload = {
+        "document": {
+            "metadata": {
+                "title": "Pipeline Doc Version Test",
+                "doc_code": "PIPE-VERS-01",
+                "era": "RF"
+            },
+            "source": {
+                "file_name": "test_file.pdf",
+                "file_hash_sha256": "abcdef123456",
+                "page_count": 5
+            },
+            "content": [],
+            "terminology": [],
+            "references": []
+        }
+    }
+    pipe_res = client.post("/api/v1/registry/documents", json=pipeline_payload)
+    assert pipe_res.status_code == 201
+    pipe_doc_id = pipe_res.json()["document_id"]
+
+    # Check total_versions is 1 for the pipeline document
+    get_pipe_res = client.get(f"/api/v1/registry/documents/{pipe_doc_id}")
+    assert get_pipe_res.status_code == 200
+    assert get_pipe_res.json()["data"].get("total_versions") == 1
+
 

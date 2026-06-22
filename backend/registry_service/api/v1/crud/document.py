@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from api.v1.models import Document, DocumentHistory, DocumentReference, DocumentSection
 
-_BIGINT_FIELDS = ('successor_doc_id', 'predecessor_doc_id')
+_BIGINT_FIELDS = ('successor_doc_id', 'predecessor_doc_id', 'draft_id', 'current_version_id')
 
 
 def _coerce_int_fields(kwargs: Dict[str, Any]) -> Dict[str, Any]:
@@ -89,6 +89,7 @@ def get_documents(
     title_hash_sha256: Optional[str] = None,
     date_from: Optional[datetime] = None,
     date_to: Optional[datetime] = None,
+    valid_at: Optional[datetime] = None,
 ) -> tuple[List[Document], int]:
     """Retrieve documents with pagination and optional filters."""
     query = db.query(Document)
@@ -131,6 +132,9 @@ def get_documents(
 
     if date_to:
         query = query.filter(Document.created_at <= date_to)
+
+    if valid_at:
+        query = query.filter(Document.valid_from <= valid_at.date(), Document.valid_until >= valid_at.date())
 
     total = query.count()
     
@@ -441,7 +445,7 @@ def get_document_sections_bundle(db: Session, document: Document) -> Dict[str, A
         'mks_name': document.mks_name,
         'okstu_name': document.okstu_name,
         'total_versions': document.total_versions,
-        'udc': document.udc,
+        'udk_code': document.udk_code,
         'successor_doc_id': document.successor_doc_id,
         'predecessor_doc_id': document.predecessor_doc_id,
         'created_at': document.created_at.isoformat() if document.created_at else None,
@@ -497,7 +501,7 @@ def create_pipeline_document(db: Session, payload: Dict[str, Any]) -> Dict[str, 
         'group_': metadata.get('group'),
         'mks_oks_code': metadata.get('mks_oks_code'),
         'okstu_code': metadata.get('okstu_code'),
-        'udc': metadata.get('udc'),
+        'udk_code': metadata.get('udc'),
         'era': metadata.get('era'),
         'validity_status': metadata.get('validity_status'),
         'status': metadata.get('status', 'uploaded'),
@@ -521,7 +525,7 @@ def create_pipeline_document(db: Session, payload: Dict[str, Any]) -> Dict[str, 
             file_hash_sha256=source_data.get('file_hash_sha256'),
             file_size_bytes=source_data.get('page_count') or 0,
             file_key=source_data.get('file_name'),
-            uploaded_at=datetime.now(timezone.utc)
+            created_at=datetime.now(timezone.utc)
         )
         db.add(db_ver)
         db.flush()
@@ -703,16 +707,16 @@ def check_and_quarantine_classifiers(db: Session, document: Document):
             if not already_pending:
                 create_classifier_pending(db, system='OKSTU', code=document.okstu_code, found_in_document_id=str(document.id))
 
-    # 3. Check udc
-    if document.udc:
-        exists = get_classifier(db, 'UDC', document.udc)
+    # 3. Check udk_code
+    if document.udk_code:
+        exists = get_classifier(db, 'UDC', document.udk_code)
         if not exists:
             already_pending = db.query(ClassifierPending).filter(
                 ClassifierPending.system == 'UDC',
-                ClassifierPending.code == document.udc
+                ClassifierPending.code == document.udk_code
             ).first()
             if not already_pending:
-                create_classifier_pending(db, system='UDC', code=document.udc, found_in_document_id=str(document.id))
+                create_classifier_pending(db, system='UDC', code=document.udk_code, found_in_document_id=str(document.id))
 
 
 

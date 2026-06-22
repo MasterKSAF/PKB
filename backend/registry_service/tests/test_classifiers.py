@@ -1,4 +1,6 @@
 import pytest
+import json
+import io
 
 def test_create_classifier(client):
     payload = {
@@ -265,7 +267,7 @@ def test_delete_classifier_udc_has_documents(client):
     client.post("/api/v1/registry/documents", json={
         "title": "Document UDC Ref Test",
         "doc_code": "DOC_UDC_01",
-        "udc": "UDC_REF"
+        "udk_code": "UDC_REF"
     })
     
     # Delete without force should fail
@@ -296,4 +298,99 @@ def test_delete_classifier_external_has_documents(client):
     response = client.delete("/api/v1/registry/classifiers/EXT_REF?classifier_system=EXTERNAL&force=true")
     assert response.status_code == 200
 
+
+
+
+def test_classifier_code_filtering(client):
+    client.post("/api/v1/registry/classifiers", json={"classifier_system": "MKS", "code": "ABC.01", "full_name": "Test ABC"})
+    client.post("/api/v1/registry/classifiers", json={"classifier_system": "MKS", "code": "XYZ.01", "full_name": "Test XYZ"})
+    
+    response = client.get("/api/v1/registry/classifiers?code=ABC")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["data"]) == 1
+    assert data["data"][0]["code"] == "ABC.01"
+
+
+
+def test_classifier_tree_metadata(client):
+    client.post("/api/v1/registry/classifiers", json={"classifier_system": "MKS", "code": "T_ROOT", "full_name": "Tree Root"})
+    
+    response = client.get("/api/v1/registry/classifiers/tree?classifier_system=MKS")
+    assert response.status_code == 200
+    res = response.json()
+    assert "meta" in res
+    assert res["meta"]["total"] >= 1
+    assert res["meta"]["max_depth_reached"] is False
+
+
+
+def test_classifier_get_children(client):
+    client.post("/api/v1/registry/classifiers", json={"classifier_system": "MKS", "code": "P_NODE", "full_name": "Parent Node"})
+    client.post("/api/v1/registry/classifiers", json={"classifier_system": "MKS", "code": "C_NODE", "full_name": "Child Node", "parent_code": "P_NODE"})
+    
+    response = client.get("/api/v1/registry/classifiers/P_NODE?classifier_system=MKS")
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert "children" in data
+    assert len(data["children"]) == 1
+    assert data["children"][0]["code"] == "C_NODE"
+
+
+
+def test_create_classifier_parent_not_found(client):
+    payload = {
+        "classifier_system": "MKS",
+        "code": "TEST_INVALID_PARENT",
+        "full_name": "Invalid Parent",
+        "parent_code": "NON_EXISTENT_PARENT"
+    }
+    response = client.post("/api/v1/registry/classifiers", json=payload)
+    assert response.status_code == 404
+    assert response.json()["detail"]["error"]["code"] == "PARENT_NOT_FOUND"
+
+
+
+def test_update_patch_classifier_nullify(client):
+    client.post("/api/v1/registry/classifiers", json={"classifier_system": "MKS", "code": "PARENT_X", "full_name": "Parent X"})
+    client.post("/api/v1/registry/classifiers", json={"classifier_system": "MKS", "code": "NODE_Y", "full_name": "Node Y", "parent_code": "PARENT_X"})
+    
+    # Nullify parent_code using PATCH
+    response = client.patch("/api/v1/registry/classifiers/NODE_Y?classifier_system=MKS", json={"parent_code": None})
+    assert response.status_code == 200
+    assert response.json()["data"].get("parent_code") is None
+
+
+
+def test_csv_imports(client):
+    # Test classifier CSV import
+    csv_data = "Code,Name,Parent\nIMP_01,Imported 1,\nIMP_02,Imported 2,IMP_01\n"
+    mapping = json.dumps({"code": "Code", "full_name": "Name", "parent_code": "Parent"})
+    response = client.post(
+        "/api/v1/registry/classifiers/import?classifier_system=MKS&mapping=" + mapping,
+        files={"file": ("test.csv", io.BytesIO(csv_data.encode('utf-8')), "text/csv")}
+    )
+    assert response.status_code == 200
+    res = response.json()["data"]
+    assert res["inserted"] == 2
+    assert res["updated"] == 0
+    assert len(res["errors"]) == 0
+
+
+
+
+def test_create_classifier_cross_system_parent(client):
+    # 1. Create a parent classifier in OKSTU system
+    client.post("/api/v1/registry/classifiers", json={"classifier_system": "OKSTU", "code": "OKSTU_P", "full_name": "OKSTU Parent"})
+
+    # 2. Try creating a classifier in MKS system with parent_code referencing the OKSTU parent
+    payload = {
+        "classifier_system": "MKS",
+        "code": "MKS_C",
+        "full_name": "MKS Child",
+        "parent_code": "OKSTU_P"
+    }
+    response = client.post("/api/v1/registry/classifiers", json=payload)
+    assert response.status_code == 409
+    assert response.json()["detail"]["error"]["code"] == "CROSS_SYSTEM_PARENT"
 

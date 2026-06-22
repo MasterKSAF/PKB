@@ -229,3 +229,19 @@ def test_import_terminology(client):
     # Dummy file upload test
     response = client.post("/api/v1/registry/terminology/import?mapping=some_mapping", files={"file": ("test.csv", b"dummy content", "text/csv")})
     assert response.status_code in [200, 201]
+
+
+def test_update_patch_terminology_nullify(client):
+    create_response = client.post("/api/v1/registry/terminology", json={
+        "raw_term": "T_NULL",
+        "standard_term": "T_NULL",
+        "normalized_value": "t_null",
+        "term_type": "term",
+        "definition": "Old Definition"
+    })
+    term_id = create_response.json()["data"]["id"]
+    
+    response = client.patch(f"/api/v1/registry/terminology/{term_id}", json={"definition": None})
+    assert response.status_code == 200
+    assert response.json()["data"].get("definition") is None
+

@@ -8,7 +8,7 @@ def test_document_creation_quarantines_missing_codes(client, db_session):
         "doc_code": "QT-001",
         "mks_oks_code": "99.999",  # missing
         "okstu_code": "8888",      # missing
-        "udc": "555.5"             # missing
+        "udk_code": "555.5"             # missing
     }
     response = client.post("/api/v1/registry/documents", json=payload)
     assert response.status_code == 201
