@@ -290,7 +290,11 @@ def _docker_health_check(services: List[str]) -> bool:
         url = f"http://127.0.0.1:{port}{path}"
         for attempt in range(3):
             try:
-                resp = httpx.get(url, timeout=3)
+                resp = httpx.get(
+                    url,
+                    timeout=3,
+                    trust_env=False,
+                )
                 if resp.status_code < 500:
                     log_ok(f"{display_name:<25} :{port} — HTTP {resp.status_code}")
                     return True
@@ -404,12 +408,12 @@ def _docker_health_check(services: List[str]) -> bool:
     log_header("Docker Health Check: ошибки в supervisor .err логах")
     has_errors = False
     # Собираем .err файлы динамически из supervisorctl или используем полный список
-    # (в SPD режиме есть rag_builder_spk.err, нет rag_builder.err + rag_search.err)
+    # (в SPD режиме есть rag_builder_spd.err, нет rag_builder.err + rag_search.err)
     err_files = [
         "auth.err", "gateway.err", "orchestrator.err", "query.err",
         "registry.err", "integration.err", "converter_validator.err",
         "parser.err", "ocr.err",
-        "rag_builder.err", "rag_search.err", "rag_builder_spk.err",
+        "rag_builder.err", "rag_search.err", "rag_builder_spd.err",
     ]
     # Примечание: OCR сервис может отсутствовать (не реализован отдельно).
     # Если файла ocr.err нет — это нормально, проверка пропускается.

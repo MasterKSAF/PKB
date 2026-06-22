@@ -367,7 +367,10 @@ async def cmd_emulate(
         f"{gateway_url}/api/v1/",
     ]
     alive = False
-    async with httpx.AsyncClient(timeout=5) as client:
+    async with httpx.AsyncClient(
+            timeout=5,
+            trust_env=False,
+    ) as client:
         for url in health_endpoints:
             try:
                 resp = await client.get(url)
