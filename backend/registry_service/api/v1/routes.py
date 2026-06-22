@@ -1641,3 +1641,169 @@ def health_check():
     """
     log_event('INFO', '/health/', None, None)
     return {'status': 'ok'}
+
+
+# ============================================================================
+# Drafts - Group 4
+# ============================================================================
+
+from api.v1.crud import draft as draft_crud
+from api.v1.schemas.draft import DraftSchema, DraftCreate, DraftUpdateStatus, DraftUpdateMetadata
+
+@routes.post('/registry/drafts')
+def create_draft(
+    payload: DraftCreate,
+    db: Session = Depends(get_db),
+):
+    """POST /registry/drafts - Создать запись черновика"""
+    log_event('INFO', '/registry/drafts', None, payload.model_dump())
+    try:
+        draft = draft_crud.create_draft(
+            db,
+            file_key=payload.file_key,
+            document_key=payload.document_key,
+            status=payload.status,
+            raw_data=payload.raw_data,
+            created_by=payload.created_by
+        )
+        return JSONResponse(status_code=201, content={'data': DraftSchema.model_validate(draft).model_dump(mode='json', by_alias=True, exclude_none=True)})
+    except Exception as e:
+        log_event('ERROR', '/registry/drafts', None, payload.model_dump(), str(e))
+        raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
+
+
+@routes.get('/registry/drafts')
+def list_drafts(
+    draft_id: Optional[int] = Query(None),
+    document_key: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    """GET /registry/drafts - Список черновиков"""
+    log_event('INFO', '/registry/drafts', None, None)
+    try:
+        drafts, total = draft_crud.get_drafts(db, page=page, page_size=page_size, draft_id=draft_id, document_key=document_key, status=status)
+        data = [DraftSchema.model_validate(d).model_dump(mode='json', by_alias=True, exclude_none=True) for d in drafts]
+        return {'data': data, 'meta': {'total': total, 'page': page, 'page_size': page_size}}
+    except Exception as e:
+        log_event('ERROR', '/registry/drafts', None, None, str(e))
+        raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
+
+
+@routes.get('/registry/drafts/{draft_id}')
+def get_draft(draft_id: int, db: Session = Depends(get_db)):
+    """GET /registry/drafts/{draft_id} - Полная информация"""
+    log_event('INFO', f'/registry/drafts/{draft_id}', None, None)
+    try:
+        draft = draft_crud.get_draft_by_id(db, draft_id)
+        if not draft:
+            raise HTTPException(status_code=404, detail={'error': {'code': 'DRAFT_NOT_FOUND', 'message': 'Draft not found'}})
+        return {'data': DraftSchema.model_validate(draft).model_dump(mode='json', by_alias=True, exclude_none=True)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_event('ERROR', f'/registry/drafts/{draft_id}', None, None, str(e))
+        raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
+
+
+@routes.get('/registry/drafts/{draft_id}/preview')
+def get_draft_preview(draft_id: int, db: Session = Depends(get_db)):
+    """GET /registry/drafts/{draft_id}/preview - Preview-метаданные"""
+    log_event('INFO', f'/registry/drafts/{draft_id}/preview', None, None)
+    try:
+        draft = draft_crud.get_draft_by_id(db, draft_id)
+        if not draft:
+            raise HTTPException(status_code=404, detail={'error': {'code': 'DRAFT_NOT_FOUND', 'message': 'Draft not found'}})
+        
+        data = DraftSchema.model_validate(draft).model_dump(mode='json', by_alias=True, exclude_none=True)
+        data.pop('raw_data', None)
+        data.pop('document_key', None)
+        data.pop('error_code', None)
+        data.pop('error_message', None)
+        data.pop('updated_by', None)
+        data.pop('updated_at', None)
+        data.pop('created_by', None)
+        
+        return {'data': data}
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_event('ERROR', f'/registry/drafts/{draft_id}/preview', None, None, str(e))
+        raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
+
+
+@routes.patch('/registry/drafts/{draft_id}/status')
+def patch_draft_status(draft_id: int, payload: DraftUpdateStatus, db: Session = Depends(get_db)):
+    """PATCH /registry/drafts/{draft_id}/status - Обновить статус"""
+    log_event('INFO', f'/registry/drafts/{draft_id}/status', None, payload.model_dump())
+    try:
+        draft = draft_crud.get_draft_by_id(db, draft_id)
+        if not draft:
+            raise HTTPException(status_code=404, detail={'error': {'code': 'DRAFT_NOT_FOUND', 'message': 'Draft not found'}})
+        if draft.status in ('approved', 'discarded'):
+            raise HTTPException(status_code=409, detail={'error': {'code': 'DRAFT_ALREADY_DECIDED', 'message': 'Draft is already in a final state'}})
+
+        updated_draft, previous_status = draft_crud.update_draft_status(
+            db, draft_id, payload.status, payload.confidence, payload.preview_metadata, payload.error_code, payload.error_message, payload.updated_by
+        )
+        
+        return {
+            'data': {
+                'id': updated_draft.draft_id,
+                'status': updated_draft.status,
+                'previous_status': previous_status,
+                'updated_at': updated_draft.updated_at.isoformat() if updated_draft.updated_at else None
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_event('ERROR', f'/registry/drafts/{draft_id}/status', None, payload.model_dump(), str(e))
+        raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
+
+
+@routes.patch('/registry/drafts/{draft_id}/metadata')
+def patch_draft_metadata(draft_id: int, payload: DraftUpdateMetadata, db: Session = Depends(get_db)):
+    """PATCH /registry/drafts/{draft_id}/metadata - Обновить метаданные черновика (internal)"""
+    log_event('INFO', f'/registry/drafts/{draft_id}/metadata', None, payload.model_dump())
+    try:
+        draft = draft_crud.get_draft_by_id(db, draft_id)
+        if not draft:
+            raise HTTPException(status_code=404, detail={'error': {'code': 'DRAFT_NOT_FOUND', 'message': 'Draft not found'}})
+        if draft.status in ('approved', 'discarded'):
+            raise HTTPException(status_code=409, detail={'error': {'code': 'DRAFT_ALREADY_DECIDED', 'message': 'Draft is already in a final state'}})
+
+        updated_draft = draft_crud.update_draft_metadata(db, draft_id, payload.preview_metadata, payload.metadata_overrides, payload.updated_by)
+        
+        return {
+            'data': {
+                'id': updated_draft.draft_id,
+                'status': updated_draft.status,
+                'preview_metadata': updated_draft.preview_metadata,
+                'updated_at': updated_draft.updated_at.isoformat() if updated_draft.updated_at else None
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_event('ERROR', f'/registry/drafts/{draft_id}/metadata', None, payload.model_dump(), str(e))
+        raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
+
+
+@routes.delete('/registry/drafts/{draft_id}')
+def delete_draft_endpoint(draft_id: int, db: Session = Depends(get_db)):
+    """DELETE /registry/drafts/{draft_id} - Удалить запись"""
+    log_event('INFO', f'/registry/drafts/{draft_id}', None, None)
+    try:
+        if not draft_crud.delete_draft(db, draft_id):
+            raise HTTPException(status_code=404, detail={'error': {'code': 'DRAFT_NOT_FOUND', 'message': 'Draft not found'}})
+        from datetime import datetime, timezone
+        return {'data': {'id': draft_id, 'deleted_at': datetime.now(timezone.utc).isoformat()}}
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_event('ERROR', f'/registry/drafts/{draft_id}', None, None, str(e))
+        raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
+
