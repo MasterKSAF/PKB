@@ -231,20 +231,6 @@ check_pass(
 
 print()
 
-# ------------------------------------------------------------------
-# 6. POST /documents/{doc_id}/reprocess response fields
-# ------------------------------------------------------------------
-print("[6] POST /documents/{doc_id}/reprocess — response")
-print("-" * 40)
-
-for field in ["task_id", "document_id", "mode", "status", "message"]:
-    check_pass(
-        f"reprocess response has `{field}` in orchestrator_service_api.md",
-        f"`{field}`",
-        include_pattern="orchestrator_service_api.md",
-        min_count=1
-    )
-
 # Note: user_id in GET /documents/{id} response is correct and expected.
 
 print()

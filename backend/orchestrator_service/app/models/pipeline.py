@@ -77,7 +77,7 @@ class Task(Base):
     )
     pipeline_type: Mapped[str] = mapped_column(
         String(16), nullable=False, index=True
-    )  # "formation" | "indexation" | "reprocess"
+    )  # "formation" | "indexation"
 
     # Task status and stage
     status: Mapped[str] = mapped_column(

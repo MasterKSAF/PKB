@@ -34,7 +34,7 @@ router = APIRouter()
 async def list_tasks(
     draft_id: Optional[int] = Query(None, description="Фильтр по ID черновика"),
     status: Optional[str] = Query(None, description="Фильтр по статусу: active, completed, failed"),
-    pipeline_type: Optional[str] = Query(None, description="Фильтр по типу: formation, indexation, reprocess"),
+    pipeline_type: Optional[str] = Query(None, description="Фильтр по типу: formation, indexation"),
     page: int = Query(1, ge=1, description="Номер страницы"),
     page_size: int = Query(50, ge=1, le=200, description="Записей на странице"),
     current_user: CurrentUser = Depends(get_current_user),
