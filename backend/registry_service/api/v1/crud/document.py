@@ -25,6 +25,53 @@ def _coerce_int_fields(kwargs: Dict[str, Any]) -> Dict[str, Any]:
     return kwargs
 
 
+def populate_document_extra_fields(db: Session, documents: List[Document]) -> None:
+    if not documents:
+        return
+        
+    doc_ids = [d.id for d in documents]
+    mks_codes = {d.mks_oks_code for d in documents if d.mks_oks_code}
+    okstu_codes = {d.okstu_code for d in documents if d.okstu_code}
+    
+    # Batch query classifiers
+    from api.v1.models import Classifier
+    mks_names = {}
+    if mks_codes:
+        mks_rows = db.query(Classifier.code, Classifier.full_name).filter(
+            Classifier.classifier_system == 'MKS',
+            Classifier.code.in_(mks_codes)
+        ).all()
+        mks_names = {r.code: r.full_name for r in mks_rows}
+        
+    okstu_names = {}
+    if okstu_codes:
+        okstu_rows = db.query(Classifier.code, Classifier.full_name).filter(
+            Classifier.classifier_system == 'OKSTU',
+            Classifier.code.in_(okstu_codes)
+        ).all()
+        okstu_names = {r.code: r.full_name for r in okstu_rows}
+        
+    # Batch query document versions count
+    from api.v1.models import DocumentVersion
+    from sqlalchemy import func
+    version_counts = {}
+    if doc_ids:
+        version_rows = db.query(
+            DocumentVersion.document_id,
+            func.count(DocumentVersion.id)
+        ).filter(
+            DocumentVersion.document_id.in_(doc_ids)
+        ).group_by(
+            DocumentVersion.document_id
+        ).all()
+        version_counts = {r[0]: r[1] for r in version_rows}
+        
+    for doc in documents:
+        doc.mks_name = mks_names.get(doc.mks_oks_code) if doc.mks_oks_code else None
+        doc.okstu_name = okstu_names.get(doc.okstu_code) if doc.okstu_code else None
+        doc.total_versions = version_counts.get(doc.id, 0)
+
+
 def get_documents(
     db: Session,
     page: int = 1,
@@ -89,6 +136,7 @@ def get_documents(
     
     skip = (page - 1) * page_size
     documents = query.order_by(desc(Document.created_at)).offset(skip).limit(page_size).all()
+    populate_document_extra_fields(db, documents)
     
     return documents, total
 
@@ -99,7 +147,10 @@ def get_document_by_id(db: Session, document_id: str) -> Optional[Document]:
         document_int = int(str(document_id))
     except (ValueError, TypeError):
         return None
-    return db.query(Document).filter(Document.id == document_int).first()
+    doc = db.query(Document).filter(Document.id == document_int).first()
+    if doc:
+        populate_document_extra_fields(db, [doc])
+    return doc
 
 
 def create_document(db: Session, doc_code: str, title: str, **kwargs) -> Document:
@@ -122,6 +173,7 @@ def create_document(db: Session, doc_code: str, title: str, **kwargs) -> Documen
     db.add(document)
     db.commit()
     db.refresh(document)
+    populate_document_extra_fields(db, [document])
     check_and_quarantine_classifiers(db, document)
     return document
 
@@ -149,6 +201,7 @@ def update_document(db: Session, document_id: str, **kwargs) -> Optional[Documen
     
     db.commit()
     db.refresh(document)
+    populate_document_extra_fields(db, [document])
     check_and_quarantine_classifiers(db, document)
     return document
 
@@ -337,6 +390,7 @@ def _reference_to_rag(reference: DocumentReference) -> Dict[str, Any]:
 
 
 def get_document_sections_bundle(db: Session, document: Document) -> Dict[str, Any]:
+    populate_document_extra_fields(db, [document])
     document_uuid = document.id
     sections = (
         db.query(DocumentSection)
@@ -350,6 +404,25 @@ def get_document_sections_bundle(db: Session, document: Document) -> Dict[str, A
         .order_by(DocumentReference.created_at.asc())
         .all()
     )
+
+    from api.v1.models import Terminology
+    from sqlalchemy import cast, Text, or_
+    doc_code = document.doc_code
+    terms_query = db.query(Terminology)
+    conds = [cast(Terminology.related_docs, Text).ilike(f'%"{doc_code}"%')]
+    if db.bind.dialect.name == "postgresql":
+        conds.append(Terminology.related_docs.has_key(doc_code))
+    related_terms = terms_query.filter(or_(*conds)).all()
+
+    terminology_payload = [
+        {
+            'term': term.standard_term,
+            'definition': term.definition,
+            'source_clause': None,
+            'normalized_term': term.normalized_value,
+        }
+        for term in related_terms
+    ]
 
     document_payload = {
         'id': document.id,
@@ -365,6 +438,9 @@ def get_document_sections_bundle(db: Session, document: Document) -> Dict[str, A
         'issuing_body': document.issuing_body,
         'mks_oks_code': document.mks_oks_code,
         'okstu_code': document.okstu_code,
+        'mks_name': document.mks_name,
+        'okstu_name': document.okstu_name,
+        'total_versions': document.total_versions,
         'udc': document.udc,
         'successor_doc_id': document.successor_doc_id,
         'predecessor_doc_id': document.predecessor_doc_id,
@@ -375,7 +451,7 @@ def get_document_sections_bundle(db: Session, document: Document) -> Dict[str, A
     return {
         'document': document_payload,
         'sections': [_section_to_rag(section) for section in sections],
-        'terminology': [],
+        'terminology': terminology_payload,
         'references': [_reference_to_rag(reference) for reference in references],
     }
 
@@ -435,6 +511,21 @@ def create_pipeline_document(db: Session, payload: Dict[str, Any]) -> Dict[str, 
     
     doc = create_document(db, doc_code=doc_code, title=title, **doc_kwargs)
     
+    # Save physical version
+    source_data = doc_data.get('source', {})
+    if source_data:
+        from api.v1.models import DocumentVersion
+        db_ver = DocumentVersion(
+            document_id=doc.id,
+            version_number=1,
+            file_hash_sha256=source_data.get('file_hash_sha256'),
+            file_size_bytes=source_data.get('page_count') or 0,
+            file_key=source_data.get('file_name'),
+            uploaded_at=datetime.now(timezone.utc)
+        )
+        db.add(db_ver)
+        db.flush()
+    
     # Save content sections
     content_list = doc_data.get('content', [])
     sections_response = []
@@ -479,8 +570,15 @@ def create_pipeline_document(db: Session, payload: Dict[str, Any]) -> Dict[str, 
                     standard_term=raw_t,
                     normalized_value=norm_t or raw_t.lower(),
                     term_type='term',
-                    definition=definition
+                    definition=definition,
+                    related_docs=[doc.doc_code]
                 )
+            else:
+                current_docs = list(existing_t.related_docs or [])
+                if doc.doc_code not in current_docs:
+                    current_docs.append(doc.doc_code)
+                    existing_t.related_docs = current_docs
+                    db.flush()
                 
     # Save references
     references_list = doc_data.get('references', [])
@@ -572,6 +670,7 @@ def update_document_status(
     db.add(history)
     db.commit()
     db.refresh(document)
+    populate_document_extra_fields(db, [document])
     db.refresh(history)
 
     return document, history, old_status
