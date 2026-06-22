@@ -1,7 +1,9 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env")
+
     app_name: str = "Auth Service"
     env: str = "dev"
 
@@ -17,16 +19,11 @@ class Settings(BaseSettings):
 
     otel_endpoint: str = "signoz-otel-collector:4317"
 
-    # Brute-force protection
     max_failed_attempts: int = 5
-    lockout_duration_seconds: int = 30 * 60  # 30 minutes
+    lockout_duration_seconds: int = 30 * 60
 
-    # Rate limiting for /auth/token
     rate_limit_requests: int = 10
     rate_limit_window_seconds: int = 60
-
-    class Config:
-        env_file = ".env"
 
 
 settings = Settings()

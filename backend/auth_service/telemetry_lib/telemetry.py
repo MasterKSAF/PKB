@@ -21,7 +21,7 @@ from opentelemetry.propagators.b3 import B3MultiFormat
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 from pythonjsonlogger import jsonlogger
 
-_MASKED_FIELDS = frozenset({"password", "access_token", "refresh_token", "token", "secret", "password_hash"})
+_MASKED_FIELDS = frozenset({"password", "access_token", "refresh_token", "secret", "password_hash"})
 
 
 class _MaskingFilter(logging.Filter):
@@ -35,6 +35,7 @@ class _MaskingFilter(logging.Filter):
             for field in _MASKED_FIELDS:
                 if field in record.msg.lower():
                     record.msg = "[MASKED LOG — contains sensitive field]"
+                    record.args = ()
                     break
         return True
 

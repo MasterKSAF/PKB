@@ -3,6 +3,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.pool import StaticPool
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from app.api.v1.auth import _rate_buckets
 
 # aiosqlite 0.11+ убрал create_function — патч для SQLAlchemy 2.0 совместимости
 if not hasattr(aiosqlite.Connection, "create_function"):
@@ -17,6 +18,13 @@ from app.main import app
 from app.models.models import Role, RolePermission, User
 
 _TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limiter():
+    _rate_buckets.clear()
+    yield
+    _rate_buckets.clear()
 
 DEFAULT_ROLES = {
     "engineer": ["documents:read", "search", "history:read"],

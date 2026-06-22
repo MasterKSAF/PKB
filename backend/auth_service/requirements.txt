@@ -8,6 +8,7 @@ pydantic-settings==2.7.1
 bcrypt==5.0.0
 PyJWT==2.10.1
 python-multipart==0.0.20
+greenlet>=3.0.0
 pytest==8.3.4
 pytest-asyncio==0.24.0
 httpx==0.28.1

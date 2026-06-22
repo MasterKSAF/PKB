@@ -1,4 +1,5 @@
 import uuid
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -20,10 +21,20 @@ except Exception:
 
 logger = get_logger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async with AsyncSessionLocal() as db:
+        await init_db(db)
+    logger.info("Auth Service started (env=%s)", settings.env)
+    yield
+
+
 app = FastAPI(
     title=settings.app_name,
     version="1.0.0",
     description="Сервис аутентификации, ролей, доступов и аудита.",
+    lifespan=lifespan,
 )
 
 if _otel_enabled:
@@ -64,14 +75,7 @@ app.include_router(audit.router, prefix="/api/v1")
 app.include_router(internal.router, prefix="/api/v1")
 
 
-@app.on_event("startup")
-async def on_startup():
-    async with AsyncSessionLocal() as db:
-        await init_db(db)
-    logger.info("Auth Service started (env=%s)", settings.env)
-
-
 @app.get("/health")
 @app.get("/api/v1/health")
 def health():
-    return {"status": "ok", "service": "auth-service", "version": "1.0.0"}
+    return {"status": "ok", "service": "auth_service", "version": "1.0.0"}
