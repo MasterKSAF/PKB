@@ -355,7 +355,6 @@ Rate limit: не более 10 запросов в минуту на `/auth/toke
 {
   "user_id": "u-001",
   "roles": ["knowledge_admin"],
-  "audit_log_id": "audit-001",
   "updated_at": "2026-04-27T11:00:00Z"
 }
 ```
