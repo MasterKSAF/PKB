@@ -1,4 +1,5 @@
 import hashlib
+import re
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -8,9 +9,25 @@ import jwt
 
 from app.core.config import settings
 
+_PASSWORD_PATTERN = re.compile(
+    r"^(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>/?`~]).{8,}$"
+)
+
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def validate_password(password: str) -> None:
+    """Raises ValueError if password doesn't meet the policy."""
+    if len(password) < 8:
+        raise ValueError("Пароль должен быть не менее 8 символов")
+    if not re.search(r"[A-Z]", password):
+        raise ValueError("Пароль должен содержать хотя бы одну заглавную букву")
+    if not re.search(r"\d", password):
+        raise ValueError("Пароль должен содержать хотя бы одну цифру")
+    if not re.search(r"[!@#$%^&*()\-_=+\[\]{};':\"\\|,.<>/?`~]", password):
+        raise ValueError("Пароль должен содержать хотя бы один спецсимвол")
 
 
 def hash_password(password: str) -> str:

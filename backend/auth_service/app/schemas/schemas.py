@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class TokenRequest(BaseModel):
@@ -34,6 +34,18 @@ class UserCreate(BaseModel):
     full_name: str
     password: str = Field(min_length=8)
     roles: list[str]
+
+    @field_validator("password")
+    @classmethod
+    def password_policy(cls, v: str) -> str:
+        import re
+        if not re.search(r"[A-Z]", v):
+            raise ValueError("Пароль должен содержать хотя бы одну заглавную букву")
+        if not re.search(r"\d", v):
+            raise ValueError("Пароль должен содержать хотя бы одну цифру")
+        if not re.search(r"[!@#$%^&*()\-_=+\[\]{};':\"\\|,.<>/?`~]", v):
+            raise ValueError("Пароль должен содержать хотя бы один спецсимвол")
+        return v
 
 
 class UserUpdate(BaseModel):

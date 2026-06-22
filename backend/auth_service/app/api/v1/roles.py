@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import require_permission
+from app.core.errors import api_error
 from app.db.session import get_db
 from app.schemas.schemas import RoleCreate, RoleListResponse, RolePublic
 from app.services.audit_service import create_audit_event
@@ -20,19 +21,22 @@ def to_public(role) -> RolePublic:
 
 
 @router.get("", response_model=RoleListResponse)
-async def roles(db: AsyncSession = Depends(get_db), current_user = Depends(require_permission("roles:manage"))):
+async def roles(db: AsyncSession = Depends(get_db), current_user=Depends(require_permission("roles:manage"))):
     roles_list = await list_roles(db)
     return {"roles": [to_public(r) for r in roles_list]}
 
 
 @router.post("", response_model=RolePublic, status_code=status.HTTP_201_CREATED)
-async def create(payload: RoleCreate, request: Request, db: AsyncSession = Depends(get_db), current_user = Depends(require_permission("roles:manage"))):
+async def create(payload: RoleCreate, request: Request, db: AsyncSession = Depends(get_db), current_user=Depends(require_permission("roles:manage"))):
     try:
         role = await create_role(db, payload.name, payload.permissions)
-    except DuplicateError as exc:
-        raise HTTPException(status_code=409, detail=str(exc))
+    except DuplicateError:
+        api_error(409, "DUPLICATE_ROLE", "Роль с таким названием уже существует")
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        api_error(400, "VALIDATION_ERROR", str(exc))
 
-    await create_audit_event(db, "role.create", current_user.user_id, "role", role.role_id, {"name": role.name}, request.client.host if request.client else None)
+    await create_audit_event(
+        db, "role.create", current_user.user_id, "role", role.role_id,
+        {"name": role.name}, request.client.host if request.client else None,
+    )
     return to_public(role)
