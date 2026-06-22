@@ -127,11 +127,11 @@ class ApiCoverageTester:
     @property
     def client(self) -> httpx.AsyncClient:
         """Ленивая инициализация HTTP-клиента (SSL certs загружаются только при первом использовании)."""
-        if self._client is None:
-            self._client = httpx.AsyncClient(
-                timeout=self._client_timeout,
-                follow_redirects=self._client_follow_redirects,
-            )
+        self._client = httpx.AsyncClient(
+            timeout=self._client_timeout,
+            follow_redirects=self._client_follow_redirects,
+            trust_env=False,
+        )
         return self._client
 
     @client.setter
