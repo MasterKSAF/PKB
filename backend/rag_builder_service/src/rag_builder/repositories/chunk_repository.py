@@ -23,6 +23,7 @@ class ChunkRepository:
                 embedding=e,
                 strategy=c.strategy,
                 page=c.page,
+                indexing_txn_id=c.indexing_txn_id,
             )
             for c, e in zip(chunks, embeddings, strict=True)
         ]

@@ -15,17 +15,17 @@ class Settings(BaseSettings):
     database_url: str | None = None
 
     app_port: int = 8090
-    embedding_dim: int = 1536
-    vector_dimension: int = 1536
-    chunk_max_tokens: int = 512
-    chunk_size: int = 512
-    max_tokens: int = 512
-    chunk_default_strategy: str = "semantic_512"
+    embedding_dim: int = 2048
+    vector_dimension: int = 2048
+    chunk_max_tokens: int = 1024
+    chunk_size: int = 1024
+    max_tokens: int = 1024
+    chunk_default_strategy: str = "semantic_1024"
     embedding_api_url: str = "http://localhost:8000/v1/embeddings"
     embedding_model: str = "text-embedding-3-small"
     embedding_timeout: int = 30
     embedding_batch_size: int = 32
-    embedding_provider: str = "mock"  # mock | openai_compatible
+    embedding_provider: str = "mock"  # mock | openai_compatible | infinity
     embedding_api_key: str = ""
     embedding_retries: int = 2
 

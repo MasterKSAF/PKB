@@ -1,11 +1,11 @@
 ﻿{
   "metadata": {
     "schema": "for_rag_v1",
-    "document_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "document_id": 420000,
     "created_at": "2026-05-28T12:00:00Z"
   },
   "document": {
-    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "id": 420000,
     "doc_code": "GOST-TEST-001",
     "title": "Тестовый нормативный документ",
     "full_title": "Тестовый нормативный документ для RAG индексации",
@@ -23,7 +23,7 @@
   "sections": [
     {
       "section_id": 1,
-      "document_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "document_id": 420000,
       "parent_id": null,
       "clause": "1",
       "title": null,
@@ -31,7 +31,7 @@
       "path": "1",
       "page": 1,
       "bbox": [10, 20, 200, 40],
-      "type": "section",
+      "type": "text",
       "content": {
         "text": "Тестовый текст раздела для проверки чанкинга и эмбеддингов.",
         "amendments": []
@@ -40,7 +40,7 @@
     },
     {
       "section_id": 2,
-      "document_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "document_id": 420000,
       "parent_id": null,
       "clause": "2",
       "title": "Таблица допусков",
@@ -72,6 +72,6 @@
   ],
   "protected_spans": [],
   "options": {
-    "strategy": "semantic_512"
+    "strategy": "semantic_1024"
   }
 }

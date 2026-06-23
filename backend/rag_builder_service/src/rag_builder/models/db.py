@@ -2,9 +2,11 @@
 
 from datetime import datetime
 
+from uuid import UUID
+
 from pgvector.sqlalchemy import Vector  # type: ignore[import-untyped]
-from sqlalchemy import BigInteger, DateTime, Float, Index, Integer, String, Text, text
-from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
+from sqlalchemy import BigInteger, DateTime, Float, Index, Integer, String, Text, UniqueConstraint, text
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID as PG_UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from rag_builder.core.config import settings
@@ -16,7 +18,10 @@ class Base(DeclarativeBase):
 
 class RagDocumentChunk(Base):
     __tablename__ = "document_chunks"
-    __table_args__ = ({"schema": "rag"},)
+    __table_args__ = (
+        UniqueConstraint("section_id", "chunk_index", name="uq_rag_chunks_section_chunk"),
+        {"schema": "rag"},
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     section_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -29,6 +34,7 @@ class RagDocumentChunk(Base):
     page: Mapped[int | None] = mapped_column(Integer, nullable=True)
     bbox: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    indexing_txn_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

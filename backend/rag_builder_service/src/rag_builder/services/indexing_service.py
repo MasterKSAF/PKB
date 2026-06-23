@@ -4,6 +4,7 @@ import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Literal
+from uuid import uuid4
 
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,9 +43,12 @@ class IndexingService:
         try:
             repo = ChunkRepository(session)
             strategy = str(req.options.get("strategy", settings.chunk_default_strategy))
-            chunks = self.chunking.build_chunks(doc_id, req.sections, req.protected_spans, strategy)
+            txn_id = uuid4()
+            chunks = self.chunking.build_chunks(doc_id, req.sections, req.protected_spans, strategy, txn_id)
             vectors = await self.embedding.embed_many([c.content for c in chunks])
             vectors_for_repo: list[list[float] | None] = [v for v in vectors]
+            warnings: list[str] = []
+            errors: list[str] = []
             async with session.begin():
                 await repo.delete_by_document(doc_id)
                 created = await repo.insert_chunks(chunks, vectors_for_repo)
@@ -53,13 +57,15 @@ class IndexingService:
                 str(doc_id),
                 DocStatus(status="indexed", chunks_count=created, has_embeddings=created > 0, indexed_at=now),
             )
-            logger.info("Indexing completed document_id={} chunks={}", doc_id, created)
+            logger.info("Indexing completed document_id={} chunks={} txn_id={}", doc_id, created, txn_id)
             return BuildResponse(
                 document_id=req.document_id,
-                status="completed",
+                status="indexed",
                 indexed_at=now,
                 chunks_count=created,
                 index_stats={"sections": len(req.sections), "chunks": created, "embeddings": created},
+                errors=errors,
+                warnings=warnings,
             )
         except Exception:
             self._set_status(str(doc_id), DocStatus(status="failed"))

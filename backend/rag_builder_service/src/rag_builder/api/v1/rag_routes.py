@@ -13,14 +13,14 @@ router = APIRouter(prefix="/rag", tags=["rag"])
 @router.post(
     "/build",
     response_model=BuildResponse,
-    status_code=201,
-    summary="Построить индекс документа",
+    status_code=202,
+    summary="Запустить индексацию документа",
     description=(
-        "Запускает пайплайн индексации: валидация входа, chunking, embeddings и сохранение "
+        "Асинхронно запускает пайплайн индексации: валидация входа, chunking, embeddings и сохранение "
         "вектора в PostgreSQL/pgvector."
     ),
     responses={
-        201: {"description": "Индексация успешно завершена."},
+        202: {"description": "Индексация запущена (асинхронно)."},
         500: {"description": "Внутренняя ошибка при построении индекса."},
     },
 )
@@ -85,7 +85,7 @@ async def build(
                     ],
                     "terminology": [{"term": "допуск", "definition": "Предельно допустимое отклонение"}],
                     "protected_spans": [],
-                    "options": {"strategy": "semantic_512"},
+                    "options": {"strategy": "semantic_1024"},
                 },
             }
         },
