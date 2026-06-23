@@ -146,4 +146,6 @@ class TestOpenAPIEndpoints:
         data = response.json()
         paths = data.get("paths", {})
         assert "/api/v1/system/health" in paths
+        # POST /documents/{doc_id}/reprocess — pipeline-операция переиндексации (P2I-9)
+        assert "/api/v1/documents/{doc_id}/reprocess" in paths
 

@@ -7,7 +7,7 @@ API v1 router configuration with auth dependency.
 from fastapi import APIRouter, Depends
 
 from app.api.deps import get_current_user
-from app.api.v1.endpoints import drafts, health, tasks
+from app.api.v1.endpoints import documents, drafts, health, tasks
 
 api_router = APIRouter(
     dependencies=[Depends(get_current_user)],
@@ -18,6 +18,14 @@ api_router.include_router(
     drafts.router,
     prefix="/drafts",
     tags=["drafts"],
+)
+
+
+# Documents endpoints — только pipeline-операция reprocess
+api_router.include_router(
+    documents.router,
+    prefix="/documents",
+    tags=["documents"],
 )
 
 

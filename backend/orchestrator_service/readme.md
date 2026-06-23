@@ -150,6 +150,13 @@ ReDoc: `http://localhost:8081/redoc`
 | GET | `/tasks/{task_id}/status` | Статус задачи с детализацией шагов |
 | GET | `/tasks/{task_id}/steps` | Список шагов задачи |
 | GET | `/drafts/{draft_id}/tasks` | Список задач для черновика |
+
+### Документы (`/api/v1/documents`)
+
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| POST | `/documents/{doc_id}/reprocess` | Переиндексация документа (P2I-9) |
+
 ### Служебные
 
 | Метод | Endpoint | Описание |
@@ -182,6 +189,7 @@ orchestrator_service/
 │   │       └── endpoints/
 │   │           ├── __init__.py
 │   │           ├── drafts.py          # Черновики: upload, preview, decide
+│   │           ├── documents.py       # Документы: reprocess (P2I-9)
 │   │           ├── tasks.py           # Статус задач пайплайна
 │   │           └── health.py          # Health check
 │   ├── core/
@@ -201,11 +209,12 @@ orchestrator_service/
 │   ├── schemas/
 │   │   ├── __init__.py
 │   │   ├── common.py                  # Общие схемы (Error, Pagination)
+│   │   ├── documents.py               # Схемы документов: ReprocessMode, ReprocessRequest, ReprocessResponse
 │   │   ├── drafts.py                  # Схемы черновиков
 │   │   ├── tasks.py                   # Схемы задач пайплайна
 │   │   ├── requests.py                # Схемы запросов к сервисам (RAG, registry)
 │   │   └── validation.py              # Схемы валидации и health
-	│   ├── services/
+│   ├── services/
 	│   │   ├── __init__.py
 	│   │   ├── base_client.py             # Базовый клиент с dual-mode (mock/real)
 	│   │   ├── rag_client.py              # RAG Service (векторный поиск, генерация)

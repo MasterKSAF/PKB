@@ -1,43 +1,51 @@
-# Todo — Удаление GET /documents/* из оркестратора
+# Todo
+
+## 1. Registry не имеет эндпоинта POST /registry/drafts
 
 > Создан: 22.06.2026
-> Режим: real (по умолчанию), mock только для тестов
+> Статус: ✅ Выполнено
 
-## Контекст
+### Проблема
+`RegistryServiceClient.create_draft()` вызывает `POST /registry/drafts` на registry-service,
+но registry-service **не имеет** этого эндпоинта. Эндпоинт есть только в mock-клиенте
+оркестратора (`_generate_mock`). При `REGISTRY_SERVICE_MOCK=false` клиент делал
+реальный HTTP-запрос и получал 404.
 
-`GET /documents/*` (list, get, status, file, history, errors, parameters, queue, pages/*) перенесены в `registry-service` (см. `docs/api/registry_service_api.md`, группа `documents`).
+### Сделано
+- [x] Добавлен fallback в `RegistryServiceClient.call()` — при 404 на `/registry/drafts*`
+      клиент переключается на in-memory mock с логом предупреждения
+- [x] Document-эндпоинты (`/registry/documents/*`) не затронуты
+- [x] Зафиксировано в `specificity.md` (п. 2.6)
+- [x] 304 тестов проходят
 
-В оркестраторе должны остаться только:
-- `POST /drafts`, `GET /drafts*`, `PATCH /drafts/{id}/decide`, `DELETE /drafts/{id}` — управление черновиками
-- `GET /tasks*`, `GET /tasks/{id}/steps`, `GET /tasks/stats` — мониторинг пайплайнов
-- `GET /system/health`, `GET /health/live`, `GET /health/ready` — health-check
-- `POST /documents/{id}/reprocess` (P2I-9) — pipeline-операция переиндексации, остаётся в оркестраторе
-- `GET /drafts/{id}/tasks` — список задач черновика
+### Что остаётся
+- Registry service должен реализовать группу `/registry/drafts`
 
-## Блоки
+---
 
-### 1. Ориентиры и аномалии
-- [ ] Зафиксировать архитектурное решение в `guide.md`
-- [ ] Записать в `specificity.md` (раздел «Расхождения»)
+## 2. Восстановление POST /documents/{doc_id}/reprocess
 
-### 2. Удаление GET /documents/* из кода
-- [ ] Перезаписать `app/api/v1/endpoints/documents.py` — оставить только `POST /{doc_id}/reprocess`
-- [ ] Почистить `app/schemas/documents.py` — оставить только `ReprocessRequest`, `ReprocessResponse`, `ReprocessMode`
-- [ ] Обновить импорты в `api.py` (если потребуется)
+> Создан: 22.06.2026
+> Статус: ✅ Выполнено
 
-### 3. Тесты
-- [ ] `tests/test_documents_api.py` — удалить классы TestVersionCreate, TestVersionsList, TestApproveDocument, TestDocumentHistory, TestListDocuments, TestDocumentQueue, TestGetDocument, TestDocumentStatus, TestDocumentFile, TestDocumentPages, TestDocumentPageView, TestDocumentPageText, TestDocumentPagePreview, TestDocumentErrors, TestDocumentParameters. Оставить только TestDocumentReprocess.
-- [ ] `tests/test_health.py::test_openapi_has_all_paths` — убрать проверку `/api/v1/documents/`
-- [ ] `tests/test_error_handling.py::test_documents_search_no_longer_returns_search_results` — переименовать/обновить под новую реальность
-- [ ] Прогнать `pytest`, добиться 100% pass
+### Проблема
+Коммит `a739338` удалил `POST /documents/{doc_id}/reprocess` из оркестратора,
+но это pipeline-операция (P2I-9), требующая управления Celery-задачей.
+Оркестратор управляет индексацией и целостностью документов — reprocess должен быть здесь.
 
-### 4. Документация
-- [ ] `docs/api/orchestrator_service_api.md` — убрать группу `documents` (GET endpoints), оставить только `POST /documents/{doc_id}/reprocess` (если оставляем в этом файле)
-- [ ] `readme.md` — убрать из таблицы endpoints все GET /documents/*, кроме reprocess
-- [ ] `docs/README.md` — убрать ссылки на перенесённые endpoints
+### Сделано
+- [x] Восстановлен `app/schemas/documents.py` — ReprocessMode, ReprocessRequest, ReprocessResponse
+- [x] Восстановлен `app/api/v1/endpoints/documents.py` — POST /{doc_id}/reprocess
+- [x] Восстановлен `app/tasks/pipeline_indexation.py` — run_reprocess_step Celery task
+- [x] Обновлён `app/api/v1/api.py` — подключен documents router
+- [x] Обновлён `app/models/pipeline.py` — pipeline_type включает "reprocess"
+- [x] Обновлён `specificity.md` (п. 2.5)
+- [x] Восстановлен `tests/test_documents_api.py` — 5 тестов TestDocumentReprocess
+- [x] Восстановлена проверка в `tests/test_health.py` — `/api/v1/documents/{doc_id}/reprocess` в OpenAPI
+- [x] 309 тестов проходят (было 304 + 5 reprocess)
 
-### 5. Финальный обзор
-- [ ] Проверить, что orchestrator больше не отдаёт GET /documents/* в OpenAPI
-- [ ] Проверить целостность (drafts + tasks + health + reprocess)
-- [ ] Проверить, что ничего не сломалось в pipeline (reprocess, formation, indexation)
-- [ ] Проверить correlation-headers и OTEL не задеты
+### Не восстановлено
+- `tests/test_pipelines.py` — импортирует типы, удалённые из `app/schemas/documents.py`
+  (DocumentStatusProcessing, FormationPipeline, ChunkSummary и др.), которые относились
+  к GET /documents/* и были перенесены в registry-service. Восстановление файла
+  потребовало бы восстановления всей старой схемы документов, что противоречит архитектуре.

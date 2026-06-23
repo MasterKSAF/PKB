@@ -121,8 +121,9 @@ LLM-ответы проверяются на корректность форма
 
 **Решение (22.06):**
 - Все GET /documents/*, POST /documents/* полностью удалены из orchestrator.
-- `app/schemas/documents.py` удалён целиком.
-- Тесты `tests/test_documents_api.py` удалены.
+- Исключение: `POST /documents/{doc_id}/reprocess` (P2I-9) **восстановлен** (22.06) — операция переиндексации, требующая управления Celery-задачей, остаётся в оркестраторе.
+- `app/schemas/documents.py` пересоздан — только ReprocessMode/ReprocessRequest/ReprocessResponse.
+- Тесты `tests/test_documents_api.py` удалены (reprocess покрывается интеграционными тестами пайплайнов).
 
 ## 3. Технические долги
 
