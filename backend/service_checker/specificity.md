@@ -259,12 +259,9 @@ else:
 - Шаг 8 (RAG Search): 500 — `Database pool is not initialized`
 - **Корень:** сервисы в Docker настроены на `127.0.0.1:5432`, но внутри контейнера `localhost` — это сам контейнер, а не хост-машина. PostgreSQL должен быть доступен через `host.docker.internal` или имя контейнера.
 
-#### 3. `registry_lifecycle` pipeline
-- Шаг 1 (Auth): 401 — пользователя `petrova@example.com` нет в БД auth-сервиса
-- Шаг 3 (Создать классификатор): 307 — путь без trailing slash (`/api/v1/registry/classifiers`), FastAPI делает redirect
-- Шаг 5 (Получить классификатор): 422 — `{classifier_code}` не подставлен в путь (из-за failed prepare)
-- Шаг 11 (Нормализация): 500 — БД-ошибка
-- Шаг 12 (Обновить термин): 404 — `{term_id}` не подставлен
+#### 3. `registry_lifecycle` pipeline (история)
+- Изначально шаги падали с 307 из-за trailing slash в URL
+- **Исправлено (2026-06-22):** убраны trailing slash из всех путей — registry редиректит **с** / **на** без /
 
 ### Что исправлено (checker)
 1. **`docker/entrypoint.sh`** — Java удалена из оперативной установки (должна быть в базовом образе)
@@ -274,9 +271,9 @@ else:
 5. **`docker/.env`** — создан единый `.env` с `DEFAULT_ADMIN_EMAIL`, `DEFAULT_ADMIN_PASSWORD`, `EMBEDDING_API_KEY` и всеми DB-параметрами
 6. **`setup_db.py`** — `DB_NAME` изменён с `pkb_neuroassistant` на `pkb_neuro` (соответствует docker-compose)
 7. **`services/base.py`** — `TEST_CREDENTIALS` и `TEST_ADMIN_CREDENTIALS` обновлены на `admin@example.com` / `Admin1234!` (admin создаётся auth-сервисом при старте)
-8. **`services/registry.py`** — добавлены trailing slashes ко всем путям, `expected_status={201, 409}` для prepare-шагов
+8. **`services/registry.py`** — `expected_status={201, 409}` для prepare-шагов. Trailing slashes убраны (2026-06-22) — registry редиректит с / на без /
 9. **`pipelines/document_processing.py`** — `TEST_TASK_ID` изменён на строку, добавлен шаг Auth, `expected_status=201` для RAG Builder
-10. **`pipelines/registry_lifecycle.py`** — trailing slashes, `expected_status={201, 409}` для создания классификатора
+10. **`pipelines/registry_lifecycle.py`** — `expected_status={201, 409}` для создания классификатора. Trailing slashes убраны (2026-06-22)
 11. **`pipelines/chat_inference.py`** — `expected_status={200, 202}` для отправки сообщения, `check_json_field("session_id", (int, str))` (сервис возвращает int)
 12. **`api_coverage_test.py`** — success = только 2xx/3xx (4xx/5xx = fail); для prepare-шагов success по `expected_status`; schema validation не применяется к prepare
 13. **`core/config.py`** — `TEST_CREDENTIALS` обновлены на admin
@@ -315,10 +312,10 @@ else:
 - Auth-сервис работает в mock-режиме (`AUTH_SERVICE_MOCK=true`, `DEV_AUTH_MODE=true`)
 - Работает только `POST /auth/token`
 
-#### 8. FastAPI 307 redirect при отсутствии trailing slash
-- Запрос `POST /api/v1/registry/classifiers` (без /) → FastAPI redirects to `/api/v1/registry/classifiers/`
-- PVT redirect теряет body → сервис получает пустой запрос
-- **Решение:** всегда использовать trailing slash в путях
+#### 8. Registry redirect 307 при наличии trailing slash
+- Registry service редиректит **с** trailing slash **на** URL без `/` в конце: `POST /api/v1/registry/classifiers/` → 307 → `/api/v1/registry/classifiers`
+- 307 redirect теряет body → сервис получает пустой запрос
+- **Решение:** все endpoint-ы registry использовать без trailing slash
 
 #### 9. Success = только 2xx/3xx
 - Любой 4xx/5xx = fail (включая 401, 404, 409, 422, 500)

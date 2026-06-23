@@ -210,7 +210,7 @@ class DocumentApprovalPipeline(PipelineDef):
             name="Создание документа в Registry",
             service="registry",
             method="POST",
-            path="/api/v1/registry/documents/",
+            path="/api/v1/registry/documents",
             port=8084,
             body={
                 "title": f"Approval тест {ts}",
@@ -218,16 +218,15 @@ class DocumentApprovalPipeline(PipelineDef):
                 "source_type": "GOST",
                 "era": "RF",
                 "validity_status": "active",
-                "source_draft_id": "{draft_id}",  # RG-9: реальный ID черновика
                 "mks_oks_code": "47.020",
                 "title_key": f"GOST|RF|APPROVAL-{ts}|2026",
             },
             expected_status={201, 409},
             needs_auth=True,
             extract_keys=["doc_id"],
-            skip_if=_draft_skipped,
         ))
 
+        # ── Шаг 13: FULL-фаза (полная обработка) ────────────────────
         steps.append(PipelineStep(
             name="Индексация документа",
             service="rag_builder",

@@ -58,7 +58,7 @@ class RegistryQuarantinePipeline(PipelineDef):
             name="Создать классификатор",
             service="registry",
             method="POST",
-            path="/api/v1/registry/classifiers/",
+            path="/api/v1/registry/classifiers",
             port=8084,
             body={
                 "classifier_system": "MKS",
@@ -78,7 +78,7 @@ class RegistryQuarantinePipeline(PipelineDef):
             name="Создать документ с неизвестным кодом",
             service="registry",
             method="POST",
-            path="/api/v1/registry/documents/",
+            path="/api/v1/registry/documents",
             port=8084,
             body={
                 "title": f"Pipeline quarantine документ {ts}",
@@ -101,7 +101,7 @@ class RegistryQuarantinePipeline(PipelineDef):
             name="Список карантина (pending)",
             service="registry",
             method="GET",
-            path="/api/v1/registry/classifiers/pending/",
+            path="/api/v1/registry/classifiers/pending",
             port=8084,
             params={"page": 1, "page_size": 10},
             expected_status=200,
@@ -115,8 +115,7 @@ class RegistryQuarantinePipeline(PipelineDef):
             name="Принять из карантина (accept)",
             service="registry",
             method="POST",
-            # ⚠️ trailing slash обязателен — FastAPI 307 redirect без него
-            path="/api/v1/registry/classifiers/pending/{pending_id}/accept/",
+            path="/api/v1/registry/classifiers/pending/{pending_id}/accept",
             port=8084,
             body={
                 "parent_code": classifier_code,
@@ -132,8 +131,7 @@ class RegistryQuarantinePipeline(PipelineDef):
             name="Валидация классификации (accept)",
             service="registry",
             method="POST",
-            # ⚠️ trailing slash для избежания 307 redirect с пустым телом
-            path="/api/v1/registry/classifiers/validate/",
+            path="/api/v1/registry/classifiers/validate",
             port=8084,
             body={
                 "classification": {
@@ -154,7 +152,7 @@ class RegistryQuarantinePipeline(PipelineDef):
             name="Создать второй документ с неизвестным кодом",
             service="registry",
             method="POST",
-            path="/api/v1/registry/documents/",
+            path="/api/v1/registry/documents",
             port=8084,
             body={
                 "title": f"Pipeline quarantine документ 2 {ts}",
@@ -176,7 +174,7 @@ class RegistryQuarantinePipeline(PipelineDef):
             name="Список карантина (второй pending)",
             service="registry",
             method="GET",
-            path="/api/v1/registry/classifiers/pending/",
+            path="/api/v1/registry/classifiers/pending",
             port=8084,
             params={"page": 1, "page_size": 10},
             expected_status=200,
@@ -190,7 +188,7 @@ class RegistryQuarantinePipeline(PipelineDef):
             name="Отклонить из карантина (reject)",
             service="registry",
             method="POST",
-            path="/api/v1/registry/classifiers/pending/{pending_id2}/reject/",
+            path="/api/v1/registry/classifiers/pending/{pending_id2}/reject",
             port=8084,
             body={
                 "admin_comment": "Отклонено pipeline тестом",
@@ -205,8 +203,7 @@ class RegistryQuarantinePipeline(PipelineDef):
             name="Валидация классификации (reject)",
             service="registry",
             method="POST",
-            # ⚠️ trailing slash для избежания 307 redirect
-            path="/api/v1/registry/classifiers/validate/",
+            path="/api/v1/registry/classifiers/validate",
             port=8084,
             body={
                 "classification": {

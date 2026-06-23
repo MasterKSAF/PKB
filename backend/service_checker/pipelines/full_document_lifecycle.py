@@ -84,7 +84,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             name="Создание документа в Registry",
             service="registry",
             method="POST",
-            path="/api/v1/registry/documents/",
+            path="/api/v1/registry/documents",
             port=8084,
             body={
                 "title": f"Lifecycle тест {ts}",
@@ -130,10 +130,10 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             name="Обновление метаданных документа",
             service="registry",
             method="PATCH",
-            # ⚠️ trailing slash обязателен (FastAPI 307 redirect)
-            path="/api/v1/registry/documents/{doc_id}/status/",
+            path="/api/v1/registry/documents/{doc_id}/status",
             port=8084,
-            body={"processing_status": "uploaded"},  # RG-1: поле processing_status
+            extra_headers={"X-Service-Id": "orchestrator"},
+            body={"status": "uploaded"},
             expected_status=200,
             needs_auth=True,
             check=check_json_field("data", dict),
@@ -185,8 +185,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             name="Удаление документа из Registry",
             service="registry",
             method="DELETE",
-            # ⚠️ trailing slash обязателен
-            path="/api/v1/registry/documents/{doc_id}/",
+            path="/api/v1/registry/documents/{doc_id}",
             port=8084,
             expected_status=200,
             needs_auth=True,
@@ -225,7 +224,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             name="Воссоздание документа в Registry",
             service="registry",
             method="POST",
-            path="/api/v1/registry/documents/",
+            path="/api/v1/registry/documents",
             port=8084,
             body={
                 "title": f"Lifecycle тест восстановленный {ts2}",

@@ -1,8 +1,15 @@
 ## API Orchestrator Service (orchestrator-service:8081)
 
-Координатор пайплайнов 1 и 2. Оркестрирует конвейер обработки документов: загрузка → task → вызов Registry для создания черновика → OCR/Parser → Converter-validator → Registry.  
-Ведение этапов задачи: запись входных/выходных данных каждого сервиса (OCR/Parser, Converter-validator) в `pipeline.task_steps`.  
-Вызов Registry для CRUD операций с данными черновиков.
+Координатор пайплайнов 1 и 2. Оркестрирует конвейер обработки документов: загрузка → task → вызов Registry для создания черновика → OCR/Parser → Converter-validator → Registry.
+
+**Orchestrator НЕ занимается чтением данных Registry.** Чтение черновиков, документов, страниц, версий, истории — через Gateway напрямую в Registry Service (см. [Разграничение ответственности](../guide.md#разграничение-ответственности-orchestrator-vs-registry)).
+
+Orchestrator отвечает только за:
+- Управление жизненным циклом черновика (upload, preview, decide)
+- Координацию пайплайнов (вызов OCR/Parser, Converter-validator, Registry internal API, RAG Builder)
+- Ведение этапов задачи в `pipeline.task_steps`
+- Связь данных Registry с задачами пайплайна (GET `/{drafts,documents}/{id}/tasks`)
+- Статус обработки (GET `/documents/{id}/status`, `/documents/queue`, `/documents/{id}/errors`)
 
 **Базовый URL (внутренний)**: `http://127.0.0.1:8081/api/v1`
 
@@ -16,6 +23,10 @@
 
 | Группа      | Описание                                                            |
 | ----------- | ------------------------------------------------------------------- |
+| `documents` | Статус обработки, очередь, ошибки, версии, переобработка             |
+| `drafts`    | Управление загрузкой, preview, решение (approve/reject), метаданные  |
+| `tasks`     | Мониторинг задач и шагов пайплайна (read-only, admin)               |
+| `health`    | Агрегированный health-check                                         |
 
 ---
 
@@ -23,16 +34,35 @@
 
 Авторизацию контролирует только Gateway. Внутренние сервисы не имеют своей аутентификации — см. [common_api.md](common_api.md#межсервисное-взаимодействие).
 
-| `health`    | Агрегированный health-check                                         |
-| `documents` | Документы: загрузка, список, статус, версии, аппрув, завершение обработки |
-| `drafts`    | Черновики: управление загрузкой, preview, решение (approve/reject) — единая точка входа. Вызов Registry internal API для CRUD |
-| `pages`     | Просмотр страниц и текстового слоя                                  |
+> **Примечание:** Группа `tasks` — внутренняя (internal). Эндпоинты `/tasks/{task_id}/...` используются только для межсервисного взаимодействия и админского анализа. `task` — агрегатор этапов пайплайна, каждый этап хранит входные/выходные JSON-контейнеры сервисов.
 
-> **Примечание:** Группа `tasks` — внутренняя (internal). Эндпоинты `/tasks/{task_id}/...` используются только для межсервисного взаимодействия и админского анализа. `task` — агрегатор этапов пайплайна, каждый этап хранит входные/выходные JSON-контейнеры сервисов. Внешние клиенты используют `/drafts/{draft_id}/...` и `/documents/{document_id}/...`.
+### Содержание
+
+| Метод | Путь | Описание |
+|-------|------|----------|
+| POST | `/drafts` | Загрузка файла (создание черновика) |
+| POST | `/drafts/{draft_id}/preview` | Запуск preview-обработки черновика |
+| GET | `/drafts/{draft_id}/preview/status` | Статус preview черновика |
+| PATCH | `/drafts/{draft_id}/decide` | Решение по черновику (approve/reject) |
+| PATCH | `/drafts/{draft_id}/metadata` | Обновление метаданных черновика |
+| DELETE | `/drafts/{draft_id}` | Удаление черновика |
+| GET | `/drafts/{draft_id}/tasks` | Связь черновика с задачами |
+| GET | `/documents/{doc_id}/tasks` | Связь документа с задачами |
+| POST | `/documents/{doc_id}/versions` | Создание версии документа |
+| GET | `/documents/{doc_id}/status` | Статус обработки документа |
+| GET | `/documents/{doc_id}/errors` | Ошибки обработки документа |
+| GET | `/documents/queue` | Очередь обработки документов |
+| GET | `/tasks` | Список всех задач |
+| GET | `/tasks/stats` | Статистика задач |
+| GET | `/tasks/{task_id}/status` | Статус задачи (longpoll) |
+| GET | `/tasks/{task_id}/steps` | Шаги задачи |
+| GET | `/health` | Health-check сервиса |
 
 ---
 
 ## Группа documents
+
+Оркестратор отвечает за статус обработки, очередь, ошибки, версионирование и переобработку. Чтение карточки документа, страниц, файлов, истории — через Registry (см. [registry_service_api.md](registry_service_api.md#группа-documents)).
 
 ### POST /drafts — Загрузка файла (создание черновика)
 
@@ -236,6 +266,38 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 | `draft_id` | bigint | ID черновика |
 | `tasks` | array | Массив задач: `task_id`, `status`, `pipeline_stage`, `initiated_by` (субъект), `created_at`, `updated_at` |
 
+### GET /documents/{doc_id}/tasks
+
+Список задач пайплайна для документа. Позволяет найти все задачи, связанные с документом (включая задачи по черновикам, создавшим данный документ, и задачи переобработки).
+
+**Путь:** `/api/v1/documents/{doc_id}/tasks`
+**Метод:** `GET`
+**Доступ:** `system_admin`, `knowledge_admin`
+
+**Ответ `200`:**
+
+```json
+{
+  "document_id": 1,
+  "tasks": [
+    {
+      "task_id": 420000,
+      "draft_id": 420000,
+      "status": "indexed",
+      "pipeline_stage": "indexation",
+      "initiated_by": "orchestrator",
+      "created_at": "2026-06-05T10:00:00Z",
+      "updated_at": "2026-06-05T10:25:00Z"
+    }
+  ]
+}
+```
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `document_id` | bigint | ID документа |
+| `tasks` | array | Массив задач: `task_id`, `draft_id`, `status`, `pipeline_stage`, `initiated_by`, `created_at`, `updated_at` |
+
 ### POST /documents/{doc_id}/versions
 
 Загрузка дополнительной версии файла к существующему логическому документу (скан к цифре, чертёж к спецификации и т.д.).
@@ -260,173 +322,6 @@ Orchestrator вычисляет SHA-256 содержимого, определя
   "created_at": "2026-05-15T11:00:00Z"
 }
 ```
-
----
-
-### GET /documents/{doc_id}/versions
-
-Список всех версий файлов логического документа.
-
-> **Примечание:** Поле `size_bytes` в ответе API соответствует полю `file_size_bytes` в таблице БД `registry.document_versions`.
-
-**Query-параметры**:
-| Параметр | Тип | Обязательность | По умолчанию | Описание |
-|----------|-----|---------------|-------------|----------|
-| `page` | int | Нет | 1 | Номер страницы |
-| `page_size` | int | Нет | 50 | Размер страницы (макс. 100) |
-
-**Ответ `200`**:
-
-```json
-{
-  "document_id": 1,
-  "versions": [
-    {
-      "version_id": 420001,
-      "version_number": 1,
-      "format_code": "pdf_digital",
-      "format_label": "PDF (цифровой)",
-      "file_key": "b3a8f1c2/v1/e3b0c442...855.pdf",
-      "file_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "size_bytes": 2048576,
-      "created_at": "2026-05-15T10:00:00Z",
-      "created_by": "Иванов И.И."
-    }
-  ],
-  "meta": { "total": 2 }
-}
-
-> **Разница между `version_id` и `version_number`**: `version_id` — внутренний идентификатор версии (bigint, sequence), `version_number` — порядковый номер версии документа (начиная с 1), видимый пользователю.
-
----
-
-### GET /documents
-
-Список документов с фильтрацией.
-
-**Query-параметры** (дополнительно к существующим):
-
-| Параметр            | Тип    | Описание                                                   |
-| ------------------- | ------ | ---------------------------------------------------------- |
-| `source_type`       | string | Фильтр по типу источника                                   |
-| `era`               | string | `USSR`, `CIS`, `RF`, `CURRENT`                             |
-| `validity_status`   | string | `active`, `superseded`, `cancelled`, `historical`, `draft` |
-| `jurisdiction`      | string | `RU`, `EU`, `US`, `NO`, `INTL`                             |
-| `mks_oks_code`      | string | Фильтр по коду МКС/ОКС                                     |
-| `okstu_code`        | string | Фильтр по коду ОКСТУ                                       |
-| `doc_code`          | string | Поиск по номеру документа                                  |
-| `status`            | string | Фильтр по статусу FSM                                      |
-| `search`            | string | Поиск по названию                                          |
-| `sort_by`           | string | Поле сортировки: `title`, `doc_code`, `created_at`, `status` (по умолчанию `created_at`) |
-| `order`             | string | Направление: `asc`, `desc` (по умолчанию `desc`)            |
-| `page`, `page_size` | int    | Пагинация                                                  |
-
-**Ответ `200`**:
-
-```json
-{
-  "summary": {
-    "total": 128,
-    "created": 100,
-    "pending_index": 5,
-    "indexing": 3,
-    "indexed": 17,
-    "failed": 3
-  },
-  "items": [
-    {
-      "document_id": 1,
-      "title": "Стойки установочные",
-      "doc_code": "20868-81",
-      "source_type": "GOST",
-      "era": "USSR",
-      "validity_status": "active",
-      "jurisdiction": "RU",
-      "issuing_body": "Госстандарт СССР",
-      "mks_oks_code": "31.240",
-      "okstu_code": null,
-      "classification_status": {
-        "mks": ["31.240"],
-        "okstu": [],
-        "udk": [],
-        "subject_area": ["Электроника", "Монтажные изделия"]
-      },
-      "file_hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "file_size_bytes": 2048576,
-      "status": "created",
-      "latest_version": 1,
-      "total_versions": 2,
-      "user_id": "u-001",
-      "created_by": "Иванов И.И.",
-      "created_at": "2026-04-27T10:00:00Z",
-      "updated_at": "2026-04-27T14:00:00Z"
-    }
-  ],
-  "meta": { "total": 128, "page": 1, "page_size": 20 }
-}
-```
-
----
-
-### GET /documents/{doc_id}
-
-Детальная информация о документе со всеми метаданными и версиями файлов.
-
-**Ответ `200`**:
-
-```json
-{
-  "document_id": 1,
-  "title": "Стойки установочные",
-  "doc_code": "20868-81",
-  "source_type": "GOST",
-  "document_type": "normative",
-  "title_hash_sha256": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
-  "title_key": "USSR|gost|47.020||20868-81|стойки установочные...",
-  "status": "created",
-  "era": "USSR",
-  "validity_status": "active",
-  "jurisdiction": "RU",
-  "issuing_body": "Госстандарт СССР",
-  "enterprise_id": null,
-  "mks_oks_code": "31.240",
-  "okstu_code": null,
-  "classification_status": {
-    "mks": ["31.240"],
-    "okstu": [],
-    "udk": [],
-    "subject_area": ["Электроника", "Монтажные изделия"]
-  },
-  "metadata": {
-    "year": "1981",
-    "udk_code": "629.5.021",
-    "tags": ["судостроение", "стойки"]
-  },
-  "latest_version": {
-    "version_id": 420001,
-    "version_number": 1,
-    "format_code": "pdf_digital",
-    "file_hash_sha256": "e3b0c442...",
-    "size_bytes": 2048576
-  },
-  "total_versions": 2,
-  "user_id": "u-001",
-  "created_by": "system_registry_sync",
-  "updated_by": "ivanov_ai",
-  "created_at": "2026-04-27T10:00:00Z",
-  "updated_at": "2026-04-27T14:00:00Z"
-}
-```
-
-**Коды ошибок**:
-| HTTP | `error.code` | Когда возникает |
-|------|-------------|----------------|
-| 400 | VALIDATION_ERROR | Некорректный `doc_id` в пути |
-| 401 | UNAUTHORIZED | Отсутствует или невалидный JWT |
-| 403 | FORBIDDEN | Нет прав на просмотр документа |
-| 404 | DOCUMENT_NOT_FOUND | Документ с указанным ID не найден |
-| 502 | BAD_GATEWAY | Ошибка вызова Registry |
-| 503 | SERVICE_UNAVAILABLE | БД недоступна |
 
 ---
 
@@ -530,124 +425,6 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 **Группировка `steps.pipeline`**: каждый пайплайн имеет свой ключ (`formation`, `indexation`) с полем `status` — агрегированный статус пайплайна, и вложенными этапами. Статусы пайплайна: `pending`, `in_progress`, `completed`, `failed`, `blocked`. Статусы этапов: `pending`, `in_progress`, `completed`, `error`, `blocked`.
 
 После завершения Пайплайна 1 автоматически запускается **Пайплайн 2 (Индексация)**.
-
----
-
-### GET /documents/{doc_id}/file
-
-Получение полного файла документа (последняя версия).
-
-**Query-параметры**:
-
-| Параметр | Тип   | Обязательность | Значение по умолчанию | Описание                                     |
-| -------- | ----- | -------------- | --------------------- | -------------------------------------------- |
-| `format` | string| Нет            | `json`                | Формат ответа: `json` — JSON со ссылкой на файл; `binary` — бинарный поток файла |
-
----
-
-#### format=json (по умолчанию)
-
-Ответ возвращает JSON с метаданными и ссылкой для скачивания файла.
-
-**Ответ `200`**:
-
-```json
-{
-  "file_url": "/files/b3a8f1c2/full.pdf",
-  "file_size": 1048576,
-  "content_type": "application/pdf"
-}
-```
-
-| Поле           | Тип    | Описание                                   |
-| -------------- | ------ | ------------------------------------------ |
-| `file_url`     | string | Относительный URL для скачивания файла     |
-| `file_size`    | int    | Размер файла в байтах                      |
-| `content_type` | string | MIME-тип файла (application/pdf, image/png, image/jpeg, image/tiff и т.д.) |
-
----
-
-#### format=binary
-
-Ответ возвращает бинарное содержимое файла напрямую.
-
-**Ответ `200`**:
-
-| Заголовок             | Значение                                           |
-| --------------------- | -------------------------------------------------- |
-| `Content-Type`        | Зависит от типа файла: `application/pdf`, `image/png`, `image/jpeg`, `image/tiff` и т.д. |
-| `Content-Disposition` | `attachment; filename="<original_filename>"`       |
-| `Content-Length`      | Размер файла в байтах                              |
-
-Тело ответа — бинарный поток (сырые байты файла).
-
----
-
-
-
-### GET /documents/{doc_id}/history
-
-История переходов статусов документа (аудит).
-
-**Query-параметры**:
-| Параметр | Тип | Обязательность | По умолчанию | Описание |
-|----------|-----|---------------|-------------|----------|
-| `page` | int | Нет | 1 | Номер страницы |
-| `page_size` | int | Нет | 50 | Размер страницы (макс. 100) |
-
-**Ответ `200`**:
-
-```json
-{
-  "document_id": 1,
-  "history": [
-    {
-      "history_id": "h-001",
-      "old_status": null,
-      "new_status": "uploaded",
-      "comment": { "reason": "initial_upload", "details": null },
-      "changed_by": "ivanov_ai",
-      "changed_at": "2026-05-15T10:00:00Z"
-    },
-    {
-      "history_id": "h-002",
-      "old_status": "created",
-      "new_status": "indexed",
-      "comment": { "reason": "manual_approve", "details": "Утверждено главным инженером" },
-      "changed_by": "ivanov_ai",
-      "changed_at": "2026-05-15T12:00:00Z"
-    }
-  ],
-  "meta": { "total": 5 }
-}
-```
-
----
-
-### DELETE /documents/{doc_id}
-
-**Soft-delete:** документ помечается как удалённый (`deleted_at`), но запись в БД сохраняется. Связанные сущности (секции, версии, история, чанки) также помечаются как недоступные. Повторный вызов возвращает `404 NOT_FOUND`.
-
-**Ответ `200`**:
-
-```json
-{
-  "document_id": 1,
-  "deleted_at": "2026-06-05T10:05:00Z"
-}
-```
-
-### Коды ошибок
-
-| HTTP | `error.code` | Когда возникает |
-|------|-------------|----------------|
-| 401 | UNAUTHORIZED | Отсутствует или невалидный JWT |
-| 403 | FORBIDDEN | Нет прав на удаление |
-| 404 | DOCUMENT_NOT_FOUND | Документ не найден или уже удалён |
-| 409 | DOCUMENT_IN_PROCESSING | Документ в обработке, удаление невозможно |
-| 409 | HAS_CHILDREN | Нельзя удалить: есть дочерние версии/секции |
-| 502 | BAD_GATEWAY | Ошибка вызова Registry |
-| 503 | SERVICE_UNAVAILABLE | БД недоступна |
 
 ---
 
@@ -843,425 +620,21 @@ Orchestrator вычисляет SHA-256 содержимого, определя
 
 ---
 
-## Группа pages
-
-### GET /documents/{doc_id}/pages
-
-Список страниц документа.
-
-**Ответ `200`**:
-
-```json
-{
-  "document_id": 1,
-  "pages_total": 12,
-  "pages": [
-    {
-      "page": 1,
-      "width": 2480,
-      "height": 3508,
-      "ocr_status": "completed",
-      "confidence": 0.95,
-      "has_text_layer": true
-    }
-  ],
-  "meta": { "total": 12, "page": 1, "page_size": 50 }
-}
-
-> **Примечание:** Поле `has_text_layer` указывает, содержит ли страница встроенный текстовый слой (цифровой PDF) или является сканированным изображением. Источник данных — OCR-сервис (этап распознавания).
-```
-
-### GET /documents/{doc_id}/pages/{page_num}
-
-Изображение страницы с наложенными блоками (bbox). Используется для визуального просмотра страницы с подсветкой распознанных элементов.
-
-**Параметры запроса (query):**
-
-| Параметр | Тип | Обязательность | Описание |
-|---|---|---|---|
-| `highlight` | string | Нет | ID блока для подсветки (число из поля `block[].number` ответа `/text`). Если передан — соответствующий блок выделяется на изображении. |
-
-**Ответ `200`:** Бинарные данные изображения страницы (PNG/JPEG) с заголовками:
-- `Content-Type: image/png` (или `image/jpeg`)
-- `Content-Length`
-
-**Ошибки:**
-| HTTP-код | Код ошибки | Описание |
-|---|---|---|
-| `404` | `DOCUMENT_NOT_FOUND` | Документ не найден |
-| `404` | `PAGE_NOT_FOUND` | Страница с указанным номером не существует |
-
-### GET /documents/{doc_id}/pages/{page_num}/text
-
-Текстовый слой и структура страницы: блоки, таблицы, изображения с координатами (bbox).
-
-**Ответ `200`:**
-
-```json
-{
-  "document_id": 1,
-  "page": 1,
-  "width": 2480,
-  "height": 3508,
-  "blocks": [
-    {
-      "number": 1,
-      "type": "paragraph",
-      "bbox": [0.05, 0.056, 1.0, 0.111],
-      "content": "Настоящий стандарт распространяется...",
-      "confidence": 0.95
-    },
-    {
-      "number": 5,
-      "type": "table",
-      "bbox": [0.05, 0.417, 1.0, 0.694],
-      "content": {
-        "columns": ["L, мм", "нормальная", "повышенная"],
-        "rows": [["От 6 до 50", "0,1", "0,05"]]
-      },
-      "confidence": 0.88
-    }
-  ]
-}
-```
-
-| Поле | Тип | Описание |
-|---|---|---|
-| `document_id` | string | ID документа |
-| `page` | int | Номер страницы |
-| `width` | int | Ширина страницы в пикселях |
-| `height` | int | Высота страницы в пикселях |
-| `blocks` | array | Массив блоков на странице в порядке чтения |
-| `blocks[].number` | int | Порядковый номер блока |
-| `blocks[].type` | string | Тип блока: `paragraph`, `heading`, `table`, `list`, `image`, `formula`, `headerFooter` |
-| `blocks[].bbox` | array | Координаты блока: `[x1, y1, x2, y2]` в нормализованных единицах (0..1) |
-| `blocks[].content` | string/object | Текстовое содержимое или структурированный объект (для таблиц) |
-| `blocks[].confidence` | float | Уверенность распознавания (0..1) |
-
-### GET /documents/{doc_id}/pages/{page_num}/preview
-
-Агрегированный просмотр: изображение страницы + текстовый слой + подсветка блоков. 
-Объединяет функциональность `/pages/{page_num}` и `/pages/{page_num}/text` в одном ответе.
-
-**Параметры запроса (query):**
-
-| Параметр | Тип | Обязательность | Описание |
-|---|---|---|---|
-| `highlight` | string | Нет | ID блока для подсветки |
-| `format` | string | Нет | Формат ответа: `json` (по умолчанию) — структурированные данные, `html` — встроенный HTML с canvas |
-
-**Ответ `200` (`format=json`):**
-
-```json
-{
-  "document_id": 1,
-  "page": 1,
-  "image_url": "/documents/1/pages/1",
-  "blocks": [
-    {
-      "number": 1,
-      "type": "paragraph",
-      "bbox": [0.05, 0.056, 1.0, 0.111],
-      "content": "Настоящий стандарт распространяется..."
-    }
-  ],
-  "text_layer": "Настоящий стандарт распространяется..."
-}
-```
-
-**Ответ `200` (`format=html`):** HTML-документ с встроенным SVG/canvas-отображением страницы и наложенными блоками.
-
-### GET /documents/{doc_id}/parameters
-
-Извлечённые параметры документа — структурированные данные из спецификаций, таблиц и формул.
-
-**Ответ `200`:**
-
-```json
-{
-  "document_id": 1,
-  "parameters": [
-    {
-      "symbol": "R_доп",
-      "description": "Допустимый радиус",
-      "unit": "мм",
-      "value": 0.05,
-      "source_clause": "6.1",
-      "source_page": 1
-    },
-    {
-      "symbol": "L",
-      "description": "Длина стойки",
-      "unit": "мм",
-      "range": { "min": 6, "max": 80 },
-      "source_clause": "6.1.table1",
-      "source_page": 2
-    }
-  ],
-  "total": 2
-}
-```
-
-| Поле | Тип | Описание |
-|---|---|---|
-| `document_id` | string | ID документа |
-| `parameters` | array | Массив извлечённых параметров |
-| `parameters[].symbol` | string | Обозначение параметра (например, `L`, `R_доп`) |
-| `parameters[].description` | string | Описание параметра |
-| `parameters[].unit` | string | Единица измерения |
-| `parameters[].value` | number | Числовое значение (если применимо) |
-| `parameters[].range` | object | Диапазон значений параметра:
-  - `min`: number — минимальное значение
-  - `max`: number — максимальное значение
-  - `min_inclusive`: boolean (опционально) — включено ли минимальное значение
-  - `max_inclusive`: boolean (опционально) — включено ли максимальное значение |
-| `parameters[].source_clause` | string | Пункт документа-источника |
-| `parameters[].source_page` | int | Страница документа-источника |
-| `total` | int | Общее количество параметров |
-
-> **Источник данных:** параметры извлекаются Converter-validator'ом на этапе полной обработки из таблиц, формул и спецификаций документа. Поле `parameters` присутствует в `registry.document_sections.content` для секций типа `formula` и `table`.
-
 ---
 
 ## Группа drafts
 
-Orchestrator — **единая точка входа** для работы с черновиками. Все эндпоинты `/drafts` проксируют вызовы к Registry internal API (`/registry/drafts`), добавляя логику пайплайна (создание task, управление этапами).
+**Чтение черновиков — Registry.** `GET /drafts`, `GET /drafts/{id}`, `GET /drafts/{id}/preview` — через Gateway напрямую в Registry (см. [registry_service_api.md](registry_service_api.md#группа-drafts)).
 
-Черновик (draft) — **обязательная точка входа** для загрузки документа. `POST /drafts` всегда создаёт задачу (`pipeline.tasks`) и черновик (`POST /registry/drafts`); загрузить документ без черновика невозможно.
+Orchestrator координирует **запись и жизненный цикл черновиков**: загрузка, preview, решение, metadata, удаление. Все write-эндпоинты вызывают Registry internal API.
 
 **Принцип работы:**
-- `POST /drafts` → создание task + вызов `POST /registry/drafts`
-- `GET /drafts` / `GET /drafts/{id}` → прокси к `GET /registry/drafts`
-- `PATCH /drafts/{id}/decide` → решение → `PATCH /registry/drafts/{id}/status` + при `approve` → `POST /registry/documents`
-- `DELETE /drafts/{id}` → вызов `DELETE /registry/drafts/{id}`
+- `POST /drafts` → создание task + `POST /registry/drafts`
+- `POST /drafts/{id}/preview` → запуск OCR/Parser → Converter
+- `PATCH /drafts/{id}/decide` → `PATCH /registry/drafts/{id}/status` + при `approve` → `POST /registry/documents`
+- `PATCH /drafts/{id}/metadata` → `POST /validate/metadata` (Converter) → `PATCH /registry/drafts/{id}/metadata`
+- `DELETE /drafts/{id}` → `DELETE /registry/drafts/{id}` + каскад `pipeline.task_steps`
 
-Данные черновиков (raw_data, preview_metadata) хранятся в `registry.drafts` (БД Registry). Управление жизненным циклом — через Orchestrator. Этапы задачи с входными/выходными данными сервисов — в `pipeline.task_steps` (БД Orchestrator).  
-Детальная схема БД — см. [db_diagrams.md](../database/db_diagrams.md).
-
-### GET /drafts
-
-Список черновиков с фильтрацией. Без параметров возвращает все черновики (доступно `system_admin` и `knowledge_admin`).
-С одним из параметров — фильтрация по бизнес-ключу или конкретному черновику.
-
-**Query-параметры:**
-
-| Параметр | Тип | Обязательный | Описание |
-|----------|-----|-------------|----------|
-| `draft_id` | bigint | Нет | Фильтр по ID черновика |
-| `document_key` | string | Нет | Бизнес-ключ документа (SHA-256). История попыток обработки одного документа |
-| `status` | string | Нет | Фильтр по статусу: `uploaded`, `previewing`, `ready_for_approve`, `review_required`, `validation`, `approved`, `discarded` |
-| `page` | int | Нет | Номер страницы (по умолчанию 1) |
-| `page_size` | int | Нет | Записей на странице (по умолчанию 50, max 200) |
-
-**Ответ `200`:**
-
-```json
-{
-  "items": [
-    {
-      "draft_id": 1,
-      "task_id": 100,
-      "file_key": "f-abc123",
-      "document_key": "sha256:def456",
-      "status": "approved",
-      "confidence": 0.92,
-      "preview_metadata": { /* см. _schemas.md#PreviewMetadata */ },
-      "document_id": 1300,
-      "created_at": "2026-06-05T10:00:00Z",
-      "updated_at": "2026-06-05T10:05:00Z"
-    },
-    {
-      "draft_id": 2,
-      "task_id": 101,
-      "file_key": "f-abc123",
-      "document_key": "sha256:def456",
-      "status": "review_required",
-      "confidence": 0.62,
-      "preview_metadata": { /* см. _schemas.md#PreviewMetadata */ },
-      "has_notifications": true,
-      "critical_count": 1,
-      "document_id": null,
-      "created_at": "2026-06-05T10:10:00Z",
-      "updated_at": "2026-06-05T10:12:00Z"
-    }
-  ],
-  "meta": {
-    "total": 2,
-    "page": 1,
-    "page_size": 50
-  }
-}
-```
-
-> Схема полей `preview_metadata` — [_schemas.md](_schemas.md#PreviewMetadata).
-
-| Поле | Тип | Описание |
-|------|-----|----------|
-| `draft_id` | bigint | Уникальный идентификатор черновика |
-| `task_id` | bigint | Внутренний ID задачи (internal) |
-| `file_key` | string | Ссылка на файл в MinIO |
-| `document_key` | string | Бизнес-ключ документа (SHA-256) |
-| `status` | string | Статус черновика: `uploaded`, `previewing`, `ready_for_approve`, `review_required`, `validation`, `approved`, `discarded` |
-| `confidence` | float | Оценка качества распознавания (0..1) |
-| `preview_metadata` | object | Preview-метаданные — см. [_schemas.md](_schemas.md#PreviewMetadata) |
-| `document_id` | bigint \| null | ID документа в Registry (FK → `registry.documents`), созданный по результатам черновика |
-| `has_notifications` | bool | **P12-3**: есть ли у черновика уведомления (для индикатора в UI) |
-| `critical_count` | int | **P12-3**: количество critical-уведомлений (для бейджа) |
-| `error_code` | string \| null | Код ошибки при `discarded` |
-| `error_message` | string \| null | Описание ошибки |
-| `created_at` | datetime | Время создания (ISO 8601) |
-| `updated_at` | datetime | Время последнего изменения (ISO 8601) |
-
-**Терминальные и промежуточные статусы:**
-
-| Тип | Статусы |
-|-----|---------|
-| **Промежуточные** (ждут операции) | `uploaded`, `previewing`, `ready_for_approve`, `review_required`, `validation` |
-| **Терминальные** (финальные) | `approved`, `discarded` |
-
-**Допустимые операции по статусам:**
-
-| Статус | `approve` | `reject` | `delete` |
-|--------|:---------:|:--------:|:--------:|
-| `uploaded` | ❌ | ❌ | ❌ |
-| `previewing` | ❌ | ❌ | ❌ |
-| `ready_for_approve` | ✅ | ✅ | ❌ |
-| `review_required` | ❌ | ✅ | ❌ |
-| `validation` | ❌ | ❌ | ❌ |
-| `approved` | ❌ | ❌ | ❌ |
-| `discarded` | ❌ | ❌ | ✅ |
-
----
-
-### GET /drafts/{draft_id}
-
-Получить полную информацию о черновике, включая сырые данные распознавания (`raw_data`).
-
-**Ответ `200`:**
-
-```json
-{
-  "draft_id": 1,
-  "task_id": 100,
-  "file_key": "f-abc123",
-  "document_key": "sha256:def456",
-  "status": "ready_for_approve",
-  "confidence": 0.92,
-  "preview_metadata": { /* см. _schemas.md#PreviewMetadata */ },
-  "raw_data": {
-    "schema": "raw_ocr_v4",
-    "pages": [
-      {
-        "page": 1,
-        "width": 595.0,
-        "height": 842.0,
-        "blocks": [
-          {
-            "number": 1,
-            "type": "text",
-            "bbox": [56.7, 70.9, 481.9, 18.0],
-            "content": "ГОСТ 20868-81",
-            "confidence": 0.99
-          }
-        ]
-      }
-    ]
-  },
-  "document_id": null,
-  "version_id": null,
-  "is_new_document": true,
-  "notifications": [],
-  "error_code": null,
-  "error_message": null,
-  "created_by": "user_10",
-  "created_at": "2026-06-05T10:00:00Z",
-  "updated_at": "2026-06-05T10:02:00Z"
-}
-```
-
-**P12-3 / P12-4 (новые поля в ответе черновика):**
-
-| Поле | Тип | Описание |
-|------|-----|----------|
-| `document_id` | bigint \| null | ID документа в Registry. `null` пока черновик не одобрен |
-| `version_id` | bigint \| null | **P12-4**: ID версии документа (`document_versions.id`). `null` пока не создана |
-| `is_new_document` | bool | **P12-4**: `true` — новый документ, `false` — новая версия существующего |
-| `notifications` | array | **P12-3**: массив уведомлений для оператора. Заполняется при `status: review_required`. Структура — см. [parser_service_api.md](parser_service_api.md#p12-3--p3-5--qualitynotifications-уведомления-оператора). Orchestrator получает их от Parser/OCR и записывает в `pipeline.draft_notifications` |
-
-> **`valid_from` / `valid_until`:** Эти поля появляются в ответе `GET /drafts/{id}` после того, как оператор передал их через `PATCH /drafts/{draft_id}/metadata`. На этапе черновика они хранятся во временном поле `metadata_overrides` в `registry.drafts`. При `approve` копируются в `registry.documents` как финальные даты действия. Если даты не заданы явно, `valid_from` может быть выведен из `year` (01-01-{year}).
-> **Особенность `valid_until`:** В БД хранится `dateMax = '9999-12-31'` для бессрочных документов, но в API-ответах это значение **возвращается как `null`**. При передаче от UI: `null` → backend подставляет `dateMax`. Это внутренняя оптимизация — UI оперирует понятием «бессрочно», а не конкретной датой.
-
-**P12-3 — поток уведомлений:**
-
-1. Parser/OCR возвращает `quality.notifications[]` в ответе `/process/{task_id}/result`.
-2. Orchestrator читает массив и вставляет записи в `pipeline.draft_notifications` (`INSERT ... RETURNING id`).
-3. Если среди уведомлений есть `severity >= warning` (или по порогам `app_settings.parser.quality_thresholds`) — черновик переводится в `review_required`.
-4. Если уведомления отсутствуют или их уровень ниже порогов — Оркестратор проверяет **авто-апрув** (`app_settings.parser.auto_approve`). Если включён и количество уведомлений не превышает пороги — черновик автоматически утверждается (`approved`), запускается Пайплайн 2.
-5. UI получает уведомления через `GET /drafts/{draft_id}` (поле `notifications`).
-6. Оператор просматривает уведомления, принимает решение через `PATCH /drafts/{draft_id}/decide`.
-
-| Поле | Тип | Описание |
-|------|-----|----------|
-| `draft_id` | bigint | Уникальный идентификатор черновика |
-| `task_id` | bigint | Внутренний ID задачи (internal) |
-| `file_key` | string | Ссылка на файл в MinIO |
-| `document_key` | string | Бизнес-ключ документа (SHA-256) |
-| `status` | string | Статус черновика |
-| `confidence` | float | Оценка качества распознавания (0..1) |
-| `preview_metadata` | object | Preview-метаданные — см. [_schemas.md](_schemas.md#PreviewMetadata) |
-| `raw_data` | object | Сырые данные распознавания (`raw_ocr_v4`) — результат Parser или OCR |
-| `document_id` | bigint \| null | ID документа в Registry, созданный по результатам черновика |
-| `error_code` | string \| null | Код ошибки |
-| `error_message` | string \| null | Описание ошибки |
-| `created_by` | string | Субъект (пользователь или сервис) |
-| `created_at` | datetime | Время создания (ISO 8601) |
-| `updated_at` | datetime | Время последнего изменения (ISO 8601) |
-
-**Возможные ошибки:**
-
-| HTTP | Код | Описание |
-|------|-----|----------|
-| 404 | `DRAFT_NOT_FOUND` | Черновик не существует |
-
----
-
-### GET /drafts/{draft_id}/preview
-
-Получить preview-метаданные черновика (облегчённый ответ, без `raw_data`).
-
-**Ответ `200`:**
-
-```json
-{
-  "draft_id": 1,
-  "task_id": 100,
-  "file_key": "f-abc123",
-  "document_key": "sha256:def456",
-  "status": "ready_for_approve",
-  "confidence": 0.92,
-  "preview_metadata": { /* см. _schemas.md#PreviewMetadata */ },
-  "created_at": "2026-06-18T10:00:00Z"
-}
-```
-
-> Схема полей `preview_metadata` — [_schemas.md](_schemas.md#PreviewMetadata).
-
-| Поле | Тип | Описание |
-|------|-----|----------|
-| `draft_id` | bigint | Уникальный идентификатор черновика |
-| `task_id` | bigint | Внутренний ID задачи (internal) |
-| `file_key` | string | Ссылка на файл в MinIO |
-| `document_key` | string | Бизнес-ключ документа (SHA-256) |
-| `status` | string | Статус черновика |
-| `confidence` | float | Оценка качества распознавания (0..1) |
-| `preview_metadata` | object | Preview-метаданные — см. [_schemas.md](_schemas.md#PreviewMetadata) |
-| `created_at` | datetime | Время создания (ISO 8601) |
-
-**Возможные ошибки:**
-
-| HTTP | Код | Описание |
-|------|-----|----------|
-| 404 | `DRAFT_NOT_FOUND` | Черновик не существует |
 
 ---
 
