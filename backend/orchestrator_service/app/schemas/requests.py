@@ -21,6 +21,7 @@ class CreateDraftRequest(BaseModel):
 
     file_key: str = Field(..., description="Ключ файла")
     document_key: str = Field(..., description="Ключ документа")
+    status: str = Field("uploaded", description="Статус черновика")
     created_by: str = Field(..., description="Кто создал (UUID пользователя)")
     file_hash_sha256: Optional[str] = Field(None, description="SHA-256 хэш файла")
     title_hash_sha256: Optional[str] = Field(None, description="SHA-256 хэш названия")
@@ -50,8 +51,11 @@ class UpdateDocumentStatusRequest(BaseModel):
 class CheckUniquenessRequest(BaseModel):
     """Request body for POST /registry/documents/check-uniqueness."""
 
-    file_hash_sha256: str = Field(..., description="SHA-256 хэш файла")
-    title_hash_sha256: Optional[str] = Field(None, description="SHA-256 хэш названия")
+    title: str = Field(..., description="Название документа для проверки уникальности")
+    doc_code: Optional[str] = Field(None, description="Регистрационный номер")
+    era: Optional[str] = Field(None, description="Эпоха: USSR, CIS, RF, CURRENT")
+    source_type: Optional[str] = Field(None, description="Тип источника: GOST, GOST_R, OST, RD, TU, ISO, DNV, ASTM, OTHER")
+    file_size_bytes: Optional[int] = Field(None, description="Размер файла в байтах")
 
 
 # ---------------------------------------------------------------------------

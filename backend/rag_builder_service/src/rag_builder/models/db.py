@@ -5,7 +5,7 @@ from datetime import datetime
 from uuid import UUID
 
 from pgvector.sqlalchemy import Vector  # type: ignore[import-untyped]
-from sqlalchemy import BigInteger, DateTime, Float, Index, Integer, String, Text, UniqueConstraint, text
+from sqlalchemy import BigInteger, DateTime, Float, Index, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID as PG_UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -19,7 +19,7 @@ class Base(DeclarativeBase):
 class RagDocumentChunk(Base):
     __tablename__ = "document_chunks"
     __table_args__ = (
-        UniqueConstraint("section_id", "chunk_index", name="uq_rag_chunks_section_chunk"),
+        # UNIQUE(section_id, chunk_index) НЕ включён — ломает индексацию нескольких документов
         {"schema": "rag"},
     )
 

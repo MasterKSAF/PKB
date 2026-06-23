@@ -17,12 +17,13 @@ class DraftNotification(Base):
     """Quality notifications from Parser/OCR services for a draft."""
 
     __tablename__ = "draft_notifications"
+    __table_args__ = {"schema": "pipeline"}
 
     id: Mapped[int] = mapped_column(
         Integer, primary_key=True, autoincrement=True
     )
     task_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True
+        Integer, ForeignKey("pipeline.tasks.id", ondelete="CASCADE"), nullable=False, index=True
     )
     draft_id: Mapped[int] = mapped_column(
         Integer, nullable=False, index=True
@@ -61,6 +62,7 @@ class Task(Base):
     __table_args__ = (
         UniqueConstraint("draft_id", "pipeline_type", name="uq_tasks_draft_pipeline"),
         UniqueConstraint("document_id", "pipeline_type", name="uq_tasks_document_pipeline"),
+        {"schema": "pipeline"},
     )
 
     id: Mapped[int] = mapped_column(
@@ -158,10 +160,11 @@ class TaskStep(Base):
     """Log of a single step execution within a pipeline task."""
 
     __tablename__ = "task_steps"
+    __table_args__ = {"schema": "pipeline"}
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     task_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True
+        Integer, ForeignKey("pipeline.tasks.id", ondelete="CASCADE"), nullable=False, index=True
     )
     step_name: Mapped[str] = mapped_column(
         String(64), nullable=False

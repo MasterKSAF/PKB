@@ -272,12 +272,15 @@ async def create_draft(
     is_duplicate_document = False
     try:
         uniqueness = await registry.check_uniqueness(
-            file_hash_sha256=file_hash,
-            title_hash_sha256=title_hash,
+            title=title or document_key,
+            doc_code=doc_code,
+            era=era,
+            source_type=source_type,
+            file_size_bytes=file_size,
         )
         data = uniqueness.get("data", {})
         is_duplicate_file = data.get("is_duplicate_file", False)
-        is_duplicate_document = data.get("is_duplicate_document", False)
+        is_duplicate_document = data.get("is_duplicate", False)
     except Exception as exc:
         logger.warning(f"Uniqueness check failed: {exc}")
     finally:
@@ -295,7 +298,7 @@ async def create_draft(
             title_key=title_key,
             metadata_fields=metadata_fields if metadata_fields else None,
         )
-        draft_id = draft_result.get("data", {}).get("draft_id", 0)
+        draft_id = draft_result.get("data", {}).get("id", 0)
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -176,7 +176,7 @@ class RegistryServiceClient(ServiceClient):
         draft_id = storage["draft_seq"]
         now = "2026-06-08T10:00:00Z"
         draft: Dict[str, Any] = {
-            "draft_id": draft_id,
+            "id": draft_id,
             "file_key": body.get("file_key", ""),
             "document_key": body.get("document_key", ""),
             "status": "uploaded",
@@ -390,17 +390,17 @@ class RegistryServiceClient(ServiceClient):
 
     @classmethod
     def _mock_check_uniqueness(cls, storage: dict, body: dict) -> dict:
-        file_hash = body.get("file_hash_sha256", "")
+        title = body.get("title", "")
         is_duplicate = False
-        if file_hash:
+        if title:
             for d in cls._all_drafts(storage) + cls._all_documents(storage):
-                if d.get("file_hash_sha256") == file_hash:
+                if d.get("document_key") == title or d.get("file_key", "").find(title[:8]) >= 0:
                     is_duplicate = True
                     break
         return {
             "data": {
-                "is_duplicate_file": is_duplicate,
-                "is_duplicate_document": False,
+                "is_duplicate": is_duplicate,
+                "is_duplicate_file": False,
                 "candidates": [],
             }
         }
@@ -540,7 +540,7 @@ class RegistryServiceClient(ServiceClient):
             request_model=CreateDraftRequest,
             mock_response={
                 "data": {
-                    "draft_id": 1,
+                    "id": 1,
                     "file_key": file_key,
                     "document_key": document_key,
                     "status": "uploaded",
@@ -631,13 +631,19 @@ class RegistryServiceClient(ServiceClient):
 
     async def check_uniqueness(
         self,
-        file_hash_sha256: str,
-        title_hash_sha256: Optional[str] = None,
+        title: str,
+        doc_code: Optional[str] = None,
+        era: Optional[str] = None,
+        source_type: Optional[str] = None,
+        file_size_bytes: Optional[int] = None,
     ) -> dict:
         """Check document uniqueness (duplicate detection)."""
         body = CheckUniquenessRequest(
-            file_hash_sha256=file_hash_sha256,
-            title_hash_sha256=title_hash_sha256,
+            title=title,
+            doc_code=doc_code,
+            era=era,
+            source_type=source_type,
+            file_size_bytes=file_size_bytes,
         )
         return await self.call(
             "POST",
@@ -645,8 +651,8 @@ class RegistryServiceClient(ServiceClient):
             request_model=CheckUniquenessRequest,
             mock_response={
                 "data": {
+                    "is_duplicate": False,
                     "is_duplicate_file": False,
-                    "is_duplicate_document": False,
                     "candidates": [],
                 }
             },

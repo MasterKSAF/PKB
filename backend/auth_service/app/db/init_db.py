@@ -16,7 +16,7 @@ DEFAULT_ROLES = {
 
 async def init_db(db: AsyncSession) -> None:
     async with engine.begin() as connection:
-        await connection.execute(text("CREATE SCHEMA IF NOT EXISTS auth_service"))
+        await connection.execute(text("CREATE SCHEMA IF NOT EXISTS auth"))
         await connection.run_sync(Base.metadata.create_all)
 
     for name, permissions in DEFAULT_ROLES.items():

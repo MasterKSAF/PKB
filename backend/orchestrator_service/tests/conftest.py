@@ -111,11 +111,16 @@ def db_engine():
 
     async def _init():
         async with engine.begin() as conn:
-            # Performance pragmas — skip disk flush, use memory journal
             from sqlalchemy import text
+            # SQLite: attach pipeline schema (for pipeline.tasks with schema="pipeline")
+            try:
+                await conn.execute(text("ATTACH DATABASE ':memory:' AS pipeline"))
+            except Exception:
+                pass  # already attached
+            # Performance pragmas — skip disk flush, use memory journal
             await conn.execute(text("PRAGMA journal_mode=MEMORY"))
             await conn.execute(text("PRAGMA synchronous=OFF"))
-            await conn.execute(text("PRAGMA cache_size=-64000"))  # 64MB cache
+            await conn.execute(text("PRAGMA cache_size=-64000"))
             await conn.run_sync(Base.metadata.create_all)
 
     asyncio.run(_init())

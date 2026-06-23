@@ -36,7 +36,7 @@ class TestRegistryDrafts:
         )
         assert "data" in result
         data = result["data"]
-        assert "draft_id" in data
+        assert "id" in data
         assert data["status"] == "uploaded"
 
     @pytest.mark.asyncio
@@ -90,23 +90,24 @@ class TestRegistryDrafts:
     async def test_check_uniqueness(self, reg_client):
         """check_uniqueness returns duplicate detection info."""
         result = await reg_client.check_uniqueness(
-            file_hash_sha256="abc123",
-            title_hash_sha256="def456",
+            title="Тестовый документ",
+            doc_code="TEST-001",
+            source_type="GOST",
         )
         assert "data" in result
         data = result["data"]
+        assert "is_duplicate" in data
         assert "is_duplicate_file" in data
-        assert "is_duplicate_document" in data
 
     @pytest.mark.asyncio
     async def test_check_uniqueness_duplicate(self, reg_client):
         """check_uniqueness returns is_duplicate flags."""
         result = await reg_client.check_uniqueness(
-            file_hash_sha256="known-duplicate-hash",
+            title="known-duplicate-title",
         )
         assert "data" in result
         data = result["data"]
-        assert isinstance(data.get("is_duplicate_file"), bool)
+        assert isinstance(data.get("is_duplicate"), bool)
 
     # ------------------------------------------------------------------
     # Document status (RG-1)

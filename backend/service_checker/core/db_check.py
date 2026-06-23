@@ -358,7 +358,7 @@ def run_db_check() -> DbCheckResult:
     result.pipeline_tables = pipeline_tables
     result.pipeline_missing = EXPECTED_PIPELINE_TABLES - set(pipeline_tables)
 
-    # ── 7. Auth таблицы (DB-29) ─────────────────────────────────
+    # ── 7. Auth таблицы (DB-29) — в схеме auth ────────────────
     auth_tables = _query_single_column(
         "SELECT schemaname || '.' || tablename "
         "FROM pg_tables WHERE schemaname = 'auth' "
