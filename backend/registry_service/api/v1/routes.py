@@ -1807,3 +1807,71 @@ def delete_draft_endpoint(draft_id: int, db: Session = Depends(get_db)):
         log_event('ERROR', f'/registry/drafts/{draft_id}', None, None, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
+
+
+# ============================================================================
+# Files and Versions API - Group 5
+# ============================================================================
+
+from api.v1.crud import file as file_crud
+from api.v1.crud import document_version as version_crud
+from api.v1.schemas.file import FileSchema
+from api.v1.schemas.document_version import DocumentVersionSchema
+
+@routes.get('/registry/files/{file_id}')
+def get_file_metadata(file_id: str, db: Session = Depends(get_db)):
+    """GET /registry/files/{file_id} — получить метаданные файла по ID"""
+    log_event('INFO', f'/registry/files/{file_id}', None, None)
+    try:
+        file_rec = file_crud.get_file_by_id(db, file_id)
+        if not file_rec:
+            raise HTTPException(status_code=404, detail={'error': {'code': 'FILE_NOT_FOUND', 'message': 'File not found'}})
+        return {'data': FileSchema.model_validate(file_rec).model_dump(mode='json')}
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_event('ERROR', f'/registry/files/{file_id}', None, None, str(e))
+        raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
+
+
+@routes.get('/registry/documents/{document_id}/files')
+def list_document_files(document_id: int, db: Session = Depends(get_db)):
+    """GET /registry/documents/{document_id}/files — список файлов, привязанных к документу"""
+    log_event('INFO', f'/registry/documents/{document_id}/files', None, None)
+    try:
+        files = file_crud.get_files_by_document_id(db, document_id)
+        data = [FileSchema.model_validate(f).model_dump(mode='json') for f in files]
+        return {'data': data}
+    except Exception as e:
+        log_event('ERROR', f'/registry/documents/{document_id}/files', None, None, str(e))
+        raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
+
+
+@routes.get('/registry/documents/{document_id}/versions')
+def list_document_versions(document_id: int, db: Session = Depends(get_db)):
+    """GET /registry/documents/{document_id}/versions — список версий документа"""
+    log_event('INFO', f'/registry/documents/{document_id}/versions', None, None)
+    try:
+        versions = version_crud.get_versions_by_document_id(db, document_id)
+        data = [DocumentVersionSchema.model_validate(v).model_dump(mode='json') for v in versions]
+        return {'data': data}
+    except Exception as e:
+        log_event('ERROR', f'/registry/documents/{document_id}/versions', None, None, str(e))
+        raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
+
+
+@routes.get('/registry/versions/{version_id}')
+def get_document_version(version_id: int, db: Session = Depends(get_db)):
+    """GET /registry/versions/{version_id} — получить конкретную версию"""
+    log_event('INFO', f'/registry/versions/{version_id}', None, None)
+    try:
+        version = version_crud.get_version_by_id(db, version_id)
+        if not version:
+            raise HTTPException(status_code=404, detail={'error': {'code': 'VERSION_NOT_FOUND', 'message': 'Version not found'}})
+        return {'data': DocumentVersionSchema.model_validate(version).model_dump(mode='json')}
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_event('ERROR', f'/registry/versions/{version_id}', None, None, str(e))
+        raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
+
