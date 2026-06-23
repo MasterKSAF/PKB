@@ -349,3 +349,65 @@ def test_document_total_versions_count(client):
     assert get_pipe_res.json()["data"].get("total_versions") == 1
 
 
+def test_patch_document_fixes(client, db_session):
+    # 1. Create a dummy document
+    create_res = client.post("/api/v1/registry/documents", json={"title": "Original Title", "doc_code": "ORIG-01", "classifier_system": "MKS"})
+    assert create_res.status_code == 201
+    doc_id = create_res.json()["data"]["id"]
+
+    # 2. Patch editable fields successfully
+    patch_payload = {
+        "title": "Patched Title",
+        "status_note": "A new note",
+        "valid_from": "2026-01-01",
+        "valid_until": None
+    }
+    patch_res = client.patch(f"/api/v1/registry/documents/{doc_id}", json=patch_payload)
+    assert patch_res.status_code == 200
+    patch_data = patch_res.json()["data"]
+    assert patch_data["id"] == doc_id
+    assert "updated_at" in patch_data
+    assert set(patch_data["updated_fields"]) == {"title", "status_note", "valid_from", "valid_until"}
+
+    # 3. Check document values in GET
+    get_res = client.get(f"/api/v1/registry/documents/{doc_id}")
+    assert get_res.status_code == 200
+    doc_data = get_res.json()["data"]
+    assert doc_data["title"] == "Patched Title"
+    assert doc_data["status_note"] == "A new note"
+    assert doc_data["valid_from"] == "2026-01-01"
+    assert doc_data["valid_until"] is None # Should be serialized to null because of dateMax mapping
+
+    # 4. Patch immutable field should fail with 400 IMMUTABLE_FIELD
+    bad_patch_res = client.patch(f"/api/v1/registry/documents/{doc_id}", json={"doc_code": "NEW-CODE-01"})
+    assert bad_patch_res.status_code == 400
+    assert bad_patch_res.json()["detail"]["error"]["code"] == "IMMUTABLE_FIELD"
+
+    # 5. Create category and patch category_ids
+    cat1_res = client.post("/api/v1/registry/categories", json={"name": "Cat For Patch 1"})
+    assert cat1_res.status_code == 201
+    cat1_id = cat1_res.json()["data"]["id"]
+
+    cat2_res = client.post("/api/v1/registry/categories", json={"name": "Cat For Patch 2"})
+    assert cat2_res.status_code == 201
+    cat2_id = cat2_res.json()["data"]["id"]
+
+    cat_patch_res = client.patch(f"/api/v1/registry/documents/{doc_id}", json={"category_ids": [cat1_id, cat2_id]})
+    assert cat_patch_res.status_code == 200
+    assert cat_patch_res.json()["data"]["updated_fields"] == ["category_ids"]
+
+    # Verify link is saved in database
+    from api.v1.models.category import DocumentCategory
+    links = db_session.query(DocumentCategory).filter(DocumentCategory.document_id == doc_id).all()
+    assert len(links) == 2
+    assert {l.category_id for l in links} == {cat1_id, cat2_id}
+
+    # Patch category_ids to single item
+    cat_patch_res2 = client.patch(f"/api/v1/registry/documents/{doc_id}", json={"category_ids": [cat2_id]})
+    assert cat_patch_res2.status_code == 200
+    links2 = db_session.query(DocumentCategory).filter(DocumentCategory.document_id == doc_id).all()
+    assert len(links2) == 1
+    assert links2[0].category_id == cat2_id
+
+
+

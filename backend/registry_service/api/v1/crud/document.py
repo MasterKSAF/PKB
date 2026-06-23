@@ -15,6 +15,9 @@ _BIGINT_FIELDS = ('successor_doc_id', 'predecessor_doc_id', 'draft_id', 'current
 def _coerce_int_fields(kwargs: Dict[str, Any]) -> Dict[str, Any]:
     if 'metadata' in kwargs:
         kwargs['doc_metadata'] = kwargs.pop('metadata')
+    if 'valid_until' in kwargs and kwargs['valid_until'] is None:
+        from datetime import date
+        kwargs['valid_until'] = date(9999, 12, 31)
     for key in _BIGINT_FIELDS:
         value = kwargs.get(key)
         if value is not None:
