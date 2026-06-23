@@ -92,9 +92,11 @@ EXPECTED_UNIQUE_INDEXES: Dict[str, str] = {
         "CREATE UNIQUE INDEX ON registry.document_versions (document_id, version_number)",
     "registry.documents_title_key_key":
         "CREATE UNIQUE INDEX ON registry.documents (title_key)",  # DB-29
-    "rag.document_chunks_section_chunk_key":
-        "CREATE UNIQUE INDEX ON rag.document_chunks (section_id, chunk_index)",  # DB-4
 }
+
+# ВНИМАНИЕ: rag.document_chunks_section_chunk_key был намеренно удалён
+# из RAG Builder (миграция 20260623_0001) — UNIQUE(section_id, chunk_index)
+# ломал индексацию нескольких документов. Не добавлять обратно.
 
 # Список сервисов — кто должен создавать таблицы при старте
 SERVICE_STARTUP_CHECKS: Dict[str, dict] = {

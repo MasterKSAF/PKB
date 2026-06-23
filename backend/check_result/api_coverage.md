@@ -1,12 +1,10 @@
 # API Coverage Report
 
-**Generated:** 2026-06-22 14:59:18 UTC
+**Generated:** 2026-06-23 14:03:13 UTC
 
 **Mode:** 🔬 Real (Docker)
 
 **Based on:** `docs/api/*.md`
-
-📋 **Logs:** [errors.md](errors.md)
 
 ---
 
@@ -14,17 +12,17 @@
 
 | Service | Port | Ping | CheckDb | Endpoints | ✅ Passed | ❌ Failed | ⏭️ Skipped | Status |
 |---------|:----:|:----:|:-------:|:---------:|:---------:|:---------:|:----------:|:------:|
-| [Auth Service](#auth) | 8082 | ✅ | — | 19 | 19 | 0 | 0 | ✅ |
-| [Registry Service](#registry) | 8084 | ✅ | — | 50 | 33 | <span style="color:red;font-weight:bold">9</span> | <span style="color:red;font-weight:bold">8</span> | <span style="color:red;font-weight:bold">❌</span> |
+| [Auth Service](#auth) | 8082 | ✅ | ✅ | 19 | 19 | 0 | 0 | ✅ |
+| [Registry Service](#registry) | 8084 | ✅ | ✅ | 50 | 50 | 0 | 0 | ✅ |
 | [Converter-Validator Service](#converter-validator) | 8086 | ✅ | — | 5 | 5 | 0 | 0 | ✅ |
 | [Parser Service](#parser) | 8087 | ✅ | — | 5 | 5 | 0 | 0 | ✅ |
-| [Orchestrator Service](#orchestrator) | 8081 | ✅ | — | 34 | 20 | <span style="color:red;font-weight:bold">4</span> | <span style="color:red;font-weight:bold">10</span> | <span style="color:red;font-weight:bold">❌</span> |
-| [Query Service](#query) | 8083 | ✅ | — | 26 | 24 | <span style="color:red;font-weight:bold">2</span> | 0 | <span style="color:red;font-weight:bold">❌</span> |
-| [RAG Builder Service](#rag-builder) | 8090 | ✅ | — | 7 | 7 | 0 | 0 | ✅ |
-| [RAG Search Service](#rag-search) | 8091 | ✅ | — | 2 | 1 | <span style="color:red;font-weight:bold">1</span> | 0 | <span style="color:red;font-weight:bold">❌</span> |
-| [Gateway Service](#gateway) | 8080 | ✅ | — | 72 | 72 | 0 | 0 | ✅ |
+| [Orchestrator Service](#orchestrator) | 8081 | ✅ | ✅ | 35 | 35 | 0 | 0 | ✅ |
+| [Query Service](#query) | 8083 | ✅ | ✅ | 27 | 26 | <span style="color:red;font-weight:bold">1</span> | 0 | <span style="color:red;font-weight:bold">❌</span> |
+| [RAG Builder Service](#rag-builder) | 8090 | ✅ | ✅ | 7 | 7 | 0 | 0 | ✅ |
+| [RAG Search Service](#rag-search) | 8091 | ✅ | — | 2 | 2 | 0 | 0 | ✅ |
+| [Gateway Service](#gateway) | 8080 | ✅ | — | 77 | 74 | 0 | <span style="color:red;font-weight:bold">3</span> | <span style="color:orange;font-weight:bold">⏭️</span> |
 | [TEI (Embeddings)](#tei) | 18092 | ✅ | — | 2 | 2 | 0 | 0 | ✅ |
-| **Total** | | **10/10** | **6/6** | **222** | **188** | <span style="color:red;font-weight:bold">16</span> | <span style="color:red;font-weight:bold">18</span> | <span style="color:red;font-weight:bold">❌</span> |
+| **Total** | | **10/10** | **6/6** | **229** | **225** | <span style="color:red;font-weight:bold">1</span> | <span style="color:red;font-weight:bold">3</span> | <span style="color:red;font-weight:bold">❌</span> |
 
 ## 🔍 Details by Service
 
@@ -43,12 +41,12 @@
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | POST | `/auth/token` | ✅ OK | 200 | 237ms |
-| 2 | GET | `/auth/me` | ✅ OK | 200 | 8ms |
+| 1 | POST | `/auth/token` | ✅ OK | 200 | 248ms |
+| 2 | GET | `/auth/me` | ✅ OK | 200 | 7ms |
 | 3 | POST | `/auth/token` | ✅ OK | 200 | 240ms |
-| 4 | GET | `/auth/me` | ✅ OK | 200 | 7ms |
-| 5 | POST | `/auth/refresh` | ✅ OK | 200 | 12ms |
-| 6 | POST | `/auth/revoke` | ✅ OK | 200 | 16ms |
+| 4 | GET | `/auth/me` | ✅ OK | 200 | 8ms |
+| 5 | POST | `/auth/refresh` | ✅ OK | 200 | 15ms |
+| 6 | POST | `/auth/revoke` | ✅ OK | 200 | 17ms |
 </details>
 
 <details>
@@ -56,16 +54,16 @@
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | POST | `/admin/users` | ✅ OK | 201 | 248ms |
-| 2 | POST | `/admin/roles` | ✅ OK | 409 | 8ms |
-| 3 | GET | `/admin/users` | ✅ OK | 200 | 13ms |
+| 1 | POST | `/admin/users` | ✅ OK | 201 | 243ms |
+| 2 | POST | `/admin/roles` | ✅ OK | 409 | 13ms |
+| 3 | GET | `/admin/users` | ✅ OK | 200 | 19ms |
 | 4 | POST | `/admin/users` | ✅ OK | 409 | 11ms |
-| 5 | GET | `/admin/users/{user_id}` | ✅ OK | 200 | 12ms |
-| 6 | PUT | `/admin/users/{user_id}` | ✅ OK | 200 | 30ms |
+| 5 | GET | `/admin/users/{user_id}` | ✅ OK | 200 | 10ms |
+| 6 | PUT | `/admin/users/{user_id}` | ✅ OK | 200 | 26ms |
 | 7 | PATCH | `/admin/users/{user_id}` | ✅ OK | 200 | 30ms |
 | 8 | DELETE | `/admin/users/{user_id}` | ✅ OK | 200 | 27ms |
-| 9 | GET | `/admin/roles` | ✅ OK | 200 | 9ms |
-| 10 | POST | `/admin/roles` | ✅ OK | 409 | 9ms |
+| 9 | GET | `/admin/roles` | ✅ OK | 200 | 8ms |
+| 10 | POST | `/admin/roles` | ✅ OK | 409 | 12ms |
 | 11 | GET | `/admin/audit` | ✅ OK | 200 | 8ms |
 </details>
 
@@ -82,7 +80,7 @@
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | POST | `/internal/auth/validate` | ✅ OK | 200 | 6ms |
+| 1 | POST | `/internal/auth/validate` | ✅ OK | 200 | 7ms |
 </details>
 
 ---
@@ -93,28 +91,32 @@
 
 **Ping:** ✅ Alive
 
-> ⚠️ ⚠️ Registry требует trailing slash на всех эндпоинтах /classifiers/, /documents/, /terminology/ (в т.ч. параметризованные). Документация — без /.
+> ⚠️ ⚠️ Registry не поддерживает trailing slash — эндпоинты /classifiers, /documents, /terminology без / в конце.
 
-**Total:** 50 | **Passed:** 33 | **Failed:** <span style="color:red;font-weight:bold">9</span> | **Skipped:** <span style="color:red;font-weight:bold">8</span>
+> ⚠️ ⚠️ PATCH /documents/{id}/status — internal API (только Orchestrator), checker ожидает 403.
+
+> ⚠️ ⚠️ PATCH /drafts/{id}/metadata — internal API (только Orchestrator), checker ожидает 404.
+
+**Total:** 50 | **Passed:** 50 | **Failed:** 0 | **Skipped:** 0
 
 <details>
 <summary><b>CLASSIFIERS</b> (13 эндпоинтов)</summary>
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | POST | `/registry/classifiers/` | ✅ OK | 201 | 11ms |
-| 2 | GET | `/registry/classifiers/pending/` | ✅ OK | 200 | 21ms |
-| 3 | GET | `/registry/classifiers/` | ✅ OK | 200 | 8ms |
-| 4 | GET | `/registry/classifiers/tree/` | ✅ OK | 200 | 8ms |
-| 5 | GET | `/registry/classifiers/{classifier_code}` | ✅ OK | 200 | 6ms |
-| 6 | PUT | `/registry/classifiers/{classifier_code}` | ✅ OK | 200 | 14ms |
-| 7 | PATCH | `/registry/classifiers/{classifier_code}` | ✅ OK | 200 | 15ms |
+| 1 | POST | `/registry/classifiers` | ✅ OK | 201 | 13ms |
+| 2 | GET | `/registry/classifiers/pending` | ✅ OK | 200 | 34ms |
+| 3 | GET | `/registry/classifiers` | ✅ OK | 200 | 10ms |
+| 4 | GET | `/registry/classifiers/tree` | ✅ OK | 200 | 5ms |
+| 5 | GET | `/registry/classifiers/{classifier_code}` | ✅ OK | 200 | 8ms |
+| 6 | PUT | `/registry/classifiers/{classifier_code}` | ✅ OK | 200 | 11ms |
+| 7 | PATCH | `/registry/classifiers/{classifier_code}` | ✅ OK | 200 | 10ms |
 | 8 | DELETE | `/registry/classifiers/{classifier_code}` | ✅ OK | 200 | 15ms |
-| 9 | POST | `/registry/classifiers/import` | ✅ OK | 422 | 6ms |
-| 10 | GET | `/registry/classifiers/pending` | ✅ OK | 200 | 24ms |
-| 11 | POST | `/registry/classifiers/pending/{pending_id}/accept` | ✅ OK | 200 | 22ms |
-| 12 | POST | `/registry/classifiers/pending/{pending_id}/reject` | ✅ OK | 200 | 14ms |
-| 13 | POST | `/registry/classifiers/validate` | ✅ OK | 200 | 13ms |
+| 9 | POST | `/registry/classifiers/import` | ✅ OK | 422 | 4ms |
+| 10 | GET | `/registry/classifiers/pending` | ✅ OK | 200 | 69ms |
+| 11 | POST | `/registry/classifiers/pending/{pending_id}/accept` | ✅ OK | 200 | 15ms |
+| 12 | POST | `/registry/classifiers/pending/{pending_id}/reject` | ✅ OK | 200 | 16ms |
+| 13 | POST | `/registry/classifiers/validate` | ✅ OK | 200 | 7ms |
 </details>
 
 <details>
@@ -122,20 +124,20 @@
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | POST | `/registry/documents/` | ✅ OK | 201 | 31ms |
-| 2 | GET | `/registry/documents/` | ✅ OK | 200 | 7ms |
-| 3 | GET | `/registry/documents/{doc_id}` | ❌ Error: Поле 'data.current_version_id' обязательно, но не найдено в ответе | 200 | 7ms |
-| 4 | PUT | `/registry/documents/{doc_id}` | ✅ OK | 200 | 21ms |
-| 5 | PATCH | `/registry/documents/{doc_id}/status` | ✅ OK | 200 | 14ms |
-| 6 | GET | `/registry/documents/{doc_id}/history` | ✅ OK | 200 | 12ms |
-| 7 | GET | `/registry/documents/{doc_id}/succession/` | ✅ OK | 200 | 7ms |
-| 8 | DELETE | `/registry/documents/{doc_id}` | ✅ OK | 200 | 14ms |
-| 9 | GET | `/registry/documents/export` | ✅ OK | 200 | 9ms |
-| 10 | POST | `/registry/documents/import` | ✅ OK | 422 | 8ms |
-| 11 | GET | `/registry/documents/search/` | ❌ Error: HTTP 404 | 404 | 6ms |
-| 12 | GET | `/registry/documents/{doc_id}/sections/` | ❌ Error: HTTP 404 | 404 | 8ms |
-| 13 | POST | `/registry/documents/check-uniqueness/` | ✅ OK | 200 | 8ms |
-| 14 | PATCH | `/registry/documents/{doc_id}/` | ❌ Error: HTTP 404 | 404 | 11ms |
+| 1 | POST | `/registry/documents` | ✅ OK | 201 | 34ms |
+| 2 | GET | `/registry/documents` | ✅ OK | 200 | 15ms |
+| 3 | GET | `/registry/documents/{doc_id}` | ✅ OK | 200 | 11ms |
+| 4 | PUT | `/registry/documents/{doc_id}` | ✅ OK | 200 | 42ms |
+| 5 | PATCH | `/registry/documents/{doc_id}/status` | ✅ OK | 403 | 11ms |
+| 6 | GET | `/registry/documents/{doc_id}/history` | ✅ OK | 200 | 13ms |
+| 7 | GET | `/registry/documents/{doc_id}/succession` | ✅ OK | 200 | 21ms |
+| 8 | GET | `/registry/documents/export` | ✅ OK | 200 | 22ms |
+| 9 | POST | `/registry/documents/import` | ✅ OK | 422 | 6ms |
+| 10 | GET | `/registry/search` | ✅ OK | 200 | 9ms |
+| 11 | GET | `/registry/documents/{doc_id}/sections` | ✅ OK | 200 | 27ms |
+| 12 | POST | `/registry/documents/check-uniqueness` | ✅ OK | 200 | 14ms |
+| 13 | PATCH | `/registry/documents/{doc_id}` | ✅ OK | 200 | 38ms |
+| 14 | DELETE | `/registry/documents/{doc_id}` | ✅ OK | 200 | 17ms |
 </details>
 
 <details>
@@ -143,13 +145,13 @@
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | POST | `/registry/terminology/` | ✅ OK | 201 | 12ms |
-| 2 | GET | `/registry/terminology/` | ✅ OK | 200 | 7ms |
-| 3 | GET | `/registry/terminology/{term_id}` | ✅ OK | 200 | 7ms |
-| 4 | GET | `/registry/terminology/normalize/` | ✅ OK | 200 | 9ms |
-| 5 | PUT | `/registry/terminology/{term_id}` | ✅ OK | 200 | 16ms |
-| 6 | DELETE | `/registry/terminology/{term_id}` | ✅ OK | 200 | 12ms |
-| 7 | POST | `/registry/terminology/import` | ✅ OK | 422 | 9ms |
+| 1 | POST | `/registry/terminology` | ✅ OK | 201 | 12ms |
+| 2 | GET | `/registry/terminology` | ✅ OK | 200 | 6ms |
+| 3 | GET | `/registry/terminology/{term_id}` | ✅ OK | 200 | 9ms |
+| 4 | GET | `/registry/terminology/normalize` | ✅ OK | 200 | 7ms |
+| 5 | PUT | `/registry/terminology/{term_id}` | ✅ OK | 200 | 19ms |
+| 6 | DELETE | `/registry/terminology/{term_id}` | ✅ OK | 200 | 13ms |
+| 7 | POST | `/registry/terminology/import` | ✅ OK | 422 | 6ms |
 </details>
 
 <details>
@@ -157,7 +159,7 @@
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | GET | `/health` | ✅ OK | 200 | 6ms |
+| 1 | GET | `/health` | ✅ OK | 200 | 3ms |
 </details>
 
 <details>
@@ -165,11 +167,11 @@
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | GET | `/registry/categories/` | ❌ Error: HTTP 404 | 404 | 1ms |
-| 2 | POST | `/registry/categories/` | ❌ Error: HTTP 404 | 404 | 1ms |
-| 3 | GET | `/registry/categories/{category_id}` | ⏭️ Skipped: Нет в контексте: category_id. Требуется предварительный вызов создающего эндпоинта. | 0 | 0ms |
-| 4 | PUT | `/registry/categories/{category_id}` | ⏭️ Skipped: Нет в контексте: category_id. Требуется предварительный вызов создающего эндпоинта. | 0 | 0ms |
-| 5 | DELETE | `/registry/categories/{category_id}` | ⏭️ Skipped: Нет в контексте: category_id. Требуется предварительный вызов создающего эндпоинта. | 0 | 0ms |
+| 1 | GET | `/registry/categories` | ✅ OK | 200 | 11ms |
+| 2 | POST | `/registry/categories` | ✅ OK | 201 | 18ms |
+| 3 | GET | `/registry/categories/{category_id}` | ✅ OK | 200 | 9ms |
+| 4 | PUT | `/registry/categories/{category_id}` | ✅ OK | 200 | 19ms |
+| 5 | DELETE | `/registry/categories/{category_id}` | ✅ OK | 200 | 14ms |
 </details>
 
 <details>
@@ -177,13 +179,13 @@
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | POST | `/registry/drafts/` | ❌ Error: HTTP 404 | 404 | 1ms |
-| 2 | GET | `/registry/drafts/` | ❌ Error: HTTP 404 | 404 | 2ms |
-| 3 | GET | `/registry/drafts/{draft_id}` | ⏭️ Skipped: Нет в контексте: draft_id. Требуется предварительный вызов создающего эндпоинта. | 0 | 0ms |
-| 4 | GET | `/registry/drafts/{draft_id}/preview/` | ⏭️ Skipped: Нет в контексте: draft_id. Требуется предварительный вызов создающего эндпоинта. | 0 | 0ms |
-| 5 | PATCH | `/registry/drafts/{draft_id}/status` | ⏭️ Skipped: Нет в контексте: draft_id. Требуется предварительный вызов создающего эндпоинта. | 0 | 0ms |
-| 6 | DELETE | `/registry/drafts/{draft_id}` | ⏭️ Skipped: Нет в контексте: draft_id. Требуется предварительный вызов создающего эндпоинта. | 0 | 0ms |
-| 7 | PATCH | `/registry/drafts/{draft_id}/metadata` | ⏭️ Skipped: Нет в контексте: draft_id. Требуется предварительный вызов создающего эндпоинта. | 0 | 0ms |
+| 1 | POST | `/registry/drafts` | ✅ OK | 201 | 17ms |
+| 2 | GET | `/registry/drafts` | ✅ OK | 200 | 14ms |
+| 3 | GET | `/registry/drafts/{draft_id}` | ✅ OK | 200 | 13ms |
+| 4 | GET | `/registry/drafts/{draft_id}/preview` | ✅ OK | 200 | 5ms |
+| 5 | PATCH | `/registry/drafts/{draft_id}/status` | ✅ OK | 200 | 15ms |
+| 6 | DELETE | `/registry/drafts/{draft_id}` | ✅ OK | 200 | 15ms |
+| 7 | PATCH | `/registry/drafts/{draft_id}/metadata` | ✅ OK | 404 | 11ms |
 </details>
 
 <details>
@@ -191,7 +193,7 @@
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | GET | `/registry/search` | ❌ Error: HTTP 404 | 404 | 3ms |
+| 1 | GET | `/registry/search` | ✅ OK | 200 | 8ms |
 </details>
 
 <details>
@@ -199,8 +201,8 @@
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | GET | `/registry/stats` | ✅ OK | 200 | 15ms |
-| 2 | GET | `/registry/enums` | ✅ OK | 200 | 8ms |
+| 1 | GET | `/registry/stats` | ✅ OK | 200 | 17ms |
+| 2 | GET | `/registry/enums` | ✅ OK | 200 | 10ms |
 </details>
 
 ---
@@ -218,7 +220,7 @@
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | GET | `/health` | ✅ OK | 200 | 1ms |
+| 1 | GET | `/health` | ✅ OK | 200 | 7ms |
 </details>
 
 <details>
@@ -226,8 +228,8 @@
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | POST | `/converter/preview` | ✅ OK | 200 | 1ms |
-| 2 | POST | `/converter/convert` | ✅ OK | 200 | 35ms |
+| 1 | POST | `/converter/preview` | ✅ OK | 200 | 9ms |
+| 2 | POST | `/converter/convert` | ✅ OK | 200 | 40ms |
 </details>
 
 <details>
@@ -235,8 +237,8 @@
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | POST | `/validate/metadata` | ✅ OK | 200 | 1ms |
-| 2 | POST | `/validate/document` | ✅ OK | 200 | 39ms |
+| 1 | POST | `/validate/metadata` | ✅ OK | 200 | 2ms |
+| 2 | POST | `/validate/document` | ✅ OK | 200 | 42ms |
 </details>
 
 ---
@@ -254,9 +256,9 @@
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | POST | `/parser/process` | ✅ OK | 202 | 40ms |
+| 1 | POST | `/parser/process` | ✅ OK | 202 | 45ms |
 | 2 | POST | `/parser/process` | ✅ OK | 202 | 3ms |
-| 3 | GET | `/parser/process/{task_id}/status` | ✅ OK | 200 | 6ms |
+| 3 | GET | `/parser/process/{task_id}/status` | ✅ OK | 200 | 4ms |
 | 4 | GET | `/parser/process/{task_id}/result` | ✅ OK | 409 | 2ms |
 </details>
 
@@ -265,7 +267,7 @@
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | GET | `/health` | ✅ OK | 200 | 4ms |
+| 1 | GET | `/health` | ✅ OK | 200 | 10ms |
 </details>
 
 ---
@@ -276,14 +278,14 @@
 
 **Ping:** ✅ Alive
 
-**Total:** 34 | **Passed:** 20 | **Failed:** <span style="color:red;font-weight:bold">4</span> | **Skipped:** <span style="color:red;font-weight:bold">10</span>
+**Total:** 35 | **Passed:** 35 | **Failed:** 0 | **Skipped:** 0
 
 <details>
 <summary><b>AUTH</b> (1 эндпоинтов)</summary>
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | POST | `/auth/token` | ✅ OK | 200 | 314ms |
+| 1 | POST | `/auth/token` | ✅ OK | 200 | 336ms |
 </details>
 
 <details>
@@ -291,17 +293,17 @@
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | POST | `/drafts/` | ❌ Error: HTTP 500 | 500 | 117ms |
-| 2 | POST | `/drafts/` | ❌ Error: HTTP 500 | 500 | 164ms |
-| 3 | GET | `/drafts/` | ✅ OK | 200 | 86ms |
-| 4 | GET | `/drafts/{draft_id}` | ⏭️ Skipped: Нет в контексте: draft_id. Требуется предварительный вызов создающего эндпоинта. | 0 | 0ms |
-| 5 | GET | `/drafts/{draft_id}/tasks` | ⏭️ Skipped: Нет в контексте: draft_id. Требуется предварительный вызов создающего эндпоинта. | 0 | 0ms |
-| 6 | DELETE | `/drafts/{draft_id}` | ⏭️ Skipped: Нет в контексте: draft_id. Требуется предварительный вызов создающего эндпоинта. | 0 | 0ms |
-| 7 | PATCH | `/drafts/{draft_id}/decide` | ⏭️ Skipped: Нет в контексте: draft_id. Требуется предварительный вызов создающего эндпоинта. | 0 | 0ms |
-| 8 | PATCH | `/drafts/{draft_id}/metadata` | ⏭️ Skipped: Нет в контексте: draft_id. Требуется предварительный вызов создающего эндпоинта. | 0 | 0ms |
-| 9 | GET | `/drafts/{draft_id}/preview` | ⏭️ Skipped: Нет в контексте: draft_id. Требуется предварительный вызов создающего эндпоинта. | 0 | 0ms |
-| 10 | POST | `/drafts/{draft_id}/preview` | ⏭️ Skipped: Нет в контексте: draft_id. Требуется предварительный вызов создающего эндпоинта. | 0 | 0ms |
-| 11 | GET | `/drafts/{draft_id}/preview/status` | ⏭️ Skipped: Нет в контексте: draft_id. Требуется предварительный вызов создающего эндпоинта. | 0 | 0ms |
+| 1 | POST | `/drafts/` | ✅ OK | 202 | 219ms |
+| 2 | POST | `/drafts/` | ✅ OK | 202 | 269ms |
+| 3 | GET | `/drafts/` | ✅ OK | 405 | 5ms |
+| 4 | GET | `/drafts/{draft_id}` | ✅ OK | 200 | 91ms |
+| 5 | GET | `/drafts/{draft_id}/tasks` | ✅ OK | 200 | 8ms |
+| 6 | DELETE | `/drafts/{draft_id}` | ✅ OK | 204 | 98ms |
+| 7 | PATCH | `/drafts/{draft_id}/decide` | ✅ OK | 200 | 293ms |
+| 8 | PATCH | `/drafts/{draft_id}/metadata` | ✅ OK | 404 | 96ms |
+| 9 | GET | `/drafts/{draft_id}/preview` | ✅ OK | 404 | 99ms |
+| 10 | POST | `/drafts/{draft_id}/preview` | ✅ OK | 404 | 109ms |
+| 11 | GET | `/drafts/{draft_id}/preview/status` | ✅ OK | 200 | 92ms |
 </details>
 
 <details>
@@ -317,7 +319,7 @@
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | GET | `/monitor/metrics` | ❌ Error: HTTP 404 | 404 | 2ms |
+| 1 | GET | `/monitor/metrics` | ✅ OK | 404 | 2ms |
 </details>
 
 <details>
@@ -325,29 +327,30 @@
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | GET | `/tasks/` | ✅ OK | 200 | 61ms |
-| 2 | GET | `/tasks/{task_id}/status` | ⏭️ Skipped: Нет в контексте: task_id. Требуется предварительный вызов создающего эндпоинта. | 0 | 0ms |
-| 3 | GET | `/tasks/{task_id}/steps` | ⏭️ Skipped: Нет в контексте: task_id. Требуется предварительный вызов создающего эндпоинта. | 0 | 0ms |
-| 4 | GET | `/tasks/stats` | ✅ OK | 200 | 12ms |
+| 1 | GET | `/tasks/` | ✅ OK | 200 | 10ms |
+| 2 | GET | `/tasks/{task_id}/status` | ✅ OK | 200 | 48ms |
+| 3 | GET | `/tasks/{task_id}/steps` | ✅ OK | 200 | 14ms |
+| 4 | GET | `/tasks/stats` | ✅ OK | 200 | 11ms |
 </details>
 
 <details>
-<summary><b>DOCUMENTS</b> (12 эндпоинтов)</summary>
+<summary><b>DOCUMENTS</b> (13 эндпоинтов)</summary>
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | GET | `/documents/` | ✅ OK | 200 | 4ms |
-| 2 | GET | `/documents/queue` | ✅ OK | 200 | 3ms |
-| 3 | GET | `/documents/{doc_id}` | ✅ OK | 200 | 6ms |
-| 4 | DELETE | `/documents/{doc_id}` | ✅ OK | 200 | 4ms |
-| 5 | GET | `/documents/{doc_id}/status` | ✅ OK | 200 | 3ms |
-| 6 | GET | `/documents/{doc_id}/file` | ✅ OK | 200 | 2ms |
-| 7 | GET | `/documents/{doc_id}/versions` | ✅ OK | 200 | 50ms |
-| 8 | POST | `/documents/{doc_id}/versions` | ✅ OK; ⚠️ Поле 'version_id' ожидалось int, получен str = fb4dd06a-3a58-45bc-8ed5-f3248d6feaad | 202 | 5ms |
-| 9 | GET | `/documents/{doc_id}/history` | ✅ OK | 200 | 2ms |
-| 10 | POST | `/documents/{doc_id}/reprocess` | ❌ Error: HTTP 500 | 500 | 23ms |
-| 11 | GET | `/documents/{doc_id}/errors` | ✅ OK | 200 | 4ms |
-| 12 | GET | `/documents/{doc_id}/parameters` | ✅ OK | 200 | 2ms |
+| 1 | GET | `/documents/` | ✅ OK | 404 | 3ms |
+| 2 | GET | `/documents/queue` | ✅ OK | 404 | 5ms |
+| 3 | GET | `/documents/{doc_id}` | ✅ OK | 404 | 4ms |
+| 4 | DELETE | `/documents/{doc_id}` | ✅ OK | 404 | 4ms |
+| 5 | GET | `/documents/{doc_id}/status` | ✅ OK | 404 | 3ms |
+| 6 | GET | `/documents/{doc_id}/file` | ✅ OK | 404 | 49ms |
+| 7 | GET | `/documents/{doc_id}/versions` | ✅ OK | 404 | 4ms |
+| 8 | POST | `/documents/{doc_id}/versions` | ✅ OK | 404 | 8ms |
+| 9 | GET | `/documents/{doc_id}/history` | ✅ OK | 404 | 3ms |
+| 10 | POST | `/documents/{doc_id}/reprocess` | ✅ OK | 409 | 6ms |
+| 11 | GET | `/documents/{doc_id}/tasks` | ✅ OK | 200 | 5ms |
+| 12 | GET | `/documents/{doc_id}/errors` | ✅ OK | 404 | 2ms |
+| 13 | GET | `/documents/{doc_id}/parameters` | ✅ OK | 404 | 4ms |
 </details>
 
 <details>
@@ -355,10 +358,10 @@
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | GET | `/documents/{doc_id}/pages` | ✅ OK | 200 | 2ms |
-| 2 | GET | `/documents/{doc_id}/pages/{page_num}` | ✅ OK | 200 | 2ms |
-| 3 | GET | `/documents/{doc_id}/pages/{page_num}/text` | ✅ OK | 200 | 2ms |
-| 4 | GET | `/documents/{doc_id}/pages/{page_num}/preview` | ✅ OK | 200 | 3ms |
+| 1 | GET | `/documents/{doc_id}/pages` | ✅ OK | 404 | 3ms |
+| 2 | GET | `/documents/{doc_id}/pages/{page_num}` | ✅ OK | 404 | 3ms |
+| 3 | GET | `/documents/{doc_id}/pages/{page_num}/text` | ✅ OK | 404 | 2ms |
+| 4 | GET | `/documents/{doc_id}/pages/{page_num}/preview` | ✅ OK | 404 | 2ms |
 </details>
 
 ---
@@ -371,35 +374,36 @@
 
 > ⚠️ ⚠️ POST /chat/feedback: rating:int + rating_status:string (QS-10). Ранее был rating:string без rating_status.
 
-**Total:** 26 | **Passed:** 24 | **Failed:** <span style="color:red;font-weight:bold">2</span> | **Skipped:** 0
+**Total:** 27 | **Passed:** 26 | **Failed:** <span style="color:red;font-weight:bold">1</span> | **Skipped:** 0
 
 <details>
-<summary><b>CHAT</b> (22 эндпоинтов)</summary>
+<summary><b>CHAT</b> (23 эндпоинтов)</summary>
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | POST | `/chat/sessions` | ✅ OK | 201 | 59ms |
-| 2 | POST | `/chat/sessions/{session_id}/messages` | ✅ OK | 202 | 17ms |
-| 3 | POST | `/chat/projects` | ❌ Error: HTTP 500 | 500 | 83ms |
-| 4 | GET | `/chat/projects` | ✅ OK | 200 | 8ms |
-| 5 | GET | `/chat/projects/{project_id}` | ✅ OK | 200 | 5ms |
-| 6 | PUT | `/chat/projects/{project_id}` | ✅ OK | 200 | 13ms |
-| 7 | DELETE | `/chat/projects/{project_id}` | ✅ OK | 204 | 53ms |
-| 8 | POST | `/chat/sessions` | ❌ Error: HTTP 500 | 500 | 36ms |
-| 9 | GET | `/chat/sessions` | ✅ OK | 200 | 10ms |
-| 10 | GET | `/chat/sessions/{session_id}` | ✅ OK | 200 | 51ms |
-| 11 | PUT | `/chat/sessions/{session_id}` | ✅ OK | 200 | 11ms |
-| 12 | POST | `/chat/sessions/{session_id}/messages` | ✅ OK | 202 | 15ms |
-| 13 | GET | `/chat/sessions/{session_id}/messages/last` | ✅ OK | 200 | 10ms |
-| 14 | GET | `/chat/sessions/{session_id}/messages` | ✅ OK | 200 | 10ms |
-| 15 | GET | `/chat/sessions/{session_id}/messages/{message_id}` | ✅ OK | 200 | 12ms |
-| 16 | POST | `/chat/sessions/{session_id}/messages/search` | ✅ OK | 200 | 9ms |
-| 17 | POST | `/chat/sessions/{session_id}/context` | ✅ OK | 200 | 33ms |
-| 18 | POST | `/chat/sessions/{session_id}/export` | ✅ OK | 200 | 11ms |
-| 19 | POST | `/chat/feedback` | ✅ OK | 200 | 11ms |
-| 20 | DELETE | `/chat/sessions/{session_id}` | ✅ OK | 200 | 16ms |
-| 21 | GET | `/chat/history` | ✅ OK | 200 | 11ms |
+| 1 | POST | `/chat/projects` | ✅ OK | 201 | 58ms |
+| 2 | POST | `/chat/sessions` | ✅ OK | 201 | 14ms |
+| 3 | POST | `/chat/sessions/{session_id}/messages` | ✅ OK | 202 | 23ms |
+| 4 | POST | `/chat/projects` | ❌ Error: HTTP 409 | 409 | 12ms |
+| 5 | GET | `/chat/projects` | ✅ OK | 200 | 17ms |
+| 6 | GET | `/chat/projects/{project_id}` | ✅ OK | 200 | 6ms |
+| 7 | PUT | `/chat/projects/{project_id}` | ✅ OK | 200 | 13ms |
+| 8 | POST | `/chat/sessions` | ✅ OK | 201 | 60ms |
+| 9 | GET | `/chat/sessions` | ✅ OK | 200 | 104ms |
+| 10 | GET | `/chat/sessions/{session_id}` | ✅ OK | 200 | 10ms |
+| 11 | PUT | `/chat/sessions/{session_id}` | ✅ OK | 200 | 12ms |
+| 12 | POST | `/chat/sessions/{session_id}/messages` | ✅ OK | 202 | 65ms |
+| 13 | GET | `/chat/sessions/{session_id}/messages/last` | ✅ OK | 200 | 11ms |
+| 14 | GET | `/chat/sessions/{session_id}/messages` | ✅ OK | 200 | 17ms |
+| 15 | GET | `/chat/sessions/{session_id}/messages/{message_id}` | ✅ OK | 200 | 11ms |
+| 16 | POST | `/chat/sessions/{session_id}/messages/search` | ✅ OK | 200 | 54ms |
+| 17 | POST | `/chat/sessions/{session_id}/context` | ✅ OK | 200 | 6ms |
+| 18 | POST | `/chat/sessions/{session_id}/export` | ✅ OK | 200 | 9ms |
+| 19 | POST | `/chat/feedback` | ✅ OK | 200 | 14ms |
+| 20 | DELETE | `/chat/sessions/{session_id}` | ✅ OK | 200 | 18ms |
+| 21 | GET | `/chat/history` | ✅ OK | 200 | 56ms |
 | 22 | GET | `/chat/history/export` | ✅ OK | 200 | 3ms |
+| 23 | DELETE | `/chat/projects/{project_id}` | ✅ OK | 204 | 12ms |
 </details>
 
 <details>
@@ -407,8 +411,8 @@
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | GET | `/health` | ✅ OK | 200 | 5ms |
-| 2 | GET | `/system/health` | ✅ OK | 200 | 4ms |
+| 1 | GET | `/health` | ✅ OK | 200 | 10ms |
+| 2 | GET | `/system/health` | ✅ OK | 200 | 49ms |
 </details>
 
 <details>
@@ -416,8 +420,8 @@
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | POST | `/text/search` | ✅ OK | 200 | 43ms |
-| 2 | POST | `/text/ask` | ✅ OK | 200 | 3ms |
+| 1 | POST | `/text/search` | ✅ OK | 200 | 3ms |
+| 2 | POST | `/text/ask` | ✅ OK | 200 | 5ms |
 </details>
 
 ---
@@ -435,7 +439,7 @@
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | POST | `/auth/token` | ✅ OK | 200 | 500ms |
+| 1 | POST | `/auth/token` | ✅ OK | 200 | 315ms |
 </details>
 
 <details>
@@ -443,7 +447,7 @@
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | POST | `/registry/documents/` | ✅ OK | 201 | 19ms |
+| 1 | POST | `/registry/documents/` | ✅ OK | 201 | 22ms |
 </details>
 
 <details>
@@ -451,10 +455,10 @@
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | POST | `/rag/build` | ✅ OK | 201 | 48ms |
-| 2 | POST | `/rag/build` | ✅ OK | 201 | 16ms |
-| 3 | DELETE | `/rag/build/{doc_id}` | ✅ OK | 200 | 12ms |
-| 4 | GET | `/rag/build/{doc_id}/status` | ✅ OK | 200 | 3ms |
+| 1 | POST | `/rag/build` | ✅ OK | 202 | 21ms |
+| 2 | POST | `/rag/build` | ✅ OK | 202 | 11ms |
+| 3 | DELETE | `/rag/build/{doc_id}` | ✅ OK | 200 | 10ms |
+| 4 | GET | `/rag/build/{doc_id}/status` | ✅ OK | 200 | 4ms |
 </details>
 
 <details>
@@ -462,7 +466,7 @@
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | GET | `/health` | ✅ OK | 200 | 5ms |
+| 1 | GET | `/health` | ✅ OK | 200 | 4ms |
 </details>
 
 ---
@@ -473,14 +477,14 @@
 
 **Ping:** ✅ Alive
 
-**Total:** 2 | **Passed:** 1 | **Failed:** <span style="color:red;font-weight:bold">1</span> | **Skipped:** 0
+**Total:** 2 | **Passed:** 2 | **Failed:** 0 | **Skipped:** 0
 
 <details>
 <summary><b>HEALTH</b> (1 эндпоинтов)</summary>
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | GET | `/health` | ✅ OK | 200 | 6ms |
+| 1 | GET | `/health` | ✅ OK | 200 | 2ms |
 </details>
 
 <details>
@@ -488,7 +492,7 @@
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | POST | `/rag/search` | ❌ Error: HTTP 500 | 500 | 3383ms |
+| 1 | POST | `/rag/search` | ✅ OK | 200 | 3318ms |
 </details>
 
 ---
@@ -499,18 +503,72 @@
 
 **Ping:** ✅ Alive
 
-**Total:** 72 | **Passed:** 72 | **Failed:** 0 | **Skipped:** 0
+**Total:** 77 | **Passed:** 74 | **Failed:** 0 | **Skipped:** <span style="color:red;font-weight:bold">3</span>
 
 <details>
 <summary><b>AUTH</b> (5 эндпоинтов)</summary>
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | POST | `/auth/token` | ✅ OK | 200 | 4ms |
+| 1 | POST | `/auth/token` | ✅ OK | 200 | 5ms |
 | 2 | POST | `/auth/token` | ✅ OK | 200 | 6ms |
 | 3 | GET | `/auth/me` | ✅ OK | 200 | 4ms |
-| 4 | POST | `/auth/refresh` | ✅ OK | 200 | 4ms |
-| 5 | POST | `/auth/revoke` | ✅ OK | 200 | 6ms |
+| 4 | POST | `/auth/refresh` | ✅ OK | 200 | 6ms |
+| 5 | POST | `/auth/revoke` | ✅ OK | 200 | 4ms |
+</details>
+
+<details>
+<summary><b>ADMIN</b> (9 эндпоинтов)</summary>
+
+| # | Method | Path | Status | Code | Time |
+|---|--------|------|--------|:----:|:----:|
+| 1 | POST | `/admin/users` | ✅ OK | 409 | 4ms |
+| 2 | GET | `/admin/users` | ✅ OK | 200 | 7ms |
+| 3 | POST | `/admin/users` | ✅ OK | 409 | 7ms |
+| 4 | GET | `/admin/users/{user_id}` | ⏭️ Skipped: Нет в контексте: user_id. Требуется предварительный вызов создающего эндпоинта. | 0 | 0ms |
+| 5 | PATCH | `/admin/users/{user_id}` | ⏭️ Skipped: Нет в контексте: user_id. Требуется предварительный вызов создающего эндпоинта. | 0 | 0ms |
+| 6 | DELETE | `/admin/users/{user_id}` | ⏭️ Skipped: Нет в контексте: user_id. Требуется предварительный вызов создающего эндпоинта. | 0 | 0ms |
+| 7 | GET | `/admin/roles` | ✅ OK | 200 | 4ms |
+| 8 | POST | `/admin/roles` | ✅ OK | 201 | 5ms |
+| 9 | GET | `/admin/audit` | ✅ OK | 200 | 4ms |
+</details>
+
+<details>
+<summary><b>CHAT</b> (10 эндпоинтов)</summary>
+
+| # | Method | Path | Status | Code | Time |
+|---|--------|------|--------|:----:|:----:|
+| 1 | POST | `/chat/projects` | ✅ OK | 201 | 11ms |
+| 2 | POST | `/chat/sessions` | ✅ OK | 201 | 4ms |
+| 3 | POST | `/chat/sessions` | ✅ OK | 201 | 8ms |
+| 4 | GET | `/chat/sessions` | ✅ OK | 200 | 4ms |
+| 5 | GET | `/chat/sessions/{session_id}` | ✅ OK | 200 | 5ms |
+| 6 | POST | `/chat/sessions/{session_id}/messages` | ✅ OK | 200 | 6ms |
+| 7 | GET | `/chat/sessions/{session_id}/messages` | ✅ OK | 200 | 5ms |
+| 8 | POST | `/chat/sessions/{session_id}/messages/search` | ✅ OK | 200 | 4ms |
+| 9 | GET | `/chat/history` | ✅ OK | 200 | 4ms |
+| 10 | GET | `/chat/history/export` | ✅ OK | 200 | 5ms |
+</details>
+
+<details>
+<summary><b>CLASSIFIERS</b> (14 эндпоинтов)</summary>
+
+| # | Method | Path | Status | Code | Time |
+|---|--------|------|--------|:----:|:----:|
+| 1 | POST | `/registry/classifiers/` | ✅ OK | 409 | 7ms |
+| 2 | GET | `/registry/classifiers/pending` | ✅ OK | 200 | 5ms |
+| 3 | GET | `/registry/classifiers/` | ✅ OK | 200 | 4ms |
+| 4 | POST | `/registry/classifiers/` | ✅ OK | 201 | 4ms |
+| 5 | GET | `/registry/classifiers/tree/` | ✅ OK | 200 | 4ms |
+| 6 | GET | `/registry/classifiers/{classifier_code}` | ✅ OK | 200 | 4ms |
+| 7 | PUT | `/registry/classifiers/{classifier_code}` | ✅ OK | 200 | 5ms |
+| 8 | PATCH | `/registry/classifiers/{classifier_code}` | ✅ OK | 200 | 5ms |
+| 9 | DELETE | `/registry/classifiers/{classifier_code}` | ✅ OK | 200 | 3ms |
+| 10 | POST | `/registry/classifiers/import` | ✅ OK | 400 | 4ms |
+| 11 | GET | `/registry/classifiers/pending` | ✅ OK | 200 | 8ms |
+| 12 | POST | `/registry/classifiers/pending/{pending_id}/accept` | ✅ OK | 200 | 6ms |
+| 13 | POST | `/registry/classifiers/pending/{pending_id}/reject` | ✅ OK | 200 | 7ms |
+| 14 | POST | `/registry/classifiers/validate` | ✅ OK | 200 | 6ms |
 </details>
 
 <details>
@@ -519,7 +577,7 @@
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
 | 1 | GET | `/health` | ✅ OK | 200 | 4ms |
-| 2 | GET | `/system/health` | ✅ OK | 200 | 5ms |
+| 2 | GET | `/system/health` | ✅ OK | 200 | 4ms |
 </details>
 
 <details>
@@ -531,49 +589,15 @@
 </details>
 
 <details>
-<summary><b>ADMIN</b> (8 эндпоинтов)</summary>
-
-| # | Method | Path | Status | Code | Time |
-|---|--------|------|--------|:----:|:----:|
-| 1 | GET | `/admin/users` | ✅ OK | 200 | 5ms |
-| 2 | POST | `/admin/users` | ✅ OK | 409 | 4ms |
-| 3 | GET | `/admin/users/{user_id}` | ✅ OK | 200 | 6ms |
-| 4 | PATCH | `/admin/users/{user_id}` | ✅ OK | 200 | 5ms |
-| 5 | DELETE | `/admin/users/{user_id}` | ✅ OK | 200 | 3ms |
-| 6 | GET | `/admin/roles` | ✅ OK | 200 | 4ms |
-| 7 | POST | `/admin/roles` | ✅ OK | 201 | 8ms |
-| 8 | GET | `/admin/audit` | ✅ OK | 200 | 5ms |
-</details>
-
-<details>
-<summary><b>CLASSIFIERS</b> (12 эндпоинтов)</summary>
-
-| # | Method | Path | Status | Code | Time |
-|---|--------|------|--------|:----:|:----:|
-| 1 | GET | `/registry/classifiers/` | ✅ OK | 200 | 4ms |
-| 2 | POST | `/registry/classifiers/` | ✅ OK | 201 | 6ms |
-| 3 | GET | `/registry/classifiers/tree/` | ✅ OK | 200 | 4ms |
-| 4 | GET | `/registry/classifiers/{classifier_code}` | ✅ OK | 200 | 4ms |
-| 5 | PUT | `/registry/classifiers/{classifier_code}` | ✅ OK | 200 | 6ms |
-| 6 | PATCH | `/registry/classifiers/{classifier_code}` | ✅ OK | 200 | 5ms |
-| 7 | DELETE | `/registry/classifiers/{classifier_code}` | ✅ OK | 200 | 6ms |
-| 8 | POST | `/registry/classifiers/import` | ✅ OK | 400 | 5ms |
-| 9 | GET | `/registry/classifiers/pending` | ✅ OK | 200 | 3ms |
-| 10 | POST | `/registry/classifiers/pending/{pending_id}/accept` | ✅ OK | 200 | 4ms |
-| 11 | POST | `/registry/classifiers/pending/{pending_id}/reject` | ✅ OK | 200 | 6ms |
-| 12 | POST | `/registry/classifiers/validate` | ✅ OK | 200 | 7ms |
-</details>
-
-<details>
 <summary><b>CATEGORIES</b> (5 эндпоинтов)</summary>
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | GET | `/registry/categories/` | ✅ OK | 200 | 6ms |
+| 1 | GET | `/registry/categories/` | ✅ OK | 200 | 4ms |
 | 2 | POST | `/registry/categories/` | ✅ OK | 201 | 5ms |
-| 3 | GET | `/registry/categories/{category_id}` | ✅ OK | 200 | 3ms |
-| 4 | PUT | `/registry/categories/{category_id}` | ✅ OK | 200 | 5ms |
-| 5 | DELETE | `/registry/categories/{category_id}` | ✅ OK | 200 | 5ms |
+| 3 | GET | `/registry/categories/{category_id}` | ✅ OK | 200 | 4ms |
+| 4 | PUT | `/registry/categories/{category_id}` | ✅ OK | 200 | 7ms |
+| 5 | DELETE | `/registry/categories/{category_id}` | ✅ OK | 200 | 4ms |
 </details>
 
 <details>
@@ -582,12 +606,12 @@
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
 | 1 | GET | `/registry/terminology/` | ✅ OK | 200 | 5ms |
-| 2 | POST | `/registry/terminology/` | ✅ OK | 201 | 6ms |
-| 3 | GET | `/registry/terminology/{term_id}` | ✅ OK | 200 | 3ms |
-| 4 | PUT | `/registry/terminology/{term_id}` | ✅ OK | 200 | 4ms |
-| 5 | DELETE | `/registry/terminology/{term_id}` | ✅ OK | 200 | 4ms |
-| 6 | GET | `/registry/terminology/normalize/` | ✅ OK | 200 | 6ms |
-| 7 | POST | `/registry/terminology/import` | ✅ OK | 400 | 6ms |
+| 2 | POST | `/registry/terminology/` | ✅ OK | 201 | 4ms |
+| 3 | GET | `/registry/terminology/{term_id}` | ✅ OK | 200 | 6ms |
+| 4 | PUT | `/registry/terminology/{term_id}` | ✅ OK | 200 | 6ms |
+| 5 | DELETE | `/registry/terminology/{term_id}` | ✅ OK | 200 | 3ms |
+| 6 | GET | `/registry/terminology/normalize/` | ✅ OK | 200 | 4ms |
+| 7 | POST | `/registry/terminology/import` | ✅ OK | 400 | 4ms |
 </details>
 
 <details>
@@ -595,15 +619,15 @@
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | GET | `/registry/documents/` | ✅ OK | 200 | 6ms |
+| 1 | GET | `/registry/documents/` | ✅ OK | 200 | 4ms |
 | 2 | POST | `/registry/documents/` | ✅ OK | 201 | 4ms |
-| 3 | GET | `/registry/documents/{doc_id}` | ✅ OK | 200 | 3ms |
-| 4 | PUT | `/registry/documents/{doc_id}` | ✅ OK | 200 | 6ms |
-| 5 | PATCH | `/registry/documents/{doc_id}/status` | ✅ OK | 200 | 6ms |
+| 3 | GET | `/registry/documents/{doc_id}` | ✅ OK | 200 | 8ms |
+| 4 | PUT | `/registry/documents/{doc_id}` | ✅ OK | 200 | 4ms |
+| 5 | PATCH | `/registry/documents/{doc_id}/status` | ✅ OK | 200 | 5ms |
 | 6 | GET | `/registry/documents/{doc_id}/history` | ✅ OK | 200 | 4ms |
-| 7 | GET | `/registry/documents/{doc_id}/succession/` | ✅ OK | 200 | 5ms |
-| 8 | DELETE | `/registry/documents/{doc_id}` | ✅ OK | 200 | 4ms |
-| 9 | GET | `/registry/documents/export` | ✅ OK | 200 | 3ms |
+| 7 | GET | `/registry/documents/{doc_id}/succession/` | ✅ OK | 200 | 3ms |
+| 8 | DELETE | `/registry/documents/{doc_id}` | ✅ OK | 200 | 3ms |
+| 9 | GET | `/registry/documents/export` | ✅ OK | 200 | 6ms |
 | 10 | POST | `/registry/documents/import` | ✅ OK | 400 | 6ms |
 | 11 | GET | `/documents/` | ✅ OK | 200 | 4ms |
 </details>
@@ -613,7 +637,7 @@
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | GET | `/registry/search` | ✅ OK | 200 | 5ms |
+| 1 | GET | `/registry/search` | ✅ OK | 200 | 4ms |
 </details>
 
 <details>
@@ -622,7 +646,7 @@
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
 | 1 | GET | `/registry/stats` | ✅ OK | 200 | 4ms |
-| 2 | GET | `/registry/enums` | ✅ OK | 200 | 4ms |
+| 2 | GET | `/registry/enums` | ✅ OK | 200 | 3ms |
 </details>
 
 <details>
@@ -630,13 +654,13 @@
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | POST | `/drafts/` | ✅ OK | 202 | 6ms |
+| 1 | POST | `/drafts/` | ✅ OK | 202 | 4ms |
 | 2 | GET | `/drafts/` | ✅ OK | 200 | 4ms |
-| 3 | GET | `/drafts/{draft_id}` | ✅ OK | 200 | 3ms |
-| 4 | DELETE | `/drafts/{draft_id}` | ✅ OK | 200 | 5ms |
-| 5 | PATCH | `/drafts/{draft_id}/decide` | ✅ OK | 409 | 7ms |
-| 6 | POST | `/drafts/{draft_id}/preview` | ✅ OK | 409 | 3ms |
-| 7 | GET | `/drafts/{draft_id}/preview` | ✅ OK | 200 | 5ms |
+| 3 | GET | `/drafts/{draft_id}` | ✅ OK | 200 | 7ms |
+| 4 | DELETE | `/drafts/{draft_id}` | ✅ OK | 200 | 3ms |
+| 5 | PATCH | `/drafts/{draft_id}/decide` | ✅ OK | 409 | 5ms |
+| 6 | POST | `/drafts/{draft_id}/preview` | ✅ OK | 409 | 4ms |
+| 7 | GET | `/drafts/{draft_id}/preview` | ✅ OK | 200 | 3ms |
 </details>
 
 <details>
@@ -644,22 +668,7 @@
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | GET | `/files/{file_id}` | ✅ OK | 200 | 3ms |
-</details>
-
-<details>
-<summary><b>CHAT</b> (8 эндпоинтов)</summary>
-
-| # | Method | Path | Status | Code | Time |
-|---|--------|------|--------|:----:|:----:|
-| 1 | POST | `/chat/sessions` | ✅ OK | 201 | 5ms |
-| 2 | GET | `/chat/sessions` | ✅ OK | 200 | 4ms |
-| 3 | GET | `/chat/sessions/{session_id}` | ✅ OK | 200 | 5ms |
-| 4 | POST | `/chat/sessions/{session_id}/messages` | ✅ OK | 200 | 7ms |
-| 5 | GET | `/chat/sessions/{session_id}/messages` | ✅ OK | 200 | 4ms |
-| 6 | POST | `/chat/sessions/{session_id}/messages/search` | ✅ OK | 200 | 4ms |
-| 7 | GET | `/chat/history` | ✅ OK | 200 | 3ms |
-| 8 | GET | `/chat/history/export` | ✅ OK | 200 | 5ms |
+| 1 | GET | `/files/1` | ✅ OK | 200 | 3ms |
 </details>
 
 <details>
@@ -667,7 +676,7 @@
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | POST | `/text/search` | ✅ OK | 200 | 5ms |
+| 1 | POST | `/text/search` | ✅ OK | 200 | 7ms |
 </details>
 
 <details>
@@ -675,7 +684,7 @@
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | POST | `/rag/search` | ✅ OK | 200 | 6ms |
+| 1 | POST | `/rag/search` | ✅ OK | 200 | 5ms |
 </details>
 
 ---
@@ -701,7 +710,7 @@
 
 | # | Method | Path | Status | Code | Time |
 |---|--------|------|--------|:----:|:----:|
-| 1 | POST | `/embed` | ✅ OK | 200 | 13ms |
+| 1 | POST | `/embed` | ✅ OK | 200 | 12ms |
 </details>
 
 ---
@@ -720,7 +729,7 @@ _No context variables extracted._
 
 - **Ping** — проверка health-эндпоинта на порту сервиса
 
-- **Mode** — Real (Docker): проверяются только запущенные в Docker сервисы
+- **Mode** — 🔬 Real (Docker)
 
 - ⏸️ **Analyse Service** — временно не тестируется (нет контейнера)
 
@@ -738,4 +747,4 @@ _No context variables extracted._
 
 ---
 
-_Report generated by `api_coverage_test.py` at 2026-06-22 14:59:18 UTC_
+_Report generated by `api_coverage_test.py` at 2026-06-23 14:03:13 UTC_

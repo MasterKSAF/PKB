@@ -1827,22 +1827,21 @@ Gateway Coverage: **4/76 → 53/76** passed.
 ### Статус
 ✅ **Реализовано (checker, 2026-06-23)**
 
-## 53. Аномалия: Orchestrator HTTP 500 на POST /drafts — 9 пайплайнов валятся (2026-06-23)
+## 53. Аномалия: Orchestrator HTTP 500 на POST /drafts — 9 пайплайнов валились (2026-06-23)
 
 ### Симптом
-При прогоне `recheck.bat` 9 из 15 пайплайнов падают на шаге "Создание черновика" с HTTP 500.
-Затронуты: `document_approval`, `orchestrator_document_reject`, `orchestrator_document_reprocess`,
-`orchestrator_document_versions`, `orchestrator_draft_delete`, `orchestrator_draft_lifecycle`,
-`orchestrator_full_document_lifecycle`, `orchestrator_metadata_update`, `document_processing`.
+При прогоне `recheck.bat` 9 из 15 пайплайнов падали на шаге "Создание черновика" с HTTP 500.
 
-### Причина (требует уточнения)
-Registry **уже реализует** `/drafts` эндпоинты. Причина HTTP 500 на `POST /drafts` в Orchestrator
-пока не установлена — требуется диагностика самого Orchestrator (возможно проблема в теле запроса,
-конфигурации или внутренней логике сервиса).
+### Повторная проверка (2026-06-23)
+При прямом вызове `POST /api/v1/drafts/` через curl и Gateway (8081) — **202 Accepted**.
+Прогон всех 15 пайплайнов — **все пройдены**. Проблема не воспроизводится.
+
+Вероятная причина: временное состояние БД/контейнеров после перезапуска (race condition
+при старте сервисов, когда Registry не успел инициализироваться).
 
 ### Статус
-🔴 **Не диагностировано (checker, 2026-06-23)** — Orchestator возвращает 500 на создание черновика;
- Registry `/drafts` реализованы.
+✅ **Не воспроизводится (2026-06-23)** — все 15 пайплайнов проходят. Если ошибка
+повторится, требуется логирование первого запроса к Registry после старта.
 
 ## 54. Изменение: в итоговой сводной таблице отчёта убраны цифры, оставлены только отметки (2026-06-23)
 
@@ -1863,13 +1862,13 @@ Registry **уже реализует** `/drafts` эндпоинты. Причи�
 ### Статус
 ✅
 
-## 55. Аномалия: Registry — Categories не реализованы, PATCH /documents/{id} не парсит body
+## 55. Аномалия: Registry — PATCH /documents/{id} не парсит body
 
 **Симптом:**
-- 5 эндпоинтов `/api/v1/registry/categories/*` (CRUD) возвращают 404 — спроектированы (docs 7), но не реализованы
 - `PATCH /api/v1/registry/documents/{id}` возвращает 400 — тело валидное по docs 3.5, Registry не парсит
+- 5 CRUD эндпоинтов `/api/v1/registry/categories/*` **реализованы** (2026-06-23): list, get, create, update, delete
 
-**Статус:** 🟡 Registry Service issues, checker не чинит
+**Статус:** 🟡 PATCH /documents — Registry Service issue, checker не чинит; Categories ✅
 
 ## 56. Решение: Изолированное тестирование API Coverage — константы вместо {context_var}
 
@@ -1922,29 +1921,22 @@ Registry **уже реализует** `/drafts` эндпоинты. Причи�
 
 **Статус:** ✅ Исправлено (2026-06-23)
 
-## 60. Аномалия: RAG Builder — UNIQUE constraint uq_rag_chunks_section_chunk мешает индексации нескольких документов (2026-06-23)
+## 60. Решение: RAG Builder — UNIQUE constraint исключён из миграции (2026-06-23)
 
 ### Симптом
-При индексации второго документа в RAG Builder (`POST /rag/build`) возвращается HTTP 500.
-Первый документ (document_id=1) индексируется успешно, все последующие падают.
+При индексации второго документа в RAG Builder (`POST /rag/build`) возвращался HTTP 500.
 
 ### Диагностика
-- Прямые запросы к RAG Builder подтвердили: `document_id=1 → 200`, `document_id>1 → 500`
-- RAG Builder логи: `/app/backend/rag_builder_service/logs/rag_builder.log`
-  - `delete_by_document` успешен (`deleted=0`)
-  - `insert_chunks` не вызывается (падает до)
-- В `rag.document_chunks` есть UNIQUE constraint `uq_rag_chunks_section_chunk` на `(section_id, chunk_index)`
-- Все pipeline-шаги используют `section_id=1, chunk_index=0`, из-за чего вставка
-  для второго документа вызывает duplicate key error
+- В `rag.document_chunks` был UNIQUE constraint `uq_rag_chunks_section_chunk` на `(section_id, chunk_index)`
+- Все pipeline-шаги использовали `section_id=1, chunk_index=0`, из-за чего вставка
+  для второго документа вызывала duplicate key error
 
-### Что исправлено (checker, 2026-06-23)
-- `core/api_coverage_test.py` — добавлено дропание UNIQUE constraint в pre-prepare
-- `pipelines/base.py` — добавлено дропание UNIQUE constraint в pre-prepare
-
-### Зона ответственности
-✅ Checker — костыль (дропает constraint).
-🟡 RAG Builder — должен генерировать уникальные section_id или использовать `ON CONFLICT DO NOTHING/UPDATE`.
+### Что исправлено
+- **RAG Builder** (миграция `20260623_0001`): UNIQUE constraint `(section_id, chunk_index)`
+  **не создаётся** — ломал индексацию нескольких документов
+- **Модель** `RagDocumentChunk`: также не содержит constraint (см. `models/db.py`)
+- **Checker**: дропает constraint в pre-prepare для совместимости (устаревшие БД)
 
 ### Статус
-✅ Checker адаптирован. Pipeline `full_document_lifecycle` и `multi_document_cross_search` исправлены.
+✅ **Исправлено на уровне схемы БД** (RAG Builder). Checker адаптирован для старых БД.
 

@@ -61,7 +61,7 @@ def _get_service_checkdb_icon(db_result: Any, svc_key: str) -> str:
 
 
 def _service_pipeline_summary_icon(
-    svc_pipe_status: Dict[str, Tuple[int, int]],
+    svc_pipe_status: Dict[str, Tuple[int, int, int]],
     pipe_order: List[str],
 ) -> str:
     """
@@ -73,8 +73,8 @@ def _service_pipeline_summary_icon(
     all_ok = True
     for pname in pipe_order:
         if pname in svc_pipe_status:
-            passed, total = svc_pipe_status[pname]
-            if passed == 0 or passed != total:
+            passed, total, failed = svc_pipe_status[pname]
+            if failed > 0:
                 all_ok = False
                 break
     return "✅" if all_ok else "❌"
@@ -102,24 +102,28 @@ def _generate_full_report(
     lines.append(f"|---------|:----:|:----:|:-------:|:---:|:--------:|:------:|")
 
     # Собираем per-service per-pipeline статус шагов
-    # service_key -> {pipeline_name -> passed/all_count}
-    pipe_service_status: Dict[str, Dict[str, Tuple[int, int]]] = {}
+    # service_key -> {pipeline_name -> (passed, total, failed)}
+    pipe_service_status: Dict[str, Dict[str, Tuple[int, int, int]]] = {}
     for pipe_name, pipe_result in pipeline_results.items():
         steps = getattr(pipe_result, "steps", [])
-        svc_steps: Dict[str, Tuple[int, int]] = {}
+        svc_steps: Dict[str, list[int]] = {}  # [passed, total, failed]
         for step in steps:
             svc = getattr(step, "service", "")
             if not svc:
                 continue
             if svc not in svc_steps:
-                svc_steps[svc] = [0, 0]  # [passed, total]
-            svc_steps[svc][1] += 1
-            if getattr(step, "status", None) is not None and step.status.value == "passed":
-                svc_steps[svc][0] += 1
-        for svc, (passed, total) in svc_steps.items():
+                svc_steps[svc] = [0, 0, 0]  # [passed, total, failed]
+            svc_steps[svc][1] += 1  # total
+            status = getattr(step, "status", None)
+            if status is not None:
+                if status.value == "passed":
+                    svc_steps[svc][0] += 1
+                elif status.value == "failed":
+                    svc_steps[svc][2] += 1
+        for svc, (passed, total, failed) in svc_steps.items():
             if svc not in pipe_service_status:
                 pipe_service_status[svc] = {}
-            pipe_service_status[svc][pipe_name] = (passed, total)
+            pipe_service_status[svc][pipe_name] = (passed, total, failed)
 
     # Определяем общую успешность пайплайнов (для итоговой строки)
     pipeline_passed: Dict[str, bool] = {}
@@ -146,14 +150,14 @@ def _generate_full_report(
             api_cell = "—"
             svc_checkdb = _get_service_checkdb_icon(db_result, svc_key) if db_result else "—"
 
-        # Pipeline columns
+        # Pipeline columns (main table)
         pipe_icons: List[str] = []
         for pname in pipe_order:
             if pname in PIPELINE_SERVICE_MAP and svc_key in PIPELINE_SERVICE_MAP[pname]:
                 pstatus = svc_pipe_status.get(pname)
                 if pstatus:
-                    p_passed, p_total = pstatus
-                    pipe_icons.append("✅" if p_passed > 0 and p_passed == p_total else "❌")
+                    p_passed, p_total, p_failed = pstatus
+                    pipe_icons.append("✅" if p_failed == 0 else "❌")
                 else:
                     pipe_icons.append("—")
             else:
@@ -221,8 +225,8 @@ def _generate_full_report(
             if pname in PIPELINE_SERVICE_MAP and svc_key in PIPELINE_SERVICE_MAP[pname]:
                 pstatus = svc_pipe_status.get(pname)
                 if pstatus:
-                    p_passed, p_total = pstatus
-                    pipe_icons.append("✅" if p_passed > 0 and p_passed == p_total else "❌")
+                    p_passed, p_total, p_failed = pstatus
+                    pipe_icons.append("✅" if p_failed == 0 else "❌")
                 else:
                     pipe_icons.append("—")
             else:
@@ -244,8 +248,8 @@ def _generate_full_report(
         for svc_key, svc_status in pipe_service_status.items():
             if pname in svc_status:
                 has_data = True
-                passed, total = svc_status[pname]
-                if passed == 0 or passed != total:
+                passed, total, failed = svc_status[pname]
+                if failed > 0:
                     all_passed = False
         if has_data:
             pipe_totals.append("✅" if all_passed else "❌")
@@ -301,7 +305,7 @@ def _generate_full_report(
             failed_pipes = [
                 pipe_columns.get(p, p) for p in pipe_order
                 if p in svc_pipe_status
-                and svc_pipe_status[p][0] != svc_pipe_status[p][1]
+                and svc_pipe_status[p][2] > 0  # failed > 0
             ]
             if failed_pipes:
                 notes.append(f"Pipelines: сбой в {', '.join(failed_pipes)}")

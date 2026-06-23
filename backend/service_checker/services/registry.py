@@ -70,7 +70,6 @@ def get_service_def() -> ServiceDef:
 
     _warnings = [
             "⚠️ Registry не поддерживает trailing slash — эндпоинты /classifiers, /documents, /terminology без / в конце.",
-            "⚠️ Categories (7 CRUD) не реализованы — Registry возвращает 404.",
             "⚠️ PATCH /documents/{id}/status — internal API (только Orchestrator), checker ожидает 403.",
             "⚠️ PATCH /drafts/{id}/metadata — internal API (только Orchestrator), checker ожидает 404.",
         ]
@@ -237,8 +236,8 @@ def get_service_def() -> ServiceDef:
             "documents", "Удалить документ",
             response_schema={"data": dict}),
         # ── Categories CRUD ──
-        # ВНИМАНИЕ: эндпоинты не реализованы в Registry (см. warning выше).
-        # Оставляем в проверке — checker честно показывает ❌ Fail.
+        # ✅ Реализованы в Registry (2026-06-23): crud/category.py + routes.py
+        # Эндпоинты: GET/POST list, GET/{id}, PUT/{id}, DELETE/{id}
         EndpointDef("GET", f"{API_PREFIX}/registry/categories", "categories",
             "Список категорий",
             response_schema={"data": list, "meta": dict}),
