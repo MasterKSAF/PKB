@@ -4,7 +4,7 @@ from datetime import date, datetime
 from typing import Any, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 
 
 class DocumentSchema(BaseModel):
@@ -58,3 +58,10 @@ class DocumentSchema(BaseModel):
         'populate_by_name': True,
         'from_attributes': True,
     }
+
+    @field_serializer('valid_until')
+    def serialize_valid_until(self, valid_until: Optional[date]) -> Optional[date]:
+        if valid_until == date(9999, 12, 31):
+            return None
+        return valid_until
+

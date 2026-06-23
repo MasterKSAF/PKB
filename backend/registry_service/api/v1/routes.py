@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, Header
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, Header, Body
 from starlette.responses import JSONResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -562,7 +562,7 @@ def patch_document_status(
 @routes.patch('/registry/documents/{document_id}')
 def patch_document(
     document_id: str,
-    payload: dict,
+    payload: dict = Body(...),
     db: Session = Depends(get_db),
 ):
     """
@@ -573,24 +573,79 @@ def patch_document(
     """
     log_event('INFO', f'/registry/documents/{document_id}/', None, log_payload(payload))
     try:
-        immutable_fields = {'id', 'created_at', 'updated_at', 'title_hash_sha256', 'file_hash_sha256', 'document_id', 'total_versions'}
-        for field in immutable_fields:
-            if field in payload:
-                raise HTTPException(status_code=422, detail={'error': {'code': 'VALIDATION_ERROR', 'message': f'Field {field} is immutable'}})
+        editable_fields = {
+            'title', 'metadata', 'validity_status', 'status_note', 'category_ids',
+            'valid_from', 'valid_until', 'mks_oks_code', 'okstu_code', 'udk_code'
+        }
 
+        # Check for immutable fields
+        for field in payload.keys():
+            if field not in editable_fields:
+                raise HTTPException(
+                    status_code=400,
+                    detail={'error': {'code': 'IMMUTABLE_FIELD', 'message': f'Field {field} is immutable'}}
+                )
+
+        # Build list of updated fields for the response
+        updated_fields = list(payload.keys())
+
+        # Extract category_ids if present
+        category_ids = None
+        if 'category_ids' in payload:
+            category_ids = payload.pop('category_ids')
+            # Validate categories exist
+            from api.v1.models.category import Category
+            if category_ids:
+                existing_cats_count = db.query(Category).filter(Category.id.in_(category_ids)).count()
+                if existing_cats_count != len(category_ids):
+                    raise HTTPException(
+                        status_code=404,
+                        detail={'error': {'code': 'CATEGORY_NOT_FOUND', 'message': 'One or more categories not found'}}
+                    )
+
+        # Parse date fields
+        from datetime import date
+        for date_field in ('valid_from', 'valid_until'):
+            if date_field in payload:
+                val = payload[date_field]
+                if val is None and date_field == 'valid_until':
+                    payload[date_field] = date(9999, 12, 31)
+                elif isinstance(val, str):
+                    try:
+                        payload[date_field] = date.fromisoformat(val.split('T')[0])
+                    except ValueError:
+                        raise HTTPException(
+                            status_code=422,
+                            detail={'error': {'code': 'VALIDATION_ERROR', 'message': f'Invalid date format for {date_field}'}}
+                        )
+
+        # Update the document attributes
         document = document_crud.update_document(db, document_id, **payload)
-        
         if not document:
             log_event('WARNING', f'/registry/documents/{document_id}/', None, None, 'Document not found')
             raise HTTPException(
                 status_code=404,
                 detail={'error': {'code': 'DOCUMENT_NOT_FOUND', 'message': 'Document not found'}},
             )
-        
+
+        # Update categories if provided
+        if category_ids is not None:
+            from api.v1.models.category import DocumentCategory
+            # Delete existing relations
+            db.query(DocumentCategory).filter(DocumentCategory.document_id == document.id).delete(synchronize_session=False)
+            # Insert new relations
+            for cat_id in category_ids:
+                db.add(DocumentCategory(document_id=document.id, category_id=cat_id))
+            db.commit()
+
         log_event('INFO', f'/registry/documents/{document_id}/', None, payload, 'Document patched')
-        
+
         return {
-            'data': DocumentSchema.model_validate(document).model_dump(mode='json', by_alias=True, exclude_none=True),
+            'data': {
+                'id': document.id,
+                'updated_at': document.updated_at.isoformat() if document.updated_at else None,
+                'updated_fields': updated_fields
+            }
         }
     except HTTPException:
         raise
