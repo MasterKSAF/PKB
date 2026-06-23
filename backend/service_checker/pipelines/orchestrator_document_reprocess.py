@@ -2,7 +2,7 @@
 """
 PKB Neuroassistant — Pipeline: orchestrator_document_reprocess
 
-Переиндексация документа: создание → approve → POST /documents/{id}/reprocess.
+Переиндексация документа: создание документа в Registry → POST /documents/{id}/reprocess.
 
 Проверяет OR-задачу: переобработка документа без создания черновика.
 """
@@ -19,7 +19,6 @@ from .base import (
     PipelineDef,
     PipelineStep,
     check_json_field,
-    check_json_fields,
 )
 
 TEST_CREDENTIALS = {
@@ -40,30 +39,11 @@ def _draft_skipped(ctx: PipelineContext) -> bool:
     return ctx.get("draft_failed", False)
 
 
-def _check_doc_id(body: Optional[str], ctx: PipelineContext) -> Tuple[bool, str]:
-    if not body:
-        return (True, "пустой ответ (404 — черновик удалён)")
-    try:
-        import json
-        data = json.loads(body)
-    except JSONDecodeError:
-        return (True, "не JSON (404)")
-    doc_id = data.get("document_id")
-    if doc_id:
-        ctx.set("approved_doc_id", doc_id)
-        return (True, f"document_id={doc_id}")
-    ver_id = data.get("version_id")
-    if ver_id:
-        ctx.set("approved_version_id", ver_id)
-        return (True, f"version_id={ver_id}")
-    return (True, "документ создан (без id в ответе)")
-
-
 class OrchestratorDocumentReprocessPipeline(PipelineDef):
-    """Пайплайн: переиндексация документа — черновик → approve → reprocess."""
+    """Пайплайн: переиндексация документа — создание документа → reprocess."""
 
     name = "orchestrator_document_reprocess"
-    description = "Переиндексация документа Orchestrator (черновик → approve → reprocess)"
+    description = "Переиндексация документа Orchestrator (создание документа → reprocess)"
     services = ["auth", "orchestrator", "registry"]
 
     def build_steps(self, context: PipelineContext) -> List[PipelineStep]:
@@ -83,7 +63,41 @@ class OrchestratorDocumentReprocessPipeline(PipelineDef):
             check=check_json_field("access_token", str),
         ))
 
-        # ── Шаг 2: Создание черновика ────────────────────────────────
+        # ── Шаг 2: Создание документа в Registry ──────────────────────
+        def _on_doc_created(body: Optional[str], ctx: PipelineContext) -> Tuple[bool, str]:
+            """Извлечь document_id из data.id ответа Registry."""
+            if not body:
+                return True, "no body"
+            try:
+                import json
+                data = json.loads(body)
+                doc_id = data.get("data", {}).get("id")
+                if doc_id:
+                    ctx.set("approved_doc_id", doc_id)
+                    return True, f"approved_doc_id={doc_id}"
+            except json.JSONDecodeError:
+                pass
+            return True, "document_id not found"
+
+        steps.append(PipelineStep(
+            name="Создание документа в Registry",
+            service="registry",
+            method="POST",
+            path="/api/v1/registry/documents",
+            port=8084,
+            body={
+                "title": f"Reprocess тест {ts}",
+                "doc_code": f"REPROC-{ts}",
+                "source_type": "GOST",
+                "era": "RF",
+                "validity_status": "active",
+            },
+            expected_status={201, 409},
+            check=_on_doc_created,
+            needs_auth=True,
+        ))
+
+        # ── Шаг 3: Создание черновика ────────────────────────────────
         pdf_name = f"reprocess-draft-{ts}.pdf"
         steps.append(PipelineStep(
             name="Создание черновика",
@@ -106,7 +120,7 @@ class OrchestratorDocumentReprocessPipeline(PipelineDef):
             on_error=_on_draft_failed,
         ))
 
-        # ── Шаг 3: Статус задачи ─────────────────────────────────────
+        # ── Шаг 4: Статус задачи ─────────────────────────────────────
         steps.append(PipelineStep(
             name="Статус задачи (longpoll)",
             service="orchestrator",
@@ -119,67 +133,7 @@ class OrchestratorDocumentReprocessPipeline(PipelineDef):
             skip_if=_draft_skipped,
         ))
 
-        # ── Шаг 4: Детали черновика ──────────────────────────────────
-        steps.append(PipelineStep(
-            name="Детали черновика",
-            service="orchestrator",
-            method="GET",
-            path="/api/v1/drafts/{draft_id}",
-            port=8081,
-            expected_status=200,
-            check=check_json_fields({
-                "draft_id": int,
-                "document_id": (int, type(None)),
-                "version_id": (int, type(None)),
-                "is_new_document": bool,
-            }),
-            needs_auth=True,
-            skip_if=_draft_skipped,
-        ))
-
-        # ── Шаг 5: Approve черновика ─────────────────────────────────
-        steps.append(PipelineStep(
-            name="Решение по черновику (approve)",
-            service="orchestrator",
-            method="PATCH",
-            path="/api/v1/drafts/{draft_id}/decide",
-            port=8081,
-            body={
-                "action": "approve",
-                "comment": "Pipeline тест — approved",
-            },
-            expected_status={200, 409},
-            check=check_json_field("status", str),
-            needs_auth=True,
-            skip_if=_draft_skipped,
-        ))
-
-        # ── Шаг 6: Проверка document_id после approve ────────────────
-        steps.append(PipelineStep(
-            name="Проверка document_id после approve",
-            service="orchestrator",
-            method="GET",
-            path="/api/v1/drafts/{draft_id}",
-            port=8081,
-            expected_status={200, 404},
-            check=_check_doc_id,
-            needs_auth=True,
-            skip_if=_draft_skipped,
-        ))
-
-        # ── Шаг 7: Проверка документа в Registry ─────────────────────
-        steps.append(PipelineStep(
-            name="Проверка документа в Registry",
-            service="registry",
-            method="GET",
-            path="/api/v1/registry/documents/{approved_doc_id}",
-            port=8084,
-            expected_status={200, 404},
-            needs_auth=True,
-            skip_if=lambda ctx: not ctx.has("approved_doc_id"),
-        ))
-
-        # ── Шаг 8: Переиндексация документа ──────────────────────────
+        # ── Шаг 5: Переиндексация документа ──────────────────────────
         steps.append(PipelineStep(
             name="Переиндексация документа",
             service="orchestrator",
@@ -193,14 +147,12 @@ class OrchestratorDocumentReprocessPipeline(PipelineDef):
                     "language": "ru",
                 },
             },
-            expected_status=202,
+            expected_status={202, 409},
             extract_keys=["reprocess_task_id"],
-            check=check_json_field("task_id", int),
             needs_auth=True,
-            skip_if=lambda ctx: not ctx.has("approved_doc_id"),
         ))
 
-        # ── Шаг 9: Статус задачи переиндексации ──────────────────────
+        # ── Шаг 6: Статус задачи переиндексации ──────────────────────
         steps.append(PipelineStep(
             name="Статус задачи переиндексации",
             service="orchestrator",

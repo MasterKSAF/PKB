@@ -12,9 +12,10 @@ DELETE /documents/{id} перенесены в registry-service (см. docs/api/
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import CurrentUser, get_current_user
 from app.db.base import get_db
@@ -55,13 +56,24 @@ async def reprocess_document(
     repo = TaskRepository(db)
 
     # Create reprocess task
-    task = await repo.create_task(
-        draft_id=0,  # reprocess has no draft
-        pipeline_type="reprocess",
-        total_steps=1,
-    )
-    task.document_id = int(doc_id) if doc_id.isdigit() else None
-    await db.flush()
+    try:
+        task = await repo.create_task(
+            draft_id=0,  # reprocess has no draft
+            pipeline_type="reprocess",
+            total_steps=1,
+        )
+        task.document_id = int(doc_id) if doc_id.isdigit() else None
+        await db.flush()
+    except IntegrityError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": {
+                    "code": "TASK_ALREADY_EXISTS",
+                    "message": f"Reprocess task for document {doc_id} already exists",
+                }
+            },
+        )
 
     # Trigger reprocess Celery task
     run_reprocess_step.delay(task.id, doc_id)

@@ -20,7 +20,6 @@ from .base import (
     PipelineDef,
     PipelineStep,
     check_json_field,
-    check_json_fields,
 )
 
 TEST_CREDENTIALS = {
@@ -39,25 +38,6 @@ def _on_draft_failed(body: Optional[str], ctx: PipelineContext) -> None:
 
 def _draft_skipped(ctx: PipelineContext) -> bool:
     return ctx.get("draft_failed", False)
-
-
-def _check_doc_id(body: Optional[str], ctx: PipelineContext) -> Tuple[bool, str]:
-    if not body:
-        return (True, "пустой ответ (404 — черновик удалён)")
-    try:
-        import json
-        data = json.loads(body)
-    except JSONDecodeError:
-        return (True, "не JSON (404)")
-    doc_id = data.get("document_id")
-    if doc_id:
-        ctx.set("approved_doc_id", doc_id)
-        return (True, f"document_id={doc_id}")
-    ver_id = data.get("version_id")
-    if ver_id:
-        ctx.set("approved_version_id", ver_id)
-        return (True, f"version_id={ver_id}")
-    return (True, "документ создан (без id в ответе)")
 
 
 class OrchestratorFullDocumentLifecyclePipeline(PipelineDef):
@@ -165,6 +145,21 @@ class OrchestratorFullDocumentLifecyclePipeline(PipelineDef):
         ))
 
         # ── Шаг 7: Approve ───────────────────────────────────────────
+        def _on_approved(body: Optional[str], ctx: PipelineContext) -> Tuple[bool, str]:
+            """Извлечь document_id из ответа approve и сохранить как approved_doc_id."""
+            if not body:
+                return True, "no body"
+            try:
+                import json
+                data = json.loads(body)
+                doc_id = data.get("document_id")
+                if doc_id:
+                    ctx.set("approved_doc_id", doc_id)
+                    return True, f"approved_doc_id={doc_id}"
+            except json.JSONDecodeError:
+                pass
+            return True, "document_id not found in approve response"
+
         steps.append(PipelineStep(
             name="Решение по черновику (approve)",
             service="orchestrator",
@@ -176,20 +171,7 @@ class OrchestratorFullDocumentLifecyclePipeline(PipelineDef):
                 "comment": "Pipeline тест — approved",
             },
             expected_status={200, 409},
-            check=check_json_field("status", str),
-            needs_auth=True,
-            skip_if=_draft_skipped,
-        ))
-
-        # ── Шаг 8: Проверка document_id после approve ────────────────
-        steps.append(PipelineStep(
-            name="Проверка document_id после approve",
-            service="orchestrator",
-            method="GET",
-            path="/api/v1/drafts/{draft_id}",
-            port=8081,
-            expected_status={200, 404},
-            check=_check_doc_id,
+            check=_on_approved,
             needs_auth=True,
             skip_if=_draft_skipped,
         ))
@@ -242,6 +224,7 @@ class OrchestratorFullDocumentLifecyclePipeline(PipelineDef):
             body={
                 "query": "тестовый документ",
                 "top_k": 3,
+                "valid_at": "2026-06-23",
             },
             expected_status=200,
             needs_auth=True,

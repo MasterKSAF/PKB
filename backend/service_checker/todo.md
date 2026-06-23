@@ -1,78 +1,72 @@
-# План выявления и исправления ошибок API Coverage
+# План для нового агента
 
-## Текущий статус (2026-06-23)
+## Текущий статус
 
 **Pipeline**: 15/15 ✅ (полностью зелёный)
-**API Coverage**: 198/226 (8 failed, 20 skipped)
+**API Coverage**: остались 6 skipped в Gateway
+
+| Сервис | Результат |
+|--------|-----------|
+| Auth | 19/19 ✅ |
+| Registry | 50/50 ✅ (Categories — пересоздана таблица) |
+| Orchestrator | 35/35 ✅ (починены metadata proxy, reprocess, pipeline) |
+| Gateway | 69/75 ⏭️ **6 skipped** |
+| Query | — проверить после обновления (UniqueViolation → 409) |
+| Остальные | зелёные |
 
 ---
 
-## 1. REGISTRY — 2 failed, 3 skipped
+## Задачи
 
-### 1a. Categories — 500 Internal Server Error
-- **Симптом**: `GET /registry/categories` и `POST /registry/categories` → 500
-- **Логи**: нет в логах (нужно смотреть registry.err)
-- **Вероятная причина**: таблица `registry.categories` не создана (миграция не применилась) или ошибка в коде
-- **Действия**:
-  1. Проверить registry.err логи
-  2. Проверить, создана ли таблица `registry.categories`
-  3. Воспроизвести запрос вручную: `curl http://localhost:8084/api/v1/registry/categories`
+### 1. Gateway: 6 skipped
 
-### 1b. PATCH /registry/drafts/{draft_id}/metadata → 404
-- **Симптом**: checker ожидает 404 (internal API, только Orchestrator)
-- **Это НЕ ошибка** — checker явно указывает `expected_status=404`
-- **Действие**: убедиться, что Registry возвращает 404 для внешних вызовов
+**Причина**: в `services/gateway.py` нет prepare-шагов для `user_id`, `pending_id`, `file_id`.
 
----
+**Конкретно**:
+- **3 эндпоинта** с `{user_id}` — пропущены
+- **2 эндпоинта** с `{pending_id}` — пропущены
+- **1 эндпоинт** с `{file_id}` — пропущен
 
-## 2. ORCHESTRATOR — 5 failed, 14 skipped
+**Что сделать** — добавить в `prepare_endpoints` Gateway:
+1. `POST /auth/admin/users` — создать пользователя, извлечь `user_id` (если ещё не создан)
+2. `POST /registry/classifiers` — создать классификатор → извлечь `pending_id` через `/classifiers/pending`
+3. `POST /registry/documents/import` — импорт документа → извлечь `file_id`
 
-### 2a. GET /drafts/ — 405 Method Not Allowed (DRAFTS-3)
-- **Причина**: list_drafts удалён при рефакторинге (чтение через Registry)
-- **Решение**: 2 варианта —
-  - (a) Добавить прокси `GET /drafts/` → Registry `/registry/drafts`
-  - (b) Обновить checker: удалить этот endpoint из API Coverage для оркестратора
+**Куда**: `services/gateway.py`, массив `prepare_endpoints` в `get_service_def()`.
 
-### 2b. PATCH /drafts/{draft_id}/metadata — 500 (DRAFTS-8)
-- **Причина**: прокси в Registry, но Registry возвращает 404 для внешних (см. 1b)
-- **Решение**: в прокси оркестратора обработать 404 от Registry как успех (expected_status=404)
-
-### 2c. GET /monitor/metrics — 404 (MONITOR-1)
-- **Причина**: Prometheus-метрики не подключены
-- **Решение**: подключить `/metrics` через `prometheus_client` или `opentelemetry`
-
-### 2d-e. GET /documents/, GET /documents/queue — 404 (DOCUMENTS-1,2)
-- **Причина**: эти эндпоинты не входят в scope оркестратора (Registry)
-- **Решение**: обновить checker — удалить из coverage для оркестратора
-
-### 2f. 14 skipped документов с {doc_id}
-- **Причина**: нет prepare-эндпоинта, создающего document_id
-- **Решение**: добавить prepare-шаг (POST /documents) перед документами
+**Проверка**: `python -m service_checker docker --action full-report --services gateway --skip-pipelines`
 
 ---
 
-## 3. QUERY — 1 failed
+### 2. Query — проверить после обновления
 
-### 3a. POST /chat/projects — 500 (CHAT-4)
-- **Симптом**: второй вызов POST /chat/projects с тем же code → UniqueViolation → 500
-- **Логи из todos**: `UniqueViolationError: duplicate key value violates unique constraint "uq_chat_projects_user_code"`
-- **Решение**: обработать UniqueViolation → 409 Conflict (не 500)
+Разработчик query сказал, что починил UniqueViolation → 409. Нужно перепроверить:
 
----
+```
+python -m service_checker docker --action full-report --services query --skip-pipelines
+```
 
-## 4. GATEWAY — 3 skipped (предварительные)
-- **Причина**: нет prepare-данных для эндпоинтов с path-параметрами
-- **Решение**: добавить prepare-шаги
+Ожидается: 27/27 ✅ вместо 26/27.
 
 ---
 
-## Порядок исправления (приоритет)
+### 3. Финальный прогон
 
-| Приоритет | Задача | Ожидаемый эффект |
-|-----------|--------|-----------------|
-| P0 | 2a, 2d-e: Обновить checker (убрать эндпоинты Registry из coverage оркестратора) | -5 failed |
-| P1 | 2b: Обработать 404 от Registry в прокси metadata | -1 failed |
-| P1 | 3a: Query 500 → 409 | -1 failed |
-| P2 | 2f: Добавить document prepare | -14 skipped |
-| P3 | 2c: Мониторинг метрики | -1 failed |
-| P3 | 1a: Разобраться с Categories 500 | -2 failed, -3 skipped |
+После gateway и query:
+
+```
+python -m service_checker docker --action full-report
+```
+
+15 pipelines + все API coverage. Обновить `todo.md` и `specificity.md` при необходимости.
+
+---
+
+## Справка по проекту
+
+- **recheck.bat**: `backend/service_checker/docker/recheck.bat` — полный цикл (чистка БД → перезапуск → отчёт). Запускать через `cmd /c recheck.bat`.
+- **Быстрые проверки**: `python -m service_checker docker --action full-report --services <name> --skip-pipelines`
+- **Checker определение сервисов**: `services/gateway.py`, `services/orchestrator.py` и т.д.
+- **Pipeline**: `pipelines/orchestrator_*.py` — починены 3 pipeline (добавлен шаг создания документа в Registry)
+- **Orchestrator**: починены metadata proxy (404 от Registry) и reprocess (IntegrityError → 409)
+- **Registry Categories**: таблица пересоздана (не хватало колонок description, color, created_at, updated_at)

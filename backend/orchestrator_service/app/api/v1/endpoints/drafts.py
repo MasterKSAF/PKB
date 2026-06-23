@@ -9,6 +9,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
+import httpx
 from fastapi import (
     APIRouter,
     Depends,
@@ -1082,6 +1083,29 @@ async def patch_draft_metadata(
         }
     except HTTPException:
         raise
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            logger.warning(f"Registry 404 on metadata update for draft {draft_id} (expected)")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": {
+                        "code": "NOT_FOUND",
+                        "message": f"Черновик {draft_id} не найден в Registry",
+                    }
+                },
+            )
+        logger.error(f"Registry HTTP error: {exc.response.status_code}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={
+                "error": {
+                    "code": "REGISTRY_ERROR",
+                    "message": f"Registry вернул {exc.response.status_code} при обновлении метаданных черновика {draft_id}",
+                    "details": {"registry_status": exc.response.status_code},
+                }
+            },
+        )
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

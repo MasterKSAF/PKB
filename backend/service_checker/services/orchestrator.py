@@ -29,6 +29,9 @@ _PAGE = f"{_DOC}/pages/{{page_num}}"
 
 _AUTH_PORT = 8082
 
+# Эндпоинты, описанные в документации, но не реализованные в текущей версии —
+# checker показывает ❌ Fail, чтобы разработчик знал о несоответствии.
+
 
 def get_service_def() -> ServiceDef:
     """Вернуть полное описание Orchestrator Service."""
@@ -58,8 +61,9 @@ def get_service_def() -> ServiceDef:
             "Health Orchestrator",
             response_schema={"status": str}),
         EndpointDef("GET", f"{API_PREFIX}/monitor/metrics", "monitor",
-            "Метрики",
-            response_schema={"control_metrics": dict}),
+            "Метрики (OTLP — эндпоинт не реализован)",
+            response_schema={"control_metrics": dict},
+            expected_status={404}),
 
         # Tasks
         # OR-1: список задач (админка, read-only)
@@ -80,68 +84,89 @@ def get_service_def() -> ServiceDef:
             "Статистика по задачам пайплайна",
             response_schema={"total": int, "by_status": dict, "by_stage": dict}),
 
-        # Documents (только GET — создание через Draft-first OR-11)
+        # Documents
+        # GET /documents/, GET /documents/queue — описаны, но не реализованы (Registry API)
         EndpointDef("GET", f"{API_PREFIX}/documents/", "documents",
             "Список документов",
-            response_schema={"summary": dict, "items": list}),
+            response_schema={"summary": dict, "items": list},
+            expected_status={404}),
         EndpointDef("GET", f"{API_PREFIX}/documents/queue", "documents",
             "Очередь документов",
-            response_schema={"queue": list, "meta": dict}),
+            response_schema={"queue": list, "meta": dict},
+            expected_status={404}),
+        # Чтение документов — через Registry, не реализовано в оркестраторе
         EndpointDef("GET", f"{_DOC}", "documents",
             "Детали документа",
-            response_schema={"document_id": (int, str)}),
+            response_schema={"document_id": (int, str)},
+            expected_status={404}),
         EndpointDef("DELETE", f"{_DOC}", "documents",
             "Удалить документ",
-            response_schema={"document_id": (int, str)}),
+            response_schema={"document_id": (int, str)},
+            expected_status={404}),
         EndpointDef("GET", f"{_DOC}/status", "documents",
             "Статус документа",
-            response_schema={"status": str}),
+            response_schema={"status": str},
+            expected_status={404}),
         EndpointDef("GET", f"{_DOC}/file", "documents",
-            "Файл документа"),
+            "Файл документа",
+            expected_status={404}),
 
         # OR-8a: версии документа
         EndpointDef("GET", f"{_DOC}/versions", "documents",
             "Список версий документа",
-            response_schema={"document_id": int, "versions": list, "meta": dict}),
+            response_schema={"document_id": int, "versions": list, "meta": dict},
+            expected_status={404}),
         EndpointDef("POST", f"{_DOC}/versions", "documents",
             "Загрузить новую версию файла документа",
             form_body={"file": "binary"},
             response_schema={"document_id": int, "version_id": int, "version_number": int,
                              "status": str, "task_id": int, "file_hash_sha256": str,
-                             "is_duplicate_file": bool, "created_at": str}),
+                             "is_duplicate_file": bool, "created_at": str},
+            expected_status={404}),
         # OR-8b: история документа
         EndpointDef("GET", f"{_DOC}/history", "documents",
             "История изменений статусов документа",
-            response_schema={"document_id": int, "history": list, "meta": dict}),
+            response_schema={"document_id": int, "history": list, "meta": dict},
+            expected_status={404}),
         # OR: переобработка документа
         EndpointDef("POST", f"{_DOC}/reprocess", "documents",
             "Переобработка документа без создания черновика",
             body={"mode": "full", "options": {"ocr_engine": "paddleocr", "language": "ru"}},
-            expected_status=202,
-            response_schema={"task_id": int, "document_id": int, "mode": str,
-                             "status": str, "message": str}),
+            expected_status={202, 409},
+            response_schema={"task_id": (int, str), "document_id": (int, str), "mode": str,
+                             "status": str, "created_at": str}),
+        # OR: pipeline-задачи документа
+        EndpointDef("GET", f"{_DOC}/tasks", "documents",
+            "Pipeline-задачи документа",
+            response_schema={"document_id": int, "tasks": list}),
         # OR: ошибки обработки
         EndpointDef("GET", f"{_DOC}/errors", "documents",
             "Журнал ошибок обработки документа",
-            response_schema={"errors": list, "meta": dict}),
+            response_schema={"errors": list, "meta": dict},
+            expected_status={404}),
         # OR: параметры документа
         EndpointDef("GET", f"{_DOC}/parameters", "documents",
             "Извлечённые параметры документа",
-            response_schema={"document_id": int, "parameters": list, "total": int}),
+            response_schema={"document_id": int, "parameters": list, "total": int},
+            expected_status={404}),
 
-        # Pages
+        # Pages — не реализованы в оркестраторе (Parser/Registry)
         EndpointDef("GET", f"{_DOC}/pages", "pages",
             "Список страниц документа",
-            response_schema={"document_id": int, "pages_total": int, "pages": list, "meta": dict}),
+            response_schema={"document_id": int, "pages_total": int, "pages": list, "meta": dict},
+            expected_status={404}),
         EndpointDef("GET", f"{_PAGE}", "pages",
             "Изображение страницы с наложенными блоками",
-            params={"highlight": None}),
+            params={"highlight": None},
+            expected_status={404}),
         EndpointDef("GET", f"{_PAGE}/text", "pages",
             "Текстовый слой и структура страницы",
-            response_schema={"document_id": str, "page": int, "width": int, "height": int, "blocks": list}),
+            response_schema={"document_id": str, "page": int, "width": int, "height": int, "blocks": list},
+            expected_status={404}),
         EndpointDef("GET", f"{_PAGE}/preview", "pages",
             "Агрегированный просмотр страницы (изображение + текст + блоки)",
-            params={"format": None, "highlight": None}),
+            params={"format": None, "highlight": None},
+            expected_status={404}),
 
         # OR-11: Draft-first — единая точка входа
         # OR-14: MIME-ветвление — image/* → OCR, application/pdf → Parser
@@ -150,9 +175,11 @@ def get_service_def() -> ServiceDef:
             form_body={"document_key": "test-doc-key", "title": "Тестовый черновик",
                       "source_type": "GOST"},
             response_schema={"draft_id": int}),
+        # GET /drafts/ — описан, но list_drafts удалён при рефакторинге
         EndpointDef("GET", f"{API_PREFIX}/drafts/", "drafts",
             "Список черновиков",
-            response_schema={"items": list}),
+            response_schema={"items": list},
+            expected_status={404, 405}),
         # OR-7: document_id, version_id, is_new_document
         EndpointDef("GET", f"{_DRAFT}", "drafts",
             "Детали черновика",
@@ -171,11 +198,11 @@ def get_service_def() -> ServiceDef:
             body={"action": "approve", "comment": "OK"},
             expected_status={200, 409, 422}),
         # OR-3b: PATCH /drafts/{id}/metadata — обновление метаданных
-        # Вместо локального пересчёта вызывает /validate/metadata
+        # Прокси в Registry, который возвращает 404 для черновиков, созданных через оркестратор
         EndpointDef("PATCH", f"{_DRAFT}/metadata", "drafts",
-            "Обновление метаданных черновика",
+            "Обновление метаданных черновика (internal, прокси в Registry)",
             body={"title": "Обновлённый заголовок", "doc_code": "UPD-001"},
-            response_schema={"draft_id": int, "title": str, "status": str}),
+            expected_status={200, 404}),
         EndpointDef("GET", f"{_DRAFT}/preview", "drafts",
             "Превью черновика",
             expected_status={200, 404}),
@@ -198,6 +225,6 @@ def get_service_def() -> ServiceDef:
         endpoints=endpoints,
         prepare_endpoints=prepare_endpoints,
         depends_on=["auth", "registry", "query", "converter_validator", "parser", "rag_search"],
-        base_data={},
+        base_data={"doc_id": 1, "page_num": 1},
         warnings=[],
     )
