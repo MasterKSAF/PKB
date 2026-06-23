@@ -1,0 +1,82 @@
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+*.egg-info/
+
+# --- Environment & Secrets ---
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# --- Virtual Environments ---
+venv/
+.env/
+ENV/
+
+# --- IDE & Editor ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# --- Project Backups & Temp Files ---
+*.bak
+*.sql0
+*.sql.bak
+
+# --- Personal & Misc ---
+*.log
+logs/
+
+# --- Data & Artifacts (Docker mounts handle these) ---
+*.pdf
+*.docx
+*.xlsx
+*.zip
+*.7z
+*.rar
+*.dwg
+*.dxf
+
+# --- Docker & DB ---
+postgres_data/
+minio_data/
+redis_data/
+pgadmin_data/
+docker-compose.override.yml
+
+# --- Cache & Models ---
+.hf/
+.hf_cache/
+.docling_cache/
+.cache/
+*.pth
+*.pt
+*.onnx
+*.bin
+*.h5
+*.safetensors
+
+# --- OS ---
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Бэкапы и черновики
+
+dist/
+build/
+
+reports/
+tmp/
+artifacts/
+
+.coverage
+htmlcov/
+
+# Local manual test payloads
+examples/*.local.json
