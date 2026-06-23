@@ -26,6 +26,19 @@ Gateway — **внутренний сервис**, не имеет внешне�
 | **Мониторинг** | Health-check endpoint `/system/health` и `/health` с агрегированным статусом всех сервисов |
 | **X-Process-Time** | Добавление заголовка `X-Process-Time` с временем обработки запроса |
 
+### Группы
+
+| Группа | Описание |
+|--------|----------|
+| `system` | Health-check и метрики мониторинга Gateway |
+
+### Содержание
+
+| Метод | Путь | Описание |
+|-------|------|----------|
+| GET | `/api/v1/system/health` | Агрегированный health-check всех сервисов |
+| GET | `/api/v1/monitor/metrics` | Метрики мониторинга (ocr_quality, retrieval_quality и др.) |
+
 ---
 
 ### Маршрутизация запросов
@@ -41,9 +54,35 @@ Gateway объединяет API всех внутренних сервисов 
 |-------------|-------------------|------|-----------------|
 | `/api/v1/auth/*` | Auth Service | `8082` | [auth_service_api.md](auth_service_api.md) |
 | `/api/v1/admin/*` | Auth Service | `8082` | [auth_service_api.md](auth_service_api.md) |
-| `/api/v1/documents/*` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md) |
+| `/api/v1/documents` (`GET`, `PUT`, `PATCH`, `DELETE`) | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md#группа-documents) |
+| `/api/v1/documents/{id}/sections` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md#321-секции-документа-полный-объект-для-rag-builder) |
+| `/api/v1/documents/{id}/pages/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md#322-страницы-документа) |
+| `/api/v1/documents/{id}/file` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md#326-файл-документа) |
+| `/api/v1/documents/{id}/history` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md#327-история-статусов) |
+| `/api/v1/documents/{id}/parameters` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md#329-параметры-документа) |
+| `/api/v1/documents/{id}/versions` (`GET`) | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md#328-версии-документа) |
+| `/api/v1/documents/{id}/succession` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md#37-цепочка-преемственности) |
+| `/api/v1/documents/search` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md#31a-полнотекстовый-поиск-bm25) |
+| `/api/v1/documents/export` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md#311-экспорт) |
+| `/api/v1/documents/import` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md#312-массовый-импорт) |
+| `/api/v1/documents/check-uniqueness` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md#3210-проверить-уникальность-документа) |
+| `/api/v1/documents/{id}/status` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md#get-documentsdoc_idstatus) |
+| `/api/v1/documents/queue` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md#get-documentsqueue) |
+| `/api/v1/documents/{id}/errors` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md#get-documentsdoc_iderrors) |
+| `/api/v1/documents/{id}/versions` (`POST`) | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md#post-documentsdoc_idversions) |
+| `/api/v1/documents/{id}/reprocess` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md#post-documentsdoc_idreprocess) |
+| `/api/v1/documents/{id}/tasks` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md#get-documentsdoc_idtasks) |
 | `/api/v1/tasks/*` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md)² |
-| `/api/v1/drafts/*` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md) |
+| `/api/v1/drafts` (`GET`) | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md#группа-drafts) |
+| `/api/v1/drafts/{id}` (`GET`) | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md#43-get-registrydraftsdraft_id--полная-информация) |
+| `/api/v1/drafts/{id}/preview` (`GET`) | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md#44-get-registrydraftsdraft_idpreview--preview-метаданные) |
+| `/api/v1/drafts` (`POST`) | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md#post-drafts--загрузка-файла-создание-черновика) |
+| `/api/v1/drafts/{id}/preview` (`POST`) | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md#post-draftsdraft_idpreview) |
+| `/api/v1/drafts/{id}/preview/status` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md#get-draftsdraft_idpreviewstatus) |
+| `/api/v1/drafts/{id}/decide` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md#patch-draftsdraft_iddecide) |
+| `/api/v1/drafts/{id}/metadata` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md#patch-draftsdraft_idmetadata) |
+| `/api/v1/drafts/{id}` (`DELETE`) | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md#delete-draftsdraft_id) |
+| `/api/v1/drafts/{id}/tasks` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md#get-draftsdraft_idtasks) |
 | `/api/v1/chat/*` | Query Service | `8083` | [query_service_api.md](query_service_api.md) |
 | `/api/v1/text/*` | Query Service | `8083` | [query_service_api.md](query_service_api.md) |
 | `/api/v1/registry/classifiers/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
@@ -55,14 +94,14 @@ Gateway объединяет API всех внутренних сервисов 
 | `/api/v1/analyse/*` | Analyse Service | `8089` | [analyse_service_api.md](analyse_service_api.md) |
 | `/api/v1/health` | Gateway (собственный) | `8080` | — |
 | `/api/v1/meridian/*` | Integration Service | `8085` | [integration_service_api.md](integration_service_api.md) |
-| `/api/v1/files/*` | Integration Service | `8085` | [integration_service_api.md](integration_service_api.md) (D25: добавлен в routing table) |
-| `/api/v1/external/*` | Integration Service | `8085` | [integration_service_api.md](integration_service_api.md) (D25: добавлен в routing table) |
+| `/api/v1/files/*` | Integration Service | `8085` | [integration_service_api.md](integration_service_api.md) |
+| `/api/v1/external/*` | Integration Service | `8085` | [integration_service_api.md](integration_service_api.md) |
 
-> **¹ Примечание**: Маршрут `/api/v1/pages/*` — устаревший алиас. Все эндпоинты работы со страницами вложены в `/documents/{doc_id}/pages/*` и маршрутизируются через `/api/v1/documents/*`. Отдельный префикс `/pages/*` будет удалён после рефакторинга Gateway.
+> **Разграничение документов и черновиков:** Чтение данных (GET) и редактирование (PUT, PATCH, DELETE) — Registry. Пайплайн и управление (POST для жизненного цикла, статус обработки, очередь, ошибки, связь с задачами) — Orchestrator. Подробнее — [Разграничение ответственности Orchestrator vs Registry](../guide.md#разграничение-ответственности-orchestrator-vs-registry).
 >
-> **² Примечание:** Маршрут `/api/v1/tasks/*` — read-only для admin-ролей (`system_admin`, `knowledge_admin`). Контракт — см. [Маршрутизация задач пайплайна `/tasks/*` (read-only)](#маршрутизация-задач-пайплайна-tasks-read-only). Внешние клиенты для статуса загрузки используют `/api/v1/drafts/*`.
-
-> **📐 Принцип категоризации путей:** Все пути Gateway организованы по категориям сервисов. Префикс пути включает имя сервиса (например, `/api/v1/registry/*` для Registry Service, `/api/v1/chat/*` для Query Service), за которым следует логическая группа эндпоинтов. Пути без категории сервиса (например, устаревший `/pages/*`) не должны добавляться.
+> **URL-трансформация при маршрутизации в Registry:** Gateway преобразует пути при проксировании. Например, `GET /api/v1/documents/{id}` → `GET /api/v1/registry/documents/{id}` на Registry Service (порт `8084`). Аналогично для всех документов и черновиков, направляемых в Registry.
+>
+> **² Примечание:** Маршрут `/api/v1/tasks/*` — read-only для admin-ролей (`system_admin`, `knowledge_admin`).
 
 В мок-режиме Gateway, Orchestrator и остальные сервисы объединены в единое FastAPI-приложение для разработки и тестов. Исходный код мок-Gateway — в репозитории `backend/` (конкретный путь уточняется в `architecture/service_dependencies.md`). Документация описывает контракт Gateway, а не привязана к пути файла.
 
@@ -93,31 +132,32 @@ Gateway объединяет API всех внутренних сервисов 
 
 ### Маршрутизация черновиков (drafts)
 
-Черновик (draft) — **обязательная точка входа** при загрузке документа: загрузить документ без черновика невозможно. Все операции жизненного цикла черновика проходят через Gateway и маршрутизируются в Orchestrator Service по префиксу `/api/v1/drafts/*`.  
-Registry drafts — только internal, доступ к ним через Gateway отсутствует.
+Черновик (draft) — **обязательная точка входа** при загрузке документа: загрузить документ без черновика невозможно.
 
-**Таблица маршрутов drafts (через Gateway → Orchestrator):**
+**Чтение черновиков** (`GET`) — Gateway проксирует напрямую в Registry Service. **Запись и управление** (`POST`, `PATCH`, `DELETE`) — в Orchestrator Service.
 
-| Метод | Путь | Описание | RBAC | Иденпотентность |
-|-------|------|----------|------|-----------------|
-| `POST` | `/api/v1/drafts` | Загрузка файла, создание черновика | `engineer` + `can_upload_documents` | ✅ `Idempotency-Key` |
-| `GET`  | `/api/v1/drafts` | Список черновиков (фильтр: `draft_id`, `document_key`, `status`). Без фильтров — все черновики (admin) | `engineer`, `knowledge_admin`, `system_admin` | — |
-| `GET`  | `/api/v1/drafts/{draft_id}` | Полная информация о черновике (с `raw_data`) | `engineer`, `knowledge_admin`, `system_admin` | — |
-| `GET`  | `/api/v1/drafts/{draft_id}/tasks` | Список задач для черновика | `system_admin`, `knowledge_admin` | — |
-| `GET`  | `/api/v1/drafts/{draft_id}/preview` | Preview-метаданные (без `raw_data`) | `engineer`, `knowledge_admin`, `system_admin` | — |
-| `POST` | `/api/v1/drafts/{draft_id}/preview` | Запуск preview-фазы | `engineer`, `knowledge_admin`, `system_admin` | — |
-| `GET`  | `/api/v1/drafts/{draft_id}/preview/status` | Статус preview (longpoll) | `engineer`, `knowledge_admin`, `system_admin` | — |
-| `PATCH`| `/api/v1/drafts/{draft_id}/decide` | Решение: `approve` / `reject` / `confirm`. Опционально `metadata_overrides` (ручные правки метаданных) | `engineer`, `knowledge_admin`, `system_admin` | — |
-| `PATCH`| `/api/v1/drafts/{draft_id}/metadata` | **S5**: Сохранение ручных правок метаданных черновика (без принятия решения). **Пересчёт бизнес-ключа через Converter-validator** (`POST /validate/metadata`) и проверка уникальности | `engineer`, `knowledge_admin`, `system_admin` | — |
-| `DELETE`| `/api/v1/drafts/{draft_id}` | Удаление черновика (soft) | `knowledge_admin`, `system_admin` | — |
+**Таблица маршрутов drafts:**
 
-> Полное описание форматов запросов/ответов и FSM — см. [orchestrator_service_api.md](orchestrator_service_api.md#группа-drafts).
+| Метод | Путь | Сервис | RBAC | Иденпотентность |
+|-------|------|--------|------|-----------------|
+| `GET`  | `/api/v1/drafts` | **Registry** | `engineer`, `knowledge_admin`, `system_admin` | — |
+| `GET`  | `/api/v1/drafts/{draft_id}` | **Registry** | `engineer`, `knowledge_admin`, `system_admin` | — |
+| `GET`  | `/api/v1/drafts/{draft_id}/preview` | **Registry** | `engineer`, `knowledge_admin`, `system_admin` | — |
+| `POST` | `/api/v1/drafts` | **Orchestrator** | `engineer` + `can_upload_documents` | ✅ `Idempotency-Key` |
+| `POST` | `/api/v1/drafts/{draft_id}/preview` | **Orchestrator** | `engineer`, `knowledge_admin`, `system_admin` | — |
+| `GET`  | `/api/v1/drafts/{draft_id}/preview/status` | **Orchestrator** | `engineer`, `knowledge_admin`, `system_admin` | — |
+| `PATCH`| `/api/v1/drafts/{draft_id}/decide` | **Orchestrator** | `engineer`, `knowledge_admin`, `system_admin` | — |
+| `PATCH`| `/api/v1/drafts/{draft_id}/metadata` | **Orchestrator** | `engineer`, `knowledge_admin`, `system_admin` | — |
+| `DELETE`| `/api/v1/drafts/{draft_id}` | **Orchestrator** | `knowledge_admin`, `system_admin` | — |
+| `GET`  | `/api/v1/drafts/{draft_id}/tasks` | **Orchestrator** | `system_admin`, `knowledge_admin` | — |
+
+> Полное описание форматов запросов/ответов — см. [registry_service_api.md](registry_service_api.md#группа-drafts) (чтение) и [orchestrator_service_api.md](orchestrator_service_api.md#группа-drafts) (запись).
 
 **Поведение Gateway для draft-потока:**
 
 1. **Аутентификация и RBAC.** Gateway проверяет JWT-токен и permissions пользователя на каждый запрос к `/api/v1/drafts/*`. Анонимный доступ запрещён (`401 UNAUTHORIZED`). Удаление черновика (`DELETE`) разрешено только `knowledge_admin` и `system_admin` (проверяется `can_manage_classifiers` ИЛИ `can_manage_terminology` — эти permissions выдаются только этим ролям). Загрузка (`POST /drafts`) требует permission `can_upload_documents`. Все остальные операции (`GET`, `POST /preview`, `PATCH /decide`) разрешены любой аутентифицированной роли.
 2. **Иденпотентность `POST /drafts`.** Клиент **должен** передавать заголовок `Idempotency-Key: <uuid>` при загрузке файла. Gateway сохраняет ответ первого запроса в in-memory кеш на 1 час. Повторный запрос с тем же ключом возвращает кешированный ответ с дополнительным заголовком `Idempotency-Key-Repeated: true`. Это защищает от двойной загрузки при сетевых сбоях UI. Запросы без `Idempotency-Key` обрабатываются без кеширования.
-3. **Маппинг идентификаторов.** Gateway прозрачно проксирует `draft_id`, `task_id` и `document_id` между UI и Orchestrator. Внешние клиенты оперируют `draft_id` (назначается Registry при создании черновика); `task_id` — внутренний идентификатор для межсервисного взаимодействия.
+3. **Маппинг идентификаторов.** Для write-операций Gateway проксирует `draft_id`, `task_id` и `document_id` между UI и Orchestrator. Внешние клиенты оперируют `draft_id` (назначается Registry при создании черновика); `task_id` — внутренний идентификатор для межсервисного взаимодействия.
 4. **Долгие операции.** `POST /drafts`, `POST /drafts/{id}/preview` и `PATCH /drafts/{id}/decide` могут возвращать `202 Accepted` (асинхронная обработка). Клиент отслеживает прогресс через `GET /drafts/{id}/preview/status?longpoll=15`.
 5. **Связь с `/documents/*`.** После успешного `PATCH /decide` (`action: "approve"`) Orchestrator создаёт документ в Registry и возвращает `document_id` в ответе. Дальнейшие операции над документом выполняются через `/api/v1/documents/{document_id}/*`. Маршрут `/api/v1/tasks/*` — read-only для admin-ролей, используется для мониторинга процессов.
 

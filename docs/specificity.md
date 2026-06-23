@@ -77,7 +77,7 @@ API черновиков и FSM документированы, но **UI сра
 
 Пустой документ (0 страниц после распознавания) не может быть завершён — документ не будет создан в Registry. Черновик переводится в `discarded` с кодом `EMPTY_DOCUMENT`. UI должен показывать сообщение об ошибке и предлагать загрузить файл заново. Реализовано в API.
 
-### A23. Черновики перенесены в Registry
+### A23. Черновики перенесены в Registry (resolved)
 
 Таблица черновиков перенесена из `pipeline.drafts` (БД Orchestrator) в `registry.drafts` (БД Registry). Добавлены новые поля. Управление — через Orchestrator, который вызывает Registry internal API. `pipeline.tasks` и `pipeline.task_steps` — новые таблицы в БД Orchestrator. `registry.documents.draft_id` — новое поле для связи документа с черновиком.
 
