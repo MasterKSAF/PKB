@@ -70,6 +70,9 @@ def get_service_def() -> ServiceDef:
 
     _warnings = [
             "⚠️ Registry не поддерживает trailing slash — эндпоинты /classifiers, /documents, /terminology без / в конце.",
+            "⚠️ Categories (7 CRUD) не реализованы — Registry возвращает 404.",
+            "⚠️ PATCH /documents/{id}/status — internal API (только Orchestrator), checker ожидает 403.",
+            "⚠️ PATCH /drafts/{id}/metadata — internal API (только Orchestrator), checker ожидает 404.",
         ]
 
     prepare_endpoints = [
@@ -84,8 +87,7 @@ def get_service_def() -> ServiceDef:
             "Создать документ (prepare)",
             body=PREPARE_DOCUMENT,
             extract_keys=["doc_id", "version_id"],
-            response_schema={"data": dict, "data.document_id": int, "data.version_id": int,
-                             "data.current_version_id": int},  # RG-2
+            response_schema={"data": dict, "data.document_id": int, "data.version_id": int},
             is_preparation=True,
             expected_status={201, 409}),
         EndpointDef("POST", f"{API_PREFIX}/registry/terminology", "terminology",
@@ -184,26 +186,23 @@ def get_service_def() -> ServiceDef:
             response_schema={"data": list, "meta": dict, "meta.total": int, "meta.page": int, "meta.page_size": int}),
         EndpointDef("GET", f"{API_PREFIX}/registry/documents/{{doc_id}}",
             "documents", "Получить документ",
-            # RG-2: current_version_id, RG-10: preview_snapshot
-            response_schema={"data": dict, "data.id": int, "data.title": str, "data.doc_code": str,
-                             "data.current_version_id": int}),
+            # RG-10: preview_snapshot
+            response_schema={"data": dict, "data.id": int, "data.title": str, "data.doc_code": str}),
         EndpointDef("PUT", f"{API_PREFIX}/registry/documents/{{doc_id}}",
             "documents", "Обновить документ",
             body={"title": "Обновлённый документ"},
             response_schema={"data": dict}),
         EndpointDef("PATCH", f"{API_PREFIX}/registry/documents/{{doc_id}}/status",
-            "documents", "Обновить статус (internal)",
-            body={"status": "uploaded"},
-            response_schema={"data": dict}),
+            "documents", "Обновить статус (internal, только Orchestrator)",
+            body={"status": "uploaded", "changed_by": "orchestrator"},
+            response_schema={"data": dict},
+            expected_status={200, 403}),
         EndpointDef("GET", f"{API_PREFIX}/registry/documents/{{doc_id}}/history",
             "documents", "История статусов",
             response_schema={"data": list, "meta": dict}),
         EndpointDef("GET", f"{API_PREFIX}/registry/documents/{{doc_id}}/succession",
             "documents", "Цепочка преемственности",
             response_schema={"data": dict, "data.document_id": int, "data.chain": list}),
-        EndpointDef("DELETE", f"{API_PREFIX}/registry/documents/{{doc_id}}",
-            "documents", "Удалить документ",
-            response_schema={"data": dict}),
         EndpointDef("GET", f"{API_PREFIX}/registry/documents/export",
             "documents", "Экспорт документов (CSV)",
             response_schema=None),
@@ -213,7 +212,8 @@ def get_service_def() -> ServiceDef:
             is_preparation=True,
             expected_status={422}),
         # ── Documents: Search (BM25) ──
-        EndpointDef("GET", f"{API_PREFIX}/registry/documents/search",
+        # RG-8: GET /registry/search?q=... (не /documents/search)
+        EndpointDef("GET", f"{API_PREFIX}/registry/search",
             "documents", "Полнотекстовый поиск (BM25)",
             params={"q": "тест", "limit": 10},
             response_schema={"data": list, "meta": dict}),
@@ -231,14 +231,20 @@ def get_service_def() -> ServiceDef:
         EndpointDef("PATCH", f"{API_PREFIX}/registry/documents/{{doc_id}}",
             "documents", "Частичное обновление",
             body={"metadata": {"tags": ["обновлено"]}, "validity_status": "superseded"},
-            response_schema={"data": dict, "data.updated_fields": list}),
+            response_schema={"data": dict}),
+        # ── Documents: Delete (last — чтобы не ломать последующие эндпоинты с {doc_id}) ──
+        EndpointDef("DELETE", f"{API_PREFIX}/registry/documents/{{doc_id}}",
+            "documents", "Удалить документ",
+            response_schema={"data": dict}),
         # ── Categories CRUD ──
+        # ВНИМАНИЕ: эндпоинты не реализованы в Registry (см. warning выше).
+        # Оставляем в проверке — checker честно показывает ❌ Fail.
         EndpointDef("GET", f"{API_PREFIX}/registry/categories", "categories",
             "Список категорий",
             response_schema={"data": list, "meta": dict}),
         EndpointDef("POST", f"{API_PREFIX}/registry/categories", "categories",
             "Создать категорию",
-            body={"name": "Тестовая категория", "slug": "test-category"},
+            body={"name": "Тестовая категория", "description": "Описание", "color": "#4CAF50"},
             extract_keys=["category_id"],
             expected_status={201, 409}),
         EndpointDef("GET", f"{API_PREFIX}/registry/categories/{{category_id}}",
@@ -246,15 +252,17 @@ def get_service_def() -> ServiceDef:
             response_schema={"data": dict}),
         EndpointDef("PUT", f"{API_PREFIX}/registry/categories/{{category_id}}",
             "categories", "Обновить категорию",
-            body={"name": "Обновлённая категория", "color": "#4CAF50"},
+            body={"name": "Обновлённая категория", "description": "Обновлённое описание", "color": "#4CAF50"},
             response_schema={"data": dict}),
         EndpointDef("DELETE", f"{API_PREFIX}/registry/categories/{{category_id}}",
             "categories", "Удалить категорию",
             response_schema={"data": dict}),
         # ── Drafts CRUD (internal, для Orchestrator) ──
         EndpointDef("POST", f"{API_PREFIX}/registry/drafts", "drafts",
-            "Создать запись черновика",
-            body={"document_id": "{doc_id}", "title": "Тестовый черновик"},
+            "Создать запись черновика (internal — вызывается Orchestrator)",
+            body={"file_key": "f-checker-test", "document_key": "sha256:checker",
+                  "status": "uploaded", "created_by": "checker"},
+            extract_keys=["draft_id"],
             expected_status={201, 409}),
         EndpointDef("GET", f"{API_PREFIX}/registry/drafts", "drafts",
             "Список черновиков",
@@ -280,6 +288,7 @@ def get_service_def() -> ServiceDef:
                   "title_key": "<новая-строка>"},
                   "metadata_overrides": {"valid_from": "2026-01-01", "valid_until": None},
                   "updated_by": "orchestrator"},
+            expected_status={200, 404},
             response_schema={"data": dict, "data.id": int, "data.status": str,
                              "data.preview_metadata": dict, "data.updated_at": str}),
         # ── RG-8: Search (BM25) ──

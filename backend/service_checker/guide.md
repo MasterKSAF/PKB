@@ -92,22 +92,58 @@ Redirect теряет body → сервис получает пустой зап
 
 ---
 
-## Orchestrator: POST /drafts — registry не имеет эндпоинта
+## Orchestrator: POST /drafts — HTTP 500
 
-**Проблема**: Orchestrator вызывает `POST /api/v1/registry/drafts`, но
-registry service **не реализует** REST-эндпоинты для черновиков.
-Эндпоинты `/drafts` есть только в mock-клиенте Orchestrator'а
-(`RegistryServiceClient._generate_mock`).
+**Проблема**: Orchestrator возвращает HTTP 500 на `POST /api/v1/registry/drafts`.
+Registry `/drafts` эндпоинты уже реализованы, но Orchestrator всё равно падает с 500.
 
-При `REGISTRY_SERVICE_MOCK=false` клиент реально ходит в registry
-и получает 404 → Orchestrator возвращает 500.
+**Статус (2026-06-23)**: причина не установлена, требуется диагностика Orchestrator.
+Затронуты 9 пайплайнов с черновиками.
 
-**Статус**: пайплайны с черновиками (`document_approval`,
-`orchestrator_draft_lifecycle` и др.) не работают, пока registry
-не добавит эндпоинты `/drafts`.
+---
 
-**Тестовый PDF** лежит в `pdf/7bd97d737317a8a272bb18a405ab2d04.pdf`,
-во всех пайплайнах уже подключен через `form_files`.
+## Registry: internal API — PATCH /documents/{id}/status, POST /drafts, PATCH /drafts/{id}/metadata
+
+**Проблема**: Некоторые Registry-эндпоинты спроектированы как **internal** — доступны только `orchestrator`.
+- `PATCH /api/v1/registry/documents/{id}/status` — только Orchestrator (docs 3.6)
+- `POST /api/v1/registry/drafts` — только Orchestrator (docs 4.1)
+- `PATCH /api/v1/registry/drafts/{id}/metadata` — только Orchestrator (docs 4.6)
+
+**Ориентир**:
+- `PATCH /status`: checker ожидает `{200, 403}` — 403 означает "внешний клиент" (норма)
+- `POST /drafts`: checker шлёт тело по docs (`file_key`, `document_key`, `status`, `created_by`). Извлекает `draft_id` в контекст.
+- `PATCH /drafts/{id}/metadata`: checker ожидает `{200, 404}` — internal
+
+**Где закреплено**:
+- `services/registry.py` — expected_status для internal endpoints
+
+---
+
+## Изолированное тестирование API Coverage
+
+**Проблема**: API Coverage тестирует каждый сервис изолированно — контекст очищается между сервисами.
+`{task_id}`, `{draft_id}`, `{version_id}` из контекста недоступны downstream сервисам.
+
+**Ориентир**:
+- Для эндпоинтов, где ID не участвуют в логике и не сохраняются в БД, используются константы:
+  - `task_id = 12345`, `draft_id = 1`, `version_id = "1"`
+- Pipeline тесты (сквозные) проверяют связанность с реальными ID из контекста
+
+**Где закреплено**:
+- `services/converter_validator.py` — константы в body
+- `services/parser.py` — константы в body
+- `pipelines/document_processing.py` — реальные ID через PipelineContext
+
+---
+
+## Registry: Categories не реализованы — честный ❌ Fail
+
+**Ориентир**: Если эндпоинт спроектирован в документации, но не реализован в сервисе —
+checker показывает ❌ Fail. Подгонка под тесты (expected_status={404}) запрещена.
+
+**Где закреплено**:
+- `services/registry.py` — categories endpoints без expected_status
+- `specificity.md` #55 — аномалия зафиксирована
 
 ---
 
