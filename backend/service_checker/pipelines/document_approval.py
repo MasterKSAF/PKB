@@ -224,6 +224,7 @@ class DocumentApprovalPipeline(PipelineDef):
             expected_status={201, 409},
             needs_auth=True,
             extract_keys=["doc_id"],
+            skip_if=_draft_skipped,
         ))
 
         # ── Шаг 13: FULL-фаза (полная обработка) ────────────────────

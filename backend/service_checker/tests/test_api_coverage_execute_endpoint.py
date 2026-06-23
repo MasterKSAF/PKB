@@ -20,7 +20,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from service_checker.core.api_coverage_test import ApiCoverageTester, ServiceResult, EndpointResult
+from service_checker.core.api_coverage_test import ApiCoverageTester, ServiceResult, EndpointResult, _has_unresolved_vars
 from service_checker.services.base import EndpointDef
 
 
@@ -231,6 +231,80 @@ class TestExecuteContextExtraction:
         assert result.results[0].skipped is True
         assert "Нет в контексте" in (result.results[0].skip_reason or "")
         assert result.endpoints_skipped == 1
+
+    @pytest.mark.asyncio
+    async def test_missing_context_body_skips(self, tester, make_endpoint):
+        """{task_id} в теле, но нет в контексте → skipped."""
+        ep = make_endpoint("/api/v1/parser/process", "parser",
+                           method="POST",
+                           body={"task_id": "{task_id}", "draft_id": "{draft_id}"})
+        result = ServiceResult(name="parser", port=8087)
+
+        await tester._execute_endpoint("parser", ep, 8087, result, alive=True)
+
+        assert result.results[0].skipped is True
+        assert "переменные контекста" in (result.results[0].skip_reason or "")
+        assert result.endpoints_skipped == 1
+
+    @pytest.mark.asyncio
+    async def test_body_with_vars_resolved_ok(self, tester, make_endpoint):
+        """{task_id} в теле и есть в контексте → выполняется, не скипается."""
+        tester.context["task_id"] = "42"
+        tester.context["draft_id"] = "7"
+        ep = make_endpoint("/api/v1/parser/process", "parser",
+                           method="POST",
+                           body={"task_id": "{task_id}", "draft_id": "{draft_id}"})
+        result = ServiceResult(name="parser", port=8087)
+        tester.client.post = AsyncMock(return_value=_mock_response(200, {"status": "ok"}))
+
+        await tester._execute_endpoint("parser", ep, 8087, result, alive=True)
+
+        # Запрос выполнился (не скипнут)
+        assert result.results[0].skipped is False
+        # Проверяем что в теле подставлены значения
+        call_kwargs = tester.client.post.call_args[1]
+        assert call_kwargs["json"] == {"task_id": "42", "draft_id": "7"}
+
+
+# ────────────────────────────────────────────────────────────────
+#  Tests for _has_unresolved_vars
+# ────────────────────────────────────────────────────────────────
+
+
+class TestHasUnresolvedVars:
+    """Юнит-тесты для _has_unresolved_vars()."""
+
+    def test_str_unresolved(self):
+        """Строка с {var} → True."""
+        assert _has_unresolved_vars("{task_id}") is True
+
+    def test_str_resolved(self):
+        """Обычная строка без плейсхолдеров → False."""
+        assert _has_unresolved_vars("42") is False
+
+    def test_dict_unresolved(self):
+        """Dict со значением {var} → True."""
+        assert _has_unresolved_vars({"task_id": "{task_id}", "draft_id": "7"}) is True
+
+    def test_dict_resolved(self):
+        """Dict без плейсхолдеров → False."""
+        assert _has_unresolved_vars({"task_id": "42", "draft_id": "7"}) is False
+
+    def test_nested_dict_unresolved(self):
+        """Вложенный dict с {var} → True."""
+        assert _has_unresolved_vars({"data": {"id": "{doc_id}"}}) is True
+
+    def test_list_unresolved(self):
+        """Список со строкой {var} → True."""
+        assert _has_unresolved_vars(["{var}", "value"]) is True
+
+    def test_none(self):
+        """None → False."""
+        assert _has_unresolved_vars(None) is False
+
+    def test_int(self):
+        """int → False."""
+        assert _has_unresolved_vars(42) is False
 
 
 # ────────────────────────────────────────────────────────────────

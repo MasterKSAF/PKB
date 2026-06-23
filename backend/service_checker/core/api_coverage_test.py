@@ -46,6 +46,9 @@ from service_checker.services.base import (
     ServiceDef,
     ServiceResult,
     HEADERS_JSON,
+    get_test_mode,
+    TEST_MODE_REAL,
+    TEST_MODE_MOCK,
 )
 from service_checker.services import (
     MODE_PORTS,
@@ -67,6 +70,17 @@ SERVICES_WITH_REAL = {
 }
 
 
+def _has_unresolved_vars(obj: Any) -> bool:
+    """Проверить, остались ли в объекте неразрешённые {variable} плейсхолдеры."""
+    if isinstance(obj, str):
+        return "{" in obj and "}" in obj
+    if isinstance(obj, dict):
+        return any(_has_unresolved_vars(v) for v in obj.values())
+    if isinstance(obj, (list, tuple)):
+        return any(_has_unresolved_vars(v) for v in obj)
+    return False
+
+
 
 class ApiCoverageTester:
     """
@@ -74,7 +88,9 @@ class ApiCoverageTester:
     Для каждого сервиса вызывает все эндпоинты из документации,
     собирает результаты и формирует отчёт.
 
-    Запуск только в Docker (real-режим).
+    Режимы:
+      - real (по умолчанию): против Docker (реальные сервисы)
+      - mock: против Gateway Mock (локальные моки)
     """
 
     def __init__(
@@ -83,10 +99,12 @@ class ApiCoverageTester:
         base_host: str = "127.0.0.1",
         skip_prepare: bool = False,
         schema_check: bool = False,
+        mode: Optional[str] = None,
     ):
         self.base_host = base_host
         self.skip_prepare = skip_prepare
         self.schema_check = schema_check
+        self.mode = (mode or get_test_mode()).lower()
 
         self.services_with_impl = SERVICES_WITH_REAL
 
@@ -127,11 +145,12 @@ class ApiCoverageTester:
     @property
     def client(self) -> httpx.AsyncClient:
         """Ленивая инициализация HTTP-клиента (SSL certs загружаются только при первом использовании)."""
-        self._client = httpx.AsyncClient(
-            timeout=self._client_timeout,
-            follow_redirects=self._client_follow_redirects,
-            trust_env=False,
-        )
+        if self._client is None:
+            self._client = httpx.AsyncClient(
+                timeout=self._client_timeout,
+                follow_redirects=self._client_follow_redirects,
+                trust_env=False,
+            )
         return self._client
 
     @client.setter
@@ -473,13 +492,13 @@ class ApiCoverageTester:
 
         # Если тело содержит неподставленные переменные — пропускаем
         body = self._resolve_body(ep.body)
-        if body and isinstance(body, str):
-            if "{" in body and "}" in body:
-                result.results.append(
-                    EndpointResult(endpoint=ep, status_code=0, success=False, skipped=True, skip_reason="Не все переменные контекста доступны для тела запроса")
-                )
-                result.endpoints_skipped += 1
-                return
+        unresolved = _has_unresolved_vars(body) if body else False
+        if unresolved:
+            result.results.append(
+                EndpointResult(endpoint=ep, status_code=0, success=False, skipped=True, skip_reason="Не все переменные контекста доступны для тела запроса")
+            )
+            result.endpoints_skipped += 1
+            return
 
         # Формируем URL
         resolved_path = self._resolve_path(ep.path)
@@ -634,7 +653,13 @@ class ApiCoverageTester:
             if port == 0:
                 port = 8080
         elif service_key in SERVICE_REGISTRY:
-            svc_def = SERVICE_REGISTRY[service_key]()
+            # mode передаём только тем сервисам, у которых get_service_def() его принимает
+            import inspect
+            svc_fn = SERVICE_REGISTRY[service_key]
+            if 'mode' in inspect.signature(svc_fn).parameters:
+                svc_def = svc_fn(mode=self.mode)
+            else:
+                svc_def = svc_fn()
             svc_endpoints = svc_def.endpoints
             svc_prepare = svc_def.prepare_endpoints
             # Порт из MODE_PORTS имеет приоритет (может быть переопределён, например --spd)
@@ -718,31 +743,30 @@ class ApiCoverageTester:
                     else:
                         raise RuntimeError("Cannot create or fetch project for chat sessions")
 
-            # ── Pre-prepare: создание черновика через Gateway (task_id + draft_id) ──
+            # ── Pre-prepare: создание черновика через Orchestrator (task_id + draft_id) ──
             # Converter/Parser/OCR используют task_id и draft_id в телах запросов.
-            # Создаём черновик через Gateway, чтобы получить реальные ID.
-            # OR-11 ожидает form-data, не JSON.
+            # Создаём черновик напрямую через Orchestrator (порт 8081).
             if service_key in ("converter_validator", "parser", "ocr"):
-                gw_url = f"http://{self.base_host}:8081/api/v1/drafts/"
+                orch_url = f"http://{self.base_host}:8081/api/v1/drafts/"
                 auth_token = self.context.get("access_token", "")
-                gw_headers: Dict[str, str] = {}
+                orch_headers: Dict[str, str] = {}
                 if auth_token:
-                    gw_headers["Authorization"] = f"Bearer {auth_token}"
+                    orch_headers["Authorization"] = f"Bearer {auth_token}"
 
                 for attempt in range(3):
                     try:
-                        gw_data = {"document_key": "test-key", "title": "Coverage draft", "source_type": "GOST"}
-                        resp = await self.client.post(gw_url, data=gw_data, headers=gw_headers)
+                        orch_data = {"document_key": "test-key", "title": "Coverage draft", "source_type": "GOST"}
+                        resp = await self.client.post(orch_url, data=orch_data, headers=orch_headers)
                         if resp.status_code == 202:
                             data = resp.json()
                             task_id = data.get("task_id")
                             draft_id = data.get("draft_id")
                             if task_id and "task_id" not in self.context:
                                 self.context["task_id"] = task_id
-                                print(f"  ℹ Gateway: получен task_id={task_id}")
+                                print(f"  ℹ Orchestrator: получен task_id={task_id}")
                             if draft_id and "draft_id" not in self.context:
                                 self.context["draft_id"] = draft_id
-                                print(f"  ℹ Gateway: получен draft_id={draft_id}")
+                                print(f"  ℹ Orchestrator: получен draft_id={draft_id}")
                             break
                         elif resp.status_code == 409:
                             break
@@ -752,16 +776,11 @@ class ApiCoverageTester:
                         continue
 
                 if "task_id" not in self.context:
-                    print(f"  ⚠ Gateway draft не создан — converter/parser/ocr будут пропущены (orchestrator→registry 500)")
-                    # Не кидаем RuntimeError, чтобы не убивать весь coverage.
-                    # Сервисы converter/parser/ocr, которым нужен task_id, просто пропустят тесты.
-                    return ServiceResult(
-                        name=svc_name, port=port, ping_ok=True,
-                        endpoints_total=0, endpoints_passed=0,
-                        endpoints_failed=0, endpoints_skipped=0,
-                    )
+                    print(f"  ⚠ Черновик через Orchestrator не создан — эндпоинты с task_id/draft_id будут пропущены")
+                    # Не возвращаем пустой результат — эндпоинты, которым не хватает контекста,
+                    # будут пропущены автоматически в _execute_endpoint.
 
-            # ── Pre-prepare: загрузка PDF в MinIO для Parser ────────────
+            # ── Pre-prepare: загрузка PDF в MinIO для Parser ────
             if service_key == "parser":
                 pdf_path = Path(__file__).resolve().parent.parent / "pdf" / "7bd97d737317a8a272bb18a405ab2d04.pdf"
                 if pdf_path.exists():
@@ -774,9 +793,6 @@ class ApiCoverageTester:
                         print(f"  ℹ MinIO upload: {resp.status_code}")
                     except Exception as e:
                         print(f"  ⚠ MinIO upload failed: {e}")
-
-                if "draft_id" not in self.context:
-                    raise RuntimeError("Cannot obtain draft_id for Parser")
             
             if service_key == "converter_validator" and "version_id" not in self.context:
                 # version_id нужен для converter, но Registry ещё не создавал документ.
@@ -872,8 +888,9 @@ class ApiCoverageTester:
     async def run_all(self) -> Dict[str, ServiceResult]:
         """Запустить тестирование всех сервисов."""
         print("=" * 70)
+        mode_label = "Real (Docker)" if self.mode == TEST_MODE_REAL else "Mock (local)"
         print(f"  PKB Neuroassistant — API Coverage Test")
-        print(f"  🔬 Real mode (Docker)")
+        print(f"  {'🔬' if self.mode == TEST_MODE_REAL else '🧪'} {mode_label}")
         print(f"  Основано на docs/api/*.md")
         if self.schema_check:
             print(f"  📋 Schema validation: ON")
@@ -919,8 +936,10 @@ class ApiCoverageTester:
         lines = []
         now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         lines.append(f"# API Coverage Report\n")
+        mode_label = "Real (Docker)" if self.mode == TEST_MODE_REAL else "Mock (local)"
+        mode_icon = "🔬" if self.mode == TEST_MODE_REAL else "🧪"
         lines.append(f"**Generated:** {now}\n")
-        lines.append(f"**Mode:** 🔬 Real (Docker)\n")
+        lines.append(f"**Mode:** {mode_icon} {mode_label}\n")
         lines.append(f"**Based on:** `docs/api/*.md`\n")
         if log_report_path:
             lines.append(f"📋 **Logs:** [{log_report_path}]({log_report_path})\n")
@@ -1078,7 +1097,9 @@ class ApiCoverageTester:
                      "или все не-health эндпоинты вернули 404 (сервис не существует)\n")
         lines.append("- **⏭️ Skipped** — эндпоинт пропущен (сервис не отвечает, нет ID в контексте)\n")
         lines.append("- **Ping** — проверка health-эндпоинта на порту сервиса\n")
-        lines.append("- **Mode** — Real (Docker): проверяются только запущенные в Docker сервисы\n")
+        mode_label = "Real (Docker)" if self.mode == TEST_MODE_REAL else "Mock (local)"
+        mode_icon = "🔬" if self.mode == TEST_MODE_REAL else "🧪"
+        lines.append(f"- **Mode** — {mode_icon} {mode_label}\n")
         lines.append("- ⏸️ **Analyse Service** — временно не тестируется (нет контейнера)\n")
 
         # Секция зависимостей
@@ -1168,13 +1189,21 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Режим strict: fail при любом расхождении ответа с OpenAPI-схемой",
     )
+    parser.add_argument(
+        "--mode",
+        choices=[TEST_MODE_REAL, TEST_MODE_MOCK],
+        default=None,
+        help=f"Режим тестирования: {TEST_MODE_REAL} (Docker) или {TEST_MODE_MOCK} (local mock). "
+             f"По умолчанию из TEST_MODE env или 'real'.",
+    )
     return parser.parse_args()
 
 
 async def ping_all(tester: ApiCoverageTester) -> None:
     """Проверить какие сервисы отвечают (конкурентно)."""
     ports = MODE_PORTS
-    print(f"\n  Mode: REAL")
+    mode_label = "REAL" if tester.mode == TEST_MODE_REAL else "MOCK"
+    print(f"\n  Mode: {mode_label}")
     print(f"  {'Service':30s} Port  Status")
     print(f"  {'─'*50}")
 
@@ -1207,6 +1236,7 @@ async def main():
         base_host=args.host,
         skip_prepare=args.skip_prepare,
         schema_check=args.schema_check or args.strict,
+        mode=args.mode,
     )
     if args.strict:
         tester.strict_mode = True

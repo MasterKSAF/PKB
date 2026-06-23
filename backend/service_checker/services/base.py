@@ -6,6 +6,7 @@ PKB Neuroassistant — Service Definition Base.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -140,3 +141,37 @@ HEADERS_JSON: Dict[str, str] = {
     "Content-Type": "application/json",
     "Accept": "application/json",
 }
+
+
+# ── Mode helpers ────────────────────────────────────────────────────────
+
+TEST_MODE_REAL = "real"
+TEST_MODE_MOCK = "mock"
+
+
+def get_test_mode() -> str:
+    """Вернуть текущий режим тестирования.
+
+    Приоритет:
+    1. Переменная окружения TEST_MODE
+    2. По умолчанию "real"
+    """
+    return os.environ.get("TEST_MODE", TEST_MODE_REAL).lower()
+
+
+def is_real_mode(mode: Optional[str] = None) -> bool:
+    """Проверить, включён ли real-режим."""
+    if mode is not None:
+        return mode.lower() == TEST_MODE_REAL
+    return get_test_mode() == TEST_MODE_REAL
+
+
+def get_credentials_for_mode(mode: Optional[str] = None) -> Dict[str, str]:
+    """Вернуть credentials в зависимости от режима.
+
+    - real: TEST_CREDENTIALS (Admin1234!) — против реального Auth
+    - mock: GATEWAY_CREDENTIALS (admin123) — против Gateway Mock
+    """
+    if is_real_mode(mode):
+        return dict(TEST_CREDENTIALS)
+    return dict(GATEWAY_CREDENTIALS)

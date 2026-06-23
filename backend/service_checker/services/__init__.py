@@ -72,7 +72,8 @@ SERVICE_DEPENDENCIES: Dict[str, list[str]] = {
 }
 
 # Реестр: service_key → функция для получения ServiceDef
-SERVICE_REGISTRY: Dict[str, Callable[[], ServiceDef]] = {
+# Функции могут принимать mode ("real"|"mock") для выбора credentials
+SERVICE_REGISTRY: Dict[str, Callable[..., ServiceDef]] = {
     "auth": auth.get_service_def,
     "registry": registry.get_service_def,
     "orchestrator": orchestrator.get_service_def,

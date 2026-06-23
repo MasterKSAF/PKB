@@ -310,7 +310,7 @@ class TestGenerateFullReport:
         assert parts_pipe[3] == "—", f"Expected '—', got {parts_pipe[3]}"
 
     def test_full_report_api_stats_in_summary(self):
-        """В сводной таблице в колонке API отображается числовая статистика (passed/total/failed)."""
+        """В сводной таблице в колонке API отображается только отметка, без цифр."""
         from service_checker.core.reports import _generate_full_report
 
         cov_results = {
@@ -324,12 +324,12 @@ class TestGenerateFullReport:
         report = _generate_full_report(cov_results, pipe_results, "t")
         lines = report.split("\n")
 
-        # Строка сервиса в сводной таблице: колонка API должна содержать "✅ 10/10/0"
+        # Строка сервиса в сводной таблице: колонка API должна содержать только "✅"
         auth_line = [l for l in lines if "Auth Service" in l][0]
         parts = [p.strip() for p in auth_line.split("|")]
-        # Колонка API (index 5): "✅ 10/10/0"
-        assert "10/10/0" in parts[5], f"Expected '10/10/0' in API column, got: {parts[5]}"
-        assert "✅" in parts[5], f"Expected ✅ in API column, got: {parts[5]}"
+        # Колонка API (index 5): только "✅" без цифр
+        assert "10/10/0" not in parts[5], f"Numbers should not appear in API column, got: {parts[5]}"
+        assert parts[5] == "✅", f"Expected only '✅' in API column, got: {parts[5]}"
 
     def test_full_report_no_orchestrator_duplicate(self):
         """Секция 'Orchestrator Pipelines' удалена — нет дублирования с Pipeline Testing детализацией."""

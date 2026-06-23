@@ -99,7 +99,7 @@ async def test_auth_refresh_does_not_crash_service():
             f"ожидался 200 или 401. Тело: {refresh_resp.text[:300]}"
         )
 
-        # Если 401 — ответ должен быть JSON с detail
+        # Если 401 — ответ должен быть JSON с detail или error.code/error.message
         if refresh_resp.status_code == 401:
             try:
                 err_data = refresh_resp.json()
@@ -108,8 +108,10 @@ async def test_auth_refresh_does_not_crash_service():
                     f"401 ответ ({token_source}) должен быть JSON: "
                     f"{refresh_resp.text[:200]}"
                 )
-            assert "detail" in err_data, (
-                f"401 ответ ({token_source}) должен содержать 'detail': {err_data}"
+            has_detail = "detail" in err_data
+            has_error = isinstance(err_data.get("error"), dict) and "code" in err_data["error"]
+            assert has_detail or has_error, (
+                f"401 ответ ({token_source}) должен содержать 'detail' или 'error.code': {err_data}"
             )
 
         # Проверка что не было рестартов (если доступен лог)

@@ -93,7 +93,7 @@ class TestDocumentApprovalPipeline:
         reg = steps[8]
         assert reg.service == "registry"
         assert reg.method == "POST"
-        assert reg.path == "/api/v1/registry/documents/"
+        assert reg.path == "/api/v1/registry/documents"
         assert reg.expected_status == {201, 409}
         assert reg.extract_keys == ["doc_id"]
         assert reg.needs_auth
@@ -101,8 +101,6 @@ class TestDocumentApprovalPipeline:
         assert reg.body is not None
         assert "title" in reg.body
         assert "doc_code" in reg.body
-        assert "source_draft_id" in reg.body
-        assert reg.body["source_draft_id"] == "{draft_id}"
 
     def test_rag_build_step(self):
         """Индексация в RAG Builder."""

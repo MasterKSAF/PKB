@@ -24,6 +24,12 @@
 | HTTP | `error.code` | Описание |
 |------|-------------|----------|
 
+### Группы
+
+| Группа | Описание |
+|--------|----------|
+| `build` | Построение чанков, вычисление эмбеддингов и индексация документа |
+
 ---
 
 ## Межсервисное взаимодействие
@@ -233,7 +239,7 @@ Orchestrator получает JSON из Registry (через `GET /registry/docu
 ### DELETE /rag/build/{doc_id}
 
 Удаление всех чанков документа из векторного индекса.  
-Вызывается Orchestrator перед переиндексацией (через `POST /documents/{doc_id}/reprocess`).
+Вызывается Orchestrator в рамках reprocess (`POST /api/v1/registry/documents/{doc_id}/reprocess`) при `mode: reindex`.
 
 **Ответ `200`:**
 ```json
@@ -287,13 +293,13 @@ Orchestrator получает JSON из Registry (через `GET /registry/docu
 
 ---
 
-### Сводная таблица эндпоинтов
+### Содержание
 
-| Метод | Путь | Описание | Доступ к БД |
-|---|---|---|---|
-| `POST` | `/rag/build` | Чанкинг + Embeddings + построение индекса | **Пишет** |
-| `DELETE` | `/rag/build/{doc_id}` | Удаление чанков документа из индекса | **Пишет** |
-| `GET` | `/rag/build/{doc_id}/status` | Статус индексации (с longpoll) | **Читает** |
+| Метод | Путь | Описание |
+|-------|------|----------|
+| POST | `/rag/build` | Чанкинг + Embeddings + построение индекса |
+| DELETE | `/rag/build/{doc_id}` | Удаление чанков документа из индекса |
+| GET | `/rag/build/{doc_id}/status` | Статус индексации (longpoll) |
 
 ---
 

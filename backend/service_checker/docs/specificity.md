@@ -77,7 +77,7 @@ API черновиков и FSM документированы, но **UI сра
 
 Пустой документ (0 страниц после распознавания) не может быть завершён — документ не будет создан в Registry. Черновик переводится в `discarded` с кодом `EMPTY_DOCUMENT`. UI должен показывать сообщение об ошибке и предлагать загрузить файл заново. Реализовано в API.
 
-### A23. Черновики перенесены в Registry
+### A23. Черновики перенесены в Registry (resolved)
 
 Таблица черновиков перенесена из `pipeline.drafts` (БД Orchestrator) в `registry.drafts` (БД Registry). Добавлены новые поля. Управление — через Orchestrator, который вызывает Registry internal API. `pipeline.tasks` и `pipeline.task_steps` — новые таблицы в БД Orchestrator. `registry.documents.draft_id` — новое поле для связи документа с черновиком.
 
@@ -335,8 +335,8 @@ Enum: `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `RMRS`, `OTHER`
 | API-S4 | Gateway: `/api/v1/tasks/*` маршрутизируется, но объявлен internal — нет RBAC-ограничения | 🔄 исправлено — Gateway разруливает internal-маршруты |
 | API-S5 | OCR/Parser: `document.pages[].width/height` — "в мм", но в `raw_ocr_v4` единицы пиксели | 🔄 исправлено |
 | API-S6 | OCR/Parser → Registry: множества `block[].type` и `section.type` не сопоставлены | 🔄 исправлено |
-| API-S7 | Orchestrator `reprocess`: дублирование `mode` и `options.engine` (могут противоречить) | 🔄 исправлено |
-| API-S8 | Orchestrator `reprocess`: ответ "аналогичен POST /drafts" — неясно, создаётся ли draft | 🔄 исправлено |
+| API-S7 | Registry `reprocess`: дублирование `mode` и `options.engine` (могут противоречить) | 🔄 исправлено |
+| API-S8 | Registry `reprocess`: ответ "аналогичен POST /drafts" — неясно, создаётся ли draft | 🔄 исправлено |
 | API-S9 | Query: статусы `processing`, `needs_clarification`, `source_conflict` отсутствуют в longpoll-логике | 🔄 исправлено — текущий FSM полный, эти статусы не используются |
 | API-S10 | Query `POST /chat/feedback`: два формата не разграничены (взаимоисключение?) | 🔄 исправлено |
 | API-S11 | Query `GET /chat/sessions/{id}`: longpoll устарел, но нет плана депрекации | 🔄 исправлено — longpoll удалён |

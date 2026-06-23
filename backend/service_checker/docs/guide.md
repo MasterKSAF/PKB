@@ -170,6 +170,104 @@ POST /validate/metadata
 
 ---
 
+## Разграничение ответственности Orchestrator vs Registry
+
+**Дата:** 23.06.2026
+
+В системе действует строгое разделение: **Registry — только данные, Orchestrator — только пайплайн**.
+
+### Принцип
+
+| Сервис | Отвечает за | Операции | БД |
+|--------|------------|----------|-----|
+| **Registry** | Данные реестра | CRUD `registry.*` (чтение и безопасная запись) | `registry.drafts`, `registry.documents`, `registry.document_*`, `registry.classifier_*`, `registry.terminology`, `registry.categories` |
+| **Orchestrator** | Пайплайн обработки | Управление задачами (`pipeline.*`), координация сервисов, FSM черновиков и статус обработки документов | `pipeline.tasks`, `pipeline.task_steps`, `pipeline.draft_notifications` |
+| **Gateway** | Маршрутизация + RBAC + иденпотентность | Прокси: чтение Registry напрямую, пайплайн — в Orchestrator | — |
+
+### Registry — что через Gateway напрямую
+
+Чтение черновиков и документов (и их связных сущностей) — Registry. Gateway проксирует напрямую без участия Orchestratorа:
+
+```
+GET    /api/v1/drafts
+GET    /api/v1/drafts/{id}
+GET    /api/v1/drafts/{id}/preview
+
+GET    /api/v1/documents
+GET    /api/v1/documents/{id}
+GET    /api/v1/documents/{id}/sections
+GET    /api/v1/documents/{id}/pages/*
+GET    /api/v1/documents/{id}/file
+GET    /api/v1/documents/{id}/history
+GET    /api/v1/documents/{id}/parameters
+GET    /api/v1/documents/{id}/versions
+GET    /api/v1/documents/{id}/succession
+PUT    /api/v1/documents/{id}
+PATCH  /api/v1/documents/{id}
+DELETE /api/v1/documents/{id}
+GET    /api/v1/documents/search
+POST   /api/v1/documents/search
+GET    /api/v1/documents/export
+POST   /api/v1/documents/import
+POST   /api/v1/documents/check-uniqueness
+```
+
+### Orchestrator — что через Gateway
+
+Операции, связанные с пайплайном, FSM и управлением жизненным циклом:
+
+```
+# Draft lifecycle (запись черновика ТОЛЬКО через Orchestrator)
+POST   /api/v1/drafts
+POST   /api/v1/drafts/{id}/preview
+PATCH  /api/v1/drafts/{id}/decide
+PATCH  /api/v1/drafts/{id}/metadata
+DELETE /api/v1/drafts/{id}
+
+# Document lifecycle (запись только через Orchestrator)
+POST   /api/v1/documents/{id}/versions
+POST   /api/v1/documents/{id}/reprocess
+
+# Pipeline status
+GET    /api/v1/documents/{id}/status
+GET    /api/v1/documents/queue
+GET    /api/v1/documents/{id}/errors
+
+# Task links (связь данных Registry с задачами Orchestratorа)
+GET    /api/v1/drafts/{id}/tasks
+GET    /api/v1/documents/{id}/tasks
+
+# Task monitoring (admin)
+GET    /api/v1/tasks
+GET    /api/v1/tasks/stats
+GET    /api/v1/tasks/{task_id}/status
+GET    /api/v1/tasks/{task_id}/steps
+GET    /api/v1/tasks/{task_id}/notifications (если есть)
+```
+
+### Registry — internal endpoint'ы (только для Orchestrator, не через Gateway)
+
+Следующие эндпоинты Registry закрыты от Gateway. Их вызывает только Orchestrator для координации:
+
+| Метод | Эндпоинт | Когда вызывается |
+|-------|----------|-----------------|
+| `POST` | `/registry/drafts` | `POST /drafts` — создать запись черновика |
+| `PATCH` | `/registry/drafts/{id}/status` | `PATCH /decide`, `POST /preview` — смена статуса |
+| `PATCH` | `/registry/drafts/{id}/metadata` | `PATCH /metadata` — обновление метаданных |
+| `DELETE` | `/registry/drafts/{id}` | `DELETE /drafts/{id}` — удаление черновика |
+| `POST` | `/registry/documents` | `PATCH /decide action:approve` — создание документа |
+| `PATCH` | `/registry/documents/{id}/status` | Завершение Pipeline 2 — обновление статуса |
+
+### Правило для разработки
+
+1. **Чтение — Registry.** Если endpoint читает данные из `registry.*` — он идёт напрямую в Registry. Gateway проксирует без участия Orchestratorа.
+2. **Пайплайн — Orchestrator.** Если endpoint создаёт/читает `pipeline.*` или управляет FSM — он идёт в Orchestrator.
+3. **Связь — Orchestrator.** `GET /{drafts,documents}/{id}/tasks` — всегда Orchestrator, т.к. `pipeline.tasks` принадлежит ему.
+4. **Запись черновиков и документов — только через Orchestrator.** Registry не имеет публичных write-эндпоинтов для `registry.drafts` и `registry.documents` (кроме PUT/PATCH для редактирования полей). Создание и смена статуса — только через Orchestrator.
+5. **Gateway — только маршрутизация.** Gateway не обогащает ответы. Если UI нужны связанные данные (черновик + задачи), он делает два запроса.
+
+---
+
 ## Рабочие практики
 
 - **Кэш перед чтением.** Перед `read_file` проверять, загружен ли файл в кэш текущей сессии. Повторное чтение уже загруженных файлов — потеря токенов и времени. Исключение — если файл гарантированно изменился между сессиями.

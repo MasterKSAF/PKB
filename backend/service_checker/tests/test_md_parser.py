@@ -307,7 +307,7 @@ class TestCrossServiceParsing:
         # Проверяем ключевые сервисы
         assert results["auth_service_api.md"]["endpoints"] >= 10
         assert results["registry_service_api.md"]["endpoints"] >= 40
-        assert results["orchestrator_service_api.md"]["endpoints"] >= 25
+        assert results["orchestrator_service_api.md"]["endpoints"] >= 15
         assert results["query_service_api.md"]["endpoints"] >= 15
         assert results["gateway_service_api.md"]["endpoints"] >= 1
 

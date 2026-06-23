@@ -71,7 +71,7 @@ class TestOrchestratorDocumentVersionsPipeline:
         reg = steps[6]
         assert reg.service == "registry"
         assert reg.method == "POST"
-        assert reg.path == "/api/v1/registry/documents/"
+        assert reg.path == "/api/v1/registry/documents"
         assert reg.expected_status == {201, 409}
         assert reg.extract_keys == ["doc_id"]
 

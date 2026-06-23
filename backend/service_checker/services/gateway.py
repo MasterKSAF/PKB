@@ -9,12 +9,13 @@ PKB Neuroassistant — Gateway Service API Definitions.
 
 from __future__ import annotations
 
+from typing import Optional
+
 from .base import (
     EndpointDef,
     ServiceDef,
     API_PREFIX,
-    TEST_CREDENTIALS,
-    GATEWAY_CREDENTIALS,
+    get_credentials_for_mode,
 )
 
 SERVICE_KEY = "gateway"
@@ -22,17 +23,24 @@ PORT = 8080
 DISPLAY_NAME = "Gateway Service"
 
 
-def get_service_def() -> ServiceDef:
-    """Вернуть полное описание Gateway Service (агрегирующий прокси)."""
+def get_service_def(mode: Optional[str] = None) -> ServiceDef:
+    """Вернуть полное описание Gateway Service (агрегирующий прокси).
+
+    Args:
+        mode: Режим тестирования — "real" (Docker, TEST_CREDENTIALS)
+              или "mock" (local Gateway Mock, GATEWAY_CREDENTIALS).
+              По умолчанию из TEST_MODE env var или "real".
+    """
+    credentials = get_credentials_for_mode(mode)
 
     prepare_endpoints = [
-        # 1. Получаем JWT токен через Gateway (не напрямую Auth),
-        #    чтобы Gateway Mock сохранил токен в своём _access_token_map.
-        #    Пароль из SEED_USERS (admin123), а не из env (Admin1234!),
-        #    т.к. Gateway Mock не читает DEFAULT_ADMIN_PASSWORD.
+        # Получаем JWT токен через Gateway.
+        # В mock-режиме — пароль из SEED_USERS (admin123),
+        # т.к. Gateway Mock не читает DEFAULT_ADMIN_PASSWORD.
+        # В real-режиме — пароль из DEFAULT_ADMIN_PASSWORD (Admin1234!).
         EndpointDef("POST", f"{API_PREFIX}/auth/token", "auth",
             "Получение JWT токена (prepare)",
-            body=GATEWAY_CREDENTIALS,
+            body=credentials,
             extract_keys=["access_token", "refresh_token"],
             is_preparation=True,
             expected_status=200),
@@ -61,7 +69,7 @@ def get_service_def() -> ServiceDef:
         # ── Auth (прокси) ──
         EndpointDef("POST", f"{API_PREFIX}/auth/token", "auth",
             "Получение JWT токена",
-            body=GATEWAY_CREDENTIALS,
+            body=credentials,
             extract_keys=["access_token", "refresh_token"],
             response_schema={"access_token": str}),
         EndpointDef("GET", f"{API_PREFIX}/auth/me", "auth",

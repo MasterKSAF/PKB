@@ -214,10 +214,48 @@ docker build -f docker/Dockerfile.base -t ghcr.io/pkb/neuro-base:latest docker/
 python setup.py
 ```
 
+## Режимы тестирования: Real vs Mock
+
+`ApiCoverageTester` и тесты gateway поддерживают два режима:
+
+| Режим | Описание | Credentials | Применение |
+|-------|----------|-------------|------------|
+| `real` (по умолчанию) | Против Docker (реальные сервисы) | `Admin1234!` (DEFAULT_ADMIN_PASSWORD) | CI, Docker, продакшн-валидация |
+| `mock` | Против Gateway Mock (локальные моки) | `admin123` (SEED_USERS) | Локальная разработка без Docker |
+
+**Управление режимом:**
+
+1. **Переменная окружения** `TEST_MODE`:
+   ```bash
+   # Real (по умолчанию)
+   set TEST_MODE=real
+   
+   # Mock
+   set TEST_MODE=mock
+   ```
+
+2. **CLI-флаг** `--mode` для `api_coverage_test.py`:
+   ```bash
+   python api_coverage_test.py --mode mock
+   python api_coverage_test.py --mode real
+   ```
+
+3. **Pytest-флаг** `--test-mode`:
+   ```bash
+   python -m pytest tests/test_gateway_mode.py --test-mode=mock -v
+   python -m pytest tests/test_gateway_mode.py --test-mode=real -v
+   ```
+
+4. **Программно** через конструктор `ApiCoverageTester(mode="mock")`
+
+**Gateway-специфичные credentials:**
+- **Real-режим**: `username: admin@example.com`, `password: Admin1234!` (читается из DEFAULT_ADMIN_PASSWORD env)
+- **Mock-режим**: `username: admin@example.com`, `password: admin123` (хардкод SEED_USERS в Gateway Mock)
+
 ## Запуск тестов
 
 ```bash
-# Все unit-тесты (281 тестов, ~32с)
+# Все unit-тесты (560 тестов, ~5с)
 python -m pytest tests/ -v
 
 # По файлам — юнит-тесты (без Docker):

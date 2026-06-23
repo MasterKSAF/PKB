@@ -140,7 +140,7 @@ def _generate_full_report(
             has_skips = cov.endpoints_skipped > 0
             passed_icon = "❌" if has_failures else ("⏭️" if has_skips else "✅")
             svc_checkdb = _get_service_checkdb_icon(db_result, svc_key)
-            api_cell = f"{passed_icon} {cov.endpoints_passed}/{cov.endpoints_total}/{cov.endpoints_failed}"
+            api_cell = f"{passed_icon}"
         else:
             ping_icon = "—"
             api_cell = "—"
@@ -172,15 +172,13 @@ def _generate_full_report(
         pipe_col = _service_pipeline_summary_icon(svc_pipe_status, pipe_order)
         lines.append(f"| {display_name} | {port} | {ping_icon} | {svc_checkdb} | {api_cell} | {pipe_col} | {status_icon} |")
 
-    # Итоговая строка — количества по всем столбцам
+    # Итоговая строка — только отметки
     total_services = len(coverage_results)
     cov_alive = sum(1 for r in coverage_results.values() if r.ping_ok)
     cov_ok_count = sum(
         1 for r in coverage_results.values()
         if r.ping_ok and r.endpoints_failed == 0
     )
-    all_total_ok = sum(r.endpoints_passed for r in coverage_results.values())
-    all_total_ep = sum(r.endpoints_total for r in coverage_results.values())
     all_failed = sum(r.endpoints_failed for r in coverage_results.values())
     all_skipped = sum(r.endpoints_skipped for r in coverage_results.values())
     svcs_with_db = [k for k in coverage_results if k in COVERAGE_TO_STARTUP_KEY]
@@ -195,10 +193,14 @@ def _generate_full_report(
     overall_status = "✅" if (all_cov_ok and all_pipe_ok) else "❌"
     pipe_total_icon = "✅" if all_pipe_ok else "❌"
 
+    ping_total_icon = "✅" if cov_alive == total_services else "❌"
+    checkdb_total_icon = "✅" if svcs_checkdb_ok == svcs_checkdb_total else "❌" if svcs_checkdb_total > 0 else "—"
+    api_total_icon = "❌" if all_failed > 0 else ("⏭️" if all_skipped > 0 else "✅")
+
     lines.append(
-        f"| **Total** | | **{cov_alive}/{total_services}** "
-        f"| **{svcs_checkdb_ok}/{svcs_checkdb_total}** "
-        f"| **{all_total_ok}/{all_total_ep}/{all_failed}** "
+        f"| **Total** | | {ping_total_icon} "
+        f"| {checkdb_total_icon} "
+        f"| {api_total_icon} "
         f"| {pipe_total_icon} "
         f"| {overall_status} |\n"
     )
@@ -234,17 +236,21 @@ def _generate_full_report(
         pipe_cols = " | ".join(pipe_icons)
         lines.append(f"| {display_name} | {pipe_cols} | {ps_status} |")
 
-    # Totals row for pipeline table
+    # Totals row for pipeline table — только отметки
     pipe_totals: List[str] = []
     for pname in pipe_order:
-        p_passed_total = 0
-        p_steps_total = 0
+        all_passed = True
+        has_data = False
         for svc_key, svc_status in pipe_service_status.items():
             if pname in svc_status:
+                has_data = True
                 passed, total = svc_status[pname]
-                p_passed_total += passed
-                p_steps_total += total
-        pipe_totals.append(f"**{p_passed_total}/{p_steps_total}**")
+                if passed == 0 or passed != total:
+                    all_passed = False
+        if has_data:
+            pipe_totals.append("✅" if all_passed else "❌")
+        else:
+            pipe_totals.append("—")
     totals_cols = " | ".join(pipe_totals)
     lines.append(f"| **Total** | {totals_cols} | {pipe_total_icon} |\n")
 
