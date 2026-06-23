@@ -9,7 +9,7 @@
 | Основная ветка | `develop` |
 | Папка приложения | `UI-UX/UI Final/frontend` |
 | Локальный порт | `3300` |
-| Локальный Gateway | `http://127.0.0.1:8081/api/v1` |
+| Локальный Gateway | `http://127.0.0.1:8080/api/v1` |
 | Стек | React, Vite, TypeScript, MUI, Zustand |
 | Режимы | продуктивный через Gateway и demo-режим |
 
@@ -47,7 +47,7 @@ npm run build
 
 | Роль | Логин | Пароль |
 | --- | --- | --- |
-| Системный администратор | `admin@example.com` | `admin123` |
+| Системный администратор | `admin@example.com` | `Admin1234!` |
 
 Demo-режим использует локальные профили:
 
@@ -145,10 +145,10 @@ Demo-режим использует локальные профили:
 Ключевые env-переменные:
 
 ```text
-VITE_API_BASE_URL=http://127.0.0.1:8081/api/v1
-VITE_GATEWAY_AUTO_LOGIN=true
+VITE_API_BASE_URL=http://127.0.0.1:8080/api/v1
+VITE_GATEWAY_AUTO_LOGIN=false
 VITE_GATEWAY_USERNAME=admin@example.com
-VITE_GATEWAY_PASSWORD=admin123
+VITE_GATEWAY_PASSWORD=Admin1234!
 ```
 
 ## Документация рядом

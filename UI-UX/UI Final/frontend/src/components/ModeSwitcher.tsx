@@ -129,11 +129,6 @@ export const ModeSwitcher: React.FC = () => {
   const [chatMenuTarget, setChatMenuTarget] = React.useState<{ projectId: string; chatId: string; title: string } | null>(
     null,
   );
-  const gatewayFallbackProjects = React.useMemo<GatewayChatProject[]>(
-    () => [{ id: 'gateway-dialogs', name: 'Рабочие диалоги', chats: [] }],
-    [],
-  );
-
   React.useEffect(() => {
     if (workMode !== 'prod') {
       clearGatewayTokens();
@@ -148,13 +143,13 @@ export const ModeSwitcher: React.FC = () => {
     setChatMessages([]);
     setActiveThreadId('');
     setCurrentGatewaySessionId(null);
-    setChatProjects(gatewayFallbackProjects);
+    setChatProjects([]);
 
     void projectsApi
       .list()
       .then((projects) => {
         if (!isMounted) return;
-        const nextProjects = projects.length ? projects : [{ id: 'gateway-dialogs', name: 'Рабочие диалоги', chats: [] }];
+        const nextProjects = projects.length ? projects : [];
         setChatProjects(nextProjects);
 
         if (!nextProjects.some((project) => project.id === activeProjectIdSnapshot) && nextProjects[0]?.id) {
@@ -163,13 +158,13 @@ export const ModeSwitcher: React.FC = () => {
       })
       .catch(() => {
         if (!isMounted) return;
-        setChatProjects(gatewayFallbackProjects);
+        setChatProjects([]);
       });
 
     return () => {
       isMounted = false;
     };
-  }, [gatewayFallbackProjects, setActiveProjectId, setChatMessages, setCurrentGatewaySessionId, workMode]);
+  }, [setActiveProjectId, setChatMessages, setCurrentGatewaySessionId, workMode]);
 
   const toggleProject = (projectId: string) => {
     setExpandedProjects((state) => ({ ...state, [projectId]: !state[projectId] }));
