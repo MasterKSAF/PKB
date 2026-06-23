@@ -5,7 +5,7 @@ from rag_builder.embeddings.stub import StubEmbeddingProvider
 
 
 def build_embedding_provider():
-    provider = settings.EMBEDDING_PROVIDER.lower()
+    provider = settings.EMBEDDING_PROVIDER.strip().lower().replace("-", "_")
 
     if provider == "stub":
         return StubEmbeddingProvider()
@@ -21,6 +21,7 @@ def build_embedding_provider():
         "openai_compatible",
         "infinity",
         "external",
+        "tei",
     }:
         from rag_builder.embeddings.openai_provider import (
             OpenAICompatibleEmbeddingProvider,

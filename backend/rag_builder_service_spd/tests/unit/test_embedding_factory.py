@@ -63,3 +63,20 @@ def test_factory_builds_external(monkeypatch):
     provider = build_embedding_provider()
 
     assert isinstance(provider, OpenAICompatibleEmbeddingProvider)
+
+
+def test_factory_builds_openai_compatible_provider_aliases(monkeypatch):
+    monkeypatch.setattr(settings, "EMBEDDING_API_KEY", "sk-noop")
+    monkeypatch.setattr(settings, "EMBEDDING_API_BASE_URL", "http://127.0.0.1:18092/v1")
+    monkeypatch.setattr(settings, "EMBEDDING_MODEL", "Vuy/rubert-tiny2-onnx")
+    monkeypatch.setattr(settings, "EMBEDDING_DIM", 312)
+
+    for provider_name in [
+        "openai-compatible",
+        "tei",
+    ]:
+        monkeypatch.setattr(settings, "EMBEDDING_PROVIDER", provider_name)
+
+        provider = build_embedding_provider()
+
+        assert isinstance(provider, OpenAICompatibleEmbeddingProvider)
