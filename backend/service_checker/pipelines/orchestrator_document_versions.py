@@ -172,7 +172,7 @@ class OrchestratorDocumentVersionsPipeline(PipelineDef):
             name="Создание документа в Registry",
             service="registry",
             method="POST",
-            path="/api/v1/registry/documents/",
+            path="/api/v1/registry/documents",
             port=8084,
             body={
                 "title": f"Version тест {ts}",

@@ -173,7 +173,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             name="Сохранение документа #1 в Registry",
             service="registry",
             method="POST",
-            path="/api/v1/registry/documents/",
+            path="/api/v1/registry/documents",
             port=8084,
             body={
                 "title": f"Multi-doc тест 1 {ts}",
@@ -296,7 +296,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             name="Сохранение документа #2 в Registry",
             service="registry",
             method="POST",
-            path="/api/v1/registry/documents/",
+            path="/api/v1/registry/documents",
             port=8084,
             body={
                 "title": f"Multi-doc тест 2 {ts}",
@@ -358,7 +358,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             name="Удаление документа #1 из Registry",
             service="registry",
             method="DELETE",
-            path="/api/v1/registry/documents/{doc_id_1}/",
+            path="/api/v1/registry/documents/{doc_id_1}",
             port=8084,
             expected_status=200,
             needs_auth=True,

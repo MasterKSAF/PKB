@@ -1101,14 +1101,14 @@ async def document_status(doc_id: int, longpoll: int = 15):
         }
 
 
-@router.get("/api/v1/documents/{doc_id}/file")
-
-
 @router.get("/api/v1/files/{file_id}")
 async def get_file(file_id: int):
     """Получить файл по ID."""
     return {"file_id": file_id, "filename": f"file-{file_id}.pdf", "url": f"/api/v1/files/{file_id}/download", "size": 1024}
-async def get_file(doc_id: int):
+
+
+@router.get("/api/v1/documents/{doc_id}/file")
+async def get_document_file(doc_id: int):
     doc = _get_document(doc_id)
     return {"document_id": doc_id, "version_id": _versions.get(doc_id, [{}])[0].get("version_id", ""),
             "content_type": "application/pdf", "file_url": f"/files/{doc_id}/full.pdf"}

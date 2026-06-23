@@ -5,7 +5,7 @@ from .base import Base
 
 class Export(Base):
     __tablename__ = 'exports'
-    __table_args__ = {'schema': 'public'}
+    __table_args__ = {'schema': 'registry'}
 
     export_id = Column('export_id', String, primary_key=True)
     document_id = Column('document_id', String, nullable=False)

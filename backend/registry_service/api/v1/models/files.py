@@ -5,7 +5,7 @@ from .base import Base
 
 class File(Base):
     __tablename__ = 'files'
-    __table_args__ = {'schema': 'public'}
+    __table_args__ = {'schema': 'registry'}
 
     file_id = Column('file_id', String, primary_key=True)
     filename = Column('filename', String, nullable=False)
