@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Column, String, Text, BigInteger, Integer, Boolean, Date, DateTime
+from sqlalchemy import Column, String, Text, BigInteger, Integer, Boolean, Date, DateTime, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 
 from .base import Base
@@ -8,7 +8,11 @@ from .base import Base
 
 class Document(Base):
     __tablename__ = 'documents'
-    __table_args__ = {'schema': 'registry'}
+    __table_args__ = (
+        UniqueConstraint('doc_code', 'era', name='uq_documents_doc_code_era'),
+        UniqueConstraint('title_hash_sha256', name='uq_documents_title_hash_sha256'),
+        {'schema': 'registry'}
+    )
 
     id = Column('id', BigInteger, primary_key=True, autoincrement=True)
     doc_code = Column('doc_code', Text, nullable=False)
