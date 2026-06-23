@@ -1,0 +1,1682 @@
+{
+	"info": {
+		"name": "PKB Neuroassistant — Gateway API",
+		"description": "Полная коллекция endpoint-ов Gateway Service (v1.2.0).\n\n## Переменные окружения\n\n| Переменная | Значение по умолчанию | Описание |\n|---|---|---|\n| `{{base_url}}` | `http://127.0.0.1:8080` | Адрес Gateway (real) |\n| `{{mock_url}}` | `http://127.0.0.1:8099` | Адрес Mock-сервера |\n| `{{access_token}}` | — | JWT токен (заполняется после /auth/login) |\n| `{{refresh_token}}` | — | Refresh токен |\n| `{{user_id}}` | `1` | ID тестового пользователя |\n| `{{doc_id}}` | `1` | ID тестового документа |\n| `{{draft_id}}` | `1` | ID тестового черновика |\n| `{{session_id}}` | `1` | ID чат-сессии |\n| `{{task_id}}` | `1` | ID задачи |\n| `{{classifier_code}}` | `MKS-01` | Код классификатора |\n| `{{term_id}}` | `1` | ID термина |\n| `{{pending_id}}` | `1` | ID карантинного элемента |\n| `{{category_id}}` | `1` | ID категории |\n| `{{message_id}}` | `1` | ID сообщения |\n| `{{project_id}}` | `1` | ID проекта |\n\n## Авторизация\n\nПосле успешного `POST /api/v1/auth/login` токены автоматически сохраняются\nв переменные коллекции через тест-скрипт.",
+		"schema": "https://getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "pkb-neuroassistant"
+	},
+	"variable": [
+		{ "key": "base_url", "value": "http://127.0.0.1:8080", "type": "string" },
+		{ "key": "mock_url", "value": "http://127.0.0.1:8099", "type": "string" },
+		{ "key": "access_token", "value": "", "type": "string" },
+		{ "key": "refresh_token", "value": "", "type": "string" },
+		{ "key": "user_id", "value": "1", "type": "string" },
+		{ "key": "doc_id", "value": "1", "type": "string" },
+		{ "key": "draft_id", "value": "1", "type": "string" },
+		{ "key": "session_id", "value": "1", "type": "string" },
+		{ "key": "task_id", "value": "1", "type": "string" },
+		{ "key": "classifier_code", "value": "73.020", "type": "string" },
+		{ "key": "term_id", "value": "1", "type": "string" },
+		{ "key": "pending_id", "value": "1", "type": "string" },
+		{ "key": "category_id", "value": "1", "type": "string" },
+		{ "key": "message_id", "value": "1", "type": "string" },
+		{ "key": "project_id", "value": "1", "type": "string" }
+	],
+	"auth": {
+		"type": "bearer",
+		"bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }]
+	},
+	"item": [
+		{
+			"name": "🔧 System (Gateway собственные)",
+			"description": "Собственные endpoint-ы Gateway, регистрируются с приоритетом над catch-all.",
+			"item": [
+				{
+					"name": "GET /api/v1/health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/health", "host": ["{{base_url}}"], "path": ["api", "v1", "health"] }
+					},
+					"event": [{
+						"listen": "test",
+						"script": {
+							"exec": [
+								"pm.test('Status 200', () => pm.response.to.have.status(200));",
+								"pm.test('Body has status', () => pm.expect(pm.response.json()).to.have.property('status'));"
+							]
+						}
+					}]
+				},
+				{
+					"name": "GET /api/v1/system/health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/system/health", "host": ["{{base_url}}"], "path": ["api", "v1", "system", "health"] }
+					},
+					"event": [{
+						"listen": "test",
+						"script": {
+							"exec": [
+								"pm.test('Status 200', () => pm.response.to.have.status(200));"
+							]
+						}
+					}]
+				},
+				{
+					"name": "GET /api/v1/system/mode",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/system/mode", "host": ["{{base_url}}"], "path": ["api", "v1", "system", "mode"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/monitor/metrics",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/monitor/metrics", "host": ["{{base_url}}"], "path": ["api", "v1", "monitor", "metrics"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/system/health/live",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/system/health/live", "host": ["{{base_url}}"], "path": ["api", "v1", "system", "health", "live"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/system/health/ready",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/system/health/ready", "host": ["{{base_url}}"], "path": ["api", "v1", "system", "health", "ready"] }
+					}
+				}
+			]
+		},
+		{
+			"name": "🔐 Auth (аутентификация)",
+			"description": "Endpoint-ы аутентификации. Проксируются в Auth Service (порт 8082).",
+			"item": [
+				{
+					"name": "POST /api/v1/auth/login",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username\": \"admin@example.com\",\n  \"password\": \"Admin@123456\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/auth/login", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "login"] }
+					},
+					"event": [{
+						"listen": "test",
+						"script": {
+							"exec": [
+								"const json = pm.response.json();",
+								"pm.test('Login success', () => {",
+								"  pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+								"  pm.expect(json).to.have.property('access_token');",
+								"  pm.expect(json).to.have.property('refresh_token');",
+								"});",
+								"if (json.access_token) {",
+								"  pm.collectionVariables.set('access_token', json.access_token);",
+								"}",
+								"if (json.refresh_token) {",
+								"  pm.collectionVariables.set('refresh_token', json.refresh_token);",
+								"}"
+							]
+						}
+					}]
+				},
+				{
+					"name": "POST /api/v1/auth/token (alias)",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username\": \"admin@example.com\",\n  \"password\": \"Admin@123456\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/auth/token", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "token"] }
+					},
+					"event": [{
+						"listen": "test",
+						"script": {
+							"exec": [
+								"const json = pm.response.json();",
+								"pm.test('Token success', () => {",
+								"  pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+								"  pm.expect(json).to.have.property('access_token');",
+								"});",
+								"if (json.access_token) pm.collectionVariables.set('access_token', json.access_token);",
+								"if (json.refresh_token) pm.collectionVariables.set('refresh_token', json.refresh_token);"
+							]
+						}
+					}]
+				},
+				{
+					"name": "POST /api/v1/auth/refresh",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/auth/refresh", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "refresh"] }
+					}
+				},
+				{
+					"name": "POST /api/v1/auth/revoke",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/auth/revoke", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "revoke"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/auth/me",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/auth/me", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "me"] }
+					}
+				},
+				{
+					"name": "POST /api/v1/internal/auth/validate",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"access_token\": \"{{access_token}}\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/internal/auth/validate", "host": ["{{base_url}}"], "path": ["api", "v1", "internal", "auth", "validate"] }
+					}
+				}
+			]
+		},
+		{
+			"name": "👑 Admin (управление пользователями)",
+			"description": "Административные endpoint-ы для управления пользователями, ролями и аудитом. Требуют роль admin/system_admin.",
+			"item": [
+				{
+					"name": "GET /api/v1/admin/users",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/admin/users?page=1&page_size=20",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "admin", "users"],
+							"query": [
+								{ "key": "page", "value": "1" },
+								{ "key": "page_size", "value": "20" }
+							]
+						}
+					}
+				},
+				{
+					"name": "POST /api/v1/admin/users",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"engineer@example.com\",\n  \"full_name\": \"Инженер Тестовый\",\n  \"password\": \"Engineer@123456\",\n  \"roles\": [\"engineer\"]\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/admin/users", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "users"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/admin/users/{{user_id}}",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/admin/users/{{user_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "users", "{{user_id}}"] }
+					}
+				},
+				{
+					"name": "PUT /api/v1/admin/users/{{user_id}}",
+					"request": {
+						"method": "PUT",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"full_name\": \"Инженер Обновлённый\",\n  \"roles\": [\"engineer\"]\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/admin/users/{{user_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "users", "{{user_id}}"] }
+					}
+				},
+				{
+					"name": "PATCH /api/v1/admin/users/{{user_id}}",
+					"request": {
+						"method": "PATCH",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"roles\": [\"admin\"]\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/admin/users/{{user_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "users", "{{user_id}}"] }
+					}
+				},
+				{
+					"name": "DELETE /api/v1/admin/users/{{user_id}}",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/admin/users/{{user_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "users", "{{user_id}}"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/admin/roles",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/admin/roles", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "roles"] }
+					}
+				},
+				{
+					"name": "POST /api/v1/admin/roles",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"reviewer\",\n  \"permissions\": [\"can_view_documents\", \"can_approve_drafts\"]\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/admin/roles", "host": ["{{base_url}}"], "path": ["api", "v1", "admin", "roles"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/admin/audit",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/admin/audit?page=1&page_size=50",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "admin", "audit"],
+							"query": [
+								{ "key": "page", "value": "1" },
+								{ "key": "page_size", "value": "50" }
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "💬 Chat (Query Service)",
+			"description": "Endpoint-ы чата и сессий. Проксируются в Query Service (порт 8083).",
+			"item": [
+				{
+					"name": "POST /api/v1/chat",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"question\": \"Какие допуски соосности для ледового класса Arc4?\",\n  \"session_id\": 1\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/chat", "host": ["{{base_url}}"], "path": ["api", "v1", "chat"] }
+					}
+				},
+				{
+					"name": "POST /api/v1/chat/sessions",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Тестирование допусков\",\n  \"document_ids\": [1, 2]\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/chat/sessions", "host": ["{{base_url}}"], "path": ["api", "v1", "chat", "sessions"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/chat/sessions",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/chat/sessions?page=1&page_size=50",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "chat", "sessions"],
+							"query": [
+								{ "key": "page", "value": "1" },
+								{ "key": "page_size", "value": "50" }
+							]
+						}
+					}
+				},
+				{
+					"name": "GET /api/v1/chat/sessions/{{session_id}}",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/chat/sessions/{{session_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "chat", "sessions", "{{session_id}}"] }
+					}
+				},
+				{
+					"name": "PUT /api/v1/chat/sessions/{{session_id}}",
+					"request": {
+						"method": "PUT",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Обновлённая сессия\",\n  \"document_ids\": [1, 2, 3]\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/chat/sessions/{{session_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "chat", "sessions", "{{session_id}}"] }
+					}
+				},
+				{
+					"name": "DELETE /api/v1/chat/sessions/{{session_id}}",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/chat/sessions/{{session_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "chat", "sessions", "{{session_id}}"] }
+					}
+				},
+				{
+					"name": "POST /api/v1/chat/projects",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"code\": \"PRJ-001\",\n  \"name\": \"Проект 1\",\n  \"description\": \"Описание проекта\",\n  \"status\": \"active\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/chat/projects", "host": ["{{base_url}}"], "path": ["api", "v1", "chat", "projects"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/chat/projects",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/chat/projects?page=1&page_size=50",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "chat", "projects"],
+							"query": [
+								{ "key": "page", "value": "1" },
+								{ "key": "page_size", "value": "50" }
+							]
+						}
+					}
+				},
+				{
+					"name": "GET /api/v1/chat/projects/{{project_id}}",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/chat/projects/{{project_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "chat", "projects", "{{project_id}}"] }
+					}
+				},
+				{
+					"name": "PUT /api/v1/chat/projects/{{project_id}}",
+					"request": {
+						"method": "PUT",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Обновлённый проект\",\n  \"status\": \"completed\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/chat/projects/{{project_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "chat", "projects", "{{project_id}}"] }
+					}
+				},
+				{
+					"name": "DELETE /api/v1/chat/projects/{{project_id}}",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/chat/projects/{{project_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "chat", "projects", "{{project_id}}"] }
+					}
+				},
+				{
+					"name": "POST /api/v1/chat/sessions/{{session_id}}/messages",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"content\": \"Какая толщина обшивки для Arc4?\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/chat/sessions/{{session_id}}/messages", "host": ["{{base_url}}"], "path": ["api", "v1", "chat", "sessions", "{{session_id}}", "messages"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/chat/sessions/{{session_id}}/messages",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/chat/sessions/{{session_id}}/messages?limit=50",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "chat", "sessions", "{{session_id}}", "messages"],
+							"query": [{ "key": "limit", "value": "50" }]
+						}
+					}
+				},
+				{
+					"name": "GET /api/v1/chat/sessions/{{session_id}}/messages/last",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/chat/sessions/{{session_id}}/messages/last?limit=20",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "chat", "sessions", "{{session_id}}", "messages", "last"],
+							"query": [{ "key": "limit", "value": "20" }]
+						}
+					}
+				},
+				{
+					"name": "GET /api/v1/chat/sessions/{{session_id}}/messages/{{message_id}}",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/chat/sessions/{{session_id}}/messages/{{message_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "chat", "sessions", "{{session_id}}", "messages", "{{message_id}}"] }
+					}
+				},
+				{
+					"name": "POST /api/v1/chat/sessions/{{session_id}}/messages/search",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": \"допуск\",\n  \"limit\": 10,\n  \"offset\": 0\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/chat/sessions/{{session_id}}/messages/search", "host": ["{{base_url}}"], "path": ["api", "v1", "chat", "sessions", "{{session_id}}", "messages", "search"] }
+					}
+				},
+				{
+					"name": "POST /api/v1/chat/sessions/{{session_id}}/context",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"action\": \"add_document\",\n  \"document_ids\": [3]\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/chat/sessions/{{session_id}}/context", "host": ["{{base_url}}"], "path": ["api", "v1", "chat", "sessions", "{{session_id}}", "context"] }
+					}
+				},
+				{
+					"name": "POST /api/v1/chat/sessions/{{session_id}}/context/export",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"format\": \"pdf\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/chat/sessions/{{session_id}}/context/export", "host": ["{{base_url}}"], "path": ["api", "v1", "chat", "sessions", "{{session_id}}", "context", "export"] }
+					}
+				},
+				{
+					"name": "POST /api/v1/chat/sessions/{{session_id}}/export",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"format\": \"pdf\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/chat/sessions/{{session_id}}/export", "host": ["{{base_url}}"], "path": ["api", "v1", "chat", "sessions", "{{session_id}}", "export"] }
+					}
+				},
+				{
+					"name": "POST /api/v1/chat/feedback",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"session_id\": 1,\n  \"message_id\": 1,\n  \"rating\": 5,\n  \"rating_status\": \"positive\",\n  \"comment\": \"Отличный ответ\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/chat/feedback", "host": ["{{base_url}}"], "path": ["api", "v1", "chat", "feedback"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/chat/history",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/chat/history?page=1&page_size=50",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "chat", "history"],
+							"query": [
+								{ "key": "page", "value": "1" },
+								{ "key": "page_size", "value": "50" }
+							]
+						}
+					}
+				},
+				{
+					"name": "GET /api/v1/chat/history/export",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/chat/history/export?format=csv", "host": ["{{base_url}}"], "path": ["api", "v1", "chat", "history", "export"], "query": [{ "key": "format", "value": "csv" }] }
+					}
+				}
+			]
+		},
+		{
+			"name": "📄 Text (Query Service)",
+			"description": "Endpoint-ы текстового поиска. Проксируются в Query Service (порт 8083).",
+			"item": [
+				{
+					"name": "POST /api/v1/text/search",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"text\": \"толщина обшивки\",\n  \"valid_at\": \"2026-06-23\",\n  \"top_k\": 5,\n  \"filters\": {}\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/text/search", "host": ["{{base_url}}"], "path": ["api", "v1", "text", "search"] }
+					}
+				},
+				{
+					"name": "POST /api/v1/text/ask",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"text\": \"Какая сталь допускается при -40°C?\",\n  \"document_ids\": [1, 2]\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/text/ask", "host": ["{{base_url}}"], "path": ["api", "v1", "text", "ask"] }
+					}
+				}
+			]
+		},
+		{
+			"name": "📁 Documents (Orchestrator — pipeline)",
+			"description": "Endpoint-ы управления документами в пайплайне обработки. Проксируются в Orchestrator Service (порт 8081).",
+			"item": [
+				{
+					"name": "GET /api/v1/documents",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/documents?page=1&page_size=50",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "documents"],
+							"query": [
+								{ "key": "page", "value": "1" },
+								{ "key": "page_size", "value": "50" }
+							]
+						}
+					}
+				},
+				{
+					"name": "GET /api/v1/documents/{{doc_id}}",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/documents/{{doc_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "documents", "{{doc_id}}"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/documents/{{doc_id}}/status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/documents/{{doc_id}}/status?longpoll=15", "host": ["{{base_url}}"], "path": ["api", "v1", "documents", "{{doc_id}}", "status"], "query": [{ "key": "longpoll", "value": "15" }] }
+					}
+				},
+				{
+					"name": "GET /api/v1/documents/{{doc_id}}/file",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/documents/{{doc_id}}/file", "host": ["{{base_url}}"], "path": ["api", "v1", "documents", "{{doc_id}}", "file"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/documents/queue",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/documents/queue?page=1&page_size=50",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "documents", "queue"],
+							"query": [
+								{ "key": "page", "value": "1" },
+								{ "key": "page_size", "value": "50" }
+							]
+						}
+					}
+				},
+				{
+					"name": "GET /api/v1/documents/{{doc_id}}/errors",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/documents/{{doc_id}}/errors?page=1&page_size=20", "host": ["{{base_url}}"], "path": ["api", "v1", "documents", "{{doc_id}}", "errors"], "query": [{ "key": "page", "value": "1"}, {"key": "page_size", "value": "20"}] }
+					}
+				},
+				{
+					"name": "POST /api/v1/documents/{{doc_id}}/versions",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"file_key\": \"v2-xxx\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/documents/{{doc_id}}/versions", "host": ["{{base_url}}"], "path": ["api", "v1", "documents", "{{doc_id}}", "versions"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/documents/{{doc_id}}/versions",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/documents/{{doc_id}}/versions?page=1&page_size=50",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "documents", "{{doc_id}}", "versions"],
+							"query": [
+								{ "key": "page", "value": "1" },
+								{ "key": "page_size", "value": "50" }
+							]
+						}
+					}
+				},
+				{
+					"name": "GET /api/v1/documents/{{doc_id}}/pages",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/documents/{{doc_id}}/pages?page=1&page_size=50",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "documents", "{{doc_id}}", "pages"],
+							"query": [
+								{ "key": "page", "value": "1" },
+								{ "key": "page_size", "value": "50" }
+							]
+						}
+					}
+				},
+				{
+					"name": "GET /api/v1/documents/{{doc_id}}/pages/1",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/documents/{{doc_id}}/pages/1", "host": ["{{base_url}}"], "path": ["api", "v1", "documents", "{{doc_id}}", "pages", "1"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/documents/{{doc_id}}/pages/1/text",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/documents/{{doc_id}}/pages/1/text", "host": ["{{base_url}}"], "path": ["api", "v1", "documents", "{{doc_id}}", "pages", "1", "text"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/documents/{{doc_id}}/pages/1/preview",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/documents/{{doc_id}}/pages/1/preview", "host": ["{{base_url}}"], "path": ["api", "v1", "documents", "{{doc_id}}", "pages", "1", "preview"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/documents/{{doc_id}}/parameters",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/documents/{{doc_id}}/parameters", "host": ["{{base_url}}"], "path": ["api", "v1", "documents", "{{doc_id}}", "parameters"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/documents/{{doc_id}}/history",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/documents/{{doc_id}}/history", "host": ["{{base_url}}"], "path": ["api", "v1", "documents", "{{doc_id}}", "history"] }
+					}
+				},
+				{
+					"name": "POST /api/v1/documents/{{doc_id}}/reprocess",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/documents/{{doc_id}}/reprocess", "host": ["{{base_url}}"], "path": ["api", "v1", "documents", "{{doc_id}}", "reprocess"] }
+					}
+				},
+				{
+					"name": "POST /api/v1/documents/search",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": \"толщина стенки\",\n  \"top_k\": 10,\n  \"filters\": {}\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/documents/search", "host": ["{{base_url}}"], "path": ["api", "v1", "documents", "search"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/documents/search",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/documents/search?q=толщина&top_k=5",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "documents", "search"],
+							"query": [
+								{ "key": "q", "value": "толщина" },
+								{ "key": "top_k", "value": "5" }
+							]
+						}
+					}
+				},
+				{
+					"name": "DELETE /api/v1/documents/{{doc_id}}",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/documents/{{doc_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "documents", "{{doc_id}}"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/files/{{doc_id}} (депр.",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/files/{{doc_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "files", "{{doc_id}}"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/monitor/health (Orchestrator)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/monitor/health", "host": ["{{base_url}}"], "path": ["api", "v1", "monitor", "health"] }
+					}
+				}
+			]
+		},
+		{
+			"name": "📝 Drafts (Orchestrator — pipeline)",
+			"description": "Endpoint-ы управления черновиками пайплайна. POST и PATCH — в Orchestrator, GET — в Registry (через трансформацию).",
+			"item": [
+				{
+					"name": "POST /api/v1/drafts (создание)",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Тестовый документ\",\n  \"file_key\": \"test.pdf\",\n  \"document_key\": \"doc-001\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/drafts", "host": ["{{base_url}}"], "path": ["api", "v1", "drafts"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/drafts (чтение)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/drafts?page=1&page_size=50",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "drafts"],
+							"query": [
+								{ "key": "page", "value": "1" },
+								{ "key": "page_size", "value": "50" }
+							]
+						}
+					}
+				},
+				{
+					"name": "GET /api/v1/drafts/{{draft_id}}",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/drafts/{{draft_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "drafts", "{{draft_id}}"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/drafts/{{draft_id}}/preview",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/drafts/{{draft_id}}/preview", "host": ["{{base_url}}"], "path": ["api", "v1", "drafts", "{{draft_id}}", "preview"] }
+					}
+				},
+				{
+					"name": "POST /api/v1/drafts/{{draft_id}}/preview (запрос)",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/drafts/{{draft_id}}/preview", "host": ["{{base_url}}"], "path": ["api", "v1", "drafts", "{{draft_id}}", "preview"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/drafts/{{draft_id}}/preview/status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/drafts/{{draft_id}}/preview/status", "host": ["{{base_url}}"], "path": ["api", "v1", "drafts", "{{draft_id}}", "preview", "status"] }
+					}
+				},
+				{
+					"name": "PATCH /api/v1/drafts/{{draft_id}}/decide",
+					"request": {
+						"method": "PATCH",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"decision\": \"approve\",\n  \"comment\": \"Одобрено\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/drafts/{{draft_id}}/decide", "host": ["{{base_url}}"], "path": ["api", "v1", "drafts", "{{draft_id}}", "decide"] }
+					}
+				},
+				{
+					"name": "PATCH /api/v1/drafts/{{draft_id}}/metadata",
+					"request": {
+						"method": "PATCH",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Уточнённый заголовок\",\n  \"source_type\": \"GOST\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/drafts/{{draft_id}}/metadata", "host": ["{{base_url}}"], "path": ["api", "v1", "drafts", "{{draft_id}}", "metadata"] }
+					}
+				},
+				{
+					"name": "DELETE /api/v1/drafts/{{draft_id}}",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/drafts/{{draft_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "drafts", "{{draft_id}}"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/drafts/{{draft_id}}/tasks",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/drafts/{{draft_id}}/tasks", "host": ["{{base_url}}"], "path": ["api", "v1", "drafts", "{{draft_id}}", "tasks"] }
+					}
+				}
+			]
+		},
+		{
+			"name": "⚙️ Tasks (Orchestrator)",
+			"description": "Endpoint-ы задач пайплайна. Проксируются в Orchestrator Service (порт 8081).",
+			"item": [
+				{
+					"name": "GET /api/v1/tasks/{{task_id}}/status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/tasks/{{task_id}}/status", "host": ["{{base_url}}"], "path": ["api", "v1", "tasks", "{{task_id}}", "status"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/tasks/{{task_id}}/steps",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/tasks/{{task_id}}/steps", "host": ["{{base_url}}"], "path": ["api", "v1", "tasks", "{{task_id}}", "steps"] }
+					}
+				}
+			]
+		},
+		{
+			"name": "📚 Registry: Документы",
+			"description": "Endpoint-ы реестра документов. Проксируются в Registry Service (порт 8084) с трансформацией пути /api/v1/documents/... → /api/v1/registry/documents/...",
+			"item": [
+				{
+					"name": "GET /api/v1/registry/documents",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/registry/documents?page=1&page_size=50",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "registry", "documents"],
+							"query": [
+								{ "key": "page", "value": "1" },
+								{ "key": "page_size", "value": "50" },
+								{ "key": "search", "value": "" }
+							]
+						}
+					}
+				},
+				{
+					"name": "GET /api/v1/registry/documents/{{doc_id}}",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/registry/documents/{{doc_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "documents", "{{doc_id}}"] }
+					}
+				},
+				{
+					"name": "POST /api/v1/registry/documents",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"ГОСТ 12345-2023\",\n  \"doc_code\": \"ГОСТ 12345-2023\",\n  \"source_type\": \"GOST\",\n  \"status\": \"approved\",\n  \"era\": \"RF\",\n  \"validity_status\": \"active\",\n  \"jurisdiction\": \"RF\",\n  \"issuing_body\": \"Росстандарт\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/registry/documents", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "documents"] }
+					}
+				},
+				{
+					"name": "PUT /api/v1/registry/documents/{{doc_id}}",
+					"request": {
+						"method": "PUT",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"ГОСТ 12345-2023 (ред. 2024)\",\n  \"status\": \"approved\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/registry/documents/{{doc_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "documents", "{{doc_id}}"] }
+					}
+				},
+				{
+					"name": "PATCH /api/v1/registry/documents/{{doc_id}}",
+					"request": {
+						"method": "PATCH",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Обновлённый заголовок\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/registry/documents/{{doc_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "documents", "{{doc_id}}"] }
+					}
+				},
+				{
+					"name": "DELETE /api/v1/registry/documents/{{doc_id}}",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/registry/documents/{{doc_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "documents", "{{doc_id}}"] }
+					}
+				},
+				{
+					"name": "PATCH /api/v1/registry/documents/{{doc_id}}/status",
+					"request": {
+						"method": "PATCH",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"archived\",\n  \"comment\": \"Архивирован\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/registry/documents/{{doc_id}}/status", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "documents", "{{doc_id}}", "status"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/registry/documents/{{doc_id}}/sections",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/registry/documents/{{doc_id}}/sections", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "documents", "{{doc_id}}", "sections"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/registry/documents/{{doc_id}}/file",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/registry/documents/{{doc_id}}/file", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "documents", "{{doc_id}}", "file"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/registry/documents/{{doc_id}}/history",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/registry/documents/{{doc_id}}/history", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "documents", "{{doc_id}}", "history"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/registry/documents/{{doc_id}}/succession",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/registry/documents/{{doc_id}}/succession", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "documents", "{{doc_id}}", "succession"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/registry/documents/{{doc_id}}/versions",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/registry/documents/{{doc_id}}/versions", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "documents", "{{doc_id}}", "versions"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/registry/documents/{{doc_id}}/parameters",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/registry/documents/{{doc_id}}/parameters", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "documents", "{{doc_id}}", "parameters"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/registry/documents/export",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/registry/documents/export?format=json", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "documents", "export"], "query": [{ "key": "format", "value": "json" }] }
+					}
+				},
+				{
+					"name": "POST /api/v1/registry/documents/import",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"mode\": \"upsert\",\n  \"data\": [\n    {\n      \"title\": \"Импорт doc 1\",\n      \"doc_code\": \"IMP-001\",\n      \"source_type\": \"GOST\",\n      \"status\": \"approved\",\n      \"era\": \"RF\",\n      \"validity_status\": \"active\",\n      \"jurisdiction\": \"RF\"\n    }\n  ]\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/registry/documents/import", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "documents", "import"] }
+					}
+				},
+				{
+					"name": "POST /api/v1/registry/documents/check-uniqueness",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Проверка уникальности\",\n  \"file_size_bytes\": 1024\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/registry/documents/check-uniqueness", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "documents", "check-uniqueness"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/registry/search",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/registry/search?q=ГОСТ",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "registry", "search"],
+							"query": [{ "key": "q", "value": "ГОСТ" }]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "🏷️ Registry: Классификаторы",
+			"description": "Endpoint-ы классификаторов (МКС, ОКСТУ, УДК). Проксируются через /api/v1/registry/*.",
+			"item": [
+				{
+					"name": "GET /api/v1/registry/classifiers",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/registry/classifiers?page=1&page_size=50",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "registry", "classifiers"],
+							"query": [
+								{ "key": "page", "value": "1" },
+								{ "key": "page_size", "value": "50" }
+							]
+						}
+					}
+				},
+				{
+					"name": "GET /api/v1/registry/classifiers/tree",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/registry/classifiers/tree", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "classifiers", "tree"] }
+					}
+				},
+				{
+					"name": "POST /api/v1/registry/classifiers/validate",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"classification\": {\n    \"mks_oks_code\": \"73.020\",\n    \"code\": \"73.020\"\n  }\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/registry/classifiers/validate", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "classifiers", "validate"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/registry/classifiers/{{classifier_code}}",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/registry/classifiers/{{classifier_code}}", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "classifiers", "{{classifier_code}}"] }
+					}
+				},
+				{
+					"name": "POST /api/v1/registry/classifiers",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"classifier_system\": \"MKS\",\n  \"code\": \"01.040.01\",\n  \"full_name\": \"Общие положения. Терминология. Стандартизация. Документация (Словари)\",\n  \"status\": \"active\",\n  \"effective_date\": \"2024-01-01\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/registry/classifiers", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "classifiers"] }
+					},
+					"event": [{
+						"listen": "test",
+						"script": {
+							"exec": [
+								"pm.test('Create classifier', () => { pm.expect(pm.response.code).to.be.oneOf([201, 409]); });"
+							]
+						}
+					}]
+				},
+				{
+					"name": "PUT /api/v1/registry/classifiers/{{classifier_code}}",
+					"request": {
+						"method": "PUT",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"full_name\": \"Обновлённое название\",\n  \"status\": \"deprecated\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/registry/classifiers/{{classifier_code}}", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "classifiers", "{{classifier_code}}"] }
+					}
+				},
+				{
+					"name": "PATCH /api/v1/registry/classifiers/{{classifier_code}}",
+					"request": {
+						"method": "PATCH",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"archived\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/registry/classifiers/{{classifier_code}}", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "classifiers", "{{classifier_code}}"] }
+					}
+				},
+				{
+					"name": "DELETE /api/v1/registry/classifiers/{{classifier_code}}",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/registry/classifiers/{{classifier_code}}", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "classifiers", "{{classifier_code}}"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/registry/classifiers/quarantine",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/registry/classifiers/quarantine?page=1&page_size=50",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "registry", "classifiers", "quarantine"],
+							"query": [
+								{ "key": "page", "value": "1" },
+								{ "key": "page_size", "value": "50" }
+							]
+						}
+					}
+				},
+				{
+					"name": "POST /api/v1/registry/classifiers/quarantine/{{pending_id}}/accept",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"admin_comment\": \"Принято\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/registry/classifiers/quarantine/{{pending_id}}/accept", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "classifiers", "quarantine", "{{pending_id}}", "accept"] }
+					}
+				},
+				{
+					"name": "POST /api/v1/registry/classifiers/quarantine/{{pending_id}}/reject",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"admin_comment\": \"Отклонено\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/registry/classifiers/quarantine/{{pending_id}}/reject", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "classifiers", "quarantine", "{{pending_id}}", "reject"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/registry/classifiers/pending",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/registry/classifiers/pending?page=1&page_size=50",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "registry", "classifiers", "pending"],
+							"query": [
+								{ "key": "page", "value": "1" },
+								{ "key": "page_size", "value": "50" }
+							]
+						}
+					}
+				},
+				{
+					"name": "POST /api/v1/registry/classifiers/pending/{{pending_id}}/accept",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"admin_comment\": \"Принято\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/registry/classifiers/pending/{{pending_id}}/accept", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "classifiers", "pending", "{{pending_id}}", "accept"] }
+					}
+				},
+				{
+					"name": "POST /api/v1/registry/classifiers/pending/{{pending_id}}/reject",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"admin_comment\": \"Отклонено\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/registry/classifiers/pending/{{pending_id}}/reject", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "classifiers", "pending", "{{pending_id}}", "reject"] }
+					}
+				},
+				{
+					"name": "POST /api/v1/registry/pending/{{pending_id}}/accept (bare)",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/registry/pending/{{pending_id}}/accept", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "pending", "{{pending_id}}", "accept"] }
+					}
+				},
+				{
+					"name": "POST /api/v1/registry/pending/{{pending_id}}/reject (bare)",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/registry/pending/{{pending_id}}/reject", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "pending", "{{pending_id}}", "reject"] }
+					}
+				},
+				{
+					"name": "POST /api/v1/registry/classifiers/import",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "[\n  {\n    \"code\": \"NEW-001\",\n    \"classifier_system\": \"MKS\",\n    \"full_name\": \"Новый классификатор\",\n    \"status\": \"active\"\n  }\n]"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/registry/classifiers/import", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "classifiers", "import"] }
+					}
+				}
+			]
+		},
+		{
+			"name": "🔤 Registry: Терминология",
+			"description": "Endpoint-ы управления терминологией. Проксируются через /api/v1/registry/*.",
+			"item": [
+				{
+					"name": "GET /api/v1/registry/terminology",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/registry/terminology?page=1&page_size=50",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "registry", "terminology"],
+							"query": [
+								{ "key": "page", "value": "1" },
+								{ "key": "page_size", "value": "50" }
+							]
+						}
+					}
+				},
+				{
+					"name": "GET /api/v1/registry/terminology/normalize",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/registry/terminology/normalize?term=ГОСТ",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "registry", "terminology", "normalize"],
+							"query": [{ "key": "term", "value": "ГОСТ" }]
+						}
+					}
+				},
+				{
+					"name": "GET /api/v1/registry/terminology/{{term_id}}",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/registry/terminology/{{term_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "terminology", "{{term_id}}"] }
+					}
+				},
+				{
+					"name": "POST /api/v1/registry/terminology",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"raw_term\": \"Толщина обшивки\",\n  \"standard_term\": \"толщина обшивки\",\n  \"term_type\": \"avatar\",\n  \"is_case_sensitive\": false,\n  \"definition\": \"Расстояние между наружной и внутренней поверхностями обшивки\",\n  \"scope\": {\n    \"source_types\": [\"GOST\"],\n    \"era\": [\"RF\"]\n  }\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/registry/terminology", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "terminology"] }
+					}
+				},
+				{
+					"name": "PUT /api/v1/registry/terminology/{{term_id}}",
+					"request": {
+						"method": "PUT",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"standard_term\": \"толщина обшивки (уточнённое)\",\n  \"definition\": \"Уточнённое определение\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/registry/terminology/{{term_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "terminology", "{{term_id}}"] }
+					}
+				},
+				{
+					"name": "DELETE /api/v1/registry/terminology/{{term_id}}",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/registry/terminology/{{term_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "terminology", "{{term_id}}"] }
+					}
+				},
+				{
+					"name": "POST /api/v1/registry/terminology/import",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "[\n  {\n    \"raw_term\": \"Допуск соосности\",\n    \"standard_term\": \"допуск соосности\",\n    \"term_type\": \"avatar\",\n    \"is_case_sensitive\": false,\n    \"definition\": \"Допуск, ограничивающий отклонение соосности\",\n    \"scope\": {\"source_types\": [\"GOST\"], \"era\": [\"RF\"]}\n  }\n]"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/registry/terminology/import", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "terminology", "import"] }
+					}
+				}
+			]
+		},
+		{
+			"name": "📋 Registry: Черновики",
+			"description": "Endpoint-ы черновиков реестра. Проксируются через /api/v1/drafts (GET) и /api/v1/registry/drafts (остальные).",
+			"item": [
+				{
+					"name": "POST /api/v1/registry/drafts",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"file_key\": \"import/test.pdf\",\n  \"document_key\": \"doc-key-001\",\n  \"status\": \"uploaded\",\n  \"raw_data\": {}\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/registry/drafts", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "drafts"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/registry/drafts",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/registry/drafts?page=1&page_size=50",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "registry", "drafts"],
+							"query": [
+								{ "key": "page", "value": "1" },
+								{ "key": "page_size", "value": "50" }
+							]
+						}
+					}
+				},
+				{
+					"name": "GET /api/v1/registry/drafts/{{draft_id}}",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/registry/drafts/{{draft_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "drafts", "{{draft_id}}"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/registry/drafts/{{draft_id}}/preview",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/registry/drafts/{{draft_id}}/preview", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "drafts", "{{draft_id}}", "preview"] }
+					}
+				},
+				{
+					"name": "PATCH /api/v1/registry/drafts/{{draft_id}}/status",
+					"request": {
+						"method": "PATCH",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"processing\",\n  \"confidence\": 0.95\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/registry/drafts/{{draft_id}}/status", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "drafts", "{{draft_id}}", "status"] }
+					}
+				},
+				{
+					"name": "DELETE /api/v1/registry/drafts/{{draft_id}}",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/registry/drafts/{{draft_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "drafts", "{{draft_id}}"] }
+					}
+				}
+			]
+		},
+		{
+			"name": "📂 Registry: Категории",
+			"description": "Endpoint-ы категорий документов. Проксируются через /api/v1/registry/*.",
+			"item": [
+				{
+					"name": "GET /api/v1/registry/categories",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/registry/categories?page=1&page_size=50",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "registry", "categories"],
+							"query": [
+								{ "key": "page", "value": "1" },
+								{ "key": "page_size", "value": "50" }
+							]
+						}
+					}
+				},
+				{
+					"name": "GET /api/v1/registry/categories/{{category_id}}",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/registry/categories/{{category_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "categories", "{{category_id}}"] }
+					}
+				},
+				{
+					"name": "POST /api/v1/registry/categories",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Судостроение\",\n  \"description\": \"Нормативные документы по судостроению\",\n  \"color\": \"#2196F3\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/registry/categories", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "categories"] }
+					}
+				},
+				{
+					"name": "PUT /api/v1/registry/categories/{{category_id}}",
+					"request": {
+						"method": "PUT",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Машиностроение\",\n  \"description\": \"Обновлённое описание\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/registry/categories/{{category_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "categories", "{{category_id}}"] }
+					}
+				},
+				{
+					"name": "DELETE /api/v1/registry/categories/{{category_id}}",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/registry/categories/{{category_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "categories", "{{category_id}}"] }
+					}
+				}
+			]
+		},
+		{
+			"name": "📊 Registry: Общие",
+			"description": "Общие endpoint-ы реестра: статистика и справочники.",
+			"item": [
+				{
+					"name": "GET /api/v1/registry/common/stats",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/registry/common/stats", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "common", "stats"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/registry/stats (shortcut)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/registry/stats", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "stats"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/registry/common/enums",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/registry/common/enums", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "common", "enums"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/registry/enums (shortcut)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/registry/enums", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "enums"] }
+					}
+				},
+				{
+					"name": "GET /api/v1/registry/health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/registry/health", "host": ["{{base_url}}"], "path": ["api", "v1", "registry", "health"] }
+					}
+				}
+			]
+		},
+		{
+			"name": "🔍 RAG Search",
+			"description": "Endpoint-ы семантического поиска через RAG. Проксируются в RAG Search Service (порт 8091).",
+			"item": [
+				{
+					"name": "POST /api/v1/rag/search",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": \"толщина обшивки Arc4\",\n  \"valid_at\": \"2026-06-23\",\n  \"filters\": {\n    \"document_ids\": [1, 2]\n  }\n}"
+						},
+						"url": { "raw": "{{base_url}}/api/v1/rag/search", "host": ["{{base_url}}"], "path": ["api", "v1", "rag", "search"] }
+					}
+				}
+			]
+		},
+		{
+			"name": "🚫 Deprecated / Интеграция (410)",
+			"description": "Endpoint-ы отключённого Integration Service. Возвращают 410 Gone.",
+			"item": [
+				{
+					"name": "GET /api/v1/meridian (410)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/meridian/test", "host": ["{{base_url}}"], "path": ["api", "v1", "meridian", "test"] }
+					},
+					"event": [{
+						"listen": "test",
+						"script": {
+							"exec": [
+								"pm.test('Returns 410 Gone', () => pm.expect(pm.response.code).to.equal(410));",
+								"pm.test('Error code SERVICE_REMOVED', () => {",
+								"  const json = pm.response.json();",
+								"  pm.expect(json.error.code).to.equal('SERVICE_REMOVED');",
+								"});"
+							]
+						}
+					}]
+				},
+				{
+					"name": "GET /api/v1/files (410)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/files/external/test", "host": ["{{base_url}}"], "path": ["api", "v1", "files", "external", "test"] }
+					},
+					"event": [{
+						"listen": "test",
+						"script": {
+							"exec": [
+								"pm.test('Returns 410 Gone', () => pm.expect(pm.response.code).to.equal(410));"
+							]
+						}
+					}]
+				},
+				{
+					"name": "GET /api/v1/external (410)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{base_url}}/api/v1/external/test", "host": ["{{base_url}}"], "path": ["api", "v1", "external", "test"] }
+					},
+					"event": [{
+						"listen": "test",
+						"script": {
+							"exec": [
+								"pm.test('Returns 410 Gone', () => pm.expect(pm.response.code).to.equal(410));"
+							]
+						}
+					}]
+				}
+			]
+		}
+	]
+}
