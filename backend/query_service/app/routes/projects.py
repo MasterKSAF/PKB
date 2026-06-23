@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
@@ -38,18 +39,21 @@ async def create_project(
 ):
     if body.status not in _VALID_STATUSES:
         raise HTTPException(status_code=422, detail={"error": {"code": "INVALID_STATUS", "message": f"status должен быть одним из: {', '.join(_VALID_STATUSES)}", "details": {}}})
-    async with db.begin():
-        project = ChatProject(
-            user_id=user_id,
-            code=body.code,
-            name=body.name,
-            description=body.description,
-            status=body.status,
-        )
-        db.add(project)
-        await db.flush()
-        await db.refresh(project)
-        snap = project
+    try:
+        async with db.begin():
+            project = ChatProject(
+                user_id=user_id,
+                code=body.code,
+                name=body.name,
+                description=body.description,
+                status=body.status,
+            )
+            db.add(project)
+            await db.flush()
+            await db.refresh(project)
+            snap = project
+    except IntegrityError:
+        raise HTTPException(status_code=409, detail={"error": {"code": "DUPLICATE_PROJECT", "message": "Проект с таким code уже существует", "details": {}}})
     return _to_response(snap, user_id)
 
 

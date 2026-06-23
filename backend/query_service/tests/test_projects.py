@@ -83,3 +83,12 @@ async def test_project_not_found(client):
 async def test_create_project_invalid_status(client):
     r = await client.post("/api/v1/chat/projects", json={"code": "BAD", "name": "Плохой статус", "status": "unknown"})
     assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_project_duplicate_code(client):
+    r = await client.post("/api/v1/chat/projects", json={"code": "DUPCODE", "name": "Проект 1"})
+    assert r.status_code == 201
+    r = await client.post("/api/v1/chat/projects", json={"code": "DUPCODE", "name": "Проект 2"})
+    assert r.status_code == 409
+    assert r.json()["detail"]["error"]["code"] == "DUPLICATE_PROJECT"
