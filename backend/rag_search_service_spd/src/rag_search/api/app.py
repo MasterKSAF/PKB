@@ -1,4 +1,4 @@
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, Depends, FastAPI, HTTPException
 
 from rag_search.core.config import settings
 from rag_search.models.search import SearchRequest, SearchResponse
@@ -6,6 +6,10 @@ from rag_search.services.search_service import SearchService
 
 
 router = APIRouter()
+
+
+def get_search_service() -> SearchService:
+    return SearchService()
 
 
 @router.get("/health")
@@ -17,13 +21,31 @@ async def health() -> dict[str, str]:
 
 
 @router.post("/search", response_model=SearchResponse)
-async def search_legacy(request: SearchRequest) -> SearchResponse:
-    return await SearchService().search(request)
+async def search_legacy(
+    request: SearchRequest,
+    service: SearchService = Depends(get_search_service),
+) -> SearchResponse:
+    try:
+        return await service.search(request)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc
 
 
 @router.post("/rag/search", response_model=SearchResponse)
-async def search_compatible(request: SearchRequest) -> SearchResponse:
-    return await SearchService().search(request)
+async def search_compatible(
+    request: SearchRequest,
+    service: SearchService = Depends(get_search_service),
+) -> SearchResponse:
+    try:
+        return await service.search(request)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc
 
 
 def create_app() -> FastAPI:
