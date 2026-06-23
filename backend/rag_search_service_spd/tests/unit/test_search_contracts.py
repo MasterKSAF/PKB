@@ -3,6 +3,7 @@ from pydantic import ValidationError
 
 from rag_search.api.app import app, get_search_service
 from rag_search.models.search import SearchRequest
+from rag_search.embeddings.stub import StubEmbeddingProvider
 from rag_search.services.search_service import SearchService
 
 
@@ -18,7 +19,10 @@ class FakeRepository:
 
 
 def override_service():
-    return SearchService(repository=FakeRepository())
+    return SearchService(
+        repository=FakeRepository(),
+        embedding_provider=StubEmbeddingProvider(),
+    )
 
 
 def test_search_request_defaults() -> None:

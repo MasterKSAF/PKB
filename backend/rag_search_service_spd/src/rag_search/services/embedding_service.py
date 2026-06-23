@@ -1,27 +1,24 @@
-from dataclasses import dataclass
-
-from rag_search.core.config import settings
-
-
-@dataclass(frozen=True)
-class EmbeddingResult:
-    embedding: list[float]
-    token_count: int
-    cost_usd: float
+from rag_search.embeddings.base import EmbeddingProvider, EmbeddingResult
+from rag_search.embeddings.factory import build_embedding_provider
 
 
-class StubEmbeddingProvider:
-    supports_dense = False
+class EmbeddingService:
+    def __init__(
+        self,
+        provider: EmbeddingProvider | None = None,
+    ) -> None:
+        self.provider = provider or build_embedding_provider()
 
     def create_embedding_with_usage(self, text: str) -> EmbeddingResult:
-        token_count = len(text.split())
+        return self.provider.create_embedding_with_usage(text)
 
-        return EmbeddingResult(
-            embedding=[0.0] * int(settings.EMBEDDING_DIM),
-            token_count=token_count,
-            cost_usd=0.0,
-        )
+    def create_embedding(self, text: str) -> list[float]:
+        return self.create_embedding_with_usage(text).embedding
 
 
-def build_embedding_provider():
-    return StubEmbeddingProvider()
+__all__ = [
+    "EmbeddingProvider",
+    "EmbeddingResult",
+    "EmbeddingService",
+    "build_embedding_provider",
+]
