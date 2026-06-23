@@ -3,12 +3,18 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel
-
+from pydantic import BaseModel, field_validator
 
 class DocumentVersionSchema(BaseModel):
     id: str
     document_id: str
+
+    @field_validator('id', 'document_id', mode='before')
+    @classmethod
+    def coerce_to_str(cls, v):
+        if isinstance(v, (int, float)):
+            return str(v)
+        return v
     version_number: Optional[int] = None
     file_hash_sha256: Optional[str] = None
     file_size_bytes: Optional[int] = None
@@ -24,4 +30,5 @@ class DocumentVersionSchema(BaseModel):
 
     model_config = {
         'extra': 'ignore',
+        'from_attributes': True,
     }

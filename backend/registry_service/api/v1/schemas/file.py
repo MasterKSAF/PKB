@@ -18,4 +18,5 @@ class FileSchema(BaseModel):
 
     model_config = {
         'extra': 'ignore',
+        'from_attributes': True,
     }
