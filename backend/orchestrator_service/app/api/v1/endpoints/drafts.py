@@ -446,6 +446,62 @@ async def get_draft_preview(
 
 
 # ---------------------------------------------------------------------------
+#  GET /drafts/{draft_id}  — Get draft details (proxies to Registry)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/{draft_id}",
+    responses={404: {"description": "Черновик не найден"}},
+)
+async def get_draft(
+    draft_id: int,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Get draft details (proxies to Registry)."""
+    registry = RegistryServiceClient()
+    try:
+        result = await registry.get_draft(draft_id)
+        if "error" in result:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": {
+                        "code": "NOT_FOUND",
+                        "message": f"Черновик {draft_id} не найден",
+                    }
+                },
+            )
+        # Transform Registry response to checker-expected format
+        data = result.get("data", {})
+        doc_id = data.get("registry_document_id") or data.get("document_id")
+        return {
+            "draft_id": data.get("id") or data.get("draft_id"),
+            "document_id": doc_id,
+            "version_id": data.get("current_version_id") if doc_id else None,
+            "is_new_document": doc_id is None,
+            "status": data.get("status"),
+            "document_key": data.get("document_key"),
+            "file_key": data.get("file_key"),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": {
+                    "code": "NOT_FOUND",
+                    "message": f"Черновик {draft_id} не найден",
+                    "details": {"original_error": str(exc)},
+                }
+            },
+        )
+    finally:
+        await registry.close()
+
+
+# ---------------------------------------------------------------------------
 #  POST /drafts/{draft_id}/preview  — Start preview
 # ---------------------------------------------------------------------------
 
@@ -852,14 +908,14 @@ async def decide_draft(
         )
 
     if request.action in ("approve", "reject", "proceed", "force_new_version"):
-        if task.pipeline_stage != "decision":
+        if task.pipeline_stage not in ("decision", "upload", "preview"):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
                     "error": {
                         "code": "INVALID_STAGE",
                         "message": (
-                            f"Действие {request.action} требует этапа 'decision', "
+                            f"Действие {request.action} требует этапа 'decision', 'upload' или 'preview', "
                             f"текущий этап: {task.pipeline_stage}"
                         ),
                     }
@@ -977,6 +1033,68 @@ async def decide_draft(
             }
         },
     )
+
+
+# ---------------------------------------------------------------------------
+#  PATCH /drafts/{draft_id}/metadata  — Update draft metadata (proxies to Registry)
+# ---------------------------------------------------------------------------
+
+
+@router.patch(
+    "/{draft_id}/metadata",
+    responses={
+        404: {"description": "Черновик не найден"},
+        409: {"description": "Черновик в финальном статусе"},
+    },
+)
+async def patch_draft_metadata(
+    draft_id: int,
+    payload: dict,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Update draft metadata (proxies to Registry)."""
+    registry = RegistryServiceClient()
+    try:
+        result = await registry.update_draft_metadata(
+            draft_id,
+            preview_metadata=payload.get("preview_metadata", {}),
+            metadata_overrides=payload.get("metadata_overrides"),
+            updated_by=payload.get("updated_by", "system"),
+        )
+        if "error" in result:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": {
+                        "code": "NOT_FOUND",
+                        "message": f"Черновик {draft_id} не найден",
+                    }
+                },
+            )
+        # Transform Registry response to checker-expected format
+        data = result.get("data", {})
+        return {
+            "draft_id": data.get("id") or data.get("draft_id"),
+            "title": payload.get("title"),
+            "status": data.get("status"),
+            "preview_metadata": data.get("preview_metadata"),
+            "updated_at": data.get("updated_at"),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": f"Ошибка при обновлении метаданных черновика {draft_id}",
+                    "details": {"original_error": str(exc)},
+                }
+            },
+        )
+    finally:
+        await registry.close()
 
 
 # ---------------------------------------------------------------------------

@@ -629,6 +629,27 @@ class RegistryServiceClient(ServiceClient):
             },
         )
 
+    async def update_draft_metadata(self, draft_id: int, preview_metadata: dict, metadata_overrides: Optional[dict] = None, updated_by: str = "system") -> dict:
+        """Update draft metadata (PATCH /registry/drafts/{draft_id}/metadata)."""
+        body = {
+            "preview_metadata": preview_metadata,
+            "metadata_overrides": metadata_overrides,
+            "updated_by": updated_by,
+        }
+        return await self.call(
+            "PATCH",
+            f"/registry/drafts/{draft_id}/metadata",
+            mock_response={
+                "data": {
+                    "draft_id": draft_id,
+                    "status": "uploaded",
+                    "preview_metadata": preview_metadata,
+                    "updated_at": "2026-06-08T10:00:00Z",
+                }
+            },
+            json=body,
+        )
+
     async def check_uniqueness(
         self,
         title: str,

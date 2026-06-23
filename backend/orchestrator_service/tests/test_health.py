@@ -150,7 +150,8 @@ class TestOpenAPIEndpoints:
         assert "/api/v1/documents/{doc_id}/reprocess" in paths
         # GET /documents/{doc_id}/tasks — задачи документа
         assert "/api/v1/documents/{doc_id}/tasks" in paths
-        # Удалённые read-эндпоинты не должны присутствовать (GET)
-        assert "get" not in paths.get("/api/v1/drafts/", {})  # list_drafts удалён
-        assert "get" not in paths.get("/api/v1/drafts/{draft_id}", {})  # get_draft удалён
+        # list_drafts — не должен присутствовать (GET), удалён при рефакторинге
+        assert "get" not in paths.get("/api/v1/drafts/", {})
+        # GET /drafts/{draft_id} — прокси в Registry (добавлен для совместимости)
+        assert "get" in paths.get("/api/v1/drafts/{draft_id}", {})
 

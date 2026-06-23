@@ -273,3 +273,17 @@ async def get_task_steps(
         total=len(steps),
         steps=step_items,
     )
+
+
+@router.get(
+    "/{task_id}/status",
+    response_model=TaskStatusResponse,
+    responses={404: {"description": "Задача не найдена"}},
+)
+async def get_task_status(
+    task_id: int,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> TaskStatusResponse:
+    """Get task status by ID (alias for GET /{task_id})."""
+    return await get_task_by_id(task_id, current_user, db)

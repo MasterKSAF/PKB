@@ -150,7 +150,7 @@ class DocumentApprovalPipeline(PipelineDef):
             method="GET",
             path="/api/v1/drafts/{draft_id}/preview/status",
             port=8081,
-            params={"longpoll": 0},
+            params={"longpoll": 1},
             expected_status={200, 404},
             needs_auth=True,
             skip_if=_draft_skipped,

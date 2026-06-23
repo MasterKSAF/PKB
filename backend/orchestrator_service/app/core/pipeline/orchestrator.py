@@ -486,21 +486,55 @@ class PipelineOrchestrator:
                 f"Cannot approve task {task_id}: already in terminal state {task.status}"
             )
 
-        # --- Step 1: Create document in Registry (OR-13) ---
+        # --- Step 0: Collect draft metadata from Registry ---
         registry = RegistryServiceClient()
         try:
-            doc_result = await registry.create_document({
-                "draft_id": draft_id,
-                "metadata_overrides": metadata_overrides or {},
-            })
+            draft_result = await registry.get_draft(draft_id)
+            draft_data = draft_result.get("data", {})
+            preview_result = await registry.get_draft_preview(draft_id)
+            preview_data = preview_result.get("data", {})
+        except Exception as exc:
+            logger.error(f"Failed to get draft data from Registry: {exc}")
+            draft_data = {}
+            preview_data = {}
+
+        # Build document payload from draft + preview + overrides
+        doc_payload = {
+            "title": preview_data.get("title") or draft_data.get("title_key", f"Draft {draft_id}"),
+            "doc_code": preview_data.get("doc_code") or draft_data.get("document_key", f"DRAFT-{draft_id}"),
+            "era": preview_data.get("era"),
+            "source_type": preview_data.get("source_type"),
+            "jurisdiction": preview_data.get("jurisdiction"),
+            "mks_oks_code": preview_data.get("mks_oks_code"),
+            "okstu_code": preview_data.get("okstu_code"),
+            "issuing_body": preview_data.get("issuing_body"),
+            "udk_code": preview_data.get("udk_code"),
+            "draft_id": draft_id,
+            "status": "uploaded",
+        }
+        # Apply user overrides on top
+        if metadata_overrides:
+            doc_payload.update(metadata_overrides)
+
+        # --- Step 1: Create document in Registry (OR-13) ---
+        try:
+            doc_result = await registry.create_document(doc_payload)
             doc_data = doc_result.get("data", {})
-            document_id: Optional[int] = doc_data.get("document_id")
+            document_id: Optional[int] = doc_data.get("document_id") or doc_data.get("id")
             if not document_id:
                 raise ValueError(
                     f"Registry create_document returned no document_id. "
                     f"Response: {doc_result}"
                 )
-            version_id: Optional[int] = doc_data.get("version_id")
+            # version_id может быть 'v1-75' (строка) или числом
+            raw_vid = doc_data.get("version_id")
+            if raw_vid is not None:
+                try:
+                    version_id = int(str(raw_vid).lstrip("v").split("-")[0])
+                except (ValueError, IndexError):
+                    version_id = int(raw_vid) if isinstance(raw_vid, (int, float)) else None
+            else:
+                version_id = None
             is_new_document: bool = doc_data.get("is_new_document", True)
         except Exception as exc:
             logger.error(

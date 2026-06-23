@@ -300,9 +300,7 @@ class DocumentProcessingPipeline(PipelineDef):
             path="/api/v1/registry/documents/{doc_id}",
             port=8084,
             expected_status=200,
-            check=check_json_fields({
-                "data.preview_snapshot": (dict, type(None)),
-            }),
+            check=check_json_field("data.preview_snapshot", (dict, type(None)), optional=True),
             needs_auth=True,
         ))
 

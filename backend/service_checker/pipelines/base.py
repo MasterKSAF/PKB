@@ -592,6 +592,8 @@ class PipelineRunner:
                     "term_id": ["id", "term_id", "termId"],
                     "message_id": ["id", "messageId", "message_id"],
                     "task_id": ["task_id", "taskId"],
+                    "task_id_2": ["task_id", "taskId"],
+                    "draft_id_2": ["draft_id", "draftId", "id"],
                     "file_key": ["file_key", "fileKey", "key"],
                     "access_token": ["access_token"],
                     "refresh_token": ["refresh_token"],

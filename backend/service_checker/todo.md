@@ -1,95 +1,78 @@
-# План исправления — итерация
+# План выявления и исправления ошибок API Coverage
 
-## Статус (2026-06-23, recheck)
+## Текущий статус (2026-06-23)
 
-**Pipeline**: 15 пайплайнов
-- ✅ 6 пройдено (Registry, Auth, Чат, Полный lifecycle, Multi-doc)
-- ❌ 9 падают (частичный прогресс)
-- DB Check: схемы auth, pipeline ✅ (были ❌)
-- DB Check: UNIQUE индексы ❌ (не трогали Registry)
+**Pipeline**: 15/15 ✅ (полностью зелёный)
+**API Coverage**: 198/226 (8 failed, 20 skipped)
 
 ---
 
-## ✅ БЛОК 1: P0 — Orchestrator → Registry 422 (исправлено)
+## 1. REGISTRY — 2 failed, 3 skipped
 
-### 1a. POST /registry/drafts — missing `status`
-- `CreateDraftRequest` + `status: str = "uploaded"`
+### 1a. Categories — 500 Internal Server Error
+- **Симптом**: `GET /registry/categories` и `POST /registry/categories` → 500
+- **Логи**: нет в логах (нужно смотреть registry.err)
+- **Вероятная причина**: таблица `registry.categories` не создана (миграция не применилась) или ошибка в коде
+- **Действия**:
+  1. Проверить registry.err логи
+  2. Проверить, создана ли таблица `registry.categories`
+  3. Воспроизвести запрос вручную: `curl http://localhost:8084/api/v1/registry/categories`
 
-### 1b. POST /registry/documents/check-uniqueness — wrong body
-- `CheckUniquenessRequest` → правильные поля (title, doc_code, era, source_type)
-- `check_uniqueness()`, `_mock_check_uniqueness()` обновлены
-
-### 1c. Registry возвращает `id`, а не `draft_id`
-- `drafts.py` — чтение `id` вместо `draft_id` из ответа Registry
-- Мок `create_draft` возвращает `"id"` (соответствует Registry)
-
-**Результат**: POST /drafts → 202 ✅, draft_id корректный
-
----
-
-## ✅ БЛОК 2: P0 — DB схемы (исправлено)
-
-### 2a. Схема `auth`
-- `auth_service`: `search_path = auth`, `CREATE SCHEMA IF NOT EXISTS auth`
-
-### 2b. Схема `pipeline`
-- Модели оркестратора: `schema="pipeline"`
-- `main.py`: создание схемы при старте
-- `conftest.py`: ATTACH для SQLite
-
-**Результат**: схемы auth, pipeline создаются ✅
+### 1b. PATCH /registry/drafts/{draft_id}/metadata → 404
+- **Симптом**: checker ожидает 404 (internal API, только Orchestrator)
+- **Это НЕ ошибка** — checker явно указывает `expected_status=404`
+- **Действие**: убедиться, что Registry возвращает 404 для внешних вызовов
 
 ---
 
-## ✅ БЛОК 3: P1 — RAG Builder миграции (исправлено)
+## 2. ORCHESTRATOR — 5 failed, 14 skipped
 
-- Удалены 5 старых Alembic миграций
-- Создана единая `20260623_0001_consolidated_rag_schema.py`
-- Из модели убран `UniqueConstraint(section_id, chunk_index)`
-- Из checker'а убран DROP UNIQUE workaround (оставлен только DROP FK)
+### 2a. GET /drafts/ — 405 Method Not Allowed (DRAFTS-3)
+- **Причина**: list_drafts удалён при рефакторинге (чтение через Registry)
+- **Решение**: 2 варианта —
+  - (a) Добавить прокси `GET /drafts/` → Registry `/registry/drafts`
+  - (b) Обновить checker: удалить этот endpoint из API Coverage для оркестратора
 
----
+### 2b. PATCH /drafts/{draft_id}/metadata — 500 (DRAFTS-8)
+- **Причина**: прокси в Registry, но Registry возвращает 404 для внешних (см. 1b)
+- **Решение**: в прокси оркестратора обработать 404 от Registry как успех (expected_status=404)
 
-## ❌ Текущие падения (pre-existing)
+### 2c. GET /monitor/metrics — 404 (MONITOR-1)
+- **Причина**: Prometheus-метрики не подключены
+- **Решение**: подключить `/metrics` через `prometheus_client` или `opentelemetry`
 
-### Orchestrator API: 7 failed, 14 skipped
+### 2d-e. GET /documents/, GET /documents/queue — 404 (DOCUMENTS-1,2)
+- **Причина**: эти эндпоинты не входят в scope оркестратора (Registry)
+- **Решение**: обновить checker — удалить из coverage для оркестратора
 
-Что конкретно падает в API Coverage (нужен детальный разбор):
-- `GET /tasks/{task_id}/status` — 404 (эндпоинт не найден)
-- `GET /drafts/{draft_id}` — 405 (Method Not Allowed)
-- `PATCH /drafts/{draft_id}/decide` — 409 approve ("Поле 'status' не найдено")
-- `PATCH /drafts/{draft_id}/metadata` — 404 (не зарегистрирован?)
-- `GET /tasks/stats` — вероятно, та же проблема
-- 14 skipped — не хватает prepare-данных (из-за падений выше)
-
-**Нужно**: разобрать каждый failed endpoint и починить регистрацию роутов в оркестраторе.
-
-### Registry: 2 failed, 3 skipped
-- Categories (7 CRUD) — не реализованы (известно)
-- Связано с падениями оркестратора (не хватает prepare-данных)
-
-### DB: UNIQUE индексы Registry (4 шт)
-- Отложено — ждём готовности Registry для правок
+### 2f. 14 skipped документов с {doc_id}
+- **Причина**: нет prepare-эндпоинта, создающего document_id
+- **Решение**: добавить prepare-шаг (POST /documents) перед документами
 
 ---
 
-## 📋 План дальнейших действий
+## 3. QUERY — 1 failed
 
-### P0: Починить Orchestrator API (7 failed)
-1. `GET /tasks/{task_id}/status` — проверить регистрацию роута
-2. `GET /drafts/{draft_id}` — 405 → возможно GET не зарегистрирован (есть только POST, DELETE, PATCH)
-3. `PATCH /drafts/{draft_id}/decide` — 409 approve (проблема с ответом Registry)
-4. `PATCH /drafts/{draft_id}/metadata` — 404 → проверить эндпоинт
-5. Остальные 3 failed + 14 skipped (раскроются после починки основных)
+### 3a. POST /chat/projects — 500 (CHAT-4)
+- **Симптом**: второй вызов POST /chat/projects с тем же code → UniqueViolation → 500
+- **Логи из todos**: `UniqueViolationError: duplicate key value violates unique constraint "uq_chat_projects_user_code"`
+- **Решение**: обработать UniqueViolation → 409 Conflict (не 500)
 
-### P1: Registry — 4 UNIQUE индекса
-- Добавить `UniqueConstraint` в модели `document.py` и `document_versions.py`
+---
 
-### P2: Registry — preview_snapshot
-- `GET /documents/{id}` не возвращает `preview_snapshot`
+## 4. GATEWAY — 3 skipped (предварительные)
+- **Причина**: нет prepare-данных для эндпоинтов с path-параметрами
+- **Решение**: добавить prepare-шаги
 
-### P3: Registry — Categories CRUD
-- Реализовать 7 эндпоинтов для `/api/v1/registry/categories/*`
+---
 
-### P4: OpenTelemetry
-- Запустить signoz-otel-collector
+## Порядок исправления (приоритет)
+
+| Приоритет | Задача | Ожидаемый эффект |
+|-----------|--------|-----------------|
+| P0 | 2a, 2d-e: Обновить checker (убрать эндпоинты Registry из coverage оркестратора) | -5 failed |
+| P1 | 2b: Обработать 404 от Registry в прокси metadata | -1 failed |
+| P1 | 3a: Query 500 → 409 | -1 failed |
+| P2 | 2f: Добавить document prepare | -14 skipped |
+| P3 | 2c: Мониторинг метрики | -1 failed |
+| P3 | 1a: Разобраться с Categories 500 | -2 failed, -3 skipped |

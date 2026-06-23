@@ -145,7 +145,7 @@ class OrchestratorDraftLifecyclePipeline(PipelineDef):
             method="GET",
             path="/api/v1/drafts/{draft_id}/preview/status",
             port=8081,
-            params={"longpoll": 0},
+            params={"longpoll": 1},
             expected_status={200, 404},
             check=check_json_field("status", str),
             needs_auth=True,

@@ -14,15 +14,17 @@
 - Черновики и документы живут в Registry.
 - Orchestrator обращается к Registry через RegistryServiceClient.
 
-### 2.1. Scope эндпоинтов оркестратора (23.06.2026, уточнено)
-Orchestrator **не проксирует чтение Registry**. Чтение черновиков (`GET /drafts`, `GET /drafts/{id}`)
-и документов (`GET /documents/{id}`, `/pages/*`, `/file`, `/history`, `/parameters`, `/versions`)
+### 2.1. Scope эндпоинтов оркестратора (23.06.2026, обновлено)
+Оркестратор **проксирует чтение и обновление черновиков** в Registry для обратной совместимости.
+Прямое чтение документов (`GET /documents/{id}`, `/pages/*`, `/file`, `/history`, `/parameters`, `/versions`)
 — зона Registry, доступная напрямую через Gateway.
 
-В оркестраторе остаются только:
+В оркестраторе:
 - `POST /drafts` — создание черновика (загрузка файла)
+- `GET /drafts/{draft_id}` — прокси в Registry (для совместимости с чекером)
 - `POST /drafts/{draft_id}/preview`, `GET /drafts/{draft_id}/preview*` — управление preview
 - `PATCH /drafts/{draft_id}/decide` — решение по черновику
+- `PATCH /drafts/{draft_id}/metadata` — прокси в Registry (для совместимости)
 - `DELETE /drafts/{draft_id}` — удаление черновика
 - `GET /drafts/{draft_id}/tasks` — задачи черновика
 - `POST /documents/{doc_id}/reprocess` — переиндексация (P2I-9)
