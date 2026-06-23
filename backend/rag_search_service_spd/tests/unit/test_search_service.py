@@ -1,5 +1,6 @@
 import asyncio
 
+from rag_search.embeddings.stub import StubEmbeddingProvider
 from rag_search.models.search import (
     SearchChunkResult,
     SearchContextItem,
@@ -143,7 +144,10 @@ def test_hybrid_search_uses_rrf() -> None:
 
 def test_hybrid_degrades_to_sparse_with_stub_embedding_provider() -> None:
     repository = FakeRepository()
-    service = SearchService(repository=repository)
+    service = SearchService(
+        repository=repository,
+        embedding_provider=StubEmbeddingProvider(),
+    )
 
     response = run(
         service.search(
