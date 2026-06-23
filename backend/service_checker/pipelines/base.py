@@ -270,6 +270,7 @@ class PipelineRunner:
         if self._client is None:
             self._client = httpx.AsyncClient(
                 timeout=self.timeout,
+                follow_redirects=True,
                 trust_env=False,
             )
         return self._client
