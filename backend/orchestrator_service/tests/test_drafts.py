@@ -190,76 +190,6 @@ class TestCreateDraft:
 
 
 # ---------------------------------------------------------------------------
-#  GET /drafts  — List drafts
-#  GET /drafts
-# ---------------------------------------------------------------------------
-
-
-class TestListDrafts:
-    """Tests for GET /api/v1/drafts."""
-
-    URL = "/api/v1/drafts/"
-
-    def test_list_drafts_default(self, client: TestClient, auth_header: dict):
-        """List drafts returns paginated response."""
-        response = client.get(self.URL, headers=auth_header)
-        assert response.status_code == 200
-        data = response.json()
-        assert "items" in data
-        assert "total" in data
-        assert "page" in data
-        assert "page_size" in data
-
-    def test_list_drafts_with_filters(self, client: TestClient, auth_header: dict):
-        """List drafts with status and document_key filters."""
-        response = client.get(
-            self.URL,
-            headers=auth_header,
-            params={"status": "uploaded", "document_key": "doc-001", "page": 1, "page_size": 20},
-        )
-        assert response.status_code == 200
-
-    def test_list_drafts_invalid_page(self, client: TestClient, auth_header: dict):
-        """Negative page returns 422."""
-        response = client.get(
-            self.URL,
-            headers=auth_header,
-            params={"page": -1},
-        )
-        assert response.status_code == 422
-
-
-# ---------------------------------------------------------------------------
-#  GET /drafts/{draft_id}
-# ---------------------------------------------------------------------------
-
-
-class TestGetDraft:
-    """Tests for GET /api/v1/drafts/{draft_id}."""
-
-    URL = "/api/v1/drafts/{draft_id}"
-
-    def test_get_draft_found(self, client: TestClient, auth_header: dict):
-        """Existing draft returns full info."""
-        response = client.get(self.URL.format(draft_id=1), headers=auth_header)
-        assert response.status_code == 200
-        data = response.json()
-        assert data["draft_id"] == 1
-        assert "status" in data
-        assert "document_key" in data
-
-    def test_get_draft_not_found(self, client: TestClient, auth_header: dict):
-        """Non-existent draft returns 404.
-
-        In mock mode, RegistryServiceClient raises for draft_id >= 99999.
-        """
-        response = client.get(self.URL.format(draft_id=99999), headers=auth_header)
-        assert response.status_code == 404
-        data = response.json()
-        assert "error" in data.get("detail", data)
-
-
-# ---------------------------------------------------------------------------
 #  GET /drafts/{draft_id}/preview
 # ---------------------------------------------------------------------------
 
@@ -685,3 +615,46 @@ class TestDeleteDraft:
         assert response.status_code == 404
         data = response.json()
         assert "error" in data.get("detail", data)
+
+
+# ---------------------------------------------------------------------------
+#  GET /drafts/{draft_id}/tasks
+# ---------------------------------------------------------------------------
+
+
+class TestDraftTasks:
+    """Tests for GET /api/v1/drafts/{draft_id}/tasks."""
+
+    URL = "/api/v1/drafts/{draft_id}/tasks"
+
+    def test_draft_tasks_success(self, client: TestClient, auth_header: dict):
+        """Existing draft returns task list."""
+        # Create a draft first
+        create_resp = client.post(
+            "/api/v1/drafts/",
+            headers=auth_header,
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF content"), "application/pdf")},
+            data={"document_key": "doc-tasks-test", "source_type": "GOST"},
+        )
+        assert create_resp.status_code == 202
+        draft_id = create_resp.json()["draft_id"]
+
+        response = client.get(self.URL.format(draft_id=draft_id), headers=auth_header)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["draft_id"] == draft_id
+        assert "tasks" in data
+        assert isinstance(data["tasks"], list)
+        if data["tasks"]:
+            task = data["tasks"][0]
+            assert "task_id" in task
+            assert "status" in task
+            assert "pipeline_stage" in task
+
+    def test_draft_tasks_not_found(self, client: TestClient, auth_header: dict):
+        """Non-existent draft returns empty tasks (not 404)."""
+        response = client.get(self.URL.format(draft_id=99999), headers=auth_header)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["draft_id"] == 99999
+        assert data["tasks"] == []

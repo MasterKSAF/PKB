@@ -1,8 +1,10 @@
 """
 Tests for Documents API endpoints.
 
-В оркестраторе осталась только одна операция над документами —
-`POST /api/v1/documents/{doc_id}/reprocess` (P2I-9, pipeline-операция переиндексации).
+В оркестраторе остались:
+- `POST /api/v1/documents/{doc_id}/reprocess` (P2I-9, pipeline-операция переиндексации)
+- `GET /api/v1/documents/{doc_id}/tasks` — список pipeline-задач документа
+
 Все остальные GET /documents/*, POST /documents/{id}/versions, POST /documents/{id}/approve,
 DELETE /documents/{id} перенесены в registry-service
 (см. docs/api/registry_service_api.md, группа documents).
@@ -73,3 +75,34 @@ class TestDocumentReprocess:
             json={"mode": "full"},
         )
         assert response.status_code == 202
+
+
+# ---------------------------------------------------------------------------
+#  GET /api/v1/documents/{doc_id}/tasks
+# ---------------------------------------------------------------------------
+
+
+class TestDocumentTasks:
+    """Tests for GET /api/v1/documents/{doc_id}/tasks."""
+
+    TASKS_URL = "/api/v1/documents/{doc_id}/tasks"
+
+    def test_document_tasks_success(self, client: TestClient, auth_header: dict):
+        """Returns document tasks list with expected structure."""
+        response = client.get(
+            self.TASKS_URL.format(doc_id=1),
+            headers=auth_header,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "document_id" in data
+        assert "tasks" in data
+        assert data["document_id"] == 1
+        assert isinstance(data["tasks"], list)
+
+    def test_document_tasks_without_auth(self, client: TestClient):
+        """Returns 200 in mock mode."""
+        response = client.get(
+            self.TASKS_URL.format(doc_id=1),
+        )
+        assert response.status_code == 200

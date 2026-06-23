@@ -75,14 +75,6 @@ class RegistryServiceClient(ServiceClient):
         return cls._SEED_DRAFTS.get(draft_id)
 
     @classmethod
-    def _get_document(cls, storage: dict, doc_id: int) -> Optional[dict]:
-        """Get document from runtime or fall back to seed."""
-        doc = storage["documents"].get(doc_id)
-        if doc is not None:
-            return doc
-        return cls._SEED_DOCUMENTS.get(doc_id)
-
-    @classmethod
     def _all_drafts(cls, storage: dict) -> List[dict]:
         """Merge seed + runtime drafts (runtime shadows seed)."""
         merged = dict(cls._SEED_DRAFTS)
@@ -112,8 +104,6 @@ class RegistryServiceClient(ServiceClient):
         if endpoint == "/registry/drafts":
             if method == "POST":
                 return self._mock_create_draft(storage, kwargs.get("json", {}))
-            elif method == "GET":
-                return self._mock_list_drafts(storage, kwargs.get("params", {}))
             return default_mock
 
         if (
@@ -148,8 +138,6 @@ class RegistryServiceClient(ServiceClient):
         if endpoint == "/registry/documents":
             if method == "POST":
                 return self._mock_create_document(storage, kwargs.get("json", {}))
-            elif method == "GET":
-                return self._mock_list_documents(storage, kwargs.get("params", {}))
             return default_mock
 
         if (
@@ -172,11 +160,7 @@ class RegistryServiceClient(ServiceClient):
                 return self._mock_get_document_sections(storage, doc_id)
 
             if sub is None:
-                if method == "GET":
-                    return self._mock_get_document(storage, doc_id)
-                elif method == "PATCH":
-                    return self._mock_update_document(storage, doc_id, kwargs.get("json", {}))
-                elif method == "DELETE":
+                if method == "DELETE":
                     return self._mock_delete_document(storage, doc_id)
             return default_mock
 
@@ -236,25 +220,7 @@ class RegistryServiceClient(ServiceClient):
             }
         }
 
-    @classmethod
-    def _mock_list_drafts(cls, storage: dict, params: dict) -> dict:
-        page = int(params.get("page", 1))
-        page_size = int(params.get("page_size", 50))
-        status_filter = params.get("status")
 
-        items = cls._all_drafts(storage)
-        if status_filter:
-            items = [d for d in items if d.get("status") == status_filter]
-
-        total = len(items)
-        start = (page - 1) * page_size
-        end = start + page_size
-        page_items = [dict(d) for d in items[start:end]]
-
-        return {
-            "data": page_items,
-            "meta": {"total": total, "page": page, "page_size": page_size},
-        }
 
     @classmethod
     def _mock_update_draft_status(cls, storage: dict, draft_id: int, body: dict) -> dict:
@@ -328,50 +294,6 @@ class RegistryServiceClient(ServiceClient):
         }
         storage["documents"][doc_id] = doc
         return {"data": dict(doc)}
-
-    @classmethod
-    def _mock_get_document(cls, storage: dict, doc_id: int) -> dict:
-        doc = cls._get_document(storage, doc_id)
-        if doc is not None:
-            return {"data": dict(doc)}
-        return {"error": {"code": "NOT_FOUND", "message": f"Document {doc_id} not found"}}
-
-    @classmethod
-    def _mock_list_documents(cls, storage: dict, params: dict) -> dict:
-        page = int(params.get("page", 1))
-        page_size = int(params.get("page_size", 50))
-        status_filter = params.get("status")
-
-        items = cls._all_documents(storage)
-        if status_filter:
-            items = [d for d in items if d.get("status") == status_filter]
-
-        total = len(items)
-        start = (page - 1) * page_size
-        end = start + page_size
-        page_items = [dict(d) for d in items[start:end]]
-
-        return {
-            "data": page_items,
-            "meta": {"total": total, "page": page, "page_size": page_size},
-        }
-
-    @classmethod
-    def _mock_update_document(cls, storage: dict, doc_id: int, body: dict) -> dict:
-        doc = storage["documents"].get(doc_id)
-        if doc is None:
-            seed = cls._SEED_DOCUMENTS.get(doc_id)
-            if seed is None:
-                return {
-                    "error": {
-                        "code": "NOT_FOUND",
-                        "message": f"Document {doc_id} not found",
-                    }
-                }
-            doc = dict(seed)
-            storage["documents"][doc_id] = doc
-        doc.update(body)
-        return {"data": {"document_id": doc_id, **doc}}
 
     @classmethod
     def _mock_update_document_status(cls, storage: dict, doc_id: int, body: dict) -> dict:
@@ -511,29 +433,6 @@ class RegistryServiceClient(ServiceClient):
             json=document_data,
         )
 
-    async def get_document(self, document_id: int) -> dict:
-        """Get document by ID."""
-        return await self.call(
-            "GET",
-            f"/registry/documents/{document_id}",
-            mock_response={
-                "data": {
-                    "document_id": document_id,
-                    "title": "Test Document",
-                    "status": "active",
-                }
-            },
-        )
-
-    async def update_document(self, document_id: int, document_data: dict) -> dict:
-        """Update an existing document."""
-        return await self.call(
-            "PATCH",
-            f"/registry/documents/{document_id}",
-            mock_response={"data": {"document_id": document_id, **document_data}},
-            json=document_data,
-        )
-
     async def update_document_status(
         self,
         document_id: int,
@@ -613,26 +512,6 @@ class RegistryServiceClient(ServiceClient):
             },
         )
 
-    async def list_documents(
-        self,
-        page: int = 1,
-        page_size: int = 50,
-        status: Optional[str] = None,
-    ) -> dict:
-        """List documents with pagination."""
-        params = {"page": page, "page_size": page_size}
-        if status:
-            params["status"] = status
-        return await self.call(
-            "GET",
-            "/registry/documents",
-            mock_response={
-                "data": [],
-                "meta": {"total": 0, "page": page, "page_size": page_size},
-            },
-            params=params,
-        )
-
     # --- Drafts ---
 
     async def create_draft(
@@ -708,26 +587,6 @@ class RegistryServiceClient(ServiceClient):
                     "processed_pages": 3,
                 }
             },
-        )
-
-    async def list_drafts(
-        self,
-        page: int = 1,
-        page_size: int = 50,
-        status: Optional[str] = None,
-    ) -> dict:
-        """List drafts with pagination."""
-        params = {"page": page, "page_size": page_size}
-        if status:
-            params["status"] = status
-        return await self.call(
-            "GET",
-            "/registry/drafts",
-            mock_response={
-                "data": [],
-                "meta": {"total": 0, "page": page, "page_size": page_size},
-            },
-            params=params,
         )
 
     async def update_draft_status(

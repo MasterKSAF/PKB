@@ -59,21 +59,6 @@ class TestRegistryDrafts:
         assert "preview_not_supported" in data
 
     @pytest.mark.asyncio
-    async def test_list_drafts(self, reg_client):
-        """list_drafts returns paginated response."""
-        result = await reg_client.list_drafts()
-        assert "data" in result
-        assert "meta" in result
-
-    @pytest.mark.asyncio
-    async def test_list_drafts_with_filters(self, reg_client):
-        """list_drafts with status filter."""
-        result = await reg_client.list_drafts(
-            page=1, page_size=20, status="uploaded"
-        )
-        assert "data" in result
-
-    @pytest.mark.asyncio
     async def test_update_draft_status(self, reg_client):
         """update_draft_status returns updated info."""
         result = await reg_client.update_draft_status(

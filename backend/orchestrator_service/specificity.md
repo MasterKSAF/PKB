@@ -114,7 +114,17 @@ LLM-ответы проверяются на корректность форма
 - `rag_client.py`: эндпоинт `/rag/index` вместо `/rag/build`, старая структура ответа.
 - `citation_validator.py`: проверяет `idx >= 1` (1-based), а спецификация требует 0-based `[0, len(sources))`.
 
-### 2.5. GET /documents/* в оркестраторе — лишние эндпоинты (22.06)
+### 2.5. Чтение drafts/documents уходит в Registry (23.06)
+Оркестратор больше не проксирует чтение Registry.
+
+**Решение (23.06):**
+- `GET /api/v1/drafts`, `GET /api/v1/drafts/{id}` удалены из orchestrator — чтение черновиков через Registry напрямую.
+- Ответ Registry содержит только базовые поля черновика. Поля `task_id`, `has_notifications`, `critical_count` — только через `GET /api/v1/drafts/{id}/tasks`.
+- `GET /api/v1/documents/{id}/tasks` — новый endpoint в orchestrator для связи документа с задачами пайплайна.
+- Управление черновиками (POST, preview, decide, delete) — без изменений в orchestrator.
+- Gateway routing детализирован до уровня конкретных путей (не по префиксу).
+
+### 2.6. GET /documents/* в оркестраторе — лишние эндпоинты (22.06)
 В `app/api/v1/endpoints/documents.py` находилось ~700 LOC мок-эндпоинтов для чтения документов (list, get, status, file, history, errors, parameters, queue, pages/*, versions, approve, delete). Эти операции — зона `registry-service` (см. `docs/api/registry_service_api.md`, группа `documents`).
 
 **Причина появления:** исторически оркестратор проектировался как прокси, но позже был перепроектирован на draft-first с Registry как источником правды. GET-эндпоинты остались как неиспользуемый код.

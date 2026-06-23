@@ -1,51 +1,38 @@
-# Todo
+# Todo — Реорганизация endpoints: чтение drafts/documents → Registry
 
-## 1. Registry не имеет эндпоинта POST /registry/drafts
+> Создан: 23.06.2026
+> Статус: В работе
 
-> Создан: 22.06.2026
-> Статус: ✅ Выполнено
+## Контекст
 
-### Проблема
-`RegistryServiceClient.create_draft()` вызывает `POST /registry/drafts` на registry-service,
-но registry-service **не имеет** этого эндпоинта. Эндпоинт есть только в mock-клиенте
-оркестратора (`_generate_mock`). При `REGISTRY_SERVICE_MOCK=false` клиент делал
-реальный HTTP-запрос и получал 404.
+Архитектурное решение (23.06): чтение черновиков и документов уходит из Orchestrator
+в Registry. Orchestrator остаётся координатором пайплайна.
 
-### Сделано
-- [x] Добавлен fallback в `RegistryServiceClient.call()` — при 404 на `/registry/drafts*`
-      клиент переключается на in-memory mock с логом предупреждения
-- [x] Document-эндпоинты (`/registry/documents/*`) не затронуты
-- [x] Зафиксировано в `specificity.md` (п. 2.6)
-- [x] 304 тестов проходят
+## Блоки
 
-### Что остаётся
-- Registry service должен реализовать группу `/registry/drafts`
+### 1. Документация — зафиксировать решение
+- [x] `guide.md` — обновить п. 2.1: orchestrator не проксирует чтение Registry
+- [x] `specificity.md` — добавить п. 2.6 с новым решением
+- [x] `readme.md` — убрать GET /drafts, GET /drafts/{id} из таблицы; добавить GET /documents/{id}/tasks
 
----
+### 2. Удалить read-эндпоинты черновиков из orchestrator
+- [x] `drafts.py` — удалить `list_drafts` (`GET /drafts/`), `get_draft` (`GET /drafts/{draft_id}`)
+- [x] `drafts.py` — очистить неиспользуемые импорты (DraftItem, DraftListResponse, DraftDetailResponse)
+- [x] `schemas/drafts.py` — удалить `DraftItem`, `DraftListResponse`, `DraftDetailResponse`
+- [x] `schemas/__init__.py` — очистить экспорт удалённых схем
+- [x] `tests/test_drafts.py` — удалить TestListDrafts, TestGetDraft
+- [x] `tests/test_health.py` — убрать проверки удалённых путей
+- [x] `tests/test_monitor.py` — заменить GET /drafts на GET /drafts/1/tasks
+- [x] `tests/integration/test_draft_to_version.py` — убрать шаг GET /drafts/{id}
 
-## 2. Восстановление POST /documents/{doc_id}/reprocess
+### 3. Добавить GET /documents/{doc_id}/tasks
+- [x] `schemas/tasks.py` — добавить `DocumentTasksResponse`
+- [x] `documents.py` — добавить `GET /{doc_id}/tasks` endpoint
+- [x] `tests/test_documents_api.py` — добавить тесты DocumentTasks
 
-> Создан: 22.06.2026
-> Статус: ✅ Выполнено
-
-### Проблема
-Коммит `a739338` удалил `POST /documents/{doc_id}/reprocess` из оркестратора,
-но это pipeline-операция (P2I-9), требующая управления Celery-задачей.
-Оркестратор управляет индексацией и целостностью документов — reprocess должен быть здесь.
-
-### Сделано
-- [x] Восстановлен `app/schemas/documents.py` — ReprocessMode, ReprocessRequest, ReprocessResponse
-- [x] Восстановлен `app/api/v1/endpoints/documents.py` — POST /{doc_id}/reprocess
-- [x] Восстановлен `app/tasks/pipeline_indexation.py` — run_reprocess_step Celery task
-- [x] Обновлён `app/api/v1/api.py` — подключен documents router
-- [x] Обновлён `app/models/pipeline.py` — pipeline_type включает "reprocess"
-- [x] Обновлён `specificity.md` (п. 2.5)
-- [x] Восстановлен `tests/test_documents_api.py` — 5 тестов TestDocumentReprocess
-- [x] Восстановлена проверка в `tests/test_health.py` — `/api/v1/documents/{doc_id}/reprocess` в OpenAPI
-- [x] 309 тестов проходят (было 304 + 5 reprocess)
-
-### Не восстановлено
-- `tests/test_pipelines.py` — импортирует типы, удалённые из `app/schemas/documents.py`
-  (DocumentStatusProcessing, FormationPipeline, ChunkSummary и др.), которые относились
-  к GET /documents/* и были перенесены в registry-service. Восстановление файла
-  потребовало бы восстановления всей старой схемы документов, что противоречит архитектуре.
+### 4. Финальный обзор
+- [x] OpenAPI: `GET /api/v1/drafts/` и `GET /api/v1/drafts/{id}` отсутствуют
+- [x] OpenAPI: `GET /api/v1/documents/{doc_id}/tasks` присутствует
+- [x] `pytest` — 306 passed
+- [x] Целостность: manage-эндпоинты черновиков не затронуты
+- [x] Удалённые схемы не импортируются нигде

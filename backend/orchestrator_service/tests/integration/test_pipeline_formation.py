@@ -547,6 +547,151 @@ class TestRejectDraft:
 
 
 # ---------------------------------------------------------------------------
+#  start_pipeline — error paths
+# ---------------------------------------------------------------------------
+
+
+class TestStartPipelineErrors:
+    """Edge cases for start_pipeline."""
+
+    async def test_task_not_found_raises_value_error(
+        self, db_session: AsyncSession
+    ):
+        """start_pipeline with non-existent task raises ValueError."""
+        orchestrator = PipelineOrchestrator(db_session)
+        with pytest.raises(ValueError, match="Task not found: 99999"):
+            await orchestrator.start_pipeline(
+                draft_id=999, task_id=99999, file_key="f-test.pdf",
+                mime_type="application/pdf",
+            )
+
+    async def test_start_pipeline_with_image_triggers_ocr_branch(
+        self, db_session: AsyncSession
+    ):
+        """Image mime_type routes to OCR Service branch."""
+        task = await _create_task(db_session, draft_id=300, total_steps=3)
+        orchestrator = PipelineOrchestrator(db_session)
+
+        with patch(
+            "app.core.pipeline.orchestrator.get_trace_id",
+            return_value="trace-img-001",
+        ), patch(
+            "app.tasks.pipeline_formation.run_ocr_preview_step.delay",
+            new_callable=MagicMock,
+        ) as mock_ocr, patch(
+            "app.tasks.pipeline_formation.run_parser_preview_step.delay",
+            new_callable=MagicMock,
+        ) as mock_parser:
+            await orchestrator.start_pipeline(
+                draft_id=300, task_id=task.id,
+                file_key="f-image.png",
+                mime_type="image/png",
+            )
+
+        # Verify OCR branch was taken (parser should NOT be called)
+        mock_ocr.assert_called_once()
+        mock_parser.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+#  stop_duplicate / reject
+# ---------------------------------------------------------------------------
+
+
+class TestStopDuplicateDraft:
+    """stop_duplicate_draft flow."""
+
+    async def test_stop_duplicate_sets_status(
+        self, db_session: AsyncSession
+    ):
+        """stop_duplicate discards the draft and fails the task."""
+        task = await _create_task(db_session, draft_id=400, total_steps=1)
+        orchestrator = PipelineOrchestrator(db_session)
+
+        with patch(
+            "app.core.pipeline.orchestrator.RegistryServiceClient",
+        ) as mock_reg_cls:
+            mock_reg = mock_reg_cls.return_value
+            mock_reg.update_draft_status = AsyncMock()
+            mock_reg.close = AsyncMock()
+
+            await orchestrator.stop_duplicate_draft(
+                draft_id=400, task_id=task.id,
+            )
+
+        # Verify draft status was updated to discarded
+        mock_reg.update_draft_status.assert_awaited_once_with(
+            draft_id=400, status="discarded",
+        )
+
+        # Verify task was failed
+        repo = TaskRepository(db_session)
+        updated = await repo.get_task(task.id)
+        assert updated is not None
+        assert updated.status == TaskStatus.FAILED.value
+
+
+class TestApproveDraftMetadataOverrides:
+    """approve_draft with metadata_overrides."""
+
+    async def test_metadata_overrides_passed_to_create_document(
+        self, db_session: AsyncSession
+    ):
+        """Custom metadata_overrides propagate to Registry.create_document."""
+        task = await _create_task(
+            db_session, draft_id=500, total_steps=3,
+        )
+        # Advance to decision stage
+        repo = TaskRepository(db_session)
+        await repo.update_task_status(
+            task_id=task.id,
+            stage=TaskStage.DECISION.value,
+            step_name="preview_converter",
+            step_index=1,
+        )
+
+        orchestrator = PipelineOrchestrator(db_session)
+
+        with patch(
+            "app.core.pipeline.orchestrator.RegistryServiceClient",
+        ) as mock_reg_cls, patch(
+            "app.tasks.pipeline_formation.run_ocr_full_step.delay",
+            new_callable=MagicMock,
+        ), patch(
+            "app.tasks.pipeline_formation.run_parser_full_step.delay",
+            new_callable=MagicMock,
+        ), patch(
+            "app.tasks.pipeline_formation.run_converter_full_step.delay",
+            new_callable=MagicMock,
+        ), patch(
+            "app.tasks.pipeline_formation.run_registry_step.delay",
+            new_callable=MagicMock,
+        ):
+            mock_reg = mock_reg_cls.return_value
+            mock_reg.create_document = AsyncMock(return_value={
+                "data": {"document_id": 42, "version_id": 421},
+            })
+            mock_reg.create_draft_snapshot = AsyncMock()
+            mock_reg.close = AsyncMock()
+            mock_reg.update_draft_status = AsyncMock()
+
+            result = await orchestrator.approve_draft(
+                draft_id=500, task_id=task.id,
+                metadata_overrides={"title": "Custom Title", "doc_code": "CUSTOM-001"},
+            )
+
+        # Verify create_document was called with overrides
+        call_kwargs = mock_reg.create_document.call_args[0][0]
+        assert call_kwargs["metadata_overrides"] == {
+            "title": "Custom Title", "doc_code": "CUSTOM-001",
+        }
+
+        # Verify response contains document_id
+        assert result["document_id"] == 42
+        assert result["version_id"] == 421
+
+
+# ---------------------------------------------------------------------------
 #  on_step_failed — retry exhaustion
 # ---------------------------------------------------------------------------
 

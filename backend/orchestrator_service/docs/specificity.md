@@ -77,7 +77,7 @@ API черновиков и FSM документированы, но **UI сра
 
 Пустой документ (0 страниц после распознавания) не может быть завершён — документ не будет создан в Registry. Черновик переводится в `discarded` с кодом `EMPTY_DOCUMENT`. UI должен показывать сообщение об ошибке и предлагать загрузить файл заново. Реализовано в API.
 
-### A23. Черновики перенесены в Registry
+### A23. Черновики перенесены в Registry (resolved)
 
 Таблица черновиков перенесена из `pipeline.drafts` (БД Orchestrator) в `registry.drafts` (БД Registry). Добавлены новые поля. Управление — через Orchestrator, который вызывает Registry internal API. `pipeline.tasks` и `pipeline.task_steps` — новые таблицы в БД Orchestrator. `registry.documents.draft_id` — новое поле для связи документа с черновиком.
 
@@ -278,6 +278,22 @@ Enum: `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `RMRS`, `OTHER`
 - Ссылка на `common_api.md` § Координаты блоков (bbox)
 - Добавлен в пример JSON-запроса POST /rag/build
 
+### A50. `content_hash` и `context.score` в RAG Search отсутствуют в БД
+
+**Обнаружено:** 20.06.2026
+
+**Проблема:**
+- `content_hash` указан в `source` ответа RAG Search, но отсутствует в схеме `rag.document_chunks` и не вычисляется RAG Builder'ом при чанкинге
+- `context[].score` для соседних чанков не вычисляется — dense-поиск и reranker не обрабатывают соседние чанки
+
+**Решение (20.06.2026):**
+- `content_hash` убран из `source` в RAG Search API и из Query Service API (нечем заполнять, дедупликация выполняется на уровне документа)
+- `score` убран из `context[]` (соседние чанки не проходят rerank, score не вычисляется)
+
+**Затронутые файлы:**
+- `docs/api/rag_search_service_api.md` — удалены `content_hash` из source и `score` из context[]
+- `docs/api/query_service_api.md` — удалён `content_hash` из таблицы полей источников
+
 
 ---
 
@@ -319,8 +335,8 @@ Enum: `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `RMRS`, `OTHER`
 | API-S4 | Gateway: `/api/v1/tasks/*` маршрутизируется, но объявлен internal — нет RBAC-ограничения | 🔄 исправлено — Gateway разруливает internal-маршруты |
 | API-S5 | OCR/Parser: `document.pages[].width/height` — "в мм", но в `raw_ocr_v4` единицы пиксели | 🔄 исправлено |
 | API-S6 | OCR/Parser → Registry: множества `block[].type` и `section.type` не сопоставлены | 🔄 исправлено |
-| API-S7 | Orchestrator `reprocess`: дублирование `mode` и `options.engine` (могут противоречить) | 🔄 исправлено |
-| API-S8 | Orchestrator `reprocess`: ответ "аналогичен POST /drafts" — неясно, создаётся ли draft | 🔄 исправлено |
+| API-S7 | Registry `reprocess`: дублирование `mode` и `options.engine` (могут противоречить) | 🔄 исправлено |
+| API-S8 | Registry `reprocess`: ответ "аналогичен POST /drafts" — неясно, создаётся ли draft | 🔄 исправлено |
 | API-S9 | Query: статусы `processing`, `needs_clarification`, `source_conflict` отсутствуют в longpoll-логике | 🔄 исправлено — текущий FSM полный, эти статусы не используются |
 | API-S10 | Query `POST /chat/feedback`: два формата не разграничены (взаимоисключение?) | 🔄 исправлено |
 | API-S11 | Query `GET /chat/sessions/{id}`: longpoll устарел, но нет плана депрекации | 🔄 исправлено — longpoll удалён |

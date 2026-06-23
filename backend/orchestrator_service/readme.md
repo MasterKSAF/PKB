@@ -132,13 +132,12 @@ ReDoc: `http://localhost:8081/redoc`
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
 | POST | `/drafts` | Загрузка файла и создание черновика (multipart/form-data) |
-| GET | `/drafts` | Список черновиков с пагинацией |
-| GET | `/drafts/{draft_id}` | Информация о черновике |
 | GET | `/drafts/{draft_id}/preview` | Метаданные preview |
 | POST | `/drafts/{draft_id}/preview` | Запуск preview-фазы |
 | GET | `/drafts/{draft_id}/preview/status` | Статус preview (с longpoll) |
 | PATCH | `/drafts/{draft_id}/decide` | Решение: approve / reject |
 | DELETE | `/drafts/{draft_id}` | Удаление черновика |
+| GET | `/drafts/{draft_id}/tasks` | Список задач для черновика |
 
 ### Задачи (`/api/v1/tasks`)
 
@@ -146,16 +145,15 @@ ReDoc: `http://localhost:8081/redoc`
 |-------|----------|----------|
 | GET | `/tasks` | Список задач пайплайна с фильтрацией и пагинацией |
 | GET | `/tasks/stats` | Статистика по задачам (по статусам и этапам) |
-| GET | `/tasks/{task_id}` | Детальная информация о задаче |
-| GET | `/tasks/{task_id}/status` | Статус задачи с детализацией шагов |
+| GET | `/tasks/{task_id}` | Детальная информация о задаче со статусом и шагами |
 | GET | `/tasks/{task_id}/steps` | Список шагов задачи |
-| GET | `/drafts/{draft_id}/tasks` | Список задач для черновика |
 
 ### Документы (`/api/v1/documents`)
 
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
 | POST | `/documents/{doc_id}/reprocess` | Переиндексация документа (P2I-9) |
+| GET | `/documents/{doc_id}/tasks` | Список pipeline-задач документа |
 
 ### Служебные
 

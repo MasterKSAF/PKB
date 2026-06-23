@@ -1,9 +1,12 @@
 """
-Pydantic schemas for Drafts API (POST /drafts, GET /drafts, etc.).
+Pydantic schemas for Drafts API.
+
+Остались только схемы управления черновиками (POST, preview, decide).
+Чтение черновиков (GET /drafts, GET /drafts/{id}) — через Registry.
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
 
@@ -28,41 +31,6 @@ class DraftCreateResponse(BaseModel):
     )
     created_at: datetime = Field(..., description="Время создания")
 
-
-class DraftItem(BaseModel):
-    """Draft item in list response."""
-
-    draft_id: int = Field(..., description="ID черновика")
-    document_key: Optional[str] = Field(None, description="Ключ документа")
-    status: str = Field(..., description="Статус черновика")
-    file_key: Optional[str] = Field(None, description="Ключ файла")
-    created_by: Optional[str] = Field(None, description="Кто создал")
-    created_at: datetime = Field(..., description="Время создания")
-    updated_at: Optional[datetime] = Field(None, description="Время обновления")
-
-
-class DraftListResponse(BaseModel):
-    """Response for GET /drafts."""
-
-    items: List[DraftItem] = Field(default_factory=list, description="Список черновиков")
-    total: int = Field(0, description="Всего записей")
-    page: int = Field(1, description="Текущая страница")
-    page_size: int = Field(50, description="Записей на странице")
-
-
-class DraftDetailResponse(BaseModel):
-    """Full draft information."""
-
-    draft_id: int = Field(..., description="ID черновика")
-    document_key: Optional[str] = Field(None, description="Ключ документа")
-    file_key: Optional[str] = Field(None, description="Ключ файла")
-    status: str = Field(..., description="Статус черновика")
-    document_id: Optional[int] = Field(None, description="ID документа после approve")
-    version_id: Optional[int] = Field(None, description="ID версии документа")
-    is_new_document: bool = Field(True, description="Создан новый документ (true) или новая версия (false)")
-    created_by: Optional[str] = Field(None, description="Кто создал")
-    created_at: datetime = Field(..., description="Время создания")
-    updated_at: Optional[datetime] = Field(None, description="Время обновления")
 
 
 class PreviewMetadata(BaseModel):

@@ -23,7 +23,12 @@
 **Специфичные коды ошибок:**
 | HTTP | `error.code` | Описание |
 |------|-------------|----------|
-| 500 | `BUILD_FAILED` | Ошибка построения чанков, эмбеддингов или очистки старого индекса |
+
+### Группы
+
+| Группа | Описание |
+|--------|----------|
+| `build` | Построение чанков, вычисление эмбеддингов и индексация документа |
 
 ---
 
@@ -207,13 +212,7 @@ Orchestrator получает JSON из Registry (через `GET /registry/docu
       "section_id": 420010
     }
   ],
-  "errors": [
-    {
-      "code": "CHUNKING_FAILED",
-      "message": "Ошибка разбивки секции 420015: превышен лимит токенов",
-      "section_id": 420015
-    }
-  ]
+  "errors": []
 }
 ```
 
@@ -234,14 +233,13 @@ Orchestrator получает JSON из Registry (через `GET /registry/docu
 | `errors` | array | Массив критических ошибок (индексация не завершена) |
 | `errors[].code` | string | Код ошибки |
 | `errors[].message` | string | Описание |
-| `errors[].section_id` | bigint \| null | ID секции, к которой относится ошибка |
 
 ---
 
 ### DELETE /rag/build/{doc_id}
 
 Удаление всех чанков документа из векторного индекса.  
-Вызывается Orchestrator перед переиндексацией (через `POST /documents/{doc_id}/reprocess`).
+Вызывается Orchestrator в рамках reprocess (`POST /api/v1/registry/documents/{doc_id}/reprocess`) при `mode: reindex`.
 
 **Ответ `200`:**
 ```json
@@ -295,13 +293,13 @@ Orchestrator получает JSON из Registry (через `GET /registry/docu
 
 ---
 
-### Сводная таблица эндпоинтов
+### Содержание
 
-| Метод | Путь | Описание | Доступ к БД |
-|---|---|---|---|
-| `POST` | `/rag/build` | Чанкинг + Embeddings + построение индекса | **Пишет** |
-| `DELETE` | `/rag/build/{doc_id}` | Удаление чанков документа из индекса | **Пишет** |
-| `GET` | `/rag/build/{doc_id}/status` | Статус индексации (с longpoll) | **Читает** |
+| Метод | Путь | Описание |
+|-------|------|----------|
+| POST | `/rag/build` | Чанкинг + Embeddings + построение индекса |
+| DELETE | `/rag/build/{doc_id}` | Удаление чанков документа из индекса |
+| GET | `/rag/build/{doc_id}/status` | Статус индексации (longpoll) |
 
 ---
 

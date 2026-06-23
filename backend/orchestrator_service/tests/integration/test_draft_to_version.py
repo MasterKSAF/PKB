@@ -5,6 +5,8 @@ Verifies that:
   1. POST /drafts → returns draft_id, task_id
   2. PATCH /drafts/{id}/decide with approve → returns document_id, version_id, is_new_document
   3. document_id and version_id are present in task details
+
+Note: GET /drafts/{id} удалён из Orchestrator (чтение черновиков — Registry).
 """
 
 import pytest
@@ -14,7 +16,6 @@ from fastapi.testclient import TestClient
 class TestDraftToDocumentChain:
     """Chain: create draft → approve → get document and version."""
 
-    DRAFT_URL = "/api/v1/drafts/{draft_id}"
     DECIDE_URL = "/api/v1/drafts/{draft_id}/decide"
 
     @pytest.fixture
@@ -50,17 +51,7 @@ class TestDraftToDocumentChain:
         """Complete draft→document→version flow."""
         draft_id, task_id = created_draft_and_task
 
-        # Step 1: Get draft detail — should have document_id field
-        detail_resp = client.get(
-            self.DRAFT_URL.format(draft_id=draft_id),
-            headers=auth_header,
-        )
-        assert detail_resp.status_code == 200
-        detail_data = detail_resp.json()
-        assert detail_data["draft_id"] == draft_id
-        assert "document_id" in detail_data
-
-        # Step 2: Approve draft
+        # Step 1: Approve draft (GET /drafts/{id} удалён — чтение через Registry)
         decide_resp = client.patch(
             self.DECIDE_URL.format(draft_id=draft_id),
             headers=auth_header,

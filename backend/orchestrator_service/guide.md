@@ -14,13 +14,20 @@
 - Черновики и документы живут в Registry.
 - Orchestrator обращается к Registry через RegistryServiceClient.
 
-### 2.1. Scope эндпоинтов оркестратора (22.06.2026, уточнено)
-Orchestrator **не выставляет** GET-операции над документами. Чтение/CRUD документов — зона Registry (`/registry/documents/*`, см. `docs/api/registry_service_api.md`).
+### 2.1. Scope эндпоинтов оркестратора (23.06.2026, уточнено)
+Orchestrator **не проксирует чтение Registry**. Чтение черновиков (`GET /drafts`, `GET /drafts/{id}`)
+и документов (`GET /documents/{id}`, `/pages/*`, `/file`, `/history`, `/parameters`, `/versions`)
+— зона Registry, доступная напрямую через Gateway.
 
 В оркестраторе остаются только:
-- `/drafts/*` — управление черновиками (proxy к Registry + логика пайплайна)
-- `/documents/{doc_id}/reprocess` — переиндексация (P2I-9), управляется Celery-задачей
-- `/tasks/*` — мониторинг pipeline-задач (внутреннее, для админов)
+- `POST /drafts` — создание черновика (загрузка файла)
+- `POST /drafts/{draft_id}/preview`, `GET /drafts/{draft_id}/preview*` — управление preview
+- `PATCH /drafts/{draft_id}/decide` — решение по черновику
+- `DELETE /drafts/{draft_id}` — удаление черновика
+- `GET /drafts/{draft_id}/tasks` — задачи черновика
+- `POST /documents/{doc_id}/reprocess` — переиндексация (P2I-9)
+- `GET /documents/{doc_id}/tasks` — задачи документа
+- `GET /tasks*` — мониторинг pipeline-задач
 - `/system/health`, `/health/live`, `/health/ready` — health-check
 
 ### 3. Двухфазный pipeline

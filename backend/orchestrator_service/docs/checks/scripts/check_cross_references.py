@@ -136,9 +136,9 @@ print()
 print("[2] DraftItem — field consistency")
 print("-" * 40)
 
-# Orchestrator DraftItem must have core fields
-for field in ["draft_id", "task_id", "file_key", "document_key", "status",
-              "confidence", "preview_metadata", "document_id",
+# Orchestrator DraftItem must have core fields (file_key, document_key, confidence теперь только в Registry)
+for field in ["draft_id", "task_id", "status",
+              "preview_metadata", "document_id",
               "has_notifications", "critical_count", "created_at", "updated_at"]:
     check_pass(
         f"DraftItem Orchestrator has `{field}`",
@@ -230,6 +230,21 @@ check_pass(
 )
 
 print()
+
+# ------------------------------------------------------------------
+# 6. POST /documents/{doc_id}/reprocess response fields
+# ------------------------------------------------------------------
+print("[6] POST /documents/{doc_id}/reprocess — response")
+print("-" * 40)
+
+for field in ["task_id", "document_id", "status", "message"]:
+    check_pass(
+        f"reprocess response has `{field}` in orchestrator_service_api.md",
+        f"`{field}`",
+        include_pattern="orchestrator_service_api.md",
+        min_count=1
+    )
+# mode в reprocess — поле запроса, не ответа, исключено из проверки
 
 # Note: user_id in GET /documents/{id} response is correct and expected.
 

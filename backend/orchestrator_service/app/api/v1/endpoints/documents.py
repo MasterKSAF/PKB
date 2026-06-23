@@ -1,25 +1,29 @@
-"""Documents API endpoints — только pipeline-операция reprocess.
+"""Documents API endpoints — pipeline-операции и связь с задачами.
+
+Оркестратор управляет только:
+- `POST /documents/{id}/reprocess` (P2I-9) — переиндексация через Celery
+- `GET /documents/{id}/tasks` — список pipeline-задач документа
 
 Все остальные GET /documents/*, POST /documents/{id}/versions, POST /documents/{id}/approve,
 DELETE /documents/{id} перенесены в registry-service (см. docs/api/registry_service_api.md,
 группа documents).
-
-Здесь осталась только `POST /documents/{id}/reprocess` (P2I-9) — операция переиндексации,
-требующая управления Celery-задачей, поэтому она принадлежит оркестратору.
 """
 
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser, get_current_user
 from app.db.base import get_db
+from app.models.pipeline import Task
 from app.schemas.documents import (
     ReprocessRequest,
     ReprocessResponse,
 )
+from app.schemas.tasks import DocumentTasksResponse, DraftTaskItem
 
 logger = logging.getLogger(__name__)
 
@@ -68,4 +72,45 @@ async def reprocess_document(
         task_id=str(task.id),
         status="reprocessing_queued",
         created_at=datetime.now(timezone.utc),
+    )
+
+
+# ---------------------------------------------------------------------------
+#  GET /documents/{doc_id}/tasks  — Pipeline tasks for a document
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/{doc_id}/tasks",
+    response_model=DocumentTasksResponse,
+    responses={404: {"description": "Документ не найден"}},
+)
+async def get_document_tasks(
+    doc_id: int,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> DocumentTasksResponse:
+    """List pipeline tasks for a document."""
+    result = await db.execute(
+        select(Task)
+        .where(Task.document_id == doc_id, Task.deleted_at.is_(None))
+        .order_by(Task.created_at.desc())
+    )
+    tasks = list(result.scalars().all())
+
+    task_items = [
+        DraftTaskItem(
+            task_id=t.id,
+            status=t.status,
+            pipeline_stage=t.pipeline_stage,
+            initiated_by=t.created_by,
+            created_at=t.created_at,
+            updated_at=t.updated_at,
+        )
+        for t in tasks
+    ]
+
+    return DocumentTasksResponse(
+        document_id=doc_id,
+        tasks=task_items,
     )

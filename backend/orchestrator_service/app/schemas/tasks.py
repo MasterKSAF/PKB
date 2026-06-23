@@ -109,3 +109,10 @@ class DraftTasksResponse(BaseModel):
 
     draft_id: int = Field(..., description="ID черновика")
     tasks: List[DraftTaskItem] = Field(default_factory=list, description="Список задач")
+
+
+class DocumentTasksResponse(BaseModel):
+    """Response for GET /documents/{doc_id}/tasks."""
+
+    document_id: int = Field(..., description="ID документа")
+    tasks: List[DraftTaskItem] = Field(default_factory=list, description="Список задач пайплайна")

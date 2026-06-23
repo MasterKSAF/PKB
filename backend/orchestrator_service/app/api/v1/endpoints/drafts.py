@@ -1,4 +1,7 @@
-"""Drafts API endpoints — upload, list, view, preview, decide, delete."""
+"""Drafts API endpoints — управление черновиками (POST, preview, decide, delete).
+
+Чтение черновиков (GET /drafts, GET /drafts/{id}) — через Registry.
+"""
 
 import hashlib
 import json
@@ -30,9 +33,6 @@ from app.schemas.drafts import (
     DecideRequest,
     DecideResponse,
     DraftCreateResponse,
-    DraftDetailResponse,
-    DraftItem,
-    DraftListResponse,
     DraftPreviewResponse,
     DraftPreviewStatusResponse,
     PreviewMetadata,
@@ -377,108 +377,6 @@ async def create_draft(
         title_key=title_key,
         created_at=datetime.now(timezone.utc),
     )
-
-
-# ---------------------------------------------------------------------------
-#  GET /drafts  — List drafts
-# ---------------------------------------------------------------------------
-
-
-@router.get(
-    "/",
-    response_model=DraftListResponse,
-    responses={400: {"description": "Ошибка пагинации"}},
-)
-async def list_drafts(
-    document_key: Optional[str] = Query(None, description="Ключ документа"),
-    status: Optional[str] = Query(None, description="Статус черновика"),
-    page: int = Query(1, ge=1, description="Номер страницы"),
-    page_size: int = Query(50, ge=1, le=200, description="Записей на странице"),
-    current_user: CurrentUser = Depends(get_current_user),
-) -> DraftListResponse:
-    """List drafts (proxies to Registry)."""
-    registry = RegistryServiceClient()
-    try:
-        result = await registry.list_drafts(
-            page=page,
-            page_size=page_size,
-            status=status,
-        )
-        data = result.get("data", [])
-        meta = result.get("meta", {"total": 0, "page": page, "page_size": page_size})
-        items = [DraftItem(**item) for item in data]
-        return DraftListResponse(
-            items=items,
-            total=meta.get("total", 0),
-            page=meta.get("page", page),
-            page_size=meta.get("page_size", page_size),
-        )
-    except Exception as exc:
-        logger.error(f"Failed to list drafts: {exc}")
-        return DraftListResponse(items=[], total=0, page=page, page_size=page_size)
-    finally:
-        await registry.close()
-
-
-# ---------------------------------------------------------------------------
-#  GET /drafts/{draft_id}  — Draft details
-# ---------------------------------------------------------------------------
-
-
-@router.get(
-    "/{draft_id}",
-    response_model=DraftDetailResponse,
-    responses={404: {"description": "Черновик не найден"}},
-)
-async def get_draft(
-    draft_id: int,
-    current_user: CurrentUser = Depends(get_current_user),
-) -> DraftDetailResponse:
-    """Get draft details (proxies to Registry).
-
-    Returns document_id, version_id, is_new_document if available.
-    """
-    registry = RegistryServiceClient()
-    try:
-        result = await registry.get_draft(draft_id)
-        if "error" in result:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={
-                    "error": {
-                        "code": "NOT_FOUND",
-                        "message": f"Черновик {draft_id} не найден",
-                    }
-                },
-            )
-        data = result.get("data", {})
-        return DraftDetailResponse(
-            draft_id=data.get("draft_id", draft_id),
-            document_key=data.get("document_key"),
-            file_key=data.get("file_key"),
-            status=data.get("status", "unknown"),
-            document_id=data.get("document_id"),
-            version_id=data.get("version_id"),
-            is_new_document=data.get("is_new_document", True),
-            created_by=data.get("created_by"),
-            created_at=data.get("created_at"),
-            updated_at=data.get("updated_at"),
-        )
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "error": {
-                    "code": "NOT_FOUND",
-                    "message": f"Черновик {draft_id} не найден",
-                    "details": {"original_error": str(exc)},
-                }
-            },
-        )
-    finally:
-        await registry.close()
 
 
 # ---------------------------------------------------------------------------
