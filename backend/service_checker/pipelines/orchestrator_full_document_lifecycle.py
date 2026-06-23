@@ -20,6 +20,7 @@ from .base import (
     PipelineDef,
     PipelineStep,
     check_json_field,
+    check_json_fields,
 )
 
 TEST_CREDENTIALS = {

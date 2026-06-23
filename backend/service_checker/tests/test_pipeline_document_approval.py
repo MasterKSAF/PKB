@@ -183,7 +183,7 @@ class TestDocumentApprovalPipeline:
         assert preview_status.method == "GET"
         assert preview_status.path == "/api/v1/drafts/{draft_id}/preview/status"
         assert preview_status.expected_status == {200, 404}
-        assert preview_status.params == {"longpoll": 0}
+        assert preview_status.params == {"longpoll": 1}
 
     def test_auth_uses_test_credentials(self):
         """Аутентификация использует тестовые credentials."""

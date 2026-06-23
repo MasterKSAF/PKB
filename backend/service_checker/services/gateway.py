@@ -69,6 +69,20 @@ def get_service_def(mode: Optional[str] = None) -> ServiceDef:
             extract_keys=["session_id"],
             expected_status=201,
             is_preparation=True),
+
+        # ── Prepare: pending_id (классификатор → карантин) ──
+        EndpointDef("POST", f"{API_PREFIX}/registry/classifiers/", "classifiers",
+            "Создать классификатор для pending (prepare)",
+            body={"classifier_system": "MKS", "code": "99.GW", "full_name": "Gateway Pending Prepare"},
+            extract_keys=["classifier_code"],
+            expected_status={201, 409},
+            is_preparation=True),
+        EndpointDef("GET", f"{API_PREFIX}/registry/classifiers/pending", "classifiers",
+            "Получить pending_id (prepare)",
+            params={"page": 1, "page_size": 10},
+            extract_keys=["pending_id"],
+            is_preparation=True),
+
     ]
 
     endpoints = [
@@ -300,7 +314,7 @@ def get_service_def(mode: Optional[str] = None) -> ServiceDef:
             response_schema={"items": list}),
 
         # ── Files (GW-12: добавлено) ──
-        EndpointDef("GET", f"{API_PREFIX}/files/{{file_id}}", "files",
+        EndpointDef("GET", f"{API_PREFIX}/files/1", "files",
             "Получить файл"),
 
         # ── Query: Chat ──

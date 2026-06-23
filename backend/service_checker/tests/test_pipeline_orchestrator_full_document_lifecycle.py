@@ -6,7 +6,7 @@ from pipelines.orchestrator_full_document_lifecycle import OrchestratorFullDocum
 
 
 class TestOrchestratorFullDocumentLifecyclePipeline:
-    """Пайплайн orchestrator_full_document_lifecycle — 12 шагов (полный цикл)."""
+    """Пайплайн orchestrator_full_document_lifecycle — 11 шагов (полный цикл)."""
 
     def test_pipeline_attributes(self):
         p = OrchestratorFullDocumentLifecyclePipeline()
@@ -20,7 +20,7 @@ class TestOrchestratorFullDocumentLifecyclePipeline:
     def test_build_steps_count(self):
         p = OrchestratorFullDocumentLifecyclePipeline()
         steps = p.build_steps(PipelineContext())
-        assert len(steps) == 12, f"Ожидалось 12 шагов, получено {len(steps)}"
+        assert len(steps) == 11, f"Ожидалось 11 шагов, получено {len(steps)}"
 
     def test_build_steps_order(self):
         p = OrchestratorFullDocumentLifecyclePipeline()
@@ -33,7 +33,6 @@ class TestOrchestratorFullDocumentLifecyclePipeline:
             "Запуск превью черновика",
             "Статус превью",
             "Решение по черновику (approve)",
-            "Проверка document_id после approve",
             "Проверка документа в Registry",
             "Индексация документа",
             "Поиск RAG Search",
@@ -77,7 +76,7 @@ class TestOrchestratorFullDocumentLifecyclePipeline:
         assert preview_status.method == "GET"
         assert preview_status.path == "/api/v1/drafts/{draft_id}/preview/status"
         assert preview_status.expected_status == {200, 404}
-        assert preview_status.params == {"longpoll": 0}
+        assert preview_status.params == {"longpoll": 1}
 
     def test_decide_step(self):
         """Шаг approve — action=approve."""
@@ -92,7 +91,7 @@ class TestOrchestratorFullDocumentLifecyclePipeline:
         """Проверка документа в Registry."""
         p = OrchestratorFullDocumentLifecyclePipeline()
         steps = p.build_steps(PipelineContext())
-        reg = steps[8]
+        reg = steps[7]
         assert reg.service == "registry"
         assert reg.path == "/api/v1/registry/documents/{approved_doc_id}"
         assert reg.expected_status == {200, 404}
@@ -101,7 +100,7 @@ class TestOrchestratorFullDocumentLifecyclePipeline:
         """Индексация в RAG Builder."""
         p = OrchestratorFullDocumentLifecyclePipeline()
         steps = p.build_steps(PipelineContext())
-        rag = steps[9]
+        rag = steps[8]
         assert rag.service == "rag_builder"
         assert rag.method == "POST"
         assert rag.path == "/api/v1/rag/build"
@@ -113,7 +112,7 @@ class TestOrchestratorFullDocumentLifecyclePipeline:
         """Поиск RAG Search."""
         p = OrchestratorFullDocumentLifecyclePipeline()
         steps = p.build_steps(PipelineContext())
-        search = steps[10]
+        search = steps[9]
         assert search.service == "rag_search"
         assert search.method == "POST"
         assert search.path == "/api/v1/rag/search"
@@ -125,33 +124,34 @@ class TestOrchestratorFullDocumentLifecyclePipeline:
         """Удаление черновика."""
         p = OrchestratorFullDocumentLifecyclePipeline()
         steps = p.build_steps(PipelineContext())
-        delete = steps[11]
+        delete = steps[10]
         assert delete.service == "orchestrator"
         assert delete.method == "DELETE"
         assert delete.path == "/api/v1/drafts/{draft_id}"
         assert delete.expected_status == {200, 204}
 
     def test_skip_if_on_draft_steps(self):
-        """Шаги 3-8 (индексы 2-7) имеют skip_if от draft."""
+        """Шаги 3-7 (индексы 2-6) имеют skip_if от draft."""
         p = OrchestratorFullDocumentLifecyclePipeline()
         steps = p.build_steps(PipelineContext())
-        for i in range(2, 8):
+        for i in range(2, 7):
             assert steps[i].skip_if is not None, (
                 f"Шаг '{steps[i].name}' (индекс {i}) должен иметь skip_if"
             )
 
     def test_skip_if_on_post_approve_steps(self):
-        """Шаги 9-11 имеют skip_if по approved_doc_id."""
+        """Шаги 8-10 имеют skip_if по approved_doc_id."""
         p = OrchestratorFullDocumentLifecyclePipeline()
         steps = p.build_steps(PipelineContext())
-        for i in range(8, 12):
+        for i in range(7, 11):
             assert steps[i].skip_if is not None
 
     def test_draft_failed_context_skip(self):
-        """При draft_failed=True шаги 3-8 пропускаются."""
+        """При draft_failed=True шаги 3-7 пропускаются."""
         p = OrchestratorFullDocumentLifecyclePipeline()
+        steps = p.build_steps(PipelineContext())
         ctx = PipelineContext()
         ctx.set("draft_failed", True)
         steps = p.build_steps(ctx)
-        for i in range(2, 8):
+        for i in range(2, 7):
             assert steps[i].skip_if(ctx) is True

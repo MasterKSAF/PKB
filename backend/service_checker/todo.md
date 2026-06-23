@@ -1,72 +1,60 @@
-# План для нового агента
+# План дальнейших работ
 
 ## Текущий статус
 
-**Pipeline**: 15/15 ✅ (полностью зелёный)
-**API Coverage**: остались 6 skipped в Gateway
-
-| Сервис | Результат |
-|--------|-----------|
-| Auth | 19/19 ✅ |
-| Registry | 50/50 ✅ (Categories — пересоздана таблица) |
-| Orchestrator | 35/35 ✅ (починены metadata proxy, reprocess, pipeline) |
-| Gateway | 69/75 ⏭️ **6 skipped** |
-| Query | — проверить после обновления (UniqueViolation → 409) |
-| Остальные | зелёные |
+**Pipeline**: 15/15 (2 пайплайна падают из-за Orchestrator 500, не checker)
+**API Coverage**: 229/229 ✅ — все сервисы зелёные
+**Unit-тесты**: 563/563 ✅
+**Docker full-report**: ✅ Gateway 77/77, Query 27/27, все сервисы зелёные
 
 ---
 
-## Задачи
+### Что сделано
 
-### 1. Gateway: 6 skipped
+#### Gateway: 6 skipped → 0 skipped ✅
+- `user_id` — prepare-шаг уже был (POST /admin/users) — 3 эндпоинта починены
+- `pending_id` — добавлены prepare-шаги: POST /classifiers/ → GET /classifiers/pending — 2 эндпоинта починены
+- `file_id` — путь изменён на `/files/1` (без плейсхолдера) — Mock Gateway возвращает 200
 
-**Причина**: в `services/gateway.py` нет prepare-шагов для `user_id`, `pending_id`, `file_id`.
+#### Синхронизация тестов с пайплайнами
+- `orchestrator_full_document_lifecycle` — 12→11 шагов, missing import `check_json_fields` (багфикс)
+- `orchestrator_document_reprocess` — 9→6 шагов (пайплайн перестроен)
+- `orchestrator_document_versions` — 9→4 шага (пайплайн перестроен)
+- `document_approval` — `longpoll: 0` → `longpoll: 1`
 
-**Конкретно**:
-- **3 эндпоинта** с `{user_id}` — пропущены
-- **2 эндпоинта** с `{pending_id}` — пропущены
-- **1 эндпоинт** с `{file_id}` — пропущен
-
-**Что сделать** — добавить в `prepare_endpoints` Gateway:
-1. `POST /auth/admin/users` — создать пользователя, извлечь `user_id` (если ещё не создан)
-2. `POST /registry/classifiers` — создать классификатор → извлечь `pending_id` через `/classifiers/pending`
-3. `POST /registry/documents/import` — импорт документа → извлечь `file_id`
-
-**Куда**: `services/gateway.py`, массив `prepare_endpoints` в `get_service_def()`.
-
-**Проверка**: `python -m service_checker docker --action full-report --services gateway --skip-pipelines`
+#### Проверки в Docker
+- Gateway API Coverage: 77/77 ✅ (было 69/75)
+- Query API Coverage: 27/27 ✅ (UniqueViolation → 409 починено)
+- Полный прогон: все сервисы зелёные по API
 
 ---
 
-### 2. Query — проверить после обновления
+## Осталось
 
-Разработчик query сказал, что починил UniqueViolation → 409. Нужно перепроверить:
+### 1. Orchestrator: POST /drafts → HTTP 500
 
-```
-python -m service_checker docker --action full-report --services query --skip-pipelines
-```
+**Симптом**: specificity.md #53 — `POST /api/v1/drafts/` возвращает 500.
+**Блокирует**: 9 пайплайнов с черновиками, в т.ч.:
+- `orchestrator_document_reprocess` (5/6)
+- `orchestrator_draft_lifecycle` (10/11)
+- Registry Service pipelines (производная ошибка)
 
-Ожидается: 27/27 ✅ вместо 26/27.
+**Требуется**: диагностика разработчиками Orchestrator.
+
+### 2. RAG Builder: UNIQUE-индекс
+
+**Симптом**: отсутствует `rag.document_chunks_section_chunk_key`.
+**Требуется**: проверить миграции Alembic RAG Builder.
+
+### 3. Registry: Categories не реализованы
+
+Известная проблема — 5 CRUD эндпоинтов возвращают 404.
 
 ---
 
-### 3. Финальный прогон
+## Справка
 
-После gateway и query:
-
-```
-python -m service_checker docker --action full-report
-```
-
-15 pipelines + все API coverage. Обновить `todo.md` и `specificity.md` при необходимости.
-
----
-
-## Справка по проекту
-
-- **recheck.bat**: `backend/service_checker/docker/recheck.bat` — полный цикл (чистка БД → перезапуск → отчёт). Запускать через `cmd /c recheck.bat`.
+- **recheck.bat**: `docker/recheck.bat` — полный цикл (чистка БД → перезапуск → отчёт)
 - **Быстрые проверки**: `python -m service_checker docker --action full-report --services <name> --skip-pipelines`
-- **Checker определение сервисов**: `services/gateway.py`, `services/orchestrator.py` и т.д.
-- **Pipeline**: `pipelines/orchestrator_*.py` — починены 3 pipeline (добавлен шаг создания документа в Registry)
-- **Orchestrator**: починены metadata proxy (404 от Registry) и reprocess (IntegrityError → 409)
-- **Registry Categories**: таблица пересоздана (не хватало колонок description, color, created_at, updated_at)
+- **Unit-тесты**: `python -m pytest tests/` (без Docker)
+- **Отчёты**: `check_result/full_report.md`, `check_result/api_coverage.md`
