@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Text, BigInteger, DateTime
+from sqlalchemy import Column, Integer, Text, BigInteger, DateTime, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 
 from .base import Base
@@ -6,7 +6,11 @@ from .base import Base
 
 class DocumentVersion(Base):
     __tablename__ = 'document_versions'
-    __table_args__ = {'schema': 'registry'}
+    __table_args__ = (
+        UniqueConstraint('document_id', 'file_path', name='uq_document_versions_document_id_file_path'),
+        UniqueConstraint('document_id', 'version_number', name='uq_document_versions_document_id_version_number'),
+        {'schema': 'registry'}
+    )
 
     id = Column('id', BigInteger, primary_key=True, autoincrement=True)
     document_id = Column('document_id', BigInteger, nullable=False)
