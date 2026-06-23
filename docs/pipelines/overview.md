@@ -379,7 +379,7 @@ stateDiagram-v2
 
     indexed --> [*] : готов к поиску
     indexed --> failed : integrity check failed (D23, P1-17)
-    failed --> uploaded : reprocess (Registry)
+    failed --> uploaded : reprocess (Orchestrator)
 ```
 
 **Карта соответствия состояний:**

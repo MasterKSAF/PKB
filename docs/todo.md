@@ -74,3 +74,13 @@ Orchestrator — только пайплайн (управление жизне�
 - [x] check_cross_references.py — PASSED (после обновления expected counts)
 - [x] Проверить консистентность ссылок — пройдено (скриптом)
 - [x] Проверить read-only удалены из orchestrator — пройдено (скриптом, ожидаемые FAIL устранены)
+
+### 10. Перенос reprocess из Registry в Orchestrator
+- [x] Удалить секцию 3.13 `POST /registry/documents/{doc_id}/reprocess` из registry_service_api.md
+- [x] Убрать reprocess из таблицы содержания registry_service_api.md
+- [x] Добавить `POST /documents/{doc_id}/reprocess` в orchestrator_service_api.md
+- [x] Обновить README.md — строка 176 (путь и принадлежность)
+- [x] Обновить gateway_service_api.md — routing уже правильный, проверить
+- [x] Обновить pipeline1-formation.md, pipeline2-indexation.md, rag_builder_service_api.md — ссылки на Registry
+- [x] Обновить common_api.md — ссылка (строка 504)
+- [ ] ~~Зафиксировать аномалию в specificity.md~~ — specificity.md не хранит историю правок
