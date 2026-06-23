@@ -27,6 +27,15 @@ def get_service_def() -> ServiceDef:
     """Вернуть полное описание Query Service."""
 
     prepare_endpoints = [
+        # QS-3: project_id должен быть доступен до создания сессии
+        EndpointDef("POST", f"{API_PREFIX}/chat/projects", "chat",
+            "Создать проект (prepare)",
+            body={"code": "API_COVERAGE", "name": "API Coverage Project",
+                  "description": "Автосозданный проект для API Coverage", "status": "active"},
+            extract_keys=["project_id"],
+            response_schema={"project_id": int, "code": str, "name": str},
+            is_preparation=True,
+            expected_status={201, 409}),
         # QS-3: document_ids, project_id
         EndpointDef("POST", f"{API_PREFIX}/chat/sessions", "chat",
             "Создать сессию (prepare)",
@@ -66,8 +75,6 @@ def get_service_def() -> ServiceDef:
             body={"name": "Ледокол проекта 21900М2 (мод. 2)", "status": "archived"},
             response_schema={"project_id": int, "code": str, "name": str, "description": str | None,
                              "status": str, "created_at": str, "updated_at": str}),
-        EndpointDef("DELETE", f"{API_PREFIX}/chat/projects/{{project_id}}", "chat", "Удалить проект",
-            expected_status=204),
         # Chat sessions
         EndpointDef("POST", f"{API_PREFIX}/chat/sessions", "chat", "Создать сессию",
             body={"title": "Тестовая сессия API", "document_ids": [], "project_id": "{project_id}"},
@@ -131,6 +138,9 @@ def get_service_def() -> ServiceDef:
         EndpointDef("POST", f"{API_PREFIX}/text/ask", "text", "Задать вопрос",
             body={"text": "Какая толщина обшивки?", "document_ids": []},
             response_schema={"answer": str, "sources": list}),
+        # Delete project last — после всех session эндпоинтов
+        EndpointDef("DELETE", f"{API_PREFIX}/chat/projects/{{project_id}}", "chat", "Удалить проект",
+            expected_status=204),
     ]
 
     _warnings = [

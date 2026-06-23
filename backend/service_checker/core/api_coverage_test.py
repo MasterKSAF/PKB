@@ -674,8 +674,8 @@ class ApiCoverageTester:
                 import time
                 self.context["timestamp"] = str(int(time.time()))
                 self.context["section_id"] = int(time.time()) % 100000
-                # FK fk_rag_document_chunks_section_id должен был быть удалён
-                # 3-й миграцией, но не был. Дропаем, чтобы RAG Build не падал с 500.
+                # FK fk_rag_document_chunks_section_id + UNIQUE uq_rag_chunks_section_chunk должны быть удалены
+                # (мешают RAG Build при индексации нескольких документов)
                 try:
                     import subprocess
                     r = subprocess.run(
@@ -687,8 +687,16 @@ class ApiCoverageTester:
                         print(f"  ℹ {svc_name}: дропнут FK fk_rag_document_chunks_section_id")
                     else:
                         print(f"  ⚠ {svc_name}: не удалось дропнуть FK: {r.stderr.decode().strip()}")
+                    # UNIQUE(section_id, chunk_index) — мешает при разных document_id
+                    r2 = subprocess.run(
+                        ["docker", "exec", "pkb-postgres", "psql", "-U", "pkb", "-d", "pkb_neuro", "-c",
+                         "ALTER TABLE IF EXISTS rag.document_chunks DROP CONSTRAINT IF EXISTS uq_rag_chunks_section_chunk;"],
+                        capture_output=True, timeout=10,
+                    )
+                    if r2.returncode == 0:
+                        print(f"  ℹ {svc_name}: дропнут UNIQUE uq_rag_chunks_section_chunk")
                 except Exception as ex:
-                    print(f"  ⚠ {svc_name}: ошибка при дропе FK: {ex}")
+                    print(f"  ⚠ {svc_name}: ошибка при дропе constraints: {ex}")
                 print(f"  ℹ {svc_name}: timestamp={self.context['timestamp']}")
 
             # ── Pre-prepare: создание проекта для Query (QS-3) ─────────

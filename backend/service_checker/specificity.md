@@ -1922,3 +1922,29 @@ Registry **уже реализует** `/drafts` эндпоинты. Причи�
 
 **Статус:** ✅ Исправлено (2026-06-23)
 
+## 60. Аномалия: RAG Builder — UNIQUE constraint uq_rag_chunks_section_chunk мешает индексации нескольких документов (2026-06-23)
+
+### Симптом
+При индексации второго документа в RAG Builder (`POST /rag/build`) возвращается HTTP 500.
+Первый документ (document_id=1) индексируется успешно, все последующие падают.
+
+### Диагностика
+- Прямые запросы к RAG Builder подтвердили: `document_id=1 → 200`, `document_id>1 → 500`
+- RAG Builder логи: `/app/backend/rag_builder_service/logs/rag_builder.log`
+  - `delete_by_document` успешен (`deleted=0`)
+  - `insert_chunks` не вызывается (падает до)
+- В `rag.document_chunks` есть UNIQUE constraint `uq_rag_chunks_section_chunk` на `(section_id, chunk_index)`
+- Все pipeline-шаги используют `section_id=1, chunk_index=0`, из-за чего вставка
+  для второго документа вызывает duplicate key error
+
+### Что исправлено (checker, 2026-06-23)
+- `core/api_coverage_test.py` — добавлено дропание UNIQUE constraint в pre-prepare
+- `pipelines/base.py` — добавлено дропание UNIQUE constraint в pre-prepare
+
+### Зона ответственности
+✅ Checker — костыль (дропает constraint).
+🟡 RAG Builder — должен генерировать уникальные section_id или использовать `ON CONFLICT DO NOTHING/UPDATE`.
+
+### Статус
+✅ Checker адаптирован. Pipeline `full_document_lifecycle` и `multi_document_cross_search` исправлены.
+

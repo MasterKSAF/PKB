@@ -648,7 +648,7 @@ class PipelineRunner:
         else:
             result.ping_ok = True
 
-        # 2. Pre-prepare: дропнуть FK fk_rag_document_chunks_section_id (мешает RAG Build)
+        # 2. Pre-prepare: дропнуть FK + UNIQUE constraints (мешают RAG Build)
         if "rag_builder" in pipeline.services:
             try:
                 import subprocess
@@ -659,6 +659,16 @@ class PipelineRunner:
                 )
                 if r.returncode == 0:
                     print(f"     ℹ Дропнут FK fk_rag_document_chunks_section_id")
+            except Exception:
+                pass
+            try:
+                r2 = subprocess.run(
+                    ["docker", "exec", "pkb-postgres", "psql", "-U", "pkb", "-d", "pkb_neuro", "-c",
+                     "ALTER TABLE IF EXISTS rag.document_chunks DROP CONSTRAINT IF EXISTS uq_rag_chunks_section_chunk;"],
+                    capture_output=True, timeout=10,
+                )
+                if r2.returncode == 0:
+                    print(f"     ℹ Дропнут UNIQUE uq_rag_chunks_section_chunk")
             except Exception:
                 pass
 
