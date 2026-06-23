@@ -1,8 +1,9 @@
-﻿# RAG Builder SPD
+# RAG Builder SPD
 
 ## 1. Назначение сервиса
 
-RAG Builder получает JSON-контейнер документа, преобразует его в набор чанков, вычисляет эмбеддинги и сохраняет результат в PostgreSQL.
+RAG Builder получает JSON-контейнер документа, преобразует его в набор чанков, вычисляет эмбеддинги
+и сохраняет результат в PostgreSQL.
 
 Текущий pipeline:
 
@@ -25,8 +26,8 @@ nsi.document_sections
 
 Сервис является частью RAG-платформы и отвечает только за индексацию документов.
 
-Поиск, retrieval, vector search и генерация ответов находятся вне зоны ответственности данного сервиса.
-
+Поиск, retrieval, vector search, rerank и генерация ответов находятся вне зоны ответственности данного сервиса.
+RAG Builder только подготавливает данные для последующего сервиса RAG Search.
 ---
 
 ## 2. Требования
@@ -43,9 +44,12 @@ nsi.document_sections
 Клонировать репозиторий:
 
 ```bash
-git clone <repository_url>
-cd backend/rag_builder_service_spd
+git clone https://github.com/NeuronsUII/PKB_neuroassistant.git
+cd PKB_neuroassistant/backend/rag_builder_service_spd
 ```
+Если репозиторий уже склонирован, достаточно перейти в папку сервиса:
+
+cd backend/rag_builder_service_spd
 
 Создать виртуальное окружение:
 
@@ -61,7 +65,7 @@ python -m venv venv
 venv\Scripts\activate
 ```
 
-Установить зависимости:
+Установить зависимости и сам локальный пакет в режиме разработки:
 
 ```bash
 pip install -e .
@@ -113,7 +117,7 @@ pytest
 Текущее состояние:
 
 ```text
-46 passed
+48 passed, 1 skipped
 ```
 
 ---
@@ -211,29 +215,43 @@ docker compose down
 
 ---
 
-### POST /index
+### POST /api/v1/rag/build
 
-Запускает индексацию документа в асинхронном режиме.
-
-Текущий MVP-вход всё ещё использует `BuildRequest` / chunk-container.
-`document_version_id` больше не является обязательным входным полем.
-Если legacy-контейнер всё ещё передаёт `document_version_id`, Builder принимает его для обратной совместимости.
-Если поле отсутствует, Builder временно использует `document_id` как legacy/audit `document_version_id` внутри Chunk/DB/Search.
-
-Пример запроса:
+Основной контрактный endpoint для запуска индексации документа. Индексация выполняется в фоне.
+Принимает flat Registry payload:
+Минимальный пример запроса:
 
 ```json
 {
-  "metadata": {
-    "schema": "schema_registry_for_rag_v2",
-    "document_id": 420000
+  "document_id": 420000,
+  "sections": [
+    {
+      "section_id": 1,
+      "parent_id": null,
+      "clause": "1",
+      "title": null,
+      "level": 1,
+      "path": "1",
+      "page": 1,
+      "bbox": null,
+      "type": "text",
+      "content": {
+        "text": "Настоящий стандарт распространяется..."
+      },
+      "references": []
+    }
+  ],
+  "protected_spans": [],
+  "options": {
+    "strategy": "semantic_1024"
   }
 }
 ```
 
-Пример ответа 202 Accepted:
+Если входной JSON проходит Pydantic-валидацию, сервис возвращает ответ
+`202 Accepted`:
 
-```
+```json
 {
   "status": "indexing",
   "document_id": 420000,
@@ -241,14 +259,204 @@ docker compose down
   "indexing_txn_id": "2f7b0a2e-5b7f-4a45-8f87-9f3c5a9b1e2d"
 }
 ```
+Если входной JSON не проходит Pydantic-валидацию, сервис возвращает стандартный
+FastAPI/Pydantic ответ
+`422 Unprocessable Entity`.
 
-Индексация выполняется в фоне. Результат проверяется через:
+В этом случае:
 
-GET /index/status/{indexing_txn_id}
+индексация не запускается;
+background task не создаётся;
+indexing_txn_id не выдаётся;
+данные в nsi.* таблицы не записываются.
 
-Пример ответа статуса:
+Ошибки, возникшие уже после успешной валидации и запуска задачи, отражаются в статусе
+индексации через GET /api/v1/rag/build/{document_id}/status.
 
+Расширенный пример с разными типами секций:
+
+```json
+{
+  "document_id": 420000,
+  "sections": [
+    {
+      "section_id": 1,
+      "parent_id": null,
+      "clause": "1",
+      "title": "Область применения",
+      "level": 1,
+      "path": "1",
+      "page": 1,
+      "bbox": [0.12, 0.18, 0.88, 0.26],
+      "type": "text",
+      "content": {
+        "text": "Настоящий стандарт распространяется..."
+      },
+      "references": []
+    },
+    {
+      "section_id": 2,
+      "parent_id": 1,
+      "clause": "1.1",
+      "title": "Таблица 1",
+      "level": 2,
+      "path": "1/1.1",
+      "page": 1,
+      "bbox": [0.10, 0.30, 0.90, 0.55],
+      "type": "table",
+      "content": {
+        "caption": "Таблица 1 — Основные параметры",
+        "headers": ["Параметр", "Значение", "Единица"],
+        "rows": [
+          ["Диаметр", "10", "мм"],
+          ["Длина", "25", "мм"]
+        ],
+        "markdown": "| Параметр | Значение | Единица |\n|---|---:|---|\n| Диаметр | 10 | мм |\n| Длина | 25 | мм |"
+      },
+      "references": []
+    },
+    {
+      "section_id": 3,
+      "parent_id": 1,
+      "clause": "1.2",
+      "title": "Рисунок 1",
+      "level": 2,
+      "path": "1/1.2",
+      "page": 2,
+      "bbox": [0.15, 0.20, 0.85, 0.70],
+      "type": "image",
+      "content": {
+        "image_key": "minio://documents/420000/page_2_image_1.png",
+        "caption": "Рисунок 1 — Схема установки",
+        "description": "Схематическое изображение установочной стойки."
+      },
+      "references": []
+    },
+    {
+      "section_id": 4,
+      "parent_id": 1,
+      "clause": "1.3",
+      "title": "Формула 1",
+      "level": 2,
+      "path": "1/1.3",
+      "page": 2,
+      "bbox": [0.20, 0.72, 0.80, 0.82],
+      "type": "formula",
+      "content": {
+        "latex": "F = m \\cdot a",
+        "meaning": "Сила равна произведению массы на ускорение.",
+        "parameters": [
+          {
+            "symbol": "F",
+            "description": "сила",
+            "unit": "Н"
+          },
+          {
+            "symbol": "m",
+            "description": "масса",
+            "unit": "кг"
+          },
+          {
+            "symbol": "a",
+            "description": "ускорение",
+            "unit": "м/с²"
+          }
+        ]
+      },
+      "references": []
+    }
+  ],
+  "protected_spans": [
+    {
+      "section_id": 1,
+      "start_offset": 120,
+      "end_offset": 260,
+      "reason": "do_not_split_normative_clause"
+    }
+  ],
+  "options": {
+    "strategy": "semantic_1024"
+  }
+}
 ```
+
+Для таблиц Builder сохраняет исходную структуру и формирует индексируемое текстовое/Markdown-представление.
+Для сложных таблиц авторитетным источником остаётся JSON-структура во входном контейнере.
+
+Для изображений Builder использует только те текстовые поля, которые уже есть во входном JSON:
+`caption`, `description`, `image_key`.
+Автоматическое описание изображения через multimodal LLM не входит в ответственность RAG Builder MVP.
+
+Для формул Builder использует уже переданные `latex`, `meaning`, `markdown` и `parameters`.
+Автоматическое распознавание смысла формул не выполняется внутри RAG Builder.
+
+### `references`
+
+Поле `sections[].references` содержит ссылки, найденные внутри конкретной секции документа.
+
+RAG Builder не использует `references` для формирования текста чанка, но сохраняет их:
+
+* в metadata соответствующего chunk;
+* в таблицу `nsi.cross_references`.
+
+Это нужно для будущего графа ссылок между документами, нормативными актами, пунктами, таблицами и другими объектами.
+
+Минимальный пример:
+
+```json
+"references": [
+  {
+    "type": "range",
+    "target_doc_code": "ГОСТ 20862-81 – ГОСТ 20867-81",
+    "context": "Размеры и предельные отклонения — по ГОСТ 20862-81 – ГОСТ 20867-81.",
+    "note": "Нормативная ссылка на диапазон стандартов"
+  }
+]
+```
+
+Пример ссылки на один документ:
+
+```json
+"references": [
+  {
+    "type": "normative_document",
+    "target_document_id": 420123,
+    "target_doc_code": "ГОСТ 20862-81",
+    "context": "Технические требования — по ГОСТ 20862-81.",
+    "note": "Связь с известным документом Registry"
+  }
+]
+```
+
+Поля `references[]`:
+
+| Поле                 | Тип           | Обязательность | Описание                                                                                   |
+| -------------------- | ------------- | -------------: | ------------------------------------------------------------------------------------------ |
+| `type`               | string        |             Да | Тип ссылки: например `normative_document`, `range`, `table`, `formula`, `image`, `unknown` |
+| `target_doc_code`    | string        |             Да | Код целевого документа или текстовое обозначение ссылки, например `ГОСТ 20862-81`          |
+| `target_document_id` | bigint | null |            Нет | ID целевого документа в Registry, если он уже известен                                     |
+| `context`            | string | null |            Нет | Фрагмент исходного текста, в котором была найдена ссылка                                   |
+| `note`               | string | null |            Нет | Дополнительное пояснение                                                                   |
+
+Если ссылка найдена, но целевой документ ещё не сопоставлен с Registry, `target_document_id` можно оставить `null`,
+а `target_doc_code` сохранить как текстовое обозначение.
+
+
+---
+
+### GET /api/v1/rag/build/{document_id}/status
+
+Проверяет статус индексации документа.
+
+Пример:
+
+```text
+GET /api/v1/rag/build/420000/status?longpoll=15
+```
+
+Пример ответа:
+
+```json
 {
   "document_id": 420000,
   "status": "indexed",
@@ -265,98 +473,41 @@ GET /index/status/{indexing_txn_id}
   "errors": []
 }
 ```
-Дополнительно поддерживается совместимый endpoint:
-
-POST /rag/build
-GET /rag/build/{document_id}/status
-
 
 ---
 
-### POST /search
+### DELETE /api/v1/rag/build/{document_id}
 
-RAG Search MVP endpoint.
+Удаляет индекс документа из таблиц RAG Builder.
 
-Search reads indexed chunks from PostgreSQL and returns source chunks with citation metadata. It does not generate LLM answers.
-
-Supported search types:
-
-| search_type | Description |
-|---|---|
-| `dense` | Vector search by `nsi.chunks.embedding` |
-| `sparse` | PostgreSQL full-text search by `nsi.chunks.content_tsv` with `ts_rank_cd` |
-| `hybrid` | RRF fusion of sparse and dense results, duplicates removed |
-
-Request example:
+Пример ответа:
 
 ```json
 {
-  "query": "допуск соосности",
-  "top_k": 5,
-  "search_type": "hybrid",
-  "expand_context": false
+  "document_id": 420000,
+  "deleted_count": 18,
+  "status": "completed"
 }
 ```
 
-Context expansion request example:
+---
 
-```json
-{
-  "query": "допуск соосности",
-  "top_k": 5,
-  "search_type": "hybrid",
-  "expand_context": true
-}
+### Legacy/local compatibility endpoints
+
+Для обратной совместимости также поддерживаются:
+
+```text
+POST /index
+GET /index/status/{indexing_txn_id}
+
+POST /rag/build
+GET /rag/build/{document_id}/status
 ```
 
-When `expand_context=true`, each result may include a `context` array with:
-
-- `parent` section
-- direct `child` sections such as tables, images, formulas or text sections
-
-Response contains chunks with citation fields:
-
-```json
-{
-  "query": "допуск соосности",
-  "search_type_used": "hybrid",
-  "results": [
-    {
-      "chunk_id": 151,
-      "document_id": 420000,
-      "document_version_id": 420001,
-      "document_section_id": 151,
-      "section_id": 3,
-      "clause": "6.1",
-      "path": "6/6.1",
-      "page": 2,
-      "content": "Допуск соосности оси отверстия...",
-      "context": []
-    }
-  ],
-  "total_found": 1,
-  "context_expanded": false
-}
-```
-
-MVP limitations:
-
-- `hybrid` uses Reciprocal Rank Fusion with `k=60`.
-- `sparse` uses PostgreSQL full-text ranking via `ts_rank_cd`; a dedicated BM25 engine is not implemented yet.
-- `context expansion` uses `document_sections.path_ltree` and returns parent + direct children for each result.
-- Context deduplication is partial: context items already present in main `results` are removed.
-- With `EMBEDDING_PROVIDER=stub`, dense search is technical only and may add non-semantic candidates to hybrid results.
-
-Sparse search acceleration:
-
-- `nsi.chunks` has a materialized `tsvector` column:
-  - `content_tsv`
-- `content_tsv` is filled during chunk indexing with:
-  - `to_tsvector('russian'::regconfig, content)`
-- `nsi.chunks` has a GIN index:
-  - `idx_chunks_content_tsv`
-  - `USING GIN (content_tsv)`
-- The index accelerates PostgreSQL full-text sparse search.
+Текущий legacy-вход всё ещё использует `BuildRequest` / chunk-container.
+`document_version_id` больше не является обязательным входным полем.
+Если legacy-контейнер всё ещё передаёт `document_version_id`, Builder принимает его для обратной совместимости.
+Если поле отсутствует, Builder временно использует `document_id` как legacy/audit `document_version_id` внутри Chunk/DB.
 
 ---
 
@@ -387,17 +538,22 @@ sql/
 * BuildRequest (chunk-container)
 * ChunkingService
 * EmbeddingService
+* batch embeddings для всех чанков документа
 * OpenAIEmbeddingProvider
 * StubEmbeddingProvider
 * PostgreSQL persistence
 * Reindex без дубликатов
-
+* async indexing jobs
+* delete/reindex endpoint
+*
 #### Chunking
 
 * поддержка subchunks
 * overlap 20%
 * разбиение по предложениям
 * fallback-разбиение по пробелам
+* `protected_spans` не разрываются между chunks
+* `protected_spans` фильтруются по `section_id`
 
 Supported chunk strategies:
 
@@ -409,14 +565,16 @@ Supported chunk strategies:
 
 MVP uses character-based approximation until tokenizer-based chunking is added.
 
-
 #### Embeddings
 
 * OpenAI Embeddings
 * Stub Embeddings
-* Batch Embeddings
+* OpenAI-compatible external API
+* Infinity-compatible API
+* Batch Embeddings для всех чанков документа
 * Usage Accounting
-* batch embeddings для всех чанков документа
+* подсчёт суммарных tokens/cost по batch-результату
+
 
 Supported embedding providers:
 
@@ -500,7 +658,7 @@ EMBEDDING_API_KEY=
 Текущее состояние:
 
 ```text
-46 passed
+48 passed, 1 skipped
 ```
 
 ---
@@ -543,42 +701,16 @@ document_sections
 
 Текущее состояние:
 
-- 46 тестов проходят
+- 48 тестов проходят, 1 skipped
 - PostgreSQL persistence реализован
 - pgvector поддерживается
 - ltree поддерживается
 - document hierarchy реализована (без связи c id внешних документов)
 - references/images/tables/formulas реализованы
 - batch embeddings реализованы
+- protected_spans реализованы
 
 Статус: MVP v1 Ready
-
----
-
-#### RAG Search MVP
-
-* `POST /search`
-* dense vector search
-* sparse full-text search with `content_tsv` and `ts_rank_cd`
-* hybrid RRF fusion with `k=60`
-* citation/source fields: `document_id`, `section_id`, `clause`, `path`, `page`, `bbox`, `content`
-* retrieval metadata: `chunk_id`, `score`, `mode`
-* context expansion via `document_sections.path_ltree`
-* parent + direct children context
-* partial context deduplication by `document_section_id`
-
----
-
-### POST /rag/search
-
-Совместимый endpoint поиска чанков.
-
-Использует тот же `SearchRequest` и `SearchResponse`, что legacy endpoint `POST /search`.
-
-Legacy/local alias:
-
-```text
-POST /search
 
 ---
 
@@ -621,7 +753,7 @@ POST /search
 * локальные embedding-модели
 * мониторинг стоимости эмбеддингов
 
-### Stage 7 — Search Integration
+### Stage 7 — Integration with RAG Search Service
 
 * интеграция с RAG Search Service
 * Hybrid Search
