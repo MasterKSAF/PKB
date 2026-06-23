@@ -1,6 +1,4 @@
-﻿from uuid import uuid4
-
-import pytest
+﻿import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rag_builder.models.contracts import BuildRequest, Section
@@ -9,7 +7,7 @@ from rag_builder.services.indexing_service import IndexingService
 
 @pytest.mark.asyncio
 async def test_build_persists_chunks(session: AsyncSession) -> None:
-    doc_id = uuid4()
+    doc_id = 100
     req = BuildRequest(
         document_id=doc_id,
         sections=[
@@ -21,21 +19,21 @@ async def test_build_persists_chunks(session: AsyncSession) -> None:
                 level=1,
                 path="1",
                 page=1,
-                type="section",
+                type="text",
                 content={"text": "hello world"},
             )
         ],
-        options={"strategy": "semantic_512"},
+        options={"strategy": "semantic_1024"},
     )
     svc = IndexingService()
     resp = await svc.build(req, session)
-    assert resp.status == "completed"
+    assert resp.status == "indexed"
     assert resp.chunks_count == 1
 
 
 @pytest.mark.asyncio
 async def test_delete_removes_chunks(session: AsyncSession) -> None:
-    doc_id = uuid4()
+    doc_id = 101
     req = BuildRequest(
         document_id=doc_id,
         sections=[
@@ -47,11 +45,11 @@ async def test_delete_removes_chunks(session: AsyncSession) -> None:
                 level=1,
                 path="1",
                 page=1,
-                type="section",
+                type="text",
                 content={"text": "bye"},
             )
         ],
-        options={"strategy": "semantic_512"},
+        options={"strategy": "semantic_1024"},
     )
     svc = IndexingService()
     await svc.build(req, session)

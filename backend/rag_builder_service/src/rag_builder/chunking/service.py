@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 from collections.abc import Iterable
+from uuid import UUID
 
 from loguru import logger
 
@@ -11,7 +12,8 @@ from rag_builder.models.domain import Chunk
 
 class ChunkingService:
     def build_chunks(
-        self, document_id: int, sections: list[Section], protected_spans: list[ProtectedSpan], strategy: str
+        self, document_id: int, sections: list[Section], protected_spans: list[ProtectedSpan], strategy: str,
+        indexing_txn_id: UUID | None = None,
     ) -> list[Chunk]:
         logger.info(
             "Chunking start document_id={} sections={} strategy={}",
@@ -38,6 +40,7 @@ class ChunkingService:
                         content=text,
                         strategy=strategy,
                         page=section.page,
+                        indexing_txn_id=indexing_txn_id,
                     )
                 )
             logger.debug("Chunking section done section_id={} chunks={}", section.section_id, len(chunk_texts))

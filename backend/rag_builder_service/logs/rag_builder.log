@@ -7436,3 +7436,939 @@
 2026-06-22 17:59:14.197 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/rag/build/14/status
 2026-06-22 17:59:14.198 UTC+3 | INFO | rag_builder.api.v1.rag_routes:status:148 | GET /rag/build/14/status longpoll=0
 2026-06-22 17:59:14.198 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/rag/build/14/status status=200 took_ms=0.98
+2026-06-22 20:56:23.248 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/openapi.json
+2026-06-22 20:56:23.262 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/openapi.json status=200 took_ms=13.64
+2026-06-22 20:56:23.541 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/auth/login
+2026-06-22 20:56:23.542 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/auth/login status=404 took_ms=0.90
+2026-06-22 20:56:23.561 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/auth/login
+2026-06-22 20:56:23.561 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/auth/login status=404 took_ms=0.41
+2026-06-22 20:57:20.670 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/openapi.json
+2026-06-22 20:57:20.687 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/openapi.json status=200 took_ms=17.24
+2026-06-22 20:57:20.713 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 20:57:20.724 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:95 | POST /rag/build document_id=1 sections=0
+2026-06-22 20:57:20.725 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=202 took_ms=12.75
+2026-06-22 20:57:20.749 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 20:57:20.751 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:95 | POST /rag/build document_id=420001 sections=1
+2026-06-22 20:57:20.751 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=202 took_ms=2.81
+2026-06-22 20:57:21.148 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 20:57:21.148 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 20:57:21.148 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=3
+2026-06-22 20:57:21.149 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=3
+2026-06-22 20:57:21.150 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=2 sections=1 strategy=semantic_1024
+2026-06-22 20:57:21.151 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=2 type=table path=2
+2026-06-22 20:57:21.151 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=2 chunks=1
+2026-06-22 20:57:21.151 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=2 total_chunks=1
+2026-06-22 20:57:21.198 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:23 | Embeddings start count=2 dim=2048 provider=mock
+2026-06-22 20:57:21.199 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:33 | Embeddings done count=2 dim=2048
+2026-06-22 20:57:21.202 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:23 | Embeddings start count=1 dim=3 provider=openai_compatible
+2026-06-22 20:57:21.202 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=1/1 size=1 attempt=1 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 20:57:21.202 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=1/1 attempt=1 status=200 took_ms=0.00
+2026-06-22 20:57:21.202 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:118 | Embedding batch done batch=1/1 vectors=1
+2026-06-22 20:57:21.202 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:33 | Embeddings done count=1 dim=3
+2026-06-22 20:57:21.205 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:23 | Embeddings start count=3 dim=3 provider=openai_compatible
+2026-06-22 20:57:21.205 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=1/2 size=2 attempt=1 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 20:57:21.205 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=1/2 attempt=1 status=429 took_ms=0.00
+2026-06-22 20:57:21.205 UTC+3 | WARNING | rag_builder.embeddings.service:_embed_batch_with_retry:103 | Embedding transient failure batch=1/2 attempt=1 status=429 retrying
+2026-06-22 20:57:22.213 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=1/2 size=2 attempt=2 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 20:57:22.214 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=1/2 attempt=2 status=200 took_ms=0.00
+2026-06-22 20:57:22.214 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:118 | Embedding batch done batch=1/2 vectors=2
+2026-06-22 20:57:22.214 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=2/2 size=1 attempt=1 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 20:57:22.214 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=2/2 attempt=1 status=200 took_ms=0.00
+2026-06-22 20:57:22.215 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:118 | Embedding batch done batch=2/2 vectors=1
+2026-06-22 20:57:22.215 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:33 | Embeddings done count=3 dim=3
+2026-06-22 20:57:22.219 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:23 | Embeddings start count=1 dim=3 provider=openai_compatible
+2026-06-22 20:57:22.219 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=1/1 size=1 attempt=1 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 20:57:22.219 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=1/1 attempt=1 status=500 took_ms=0.00
+2026-06-22 20:57:22.219 UTC+3 | WARNING | rag_builder.embeddings.service:_embed_batch_with_retry:103 | Embedding transient failure batch=1/1 attempt=1 status=500 retrying
+2026-06-22 20:57:35.781 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/openapi.json
+2026-06-22 20:57:35.806 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/openapi.json status=200 took_ms=24.95
+2026-06-22 20:57:35.835 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 20:57:35.843 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:95 | POST /rag/build document_id=1 sections=0
+2026-06-22 20:57:35.844 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=202 took_ms=9.75
+2026-06-22 20:57:35.868 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 20:57:35.871 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:95 | POST /rag/build document_id=420001 sections=1
+2026-06-22 20:57:35.871 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=202 took_ms=3.01
+2026-06-22 20:57:35.879 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 20:57:35.879 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 20:57:35.880 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=3
+2026-06-22 20:57:35.880 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=3
+2026-06-22 20:57:35.882 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=2 sections=1 strategy=semantic_1024
+2026-06-22 20:57:35.882 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=2 type=table path=2
+2026-06-22 20:57:35.882 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=2 chunks=1
+2026-06-22 20:57:35.882 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=2 total_chunks=1
+2026-06-22 20:57:35.931 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:23 | Embeddings start count=2 dim=2048 provider=mock
+2026-06-22 20:57:35.932 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:33 | Embeddings done count=2 dim=2048
+2026-06-22 20:57:35.935 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:23 | Embeddings start count=1 dim=3 provider=openai_compatible
+2026-06-22 20:57:35.935 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=1/1 size=1 attempt=1 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 20:57:35.935 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=1/1 attempt=1 status=200 took_ms=0.00
+2026-06-22 20:57:35.936 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:118 | Embedding batch done batch=1/1 vectors=1
+2026-06-22 20:57:35.936 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:33 | Embeddings done count=1 dim=3
+2026-06-22 20:57:35.939 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:23 | Embeddings start count=3 dim=3 provider=openai_compatible
+2026-06-22 20:57:35.940 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=1/2 size=2 attempt=1 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 20:57:35.940 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=1/2 attempt=1 status=429 took_ms=0.01
+2026-06-22 20:57:35.940 UTC+3 | WARNING | rag_builder.embeddings.service:_embed_batch_with_retry:103 | Embedding transient failure batch=1/2 attempt=1 status=429 retrying
+2026-06-22 20:57:36.957 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=1/2 size=2 attempt=2 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 20:57:36.958 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=1/2 attempt=2 status=200 took_ms=0.01
+2026-06-22 20:57:36.958 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:118 | Embedding batch done batch=1/2 vectors=2
+2026-06-22 20:57:36.958 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=2/2 size=1 attempt=1 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 20:57:36.958 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=2/2 attempt=1 status=200 took_ms=0.00
+2026-06-22 20:57:36.959 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:118 | Embedding batch done batch=2/2 vectors=1
+2026-06-22 20:57:36.959 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:33 | Embeddings done count=3 dim=3
+2026-06-22 20:57:36.962 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:23 | Embeddings start count=1 dim=3 provider=openai_compatible
+2026-06-22 20:57:36.962 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=1/1 size=1 attempt=1 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 20:57:36.962 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=1/1 attempt=1 status=500 took_ms=0.00
+2026-06-22 20:57:36.963 UTC+3 | WARNING | rag_builder.embeddings.service:_embed_batch_with_retry:103 | Embedding transient failure batch=1/1 attempt=1 status=500 retrying
+2026-06-22 20:58:37.145 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/openapi.json
+2026-06-22 20:58:37.161 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/openapi.json status=200 took_ms=15.80
+2026-06-22 20:58:37.177 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 20:58:37.183 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:95 | POST /rag/build document_id=1 sections=0
+2026-06-22 20:58:37.184 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=202 took_ms=6.96
+2026-06-22 20:58:37.199 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 20:58:37.200 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:95 | POST /rag/build document_id=420001 sections=1
+2026-06-22 20:58:37.201 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=202 took_ms=2.04
+2026-06-22 20:58:37.206 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 20:58:37.207 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 20:58:37.207 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=3
+2026-06-22 20:58:37.207 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=3
+2026-06-22 20:58:37.209 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=2 sections=1 strategy=semantic_1024
+2026-06-22 20:58:37.209 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=2 type=table path=2
+2026-06-22 20:58:37.209 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=2 chunks=1
+2026-06-22 20:58:37.209 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=2 total_chunks=1
+2026-06-22 20:58:37.257 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:23 | Embeddings start count=2 dim=2048 provider=mock
+2026-06-22 20:58:37.257 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:33 | Embeddings done count=2 dim=2048
+2026-06-22 20:58:37.260 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:23 | Embeddings start count=1 dim=3 provider=openai_compatible
+2026-06-22 20:58:37.260 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=1/1 size=1 attempt=1 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 20:58:37.261 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=1/1 attempt=1 status=200 took_ms=0.00
+2026-06-22 20:58:37.261 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:118 | Embedding batch done batch=1/1 vectors=1
+2026-06-22 20:58:37.261 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:33 | Embeddings done count=1 dim=3
+2026-06-22 20:58:37.263 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:23 | Embeddings start count=3 dim=3 provider=openai_compatible
+2026-06-22 20:58:37.264 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=1/2 size=2 attempt=1 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 20:58:37.264 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=1/2 attempt=1 status=429 took_ms=0.00
+2026-06-22 20:58:37.264 UTC+3 | WARNING | rag_builder.embeddings.service:_embed_batch_with_retry:103 | Embedding transient failure batch=1/2 attempt=1 status=429 retrying
+2026-06-22 20:58:38.275 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=1/2 size=2 attempt=2 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 20:58:38.275 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=1/2 attempt=2 status=200 took_ms=0.00
+2026-06-22 20:58:38.275 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:118 | Embedding batch done batch=1/2 vectors=2
+2026-06-22 20:58:38.275 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=2/2 size=1 attempt=1 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 20:58:38.276 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=2/2 attempt=1 status=200 took_ms=0.00
+2026-06-22 20:58:38.276 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:118 | Embedding batch done batch=2/2 vectors=1
+2026-06-22 20:58:38.276 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:33 | Embeddings done count=3 dim=3
+2026-06-22 20:58:38.279 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:23 | Embeddings start count=1 dim=3 provider=openai_compatible
+2026-06-22 20:58:38.280 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=1/1 size=1 attempt=1 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 20:58:38.280 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=1/1 attempt=1 status=500 took_ms=0.00
+2026-06-22 20:58:38.280 UTC+3 | WARNING | rag_builder.embeddings.service:_embed_batch_with_retry:103 | Embedding transient failure batch=1/1 attempt=1 status=500 retrying
+2026-06-22 21:00:01.439 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/openapi.json
+2026-06-22 21:00:01.454 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/openapi.json status=200 took_ms=15.76
+2026-06-22 21:00:01.472 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 21:00:01.478 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:95 | POST /rag/build document_id=1 sections=0
+2026-06-22 21:00:01.478 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=202 took_ms=6.31
+2026-06-22 21:00:01.494 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 21:00:01.496 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:95 | POST /rag/build document_id=420001 sections=1
+2026-06-22 21:00:01.496 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=202 took_ms=2.13
+2026-06-22 21:00:01.501 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:00:01.502 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:00:01.503 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=3
+2026-06-22 21:00:01.503 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=3
+2026-06-22 21:00:01.505 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=2 sections=1 strategy=semantic_1024
+2026-06-22 21:00:01.505 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=2 type=table path=2
+2026-06-22 21:00:01.506 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=2 chunks=1
+2026-06-22 21:00:01.506 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=2 total_chunks=1
+2026-06-22 21:00:01.566 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:23 | Embeddings start count=2 dim=2048 provider=mock
+2026-06-22 21:00:01.568 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:33 | Embeddings done count=2 dim=2048
+2026-06-22 21:00:01.575 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:23 | Embeddings start count=1 dim=3 provider=openai_compatible
+2026-06-22 21:00:01.575 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=1/1 size=1 attempt=1 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 21:00:01.576 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=1/1 attempt=1 status=200 took_ms=0.01
+2026-06-22 21:00:01.576 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:118 | Embedding batch done batch=1/1 vectors=1
+2026-06-22 21:00:01.576 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:33 | Embeddings done count=1 dim=3
+2026-06-22 21:00:01.580 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:23 | Embeddings start count=3 dim=3 provider=openai_compatible
+2026-06-22 21:00:01.580 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=1/2 size=2 attempt=1 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 21:00:01.580 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=1/2 attempt=1 status=429 took_ms=0.00
+2026-06-22 21:00:01.580 UTC+3 | WARNING | rag_builder.embeddings.service:_embed_batch_with_retry:103 | Embedding transient failure batch=1/2 attempt=1 status=429 retrying
+2026-06-22 21:00:02.587 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=1/2 size=2 attempt=2 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 21:00:02.587 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=1/2 attempt=2 status=200 took_ms=0.00
+2026-06-22 21:00:02.587 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:118 | Embedding batch done batch=1/2 vectors=2
+2026-06-22 21:00:02.588 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=2/2 size=1 attempt=1 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 21:00:02.588 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=2/2 attempt=1 status=200 took_ms=0.00
+2026-06-22 21:00:02.588 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:118 | Embedding batch done batch=2/2 vectors=1
+2026-06-22 21:00:02.588 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:33 | Embeddings done count=3 dim=3
+2026-06-22 21:00:02.592 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:23 | Embeddings start count=1 dim=3 provider=openai_compatible
+2026-06-22 21:00:02.592 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=1/1 size=1 attempt=1 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 21:00:02.592 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=1/1 attempt=1 status=500 took_ms=0.00
+2026-06-22 21:00:02.592 UTC+3 | WARNING | rag_builder.embeddings.service:_embed_batch_with_retry:103 | Embedding transient failure batch=1/1 attempt=1 status=500 retrying
+2026-06-22 21:01:51.619 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/openapi.json
+2026-06-22 21:01:51.633 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/openapi.json status=200 took_ms=14.43
+2026-06-22 21:01:51.647 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 21:01:51.653 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:95 | POST /rag/build document_id=1 sections=0
+2026-06-22 21:01:51.654 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=202 took_ms=6.54
+2026-06-22 21:01:51.668 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 21:01:51.669 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:95 | POST /rag/build document_id=420001 sections=1
+2026-06-22 21:01:51.670 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=202 took_ms=1.92
+2026-06-22 21:01:51.674 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:01:51.674 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:01:51.674 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=3
+2026-06-22 21:01:51.674 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=3
+2026-06-22 21:01:51.677 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=2 sections=1 strategy=semantic_1024
+2026-06-22 21:01:51.677 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=2 type=table path=2
+2026-06-22 21:01:51.677 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=2 chunks=1
+2026-06-22 21:01:51.677 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=2 total_chunks=1
+2026-06-22 21:01:51.679 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:01:51.679 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:01:51.679 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=0
+2026-06-22 21:01:51.680 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=0
+2026-06-22 21:01:51.682 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:01:51.682 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:01:51.682 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=0
+2026-06-22 21:01:51.683 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=0
+2026-06-22 21:01:51.685 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:01:51.685 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:01:51.685 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:01:51.685 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:01:51.688 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:01:51.688 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:01:51.688 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=3
+2026-06-22 21:01:51.688 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=3
+2026-06-22 21:01:51.691 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:01:51.692 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:01:51.692 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:01:51.692 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:01:51.695 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:01:51.695 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:01:51.695 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:01:51.696 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:01:51.697 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:01:51.697 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=table path=1
+2026-06-22 21:01:51.698 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:01:51.698 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:01:51.699 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:01:51.699 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=table path=1
+2026-06-22 21:01:51.700 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:01:51.700 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:01:51.701 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:01:51.702 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=list path=1
+2026-06-22 21:01:51.702 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:01:51.702 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:01:51.704 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:01:51.704 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=list path=1
+2026-06-22 21:01:51.704 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:01:51.704 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:01:51.706 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:01:51.706 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=list path=1
+2026-06-22 21:01:51.706 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:01:51.706 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:01:51.708 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:01:51.708 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=image path=1
+2026-06-22 21:01:51.709 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:01:51.709 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:01:51.711 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:01:51.711 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=image path=1
+2026-06-22 21:01:51.712 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:01:51.712 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:01:51.715 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:01:51.715 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=image path=1
+2026-06-22 21:01:51.715 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:01:51.715 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:01:51.717 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:01:51.717 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=formula path=1
+2026-06-22 21:01:51.718 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:01:51.718 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:01:51.720 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:01:51.720 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=formula path=1
+2026-06-22 21:01:51.720 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:01:51.720 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:01:51.722 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:01:51.722 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=textBlock path=1
+2026-06-22 21:01:51.722 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:01:51.722 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:01:51.724 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:01:51.724 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=headerFooter path=1
+2026-06-22 21:01:51.724 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:01:51.724 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:01:51.725 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:01:51.726 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:01:51.726 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:01:51.726 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:01:51.728 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=2 strategy=semantic_1024
+2026-06-22 21:01:51.728 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:01:51.728 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:01:51.728 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=2 type=text path=2
+2026-06-22 21:01:51.728 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=2 chunks=1
+2026-06-22 21:01:51.728 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=2
+2026-06-22 21:01:51.731 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=2 strategy=semantic_1024
+2026-06-22 21:01:51.731 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:01:51.731 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:01:51.732 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=2 type=text path=2
+2026-06-22 21:01:51.732 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=2 chunks=1
+2026-06-22 21:01:51.732 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=2
+2026-06-22 21:01:51.734 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=42 sections=1 strategy=semantic_1024
+2026-06-22 21:01:51.735 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:01:51.735 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:01:51.735 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=42 total_chunks=1
+2026-06-22 21:01:51.737 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=custom_strategy
+2026-06-22 21:01:51.737 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:01:51.737 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:01:51.738 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:01:51.739 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:01:51.739 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:01:51.740 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:01:51.740 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:01:51.742 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:01:51.742 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:01:51.742 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:01:51.742 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:01:51.744 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:01:51.744 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:01:51.744 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:01:51.744 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:01:51.834 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:23 | Embeddings start count=2 dim=2048 provider=mock
+2026-06-22 21:01:51.835 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:33 | Embeddings done count=2 dim=2048
+2026-06-22 21:01:51.838 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:23 | Embeddings start count=1 dim=3 provider=openai_compatible
+2026-06-22 21:01:51.839 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=1/1 size=1 attempt=1 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 21:01:51.839 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=1/1 attempt=1 status=200 took_ms=0.00
+2026-06-22 21:01:51.839 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:118 | Embedding batch done batch=1/1 vectors=1
+2026-06-22 21:01:51.839 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:33 | Embeddings done count=1 dim=3
+2026-06-22 21:01:51.842 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:23 | Embeddings start count=3 dim=3 provider=openai_compatible
+2026-06-22 21:01:51.842 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=1/2 size=2 attempt=1 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 21:01:51.842 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=1/2 attempt=1 status=429 took_ms=0.00
+2026-06-22 21:01:51.843 UTC+3 | WARNING | rag_builder.embeddings.service:_embed_batch_with_retry:103 | Embedding transient failure batch=1/2 attempt=1 status=429 retrying
+2026-06-22 21:01:52.847 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=1/2 size=2 attempt=2 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 21:01:52.848 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=1/2 attempt=2 status=200 took_ms=0.00
+2026-06-22 21:01:52.848 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:118 | Embedding batch done batch=1/2 vectors=2
+2026-06-22 21:01:52.848 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=2/2 size=1 attempt=1 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 21:01:52.848 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=2/2 attempt=1 status=200 took_ms=0.00
+2026-06-22 21:01:52.848 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:118 | Embedding batch done batch=2/2 vectors=1
+2026-06-22 21:01:52.848 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:33 | Embeddings done count=3 dim=3
+2026-06-22 21:01:52.852 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:23 | Embeddings start count=1 dim=3 provider=openai_compatible
+2026-06-22 21:01:52.852 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=1/1 size=1 attempt=1 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 21:01:52.852 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=1/1 attempt=1 status=500 took_ms=0.00
+2026-06-22 21:01:52.852 UTC+3 | WARNING | rag_builder.embeddings.service:_embed_batch_with_retry:103 | Embedding transient failure batch=1/1 attempt=1 status=500 retrying
+2026-06-22 21:01:52.859 UTC+3 | INFO | rag_builder.services.indexing_service:build:41 | Indexing start document_id=100
+2026-06-22 21:01:52.859 UTC+3 | ERROR | rag_builder.services.indexing_service:build:72 | Indexing failed document_id=100
+2026-06-22 21:01:53.181 UTC+3 | INFO | rag_builder.services.indexing_service:build:41 | Indexing start document_id=100
+2026-06-22 21:01:53.181 UTC+3 | ERROR | rag_builder.services.indexing_service:build:72 | Indexing failed document_id=100
+2026-06-22 21:01:53.198 UTC+3 | INFO | rag_builder.services.indexing_service:build:41 | Indexing start document_id=100
+2026-06-22 21:01:53.198 UTC+3 | ERROR | rag_builder.services.indexing_service:build:72 | Indexing failed document_id=100
+2026-06-22 21:01:53.213 UTC+3 | INFO | rag_builder.services.indexing_service:build:41 | Indexing start document_id=100
+2026-06-22 21:01:53.214 UTC+3 | ERROR | rag_builder.services.indexing_service:build:72 | Indexing failed document_id=100
+2026-06-22 21:01:53.229 UTC+3 | INFO | rag_builder.services.indexing_service:build:41 | Indexing start document_id=100
+2026-06-22 21:01:53.229 UTC+3 | ERROR | rag_builder.services.indexing_service:build:72 | Indexing failed document_id=100
+2026-06-22 21:01:53.244 UTC+3 | INFO | rag_builder.services.indexing_service:build:41 | Indexing start document_id=100
+2026-06-22 21:01:53.244 UTC+3 | ERROR | rag_builder.services.indexing_service:build:72 | Indexing failed document_id=100
+2026-06-22 21:01:53.277 UTC+3 | INFO | rag_builder.services.indexing_service:delete:76 | Delete index start document_id=100
+2026-06-22 21:01:53.277 UTC+3 | ERROR | rag_builder.services.indexing_service:delete:85 | Delete index failed document_id=100
+2026-06-22 21:01:53.292 UTC+3 | INFO | rag_builder.services.indexing_service:delete:76 | Delete index start document_id=100
+2026-06-22 21:01:53.292 UTC+3 | ERROR | rag_builder.services.indexing_service:delete:85 | Delete index failed document_id=100
+2026-06-22 21:01:53.306 UTC+3 | INFO | rag_builder.services.indexing_service:delete:76 | Delete index start document_id=999
+2026-06-22 21:01:53.306 UTC+3 | ERROR | rag_builder.services.indexing_service:delete:85 | Delete index failed document_id=999
+2026-06-22 21:01:53.325 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:90 | Status check start document_id=100 longpoll=0
+2026-06-22 21:01:53.325 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:108 | Status check done document_id=100 status=pending
+2026-06-22 21:01:53.330 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:90 | Status check start document_id=100 longpoll=0
+2026-06-22 21:01:53.330 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:108 | Status check done document_id=100 status=indexed
+2026-06-22 21:01:53.335 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:90 | Status check start document_id=100 longpoll=1
+2026-06-22 21:01:54.347 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:106 | Longpoll timeout document_id=100 timeout=1s
+2026-06-22 21:01:54.347 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:108 | Status check done document_id=100 status=pending
+2026-06-22 21:01:54.352 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:90 | Status check start document_id=100 longpoll=0
+2026-06-22 21:01:54.352 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:108 | Status check done document_id=100 status=indexed
+2026-06-22 21:02:33.808 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/openapi.json
+2026-06-22 21:02:33.822 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/openapi.json status=200 took_ms=14.31
+2026-06-22 21:02:33.836 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 21:02:33.841 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:95 | POST /rag/build document_id=1 sections=0
+2026-06-22 21:02:33.841 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=202 took_ms=5.58
+2026-06-22 21:02:33.855 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 21:02:33.857 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:95 | POST /rag/build document_id=420001 sections=1
+2026-06-22 21:02:33.857 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=202 took_ms=2.02
+2026-06-22 21:02:33.860 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:02:33.860 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:02:33.861 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=3
+2026-06-22 21:02:33.861 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=3
+2026-06-22 21:02:33.862 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=2 sections=1 strategy=semantic_1024
+2026-06-22 21:02:33.862 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=2 type=table path=2
+2026-06-22 21:02:33.863 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=2 chunks=1
+2026-06-22 21:02:33.863 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=2 total_chunks=1
+2026-06-22 21:02:33.864 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:02:33.864 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:02:33.865 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=0
+2026-06-22 21:02:33.865 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=0
+2026-06-22 21:02:33.866 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:02:33.866 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:02:33.867 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=0
+2026-06-22 21:02:33.867 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=0
+2026-06-22 21:02:33.869 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:02:33.869 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:02:33.869 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:02:33.869 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:02:33.870 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:02:33.870 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:02:33.871 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=3
+2026-06-22 21:02:33.871 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=3
+2026-06-22 21:02:33.873 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:02:33.873 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:02:33.873 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:02:33.873 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:02:33.875 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:02:33.875 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:02:33.875 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:02:33.875 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:02:33.877 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:02:33.877 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=table path=1
+2026-06-22 21:02:33.877 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:02:33.877 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:02:33.879 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:02:33.879 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=table path=1
+2026-06-22 21:02:33.879 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:02:33.879 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:02:33.880 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:02:33.880 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=list path=1
+2026-06-22 21:02:33.881 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:02:33.881 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:02:33.882 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:02:33.882 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=list path=1
+2026-06-22 21:02:33.882 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:02:33.882 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:02:33.884 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:02:33.884 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=list path=1
+2026-06-22 21:02:33.884 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:02:33.884 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:02:33.886 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:02:33.886 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=image path=1
+2026-06-22 21:02:33.886 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:02:33.886 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:02:33.888 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:02:33.888 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=image path=1
+2026-06-22 21:02:33.888 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:02:33.889 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:02:33.890 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:02:33.890 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=image path=1
+2026-06-22 21:02:33.891 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:02:33.891 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:02:33.892 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:02:33.892 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=formula path=1
+2026-06-22 21:02:33.893 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:02:33.893 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:02:33.894 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:02:33.894 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=formula path=1
+2026-06-22 21:02:33.895 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:02:33.895 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:02:33.897 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:02:33.897 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=textBlock path=1
+2026-06-22 21:02:33.897 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:02:33.897 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:02:33.899 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:02:33.899 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=headerFooter path=1
+2026-06-22 21:02:33.899 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:02:33.900 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:02:33.902 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:02:33.902 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:02:33.902 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:02:33.902 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:02:33.904 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=2 strategy=semantic_1024
+2026-06-22 21:02:33.904 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:02:33.905 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:02:33.905 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=2 type=text path=2
+2026-06-22 21:02:33.905 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=2 chunks=1
+2026-06-22 21:02:33.905 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=2
+2026-06-22 21:02:33.908 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=2 strategy=semantic_1024
+2026-06-22 21:02:33.908 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:02:33.908 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:02:33.908 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=2 type=text path=2
+2026-06-22 21:02:33.909 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=2 chunks=1
+2026-06-22 21:02:33.909 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=2
+2026-06-22 21:02:33.911 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=42 sections=1 strategy=semantic_1024
+2026-06-22 21:02:33.911 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:02:33.911 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:02:33.911 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=42 total_chunks=1
+2026-06-22 21:02:33.913 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=custom_strategy
+2026-06-22 21:02:33.913 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:02:33.913 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:02:33.914 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:02:33.915 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:02:33.915 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:02:33.915 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:02:33.916 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:02:33.917 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:02:33.917 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:02:33.918 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:02:33.918 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:02:33.919 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:02:33.920 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:02:33.920 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:02:33.920 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:02:33.978 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:23 | Embeddings start count=2 dim=2048 provider=mock
+2026-06-22 21:02:33.980 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:33 | Embeddings done count=2 dim=2048
+2026-06-22 21:02:33.986 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:23 | Embeddings start count=1 dim=3 provider=openai_compatible
+2026-06-22 21:02:33.987 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=1/1 size=1 attempt=1 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 21:02:33.987 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=1/1 attempt=1 status=200 took_ms=0.01
+2026-06-22 21:02:33.987 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:118 | Embedding batch done batch=1/1 vectors=1
+2026-06-22 21:02:33.988 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:33 | Embeddings done count=1 dim=3
+2026-06-22 21:02:33.992 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:23 | Embeddings start count=3 dim=3 provider=openai_compatible
+2026-06-22 21:02:33.992 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=1/2 size=2 attempt=1 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 21:02:33.992 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=1/2 attempt=1 status=429 took_ms=0.01
+2026-06-22 21:02:33.992 UTC+3 | WARNING | rag_builder.embeddings.service:_embed_batch_with_retry:103 | Embedding transient failure batch=1/2 attempt=1 status=429 retrying
+2026-06-22 21:02:34.996 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=1/2 size=2 attempt=2 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 21:02:34.997 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=1/2 attempt=2 status=200 took_ms=0.01
+2026-06-22 21:02:34.998 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:118 | Embedding batch done batch=1/2 vectors=2
+2026-06-22 21:02:34.998 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=2/2 size=1 attempt=1 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 21:02:34.999 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=2/2 attempt=1 status=200 took_ms=0.01
+2026-06-22 21:02:34.999 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:118 | Embedding batch done batch=2/2 vectors=1
+2026-06-22 21:02:35.000 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:33 | Embeddings done count=3 dim=3
+2026-06-22 21:02:35.004 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:23 | Embeddings start count=1 dim=3 provider=openai_compatible
+2026-06-22 21:02:35.004 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=1/1 size=1 attempt=1 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 21:02:35.004 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=1/1 attempt=1 status=500 took_ms=0.00
+2026-06-22 21:02:35.004 UTC+3 | WARNING | rag_builder.embeddings.service:_embed_batch_with_retry:103 | Embedding transient failure batch=1/1 attempt=1 status=500 retrying
+2026-06-22 21:02:35.012 UTC+3 | INFO | rag_builder.services.indexing_service:build:41 | Indexing start document_id=100
+2026-06-22 21:02:35.012 UTC+3 | INFO | rag_builder.services.indexing_service:build:60 | Indexing completed document_id=100 chunks=1 txn_id=c1430f16-a34e-4949-968c-0693afd77b9d
+2026-06-22 21:02:35.017 UTC+3 | INFO | rag_builder.services.indexing_service:build:41 | Indexing start document_id=100
+2026-06-22 21:02:35.017 UTC+3 | INFO | rag_builder.services.indexing_service:build:60 | Indexing completed document_id=100 chunks=1 txn_id=1bae848a-7583-484a-a958-cea3489b85a3
+2026-06-22 21:02:35.025 UTC+3 | INFO | rag_builder.services.indexing_service:build:41 | Indexing start document_id=100
+2026-06-22 21:02:35.025 UTC+3 | INFO | rag_builder.services.indexing_service:build:60 | Indexing completed document_id=100 chunks=1 txn_id=e6edc730-fb5c-4b33-b5c2-464bb32712a1
+2026-06-22 21:02:35.030 UTC+3 | INFO | rag_builder.services.indexing_service:build:41 | Indexing start document_id=100
+2026-06-22 21:02:35.030 UTC+3 | INFO | rag_builder.services.indexing_service:build:60 | Indexing completed document_id=100 chunks=0 txn_id=581167ad-a999-4c71-acd3-5463346f9848
+2026-06-22 21:02:35.035 UTC+3 | INFO | rag_builder.services.indexing_service:build:41 | Indexing start document_id=100
+2026-06-22 21:02:35.035 UTC+3 | INFO | rag_builder.services.indexing_service:build:60 | Indexing completed document_id=100 chunks=0 txn_id=805691c8-ff51-4687-a410-f350596f6f1a
+2026-06-22 21:02:35.041 UTC+3 | INFO | rag_builder.services.indexing_service:build:41 | Indexing start document_id=100
+2026-06-22 21:02:35.041 UTC+3 | ERROR | rag_builder.services.indexing_service:build:72 | Indexing failed document_id=100
+2026-06-22 21:02:35.055 UTC+3 | INFO | rag_builder.services.indexing_service:delete:76 | Delete index start document_id=100
+2026-06-22 21:02:35.055 UTC+3 | INFO | rag_builder.services.indexing_service:delete:82 | Delete index completed document_id=100 deleted_count=5
+2026-06-22 21:02:35.059 UTC+3 | INFO | rag_builder.services.indexing_service:delete:76 | Delete index start document_id=100
+2026-06-22 21:02:35.060 UTC+3 | INFO | rag_builder.services.indexing_service:delete:82 | Delete index completed document_id=100 deleted_count=3
+2026-06-22 21:02:35.064 UTC+3 | INFO | rag_builder.services.indexing_service:delete:76 | Delete index start document_id=999
+2026-06-22 21:02:35.064 UTC+3 | INFO | rag_builder.services.indexing_service:delete:82 | Delete index completed document_id=999 deleted_count=0
+2026-06-22 21:02:35.069 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:90 | Status check start document_id=100 longpoll=0
+2026-06-22 21:02:35.069 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:108 | Status check done document_id=100 status=pending
+2026-06-22 21:02:35.073 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:90 | Status check start document_id=100 longpoll=0
+2026-06-22 21:02:35.074 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:108 | Status check done document_id=100 status=indexed
+2026-06-22 21:02:35.079 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:90 | Status check start document_id=100 longpoll=1
+2026-06-22 21:02:36.096 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:106 | Longpoll timeout document_id=100 timeout=1s
+2026-06-22 21:02:36.096 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:108 | Status check done document_id=100 status=pending
+2026-06-22 21:02:36.100 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:90 | Status check start document_id=100 longpoll=0
+2026-06-22 21:02:36.100 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:108 | Status check done document_id=100 status=indexed
+2026-06-22 21:03:06.931 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/openapi.json
+2026-06-22 21:03:06.945 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/openapi.json status=200 took_ms=13.85
+2026-06-22 21:03:06.958 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 21:03:06.964 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:95 | POST /rag/build document_id=1 sections=0
+2026-06-22 21:03:06.965 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=202 took_ms=6.26
+2026-06-22 21:03:06.977 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 21:03:06.979 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:95 | POST /rag/build document_id=420001 sections=1
+2026-06-22 21:03:06.979 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=202 took_ms=1.90
+2026-06-22 21:03:06.982 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:03:06.982 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:03:06.982 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=3
+2026-06-22 21:03:06.983 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=3
+2026-06-22 21:03:06.984 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=2 sections=1 strategy=semantic_1024
+2026-06-22 21:03:06.984 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=2 type=table path=2
+2026-06-22 21:03:06.984 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=2 chunks=1
+2026-06-22 21:03:06.985 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=2 total_chunks=1
+2026-06-22 21:03:06.986 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:03:06.986 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:03:06.986 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=0
+2026-06-22 21:03:06.986 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=0
+2026-06-22 21:03:06.988 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:03:06.988 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:03:06.988 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=0
+2026-06-22 21:03:06.988 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=0
+2026-06-22 21:03:06.990 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:03:06.990 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:03:06.990 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:03:06.990 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:03:06.991 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:03:06.992 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:03:06.992 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=3
+2026-06-22 21:03:06.992 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=3
+2026-06-22 21:03:06.994 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:03:06.994 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:03:06.994 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:03:06.994 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:03:06.996 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:03:06.996 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:03:06.996 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:03:06.996 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:03:06.998 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:03:06.998 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=table path=1
+2026-06-22 21:03:06.998 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:03:06.998 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:03:07.000 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:03:07.000 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=table path=1
+2026-06-22 21:03:07.000 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:03:07.000 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:03:07.001 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:03:07.001 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=list path=1
+2026-06-22 21:03:07.002 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:03:07.002 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:03:07.003 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:03:07.003 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=list path=1
+2026-06-22 21:03:07.003 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:03:07.004 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:03:07.005 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:03:07.005 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=list path=1
+2026-06-22 21:03:07.005 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:03:07.005 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:03:07.007 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:03:07.007 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=image path=1
+2026-06-22 21:03:07.007 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:03:07.007 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:03:07.009 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:03:07.009 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=image path=1
+2026-06-22 21:03:07.009 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:03:07.009 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:03:07.010 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:03:07.011 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=image path=1
+2026-06-22 21:03:07.011 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:03:07.011 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:03:07.012 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:03:07.012 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=formula path=1
+2026-06-22 21:03:07.013 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:03:07.013 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:03:07.014 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:03:07.014 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=formula path=1
+2026-06-22 21:03:07.015 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:03:07.015 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:03:07.016 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:03:07.016 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=textBlock path=1
+2026-06-22 21:03:07.016 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:03:07.017 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:03:07.018 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:03:07.018 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=headerFooter path=1
+2026-06-22 21:03:07.018 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:03:07.018 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:03:07.020 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:03:07.020 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:03:07.020 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:03:07.020 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:03:07.022 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=2 strategy=semantic_1024
+2026-06-22 21:03:07.022 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:03:07.022 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:03:07.022 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=2 type=text path=2
+2026-06-22 21:03:07.022 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=2 chunks=1
+2026-06-22 21:03:07.022 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=2
+2026-06-22 21:03:07.024 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=2 strategy=semantic_1024
+2026-06-22 21:03:07.024 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:03:07.024 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:03:07.024 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=2 type=text path=2
+2026-06-22 21:03:07.024 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=2 chunks=1
+2026-06-22 21:03:07.024 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=2
+2026-06-22 21:03:07.026 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=42 sections=1 strategy=semantic_1024
+2026-06-22 21:03:07.026 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:03:07.027 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:03:07.027 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=42 total_chunks=1
+2026-06-22 21:03:07.028 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=custom_strategy
+2026-06-22 21:03:07.028 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:03:07.029 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:03:07.029 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:03:07.030 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:03:07.030 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:03:07.030 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:03:07.030 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:03:07.032 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:03:07.032 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:03:07.032 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:03:07.032 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:03:07.034 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:03:07.034 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:03:07.034 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:03:07.034 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:03:07.078 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:23 | Embeddings start count=2 dim=2048 provider=mock
+2026-06-22 21:03:07.079 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:33 | Embeddings done count=2 dim=2048
+2026-06-22 21:03:07.082 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:23 | Embeddings start count=1 dim=3 provider=openai_compatible
+2026-06-22 21:03:07.082 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=1/1 size=1 attempt=1 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 21:03:07.082 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=1/1 attempt=1 status=200 took_ms=0.00
+2026-06-22 21:03:07.082 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:118 | Embedding batch done batch=1/1 vectors=1
+2026-06-22 21:03:07.082 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:33 | Embeddings done count=1 dim=3
+2026-06-22 21:03:07.085 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:23 | Embeddings start count=3 dim=3 provider=openai_compatible
+2026-06-22 21:03:07.085 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=1/2 size=2 attempt=1 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 21:03:07.085 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=1/2 attempt=1 status=429 took_ms=0.00
+2026-06-22 21:03:07.086 UTC+3 | WARNING | rag_builder.embeddings.service:_embed_batch_with_retry:103 | Embedding transient failure batch=1/2 attempt=1 status=429 retrying
+2026-06-22 21:03:08.095 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=1/2 size=2 attempt=2 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 21:03:08.095 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=1/2 attempt=2 status=200 took_ms=0.01
+2026-06-22 21:03:08.096 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:118 | Embedding batch done batch=1/2 vectors=2
+2026-06-22 21:03:08.096 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=2/2 size=1 attempt=1 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 21:03:08.096 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=2/2 attempt=1 status=200 took_ms=0.00
+2026-06-22 21:03:08.096 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:118 | Embedding batch done batch=2/2 vectors=1
+2026-06-22 21:03:08.096 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:33 | Embeddings done count=3 dim=3
+2026-06-22 21:03:08.099 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:23 | Embeddings start count=1 dim=3 provider=openai_compatible
+2026-06-22 21:03:08.099 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=1/1 size=1 attempt=1 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 21:03:08.100 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=1/1 attempt=1 status=500 took_ms=0.00
+2026-06-22 21:03:08.100 UTC+3 | WARNING | rag_builder.embeddings.service:_embed_batch_with_retry:103 | Embedding transient failure batch=1/1 attempt=1 status=500 retrying
+2026-06-22 21:03:08.106 UTC+3 | INFO | rag_builder.services.indexing_service:build:41 | Indexing start document_id=100
+2026-06-22 21:03:08.107 UTC+3 | INFO | rag_builder.services.indexing_service:build:60 | Indexing completed document_id=100 chunks=1 txn_id=e1b1cf53-241e-48ff-a7bc-c456514b42bc
+2026-06-22 21:03:08.111 UTC+3 | INFO | rag_builder.services.indexing_service:build:41 | Indexing start document_id=100
+2026-06-22 21:03:08.112 UTC+3 | INFO | rag_builder.services.indexing_service:build:60 | Indexing completed document_id=100 chunks=1 txn_id=db9a7b23-74b3-468d-acfe-74941b805980
+2026-06-22 21:03:08.117 UTC+3 | INFO | rag_builder.services.indexing_service:build:41 | Indexing start document_id=100
+2026-06-22 21:03:08.117 UTC+3 | INFO | rag_builder.services.indexing_service:build:60 | Indexing completed document_id=100 chunks=1 txn_id=0538ab14-c112-49ec-b3de-f410eab97c70
+2026-06-22 21:03:08.121 UTC+3 | INFO | rag_builder.services.indexing_service:build:41 | Indexing start document_id=100
+2026-06-22 21:03:08.122 UTC+3 | INFO | rag_builder.services.indexing_service:build:60 | Indexing completed document_id=100 chunks=0 txn_id=d2348329-286d-4577-bb5f-2779d2ca068a
+2026-06-22 21:03:08.126 UTC+3 | INFO | rag_builder.services.indexing_service:build:41 | Indexing start document_id=100
+2026-06-22 21:03:08.127 UTC+3 | INFO | rag_builder.services.indexing_service:build:60 | Indexing completed document_id=100 chunks=0 txn_id=57d5b2d5-351d-4a05-a327-ce7920add9ae
+2026-06-22 21:03:08.131 UTC+3 | INFO | rag_builder.services.indexing_service:build:41 | Indexing start document_id=100
+2026-06-22 21:03:08.131 UTC+3 | ERROR | rag_builder.services.indexing_service:build:72 | Indexing failed document_id=100
+2026-06-22 21:03:08.144 UTC+3 | INFO | rag_builder.services.indexing_service:delete:76 | Delete index start document_id=100
+2026-06-22 21:03:08.145 UTC+3 | INFO | rag_builder.services.indexing_service:delete:82 | Delete index completed document_id=100 deleted_count=5
+2026-06-22 21:03:08.149 UTC+3 | INFO | rag_builder.services.indexing_service:delete:76 | Delete index start document_id=100
+2026-06-22 21:03:08.150 UTC+3 | INFO | rag_builder.services.indexing_service:delete:82 | Delete index completed document_id=100 deleted_count=3
+2026-06-22 21:03:08.154 UTC+3 | INFO | rag_builder.services.indexing_service:delete:76 | Delete index start document_id=999
+2026-06-22 21:03:08.154 UTC+3 | INFO | rag_builder.services.indexing_service:delete:82 | Delete index completed document_id=999 deleted_count=0
+2026-06-22 21:03:08.158 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:90 | Status check start document_id=100 longpoll=0
+2026-06-22 21:03:08.159 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:108 | Status check done document_id=100 status=pending
+2026-06-22 21:03:08.164 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:90 | Status check start document_id=100 longpoll=0
+2026-06-22 21:03:08.164 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:108 | Status check done document_id=100 status=indexed
+2026-06-22 21:03:08.171 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:90 | Status check start document_id=100 longpoll=1
+2026-06-22 21:03:09.184 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:106 | Longpoll timeout document_id=100 timeout=1s
+2026-06-22 21:03:09.185 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:108 | Status check done document_id=100 status=pending
+2026-06-22 21:03:09.189 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:90 | Status check start document_id=100 longpoll=0
+2026-06-22 21:03:09.189 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:108 | Status check done document_id=100 status=indexed
+2026-06-22 21:07:08.525 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 21:07:08.595 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:95 | POST /rag/build document_id=420000 sections=1
+2026-06-22 21:07:08.595 UTC+3 | INFO | rag_builder.services.indexing_service:build:41 | Indexing start document_id=420000
+2026-06-22 21:07:08.596 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=420000 sections=1 strategy=semantic_1024
+2026-06-22 21:07:08.596 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:07:08.596 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:07:08.596 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=420000 total_chunks=1
+2026-06-22 21:07:08.596 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:23 | Embeddings start count=1 dim=2048 provider=mock
+2026-06-22 21:07:08.597 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:33 | Embeddings done count=1 dim=2048
+2026-06-22 21:07:08.597 UTC+3 | DEBUG | rag_builder.repositories.chunk_repository:delete_by_document:36 | Repository.delete_by_document start document_id=420000
+2026-06-22 21:07:08.606 UTC+3 | INFO | rag_builder.repositories.chunk_repository:delete_by_document:40 | Repository.delete_by_document done document_id=420000 deleted=0
+2026-06-22 21:07:08.606 UTC+3 | DEBUG | rag_builder.repositories.chunk_repository:insert_chunks:16 | Repository.insert_chunks start chunks=1 embeddings=1
+2026-06-22 21:07:08.627 UTC+3 | INFO | rag_builder.repositories.chunk_repository:insert_chunks:32 | Repository.insert_chunks done inserted=1
+2026-06-22 21:07:08.631 UTC+3 | INFO | rag_builder.services.indexing_service:build:60 | Indexing completed document_id=420000 chunks=1 txn_id=ac03a1a5-32a2-4f99-bd96-21c47f1d4749
+2026-06-22 21:07:08.632 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=202 took_ms=107.43
+2026-06-22 21:07:08.633 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/rag/build/420000/status
+2026-06-22 21:07:08.634 UTC+3 | INFO | rag_builder.api.v1.rag_routes:status:148 | GET /rag/build/420000/status longpoll=1
+2026-06-22 21:07:08.634 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:90 | Status check start document_id=420000 longpoll=1
+2026-06-22 21:07:08.634 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:108 | Status check done document_id=420000 status=indexed
+2026-06-22 21:07:08.634 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/rag/build/420000/status status=200 took_ms=1.40
+2026-06-22 21:07:08.635 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=DELETE path=/api/v1/rag/build/420000
+2026-06-22 21:07:08.636 UTC+3 | INFO | rag_builder.api.v1.rag_routes:delete:117 | DELETE /rag/build/420000
+2026-06-22 21:07:08.636 UTC+3 | INFO | rag_builder.services.indexing_service:delete:76 | Delete index start document_id=420000
+2026-06-22 21:07:08.636 UTC+3 | DEBUG | rag_builder.repositories.chunk_repository:delete_by_document:36 | Repository.delete_by_document start document_id=420000
+2026-06-22 21:07:08.639 UTC+3 | INFO | rag_builder.repositories.chunk_repository:delete_by_document:40 | Repository.delete_by_document done document_id=420000 deleted=1
+2026-06-22 21:07:08.642 UTC+3 | INFO | rag_builder.services.indexing_service:delete:82 | Delete index completed document_id=420000 deleted_count=1
+2026-06-22 21:07:08.643 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=DELETE path=/api/v1/rag/build/420000 status=200 took_ms=7.68
+2026-06-22 21:07:08.736 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-22 21:07:08.737 UTC+3 | DEBUG | rag_builder.api.v1.health_routes:health:33 | GET /health
+2026-06-22 21:07:08.740 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=200 took_ms=4.14
+2026-06-22 21:16:13.203 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/openapi.json
+2026-06-22 21:16:13.215 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/openapi.json status=200 took_ms=12.93
+2026-06-22 21:16:13.228 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-22 21:16:13.228 UTC+3 | DEBUG | rag_builder.api.v1.health_routes:health:33 | GET /health
+2026-06-22 21:16:17.303 UTC+3 | ERROR | rag_builder.api.v1.health_routes:health:39 | Health check dependency failure service=rag-builder
+2026-06-22 21:16:17.527 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=200 took_ms=4299.50
+2026-06-22 21:16:17.825 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 21:16:17.831 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:95 | POST /rag/build document_id=1 sections=0
+2026-06-22 21:16:17.832 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=202 took_ms=6.85
+2026-06-22 21:16:17.845 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 21:16:17.846 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:95 | POST /rag/build document_id=420001 sections=1
+2026-06-22 21:16:17.847 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=202 took_ms=1.90
+2026-06-22 21:16:17.859 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 21:16:17.860 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.49
+2026-06-22 21:16:17.873 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 21:16:17.874 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.03
+2026-06-22 21:16:17.886 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 21:16:17.888 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=2.02
+2026-06-22 21:16:17.901 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 21:16:17.903 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.86
+2026-06-22 21:16:17.915 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 21:16:17.916 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.08
+2026-06-22 21:16:17.932 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 21:16:17.934 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.13
+2026-06-22 21:16:17.945 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 21:16:17.946 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=0.97
+2026-06-22 21:16:17.957 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 21:16:17.959 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=2.50
+2026-06-22 21:16:17.972 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 21:16:17.973 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.13
+2026-06-22 21:16:17.984 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 21:16:17.985 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=0.90
+2026-06-22 21:16:28.629 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/openapi.json
+2026-06-22 21:16:28.647 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/openapi.json status=200 took_ms=18.01
+2026-06-22 21:16:28.670 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=GET path=/api/v1/health
+2026-06-22 21:16:28.671 UTC+3 | DEBUG | rag_builder.api.v1.health_routes:health:33 | GET /health
+2026-06-22 21:16:32.746 UTC+3 | ERROR | rag_builder.api.v1.health_routes:health:39 | Health check dependency failure service=rag-builder
+2026-06-22 21:16:32.774 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=GET path=/api/v1/health status=200 took_ms=4104.18
+2026-06-22 21:16:32.796 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 21:16:32.806 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:95 | POST /rag/build document_id=1 sections=0
+2026-06-22 21:16:32.806 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=202 took_ms=10.04
+2026-06-22 21:16:32.833 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 21:16:32.838 UTC+3 | INFO | rag_builder.api.v1.rag_routes:build:95 | POST /rag/build document_id=420001 sections=1
+2026-06-22 21:16:32.840 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=202 took_ms=7.06
+2026-06-22 21:16:32.859 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 21:16:32.861 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.60
+2026-06-22 21:16:32.879 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 21:16:32.880 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.57
+2026-06-22 21:16:32.901 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 21:16:32.902 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.56
+2026-06-22 21:16:32.915 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 21:16:32.917 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.88
+2026-06-22 21:16:32.939 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 21:16:32.941 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.60
+2026-06-22 21:16:32.956 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 21:16:32.958 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=2.40
+2026-06-22 21:16:32.976 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 21:16:32.978 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.32
+2026-06-22 21:16:33.000 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 21:16:33.002 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=2.08
+2026-06-22 21:16:33.015 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 21:16:33.016 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=0.92
+2026-06-22 21:16:33.034 UTC+3 | INFO | rag_builder.api.middleware:dispatch:18 | Request start method=POST path=/api/v1/rag/build
+2026-06-22 21:16:33.035 UTC+3 | INFO | rag_builder.api.middleware:dispatch:21 | Request done method=POST path=/api/v1/rag/build status=422 took_ms=1.12
+2026-06-22 21:16:33.039 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:16:33.039 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:16:33.039 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=3
+2026-06-22 21:16:33.039 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=3
+2026-06-22 21:16:33.042 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=2 sections=1 strategy=semantic_1024
+2026-06-22 21:16:33.042 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=2 type=table path=2
+2026-06-22 21:16:33.042 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=2 chunks=1
+2026-06-22 21:16:33.043 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=2 total_chunks=1
+2026-06-22 21:16:33.045 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:16:33.046 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:16:33.046 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=0
+2026-06-22 21:16:33.046 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=0
+2026-06-22 21:16:33.049 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:16:33.049 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:16:33.049 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=0
+2026-06-22 21:16:33.049 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=0
+2026-06-22 21:16:33.051 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:16:33.052 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:16:33.052 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:16:33.052 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:16:33.054 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:16:33.054 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:16:33.054 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=3
+2026-06-22 21:16:33.054 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=3
+2026-06-22 21:16:33.057 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:16:33.058 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:16:33.058 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:16:33.058 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:16:33.061 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:16:33.061 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:16:33.061 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:16:33.062 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:16:33.064 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:16:33.064 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=table path=1
+2026-06-22 21:16:33.065 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:16:33.065 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:16:33.067 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:16:33.067 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=table path=1
+2026-06-22 21:16:33.067 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:16:33.068 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:16:33.069 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:16:33.070 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=list path=1
+2026-06-22 21:16:33.070 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:16:33.070 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:16:33.072 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:16:33.072 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=list path=1
+2026-06-22 21:16:33.072 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:16:33.072 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:16:33.074 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:16:33.074 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=list path=1
+2026-06-22 21:16:33.074 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:16:33.074 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:16:33.076 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:16:33.076 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=image path=1
+2026-06-22 21:16:33.076 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:16:33.076 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:16:33.078 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:16:33.078 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=image path=1
+2026-06-22 21:16:33.078 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:16:33.078 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:16:33.080 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:16:33.080 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=image path=1
+2026-06-22 21:16:33.080 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:16:33.081 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:16:33.083 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:16:33.083 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=formula path=1
+2026-06-22 21:16:33.084 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:16:33.084 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:16:33.086 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:16:33.087 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=formula path=1
+2026-06-22 21:16:33.087 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:16:33.087 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:16:33.092 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:16:33.093 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=textBlock path=1
+2026-06-22 21:16:33.093 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:16:33.093 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:16:33.096 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:16:33.096 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=headerFooter path=1
+2026-06-22 21:16:33.097 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:16:33.097 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:16:33.099 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:16:33.099 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:16:33.099 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:16:33.099 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:16:33.101 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=2 strategy=semantic_1024
+2026-06-22 21:16:33.101 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:16:33.101 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:16:33.102 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=2 type=text path=2
+2026-06-22 21:16:33.102 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=2 chunks=1
+2026-06-22 21:16:33.102 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=2
+2026-06-22 21:16:33.104 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=2 strategy=semantic_1024
+2026-06-22 21:16:33.104 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:16:33.104 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:16:33.104 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=2 type=text path=2
+2026-06-22 21:16:33.104 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=2 chunks=1
+2026-06-22 21:16:33.104 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=2
+2026-06-22 21:16:33.106 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=42 sections=1 strategy=semantic_1024
+2026-06-22 21:16:33.106 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:16:33.106 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:16:33.106 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=42 total_chunks=1
+2026-06-22 21:16:33.108 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=custom_strategy
+2026-06-22 21:16:33.108 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:16:33.108 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:16:33.108 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:16:33.109 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:16:33.110 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:16:33.110 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:16:33.110 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:16:33.111 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:16:33.112 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:16:33.112 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:16:33.112 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:16:33.113 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:18 | Chunking start document_id=1 sections=1 strategy=semantic_1024
+2026-06-22 21:16:33.114 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:27 | Chunking section start section_id=1 type=text path=1
+2026-06-22 21:16:33.114 UTC+3 | DEBUG | rag_builder.chunking.service:build_chunks:46 | Chunking section done section_id=1 chunks=1
+2026-06-22 21:16:33.114 UTC+3 | INFO | rag_builder.chunking.service:build_chunks:47 | Chunking done document_id=1 total_chunks=1
+2026-06-22 21:16:33.183 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:23 | Embeddings start count=2 dim=2048 provider=mock
+2026-06-22 21:16:33.184 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:33 | Embeddings done count=2 dim=2048
+2026-06-22 21:16:33.189 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:23 | Embeddings start count=1 dim=3 provider=openai_compatible
+2026-06-22 21:16:33.190 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=1/1 size=1 attempt=1 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 21:16:33.190 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=1/1 attempt=1 status=200 took_ms=0.01
+2026-06-22 21:16:33.191 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:118 | Embedding batch done batch=1/1 vectors=1
+2026-06-22 21:16:33.191 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:33 | Embeddings done count=1 dim=3
+2026-06-22 21:16:33.195 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:23 | Embeddings start count=3 dim=3 provider=openai_compatible
+2026-06-22 21:16:33.195 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=1/2 size=2 attempt=1 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 21:16:33.195 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=1/2 attempt=1 status=429 took_ms=0.00
+2026-06-22 21:16:33.195 UTC+3 | WARNING | rag_builder.embeddings.service:_embed_batch_with_retry:103 | Embedding transient failure batch=1/2 attempt=1 status=429 retrying
+2026-06-22 21:16:34.201 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=1/2 size=2 attempt=2 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 21:16:34.202 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=1/2 attempt=2 status=200 took_ms=0.01
+2026-06-22 21:16:34.202 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:118 | Embedding batch done batch=1/2 vectors=2
+2026-06-22 21:16:34.202 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=2/2 size=1 attempt=1 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 21:16:34.203 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=2/2 attempt=1 status=200 took_ms=0.00
+2026-06-22 21:16:34.203 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:118 | Embedding batch done batch=2/2 vectors=1
+2026-06-22 21:16:34.203 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:33 | Embeddings done count=3 dim=3
+2026-06-22 21:16:34.207 UTC+3 | INFO | rag_builder.embeddings.service:embed_many:23 | Embeddings start count=1 dim=3 provider=openai_compatible
+2026-06-22 21:16:34.208 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:82 | Embedding batch request start batch=1/1 size=1 attempt=1 url=http://localhost:8000/v1/embeddings model=text-embedding-3-small
+2026-06-22 21:16:34.208 UTC+3 | INFO | rag_builder.embeddings.service:_embed_batch_with_retry:94 | Embedding batch response batch=1/1 attempt=1 status=500 took_ms=0.00
+2026-06-22 21:16:34.208 UTC+3 | WARNING | rag_builder.embeddings.service:_embed_batch_with_retry:103 | Embedding transient failure batch=1/1 attempt=1 status=500 retrying
+2026-06-22 21:16:34.217 UTC+3 | INFO | rag_builder.services.indexing_service:build:41 | Indexing start document_id=100
+2026-06-22 21:16:34.218 UTC+3 | INFO | rag_builder.services.indexing_service:build:60 | Indexing completed document_id=100 chunks=1 txn_id=f2de093f-a8d1-4c07-af72-208caaeff356
+2026-06-22 21:16:34.229 UTC+3 | INFO | rag_builder.services.indexing_service:build:41 | Indexing start document_id=100
+2026-06-22 21:16:34.229 UTC+3 | INFO | rag_builder.services.indexing_service:build:60 | Indexing completed document_id=100 chunks=1 txn_id=4c67e237-282f-4719-b831-28ed51df799e
+2026-06-22 21:16:34.240 UTC+3 | INFO | rag_builder.services.indexing_service:build:41 | Indexing start document_id=100
+2026-06-22 21:16:34.241 UTC+3 | INFO | rag_builder.services.indexing_service:build:60 | Indexing completed document_id=100 chunks=1 txn_id=20dcb204-0bff-42c0-a2d7-b6003e132909
+2026-06-22 21:16:34.249 UTC+3 | INFO | rag_builder.services.indexing_service:build:41 | Indexing start document_id=100
+2026-06-22 21:16:34.249 UTC+3 | INFO | rag_builder.services.indexing_service:build:60 | Indexing completed document_id=100 chunks=0 txn_id=c9ed7de5-392d-49fa-87a1-6a19109e2cc2
+2026-06-22 21:16:34.258 UTC+3 | INFO | rag_builder.services.indexing_service:build:41 | Indexing start document_id=100
+2026-06-22 21:16:34.258 UTC+3 | INFO | rag_builder.services.indexing_service:build:60 | Indexing completed document_id=100 chunks=0 txn_id=8381ce25-9e08-46a4-8307-e7c1e9032438
+2026-06-22 21:16:34.264 UTC+3 | INFO | rag_builder.services.indexing_service:build:41 | Indexing start document_id=100
+2026-06-22 21:16:34.265 UTC+3 | ERROR | rag_builder.services.indexing_service:build:72 | Indexing failed document_id=100
+2026-06-22 21:16:34.283 UTC+3 | INFO | rag_builder.services.indexing_service:delete:76 | Delete index start document_id=100
+2026-06-22 21:16:34.283 UTC+3 | INFO | rag_builder.services.indexing_service:delete:82 | Delete index completed document_id=100 deleted_count=5
+2026-06-22 21:16:34.294 UTC+3 | INFO | rag_builder.services.indexing_service:delete:76 | Delete index start document_id=100
+2026-06-22 21:16:34.295 UTC+3 | INFO | rag_builder.services.indexing_service:delete:82 | Delete index completed document_id=100 deleted_count=3
+2026-06-22 21:16:34.303 UTC+3 | INFO | rag_builder.services.indexing_service:delete:76 | Delete index start document_id=999
+2026-06-22 21:16:34.304 UTC+3 | INFO | rag_builder.services.indexing_service:delete:82 | Delete index completed document_id=999 deleted_count=0
+2026-06-22 21:16:34.311 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:90 | Status check start document_id=100 longpoll=0
+2026-06-22 21:16:34.311 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:108 | Status check done document_id=100 status=pending
+2026-06-22 21:16:34.319 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:90 | Status check start document_id=100 longpoll=0
+2026-06-22 21:16:34.320 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:108 | Status check done document_id=100 status=indexed
+2026-06-22 21:16:34.328 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:90 | Status check start document_id=100 longpoll=1
+2026-06-22 21:16:35.343 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:106 | Longpoll timeout document_id=100 timeout=1s
+2026-06-22 21:16:35.344 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:108 | Status check done document_id=100 status=pending
+2026-06-22 21:16:35.348 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:90 | Status check start document_id=100 longpoll=0
+2026-06-22 21:16:35.352 UTC+3 | DEBUG | rag_builder.services.indexing_service:status:108 | Status check done document_id=100 status=indexed

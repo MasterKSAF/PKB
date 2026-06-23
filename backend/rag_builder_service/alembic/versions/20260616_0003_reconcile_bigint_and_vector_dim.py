@@ -22,7 +22,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    vector_dim = int(os.environ.get("VECTOR_DIMENSION", os.environ.get("EMBEDDING_DIM", "1536")))
+    vector_dim = int(os.environ.get("VECTOR_DIMENSION", os.environ.get("EMBEDDING_DIM", "2048")))
     expected_vector_type = f"vector({vector_dim})"
 
     # 1. Convert document_id to BIGINT if it is still UUID (or any non-bigint type)

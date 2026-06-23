@@ -69,6 +69,12 @@ class Section(BaseModel):
     content: dict[str, Any]
     created_at: datetime | None = None
 
+    @model_validator(mode="after")
+    def validate_page_is_1_based(self) -> "Section":
+        if self.page is not None and self.page < 1:
+            raise ValueError(f"page must be 1-based, got {self.page}")
+        return self
+
 
 class BuildRequest(BaseModel):
     document_id: int | None = None
@@ -80,7 +86,7 @@ class BuildRequest(BaseModel):
     options: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
-    def validate_and_normalize_document_id(self) -> BuildRequest:
+    def validate_and_normalize_document_id(self) -> "BuildRequest":
         effective = self.document_id
         if effective is None and self.metadata is not None:
             effective = self.metadata.document_id
@@ -100,13 +106,34 @@ class BuildRequest(BaseModel):
         self.document_id = effective
         return self
 
+    @model_validator(mode="after")
+    def validate_section_ids_unique(self) -> "BuildRequest":
+        seen = set()
+        for s in self.sections:
+            if s.section_id in seen:
+                raise ValueError(f"duplicate section_id {s.section_id}")
+            seen.add(s.section_id)
+        return self
+
+    @model_validator(mode="after")
+    def validate_parent_id_refers_to_existing_section(self) -> "BuildRequest":
+        section_ids = {s.section_id for s in self.sections}
+        for s in self.sections:
+            if s.parent_id is not None and s.parent_id not in section_ids:
+                raise ValueError(
+                    f"parent_id {s.parent_id} refers to non-existent section_id in request"
+                )
+        return self
+
 
 class BuildResponse(BaseModel):
     document_id: int
-    status: Literal["completed", "failed"]
+    status: Literal["indexed", "failed"]
     indexed_at: datetime
     chunks_count: int
     index_stats: dict[str, int]
+    errors: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
 
 
 class DeleteResponse(BaseModel):
@@ -123,32 +150,4 @@ class StatusResponse(BaseModel):
     indexed_at: datetime | None = None
 
 
-class LoginRequest(BaseModel):
-    username: str
-    password: str
 
-
-class LoginResponse(BaseModel):
-    access_token: str
-    refresh_token: str
-    token_type: Literal["bearer"] = "bearer"
-
-
-class RefreshRequest(BaseModel):
-    refresh_token: str
-
-
-class RefreshResponse(BaseModel):
-    access_token: str
-    token_type: Literal["bearer"] = "bearer"
-
-
-class TokenValidationRequest(BaseModel):
-    access_token: str
-
-
-class TokenValidationResponse(BaseModel):
-    active: bool
-    sub: str
-    exp: int
-    type: Literal["access"]

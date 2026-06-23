@@ -1,3 +1,5 @@
+"""Root conftest — shared fixtures. DB fixtures only activate when requested."""
+
 from collections.abc import AsyncGenerator
 
 import pytest
@@ -12,16 +14,22 @@ from rag_builder.api.app import create_app
 from rag_builder.db.session import get_session
 from rag_builder.db.migrations import upgrade_to_head
 
-TEST_DB_URL = "postgresql+asyncpg://pkb_user:pkb_pass@localhost:5433/pkb_db"
+# pkb-postgres exposed on host port 15432 (see `docker ps`)
+TEST_DB_URL = "postgresql+asyncpg://pkb:pkb@localhost:15432/pkb_neuro"
 
 
-@pytest.fixture(scope="session", autouse=True)
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line("markers", "db: marks tests that need PostgreSQL with pgvector")
+
+
+@pytest.fixture(scope="session")
 def migrate_test_db() -> None:
+    """Apply Alembic migrations. Only runs when a test requests DB fixtures."""
     upgrade_to_head(TEST_DB_URL)
 
 
 @pytest_asyncio.fixture()
-async def engine() -> AsyncGenerator[AsyncEngine, None]:
+async def engine(migrate_test_db: None) -> AsyncGenerator[AsyncEngine, None]:
     eng = create_async_engine(TEST_DB_URL, future=True)
     async with eng.begin() as conn:
         await conn.execute(text("TRUNCATE TABLE rag.document_chunks RESTART IDENTITY"))

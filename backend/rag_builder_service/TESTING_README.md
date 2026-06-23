@@ -1,79 +1,54 @@
 ﻿# Testing README
 
 ## Цель
-Проверка корректности RAG Builder Service на уровнях unit/integration/e2e.
+Проверка корректности RAG Builder Service на всех уровнях.
 
-## Что покрыто
-- Unit:
-  - chunking (лимит токенов, таблицы)
-  - embeddings (детерминизм, размерность)
-  - API/OpenAPI контракт
-- Integration:
-  - запись/удаление чанков в PostgreSQL + pgvector
-- E2E smoke:
-  - build -> status -> delete через HTTP API
+## Уровни тестов
 
-## Структура тестов
-- `tests/unit`
-- `tests/integration`
-- `tests/e2e`
-- `tests/conftest.py`
-
-## Подготовка
-1. Python 3.13 установлен.
-2. PostgreSQL с pgvector поднят (контейнер `pkb-pg16` на `localhost:5433`).
-3. Установлены зависимости:
+### Unit-тесты (без БД)
+**93 теста**, запуск без внешних зависимостей:
 ```powershell
-py -3.13 -m pip install -e .[dev]
+python -m pytest tests/unit/ -v
 ```
 
-## Базовый запуск (обязательный)
+Покрывают:
+- **Контракты** (`test_contracts.py`): 45 тестов — валидация document_id, section_id, parent_id, page, response models
+- **Chunking** (`test_chunking.py`, `test_chunking_full.py`): 28 тестов — все типы секций (text, table, list, image, formula, textBlock, headerFooter), protected spans, граничные случаи
+- **Embeddings** (`test_embeddings.py`, `test_embeddings_openai.py`): 5 тестов — детерминизм, размерность, retry, batching, ошибки
+- **IndexingService** (`test_indexing_service.py`): 14 тестов — build/delete/status с mocked DB
+- **API контракт** (`test_api_contract.py`): 3 теста — OpenAPI shape, payload validation
 
-Windows:
+### Integration-тесты (нужен Docker)
+**8 тестов**, требуют PostgreSQL 16 + pgvector на `localhost:5433`:
 ```powershell
-.\make.cmd test
+docker compose up -d postgres
+python -m pytest tests/integration/ -v
 ```
 
-Альтернатива:
+Покрывают:
+- **DB flow** (`test_db_flow.py`): вставка/удаление чанков
+- **Vector flow** (`test_vector_flow.py`): размерность 2048, roundtrip, cosine similarity, indexing_txn_id, chunk indices, delete
+
+### E2E-тесты (нужен Docker)
+**2 теста**, требуют полный стек:
 ```powershell
-py -3.13 -m pytest
+python -m pytest tests/e2e/ -v
 ```
 
-## Проверка качества
+Покрывают:
+- **Smoke API** (`test_smoke_api.py`): build → status → delete через HTTP, health endpoint
+
+## Быстрый запуск
 ```powershell
-py -3.13 -m ruff check .
-py -3.13 -m mypy src tests
+# Только unit (без БД)
+python -m pytest tests/unit/
+
+# Всё (с Docker)
+docker compose up -d postgres
+python -m pytest
 ```
 
-## Проверка покрытия
-Покрытие считается автоматически через `pytest-cov`.
-Текущий порог: `>= 80%`.
-
-## Что делать при падениях
-1. Сначала проверить доступность БД:
-```powershell
-docker ps
-```
-2. Проверить расширение vector:
-```powershell
-docker exec pkb-pg16 psql -U pkb_user -d pkb_db -c "SELECT extversion FROM pg_extension WHERE extname='vector';"
-```
-3. Повторно запустить:
-```powershell
-py -3.13 -m pytest -x
-```
-
-## Smoke-проверка API вручную
-Запуск сервиса:
-```powershell
-py -3.13 -m uvicorn rag_builder.main:app --host 0.0.0.0 --port 8090
-```
-
-OpenAPI:
-```powershell
-curl http://127.0.0.1:8090/openapi.json
-```
-
-## Логи во время тестов
-- Локально: `./logs/rag_builder.log`
-- В логах есть request id/correlation id/traceback.
+## Покрытие (текущее)
+- Unit: 93 теста, 0 failures
+- Integration + E2E: 10 тестов (нужен Docker с pgvector)
+- Порог покрытия: 80% (через pytest-cov)

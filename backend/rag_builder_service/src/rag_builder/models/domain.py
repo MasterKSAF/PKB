@@ -1,4 +1,5 @@
-﻿from dataclasses import dataclass
+﻿from uuid import UUID
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -9,3 +10,4 @@ class Chunk:
     content: str
     strategy: str
     page: int | None
+    indexing_txn_id: UUID | None = None

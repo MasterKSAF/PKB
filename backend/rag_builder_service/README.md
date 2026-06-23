@@ -12,7 +12,7 @@ RAG Builder Service строит векторный индекс докумен�
 Базовый API prefix: `/api/v1`
 
 ## Эндпоинты
-- `POST /api/v1/rag/build`
+- `POST /api/v1/rag/build` — **202 Accepted** (асинхронный запуск)
 - `DELETE /api/v1/rag/build/{doc_id}`
 - `GET /api/v1/rag/build/{doc_id}/status?longpoll=15`
 - `GET /api/v1/health`
@@ -58,17 +58,22 @@ RAG Builder Service строит векторный индекс докумен�
 `docs/database/db_diagrams.md` по таблице `rag.document_chunks`.
 Согласованные поля:
 - `id` (`bigint`, PK)
-- `section_id` (`bigint`, FK)
-- `document_id` (`uuid`, FK)
+- `section_id` (`bigint`, FK → `registry.document_sections.id`)
+- `document_id` (`bigint`, FK → `registry.documents.id`)
 - `chunk_index` (`int`)
 - `content` (`text`)
-- `embedding` (`vector`)
+- `embedding` (`vector(2048)`)
 - `tsv` (`tsvector`)
 - `strategy` (`varchar`)
 - `page` (`int`)
 - `bbox` (`jsonb`)
 - `confidence` (`float`)
+- `indexing_txn_id` (`uuid`, идентификатор транзакции индексации)
 - `created_at` (`timestamptz`)
+- `updated_at` (`timestamptz`)
+
+Ограничения:
+- `UNIQUE (section_id, chunk_index)` — уникальность чанков в рамках раздела
 
 ## Конфигурация (env)
 Смотри `.env.example`.
@@ -77,6 +82,7 @@ RAG Builder Service строит векторный индекс докумен�
 - `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DATABASE_URL`
 - `LOG_LEVEL`, `LOG_DIR`, `LOG_FILE`
 - `EMBEDDING_API_URL`, `EMBEDDING_MODEL`, `EMBEDDING_TIMEOUT`
+- `EMBEDDING_PROVIDER` (mock | openai_compatible | infinity)
 - `EMBEDDING_BATCH_SIZE`, `EMBEDDING_RETRIES`
 - `EMBEDDING_DIM`, `VECTOR_DIMENSION`
 - `CHUNK_SIZE`, `CHUNK_MAX_TOKENS`, `MAX_TOKENS`
@@ -121,7 +127,9 @@ curl.exe http://127.0.0.1:8090/api/v1/health
 - [GITHUB_PULL_RUNBOOK.md](C:\Users\Игорь\projects\PKB\PKB_neuroassistant\Abzalov_Igor\GITHUB_PULL_RUNBOOK.md)
 
 Важно по embeddings:
-- `EMBEDDING_PROVIDER=openai_compatible`
+- `EMBEDDING_PROVIDER` — один из: `mock`, `openai_compatible`, `infinity`
+- `infinity` использует тот же OpenAI-совместимый протокол, но подразумевает локальный Infinity-сервер (`http://localhost:7997/v1/embeddings`)
+- `openai_compatible` — для внешних API (OpenAI, Qwen3 и т.д.)
 - токен хранится в `EMBEDDING_API_KEY`
 - не вставлять токен в `EMBEDDING_PROVIDER`
 
