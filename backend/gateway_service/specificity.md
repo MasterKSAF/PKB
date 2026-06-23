@@ -353,6 +353,29 @@ Docker healthcheck может слать `/api/v1/system/health/` — слеш �
 ### Аномалии
 - **test_91_update_registry_doc** — падает с 422: `jurisdiction='RF'` недопустимо (список: RU/BY/KZ/...). Ошибка в тесте или в seed-данных, не связана с правками.
 
+## 2026-06-23: Gateway — path-pattern routing (разграничение Orchestrator/Registry)
+### Изменения
+- **gateway/client.py**: Заменена префиксная маршрутизация `SERVICE_ROUTES` на path-pattern `ROUTE_TABLE` с `RouteEntry`. Новая сигнатура `resolve_service(method, path)` возвращает `(service, target_path)`. Добавлена URL-трансформация для Registry: `/api/v1/documents/{id}` → `/api/v1/registry/documents/{id}`.
+- **gateway/routers.py**: Передача `method` в `resolve_service`, использование `target_path` в `proxy_request`.
+- **mocks/tests/test_gateway_routing.py**: Полное обновление — 81 тест (было 14), покрытие всех граничных случаев.
+- **README.md, guide.md**: Актуализация описания маршрутизации.
+### Ключевые изменения
+| Запрос | Было | Стало |
+|--------|------|-------|
+| `GET /api/v1/drafts` | Orchestrator | **Registry** (path transform) |
+| `GET /api/v1/drafts/{id}` | Orchestrator | **Registry** (path transform) |
+| `GET /api/v1/documents/{id}` | Orchestrator | **Registry** (path transform) |
+| `GET /api/v1/documents/{id}/pages/*` | Orchestrator | **Registry** (path transform) |
+| `GET /api/v1/documents/{id}/file` | Orchestrator | **Registry** (path transform) |
+| `GET /api/v1/documents/{id}/history` | Orchestrator | **Registry** (path transform) |
+| `GET /api/v1/documents/{id}/parameters` | Orchestrator | **Registry** (path transform) |
+| `GET /api/v1/documents/{id}/versions` | Orchestrator | **Registry** (path transform) |
+| `GET /api/v1/documents/{id}/tasks` | — | **Orchestrator** (новый endpoint) |
+| `POST /api/v1/drafts` | Orchestrator | Orchestrator (без изменений) |
+| `DELETE /api/v1/drafts/{id}` | Orchestrator | Orchestrator (без изменений) |
+### Статус тестов
+- 81/81 routing tests pass, 614/615 full suite pass (1 pre-existing failure в test_29_document_file)
+
 ## 2026-06-22: pending_id — файловый импорт классификаторов создаёт карантин
 ### Изменения
 - **registry_routes.py**: Файловый импорт `POST /classifiers/import` (multipart) больше не вставляет напрямую в `_classifiers`, а создаёт записи в `_pending_classifiers` (карантин). JSON-body (inline) остался без изменений — прямая вставка.

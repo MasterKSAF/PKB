@@ -3,11 +3,16 @@ HTTP client for proxying requests to real microservices.
 
 Gateway выступает как reverse-proxy: получает запрос от UI,
 перенаправляет его в соответствующий внутренний сервис, и возвращает ответ.
+
+Маршрутизация — по шаблону пути (path-pattern), а не по префиксу.
+Для Registry пути трансформируются: /api/v1/documents/* → /api/v1/registry/documents/*.
 """
 
 import asyncio
 import logging
-from typing import Dict, Optional
+import re
+from dataclasses import dataclass, field
+from typing import Callable, Dict, List, Optional, Set, Tuple
 
 import httpx
 from fastapi import Request, Response
@@ -29,27 +34,159 @@ def _error_response(code: str, message: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Service routing table — префикс пути → имя сервиса
+# Route rule — шаблон пути → сервис
 # ---------------------------------------------------------------------------
-SERVICE_ROUTES: Dict[str, str] = {
-    # Auth Service (:8082)
-    "/api/v1/auth/": "auth",
-    "/api/v1/admin/": "auth",
-    # Orchestrator Service (:8081)
-    "/api/v1/documents/": "orchestrator",
-    "/api/v1/drafts/": "orchestrator",
-    "/api/v1/tasks/": "orchestrator",
-    # Query Service (:8083)
-    "/api/v1/chat/": "query",
-    "/api/v1/text/": "query",
-    # Registry Service (:8084)
-    "/api/v1/registry/": "registry",
-    "/api/v1/registry/categories/": "registry",
-    # Analyse Service (:8089)
-    "/api/v1/analyse/": "analyse",
-    # RAG Search Service (:8091)
-    "/api/v1/rag/": "rag_search",
-}
+
+# Символ для обозначения "любой метод"
+ALL_METHODS = "*"
+
+
+@dataclass
+class RouteEntry:
+    """Одно правило маршрутизации.
+
+    Сопоставляет HTTP-метод и путь с именем внутреннего сервиса.
+    При необходимости преобразует исходный путь в целевой (например,
+    для Registry: /api/v1/documents/{id} → /api/v1/registry/documents/{id}).
+    """
+
+    methods: Set[str]
+    """Допустимые HTTP-методы (например {'GET'}, {'POST','PUT'}) или {'*'} для любых."""
+
+    path_regex: str
+    """Регулярное выражение для сопоставления с путём запроса."""
+
+    service: str
+    """Имя целевого сервиса (ключ в config.service_urls)."""
+
+    transform: Optional[Callable[[str], str]] = None
+    """Опциональная функция преобразования пути.
+    Если не задана, используется исходный путь без изменений."""
+
+    _compiled: Optional[re.Pattern] = field(init=False, default=None, repr=False)
+
+    def __post_init__(self):
+        self._compiled = re.compile(self.path_regex)
+
+    def match(self, method: str, path: str) -> bool:
+        """Проверяет, подходит ли правило для данного запроса."""
+        if ALL_METHODS not in self.methods:
+            if method.upper() not in {m.upper() for m in self.methods}:
+                return False
+        return bool(self._compiled.match(path))
+
+    def apply(self, path: str) -> str:
+        """Применяет трансформацию пути (если задана) или возвращает исходный."""
+        if self.transform:
+            return self.transform(path)
+        return path
+
+
+# ---------------------------------------------------------------------------
+# Таблица маршрутов — детализирована до уровня конкретных путей
+# ---------------------------------------------------------------------------
+# Порядок имеет значение: более специфичные правила идут раньше.
+# Сначала документы и черновики (разделение Registry/Orchestrator),
+# затем общие префиксы других сервисов.
+
+ROUTE_TABLE: List[RouteEntry] = [
+    # ── Registry: черновики (чтение) ──────────────────────────────────────
+    RouteEntry(
+        {"GET"}, r"^/api/v1/drafts(?:/\d+(?:/preview)?)?$", "registry",
+        transform=lambda p: p.replace("/api/v1/drafts", "/api/v1/registry/drafts", 1),
+    ),
+
+    # ── Orchestrator: черновики (управление/пайплайн) ─────────────────────
+    RouteEntry({"POST"}, r"^/api/v1/drafts$", "orchestrator"),
+    RouteEntry({"POST"}, r"^/api/v1/drafts/\d+/preview$", "orchestrator"),
+    RouteEntry({"GET"}, r"^/api/v1/drafts/\d+/preview/status$", "orchestrator"),
+    RouteEntry({"PATCH"}, r"^/api/v1/drafts/\d+/decide$", "orchestrator"),
+    RouteEntry({"PATCH"}, r"^/api/v1/drafts/\d+/metadata$", "orchestrator"),
+    RouteEntry({"DELETE"}, r"^/api/v1/drafts/\d+$", "orchestrator"),
+    RouteEntry({"GET"}, r"^/api/v1/drafts/\d+/tasks$", "orchestrator"),
+
+    # ── Registry: документы (CRUD + чтение) ──────────────────────────────
+    RouteEntry(
+        {"GET", "PUT", "PATCH", "DELETE"}, r"^/api/v1/documents/\d+$", "registry",
+        transform=lambda p: p.replace("/api/v1/documents", "/api/v1/registry/documents", 1),
+    ),
+    RouteEntry(
+        {"GET"}, r"^/api/v1/documents$", "registry",
+        transform=lambda p: p.replace("/api/v1/documents", "/api/v1/registry/documents", 1),
+    ),
+    RouteEntry(
+        {"GET"}, r"^/api/v1/documents/\d+/sections$", "registry",
+        transform=lambda p: p.replace("/api/v1/documents", "/api/v1/registry/documents", 1),
+    ),
+    # pages listing: /documents/{id}/pages (exact) and /documents/{id}/pages/{page}(/...) 
+    RouteEntry(
+        {"GET"}, r"^/api/v1/documents/\d+/pages(?:/.*)?$", "registry",
+        transform=lambda p: p.replace("/api/v1/documents", "/api/v1/registry/documents", 1),
+    ),
+    RouteEntry(
+        {"GET"}, r"^/api/v1/documents/\d+/file$", "registry",
+        transform=lambda p: p.replace("/api/v1/documents", "/api/v1/registry/documents", 1),
+    ),
+    RouteEntry(
+        {"GET"}, r"^/api/v1/documents/\d+/history$", "registry",
+        transform=lambda p: p.replace("/api/v1/documents", "/api/v1/registry/documents", 1),
+    ),
+    RouteEntry(
+        {"GET"}, r"^/api/v1/documents/\d+/parameters$", "registry",
+        transform=lambda p: p.replace("/api/v1/documents", "/api/v1/registry/documents", 1),
+    ),
+    RouteEntry(
+        {"GET"}, r"^/api/v1/documents/\d+/versions$", "registry",
+        transform=lambda p: p.replace("/api/v1/documents", "/api/v1/registry/documents", 1),
+    ),
+    RouteEntry(
+        {"GET"}, r"^/api/v1/documents/\d+/succession$", "registry",
+        transform=lambda p: p.replace("/api/v1/documents", "/api/v1/registry/documents", 1),
+    ),
+
+    # ── Registry: документы — массовые/спец. операции ────────────────────
+    # search — особый случай: Registry endpoint /api/v1/registry/search
+    RouteEntry(
+        {"GET", "POST"}, r"^/api/v1/documents/search$", "registry",
+        transform=lambda _: "/api/v1/registry/search",
+    ),
+    RouteEntry(
+        {"GET"}, r"^/api/v1/documents/export$", "registry",
+        transform=lambda p: p.replace("/api/v1/documents", "/api/v1/registry/documents", 1),
+    ),
+    RouteEntry(
+        {"POST"}, r"^/api/v1/documents/import$", "registry",
+        transform=lambda p: p.replace("/api/v1/documents", "/api/v1/registry/documents", 1),
+    ),
+    RouteEntry(
+        {"POST"}, r"^/api/v1/documents/check-uniqueness$", "registry",
+        transform=lambda p: p.replace("/api/v1/documents", "/api/v1/registry/documents", 1),
+    ),
+
+    # ── Orchestrator: документы — deprecated + пайплайн ─────────────────
+    # POST /api/v1/documents — deprecated (OR-11), возвращает 410
+    RouteEntry({"POST"}, r"^/api/v1/documents$", "orchestrator"),
+    RouteEntry({"GET"}, r"^/api/v1/documents/\d+/status$", "orchestrator"),
+    RouteEntry({"GET"}, r"^/api/v1/documents/queue$", "orchestrator"),
+    RouteEntry({"GET"}, r"^/api/v1/documents/\d+/errors$", "orchestrator"),
+    RouteEntry({"POST"}, r"^/api/v1/documents/\d+/versions$", "orchestrator"),
+    RouteEntry({"POST"}, r"^/api/v1/documents/\d+/reprocess$", "orchestrator"),
+    RouteEntry({"GET"}, r"^/api/v1/documents/\d+/tasks$", "orchestrator"),
+
+    # ── Registry: прямой доступ /api/v1/registry/* ────────────────────────
+    RouteEntry({ALL_METHODS}, r"^/api/v1/registry(?:/.*)?$", "registry"),
+
+    # ── Задачи (tasks) — только Orchestrator ─────────────────────────────
+    RouteEntry({ALL_METHODS}, r"^/api/v1/tasks(?:/.*)?$", "orchestrator"),
+
+    # ── Другие сервисы (без изменений) ───────────────────────────────────
+    RouteEntry({ALL_METHODS}, r"^/api/v1/auth(?:/.*)?$", "auth"),
+    RouteEntry({ALL_METHODS}, r"^/api/v1/admin(?:/.*)?$", "auth"),
+    RouteEntry({ALL_METHODS}, r"^/api/v1/chat(?:/.*)?$", "query"),
+    RouteEntry({ALL_METHODS}, r"^/api/v1/text(?:/.*)?$", "query"),
+    RouteEntry({ALL_METHODS}, r"^/api/v1/analyse(?:/.*)?$", "analyse"),
+    RouteEntry({ALL_METHODS}, r"^/api/v1/rag(?:/.*)?$", "rag_search"),
+]
 
 
 DEPRECATED_INTEGRATION_PREFIXES = (
@@ -69,20 +206,25 @@ def is_deprecated_integration_route(path: str) -> bool:
     return False
 
 
-def resolve_service(path: str) -> Optional[str]:
-    """Определяет имя сервиса по префиксу пути.
+# ---------------------------------------------------------------------------
+# resolve_service — поиск маршрута по методу + пути
+# ---------------------------------------------------------------------------
 
-    Сопоставление гибкое:
-      /api/v1/classifiers      → registry (точное совпадение)
-      /api/v1/classifiers/ext  → registry (вложенный путь)
-      /api/v1/health           → None (собственный эндпоинт Gateway)
-      /api/v1/system/health    → None (алиас)
+def resolve_service(method: str, path: str) -> Optional[Tuple[str, str]]:
+    """Определяет сервис и целевой путь для запроса.
+
+    Возвращает (имя_сервиса, целевой_путь) или None если маршрут не найден.
+
+    В отличие от старой версии, учитывает HTTP-метод и выполняет
+    преобразование пути (для Registry: документы → /api/v1/registry/*).
     """
-    normalized = path.rstrip("/")
-    for prefix, svc in SERVICE_ROUTES.items():
-        p = prefix.rstrip("/")
-        if normalized == p or normalized.startswith(p + "/"):
-            return svc
+    normalized = path.rstrip("/") if path != "/" else "/"
+
+    for entry in ROUTE_TABLE:
+        if entry.match(method, normalized):
+            target = entry.apply(normalized)
+            return entry.service, target
+
     return None
 
 
@@ -157,10 +299,16 @@ async def check_all_services_health() -> Dict[str, str]:
 # Proxying logic
 # ---------------------------------------------------------------------------
 
-async def proxy_request(request: Request, service_name: str) -> Response:
+async def proxy_request(request: Request, service_name: str, target_path: Optional[str] = None) -> Response:
     """Проксирует HTTP-запрос к указанному внутреннему сервису.
 
-    1. Определяет целевой URL (service_url + path + query_string)
+    Args:
+        request: Исходный запрос.
+        service_name: Имя целевого сервиса (ключ в config.service_urls).
+        target_path: Целевой путь (если None, используется оригинальный path).
+                     Нужен для URL-трансформации (Registry: /api/v1/documents → /api/v1/registry/documents).
+
+    1. Определяет целевой URL (service_url + target_path + query_string)
     2. Копирует заголовки (с фильтрацией hop-by-hop)
     3. Читает тело запроса (bytes)
     4. Отправляет запрос через httpx
@@ -176,12 +324,12 @@ async def proxy_request(request: Request, service_name: str) -> Response:
             ),
         )
 
-    # Целевой URL — обрезаем trailing slash, чтобы downstream сервисы
-    # не возвращали 307 redirect (redirect_slashes нормализация).
-    # Путь / остаётся как есть.
-    path = request.url.path.rstrip("/") if request.url.path != "/" else "/"
+    # Целевой путь: либо переданный (с трансформацией), либо исходный
+    path_to_use = target_path if target_path is not None else (
+        request.url.path.rstrip("/") if request.url.path != "/" else "/"
+    )
     query = request.url.query
-    target_url = f"{base_url}{path}"
+    target_url = f"{base_url}{path_to_use}"
     if query:
         target_url += f"?{query}"
 

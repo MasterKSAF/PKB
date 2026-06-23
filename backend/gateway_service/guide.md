@@ -5,7 +5,9 @@
 ### 1. Единый Gateway (reverse-proxy)
 - Gateway (порт 8080) — единственная точка входа. Режим: `real` (reverse-proxy).
 - Все запросы `/api/v1/*` проксируются к внутренним сервисам через `gateway/client.py`.
-- Маршрутизация по префиксу пути (`SERVICE_ROUTES` в `client.py`).
+- Маршрутизация по шаблону пути + HTTP-методу (`ROUTE_TABLE` в `client.py` с `RouteEntry`).
+- Учитывается не только путь, но и метод: `GET /api/v1/drafts` → Registry, `POST /api/v1/drafts` → Orchestrator.
+- Registry-пути трансформируются: `/api/v1/documents/{id}` → `/api/v1/registry/documents/{id}`.
 - Catch-all router (`gateway/routers.py`) обрабатывает все `/api/v1/{path:path}`.
 
 ### 2. Mock-сервер — унифицированный

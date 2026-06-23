@@ -17,9 +17,9 @@ Production Gateway — reverse-proxy для внутренних микросе�
 |--------|:----:|------|---------------------------|
 | **Gateway** | `8080` | Reverse-proxy, JWT, RBAC, логирование | `/api/v1/system/health`, `/api/v1/health`, `/api/v1/system/mode` |
 | **Auth Service** | `8082` | Аутентификация, пользователи, роли, аудит | `/api/v1/auth/*`, `/api/v1/admin/*` |
-| **Orchestrator** | `8081` | Документы, черновики, задачи, мониторинг | `/api/v1/documents/*`, `/api/v1/drafts/*`, `/api/v1/tasks/*`, `/api/v1/monitor/*` |
+| **Orchestrator** | `8081` | Координация пайплайна, FSM, задачи | `/api/v1/tasks/*`, `/api/v1/drafts` (POST/DELETE/PATCH), `/api/v1/documents/{id}/status`, `/api/v1/documents/{id}/tasks`, `/api/v1/documents/queue`, `/api/v1/documents/{id}/errors` |
 | **Query Service** | `8083` | Чат-сессии, Q&A, текстовый поиск | `/api/v1/chat/*`, `/api/v1/text/*` |
-| **Registry** | `8084` | Классификаторы, терминология, реестр НСИ | `/api/v1/registry/*`, `/api/v1/registry/categories/*` |
+| **Registry** | `8084` | Данные реестра: документы, черновики, классификаторы, терминология | `/api/v1/registry/*`, `/api/v1/documents` (GET/PUT/PATCH/DELETE), `/api/v1/drafts` (GET), `/api/v1/documents/{id}/pages/*`, `/api/v1/documents/{id}/file`, `/api/v1/documents/{id}/history`, `/api/v1/documents/{id}/parameters`, `/api/v1/documents/{id}/versions`, `/api/v1/documents/search` |
 | **Integration** | `8085` | Интеграция с Meridian, файлы, external API | `/api/v1/meridian/*`, `/api/v1/files/*`, `/api/v1/external/*` |
 | **Converter-Validator** | `8086` | Конвертация и валидация документов | Внутренний (через Orchestrator) |
 | **Parser** | `8087` | Парсинг цифровых PDF/DOC | Внутренний (через Orchestrator) |
@@ -213,6 +213,8 @@ backend/gateway_service/
 |-------------|----------|
 | **JWT-аутентификация** | Проверка Bearer-токена через Auth Service (`POST /internal/auth/validate`) |
 | **RBAC** | Матрица доступа на основе роли и permissions пользователя |
+| **Path-pattern routing** | Маршрутизация не по префиксу, а по шаблону пути + HTTP-методу. Чтение документов/черновиков → Registry, управление/пайплайн → Orchestrator |
+| **URL-трансформация Registry** | Gateway преобразует `/api/v1/documents/{id}` → `/api/v1/registry/documents/{id}` при проксировании в Registry |
 | **Структурированное логирование (P11-1)** | JSON-логирование с обязательными полями (timestamp, level, service, request_id, user_id, path, method, status, latency_ms) |
 | **X-Request-ID (P11-2)** | Автоматическая генерация UUIDv4 при отсутствии, проброс во все downstream сервисы |
 | **X-User-ID (P11-2)** | Проброс ID аутентифицированного пользователя в downstream сервисы |

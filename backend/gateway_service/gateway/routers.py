@@ -2,8 +2,12 @@
 Catch-all router for the Gateway reverse-proxy.
 
 Перенаправляет запросы от Web UI к соответствующим внутренним сервисам
-на основе префикса пути. Собственные эндпоинты Gateway (/system/health,
-/system/mode) регистрируются на уровне app и имеют приоритет над catch-all.
+на основе path-pattern маршрутизации. Собственные эндпоинты Gateway
+(/system/health, /system/mode) регистрируются на уровне app
+и имеют приоритет над catch-all.
+
+Маршрутизация учитывает HTTP-метод и выполняет URL-трансформацию
+для Registry (документы/черновики: /api/v1/documents/* → /api/v1/registry/documents/*).
 """
 
 import logging
@@ -38,7 +42,7 @@ def _error(code: str, message: str) -> dict:
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
 )
 async def gateway_catch_all(request: Request, path: str) -> Response:
-    """Проксирует запрос к внутреннему сервису на основе префикса пути."""
+    """Проксирует запрос к внутреннему сервису по path-pattern маршруту."""
     full_path = f"/api/v1/{path}"
 
     if is_deprecated_integration_route(full_path):
@@ -51,9 +55,10 @@ async def gateway_catch_all(request: Request, path: str) -> Response:
             ),
         )
 
-    service_name = resolve_service(full_path)
+    # Новая сигнатура: resolve_service(method, path) → (service_name, target_path) | None
+    result = resolve_service(request.method, full_path)
 
-    if not service_name:
+    if not result:
         return JSONResponse(
             status_code=404,
             content=_error(
@@ -62,4 +67,5 @@ async def gateway_catch_all(request: Request, path: str) -> Response:
             ),
         )
 
-    return await proxy_request(request, service_name)
+    service_name, target_path = result
+    return await proxy_request(request, service_name, target_path)
