@@ -501,7 +501,7 @@ GET .../{doc_id}/status?longpoll=15
   - Остальные получают `409 CONFLICT`
   - Механизм: уникальный индекс `UNIQUE (file_hash_sha256)` + `INSERT ... ON CONFLICT DO NOTHING`
   - Если файл уже обрабатывается (статус `uploaded`/`previewing`/`parsing`), новый запрос с тем же SHA-256 отклоняется
-- Одновременный вызов `POST /api/v1/registry/documents/{doc_id}/reprocess` для одного документа — второй запрос получает `409 CONFLICT` с кодом `ALREADY_PROCESSING`.
+- Одновременный вызов `POST /api/v1/documents/{doc_id}/reprocess` для одного документа — второй запрос получает `409 CONFLICT` с кодом `ALREADY_PROCESSING`.
 - Idempotency-Key: при повторном запросе с тем же ключом в течение 1 часа возвращается
   сохранённый результат первого запроса.
 

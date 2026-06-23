@@ -173,7 +173,7 @@ flowchart LR
 | `GET /chat/history/export`, `POST /chat/sessions/{id}/export` (stream) | ✅ | ❌ | P1-7 |
 | `GET /registry/classifiers/*`, `/terminology/*`, `/stats`, `/enums` (CRUD) | ✅ | ❌ | P1-8 |
 | `GET /tasks/*` (read-only admin) | ✅ | ❌ нет UI-раздела (P1-9) | Добавить «Артефакты и журналы обработки» |
-| `POST /api/v1/registry/documents/{doc_id}/reprocess` | ✅ | ❌ | Перенесён в Registry (P1-10) |
+| `POST /api/v1/documents/{doc_id}/reprocess` | ✅ | ❌ | Orchestrator (P1-10) |
 | `GET /admin/roles` (отдельная таблица ROLES) | ✅ | ❌ | P1-12 |
 | Карточка документа: `detail / status / history / errors` | ✅ частично | ❌ не все поля (P1-13) | Дополнить UI |
 | `POST /drafts/{draft_id}/preview` (повторный запуск) | ✅ idempotency | ❌ | P1-19 (idempotency 409 описан) |

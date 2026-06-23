@@ -239,7 +239,7 @@ Orchestrator получает JSON из Registry (через `GET /registry/docu
 ### DELETE /rag/build/{doc_id}
 
 Удаление всех чанков документа из векторного индекса.  
-Вызывается Orchestrator в рамках reprocess (`POST /api/v1/registry/documents/{doc_id}/reprocess`) при `mode: reindex`.
+Вызывается Orchestrator в рамках reprocess (`POST /api/v1/documents/{doc_id}/reprocess`) при `mode: reindex`.
 
 **Ответ `200`:**
 ```json
