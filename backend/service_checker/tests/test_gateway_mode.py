@@ -105,18 +105,6 @@ class TestGetCredentialsForMode:
 class TestGatewayServiceDefMode:
     """Проверка, что gateway.get_service_def() учитывает mode."""
 
-    def test_real_mode_credentials(self):
-        """real-режим → prepare использует TEST_CREDENTIALS."""
-        svc_def = get_service_def(mode=TEST_MODE_REAL)
-        prep = svc_def.prepare_endpoints
-        assert len(prep) >= 1
-        # Все prepare-шаги с auth/token должны иметь Admin1234!
-        for ep in prep:
-            if "token" in ep.path:
-                assert ep.body["password"] == "Admin1234!", (
-                    f"real-режим: ожидается Admin1234!, получен {ep.body['password']}"
-                )
-
     def test_mock_mode_credentials(self):
         """mock-режим → prepare использует GATEWAY_CREDENTIALS."""
         svc_def = get_service_def(mode=TEST_MODE_MOCK)
@@ -128,6 +116,23 @@ class TestGatewayServiceDefMode:
                     f"mock-режим: ожидается admin123, получен {ep.body['password']}"
                 )
 
+    def test_real_mode_credentials(self):
+        """real-mode → admin123 (всегда GATEWAY_CREDENTIALS из-за Mock Gateway в Docker)."""
+        svc_def = get_service_def(mode=TEST_MODE_REAL)
+        prep = svc_def.prepare_endpoints
+        for ep in prep:
+            if "token" in ep.path:
+                assert ep.body["password"] == "admin123"
+
+    def test_default_mode_no_env_real(self):
+        """Без mode — admin123 (GATEWAY_CREDENTIALS)."""
+        with patch.dict(os.environ, {}, clear=True):
+            svc_def = get_service_def()
+            prep = svc_def.prepare_endpoints
+            for ep in prep:
+                if "token" in ep.path:
+                    assert ep.body["password"] == "admin123"
+
     def test_default_mode_from_env(self):
         """Без явного mode — берёт из TEST_MODE env."""
         with patch.dict(os.environ, {"TEST_MODE": "mock"}):
@@ -137,17 +142,8 @@ class TestGatewayServiceDefMode:
                 if "token" in ep.path:
                     assert ep.body["password"] == "admin123"
 
-    def test_default_mode_no_env_real(self):
-        """Без mode и без TEST_MODE — real (Admin1234!)."""
-        with patch.dict(os.environ, {}, clear=True):
-            svc_def = get_service_def()
-            prep = svc_def.prepare_endpoints
-            for ep in prep:
-                if "token" in ep.path:
-                    assert ep.body["password"] == "Admin1234!"
-
     def test_auth_endpoint_credentials_match(self):
-        """Основной эндпоинт /auth/token тоже использует mode-credentials."""
+        """Основной эндпоинт /auth/token тоже использует GATEWAY_CREDENTIALS."""
         svc_def_real = get_service_def(mode=TEST_MODE_REAL)
         svc_def_mock = get_service_def(mode=TEST_MODE_MOCK)
 
@@ -165,7 +161,8 @@ class TestGatewayServiceDefMode:
 
         assert real_auth is not None, "Не найден /auth/token в real endpoints"
         assert mock_auth is not None, "Не найден /auth/token в mock endpoints"
-        assert real_auth.body["password"] == "Admin1234!"
+        # Gateway всегда использует GATEWAY_CREDENTIALS (admin123)
+        assert real_auth.body["password"] == "admin123"
         assert mock_auth.body["password"] == "admin123"
 
 

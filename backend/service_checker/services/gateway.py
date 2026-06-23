@@ -13,9 +13,9 @@ from typing import Optional
 
 from .base import (
     EndpointDef,
+    GATEWAY_CREDENTIALS,
     ServiceDef,
     API_PREFIX,
-    get_credentials_for_mode,
 )
 
 SERVICE_KEY = "gateway"
@@ -26,24 +26,49 @@ DISPLAY_NAME = "Gateway Service"
 def get_service_def(mode: Optional[str] = None) -> ServiceDef:
     """Вернуть полное описание Gateway Service (агрегирующий прокси).
 
-    Args:
-        mode: Режим тестирования — "real" (Docker, TEST_CREDENTIALS)
-              или "mock" (local Gateway Mock, GATEWAY_CREDENTIALS).
-              По умолчанию из TEST_MODE env var или "real".
+    В Docker (supervisord.conf) запускается Mock Gateway (mocks.gateway:app)
+    с seed-паролем admin123, поэтому ВСЕГДА используем GATEWAY_CREDENTIALS.
+    Реальный Gateway (gateway.main:app) в production будет иметь свои credentials.
     """
-    credentials = get_credentials_for_mode(mode)
+    credentials = dict(GATEWAY_CREDENTIALS)
 
     prepare_endpoints = [
         # Получаем JWT токен через Gateway.
-        # В mock-режиме — пароль из SEED_USERS (admin123),
-        # т.к. Gateway Mock не читает DEFAULT_ADMIN_PASSWORD.
-        # В real-режиме — пароль из DEFAULT_ADMIN_PASSWORD (Admin1234!).
+        # В Docker запущен Mock Gateway (mocks.gateway:app), который
+        # использует пароль admin123 из SEED_USERS (см. mocks/common.py).
         EndpointDef("POST", f"{API_PREFIX}/auth/token", "auth",
             "Получение JWT токена (prepare)",
             body=credentials,
             extract_keys=["access_token", "refresh_token"],
             is_preparation=True,
             expected_status=200),
+
+        # Создаём тестового пользователя (prepare) — нужен для /admin/users/{user_id}
+        EndpointDef("POST", f"{API_PREFIX}/admin/users", "admin",
+            "Создать тестового пользователя (prepare)",
+            body={"email": "gateway-prepare@test.com", "full_name": "Gateway Prepare",
+                  "password": "Prepare1234!", "roles": ["engineer"]},
+            extract_keys=["user_id"],
+            expected_status={201, 409},
+            is_preparation=True),
+
+        # Создаём проект для чат-сессий (prepare) — нужен для /chat/sessions
+        EndpointDef("POST", f"{API_PREFIX}/chat/projects", "chat",
+            "Создать проект (prepare)",
+            body={"code": "GW_PREPARE", "name": "Gateway Prepare Project"},
+            extract_keys=["project_id"],
+            expected_status={201, 409},
+            is_preparation=True),
+
+        # Создаём чат-сессию (prepare) — нужна для /chat/sessions/{session_id}/*
+        # project_id подставится из контекста после шага выше
+        EndpointDef("POST", f"{API_PREFIX}/chat/sessions", "chat",
+            "Создать чат-сессию (prepare)",
+            body={"title": "Gateway prepare session", "document_ids": [],
+                  "project_id": "{project_id}"},
+            extract_keys=["session_id"],
+            expected_status=201,
+            is_preparation=True),
     ]
 
     endpoints = [

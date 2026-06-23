@@ -837,6 +837,21 @@ class ApiCoverageTester:
                     expected_keys.update(ep.extract_keys)
             if expected_keys and not any(k in self.context for k in expected_keys):
                 print(f"     ⚠️  Все prepare-шаги вернули ошибки — контекст не создан (будут пропуски)")
+                # Для Gateway — дополнительная диагностика
+                if svc_key == "gateway":
+                    last_prep = svc_prepare[-1] if svc_prepare else None
+                    if last_prep:
+                        target_port = last_prep.override_port or port
+                        url = f"http://{self.base_host}:{target_port}{last_prep.path}"
+                        body_short = str(last_prep.body)[:120] if last_prep.body else "-"
+                        print(f"     🔍 Gateway prepare URL: {url}")
+                        print(f"     🔍 Gateway prepare body: {body_short}")
+                        # Ищем результат последнего prepare-шага
+                        for r in reversed(result.results):
+                            if r.endpoint.is_preparation:
+                                snippet = (r.response_body[:150] if r.response_body else "-")
+                                print(f"     🔍 Gateway prepare response (HTTP {r.status_code}): {snippet}")
+                                break
 
         # ── 2. Основные эндпоинты ────────────────────────────────────
         for ep in svc_endpoints:

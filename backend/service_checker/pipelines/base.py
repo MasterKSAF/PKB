@@ -287,10 +287,13 @@ class PipelineRunner:
             headers["Authorization"] = f"Bearer {auth_token}"
         base_url = f"http://{self.base_host}:8083/api/v1/chat/projects"
 
-        # 1. Пытаемся создать проект (retry 3 раза)
+        # 1. Пытаемся создать проект (retry 3 раза), code с timestamp чтобы избежать
+        #    UniqueViolation при параллельных или последовательных прогонах
+        ts = datetime.now().strftime("%Y%m%d%H%M%S%f")
         for attempt in range(3):
             try:
-                body = _json.dumps({"code": "PIPELINE", "name": "Pipeline Test Project"}).encode()
+                project_code = f"PIPELINE_{ts}_{attempt}"
+                body = _json.dumps({"code": project_code, "name": "Pipeline Test Project"}).encode()
                 resp = await self.client.post(base_url, content=body, headers=headers)
                 if resp.status_code == 201:
                     data = resp.json()
@@ -302,7 +305,12 @@ class PipelineRunner:
                 elif resp.status_code == 409:
                     # Проект уже существует — переходим к GET
                     break
-            except Exception:
+                elif resp.status_code == 500:
+                    # Сервис вернул 500 (например UniqueViolation вместо 409) —
+                    # пробуем следующий attempt с другим code
+                    body_text = (resp.text[:200] if resp.text else "")
+                    print(f"     ⚠ Проект не создан (HTTP {resp.status_code}), попытка {attempt+1}/3: {body_text}")
+            except Exception as e:
                 if attempt < 2:
                     await asyncio.sleep(1)
                 continue
@@ -496,12 +504,18 @@ class PipelineRunner:
                     if status_ok:
                         break
                 else:
+                    body_snippet = (resp.text[:200] if resp.text else "")
                     step.error = f"Expected HTTP {step.expected_status}, got {resp.status_code} after {step.retry_max} retries"
+                    if body_snippet:
+                        step.error += f" | body: {body_snippet}"
                     step.status = StepStatus.FAILED
                     return step
             
             if not status_ok:
+                body_snippet = (resp.text[:200] if resp.text else "")
                 step.error = f"Expected HTTP {step.expected_status}, got {resp.status_code}"
+                if body_snippet:
+                    step.error += f" | body: {body_snippet}"
                 step.status = StepStatus.FAILED
                 # on_error: сохраняем информацию об ошибке для ветвления
                 if step.on_error:
