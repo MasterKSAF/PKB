@@ -31,9 +31,8 @@ class TestAuthBehaviourInMockMode:
     def test_protected_endpoints_work_in_mock_mode(self, client: TestClient):
         """In mock mode, protected endpoints return data without auth token."""
         protected_paths = [
-            ("GET", "/api/v1/documents/"),
-            ("GET", "/api/v1/documents/doc-mock-001"),
-            ("GET", "/api/v1/documents/search"),
+            ("GET", "/api/v1/drafts"),
+            ("GET", "/api/v1/tasks"),
         ]
         for method, path in protected_paths:
             if method == "GET":

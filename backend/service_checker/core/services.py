@@ -80,7 +80,10 @@ async def wait_for_service(
     start = time.time()
     while time.time() - start < timeout:
         try:
-            async with httpx.AsyncClient(timeout=5) as client:
+            async with httpx.AsyncClient(
+                    timeout=5,
+                    trust_env=False,
+            ) as client:
                 resp = await client.get(sp.health_url)
                 if resp.status_code < 500:
                     return True
@@ -109,7 +112,10 @@ async def check_service_health(
     """Проверить health одного сервиса."""
     start = time.time()
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
+        async with httpx.AsyncClient(
+                timeout=timeout,
+                trust_env=False,
+        ) as client:
             resp = await client.get(sp.health_url)
         elapsed = int((time.time() - start) * 1000)
         data = resp.json() if resp.content else None
@@ -206,7 +212,10 @@ class WebEmulator:
         self.headers: Dict[str, str] = {**HEADERS_JSON}
         self.documents: List[Dict[str, Any]] = []
         self.project_id: int = 1
-        self.client = httpx.AsyncClient(timeout=30)
+        self.client = httpx.AsyncClient(
+            timeout=30,
+            trust_env=False,
+        )
 
     async def _ensure_project(self) -> None:
         """Create or get a project. Raises RuntimeError if impossible."""

@@ -669,6 +669,7 @@ POST /registry/terminology/import
 | PATCH | `/registry/documents/{doc_id}/status` | Обновить статус (internal — только для Оркестратора) |
 | GET | `/registry/documents/{doc_id}/succession` | Цепочка преемственности |
 | DELETE | `/registry/documents/{doc_id}` | Удалить |
+| POST | `/registry/documents/{doc_id}/reprocess` | Переобработка документа (reprocess) |
 | GET | `/registry/documents/export` | Экспорт |
 | POST | `/registry/documents/import` | Массовый импорт |
 
@@ -1566,6 +1567,51 @@ POST /registry/documents/import
   }
 }
 ```
+
+---
+
+### 3.13. POST /registry/documents/{doc_id}/reprocess — переобработка документа
+
+Асинхронная переобработка документа без создания нового черновика.
+Перезапускает указанный этап обработки для существующего документа. Новый `draft_id` **не создаётся**.
+
+**Запрос**:
+
+```json
+{
+  "mode": "full",
+  "options": { "ocr_engine": "paddleocr", "language": "ru", "pages": "1-5" }
+}
+```
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `mode` | string | Режим переобработки: `full`, `ocr_only`, `chunking_only`, `validation_only`, `reindex` |
+| `options` | object | Опциональные параметры обработки (см. таблицу ниже) |
+
+**Поле `options`** (опционально):
+| Поле | Тип | Описание | Допустимые значения |
+|------|-----|----------|-------------------|
+| `ocr_engine` | string | Движок OCR | `paddleocr`, `tesseract` |
+| `parser_engine` | string | Движок парсинга | `docling` |
+| `language` | string | Язык OCR | `rus` (по умолчанию), `eng` |
+| `pages` | string | Диапазон страниц | `"1-5"`, `"1,3,5"`, `"all"` (по умолчанию) |
+
+**Ответ `202`**:
+```json
+{
+  "task_id": 420002,
+  "document_id": 1,
+  "mode": "full",
+  "status": "processing",
+  "message": "Переобработка запущена. Новый черновик не создаётся — используется существующий документ."
+}
+```
+
+**Особенности переиндексации (`mode: reindex`):**
+Registry регистрирует задачу на переобработку. Orchestrator, получив уведомление, вызывает `DELETE /rag/build/{doc_id}` для очистки существующих чанков документа из векторного индекса. Только после успешного удаления запускается новый `POST /rag/build`. Если `DELETE` вернул ошибку, переиндексация отменяется с кодом `CLEANUP_FAILED`.
+
+**Ошибки**: `404` — документ не найден, `409` — документ в обработке.
 
 ---
 
