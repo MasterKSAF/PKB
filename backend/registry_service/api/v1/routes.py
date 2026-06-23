@@ -1875,3 +1875,119 @@ def get_document_version(version_id: int, db: Session = Depends(get_db)):
         log_event('ERROR', f'/registry/versions/{version_id}', None, None, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
+
+
+# ============================================================================
+# Categories API - Group 6
+# ============================================================================
+
+from api.v1.crud import category as category_crud
+from api.v1.schemas.category import CategorySchema, CategoryCreateSchema, CategoryUpdateSchema
+
+@routes.get('/registry/categories')
+def list_categories(page: int = 1, page_size: int = 50, db: Session = Depends(get_db)):
+    """GET /registry/categories — список категорий"""
+    log_event('INFO', '/registry/categories', None, None)
+    try:
+        if page < 1:
+            page = 1
+        if page_size < 1:
+            page_size = 50
+        records, total = category_crud.get_categories(db, page, page_size)
+        data = [CategorySchema.model_validate(r).model_dump(mode='json') for r in records]
+        return {
+            'data': data,
+            'meta': {'total': total, 'page': page, 'page_size': page_size}
+        }
+    except Exception as e:
+        log_event('ERROR', '/registry/categories', None, None, str(e))
+        raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
+
+
+@routes.get('/registry/categories/{category_id}')
+def get_category(category_id: int, db: Session = Depends(get_db)):
+    """GET /registry/categories/{category_id} — получить одну категорию"""
+    log_event('INFO', f'/registry/categories/{category_id}', None, None)
+    try:
+        category = category_crud.get_category_by_id(db, category_id)
+        if not category:
+            raise HTTPException(status_code=404, detail={'error': {'code': 'CATEGORY_NOT_FOUND', 'message': 'Category not found'}})
+        return {'data': CategorySchema.model_validate(category).model_dump(mode='json')}
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_event('ERROR', f'/registry/categories/{category_id}', None, None, str(e))
+        raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
+
+
+@routes.post('/registry/categories', status_code=201)
+def create_category_endpoint(schema: CategoryCreateSchema, db: Session = Depends(get_db)):
+    """POST /registry/categories — создать категорию"""
+    log_event('INFO', '/registry/categories', None, None)
+    try:
+        # Check duplicate name
+        existing = category_crud.get_category_by_name(db, schema.name)
+        if existing:
+            raise HTTPException(status_code=409, detail={'error': {'code': 'DUPLICATE_CATEGORY_NAME', 'message': 'Category with this name already exists'}})
+        category = category_crud.create_category(db, schema)
+        return {'data': CategorySchema.model_validate(category).model_dump(mode='json')}
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_event('ERROR', '/registry/categories', None, None, str(e))
+        raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
+
+
+@routes.put('/registry/categories/{category_id}')
+def update_category_endpoint(category_id: int, schema: CategoryUpdateSchema, db: Session = Depends(get_db)):
+    """PUT /registry/categories/{category_id} — обновить категорию"""
+    log_event('INFO', f'/registry/categories/{category_id}', None, None)
+    try:
+        category = category_crud.get_category_by_id(db, category_id)
+        if not category:
+            raise HTTPException(status_code=404, detail={'error': {'code': 'CATEGORY_NOT_FOUND', 'message': 'Category not found'}})
+        
+        # If name is provided and different, check for duplicate name
+        if schema.name is not None and schema.name.strip() != category.name:
+            existing = category_crud.get_category_by_name(db, schema.name)
+            if existing and existing.id != category.id:
+                raise HTTPException(status_code=409, detail={'error': {'code': 'DUPLICATE_CATEGORY_NAME', 'message': 'Category with this name already exists'}})
+                
+        updated = category_crud.update_category(db, category, schema)
+        return {'data': CategorySchema.model_validate(updated).model_dump(mode='json')}
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_event('ERROR', f'/registry/categories/{category_id}', None, None, str(e))
+        raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
+
+
+@routes.delete('/registry/categories/{category_id}')
+def delete_category_endpoint(category_id: int, db: Session = Depends(get_db)):
+    """DELETE /registry/categories/{category_id} — удалить категорию"""
+    log_event('INFO', f'/registry/categories/{category_id}', None, None)
+    try:
+        category = category_crud.get_category_by_id(db, category_id)
+        if not category:
+            raise HTTPException(status_code=404, detail={'error': {'code': 'CATEGORY_NOT_FOUND', 'message': 'Category not found'}})
+            
+        # Check if linked to documents
+        if category_crud.is_category_linked_to_documents(db, category_id):
+            raise HTTPException(status_code=409, detail={'error': {'code': 'CATEGORY_HAS_DOCUMENTS', 'message': 'Category is linked to documents and cannot be deleted'}})
+            
+        category_crud.delete_category(db, category)
+        from datetime import datetime, timezone
+        return {
+            'data': {
+                'id': category_id,
+                'deleted_at': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
+                'message': 'Категория удалена'
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_event('ERROR', f'/registry/categories/{category_id}', None, None, str(e))
+        raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
+
+
