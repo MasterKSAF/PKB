@@ -6,8 +6,8 @@
 > RAG Builder prepares `document_sections`, `chunks`, embeddings, `content_tsv`, `path_ltree`, citation metadata and source objects.
 > RAG Search reads the prepared index and performs retrieval.
 >
-> This file is kept separately from `README.md` to avoid mixing indexing responsibilities with search/retrieval responsibilities.
-> It is a temporary source document for the future `backend/rag_search_service_spd`.
+> This README describes the current `backend/rag_search_service_spd` service.
+> RAG Search is a read-only retrieval service over the index prepared by RAG Builder.
 
 ---
 
@@ -78,17 +78,27 @@ content
 
 ## 3. API contract
 
+### POST /api/v1/rag/search
+
+Main contract endpoint for RAG Search SPD.
+
 ### POST /search
 
-Legacy/local endpoint поиска.
+Legacy/local endpoint.
 
 ### POST /rag/search
 
-Совместимый endpoint поиска чанков.
+Compatibility endpoint used by earlier local integrations.
 
-Оба endpoint-а используют один и тот же `SearchRequest` и `SearchResponse`.
+All three endpoints use the same `SearchRequest` and return the same `SearchResponse`.
 
-> Финальное имя endpoint-а для `backend/rag_search_service_spd` нужно согласовать с backend-интеграцией. Для совместимости MVP сохраняются оба варианта.
+Current endpoint policy:
+
+```text
+POST /api/v1/rag/search  # preferred API v1 contract
+POST /rag/search         # compatibility alias
+POST /search             # legacy/local alias
+```
 
 ---
 
@@ -268,48 +278,11 @@ Given current server constraints, production search should not require a local G
 
 ---
 
-## 11. Future extraction target
-
-Temporary source location:
+## 11. Current test status
 
 ```text
-backend/rag_builder_service_spd/README_SEARCH.md
+18 passed, 1 warning
 ```
-
-Target service:
-
-```text
-backend/rag_search_service_spd
-```
-
-Expected future structure:
-
-```text
-backend/rag_search_service_spd/
-├── README.md
-├── pyproject.toml
-├── src/
-│   └── rag_search/
-│       ├── api/
-│       ├── core/
-│       ├── embeddings/
-│       ├── models/
-│       ├── repositories/
-│       └── services/
-└── tests/
-```
-
-Candidate code to extract from current SPD work:
-
-```text
-models/search.py
-services/search_service.py
-repositories/postgres_search_repository.py
-api/search_routes.py
-tests/unit/test_search_*.py
-```
-
-Namespace should be changed from `rag_builder` to `rag_search` during extraction.
 
 ---
 
