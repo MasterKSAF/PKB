@@ -76,10 +76,6 @@ IndexingJobStatus = Literal[
     "/api/v1/health",
     response_model=HealthResponse,
 )
-@app.get(
-    "/health",
-    response_model=HealthResponse,
-)
 def health_check() -> HealthResponse:
     repository = PostgresChunkRepository()
 
