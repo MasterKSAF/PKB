@@ -176,3 +176,15 @@ def test_api_v1_rag_build_delete_index():
     assert data["document_id"] == 420000
     assert data["status"] == "completed"
     assert "deleted_count" in data
+
+
+
+def test_api_v1_health_endpoint():
+    response = client.get("/api/v1/health")
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["service"] == "rag_builder_service_spd"
+    assert data["database"] == "ok"
