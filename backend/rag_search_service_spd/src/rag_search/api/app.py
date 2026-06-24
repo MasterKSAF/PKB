@@ -35,6 +35,7 @@ async def search_legacy(
         ) from exc
 
 
+@router.post("/api/v1/rag/search", response_model=SearchResponse)
 @router.post("/rag/search", response_model=SearchResponse)
 async def search_compatible(
     request: SearchRequest,

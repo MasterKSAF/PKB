@@ -91,3 +91,19 @@ def test_compatible_rag_search_endpoint() -> None:
         assert response.json()["search_type_used"] == "sparse"
     finally:
         app.dependency_overrides.clear()
+
+def test_api_v1_rag_search_endpoint() -> None:
+    app.dependency_overrides[get_search_service] = override_service
+
+    try:
+        client = TestClient(app)
+
+        response = client.post(
+            "/api/v1/rag/search",
+            json={"query": "skin thickness", "search_type": "sparse"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["search_type_used"] == "sparse"
+    finally:
+        app.dependency_overrides.clear()
