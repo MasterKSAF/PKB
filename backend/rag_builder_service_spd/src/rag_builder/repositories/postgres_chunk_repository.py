@@ -274,6 +274,63 @@ class PostgresChunkRepository(ChunkRepository):
             "errors": row[8] or [],
         }
 
+    def get_active_indexing_job_for_document(
+        self,
+        document_id: int,
+        stale_after_seconds: int,
+    ) -> dict | None:
+        if stale_after_seconds <= 0:
+            return None
+
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    sql.SQL(
+                        """
+                        SELECT
+                            document_id,
+                            status,
+                            indexing_txn_id::text,
+                            chunks_count,
+                            has_embeddings,
+                            indexed_at,
+                            index_stats,
+                            warnings,
+                            errors
+                        FROM {schema}.indexing_jobs
+                        WHERE document_id = %s
+                          AND status IN ('pending_index', 'indexing')
+                          AND updated_at >= now() - (%s * interval '1 second')
+                        ORDER BY created_at DESC, id DESC
+                        LIMIT 1
+                        """
+                    ).format(
+                        schema=sql.Identifier(settings.POSTGRES_SCHEMA),
+                    ),
+                    (
+                        document_id,
+                        stale_after_seconds,
+                    ),
+                )
+
+                row = cur.fetchone()
+
+        if row is None:
+            return None
+
+        return {
+            "document_id": row[0],
+            "status": row[1],
+            "indexing_txn_id": row[2],
+            "chunks_count": row[3],
+            "has_embeddings": row[4],
+            "indexed_at": row[5],
+            "index_stats": row[6] or {},
+            "warnings": row[7] or [],
+            "errors": row[8] or [],
+        }
+
+
     def get_latest_indexing_job_for_document(
         self,
         document_id: int,

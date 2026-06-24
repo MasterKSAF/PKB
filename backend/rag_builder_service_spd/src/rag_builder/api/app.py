@@ -196,6 +196,29 @@ def index_document(
 
     _mark_stale_indexing_jobs_failed(repository)
 
+    active_job = repository.get_active_indexing_job_for_document(
+        document_id=request.metadata.document_id,
+        stale_after_seconds=settings.INDEXING_JOB_STALE_AFTER_SECONDS,
+    )
+
+    if active_job is not None:
+        logger.warning(
+            "Reject duplicate active indexing job for document_id=%s",
+            request.metadata.document_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ALREADY_PROCESSING",
+                "message": "Document indexing is already in progress",
+                "details": {
+                    "document_id": request.metadata.document_id,
+                    "indexing_txn_id": active_job["indexing_txn_id"],
+                    "status": active_job["status"],
+                },
+            },
+        )
+
     indexing_txn_id = str(uuid4())
 
     task_id = repository.create_indexing_job(
