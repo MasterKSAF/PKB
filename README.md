@@ -65,6 +65,33 @@ PKB_neuroassistant/
 - **План спринта**: [`docs/plans/sprint1_04_06_10_06.md`](docs/plans/sprint1_04_06_10_06.md)
 - **Сводный план реализации**: [`docs/plans/СВОДНЫЙ_ПЛАН_РЕАЛИЗАЦИИ.md`](docs/plans/СВОДНЫЙ_ПЛАН_РЕАЛИЗАЦИИ.md)
 
+## Batch-файлы
+
+В корне проекта и в `backend/` находятся bat-файлы для управления системой.
+
+### Корневые (главные)
+
+| Файл | Назначение | Детали |
+|------|-----------|--------|
+| [`start_web.bat`](start_web.bat) | Полный запуск backend + Web UI | Проверка Docker → создание .env → сборка base-образа → загрузка TEI-модели → `docker compose up -d --build` → ожидание supervisord → открытие UI и health |
+| [`reset_web.bat`](reset_web.bat) | Сброс данных + перезапуск | Дропает БД, сбрасывает Redis, пересоздаёт контейнеры app и frontend без пересборки образов |
+
+### Вспомогательные (backend)
+
+| Файл | Назначение |
+|------|-----------|
+| [`backend/check.bat`](backend/check.bat) | Быстрый прогон recheck — делегирует `service_checker/docker/recheck.bat` |
+| [`backend/check_spd.bat`](backend/check_spd.bat) | Быстрый прогон recheck для SPD — делегирует `service_checker/docker/recheck_spd.bat` |
+
+### Docker-утилиты (backend/service_checker/docker)
+
+| Файл | Назначение |
+|------|-----------|
+| [`start.bat`](backend/service_checker/docker/start.bat) | Запуск сервера без сброса данных |
+| [`prepare.bat`](backend/service_checker/docker/prepare.bat) | Полная инициализация с нуля (после git clone): очистка volumes, сборка образа, запуск, full-report |
+| [`recheck.bat`](backend/service_checker/docker/recheck.bat) | Чистый перезапуск + отчёт (health, coverage, pipelines). Поддерживает фильтрацию по сервисам и пайплайнам |
+| [`recheck_spd.bat`](backend/service_checker/docker/recheck_spd.bat) | То же, что recheck, но для RAG Builder SPD (`docker-compose.spd.yml`) |
+
 ## Docker (All-in-One контейнер)
 
 Всё в одном контейнере: **PostgreSQL 16 + pgvector, Redis, MinIO** и **все 8 backend-сервисов**.
@@ -84,21 +111,22 @@ docker compose up -d --build
 docker compose ps
 ```
 
-**Быстрый старт backend + web UI:**
+### Портовая схема
 
-```bash
-start_web.bat
-```
+После запуска открывается:
+- **Backend API (Gateway):** `http://localhost:8080` — единая точка входа (включает auth, orchestrator, query, registry)
+- **Web UI:** `http://localhost:3300`
+- **Auth Service:** `http://localhost:8082` (напрямую, не через Gateway)
+- **Orchestrator:** `http://localhost:8081`
+- **PostgreSQL:** `localhost:15432`
+- **Redis:** `localhost:16379`
+- **MinIO Console:** `http://localhost:19001`
+- **TEI:** `http://localhost:18092`
 
-**Сброс данных и перезапуск сервисов (без пересборки образов):**
-
-```bash
-reset_web.bat
-```
-
-Откроется:
-- Backend API: `http://localhost:8080`
-- Web UI:     `http://localhost:3300`
+> **Gateway URL для фронтенда:** Фронтенд обращается к Gateway на порту **8080** (не 8081).
+> Маршруты аутентификации (`POST /auth/token`, `GET /auth/me` и др.) находятся в Gateway, а не в Orchestrator.
+> Настройка: `UI-UX/UI Final/frontend/src/utils/http.ts` — `DEFAULT_GATEWAY_URL`.
+> Env-переменная: `VITE_API_BASE_URL=http://127.0.0.1:8080/api/v1`.
 
 Подробнее:
 - [`backend/README.Docker.md`](backend/README.Docker.md) — Docker-сборка

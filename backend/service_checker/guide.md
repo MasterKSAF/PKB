@@ -61,8 +61,9 @@ def client(self, value: httpx.AsyncClient) -> None:
 Любая проверка Docker (статус сервисов, coverage, pipeline-тесты) запускается **только** через:
 
 ```
-cd docker && recheck.bat       # Обычный режим (rag-builder + rag-search)
-cd docker && recheck_spd.bat   # SPD-режим (rag-builder-spk на 8090)
+cd docker && recheck.bat       # Обычный режим (rag-builder + rag-search) — сброс БД + отчёт
+cd docker && recheck_spd.bat   # SPD-режим (rag-builder-spk на 8090) — сброс БД + отчёт
+cd docker && start.bat         # Просто запустить сервер (без сброса данных, без отчёта)
 ```
 
 **Что делает**: чистит БД → перезапускает app → ждёт supervisor → запускает полный отчёт.

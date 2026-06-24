@@ -146,7 +146,7 @@ Demo-режим использует локальные профили:
 
 ```text
 VITE_API_BASE_URL=http://127.0.0.1:8080/api/v1
-VITE_GATEWAY_AUTO_LOGIN=false
+VITE_GATEWAY_AUTO_LOGIN=true
 VITE_GATEWAY_USERNAME=admin@example.com
 VITE_GATEWAY_PASSWORD=Admin1234!
 ```

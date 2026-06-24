@@ -4,7 +4,7 @@
 
 ## Что получится после запуска
 
-- Gateway работает локально на `http://127.0.0.1:8081/api/v1`.
+- Gateway работает локально на `http://127.0.0.1:8080/api/v1`.
 - UI Final работает локально на `http://127.0.0.1:3300`.
 - В UI можно выбрать режим `Продуктивный`, войти через Gateway и проверить реальные запросы к Gateway.
 - Основной переходник UI к Gateway находится в `UI-UX/UI Final/frontend/src/utils/http.ts`.
@@ -43,7 +43,7 @@ python backend\gateway_service\mocks\gateway.py
 Проверка Gateway:
 
 ```text
-http://127.0.0.1:8081/docs
+http://127.0.0.1:8080/docs
 ```
 
 Если Swagger открылся, Gateway поднят.

@@ -75,6 +75,7 @@ service_checker/
 │   ├── prepare_tei_model.py             # Скачивание и подготовка модели TEI
 │   ├── recheck.bat                      # Быстрый re-check: сброс БД + restart + full-report
 │   ├── recheck_spd.bat                  # Re-check для rag_builder_service_spd: сброс БД + restart + --spd
+│   ├── start.bat                        # Простой запуск сервера без сброса данных и отчёта
 │   ├── docker-compose.spd.yml           # Override для SPD-компоновки (supervisord.spd.conf + entrypoint.spd.sh)
 │   ├── supervisord.spd.conf             # supervisor.conf для SPD (rag-builder-spk вместо rag-builder + rag-search)
 │   ├── entrypoint.spd.sh                # entrypoint для SPD (.env для rag_builder_service_spd)
