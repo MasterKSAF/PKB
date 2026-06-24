@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from rag_builder.api.app import app
+from rag_builder.core.config import settings
 from rag_builder.repositories.postgres_chunk_repository import PostgresChunkRepository
 
 
@@ -356,4 +357,97 @@ def test_api_v1_rag_build_rejects_duplicate_active_job(monkeypatch):
         "document_id": 420000,
         "indexing_txn_id": active_txn_id,
         "status": "indexing",
+    }
+
+def test_api_v1_rag_build_rejects_when_active_jobs_limit_reached(monkeypatch):
+    monkeypatch.setattr(settings, "MAX_ACTIVE_INDEXING_JOBS", 1)
+
+    def fake_mark_stale_indexing_jobs_failed(
+        self,
+        stale_after_seconds,
+    ):
+        assert stale_after_seconds > 0
+        return 0
+
+    def fake_get_active_indexing_job_for_document(
+        self,
+        document_id,
+        stale_after_seconds,
+    ):
+        assert document_id == 420000
+        assert stale_after_seconds > 0
+        return None
+
+    def fake_count_active_indexing_jobs(
+        self,
+        stale_after_seconds,
+    ):
+        assert stale_after_seconds > 0
+        return 1
+
+    def fail_create_indexing_job(
+        self,
+        document_id,
+        indexing_txn_id,
+        status="indexing",
+    ):
+        raise AssertionError("create_indexing_job must not be called")
+
+    monkeypatch.setattr(
+        PostgresChunkRepository,
+        "mark_stale_indexing_jobs_failed",
+        fake_mark_stale_indexing_jobs_failed,
+    )
+    monkeypatch.setattr(
+        PostgresChunkRepository,
+        "get_active_indexing_job_for_document",
+        fake_get_active_indexing_job_for_document,
+    )
+    monkeypatch.setattr(
+        PostgresChunkRepository,
+        "count_active_indexing_jobs",
+        fake_count_active_indexing_jobs,
+    )
+    monkeypatch.setattr(
+        PostgresChunkRepository,
+        "create_indexing_job",
+        fail_create_indexing_job,
+    )
+
+    payload = {
+        "document_id": 420000,
+        "sections": [
+            {
+                "section_id": 1,
+                "document_id": 420000,
+                "parent_id": None,
+                "clause": "1",
+                "title": None,
+                "level": 1,
+                "path": "1",
+                "page": 1,
+                "bbox": None,
+                "type": "text",
+                "content": {
+                    "text": "????????? ???????? ????????????????...",
+                },
+                "references": [],
+            }
+        ],
+        "protected_spans": [],
+        "options": {
+            "strategy": "semantic_1024",
+        },
+    }
+
+    response = client.post("/api/v1/rag/build", json=payload)
+
+    assert response.status_code == 429
+
+    data = response.json()
+
+    assert data["detail"]["code"] == "TOO_MANY_REQUESTS"
+    assert data["detail"]["details"] == {
+        "active_jobs": 1,
+        "max_active_jobs": 1,
     }

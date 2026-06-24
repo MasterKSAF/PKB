@@ -274,6 +274,34 @@ class PostgresChunkRepository(ChunkRepository):
             "errors": row[8] or [],
         }
 
+    def count_active_indexing_jobs(
+        self,
+        stale_after_seconds: int,
+    ) -> int:
+        if stale_after_seconds <= 0:
+            return 0
+
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    sql.SQL(
+                        """
+                        SELECT count(*)
+                        FROM {schema}.indexing_jobs
+                        WHERE status IN ('pending_index', 'indexing')
+                          AND updated_at >= now() - (%s * interval '1 second')
+                        """
+                    ).format(
+                        schema=sql.Identifier(settings.POSTGRES_SCHEMA),
+                    ),
+                    (stale_after_seconds,),
+                )
+
+                row = cur.fetchone()
+
+        return int(row[0])
+
+
     def get_active_indexing_job_for_document(
         self,
         document_id: int,
