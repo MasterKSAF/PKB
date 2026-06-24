@@ -72,7 +72,7 @@ async def search(
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 resp = await client.post(
-                    f"{settings.RAG_SERVICE_URL}/rag/search",
+                    f"{settings.RAG_SERVICE_URL}/api/v1/rag/search",
                     json={
                         "query": query,
                         "top_k": top_k,

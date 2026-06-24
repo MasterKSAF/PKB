@@ -5,7 +5,7 @@ Supports dual mode: real API calls or mock/stub mode for each external service.
 
 from typing import Optional
 
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -20,13 +20,27 @@ class ServiceConfig(BaseSettings):
         default=False, description="Use mock mode for registry service"
     )
 
-    # RAG Builder Service (port 8087)
+    # RAG Builder Service (port 8090) — indexing
+    RAG_BUILDER_SERVICE_URL: Optional[str] = Field(
+        default="http://rag-builder:8090", description="URL for RAG Builder service (indexing)"
+    )
+    # RAG Search Service (port 8091) — search
+    RAG_SEARCH_SERVICE_URL: Optional[str] = Field(
+        default="http://rag-search:8091", description="URL for RAG Search service (search)"
+    )
+    # Deprecated: use RAG_BUILDER_SERVICE_URL
     RAG_SERVICE_URL: Optional[str] = Field(
-        default="http://rag-builder:8087", description="URL for rag builder service"
+        default=None, description="[DEPRECATED] Use RAG_BUILDER_SERVICE_URL"
     )
     RAG_SERVICE_MOCK: bool = Field(
         default=False, description="Use mock mode for rag service"
     )
+
+    @model_validator(mode='after')
+    def _sync_rag_urls(self):
+        if self.RAG_SERVICE_URL is not None:
+            self.RAG_BUILDER_SERVICE_URL = self.RAG_SERVICE_URL
+        return self
 
     # OCR Service (port 8088)
     OCR_SERVICE_URL: Optional[str] = Field(

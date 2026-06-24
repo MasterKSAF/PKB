@@ -89,15 +89,15 @@ x-env-service-urls: &env-service-urls
   AUTH_SERVICE_URL: http://auth:8082
   ORCHESTRATOR_SERVICE_URL: http://orchestrator:8081
   QUERY_SERVICE_URL: http://query:8083
-  REGISTRY_SERVICE_URL: http://registry:8084/api/v1
+  REGISTRY_SERVICE_URL: http://registry:8084
   CONVERTER_VALIDATOR_SERVICE_URL: http://converter-validator:8086
   CONVERTER_SERVICE_URL: http://converter-validator:8086
-  VALIDATE_SERVICE_URL: http://converter-validator:8086/api/v1
+  VALIDATE_SERVICE_URL: http://converter-validator:8086
   PARSER_SERVICE_URL: http://parser:8087
   OCR_SERVICE_URL: http://parser:8087
   RAG_BUILDER_SERVICE_URL: http://rag-builder:8090
   RAG_SEARCH_SERVICE_URL: http://rag-search:8091
-  RAG_SERVICE_URL: http://rag-search:8091/api/v1
+  RAG_SERVICE_URL: http://rag-search:8091
 
 services:
 
@@ -480,7 +480,6 @@ services:
       PARSER_SERVICE_URL: http://parser:8087
       OCR_SERVICE_URL: http://parser:8087
       CONVERTER_SERVICE_URL: http://converter-validator:8086
-      RAG_SERVICE_URL: http://rag-builder:8090
     depends_on:
       postgres:
         condition: service_healthy
@@ -523,7 +522,6 @@ services:
       - "8080:8080"
     environment:
       <<: [*env-service-urls]
-      REGISTRY_SERVICE_URL: http://registry:8084
       GATEWAY_MODE: real
       GATEWAY_HOST: 0.0.0.0
       GATEWAY_PORT: "8080"

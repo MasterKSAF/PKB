@@ -84,10 +84,11 @@ cp .env.example .env
 ```env
 # .env — переопределить URL для локальной разработки
 REGISTRY_SERVICE_URL=http://localhost:8084
-PARSER_SERVICE_URL=http://localhost:8089
+PARSER_SERVICE_URL=http://localhost:8087
 OCR_SERVICE_URL=http://localhost:8088
-CONVERTER_SERVICE_URL=http://localhost:8090
-RAG_SERVICE_URL=http://localhost:8087
+CONVERTER_SERVICE_URL=http://localhost:8086
+RAG_BUILDER_SERVICE_URL=http://localhost:8090
+RAG_SEARCH_SERVICE_URL=http://localhost:8091
 ```
 
 ### Для mock-режима (локальная разработка без Docker):

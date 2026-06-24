@@ -36,7 +36,9 @@ class TestServiceConfig:
         _clean_env()
         config = ServiceConfig()
         assert config.REGISTRY_SERVICE_URL == "http://registry-service:8084"
-        assert config.RAG_SERVICE_URL == "http://rag-builder:8087"
+        assert config.RAG_BUILDER_SERVICE_URL == "http://rag-builder:8090"
+        assert config.RAG_SEARCH_SERVICE_URL == "http://rag-search:8091"
+        assert config.RAG_SERVICE_URL is None  # deprecated
         assert config.OCR_SERVICE_URL == "http://ocr-service:8088"
 
     def test_override_with_env(self):
@@ -44,14 +46,27 @@ class TestServiceConfig:
         with patch.dict(os.environ, {
             "REGISTRY_SERVICE_URL": "http://registry:8084",
             "REGISTRY_SERVICE_MOCK": "false",
-            "RAG_SERVICE_URL": "http://rag:8087",
+            "RAG_BUILDER_SERVICE_URL": "http://rag-builder:8090",
+            "RAG_SEARCH_SERVICE_URL": "http://rag-search:8091",
             "RAG_SERVICE_MOCK": "false",
         }, clear=False):
             config = ServiceConfig()
             assert config.REGISTRY_SERVICE_URL == "http://registry:8084"
             assert config.REGISTRY_SERVICE_MOCK is False
-            assert config.RAG_SERVICE_URL == "http://rag:8087"
+            assert config.RAG_BUILDER_SERVICE_URL == "http://rag-builder:8090"
+            assert config.RAG_SEARCH_SERVICE_URL == "http://rag-search:8091"
             assert config.RAG_SERVICE_MOCK is False
+
+    def test_deprecated_rag_service_url_syncs_to_builder(self):
+        """Setting deprecated RAG_SERVICE_URL syncs to RAG_BUILDER_SERVICE_URL."""
+        _clean_env()
+        with patch.dict(os.environ, {
+            "RAG_SERVICE_URL": "http://custom-rag:9090",
+        }, clear=False):
+            config = ServiceConfig()
+            assert config.RAG_SERVICE_URL == "http://custom-rag:9090"
+            assert config.RAG_BUILDER_SERVICE_URL == "http://custom-rag:9090"
+            assert config.RAG_SEARCH_SERVICE_URL == "http://rag-search:8091"  # unchanged
 
     def test_mixed_mock_and_real(self):
         """Some services mock, some real."""

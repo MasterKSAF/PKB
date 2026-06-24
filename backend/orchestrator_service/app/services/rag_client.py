@@ -18,13 +18,13 @@ from app.schemas.requests import (
 from app.services.base_client import ServiceClient
 
 
-class RAGServiceClient(ServiceClient):
-    """Client for RAG Service (vector search)."""
+class RAGBuilderClient(ServiceClient):
+    """Client for RAG Builder service (indexing)."""
 
     def __init__(self):
         super().__init__(
-            service_name="rag",
-            service_url=settings.services.RAG_SERVICE_URL,
+            service_name="rag-builder",
+            service_url=settings.services.RAG_BUILDER_SERVICE_URL,
             mock_mode=settings.services.RAG_SERVICE_MOCK,
         )
 
@@ -32,7 +32,7 @@ class RAGServiceClient(ServiceClient):
         self, method: str, endpoint: str, default_mock: Dict[str, Any], **kwargs
     ) -> Dict[str, Any]:
         """Generate mock RAG responses."""
-        if endpoint == "/rag/build" and method == "POST":
+        if endpoint == "/api/v1/rag/build" and method == "POST":
             request_data = kwargs.get("json", {})
             sections = request_data.get("sections", [])
             return {
@@ -42,17 +42,17 @@ class RAGServiceClient(ServiceClient):
                 "status": "indexing",
             }
 
-        if endpoint.startswith("/rag/build/") and method == "DELETE":
+        if endpoint.startswith("/api/v1/rag/build/") and method == "DELETE":
             return {
                 "document_id": endpoint.split("/")[-1],
                 "deleted_count": 128,
                 "status": "completed",
             }
 
-        if endpoint.startswith("/rag/build/") and endpoint.endswith("/status") and method == "GET":
-            # GET /rag/build/{doc_id}/status
+        if endpoint.startswith("/api/v1/rag/build/") and endpoint.endswith("/status") and method == "GET":
+            # GET /api/v1/rag/build/{doc_id}/status
             parts = endpoint.split("/")
-            doc_id = parts[-2] if len(parts) >= 4 else "unknown"
+            doc_id = parts[-2] if len(parts) >= 5 else "unknown"
             return {
                 "document_id": doc_id,
                 "status": "indexed",
@@ -63,10 +63,10 @@ class RAGServiceClient(ServiceClient):
                 "errors": [],
             }
 
-        if endpoint.startswith("/rag/build/") and endpoint.endswith("/check") and method == "GET":
-            # /rag/build/{document_id}/check
+        if endpoint.startswith("/api/v1/rag/build/") and endpoint.endswith("/check") and method == "GET":
+            # /api/v1/rag/build/{document_id}/check
             parts = endpoint.split("/")
-            doc_id = parts[-2] if len(parts) >= 4 else "unknown"
+            doc_id = parts[-2] if len(parts) >= 5 else "unknown"
             return {
                 "document_id": doc_id,
                 "indexed_count": 128,
@@ -75,7 +75,111 @@ class RAGServiceClient(ServiceClient):
                 "status": "completed",
             }
 
-        if endpoint == "/rag/search" and method == "POST":
+        return default_mock
+
+    async def index_document(
+        self,
+        document_id: str,
+        sections: Optional[List[Dict[str, Any]]] = None,
+        protected_spans: Optional[List[Dict[str, Any]]] = None,
+        options: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Build index for document sections (POST /api/v1/rag/build).
+
+        RS-6/RS-7: Принимает document_id + sections[].
+        section_id стабилен, chunk_id — технический.
+        Возвращает 202 + indexing_txn_id.
+        """
+        body = RagBuildRequest(
+            document_id=document_id,
+            sections=sections or [],
+            protected_spans=protected_spans,
+            options=options,
+        )
+        mock = RagBuildResponse(
+            document_id=document_id,
+            task_id="task-mock-001",
+            indexing_txn_id="txn-mock-001",
+            status="indexing",
+        )
+        return await self.call(
+            "POST",
+            "/api/v1/rag/build",
+            request_model=RagBuildRequest,
+            mock_response=mock.model_dump(),
+            json=body.model_dump(exclude_none=True),
+        )
+
+    async def get_build_status(
+        self,
+        document_id: str,
+        longpoll: int = 15,
+    ) -> Dict[str, Any]:
+        """Get build status with longpoll (GET /api/v1/rag/build/{doc_id}/status).
+
+        Args:
+            document_id: ID документа.
+            longpoll: Время ожидания в секундах (по умолч. 15).
+                      Сервер держит соединение до завершения или таймаута.
+        """
+        params = {"longpoll": str(longpoll)}
+        return await self.call(
+            "GET",
+            f"/api/v1/rag/build/{document_id}/status",
+            mock_response={
+                "document_id": document_id,
+                "status": "indexed",
+                "chunks_count": 34,
+                "has_embeddings": True,
+                "indexed_at": "2026-06-20T12:00:18Z",
+                "warnings": [],
+                "errors": [],
+            },
+        )
+
+    async def delete_index(self, document_id: str) -> Dict[str, Any]:
+        """Delete document from index (DELETE /api/v1/rag/build/{doc_id})."""
+        return await self.call(
+            "DELETE",
+            f"/api/v1/rag/build/{document_id}",
+            mock_response={"deleted_count": 0, "status": "completed"},
+        )
+
+    async def check_index(self, document_id: str) -> Dict[str, Any]:
+        """
+        Check index integrity for a document (P2I-2).
+
+        Verifies that chunks are properly indexed and retrievable.
+        Returns indexed_count, expected_count, and integrity_ok flag.
+        """
+        return await self.call(
+            "GET",
+            f"/api/v1/rag/build/{document_id}/check",
+            mock_response={
+                "document_id": document_id,
+                "indexed_count": 128,
+                "expected_count": 128,
+                "integrity_ok": True,
+                "status": "completed",
+            },
+        )
+
+
+class RAGSearchClient(ServiceClient):
+    """Client for RAG Search service (search/generate)."""
+
+    def __init__(self):
+        super().__init__(
+            service_name="rag-search",
+            service_url=settings.services.RAG_SEARCH_SERVICE_URL,
+            mock_mode=settings.services.RAG_SERVICE_MOCK,
+        )
+
+    async def _generate_mock(
+        self, method: str, endpoint: str, default_mock: Dict[str, Any], **kwargs
+    ) -> Dict[str, Any]:
+        """Generate mock RAG responses."""
+        if endpoint == "/api/v1/rag/search" and method == "POST":
             request_data = kwargs.get("json", {})
             query = request_data.get("query", "")
 
@@ -123,7 +227,7 @@ class RAGServiceClient(ServiceClient):
                 "total_found": 15,
             }
 
-        if endpoint == "/rag/generate" and method == "POST":
+        if endpoint == "/api/v1/rag/generate" and method == "POST":
             request_data = kwargs.get("json", {})
             model = request_data.get("model", "llama-3-70b")
             return {
@@ -135,100 +239,13 @@ class RAGServiceClient(ServiceClient):
 
         return default_mock
 
-    async def index_document(
-        self,
-        document_id: str,
-        sections: Optional[List[Dict[str, Any]]] = None,
-        protected_spans: Optional[List[Dict[str, Any]]] = None,
-        options: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        """Build index for document sections (POST /rag/build).
-
-        RS-6/RS-7: Принимает document_id + sections[].
-        section_id стабилен, chunk_id — технический.
-        Возвращает 202 + indexing_txn_id.
-        """
-        body = RagBuildRequest(
-            document_id=document_id,
-            sections=sections or [],
-            protected_spans=protected_spans,
-            options=options,
-        )
-        mock = RagBuildResponse(
-            document_id=document_id,
-            task_id="task-mock-001",
-            indexing_txn_id="txn-mock-001",
-            status="indexing",
-        )
-        return await self.call(
-            "POST",
-            "/rag/build",
-            request_model=RagBuildRequest,
-            mock_response=mock.model_dump(),
-            json=body.model_dump(exclude_none=True),
-        )
-
-    async def get_build_status(
-        self,
-        document_id: str,
-        longpoll: int = 15,
-    ) -> Dict[str, Any]:
-        """Get build status with longpoll (GET /rag/build/{doc_id}/status).
-
-        Args:
-            document_id: ID документа.
-            longpoll: Время ожидания в секундах (по умолч. 15).
-                      Сервер держит соединение до завершения или таймаута.
-        """
-        params = {"longpoll": str(longpoll)}
-        return await self.call(
-            "GET",
-            f"/rag/build/{document_id}/status",
-            mock_response={
-                "document_id": document_id,
-                "status": "indexed",
-                "chunks_count": 34,
-                "has_embeddings": True,
-                "indexed_at": "2026-06-20T12:00:18Z",
-                "warnings": [],
-                "errors": [],
-            },
-        )
-
-    async def delete_index(self, document_id: str) -> Dict[str, Any]:
-        """Delete document from index (DELETE /rag/build/{doc_id})."""
-        return await self.call(
-            "DELETE",
-            f"/rag/build/{document_id}",
-            mock_response={"deleted_count": 0, "status": "completed"},
-        )
-
-    async def check_index(self, document_id: str) -> Dict[str, Any]:
-        """
-        Check index integrity for a document (P2I-2).
-
-        Verifies that chunks are properly indexed and retrievable.
-        Returns indexed_count, expected_count, and integrity_ok flag.
-        """
-        return await self.call(
-            "GET",
-            f"/rag/build/{document_id}/check",
-            mock_response={
-                "document_id": document_id,
-                "indexed_count": 128,
-                "expected_count": 128,
-                "integrity_ok": True,
-                "status": "completed",
-            },
-        )
-
     async def search(
         self,
         query: str,
         valid_at: Optional[str] = None,
         filters: Optional[Dict] = None,
     ) -> Dict[str, Any]:
-        """Search in vector index (POST /rag/search).
+        """Search in vector index (POST /api/v1/rag/search).
 
         RS-6: только query + valid_at + filters.
         search_type, top_k, rerank — ТОЛЬКО из app_settings.
@@ -240,7 +257,7 @@ class RAGServiceClient(ServiceClient):
         )
         return await self.call(
             "POST",
-            "/rag/search",
+            "/api/v1/rag/search",
             request_model=RagSearchRequest,
             mock_response={
                 "query": query,
@@ -268,7 +285,7 @@ class RAGServiceClient(ServiceClient):
 
         return await self.call(
             "POST",
-            "/rag/generate",
+            "/api/v1/rag/generate",
             request_model=RagGenerateRequest,
             mock_response={
                 "content": "Mock generated answer based on context.",
@@ -280,5 +297,5 @@ class RAGServiceClient(ServiceClient):
         )
 
 
-# Alias for Celery tasks that import RAGBuilderClient
-RAGBuilderClient = RAGServiceClient
+# Backward compatibility alias
+RAGServiceClient = RAGBuilderClient

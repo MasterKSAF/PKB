@@ -17,7 +17,7 @@ class Settings:
     MOCK_REGISTRY_ENABLED: bool = os.getenv("MOCK_REGISTRY_ENABLED", "true").lower() == "true"
     MOCK_LLM_ENABLED: bool = os.getenv("MOCK_LLM_ENABLED", "true").lower() == "true"
 
-    RAG_SERVICE_URL: str = os.getenv("RAG_SERVICE_URL", "http://localhost:8091/api/v1")
+    RAG_SERVICE_URL: str = os.getenv("RAG_SERVICE_URL", "http://localhost:8091")
     REGISTRY_SERVICE_URL: str = os.getenv("REGISTRY_SERVICE_URL", "http://localhost:8084/api/v1")
     LLM_API_URL: str = os.getenv("LLM_API_URL", "http://localhost:11434/v1")
     LLM_API_KEY: str = os.getenv("LLM_API_KEY", "")

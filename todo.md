@@ -1,12 +1,10 @@
-# Не работает логин при start_web.bat
 
-## Причина
-Фронтенд настроен на `http://127.0.0.1:8081/api/v1` (порт Orchestrator), но маршруты `/auth/token` находятся в Gateway (порт **8080**). Запросы аутентификации уходят на Orchestrator, который не имеет auth-роутов → 404.
+# Приведение SERVICE_URL к единому формату — выполнено
 
 ## Что сделано
-- [x] 1. `UI-UX/UI Final/frontend/src/utils/http.ts` — `DEFAULT_GATEWAY_URL` изменён с 8081 → 8080
-- [x] 2. `UI-UX/UI Final/frontend/src/components/DocumentRegistryPanel.tsx` — fallback изменён с 8081 → 8080
-- [x] 3. `UI-UX/UI Final/frontend/README.md` — документация исправлена
-- [x] 4. Проверено: других 8081 в source-коде фронтенда нет (grep по `*.ts, *.tsx, *.js, *.jsx` — 0 совпадений)
-- [x] 5. Обновлены сопутствующие docs: `UI-UX/UI Final/README.md`, `UI-UX/README.md`, `UI-UX/UI Final/docs/first-run-ui-final-with-gateway.md`
-- [x] 6. Корневой `README.md` — добавлено описание batch-файлов, портовой схемы и Gateway URL
+- [x] **`docker-compose.yml`**: `x-env-service-urls` — все URL теперь без `/api/v1` (REGISTRY, VALIDATE, RAG_BUILDER, RAG_SEARCH, RAG_SERVICE). Из gateway убрано переопределение `REGISTRY_SERVICE_URL`.
+- [x] **`orchestrator_service/config.py`**: `RAG_BUILDER_SERVICE_URL` и `RAG_SEARCH_SERVICE_URL` — без `/api/v1`.
+- [x] **`orchestrator_service/rag_client.py`**: endpoints с `/api/v1` (`/api/v1/rag/build`, `/api/v1/rag/search`...).
+- [x] **`query_service/config.py`**: `RAG_SERVICE_URL` — без `/api/v1`.
+- [x] **`query_service/rag_client.py`**: путь с `/api/v1/rag/search`.
+- [x] **Тесты**: обновлены, 34/34 прошли, регрессия 315/321 (те же 6 pre-existing).
