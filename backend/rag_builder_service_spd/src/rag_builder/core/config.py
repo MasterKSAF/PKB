@@ -35,6 +35,8 @@ class Settings(BaseSettings):
 
     CHUNK_STRATEGY: str = "semantic_1024"
 
+    INDEXING_JOB_STALE_AFTER_SECONDS: int = 3600
+
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,
         env_file_encoding="utf-8",

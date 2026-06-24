@@ -191,6 +191,48 @@ class PostgresChunkRepository(ChunkRepository):
 
             conn.commit()
 
+    def mark_stale_indexing_jobs_failed(
+        self,
+        stale_after_seconds: int,
+    ) -> int:
+        if stale_after_seconds <= 0:
+            return 0
+
+        stale_error = {
+            "code": "INDEXING_JOB_STALE",
+            "message": "Indexing job marked as failed after stale timeout",
+            "stale_after_seconds": stale_after_seconds,
+        }
+
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    sql.SQL(
+                        """
+                        UPDATE {schema}.indexing_jobs
+                        SET
+                            status = 'failed',
+                            errors = errors || %s::jsonb,
+                            updated_at = now()
+                        WHERE status IN ('pending_index', 'indexing')
+                          AND updated_at < now() - (%s * interval '1 second')
+                        """
+                    ).format(
+                        schema=sql.Identifier(settings.POSTGRES_SCHEMA),
+                    ),
+                    (
+                        json.dumps([stale_error]),
+                        stale_after_seconds,
+                    ),
+                )
+
+                marked_count = cur.rowcount
+
+            conn.commit()
+
+        return marked_count
+
+
     def get_indexing_job(
         self,
         indexing_txn_id: str,
