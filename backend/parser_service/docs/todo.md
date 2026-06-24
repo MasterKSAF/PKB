@@ -1,5 +1,29 @@
-todo на 21.06.2026:
-улучшение качества сервиса
+todo на 28.06.26:
+улучшить качество сервиса
+
+
+
+24.06.2026 внесены изменения:
+  * Архитектура: введены TaskService и PipelineService через DI; пайплайн вынесен в services/pipeline; удалены StorageService, file_loader (его функциональность в MinIOClient.download_and_validate); task_state_storage и task_store теперь фасад (хранилище осталось единым классом).
+  * Схемы: ResultResponse без верхнеуровневых task_id/draft_id/mode — только в metadata; ProcessRequest заменён (убран version_id, добавлены mode, max_pages); ResultMetadata расширен task_id и draft_id.
+  * Хранилище: асинхронное, с блокировками, эвикцией и TTL; TaskEventNotifier вынесен; версионирование для long-polling.
+  * Пайплайн: шаги нормализации и стандартизации объединены в TransformStep; , preview не загружает; SaveJsonToFileStep использует build_result для идентичности с хранилищем.
+  * Логи/ошибки: единый стиль, глобальные хендлеры возвращают ErrorResponse; параметры блокировки SecurityScanner через config (убраны глобальные константы).
+  * Конфигурация/тесты: добавлены параметры параллельности и очереди; тесты переписаны, удалены устаревшие.
+  * Дополнительно:
+ --- ResultBuilder заменён на функцию build_result.
+ --- Вынос логики извлечения результата в _extract_result_data с NamedTuple.
+ --- В standardizer.py добавлены text_block, caption, formula, преобразование дат PDF → ISO с Z.
+ --- В exceptions.py исправлены дублирующиеся импорты.
+ --- В minio_client.py добавлен метод download_and_validate.
+ --- В process.py добавлен set_shutdown_event для graceful shutdown.
+ --- Удалена неиспользуемая get_storage_service в dependencies.py.
+
+
+22.06.2026 внесены изменения:
+  * добавлено draft_id
+  * преписаны пути сохранения картинок - теперь картинки сохраняются срезу в бакет images с наименованием по хэшу ({hash}.png). (до этого картинки складывались в папку : {task_id}/{task_id}_{num_image}_{hash}.png). Загрузка изображений — SHA-256 (вместо MD5)
+
 
 17.06.2026 внесены изменения: 
   * Удалена v1, а v2 перенесена на v1
