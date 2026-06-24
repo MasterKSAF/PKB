@@ -1,9 +1,7 @@
-FROM ghcr.io/pkb/neuro-base:latest AS build
+FROM node:22-alpine AS build
 
 WORKDIR /app
 
-# Проверка зависимостей — если package.json не менялся, node_modules
-# уже есть из базового образа, npm ci пройдёт мгновенно
 COPY package*.json ./
 RUN npm ci
 
