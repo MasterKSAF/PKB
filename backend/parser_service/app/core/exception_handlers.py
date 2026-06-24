@@ -26,16 +26,21 @@ async def parser_service_error_handler(request: Request, exc: ParserServiceError
     Returns:
         JSONResponse с кодом ошибки из исключения и структурой ErrorResponse.
     """
-    logger.error(f"ParserServiceError: {exc.error_code} - {exc.detail}")
+    logger.error(
+        "ParserServiceError: %s - %s",
+        exc.error_code,
+        exc.detail.get("error", {}).get("message", "No message"),
+        exc_info=True,
+    )
     return JSONResponse(
         status_code=exc.status_code,
         content=ErrorResponse(
             error=ErrorDetail(
                 code=exc.error_code,
                 message=exc.detail["error"]["message"],
-                details=exc.details
+                details=exc.details,
             )
-        ).model_dump()
+        ).model_dump(),
     )
 
 
@@ -50,18 +55,20 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
     Returns:
         JSONResponse с 422 и деталями ошибок.
     """
-    logger.warning(f"Validation error: {exc.errors()}")
+    logger.warning("Validation error: %s", exc.errors())
     # Преобразуем исключения ValueError в читаемый JSON
     errors = []
     for err in exc.errors():
         if isinstance(err.get("ctx"), dict) and "error" in err["ctx"]:
             error_obj = err["ctx"]["error"]
             if isinstance(error_obj, ValueError):
-                errors.append({
-                    "loc": err["loc"],
-                    "msg": str(error_obj),
-                    "type": err["type"]
-                })
+                errors.append(
+                    {
+                        "loc": err["loc"],
+                        "msg": str(error_obj),
+                        "type": err["type"],
+                    }
+                )
             else:
                 errors.append(err)
         else:
@@ -72,9 +79,9 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
             error=ErrorDetail(
                 code="VALIDATION_ERROR",
                 message="Invalid request data",
-                details={"errors": errors}
+                details={"errors": errors},
             )
-        ).model_dump()
+        ).model_dump(),
     )
 
 
@@ -89,13 +96,13 @@ async def generic_exception_handler(request: Request, exc: Exception):
     Returns:
         JSONResponse с 500 и общим сообщением.
     """
-    logger.exception("Unhandled exception")
+    logger.exception("Unhandled exception: %s", exc)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content=ErrorResponse(
             error=ErrorDetail(
                 code="INTERNAL_SERVER_ERROR",
-                message="An unexpected error occurred. Please contact support."
+                message="An unexpected error occurred. Please contact support.",
             )
-        ).model_dump()
+        ).model_dump(),
     )

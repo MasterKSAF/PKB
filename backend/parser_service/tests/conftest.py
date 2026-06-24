@@ -1,6 +1,5 @@
 """
 Общие фикстуры для всех тестов проекта.
-Обеспечивают очистку хранилища задач, клиенты для синхронного и асинхронного тестирования.
 """
 import os
 import sys
@@ -9,8 +8,6 @@ import asyncio
 import pytest
 from fastapi.testclient import TestClient
 from httpx import AsyncClient, ASGITransport
-from unittest.mock import patch, AsyncMock, MagicMock
-
 
 # Очищаем переменные, которые могут переопределить таймауты из окружения
 for env_var in ["PREVIEW_TIMEOUT", "PIPELINE_TIMEOUT", "PARSER_TIMEOUT", "VALIDATION_GLOBAL_TIMEOUT"]:
@@ -30,6 +27,7 @@ sys.path.insert(0, str(root_dir))
 
 from app.main import app
 from app.core.task_store import task_store
+from app.dependencies import init_services
 
 
 @pytest.fixture(scope="function")
@@ -48,6 +46,15 @@ def clear_task_store():
     yield
 
 
+@pytest.fixture(scope="function")
+async def init_test_services():
+    """Инициализирует сервисы (DI) перед тестами, которые используют эндпоинты."""
+    shutdown_event = asyncio.Event()
+    init_services(shutdown_event)
+    yield
+    # Можно добавить очистку, если нужно
+
+
 @pytest.fixture(scope="session")
 def event_loop():
     """Создаёт цикл событий asyncio для всех асинхронных тестов."""
@@ -64,42 +71,3 @@ async def async_client():
         base_url="http://test"
     ) as ac:
         yield ac
-
-
-@pytest.fixture(scope="function")
-async def async_client_v1():
-    """Асинхронный HTTP‑клиент для тестирования эндпоинтов v1."""
-    async with AsyncClient(
-        transport=ASGITransport(app=app),
-        base_url="http://test/api/v1"
-    ) as ac:
-        yield ac
-
-
-# Общие моки для MinIO и валидатора
-@pytest.fixture
-def mock_minio_download():
-    with patch("app.services.file_loader.minio_client.download_file", new_callable=AsyncMock) as mock:
-        yield mock
-
-
-@pytest.fixture
-def mock_validator():
-    with patch("app.services.file_loader.Validator.validate") as mock:
-        mock.return_value = "application/pdf"
-        yield mock
-
-
-@pytest.fixture
-def mock_pipeline_preview():
-    with patch("app.api.1.endpoints.process.Pipeline.create") as mock:
-        mock_pipeline = AsyncMock()
-        mock_ctx = MagicMock()
-        mock_ctx.final_json = {
-            "content": {
-                "document": {"source": {"file_name": "test.pdf", "page_count": 2}}
-            }
-        }
-        mock_pipeline.run = AsyncMock(return_value=mock_ctx)
-        mock.return_value = mock_pipeline
-        yield mock
