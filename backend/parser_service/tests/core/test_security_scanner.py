@@ -1,60 +1,95 @@
+"""
+Тесты для модуля безопасности PDF (security_scanner.py).
+"""
 import pytest
-import app.core.security_scanner as security_scanner
-
-# Сохраняем исходные значения глобальных переключателей (на случай, если они изменены)
-_orig_unicode = security_scanner.BLOCK_ON_UNICODE_CHECK
-_orig_jbig2 = security_scanner.BLOCK_ON_JBIG2_CHECK
-_orig_dangerous = security_scanner.BLOCK_ON_DANGEROUS_KEYS
-_orig_yara = security_scanner.BLOCK_ON_YARA
+from app.core.security_scanner import SecurityScanner
 
 
 def test_dangerous_keys_detection():
-    # Включаем блокировку на опасные ключи
-    security_scanner.BLOCK_ON_DANGEROUS_KEYS = True
-    try:
-        data = b"/JS 1 0 R"
-        is_safe, msg = security_scanner.SecurityScanner.scan_pdf(data, "test.pdf", "", 10000, False, False)
-        assert not is_safe
-        assert "JS" in msg
-    finally:
-        security_scanner.BLOCK_ON_DANGEROUS_KEYS = _orig_dangerous
+    """Обнаружение опасных ключей с блокировкой."""
+    data = b"/JS 1 0 R"
+    is_safe, msg = SecurityScanner.scan_pdf(
+        data, "test.pdf",
+        yara_rules_path="",
+        max_font_stream=10000,
+        reject_jbig2=False,
+        enable_yara=False,
+        block_on_unicode=False,
+        block_on_jbig2=False,
+        block_on_dangerous_keys=True,
+        block_on_yara=False
+    )
+    assert not is_safe
+    assert "JS" in msg
 
 
 def test_jbig2_not_rejected_by_default():
-    # При выключенной блокировке и reject_jbig2=False — файл безопасен
+    """JBIG2 не блокируется по умолчанию."""
     data = b"/JBIG2Decode"
-    is_safe, msg = security_scanner.SecurityScanner.scan_pdf(data, "test.pdf", "", 10000, False, False)
+    is_safe, msg = SecurityScanner.scan_pdf(
+        data, "test.pdf",
+        yara_rules_path="",
+        max_font_stream=10000,
+        reject_jbig2=False,
+        enable_yara=False,
+        block_on_unicode=False,
+        block_on_jbig2=False,
+        block_on_dangerous_keys=False,
+        block_on_yara=False
+    )
     assert is_safe is True
     assert msg is None
 
 
 def test_jbig2_rejected_when_flag_true():
-    # Включаем блокировку JBIG2 и передаём reject_jbig2=True
-    security_scanner.BLOCK_ON_JBIG2_CHECK = True
-    try:
-        data = b"/JBIG2Decode"
-        is_safe, msg = security_scanner.SecurityScanner.scan_pdf(data, "test.pdf", "", 10000, True, False)
-        assert not is_safe
-        assert "JBIG2Decode" in msg
-    finally:
-        security_scanner.BLOCK_ON_JBIG2_CHECK = _orig_jbig2
+    """JBIG2 блокируется при включённом флаге."""
+    data = b"/JBIG2Decode"
+    is_safe, msg = SecurityScanner.scan_pdf(
+        data, "test.pdf",
+        yara_rules_path="",
+        max_font_stream=10000,
+        reject_jbig2=True,
+        enable_yara=False,
+        block_on_unicode=False,
+        block_on_jbig2=True,
+        block_on_dangerous_keys=False,
+        block_on_yara=False
+    )
+    assert not is_safe
+    assert "JBIG2Decode" in msg
 
 
 def test_unicode_filename():
-    # Включаем блокировку на Unicode-маскировку
-    security_scanner.BLOCK_ON_UNICODE_CHECK = True
-    try:
-        dangerous = "file\u202E.pdf"
-        is_safe, msg = security_scanner.SecurityScanner.scan_pdf(b"", dangerous, "", 10000, False, False)
-        assert not is_safe
-        assert "Unicode" in msg
-    finally:
-        security_scanner.BLOCK_ON_UNICODE_CHECK = _orig_unicode
+    """Обнаружение Unicode-маскировки."""
+    dangerous = "file\u202E.pdf"
+    is_safe, msg = SecurityScanner.scan_pdf(
+        b"", dangerous,
+        yara_rules_path="",
+        max_font_stream=10000,
+        reject_jbig2=False,
+        enable_yara=False,
+        block_on_unicode=True,
+        block_on_jbig2=False,
+        block_on_dangerous_keys=False,
+        block_on_yara=False
+    )
+    assert not is_safe
+    assert "Unicode" in msg
 
 
 def test_large_file_only_logs():
-    # Большой файл никогда не блокируется (только лог)
+    """Большой файл только логируется, но не блокируется."""
     data = b"x" * (20 * 1024 * 1024)  # 20 MB > max_font_stream (10 MB)
-    is_safe, msg = security_scanner.SecurityScanner.scan_pdf(data, "big.pdf", "", 10_000_000, False, False)
+    is_safe, msg = SecurityScanner.scan_pdf(
+        data, "big.pdf",
+        yara_rules_path="",
+        max_font_stream=10_000_000,
+        reject_jbig2=False,
+        enable_yara=False,
+        block_on_unicode=False,
+        block_on_jbig2=False,
+        block_on_dangerous_keys=False,
+        block_on_yara=False
+    )
     assert is_safe is True
     assert msg is None

@@ -12,6 +12,7 @@ def get_search_service() -> SearchService:
     return SearchService()
 
 
+@router.get("/api/v1/health")
 @router.get("/health")
 async def health() -> dict[str, str]:
     return {

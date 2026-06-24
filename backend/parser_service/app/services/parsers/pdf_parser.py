@@ -32,7 +32,7 @@ class PdfParser(BaseParser):
         file_bytes: bytes,
         options: Dict[str, bool],
         task_id: int,
-        total_pages: Optional[int] = None
+        total_pages: Optional[int] = None,
     ) -> ParseResult:
         """
         Выполняет парсинг PDF-файла.
@@ -59,7 +59,7 @@ class PdfParser(BaseParser):
                 logger.debug("Page count determined by PdfReader: %d", total_pages_original)
             except Exception as e:
                 total_pages_original = 1
-                logger.warning("Failed to get page count via pypdf: %s", str(e))
+                logger.warning("Failed to get page count via pypdf: %s", e)
         else:
             total_pages_original = total_pages
             logger.debug("Using provided total_pages=%d", total_pages_original)
@@ -84,20 +84,22 @@ class PdfParser(BaseParser):
                         output_dir=output_dir,
                         format="markdown,html,json",
                         keep_line_breaks=True,
-                        quiet=False
-                    )
+                        quiet=False,
+                    ),
                 ),
-                timeout=settings.parser_timeout
+                timeout=settings.parser_timeout,
             )
             logger.info("opendataloader_pdf conversion completed for task %d", task_id)
 
             # Поиск сгенерированного JSON-файла
             files = os.listdir(output_dir)
-            json_path = next((os.path.join(output_dir, f) for f in files if f.endswith('.json')), None)
+            json_path = next(
+                (os.path.join(output_dir, f) for f in files if f.endswith(".json")), None
+            )
             if not json_path:
                 raise FileNotFoundError("JSON file not generated")
 
-            with open(json_path, 'r', encoding='utf-8') as f:
+            with open(json_path, "r", encoding="utf-8") as f:
                 full_json = json.load(f)
             logger.debug("Loaded JSON from %s", json_path)
 
@@ -105,7 +107,7 @@ class PdfParser(BaseParser):
             images = self._collect_image_paths(full_json, output_dir)
             logger.info("Found %d image references in JSON", len(images))
 
-            if not options.get('extract_images', True):
+            if not options.get("extract_images", True):
                 images = []
                 logger.debug("Image extraction disabled by options")
 
@@ -113,12 +115,14 @@ class PdfParser(BaseParser):
                 full_json=full_json,
                 images=images,
                 total_pages=total_pages_original,
-                temp_dir=output_dir
+                temp_dir=output_dir,
             )
         except asyncio.TimeoutError:
             logger.error(
                 "PDF parsing timeout after %d seconds for task %d",
-                settings.parser_timeout, task_id, exc_info=True
+                settings.parser_timeout,
+                task_id,
+                exc_info=True,
             )
             shutil.rmtree(output_dir, ignore_errors=True)
             raise TimeoutError(

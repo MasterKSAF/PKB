@@ -13,8 +13,7 @@ class ProcessingContext:
 
     Attributes:
         task_id: ID задачи
-        draft_id: ID черновика 
-        version_id: Версия документа (v1) или пустая строка (v2)
+        draft_id: ID черновика
         file_key: Ключ файла в MinIO
         options: Опции парсинга (extract_tables, extract_images и т.д.)
         file_bytes: Содержимое файла (заполняется на шаге Download)
@@ -31,8 +30,7 @@ class ProcessingContext:
         api_version: Версия API (1 или 2), влияет на формат результата
     """
     task_id: int
-    draft_id: int 
-    version_id: str
+    draft_id: int
     file_key: str
     options: Dict[str, bool] = field(default_factory=dict)
 
@@ -47,4 +45,4 @@ class ProcessingContext:
     total_pages: Optional[int] = None
     temp_dir: Optional[str] = None
     shutdown_event: Optional[object] = None
-    api_version: int = 2   # по умолчанию v2, для v1 передавать 1
+    api_version: int = 2  # по умолчанию v2, для v1 передавать 1

@@ -261,6 +261,66 @@ class PIIQueryValidatorMiddleware(BaseHTTPMiddleware):
 # ---------------------------------------------------------------------------
 
 
+def _normalize_roles(raw_roles: Any) -> list[str]:
+    """Return a stable list of role names from Auth responses."""
+    if isinstance(raw_roles, str):
+        return [raw_roles]
+    if isinstance(raw_roles, list):
+        return [str(role) for role in raw_roles if role]
+    return []
+
+
+def _normalize_permissions(raw_permissions: Any, roles: list[str]) -> Dict[str, bool]:
+    """Normalize Auth permissions from either boolean map or permission-code list."""
+    if isinstance(raw_permissions, dict):
+        normalized = dict(raw_permissions)
+    elif isinstance(raw_permissions, list):
+        permissions = {str(permission) for permission in raw_permissions}
+        normalized = {
+            "can_upload_documents": (
+                "documents:write" in permissions
+                or "documents:manage" in permissions
+                or "registry:manage" in permissions
+            ),
+            "can_run_ocr": "ocr:write" in permissions or "ocr:manage" in permissions,
+            "can_manage_users": "users:manage" in permissions,
+            "can_manage_classifiers": (
+                "classifiers:manage" in permissions
+                or "registry:classifiers:manage" in permissions
+                or "registry:manage" in permissions
+            ),
+            "can_manage_terminology": (
+                "terminology:manage" in permissions
+                or "registry:terminology:manage" in permissions
+                or "registry:manage" in permissions
+            ),
+            "can_manage_registry": (
+                "registry:manage" in permissions
+                or "documents:manage" in permissions
+                or "documents:write" in permissions
+            ),
+        }
+    else:
+        normalized = {}
+
+    # Legacy Auth may send only roles[] + coarse permissions. Keep Gateway RBAC
+    # aligned with the role comments below without overriding explicit booleans.
+    role_set = set(roles)
+    if "system_admin" in role_set:
+        normalized.setdefault("can_manage_users", True)
+        normalized.setdefault("can_upload_documents", True)
+        normalized.setdefault("can_manage_classifiers", True)
+        normalized.setdefault("can_manage_terminology", True)
+        normalized.setdefault("can_manage_registry", True)
+    elif "knowledge_admin" in role_set:
+        normalized.setdefault("can_upload_documents", True)
+        normalized.setdefault("can_manage_classifiers", True)
+        normalized.setdefault("can_manage_terminology", True)
+        normalized.setdefault("can_manage_registry", True)
+
+    return normalized
+
+
 class RBACMiddleware(BaseHTTPMiddleware):
     """Проверяет JWT Bearer-токен через Auth Service и применяет RBAC.
 
@@ -495,12 +555,14 @@ async def _validate_token_remotely(token: str, user_context: Dict[str, Any]) -> 
         )
         if resp.status_code == 200:
             data = resp.json()
+            roles = _normalize_roles(data.get("roles", []))
+            role = data.get("role") or (roles[0] if roles else None)
             user_context.update(
                 user_id=data.get("user_id"),
                 full_name=data.get("full_name"),
-                roles=data.get("roles", []),
-                role=data.get("role"),
-                permissions=data.get("permissions", {}),
+                roles=roles,
+                role=role,
+                permissions=_normalize_permissions(data.get("permissions", {}), roles),
                 is_authenticated=True,
                 is_anonymous=False,
             )

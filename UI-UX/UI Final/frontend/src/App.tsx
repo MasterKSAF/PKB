@@ -54,9 +54,11 @@ export default function App() {
     toggleWorkMode,
   } = useUIStore();
   const appTheme = useMemo(() => getAppTheme(themeMode), [themeMode]);
-  const currentUser = adminUsers.find((user) => user.id === currentUserId) ?? adminUsers[0];
+  const currentUser = adminUsers.find((user) => user.id === currentUserId) ?? adminUsers[0] ?? null;
   const currentUserMeta =
-    currentUser.position === currentUser.role
+    !currentUser
+      ? 'Пользователь'
+      : currentUser.position === currentUser.role
       ? currentUser.role
       : `${currentUser.position} · ${currentUser.role}`;
   const activeNavHeaderBackground = themeMode === 'dark' ? '#242829' : '#e0f2fe';
@@ -86,11 +88,13 @@ export default function App() {
   }, [isAuthenticated, setApiStatus, workMode]);
 
   useEffect(() => {
+    if (!currentUser) return;
+
     const userRole = USER_ROLE_BY_LABEL[currentUser.role] ?? 'user';
     if (userRole !== currentRole) {
       setCurrentRole(userRole);
     }
-  }, [currentRole, currentUser.role, setCurrentRole]);
+  }, [currentRole, currentUser, setCurrentRole]);
 
   useEffect(() => {
     if (!canAccessTab(currentRole, activeTab)) {
@@ -320,7 +324,7 @@ export default function App() {
                               whiteSpace: 'nowrap',
                             }}
                           >
-                            {currentUser.name}
+                            {currentUser?.name ?? 'Пользователь'}
                           </Typography>
                           <Typography
                             component="span"

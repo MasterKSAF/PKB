@@ -1,5 +1,6 @@
 # src/rag_builder/models/responses.py
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -47,3 +48,32 @@ class DeleteIndexResponse(BaseModel):
     document_id: int
     deleted_count: int
     status: str
+
+
+class PaginationMeta(BaseModel):
+    total: int
+    page: int
+    page_size: int
+
+
+class IndexingJobItem(BaseModel):
+    id: int
+    indexing_txn_id: str
+    document_id: int
+    status: str
+
+    chunks_count: int = 0
+    has_embeddings: bool = False
+    indexed_at: datetime | None = None
+
+    index_stats: dict[str, Any] = Field(default_factory=dict)
+    warnings: list[dict[str, Any]] = Field(default_factory=list)
+    errors: list[dict[str, Any]] = Field(default_factory=list)
+
+    created_at: datetime
+    updated_at: datetime
+
+
+class IndexingJobsResponse(BaseModel):
+    items: list[IndexingJobItem] = Field(default_factory=list)
+    meta: PaginationMeta

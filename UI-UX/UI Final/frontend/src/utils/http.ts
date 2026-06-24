@@ -22,11 +22,11 @@ import {
 import { USER_ROLE_BY_LABEL } from './access';
 import { useUIStore } from '../store/uiStore';
 
-const DEFAULT_GATEWAY_URL = 'http://127.0.0.1:8081/api/v1';
+const DEFAULT_GATEWAY_URL = 'http://127.0.0.1:8080/api/v1';
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? DEFAULT_GATEWAY_URL;
-const GATEWAY_AUTO_LOGIN = import.meta.env.VITE_GATEWAY_AUTO_LOGIN !== 'false';
+const GATEWAY_AUTO_LOGIN = import.meta.env.VITE_GATEWAY_AUTO_LOGIN === 'true';
 const GATEWAY_USERNAME = import.meta.env.VITE_GATEWAY_USERNAME ?? 'admin@example.com';
-const GATEWAY_PASSWORD = import.meta.env.VITE_GATEWAY_PASSWORD ?? 'admin123';
+const GATEWAY_PASSWORD = import.meta.env.VITE_GATEWAY_PASSWORD ?? 'Admin1234!';
 const ACCESS_TOKEN_KEY = 'pkb_gateway_access_token_v2';
 const REFRESH_TOKEN_KEY = 'pkb_gateway_refresh_token_v2';
 const LEGACY_ACCESS_TOKEN_KEY = 'pkb_gateway_access_token';
@@ -72,6 +72,7 @@ export type GatewayHealth = {
 };
 
 type DraftCreateInput = {
+  documentKey?: string;
   sourceType?: string;
   title?: string;
   docCode?: string;
@@ -235,25 +236,16 @@ export interface RegistryTerminologyEntry {
   updated_at?: string | null;
 }
 
-const EMPTY_SYSTEM_METRICS: SystemMetrics = {
-  ocrQuality: 0,
-  retrievalQuality: 0,
-  answersWithSources: 0,
-  manualReviewQueue: 0,
-  searchLatency: 0,
-};
-
-const EMPTY_ENGINEER_RATINGS: EngineerRatingMetrics = {
-  ratedAnswers: 0,
-  usefulRate: 0,
-  flaggedForReview: 0,
-  unresolvedAfterReview: 0,
-  commonSignals: [],
-};
-
 function appendFormValue(form: FormData, key: string, value: unknown) {
   if (value === undefined || value === null || value === '') return;
   form.append(key, typeof value === 'string' ? value : String(value));
+}
+
+async function calculateFileSha256(file: File) {
+  const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 function toGatewayStringId(value: unknown, fallback = '') {
@@ -301,6 +293,10 @@ function normalizePreviewMetadata(payload?: DraftPreviewMetadata | null) {
 
 function isDemoMode() {
   return useUIStore.getState().workMode === 'demo';
+}
+
+function todayIsoDate() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 function toUiTimestamp(value?: string) {
@@ -1409,24 +1405,14 @@ export const authApi = {
 
 export const systemApi = {
   health: async (): Promise<GatewayHealth> => {
-    try {
-      const response = await apiClient.get('/system/health');
-      return {
-        status: response.data?.status ?? 'unknown',
-        service: response.data?.service,
-        version: response.data?.version,
-        timestamp: response.data?.timestamp,
-        raw: response.data,
-      };
-    } catch {
-      const response = await apiClient.get('/monitor/health');
-      return {
-        status: response.data?.status ?? 'unknown',
-        service: response.data?.service ?? 'monitor',
-        version: response.data?.version,
-        raw: response.data,
-      };
-    }
+    const response = await apiClient.get('/system/health');
+    return {
+      status: response.data?.status ?? 'unknown',
+      service: response.data?.service,
+      version: response.data?.version,
+      timestamp: response.data?.timestamp,
+      raw: response.data,
+    };
   },
 };
 
@@ -1625,7 +1611,9 @@ export const searchApi = {
     }
 
     try {
-      const response = await gatewayRequest<any>(() => apiClient.post('/text/search', { text: q, top_k: 10 }));
+      const response = await gatewayRequest<any>(() =>
+        apiClient.post('/text/search', { text: q, top_k: 10, valid_at: todayIsoDate() }),
+      );
       useUIStore.getState().setApiStatus('online');
       return mapGatewaySearchResponse(response.data);
     } catch {
@@ -1638,7 +1626,11 @@ export const searchApi = {
 export const draftsApi = {
   create: async (file: File, input: DraftCreateInput = {}) => {
     const form = new FormData();
+    const fileHashSha256 = await calculateFileSha256(file);
+    const documentKey = input.documentKey?.trim() || deriveDocumentKey(fileHashSha256);
+
     form.append('file', file);
+    form.append('document_key', documentKey);
     form.append('source_type', input.sourceType?.trim() || 'OTHER');
     appendFormValue(form, 'title', input.title?.trim());
     appendFormValue(form, 'doc_code', input.docCode?.trim());
@@ -2085,29 +2077,21 @@ export const registryApi = {
   documents: async () => {
     if (isDemoMode()) return MOCK_DOCUMENTS;
 
-    try {
-      const response = await gatewayRequest<any>(() =>
-        apiClient.get('/registry/documents', {
-          params: {
-            page_size: 200,
-            sort_by: 'updated_at',
-            order: 'desc',
-          },
-        }),
-      );
-      useUIStore.getState().setApiStatus('online');
-      return mapGatewayDocumentsResponse(response.data);
-    } catch {
-      return documentsApi.list();
-    }
+    const response = await gatewayRequest<any>(() =>
+      apiClient.get('/registry/documents', {
+        params: {
+          page_size: 200,
+          sort_by: 'updated_at',
+          order: 'desc',
+        },
+      }),
+    );
+    useUIStore.getState().setApiStatus('online');
+    return mapGatewayDocumentsResponse(response.data);
   },
   document: async (documentId: string) => {
-    try {
-      const response = await gatewayRequest<any>(() => apiClient.get(`/registry/documents/${documentId}`));
-      return mapGatewayDocumentDetailResponse(response.data);
-    } catch {
-      return documentsApi.get(documentId);
-    }
+    const response = await gatewayRequest<any>(() => apiClient.get(`/registry/documents/${documentId}`));
+    return mapGatewayDocumentDetailResponse(response.data);
   },
   documentSections: async (documentId: string) => {
     const response = await gatewayRequest<any>(() => apiClient.get(`/registry/documents/${documentId}/sections`));
@@ -2128,11 +2112,11 @@ export const registryApi = {
     return mapGatewayKnowledgeSections(response.data);
   },
   stats: async () => {
-    const response = await gatewayRequest<any>(() => apiClient.get('/common/stats'));
+    const response = await gatewayRequest<any>(() => apiClient.get('/registry/stats'));
     return response.data?.data ?? response.data;
   },
   enums: async () => {
-    const response = await gatewayRequest<any>(() => apiClient.get('/common/enums'));
+    const response = await gatewayRequest<any>(() => apiClient.get('/registry/enums'));
     return response.data?.data ?? response.data;
   },
 };
@@ -2187,7 +2171,7 @@ export const metricsApi = {
       return mapGatewayMetricsResponse(response.data);
     } catch {
       useUIStore.getState().setApiStatus('offline');
-      return EMPTY_SYSTEM_METRICS;
+      throw new Error('Не удалось загрузить реальные метрики системы');
     }
   },
   dashboard: async (): Promise<MetricsDashboard> => {
@@ -2209,11 +2193,7 @@ export const metricsApi = {
       };
     } catch {
       useUIStore.getState().setApiStatus('offline');
-      return {
-        control: EMPTY_SYSTEM_METRICS,
-        answers: EMPTY_ENGINEER_RATINGS,
-        logs: [],
-      };
+      throw new Error('Не удалось загрузить реальные метрики системы');
     }
   },
 };

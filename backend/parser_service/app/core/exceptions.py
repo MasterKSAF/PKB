@@ -5,6 +5,7 @@
 Все исключения наследуются от ParserServiceError, который форматирует ответ
 в виде {"error": {"code": ..., "message": ..., "details": ...}}.
 """
+
 from fastapi import HTTPException, status
 from app.config import settings
 
@@ -12,11 +13,6 @@ from app.config import settings
 class ParserServiceError(HTTPException):
     """
     Базовое исключение для всех ошибок сервиса парсинга.
-
-    :param status_code: HTTP-статус ответа
-    :param error_code: строковый код ошибки (например, "FILE_NOT_FOUND")
-    :param message: человекочитаемое описание
-    :param details: дополнительные детали (опционально)
     """
     def __init__(self, status_code: int, error_code: str, message: str, details: dict = None):
         self.error_code = error_code
@@ -33,10 +29,31 @@ class ParserServiceError(HTTPException):
         )
 
 
-# ----- Конкретные ошибки -----
+# ---------- Транзиентные (временные) ошибки ----------
+class TransientError(ParserServiceError):
+    """Ошибка, которая может быть исправлена повторной попыткой."""
+    def __init__(self, message: str, original_exception: Exception = None):
+        super().__init__(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            error_code="TRANSIENT_ERROR",
+            message=message,
+            details={"original": str(original_exception)} if original_exception else {}
+        )
 
+
+class FatalError(ParserServiceError):
+    """Неисправимая ошибка, повторные попытки бессмысленны."""
+    def __init__(self, message: str, original_exception: Exception = None):
+        super().__init__(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            error_code="FATAL_ERROR",
+            message=message,
+            details={"original": str(original_exception)} if original_exception else {}
+        )
+
+
+# ---------- Конкретные ошибки (наследуем от ParserServiceError) ----------
 class FileNotFoundError(ParserServiceError):
-    """Файл не найден в MinIO (HTTP 404)."""
     def __init__(self, file_key: str):
         super().__init__(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -46,7 +63,6 @@ class FileNotFoundError(ParserServiceError):
 
 
 class FileTooLargeError(ParserServiceError):
-    """Превышен допустимый размер файла (HTTP 413)."""
     def __init__(self, size_mb: int, max_mb: int):
         super().__init__(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
@@ -56,7 +72,6 @@ class FileTooLargeError(ParserServiceError):
 
 
 class UnsupportedFormatError(ParserServiceError):
-    """Неподдерживаемый MIME-тип (HTTP 415)."""
     def __init__(self, mime_type: str):
         super().__init__(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
@@ -66,7 +81,6 @@ class UnsupportedFormatError(ParserServiceError):
 
 
 class ParserFailedError(ParserServiceError):
-    """Критическая ошибка в процессе парсинга (HTTP 500)."""
     def __init__(self, original_exception: Exception):
         super().__init__(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -76,7 +90,6 @@ class ParserFailedError(ParserServiceError):
 
 
 class StorageError(ParserServiceError):
-    """Ошибка взаимодействия с MinIO (HTTP 502)."""
     def __init__(self, operation: str):
         super().__init__(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -86,7 +99,6 @@ class StorageError(ParserServiceError):
 
 
 class TaskNotFoundError(ParserServiceError):
-    """Задача с указанным task_id не найдена (HTTP 404)."""
     def __init__(self, task_id: int):
         super().__init__(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -96,7 +108,6 @@ class TaskNotFoundError(ParserServiceError):
 
 
 class TaskExpiredError(ParserServiceError):
-    """Результат задачи удалён из-за истечения TTL (HTTP 410)."""
     def __init__(self, task_id: int):
         super().__init__(
             status_code=status.HTTP_410_GONE,

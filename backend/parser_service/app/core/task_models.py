@@ -1,8 +1,5 @@
 """
 Модели задач, используемые хранилищем и нотификатором.
-
-Определяет статус задачи (TaskStatus) и структуру TaskInfo,
-содержащую всю информацию о задаче: прогресс, результат, ошибки.
 """
 from datetime import datetime, timezone
 from typing import Optional, Any, Dict
@@ -10,7 +7,6 @@ from enum import Enum
 
 
 class TaskStatus(str, Enum):
-    """Возможные состояния задачи."""
     ACCEPTED = "accepted"
     PROCESSING = "processing"
     COMPLETED = "completed"
@@ -20,15 +16,11 @@ class TaskStatus(str, Enum):
 class TaskInfo:
     """
     Информация о задаче парсинга.
-
-    Хранит метаданные, статус, прогресс, результат и версию для long polling.
-    Все изменения должны производиться через метод update(), который увеличивает версию.
     """
 
-    def __init__(self, task_id: int, draft_id: int, version_id: str, file_key: str, options: dict):  # <-- ИЗМЕНЕНИЕ
+    def __init__(self, task_id: int, draft_id: int, file_key: str, options: dict):  # version_id удалён
         self.task_id = task_id
-        self.draft_id = draft_id  # <-- ИЗМЕНЕНИЕ
-        self.version_id = version_id
+        self.draft_id = draft_id
         self.file_key = file_key
         self.options = options
 
@@ -48,12 +40,6 @@ class TaskInfo:
         self._version = 0
 
     def update(self, **kwargs) -> None:
-        """
-        Обновляет атрибуты задачи и увеличивает версию.
-
-        Args:
-            **kwargs: Пары (имя_атрибута, значение) для обновления.
-        """
         updated = False
         for key, value in kwargs.items():
             if hasattr(self, key):
@@ -63,5 +49,4 @@ class TaskInfo:
             self._version += 1
 
     def get_version(self) -> int:
-        """Возвращает текущую версию задачи (монотонно возрастает при каждом обновлении)."""
         return self._version

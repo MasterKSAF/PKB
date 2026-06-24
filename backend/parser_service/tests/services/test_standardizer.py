@@ -1,6 +1,5 @@
 """
 Тесты для стандартизатора JSON (standardizer.py)
-Проверяют преобразование как сырого JSON, так и контейнера от нормализатора.
 """
 import pytest
 from app.services.standardizer import JsonStandardizer
@@ -15,7 +14,8 @@ def test_standardizer_transform_raw_paragraph():
         "number of pages": 1,
         "file name": "doc.pdf"
     }
-    result = JsonStandardizer.transform(raw, file_name="override.pdf")
+    standardizer = JsonStandardizer()
+    result = standardizer.transform(raw, file_name="override.pdf")
     doc = result["document"]
     assert doc["source"]["file_name"] == "override.pdf"
     assert doc["source"]["page_count"] == 1
@@ -34,7 +34,8 @@ def test_standardizer_transform_heading():
         ],
         "number of pages": 2
     }
-    result = JsonStandardizer.transform(raw)
+    standardizer = JsonStandardizer()
+    result = standardizer.transform(raw)
     block = result["document"]["block"][0]
     assert block["type"] == "heading"
     assert block["heading_level"] == 1
@@ -56,7 +57,8 @@ def test_standardizer_transform_list():
         ],
         "number of pages": 1
     }
-    result = JsonStandardizer.transform(raw)
+    standardizer = JsonStandardizer()
+    result = standardizer.transform(raw)
     block = result["document"]["block"][0]
     assert block["type"] == "list"
     assert block["numbering_style"] == "decimal"
@@ -93,7 +95,8 @@ def test_standardizer_transform_table():
         ],
         "number of pages": 1
     }
-    result = JsonStandardizer.transform(raw)
+    standardizer = JsonStandardizer()
+    result = standardizer.transform(raw)
     block = result["document"]["block"][0]
     assert block["type"] == "table"
     assert block["number_of_rows"] == 2
@@ -115,7 +118,8 @@ def test_standardizer_transform_image():
         ],
         "number of pages": 1
     }
-    result = JsonStandardizer.transform(raw)
+    standardizer = JsonStandardizer()
+    result = standardizer.transform(raw)
     block = result["document"]["block"][0]
     assert block["type"] == "image"
     assert block["image_key"] == "fig.png"
@@ -130,7 +134,8 @@ def test_standardizer_transform_formula():
         ],
         "number of pages": 1
     }
-    result = JsonStandardizer.transform(raw)
+    standardizer = JsonStandardizer()
+    result = standardizer.transform(raw)
     block = result["document"]["block"][0]
     assert block["type"] == "formula"
     assert block["latex"] == "E=mc^2"
@@ -151,7 +156,8 @@ def test_standardizer_transform_font():
         ],
         "number of pages": 1
     }
-    result = JsonStandardizer.transform(raw)
+    standardizer = JsonStandardizer()
+    result = standardizer.transform(raw)
     block = result["document"]["block"][0]
     assert block["font"]["size"] == 12.0
     assert block["font"]["color"] == "#808080"  # 0.5*255=128
@@ -169,7 +175,8 @@ def test_standardizer_transform_container():
         },
         "metadata": {"some": "meta"}
     }
-    result = JsonStandardizer.transform(input_data, file_name="test.pdf")
+    standardizer = JsonStandardizer()
+    result = standardizer.transform(input_data, file_name="test.pdf")
     assert result["document_info"] == {"task_id": 123}
     assert result["metadata"]["some"] == "meta"
     assert result["content"]["document"]["block"][0]["content"] == "Hi"
@@ -186,7 +193,8 @@ def test_standardizer_pages_calculation():
         ],
         "number of pages": 5
     }
-    result = JsonStandardizer.transform(raw)
+    standardizer = JsonStandardizer()
+    result = standardizer.transform(raw)
     pages = result["document"]["pages"]
     assert len(pages) == 2
     assert pages[0]["page"] == 2

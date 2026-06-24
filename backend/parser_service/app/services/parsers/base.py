@@ -33,7 +33,7 @@ class BaseParser(ABC):
         file_bytes: bytes,
         options: Dict[str, bool],
         task_id: int,
-        total_pages: Optional[int] = None
+        total_pages: Optional[int] = None,
     ) -> ParseResult:
         """
         Запускает парсинг документа.

@@ -72,6 +72,16 @@ export const useUIStore = create<UIState>((set) => ({
   login: (currentUserId) =>
     set((state) => {
       const user = state.adminUsers.find((item) => item.id === currentUserId) ?? state.adminUsers[0];
+      if (!user) {
+        return {
+          isAuthenticated: false,
+          currentUserId: '',
+          currentRole: 'user',
+          currentPermissions: {},
+          activeTab: 'chat',
+        };
+      }
+
       const currentRole = USER_ROLE_BY_LABEL[user.role] ?? 'user';
 
       return {
@@ -106,6 +116,7 @@ export const useUIStore = create<UIState>((set) => ({
       workMode,
       apiStatus: workMode === 'demo' ? 'demo' : 'offline',
       currentGatewaySessionId: null,
+      adminUsers: workMode === 'demo' ? MOCK_ADMIN_USERS : [],
       chatMessages: workMode === 'demo' ? MOCK_CHATS : [],
     }),
   toggleWorkMode: () =>
@@ -115,6 +126,7 @@ export const useUIStore = create<UIState>((set) => ({
         workMode,
         apiStatus: workMode === 'demo' ? 'demo' : 'offline',
         currentGatewaySessionId: null,
+        adminUsers: workMode === 'demo' ? MOCK_ADMIN_USERS : [],
         chatMessages: workMode === 'demo' ? MOCK_CHATS : [],
       };
     }),
@@ -125,7 +137,7 @@ export const useUIStore = create<UIState>((set) => ({
   setVideoGuideOpen: (videoGuideOpen) => set({ videoGuideOpen }),
   apiStatus: 'offline',
   setApiStatus: (apiStatus) => set({ apiStatus }),
-  adminUsers: MOCK_ADMIN_USERS,
+  adminUsers: [],
   setAdminUsers: (adminUsers) => set({ adminUsers }),
   upsertAdminUser: (user) =>
     set((state) => {

@@ -63,16 +63,21 @@ class MockPdfParser(BaseParser):
                         "type": "paragraph",
                         "page number": 1,
                         "bounding box": [10, 10, 100, 50],
-                        "content": "Mock paragraph content"
+                        "content": "Mock paragraph content",
                     },
                     {
                         "type": "image",
                         "page number": 2,
                         "source": "mock_image.png",
                         "width": 200,
-                        "height": 150
-                    }
-                ]
+                        "height": 150,
+                    },
+                ],
             }
         images = []
-        return ParseResult(full_json=full_json, images=images, total_pages=total_pages or 5, temp_dir=None)
+        return ParseResult(
+            full_json=full_json,
+            images=images,
+            total_pages=total_pages or 5,
+            temp_dir=None,
+        )

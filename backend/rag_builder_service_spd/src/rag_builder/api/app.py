@@ -5,21 +5,41 @@ from contextlib import asynccontextmanager
 from uuid import uuid4
 
 from dataclasses import asdict
+from typing import Literal
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, status
 
 from rag_builder.core.logger import logger
+from rag_builder.core.config import settings
 from rag_builder.models.contracts import BuildRequest
 from rag_builder.models.responses import (
     DeleteIndexResponse,
     HealthResponse,
     IndexResponse,
     IndexStatusResponse,
+    IndexingJobsResponse,
 )
 from rag_builder.repositories.postgres_chunk_repository import (
     PostgresChunkRepository,
 )
 from rag_builder.services.indexing_service import IndexingService
+
+
+
+def _mark_stale_indexing_jobs_failed(
+    repository: PostgresChunkRepository,
+) -> int:
+    marked_count = repository.mark_stale_indexing_jobs_failed(
+        settings.INDEXING_JOB_STALE_AFTER_SECONDS,
+    )
+
+    if marked_count:
+        logger.warning(
+            "Marked %s stale indexing jobs as failed",
+            marked_count,
+        )
+
+    return marked_count
 
 
 @asynccontextmanager
@@ -30,6 +50,7 @@ async def lifespan(app: FastAPI):
     repository.ensure_schema()
 
     logger.info("Database schema ensured")
+    _mark_stale_indexing_jobs_failed(repository)
 
     yield
 
@@ -43,6 +64,18 @@ app = FastAPI(
 )
 
 
+IndexingJobStatus = Literal[
+    "pending_index",
+    "indexing",
+    "indexed",
+    "failed",
+]
+
+
+@app.get(
+    "/api/v1/health",
+    response_model=HealthResponse,
+)
 @app.get(
     "/health",
     response_model=HealthResponse,
@@ -161,6 +194,56 @@ def index_document(
 
     repository = PostgresChunkRepository()
 
+    _mark_stale_indexing_jobs_failed(repository)
+
+    active_job = repository.get_active_indexing_job_for_document(
+        document_id=request.metadata.document_id,
+        stale_after_seconds=settings.INDEXING_JOB_STALE_AFTER_SECONDS,
+    )
+
+    if active_job is not None:
+        logger.warning(
+            "Reject duplicate active indexing job for document_id=%s",
+            request.metadata.document_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ALREADY_PROCESSING",
+                "message": "Document indexing is already in progress",
+                "details": {
+                    "document_id": request.metadata.document_id,
+                    "indexing_txn_id": active_job["indexing_txn_id"],
+                    "status": active_job["status"],
+                },
+            },
+        )
+
+    max_active_jobs = settings.MAX_ACTIVE_INDEXING_JOBS
+
+    if max_active_jobs > 0:
+        active_jobs_count = repository.count_active_indexing_jobs(
+            settings.INDEXING_JOB_STALE_AFTER_SECONDS,
+        )
+
+        if active_jobs_count >= max_active_jobs:
+            logger.warning(
+                "Reject indexing job because active jobs limit is reached: %s/%s",
+                active_jobs_count,
+                max_active_jobs,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail={
+                    "code": "TOO_MANY_REQUESTS",
+                    "message": "Too many active indexing jobs",
+                    "details": {
+                        "active_jobs": active_jobs_count,
+                        "max_active_jobs": max_active_jobs,
+                    },
+                },
+            )
+
     indexing_txn_id = str(uuid4())
 
     task_id = repository.create_indexing_job(
@@ -213,6 +296,37 @@ def delete_document_index(document_id: int) -> DeleteIndexResponse:
         document_id=document_id,
         deleted_count=deleted_count,
         status="completed",
+    )
+
+
+
+@app.get(
+    "/api/v1/rag/build/jobs",
+    response_model=IndexingJobsResponse,
+)
+def list_indexing_jobs(
+    status_filter: IndexingJobStatus | None = Query(
+        default=None,
+        alias="status",
+    ),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+) -> IndexingJobsResponse:
+    repository = PostgresChunkRepository()
+
+    items, total = repository.list_indexing_jobs(
+        status_filter=status_filter,
+        page=page,
+        page_size=page_size,
+    )
+
+    return IndexingJobsResponse(
+        items=items,
+        meta={
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        },
     )
 
 

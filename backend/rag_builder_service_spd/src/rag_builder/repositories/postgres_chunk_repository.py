@@ -191,6 +191,48 @@ class PostgresChunkRepository(ChunkRepository):
 
             conn.commit()
 
+    def mark_stale_indexing_jobs_failed(
+        self,
+        stale_after_seconds: int,
+    ) -> int:
+        if stale_after_seconds <= 0:
+            return 0
+
+        stale_error = {
+            "code": "INDEXING_JOB_STALE",
+            "message": "Indexing job marked as failed after stale timeout",
+            "stale_after_seconds": stale_after_seconds,
+        }
+
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    sql.SQL(
+                        """
+                        UPDATE {schema}.indexing_jobs
+                        SET
+                            status = 'failed',
+                            errors = errors || %s::jsonb,
+                            updated_at = now()
+                        WHERE status IN ('pending_index', 'indexing')
+                          AND updated_at < now() - (%s * interval '1 second')
+                        """
+                    ).format(
+                        schema=sql.Identifier(settings.POSTGRES_SCHEMA),
+                    ),
+                    (
+                        json.dumps([stale_error]),
+                        stale_after_seconds,
+                    ),
+                )
+
+                marked_count = cur.rowcount
+
+            conn.commit()
+
+        return marked_count
+
+
     def get_indexing_job(
         self,
         indexing_txn_id: str,
@@ -231,6 +273,91 @@ class PostgresChunkRepository(ChunkRepository):
             "warnings": row[7] or [],
             "errors": row[8] or [],
         }
+
+    def count_active_indexing_jobs(
+        self,
+        stale_after_seconds: int,
+    ) -> int:
+        if stale_after_seconds <= 0:
+            return 0
+
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    sql.SQL(
+                        """
+                        SELECT count(*)
+                        FROM {schema}.indexing_jobs
+                        WHERE status IN ('pending_index', 'indexing')
+                          AND updated_at >= now() - (%s * interval '1 second')
+                        """
+                    ).format(
+                        schema=sql.Identifier(settings.POSTGRES_SCHEMA),
+                    ),
+                    (stale_after_seconds,),
+                )
+
+                row = cur.fetchone()
+
+        return int(row[0])
+
+
+    def get_active_indexing_job_for_document(
+        self,
+        document_id: int,
+        stale_after_seconds: int,
+    ) -> dict | None:
+        if stale_after_seconds <= 0:
+            return None
+
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    sql.SQL(
+                        """
+                        SELECT
+                            document_id,
+                            status,
+                            indexing_txn_id::text,
+                            chunks_count,
+                            has_embeddings,
+                            indexed_at,
+                            index_stats,
+                            warnings,
+                            errors
+                        FROM {schema}.indexing_jobs
+                        WHERE document_id = %s
+                          AND status IN ('pending_index', 'indexing')
+                          AND updated_at >= now() - (%s * interval '1 second')
+                        ORDER BY created_at DESC, id DESC
+                        LIMIT 1
+                        """
+                    ).format(
+                        schema=sql.Identifier(settings.POSTGRES_SCHEMA),
+                    ),
+                    (
+                        document_id,
+                        stale_after_seconds,
+                    ),
+                )
+
+                row = cur.fetchone()
+
+        if row is None:
+            return None
+
+        return {
+            "document_id": row[0],
+            "status": row[1],
+            "indexing_txn_id": row[2],
+            "chunks_count": row[3],
+            "has_embeddings": row[4],
+            "indexed_at": row[5],
+            "index_stats": row[6] or {},
+            "warnings": row[7] or [],
+            "errors": row[8] or [],
+        }
+
 
     def get_latest_indexing_job_for_document(
         self,
@@ -331,6 +458,94 @@ class PostgresChunkRepository(ChunkRepository):
                 embedding_dim=self._embedding_dim_sql(),
             )
         )
+
+    def list_indexing_jobs(
+        self,
+        status_filter: str | None = None,
+        page: int = 1,
+        page_size: int = 50,
+    ) -> tuple[list[dict], int]:
+        offset = (page - 1) * page_size
+
+        where_clause = sql.SQL("")
+        params: list[object] = []
+
+        if status_filter is not None:
+            where_clause = sql.SQL("WHERE status = %s")
+            params.append(status_filter)
+
+        count_query = sql.SQL(
+            """
+            SELECT count(*)
+            FROM {schema}.indexing_jobs
+            {where_clause}
+            """
+        ).format(
+            schema=sql.Identifier(settings.POSTGRES_SCHEMA),
+            where_clause=where_clause,
+        )
+
+        list_query = sql.SQL(
+            """
+            SELECT
+                id,
+                indexing_txn_id::text,
+                document_id,
+                status,
+                chunks_count,
+                has_embeddings,
+                indexed_at,
+                index_stats,
+                warnings,
+                errors,
+                created_at,
+                updated_at
+            FROM {schema}.indexing_jobs
+            {where_clause}
+            ORDER BY created_at DESC, id DESC
+            LIMIT %s
+            OFFSET %s
+            """
+        ).format(
+            schema=sql.Identifier(settings.POSTGRES_SCHEMA),
+            where_clause=where_clause,
+        )
+
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(count_query, params)
+                total = cur.fetchone()[0]
+
+                cur.execute(
+                    list_query,
+                    [
+                        *params,
+                        page_size,
+                        offset,
+                    ],
+                )
+                rows = cur.fetchall()
+
+        items = [
+            {
+                "id": row[0],
+                "indexing_txn_id": row[1],
+                "document_id": row[2],
+                "status": row[3],
+                "chunks_count": row[4],
+                "has_embeddings": row[5],
+                "indexed_at": row[6],
+                "index_stats": row[7] or {},
+                "warnings": row[8] or [],
+                "errors": row[9] or [],
+                "created_at": row[10],
+                "updated_at": row[11],
+            }
+            for row in rows
+        ]
+
+        return items, total
+
 
     def ensure_schema(self) -> None:
         """
