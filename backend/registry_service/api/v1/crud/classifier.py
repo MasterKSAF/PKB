@@ -149,7 +149,7 @@ def get_classifier_tree(
     
     all_nodes = query.all()
     if not all_nodes:
-        return []
+        return [], False
 
     # Map nodes by code for easy access
     nodes_by_code = {node.code: node for node in all_nodes}

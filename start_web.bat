@@ -69,7 +69,7 @@ REM ── 4. Запуск всех сервисов + frontend ─────�
 echo [4/6] Starting all services (infra + backend + frontend)...
 echo.
 
-docker compose -f docker-compose-web.yml up -d --build
+docker compose -f docker-compose-web.yml up -d --build --force-recreate
 if %ERRORLEVEL% neq 0 (
     echo.
     echo ERROR: Failed to start containers!

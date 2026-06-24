@@ -31,6 +31,26 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+# ---------------------------------------------------------------------------
+#  GET /documents/queue — очередь обработки
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/queue",
+    response_model=list,
+    responses={"200": {"description": "Список задач в очереди обработки"}},
+)
+async def document_queue():
+    """Return processing queue (mock — пока заглушка)."""
+    return []
+
+
+# ---------------------------------------------------------------------------
+#  POST /documents/{doc_id}/reprocess  — переиндексация документа
+# ---------------------------------------------------------------------------
+
+
 @router.post(
     "/{doc_id}/reprocess",
     response_model=ReprocessResponse,
