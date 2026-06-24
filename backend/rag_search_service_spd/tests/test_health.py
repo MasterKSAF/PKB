@@ -11,3 +11,13 @@ def test_health() -> None:
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
     assert response.json()["service"] == "rag_search_service_spd"
+
+
+def test_api_v1_health() -> None:
+    client = TestClient(app)
+
+    response = client.get("/api/v1/health")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    assert response.json()["service"] == "rag_search_service_spd"
