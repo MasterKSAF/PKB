@@ -1,8 +1,9 @@
 # =============================================================================
-# PKB Neuroassistant — Docker Compose
+# PKB Neuroassistant — Docker Compose (Backend + Web)
 #
 # Python-сервисы в одном контейнере (supervisord).
 # PostgreSQL (pgvector), Redis, MinIO — отдельные контейнеры.
+# Web-интерфейс — отдельный контейнер (nginx).
 # =============================================================================
 
 name: pkb
@@ -189,6 +190,26 @@ services:
       - /bin/bash
       - -lc
       - sed -i 's/\r$//' /app/backend/service_checker/docker/entrypoint.sh 2>/dev/null || true; chmod +x /app/backend/service_checker/docker/entrypoint.sh; exec /app/backend/service_checker/docker/entrypoint.sh
+    networks:
+      - pkb-net
+
+  # ============================================================================
+  # Web Frontend (Vite Dev Server)
+  # ============================================================================
+  frontend:
+    image: ghcr.io/pkb/neuro-base:latest
+    container_name: pkb-frontend
+    restart: unless-stopped
+    ports:
+      - "3300:3300"
+    volumes:
+      - "../../../UI-UX/UI Final/frontend:/app/frontend"
+    environment:
+      NODE_PATH: /app/node_modules
+    entrypoint:
+      - /bin/bash
+      - -lc
+      - exec npm run dev --prefix /app/frontend
     networks:
       - pkb-net
 

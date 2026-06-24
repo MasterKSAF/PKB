@@ -19,6 +19,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
+# ---- 1b. Node.js + npm (для сборки web-фронтенда) ----
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm install -g npm@latest \
+    && npm cache clean --force
+
 # ---- 2. Python-зависимости (всех backend-сервисов) ----
 COPY requirements.txt /tmp/
 RUN pip install --no-cache-dir --upgrade pip \
@@ -30,6 +37,11 @@ RUN mkdir -p /var/log/supervisor /var/run/supervisor
 
 # ---- 4. Рабочая директория ----
 WORKDIR /app
+
+# ---- 4b. Frontend-зависимости (npm) — для быстрой сборки web-интерфейса ----
+# Копируются из того же контекста сборки (подготовлены .bat-скриптами)
+COPY package*.json ./
+RUN npm ci && rm package*.json
 
 # ---- 5. ENV по умолчанию (можно переопределить при запуске) ----
 ENV PYTHONDONTWRITEBYTECODE=1 \

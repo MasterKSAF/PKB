@@ -49,6 +49,8 @@ PKB_neuroassistant/
 ├── Fakhrutdinov_Roman/
 ├── Osipenko_Dmitrii/
 ├── Vitalyy_Novozhilov/
+├── start_web.bat                # Запуск backend + web UI одной командой
+├── reset_web.bat                 # Сброс БД и Redis, перезапуск сервисов
 ├── UI-UX/                       # Актуальный UI Final и материалы UI/UX-команды
 │
 ├── Documents_Pipeline/          # Наработки по пайплайну документов
@@ -75,14 +77,32 @@ PKB_neuroassistant/
 - **Аномалии**: [`docs/specificity.md`](docs/specificity.md)
 
 ```bash
-# Сборка и запуск
+# Сборка и запуск (backend + инфраструктура)
 docker compose up -d --build
 
 # Проверка статуса
 docker compose ps
 ```
 
-Подробнее: [`backend/README.Docker.md`](backend/README.Docker.md)
+**Быстрый старт backend + web UI:**
+
+```bash
+start_web.bat
+```
+
+**Сброс данных и перезапуск сервисов (без пересборки образов):**
+
+```bash
+reset_web.bat
+```
+
+Откроется:
+- Backend API: `http://localhost:8080`
+- Web UI:     `http://localhost:3300`
+
+Подробнее:
+- [`backend/README.Docker.md`](backend/README.Docker.md) — Docker-сборка
+- [`UI-UX/UI Final/README.md`](UI-UX/UI%20Final/README.md) — Web UI
 
 ## RAG Builder SPD
 

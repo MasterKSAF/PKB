@@ -1,64 +1,21 @@
 @echo off
 REM =============================================================================
-REM PKB Neuroassistant — re-check: clean DB + restart + full report
+REM PKB Neuroassistant — Reset Backend + Web UI
 REM
-REM Автоматически:
+REM Сброс данных и перезапуск (без пересборки образов):
 REM   0. Проверяет, запущен ли Docker
 REM   1. Создаёт .env (если нет — генерирует из create_env.py)
 REM   2. Проверяет наличие base-образа — если нет, собирает
 REM   3. Проверяет наличие модели TEI — если нет, скачивает
 REM   4. Проверяет, запущен ли контейнер TEI — если нет, запускает
-REM   5. Дропает схемы БД, сбрасывает Redis, перезапускает app
-REM   6. Запускает отчёт (health + coverage + pipeline)
-REM
-REM Параметры:
-REM   --api service1,service2    Только указанные сервисы (через запятую)
-REM   --pipeline name1,name2     Только указанные пайплайны
-REM   --skip-coverage            Пропустить API Coverage
-REM   --skip-pipelines           Пропустить Pipeline тесты
-REM
-REM Примеры:
-REM   recheck.bat                                Полный прогон
-REM   recheck.bat --api gateway                  Только Gateway
-REM   recheck.bat --api gateway --skip-pipelines Только Gateway, без пайплайнов
-REM   recheck.bat --pipeline registry_lifecycle  Только один пайплайн
+REM   5. Дропает БД, сбрасывает Redis, перезапускает app + frontend
+REM   6. Ожидает supervisor
+REM   7. Показывает статус сервисов
 REM =============================================================================
 
-cd /d "%~dp0"
+cd /d "%~dp0\backend\service_checker\docker"
 
-REM ── Парсинг параметров ─────────────────────────────────────────────────────
-set "CLI_ARGS="
-
-:parse_args
-if "%1"=="" goto end_parse
-if /i "%1"=="--api" (
-    set "CLI_ARGS=%CLI_ARGS% --services %2"
-    shift
-    shift
-    goto parse_args
-)
-if /i "%1"=="--pipeline" (
-    set "CLI_ARGS=%CLI_ARGS% --pipelines %2"
-    shift
-    shift
-    goto parse_args
-)
-if /i "%1"=="--skip-coverage" (
-    set "CLI_ARGS=%CLI_ARGS% --skip-coverage"
-    shift
-    goto parse_args
-)
-if /i "%1"=="--skip-pipelines" (
-    set "CLI_ARGS=%CLI_ARGS% --skip-pipelines"
-    shift
-    goto parse_args
-)
-REM Неизвестный параметр — игнорируем
-shift
-goto parse_args
-:end_parse
-
-echo === PKB Neuroassistant: Re-check ===
+echo === PKB Neuroassistant: Reset Backend + Web UI ===
 echo.
 
 REM ── 0. Проверка Docker ─────────────────────────────────────────────────────
@@ -70,7 +27,7 @@ if %ERRORLEVEL% neq 0 (
     pause
     exit /b 1
 )
-echo [0/6] Docker is running.
+echo [0/7] Docker is running.
 echo.
 
 REM ── 1. Создание .env ───────────────────────────────────────────────────────
@@ -127,8 +84,9 @@ if %ERRORLEVEL% equ 0 (
 )
 echo.
 
-REM ── 5. Очистка данных + перезапуск app ────────────────────────────────
-echo [5/7] Dropping data + restarting app...
+REM ── 5. Сброс данных + перезапуск сервисов ─────────────────────────────
+echo [5/7] Dropping data + restarting services...
+echo.
 
 echo     Recreating database...
 docker exec pkb-postgres psql -U pkb -d postgres -c "SELECT pg_terminate_backend(pg_stat_activity.pid) FROM pg_stat_activity WHERE datname = 'pkb_neuro' AND pid <> pg_backend_pid();" 2>nul
@@ -138,26 +96,24 @@ docker exec pkb-postgres psql -U pkb -d postgres -c "CREATE DATABASE pkb_neuro;"
 echo     Flushing Redis...
 docker exec pkb-redis redis-cli FLUSHALL 2>nul
 
-docker compose --progress quiet kill app 2>&1
-docker compose --progress quiet rm -f -v app 2>&1
+docker compose -f docker-compose-web.yml --progress quiet kill app frontend 2>&1
+docker compose -f docker-compose-web.yml --progress quiet rm -f -v app frontend 2>&1
 echo.
 
-REM ── 6. Запуск app + отчёт ─────────────────────────────────────────────
-echo [6/7] Starting app...
-docker compose up -d app
+REM ── 6. Запуск app + frontend ──────────────────────────────────────────────
+echo [6/7] Starting app + frontend...
+docker compose -f docker-compose-web.yml up -d app frontend
 if %ERRORLEVEL% neq 0 (
     echo.
-    echo ERROR: Failed to start app container!
+    echo ERROR: Failed to start containers!
     pause
     exit /b 1
 )
-echo     App started. Running full report...
+echo     Services started.
 echo.
 
-cd /d "%~dp0..\.."
-set PYTHONIOENCODING=utf-8
-
-echo     Waiting for supervisor...
+REM ── 7. Ожидание supervisor ─────────────────────────────────────────────────
+echo [7/7] Waiting for supervisor...
 :wait_supervisor
 docker exec pkb-neuro supervisorctl status 2>nul | findstr "RUNNING" >nul 2>&1
 if %ERRORLEVEL% neq 0 (
@@ -165,37 +121,22 @@ if %ERRORLEVEL% neq 0 (
     goto wait_supervisor
 )
 
-REM ── Проверка, что развёрнут обычный режим (rag-builder + rag-search) ──
-docker exec pkb-neuro supervisorctl status 2>nul | findstr /C:"rag-builder" | findstr "RUNNING" >nul 2>&1
-if %ERRORLEVEL% neq 0 (
-    echo     ⚠ Предупреждение: rag-builder не в RUNNING — возможно, развёрнут SPK?
-) else (
-    docker exec pkb-neuro supervisorctl status 2>nul | findstr /C:"rag-search" | findstr "RUNNING" >nul 2>&1
-    if %ERRORLEVEL% neq 0 (
-        echo     ⚠ Предупреждение: rag-search не в RUNNING — возможно, развёрнут SPK?
-    ) else (
-        echo     ✅ Обычный режим: rag-builder + rag-search RUNNING
-    )
-)
-
-echo     RAG Builder tables are now handled by Alembic migrations (no patching needed).
-
+REM ── Статус сервисов ────────────────────────────────────────────────────────
 echo.
-if defined CLI_ARGS (
-    echo     Running: python -m service_checker docker --action full-report%CLI_ARGS%
-    echo.
-    python -m service_checker docker --action full-report%CLI_ARGS%
-) else (
-    echo     Running full report...
-    echo.
-    python -m service_checker docker --action full-report
-)
-if %ERRORLEVEL% neq 0 (
-    echo.
-    echo WARNING: Some checks failed, check the report above.
-)
-
+echo === Backend Services (supervisord) ===
+docker exec pkb-neuro supervisorctl status 2>nul
 echo.
+echo === Docker containers ===
+docker compose -f docker-compose-web.yml ps
+echo.
+
 echo === Done ===
-echo Reports: check_result/
 echo.
+echo   Backend API:       http://localhost:8080
+echo   Web UI:            http://localhost:3300
+echo.
+
+start http://localhost:3300
+start http://localhost:8080/api/v1/health
+
+pause
