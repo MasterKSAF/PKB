@@ -202,7 +202,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8087 --reload
 
 ```text
 bash
-curl http://127.0.0.1:8087/health
+curl http://127.0.0.1:8087/api/v1/health
 # {"status":"ok"}
 ```
 
@@ -223,56 +223,74 @@ docker build -t parser-service:latest .
 
 ```text
 bash
-curl -X POST http://127.0.0.1:8087/api/v1/parser/preview \
+curl -X POST http://127.0.0.1:8087/api/v1/parser/process \
   -H "Content-Type: application/json" \
-  -d '{
-    "task_id": 420000,
-    "version_id": "v1.0",
-    "file_key": "document.pdf",
-    "max_pages": 3,
-    "options": {
-      "extract_tables": false,
-      "extract_images": false
-    }
-  }'
-```
-ИЛИ 
-```text
-bash
-curl -X POST http://127.0.0.1:8087/api/v2/parser/process \
-  -H "Content-Type: application/json" \
-  -d '{
-    "task_id": 420000,
-    "file_key": "document.pdf",
-    "mode": "preview",
-    "max_pages": 3,
-    "options": {
-      "extract_tables": false,
-      "extract_images": false  
-    }
-  }'
+  -d '{"task_id": 420000,
+      "draft_id": 123456,
+      "file_key": "ГИМС РФ правила, том 1.pdf",
+      "mode": "full",
+      "options": {  "extract_tables": true,
+                    "extract_images": true   }}'
 ```
 
 Ответ (содержит имя файла и общее количество страниц):
 
 ```text
 json
-{
-  "task_id": 420000,
-  "version_id": "v1.0",
-  "preview": true,
-  "max_pages": 3,
-  "metadata": {
+ "metadata": {
     "schema": "raw_ocr_v4",
-    "created_at": "2026-06-02T12:00:00Z"
-  },
+    "task_id": 420000,
+    "draft_id": 123456,
+    "mode": "full",
+    "preview_not_supported": false,
+    "created_at": "2026-06-24T04:18:32.709392",
+    "parser": {
+      "name": "unknown",
+      "version": "1.0",
+      "ocr_engine": null,
+      "ocr_fallback": false    }  },
   "document": {
     "source": {
-      "file_name": "document.pdf",
-      "page_count": 136
-    }
-  }
-}
+      "file_name": "ГИМС РФ правила, том 1.pdf",
+      "file_hash_sha256": "",
+      "page_count": 139,
+      "author": null,
+      "title": null,
+      "creation_date": "2021-08-19T06:23:07Z",
+      "modification_date": "2021-08-19T09:24:01Z"    },
+    "pages": [      {
+        "page": 1,
+        "width": 595,
+        "height": 841      },
+        
+         … ,
+
+{	"type": "paragraph",
+            "page": 139,
+            "bbox": [81.349, 540.804, 470.533, 554.093],
+            "content": "- Информация об остойчивости и непотопляемости перегоняемого судна.",
+            "font": {
+              "size": 12,
+              "color": "#000000",
+              "bold": false,
+              "italic": false,
+              "underline": false    }   }   ]   }   ]  },
+  "quality": {
+    "confidence": 0.94,
+    "pages_processed": 139,
+    "pages_failed": 0,
+    "per_page": [
+
+      {...},
+       …, 
+
+     {  "page": 139,
+        "status": "ok",
+        "confidence": 0.94    }  ],
+  "notifications": []  },
+  "errors": [],
+  "status": "completed" }
+
 ```
 
   
@@ -281,30 +299,14 @@ json
 bash
 curl -X POST http://127.0.0.1:8087/api/v1/parser/process \
   -H "Content-Type: application/json" \
-  -d '{
-    "task_id": 420000,
-    "version_id": "v1.0",
-    "file_key": "document.pdf",
-    "options": {
-      "extract_tables": true,
-      "extract_images": true
-    }
-  }'
+  -d '{ "task_id": 420001,
+        "draft_id": 123456,
+        "file_key": "ГИМС РФ правила, том 1.pdf",
+        "mode": "preview",
+        "max_pages": 3,
+        "options": {   "extract_tables": false,
+                      "extract_images": false  }}'
   ```
-ИЛИ
-```text
-bash
-curl -X POST http://127.0.0.1:8087/api/v2/parser/process \
-  -H "Content-Type: application/json" \
-  -d '{"task_id": 420000,
-    "file_key": "document.pdf",
-    "mode": "full",
-    "options": {
-      "extract_tables": true,
-      "extract_images": true   
-    } 
-  }'
-  ```  
 Ответ:
 
 ```text
@@ -312,7 +314,7 @@ json
 {
   "task_id": 420000,
   "status": "accepted",
-  "version_id": "v1.0",
+  "mode": "preview",
   "estimated_completion": "2026-06-02T12:00:30Z"
 }
 ```
