@@ -35,7 +35,6 @@ class FakeRepository:
             SearchChunkResult(
                 chunk_id=1,
                 document_id=100,
-                document_version_id=101,
                 document_section_id=10,
                 section_id=1,
                 chunk_index=0,
@@ -52,7 +51,6 @@ class FakeRepository:
             SearchChunkResult(
                 chunk_id=2,
                 document_id=100,
-                document_version_id=101,
                 document_section_id=20,
                 section_id=2,
                 chunk_index=1,
