@@ -1,10 +1,5 @@
 """
 Pydantic схемы для API версии 2.
-
-Основные отличия от v1:
-- В ProcessRequest нет version_id, добавлен mode (full/preview) и max_pages.
-- Ответы упрощены (например, ProcessResponse не содержит version_id).
-- Добавлены ResultResponse и ParserInfo.
 """
 from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 from typing import Optional, Dict, Any, List
@@ -25,7 +20,7 @@ class ProcessRequest(BaseModel):
     Запрос на обработку документа.
     """
     task_id: int = Field(..., ge=1, description="Идентификатор задачи")
-    draft_id: int = Field(..., ge=1, description="Идентификатор черновика")  
+    draft_id: int = Field(..., ge=1, description="Идентификатор черновика")
     file_key: str = Field(..., min_length=1, description="Ключ файла в MinIO")
     mode: ProcessingMode = Field(default=ProcessingMode.FULL, description="Режим обработки")
     max_pages: Optional[int] = Field(None, ge=1, le=100, description="Максимальное количество страниц (обязательно для preview)")
@@ -122,6 +117,8 @@ class ResultMetadata(BaseModel):
     Метаданные результата.
     """
     schema_version: str = Field(..., alias="schema", description="Версия схемы вывода")
+    task_id: int = Field(..., description="Идентификатор задачи")         
+    draft_id: int = Field(..., description="Идентификатор черновика")     
     mode: str = Field(..., description="Режим обработки (full/preview)")
     preview_not_supported: bool = Field(..., description="Флаг, что предпросмотр не поддерживается (если max_pages < total_pages)")
     created_at: datetime = Field(..., description="Время создания результата")
@@ -134,8 +131,7 @@ class ResultResponse(BaseModel):
     """
     Полный ответ на запрос результата.
     """
-    task_id: int = Field(..., description="ID задачи")
-    draft_id: int = Field(..., description="ID черновика") 
+    # Убраны поля task_id, draft_id, mode на верхнем уровне — они теперь только внутри metadata
     metadata: ResultMetadata = Field(..., description="Метаданные")
     document: Dict[str, Any] = Field(..., description="Стандартизированный документ")
     quality: Dict[str, Any] = Field(..., description="Метрики качества")

@@ -1,7 +1,6 @@
-try:
-    import pkg_resources
-except ImportError as e:
-    print("Import error:", e)
+"""
+Настройка OpenTelemetry для сбора трейсов, метрик и логов.
+"""
 import os
 import sys
 import logging
@@ -22,7 +21,28 @@ from opentelemetry.propagate import set_global_textmap
 from opentelemetry.propagators.composite import CompositePropagator
 from opentelemetry.propagators.b3 import B3MultiFormat
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
-from pythonjsonlogger import jsonlogger  # <-- ТРЕБОВАНИЕ: JSON-логирование в stdout
+from pythonjsonlogger import jsonlogger
+from app.config import settings
+
+
+class TraceIdFilter(logging.Filter):
+    """Добавляет trace_id и span_id в каждый лог-запись."""
+
+    def filter(self, record):
+        span = trace.get_current_span()
+        if span:
+            ctx = span.get_span_context()
+            if ctx.is_valid:
+                record.trace_id = format(ctx.trace_id, "032x")
+                record.span_id = format(ctx.span_id, "016x")
+            else:
+                record.trace_id = "no-trace"
+                record.span_id = "no-span"
+        else:
+            record.trace_id = "no-trace"
+            record.span_id = "no-span"
+        return True
+
 
 def setup_observability(service_name: str, otlp_endpoint: str = None):
     """
@@ -30,6 +50,9 @@ def setup_observability(service_name: str, otlp_endpoint: str = None):
     - трейсы -> OTLP Span Exporter
     - метрики -> OTLP Metric Exporter
     - логи -> OTLP Log Exporter + JSON-формат в stdout
+
+    Уровень логирования по умолчанию берётся из переменной окружения LOG_LEVEL (по умолчанию DEBUG).
+    Для production рекомендуется установить LOG_LEVEL=INFO.
     """
     if otlp_endpoint is None:
         otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317")
@@ -63,15 +86,16 @@ def setup_observability(service_name: str, otlp_endpoint: str = None):
 
     # JSON-форматтер (rename_fields для соответствия стандартам OTLP)
     json_formatter = jsonlogger.JsonFormatter(
-        fmt='%(asctime)s | %(levelname)s | %(name)s | %(message)s',
-        rename_fields={'levelname': 'severity', 'asctime': 'timestamp'},
-        json_ensure_ascii=False
+        fmt="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+        rename_fields={"levelname": "severity", "asctime": "timestamp"},
+        json_ensure_ascii=False,
     )
     console_handler.setFormatter(json_formatter)
 
     # Configure root logger
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG)
+    log_level = getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.DEBUG)
+    root_logger.setLevel(log_level)
     root_logger.handlers.clear()  # избегаем дублирования логов
     root_logger.addHandler(otlp_handler)
     root_logger.addHandler(console_handler)
@@ -86,6 +110,7 @@ def setup_observability(service_name: str, otlp_endpoint: str = None):
         pass  # Игнорируем ошибки инструментирования, если httpx не установлен
 
     return tracer_provider, meter_provider, root_logger
+
 
 def instrument_fastapi(app, tracer_provider):
     """Инструментирует FastAPI приложение для сбора трейсов."""

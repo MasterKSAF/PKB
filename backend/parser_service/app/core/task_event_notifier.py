@@ -6,6 +6,9 @@
 """
 import asyncio
 from typing import Dict
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class TaskEventNotifier:
@@ -34,6 +37,7 @@ class TaskEventNotifier:
             if task_id not in self._conditions:
                 self._conditions[task_id] = asyncio.Condition()
                 self._versions[task_id] = 0
+                logger.debug("Created condition for task %d", task_id)
             return self._conditions[task_id]
 
     async def notify_task_changed(self, task_id: int) -> None:
@@ -48,11 +52,18 @@ class TaskEventNotifier:
             cond = self._conditions.get(task_id)
             if cond:
                 self._versions[task_id] = self._versions.get(task_id, 0) + 1
+                logger.debug("Task %d version incremented to %d", task_id, self._versions[task_id])
         if cond:
             async with cond:
                 cond.notify_all()
+                logger.debug("Notified all waiters for task %d", task_id)
 
-    async def wait_for_task_change(self, task_id: int, current_version: int, timeout: float) -> bool:
+    async def wait_for_task_change(
+        self,
+        task_id: int,
+        current_version: int,
+        timeout: float,
+    ) -> bool:
         """
         Ожидает изменения версии задачи.
 
@@ -70,7 +81,9 @@ class TaskEventNotifier:
                 try:
                     await asyncio.wait_for(cond.wait(), timeout=timeout)
                 except asyncio.TimeoutError:
+                    logger.debug("Timeout waiting for task %d change", task_id)
                     return False
+            logger.debug("Task %d changed from version %d", task_id, current_version)
             return True
 
     async def cleanup_task(self, task_id: int) -> None:
@@ -83,3 +96,4 @@ class TaskEventNotifier:
         async with self._lock:
             self._conditions.pop(task_id, None)
             self._versions.pop(task_id, None)
+            logger.debug("Cleaned up notifier data for task %d", task_id)

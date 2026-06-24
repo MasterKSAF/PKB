@@ -1,12 +1,9 @@
 """
 Эндпоинт GET /api/v1/parser/processes – список активных процессов.
-
-Возвращает задачи, которые ещё не завершены (status = accepted или processing).
-Отличие от v1: отсутствует поле version_id в ответе.
 """
-
-from fastapi import APIRouter
-from app.core.task_store import task_store
+from fastapi import APIRouter, Depends
+from app.dependencies import get_task_service
+from app.services.task_service import TaskService
 import logging
 
 router = APIRouter()
@@ -14,29 +11,25 @@ logger = logging.getLogger(__name__)
 
 
 @router.get("/processes")
-async def list_active_processes():
+async def list_active_processes(
+    task_service: TaskService = Depends(get_task_service),
+):
     """
-    Формирует список активных задач.
-
-    Для каждой задачи возвращает:
-    - task_id, version_id, status, progress_percent,
-    - pages_processed, pages_total, started_at.
-
-    Returns:
-        dict: Словарь с ключом "processes", содержащим список активных задач.
+    Возвращает список активных (не завершённых) задач обработки.
     """
     logger.debug("Listing active processes")
-    active = task_store.get_active_tasks()
+    active = await task_service.get_active_tasks()
     result = []
     for task in active:
-        result.append({
-            "task_id": task.task_id,
-            "version_id": task.version_id,
-            "status": task.status,
-            "progress_percent": task.progress_percent,
-            "pages_processed": task.pages_processed,
-            "pages_total": task.pages_total,
-            "started_at": task.started_at.isoformat() + "Z"
-        })
+        result.append(
+            {
+                "task_id": task.task_id,
+                "status": task.status,
+                "progress_percent": task.progress_percent,
+                "pages_processed": task.pages_processed,
+                "pages_total": task.pages_total,
+                "started_at": task.started_at.isoformat() + "Z",
+            }
+        )
     logger.info("Returned %d active processes", len(result))
     return {"processes": result}

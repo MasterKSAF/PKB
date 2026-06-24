@@ -28,13 +28,13 @@ class Normalizer:
             "document_info": {
                 "task_id": task_id,
                 "parser_version": "1.0",
-                "extraction_options": parse_result.full_json.get("options", {})
+                "extraction_options": parse_result.full_json.get("options", {}),
             },
             "content": parse_result.full_json,
             "metadata": {
                 "total_pages": parse_result.total_pages,
-                "has_tables": "table" in str(parse_result.full_json).lower()
-            }
+                "has_tables": "table" in str(parse_result.full_json).lower(),
+            },
         }
 
         logger.debug("Normalization completed for task %d", task_id)

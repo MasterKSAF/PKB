@@ -12,6 +12,7 @@ from botocore.config import Config
 from botocore.exceptions import ClientError
 from app.config import settings
 from app.core.exceptions import StorageError, FileNotFoundError
+from app.core.validator import validate
 import logging
 import os
 import asyncio
@@ -37,7 +38,7 @@ class MinIOClient:
             connect_timeout=self._timeout,
             read_timeout=self._timeout,
             max_pool_connections=10,
-            region_name="us-east-1"
+            region_name="us-east-1",
         )
         logger.debug("MinIO client initialized")
 
@@ -56,16 +57,26 @@ class MinIOClient:
                 await client.head_bucket(Bucket=bucket_name)
                 logger.debug("Bucket %s exists", bucket_name)
             except ClientError as e:
-                error_code = e.response.get('Error', {}).get('Code')
-                if error_code == 'NoSuchBucket':
+                error_code = e.response.get("Error", {}).get("Code")
+                if error_code == "NoSuchBucket":
                     logger.info("Bucket %s not found, creating...", bucket_name)
                     await client.create_bucket(Bucket=bucket_name)
                     logger.info("Bucket %s created", bucket_name)
                 else:
-                    logger.error("Error checking bucket %s: %s", bucket_name, e, exc_info=True)
+                    logger.error(
+                        "Error checking bucket %s: %s",
+                        bucket_name,
+                        e,
+                        exc_info=True,
+                    )
                     raise StorageError(f"check bucket {bucket_name}") from e
             except Exception as e:
-                logger.error("Unexpected error checking bucket %s: %s", bucket_name, e, exc_info=True)
+                logger.error(
+                    "Unexpected error checking bucket %s: %s",
+                    bucket_name,
+                    e,
+                    exc_info=True,
+                )
                 raise StorageError(f"check bucket {bucket_name}") from e
 
     @asynccontextmanager
@@ -74,12 +85,12 @@ class MinIOClient:
         Контекстный менеджер, возвращающий клиента aiobotocore для S3.
         """
         async with self._session.create_client(
-            's3',
+            "s3",
             endpoint_url=f"http{'s' if self.secure else ''}://{self.endpoint}",
             aws_access_key_id=self.access_key,
             aws_secret_access_key=self.secret_key,
             use_ssl=self.secure,
-            config=self._client_config
+            config=self._client_config,
         ) as client:
             yield client
 
@@ -101,22 +112,70 @@ class MinIOClient:
         try:
             async with self._client() as client:
                 resp = await client.get_object(Bucket=self.bucket, Key=file_key)
-                async with resp['Body'] as stream:
+                async with resp["Body"] as stream:
                     data = await stream.read()
-                logger.info("Downloaded %s, size=%d bytes", file_key, len(data))
+                logger.info(
+                    "Downloaded %s, size=%d bytes",
+                    file_key,
+                    len(data),
+                )
                 return data
         except ClientError as e:
-            error_code = e.response.get('Error', {}).get('Code')
-            if error_code == 'NoSuchKey':
+            error_code = e.response.get("Error", {}).get("Code")
+            if error_code == "NoSuchKey":
                 logger.error("File %s not found in MinIO", file_key, exc_info=True)
                 raise FileNotFoundError(file_key) from e
-            logger.error("ClientError downloading %s: %s", file_key, e, exc_info=True)
+            logger.error(
+                "ClientError downloading %s: %s",
+                file_key,
+                e,
+                exc_info=True,
+            )
             raise StorageError(f"download {file_key}") from e
         except Exception as e:
             if "not found" in str(e).lower():
+                logger.error("File %s not found", file_key, exc_info=True)
                 raise FileNotFoundError(file_key) from e
-            logger.error("Failed to download %s: %s", file_key, e, exc_info=True)
+            logger.error(
+                "Failed to download %s: %s",
+                file_key,
+                e,
+                exc_info=True,
+            )
             raise StorageError(f"download {file_key}") from e
+
+    async def download_and_validate(self, file_key: str) -> bytes:
+        """
+        Скачивает файл и выполняет полную валидацию (размер, MIME, безопасность).
+        Возвращает содержимое файла.
+        """
+        from app.core.exceptions import StorageError, UnsupportedFormatError, FileTooLargeError
+
+        logger.debug("Fetching file: %s", file_key)
+        try:
+            file_bytes = await self.download_file(file_key)
+        except Exception as e:
+            logger.error("Download failed for %s", file_key, exc_info=True)
+            raise StorageError(f"download {file_key}") from e
+
+        original_filename = os.path.basename(file_key)
+        try:
+            mime = await validate(file_bytes, original_filename)
+            logger.debug("Validation passed for %s, MIME=%s", file_key, mime)
+        except Exception as e:
+            logger.error(
+                "Validation failed for %s: %s",
+                file_key,
+                str(e),
+                exc_info=True,
+            )
+            raise
+
+        if mime != "application/pdf":
+            logger.warning("Unsupported MIME type %s for file %s", mime, file_key)
+            raise UnsupportedFormatError(mime)
+
+        return file_bytes
 
     async def upload_image(
         self,
@@ -124,7 +183,7 @@ class MinIOClient:
         task_id: int,
         page_num: int,
         ext: str = ".png",
-        custom_key: str = None
+        custom_key: str = None,
     ) -> str:
         """
         Загружает изображение в бакет для изображений.
@@ -142,7 +201,11 @@ class MinIOClient:
         Raises:
             StorageError: При ошибке загрузки.
         """
-        key = custom_key if custom_key else f"task_{task_id}/page_{page_num}_{task_id}_{page_num}_{abs(hash(image_data))}{ext}"
+        key = (
+            custom_key
+            if custom_key
+            else f"task_{task_id}/page_{page_num}_{task_id}_{page_num}_{abs(hash(image_data))}{ext}"
+        )
         await self._ensure_bucket(self.image_bucket)
         try:
             async with self._client() as client:
@@ -150,12 +213,22 @@ class MinIOClient:
                     Bucket=self.image_bucket,
                     Key=key,
                     Body=io.BytesIO(image_data),
-                    ContentType="image/png"
+                    ContentType="image/png",
                 )
-            logger.info("Image uploaded to %s/%s, size=%d bytes", self.image_bucket, key, len(image_data))
+            logger.info(
+                "Image uploaded to %s/%s, size=%d bytes",
+                self.image_bucket,
+                key,
+                len(image_data),
+            )
             return key
         except Exception as e:
-            logger.error("Failed to upload image %s: %s", key, e, exc_info=True)
+            logger.error(
+                "Failed to upload image %s: %s",
+                key,
+                e,
+                exc_info=True,
+            )
             raise StorageError(f"upload image {key}") from e
 
     async def get_presigned_url(self, file_key: str, expires_in: int = 3600) -> str:
@@ -175,14 +248,19 @@ class MinIOClient:
         async with self._client() as client:
             try:
                 url = await client.generate_presigned_url(
-                    'get_object',
-                    Params={'Bucket': self.bucket, 'Key': file_key},
-                    ExpiresIn=expires_in
+                    "get_object",
+                    Params={"Bucket": self.bucket, "Key": file_key},
+                    ExpiresIn=expires_in,
                 )
                 logger.debug("Presigned URL generated for %s", file_key)
                 return url
             except Exception as e:
-                logger.error("Failed to generate presigned URL for %s: %s", file_key, e, exc_info=True)
+                logger.error(
+                    "Failed to generate presigned URL for %s: %s",
+                    file_key,
+                    e,
+                    exc_info=True,
+                )
                 raise StorageError(f"generate presigned URL for {file_key}") from e
 
 
@@ -208,8 +286,15 @@ class MockMinIOClient:
         await self._maybe_delay()
         logger.debug("[MOCK] Downloading %s", file_key)
         if file_key == "missing.pdf":
+            logger.warning("[MOCK] File not found: %s", file_key)
             raise FileNotFoundError(file_key)
         return self.mock_file_data
+
+    async def download_and_validate(self, file_key: str) -> bytes:
+        """Мок-валидация: просто возвращает данные, пропуская реальную проверку."""
+        await self._maybe_delay()
+        logger.debug("[MOCK] Download and validate %s", file_key)
+        return await self.download_file(file_key)
 
     async def upload_image(
         self,
@@ -217,16 +302,21 @@ class MockMinIOClient:
         task_id: int,
         page_num: int,
         ext: str = ".png",
-        custom_key: str = None
+        custom_key: str = None,
     ) -> str:
         await self._maybe_delay()
-        key = custom_key if custom_key else f"mock_task_{task_id}/page_{page_num}_{abs(hash(image_data))}{ext}"
+        key = (
+            custom_key
+            if custom_key
+            else f"mock_task_{task_id}/page_{page_num}_{abs(hash(image_data))}{ext}"
+        )
         self.uploaded_images[key] = image_data
         logger.debug("[MOCK] Uploaded image to %s", key)
         return key
 
     async def get_presigned_url(self, file_key: str, expires_in: int = 3600) -> str:
         await self._maybe_delay()
+        logger.debug("[MOCK] Presigned URL for %s", file_key)
         return f"http://mock-minio/presigned/{file_key}?expires={expires_in}"
 
     async def _ensure_bucket(self, bucket_name: str):

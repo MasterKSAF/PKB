@@ -1,23 +1,22 @@
 """
-Тесты для result_builder.py
+Тесты для result_builder.py (функция build_result).
 """
 from datetime import datetime
-from app.services.result_builder import ResultBuilder
+from app.services.result_builder import build_result
 from app.config import settings
 
 
 def test_result_builder_full():
+    # Передаём уже стандартизированный JSON с полем document на верхнем уровне
     final_json = {
-        "content": {
-            "document": {"source": {"file_name": "test.pdf"}},
-            "quality": {"confidence": 0.95},
-            "errors": [],
-            "status": "completed"
-        }
+        "document": {"source": {"file_name": "test.pdf"}},
+        "quality": {"confidence": 0.95},
+        "errors": [],
+        "status": "completed"
     }
-    result = ResultBuilder.build(task_id=123, draft_id=1, final_json=final_json, mode="full")
-    assert result["task_id"] == 123
-    assert result["draft_id"] == 1
+    result = build_result(task_id=123, draft_id=1, final_json=final_json, mode="full")
+    assert result["metadata"]["task_id"] == 123
+    assert result["metadata"]["draft_id"] == 1
     assert result["metadata"]["mode"] == "full"
     assert result["metadata"]["preview_not_supported"] is False
     assert result["metadata"]["schema"] == settings.parsing_schema
@@ -29,14 +28,12 @@ def test_result_builder_full():
 
 def test_result_builder_preview_with_flag():
     final_json = {
-        "content": {
-            "document": {},
-            "quality": {},
-            "errors": [],
-            "status": "preview"
-        }
+        "document": {},
+        "quality": {},
+        "errors": [],
+        "status": "preview"
     }
-    result = ResultBuilder.build(
+    result = build_result(
         task_id=456, draft_id=1, final_json=final_json, mode="preview", preview_not_supported=True
     )
     assert result["metadata"]["mode"] == "preview"
@@ -47,7 +44,7 @@ def test_result_builder_preview_with_flag():
 
 def test_result_builder_missing_fields():
     final_json = {}
-    result = ResultBuilder.build(task_id=1, draft_id=1, final_json=final_json, mode="full")
+    result = build_result(task_id=1, draft_id=1, final_json=final_json, mode="full")
     assert result["document"] == {}
     assert result["quality"] == {}
     assert result["errors"] == []
