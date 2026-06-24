@@ -1,11 +1,13 @@
 # tests/unit/test_api.py
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from rag_builder.api.app import app
+from rag_builder.repositories.postgres_chunk_repository import PostgresChunkRepository
 
 
 client = TestClient(app)
@@ -188,3 +190,77 @@ def test_api_v1_health_endpoint():
 
     assert data["service"] == "rag_builder_service_spd"
     assert data["database"] == "ok"
+
+
+def test_api_v1_rag_build_jobs_list(monkeypatch):
+    timestamp = datetime(2026, 6, 24, 12, 0, tzinfo=timezone.utc)
+
+    def fake_list_indexing_jobs(
+        self,
+        status_filter=None,
+        page=1,
+        page_size=50,
+    ):
+        assert status_filter == "indexed"
+        assert page == 2
+        assert page_size == 10
+
+        return [
+            {
+                "id": 26,
+                "indexing_txn_id": "5c2d9d45-2e02-44ad-a2d7-806ba5158341",
+                "document_id": 420000,
+                "status": "indexed",
+                "chunks_count": 3,
+                "has_embeddings": True,
+                "indexed_at": timestamp,
+                "index_stats": {
+                    "sections": 3,
+                    "chunks": 3,
+                    "embeddings": 3,
+                },
+                "warnings": [],
+                "errors": [],
+                "created_at": timestamp,
+                "updated_at": timestamp,
+            }
+        ], 11
+
+    monkeypatch.setattr(
+        PostgresChunkRepository,
+        "list_indexing_jobs",
+        fake_list_indexing_jobs,
+    )
+
+    response = client.get(
+        "/api/v1/rag/build/jobs?status=indexed&page=2&page_size=10"
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["meta"] == {
+        "total": 11,
+        "page": 2,
+        "page_size": 10,
+    }
+
+    assert len(data["items"]) == 1
+
+    item = data["items"][0]
+
+    assert item["id"] == 26
+    assert item["document_id"] == 420000
+    assert item["status"] == "indexed"
+    assert item["chunks_count"] == 3
+    assert item["has_embeddings"] is True
+    assert item["index_stats"]["chunks"] == 3
+
+
+def test_api_v1_rag_build_jobs_rejects_invalid_status():
+    response = client.get(
+        "/api/v1/rag/build/jobs?status=unknown"
+    )
+
+    assert response.status_code == 422

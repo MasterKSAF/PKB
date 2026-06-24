@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from uuid import uuid4
 
 from dataclasses import asdict
+from typing import Literal
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, status
 
@@ -15,6 +16,7 @@ from rag_builder.models.responses import (
     HealthResponse,
     IndexResponse,
     IndexStatusResponse,
+    IndexingJobsResponse,
 )
 from rag_builder.repositories.postgres_chunk_repository import (
     PostgresChunkRepository,
@@ -41,6 +43,14 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+
+IndexingJobStatus = Literal[
+    "pending_index",
+    "indexing",
+    "indexed",
+    "failed",
+]
 
 
 @app.get(
@@ -217,6 +227,37 @@ def delete_document_index(document_id: int) -> DeleteIndexResponse:
         document_id=document_id,
         deleted_count=deleted_count,
         status="completed",
+    )
+
+
+
+@app.get(
+    "/api/v1/rag/build/jobs",
+    response_model=IndexingJobsResponse,
+)
+def list_indexing_jobs(
+    status_filter: IndexingJobStatus | None = Query(
+        default=None,
+        alias="status",
+    ),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+) -> IndexingJobsResponse:
+    repository = PostgresChunkRepository()
+
+    items, total = repository.list_indexing_jobs(
+        status_filter=status_filter,
+        page=page,
+        page_size=page_size,
+    )
+
+    return IndexingJobsResponse(
+        items=items,
+        meta={
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        },
     )
 
 
