@@ -197,7 +197,7 @@ services:
   db-init:
     build:
       context: ./backend/service_checker/docker
-      dockerfile: Dockerfile.base
+      dockerfile: Dockerfile.init
     image: pkb/db-init:local
     container_name: pkb-db-init
     environment:
@@ -221,7 +221,7 @@ services:
   minio-init:
     build:
       context: ./backend/service_checker/docker
-      dockerfile: Dockerfile.base
+      dockerfile: Dockerfile.init
     image: pkb/minio-init:local
     container_name: pkb-minio-init
     environment:
@@ -240,7 +240,7 @@ services:
   tei-init:
     build:
       context: ./backend/service_checker/docker
-      dockerfile: Dockerfile.base
+      dockerfile: Dockerfile.tei-init
     image: pkb/tei-init:local
     container_name: pkb-tei-init
     volumes:

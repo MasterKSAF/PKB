@@ -19,7 +19,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-# ---- 1b. Node.js + npm (для сборки web-фронтенда) ----
+# ---- 1b. Node.js + npm (для neuro-base и сборки UI Final frontend) ----
+# Перед сборкой скопируйте package*.json из UI Final:
+#   copy "..\..\..\UI-UX\UI Final\frontend\package*.json" .
+# (см. start_web.bat / reset_web.bat / recheck.bat)
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/* \
@@ -38,8 +41,8 @@ RUN mkdir -p /var/log/supervisor /var/run/supervisor
 # ---- 4. Рабочая директория ----
 WORKDIR /app
 
-# ---- 4b. Frontend-зависимости (npm) — для быстрой сборки web-интерфейса ----
-# Копируются из того же контекста сборки (подготовлены .bat-скриптами)
+# ---- 4b. Frontend-зависимости (npm) — для neuro-base / UI Final ----
+# Требует package*.json в контексте сборки (копируется .bat-скриптами).
 COPY package*.json ./
 RUN npm ci && rm package*.json
 

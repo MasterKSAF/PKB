@@ -1,0 +1,32 @@
+# =============================================================================
+# PKB Neuroassistant — slim image for one-shot init jobs
+#
+# Используется в корневом docker-compose для:
+#   - db-init
+#   - minio-init
+#
+# Без Node.js/npm: init-скрипты только на Python.
+# =============================================================================
+
+FROM python:3.13-slim-bookworm
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    libpq5 \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt /tmp/
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r /tmp/requirements.txt \
+    && rm -rf /root/.cache
+
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH="/app/backend:/app/backend/shared:/app/backend/rag_builder_service/src"
+
+CMD ["sleep", "infinity"]
