@@ -8,7 +8,6 @@ SearchType = Literal["dense", "sparse", "hybrid"]
 
 class SearchFilters(BaseModel):
     document_id: int | None = None
-    document_version_id: int | None = None
     section_id: int | None = None
     chunk_type: str | None = None
 
@@ -49,7 +48,6 @@ class SearchChunkResult(BaseModel):
     chunk_id: int
 
     document_id: int
-    document_version_id: int
 
     document_section_id: int
     section_id: int

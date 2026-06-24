@@ -62,7 +62,6 @@ nsi.document_sections.path_ltree
 
 ```text
 document_id
-document_version_id
 document_section_id
 section_id
 clause
@@ -203,7 +202,6 @@ Context deduplication:
     {
       "chunk_id": 151,
       "document_id": 420000,
-      "document_version_id": 420001,
       "document_section_id": 151,
       "section_id": 3,
       "clause": "6.1",
