@@ -96,6 +96,9 @@ EMBEDDING_API_BASE_URL=
 EMBEDDING_API_KEY=
 
 CHUNK_STRATEGY=semantic_1024
+
+INDEXING_JOB_STALE_AFTER_SECONDS=3600
+MAX_ACTIVE_INDEXING_JOBS=10
 ```
 
 Проверить настройки:
@@ -117,7 +120,7 @@ pytest
 Текущее состояние:
 
 ```text
-48 passed, 1 skipped
+60 passed, 1 skipped
 ```
 
 ---
@@ -272,6 +275,44 @@ indexing_txn_id не выдаётся;
 
 Ошибки, возникшие уже после успешной валидации и запуска задачи, отражаются в статусе
 индексации через GET /api/v1/rag/build/{document_id}/status.
+
+Перед созданием новой indexing job сервис выполняет защитные проверки в следующем порядке:
+
+1. Помечает зависшие `pending_index` / `indexing` jobs как `failed`, если они старше `INDEXING_JOB_STALE_AFTER_SECONDS`.
+2. Проверяет, нет ли уже активной job для того же `document_id`.
+3. Проверяет глобальный лимит активных jobs через `MAX_ACTIVE_INDEXING_JOBS`.
+4. Только после этого создаёт новую indexing job и ставит background task.
+
+Если для того же `document_id` уже есть свежая активная job, сервис возвращает `409 Conflict`:
+
+```json
+{
+  "detail": {
+    "code": "ALREADY_PROCESSING",
+    "message": "Document indexing is already in progress",
+    "details": {
+      "document_id": 420000,
+      "indexing_txn_id": "2f7b0a2e-5b7f-4a45-8f87-9f3c5a9b1e2d",
+      "status": "indexing"
+    }
+  }
+}
+```
+
+Если количество свежих активных jobs достигло `MAX_ACTIVE_INDEXING_JOBS`, сервис возвращает `429 Too Many Requests`:
+
+```json
+{
+  "detail": {
+    "code": "TOO_MANY_REQUESTS",
+    "message": "Too many active indexing jobs",
+    "details": {
+      "active_jobs": 10,
+      "max_active_jobs": 10
+    }
+  }
+}
+```
 
 Расширенный пример с разными типами секций:
 
@@ -444,6 +485,58 @@ RAG Builder не использует `references` для формировани
 
 ---
 
+### GET /api/v1/rag/build/jobs
+
+Возвращает список indexing jobs с пагинацией и опциональной фильтрацией по статусу.
+
+Параметры запроса:
+
+| Параметр | Тип | По умолчанию | Описание |
+| -------- | --- | ------------ | -------- |
+| `status` | string | `null` | Фильтр по статусу: `pending_index`, `indexing`, `indexed`, `failed` |
+| `page` | int | `1` | Номер страницы |
+| `page_size` | int | `50` | Размер страницы, максимум `200` |
+
+Пример:
+
+```text
+GET /api/v1/rag/build/jobs?status=indexed&page=1&page_size=10
+```
+
+Пример ответа:
+
+```json
+{
+  "items": [
+    {
+      "id": 26,
+      "indexing_txn_id": "5c2d9d45-2e02-44ad-a2d7-806ba5158341",
+      "document_id": 420000,
+      "status": "indexed",
+      "chunks_count": 3,
+      "has_embeddings": true,
+      "indexed_at": "2026-06-24T12:00:00Z",
+      "index_stats": {
+        "sections": 3,
+        "chunks": 3,
+        "embeddings": 3
+      },
+      "warnings": [],
+      "errors": [],
+      "created_at": "2026-06-24T12:00:00Z",
+      "updated_at": "2026-06-24T12:00:00Z"
+    }
+  ],
+  "meta": {
+    "total": 11,
+    "page": 1,
+    "page_size": 10
+  }
+}
+```
+
+---
+
 ### GET /api/v1/rag/build/{document_id}/status
 
 Проверяет статус индексации документа.
@@ -544,8 +637,12 @@ sql/
 * PostgreSQL persistence
 * Reindex без дубликатов
 * async indexing jobs
+* indexing jobs list endpoint
+* stale indexing jobs cleanup
+* duplicate active job guard per `document_id`
+* active jobs limit
 * delete/reindex endpoint
-*
+
 #### Chunking
 
 * поддержка subchunks
@@ -658,7 +755,7 @@ EMBEDDING_API_KEY=
 Текущее состояние:
 
 ```text
-48 passed, 1 skipped
+60 passed, 1 skipped
 ```
 
 ---
@@ -701,7 +798,7 @@ document_sections
 
 Текущее состояние:
 
-- 48 тестов проходят, 1 skipped
+- 60 тестов проходят, 1 skipped
 - PostgreSQL persistence реализован
 - pgvector поддерживается
 - ltree поддерживается
@@ -761,4 +858,3 @@ document_sections
 * Citation Engine
 * Context Expansion через ltree
 * context expansion применяется к каждому result из top_k
-
