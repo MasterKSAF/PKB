@@ -1,0 +1,290 @@
+# Docker Compose — Production Gateway Stack
+# Сетевая изоляция internal/service-to-service (CM-4, GW-1, GW-2, GW-5)
+#
+# Архитектура сетей (L1–L4):
+#   L1. public  — внешняя (Internet → Gateway:8080)
+#   L2. dmz     — Gateway + Auth (обрабатывают внешние запросы)
+#   L3. internal — сервисы (только между собой, без прямого доступа извне)
+#   L4. data    — БД и инфраструктура (PostgreSQL, Redis, MinIO)
+#
+# Правила изоляции:
+#   - Gateway имеет доступ к L2 (Auth) и L3 (все сервисы)
+#   - Auth имеет доступ только из L2 (через Gateway) и к L4 (БД)
+#   - Internal сервисы (Orchestrator, Registry, Query, Parser, OCR и др.)
+#     только в L3 — никогда не暴露 наружу
+#   - /internal/auth/validate доступен только из L2+L3 (GW-5)
+#   - Registry internal-эндпоинты только в L3 (GW-2)
+
+version: "3.9"
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+
+  # =====================================================================
+  # Gateway — точка входа (L2: dmz)
+  # =====================================================================
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
+    image: pkb/gateway:latest
+    container_name: pkb-gateway
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env.production
+    environment:
+      GATEWAY_MODE: "real"
+      ENV: "production"
+      GATEWAY_PORT: "8080"
+      AUTH_SERVICE_URL: "http://auth:8082"
+      ORCHESTRATOR_SERVICE_URL: "http://orchestrator:8081"
+      QUERY_SERVICE_URL: "http://query:8083"
+      REGISTRY_SERVICE_URL: "http://registry:8084"
+      INTEGRATION_SERVICE_URL: "http://integration:8085"
+      ANALYSE_SERVICE_URL: "http://analyse:8089"
+      RAG_BUILDER_SERVICE_URL: "http://rag-builder:8090"
+      RAG_SEARCH_SERVICE_URL: "http://rag-search:8091"
+      # Rate limiting + IDOR protection (CM-2, CM-3, GW-4, GW-6)
+      RATE_LIMIT_ENABLED: "1"
+    depends_on:
+      auth:
+        condition: service_healthy
+    networks:
+      - dmz
+      - internal
+    restart: unless-stopped
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/system/health/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # =====================================================================
+  # Auth Service (L2: dmz — только validate, L4: БД)
+  # =====================================================================
+  auth:
+    build:
+      context: .
+      dockerfile: Dockerfile.auth
+    image: pkb/auth:latest
+    container_name: pkb-auth
+    env_file:
+      - .env.production
+    environment:
+      AUTH_PORT: "8082"
+      DATABASE_URL: "postgresql://pkb:pkb@postgres:5432/pkb_auth"
+    expose:
+      - "8082"
+    networks:
+      dmz:
+        # /internal/auth/validate доступен только из dmz + internal
+        aliases:
+          - auth
+      internal:
+      data:
+    restart: unless-stopped
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/api/v1/system/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # =====================================================================
+  # Internal services (L3: internal — без доступа извне)
+  # =====================================================================
+  orchestrator:
+    image: pkb/orchestrator:latest
+    container_name: pkb-orchestrator
+    expose:
+      - "8081"
+    networks:
+      - internal
+      - data
+    restart: unless-stopped
+    logging: *default-logging
+
+  registry:
+    image: pkb/registry:latest
+    container_name: pkb-registry
+    expose:
+      - "8084"
+    networks:
+      - internal
+      - data
+    restart: unless-stopped
+    logging: *default-logging
+
+  query:
+    image: pkb/query:latest
+    container_name: pkb-query
+    expose:
+      - "8083"
+    networks:
+      - internal
+      - data
+    restart: unless-stopped
+    logging: *default-logging
+
+  integration:
+    image: pkb/integration:latest
+    container_name: pkb-integration
+    expose:
+      - "8085"
+    networks:
+      - internal
+    restart: unless-stopped
+    logging: *default-logging
+
+  analyse:
+    image: pkb/analyse:latest
+    container_name: pkb-analyse
+    expose:
+      - "8089"
+    networks:
+      - internal
+    restart: unless-stopped
+    logging: *default-logging
+
+  converter-validator:
+    image: pkb/converter-validator:latest
+    container_name: pkb-converter-validator
+    expose:
+      - "8086"
+    environment:
+      OPENAI_API_KEY: ${ROUTERAI_API_KEY:-}
+      OPENAI_BASE_URL: https://routerai.ru/api/v1
+    networks:
+      - internal
+    restart: unless-stopped
+    logging: *default-logging
+
+  parser:
+    image: pkb/parser:latest
+    container_name: pkb-parser
+    expose:
+      - "8087"
+    networks:
+      - internal
+    restart: unless-stopped
+    logging: *default-logging
+
+  ocr:
+    image: pkb/ocr:latest
+    container_name: pkb-ocr
+    expose:
+      - "8088"
+    networks:
+      - internal
+    restart: unless-stopped
+    logging: *default-logging
+
+  rag-builder:
+    image: pkb/rag-builder:latest
+    container_name: pkb-rag-builder
+    expose:
+      - "8090"
+    networks:
+      - internal
+      - data
+    restart: unless-stopped
+    logging: *default-logging
+
+  rag-search:
+    image: pkb/rag-search:latest
+    container_name: pkb-rag-search
+    expose:
+      - "8091"
+    networks:
+      - internal
+      - data
+    restart: unless-stopped
+    logging: *default-logging
+
+  # =====================================================================
+  # Infrastructure (L4: data)
+  # =====================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: pkb-redis
+    expose:
+      - "6379"
+    networks:
+      - data
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: pkb-postgres
+    expose:
+      - "5432"
+    environment:
+      POSTGRES_USER: pkb
+      POSTGRES_PASSWORD: pkb
+      POSTGRES_DB: pkb_neuroassistant
+    networks:
+      - data
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    restart: unless-stopped
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pkb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# =====================================================================
+# Networks — трехуровневая изоляция (L2–L4)
+# =====================================================================
+networks:
+  dmz:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: "172.20.0.0/24"
+    labels:
+      description: "L2: DMZ — Gateway, Auth (только validate)"
+
+  internal:
+    driver: bridge
+    internal: true  # ключевой параметр — нет выхода в internet
+    ipam:
+      config:
+        - subnet: "172.20.1.0/24"
+    labels:
+      description: "L3: Internal — сервисы (только внутренние вызовы)"
+
+  data:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: "172.20.2.0/24"
+    labels:
+      description: "L4: Data — PostgreSQL, Redis, MinIO"
+
+# =====================================================================
+# Volumes
+# =====================================================================
+volumes:
+  redis_data:
+  postgres_data:

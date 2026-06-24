@@ -1,0 +1,45 @@
+name: rag-builder-service
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: pkb-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-pkb_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-pkb_pass}
+      POSTGRES_DB: ${DB_NAME:-pkb_db}
+    ports:
+      - "5433:5432"
+    volumes:
+      - pkb_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-pkb_user} -d ${DB_NAME:-pkb_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+  rag-builder-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: rag-builder-service:local
+    container_name: rag-builder-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DATABASE_URL: ""
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./logs:/app/logs
+
+volumes:
+  pkb_pgdata:

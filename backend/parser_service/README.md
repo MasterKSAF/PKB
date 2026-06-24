@@ -1,0 +1,371 @@
+
+**Инструкция по установке и использованию Parser Service**
+
+Сервис парсинга цифровых PDF/DOC-документов (без OCR).
+
+**1. Предварительные требования**
+- Docker (для запуска MinIO)
+- Python 3.10+ (для запуска сервиса)
+- pip, virtualenv (рекомендуется)
+- Git (опционально)
+
+Дополнительные: 
+- запуск в изолированной среде с ограничением прав пользователя 
+- запрет на выход в интернет
+
+**2. Установка, запуск и настройка MinIO (если его нет)**
+2.1 Docker Compose для MinIO
+Создайте файл docker-compose-minio.yml:
+
+```text
+yaml
+version: '3.8'
+
+services:
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin      # ИЗМЕНИТЕ НА СВОЙ ЛОГИН
+      MINIO_ROOT_PASSWORD: minioadmin  # ИЗМЕНИТЕ НА СВОЙ ПАРОЛЬ
+    ports:
+      - "9000:9000"   # S3 API порт
+      - "9001:9001"   # Web консоль
+    volumes:
+      - ./minio_data:/data
+```
+
+Запустите:
+```text
+bash
+docker-compose -f docker-compose-minio.yml up -d
+```
+
+Проверьте:
+Web UI: http://localhost:9001 (логин/пароль указаны выше)
+API: http://localhost:9000
+
+2.2 Создание бакетов и пользователя
+Вариант А: через Web консоль
+Зайдите в http://localhost:9001
+Создайте бакеты: files, images
+Перейдите в Identity → Users → создайте пользователя parser_user (придумайте пароль)
+Назначьте права: readwrite на оба бакета
+
+Вариант Б: через MinIO Client (mc)
+```text
+bash
+# Установка mc
+wget https://dl.min.io/client/mc/release/linux-amd64/mc
+chmod +x mc
+sudo mv mc /usr/local/bin/
+
+# Добавляем хост
+mc alias set local http://localhost:9000 minioadmin minioadmin
+
+# Создаём бакеты
+mc mb local/files
+mc mb local/images
+
+# Создаём пользователя
+mc admin user add local parser_user <ваш_пароль>
+
+# Создаём политику доступа (файл policy.json)
+cat > policy.json <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+      "Resource": ["arn:aws:s3:::files/*"]
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:GetObject"],
+      "Resource": ["arn:aws:s3:::images/*"]
+    }
+  ]
+}
+EOF
+
+mc admin policy create local parser-policy policy.json
+
+# Привязываем политику к пользователю
+mc admin policy attach local parser-policy --user parser_user
+```
+Запомните логин parser_user и его пароль – они понадобятся для .env файла сервиса.
+
+2.3. Конфигурация окружения
+Создайте файл .env в корне проекта на основе .env.example с учетом установки MinIO. 
+Важно: Замените <ваш_пароль_от_parser_user> на реальный пароль.
+
+2.4. Загрузка файлов в MinIO
+Поместите PDF‑файлы, которые хотите обработать, в локальную папку ./input.
+
+Способ 1: через mc
+```text
+bash
+mc cp --recursive ./input/ local/files/
+```
+
+2.5. Дополнительно. Остановка и очистка
+Остановить MinIO:
+```text
+bash
+docker-compose -f docker-compose-minio.yml down
+```
+
+
+
+**3. Установка Parser Service (самому локально)**
+3.1 Клонирование репозитория (или создание папки)
+```text
+bash
+git clone <url-репозитория> parser-service
+cd parser-service
+```
+
+
+3.2 Создание виртуального окружения
+```text
+bash
+python3 -m venv venv
+source venv/bin/activate   # Linux/Mac
+# или .\venv\Scripts\activate (Windows)
+```
+
+Дополнительно нужно установить  Java 11 (OpenJDK) - для работы  opendataloader.
+```text
+bash
+sudo apt install -y openjdk-11-jre-headless 
+```
+
+3.3 Установка зависимостей
+Убедитесь, что в корне проекта есть файл requirements.txt (пример ниже). Установите зависимости:
+```text
+bash
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+3.4 Конфигурация окружения
+Создайте файл .env в корне проекта на основе .env.example с учетом установки MinIO. 
+Важно: Замените <ваш_пароль_от_parser_user> на реальный пароль.
+
+3.5 Загрузка файлов в MinIO
+Поместите PDF‑файлы, которые хотите обработать, в локальную папку ./input.
+
+Способ 1: через mc
+```text
+bash
+mc cp --recursive ./input/ local/files/
+```
+
+Способ 2: через Python скрипт
+```text
+python
+import asyncio
+import os
+from aiobotocore.session import get_session
+
+async def upload_file(file_path, bucket, object_name):
+    session = get_session()
+    async with session.create_client(
+        's3',
+        endpoint_url='http://localhost:9000',
+        aws_access_key_id='parser_user',
+        aws_secret_access_key='<ваш_пароль>',
+        use_ssl=False
+    ) as client:
+        with open(file_path, 'rb') as f:
+            await client.put_object(Bucket=bucket, Key=object_name, Body=f.read())
+
+async def main():
+    for f in os.listdir('./input'):
+        if f.lower().endswith('.pdf'):
+            await upload_file(f'./input/{f}', 'files', f)
+asyncio.run(main())
+```
+После загрузки файлы будут доступны по ключу (имени файла), например document.pdf.
+
+3.6. Запуск Parser Service
+```text
+bash
+uvicorn app.main:app --host 0.0.0.0 --port 8087 --reload
+```
+При успешном запуске будет доступен Swagger UI: http://127.0.0.1:8087/docs
+
+Проверка здоровья:
+
+```text
+bash
+curl http://127.0.0.1:8087/api/v1/health
+# {"status":"ok"}
+```
+
+Для остановки сервиса нажмите Ctrl+C в терминале с uvicorn.
+
+**4. Установка Parser Service (через Dockerfile)**
+
+Запустить команду
+```text
+bash
+docker build -t parser-service:latest .
+```
+Для полноценной работы сервиса необходимо подключение к MinIO. Смотрите пункт 2.
+
+**5. Использование API**
+5.1 Предпросмотр (синхронный)
+Получить информацию о файле без полной обработки:
+
+```text
+bash
+curl -X POST http://127.0.0.1:8087/api/v1/parser/process \
+  -H "Content-Type: application/json" \
+  -d '{"task_id": 420000,
+      "draft_id": 123456,
+      "file_key": "ГИМС РФ правила, том 1.pdf",
+      "mode": "full",
+      "options": {  "extract_tables": true,
+                    "extract_images": true   }}'
+```
+
+Ответ (содержит имя файла и общее количество страниц):
+
+```text
+json
+ "metadata": {
+    "schema": "raw_ocr_v4",
+    "task_id": 420000,
+    "draft_id": 123456,
+    "mode": "full",
+    "preview_not_supported": false,
+    "created_at": "2026-06-24T04:18:32.709392",
+    "parser": {
+      "name": "unknown",
+      "version": "1.0",
+      "ocr_engine": null,
+      "ocr_fallback": false    }  },
+  "document": {
+    "source": {
+      "file_name": "ГИМС РФ правила, том 1.pdf",
+      "file_hash_sha256": "",
+      "page_count": 139,
+      "author": null,
+      "title": null,
+      "creation_date": "2021-08-19T06:23:07Z",
+      "modification_date": "2021-08-19T09:24:01Z"    },
+    "pages": [      {
+        "page": 1,
+        "width": 595,
+        "height": 841      },
+        
+         … ,
+
+{	"type": "paragraph",
+            "page": 139,
+            "bbox": [81.349, 540.804, 470.533, 554.093],
+            "content": "- Информация об остойчивости и непотопляемости перегоняемого судна.",
+            "font": {
+              "size": 12,
+              "color": "#000000",
+              "bold": false,
+              "italic": false,
+              "underline": false    }   }   ]   }   ]  },
+  "quality": {
+    "confidence": 0.94,
+    "pages_processed": 139,
+    "pages_failed": 0,
+    "per_page": [
+
+      {...},
+       …, 
+
+     {  "page": 139,
+        "status": "ok",
+        "confidence": 0.94    }  ],
+  "notifications": []  },
+  "errors": [],
+  "status": "completed" }
+
+```
+
+  
+5.2 Асинхронная обработка
+```text
+bash
+curl -X POST http://127.0.0.1:8087/api/v1/parser/process \
+  -H "Content-Type: application/json" \
+  -d '{ "task_id": 420001,
+        "draft_id": 123456,
+        "file_key": "ГИМС РФ правила, том 1.pdf",
+        "mode": "preview",
+        "max_pages": 3,
+        "options": {   "extract_tables": false,
+                      "extract_images": false  }}'
+  ```
+Ответ:
+
+```text
+json
+{
+  "task_id": 420000,
+  "status": "accepted",
+  "mode": "preview",
+  "estimated_completion": "2026-06-02T12:00:30Z"
+}
+```
+
+5.3 Отслеживание статуса (longpoll)
+```text
+bash
+curl "http://127.0.0.1:8087/api/v1/parser/process/420000/status?timeout=15"
+или 
+curl "http://127.0.0.1:8087/api/v2/parser/process/420000/status?timeout=15"
+```
+При завершении обработки вернётся:
+
+```text
+json
+{
+  "task_id": 420000,
+  "status": "completed",
+  "progress_percent": 100,
+  "pages_processed": 136,
+  "pages_total": 136,
+  "avg_confidence": 0.94,
+  "step": "completed",
+  "step_detail": "Результат сохранён",
+  "started_at": "2026-06-02T11:55:00Z",
+  "completed_at": "2026-06-02T11:56:30Z"
+}
+```
+
+5.4 Получение результата
+```text
+bash
+curl http://127.0.0.1:8087/api/v1/parser/process/420000/result
+или 
+curl http://127.0.0.1:8087/api/v2/parser/process/420000/result
+```
+
+В ответе – JSON‑контейнер с текстом, таблицами, ссылками на изображения в MinIO.
+
+5.5 Список активных задач
+```text
+bash
+curl http://127.0.0.1:8087/api/v1/parser/processes
+или 
+curl http://127.0.0.1:8087/api/v2/parser/processes
+```
+
+6. Тестирование 
+Для запуска модульных тестов:
+
+```text
+bash
+pytest tests/ -v
+```

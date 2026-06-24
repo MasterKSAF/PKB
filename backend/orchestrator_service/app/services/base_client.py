@@ -1,156 +1,376 @@
 """
-Base HTTP client for external services with dual mode support.
-Supports both real API calls and mock/stub mode.
+Base Service Client with mock mode support and real HTTP client.
+
+All external service clients inherit from this class.
+Supports dual mode: mock responses for development/testing,
+or real HTTP calls to the actual microservice.
+
+HTTP client uses httpx with configurable timeouts, retry (tenacity),
+and circuit breaker for resilience.
 """
 
 import json
-from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+import logging
+import time
+from typing import Any, Dict, Optional, Type
 
 import httpx
+from pydantic import BaseModel, ValidationError
+from circuitbreaker import CircuitBreaker, CircuitBreakerError
+from tenacity import (
+    retry,
+    retry_if_exception,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
-from app.core.config import ServiceConfig, settings
+from app.core.config import settings
+from app.core.trace import build_correlation_headers
+
+logger = logging.getLogger("services.base_client")
 
 
-class ServiceClient(ABC):
-    """Base client for external services with mock mode support."""
+class ServiceClient:
+    """Base class for microservice HTTP clients with mock mode support.
+
+    In mock mode: returns predefined responses without network calls.
+    In real mode: makes asynchronous HTTP requests via httpx with:
+      - Configurable timeouts
+      - Retry with exponential backoff (tenacity) on transient errors
+      - Circuit breaker that opens after N failures
+    """
 
     def __init__(
         self,
         service_name: str,
-        service_url: Optional[str] = None,
-        mock_mode: bool = True,
+        service_url: Optional[str],
+        mock_mode: bool = False,
     ):
         self.service_name = service_name
-        self.service_url = service_url
+        self.service_url = service_url.rstrip("/") if service_url else None
         self.mock_mode = mock_mode
         self._http_client: Optional[httpx.AsyncClient] = None
+        self._circuit_breaker: Optional[CircuitBreaker] = None
 
-    async def _get_client(self) -> httpx.AsyncClient:
-        """Get or create HTTP client."""
-        if self._http_client is None:
+        if not mock_mode and self.service_url:
+            # Initialize real HTTP client with timeouts from config
+            http_cfg = settings.http_client
+            timeout = httpx.Timeout(
+                connect=http_cfg.CONNECT_TIMEOUT,
+                read=http_cfg.READ_TIMEOUT,
+                write=http_cfg.READ_TIMEOUT,
+                pool=http_cfg.POOL_TIMEOUT,
+            )
+            limits = httpx.Limits(
+                max_connections=http_cfg.POOL_CONNECTIONS,
+                max_keepalive_connections=http_cfg.POOL_MAX_SIZE,
+            )
             self._http_client = httpx.AsyncClient(
-                base_url=self.service_url or "",
-                timeout=30.0,
-                headers={"Content-Type": "application/json"},
+                base_url=self.service_url,
+                timeout=timeout,
+                limits=limits,
             )
-        return self._http_client
 
-    async def _make_request(
-        self,
-        method: str,
-        endpoint: str,
-        **kwargs,
-    ) -> Dict[str, Any]:
-        """Make HTTP request to real service."""
-        client = await self._get_client()
-        url = f"{self.service_url}{endpoint}"
-
-        try:
-            response = await client.request(method, url, **kwargs)
-            response.raise_for_status()
-            return response.json()
-        except httpx.HTTPStatusError as e:
-            raise ServiceError(
-                f"HTTP error from {self.service_name}: {e.response.status_code}",
-                status_code=e.response.status_code,
-                details=e.response.text,
+            # Initialize circuit breaker from pipeline config
+            pipeline_cfg = settings.pipeline
+            self._circuit_breaker = CircuitBreaker(
+                failure_threshold=pipeline_cfg.CIRCUIT_FAILURE_THRESHOLD,
+                recovery_timeout=pipeline_cfg.CIRCUIT_RECOVERY_TIMEOUT,
+                name=f"cb_{service_name}",
             )
-        except httpx.RequestError as e:
-            raise ServiceError(
-                f"Request error to {self.service_name}: {str(e)}",
-                status_code=503,
-                details=str(e),
+
+            logger.info(
+                "HTTP client initialized with retry + circuit breaker",
+                extra={
+                    "service": service_name,
+                    "url": service_url,
+                    "timeout": http_cfg.READ_TIMEOUT,
+                    "max_retries": http_cfg.MAX_RETRIES,
+                    "cb_threshold": pipeline_cfg.CIRCUIT_FAILURE_THRESHOLD,
+                    "cb_timeout": pipeline_cfg.CIRCUIT_RECOVERY_TIMEOUT,
+                },
             )
 
     async def call(
         self,
         method: str,
         endpoint: str,
-        mock_response: Dict[str, Any],
+        mock_response: Optional[Dict[str, Any]] = None,
+        request_model: Optional[Type[BaseModel]] = None,
         **kwargs,
     ) -> Dict[str, Any]:
-        """
-        Make API call with automatic mock mode support.
+        """Make an API call (mock or real HTTP).
 
-        Args:
-            method: HTTP method (GET, POST, etc.)
-            endpoint: API endpoint path
-            mock_response: Response to return in mock mode
-            **kwargs: Additional arguments for HTTP request
+        In mock mode: delegates to ``_generate_mock``.
+        In real mode: performs an actual HTTP request via httpx with
+        retry (tenacity) and circuit breaker protection.
 
-        Returns:
-            API response (real or mocked)
+        Parameters
+        ----------
+        request_model : optional
+            If provided, validates ``json`` kwargs through this Pydantic model
+            before sending (catches type mismatches early in both mock and real mode).
         """
-        if self.mock_mode or not self.service_url:
-            return await self._get_mock_response(
-                method, endpoint, mock_response, **kwargs
+        # --- Validate json body through Pydantic if request_model provided ---
+        if request_model is not None and "json" in kwargs:
+            try:
+                kwargs["json"] = request_model.model_validate(
+                    kwargs["json"]
+                ).model_dump(exclude_none=True)
+            except ValidationError as exc:
+                raise TypeError(
+                    f"Request body for {method} {endpoint} failed "
+                    f"Pydantic validation: {exc}"
+                ) from exc
+
+        # --- Guard: ensure json body is JSON-serializable ---
+        if "json" in kwargs:
+            try:
+                json.dumps(kwargs["json"], ensure_ascii=False)
+            except TypeError as exc:
+                raise TypeError(
+                    f"Request body for {method} {endpoint} contains "
+                    f"non-serializable value: {exc}"
+                ) from exc
+
+        start_time = time.monotonic()
+
+        if self.mock_mode:
+            result = await self._generate_mock(
+                method, endpoint, mock_response or {}, **kwargs
             )
+            elapsed = time.monotonic() - start_time
+            logger.debug(
+                f"Mock call: {method} {endpoint} -> {elapsed:.3f}s",
+                extra={
+                    "service": self.service_name,
+                    "method": method,
+                    "endpoint": endpoint,
+                    "mock": True,
+                    "duration_ms": round(elapsed * 1000),
+                },
+            )
+            return result
 
-        return await self._make_request(method, endpoint, **kwargs)
+        # Real HTTP call with circuit breaker
+        url = f"{self.service_url}{endpoint}" if self.service_url else endpoint
+        try:
+            if self._circuit_breaker:
+                # Use circuit breaker
+                response = await self._call_with_circuit_breaker(method, url, **kwargs)
+            else:
+                # No circuit breaker configured
+                response = await self._retry_request(method, url, **kwargs)
 
-    async def _get_mock_response(
-        self,
-        method: str,
-        endpoint: str,
-        default_mock: Dict[str, Any],
-        **kwargs,
-    ) -> Dict[str, Any]:
-        """Generate mock response. Override in subclasses for custom mock logic."""
-        mock_data = await self._generate_mock(method, endpoint, default_mock, **kwargs)
-        return mock_data
+            elapsed = time.monotonic() - start_time
+            data: Dict[str, Any] = response.json()
 
-    @abstractmethod
-    async def _generate_mock(
-        self,
-        method: str,
-        endpoint: str,
-        default_mock: Dict[str, Any],
-        **kwargs,
-    ) -> Dict[str, Any]:
-        """Generate mock response. Must be implemented by subclasses."""
-        pass
+            logger.info(
+                f"HTTP {method} {endpoint} -> {response.status_code} ({elapsed:.3f}s)",
+                extra={
+                    "service": self.service_name,
+                    "method": method,
+                    "endpoint": endpoint,
+                    "status": response.status_code,
+                    "duration_ms": round(elapsed * 1000),
+                },
+            )
+            return data
+
+        except CircuitBreakerError:
+            elapsed = time.monotonic() - start_time
+            logger.error(
+                f"Circuit breaker OPEN for {self.service_name}, "
+                f"falling back to mock ({elapsed:.1f}s)",
+                extra={
+                    "service": self.service_name,
+                    "method": method,
+                    "endpoint": endpoint,
+                    "duration_ms": round(elapsed * 1000),
+                    "circuit_breaker": "open",
+                },
+            )
+            return mock_response or {}
+
+        except httpx.TimeoutException as exc:
+            elapsed = time.monotonic() - start_time
+            logger.error(
+                f"HTTP timeout: {method} {endpoint} after {elapsed:.1f}s "
+                f"(retries exhausted)",
+                extra={
+                    "service": self.service_name,
+                    "method": method,
+                    "endpoint": endpoint,
+                    "duration_ms": round(elapsed * 1000),
+                    "error": str(exc),
+                },
+            )
+            raise
+
+        except httpx.ConnectError as exc:
+            elapsed = time.monotonic() - start_time
+            logger.error(
+                f"HTTP connection error: {method} {endpoint} ({exc})",
+                extra={
+                    "service": self.service_name,
+                    "method": method,
+                    "endpoint": endpoint,
+                    "duration_ms": round(elapsed * 1000),
+                    "error": str(exc),
+                },
+            )
+            # Do NOT retry on connection error — return mock as fallback
+            logger.warning(
+                f"Falling back to mock response for {endpoint} after connection error"
+            )
+            return mock_response or {}
+
+        except httpx.HTTPStatusError as exc:
+            elapsed = time.monotonic() - start_time
+            logger.error(
+                f"HTTP error: {method} {endpoint} -> {exc.response.status_code} "
+                f"({elapsed:.3f}s, retries exhausted)",
+                extra={
+                    "service": self.service_name,
+                    "method": method,
+                    "endpoint": endpoint,
+                    "status": exc.response.status_code,
+                    "response_body": exc.response.text[:500],
+                    "duration_ms": round(elapsed * 1000),
+                },
+            )
+            raise
+
+        except Exception as exc:
+            elapsed = time.monotonic() - start_time
+            logger.error(
+                f"Unexpected error calling {method} {endpoint}: {exc}",
+                extra={
+                    "service": self.service_name,
+                    "method": method,
+                    "endpoint": endpoint,
+                    "duration_ms": round(elapsed * 1000),
+                    "error_type": type(exc).__name__,
+                },
+            )
+            raise
+
+    async def _call_with_circuit_breaker(
+        self, method: str, url: str, **kwargs
+    ) -> httpx.Response:
+        """Execute request through circuit breaker.
+
+        If circuit is OPEN, raises CircuitBreakerError immediately.
+        If circuit is CLOSED/HALF-OPEN, attempts the request;
+        on failure, the circuit breaker tracks the error.
+        """
+        cb = self._circuit_breaker
+        assert cb is not None
+
+        # CircuitBreaker.call_async executes the coroutine and tracks failures
+        return await cb.call_async(self._retry_request, method, url, **kwargs)
+
+    async def _retry_request(
+        self, method: str, url: str, **kwargs
+    ) -> httpx.Response:
+        """Execute HTTP request with tenacity retry logic.
+
+        Retries on TimeoutException and 5xx HTTP errors.
+        Does NOT retry on ConnectError (connection refused/DNS failure)
+        or 4xx client errors.
+        """
+        http_cfg = settings.http_client
+        # Apply retry manually in the wrapper because tenacity's
+        # async retry can interfere with the circuit breaker.
+        return await self._request_with_retry(
+            method, url, http_cfg.MAX_RETRIES, **kwargs
+        )
+
+    def _build_correlation_headers(self) -> dict:
+        """Build correlation headers from current trace context (CM-5).
+
+        Injects X-Trace-ID, X-Request-ID, X-User-ID, X-Draft-ID,
+        X-Document-ID, X-Version-ID into every downstream request
+        for end-to-end tracing across services.
+        """
+        return build_correlation_headers()
+
+    async def _request(self, method: str, url: str, **kwargs) -> httpx.Response:
+        """Execute the actual HTTP request (no retry — use _request_with_retry).
+
+        Injects correlation headers from trace context for distributed tracing.
+        Does NOT retry on any error — retry logic is in _request_with_retry.
+        Must raise_for_status here so that tenacity can catch HTTPStatusError.
+        """
+        if self._http_client is None:
+            raise RuntimeError(
+                f"HTTP client not initialized for {self.service_name}. "
+                f"Service URL may be missing."
+            )
+        # Inject correlation headers into every downstream call
+        headers = kwargs.pop("headers", {})
+        headers.update(self._build_correlation_headers())
+        kwargs["headers"] = headers
+        response = await self._http_client.request(method, url, **kwargs)
+        # Raise on HTTP errors so tenacity can catch them for retry
+        response.raise_for_status()
+        return response
+
+    async def _request_with_retry(
+        self, method: str, url: str, max_retries: int, **kwargs
+    ) -> httpx.Response:
+        """Wrapper that dynamically sets tenacity stop condition."""
+        # Dynamically apply retry by re-creating the decorator
+        # with the configured max_retries count.
+        retry_decorator = retry(
+            stop=stop_after_attempt(max_retries + 1),  # +1 for initial attempt
+            wait=wait_exponential(
+                multiplier=settings.http_client.RETRY_BACKOFF_FACTOR,
+                min=1,
+                max=60,
+            ),
+            retry=(
+                retry_if_exception_type(httpx.TimeoutException)
+                | retry_if_exception(_is_retryable_http_error)
+            ),
+            reraise=True,
+        )
+        decorated = retry_decorator(self._request)
+        return await decorated(method, url, **kwargs)
 
     async def close(self):
-        """Close HTTP client."""
-        if self._http_client:
+        """Close the underlying HTTP client."""
+        if self._http_client is not None:
             await self._http_client.aclose()
             self._http_client = None
+            logger.debug(
+                "HTTP client closed",
+                extra={"service": self.service_name},
+            )
+
+    async def _generate_mock(
+        self, method: str, endpoint: str, default_mock: Dict[str, Any], **kwargs
+    ) -> Dict[str, Any]:
+        """Override in subclasses to provide custom mock logic."""
+        return default_mock
 
 
-class ServiceError(Exception):
-    """Service error exception."""
+def _is_retryable_http_error(exc: BaseException) -> bool:
+    """Check if an HTTP error is retryable.
 
-    def __init__(
-        self,
-        message: str,
-        status_code: int = 500,
-        details: Optional[str] = None,
-    ):
-        self.message = message
-        self.status_code = status_code
-        self.details = details
-        super().__init__(message)
+    Retry on:
+    - Server errors (5xx) — transient
+    - TimeoutException — network may recover
 
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "error": {
-                "code": self._get_code_name(),
-                "message": self.message,
-                "details": {"service_error": self.details} if self.details else {},
-            }
-        }
-
-    def _get_code_name(self) -> str:
-        """Get error code name based on status code."""
-        code_names = {
-            400: "BAD_REQUEST",
-            401: "UNAUTHORIZED",
-            403: "FORBIDDEN",
-            404: "NOT_FOUND",
-            409: "CONFLICT",
-            422: "VALIDATION_FAILED",
-            500: "INTERNAL_ERROR",
-            503: "SERVICE_UNAVAILABLE",
-        }
-        return code_names.get(self.status_code, "INTERNAL_ERROR")
+    Do NOT retry on:
+    - ConnectError — connection refused / DNS failure (waste of time)
+    - Client errors (4xx) — request is bad
+    """
+    if isinstance(exc, httpx.ConnectError):
+        return False
+    if isinstance(exc, httpx.TimeoutException):
+        return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        return 500 <= exc.response.status_code < 600
+    return False

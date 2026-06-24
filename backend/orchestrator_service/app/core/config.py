@@ -5,67 +5,169 @@ Supports dual mode: real API calls or mock/stub mode for each external service.
 
 from typing import Optional
 
-from pydantic import Field
+from pydantic import ConfigDict, Field, model_validator
 from pydantic_settings import BaseSettings
 
 
 class ServiceConfig(BaseSettings):
     """Configuration for external services."""
 
-    # Auth Service (port 8082)
-    AUTH_SERVICE_URL: Optional[str] = Field(
-        default=None, description="URL for auth service"
-    )
-    AUTH_SERVICE_MOCK: bool = Field(
-        default=True, description="Use mock mode for auth service"
-    )
-
-    # Query Service (port 8083)
-    QUERY_SERVICE_URL: Optional[str] = Field(
-        default=None, description="URL for query service"
-    )
-    QUERY_SERVICE_MOCK: bool = Field(
-        default=True, description="Use mock mode for query service"
-    )
-
     # Registry Service (port 8084)
     REGISTRY_SERVICE_URL: Optional[str] = Field(
-        default=None, description="URL for registry service"
+        default="http://registry-service:8084", description="URL for registry service"
     )
     REGISTRY_SERVICE_MOCK: bool = Field(
-        default=True, description="Use mock mode for registry service"
+        default=False, description="Use mock mode for registry service"
     )
 
-    # Integration Service (port 8085)
-    INTEGRATION_SERVICE_URL: Optional[str] = Field(
-        default=None, description="URL for integration service"
+    # RAG Builder Service (port 8090) — indexing
+    RAG_BUILDER_SERVICE_URL: Optional[str] = Field(
+        default="http://rag-builder:8090", description="URL for RAG Builder service (indexing)"
     )
-    INTEGRATION_SERVICE_MOCK: bool = Field(
-        default=True, description="Use mock mode for integration service"
+    # RAG Search Service (port 8091) — search
+    RAG_SEARCH_SERVICE_URL: Optional[str] = Field(
+        default="http://rag-search:8091", description="URL for RAG Search service (search)"
     )
-
-    # Validation Service (port 8086)
-    VALIDATE_SERVICE_URL: Optional[str] = Field(
-        default=None, description="URL for validation service"
-    )
-    VALIDATE_SERVICE_MOCK: bool = Field(
-        default=True, description="Use mock mode for validation service"
-    )
-
-    # RAG Service (port 8087)
+    # Deprecated: use RAG_BUILDER_SERVICE_URL
     RAG_SERVICE_URL: Optional[str] = Field(
-        default=None, description="URL for rag service"
+        default=None, description="[DEPRECATED] Use RAG_BUILDER_SERVICE_URL"
     )
     RAG_SERVICE_MOCK: bool = Field(
-        default=True, description="Use mock mode for rag service"
+        default=False, description="Use mock mode for rag service"
     )
+
+    @model_validator(mode='after')
+    def _sync_rag_urls(self):
+        if self.RAG_SERVICE_URL is not None:
+            self.RAG_BUILDER_SERVICE_URL = self.RAG_SERVICE_URL
+        return self
 
     # OCR Service (port 8088)
     OCR_SERVICE_URL: Optional[str] = Field(
-        default=None, description="URL for OCR service"
+        default="http://ocr-service:8088", description="URL for OCR service"
     )
     OCR_SERVICE_MOCK: bool = Field(
-        default=True, description="Use mock mode for OCR service"
+        default=False, description="Use mock mode for OCR service"
+    )
+
+    # Parser Service (port 8089)
+    PARSER_SERVICE_URL: Optional[str] = Field(
+        default="http://parser-service:8089", description="URL for parser service"
+    )
+    PARSER_SERVICE_MOCK: bool = Field(
+        default=False, description="Use mock mode for parser service"
+    )
+
+    # Converter-Validator Service (port 8090)
+    CONVERTER_SERVICE_URL: Optional[str] = Field(
+        default="http://converter-service:8090", description="URL for converter-validator service"
+    )
+    CONVERTER_SERVICE_MOCK: bool = Field(
+        default=False, description="Use mock mode for converter-validator service"
+    )
+
+
+class PipelineConfig(BaseSettings):
+    """Pipeline execution parameters."""
+
+    # Max retries per step before failing the pipeline
+    MAX_STEP_RETRIES: int = Field(default=3, description="Max retry attempts per step")
+
+    # Base delay for exponential backoff (seconds)
+    RETRY_BASE_DELAY: int = Field(default=60, description="Base retry delay in seconds")
+
+    # Circuit breaker: failure threshold
+    CIRCUIT_FAILURE_THRESHOLD: int = Field(
+        default=5, description="Failures before circuit opens"
+    )
+
+    # Circuit breaker: recovery timeout (seconds)
+    CIRCUIT_RECOVERY_TIMEOUT: int = Field(
+        default=60, description="Seconds before circuit resets"
+    )
+
+    # Step-specific timeouts (seconds)
+    STEP_TIMEOUT_OCR: int = Field(default=300, description="OCR step timeout")
+    STEP_TIMEOUT_PARSER: int = Field(default=300, description="Parser step timeout")
+    STEP_TIMEOUT_CONVERTER: int = Field(
+        default=120, description="Converter step timeout"
+    )
+    STEP_TIMEOUT_REGISTRY: int = Field(
+        default=30, description="Registry step timeout"
+    )
+    STEP_TIMEOUT_RAG_INDEX: int = Field(
+        default=300, description="RAG Index step timeout"
+    )
+
+    # Saga compensation timeout
+    SAGA_COMPENSATION_TIMEOUT: int = Field(
+        default=60, description="Timeout per compensation action"
+    )
+
+    # Dead job detection: max time a job can be in "running" state
+    MAX_JOB_RUNNING_TIME: int = Field(
+        default=3600, description="Max seconds a job can stay running"
+    )
+
+    # Per-state timeout: max time a step can stay in 'pending' before being marked stale
+    PENDING_STATE_TIMEOUT: int = Field(
+        default=30,
+        description="Max seconds a step can stay in pending state (P3S-1)",
+    )
+
+    # Absolute task timeout: max total time for any pipeline task
+    ABSOLUTE_TASK_TIMEOUT_HOURS: int = Field(
+        default=48,
+        description="Max hours a task can exist before being killed (P3S-1)",
+    )
+
+    # Full phase mode (P1F-9): auto | partial | full
+    # auto  — full_completed (preview_not_supported) → skip OCR, else full OCR
+    # partial — always run full OCR/Parser even if full preview is available
+    # full   — skip full OCR/Parser entirely (full_completed must be True)
+    FULL_PHASE_MODE: str = Field(
+        default="auto",
+        description="Full phase strategy: auto | partial | full",
+    )
+
+
+class HTTPClientConfig(BaseSettings):
+    """HTTP client settings for external service calls."""
+
+    # Default timeout for HTTP requests (seconds)
+    DEFAULT_TIMEOUT: int = Field(
+        default=30, description="Default HTTP request timeout"
+    )
+
+    # Connection timeout (seconds)
+    CONNECT_TIMEOUT: int = Field(
+        default=10, description="TCP connection timeout"
+    )
+
+    # Read timeout (seconds)
+    READ_TIMEOUT: int = Field(
+        default=30, description="HTTP read/response timeout"
+    )
+
+    # Pool timeout (seconds) — max time to wait for a connection from pool
+    POOL_TIMEOUT: int = Field(
+        default=5, description="Connection pool timeout"
+    )
+
+    # Connection pool limits
+    POOL_CONNECTIONS: int = Field(
+        default=50, description="Max connections in pool"
+    )
+    POOL_MAX_SIZE: int = Field(
+        default=100, description="Max keepalive connections"
+    )
+
+    # Retry settings
+    MAX_RETRIES: int = Field(
+        default=3, description="Max retries for HTTP requests"
+    )
+    RETRY_BACKOFF_FACTOR: float = Field(
+        default=2.0, description="Exponential backoff multiplier"
     )
 
 
@@ -79,7 +181,7 @@ class Settings(BaseSettings):
 
     # Server
     HOST: str = "0.0.0.0"
-    PORT: int = 8000
+    PORT: int = 8081
 
     # API
     API_V1_PREFIX: str = "/api/v1"
@@ -90,13 +192,49 @@ class Settings(BaseSettings):
     )
     JWT_ALGORITHM: str = "HS256"
 
-    # External Services Configuration
-    services: ServiceConfig = ServiceConfig()
+    # Database
+    DATABASE_URL: str = Field(
+        default="sqlite+aiosqlite:///./orchestrator.db",
+        description="Async SQLAlchemy database URL",
+    )
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        env_nested_delimiter = "__"
+    # Redis
+    REDIS_URL: str = Field(
+        default="redis://localhost:6379/0", description="Redis connection URL"
+    )
+
+    # Celery
+    CELERY_BROKER_URL: str = Field(
+        default="redis://localhost:6379/1", description="Celery broker URL (Redis)"
+    )
+    CELERY_RESULT_BACKEND: str = Field(
+        default="redis://localhost:6379/2", description="Celery result backend URL"
+    )
+
+    # External Services Configuration
+    services: ServiceConfig = Field(
+        default_factory=ServiceConfig,
+        description="External services configuration (URL, mock mode)",
+    )
+
+    # Pipeline Configuration
+    pipeline: PipelineConfig = Field(
+        default_factory=PipelineConfig,
+        description="Pipeline execution parameters",
+    )
+
+    # HTTP Client Configuration
+    http_client: HTTPClientConfig = Field(
+        default_factory=HTTPClientConfig,
+        description="HTTP client settings for external service calls",
+    )
+
+    model_config = ConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        env_nested_delimiter="__",
+        extra="ignore",
+    )
 
 
 # Global settings instance

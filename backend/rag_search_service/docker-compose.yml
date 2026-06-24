@@ -1,0 +1,67 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: rag_search_postgres
+    environment:
+      POSTGRES_USER: rag_user
+      POSTGRES_PASSWORD: rag_password
+      POSTGRES_DB: knowledge_base
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations/init_schemas.sql:/docker-entrypoint-initdb.d/01_init.sql
+      - ./migrations/seed_data.sql:/docker-entrypoint-initdb.d/02_seed.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rag_user -d knowledge_base"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  tei-reranker:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-latest
+    container_name: rag_search_tei_reranker
+    ports:
+      - "8080:80"
+    volumes:
+      - tei_reranker_data:/data
+    environment:
+      TEI_MODEL_ID: ${TEI_MODEL_ID:-BAAI/bge-reranker-v2-m3}
+    command: --model-id ${TEI_MODEL_ID:-BAAI/bge-reranker-v2-m3} --max-client-batch-size 4 --max-batch-tokens 1024
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 360s
+
+  rag_search:
+    build: .
+    container_name: rag_search_service
+    ports:
+      - "8091:8091"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: rag_user
+      DB_PASSWORD: rag_password
+      DB_DATABASE: knowledge_base
+      EMBEDDING_BASE_URL: http://host.docker.internal:7997
+      RERANKER_BASE_URL: http://tei-reranker:80
+      LOG_LEVEL: INFO
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_INSECURE: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      tei-reranker:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8091/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  postgres_data:
+  tei_reranker_data:

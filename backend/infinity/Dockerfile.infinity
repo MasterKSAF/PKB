@@ -1,0 +1,3 @@
+FROM michaelf34/infinity:latest
+
+RUN pip install --no-cache-dir --upgrade transformers sentence-transformers==5.1.0

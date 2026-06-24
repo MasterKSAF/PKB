@@ -1,0 +1,14 @@
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.5.0
+python-multipart>=0.0.9
+httpx>=0.27.0
+
+# observability (beta-версии instrumentation — pin, не >=)
+opentelemetry-api==1.27.0
+opentelemetry-sdk==1.27.0
+opentelemetry-exporter-otlp==1.27.0
+opentelemetry-instrumentation-fastapi==0.48b0
+
+# tests (не нужны в runtime, но оставлены для локальной разработки)
+pytest>=7.0

@@ -1,0 +1,3555 @@
+{
+  "info": {
+    "name": "PKB Neuroassistant \u2014 Gateway API",
+    "description": "Polnaya kollekciya endpoint-ov Gateway Service (v1.2.0).\n\nPeremennye okruzheniya:\n- {{base_url}}: http://127.0.0.1:8080 (Gateway)\n- {{mock_url}}: http://127.0.0.1:8099 (Mock)\n- {{access_token}}: zapolnyaetsya posle /auth/login\n- {{refresh_token}}: dlya obnovleniya tokena",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8080"
+    },
+    {
+      "key": "mock_url",
+      "value": "http://127.0.0.1:8099"
+    },
+    {
+      "key": "access_token",
+      "value": ""
+    },
+    {
+      "key": "refresh_token",
+      "value": ""
+    },
+    {
+      "key": "user_id",
+      "value": "1"
+    },
+    {
+      "key": "doc_id",
+      "value": "1"
+    },
+    {
+      "key": "draft_id",
+      "value": "1"
+    },
+    {
+      "key": "session_id",
+      "value": "1"
+    },
+    {
+      "key": "task_id",
+      "value": "1"
+    },
+    {
+      "key": "classifier_code",
+      "value": "73.020"
+    },
+    {
+      "key": "term_id",
+      "value": "1"
+    },
+    {
+      "key": "pending_id",
+      "value": "1"
+    },
+    {
+      "key": "category_id",
+      "value": "1"
+    },
+    {
+      "key": "message_id",
+      "value": "1"
+    },
+    {
+      "key": "project_id",
+      "value": "1"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "System",
+      "description": "Sobstvennye endpoints Gateway",
+      "item": [
+        {
+          "name": "GET /api/v1/health",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "health"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/system/health",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/system/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "system",
+                "health"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/system/mode",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/system/mode",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "system",
+                "mode"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/monitor/metrics",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/monitor/metrics",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "monitor",
+                "metrics"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/system/health/live",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/system/health/live",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "system",
+                "health",
+                "live"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/system/health/ready",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/system/health/ready",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "system",
+                "health",
+                "ready"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "description": "Autentifikaciya",
+      "item": [
+        {
+          "name": "POST /api/v1/auth/login",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin@example.com\",\n  \"password\": \"Admin@123456\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Login ok', () => {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                  "  pm.expect(json).to.have.property('access_token');",
+                  "});",
+                  "if (json.access_token) pm.collectionVariables.set('access_token', json.access_token);",
+                  "if (json.refresh_token) pm.collectionVariables.set('refresh_token', json.refresh_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/v1/auth/token",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/token",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "token"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin@example.com\",\n  \"password\": \"Admin@123456\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Login ok', () => {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                  "  pm.expect(json).to.have.property('access_token');",
+                  "});",
+                  "if (json.access_token) pm.collectionVariables.set('access_token', json.access_token);",
+                  "if (json.refresh_token) pm.collectionVariables.set('refresh_token', json.refresh_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/v1/auth/refresh",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/refresh",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "refresh"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/auth/revoke",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/revoke",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "revoke"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/auth/me",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "me"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/internal/auth/validate",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/internal/auth/validate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "internal",
+                "auth",
+                "validate"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"access_token\": \"{{access_token}}\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "description": "Upravlenie polzovatelyami",
+      "item": [
+        {
+          "name": "GET /api/v1/admin/users",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/users?page=1&page_size=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "20"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/admin/users",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/users",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"engineer@test.com\",\n  \"full_name\": \"Engineer\",\n  \"password\": \"Pass1234!\",\n  \"roles\": [\n    \"engineer\"\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/admin/users/{{user_id}}",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/users/{{user_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                "{{user_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PUT /api/v1/admin/users/{{user_id}}",
+          "request": {
+            "method": "PUT",
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/users/{{user_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                "{{user_id}}"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Updated\",\n  \"roles\": [\n    \"engineer\"\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "PATCH /api/v1/admin/users/{{user_id}}",
+          "request": {
+            "method": "PATCH",
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/users/{{user_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                "{{user_id}}"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roles\": [\n    \"admin\"\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "DELETE /api/v1/admin/users/{{user_id}}",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/users/{{user_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                "{{user_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/admin/roles",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/roles",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "roles"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/admin/roles",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/roles",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "roles"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"reviewer\",\n  \"permissions\": [\n    \"can_view_documents\"\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/admin/audit",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/audit?page=1&page_size=50",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "audit"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "50"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Chat",
+      "description": "Chat (Query Service)",
+      "item": [
+        {
+          "name": "POST /api/v1/chat",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "chat"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"Kakie dopuski dlya Arc4?\",\n  \"session_id\": 1\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/chat/sessions",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/sessions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "chat",
+                "sessions"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Test\",\n  \"document_ids\": [\n    1\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/chat/sessions",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/sessions?page=1&page_size=50",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "chat",
+                "sessions"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "50"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/chat/sessions/{{session_id}}",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/sessions/{{session_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "chat",
+                "sessions",
+                "{{session_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PUT /api/v1/chat/sessions/{{session_id}}",
+          "request": {
+            "method": "PUT",
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/sessions/{{session_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "chat",
+                "sessions",
+                "{{session_id}}"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated\",\n  \"document_ids\": [\n    1,\n    2\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "DELETE /api/v1/chat/sessions/{{session_id}}",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/sessions/{{session_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "chat",
+                "sessions",
+                "{{session_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/chat/projects",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/projects",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "chat",
+                "projects"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"PRJ-1\",\n  \"name\": \"Project 1\",\n  \"status\": \"active\"\n}"
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/chat/projects",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/projects?page=1&page_size=50",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "chat",
+                "projects"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "50"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/chat/projects/{{project_id}}",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/projects/{{project_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "chat",
+                "projects",
+                "{{project_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PUT /api/v1/chat/projects/{{project_id}}",
+          "request": {
+            "method": "PUT",
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/projects/{{project_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "chat",
+                "projects",
+                "{{project_id}}"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated\",\n  \"status\": \"completed\"\n}"
+            }
+          }
+        },
+        {
+          "name": "DELETE /api/v1/chat/projects/{{project_id}}",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/projects/{{project_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "chat",
+                "projects",
+                "{{project_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/chat/sessions/{{session_id}}/messages",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/sessions/{{session_id}}/messages",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "chat",
+                "sessions",
+                "{{session_id}}",
+                "messages"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Tolshchina obshivki?\"\n}"
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/chat/sessions/{{session_id}}/messages",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/sessions/{{session_id}}/messages?limit=50",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "chat",
+                "sessions",
+                "{{session_id}}",
+                "messages"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/chat/sessions/{{session_id}}/messages/last",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/sessions/{{session_id}}/messages/last?limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "chat",
+                "sessions",
+                "{{session_id}}",
+                "messages",
+                "last"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/chat/sessions/{{session_id}}/messages/{{message_id}}",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/sessions/{{session_id}}/messages/{{message_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "chat",
+                "sessions",
+                "{{session_id}}",
+                "messages",
+                "{{message_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/chat/sessions/{{session_id}}/messages/search",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/sessions/{{session_id}}/messages/search",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "chat",
+                "sessions",
+                "{{session_id}}",
+                "messages",
+                "search"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"dopusk\",\n  \"limit\": 10\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/chat/sessions/{{session_id}}/context",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/sessions/{{session_id}}/context",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "chat",
+                "sessions",
+                "{{session_id}}",
+                "context"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"add_document\",\n  \"document_ids\": [\n    3\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/chat/sessions/{{session_id}}/context/export",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/sessions/{{session_id}}/context/export",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "chat",
+                "sessions",
+                "{{session_id}}",
+                "context",
+                "export"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"format\": \"pdf\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/chat/sessions/{{session_id}}/export",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/sessions/{{session_id}}/export",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "chat",
+                "sessions",
+                "{{session_id}}",
+                "export"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"format\": \"pdf\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/chat/feedback",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/feedback",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "chat",
+                "feedback"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_id\": 1,\n  \"message_id\": 1,\n  \"rating\": 5,\n  \"rating_status\": \"positive\"\n}"
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/chat/history",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/history?page=1&page_size=50",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "chat",
+                "history"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "50"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/chat/history/export",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/chat/history/export?format=csv",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "chat",
+                "history",
+                "export"
+              ],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "csv"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Text",
+      "description": "Tekstovyj poisk",
+      "item": [
+        {
+          "name": "POST /api/v1/text/search",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/text/search",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "text",
+                "search"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"tolshchina obshivki\",\n  \"valid_at\": \"2026-06-23\",\n  \"top_k\": 5\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/text/ask",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/text/ask",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "text",
+                "ask"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Kakaya stal pri -40C?\",\n  \"document_ids\": [\n    1,\n    2\n  ]\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Documents",
+      "description": "Dokumenty v pajplajne (Orchestrator)",
+      "item": [
+        {
+          "name": "GET /api/v1/documents",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/documents?page=1&page_size=50",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "documents"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "50"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/documents/{{doc_id}}",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/documents/{{doc_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "documents",
+                "{{doc_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/documents/{{doc_id}}/status",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/documents/{{doc_id}}/status?longpoll=15",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "documents",
+                "{{doc_id}}",
+                "status"
+              ],
+              "query": [
+                {
+                  "key": "longpoll",
+                  "value": "15"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/documents/{{doc_id}}/file",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/documents/{{doc_id}}/file",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "documents",
+                "{{doc_id}}",
+                "file"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/documents/queue",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/documents/queue?page=1&page_size=50",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "documents",
+                "queue"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "50"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/documents/{{doc_id}}/errors",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/documents/{{doc_id}}/errors?page=1&page_size=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "documents",
+                "{{doc_id}}",
+                "errors"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "20"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/documents/{{doc_id}}/versions",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/documents/{{doc_id}}/versions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "documents",
+                "{{doc_id}}",
+                "versions"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"file_key\": \"v2-xxx\"\n}"
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/documents/{{doc_id}}/versions",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/documents/{{doc_id}}/versions?page=1&page_size=50",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "documents",
+                "{{doc_id}}",
+                "versions"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "50"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/documents/{{doc_id}}/pages",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/documents/{{doc_id}}/pages?page=1&page_size=50",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "documents",
+                "{{doc_id}}",
+                "pages"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "50"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/documents/{{doc_id}}/pages/1",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/documents/{{doc_id}}/pages/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "documents",
+                "{{doc_id}}",
+                "pages",
+                "1"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/documents/{{doc_id}}/pages/1/text",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/documents/{{doc_id}}/pages/1/text",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "documents",
+                "{{doc_id}}",
+                "pages",
+                "1",
+                "text"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/documents/{{doc_id}}/pages/1/preview",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/documents/{{doc_id}}/pages/1/preview",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "documents",
+                "{{doc_id}}",
+                "pages",
+                "1",
+                "preview"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/documents/{{doc_id}}/parameters",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/documents/{{doc_id}}/parameters",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "documents",
+                "{{doc_id}}",
+                "parameters"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/documents/{{doc_id}}/history",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/documents/{{doc_id}}/history",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "documents",
+                "{{doc_id}}",
+                "history"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/documents/{{doc_id}}/reprocess",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/documents/{{doc_id}}/reprocess",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "documents",
+                "{{doc_id}}",
+                "reprocess"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/documents/search",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/documents/search",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "documents",
+                "search"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"tolshchina\",\n  \"top_k\": 10\n}"
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/documents/search",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/documents/search?q=tolshchina&top_k=5",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "documents",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "tolshchina"
+                },
+                {
+                  "key": "top_k",
+                  "value": "5"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE /api/v1/documents/{{doc_id}}",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/api/v1/documents/{{doc_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "documents",
+                "{{doc_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/monitor/health",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/monitor/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "monitor",
+                "health"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Drafts",
+      "description": "Chernoviki pajplajna (Orchestrator)",
+      "item": [
+        {
+          "name": "POST /api/v1/drafts",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/drafts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Test doc\",\n  \"file_key\": \"test.pdf\",\n  \"document_key\": \"doc-001\"\n}"
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/drafts",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/drafts?page=1&page_size=50",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "50"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/drafts/{{draft_id}}",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/drafts/{{draft_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts",
+                "{{draft_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/drafts/{{draft_id}}/preview",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/drafts/{{draft_id}}/preview",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts",
+                "{{draft_id}}",
+                "preview"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/drafts/{{draft_id}}/preview",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/drafts/{{draft_id}}/preview",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts",
+                "{{draft_id}}",
+                "preview"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/drafts/{{draft_id}}/preview/status",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/drafts/{{draft_id}}/preview/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts",
+                "{{draft_id}}",
+                "preview",
+                "status"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PATCH /api/v1/drafts/{{draft_id}}/decide",
+          "request": {
+            "method": "PATCH",
+            "url": {
+              "raw": "{{base_url}}/api/v1/drafts/{{draft_id}}/decide",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts",
+                "{{draft_id}}",
+                "decide"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"approve\",\n  \"comment\": \"OK\"\n}"
+            }
+          }
+        },
+        {
+          "name": "PATCH /api/v1/drafts/{{draft_id}}/metadata",
+          "request": {
+            "method": "PATCH",
+            "url": {
+              "raw": "{{base_url}}/api/v1/drafts/{{draft_id}}/metadata",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts",
+                "{{draft_id}}",
+                "metadata"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated title\",\n  \"source_type\": \"GOST\"\n}"
+            }
+          }
+        },
+        {
+          "name": "DELETE /api/v1/drafts/{{draft_id}}",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/api/v1/drafts/{{draft_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts",
+                "{{draft_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/drafts/{{draft_id}}/tasks",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/drafts/{{draft_id}}/tasks",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "drafts",
+                "{{draft_id}}",
+                "tasks"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tasks",
+      "description": "Zadachi (Orchestrator)",
+      "item": [
+        {
+          "name": "GET /api/v1/tasks/{{task_id}}/status",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/{{task_id}}/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{task_id}}",
+                "status"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/tasks/{{task_id}}/steps",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/{{task_id}}/steps",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{task_id}}",
+                "steps"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Registry: Documents",
+      "description": "Reestr dokumentov",
+      "item": [
+        {
+          "name": "GET /api/v1/registry/documents",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/documents?page=1&page_size=50",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "documents"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "50"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/registry/documents/{{doc_id}}",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/documents/{{doc_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "documents",
+                "{{doc_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/registry/documents",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/documents",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "documents"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"GOST 12345\",\n  \"doc_code\": \"GOST 12345\",\n  \"source_type\": \"GOST\",\n  \"status\": \"approved\",\n  \"era\": \"RF\",\n  \"validity_status\": \"active\",\n  \"jurisdiction\": \"RF\"\n}"
+            }
+          }
+        },
+        {
+          "name": "PUT /api/v1/registry/documents/{{doc_id}}",
+          "request": {
+            "method": "PUT",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/documents/{{doc_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "documents",
+                "{{doc_id}}"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated title\",\n  \"status\": \"approved\"\n}"
+            }
+          }
+        },
+        {
+          "name": "PATCH /api/v1/registry/documents/{{doc_id}}",
+          "request": {
+            "method": "PATCH",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/documents/{{doc_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "documents",
+                "{{doc_id}}"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Patched title\"\n}"
+            }
+          }
+        },
+        {
+          "name": "DELETE /api/v1/registry/documents/{{doc_id}}",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/documents/{{doc_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "documents",
+                "{{doc_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PATCH /api/v1/registry/documents/{{doc_id}}/status",
+          "request": {
+            "method": "PATCH",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/documents/{{doc_id}}/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "documents",
+                "{{doc_id}}",
+                "status"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"archived\",\n  \"comment\": \"Archived\"\n}"
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/registry/documents/{{doc_id}}/sections",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/documents/{{doc_id}}/sections",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "documents",
+                "{{doc_id}}",
+                "sections"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/registry/documents/{{doc_id}}/file",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/documents/{{doc_id}}/file",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "documents",
+                "{{doc_id}}",
+                "file"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/registry/documents/{{doc_id}}/history",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/documents/{{doc_id}}/history",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "documents",
+                "{{doc_id}}",
+                "history"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/registry/documents/{{doc_id}}/succession",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/documents/{{doc_id}}/succession",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "documents",
+                "{{doc_id}}",
+                "succession"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/registry/documents/{{doc_id}}/versions",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/documents/{{doc_id}}/versions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "documents",
+                "{{doc_id}}",
+                "versions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/registry/documents/{{doc_id}}/parameters",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/documents/{{doc_id}}/parameters",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "documents",
+                "{{doc_id}}",
+                "parameters"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/registry/documents/export",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/documents/export?format=json",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "documents",
+                "export"
+              ],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "json"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/registry/documents/import",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/documents/import",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "documents",
+                "import"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mode\": \"upsert\",\n  \"data\": [\n    {\n      \"title\": \"Imported\",\n      \"doc_code\": \"IMP-1\",\n      \"source_type\": \"GOST\",\n      \"status\": \"approved\",\n      \"era\": \"RF\",\n      \"validity_status\": \"active\",\n      \"jurisdiction\": \"RF\"\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/registry/documents/check-uniqueness",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/documents/check-uniqueness",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "documents",
+                "check-uniqueness"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Unique check\",\n  \"file_size_bytes\": 1024\n}"
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/registry/search",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/search?q=GOST",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "GOST"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Registry: Classifiers",
+      "description": "Klassifikatory",
+      "item": [
+        {
+          "name": "GET /api/v1/registry/classifiers",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/classifiers?page=1&page_size=50",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "classifiers"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "50"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/registry/classifiers/tree",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/classifiers/tree",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "classifiers",
+                "tree"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/registry/classifiers/validate",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/classifiers/validate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "classifiers",
+                "validate"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"classification\": {\n    \"mks_oks_code\": \"73.020\",\n    \"code\": \"73.020\"\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/registry/classifiers/{{classifier_code}}",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/classifiers/{{classifier_code}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "classifiers",
+                "{{classifier_code}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/registry/classifiers",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/classifiers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "classifiers"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"classifier_system\": \"MKS\",\n  \"code\": \"01.040\",\n  \"full_name\": \"General terms\",\n  \"status\": \"active\",\n  \"effective_date\": \"2024-01-01\"\n}"
+            }
+          }
+        },
+        {
+          "name": "PUT /api/v1/registry/classifiers/{{classifier_code}}",
+          "request": {
+            "method": "PUT",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/classifiers/{{classifier_code}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "classifiers",
+                "{{classifier_code}}"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Updated\",\n  \"status\": \"deprecated\"\n}"
+            }
+          }
+        },
+        {
+          "name": "PATCH /api/v1/registry/classifiers/{{classifier_code}}",
+          "request": {
+            "method": "PATCH",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/classifiers/{{classifier_code}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "classifiers",
+                "{{classifier_code}}"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"archived\"\n}"
+            }
+          }
+        },
+        {
+          "name": "DELETE /api/v1/registry/classifiers/{{classifier_code}}",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/classifiers/{{classifier_code}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "classifiers",
+                "{{classifier_code}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/registry/classifiers/quarantine",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/classifiers/quarantine?page=1&page_size=50",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "classifiers",
+                "quarantine"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "50"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/registry/classifiers/quarantine/{{pending_id}}/accept",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/classifiers/quarantine/{{pending_id}}/accept",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "classifiers",
+                "quarantine",
+                "{{pending_id}}",
+                "accept"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"admin_comment\": \"Accepted\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/registry/classifiers/quarantine/{{pending_id}}/reject",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/classifiers/quarantine/{{pending_id}}/reject",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "classifiers",
+                "quarantine",
+                "{{pending_id}}",
+                "reject"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"admin_comment\": \"Rejected\"\n}"
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/registry/classifiers/pending",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/classifiers/pending?page=1&page_size=50",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "classifiers",
+                "pending"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "50"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/registry/classifiers/pending/{{pending_id}}/accept",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/classifiers/pending/{{pending_id}}/accept",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "classifiers",
+                "pending",
+                "{{pending_id}}",
+                "accept"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"admin_comment\": \"Accepted\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/registry/classifiers/pending/{{pending_id}}/reject",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/classifiers/pending/{{pending_id}}/reject",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "classifiers",
+                "pending",
+                "{{pending_id}}",
+                "reject"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"admin_comment\": \"Rejected\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/registry/pending/{{pending_id}}/accept",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/pending/{{pending_id}}/accept",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "pending",
+                "{{pending_id}}",
+                "accept"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/registry/pending/{{pending_id}}/reject",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/pending/{{pending_id}}/reject",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "pending",
+                "{{pending_id}}",
+                "reject"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/registry/classifiers/import",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/classifiers/import",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "classifiers",
+                "import"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"code\": \"NEW-001\",\n    \"classifier_system\": \"MKS\",\n    \"full_name\": \"New classifier\",\n    \"status\": \"active\"\n  }\n]"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Registry: Terminology",
+      "description": "Terminologiya",
+      "item": [
+        {
+          "name": "GET /api/v1/registry/terminology",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/terminology?page=1&page_size=50",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "terminology"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "50"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/registry/terminology/normalize",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/terminology/normalize?term=GOST",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "terminology",
+                "normalize"
+              ],
+              "query": [
+                {
+                  "key": "term",
+                  "value": "GOST"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/registry/terminology/{{term_id}}",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/terminology/{{term_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "terminology",
+                "{{term_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/registry/terminology",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/terminology",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "terminology"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"raw_term\": \"Tolshchina\",\n  \"standard_term\": \"tolshchina\",\n  \"term_type\": \"avatar\",\n  \"is_case_sensitive\": false\n}"
+            }
+          }
+        },
+        {
+          "name": "PUT /api/v1/registry/terminology/{{term_id}}",
+          "request": {
+            "method": "PUT",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/terminology/{{term_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "terminology",
+                "{{term_id}}"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"standard_term\": \"tolshchina (updated)\"\n}"
+            }
+          }
+        },
+        {
+          "name": "DELETE /api/v1/registry/terminology/{{term_id}}",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/terminology/{{term_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "terminology",
+                "{{term_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/registry/terminology/import",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/terminology/import",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "terminology",
+                "import"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"raw_term\": \"Dopusk\",\n    \"standard_term\": \"dopusk\",\n    \"term_type\": \"avatar\"\n  }\n]"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Registry: Drafts",
+      "description": "Chernoviki reestra",
+      "item": [
+        {
+          "name": "POST /api/v1/registry/drafts",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/drafts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "drafts"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"file_key\": \"test.pdf\",\n  \"document_key\": \"doc-1\",\n  \"status\": \"uploaded\"\n}"
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/registry/drafts",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/drafts?page=1&page_size=50",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "drafts"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "50"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/registry/drafts/{{draft_id}}",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/drafts/{{draft_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "drafts",
+                "{{draft_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/registry/drafts/{{draft_id}}/preview",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/drafts/{{draft_id}}/preview",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "drafts",
+                "{{draft_id}}",
+                "preview"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PATCH /api/v1/registry/drafts/{{draft_id}}/status",
+          "request": {
+            "method": "PATCH",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/drafts/{{draft_id}}/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "drafts",
+                "{{draft_id}}",
+                "status"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"processing\",\n  \"confidence\": 0.95\n}"
+            }
+          }
+        },
+        {
+          "name": "DELETE /api/v1/registry/drafts/{{draft_id}}",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/drafts/{{draft_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "drafts",
+                "{{draft_id}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Registry: Categories",
+      "description": "Kategorii",
+      "item": [
+        {
+          "name": "GET /api/v1/registry/categories",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/categories?page=1&page_size=50",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "categories"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "50"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/registry/categories/{{category_id}}",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/categories/{{category_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "categories",
+                "{{category_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /api/v1/registry/categories",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/categories",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "categories"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Shipbuilding\",\n  \"description\": \"Ship docs\",\n  \"color\": \"#2196F3\"\n}"
+            }
+          }
+        },
+        {
+          "name": "PUT /api/v1/registry/categories/{{category_id}}",
+          "request": {
+            "method": "PUT",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/categories/{{category_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "categories",
+                "{{category_id}}"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Mechanical\",\n  \"description\": \"Updated\"\n}"
+            }
+          }
+        },
+        {
+          "name": "DELETE /api/v1/registry/categories/{{category_id}}",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/categories/{{category_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "categories",
+                "{{category_id}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Registry: Common",
+      "description": "Obshie endpoints reestra",
+      "item": [
+        {
+          "name": "GET /api/v1/registry/common/stats",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/common/stats",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "common",
+                "stats"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/registry/stats",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/stats",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "stats"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/registry/common/enums",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/common/enums",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "common",
+                "enums"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/registry/enums",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/enums",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "enums"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/v1/registry/health",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/registry/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "registry",
+                "health"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "RAG Search",
+      "description": " semanticheskij poisk",
+      "item": [
+        {
+          "name": "POST /api/v1/rag/search",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/v1/rag/search",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "rag",
+                "search"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"tolshchina obshivki Arc4\",\n  \"valid_at\": \"2026-06-23\",\n  \"filters\": {\n    \"document_ids\": [\n      1,\n      2\n    ]\n  }\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Deprecated",
+      "description": "Otkluchyonnye endpoints (410)",
+      "item": [
+        {
+          "name": "GET /api/v1/meridian/test",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/meridian/test",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "meridian",
+                "test"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 410 Gone', () => pm.expect(pm.response.code).to.equal(410));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/v1/files/external/test",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/files/external/test",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "files",
+                "external",
+                "test"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 410 Gone', () => pm.expect(pm.response.code).to.equal(410));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/v1/external/test",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/external/test",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "external",
+                "test"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 410 Gone', () => pm.expect(pm.response.code).to.equal(410));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

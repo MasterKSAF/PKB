@@ -5,39 +5,40 @@ Forming unified API responses
 from fastapi import HTTPException
 
 
-def get_status(code: int) -> dict | None:
+# List of (http_code, code_name, message) — supports multiple codes per HTTP status
+STATUS_CODES = [
+    (200, "OK", "Успех"),
+    (201, "CREATED", "Создан ресурс"),
+    (202, "ACCEPTED", "Запрос принят"),
+    (400, "BAD_REQUEST", "Неверные параметры запроса"),
+    (401, "UNAUTHORIZED", "Нет доступа — клиент не известен"),
+    (403, "FORBIDDEN", "Нет доступа — нет прав на ресурс"),
+    (404, "NOT_FOUND", "Ресурс не найден"),
+    (408, "DECISION_TIMEOUT", "Истекло время на принятие решения"),
+    (408, "PREVIEW_TRIGGER_TIMEOUT", "Таймаут выполнения preview фазы"),
+    (409, "CONFLICT", "Конфликт"),
+    (413, "PAYLOAD_TOO_LARGE", "Превышен размер файла"),
+    (422, "VALIDATION_FAILED", "Ошибка семантической валидации"),
+    (422, "PREVIEW_NOT_SUPPORTED", "Формат файла не поддерживает preview режим"),
+    (500, "INTERNAL_ERROR", "Внутренняя ошибка сервера"),
+    (501, "NOT_IMPLEMENTED", "Метод не реализован"),
+    (503, "SERVICE_UNAVAILABLE", "Сервис временно недоступен"),
+    (504, "GATEWAY_TIMEOUT", "Таймаут при вызове внутреннего сервиса"),
+]
+
+
+def get_status(http_code: int, code_name: str | None = None) -> dict | None:
     """
     Returns error code information.
+
+    If code_name is provided, returns matching (http_code, code_name) pair.
+    Otherwise, returns the first match for the given http_code.
     """
-    status_codes = {
-        200: {"code_name": "OK", "message": "Успех"},
-        201: {"code_name": "CREATED", "message": "Создан ресурс"},
-        202: {"code_name": "ACCEPTED", "message": "Запрос принят"},
-        400: {"code_name": "BAD_REQUEST", "message": "Неверные параметры запроса"},
-        401: {
-            "code_name": "UNAUTHORIZED",
-            "message": "Нет доступа — клиент не известен",
-        },
-        403: {"code_name": "FORBIDDEN", "message": "Нет доступа — нет прав на ресурс"},
-        404: {"code_name": "NOT_FOUND", "message": "Ресурс не найден"},
-        409: {"code_name": "CONFLICT", "message": "Конфликт"},
-        413: {"code_name": "PAYLOAD_TOO_LARGE", "message": "Превышен размер файла"},
-        422: {
-            "code_name": "VALIDATION_FAILED",
-            "message": "Ошибка семантической валидации",
-        },
-        500: {"code_name": "INTERNAL_ERROR", "message": "Внутренняя ошибка сервера"},
-        501: {"code_name": "NOT_IMPLEMENTED", "message": "Метод не реализован"},
-        503: {
-            "code_name": "SERVICE_UNAVAILABLE",
-            "message": "Сервис временно недоступен",
-        },
-        504: {
-            "code_name": "GATEWAY_TIMEOUT",
-            "message": "Таймаут при вызове внутреннего сервиса",
-        },
-    }
-    return status_codes.get(code)
+    for code, name, message in STATUS_CODES:
+        if code == http_code:
+            if code_name is None or name == code_name:
+                return {"code_name": name, "message": message}
+    return None
 
 
 class APIException(HTTPException):

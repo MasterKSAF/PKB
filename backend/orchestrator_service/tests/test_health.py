@@ -49,17 +49,19 @@ class TestHealthEndpoint:
         response = client.get("/api/v1/system/health")
         data = response.json()
         services = data["services"]
-        expected_services = {"auth", "rag", "ocr", "validation", "integration"}
+        expected_services = {"auth", "rag_builder", "rag_search", "ocr", "validation", "integration"}
         assert set(services.keys()) == expected_services
         for service_name, status in services.items():
             assert status == "ok", f"Service {service_name} should be 'ok'"
 
     def test_health_check_subsystem_status(self, client: TestClient):
-        """Subsystems like database, search_index, etc. should be 'ok'."""
+        """Subsystems should report their specific status values."""
         response = client.get("/api/v1/system/health")
         data = response.json()
-        for key in ("database", "search_index", "ocr_queue", "storage"):
-            assert data[key] == "ok", f"Subsystem {key} should be 'ok'"
+        assert data["database"] == "online", "database should be 'online'"
+        assert data["search_index"] == "ready", "search_index should be 'ready'"
+        assert data["ocr_queue"] == "idle", "ocr_queue should be 'idle'"
+        assert data["storage"] == "online", "storage should be 'online'"
 
     def test_health_check_uptime_is_positive(self, client: TestClient):
         """Uptime should be a non-negative integer."""
@@ -82,6 +84,37 @@ class TestHealthEndpoint:
         # FastAPI CORS middleware adds the header
         cors_origin = response.headers.get("access-control-allow-origin")
         assert cors_origin is not None
+
+
+class TestHealthLivenessReadiness:
+    """Tests for /health/live and /health/ready (T-12)."""
+
+    def test_health_live_returns_alive(self, client: TestClient):
+        """Liveness endpoint returns alive status."""
+        response = client.get("/api/v1/health/live")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "alive"
+        assert data["service"] == "orchestrator-service"
+
+    def test_health_live_public_no_auth(self, client: TestClient):
+        """Liveness is public."""
+        response = client.get("/api/v1/health/live", headers={})
+        assert response.status_code == 200
+
+    def test_health_ready_returns_ready(self, client: TestClient):
+        """Readiness endpoint returns ready with uptime."""
+        response = client.get("/api/v1/health/ready")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ready"
+        assert "uptime_seconds" in data
+        assert "database" in data
+
+    def test_health_ready_public_no_auth(self, client: TestClient):
+        """Readiness is public."""
+        response = client.get("/api/v1/health/ready", headers={})
+        assert response.status_code == 200
 
 
 class TestOpenAPIEndpoints:
@@ -113,7 +146,12 @@ class TestOpenAPIEndpoints:
         data = response.json()
         paths = data.get("paths", {})
         assert "/api/v1/system/health" in paths
-        assert "/api/v1/documents/" in paths
-        assert "/api/v1/documents/search" in paths
-        assert "/api/v1/ask" in paths
-        assert "/api/v1/validate/compare" in paths
+        # POST /documents/{doc_id}/reprocess — pipeline-операция переиндексации (P2I-9)
+        assert "/api/v1/documents/{doc_id}/reprocess" in paths
+        # GET /documents/{doc_id}/tasks — задачи документа
+        assert "/api/v1/documents/{doc_id}/tasks" in paths
+        # list_drafts — не должен присутствовать (GET), удалён при рефакторинге
+        assert "get" not in paths.get("/api/v1/drafts/", {})
+        # GET /drafts/{draft_id} — прокси в Registry (добавлен для совместимости)
+        assert "get" in paths.get("/api/v1/drafts/{draft_id}", {})
+

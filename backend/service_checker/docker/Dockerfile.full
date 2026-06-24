@@ -1,0 +1,71 @@
+# =============================================================================
+# PKB Neuroassistant — Python base image
+#
+# Содержит: Python 3.13 + все pip-пакеты, supervisord, entrypoint
+# Без PostgreSQL, Redis, MinIO — они ставятся отдельными контейнерами.
+# =============================================================================
+
+FROM python:3.13-slim-bookworm
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# ---- 1. Системные зависимости ----
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    supervisor \
+    libpq5 \
+    libmagic1 \
+    default-jre \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# ---- 2. Python-зависимости (всех backend-сервисов) ----
+COPY requirements.txt /tmp/
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r /tmp/requirements.txt \
+    && rm -rf /root/.cache
+
+# ---- 3. Конфиги ----
+COPY backend/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY backend/entrypoint.sh /entrypoint.sh
+RUN sed -i 's/\r$//' /entrypoint.sh /etc/supervisor/conf.d/supervisord.conf && \
+    chmod +x /entrypoint.sh && \
+    mkdir -p /var/log/supervisor /var/run/supervisor
+
+WORKDIR /app
+
+# ---- 4. Код сервисов ----
+COPY backend/ ./backend/
+
+# ---- 5. Порты (только Python-сервисы) ----
+EXPOSE 8000 8081 8082 8083 8084 8085 8086 8087 8090 8091 8092
+
+# ---- 6. ENV по умолчанию ----
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    TZ=Europe/Moscow \
+    PYTHONPATH="/app/backend:/app/backend/shared:/app/backend/rag_builder_service/src" \
+    DB_HOST=postgres \
+    DB_PORT=5432 \
+    DB_USERNAME=pkb \
+    DB_PASSWORD=pkb \
+    DB_DATABASE=pkb_neuro \
+    DATABASE_URL=postgresql+asyncpg://pkb:pkb@postgres:5432/pkb_neuro \
+    REDIS_URL=redis://redis:6379/0 \
+    CELERY_BROKER_URL=redis://redis:6379/1 \
+    CELERY_RESULT_BACKEND=redis://redis:6379/2 \
+    MINIO_ENDPOINT=minio:9000 \
+    MINIO_ACCESS_KEY=minioadmin \
+    MINIO_SECRET_KEY=minioadmin \
+    MINIO_BUCKET=documents \
+    MINIO_IMAGE_BUCKET=images \
+    MINIO_SECURE=false \
+    AUTH_SERVICE_MOCK=true \
+    DEV_AUTH_MODE=true \
+    MOCK_LLM_ENABLED=true \
+    REGISTRY_SERVICE_URL=http://registry:8084/api/v1 \
+    INTEGRATION_SERVICE_URL=http://integration:8085/api/v1 \
+    VALIDATE_SERVICE_URL=http://converter-validator:8086/api/v1 \
+    RAG_SERVICE_URL=http://rag-search:8091/api/v1
+
+ENTRYPOINT ["/entrypoint.sh"]
