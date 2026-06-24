@@ -219,6 +219,31 @@ def index_document(
             },
         )
 
+    max_active_jobs = settings.MAX_ACTIVE_INDEXING_JOBS
+
+    if max_active_jobs > 0:
+        active_jobs_count = repository.count_active_indexing_jobs(
+            settings.INDEXING_JOB_STALE_AFTER_SECONDS,
+        )
+
+        if active_jobs_count >= max_active_jobs:
+            logger.warning(
+                "Reject indexing job because active jobs limit is reached: %s/%s",
+                active_jobs_count,
+                max_active_jobs,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail={
+                    "code": "TOO_MANY_REQUESTS",
+                    "message": "Too many active indexing jobs",
+                    "details": {
+                        "active_jobs": active_jobs_count,
+                        "max_active_jobs": max_active_jobs,
+                    },
+                },
+            )
+
     indexing_txn_id = str(uuid4())
 
     task_id = repository.create_indexing_job(
