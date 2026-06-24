@@ -332,6 +332,94 @@ class PostgresChunkRepository(ChunkRepository):
             )
         )
 
+    def list_indexing_jobs(
+        self,
+        status_filter: str | None = None,
+        page: int = 1,
+        page_size: int = 50,
+    ) -> tuple[list[dict], int]:
+        offset = (page - 1) * page_size
+
+        where_clause = sql.SQL("")
+        params: list[object] = []
+
+        if status_filter is not None:
+            where_clause = sql.SQL("WHERE status = %s")
+            params.append(status_filter)
+
+        count_query = sql.SQL(
+            """
+            SELECT count(*)
+            FROM {schema}.indexing_jobs
+            {where_clause}
+            """
+        ).format(
+            schema=sql.Identifier(settings.POSTGRES_SCHEMA),
+            where_clause=where_clause,
+        )
+
+        list_query = sql.SQL(
+            """
+            SELECT
+                id,
+                indexing_txn_id::text,
+                document_id,
+                status,
+                chunks_count,
+                has_embeddings,
+                indexed_at,
+                index_stats,
+                warnings,
+                errors,
+                created_at,
+                updated_at
+            FROM {schema}.indexing_jobs
+            {where_clause}
+            ORDER BY created_at DESC, id DESC
+            LIMIT %s
+            OFFSET %s
+            """
+        ).format(
+            schema=sql.Identifier(settings.POSTGRES_SCHEMA),
+            where_clause=where_clause,
+        )
+
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(count_query, params)
+                total = cur.fetchone()[0]
+
+                cur.execute(
+                    list_query,
+                    [
+                        *params,
+                        page_size,
+                        offset,
+                    ],
+                )
+                rows = cur.fetchall()
+
+        items = [
+            {
+                "id": row[0],
+                "indexing_txn_id": row[1],
+                "document_id": row[2],
+                "status": row[3],
+                "chunks_count": row[4],
+                "has_embeddings": row[5],
+                "indexed_at": row[6],
+                "index_stats": row[7] or {},
+                "warnings": row[8] or [],
+                "errors": row[9] or [],
+                "created_at": row[10],
+                "updated_at": row[11],
+            }
+            for row in rows
+        ]
+
+        return items, total
+
+
     def ensure_schema(self) -> None:
         """
         Создаёт расширение vector, схему и таблицы  chunks,
