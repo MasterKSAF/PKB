@@ -67,3 +67,58 @@ def test_mark_stale_indexing_jobs_failed():
                     (indexing_txn_id,),
                 )
             conn.commit()
+
+def test_get_active_indexing_job_for_document_ignores_stale_job():
+    repo = PostgresChunkRepository()
+    repo.ensure_schema()
+
+    indexing_txn_id = str(uuid4())
+    document_id = 880002
+
+    try:
+        repo.create_indexing_job(
+            document_id=document_id,
+            indexing_txn_id=indexing_txn_id,
+            status="indexing",
+        )
+
+        active_job = repo.get_active_indexing_job_for_document(
+            document_id=document_id,
+            stale_after_seconds=3600,
+        )
+
+        assert active_job is not None
+        assert active_job["document_id"] == document_id
+        assert active_job["status"] == "indexing"
+        assert active_job["indexing_txn_id"] == indexing_txn_id
+
+        with repo._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    UPDATE {settings.POSTGRES_SCHEMA}.indexing_jobs
+                    SET updated_at = now() - interval '2 hours'
+                    WHERE indexing_txn_id = %s
+                    """,
+                    (indexing_txn_id,),
+                )
+            conn.commit()
+
+        stale_job = repo.get_active_indexing_job_for_document(
+            document_id=document_id,
+            stale_after_seconds=3600,
+        )
+
+        assert stale_job is None
+
+    finally:
+        with repo._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    DELETE FROM {settings.POSTGRES_SCHEMA}.indexing_jobs
+                    WHERE indexing_txn_id = %s
+                    """,
+                    (indexing_txn_id,),
+                )
+            conn.commit()

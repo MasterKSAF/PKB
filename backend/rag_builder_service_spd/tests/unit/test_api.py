@@ -264,3 +264,96 @@ def test_api_v1_rag_build_jobs_rejects_invalid_status():
     )
 
     assert response.status_code == 422
+
+def test_api_v1_rag_build_rejects_duplicate_active_job(monkeypatch):
+    active_txn_id = "5c2d9d45-2e02-44ad-a2d7-806ba5158341"
+
+    def fake_mark_stale_indexing_jobs_failed(
+        self,
+        stale_after_seconds,
+    ):
+        assert stale_after_seconds > 0
+        return 0
+
+    def fake_get_active_indexing_job_for_document(
+        self,
+        document_id,
+        stale_after_seconds,
+    ):
+        assert document_id == 420000
+        assert stale_after_seconds > 0
+
+        return {
+            "document_id": document_id,
+            "status": "indexing",
+            "indexing_txn_id": active_txn_id,
+            "chunks_count": 0,
+            "has_embeddings": False,
+            "indexed_at": None,
+            "index_stats": {},
+            "warnings": [],
+            "errors": [],
+        }
+
+    def fail_create_indexing_job(
+        self,
+        document_id,
+        indexing_txn_id,
+        status="indexing",
+    ):
+        raise AssertionError("create_indexing_job must not be called")
+
+    monkeypatch.setattr(
+        PostgresChunkRepository,
+        "mark_stale_indexing_jobs_failed",
+        fake_mark_stale_indexing_jobs_failed,
+    )
+    monkeypatch.setattr(
+        PostgresChunkRepository,
+        "get_active_indexing_job_for_document",
+        fake_get_active_indexing_job_for_document,
+    )
+    monkeypatch.setattr(
+        PostgresChunkRepository,
+        "create_indexing_job",
+        fail_create_indexing_job,
+    )
+
+    payload = {
+        "document_id": 420000,
+        "sections": [
+            {
+                "section_id": 1,
+                "document_id": 420000,
+                "parent_id": None,
+                "clause": "1",
+                "title": None,
+                "level": 1,
+                "path": "1",
+                "page": 1,
+                "bbox": None,
+                "type": "text",
+                "content": {
+                    "text": "????????? ???????? ????????????????...",
+                },
+                "references": [],
+            }
+        ],
+        "protected_spans": [],
+        "options": {
+            "strategy": "semantic_1024",
+        },
+    }
+
+    response = client.post("/api/v1/rag/build", json=payload)
+
+    assert response.status_code == 409
+
+    data = response.json()
+
+    assert data["detail"]["code"] == "ALREADY_PROCESSING"
+    assert data["detail"]["details"] == {
+        "document_id": 420000,
+        "indexing_txn_id": active_txn_id,
+        "status": "indexing",
+    }
