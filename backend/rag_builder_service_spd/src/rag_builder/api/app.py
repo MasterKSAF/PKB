@@ -10,6 +10,7 @@ from typing import Literal
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, status
 
 from rag_builder.core.logger import logger
+from rag_builder.core.config import settings
 from rag_builder.models.contracts import BuildRequest
 from rag_builder.models.responses import (
     DeleteIndexResponse,
@@ -24,6 +25,23 @@ from rag_builder.repositories.postgres_chunk_repository import (
 from rag_builder.services.indexing_service import IndexingService
 
 
+
+def _mark_stale_indexing_jobs_failed(
+    repository: PostgresChunkRepository,
+) -> int:
+    marked_count = repository.mark_stale_indexing_jobs_failed(
+        settings.INDEXING_JOB_STALE_AFTER_SECONDS,
+    )
+
+    if marked_count:
+        logger.warning(
+            "Marked %s stale indexing jobs as failed",
+            marked_count,
+        )
+
+    return marked_count
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting RAG Builder service")
@@ -32,6 +50,7 @@ async def lifespan(app: FastAPI):
     repository.ensure_schema()
 
     logger.info("Database schema ensured")
+    _mark_stale_indexing_jobs_failed(repository)
 
     yield
 
@@ -174,6 +193,8 @@ def index_document(
     )
 
     repository = PostgresChunkRepository()
+
+    _mark_stale_indexing_jobs_failed(repository)
 
     indexing_txn_id = str(uuid4())
 
