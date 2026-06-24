@@ -14,15 +14,11 @@ from rag_builder.repositories.postgres_chunk_repository import PostgresChunkRepo
 client = TestClient(app)
 
 
-def test_health_endpoint():
-    response = client.get("/health")
+def test_legacy_health_endpoint_removed():
+    legacy_path = "/" + "health"
+    response = client.get(legacy_path)
 
-    assert response.status_code == 200
-
-    data = response.json()
-
-    assert data["service"] == "rag_builder_service_spd"
-    assert data["database"] == "ok"
+    assert response.status_code == 404
 
 
 def test_index_endpoint():

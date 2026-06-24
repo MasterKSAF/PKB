@@ -140,7 +140,7 @@ Swagger UI:
 http://127.0.0.1:8000/docs
 
 Healthcheck:
-http://127.0.0.1:8000/health
+http://127.0.0.1:8000/api/v1/health
 ```
 
 ---
@@ -166,7 +166,7 @@ docker run --rm \
 Проверка:
 
 ```text
-http://127.0.0.1:8001/health
+http://127.0.0.1:8001/api/v1/health
 http://127.0.0.1:8001/docs
 ```
 
@@ -202,7 +202,7 @@ docker compose down
 
 ## 9. API
 
-### GET /health
+### GET /api/v1/health
 
 Проверка работоспособности сервиса и подключения к PostgreSQL.
 
