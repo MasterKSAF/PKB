@@ -41,35 +41,24 @@ git pull --ff-only
 echo -e "  ${GREEN}Git updated.${NC}"
 echo ""
 
-# ── 2. Подготовка TEI модели ─────────────────────────────────────────────────
-echo -e "${YELLOW}[2/7] Preparing TEI model...${NC}"
-
-PREPARE_SCRIPT="$SCRIPT_DIR/backend/diagnostics/prepare_tei_model.sh"
-if [ -x "$PREPARE_SCRIPT" ]; then
-    "$PREPARE_SCRIPT"
-else
-    echo -e "  ${YELLOW}prepare script not found at $PREPARE_SCRIPT${NC}"
-fi
-echo ""
-
-# ── 3. Сборка и запуск ──────────────────────────────────────────────────────
-echo -e "${YELLOW}[3/7] Building and starting all services...${NC}"
+# ── 2. Сборка и запуск ──────────────────────────────────────────────────────
+echo -e "${YELLOW}[2/6] Building and starting all services...${NC}"
 docker compose up -d --build
 echo -e "  ${GREEN}All containers started.${NC}"
 echo ""
 
-# ── 4. Ожидание инициализации ───────────────────────────────────────────────
-echo -e "${YELLOW}[4/7] Waiting for services to initialize (30s)...${NC}"
+# ── 3. Ожидание инициализации ───────────────────────────────────────────────
+echo -e "${YELLOW}[3/6] Waiting for services to initialize (30s)...${NC}"
 sleep 30
 echo ""
 
-# ── 5. Статус ────────────────────────────────────────────────────────────────
-echo -e "${YELLOW}[5/7] Service status:${NC}"
+# ── 4. Статус ────────────────────────────────────────────────────────────────
+echo -e "${YELLOW}[4/6] Service status:${NC}"
 docker compose ps
 echo ""
 
-# ── 6. Health check ──────────────────────────────────────────────────────────
-echo -e "${YELLOW}[6/7] Health check (Gateway):${NC}"
+# ── 5. Health check ──────────────────────────────────────────────────────────
+echo -e "${YELLOW}[5/6] Health check (Gateway):${NC}"
 HEALTH=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 http://localhost:8080/health 2>/dev/null || echo "000")
 if [ "$HEALTH" = "200" ]; then
     echo -e "  Gateway health: ${GREEN}$HEALTH OK${NC}"
@@ -78,8 +67,8 @@ else
 fi
 echo ""
 
-# ── 7. Diagnostics server ─────────────────────────────────────────────────────
-echo -e "${YELLOW}[7/7] Starting diagnostics server...${NC}"
+# ── 6. Diagnostics server ─────────────────────────────────────────────────────
+echo -e "${YELLOW}[6/6] Starting diagnostics server...${NC}"
 DIAGNOSTICS_SCRIPT="$SCRIPT_DIR/backend/diagnostics/start_diagnostics_server.sh"
 if [ -x "$DIAGNOSTICS_SCRIPT" ]; then
     "$DIAGNOSTICS_SCRIPT" start || echo -e "  ${YELLOW}(diagnostics server already running or port in use)${NC}"

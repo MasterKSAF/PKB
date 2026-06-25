@@ -16,17 +16,17 @@
 #   - analyse (:8089) — заморожен, не включён
 #   - monitoring_service — только demo/observability tutorial, не PKB prod
 #   - Embeddings: внешний routerai.ru (qwen/qwen3-embedding-8b)
-#   - TEI: локальный reranker (BAAI/bge-reranker-v2-m3-int8)
+#   - Reranker: Infinity локально (BAAI/bge-reranker-v2-m3, ONNX int8)
 #
 # Порядок запуска (depends_on):
 #
-#   [1] postgres, redis, minio → tei
+#   [1] postgres, redis, minio → infinity
 #         │
 #   [2] db-init, minio-init  (one-shot)
 #         │
 #   [3] auth, registry, parser, converter-validator
 #         │
-#   [4] rag-builder, rag-search  (→ postgres + tei)
+#   [4] rag-builder, rag-search  (→ postgres + infinity)
 #         │
 #   [5] query  (→ postgres + registry + rag-search)
 #         │
@@ -37,7 +37,7 @@
 # Порты сервисов (внутри сети = снаружи):
 #   gateway :8080   auth :8082        orchestrator :8081   query :8083
 #   registry :8084  converter-validator :8086  parser :8087
-#   rag-builder :8090  rag-search :8091   tei :18092 (host)
+#   rag-builder :8090  rag-search :8091   infinity :18080 (host)
 # =============================================================================
 
 name: pkb
@@ -86,10 +86,10 @@ x-env-embeddings: &env-embeddings
   EMBEDDING_TIMEOUT: "60"
   EMBEDDING_INSTRUCTION: ""
 
-# --- Reranker (TEI локально) ---
+# --- Reranker (Infinity локально) ---
 x-env-rerank: &env-rerank
-  RERANKER_BASE_URL: http://tei:80
-  RERANKER_MODEL: BAAI/bge-reranker-v2-m3-int8
+  RERANKER_BASE_URL: http://infinity:80
+  RERANKER_MODEL: BAAI/bge-reranker-v2-m3
   RERANKER_TIMEOUT: "15"
   RERANK_TOP_N: "15"
 
@@ -177,28 +177,26 @@ services:
       - pkb-net
     logging: *default-logging
 
-  tei:
-    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.6
-    container_name: pkb-tei
+  infinity:
+    image: michaelfeil/infinity:latest
+    container_name: pkb-infinity
     restart: unless-stopped
-    volumes:
-      - ./backend/models/my-bge-int8:/data
     command:
+      - "v2"
       - "--model-id"
-      - "/data"
-      - "--rerank"
-      - "--max-client-batch-size"
-      - "4"
-      - "--max-batch-tokens"
-      - "1024"
+      - "BAAI/bge-reranker-v2-m3"
+      - "--batch-size"
+      - "20"
+      - "--engine"
+      - "onnx"
     ports:
-      - "${TEI_PORT:-18092}:80"
+      - "${INFINITY_PORT:-18080}:80"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:80/health"]
       interval: 10s
       timeout: 5s
       retries: 10
-      start_period: 360s
+      start_period: 120s
     networks:
       - pkb-net
     logging: *default-logging
@@ -385,7 +383,7 @@ services:
         condition: service_healthy
       db-init:
         condition: service_completed_successfully
-      tei:
+      infinity:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/api/v1/health', timeout=3)\""]
@@ -421,7 +419,7 @@ services:
         condition: service_healthy
       db-init:
         condition: service_completed_successfully
-      tei:
+      infinity:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:8091/api/v1/health"]
