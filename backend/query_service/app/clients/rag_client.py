@@ -58,6 +58,7 @@ async def search(
     query: str,
     top_k: int = 10,
     filters: dict | None = None,
+    valid_at: str | None = None,
     search_type: str = "hybrid",
     rerank: bool = True,
 ) -> list[Chunk]:
@@ -76,6 +77,7 @@ async def search(
                     json={
                         "query": query,
                         "top_k": top_k,
+                        "valid_at": valid_at,
                         "filters": filters or {},
                         "search_type": search_type,
                         "rerank": rerank,
