@@ -76,14 +76,13 @@ def system_info() -> list:
     lines.append(f"  Load:     {run(['uptime']).split('load average:')[-1].strip() if 'load average' in run(['uptime']) else '?'}")
     lines.append(f"  CPU:      {run(['nproc'])} cores")
 
-    # Git commit и время сборки (из ARG в Dockerfile)
-    for label, path in [("Commit", "/app/.git_commit"), ("Build", "/app/.build_time")]:
-        try:
-            val = Path(path).read_text().strip()
-            if val and val != "unknown":
-                lines.append(f"  {label}:    {val}")
-        except Exception:
-            pass
+    # Git commit и время сборки (из ENV, передаются через docker-compose)
+    git_commit = os.environ.get("GIT_COMMIT", "")
+    build_time = os.environ.get("BUILD_TIME", "")
+    if git_commit and git_commit != "unknown":
+        lines.append(f"  Commit:   {git_commit[:16]}")
+    if build_time and build_time != "unknown":
+        lines.append(f"  Build:    {build_time}")
     mem = run(['free', '-h']).split("\n")
     for m in mem:
         if m.startswith("Mem:"):

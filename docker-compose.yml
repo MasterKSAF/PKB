@@ -531,9 +531,6 @@ services:
     build:
       context: ./backend/gateway_service
       dockerfile: Dockerfile
-      args:
-        GIT_COMMIT: ${GIT_COMMIT:-unknown}
-        BUILD_TIME: ${BUILD_TIME:-unknown}
     image: pkb/gateway:local
     container_name: pkb-gateway
     restart: unless-stopped
@@ -554,6 +551,8 @@ services:
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-*}
       PROJECT_DIR: /project
       HOST_PROC: /host/proc
+      GIT_COMMIT: ${GIT_COMMIT:-unknown}
+      BUILD_TIME: ${BUILD_TIME:-unknown}
     depends_on:
       auth:
         condition: service_healthy

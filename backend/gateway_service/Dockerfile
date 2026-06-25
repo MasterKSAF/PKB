@@ -13,10 +13,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-ARG GIT_COMMIT=unknown
-ARG BUILD_TIME=unknown
-RUN echo "$GIT_COMMIT" > .git_commit && echo "$BUILD_TIME" > .build_time
-
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV GATEWAY_HOST=0.0.0.0
