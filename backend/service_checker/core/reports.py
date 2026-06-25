@@ -85,8 +85,9 @@ def _generate_full_report(
     pipeline_results: Dict[str, Any],
     timestamp: str,
     db_result: Any = None,
+    contract_report: Optional[str] = None,
 ) -> str:
-    """Сформировать итоговый отчёт: сводная таблица + детали coverage + детали pipeline + БД."""
+    """Сформировать итоговый отчёт: сводная таблица + детали coverage + детали pipeline + БД + контракты."""
     lines: List[str] = []
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     lines.append("# Full Report — API Coverage + Pipeline Testing\n")
@@ -387,7 +388,11 @@ def _generate_full_report(
         db_section = format_db_report(db_result)
         lines.append(db_section)
 
-    # ── 5. Детальные шаги каждого пайплайна ──────────────────────────
+    # ── 5. Service Contracts Check ───────────────────────────────────────
+    if contract_report:
+        lines.append(contract_report)
+
+    # ── 6. Детальные шаги каждого пайплайна ──────────────────────────
     lines.append("\n---\n")
     lines.append("## 📋 Pipeline Testing — Пошаговая детализация\n")
     for pipe_name, result in sorted(pipeline_results.items()):

@@ -348,7 +348,7 @@ def get_service_def(mode: Optional[str] = None) -> ServiceDef:
             "Поиск по тексту",
             body={"text": "тест", "valid_at": "2026-06-19", "top_k": 5,
                   "filters": {"category_ids": []}},
-            response_schema={"results": list}),
+            response_schema={"results": list, "enrichment_skipped": bool}),
 
         # ── RAG Search ──
         EndpointDef("POST", f"{API_PREFIX}/rag/search", "rag",
