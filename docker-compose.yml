@@ -185,7 +185,8 @@ services:
       HF_TOKEN: ${HF_TOKEN:-}
     command:
       - "--model-id"
-      - "BAAI/bge-reranker-v2-m3-int8"
+      - "BAAI/bge-reranker-v2-m3"
+      - "--rerank"
       - "--max-client-batch-size"
       - "4"
       - "--max-batch-tokens"
