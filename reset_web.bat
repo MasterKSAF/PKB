@@ -137,6 +137,5 @@ echo   Web UI:            http://localhost:3300
 echo.
 
 start http://localhost:3300
-start http://localhost:8080/api/v1/health
 
 pause

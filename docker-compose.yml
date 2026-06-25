@@ -15,11 +15,12 @@
 #   - Отдельные контейнеры, сеть dmz/internal/data
 #   - analyse (:8089) — заморожен, не включён
 #   - monitoring_service — только demo/observability tutorial, не PKB prod
-#   - Embeddings: TEI (локально, rubert-tiny2-onnx)
+#   - Embeddings: внешний routerai.ru (qwen/qwen3-embedding-8b)
+#   - TEI: локальный reranker (BAAI/bge-reranker-v2-m3-int8)
 #
 # Порядок запуска (depends_on):
 #
-#   [1] postgres, redis, minio, tei-init → tei
+#   [1] postgres, redis, minio → tei
 #         │
 #   [2] db-init, minio-init  (one-shot)
 #         │
@@ -73,16 +74,24 @@ x-env-auth: &env-auth
   DEFAULT_ADMIN_EMAIL: ${DEFAULT_ADMIN_EMAIL:-admin@example.com}
   DEFAULT_ADMIN_PASSWORD: ${DEFAULT_ADMIN_PASSWORD:-Admin1234!}
 
-# --- Embeddings (TEI) ---
+# --- Embeddings (внешний routerai.ru) ---
 x-env-embeddings: &env-embeddings
-  EMBEDDING_PROVIDER: tei
-  EMBEDDING_BASE_URL: http://tei:80
-  EMBEDDING_API_URL: http://tei:80
-  EMBEDDING_MODEL: Vuy/rubert-tiny2-onnx
-  EMBEDDING_DIM: "312"
-  VECTOR_DIMENSION: "312"
-  EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-sk-noop}
+  EMBEDDING_PROVIDER: openai_compatible
+  EMBEDDING_BASE_URL: https://routerai.ru/api/v1
+  EMBEDDING_API_URL: https://routerai.ru/api/v1/embeddings
+  EMBEDDING_MODEL: qwen/qwen3-embedding-8b
+  EMBEDDING_DIM: "2048"
+  VECTOR_DIMENSION: "2048"
+  EMBEDDING_API_KEY: ${ROUTERAI_API_KEY:-}
   EMBEDDING_TIMEOUT: "60"
+  EMBEDDING_INSTRUCTION: ""
+
+# --- Reranker (TEI локально) ---
+x-env-rerank: &env-rerank
+  RERANKER_BASE_URL: http://tei:80
+  RERANKER_MODEL: BAAI/bge-reranker-v2-m3-int8
+  RERANKER_TIMEOUT: "15"
+  RERANK_TOP_N: "15"
 
 # --- Межсервисные URL (Docker DNS) ---
 x-env-service-urls: &env-service-urls
@@ -172,20 +181,21 @@ services:
     image: ghcr.io/huggingface/text-embeddings-inference:cpu-latest
     container_name: pkb-tei
     restart: unless-stopped
-    entrypoint: ["text-embeddings-router", "--model-id", "/data"]
+    command:
+      - "--model-id"
+      - "BAAI/bge-reranker-v2-m3-int8"
+      - "--max-client-batch-size"
+      - "4"
+      - "--max-batch-tokens"
+      - "1024"
     ports:
       - "${TEI_PORT:-18092}:80"
-    volumes:
-      - ./backend/service_checker/docker/tei_model:/data:ro
-    depends_on:
-      tei-init:
-        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:80/health"]
-      interval: 30s
+      interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 30s
+      retries: 10
+      start_period: 360s
     networks:
       - pkb-net
     logging: *default-logging
@@ -232,22 +242,6 @@ services:
     depends_on:
       minio:
         condition: service_healthy
-    networks:
-      - pkb-net
-    restart: "no"
-    logging: *default-logging
-
-  tei-init:
-    build:
-      context: ./backend/service_checker/docker
-      dockerfile: Dockerfile.tei-init
-    image: pkb/tei-init:local
-    container_name: pkb-tei-init
-    volumes:
-      - ./backend:/app/backend
-    entrypoint:
-      - python
-      - /app/backend/service_checker/docker/prepare_tei_model.py
     networks:
       - pkb-net
     restart: "no"
@@ -350,6 +344,10 @@ services:
     environment:
       OPENAI_API_KEY: ${ROUTERAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://routerai.ru/api/v1}
+      DEFAULT_LLM_MODEL: deepseek/deepseek-v4-flash
+      DEFAULT_LLM_MAX_TOKENS: "4096"
+      DEFAULT_LLM_TIMEOUT: "60"
+      CONFIDENCE_THRESHOLD: "0.55"
       REGISTRY_SERVICE_URL: http://registry:8084/api/v1
     depends_on:
       registry:
@@ -374,8 +372,11 @@ services:
     ports:
       - "8090:8090"
     environment:
-      <<: [*env-db, *env-embeddings]
+      <<: [*env-db, *env-embeddings, *env-rerank]
       APP_PORT: "8090"
+      CHUNK_SIZE: "1024"
+      EMBEDDING_BATCH_SIZE: "256"
+      EMBEDDING_RETRIES: "3"
     depends_on:
       postgres:
         condition: service_healthy
@@ -403,12 +404,15 @@ services:
     ports:
       - "8091:8091"
     environment:
-      <<: [*env-db, *env-embeddings]
+      <<: [*env-db, *env-embeddings, *env-rerank]
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
       POSTGRES_USER: pkb
       POSTGRES_PASSWORD: pkb
       POSTGRES_DB: pkb_neuro
+      SEARCH_STRATEGY: dense_rerank
+      SEARCH_TOP_K: "10"
+      CONTEXT_EXPANSION: "2"
     depends_on:
       postgres:
         condition: service_healthy
@@ -440,9 +444,13 @@ services:
       DEV_AUTH_MODE: ${DEV_AUTH_MODE:-true}
       MOCK_RAG_ENABLED: ${MOCK_RAG_ENABLED:-false}
       MOCK_REGISTRY_ENABLED: ${MOCK_REGISTRY_ENABLED:-false}
-      MOCK_LLM_ENABLED: ${MOCK_LLM_ENABLED:-true}
+      MOCK_LLM_ENABLED: ${MOCK_LLM_ENABLED:-false}
       LLM_API_URL: ${LLM_API_URL:-https://routerai.ru/api/v1}
       LLM_API_KEY: ${ROUTERAI_API_KEY:-}
+      LLM_MODEL: deepseek/deepseek-v4-flash
+      LLM_TEMPERATURE: "0.2"
+      LLM_MAX_TOKENS: "8196"
+      LLM_TOP_P: "0.95"
     depends_on:
       postgres:
         condition: service_healthy

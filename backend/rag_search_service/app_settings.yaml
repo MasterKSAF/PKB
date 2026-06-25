@@ -35,7 +35,7 @@ rag:
     model: "Qwen/Qwen3-Embedding-0.6B"
 
   # TEI reranker (локальный, int8-квантизация)
-  rerank_url: "http://tei-reranker:80"
+  rerank_url: "http://tei:80"
   rerank_model: "BAAI/bge-reranker-v2-m3-int8"
   rerank_top_n: 50
 
