@@ -22,6 +22,8 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any, Dict, Optional
 
+import httpx
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fastapi import FastAPI, HTTPException, Request
@@ -1024,6 +1026,39 @@ async def health_live():
 async def health_ready():
     """Readiness probe — сервис готов принимать запросы."""
     return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# Diagnostics — прокси к diagnostics-server на хосте
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/v1/system/diagnostics")
+async def gateway_diagnostics():
+    """Полная диагностика сервера (прокси к diagnostics_server.py на хосте).
+
+    Diagnostics server запускается отдельно на хосте (не в Docker):
+      cd backend/diagnostics && ./start_diagnostics_server.sh start
+
+    Адрес diagnostics server задаётся в DIAGNOSTICS_URL
+    (по умолчанию http://host.docker.internal:9090/diagnostics).
+    """
+    url = config.diagnostics_url
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.get(url)
+            content = resp.text
+            return Response(content=content, media_type="text/plain")
+    except httpx.RequestError as exc:
+        return JSONResponse(
+            status_code=502,
+            content={
+                "error": {
+                    "code": "DIAGNOSTICS_UNAVAILABLE",
+                    "message": f"Diagnostics server недоступен: {exc}",
+                }
+            },
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -216,8 +216,8 @@ services:
       - ./backend:/app/backend
     entrypoint:
       - /bin/bash
-      - -lc
-      - >-
+      - -c
+      - |-
         sed -i 's/\r$//' /app/backend/service_checker/core/setup_db.py 2>/dev/null || true;
         python /app/backend/service_checker/core/setup_db.py --docker
     depends_on:
@@ -536,6 +536,9 @@ services:
       ENV: ${ENV:-development}
       RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-0}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-*}
+      DIAGNOSTICS_URL: ${DIAGNOSTICS_URL:-http://host.docker.internal:9090/diagnostics}
+    extra_hosts:
+      - host.docker.internal:host-gateway
     depends_on:
       auth:
         condition: service_healthy
