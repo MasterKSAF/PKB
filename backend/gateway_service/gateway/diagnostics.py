@@ -10,6 +10,7 @@ import subprocess
 import time
 from pathlib import Path
 
+PROJECT_DIR = os.environ.get("PROJECT_DIR", "/project")
 COMPOSE_PROJECT = "pkb"
 HEALTH_SERVICES = [
     "pkb-postgres", "pkb-redis", "pkb-minio", "pkb-auth",
@@ -29,18 +30,27 @@ START_TIME = time.time()
 # Helpers
 # ---------------------------------------------------------------------------
 
-def run(cmd, timeout=30) -> str:
+def run(cmd, timeout=30, cwd=None) -> str:
     """Запускает команду, возвращает stdout или пустую строку."""
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd)
         return r.stdout.strip()
     except Exception:
         return ""
 
 
-def run_lines(cmd, timeout=30) -> list:
-    out = run(cmd, timeout)
+def run_lines(cmd, timeout=30, cwd=None) -> list:
+    out = run(cmd, timeout, cwd=cwd)
     return out.split("\n") if out else []
+
+
+def _git(cmd, timeout=30) -> str:
+    """Запускает git-команду в PROJECT_DIR."""
+    return run(['git'] + cmd, timeout, cwd=PROJECT_DIR)
+
+
+def _git_lines(cmd, timeout=30) -> list:
+    return run_lines(['git'] + cmd, timeout, cwd=PROJECT_DIR)
 
 
 # ---------------------------------------------------------------------------
@@ -71,8 +81,7 @@ def disk_usage() -> list:
     df = run_lines(['df', '-h', '/', '/var/lib/docker'])
     for d in df[:5]:
         lines.append(f"  {d}")
-    prj = Path(__file__).resolve().parents[2]  # проект
-    prj_size = run(['du', '-sh', str(prj)])
+    prj_size = run(['du', '-sh', PROJECT_DIR])
     if prj_size:
         lines.append(f"  Project: {prj_size}")
     docker_root = ""
@@ -102,27 +111,27 @@ def docker_df() -> list:
 def git_status() -> list:
     lines = []
     lines.append("[Git]")
-    branch = run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'])
+    branch = _git(['rev-parse', '--abbrev-ref', 'HEAD'])
     if not branch:
         lines.append("  (not a git repository)")
         return lines
-    commit = run(['git', 'rev-parse', '--short', 'HEAD'])
-    msg = run(['git', 'log', '-1', '--pretty=%s'])
+    commit = _git(['rev-parse', '--short', 'HEAD'])
+    msg = _git(['log', '-1', '--pretty=%s'])
     lines.append(f"  Branch: {branch}")
     lines.append(f"  Commit: {commit}")
     lines.append(f"  Msg:    {msg}")
-    status = run(['git', 'diff', '--stat'])
+    status = _git(['diff', '--stat'])
     if status:
         lines.append(f"  Dirty:  {status.split(chr(10))[-1]}")
     else:
         lines.append(f"  Dirty:  clean")
-    upstream = run(['git', 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'])
+    upstream = _git(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'])
     if upstream:
         upstream = upstream.replace("refs/remotes/", "")
-        behind = run(['git', 'rev-list', '--count', 'HEAD..@{upstream}'])
-        ahead = run(['git', 'rev-list', '--count', '@{upstream}..HEAD'])
+        behind = _git(['rev-list', '--count', 'HEAD..@{upstream}'])
+        ahead = _git(['rev-list', '--count', '@{upstream}..HEAD'])
         lines.append(f"  Remote:  {upstream}  (ahead {ahead}, behind {behind})")
-    last = run_lines(['git', 'log', '--oneline', '-5'])
+    last = _git_lines(['log', '--oneline', '-5'])
     for l in last:
         lines.append(f"    {l}")
     return lines
@@ -131,14 +140,14 @@ def git_status() -> list:
 def git_status_compact() -> list:
     lines = []
     lines.append("[Git]")
-    branch = run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'])
+    branch = _git(['rev-parse', '--abbrev-ref', 'HEAD'])
     if not branch:
         lines.append("  (not a git repository)")
         return lines
-    commit = run(['git', 'rev-parse', '--short', 'HEAD'])
+    commit = _git(['rev-parse', '--short', 'HEAD'])
     lines.append(f"  Branch: {branch}")
     lines.append(f"  Commit: {commit}")
-    status = run(['git', 'diff', '--stat'])
+    status = _git(['diff', '--stat'])
     if status:
         lines.append(f"  Dirty:  {status.split(chr(10))[-1]}")
     else:
@@ -195,7 +204,7 @@ def docker_containers_compact() -> list:
 def compose_ps() -> list:
     lines = []
     lines.append("[Compose]")
-    out = run_lines(['docker', 'compose', 'ps'])
+    out = run_lines(['docker', 'compose', 'ps'], cwd=PROJECT_DIR)
     for o in out:
         lines.append(f"  {o}")
     return lines
@@ -245,13 +254,13 @@ def volumes_info() -> list:
 def logs_errors(log_lines=20) -> list:
     lines = []
     lines.append(f"[Errors] (last {log_lines} per service)")
-    services = run_lines(['docker', 'compose', 'config', '--services'])
+    services = run_lines(['docker', 'compose', 'config', '--services'], cwd=PROJECT_DIR)
     if not services:
         lines.append("  (no services)")
         return lines
     found = False
     for svc in services:
-        errors = run(['docker', 'compose', 'logs', '--tail=100', svc]).split("\n")
+        errors = run(['docker', 'compose', 'logs', '--tail=100', svc], cwd=PROJECT_DIR).split("\n")
         errs = [e for e in errors if any(x in e.lower() for x in ['error', 'traceback', 'exception', 'fail', 'critical'])]
         if errs:
             found = True
