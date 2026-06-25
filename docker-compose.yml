@@ -192,7 +192,7 @@ services:
       - "--device"
       - "cpu"
       - "--batch-size"
-      - "4"
+      - "2"
     ports:
       - "${INFINITY_PORT:-18080}:7997"
     healthcheck:

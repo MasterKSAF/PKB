@@ -54,30 +54,37 @@ echo -e "  ${GREEN}Git updated.${NC}"
 chmod +x deploy.sh deploy_reset.sh 2>/dev/null || true
 echo ""
 
-# ── 2. Остановка + удаление volumes ─────────────────────────────────────────
-echo -e "${YELLOW}[2/8] Stopping services and removing volumes...${NC}"
-docker compose down -v
-echo -e "  ${GREEN}Services stopped, volumes removed.${NC}"
+# ── 2. Остановка сервисов ────────────────────────────────────────────────
+echo -e "${YELLOW}[2/8] Stopping services...${NC}"
+docker compose down
+
+# ── 3. Удаление volumes данных (huggingface_cache — кеш Infinity — оставляем)
+echo -e "${YELLOW}[3/8] Removing data volumes (pg_data, minio_data)...${NC}"
+docker volume rm \
+  $(docker volume ls --filter label=com.docker.compose.volume=pg_data -q) \
+  $(docker volume ls --filter label=com.docker.compose.volume=minio_data -q) \
+  2>/dev/null || true
+echo -e "  ${GREEN}Data volumes removed.${NC}"
 echo ""
 
-# ── 3. Сборка и запуск ──────────────────────────────────────────────────────
-echo -e "${YELLOW}[3/7] Building and starting all services...${NC}"
+# ── 4. Сборка и запуск ──────────────────────────────────────────────────────
+echo -e "${YELLOW}[4/8] Building and starting all services...${NC}"
 docker compose up -d --build
 echo -e "  ${GREEN}All containers started.${NC}"
 echo ""
 
-# ── 4. Ожидание инициализации ───────────────────────────────────────────────
-echo -e "${YELLOW}[4/7] Waiting for services to initialize (30s)...${NC}"
+# ── 5. Ожидание инициализации ───────────────────────────────────────────────
+echo -e "${YELLOW}[5/8] Waiting for services to initialize (30s)...${NC}"
 sleep 30
 echo ""
 
-# ── 5. Статус ────────────────────────────────────────────────────────────────
-echo -e "${YELLOW}[5/7] Service status:${NC}"
+# ── 6. Статус ────────────────────────────────────────────────────────────────
+echo -e "${YELLOW}[6/8] Service status:${NC}"
 docker compose ps
 echo ""
 
-# ── 6. Health check ──────────────────────────────────────────────────────────
-echo -e "${YELLOW}[6/7] Health check (Gateway):${NC}"
+# ── 7. Health check ──────────────────────────────────────────────────────────
+echo -e "${YELLOW}[7/8] Health check (Gateway):${NC}"
 HEALTH=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 http://localhost:8080/health 2>/dev/null || echo "000")
 if [ "$HEALTH" = "200" ]; then
     echo -e "  Gateway health: ${GREEN}$HEALTH OK${NC}"
@@ -86,8 +93,8 @@ else
 fi
 echo ""
 
-# ── 7. Diagnostics server ─────────────────────────────────────────────────────
-echo -e "${YELLOW}[7/7] Starting diagnostics server...${NC}"
+# ── 8. Diagnostics server ─────────────────────────────────────────────────────
+echo -e "${YELLOW}[8/8] Starting diagnostics server...${NC}"
 DIAGNOSTICS_SCRIPT="$SCRIPT_DIR/backend/diagnostics/start_diagnostics_server.sh"
 if [ -x "$DIAGNOSTICS_SCRIPT" ]; then
     "$DIAGNOSTICS_SCRIPT" start || echo -e "  ${YELLOW}(diagnostics server already running or port in use)${NC}"
