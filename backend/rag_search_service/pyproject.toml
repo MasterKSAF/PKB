@@ -9,7 +9,7 @@ dependencies = [
     "pydantic==2.9.2",
     "pydantic-settings==2.5.2",
     "asyncpg==0.30.0",
-    "pgvector>=0.7.0",
+    "pgvector>=0.4.2"
     "numpy==2.1.2",
     "httpx==0.27.2",
     "openai>=1.0",
