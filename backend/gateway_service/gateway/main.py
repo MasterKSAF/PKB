@@ -18,7 +18,6 @@ import re
 import sys
 import time
 import uuid
-from urllib.parse import urlparse
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any, Dict, Optional
@@ -91,6 +90,10 @@ def _setup_otel(app_instance: FastAPI) -> None:
 
 setup_logging()
 logger = logging.getLogger("gateway")
+
+# Время старта gateway (для uptime в diagnostics)
+GATEWAY_START_TIME = time.time()
+GATEWAY_VERSION = "1.3.0"
 
 logger.info("Gateway starting — mode=%s, port=%s", config.mode, config.port)
 
@@ -1090,46 +1093,50 @@ async def _try_host_diagnostics(request: Request, rest_of_path: str) -> Optional
 
 async def _gateway_summary_diagnostics(request: Request) -> Response:
     """Собирает базовую диагностику силами Gateway (без diagnostics server)."""
+    uptime_sec = time.time() - GATEWAY_START_TIME
+    uptime_str = f"{int(uptime_sec // 3600)}h {int((uptime_sec % 3600) // 60)}m {int(uptime_sec % 60)}s"
+
     lines = []
     lines.append("=" * 52)
     lines.append("   PKB Neuroassistant — Gateway Self-Diagnostics")
-    lines.append("   (host diagnostics server unavailable)")
     lines.append("=" * 52)
     lines.append("")
 
-    lines.append("[1] Gateway info")
-    lines.append(f"  Mode:           {config.mode}")
-    lines.append(f"  Port:           {config.port}")
-    lines.append(f"  Env:            {config.env}")
-    lines.append(f"  Allow anonymous: {config.allow_anonymous}")
-    lines.append(f"  Request timeout: {config.request_timeout}s")
-    lines.append(f"  Diagnostics URL: {config.diagnostics_url}")
+    lines.append(f"  Version:    {GATEWAY_VERSION}")
+    lines.append(f"  Uptime:     {uptime_str}")
+    lines.append(f"  Mode:       {config.mode}")
+    lines.append(f"  Port:       {config.port}")
+    lines.append(f"  Env:        {config.env}")
+    lines.append(f"  Timeout:    {config.request_timeout}s")
+    lines.append(f"  Anon:       {'yes' if config.allow_anonymous else 'no'}")
     lines.append("")
 
-    lines.append("[2] Service URLs")
-    for name, url in sorted(config.service_urls.items()):
-        lines.append(f"  {name}: {url}")
-    lines.append("")
-
-    lines.append("[3] Service health")
+    lines.append("[Services]")
     try:
         services = await check_all_services_health()
-        for svc, status in services.items():
-            marker = "OK" if status == "ok" else "ERR"
-            lines.append(f"  {svc:20s}  {marker}")
+        for svc, status in sorted(services.items()):
+            icon = "OK" if status == "ok" else "ERR"
+            url = config.service_urls.get(svc, "n/a")
+            lines.append(f"  {icon}  {svc:20s}  {url}")
     except Exception as exc:
-        lines.append(f"  (health check failed: {exc})")
+        lines.append(f"  ?  (health check failed: {exc})")
     lines.append("")
 
-    parsed = urlparse(str(request.url))
-    lines.append("[4] Request")
-    lines.append(f"  Path:    {request.url.path}")
-    lines.append(f"  Query:   {parsed.query or '(none)'}")
-    lines.append(f"  Client:  {request.client.host if request.client else 'unknown'}")
+    host_url = config.diagnostics_url
+    lines.append("[Host diagnostics]")
+    lines.append(f"  URL: {host_url}")
+    lines.append(f"  Status: unavailable")
+    lines.append(f"  Hint:  cd backend/diagnostics && ./start_diagnostics_server.sh start")
+    lines.append("")
+
+    lines.append("[Request]")
+    lines.append(f"  Path:   {request.url.path}")
+    lines.append(f"  Query:  {request.url.query or '(none)'}")
+    lines.append(f"  Client: {request.client.host if request.client else 'unknown'}")
     lines.append("")
 
     lines.append("=" * 52)
-    lines.append("   Diagnostics complete (gateway-only)")
+    lines.append("   Endpoint: GET /api/v1/system/diagnostics")
     lines.append("=" * 52)
     lines.append("")
 
