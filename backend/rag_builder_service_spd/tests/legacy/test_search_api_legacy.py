@@ -32,7 +32,6 @@ class FakeSearchService:
                 SearchChunkResult(
                     chunk_id=1001,
                     document_id=420000,
-                    document_version_id=420001,
                     document_section_id=10,
                     section_id=8,
                     clause="6.1",
@@ -87,7 +86,6 @@ def test_search_endpoint_returns_chunks(monkeypatch):
     result = data["results"][0]
 
     assert result["document_id"] == 420000
-    assert result["document_version_id"] == 420001
     assert result["document_section_id"] == 10
     assert result["section_id"] == 8
     assert result["clause"] == "6.1"
@@ -127,7 +125,6 @@ def test_rag_search_alias_returns_chunks(monkeypatch):
     result = data["results"][0]
 
     assert result["document_id"] == 420000
-    assert result["document_version_id"] == 420001
     assert result["document_section_id"] == 10
     assert result["section_id"] == 8
     assert result["clause"] == "6.1"

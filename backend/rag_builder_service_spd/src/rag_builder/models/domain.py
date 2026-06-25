@@ -7,7 +7,6 @@ from typing import Any
 @dataclass(frozen=True)
 class Chunk:
     document_id: int
-    document_version_id: int
     section_id: int
 
     parent_id: int | None

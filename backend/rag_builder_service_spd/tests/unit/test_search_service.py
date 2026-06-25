@@ -48,7 +48,6 @@ class FakeSearchRepository:
             SearchChunkResult(
                 chunk_id=1001,
                 document_id=420000,
-                document_version_id=420001,
                 document_section_id=10,
                 section_id=8,
                 clause="6.1",
@@ -114,7 +113,6 @@ class FakeSearchRepository:
             SearchChunkResult(
                 chunk_id=1001,
                 document_id=420000,
-                document_version_id=420001,
                 document_section_id=10,
                 section_id=8,
                 clause="6.1",
@@ -130,7 +128,6 @@ class FakeSearchRepository:
             SearchChunkResult(
                 chunk_id=1002,
                 document_id=420000,
-                document_version_id=420001,
                 document_section_id=11,
                 section_id=9,
                 clause="table-1",
@@ -273,4 +270,3 @@ def test_search_service_runs_hybrid_search_with_rrf_no_duplicates():
 
     assert response.results[0].score == expected_duplicate_score
     assert response.results[1].score == expected_sparse_only_score
-

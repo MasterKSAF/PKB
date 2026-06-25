@@ -26,7 +26,6 @@ def test_index_document_returns_embedded_chunks():
     first = result.chunks[0]
 
     assert first.chunk.document_id == 420000
-    assert first.chunk.document_version_id == 420001
     assert first.chunk.clause == "1"
 
     assert len(first.embedding) == settings.EMBEDDING_DIM
@@ -42,11 +41,9 @@ def test_index_document_returns_warning_when_no_chunks():
         "metadata": {
             "schema": "schema_registry_for_rag_v2",
             "document_id": 420000,
-            "document_version_id": 420001,
         },
         "document": {
             "id": 420000,
-            "document_version_id": 420001,
             "pkb_code": "04",
             "doc_code": "TEST",
             "title": "Test",
