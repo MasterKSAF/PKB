@@ -31,12 +31,17 @@ START_TIME = time.time()
 # ---------------------------------------------------------------------------
 
 def run(cmd, timeout=30, cwd=None) -> str:
-    """Запускает команду, возвращает stdout или пустую строку."""
+    """Запускает команду, возвращает stdout. При ошибке — stderr."""
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd)
-        return r.stdout.strip()
-    except Exception:
-        return ""
+        out = r.stdout.strip()
+        if r.returncode != 0:
+            err = r.stderr.strip()
+            if err:
+                return err
+        return out
+    except Exception as e:
+        return str(e)
 
 
 def run_lines(cmd, timeout=30, cwd=None) -> list:
@@ -45,8 +50,14 @@ def run_lines(cmd, timeout=30, cwd=None) -> list:
 
 
 def _git(cmd, timeout=30) -> str:
-    """Запускает git-команду в PROJECT_DIR."""
-    return run(['git'] + cmd, timeout, cwd=PROJECT_DIR)
+    """Запускает git-команду в PROJECT_DIR. Возвращает stdout при успехе, иначе пустую строку."""
+    try:
+        r = subprocess.run(['git'] + cmd, capture_output=True, text=True, timeout=timeout, cwd=PROJECT_DIR)
+        if r.returncode != 0:
+            return ""
+        return r.stdout.strip()
+    except Exception:
+        return ""
 
 
 def _git_lines(cmd, timeout=30) -> list:

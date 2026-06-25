@@ -1,11 +1,16 @@
-# Diagnostics в Gateway
+# Диагностика "Поиск временно недоступен"
 
-- [x] Diagnostics встроен в Gateway, а не отдельный сервер
-- [x] `GET /api/v1/system/diagnostics` — сводка (конфиг + health сервисов)
-- [x] `GET /api/v1/system/diagnostics/{service}` — диагностика по сервису
-- [x] Удалены: diagnostics_server.py, Dockerfile, shell-скрипты
-- [x] deploy.sh: убрано управление diagnostics (не нужно)
-- [x] deploy_reset.sh: вызывает deploy.sh (down + clean + deploy)
-- [x] docker-compose.yml: чисто (нет diagnostics сервиса, нет DIAGNOSTICS_URL)
-- [x] config.py: удалён diagnostics_url
-- [x] README.md: обновлён
+## Выполнено
+- [x] Проверен diagnostics endpoint (`/api/v1/system/diagnostics?verbose=true`)
+- [x] Проверены сервисы напрямую: infinity (7997), rag-search (8091), query (8083), registry (8084)
+- [x] Установлена корневая причина: OOM kill infinity_emb
+- [x] Прочитан код pipeline.py — точка возникновения ошибки
+- [x] Прочитан код diagnostics.py — `run()` не возвращал stderr
+- [x] Прочитан конфиг infinity в docker-compose.yml
+- [x] Прочитан issue michaelfeil/infinity#579 — optimum engine жрёт >10GB при загрузке
+- [x] Добавить memory limit infinity в docker-compose.yml
+- [x] Сменить engine optimum → torch и модель ONNX → BAAI/bge-reranker-v2-m3
+- [x] Починить diagnostics.py — `run()` возвращает stderr при ошибке (проверено локально)
+- [x] Записать в specificity.md диагностику и выводы
+- [x] Записать в guide.md правила диагностики
+- [x] Финальный обзор

@@ -492,4 +492,52 @@ Check '(element_type_bias == ov::element::f32)' failed
 
 **Дополнительно:** `michaelf34/infinity:latest-cpu` на Windows вызывает OOM (exit 137) из-за Docker Desktop VM. На Linux достаточно `latest` образа.
 
+### G4. Diagnostics на сервере — docker логи недоступны
+
+Gateway имеет встроенный diagnostics-модуль (`diagnostics.py`) с эндпоинтами:
+- `GET /api/v1/system/diagnostics` — краткая сводка (публичный)
+- `GET /api/v1/system/diagnostics?verbose=true` — полная (диски, порты, Docker, логи, dmesg)
+- `GET /api/v1/system/diagnostics/{service}` — детально по сервису (name: query, auth, rag-search...)
+- `GET /api/v1/system/diagnostics/system` — логи ядра (dmesg) и memory pressure
+
+**Важно:** diagnostics вызывает `docker inspect`, `docker logs`, `docker ps` через subprocess внутри контейнера gateway. Если Docker CLI не установлен или `/var/run/docker.sock` не смонтирован — все docker-команды возвращают пустоту (`"(container not found)"`, `"Running: 0 / 0"`).
+
+**Что работает всегда (без docker):** dmesg, journalctl, memory pressure, df, free, ss — через `/host/proc`.
+
+**Как диагностировать сервисы на сервере без SSH:**
+1. `GET /api/v1/system/diagnostics?verbose=true` — увидеть OOM в dmesg
+2. `GET /api/v1/system/diagnostics/{service}` — пытается взять docker logs, но если docker не работает — будет пусто
+3. Нужен SSH на сервер для `docker logs pkb-query --tail 50`
+
+### G5. Infinity OOM — диагностика и схема отказа (26.06)
+
+**Симптом:** фронтенд: «Поиск временно недоступен».
+
+**Схема отказа:**
+```
+infinity (7997) — OOM kill
+  ↓
+RAG search (8091) — timeout (зависит от infinity)
+  ↓
+query_service.pipeline.run_pipeline()
+  → rag_client.search() 3 retries × 30s timeout → всё падает
+  → запись в БД: status="failed", content="Поиск временно недоступен..."
+```
+
+**Диагностика (через gateway diagnostics):**
+- `GET /api/v1/system/diagnostics?verbose=true` → dmesg показывает OOM kill infinity_emb
+- `GET /api/v1/system/diagnostics/query` → пусто (docker не работает внутри контейнера)
+- `GET /api/v1/system/diagnostics/system` → dmesg + memory pressure
+- Прямые запросы к infinity:7997, rag-search:8091 → timeout (порты не открыты наружу)
+
+**Причина:** infinity без `mem_limit` грузит `bge-reranker-v2-m3-ONNX` через optimum engine и жрёт ~30GB RAM. На сервере 32GB RAM + 4GB swap. Своп исчерпан, OOM убивает infinity, после перезапуска infinity снова забирает всю память и система в цикле OOM.
+
+**Фикс:** `mem_limit: 8g`, `memswap_limit: 0` (запрет свопа), `batch-size: 1` — в docker-compose.yml.
+
+**Выводы:**
+- Diagnostics gateway не может читать docker logs (docker CLI отсутствует внутри контейнера gateway или не смонтирован сокет).
+- Единственный источник диагностики без SSH — dmesg (через /host/proc) и health endpoints.
+- При добавлении нового сервиса с потенциально высоким потреблением памяти — обязательно указывать `mem_limit`.
+- При OOM одного сервиса валится вся цепочка downstream. Нужен Resilience: circuit breaker на rag_client.
+
 
