@@ -89,7 +89,7 @@ x-env-embeddings: &env-embeddings
 # --- Reranker (Infinity локально) ---
 x-env-rerank: &env-rerank
   RERANKER_BASE_URL: http://infinity:80
-  RERANKER_MODEL: BAAI/bge-reranker-v2-m3
+  RERANKER_MODEL: onnx-community/bge-reranker-v2-m3-ONNX
   RERANKER_TIMEOUT: "15"
   RERANK_TOP_N: "15"
 
@@ -184,7 +184,7 @@ services:
     command:
       - "v2"
       - "--model-id"
-      - "BAAI/bge-reranker-v2-m3"
+      - "onnx-community/bge-reranker-v2-m3-ONNX"
       - "--batch-size"
       - "20"
       - "--engine"
