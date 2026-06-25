@@ -45,6 +45,16 @@ chmod +x deploy.sh deploy_reset.sh 2>/dev/null || true
 chmod +x backend/diagnostics/*.sh backend/diagnostics/*.py 2>/dev/null || true
 echo ""
 
+# Diagnostics server — перезапуск сразу после обновления кода
+DIAGNOSTICS_SCRIPT="$SCRIPT_DIR/backend/diagnostics/start_diagnostics_server.sh"
+if [ -x "$DIAGNOSTICS_SCRIPT" ]; then
+    "$DIAGNOSTICS_SCRIPT" stop 2>/dev/null || true
+    sleep 1
+    "$DIAGNOSTICS_SCRIPT" start
+    echo -e "  ${GREEN}Diagnostics server restarted.${NC}"
+fi
+echo ""
+
 # ── 2. Сборка и запуск ──────────────────────────────────────────────────────
 echo -e "${YELLOW}[2/6] Building and starting all services...${NC}"
 docker compose up -d --build
@@ -61,7 +71,7 @@ echo -e "${YELLOW}[4/6] Service status:${NC}"
 docker compose ps
 echo ""
 
-# ── 5. Health check ──────────────────────────────────────────────────────────
+# ── 6. Health check ──────────────────────────────────────────────────────────
 echo -e "${YELLOW}[5/6] Health check (Gateway):${NC}"
 HEALTH=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 http://localhost:8080/health 2>/dev/null || echo "000")
 if [ "$HEALTH" = "200" ]; then
@@ -71,15 +81,11 @@ else
 fi
 echo ""
 
-# ── 6. Diagnostics server ─────────────────────────────────────────────────────
-echo -e "${YELLOW}[6/6] Restarting diagnostics server...${NC}"
+# ── 7. Diagnostics server — уже перезапущен после git pull, дублируем на случай если шаг 1 не сработал ───
+echo -e "${YELLOW}[6/6] Ensuring diagnostics server is running...${NC}"
 DIAGNOSTICS_SCRIPT="$SCRIPT_DIR/backend/diagnostics/start_diagnostics_server.sh"
 if [ -x "$DIAGNOSTICS_SCRIPT" ]; then
-    "$DIAGNOSTICS_SCRIPT" stop 2>/dev/null || true
-    sleep 1
-    "$DIAGNOSTICS_SCRIPT" start || echo -e "  ${YELLOW}(diagnostics server already running or port in use)${NC}"
-else
-    echo -e "  ${YELLOW}diagnostics script not found at $DIAGNOSTICS_SCRIPT${NC}"
+    "$DIAGNOSTICS_SCRIPT" start 2>/dev/null || echo -e "  ${YELLOW}(could not start)${NC}"
 fi
 echo ""
 

@@ -55,6 +55,16 @@ chmod +x deploy.sh deploy_reset.sh 2>/dev/null || true
 chmod +x backend/diagnostics/*.sh backend/diagnostics/*.py 2>/dev/null || true
 echo ""
 
+# Diagnostics server — перезапуск сразу после обновления кода
+DIAGNOSTICS_SCRIPT="$SCRIPT_DIR/backend/diagnostics/start_diagnostics_server.sh"
+if [ -x "$DIAGNOSTICS_SCRIPT" ]; then
+    "$DIAGNOSTICS_SCRIPT" stop 2>/dev/null || true
+    sleep 1
+    "$DIAGNOSTICS_SCRIPT" start
+    echo -e "  ${GREEN}Diagnostics server restarted.${NC}"
+fi
+echo ""
+
 # ── 2. Остановка сервисов ────────────────────────────────────────────────
 echo -e "${YELLOW}[2/8] Stopping services...${NC}"
 docker compose down
@@ -94,15 +104,11 @@ else
 fi
 echo ""
 
-# ── 8. Diagnostics server ─────────────────────────────────────────────────────
-echo -e "${YELLOW}[8/8] Restarting diagnostics server...${NC}"
+# ── 8. Diagnostics server — уже перезапущен после git pull, дублируем ───
+echo -e "${YELLOW}[8/8] Ensuring diagnostics server is running...${NC}"
 DIAGNOSTICS_SCRIPT="$SCRIPT_DIR/backend/diagnostics/start_diagnostics_server.sh"
 if [ -x "$DIAGNOSTICS_SCRIPT" ]; then
-    "$DIAGNOSTICS_SCRIPT" stop 2>/dev/null || true
-    sleep 1
-    "$DIAGNOSTICS_SCRIPT" start || echo -e "  ${YELLOW}(diagnostics server already running or port in use)${NC}"
-else
-    echo -e "  ${YELLOW}diagnostics script not found at $DIAGNOSTICS_SCRIPT${NC}"
+    "$DIAGNOSTICS_SCRIPT" start 2>/dev/null || echo -e "  ${YELLOW}(could not start)${NC}"
 fi
 echo ""
 
