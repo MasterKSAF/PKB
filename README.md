@@ -117,7 +117,7 @@ Gateway проверяет собственный конфиг и health-check �
 
 | Скрипт | Команда | Описание |
 |--------|---------|---------|
-| [`deploy.sh`](deploy.sh) | `./deploy.sh` | **Основной деплой:** `git fetch && git reset --hard origin/develop` + `docker compose up -d --build`. Сбрасывает локальные изменения и разворачивает последнюю версию |
+| [`deploy.sh`](deploy.sh) | `./deploy.sh` | **Основной деплой:** `git fetch` + форсированный merge (`-X theirs`), затем `docker compose up -d --build`. Локальные изменения перезаписываются версией из репозитория |
 | [`deploy_reset.sh`](deploy_reset.sh) | `./deploy_reset.sh` | **Деплой со сбросом данных:** останавливает сервисы, удаляет volumes БД и MinIO, затем вызывает `deploy.sh`. **Осторожно — удаляет все данные!** |
 
 Деплой всегда форсированный: `git reset --hard` отменяет любые локальные изменения и переключается на `origin/develop`. Это исключает ошибки `Your local changes would be overwritten by merge`.
