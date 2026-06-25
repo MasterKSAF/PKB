@@ -187,6 +187,8 @@ services:
       - "--model-id"
       - "BAAI/bge-reranker-v2-m3"
       - "--rerank"
+      - "--dtype"
+      - "int8"
       - "--max-client-batch-size"
       - "4"
       - "--max-batch-tokens"
