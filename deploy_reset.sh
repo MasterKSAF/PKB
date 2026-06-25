@@ -33,7 +33,7 @@ fi
 echo ""
 
 # ── 0. Проверка Docker ───────────────────────────────────────────────────────
-echo -e "${YELLOW}[0/7] Checking Docker...${NC}"
+echo -e "${YELLOW}[0/8] Checking Docker...${NC}"
 if ! docker info >/dev/null 2>&1; then
     echo -e "${RED}ERROR: Docker is not running!${NC}"
     exit 1
@@ -42,35 +42,45 @@ echo -e "  ${GREEN}Docker is running.${NC}"
 echo ""
 
 # ── 1. Git pull ──────────────────────────────────────────────────────────────
-echo -e "${YELLOW}[1/7] Pulling latest code from git...${NC}"
+echo -e "${YELLOW}[1/8] Pulling latest code from git...${NC}"
 git pull --ff-only
 echo -e "  ${GREEN}Git updated.${NC}"
 echo ""
 
 # ── 2. Остановка + удаление volumes ─────────────────────────────────────────
-echo -e "${YELLOW}[2/7] Stopping services and removing volumes...${NC}"
+echo -e "${YELLOW}[2/8] Stopping services and removing volumes...${NC}"
 docker compose down -v
 echo -e "  ${GREEN}Services stopped, volumes removed.${NC}"
 echo ""
 
-# ── 3. Сборка и запуск ──────────────────────────────────────────────────────
-echo -e "${YELLOW}[3/7] Building and starting all services...${NC}"
+# ── 3. Подготовка TEI модели ─────────────────────────────────────────────────
+echo -e "${YELLOW}[3/8] Preparing TEI model...${NC}"
+PREPARE_SCRIPT="$SCRIPT_DIR/backend/diagnostics/prepare_tei_model.sh"
+if [ -x "$PREPARE_SCRIPT" ]; then
+    "$PREPARE_SCRIPT"
+else
+    echo -e "  ${YELLOW}prepare script not found at $PREPARE_SCRIPT${NC}"
+fi
+echo ""
+
+# ── 4. Сборка и запуск ──────────────────────────────────────────────────────
+echo -e "${YELLOW}[4/8] Building and starting all services...${NC}"
 docker compose up -d --build
 echo -e "  ${GREEN}All containers started.${NC}"
 echo ""
 
-# ── 4. Ожидание инициализации ───────────────────────────────────────────────
-echo -e "${YELLOW}[4/7] Waiting for services to initialize (30s)...${NC}"
+# ── 5. Ожидание инициализации ───────────────────────────────────────────────
+echo -e "${YELLOW}[5/8] Waiting for services to initialize (30s)...${NC}"
 sleep 30
 echo ""
 
-# ── 5. Статус ────────────────────────────────────────────────────────────────
-echo -e "${YELLOW}[5/7] Service status:${NC}"
+# ── 6. Статус ────────────────────────────────────────────────────────────────
+echo -e "${YELLOW}[6/8] Service status:${NC}"
 docker compose ps
 echo ""
 
-# ── 6. Health check ──────────────────────────────────────────────────────────
-echo -e "${YELLOW}[6/7] Health check (Gateway):${NC}"
+# ── 7. Health check ──────────────────────────────────────────────────────────
+echo -e "${YELLOW}[7/8] Health check (Gateway):${NC}"
 HEALTH=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 http://localhost:8080/health 2>/dev/null || echo "000")
 if [ "$HEALTH" = "200" ]; then
     echo -e "  Gateway health: ${GREEN}$HEALTH OK${NC}"
@@ -79,8 +89,8 @@ else
 fi
 echo ""
 
-# ── 7. Diagnostics server ─────────────────────────────────────────────────────
-echo -e "${YELLOW}[7/7] Starting diagnostics server...${NC}"
+# ── 8. Diagnostics server ─────────────────────────────────────────────────────
+echo -e "${YELLOW}[8/8] Starting diagnostics server...${NC}"
 DIAGNOSTICS_SCRIPT="$SCRIPT_DIR/backend/diagnostics/start_diagnostics_server.sh"
 if [ -x "$DIAGNOSTICS_SCRIPT" ]; then
     "$DIAGNOSTICS_SCRIPT" start || echo -e "  ${YELLOW}(diagnostics server already running or port in use)${NC}"

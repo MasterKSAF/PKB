@@ -181,14 +181,12 @@ services:
     image: ghcr.io/huggingface/text-embeddings-inference:cpu-latest
     container_name: pkb-tei
     restart: unless-stopped
-    environment:
-      HF_TOKEN: ${HF_TOKEN:-}
+    volumes:
+      - ./models/bge-reranker-m3-int8:/data
     command:
       - "--model-id"
-      - "BAAI/bge-reranker-v2-m3"
+      - "/data"
       - "--rerank"
-      - "--dtype"
-      - "int8"
       - "--max-client-batch-size"
       - "4"
       - "--max-batch-tokens"
