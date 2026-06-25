@@ -188,7 +188,7 @@ services:
       - "--batch-size"
       - "20"
       - "--engine"
-      - "onnx"
+      - "optimum"
     ports:
       - "${INFINITY_PORT:-18080}:80"
     healthcheck:
