@@ -178,7 +178,7 @@ services:
     logging: *default-logging
 
   tei:
-    image: ghcr.io/huggingface/text-embeddings-inference:cpu-latest
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.6
     container_name: pkb-tei
     restart: unless-stopped
     volumes:
