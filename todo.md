@@ -1,14 +1,6 @@
-# todo: Настройки эмбеддингов, LLM, реранка в корневом docker-compose.yml
+# Fix: IVFFlat → HNSW для vector-индекса в rag_builder
 
-## Выполнено
-- [x] **x-env-embeddings** — все параметры явно: `PROVIDER`, `BASE_URL`, `API_URL`, `MODEL`, `DIM`, `VECTOR_DIMENSION`, `API_KEY`, `TIMEOUT`, `INSTRUCTION`
-- [x] **x-env-rerank** — новый блок с `RERANKER_BASE_URL`, `RERANKER_MODEL`, `RERANKER_TIMEOUT`, `RERANK_TOP_N`
-- [x] **tei** — переключён на reranker `BAAI/bge-reranker-v2-m3-int8`, убран `tei-init`
-- [x] **rag-builder** — явно: `CHUNK_SIZE`, `EMBEDDING_BATCH_SIZE`, `EMBEDDING_RETRIES`
-- [x] **rag-search** — явно: `SEARCH_STRATEGY`, `SEARCH_TOP_K`, `CONTEXT_EXPANSION`
-- [x] **query** — явно: `LLM_MODEL`, `LLM_API_URL`, `LLM_API_KEY`, `LLM_TEMPERATURE`, `LLM_MAX_TOKENS`, `LLM_TOP_P`, `MOCK_*`
-- [x] **converter-validator** — явно: `DEFAULT_LLM_MODEL`, `DEFAULT_LLM_MAX_TOKENS`, `DEFAULT_LLM_TIMEOUT`, `CONFIDENCE_THRESHOLD`
-- [x] **app_settings.yaml** — `rerank_url` → `http://tei:80`
-
-## Что осталось / к сведению
-- Размерность эмбеддингов 2048 — проверить совместимость схемы БД (pgvector) при миграции
+- [x] 1. Alembic migration — заменить ivfflat на hnsw
+- [x] 2. service_checker/db_check.py — заменить rag_has_ivfflat на rag_has_hnsw
+- [x] 3. Документация db_diagrams.md (3 копии) — IVFFlat → HNSW
+- [x] 4. Документация ddl_migrations_17_06.md (3 копии) — IVFFlat → HNSW

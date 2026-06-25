@@ -29,7 +29,7 @@
 
 - `registry.documents.file_hash_sha256` и `title_hash_sha256` — тип изменён на `CHAR(64)` (был `text`)
 - `registry.document_versions.file_hash_sha256` — также `CHAR(64)`
-- `rag.document_chunks.embedding` — тип изменён на `VECTOR(2048)` (был `VECTOR(1536)`). **Требует переиндексации всех документов.** Порядок: удалить IVFFlat индекс → ALTER COLUMN → полная переиндексация → создать IVFFlat заново
+- `rag.document_chunks.embedding` — тип изменён на `VECTOR(2048)` (был `VECTOR(1536)`). **Требует переиндексации всех документов.** Порядок: удалить HNSW индекс → ALTER COLUMN → полная переиндексация → создать HNSW заново
 
 ---
 

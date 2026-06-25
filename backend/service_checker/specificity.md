@@ -871,57 +871,6 @@ class FeedbackRequest(BaseModel):
 ### Статус
 🟡 **Принято** — docs новее реализации, checker тестирует по факту
 
-## 25. RAG Builder — Alembic migration падает: несовместимость UUID и BIGINT
-
-### Проблема
-RAG Builder не стартует — `validate_startup_migrations()` проверяет таблицу `alembic_version`, которой нет в БД.
-А при попытке выполнить `alembic upgrade head`:
-- 1-я миграция (`20260528_0001`) создаёт `rag.document_chunks` с `document_id UUID`
-- 2-я миграция (`20260614_0002`) пытается добавить FK `document_id → registry.documents.id`, но Registry использует `BIGINT`, а не UUID
-- FK падает: `DatatypeMismatchError: key columns document_id and id are of incompatible types: uuid and bigint`
-
-### Диагностика
-```
-DETAIL: Key columns "document_id" and "id" are of incompatible types: uuid and bigint.
-```
-В проекте принято архитектурное решение: **все ID — BIGINT** (см. аномалию №13).
-RAG Builder использует UUID для document_id — это ошибка в схеме.
-
-### Что сделано (checker, 2026-06-15)
-1. Создан `alembic_version` со значением `20260614_0002` (пропуск 2-й миграции)
-2. `rag.document_chunks` создана вручную через DDL с `document_id BIGINT` (вместо UUID)
-3. Индексы (GIN, IVFFlat) созданы
-4. RAG Builder перезапущен — стартует и отвечает на health check
-5. RAG Search (зависимый) починился — 2/2 ✅
-
-### Дополнение (checker, 2026-06-15, v2)
-Таблица `rag.document_chunks` пересоздана с `document_id UUID` (изначальная схема).
-В пайплайны добавлена конвертация int→UUID с warning:
-- `pipelines/full_document_lifecycle.py` — `_save_uuid_for_build()` конвертирует BIGINT из Registry
-  в UUID перед отправкой в RAG Builder. Использует `int_to_uuid()` из `core/utils.py`.
-- `pipelines/multi_document_cross_search.py` — аналогичная конвертация уже была (создана 2026-06-15).
-- `pipelines/document_processing.py` — использует `int_to_uuid()` для TEST_DOC_ID (статическая константа).
-
-⚠️ RAG Search внутренний JOIN (`rag.document_chunks.document_id` UUID vs `registry.documents.id` BIGINT)
-всё ещё падает с `operator does not exist: bigint = uuid`. Требует фикса в RAG Search service.
-
-### Что НЕ сделано
-2-я миграция (`20260614_0002`) пропущена — FK на registry.documents нет.
-Для корректной работы FK нужно:
-- Править 1-ю миграцию RAG Builder: `document_id` → `BIGINT` (не UUID)
-- Либо править 2-ю миграцию: проверять типы колонок перед ADD CONSTRAINT
-
-### Статус
-⚠️ **Костыль** — таблица создана вручную, 2-я миграция пропущена. Ждёт фикса от разработчика RAG Builder.
-
-### Костыли удалены (2026-06-16)
-- `service_checker/docker/patch_rag_tables.py` — удалён (ручное создание таблиц)
-- `service_checker/docker/fix_rag_dim.py`, `fix_supervisor_conf.py` — удалены
-- `service_checker/core/utils.py` — `int_to_uuid()` / `uuid_to_int()` удалены
-- `service_checker/pipelines/*` — `_save_uuid_for_build`, `_on_rag_search_error` удалены
-- `service_checker/services/rag_builder.py` — warnings о костылях удалены
-
-RAG Builder теперь проверяется без обходных путей.
 
 ## 26. Orchestrator — 500 вместо 404 при запросе удалённого draft
 

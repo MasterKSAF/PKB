@@ -171,7 +171,7 @@ class DbCheckResult:
 
     rag_tables: List[str] = field(default_factory=list)
     rag_has_embedding: bool = False
-    rag_has_ivfflat: bool = False
+    rag_has_hnsw: bool = False
     rag_has_gin: bool = False
     rag_has_created_at: bool = False
 
@@ -203,7 +203,7 @@ class DbCheckResult:
     @property
     def rag_ok(self) -> bool:
         return (self.rag_has_embedding and
-                self.rag_has_ivfflat and
+                self.rag_has_hnsw and
                 self.rag_has_gin)
 
     @property
@@ -337,7 +337,7 @@ def run_db_check() -> DbCheckResult:
             "SELECT indexname FROM pg_indexes "
             "WHERE schemaname = 'rag' AND tablename = 'document_chunks'"
         ))
-        result.rag_has_ivfflat = "ix_rag_doc_chunks_embedding_ivfflat" in rag_indexes
+        result.rag_has_hnsw = "ix_rag_doc_chunks_embedding_hnsw" in rag_indexes
         result.rag_has_gin = "ix_rag_doc_chunks_tsv" in rag_indexes
         result.rag_has_created_at = bool(_query_single_column(
             "SELECT column_name FROM information_schema.columns "
@@ -527,7 +527,7 @@ def format_db_report(result: DbCheckResult) -> str:
     rag_checks = [
         ("Таблица `document_chunks`", bool(result.rag_tables)),
         ("Колонка `embedding` (vector)", result.rag_has_embedding),
-        ("IVFFlat индекс `ix_rag_doc_chunks_embedding_ivfflat`", result.rag_has_ivfflat),
+        ("HNSW индекс `ix_rag_doc_chunks_embedding_hnsw`", result.rag_has_hnsw),
         ("GIN индекс `ix_rag_doc_chunks_tsv`", result.rag_has_gin),
         ("Колонка `created_at`", result.rag_has_created_at),
     ]

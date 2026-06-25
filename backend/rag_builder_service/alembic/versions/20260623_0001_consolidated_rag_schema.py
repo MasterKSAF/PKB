@@ -64,14 +64,19 @@ def upgrade() -> None:
         "CREATE INDEX IF NOT EXISTS ix_rag_doc_chunks_tsv "
         "ON rag.document_chunks USING GIN (tsv)"
     )
+    # Удаляем старый IVFFlat индекс, если он был создан предыдущими миграциями
     op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_rag_doc_chunks_embedding_ivfflat "
-        "ON rag.document_chunks USING ivfflat (embedding vector_cosine_ops) "
-        "WITH (lists = 100)"
+        "DROP INDEX IF EXISTS rag.ix_rag_doc_chunks_embedding_ivfflat"
+    )
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_rag_doc_chunks_embedding_hnsw "
+        "ON rag.document_chunks USING hnsw (embedding vector_cosine_ops) "
+        "WITH (m = 16, ef_construction = 64)"
     )
 
 
 def downgrade() -> None:
+    op.execute("DROP INDEX IF EXISTS rag.ix_rag_doc_chunks_embedding_hnsw")
     op.execute("DROP INDEX IF EXISTS rag.ix_rag_doc_chunks_embedding_ivfflat")
     op.execute("DROP INDEX IF EXISTS rag.ix_rag_doc_chunks_tsv")
     op.execute("DROP INDEX IF EXISTS rag.ix_rag_doc_chunks_doc_id")
