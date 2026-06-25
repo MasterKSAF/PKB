@@ -109,6 +109,53 @@ Gateway проверяет собственный конфиг и health-check �
 | [`recheck.bat`](backend/service_checker/docker/recheck.bat) | Чистый перезапуск + отчёт (health, coverage, pipelines). Поддерживает фильтрацию по сервисам и пайплайнам |
 | [`recheck_spd.bat`](backend/service_checker/docker/recheck_spd.bat) | То же, что recheck, но для RAG Builder SPD (`docker-compose.spd.yml`) |
 
+## Деплой на сервер
+
+### Скрипты деплоя
+
+В корне проекта:
+
+| Скрипт | Команда | Описание |
+|--------|---------|---------|
+| [`deploy.sh`](deploy.sh) | `./deploy.sh` | **Основной деплой:** `git fetch && git reset --hard origin/develop` + `docker compose up -d --build`. Сбрасывает локальные изменения и разворачивает последнюю версию |
+| [`deploy_reset.sh`](deploy_reset.sh) | `./deploy_reset.sh` | **Деплой со сбросом данных:** останавливает сервисы, удаляет volumes БД и MinIO, затем вызывает `deploy.sh`. **Осторожно — удаляет все данные!** |
+
+Деплой всегда форсированный: `git reset --hard` отменяет любые локальные изменения и переключается на `origin/develop`. Это исключает ошибки `Your local changes would be overwritten by merge`.
+
+### docker-compose.yml — конфигурация сервера
+
+[`docker-compose.yml`](docker-compose.yml) — единственный источник истины для развёртывания:
+- Все сервисы (postgres, redis, minio, infinity, auth, registry, parser, converter-validator, rag-builder, rag-search, query, orchestrator, gateway)
+- Переменные окружения для каждого сервиса
+- Версии образов, порты, volumes, healthcheck'и
+- Сети (`pkb-net`, `signoz-net`)
+
+### Управление сервером
+
+```bash
+# Полное обновление и перезапуск
+./deploy.sh
+
+# Обновление и перезапуск со сбросом БД
+./deploy_reset.sh
+
+# Просмотр логов всех сервисов
+docker compose logs -f
+
+# Логи конкретного сервиса
+docker compose logs -f gateway
+docker compose logs -f infinity
+
+# Проверка статуса
+docker compose ps
+
+# Остановка всех сервисов
+docker compose down
+
+# Перезапуск конкретного сервиса после изменения кода
+docker compose up -d --build gateway
+```
+
 ## Docker (All-in-One контейнер)
 
 Всё в одном контейнере: **PostgreSQL 16 + pgvector, Redis, MinIO** и **все 8 backend-сервисов**.
