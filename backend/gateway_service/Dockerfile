@@ -11,6 +11,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     apt-get update && apt-get install -y --no-install-recommends docker-ce-cli && \
     rm -rf /var/lib/apt/lists/*
 
+ARG GIT_COMMIT=unknown
+ARG BUILD_TIME=unknown
+RUN echo "$GIT_COMMIT" > /app/.git_commit && echo "$BUILD_TIME" > /app/.build_time
+
 WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1

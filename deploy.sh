@@ -47,6 +47,8 @@ echo ""
 
 # ── 2. Сборка и запуск ──────────────────────────────────────────────────────
 echo -e "${YELLOW}[2/4] Building and starting all services...${NC}"
+export GIT_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+export BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 docker compose up -d --build
 echo -e "  ${GREEN}All containers started.${NC}"
 echo ""
