@@ -21,6 +21,7 @@ import http.server
 import subprocess
 import sys
 import os
+import stat
 from urllib.parse import urlparse, parse_qs
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 9090
@@ -29,6 +30,13 @@ PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 9090
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 DIAGNOSTICS_SCRIPT = "./server_diagnostics.sh"
+
+# Гарантируем права на выполнение скрипта
+_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "server_diagnostics.sh")
+if os.path.exists(_script_path):
+    st = os.stat(_script_path)
+    if not st.st_mode & stat.S_IXUSR:
+        os.chmod(_script_path, st.st_mode | stat.S_IRWXU)
 
 # Известные сервисы (для валидации)
 KNOWN_SERVICES = {
