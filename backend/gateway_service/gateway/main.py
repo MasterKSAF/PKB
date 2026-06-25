@@ -1035,16 +1035,38 @@ async def health_ready():
 
 
 @app.get("/api/v1/system/diagnostics")
-async def gateway_diagnostics():
-    """Полная диагностика сервера (прокси к diagnostics_server.py на хосте).
+@app.get("/api/v1/system/diagnostics/{rest_of_path:path}")
+async def gateway_diagnostics(request: Request, rest_of_path: str = ""):
+    """Диагностика сервера (прокси к diagnostics_server.py на хосте).
+
+    Проксирует path и query-параметры на diagnostics server.
+    Примеры:
+      /api/v1/system/diagnostics              → базовая сводка
+      /api/v1/system/diagnostics/gateway       → диагностика gateway
+      /api/v1/system/diagnostics/system        → системные логи
+      /api/v1/system/diagnostics?verbose=true  → расширенная
+      /api/v1/system/diagnostics?logs=100      → с указанием логов
 
     Diagnostics server запускается отдельно на хосте (не в Docker):
       cd backend/diagnostics && ./start_diagnostics_server.sh start
 
     Адрес diagnostics server задаётся в DIAGNOSTICS_URL
-    (по умолчанию http://host.docker.internal:9090/diagnostics).
+    (по умолчанию http://host.docker.internal:9090).
     """
-    url = config.diagnostics_url
+    # DIAGNOSTICS_URL может быть с /diagnostics на конце или без
+    base = config.diagnostics_url.rstrip("/")
+    if base.endswith("/diagnostics"):
+        base = base[:-len("/diagnostics")]
+
+    # Строим целевой URL: /diagnostics[/{rest}]?query
+    subpath = "/diagnostics"
+    if rest_of_path:
+        subpath += "/" + rest_of_path.rstrip("/")
+    query = request.url.query
+    url = f"{base}{subpath}"
+    if query:
+        url += f"?{query}"
+
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
             resp = await client.get(url)
