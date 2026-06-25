@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ThemeProvider,
   CssBaseline,
@@ -30,7 +30,11 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       refetchOnWindowFocus: false,
-      retry: 1,
+      retry: (failureCount, error: any) => {
+        const status = error?.response?.status;
+        if (status === 401 || status === 403) return false;
+        return failureCount < 1;
+      },
     },
   },
 });
@@ -44,7 +48,8 @@ export default function App() {
     currentUserId,
     focusMode,
     isAuthenticated,
-    logout,
+    login,
+    logout: storeLogout,
     themeMode,
     workMode,
     setActiveTab,
@@ -54,6 +59,7 @@ export default function App() {
     toggleWorkMode,
   } = useUIStore();
   const appTheme = useMemo(() => getAppTheme(themeMode), [themeMode]);
+  const [authChecked, setAuthChecked] = useState(false);
   const currentUser = adminUsers.find((user) => user.id === currentUserId) ?? adminUsers[0] ?? null;
   const currentUserMeta =
     !currentUser
@@ -67,6 +73,38 @@ export default function App() {
   useEffect(() => {
     document.body.dataset.pkbTheme = themeMode;
   }, [themeMode]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (workMode === 'demo') {
+      setAuthChecked(true);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setAuthChecked(false);
+    authApi
+      .restore()
+      .then((profile) => {
+        if (cancelled) return;
+        if (profile) {
+          login(profile.id);
+          setApiStatus('online');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setApiStatus('offline');
+      })
+      .finally(() => {
+        if (!cancelled) setAuthChecked(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [login, setApiStatus, workMode]);
 
   useEffect(() => {
     if (!isAuthenticated || workMode === 'demo') return;
@@ -127,11 +165,30 @@ export default function App() {
     }
   };
 
+  const handleLogout = () => {
+    void authApi.logout().finally(() => {
+      queryClient.clear();
+      storeLogout();
+    });
+  };
+
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider theme={appTheme}>
         <CssBaseline />
-        {!isAuthenticated ? (
+        {!authChecked && workMode !== 'demo' ? (
+          <Box
+            sx={{
+              minHeight: '100vh',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              bgcolor: 'background.default',
+            }}
+          >
+            <Typography color="text.secondary">Проверяем сессию...</Typography>
+          </Box>
+        ) : !isAuthenticated ? (
           <LoginScreen />
         ) : (
         <Box
@@ -348,7 +405,7 @@ export default function App() {
                       size="small"
                       variant="outlined"
                       startIcon={<LogOut size={15} />}
-                      onClick={logout}
+                      onClick={handleLogout}
                       sx={{
                         height: 34,
                         px: 1.15,

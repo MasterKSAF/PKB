@@ -43,7 +43,15 @@ npm run build
 
 Продуктивный режим работает через Gateway/Auth. Роль и права должны приходить из профиля пользователя.
 
-Локальный mock Gateway обычно использует:
+Текущий auth-flow:
+
+1. Вход выполняется через `POST /auth/token`.
+2. Профиль, роль и permissions подтягиваются через `GET /auth/me`.
+3. После обновления страницы UI восстанавливает сессию по сохраненным access/refresh token и не требует повторного логина, если сессия еще валидна.
+4. При `401 Unauthorized` общий HTTP-слой вызывает `POST /auth/refresh`, обновляет access token и повторяет исходный запрос один раз.
+5. Если refresh token истек или невалиден, UI очищает локальную сессию и возвращает пользователя на экран входа.
+
+Актуальная dev/server-сборка обычно использует:
 
 | Роль | Логин | Пароль |
 | --- | --- | --- |
@@ -86,7 +94,7 @@ Demo-режим использует локальные профили:
 
 | Файл | Назначение |
 | --- | --- |
-| `src/utils/http.ts` | Gateway-first HTTP-слой, авторизация, API-вызовы и controlled fallback/error states. |
+| `src/utils/http.ts` | Gateway-first HTTP-слой, авторизация, refresh token, восстановление сессии, API-вызовы и controlled fallback/error states. |
 | `src/utils/mockData.ts` | Demo-данные для локального режима. |
 | `src/store/uiStore.ts` | Zustand-состояние UI: режим, пользователь, вкладки, роли, состояние Gateway. |
 | `src/utils/access.ts` | Роли, permissions и доступность вкладок. |
@@ -146,10 +154,12 @@ Demo-режим использует локальные профили:
 
 ```text
 VITE_API_BASE_URL=http://127.0.0.1:8080/api/v1
-VITE_GATEWAY_AUTO_LOGIN=true
+VITE_GATEWAY_AUTO_LOGIN=false
 VITE_GATEWAY_USERNAME=admin@example.com
 VITE_GATEWAY_PASSWORD=Admin1234!
 ```
+
+`VITE_GATEWAY_AUTO_LOGIN=true` допустим только для локальной отладки. В продуктивной сборке вход должен выполняться пользователем через экран авторизации.
 
 ## Документация рядом
 
@@ -167,5 +177,6 @@ VITE_GATEWAY_PASSWORD=Admin1234!
 2. Ключевые сценарии подключены к Gateway-контрактам в текущем объеме.
 3. Registry-редакторы классификаторов, терминологии и неизвестных кодов добавлены в администрирование.
 4. Обработка базы знаний разделена на загрузку, черновики, реестр и журналы.
-5. Открытые backend-блокеры зафиксированы отдельно.
-6. Проверки: `npm run lint`, `npm run build`.
+5. Авторизация в продуктивном режиме поддерживает refresh token и восстановление после F5/reload.
+6. Открытые backend-блокеры зафиксированы отдельно.
+7. Проверки: `npm run lint`, `npm run build`.
