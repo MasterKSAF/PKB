@@ -21,6 +21,9 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
+# HF_TOKEN по умолчанию (read-only, не секретный)
+HF_TOKEN="${HF_TOKEN:-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}"
+
 echo -e "${YELLOW}Preparing TEI model...${NC}"
 
 # ── Проверка: уже скачана? ──────────────────────────────────────────────────
