@@ -29,14 +29,15 @@ PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 9090
 # Переходим в директорию скрипта (чтобы найти server_diagnostics.sh)
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-DIAGNOSTICS_SCRIPT = "./server_diagnostics.sh"
+# Абсолютный путь к скрипту (CWD может отличаться при запуске через nohup)
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DIAGNOSTICS_SCRIPT = os.path.join(SCRIPT_DIR, "server_diagnostics.sh")
 
 # Гарантируем права на выполнение скрипта
-_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "server_diagnostics.sh")
-if os.path.exists(_script_path):
-    st = os.stat(_script_path)
+if os.path.exists(DIAGNOSTICS_SCRIPT):
+    st = os.stat(DIAGNOSTICS_SCRIPT)
     if not st.st_mode & stat.S_IXUSR:
-        os.chmod(_script_path, st.st_mode | stat.S_IRWXU)
+        os.chmod(DIAGNOSTICS_SCRIPT, st.st_mode | stat.S_IRWXU)
 
 # Известные сервисы (для валидации)
 KNOWN_SERVICES = {
