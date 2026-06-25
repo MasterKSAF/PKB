@@ -61,11 +61,6 @@ class GatewayConfig:
         default_factory=lambda: os.getenv("RATE_LIMIT_ENABLED", "1").lower() in ("1", "true", "yes")
     )
 
-    # URL сервера диагностики (для проксирования /api/v1/system/diagnostics)
-    diagnostics_url: str = field(
-        default_factory=lambda: os.getenv("DIAGNOSTICS_URL", "http://host.docker.internal:9090/diagnostics")
-    )
-
     # Разрешён ли анонимный доступ (для тестов)
     allow_anonymous: bool = field(
         default_factory=lambda: os.getenv("ALLOW_ANONYMOUS", "").lower() in ("1", "true", "yes")

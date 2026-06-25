@@ -20,9 +20,7 @@ import time
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any, Dict, Optional
-
-import httpx
+from typing import Any, Dict
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -1035,152 +1033,52 @@ async def health_ready():
 
 
 # ---------------------------------------------------------------------------
-# Diagnostics — прокси к diagnostics-server на хосте
+# Diagnostics — системная диагностика (Docker, Git, system)
 # ---------------------------------------------------------------------------
+
+from gateway.diagnostics import (
+    KNOWN_SERVICES,
+    build_service_diagnostics,
+    build_summary,
+    build_system_logs,
+)
 
 
 @app.get("/api/v1/system/diagnostics")
 @app.get("/api/v1/system/diagnostics/{rest_of_path:path}")
 async def gateway_diagnostics(request: Request, rest_of_path: str = ""):
-    """Диагностика сервера.
+    """Диагностика системы.
 
-    Сначала пытается получить данные от diagnostics server на хосте
-    (системные логи, docker, git). Если он недоступен — gateway
-    возвращает собственную диагностику (health сервисов, конфиг).
+    Собирает данные через Docker socket и git — статус контейнеров,
+    health, диски, логи, git, системные ресурсы.
 
     Примеры:
       /api/v1/system/diagnostics              → компактная сводка
-      /api/v1/system/diagnostics?verbose=true → полная сводка (диски, Docker, порты, логи)
-      /api/v1/system/diagnostics/gateway       → диагностика gateway
-      /api/v1/system/diagnostics?logs=100      → с указанием количества строк логов
-
-    Diagnostics server:
-      cd backend/diagnostics && python3 diagnostics_server.py 9090
+      /api/v1/system/diagnostics?verbose=true → полная (диски, Docker, порты, логи)
+      /api/v1/system/diagnostics/{service}     → детально по сервису
+      /api/v1/system/diagnostics/system        → системные логи
     """
-    # --- Пытаемся получить данные от diagnostics server ---
-    host_result = await _try_host_diagnostics(request, rest_of_path)
-    if host_result is not None:
-        return host_result
+    from urllib.parse import parse_qs
 
-    # --- Fallback: диагностика от Gateway ---
+    params = parse_qs(request.url.query)
+    verbose = params.get("verbose", [None])[0] in ("true", "1", "yes")
+    logs_n = params.get("logs", [None])[0]
+    log_lines = int(logs_n) if logs_n and logs_n.isdigit() else 20
+
     if rest_of_path:
-        return await _gateway_service_diagnostics(rest_of_path)
-    return await _gateway_summary_diagnostics(request)
+        svc = rest_of_path.rstrip("/")
+        if svc == "system":
+            body = build_system_logs(100)
+        elif svc in KNOWN_SERVICES:
+            body = build_service_diagnostics(svc, log_lines)
+        else:
+            services = ", ".join(sorted(KNOWN_SERVICES))
+            body = f"Unknown service: {svc}\nKnown: {services}\n"
+            return Response(content=body, media_type="text/plain", status_code=404)
+        return Response(content=body, media_type="text/plain")
 
-
-async def _try_host_diagnostics(request: Request, rest_of_path: str) -> Optional[Response]:
-    """Пытается получить диагностику от diagnostics server на хосте.
-    Возвращает Response или None если сервер недоступен."""
-    base = config.diagnostics_url.rstrip("/")
-    if base.endswith("/diagnostics"):
-        base = base[:-len("/diagnostics")]
-
-    subpath = "/diagnostics"
-    if rest_of_path:
-        subpath += "/" + rest_of_path.rstrip("/")
-    query = request.url.query
-    url = f"{base}{subpath}"
-    if query:
-        url += f"?{query}"
-
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(url)
-            if resp.status_code >= 400:
-                return None
-            return Response(content=resp.text, media_type="text/plain")
-    except httpx.RequestError:
-        return None
-
-
-async def _gateway_summary_diagnostics(request: Request) -> Response:
-    """Собирает базовую диагностику силами Gateway (без diagnostics server)."""
-    uptime_sec = time.time() - GATEWAY_START_TIME
-    uptime_str = f"{int(uptime_sec // 3600)}h {int((uptime_sec % 3600) // 60)}m {int(uptime_sec % 60)}s"
-
-    lines = []
-    lines.append("=" * 52)
-    lines.append("   PKB Neuroassistant — Gateway Self-Diagnostics")
-    lines.append("=" * 52)
-    lines.append("")
-
-    lines.append(f"  Version:    {GATEWAY_VERSION}")
-    lines.append(f"  Uptime:     {uptime_str}")
-    lines.append(f"  Mode:       {config.mode}")
-    lines.append(f"  Port:       {config.port}")
-    lines.append(f"  Env:        {config.env}")
-    lines.append(f"  Timeout:    {config.request_timeout}s")
-    lines.append(f"  Anon:       {'yes' if config.allow_anonymous else 'no'}")
-    lines.append("")
-
-    lines.append("[Services]")
-    try:
-        services = await check_all_services_health()
-        for svc, status in sorted(services.items()):
-            icon = "OK" if status == "ok" else "ERR"
-            url = config.service_urls.get(svc, "n/a")
-            lines.append(f"  {icon}  {svc:20s}  {url}")
-    except Exception as exc:
-        lines.append(f"  ?  (health check failed: {exc})")
-    lines.append("")
-
-    host_url = config.diagnostics_url
-    lines.append("[Host diagnostics]")
-    lines.append(f"  URL: {host_url}")
-    lines.append(f"  Status: unavailable")
-    lines.append(f"  Hint:  cd backend/diagnostics && python3 diagnostics_server.py 9090")
-    lines.append("")
-
-    lines.append("[Request]")
-    lines.append(f"  Path:   {request.url.path}")
-    lines.append(f"  Query:  {request.url.query or '(none)'}")
-    lines.append(f"  Client: {request.client.host if request.client else 'unknown'}")
-    lines.append("")
-
-    lines.append("=" * 52)
-    lines.append("   Endpoint: GET /api/v1/system/diagnostics")
-    lines.append("=" * 52)
-    lines.append("")
-
-    return Response(content="\n".join(lines), media_type="text/plain")
-
-
-async def _gateway_service_diagnostics(service: str) -> Response:
-    """Диагностика конкретного сервиса силами Gateway."""
-    svc_name = service.rstrip("/")
-    lines = []
-    lines.append("=" * 52)
-    lines.append(f"   Service diagnostics: {svc_name}")
-    lines.append(f"   (host diagnostics server unavailable)")
-    lines.append("=" * 52)
-    lines.append("")
-
-    lines.append(f"[1] Health check")
-    try:
-        services = await check_all_services_health()
-        status = services.get(svc_name, "unknown")
-        marker = "OK" if status == "ok" else "ERR"
-        lines.append(f"  {svc_name:20s}  {marker}")
-    except Exception as exc:
-        lines.append(f"  (health check failed: {exc})")
-
-    svc_url = config.service_urls.get(svc_name)
-    if svc_url:
-        lines.append(f"  URL:     {svc_url}")
-    lines.append("")
-
-    lines.append("[2] Note")
-    lines.append("  Для полной диагностики (логи, docker inspect, ресурсы)")
-    lines.append("  запустите diagnostics server на хосте:")
-    lines.append("    cd backend/diagnostics && python3 diagnostics_server.py 9090")
-    lines.append("")
-
-    lines.append("=" * 52)
-    lines.append("   Diagnostics complete (gateway-only)")
-    lines.append("=" * 52)
-    lines.append("")
-
-    return Response(content="\n".join(lines), media_type="text/plain")
+    body = build_summary(log_lines, verbose)
+    return Response(content=body, media_type="text/plain")
 
 
 # ---------------------------------------------------------------------------

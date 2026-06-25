@@ -1,11 +1,11 @@
-# Diagnostics: компактная сводка + надёжный запуск
+# Diagnostics в Gateway
 
-- [x] Базовая диагностика → компактная (system + health + containers ✓/✗ + git)
-- [x] `?verbose=true` → полная (диски, Docker, порты, логи ошибок, system)
-- [x] `/diagnostics/{service}` → диагностика конкретного сервиса
-- [x] `/health` → health-check эндпоинт для diagnostics_server.py
-- [x] `--pidfile` аргумент для diagnostics_server.py
-- [x] Graceful shutdown через SIGTERM/SIGINT
-- [x] Удалены server_diagnostics.sh и start_diagnostics_server.sh
-- [x] deploy.sh/deploy_reset.sh: PID-файл, проверка через /health, без дублей
-- [x] Все ссылки на shell → python3 diagnostics_server.py 9090
+- [x] Diagnostics встроен в Gateway, а не отдельный сервер
+- [x] `GET /api/v1/system/diagnostics` — сводка (конфиг + health сервисов)
+- [x] `GET /api/v1/system/diagnostics/{service}` — диагностика по сервису
+- [x] Удалены: diagnostics_server.py, Dockerfile, shell-скрипты
+- [x] deploy.sh: убрано управление diagnostics (не нужно)
+- [x] deploy_reset.sh: вызывает deploy.sh (down + clean + deploy)
+- [x] docker-compose.yml: чисто (нет diagnostics сервиса, нет DIAGNOSTICS_URL)
+- [x] config.py: удалён diagnostics_url
+- [x] README.md: обновлён

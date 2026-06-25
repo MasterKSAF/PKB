@@ -534,6 +534,12 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"
+    privileged: true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - .:/project:ro
+      - /proc:/host/proc:ro
+    working_dir: /project
     environment:
       <<: [*env-service-urls]
       GATEWAY_MODE: real
@@ -542,9 +548,7 @@ services:
       ENV: ${ENV:-development}
       RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-0}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-*}
-      DIAGNOSTICS_URL: ${DIAGNOSTICS_URL:-http://host.docker.internal:9090/diagnostics}
-    extra_hosts:
-      - host.docker.internal:host-gateway
+      HOST_PROC: /host/proc
     depends_on:
       auth:
         condition: service_healthy

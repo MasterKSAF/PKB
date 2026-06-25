@@ -65,45 +65,22 @@ PKB_neuroassistant/
 - **План спринта**: [`docs/plans/sprint1_04_06_10_06.md`](docs/plans/sprint1_04_06_10_06.md)
 - **Сводный план реализации**: [`docs/plans/СВОДНЫЙ_ПЛАН_РЕАЛИЗАЦИИ.md`](docs/plans/СВОДНЫЙ_ПЛАН_РЕАЛИЗАЦИИ.md)
 
-## Diagnostics — удалённая диагностика через Gateway
+## Diagnostics — диагностика через Gateway
 
-Диагностика сервера доступна через единый endpoint Gateway (порт 8080):
+Диагностика системы встроена в Gateway и всегда доступна:
 
-```
-GET /api/v1/system/diagnostics
-```
-
-**Как это работает:**
-1. Diagnostics server запускается на хосте (вне Docker) — HTTP-сервер на порту 9090
-2. Gateway проксирует запрос `/api/v1/system/diagnostics` на diagnostics server
-3. Diagnostics server собирает данные через Python-модуль `diagnostics_server.py`
-
-**Запуск diagnostics server на хосте:**
 ```bash
-cd backend/diagnostics
-python3 diagnostics_server.py 9090
-```
-
-**Получение диагностики (через Gateway):**
-```bash
-# Компактная сводка
+# Общая сводка
 curl http://localhost:8080/api/v1/system/diagnostics
-
-# Полная сводка (диски, Docker, порты, логи)
-curl "http://localhost:8080/api/v1/system/diagnostics?verbose=true"
 
 # Диагностика конкретного сервиса
 curl http://localhost:8080/api/v1/system/diagnostics/gateway
-curl http://localhost:8080/api/v1/system/diagnostics/parser
-
-# Системные логи
-curl http://localhost:8080/api/v1/system/diagnostics/system
-
-# С указанием количества строк логов
-curl "http://localhost:8080/api/v1/system/diagnostics?logs=50"
+curl http://localhost:8080/api/v1/system/diagnostics/orchestrator
+curl http://localhost:8080/api/v1/system/diagnostics/auth
 ```
 
-> **Замечание:** Если diagnostics server не запущен, Gateway вернёт собственную базовую диагностику (конфиг + health сервисов).
+Gateway проверяет собственный конфиг и health-check всех сервисов.
+Отдельный diagnostics server не требуется.
 
 ## Batch-файлы (Windows)
 
