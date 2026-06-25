@@ -479,4 +479,17 @@ Enum: `GOST`, `GOST_R`, `OST`, `RD`, `TU`, `ISO`, `DNV`, `ASTM`, `RMRS`, `OTHER`
 
 **Рекомендация:** при ошибке `unable to index file 'docs/nul'` — удалить файл и повторить `git add`.
 
+### G3. Infinity + OpenVINO EP несовместимы с quantized ONNX (DynamicQuantizeMatMul)
+
+При запуске `michaelf34/infinity:latest-cpu` с `--engine optimum` infinity пытается оптимизировать ONNX-модель через OpenVINO ExecutionProvider и падает с:
+```
+RuntimeException: Unsupported input bias type, accepted FP32 but got: dynamic
+Check '(element_type_bias == ov::element::f32)' failed
+```
+Это баг OpenVINO — не поддерживает DynamicQuantizeMatMul ноды в quantized ONNX-моделях.
+
+**Решение:** `--device cpu` — onnxruntime использует CPUExecutionProvider.
+
+**Дополнительно:** `michaelf34/infinity:latest-cpu` на Windows вызывает OOM (exit 137) из-за Docker Desktop VM. На Linux достаточно `latest` образа.
+
 
