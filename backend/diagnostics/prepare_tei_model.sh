@@ -13,7 +13,8 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 MODEL_DIR="$PROJECT_ROOT/models/bge-reranker-m3-int8"
-MODEL_URL="https://huggingface.co/BAAI/bge-reranker-v2-m3-int8"
+MODEL_REPO="BAAI/bge-reranker-v2-m3-int8"
+MODEL_URL="https://huggingface.co/$MODEL_REPO"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -43,8 +44,14 @@ fi
 if [ -f "config.json" ]; then
     echo "  Model files already downloaded (config.json found)."
 else
-    echo "  Downloading model from $MODEL_URL ..."
-    GIT_LFS_SKIP_SMUDGE=0 git clone --depth 1 "$MODEL_URL" "$MODEL_DIR" 2>&1 || {
+    # Определяем URL с токеном (если есть HF_TOKEN)
+    CLONE_URL="$MODEL_URL"
+    if [ -n "${HF_TOKEN:-}" ]; then
+        CLONE_URL="https://user:${HF_TOKEN}@huggingface.co/$MODEL_REPO"
+    fi
+
+    echo "  Downloading model from $MODEL_REPO ..."
+    GIT_LFS_SKIP_SMUDGE=0 git clone --depth 1 "$CLONE_URL" . 2>&1 || {
         echo -e "  ${RED}Failed to download model.${NC}"
         echo "  Try: export HF_TOKEN=your_token && $0"
         exit 1
