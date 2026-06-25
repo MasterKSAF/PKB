@@ -36,7 +36,9 @@ echo ""
 
 # ── 1. Git pull ──────────────────────────────────────────────────────────────
 echo -e "${YELLOW}[1/4] Pulling latest code from git...${NC}"
-git pull --ff-only
+git fetch origin
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+git reset --hard "origin/$CURRENT_BRANCH"
 echo -e "  ${GREEN}Git updated.${NC}"
 
 # Восстановить права — git мог сбросить +x при обновлении файлов
