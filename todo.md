@@ -1,16 +1,19 @@
-# Диагностика "Поиск временно недоступен"
+# Todo: тестирование связок (integration tests)
 
-## Выполнено
-- [x] Проверен diagnostics endpoint (`/api/v1/system/diagnostics?verbose=true`)
-- [x] Проверены сервисы напрямую: infinity (7997), rag-search (8091), query (8083), registry (8084)
-- [x] Установлена корневая причина: OOM kill infinity_emb
-- [x] Прочитан код pipeline.py — точка возникновения ошибки
-- [x] Прочитан код diagnostics.py — `run()` не возвращал stderr
-- [x] Прочитан конфиг infinity в docker-compose.yml
-- [x] Прочитан issue michaelfeil/infinity#579 — optimum engine жрёт >10GB при загрузке
-- [x] Добавить memory limit infinity в docker-compose.yml
-- [x] Сменить engine optimum → torch и модель ONNX → BAAI/bge-reranker-v2-m3
-- [x] Починить diagnostics.py — `run()` возвращает stderr при ошибке (проверено локально)
-- [x] Записать в specificity.md диагностику и выводы
-- [x] Записать в guide.md правила диагностики
-- [x] Финальный обзор
+## Проблема
+Ошибка `valid_at` не была обнаружена потому, что тесты проверяют каждый сервис изолированно. Связка query_service → rag_search не тестируется: query отправляет запрос без `valid_at`, rag_search возвращает 422, query ловит exception и показывает «Поиск временно недоступен».
+
+## Что нужно
+Добавить тесты, которые проверяют реальное взаимодействие сервисов друг с другом, а не только каждый API эндпоинт по отдельности.
+
+### Критические связки (по приоритету)
+1. **query → rag_search** — отправка сообщения в чат, pipeline вызывает `rag_client.search()` → rag_search
+2. **query → registry** — pipeline вызывает `registry_client.enrich_query()`
+3. **rag_search → infinity** — rag_search вызывает infinity для реранкинга
+4. **gateway → query** — gateway проксирует `/api/v1/chat/*` на query
+5. **gateway → rag_search** — gateway проксирует `/api/v1/rag/*` на rag_search (с transform пути)
+
+### Формат
+- Тесты поднимают оба сервиса (или используют моки с реальными контрактами)
+- Проверяют не только HTTP статус, но и структуру ответа
+- Ловят рассогласования схем (обязательные поля, типы)

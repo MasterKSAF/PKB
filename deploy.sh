@@ -61,10 +61,15 @@ echo -e "${YELLOW}[3/4] Waiting for services to initialize (30s)...${NC}"
 sleep 30
 echo ""
 
-# ── 4. Статус и health ──────────────────────────────────────────────────────
-echo -e "${YELLOW}[4/4] Service status:${NC}"
+# ── 4. Метка времени деплоя ────────────────────────────────────────────────────
+date -u +"%Y-%m-%dT%H:%M:%SZ" > .deployed
+echo -e "  ${GREEN}Deploy timestamp saved.${NC}"
+echo ""
+
+# ── 5. Статус и health ──────────────────────────────────────────────────────
+echo -e "${YELLOW}[5/5] Service status:${NC}"
 docker compose ps
-echo -e "\n${YELLOW}[4/4] Health check (Gateway):${NC}"
+echo -e "\n${YELLOW}[5/5] Health check (Gateway):${NC}"
 HEALTH=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 http://localhost:8080/health 2>/dev/null || echo "000")
 if [ "$HEALTH" = "200" ]; then
     echo -e "  Gateway health: ${GREEN}$HEALTH OK${NC}"

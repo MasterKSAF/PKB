@@ -53,6 +53,8 @@ backend/models/
 NUL
 nul
 
+.deployed
+
 # Databases
 *.db
 *.sqlite
