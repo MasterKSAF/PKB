@@ -23,7 +23,7 @@ echo -e "${CYAN}============================================${NC}"
 echo ""
 
 # ── 0. Проверка Docker ───────────────────────────────────────────────────────
-echo -e "${YELLOW}[0/7] Checking Docker...${NC}"
+echo -e "${YELLOW}[0/6] Checking Docker...${NC}"
 if ! docker info >/dev/null 2>&1; then
     echo -e "${RED}ERROR: Docker is not running!${NC}"
     exit 1
@@ -32,18 +32,13 @@ echo -e "  ${GREEN}Docker is running.${NC}"
 echo ""
 
 # ── 1. Git pull ──────────────────────────────────────────────────────────────
-echo -e "${YELLOW}[1/7] Pulling latest code from git...${NC}"
+echo -e "${YELLOW}[1/6] Pulling latest code from git...${NC}"
 git pull --ff-only
 echo -e "  ${GREEN}Git updated.${NC}"
 echo ""
 
 # ── 2. Подготовка TEI модели ─────────────────────────────────────────────────
 echo -e "${YELLOW}[2/7] Preparing TEI model...${NC}"
-
-# Загружаем HF_TOKEN из .env (если не экспортирован в сессии)
-if [ -z "${HF_TOKEN:-}" ] && [ -f .env ]; then
-    export HF_TOKEN=$(grep -E '^HF_TOKEN=' .env | head -1 | cut -d= -f2 || true)
-fi
 
 PREPARE_SCRIPT="$SCRIPT_DIR/backend/diagnostics/prepare_tei_model.sh"
 if [ -x "$PREPARE_SCRIPT" ]; then

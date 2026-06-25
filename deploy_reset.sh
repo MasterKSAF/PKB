@@ -56,11 +56,6 @@ echo ""
 # ── 3. Подготовка TEI модели ─────────────────────────────────────────────────
 echo -e "${YELLOW}[3/8] Preparing TEI model...${NC}"
 
-# Загружаем HF_TOKEN из .env (если не экспортирован в сессии)
-if [ -z "${HF_TOKEN:-}" ] && [ -f .env ]; then
-    export HF_TOKEN=$(grep -E '^HF_TOKEN=' .env | head -1 | cut -d= -f2 || true)
-fi
-
 PREPARE_SCRIPT="$SCRIPT_DIR/backend/diagnostics/prepare_tei_model.sh"
 if [ -x "$PREPARE_SCRIPT" ]; then
     "$PREPARE_SCRIPT"
