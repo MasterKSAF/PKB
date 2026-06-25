@@ -24,7 +24,6 @@ def test_chunking_keeps_citation_metadata():
     first = chunks[0]
 
     assert first.document_id == 420000
-    assert first.document_version_id == 420001
     assert first.section_id == 1
     assert first.clause == "1"
     assert first.page == 1
@@ -56,11 +55,9 @@ def test_empty_text_section_is_skipped():
         "metadata": {
             "schema": "schema_registry_for_rag_v2",
             "document_id": 420000,
-            "document_version_id": 420001,
         },
         "document": {
             "id": 420000,
-            "document_version_id": 420001,
             "pkb_code": "04",
             "doc_code": "ГОСТ 20868-81",
             "title": "Test",
@@ -101,11 +98,9 @@ def test_long_text_is_split_into_multiple_chunks():
         "metadata": {
             "schema": "schema_registry_for_rag_v2",
             "document_id": 1,
-            "document_version_id": 1,
         },
         "document": {
             "id": 1,
-            "document_version_id": 1,
             "pkb_code": "04",
             "doc_code": "TEST",
             "title": "Test",
@@ -200,11 +195,9 @@ def test_protected_span_is_not_split_between_chunks():
         "metadata": {
             "schema": "schema_registry_for_rag_v2",
             "document_id": 1,
-            "document_version_id": 1,
         },
         "document": {
             "id": 1,
-            "document_version_id": 1,
             "pkb_code": "04",
             "doc_code": "TEST",
             "title": "Test",
@@ -275,11 +268,9 @@ def test_protected_span_from_other_section_is_ignored():
         "metadata": {
             "schema": "schema_registry_for_rag_v2",
             "document_id": 1,
-            "document_version_id": 1,
         },
         "document": {
             "id": 1,
-            "document_version_id": 1,
             "pkb_code": "04",
             "doc_code": "TEST",
             "title": "Test",

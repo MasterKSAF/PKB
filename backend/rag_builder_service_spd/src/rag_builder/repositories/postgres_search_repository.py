@@ -56,10 +56,6 @@ class PostgresSearchRepository:
                 where_clauses.append(sql.SQL("document_id = %s"))
                 params.append(filters.document_id)
 
-            if filters.document_version_id is not None:
-                where_clauses.append(sql.SQL("document_version_id = %s"))
-                params.append(filters.document_version_id)
-
             if filters.section_id is not None:
                 where_clauses.append(sql.SQL("section_id = %s"))
                 params.append(filters.section_id)
@@ -76,7 +72,6 @@ class PostgresSearchRepository:
             SELECT
                 id AS chunk_id,
                 document_id,
-                document_version_id,
                 document_section_id,
                 section_id,
                 clause,
@@ -130,10 +125,6 @@ class PostgresSearchRepository:
                 where_clauses.append(sql.SQL("document_id = %s"))
                 params.append(filters.document_id)
 
-            if filters.document_version_id is not None:
-                where_clauses.append(sql.SQL("document_version_id = %s"))
-                params.append(filters.document_version_id)
-
             if filters.section_id is not None:
                 where_clauses.append(sql.SQL("section_id = %s"))
                 params.append(filters.section_id)
@@ -149,7 +140,6 @@ class PostgresSearchRepository:
             SELECT
                 id AS chunk_id,
                 document_id,
-                document_version_id,
                 document_section_id,
                 section_id,
                 clause,
@@ -182,7 +172,7 @@ class PostgresSearchRepository:
         return [
             self._row_to_result_with_score(
                 row,
-                score=float(row[13] or 0.0),
+                score=float(row[12] or 0.0),
             )
             for row in rows
         ]
@@ -197,8 +187,7 @@ class PostgresSearchRepository:
             WITH current_section AS (
                 SELECT
                     id,
-                    document_version_id,
-                    path_ltree
+                        path_ltree
                 FROM {schema}.document_sections
                 WHERE id = %s
             ),
@@ -216,7 +205,7 @@ class PostgresSearchRepository:
                     s.metadata -> 'raw_content' AS content
                 FROM {schema}.document_sections s
                 JOIN current_section c
-                    ON s.document_version_id = c.document_version_id
+                    ON s.document_id = c.document_id
                 WHERE
                     c.path_ltree IS NOT NULL
                     AND s.path_ltree IS NOT NULL
@@ -239,7 +228,7 @@ class PostgresSearchRepository:
                     s.metadata -> 'raw_content' AS content
                 FROM {schema}.document_sections s
                 JOIN current_section c
-                    ON s.document_version_id = c.document_version_id
+                    ON s.document_id = c.document_id
                 WHERE
                     c.path_ltree IS NOT NULL
                     AND s.path_ltree IS NOT NULL
@@ -295,8 +284,7 @@ class PostgresSearchRepository:
         return SearchChunkResult(
             chunk_id=row[0],
             document_id=row[1],
-            document_version_id=row[2],
-            document_section_id=row[3],
+                        document_section_id=row[3],
             section_id=row[4],
             clause=row[5],
             path=row[6],
@@ -310,14 +298,13 @@ class PostgresSearchRepository:
         )
 
     def _row_to_result(self, row) -> SearchChunkResult:
-        raw_distance = row[12]
+        raw_distance = row[11]
         distance = float(raw_distance) if raw_distance is not None else None
 
         return SearchChunkResult(
             chunk_id=row[0],
             document_id=row[1],
-            document_version_id=row[2],
-            document_section_id=row[3],
+                        document_section_id=row[3],
             section_id=row[4],
             clause=row[5],
             path=row[6],
@@ -341,5 +328,3 @@ class PostgresSearchRepository:
 
     def _to_vector_literal(self, embedding: list[float]) -> str:
         return "[" + ",".join(str(value) for value in embedding) + "]"
-
-

@@ -629,7 +629,6 @@ class PostgresChunkRepository(ChunkRepository):
                         CREATE TABLE IF NOT EXISTS {}.document_sections(
                             id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
                             document_id BIGINT NOT NULL,
-                            document_version_id BIGINT NOT NULL,
                             section_id BIGINT NOT NULL,
                             parent_id BIGINT,              
                             clause TEXT,
@@ -642,7 +641,7 @@ class PostgresChunkRepository(ChunkRepository):
                             section_type TEXT NOT NULL,
                             metadata JSONB,
                             created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                            UNIQUE(document_version_id, section_id)
+                            UNIQUE(document_id, section_id)
                         )
                         """
                     ).format(sql.Identifier(settings.POSTGRES_SCHEMA))
@@ -668,7 +667,6 @@ class PostgresChunkRepository(ChunkRepository):
                         CREATE TABLE IF NOT EXISTS {schema}.chunks (
                             id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
                             document_id BIGINT NOT NULL,
-                            document_version_id BIGINT NOT NULL,
                             indexing_txn_id UUID,
                             document_section_id BIGINT NOT NULL,
                             section_id BIGINT NOT NULL,
@@ -739,7 +737,6 @@ class PostgresChunkRepository(ChunkRepository):
                             id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 
                             document_id BIGINT NOT NULL,
-                            document_version_id BIGINT NOT NULL,
                             document_section_id BIGINT NOT NULL,
 
                             source_section_id BIGINT NOT NULL,
@@ -799,7 +796,6 @@ class PostgresChunkRepository(ChunkRepository):
                             id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     
                             document_id BIGINT NOT NULL,
-                            document_version_id BIGINT NOT NULL,
                             document_section_id BIGINT NOT NULL,
     
                             source_section_id BIGINT NOT NULL,
@@ -836,7 +832,6 @@ class PostgresChunkRepository(ChunkRepository):
                             id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     
                             document_id BIGINT NOT NULL,
-                            document_version_id BIGINT NOT NULL,
                             document_section_id BIGINT NOT NULL,
     
                             source_section_id BIGINT NOT NULL,
@@ -874,7 +869,6 @@ class PostgresChunkRepository(ChunkRepository):
                             id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     
                             document_id BIGINT NOT NULL,
-                            document_version_id BIGINT NOT NULL,
                             document_section_id BIGINT NOT NULL,
     
                             source_section_id BIGINT NOT NULL,
@@ -948,7 +942,7 @@ class PostgresChunkRepository(ChunkRepository):
 
         В RAG-хранилище хранится актуальный индекс документа,
         поэтому очистка выполняется по document_id, а не только
-        по document_version_id.
+        по document_id.
         """
         document_id = request.metadata.document_id
 
@@ -1068,23 +1062,23 @@ class PostgresChunkRepository(ChunkRepository):
 
         with self._connect() as conn:
             with conn.cursor() as cur:
-                document_version_id = chunks[0].chunk.document_version_id
+                document_id = chunks[0].chunk.document_id
 
                 cur.execute(
                     f"""
                     DELETE FROM {settings.POSTGRES_SCHEMA}.chunks
-                    WHERE document_version_id = %s
+                    WHERE document_id = %s
                     """,
-                    (document_version_id,),
+                    (document_id,),
                 )
 
                 cur.execute(
                     f"""
                     SELECT section_id, id
                     FROM {settings.POSTGRES_SCHEMA}.document_sections
-                    WHERE document_version_id = %s
+                    WHERE document_id = %s
                     """,
-                    (document_version_id,),
+                    (document_id,),
                 )
 
                 section_id_to_db_id = {
@@ -1100,7 +1094,7 @@ class PostgresChunkRepository(ChunkRepository):
                     if document_section_id is None:
                         raise ValueError(
                             "No document_section_id found for "
-                            f"document_version_id={document_version_id}, "
+                            f"document_id={document_id}, "
                             f"section_id={item.chunk.section_id}"
                         )
 
@@ -1108,7 +1102,6 @@ class PostgresChunkRepository(ChunkRepository):
                         f"""
                         INSERT INTO {settings.POSTGRES_SCHEMA}.chunks (
                             document_id,
-                            document_version_id,
                             indexing_txn_id,
                             document_section_id,
                             section_id,
@@ -1128,14 +1121,12 @@ class PostgresChunkRepository(ChunkRepository):
                             %s, %s, %s, %s,
                             %s, %s, %s, %s,
                             %s, %s, %s, %s,
-                            %s,
                             to_tsvector('russian'::regconfig, %s),
                             %s, %s
                         )
                         """,
                         (
                             item.chunk.document_id,
-                            item.chunk.document_version_id,
                             indexing_txn_id,
                             document_section_id,
                             item.chunk.section_id,
@@ -1167,9 +1158,9 @@ class PostgresChunkRepository(ChunkRepository):
                 cur.execute(
                     f"""
                     DELETE FROM {settings.POSTGRES_SCHEMA}.document_sections
-                    WHERE document_version_id = %s
+                    WHERE document_id = %s
                     """,
-                    (request.metadata.document_version_id,),
+                    (request.metadata.document_id,),
                 )
 
                 for section in request.sections:
@@ -1177,7 +1168,6 @@ class PostgresChunkRepository(ChunkRepository):
                         f"""
                         INSERT INTO {settings.POSTGRES_SCHEMA}.document_sections (
                             document_id,
-                            document_version_id,
                             section_id,
                             parent_id,
                             clause,
@@ -1193,12 +1183,11 @@ class PostgresChunkRepository(ChunkRepository):
                         VALUES (
                             %s, %s, %s, %s,
                             %s, %s, %s, %s,
-                            %s, %s, %s, %s, %s
+                            %s, %s, %s, %s
                         )
                         """,
                         (
                             request.metadata.document_id,
-                            request.metadata.document_version_id,
                             section.section_id,
                             section.parent_id,
                             section.clause,
@@ -1235,18 +1224,18 @@ class PostgresChunkRepository(ChunkRepository):
                 cur.execute(
                     f"""
                     DELETE FROM {settings.POSTGRES_SCHEMA}.cross_references
-                    WHERE document_version_id = %s
+                    WHERE document_id = %s
                     """,
-                    (request.metadata.document_version_id,),
+                    (request.metadata.document_id,),
                 )
 
                 cur.execute(
                     f"""
                     SELECT section_id, id
                     FROM {settings.POSTGRES_SCHEMA}.document_sections
-                    WHERE document_version_id = %s
+                    WHERE document_id = %s
                     """,
-                    (request.metadata.document_version_id,),
+                    (request.metadata.document_id,),
                 )
 
                 section_id_to_db_id = {
@@ -1262,7 +1251,7 @@ class PostgresChunkRepository(ChunkRepository):
                     if document_section_id is None:
                         raise ValueError(
                             "No document_section_id found for "
-                            f"document_version_id={request.metadata.document_version_id}, "
+                            f"document_id={request.metadata.document_id}, "
                             f"section_id={section.section_id}"
                         )
 
@@ -1271,7 +1260,6 @@ class PostgresChunkRepository(ChunkRepository):
                             f"""
                             INSERT INTO {settings.POSTGRES_SCHEMA}.cross_references (
                                 document_id,
-                                document_version_id,
                                 document_section_id,
                                 source_section_id,
                                 source_clause,
@@ -1286,12 +1274,11 @@ class PostgresChunkRepository(ChunkRepository):
                             VALUES (
                                 %s, %s, %s, %s,
                                 %s, %s, %s, %s,
-                                %s, %s, %s, %s
+                                %s, %s, %s
                             )
                             """,
                             (
                                 request.metadata.document_id,
-                                request.metadata.document_version_id,
                                 document_section_id,
                                 section.section_id,
                                 section.clause,
@@ -1322,18 +1309,18 @@ class PostgresChunkRepository(ChunkRepository):
                 cur.execute(
                     f"""
                     DELETE FROM {settings.POSTGRES_SCHEMA}.images
-                    WHERE document_version_id = %s
+                    WHERE document_id = %s
                     """,
-                    (request.metadata.document_version_id,),
+                    (request.metadata.document_id,),
                 )
 
                 cur.execute(
                     f"""
                     SELECT section_id, id
                     FROM {settings.POSTGRES_SCHEMA}.document_sections
-                    WHERE document_version_id = %s
+                    WHERE document_id = %s
                     """,
-                    (request.metadata.document_version_id,),
+                    (request.metadata.document_id,),
                 )
 
                 section_id_to_db_id = {
@@ -1361,7 +1348,6 @@ class PostgresChunkRepository(ChunkRepository):
                         f"""
                         INSERT INTO {settings.POSTGRES_SCHEMA}.images (
                             document_id,
-                            document_version_id,
                             document_section_id,
                             source_section_id,
                             clause,
@@ -1375,12 +1361,11 @@ class PostgresChunkRepository(ChunkRepository):
                         VALUES (
                             %s, %s, %s, %s,
                             %s, %s, %s, %s,
-                            %s, %s, %s
+                            %s, %s
                         )
                         """,
                         (
                             request.metadata.document_id,
-                            request.metadata.document_version_id,
                             document_section_id,
                             section.section_id,
                             section.clause,
@@ -1455,18 +1440,18 @@ class PostgresChunkRepository(ChunkRepository):
                 cur.execute(
                     f"""
                     DELETE FROM {settings.POSTGRES_SCHEMA}.extracted_tables
-                    WHERE document_version_id = %s
+                    WHERE document_id = %s
                     """,
-                    (request.metadata.document_version_id,),
+                    (request.metadata.document_id,),
                 )
 
                 cur.execute(
                     f"""
                     SELECT section_id, id
                     FROM {settings.POSTGRES_SCHEMA}.document_sections
-                    WHERE document_version_id = %s
+                    WHERE document_id = %s
                     """,
-                    (request.metadata.document_version_id,),
+                    (request.metadata.document_id,),
                 )
 
                 section_id_to_db_id = {
@@ -1500,7 +1485,6 @@ class PostgresChunkRepository(ChunkRepository):
                         f"""
                         INSERT INTO {settings.POSTGRES_SCHEMA}.extracted_tables (
                             document_id,
-                            document_version_id,
                             document_section_id,
                             source_section_id,
                             clause,
@@ -1516,12 +1500,11 @@ class PostgresChunkRepository(ChunkRepository):
                         VALUES (
                             %s, %s, %s, %s,
                             %s, %s, %s, %s,
-                            %s, %s, %s, %s, %s
+                            %s, %s, %s, %s
                         )
                         """,
                         (
                             request.metadata.document_id,
-                            request.metadata.document_version_id,
                             document_section_id,
                             section.section_id,
                             section.clause,
@@ -1552,18 +1535,18 @@ class PostgresChunkRepository(ChunkRepository):
                 cur.execute(
                     f"""
                     DELETE FROM {settings.POSTGRES_SCHEMA}.formulas
-                    WHERE document_version_id = %s
+                    WHERE document_id = %s
                     """,
-                    (request.metadata.document_version_id,),
+                    (request.metadata.document_id,),
                 )
 
                 cur.execute(
                     f"""
                     SELECT section_id, id
                     FROM {settings.POSTGRES_SCHEMA}.document_sections
-                    WHERE document_version_id = %s
+                    WHERE document_id = %s
                     """,
-                    (request.metadata.document_version_id,),
+                    (request.metadata.document_id,),
                 )
 
                 section_id_to_db_id = {
@@ -1583,7 +1566,7 @@ class PostgresChunkRepository(ChunkRepository):
                     if document_section_id is None:
                         raise ValueError(
                             "No document_section_id found for "
-                            f"document_version_id={request.metadata.document_version_id}, "
+                            f"document_id={request.metadata.document_id}, "
                             f"section_id={section.section_id}"
                         )
 
@@ -1597,7 +1580,6 @@ class PostgresChunkRepository(ChunkRepository):
                         f"""
                         INSERT INTO {settings.POSTGRES_SCHEMA}.formulas (
                             document_id,
-                            document_version_id,
                             document_section_id,
                             source_section_id,
                             clause,
@@ -1613,13 +1595,12 @@ class PostgresChunkRepository(ChunkRepository):
                         VALUES (
                             %s, %s, %s, %s,
                             %s, %s, %s, %s,
-                            %s, %s, %s, %s, %s
+                            %s, %s, %s, %s
                         )
                         RETURNING id
                         """,
                         (
                             request.metadata.document_id,
-                            request.metadata.document_version_id,
                             document_section_id,
                             section.section_id,
                             section.clause,
@@ -1676,6 +1657,3 @@ class PostgresChunkRepository(ChunkRepository):
                         )
 
             conn.commit()
-
-
-

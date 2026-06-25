@@ -45,7 +45,6 @@ def test_search_response_contains_citation_fields():
     chunk = SearchChunkResult(
         chunk_id=1001,
         document_id=420000,
-        document_version_id=420001,
         document_section_id=10,
         section_id=8,
         clause="6.1",
@@ -68,7 +67,6 @@ def test_search_response_contains_citation_fields():
     )
 
     assert response.results[0].document_id == 420000
-    assert response.results[0].document_version_id == 420001
     assert response.results[0].document_section_id == 10
     assert response.results[0].section_id == 8
     assert response.results[0].clause == "6.1"
@@ -95,7 +93,6 @@ def test_search_chunk_result_supports_context_items():
     chunk = SearchChunkResult(
         chunk_id=139,
         document_id=420000,
-        document_version_id=420001,
         document_section_id=8,
         section_id=8,
         clause="6.1",

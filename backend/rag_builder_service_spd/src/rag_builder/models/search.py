@@ -12,7 +12,6 @@ class SearchFilters(BaseModel):
     Только поля, которые реально есть в nsi.chunks.
     """
     document_id: int | None = None
-    document_version_id: int | None = None
     section_id: int | None = None
     chunk_type: str | None = None
 
@@ -64,12 +63,11 @@ class SearchChunkResult(BaseModel):
     Один найденный chunk.
 
     Важно: возвращаем данные, достаточные для точной citation:
-    document_id + document_version_id + clause + page + content.
+    document_id + clause + page + content.
     """
     chunk_id: int
 
     document_id: int
-    document_version_id: int
 
     document_section_id: int
     section_id: int

@@ -598,9 +598,6 @@ GET /rag/build/{document_id}/status
 ```
 
 Текущий legacy-вход всё ещё использует `BuildRequest` / chunk-container.
-`document_version_id` больше не является обязательным входным полем.
-Если legacy-контейнер всё ещё передаёт `document_version_id`, Builder принимает его для обратной совместимости.
-Если поле отсутствует, Builder временно использует `document_id` как legacy/audit `document_version_id` внутри Chunk/DB.
 
 ---
 

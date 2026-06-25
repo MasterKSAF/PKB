@@ -1,69 +1,56 @@
 {
   "metadata": {
     "schema": "schema_registry_for_rag_v2",
-    "document_id": 420000,
-    "document_version_id": 420001
+    "document_id": 420000
   },
-
   "document": {
     "id": 420000,
-    "document_version_id": 420001,
-
     "pkb_code": "04",
     "doc_code": "ГОСТ 20868-81",
-
     "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
-
     "validity_status": "active",
     "era": "USSR",
-
     "page_count": 2
   },
-
   "sections": [
     {
       "section_id": 1,
       "parent_id": null,
-
       "clause": "1",
       "title": null,
-
       "level": 1,
       "path": "1",
-
       "page": 1,
-
-      "bbox": [0.12, 0.18, 0.88, 0.26],
-
+      "bbox": [
+        0.12,
+        0.18,
+        0.88,
+        0.26
+      ],
       "type": "text",
-
       "content": {
         "text": "Настоящий стандарт распространяется на металлические крепежные установочные стойки..."
       },
-
       "references": []
     },
-
     {
       "section_id": 2,
       "parent_id": null,
-
       "clause": "2",
       "title": null,
-
       "level": 1,
       "path": "2",
-
       "page": 1,
-
-      "bbox": [0.12, 0.27, 0.88, 0.34],
-
+      "bbox": [
+        0.12,
+        0.27,
+        0.88,
+        0.34
+      ],
       "type": "text",
-
       "content": {
         "text": "Крепежные установочные стойки следует изготовлять по ГОСТ 20862-81 – ГОСТ 20867-81."
       },
-
       "references": [
         {
           "target_document_id": null,
@@ -73,32 +60,27 @@
         }
       ]
     },
-
     {
       "section_id": 3,
       "parent_id": null,
-
       "clause": "6.1",
       "title": "Допуск соосности",
-
       "level": 2,
       "path": "6/6.1",
-
       "page": 2,
-
-      "bbox": [0.10, 0.42, 0.92, 0.55],
-
+      "bbox": [
+        0.1,
+        0.42,
+        0.92,
+        0.55
+      ],
       "type": "text",
-
       "content": {
         "text": "Допуск соосности оси отверстия Б относительно оси поверхности А должен соответствовать приведенной в таблице."
       },
-
       "references": []
     }
   ],
-
   "terminology": [],
-
   "options": {}
 }
