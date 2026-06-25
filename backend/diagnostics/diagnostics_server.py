@@ -107,10 +107,78 @@ class DiagnosticsHandler(http.server.BaseHTTPRequestHandler):
             body = "ERROR: diagnostics script timed out (120s)\n"
             status = 500
         except FileNotFoundError:
-            body = f"ERROR: {DIAGNOSTICS_SCRIPT} not found\n"
-            status = 500
+            # Если скрипт не найден — собираем базовую диагностику напрямую
+            body = self._fallback_diagnostics(path)
+            status = 200
 
         self._respond(status, body)
+
+    def _fallback_diagnostics(self, request_path: str) -> str:
+        """Собирает базовую диагностику если server_diagnostics.sh недоступен."""
+        lines = []
+        lines.append("=" * 52)
+        lines.append("   PKB Neuroassistant — Host Self-Diagnostics")
+        lines.append("   (server_diagnostics.sh not found, fallback mode)")
+        lines.append("=" * 52)
+        lines.append("")
+
+        # Хост
+        try:
+            hostname = subprocess.run(["hostname"], capture_output=True, text=True, timeout=5).stdout.strip()
+            uptime = subprocess.run(["uptime", "-p"], capture_output=True, text=True, timeout=5).stdout.strip()
+            lines.append(f"  Hostname: {hostname}")
+            lines.append(f"  Uptime:   {uptime}")
+        except Exception:
+            lines.append("  Hostname: (unavailable)")
+        lines.append("")
+
+        # Docker containers
+        lines.append("[Docker containers (pkb)]")
+        try:
+            result = subprocess.run(
+                ["docker", "ps", "-a", "--filter", "label=com.docker.compose.project=pkb",
+                 "--format", "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"],
+                capture_output=True, text=True, timeout=15,
+            )
+            if result.stdout:
+                lines.append(result.stdout.strip())
+        except Exception:
+            lines.append("  (docker not available)")
+        lines.append("")
+
+        # Health checks
+        lines.append("[Health checks]")
+        HEALTH_SERVICES = ["pkb-postgres", "pkb-redis", "pkb-minio", "pkb-auth",
+                          "pkb-registry", "pkb-parser", "pkb-gateway", "pkb-orchestrator",
+                          "pkb-query", "pkb-converter-validator", "pkb-rag-builder", "pkb-rag-search"]
+        for container in HEALTH_SERVICES:
+            try:
+                status = subprocess.run(
+                    ["docker", "inspect", container, "--format", "{{.State.Health.Status}}"],
+                    capture_output=True, text=True, timeout=5,
+                ).stdout.strip()
+                name = container.replace("pkb-", "", 1)
+                if status == "healthy":
+                    lines.append(f"  OK  {name}")
+                else:
+                    lines.append(f"  --  {name}  ({status or 'not found'})")
+            except Exception:
+                pass
+        lines.append("")
+
+        # System info
+        lines.append("[Host diagnostics]")
+        lines.append(f"  Diagnostics server: running")
+        lines.append(f"  Script: {DIAGNOSTICS_SCRIPT} (not found)")
+        lines.append(f"  Hint:  chmod +x backend/diagnostics/*.sh")
+        lines.append("")
+
+        lines.append("=" * 52)
+        lines.append("   Endpoint: GET /diagnostics (fallback)")
+        lines.append("=" * 52)
+        lines.append("")
+
+        return "\n".join(lines)
 
     def _respond(self, status: int, body: str):
         self.send_response(status)
