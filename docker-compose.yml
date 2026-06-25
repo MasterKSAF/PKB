@@ -178,7 +178,7 @@ services:
     logging: *default-logging
 
   infinity:
-    image: michaelf34/infinity:latest
+    image: michaelf34/infinity:latest-cpu
     container_name: pkb-infinity
     restart: unless-stopped
     command:
