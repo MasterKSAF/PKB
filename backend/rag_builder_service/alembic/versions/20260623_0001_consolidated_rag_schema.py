@@ -64,13 +64,13 @@ def upgrade() -> None:
         "CREATE INDEX IF NOT EXISTS ix_rag_doc_chunks_tsv "
         "ON rag.document_chunks USING GIN (tsv)"
     )
-    # Удаляем старый IVFFlat индекс, если он был создан предыдущими миграциями
+    # HNSW индекс с halfvec_cosine_ops (используется halfvec, поэтому нужен halfvec_cosine_ops, не vector_cosine_ops)
     op.execute(
         "DROP INDEX IF EXISTS rag.ix_rag_doc_chunks_embedding_ivfflat"
     )
     op.execute(
         "CREATE INDEX IF NOT EXISTS ix_rag_doc_chunks_embedding_hnsw "
-        "ON rag.document_chunks USING hnsw (embedding vector_cosine_ops) "
+        "ON rag.document_chunks USING hnsw (embedding halfvec_cosine_ops) "
         "WITH (m = 16, ef_construction = 64)"
     )
 
