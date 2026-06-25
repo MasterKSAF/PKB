@@ -181,6 +181,8 @@ services:
     image: ghcr.io/huggingface/text-embeddings-inference:cpu-latest
     container_name: pkb-tei
     restart: unless-stopped
+    environment:
+      HF_TOKEN: ${HF_TOKEN:-}
     command:
       - "--model-id"
       - "BAAI/bge-reranker-v2-m3-int8"
