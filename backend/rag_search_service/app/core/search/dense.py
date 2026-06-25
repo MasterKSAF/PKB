@@ -39,7 +39,7 @@ async def dense_search(
         SELECT id
         FROM rag.document_chunks
         WHERE embedding IS NOT NULL
-        ORDER BY embedding <=> $1::vector
+        ORDER BY embedding <=> $1::halfvec
         LIMIT $2
         """,
         query_embedding,

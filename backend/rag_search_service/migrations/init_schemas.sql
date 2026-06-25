@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS rag.document_chunks (
     document_id BIGINT NOT NULL REFERENCES registry.documents(id) ON DELETE CASCADE,
     section_id BIGINT REFERENCES registry.document_sections(id) ON DELETE SET NULL,
     content TEXT NOT NULL,
-    embedding VECTOR(1024),
+    embedding halfvec(1024),
     tsv TSVECTOR,
     page INT,
     chunk_index INT,

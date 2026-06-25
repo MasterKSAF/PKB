@@ -116,6 +116,7 @@ services:
 
   postgres:
     image: pgvector/pgvector:pg16
+    pull_policy: always
     container_name: pkb-postgres
     restart: unless-stopped
     environment:

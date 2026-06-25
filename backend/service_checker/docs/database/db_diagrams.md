@@ -335,7 +335,7 @@ erDiagram
 | `registry.classifier_registry` | `mks_oks_code` | **P2-8**: CHECK (mks_oks_code ~ '^\d{2}\.\d{3}$') — формат МКС/ОКС: две цифры, точка, три цифры |
 | `registry.classifier_registry` | `okstu_code` | **P2-8**: CHECK (okstu_code ~ '^\d{4}$') — формат ОКСТУ: четыре цифры |
 | `pipeline.tasks` | `processing_time_ms` | **P2-7**: CHECK (processing_time_ms >= 0) |
-| `rag.document_chunks` | `embedding` | **D10, P13-1**: `VECTOR(2048)` (не `VECTOR(1536)`!) — pgvector, размерность по умолчанию для Qwen3-Embedding-4B. Параметр конфигурации `app_settings.rag.embedding_dim` (альтернативы для экспериментов: 1536, 2560, 4096). `HNSW` индекс для `cosine_similarity` |
+| `rag.document_chunks` | `embedding` | **D10, P13-1**: `halfvec(2048)` (не `VECTOR(1536)`!) — pgvector, размерность по умолчанию для Qwen3-Embedding-4B. Параметр конфигурации `app_settings.rag.embedding_dim` (альтернативы для экспериментов: 1536, 2560, 4096). `HNSW` индекс для `cosine_similarity` |
 | `rag.document_chunks` | `tsv` | `tsvector` — GIN-индекс для полнотекстового поиска (`ts_rank`) |
 
 ### P2-9: valid_from / valid_until / indexing_txn_id
@@ -517,7 +517,7 @@ erDiagram
 | `section_id` | `registry.document_sections.id` |
 | `chunk_index` | Порядковый номер чанка в секции |
 | `content` | Текст чанка: plain text для `section`, Markdown для `table` |
-| `embedding` | **D10, P13-1**: `VECTOR(2048)` (не `VECTOR(1536)`!) — pgvector, размерность по умолчанию для Qwen3-Embedding-4B. `HNSW` индекс для `cosine_similarity` |
+| `embedding` | **D10, P13-1**: `halfvec(2048)` (не `VECTOR(1536)`!) — pgvector, размерность по умолчанию для Qwen3-Embedding-4B. `HNSW` индекс для `cosine_similarity` |
 | `tsv` | Полнотекстовый индекс (`to_tsvector('russian', content)`), GIN-индекс |
 | `strategy` | Стратегия чанкинга: **`semantic_1024`** (не `semantic_512`!) — **P13-1**: новый дефолт 1024 токена. Альтернативы: `semantic_512`, `semantic_2048`, `fixed_256`, `fixed_512` |
 

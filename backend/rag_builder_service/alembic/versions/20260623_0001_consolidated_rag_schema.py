@@ -43,7 +43,7 @@ def upgrade() -> None:
             document_id BIGINT NOT NULL,
             chunk_index INTEGER NOT NULL,
             content TEXT NOT NULL,
-            embedding VECTOR({dim}),
+            embedding halfvec({dim}),
             tsv TSVECTOR,
             strategy VARCHAR(32) NOT NULL,
             page INTEGER,
