@@ -49,6 +49,9 @@ echo ""
 echo -e "${YELLOW}[1/8] Pulling latest code from git...${NC}"
 git pull --ff-only
 echo -e "  ${GREEN}Git updated.${NC}"
+
+# Восстановить права — git мог сбросить +x при обновлении файлов
+chmod +x deploy.sh deploy_reset.sh 2>/dev/null || true
 echo ""
 
 # ── 2. Остановка + удаление volumes ─────────────────────────────────────────
