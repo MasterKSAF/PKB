@@ -317,7 +317,7 @@ GET    /api/v1/tasks/{task_id}/notifications (если есть)
 
 **Volume:** `huggingface_cache:/app/.cache` — кеш модели персистентный.
 
-**Связь:** сервисы через Docker DNS `http://infinity:80`.
+**Связь:** сервисы через Docker DNS `http://infinity:7997`.
 
 
 ## Конвенция нейминга полей

@@ -88,7 +88,7 @@ x-env-embeddings: &env-embeddings
 
 # --- Reranker (Infinity локально) ---
 x-env-rerank: &env-rerank
-  RERANKER_BASE_URL: http://infinity:80
+  RERANKER_BASE_URL: http://infinity:7997
   RERANKER_MODEL: onnx-community/bge-reranker-v2-m3-ONNX
   RERANKER_TIMEOUT: "15"
   RERANK_TOP_N: "15"
@@ -194,9 +194,9 @@ services:
       - "--batch-size"
       - "4"
     ports:
-      - "${INFINITY_PORT:-18080}:80"
+      - "${INFINITY_PORT:-18080}:7997"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:7997/health"]
       interval: 10s
       timeout: 5s
       retries: 10
