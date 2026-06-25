@@ -31,7 +31,8 @@ fi
 # ── Установка optimum ────────────────────────────────────────────────────────
 if ! python3 -c "import optimum" 2>/dev/null; then
     echo "  Installing optimum[onnxruntime]..."
-    pip install optimum[onnxruntime] -q 2>&1 | tail -1
+    pip install optimum[onnxruntime] --break-system-packages -q 2>&1 | tail -1 || \
+    pip install optimum[onnxruntime] --user -q 2>&1 | tail -1
 fi
 
 # ── Создание папки ───────────────────────────────────────────────────────────
