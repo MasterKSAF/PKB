@@ -374,6 +374,7 @@ class RBACMiddleware(BaseHTTPMiddleware):
                 or path == "/api/v1/system/health"
                 or path == "/api/v1/system/mode"
                 or path == "/api/v1/system/diagnostics"
+                or path.startswith("/api/v1/system/diagnostics/")
             ):
                 if not user_context["is_authenticated"]:
                     _log_access_denied(request, "UNAUTHORIZED", "Требуется аутентификация")
