@@ -20,14 +20,14 @@
   - [x] `/diagnostics/system` → системные логи
   - [x] Валидация известных сервисов (404 для неизвестных)
 
-### [x] 3. Gateway — прокси path и query
-  - [x] `gateway_diagnostics` — `@app.get("/api/v1/system/diagnostics/{rest_of_path:path}")`
-  - [x] Проброс query string на diagnostics server
-  - [x] Совместимость со старым DIAGNOSTICS_URL (с /diagnostics на конце)
+### [x] 3. Gateway — прокси path и query + fallback диагностика
+  - [x] `gateway_diagnostics` — проксирует path и query на diagnostics server
+  - [x] Fallback: если diagnostics server недоступен — gateway сам отдаёт базовую диагностику
+  - [x] `_gateway_summary_diagnostics()` — конфиг + health сервисов
+  - [x] `_gateway_service_diagnostics()` — health + URL конкретного сервиса
+  - [x] Совместимость со старым DIAGNOSTICS_URL
 
-### [ ] 4. Проверка на сервере
-  - [ ] deploy.sh → перезапуск gateway + diagnostics server (перезапустить diagnostics)
-  - [ ] `curl /api/v1/system/diagnostics` — базовая сводка
-  - [ ] `curl /api/v1/system/diagnostics/gateway` — по сервису
-  - [ ] `curl /api/v1/system/diagnostics/system` — системные логи
-  - [ ] `curl "/api/v1/system/diagnostics?verbose=true&logs=10"` — проверка params
+### [ ] 4. Деплой и проверка
+  - [ ] `git push`
+  - [ ] На сервере: `git pull && docker compose up -d --build gateway`
+  - [ ] Проверить `/api/v1/system/diagnostics`

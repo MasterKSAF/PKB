@@ -18,6 +18,7 @@ import re
 import sys
 import time
 import uuid
+from urllib.parse import urlparse
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any, Dict, Optional
@@ -1037,28 +1038,39 @@ async def health_ready():
 @app.get("/api/v1/system/diagnostics")
 @app.get("/api/v1/system/diagnostics/{rest_of_path:path}")
 async def gateway_diagnostics(request: Request, rest_of_path: str = ""):
-    """Диагностика сервера (прокси к diagnostics_server.py на хосте).
+    """Диагностика сервера.
 
-    Проксирует path и query-параметры на diagnostics server.
+    Сначала пытается получить данные от diagnostics server на хосте
+    (системные логи, docker, git). Если он недоступен — gateway
+    возвращает собственную диагностику (health сервисов, конфиг).
+
     Примеры:
       /api/v1/system/diagnostics              → базовая сводка
       /api/v1/system/diagnostics/gateway       → диагностика gateway
-      /api/v1/system/diagnostics/system        → системные логи
       /api/v1/system/diagnostics?verbose=true  → расширенная
       /api/v1/system/diagnostics?logs=100      → с указанием логов
 
-    Diagnostics server запускается отдельно на хосте (не в Docker):
+    Diagnostics server:
       cd backend/diagnostics && ./start_diagnostics_server.sh start
-
-    Адрес diagnostics server задаётся в DIAGNOSTICS_URL
-    (по умолчанию http://host.docker.internal:9090).
     """
-    # DIAGNOSTICS_URL может быть с /diagnostics на конце или без
+    # --- Пытаемся получить данные от diagnostics server ---
+    host_result = await _try_host_diagnostics(request, rest_of_path)
+    if host_result is not None:
+        return host_result
+
+    # --- Fallback: диагностика от Gateway ---
+    if rest_of_path:
+        return await _gateway_service_diagnostics(rest_of_path)
+    return await _gateway_summary_diagnostics(request)
+
+
+async def _try_host_diagnostics(request: Request, rest_of_path: str) -> Optional[Response]:
+    """Пытается получить диагностику от diagnostics server на хосте.
+    Возвращает Response или None если сервер недоступен."""
     base = config.diagnostics_url.rstrip("/")
     if base.endswith("/diagnostics"):
         base = base[:-len("/diagnostics")]
 
-    # Строим целевой URL: /diagnostics[/{rest}]?query
     subpath = "/diagnostics"
     if rest_of_path:
         subpath += "/" + rest_of_path.rstrip("/")
@@ -1068,20 +1080,97 @@ async def gateway_diagnostics(request: Request, rest_of_path: str = ""):
         url += f"?{query}"
 
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get(url)
-            content = resp.text
-            return Response(content=content, media_type="text/plain")
-    except httpx.RequestError as exc:
-        return JSONResponse(
-            status_code=502,
-            content={
-                "error": {
-                    "code": "DIAGNOSTICS_UNAVAILABLE",
-                    "message": f"Diagnostics server недоступен: {exc}",
-                }
-            },
-        )
+            return Response(content=resp.text, media_type="text/plain")
+    except httpx.RequestError:
+        return None
+
+
+async def _gateway_summary_diagnostics(request: Request) -> Response:
+    """Собирает базовую диагностику силами Gateway (без diagnostics server)."""
+    lines = []
+    lines.append("=" * 52)
+    lines.append("   PKB Neuroassistant — Gateway Self-Diagnostics")
+    lines.append("   (host diagnostics server unavailable)")
+    lines.append("=" * 52)
+    lines.append("")
+
+    lines.append("[1] Gateway info")
+    lines.append(f"  Mode:           {config.mode}")
+    lines.append(f"  Port:           {config.port}")
+    lines.append(f"  Env:            {config.env}")
+    lines.append(f"  Allow anonymous: {config.allow_anonymous}")
+    lines.append(f"  Request timeout: {config.request_timeout}s")
+    lines.append(f"  Diagnostics URL: {config.diagnostics_url}")
+    lines.append("")
+
+    lines.append("[2] Service URLs")
+    for name, url in sorted(config.service_urls.items()):
+        lines.append(f"  {name}: {url}")
+    lines.append("")
+
+    lines.append("[3] Service health")
+    try:
+        services = await check_all_services_health()
+        for svc, status in services.items():
+            marker = "OK" if status == "ok" else "ERR"
+            lines.append(f"  {svc:20s}  {marker}")
+    except Exception as exc:
+        lines.append(f"  (health check failed: {exc})")
+    lines.append("")
+
+    parsed = urlparse(str(request.url))
+    lines.append("[4] Request")
+    lines.append(f"  Path:    {request.url.path}")
+    lines.append(f"  Query:   {parsed.query or '(none)'}")
+    lines.append(f"  Client:  {request.client.host if request.client else 'unknown'}")
+    lines.append("")
+
+    lines.append("=" * 52)
+    lines.append("   Diagnostics complete (gateway-only)")
+    lines.append("=" * 52)
+    lines.append("")
+
+    return Response(content="\n".join(lines), media_type="text/plain")
+
+
+async def _gateway_service_diagnostics(service: str) -> Response:
+    """Диагностика конкретного сервиса силами Gateway."""
+    svc_name = service.rstrip("/")
+    lines = []
+    lines.append("=" * 52)
+    lines.append(f"   Service diagnostics: {svc_name}")
+    lines.append(f"   (host diagnostics server unavailable)")
+    lines.append("=" * 52)
+    lines.append("")
+
+    lines.append(f"[1] Health check")
+    try:
+        services = await check_all_services_health()
+        status = services.get(svc_name, "unknown")
+        marker = "OK" if status == "ok" else "ERR"
+        lines.append(f"  {svc_name:20s}  {marker}")
+    except Exception as exc:
+        lines.append(f"  (health check failed: {exc})")
+
+    svc_url = config.service_urls.get(svc_name)
+    if svc_url:
+        lines.append(f"  URL:     {svc_url}")
+    lines.append("")
+
+    lines.append("[2] Note")
+    lines.append("  Для полной диагностики (логи, docker inspect, ресурсы)")
+    lines.append("  запустите diagnostics server на хосте:")
+    lines.append("    cd backend/diagnostics && ./start_diagnostics_server.sh start")
+    lines.append("")
+
+    lines.append("=" * 52)
+    lines.append("   Diagnostics complete (gateway-only)")
+    lines.append("=" * 52)
+    lines.append("")
+
+    return Response(content="\n".join(lines), media_type="text/plain")
 
 
 # ---------------------------------------------------------------------------
