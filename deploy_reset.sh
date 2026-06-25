@@ -52,6 +52,7 @@ echo -e "  ${GREEN}Git updated.${NC}"
 
 # Восстановить права — git мог сбросить +x при обновлении файлов
 chmod +x deploy.sh deploy_reset.sh 2>/dev/null || true
+chmod +x backend/diagnostics/*.sh backend/diagnostics/*.py 2>/dev/null || true
 echo ""
 
 # ── 2. Остановка сервисов ────────────────────────────────────────────────
@@ -94,9 +95,11 @@ fi
 echo ""
 
 # ── 8. Diagnostics server ─────────────────────────────────────────────────────
-echo -e "${YELLOW}[8/8] Starting diagnostics server...${NC}"
+echo -e "${YELLOW}[8/8] Restarting diagnostics server...${NC}"
 DIAGNOSTICS_SCRIPT="$SCRIPT_DIR/backend/diagnostics/start_diagnostics_server.sh"
 if [ -x "$DIAGNOSTICS_SCRIPT" ]; then
+    "$DIAGNOSTICS_SCRIPT" stop 2>/dev/null || true
+    sleep 1
     "$DIAGNOSTICS_SCRIPT" start || echo -e "  ${YELLOW}(diagnostics server already running or port in use)${NC}"
 else
     echo -e "  ${YELLOW}diagnostics script not found at $DIAGNOSTICS_SCRIPT${NC}"
