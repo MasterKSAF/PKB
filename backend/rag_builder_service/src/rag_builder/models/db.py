@@ -4,7 +4,7 @@ from datetime import datetime
 
 from uuid import UUID
 
-from pgvector.sqlalchemy import Vector  # type: ignore[import-untyped]
+from pgvector.sqlalchemy import HALFVEC  # type: ignore[import-untyped]
 from sqlalchemy import BigInteger, DateTime, Float, Index, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID as PG_UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -28,7 +28,7 @@ class RagDocumentChunk(Base):
     document_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(settings.vector_dimension), nullable=True)
+    embedding: Mapped[list[float] | None] = mapped_column(HALFVEC(settings.vector_dimension), nullable=True)
     tsv: Mapped[str | None] = mapped_column(TSVECTOR, nullable=True)
     strategy: Mapped[str] = mapped_column(String(32), nullable=False)
     page: Mapped[int | None] = mapped_column(Integer, nullable=True)

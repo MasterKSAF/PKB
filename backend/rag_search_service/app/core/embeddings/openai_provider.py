@@ -47,6 +47,7 @@ class OpenAICompatibleProvider(EmbeddingProvider):
             response = await self._client.embeddings.create(
                 input=[input_text],
                 model=self._model,
+                dimensions=self._dimension,
             )
 
             embedding = response.data[0].embedding

@@ -17,15 +17,15 @@ _pool: asyncpg.Pool | None = None
 
 
 async def _register_vector_types(conn: asyncpg.Connection) -> None:
-    """Регистрация типов pgvector для корректной работы asyncpg."""
-    # Кодек для преобразования Python list/numpy array ↔ PostgreSQL vector
-    await conn.set_type_codec(
-        "vector",
-        encoder=_vector_encoder,
-        decoder=_vector_decoder,
-        schema="public",
-        format="text",
-    )
+    """Регистрация типов pgvector (vector, halfvec) для корректной работы asyncpg."""
+    for pgtype in ("vector", "halfvec"):
+        await conn.set_type_codec(
+            pgtype,
+            encoder=_vector_encoder,
+            decoder=_vector_decoder,
+            schema="public",
+            format="text",
+        )
 
 
 def _vector_encoder(value: list[float] | np.ndarray) -> str:

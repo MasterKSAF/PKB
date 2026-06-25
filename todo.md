@@ -1,10 +1,19 @@
+# Todo: тестирование связок (integration tests)
 
-# Приведение SERVICE_URL к единому формату — выполнено
+## Проблема
+Ошибка `valid_at` не была обнаружена потому, что тесты проверяют каждый сервис изолированно. Связка query_service → rag_search не тестируется: query отправляет запрос без `valid_at`, rag_search возвращает 422, query ловит exception и показывает «Поиск временно недоступен».
 
-## Что сделано
-- [x] **`docker-compose.yml`**: `x-env-service-urls` — все URL теперь без `/api/v1` (REGISTRY, VALIDATE, RAG_BUILDER, RAG_SEARCH, RAG_SERVICE). Из gateway убрано переопределение `REGISTRY_SERVICE_URL`.
-- [x] **`orchestrator_service/config.py`**: `RAG_BUILDER_SERVICE_URL` и `RAG_SEARCH_SERVICE_URL` — без `/api/v1`.
-- [x] **`orchestrator_service/rag_client.py`**: endpoints с `/api/v1` (`/api/v1/rag/build`, `/api/v1/rag/search`...).
-- [x] **`query_service/config.py`**: `RAG_SERVICE_URL` — без `/api/v1`.
-- [x] **`query_service/rag_client.py`**: путь с `/api/v1/rag/search`.
-- [x] **Тесты**: обновлены, 34/34 прошли, регрессия 315/321 (те же 6 pre-existing).
+## Что нужно
+Добавить тесты, которые проверяют реальное взаимодействие сервисов друг с другом, а не только каждый API эндпоинт по отдельности.
+
+### Критические связки (по приоритету)
+1. **query → rag_search** — отправка сообщения в чат, pipeline вызывает `rag_client.search()` → rag_search
+2. **query → registry** — pipeline вызывает `registry_client.enrich_query()`
+3. **rag_search → infinity** — rag_search вызывает infinity для реранкинга
+4. **gateway → query** — gateway проксирует `/api/v1/chat/*` на query
+5. **gateway → rag_search** — gateway проксирует `/api/v1/rag/*` на rag_search (с transform пути)
+
+### Формат
+- Тесты поднимают оба сервиса (или используют моки с реальными контрактами)
+- Проверяют не только HTTP статус, но и структуру ответа
+- Ловят рассогласования схем (обязательные поля, типы)

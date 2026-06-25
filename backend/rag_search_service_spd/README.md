@@ -77,6 +77,32 @@ content
 
 ## 3. API contract
 
+### Current endpoint map
+
+RAG Search SPD exposes read-only retrieval endpoints.
+
+Supported endpoints:
+
+```text
+GET  /api/v1/health
+
+POST /api/v1/rag/search
+POST /rag/search
+POST /search
+```
+
+RAG Search SPD does not expose legacy unversioned health endpoint:
+
+```text
+GET /health
+```
+
+RAG Search does not modify the index. Index writes are handled by `backend/rag_builder_service_spd`.
+
+### GET /api/v1/health
+
+Healthcheck endpoint for RAG Search SPD.
+
 ### POST /api/v1/rag/search
 
 Main contract endpoint for RAG Search SPD.
@@ -89,7 +115,7 @@ Legacy/local endpoint.
 
 Compatibility endpoint used by earlier local integrations.
 
-All three endpoints use the same `SearchRequest` and return the same `SearchResponse`.
+All three search endpoints use the same `SearchRequest` and return the same `SearchResponse`.
 
 Current endpoint policy:
 
@@ -100,7 +126,6 @@ POST /search             # legacy/local alias
 ```
 
 ---
-
 ## 4. SearchRequest
 
 ```json
@@ -119,7 +144,7 @@ POST /search             # legacy/local alias
 | `top_k` | integer | количество результатов |
 | `search_type` | string | `dense`, `sparse` или `hybrid` |
 | `expand_context` | boolean | добавить parent/direct children context |
-| `filters` | object/null | будущие фильтры по документу, версии, типу и т.п. |
+| `filters` | object/null | будущие фильтры по документу, секции, типу chunk и т.п. |
 
 ---
 

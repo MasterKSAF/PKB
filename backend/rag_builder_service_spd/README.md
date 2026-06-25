@@ -120,7 +120,7 @@ pytest
 Текущее состояние:
 
 ```text
-60 passed, 1 skipped
+51 passed, 1 warning
 ```
 
 ---
@@ -202,6 +202,40 @@ docker compose down
 
 ## 9. API
 
+### Current endpoint map
+
+RAG Builder SPD exposes only indexing/build endpoints.
+
+Supported endpoints:
+
+```text
+GET    /api/v1/health
+
+POST   /api/v1/rag/build
+DELETE /api/v1/rag/build/{document_id}
+GET    /api/v1/rag/build/jobs
+GET    /api/v1/rag/build/{document_id}/status
+
+POST   /index
+GET    /index/status/{indexing_txn_id}
+
+POST   /rag/build
+DELETE /rag/build/{document_id}
+GET    /rag/build/{document_id}/status
+```
+
+RAG Builder SPD does not expose Search API endpoints:
+
+```text
+GET  /health
+POST /search
+POST /rag/search
+POST /api/v1/rag/search
+```
+
+Search and retrieval endpoints live in `backend/rag_search_service_spd`.
+
+---
 ### GET /api/v1/health
 
 Проверка работоспособности сервиса и подключения к PostgreSQL.
@@ -590,17 +624,15 @@ GET /api/v1/rag/build/420000/status?longpoll=15
 Для обратной совместимости также поддерживаются:
 
 ```text
-POST /index
-GET /index/status/{indexing_txn_id}
+POST   /index
+GET    /index/status/{indexing_txn_id}
 
-POST /rag/build
-GET /rag/build/{document_id}/status
+POST   /rag/build
+DELETE /rag/build/{document_id}
+GET    /rag/build/{document_id}/status
 ```
 
 Текущий legacy-вход всё ещё использует `BuildRequest` / chunk-container.
-`document_version_id` больше не является обязательным входным полем.
-Если legacy-контейнер всё ещё передаёт `document_version_id`, Builder принимает его для обратной совместимости.
-Если поле отсутствует, Builder временно использует `document_id` как legacy/audit `document_version_id` внутри Chunk/DB.
 
 ---
 
@@ -755,7 +787,7 @@ EMBEDDING_API_KEY=
 Текущее состояние:
 
 ```text
-60 passed, 1 skipped
+51 passed, 1 warning
 ```
 
 ---
@@ -850,11 +882,8 @@ document_sections
 * локальные embedding-модели
 * мониторинг стоимости эмбеддингов
 
-### Stage 7 — Integration with RAG Search Service
+### Stage 7 - Integration with RAG Search Service
 
-* интеграция с RAG Search Service
-* Hybrid Search
-* RRF
-* Citation Engine
-* Context Expansion через ltree
-* context expansion применяется к каждому result из top_k
+* интеграция с отдельным RAG Search Service
+* Builder остаётся сервисом индексации и не содержит Search API
+* Hybrid Search, RRF, Citation Engine и Context Expansion реализуются на стороне RAG Search

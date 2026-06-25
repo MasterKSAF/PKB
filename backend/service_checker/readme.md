@@ -347,6 +347,27 @@ python -m service_checker docker --action full-report  # full-report включ�
 | `orchestrator_document_versions` | Версионирование: черновик → approve → новая версия | Auth → Orchestrator → Registry | 9 |
 | `orchestrator_full_document_lifecycle` | Полный цикл через Orchestrator: создание → preview → approve → Registry → индексация → удаление | Auth → Orchestrator → Registry → RAG Builder → RAG Search | 12 |
 
+## Service Contracts Check
+
+Реальная проверка взаимодействия сервисов друг с другом (Docker mode).
+Выполняется как шаг 3b в `full-report`, после Pipeline тестов.
+
+| Контракт | Что проверяет | Эндпоинт |
+|----------|---------------|----------|
+| query → rag_search | Прямой вызов rag_search с valid_at | `POST /api/v1/rag/search` |
+| query → registry | Registry search с valid_at | `GET /api/v1/registry/search` |
+| rag_search → infinity (TEI) | Эмбеддинги через TEI | `POST /embed` |
+| gateway → query | Прокси chat-эндпоинтов | `POST /api/v1/chat/sessions` |
+| gateway → rag_search | Прокси rag-эндпоинтов | `POST /api/v1/rag/search` |
+
+Проверяет не только HTTP статус, но и структуру ответа (обязательные поля, типы).
+При наличии gateway проверяется, что ответ от gateway содержит те же поля, что и от целевого сервиса.
+
+Также доступны unit-тесты с моками: `tests/test_service_contracts.py` (без Docker):
+```
+pytest tests/test_service_contracts.py -v
+```
+
 ## Ключевые решения
 
 - **2xx/3xx** — success

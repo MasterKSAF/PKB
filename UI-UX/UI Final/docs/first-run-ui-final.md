@@ -14,7 +14,7 @@
 
 ## 2. Забрать только UI Final
 
-Для запуска UI Final не обязательно забирать все рабочие материалы проекта. Удобный вариант - скачать ZIP ветки `feature/ui-final-api-gap-adaptation` с GitHub и открыть только папку:
+Для запуска UI Final не обязательно забирать все рабочие материалы проекта. Удобный вариант - скачать ZIP ветки `develop` с GitHub и открыть только папку:
 
 ```text
 UI-UX/UI Final/frontend
@@ -25,7 +25,7 @@ UI-UX/UI Final/frontend
 ```bash
 git clone --filter=blob:none --sparse https://github.com/NeuronsUII/PKB_neuroassistant.git
 cd PKB_neuroassistant
-git checkout feature/ui-final-api-gap-adaptation
+git checkout develop
 git sparse-checkout set "UI-UX/UI Final"
 cd "UI-UX/UI Final/frontend"
 ```
@@ -52,10 +52,10 @@ git clone https://github.com/NeuronsUII/PKB_neuroassistant.git
 cd PKB_neuroassistant
 ```
 
-Переключиться на ветку объединенного интерфейса:
+Переключиться на актуальную ветку:
 
 ```bash
-git checkout feature/ui-final-api-gap-adaptation
+git checkout develop
 ```
 
 Перейти в папку фронтенда:
@@ -130,7 +130,7 @@ npm run lint
 
 ## 7. Демо-вход
 
-Можно вручную ввести логин и пароль или нажать одну из карточек роли на экране входа.
+Выбрать `Демо` на экране входа и вручную ввести логин и пароль.
 
 | Роль | Логин | Пароль |
 | --- | --- | --- |

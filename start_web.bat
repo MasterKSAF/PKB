@@ -109,6 +109,5 @@ echo     docker compose -f backend\service_checker\docker\docker-compose-web.yml
 echo.
 
 start http://localhost:3300
-start http://localhost:8080/api/v1/health
 
 pause

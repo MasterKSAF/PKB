@@ -18,12 +18,10 @@ SectionType = Literal[
 class MetadataBlock(BaseModel):
     schema_name: str = Field(alias="schema")
     document_id: int
-    document_version_id: int | None = None
 
 
 class DocumentBlock(BaseModel):
     id: int
-    document_version_id: int | None = None
 
     pkb_code: str
     doc_code: str
@@ -114,12 +112,10 @@ class BuildRequest(BaseModel):
         normalized["metadata"] = {
             "schema": data.get("schema", "schema_registry_for_rag_v2"),
             "document_id": document_id,
-            "document_version_id": data.get("document_version_id"),
         }
 
         normalized["document"] = {
             "id": document_id,
-            "document_version_id": data.get("document_version_id"),
             "pkb_code": data.get("pkb_code", ""),
             "doc_code": data.get("doc_code", ""),
             "title": data.get("title", ""),
@@ -132,29 +128,3 @@ class BuildRequest(BaseModel):
         }
 
         return normalized
-
-    @model_validator(mode="after")
-    def fill_legacy_document_version_id(self) -> "BuildRequest":
-        """
-        document_version_id больше не является обязательным
-        входным полем RAG Builder.
-
-        Для обратной совместимости с текущими Chunk/DB/Search
-        временно заполняем legacy/audit document_version_id:
-
-        1. metadata.document_version_id
-        2. document.document_version_id
-        3. metadata.document_id
-        """
-        document_version_id = self.metadata.document_version_id
-
-        if document_version_id is None:
-            document_version_id = self.document.document_version_id
-
-        if document_version_id is None:
-            document_version_id = self.metadata.document_id
-
-        self.metadata.document_version_id = document_version_id
-        self.document.document_version_id = document_version_id
-
-        return self

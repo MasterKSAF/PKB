@@ -1,27 +1,18 @@
 {
   "metadata": {
     "schema": "schema_registry_for_rag_v2",
-    "document_id": 420000,
-    "document_version_id": 420001
+    "document_id": 420000
   },
-
   "document": {
     "id": 420000,
-    "document_version_id": 420001,
-
     "pkb_code": "04",
     "doc_code": "ГОСТ 20868-81",
-
     "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
-
     "validity_status": "active",
     "era": "USSR",
-
     "page_count": 2
   },
-
   "sections": [
-
     {
       "section_id": 1,
       "parent_id": null,
@@ -36,7 +27,6 @@
       },
       "references": []
     },
-
     {
       "section_id": 2,
       "parent_id": null,
@@ -51,7 +41,6 @@
       },
       "references": []
     },
-
     {
       "section_id": 3,
       "parent_id": null,
@@ -75,7 +64,6 @@
         }
       ]
     },
-
     {
       "section_id": 4,
       "parent_id": null,
@@ -99,7 +87,6 @@
         }
       ]
     },
-
     {
       "section_id": 5,
       "parent_id": null,
@@ -119,7 +106,6 @@
         }
       ]
     },
-
     {
       "section_id": 6,
       "parent_id": null,
@@ -134,7 +120,6 @@
       },
       "references": []
     },
-
     {
       "section_id": 7,
       "parent_id": null,
@@ -149,7 +134,6 @@
       },
       "references": []
     },
-
     {
       "section_id": 8,
       "parent_id": 7,
@@ -169,7 +153,6 @@
         }
       ]
     },
-
     {
       "section_id": 9,
       "parent_id": 8,
@@ -184,7 +167,6 @@
       },
       "references": []
     },
-
     {
       "section_id": 10,
       "parent_id": 8,
@@ -199,7 +181,6 @@
       },
       "references": []
     },
-
     {
       "section_id": 11,
       "parent_id": 8,
@@ -216,14 +197,25 @@
           "Повышенная"
         ],
         "rows": [
-          ["6-50", "0.10", "0.05"],
-          ["50-80", "0.12", "0.06"],
-          [">80", "0.15", "0.08"]
+          [
+            "6-50",
+            "0.10",
+            "0.05"
+          ],
+          [
+            "50-80",
+            "0.12",
+            "0.06"
+          ],
+          [
+            ">80",
+            "0.15",
+            "0.08"
+          ]
         ]
       },
       "references": []
     },
-
     {
       "section_id": 12,
       "parent_id": 7,
@@ -238,7 +230,6 @@
       },
       "references": []
     },
-
     {
       "section_id": 13,
       "parent_id": 7,
@@ -253,7 +244,6 @@
       },
       "references": []
     },
-
     {
       "section_id": 14,
       "parent_id": 7,
@@ -268,7 +258,6 @@
       },
       "references": []
     },
-
     {
       "section_id": 15,
       "parent_id": 7,
@@ -283,7 +272,6 @@
       },
       "references": []
     },
-
     {
       "section_id": 16,
       "parent_id": null,
@@ -298,7 +286,6 @@
       },
       "references": []
     },
-
     {
       "section_id": 17,
       "parent_id": null,
@@ -313,7 +300,6 @@
       },
       "references": []
     },
-
     {
       "section_id": 18,
       "parent_id": null,
@@ -329,9 +315,7 @@
       "references": []
     }
   ],
-
   "terminology": [],
-
   "options": {
     "source": "docling",
     "contains_images": true,

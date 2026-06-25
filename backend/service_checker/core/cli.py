@@ -592,11 +592,30 @@ async def cmd_docker(
         else:
             log_info("Pipeline тесты пропущены (--skip-pipelines)")
 
+        # 3b. Service Contracts Check (реальное взаимодействие сервисов)
+        contract_report: Optional[str] = None
+        try:
+            from service_checker.core.contracts_check import run_all_contract_checks, format_contracts_report
+
+            log_info("Проверка контрактов между сервисами...")
+            contract_report_obj = await run_all_contract_checks(timeout=15)
+            contract_report = format_contracts_report(contract_report_obj)
+            if contract_report_obj.all_passed:
+                log_ok(f"Контракты: {contract_report_obj.passed}/{contract_report_obj.total} пройдено")
+            else:
+                log_warn(f"Контракты: {contract_report_obj.failed}/{contract_report_obj.total} упало")
+        except Exception as e:
+            log_err(f"Ошибка проверки контрактов: {e}")
+            contract_report = f"\n---\n## 🔗 Service Contracts Check\n\n❌ Ошибка: {e}\n"
+
         # 4. Full report
-        if cov_results or pipe_results:
+        if cov_results or pipe_results or contract_report:
             if cov_results is None:
                 cov_results = {}
-            full_report = _generate_full_report(cov_results, pipe_results, timestamp, db_result=db_result)
+            full_report = _generate_full_report(
+                cov_results, pipe_results, timestamp,
+                db_result=db_result, contract_report=contract_report,
+            )
             full_path = check_result_dir / f"full_report{report_suffix}.md"
             full_path.write_text(full_report, encoding="utf-8")
             log_ok(f"Сводный отчёт сохранён: {full_path}")

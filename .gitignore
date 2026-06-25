@@ -46,9 +46,14 @@ Desktop.ini
 # IDE
 .vscode/
 
+# TEI model (скачивается отдельно на сервере)
+backend/models/
+
 # Windows artifacts
 NUL
 nul
+
+.deployed
 
 # Databases
 *.db

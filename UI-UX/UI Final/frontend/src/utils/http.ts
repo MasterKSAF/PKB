@@ -31,6 +31,8 @@ const ACCESS_TOKEN_KEY = 'pkb_gateway_access_token_v2';
 const REFRESH_TOKEN_KEY = 'pkb_gateway_refresh_token_v2';
 const LEGACY_ACCESS_TOKEN_KEY = 'pkb_gateway_access_token';
 const LEGACY_REFRESH_TOKEN_KEY = 'pkb_gateway_refresh_token';
+const SKIP_AUTH_HEADER = 'X-PKB-Skip-Auth';
+let refreshGatewayTokenPromise: Promise<string | null> | null = null;
 
 export const apiClient = axios.create({
   baseURL: BASE_URL,
@@ -355,13 +357,50 @@ export function clearGatewayTokens() {
   window.localStorage.removeItem(REFRESH_TOKEN_KEY);
 }
 
+function clearGatewaySession() {
+  clearGatewayTokens();
+  const store = useUIStore.getState();
+  store.logout();
+  store.setApiStatus(store.workMode === 'demo' ? 'demo' : 'offline');
+}
+
 apiClient.interceptors.request.use((config) => {
+  const headers = config.headers as any;
+  if (headers?.[SKIP_AUTH_HEADER]) {
+    delete headers[SKIP_AUTH_HEADER];
+    delete headers.Authorization;
+    return config;
+  }
+
   const token = getAccessToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
+
+async function refreshGatewayAccessToken() {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return null;
+
+  const response = await apiClient.post(
+    '/auth/refresh',
+    { refresh_token: refreshToken },
+    { headers: { [SKIP_AUTH_HEADER]: 'true' } },
+  );
+  setGatewayTokens(response.data);
+  return response.data?.access_token ?? null;
+}
+
+async function refreshGatewayTokenOnce() {
+  if (!refreshGatewayTokenPromise) {
+    refreshGatewayTokenPromise = refreshGatewayAccessToken().finally(() => {
+      refreshGatewayTokenPromise = null;
+    });
+  }
+
+  return refreshGatewayTokenPromise;
+}
 
 async function ensureGatewayToken() {
   if (isDemoMode() || !GATEWAY_AUTO_LOGIN) return;
@@ -390,9 +429,26 @@ async function gatewayRequest<T>(request: () => Promise<{ data: T }>) {
     return await request();
   } catch (error: any) {
     if (error?.response?.status === 401) {
-      clearGatewayTokens();
-      await ensureGatewayToken();
-      return await request();
+      let refreshedToken: string | null = null;
+
+      try {
+        refreshedToken = await refreshGatewayTokenOnce();
+      } catch {
+        refreshedToken = null;
+      }
+
+      if (refreshedToken) {
+        try {
+          return await request();
+        } catch (retryError: any) {
+          if (retryError?.response?.status === 401) {
+            clearGatewaySession();
+          }
+          throw retryError;
+        }
+      }
+
+      clearGatewaySession();
     }
     throw error;
   }
@@ -1363,7 +1419,7 @@ function demoSearchResults(q: string) {
 
 export const authApi = {
   login: async (username: string, password: string) => {
-    const response = await apiClient.post('/auth/token', { username, password });
+    const response = await apiClient.post('/auth/token', { username, password }, { headers: { [SKIP_AUTH_HEADER]: 'true' } });
     setGatewayTokens(response.data);
     const profile = await syncGatewayCurrentUser(response.data?.access_token);
     useUIStore.getState().setApiStatus('online');
@@ -1382,23 +1438,36 @@ export const authApi = {
     return profile;
   },
   refresh: async () => {
-    const refreshToken = getRefreshToken();
-    if (!refreshToken) throw new Error('Refresh token is empty');
+    const accessToken = await refreshGatewayTokenOnce();
+    if (!accessToken) throw new Error('Refresh token is empty');
+    return { access_token: accessToken };
+  },
+  restore: async (): Promise<AdminUser | null> => {
+    if (isDemoMode()) return null;
+    if (!getAccessToken() && !getRefreshToken()) return null;
 
-    const response = await apiClient.post('/auth/refresh', { refresh_token: refreshToken });
-    setGatewayTokens(response.data);
-    return response.data;
+    try {
+      const profile = await authApi.me();
+      useUIStore.getState().setApiStatus('online');
+      return profile;
+    } catch {
+      clearGatewaySession();
+      return null;
+    }
   },
   logout: async () => {
     const refreshToken = getRefreshToken();
     try {
       if (refreshToken) {
-        await apiClient.post('/auth/revoke', { refresh_token: refreshToken });
+        await apiClient.post(
+          '/auth/revoke',
+          { refresh_token: refreshToken },
+          { headers: { [SKIP_AUTH_HEADER]: 'true' } },
+        );
       }
     } finally {
-      clearGatewayTokens();
+      clearGatewaySession();
       useUIStore.getState().setCurrentGatewaySessionId(null);
-      useUIStore.getState().setApiStatus(useUIStore.getState().workMode === 'demo' ? 'demo' : 'offline');
     }
   },
 };

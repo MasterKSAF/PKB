@@ -63,7 +63,6 @@ class ChunkingService:
     не потерять данные, необходимые для цитирования:
 
         - document_id
-        - document_version_id
         - section_id
         - clause
         - page
@@ -381,7 +380,6 @@ class ChunkingService:
             for chunk_index, subcontent in enumerate(subchunks):
                 chunk = Chunk(
                     document_id=request.metadata.document_id,
-                    document_version_id=request.metadata.document_version_id,
 
                     section_id=section.section_id,
                     parent_id=section.parent_id,

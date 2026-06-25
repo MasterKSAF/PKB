@@ -77,7 +77,7 @@ async def run_pipeline(
         await _set_status(session_factory, message_id, "searching")
         try:
             chunks = await asyncio.wait_for(
-                rag_client.search(enriched_query, top_k=10),
+                rag_client.search(enriched_query, top_k=10, valid_at=_utcnow().strftime("%Y-%m-%d")),
                 timeout=60.0,
             )
         except Exception:

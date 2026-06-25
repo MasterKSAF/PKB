@@ -1,4 +1,4 @@
-"""Reranking-провайдер через TEI (Text Embeddings Inference)."""
+"""Reranking-провайдер через Infinity (совместим с Cohere Rerank API)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ logger = get_logger("reranking.tei")
 
 
 class TEIRerankerProvider(RerankerProvider):
-    """Reranking через TEI HTTP API (POST /rerank)."""
+    """Reranking через Infinity HTTP API (POST /rerank, Cohere-формат)."""
 
     def __init__(self) -> None:
         settings = get_settings()
@@ -43,8 +43,9 @@ class TEIRerankerProvider(RerankerProvider):
             resp = await self._client.post(
                 "/rerank",
                 json={
+                    "model": self._model,
                     "query": query,
-                    "texts": documents,
+                    "documents": documents,
                     "top_n": len(documents),
                 },
             )

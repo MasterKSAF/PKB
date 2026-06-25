@@ -20,7 +20,7 @@ import time
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -88,6 +88,10 @@ def _setup_otel(app_instance: FastAPI) -> None:
 
 setup_logging()
 logger = logging.getLogger("gateway")
+
+# Время старта gateway (для uptime в diagnostics)
+GATEWAY_START_TIME = time.time()
+GATEWAY_VERSION = "1.3.0"
 
 logger.info("Gateway starting — mode=%s, port=%s", config.mode, config.port)
 
@@ -370,6 +374,8 @@ class RBACMiddleware(BaseHTTPMiddleware):
                 or path == "/api/v1/health"
                 or path == "/api/v1/system/health"
                 or path == "/api/v1/system/mode"
+                or path == "/api/v1/system/diagnostics"
+                or path.startswith("/api/v1/system/diagnostics/")
             ):
                 if not user_context["is_authenticated"]:
                     _log_access_denied(request, "UNAUTHORIZED", "Требуется аутентификация")
@@ -1024,6 +1030,55 @@ async def health_live():
 async def health_ready():
     """Readiness probe — сервис готов принимать запросы."""
     return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# Diagnostics — системная диагностика (Docker, Git, system)
+# ---------------------------------------------------------------------------
+
+from gateway.diagnostics import (
+    KNOWN_SERVICES,
+    build_service_diagnostics,
+    build_summary,
+    build_system_logs,
+)
+
+
+@app.get("/api/v1/system/diagnostics")
+@app.get("/api/v1/system/diagnostics/{rest_of_path:path}")
+async def gateway_diagnostics(request: Request, rest_of_path: str = ""):
+    """Диагностика системы.
+
+    Собирает данные через Docker socket и git — статус контейнеров,
+    health, диски, логи, git, системные ресурсы.
+
+    Примеры:
+      /api/v1/system/diagnostics              → компактная сводка
+      /api/v1/system/diagnostics?verbose=true → полная (диски, Docker, порты, логи)
+      /api/v1/system/diagnostics/{service}     → детально по сервису
+      /api/v1/system/diagnostics/system        → системные логи
+    """
+    from urllib.parse import parse_qs
+
+    params = parse_qs(request.url.query)
+    verbose = params.get("verbose", [None])[0] in ("true", "1", "yes")
+    logs_n = params.get("logs", [None])[0]
+    log_lines = int(logs_n) if logs_n and logs_n.isdigit() else 20
+
+    if rest_of_path:
+        svc = rest_of_path.rstrip("/")
+        if svc == "system":
+            body = build_system_logs(100)
+        elif svc in KNOWN_SERVICES:
+            body = build_service_diagnostics(svc, log_lines)
+        else:
+            services = ", ".join(sorted(KNOWN_SERVICES))
+            body = f"Unknown service: {svc}\nKnown: {services}\n"
+            return Response(content=body, media_type="text/plain", status_code=404)
+        return Response(content=body, media_type="text/plain")
+
+    body = build_summary(log_lines, verbose)
+    return Response(content=body, media_type="text/plain")
 
 
 # ---------------------------------------------------------------------------

@@ -99,7 +99,7 @@ def extract_chunk_contents(sql: str) -> list[dict]:
 
         # Находим позицию random()-выражения для замены
         random_expr_match = re.search(
-            r"\(SELECT ARRAY_AGG\(random\(\)::float - 0\.5 ORDER BY g\) FROM generate_series\(1, 1024\) g\)::vector\(1024\)",
+            r"\(SELECT ARRAY_AGG\(random\(\)::float - 0\.5 ORDER BY g\) FROM generate_series\(1, 1024\) g\)::halfvec\(1024\)",
             block,
         )
         if not random_expr_match:
@@ -149,7 +149,7 @@ def generate_embedding(text: str, base_url: str, api_key: str) -> list[float]:
 def format_vector(embedding: list[float]) -> str:
     """Форматировать вектор как PostgreSQL-литерал (pgvector)."""
     values = ",".join(f"{v:.6f}" for v in embedding)
-    return f"'[{values}]'::vector({EMBEDDING_DIM})"
+    return f"'[{values}]'::halfvec({EMBEDDING_DIM})"
 
 
 def main():
@@ -198,7 +198,7 @@ def main():
 
     all_random_exprs = list(
         re.finditer(
-            r"\(SELECT ARRAY_AGG\(random\(\)::float - 0\.5 ORDER BY g\) FROM generate_series\(1, 1024\) g\)::vector\(1024\)",
+            r"\(SELECT ARRAY_AGG\(random\(\)::float - 0\.5 ORDER BY g\) FROM generate_series\(1, 1024\) g\)::halfvec\(1024\)",
             sql,
         )
     )

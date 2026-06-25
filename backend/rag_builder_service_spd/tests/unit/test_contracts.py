@@ -17,7 +17,6 @@ def test_load_gost_container():
     request = BuildRequest.model_validate(data)
 
     assert request.document.id == 420000
-    assert request.document.document_version_id == 420001
 
     assert len(request.sections) > 0
 
@@ -26,7 +25,6 @@ def test_document_id_is_required():
     payload = {
         "metadata": {
             "schema": "schema_registry_for_rag_v2",
-            "document_version_id": 420001,
         },
         "document": {
             "id": 420000,
@@ -42,7 +40,7 @@ def test_document_id_is_required():
         BuildRequest.model_validate(payload)
 
 
-def test_document_version_id_is_optional_for_input_contract():
+def test_input_contract_without_document_version_id():
     payload = {
         "metadata": {
             "schema": "schema_registry_for_rag_v2",
@@ -59,8 +57,11 @@ def test_document_version_id_is_optional_for_input_contract():
 
     request = BuildRequest.model_validate(payload)
 
-    assert request.metadata.document_version_id == 420000
-    assert request.document.document_version_id == 420000
+    assert request.metadata.document_id == 420000
+    assert request.document.id == 420000
+    assert not hasattr(request.metadata, "document_version_id")
+    assert not hasattr(request.document, "document_version_id")
+
 
 
 def test_sections_are_required():
@@ -68,7 +69,6 @@ def test_sections_are_required():
         "metadata": {
             "schema": "schema_registry_for_rag_v2",
             "document_id": 420000,
-            "document_version_id": 420001,
         },
         "document": {
             "id": 420000,
@@ -112,9 +112,7 @@ def test_build_request_accepts_flat_registry_payload():
     request = BuildRequest.model_validate(payload)
 
     assert request.metadata.document_id == 420000
-    assert request.metadata.document_version_id == 420000
     assert request.document.id == 420000
-    assert request.document.document_version_id == 420000
     assert request.sections[0].section_id == 1
     assert request.protected_spans == []
     assert request.options["strategy"] == "semantic_1024"

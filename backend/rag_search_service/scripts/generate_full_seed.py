@@ -236,7 +236,7 @@ def generate_embedding(text: str) -> list[float]:
 def format_vector(embedding: list[float]) -> str:
     """Форматировать вектор как pgvector-литерал."""
     values = ",".join(f"{v:.6f}" for v in embedding)
-    return f"'[{values}]'::vector(1024)"
+    return f"'[{values}]'::halfvec(1024)"
 
 
 # ──────────────────────────────────────────────────────────────────────
