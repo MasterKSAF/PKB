@@ -33,7 +33,7 @@ def test_get_file_metadata(client, db_session):
     # Test 404
     res_404 = client.get("/api/v1/registry/files/f-nonexistent")
     assert res_404.status_code == 404
-    assert res_404.json()["detail"]["error"]["code"] == "FILE_NOT_FOUND"
+    assert res_404.json()["error"]["code"] == "FILE_NOT_FOUND"
 
 def test_list_document_files(client, db_session):
     # 1. Insert test files
@@ -155,4 +155,4 @@ def test_get_document_version(client, db_session):
     # Test 404
     res_404 = client.get("/api/v1/registry/versions/999")
     assert res_404.status_code == 404
-    assert res_404.json()["detail"]["error"]["code"] == "VERSION_NOT_FOUND"
+    assert res_404.json()["error"]["code"] == "VERSION_NOT_FOUND"
