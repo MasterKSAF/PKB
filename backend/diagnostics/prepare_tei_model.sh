@@ -35,6 +35,9 @@ if ! python3 -c "import optimum" 2>/dev/null; then
     pip install optimum[onnxruntime] --user -q 2>&1 | tail -1
 fi
 
+# Добавляем ~/.local/bin в PATH (туда pip ставит скрипты)
+export PATH="$HOME/.local/bin:$PATH"
+
 # ── Создание папки ───────────────────────────────────────────────────────────
 mkdir -p "$MODEL_DIR"
 
@@ -43,7 +46,7 @@ echo "  Downloading $MODEL_NAME and converting to int8 ONNX..."
 echo "  Output: $MODEL_DIR"
 echo ""
 
-python3 -m optimum.cli export onnx \
+optimum-cli export onnx \
     --model "$MODEL_NAME" \
     --optimize O2 \
     --quantize int8 \
