@@ -1049,13 +1049,13 @@ async def gateway_diagnostics(request: Request, rest_of_path: str = ""):
     возвращает собственную диагностику (health сервисов, конфиг).
 
     Примеры:
-      /api/v1/system/diagnostics              → базовая сводка
+      /api/v1/system/diagnostics              → компактная сводка
+      /api/v1/system/diagnostics?verbose=true → полная сводка (диски, Docker, порты, логи)
       /api/v1/system/diagnostics/gateway       → диагностика gateway
-      /api/v1/system/diagnostics?verbose=true  → расширенная
-      /api/v1/system/diagnostics?logs=100      → с указанием логов
+      /api/v1/system/diagnostics?logs=100      → с указанием количества строк логов
 
     Diagnostics server:
-      cd backend/diagnostics && ./start_diagnostics_server.sh start
+      cd backend/diagnostics && python3 diagnostics_server.py 9090
     """
     # --- Пытаемся получить данные от diagnostics server ---
     host_result = await _try_host_diagnostics(request, rest_of_path)
@@ -1128,7 +1128,7 @@ async def _gateway_summary_diagnostics(request: Request) -> Response:
     lines.append("[Host diagnostics]")
     lines.append(f"  URL: {host_url}")
     lines.append(f"  Status: unavailable")
-    lines.append(f"  Hint:  cd backend/diagnostics && ./start_diagnostics_server.sh start")
+    lines.append(f"  Hint:  cd backend/diagnostics && python3 diagnostics_server.py 9090")
     lines.append("")
 
     lines.append("[Request]")
@@ -1172,7 +1172,7 @@ async def _gateway_service_diagnostics(service: str) -> Response:
     lines.append("[2] Note")
     lines.append("  Для полной диагностики (логи, docker inspect, ресурсы)")
     lines.append("  запустите diagnostics server на хосте:")
-    lines.append("    cd backend/diagnostics && ./start_diagnostics_server.sh start")
+    lines.append("    cd backend/diagnostics && python3 diagnostics_server.py 9090")
     lines.append("")
 
     lines.append("=" * 52)

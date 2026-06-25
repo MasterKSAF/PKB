@@ -19,7 +19,7 @@ cd "$SCRIPT_DIR"
 
 # Права на выполнение (git не всегда сохраняет chmod)
 chmod +x deploy.sh deploy_reset.sh 2>/dev/null || true
-chmod +x backend/diagnostics/*.sh backend/diagnostics/*.py 2>/dev/null || true
+chmod +x backend/diagnostics/*.py 2>/dev/null || true
 
 echo -e "${CYAN}============================================${NC}"
 echo -e "${CYAN}  PKB Neuroassistant — Deploy${NC}"
@@ -42,16 +42,41 @@ echo -e "  ${GREEN}Git updated.${NC}"
 
 # Восстановить права — git мог сбросить +x при обновлении файлов
 chmod +x deploy.sh deploy_reset.sh 2>/dev/null || true
-chmod +x backend/diagnostics/*.sh backend/diagnostics/*.py 2>/dev/null || true
+chmod +x backend/diagnostics/*.py 2>/dev/null || true
 echo ""
 
 # Diagnostics server — перезапуск сразу после обновления кода
-DIAGNOSTICS_SCRIPT="$SCRIPT_DIR/backend/diagnostics/start_diagnostics_server.sh"
-if [ -x "$DIAGNOSTICS_SCRIPT" ]; then
-    "$DIAGNOSTICS_SCRIPT" stop 2>/dev/null || true
+DIAGNOSTICS_DIR="$SCRIPT_DIR/backend/diagnostics"
+DIAGNOSTICS_PID="/tmp/pkb-diagnostics-server.pid"
+
+_start_diagnostics() {
+    nohup python3 "$DIAGNOSTICS_DIR/diagnostics_server.py" 9090 --pidfile "$DIAGNOSTICS_PID" > /dev/null 2>&1 &
+    local pid=$!
+    for i in 1 2 3 4 5; do
+        sleep 1
+        if curl -s -o /dev/null -w "%{http_code}" http://localhost:9090/health 2>/dev/null | grep -q "200"; then
+            echo -e "  ${GREEN}Diagnostics server started (PID $pid, port 9090)${NC}"
+            return 0
+        fi
+        kill -0 "$pid" 2>/dev/null || break
+    done
+    echo -e "  ${RED}Diagnostics server failed to start${NC}"
+    rm -f "$DIAGNOSTICS_PID"
+    return 1
+}
+
+if [ -f "$DIAGNOSTICS_DIR/diagnostics_server.py" ]; then
+    # Stop by PID file
+    if [ -f "$DIAGNOSTICS_PID" ]; then
+        OLD_PID=$(cat "$DIAGNOSTICS_PID")
+        kill "$OLD_PID" 2>/dev/null || true
+        sleep 1
+        rm -f "$DIAGNOSTICS_PID"
+    fi
+    # Fallback: kill any leftover on port 9090
+    pkill -f "diagnostics_server.py" 2>/dev/null || true
     sleep 1
-    "$DIAGNOSTICS_SCRIPT" start
-    echo -e "  ${GREEN}Diagnostics server restarted.${NC}"
+    _start_diagnostics || true
 fi
 echo ""
 
@@ -81,11 +106,13 @@ else
 fi
 echo ""
 
-# ── 7. Diagnostics server — уже перезапущен после git pull, дублируем на случай если шаг 1 не сработал ───
-echo -e "${YELLOW}[6/6] Ensuring diagnostics server is running...${NC}"
-DIAGNOSTICS_SCRIPT="$SCRIPT_DIR/backend/diagnostics/start_diagnostics_server.sh"
-if [ -x "$DIAGNOSTICS_SCRIPT" ]; then
-    "$DIAGNOSTICS_SCRIPT" start 2>/dev/null || echo -e "  ${YELLOW}(could not start)${NC}"
+echo -e "${YELLOW}[6/6] Diagnostics server health:${NC}"
+DIAGNOSTICS_HEALTH=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 3 http://localhost:9090/health 2>/dev/null || echo "000")
+if [ "$DIAGNOSTICS_HEALTH" = "200" ]; then
+    echo -e "  Diagnostics server: ${GREEN}$DIAGNOSTICS_HEALTH OK${NC}"
+else
+    echo -e "  Diagnostics server: ${RED}$DIAGNOSTICS_HEALTH (not running)${NC}"
+    echo -e "  ${YELLOW}  Run: cd backend/diagnostics && python3 diagnostics_server.py 9090${NC}"
 fi
 echo ""
 

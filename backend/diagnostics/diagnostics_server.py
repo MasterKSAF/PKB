@@ -6,19 +6,21 @@ PKB Neuroassistant — Diagnostics HTTP Server
 Не требует внешних скриптов.
 
 Роутинг:
-  GET /diagnostics              → базовая сводка
+  GET /diagnostics              → компактная сводка
+  GET /diagnostics?verbose=true → полная сводка (диски, Docker, порты, логи)
   GET /diagnostics/{service}    → диагностика одного сервиса
   GET /diagnostics/system       → системные логи
-  GET /diagnostics?verbose=true → расширенная сводка
   GET /diagnostics?logs=100     → с указанием количества строк логов
 
 Usage:
   python diagnostics_server.py [port]
 """
 
+import atexit
 import http.server
 import json
 import os
+import signal
 import shlex
 import subprocess
 import sys
@@ -26,6 +28,7 @@ import time
 from urllib.parse import urlparse, parse_qs
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 9090
+PID_FILE = None
 COMPOSE_PROJECT = "pkb"
 HEALTH_SERVICES = [
     "pkb-postgres", "pkb-redis", "pkb-minio", "pkb-auth",
@@ -136,6 +139,25 @@ def git_status() -> list:
     return lines
 
 
+def git_status_compact() -> list:
+    """Компактная сводка Git: только ветка, коммит, чистота."""
+    lines = []
+    lines.append("[Git]")
+    branch = run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'])
+    if not branch:
+        lines.append("  (not a git repository)")
+        return lines
+    commit = run(['git', 'rev-parse', '--short', 'HEAD'])
+    lines.append(f"  Branch: {branch}")
+    lines.append(f"  Commit: {commit}")
+    status = run(['git', 'diff', '--stat'])
+    if status:
+        lines.append(f"  Dirty:  {status.split(chr(10))[-1]}")
+    else:
+        lines.append(f"  Dirty:  clean")
+    return lines
+
+
 def docker_containers() -> list:
     lines = []
     lines.append("[Containers]")
@@ -153,6 +175,34 @@ def docker_containers() -> list:
         for f in fallback:
             if 'pkb-' in f:
                 lines.append(f"  {f}")
+    return lines
+
+
+def docker_containers_compact() -> list:
+    """Компактная сводка контейнеров: только имена и статус."""
+    lines = []
+    lines.append("[Containers]")
+    total = run(['docker', 'ps', '-a', '--filter', f'label=com.docker.compose.project={COMPOSE_PROJECT}', '-q'])
+    running = run(['docker', 'ps', '--filter', f'label=com.docker.compose.project={COMPOSE_PROJECT}', '-q'])
+    t = len(total.split("\n")) if total else 0
+    r = len(running.split("\n")) if running else 0
+    lines.append(f"  Running: {r} / {t}")
+    ps = run_lines(['docker', 'ps', '-a', '--filter', f'label=com.docker.compose.project={COMPOSE_PROJECT}',
+                    '--format', '{{.Names}}\t{{.Status}}'])
+    for p in ps:
+        if not p.startswith("pkb-"):
+            continue
+        name = p.split("\t")[0].replace("pkb-", "", 1)
+        status = p.split("\t")[1] if "\t" in p else "?"
+        # Сворачиваем длинный статус до первого слова или "Up"/"Exited"
+        if status.startswith("Up "):
+            status_short = "up"
+        elif status.startswith("Exited "):
+            status_short = "down"
+        else:
+            status_short = status.split()[0] if status else "?"
+        icon = "✓" if status_short == "up" else "✗"
+        lines.append(f"  {icon} {name}")
     return lines
 
 
@@ -315,20 +365,32 @@ def system_logs(log_lines=50) -> list:
 def build_summary(log_lines=20, verbose=False) -> str:
     lines = []
     lines.append("=" * 52)
-    lines.append("   PKB Neuroassistant — Server Diagnostics")
+    lines.append("   PKB Neuroassistant — Diagnostics")
     lines.append("=" * 52)
     lines.append("")
 
-    for block in [system_info, disk_usage, docker_df, git_status,
-                  docker_containers, compose_ps, health_checks,
-                  ports_info, volumes_info]:
+    # --- Compact blocks (всегда) ---
+    for block in [system_info, health_checks]:
         lines += block()
         lines.append("")
 
-    lines += logs_errors(log_lines)
+    lines += docker_containers_compact()
     lines.append("")
 
+    lines += git_status_compact()
+    lines.append("")
+
+    # --- Verbose blocks (только по запросу) ---
     if verbose:
+        lines.append("[Extended]")
+        lines.append("")
+        for block in [disk_usage, docker_df, git_status,
+                      docker_containers, compose_ps,
+                      ports_info, volumes_info]:
+            lines += block()
+            lines.append("")
+        lines += logs_errors(log_lines)
+        lines.append("")
         lines += system_logs(50)
         lines.append("")
 
@@ -385,7 +447,11 @@ class DiagnosticsHandler(http.server.BaseHTTPRequestHandler):
         logs_arg = int(logs_n) if logs_n and logs_n.isdigit() else 20
 
         try:
-            if path in ("", "/diagnostics"):
+            if path in ("", "/", "/health"):
+                body = "ok\n"
+                status = 200
+
+            elif path == "/diagnostics":
                 body = build_summary(logs_arg, verbose)
                 status = 200
 
@@ -422,13 +488,39 @@ class DiagnosticsHandler(http.server.BaseHTTPRequestHandler):
         sys.stderr.write("[%s] %s\n" % (self.log_date_time_string(), format % args))
 
 
+def _cleanup_pid():
+    if PID_FILE and os.path.exists(PID_FILE):
+        try:
+            os.unlink(PID_FILE)
+        except OSError:
+            pass
+
+
+def _handle_signal(signum, frame):
+    print(f"\nSignal {signum} received, shutting down.")
+    sys.exit(0)
+
+
 if __name__ == "__main__":
+    # PID file management
+    for i, arg in enumerate(sys.argv):
+        if arg == "--pidfile" and i + 1 < len(sys.argv):
+            PID_FILE = sys.argv[i + 1]
+            with open(PID_FILE, "w") as f:
+                f.write(str(os.getpid()))
+            atexit.register(_cleanup_pid)
+            break
+
+    signal.signal(signal.SIGTERM, _handle_signal)
+    signal.signal(signal.SIGINT, _handle_signal)
+
     server = http.server.HTTPServer(("0.0.0.0", PORT), DiagnosticsHandler)
     print(f"Diagnostics server on http://0.0.0.0:{PORT}")
+    print(f"  → http://localhost:{PORT}/health")
     print(f"  → http://localhost:{PORT}/diagnostics")
+    print(f"  → http://localhost:{PORT}/diagnostics?verbose=true")
     print(f"  → http://localhost:{PORT}/diagnostics/gateway")
     print(f"  → http://localhost:{PORT}/diagnostics/system")
-    print(f"  → http://localhost:{PORT}/diagnostics?verbose=true&logs=50")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
