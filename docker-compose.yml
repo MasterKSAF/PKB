@@ -182,7 +182,7 @@ services:
     container_name: pkb-tei
     restart: unless-stopped
     volumes:
-      - ./models/bge-reranker-m3-int8:/data
+      - ./backend/models/my-bge-int8:/data
     command:
       - "--model-id"
       - "/data"

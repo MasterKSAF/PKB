@@ -1,77 +1,58 @@
 #!/bin/bash
 # =============================================================================
-# Prepare TEI model (BAAI/bge-reranker-v2-m3-int8)
+# Prepare TEI model (BAAI/bge-reranker-v2-m3 → ONNX int8)
 #
-# Скачивает ONNX-int8 модель и переименовывает model_quantized.onnx → model.onnx
-# (необходимо для работы TEI с int8-квантованной моделью).
+# Скачивает модель BAAI/bge-reranker-v2-m3 и конвертирует в ONNX int8
+# через optimum-cli. Результат готов для монтирования в TEI.
 #
-# Model: https://huggingface.co/BAAI/bge-reranker-v2-m3-int8
+# Output: backend/models/my-bge-int8/
 # =============================================================================
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-MODEL_DIR="$PROJECT_ROOT/models/bge-reranker-m3-int8"
-MODEL_REPO="BAAI/bge-reranker-v2-m3-int8"
-MODEL_URL="https://huggingface.co/$MODEL_REPO"
+MODEL_DIR="$PROJECT_ROOT/backend/models/my-bge-int8"
+MODEL_NAME="BAAI/bge-reranker-v2-m3"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-# HF_TOKEN по умолчанию (read-only, не секретный)
-HF_TOKEN="${HF_TOKEN:-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}"
+echo -e "${YELLOW}Preparing TEI model (int8 ONNX)...${NC}"
 
-echo -e "${YELLOW}Preparing TEI model...${NC}"
-
-# ── Проверка: уже скачана? ──────────────────────────────────────────────────
-if [ -f "$MODEL_DIR/model.onnx" ]; then
-    echo -e "  ${GREEN}Model already prepared (model.onnx found).${NC}"
+# ── Проверка: уже готова? ───────────────────────────────────────────────────
+if [ -f "$MODEL_DIR/model.onnx" ] && [ -f "$MODEL_DIR/config.json" ]; then
+    echo -e "  ${GREEN}Model already prepared.${NC}"
     exit 0
+fi
+
+# ── Установка optimum ────────────────────────────────────────────────────────
+if ! python3 -c "import optimum" 2>/dev/null; then
+    echo "  Installing optimum[onnxruntime]..."
+    pip install optimum[onnxruntime] -q 2>&1 | tail -1
 fi
 
 # ── Создание папки ───────────────────────────────────────────────────────────
 mkdir -p "$MODEL_DIR"
-cd "$MODEL_DIR"
 
-# ── Проверка git-lfs ─────────────────────────────────────────────────────────
-if ! command -v git-lfs &>/dev/null; then
-    echo -e "  ${YELLOW}git-lfs not found, installing...${NC}"
-    sudo apt-get update -qq && sudo apt-get install -y -qq git-lfs
-    git lfs install
-fi
+# ── Конвертация ──────────────────────────────────────────────────────────────
+echo "  Downloading $MODEL_NAME and converting to int8 ONNX..."
+echo "  Output: $MODEL_DIR"
+echo ""
 
-# ── Клонирование модели ──────────────────────────────────────────────────────
-if [ -f "config.json" ]; then
-    echo "  Model files already downloaded (config.json found)."
+optimum-cli export onnx \
+    --model "$MODEL_NAME" \
+    --optimize O2 \
+    --quantize int8 \
+    "$MODEL_DIR" 2>&1
+
+if [ $? -eq 0 ] && [ -f "$MODEL_DIR/model.onnx" ]; then
+    echo ""
+    echo -e "  ${GREEN}Model prepared successfully.${NC}"
 else
-    # Определяем URL с токеном (если есть HF_TOKEN)
-    CLONE_URL="$MODEL_URL"
-    if [ -n "${HF_TOKEN:-}" ]; then
-        CLONE_URL="https://user:${HF_TOKEN}@huggingface.co/$MODEL_REPO"
-    fi
-
-    echo "  Downloading model from $MODEL_REPO ..."
-    GIT_LFS_SKIP_SMUDGE=0 git clone --depth 1 "$CLONE_URL" . 2>&1 || {
-        echo -e "  ${RED}Failed to download model.${NC}"
-        echo "  Try: export HF_TOKEN=your_token && $0"
-        exit 1
-    }
-fi
-
-# ── Переименование model_quantized.onnx → model.onnx ────────────────────────
-if [ -f "model_quantized.onnx" ] && [ ! -f "model.onnx" ]; then
-    echo "  Renaming model_quantized.onnx → model.onnx ..."
-    mv model_quantized.onnx model.onnx
-    echo -e "  ${GREEN}Done.${NC}"
-elif [ -f "model.onnx" ]; then
-    echo -e "  ${GREEN}model.onnx already exists.${NC}"
-else
-    echo -e "  ${RED}model_quantized.onnx not found in $MODEL_DIR${NC}"
-    echo "  Check model files: ls -la $MODEL_DIR"
+    echo ""
+    echo -e "  ${RED}Model preparation failed.${NC}"
     exit 1
 fi
-
-echo -e "${GREEN}TEI model prepared: $MODEL_DIR${NC}"
