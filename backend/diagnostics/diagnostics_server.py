@@ -2,50 +2,377 @@
 """
 PKB Neuroassistant — Diagnostics HTTP Server
 
-Запускает server_diagnostics.sh с аргументами в зависимости от пути запроса.
+Собирает диагностику сервера: система, Docker, Git, логи.
+Не требует внешних скриптов.
 
 Роутинг:
-  GET /diagnostics              → базовая сводка (--summary)
-  GET /diagnostics/{service}    → диагностика одного сервиса (--service {service})
-  GET /diagnostics/system       → системные логи (--verbose без summary)
+  GET /diagnostics              → базовая сводка
+  GET /diagnostics/{service}    → диагностика одного сервиса
+  GET /diagnostics/system       → системные логи
   GET /diagnostics?verbose=true → расширенная сводка
   GET /diagnostics?logs=100     → с указанием количества строк логов
 
 Usage:
   python diagnostics_server.py [port]
-
-По умолчанию слушает на 0.0.0.0:9090.
 """
 
 import http.server
+import json
+import os
+import shlex
 import subprocess
 import sys
-import os
-import stat
+import time
 from urllib.parse import urlparse, parse_qs
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 9090
-
-# Переходим в директорию скрипта (чтобы найти server_diagnostics.sh)
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
-
-# Абсолютный путь к скрипту (CWD может отличаться при запуске через nohup)
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DIAGNOSTICS_SCRIPT = os.path.join(SCRIPT_DIR, "server_diagnostics.sh")
-
-# Гарантируем права на выполнение скрипта
-if os.path.exists(DIAGNOSTICS_SCRIPT):
-    st = os.stat(DIAGNOSTICS_SCRIPT)
-    if not st.st_mode & stat.S_IXUSR:
-        os.chmod(DIAGNOSTICS_SCRIPT, st.st_mode | stat.S_IRWXU)
-
-# Известные сервисы (для валидации)
+COMPOSE_PROJECT = "pkb"
+HEALTH_SERVICES = [
+    "pkb-postgres", "pkb-redis", "pkb-minio", "pkb-auth",
+    "pkb-registry", "pkb-parser", "pkb-converter-validator",
+    "pkb-rag-builder", "pkb-rag-search", "pkb-query",
+    "pkb-orchestrator", "pkb-gateway",
+]
 KNOWN_SERVICES = {
     "gateway", "orchestrator", "parser", "converter-validator",
     "rag-builder", "rag-search", "registry", "auth", "query",
     "postgres", "redis", "minio", "infinity",
 }
+START_TIME = time.time()
 
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def run(cmd, timeout=30) -> str:
+    """Запускает команду, возвращает stdout или пустую строку."""
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return r.stdout.strip()
+    except Exception:
+        return ""
+
+
+def run_lines(cmd, timeout=30) -> list:
+    out = run(cmd, timeout)
+    return out.split("\n") if out else []
+
+
+# ---------------------------------------------------------------------------
+# Блоки диагностики
+# ---------------------------------------------------------------------------
+
+def system_info() -> list:
+    lines = []
+    lines.append("[System]")
+    lines.append(f"  Hostname: {run(['hostname'])}")
+    lines.append(f"  Uptime:   {run(['uptime', '-p']) or run(['uptime'])}")
+    lines.append(f"  Load:     {run(['uptime']).split('load average:')[-1].strip() if 'load average' in run(['uptime']) else '?'}")
+    lines.append(f"  CPU:      {run(['nproc'])} cores")
+    mem = run(['free', '-h']).split("\n")
+    for m in mem:
+        if m.startswith("Mem:"):
+            parts = m.split()
+            lines.append(f"  Memory:   {parts[2]} / {parts[1]}  (avail: {parts[6]})")
+        elif m.startswith("Swap:"):
+            parts = m.split()
+            lines.append(f"  Swap:     {parts[2]} / {parts[1]}")
+    return lines
+
+
+def disk_usage() -> list:
+    lines = []
+    lines.append("[Disk]")
+    df = run_lines(['df', '-h', '/', '/var/lib/docker'])
+    for d in df[:5]:
+        lines.append(f"  {d}")
+    prj_size = run(['du', '-sh', '.'])
+    if prj_size:
+        lines.append(f"  Project: {prj_size}")
+    docker_root = run(['docker', 'info']).split("Docker Root Dir:")[-1].split("\n")[0].strip() if "Docker Root Dir:" in run(['docker', 'info']) else ""
+    if docker_root:
+        df_docker = run(['df', '-h', docker_root]).split("\n")
+        if len(df_docker) > 1:
+            p = df_docker[1].split()
+            lines.append(f"  Docker:  {docker_root} ({p[2]} / {p[1]} ({p[4]})" if len(p) >= 5 else "")
+    return lines
+
+
+def docker_df() -> list:
+    lines = []
+    lines.append("[Docker disk]")
+    df = run_lines(['docker', 'system', 'df'])
+    for d in df:
+        lines.append(f"  {d}")
+    return lines
+
+
+def git_status() -> list:
+    lines = []
+    lines.append("[Git]")
+    branch = run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'])
+    if not branch:
+        lines.append("  (not a git repository)")
+        return lines
+    commit = run(['git', 'rev-parse', '--short', 'HEAD'])
+    msg = run(['git', 'log', '-1', '--pretty=%s'])
+    lines.append(f"  Branch: {branch}")
+    lines.append(f"  Commit: {commit}")
+    lines.append(f"  Msg:    {msg}")
+    status = run(['git', 'diff', '--stat'])
+    if status:
+        lines.append(f"  Dirty:  {status.split(chr(10))[-1]}")
+    else:
+        lines.append(f"  Dirty:  clean")
+    upstream = run(['git', 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}']).replace("refs/remotes/", "")
+    if upstream:
+        behind = run(['git', 'rev-list', '--count', 'HEAD..@{upstream}'])
+        ahead = run(['git', 'rev-list', '--count', '@{upstream}..HEAD'])
+        lines.append(f"  Remote:  {upstream}  (ahead {ahead}, behind {behind})")
+    last = run_lines(['git', 'log', '--oneline', '-5'])
+    for l in last:
+        lines.append(f"    {l}")
+    return lines
+
+
+def docker_containers() -> list:
+    lines = []
+    lines.append("[Containers]")
+    total = run(['docker', 'ps', '-a', '--filter', f'label=com.docker.compose.project={COMPOSE_PROJECT}', '-q'])
+    running = run(['docker', 'ps', '--filter', f'label=com.docker.compose.project={COMPOSE_PROJECT}', '-q'])
+    t = len(total.split("\n")) if total else 0
+    r = len(running.split("\n")) if running else 0
+    lines.append(f"  Running: {r} / {t}")
+    ps = run_lines(['docker', 'ps', '-a', '--filter', f'label=com.docker.compose.project={COMPOSE_PROJECT}',
+                    '--format', 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'])
+    for p in ps:
+        lines.append(f"  {p}")
+    if len(ps) <= 1:
+        fallback = run_lines(['docker', 'ps', '-a', '--format', 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'])
+        for f in fallback:
+            if 'pkb-' in f:
+                lines.append(f"  {f}")
+    return lines
+
+
+def compose_ps() -> list:
+    lines = []
+    lines.append("[Compose]")
+    out = run_lines(['docker', 'compose', 'ps'])
+    for o in out:
+        lines.append(f"  {o}")
+    return lines
+
+
+def health_checks() -> list:
+    lines = []
+    lines.append("[Health]")
+    for container in HEALTH_SERVICES:
+        status = run(['docker', 'inspect', container, '--format', '{{.State.Health.Status}}'])
+        name = container.replace("pkb-", "", 1)
+        if status == "healthy":
+            lines.append(f"  OK  {name}")
+        elif status:
+            lines.append(f"  --  {name} ({status})")
+    return lines
+
+
+def ports_info() -> list:
+    lines = []
+    lines.append("[Ports]")
+    for port in [8080, 3300, 8082, 8081, 8083, 8084, 8086, 8087, 8090, 8091, 15432, 16379, 19001, 18092]:
+        out = run(['ss', '-tlnp', f'sport = :{port}'])
+        if out:
+            lines.append(f"  {port}  in use")
+        else:
+            lines.append(f"  {port}  free")
+    return lines
+
+
+def volumes_info() -> list:
+    lines = []
+    lines.append("[Volumes]")
+    vols = run_lines(['docker', 'volume', 'ls', '--filter', f'label=com.docker.compose.project={COMPOSE_PROJECT}',
+                      '--format', '{{.Name}}'])
+    for vol in vols:
+        size = run(['docker', 'system', 'df', '-v']).split(vol)
+        sz = "?"
+        if len(size) > 1:
+            parts = size[1].split()
+            if len(parts) > 3:
+                sz = parts[3]
+        lines.append(f"  {vol} ({sz})")
+    return lines
+
+
+def logs_errors(log_lines=20) -> list:
+    lines = []
+    lines.append(f"[Errors] (last {log_lines} per service)")
+    services = run_lines(['docker', 'compose', 'config', '--services'])
+    if not services:
+        lines.append("  (no services)")
+        return lines
+    found = False
+    for svc in services:
+        errors = run(['docker', 'compose', 'logs', '--tail=100', svc]).split("\n")
+        errs = [e for e in errors if any(x in e.lower() for x in ['error', 'traceback', 'exception', 'fail', 'critical'])]
+        if errs:
+            found = True
+            lines.append(f"  {svc}")
+            for e in errs[-log_lines:]:
+                lines.append(f"    {e}")
+    if not found:
+        lines.append("  (no errors found)")
+    return lines
+
+
+# ---------------------------------------------------------------------------
+# Диагностика одного сервиса
+# ---------------------------------------------------------------------------
+
+def service_diagnostics(name: str, log_lines=20) -> list:
+    container = f"pkb-{name}"
+    lines = []
+    lines.append(f"[Service: {name}]")
+
+    # Inspect
+    info = run(['docker', 'inspect', container, '--format',
+                'Name: {{.Name}}\nImage: {{.Config.Image}}\nStatus: {{.State.Status}}\nHealth: {{.State.Health.Status}}\nCreated: {{.Created}}'])
+    if info:
+        for i in info.split("\n"):
+            lines.append(f"  {i}")
+    else:
+        lines.append(f"  (container {container} not found)")
+
+    # Resource usage
+    stats = run(['docker', 'stats', container, '--no-stream',
+                 '--format', 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}'])
+    for s in stats.split("\n"):
+        lines.append(f"  {s}")
+
+    # Errors in logs
+    lines.append(f"\n[Log errors]")
+    logs = run(['docker', 'logs', container, '--tail', '100']).split("\n")
+    errs = [e for e in logs if any(x in e.lower() for x in ['error', 'traceback', 'exception', 'fail', 'critical'])]
+    if errs:
+        for e in errs[-log_lines:]:
+            lines.append(f"  {e}")
+    else:
+        lines.append("  (no errors)")
+
+    # Recent logs
+    lines.append(f"\n[Logs] (last {log_lines})")
+    recent = run(['docker', 'logs', container, '--tail', str(log_lines)]).split("\n")
+    for r in recent:
+        lines.append(f"  {r}")
+
+    return lines
+
+
+# ---------------------------------------------------------------------------
+# Системные логи
+# ---------------------------------------------------------------------------
+
+def system_logs(log_lines=50) -> list:
+    lines = []
+    lines.append("[System logs]")
+
+    # dmesg
+    dmesg = run(['dmesg', '--level=err,warn']).split("\n")
+    if dmesg:
+        lines.append(f"\n[Kernel] (last {log_lines})")
+        for d in dmesg[-log_lines:]:
+            lines.append(f"  {d}")
+
+    # journalctl
+    jctl = run(['journalctl', '-n', str(log_lines), '--no-pager']).split("\n")
+    errors = [j for j in jctl if any(x in j.lower() for x in ['error', 'fail', 'critical', 'oom', 'killed'])]
+    if errors:
+        lines.append(f"\n[Journal errors] (last {log_lines})")
+        for j in errors[-log_lines:]:
+            lines.append(f"  {j}")
+
+    # Memory pressure
+    if os.path.exists('/proc/pressure/memory'):
+        with open('/proc/pressure/memory') as f:
+            lines.append(f"\n[Memory pressure]")
+            lines.append(f"  {f.read().strip()}")
+
+    # Load
+    if os.path.exists('/proc/loadavg'):
+        with open('/proc/loadavg') as f:
+            lines.append(f"\n[Load]")
+            lines.append(f"  {f.read().strip()}")
+
+    return lines
+
+
+# ---------------------------------------------------------------------------
+# Сборка ответа
+# ---------------------------------------------------------------------------
+
+def build_summary(log_lines=20, verbose=False) -> str:
+    lines = []
+    lines.append("=" * 52)
+    lines.append("   PKB Neuroassistant — Server Diagnostics")
+    lines.append("=" * 52)
+    lines.append("")
+
+    for block in [system_info, disk_usage, docker_df, git_status,
+                  docker_containers, compose_ps, health_checks,
+                  ports_info, volumes_info]:
+        lines += block()
+        lines.append("")
+
+    lines += logs_errors(log_lines)
+    lines.append("")
+
+    if verbose:
+        lines += system_logs(50)
+        lines.append("")
+
+    lines.append("=" * 52)
+    lines.append("   Diagnostics complete")
+    lines.append("=" * 52)
+    return "\n".join(lines)
+
+
+def build_service_diagnostics(name: str, log_lines=20) -> str:
+    lines = []
+    lines.append("=" * 52)
+    lines.append(f"   Service diagnostics: {name}")
+    lines.append("=" * 52)
+    lines.append("")
+
+    lines += service_diagnostics(name, log_lines)
+    lines.append("")
+
+    lines.append("=" * 52)
+    lines.append(f"   Complete: {name}")
+    lines.append("=" * 52)
+    return "\n".join(lines)
+
+
+def build_system_logs(log_lines=100) -> str:
+    lines = []
+    lines.append("=" * 52)
+    lines.append("   System Logs")
+    lines.append("=" * 52)
+    lines.append("")
+
+    lines += system_logs(log_lines)
+    lines.append("")
+
+    lines.append("=" * 52)
+    lines.append("   Complete")
+    lines.append("=" * 52)
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# HTTP Handler
+# ---------------------------------------------------------------------------
 
 class DiagnosticsHandler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
@@ -53,132 +380,36 @@ class DiagnosticsHandler(http.server.BaseHTTPRequestHandler):
         path = parsed.path.rstrip("/")
         params = parse_qs(parsed.query)
 
-        # Параметры
         verbose = params.get("verbose", [None])[0] in ("true", "1", "yes")
         logs_n = params.get("logs", [None])[0]
         logs_arg = int(logs_n) if logs_n and logs_n.isdigit() else 20
 
-        # Определяем команду в зависимости от пути
-        if path in ("", "/diagnostics"):
-            # Базовая сводка
-            cmd = [DIAGNOSTICS_SCRIPT, "--summary"]
-            if verbose:
-                cmd.append("--verbose")
-            if logs_n:
-                cmd += ["--logs", str(logs_arg)]
-
-        elif path.startswith("/diagnostics/"):
-            service = path.split("/")[-1]
-
-            if service == "system":
-                # Только системные логи
-                cmd = [DIAGNOSTICS_SCRIPT, "--verbose", "--logs", "100"]
-
-            elif service in KNOWN_SERVICES:
-                # Диагностика конкретного сервиса
-                cmd = [DIAGNOSTICS_SCRIPT, "--service", service]
-                if verbose:
-                    cmd.append("--verbose")
-                if logs_n:
-                    cmd += ["--logs", str(logs_arg)]
-            else:
-                body = f"Unknown service: {service}\n"
-                body += f"Known services: {', '.join(sorted(KNOWN_SERVICES))}\n"
-                self._respond(404, body)
-                return
-        else:
-            body = "404 Not Found\n"
-            self._respond(404, body)
-            return
-
-        # Запускаем скрипт
         try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=120,
-            )
-            body = result.stdout
-            if result.stderr:
-                body += "\n--- stderr ---\n" + result.stderr
-            status = 200
-        except subprocess.TimeoutExpired:
-            body = "ERROR: diagnostics script timed out (120s)\n"
+            if path in ("", "/diagnostics"):
+                body = build_summary(logs_arg, verbose)
+                status = 200
+
+            elif path.startswith("/diagnostics/"):
+                service = path.split("/")[-1]
+
+                if service == "system":
+                    body = build_system_logs(100)
+                    status = 200
+                elif service in KNOWN_SERVICES:
+                    body = build_service_diagnostics(service, logs_arg)
+                    status = 200
+                else:
+                    body = f"Unknown service: {service}\n"
+                    body += f"Known: {', '.join(sorted(KNOWN_SERVICES))}\n"
+                    status = 404
+            else:
+                body = "404 Not Found\n"
+                status = 404
+        except Exception as exc:
+            body = f"ERROR: {exc}\n"
             status = 500
-        except FileNotFoundError:
-            # Если скрипт не найден — собираем базовую диагностику напрямую
-            body = self._fallback_diagnostics(path)
-            status = 200
 
         self._respond(status, body)
-
-    def _fallback_diagnostics(self, request_path: str) -> str:
-        """Собирает базовую диагностику если server_diagnostics.sh недоступен."""
-        lines = []
-        lines.append("=" * 52)
-        lines.append("   PKB Neuroassistant — Host Self-Diagnostics")
-        lines.append("   (server_diagnostics.sh not found, fallback mode)")
-        lines.append("=" * 52)
-        lines.append("")
-
-        # Хост
-        try:
-            hostname = subprocess.run(["hostname"], capture_output=True, text=True, timeout=5).stdout.strip()
-            uptime = subprocess.run(["uptime", "-p"], capture_output=True, text=True, timeout=5).stdout.strip()
-            lines.append(f"  Hostname: {hostname}")
-            lines.append(f"  Uptime:   {uptime}")
-        except Exception:
-            lines.append("  Hostname: (unavailable)")
-        lines.append("")
-
-        # Docker containers
-        lines.append("[Docker containers (pkb)]")
-        try:
-            result = subprocess.run(
-                ["docker", "ps", "-a", "--filter", "label=com.docker.compose.project=pkb",
-                 "--format", "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"],
-                capture_output=True, text=True, timeout=15,
-            )
-            if result.stdout:
-                lines.append(result.stdout.strip())
-        except Exception:
-            lines.append("  (docker not available)")
-        lines.append("")
-
-        # Health checks
-        lines.append("[Health checks]")
-        HEALTH_SERVICES = ["pkb-postgres", "pkb-redis", "pkb-minio", "pkb-auth",
-                          "pkb-registry", "pkb-parser", "pkb-gateway", "pkb-orchestrator",
-                          "pkb-query", "pkb-converter-validator", "pkb-rag-builder", "pkb-rag-search"]
-        for container in HEALTH_SERVICES:
-            try:
-                status = subprocess.run(
-                    ["docker", "inspect", container, "--format", "{{.State.Health.Status}}"],
-                    capture_output=True, text=True, timeout=5,
-                ).stdout.strip()
-                name = container.replace("pkb-", "", 1)
-                if status == "healthy":
-                    lines.append(f"  OK  {name}")
-                else:
-                    lines.append(f"  --  {name}  ({status or 'not found'})")
-            except Exception:
-                pass
-        lines.append("")
-
-        # System info
-        lines.append("[Host diagnostics]")
-        lines.append(f"  Diagnostics server: running")
-        lines.append(f"  Script: {DIAGNOSTICS_SCRIPT} (not found)")
-        lines.append(f"  Hint:  chmod +x backend/diagnostics/*.sh")
-        lines.append("")
-
-        lines.append("=" * 52)
-        lines.append("   Endpoint: GET /diagnostics (fallback)")
-        lines.append("=" * 52)
-        lines.append("")
-
-        return "\n".join(lines)
 
     def _respond(self, status: int, body: str):
         self.send_response(status)
@@ -193,11 +424,11 @@ class DiagnosticsHandler(http.server.BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     server = http.server.HTTPServer(("0.0.0.0", PORT), DiagnosticsHandler)
-    print(f"Diagnostics server listening on http://0.0.0.0:{PORT}")
-    print(f"  → curl http://localhost:{PORT}/diagnostics")
-    print(f"  → curl http://localhost:{PORT}/diagnostics/gateway")
-    print(f"  → curl http://localhost:{PORT}/diagnostics/system")
-    print(f"  → curl http://localhost:{PORT}/diagnostics?verbose=true&logs=50")
+    print(f"Diagnostics server on http://0.0.0.0:{PORT}")
+    print(f"  → http://localhost:{PORT}/diagnostics")
+    print(f"  → http://localhost:{PORT}/diagnostics/gateway")
+    print(f"  → http://localhost:{PORT}/diagnostics/system")
+    print(f"  → http://localhost:{PORT}/diagnostics?verbose=true&logs=50")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
