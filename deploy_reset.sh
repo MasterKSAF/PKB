@@ -19,6 +19,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
 # Права на выполнение (git не всегда сохраняет chmod)
+chmod +x deploy.sh deploy_reset.sh 2>/dev/null || true
 chmod +x backend/diagnostics/*.sh backend/diagnostics/*.py 2>/dev/null || true
 
 echo -e "${RED}============================================${NC}"

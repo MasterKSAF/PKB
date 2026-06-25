@@ -42,7 +42,7 @@ echo "  Downloading $MODEL_NAME and converting to int8 ONNX..."
 echo "  Output: $MODEL_DIR"
 echo ""
 
-optimum-cli export onnx \
+python3 -m optimum.cli export onnx \
     --model "$MODEL_NAME" \
     --optimize O2 \
     --quantize int8 \
