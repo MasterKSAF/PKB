@@ -37,8 +37,8 @@ echo ""
 # ── 1. Git pull ──────────────────────────────────────────────────────────────
 echo -e "${YELLOW}[1/4] Pulling latest code from git...${NC}"
 git fetch origin
-git merge -X theirs origin/develop --no-edit 2>/dev/null || \
-    git merge --no-commit --strategy-option=theirs origin/develop 2>/dev/null || true
+git checkout origin/develop -- . 2>/dev/null || true
+git fetch --unshallow 2>/dev/null || true
 echo -e "  ${GREEN}Git updated.${NC}"
 
 # Восстановить права — git мог сбросить +x при обновлении файлов
