@@ -1086,6 +1086,8 @@ async def _try_host_diagnostics(request: Request, rest_of_path: str) -> Optional
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get(url)
+            if resp.status_code >= 400:
+                return None
             return Response(content=resp.text, media_type="text/plain")
     except httpx.RequestError:
         return None
