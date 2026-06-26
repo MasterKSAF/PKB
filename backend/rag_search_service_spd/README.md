@@ -1,13 +1,12 @@
-# RAG Search MVP — SPD Notes
+# RAG Search SPD
 
-> This document describes the SPD RAG Search MVP contract and implementation notes.
+> README описывает текущий сервис `backend/rag_search_service_spd`.
 >
-> RAG Search is logically separate from RAG Builder.
-> RAG Builder prepares `document_sections`, `chunks`, embeddings, `content_tsv`, `path_ltree`, citation metadata and source objects.
-> RAG Search reads the prepared index and performs retrieval.
+> RAG Search логически отделён от RAG Builder.
+> RAG Builder подготавливает `document_sections`, `chunks`, embeddings, `content_tsv`, `path_ltree`, citation metadata и связанные объекты.
+> RAG Search читает подготовленный индекс и выполняет retrieval.
 >
-> This README describes the current `backend/rag_search_service_spd` service.
-> RAG Search is a read-only retrieval service over the index prepared by RAG Builder.
+> Сервис является read-only: он не изменяет индекс и не пишет данные в `nsi`.
 
 ---
 
@@ -77,11 +76,11 @@ content
 
 ## 3. API contract
 
-### Current endpoint map
+### Карта endpoint-ов
 
-RAG Search SPD exposes read-only retrieval endpoints.
+RAG Search SPD предоставляет только endpoint-ы поиска и чтения индекса.
 
-Supported endpoints:
+Поддерживаемые endpoint-ы:
 
 ```text
 GET  /api/v1/health
@@ -91,21 +90,22 @@ POST /rag/search
 POST /search
 ```
 
-RAG Search SPD does not expose legacy unversioned health endpoint:
+Legacy endpoint `GET /health` не поддерживается:
 
 ```text
 GET /health
 ```
 
-RAG Search does not modify the index. Index writes are handled by `backend/rag_builder_service_spd`.
+RAG Search не изменяет индекс.
+Запись индекса выполняет `backend/rag_builder_service_spd`.
 
 ### GET /api/v1/health
 
-Healthcheck endpoint for RAG Search SPD.
+Проверка работоспособности сервиса.
 
 ### POST /api/v1/rag/search
 
-Main contract endpoint for RAG Search SPD.
+Основной контрактный endpoint поиска.
 
 ### POST /search
 
@@ -113,19 +113,20 @@ Legacy/local endpoint.
 
 ### POST /rag/search
 
-Compatibility endpoint used by earlier local integrations.
+Совместимый endpoint для старых локальных интеграций.
 
-All three search endpoints use the same `SearchRequest` and return the same `SearchResponse`.
+Все три search endpoint-а используют один `SearchRequest` и возвращают один `SearchResponse`.
 
-Current endpoint policy:
+Текущая политика endpoint-ов:
 
 ```text
-POST /api/v1/rag/search  # preferred API v1 contract
-POST /rag/search         # compatibility alias
+POST /api/v1/rag/search  # основной API v1 endpoint
+POST /rag/search         # совместимый alias
 POST /search             # legacy/local alias
 ```
 
 ---
+
 ## 4. SearchRequest
 
 ```json
@@ -138,7 +139,7 @@ POST /search             # legacy/local alias
 }
 ```
 
-| field | type | description |
+| Поле | Тип | Описание |
 |---|---|---|
 | `query` | string | поисковый запрос |
 | `top_k` | integer | количество результатов |
@@ -148,13 +149,37 @@ POST /search             # legacy/local alias
 
 ---
 
-## 5. Search modes
+## 5. Совместимость dense-поиска с ANN-индексом
 
-| search_type | Description |
+Dense-поиск использует то же SQL-выражение, под которое RAG Builder создаёт ANN-индекс:
+
+```sql
+embedding::halfvec(EMBEDDING_DIM) <=> query::halfvec(EMBEDDING_DIM)
+```
+
+Это нужно, чтобы PostgreSQL мог использовать индекс:
+
+```text
+idx_chunks_embedding_hnsw_halfvec
+```
+
+Размерность берётся из `EMBEDDING_DIM`.
+
+Локально сейчас Builder и Search используют `EMBEDDING_DIM=312`.
+В боевом окружении при `EMBEDDING_DIM=2048` оба сервиса должны быть запущены с одинаковым значением.
+
+Причина использования `halfvec`: pgvector HNSW по обычному `vector` ограничен 2000 измерениями.
+`halfvec` поддерживает индексирование до 4000 измерений, поэтому подходит для embedding-ов размерности 2048.
+
+---
+
+## 6. Режимы поиска
+
+| search_type | Описание |
 |---|---|
-| `dense` | vector search by `nsi.chunks.embedding` |
-| `sparse` | PostgreSQL full-text search by `nsi.chunks.content_tsv` with `ts_rank_cd` |
-| `hybrid` | RRF fusion of sparse and dense results, duplicates removed |
+| `dense` | vector search по `nsi.chunks.embedding` |
+| `sparse` | PostgreSQL full-text search по `nsi.chunks.content_tsv` с ранжированием `ts_rank_cd` |
+| `hybrid` | объединение sparse и dense результатов через RRF, дубликаты удаляются |
 
 ### dense
 
@@ -192,7 +217,7 @@ rrf_k = 60
 
 ---
 
-## 6. Context expansion
+## 7. Context expansion
 
 Если `expand_context=true`, каждый result может получить `context` array.
 
@@ -217,7 +242,7 @@ Context deduplication:
 
 ---
 
-## 7. Response example
+## 8. Пример ответа
 
 ```json
 {
@@ -251,11 +276,11 @@ Context deduplication:
 
 ---
 
-## 8. Sparse search acceleration
+## 9. Ускорение sparse-поиска
 
-RAG Builder prepares `content_tsv` during indexing.
+RAG Builder готовит `content_tsv` во время индексации.
 
-Expected DB fields/indexes:
+Ожидаемые поля и индексы в БД:
 
 ```text
 nsi.chunks.content_tsv
@@ -263,7 +288,7 @@ idx_chunks_content_tsv
 USING GIN (content_tsv)
 ```
 
-The value is filled from chunk content:
+Значение заполняется из текста chunk-а:
 
 ```sql
 to_tsvector('russian'::regconfig, content)
@@ -271,37 +296,38 @@ to_tsvector('russian'::regconfig, content)
 
 ---
 
-## 9. Embeddings
+## 10. Embeddings
 
-Dense and hybrid search need query embeddings.
+Dense и hybrid search требуют query embeddings.
 
-Supported deployment options:
+Поддерживаемые варианты deployment:
 
 ```text
-stub               — tests/local technical mode
-openai             — official OpenAI API
+stub               — тестовый/local technical режим
+openai             — официальный OpenAI API
 openai_compatible  — OpenAI-compatible endpoint
-infinity           — local Infinity-compatible endpoint
-external           — external OpenAI-compatible API
+infinity           — локальный Infinity-compatible endpoint
+external           — внешний OpenAI-compatible API
 ```
 
-Given current server constraints, production search should not require a local GPU. Dense query embeddings should use an external API or another backend-provided embedding endpoint.
+С учётом ограничений сервера production search не должен требовать локальную GPU.
+Dense query embeddings должны приходить через внешний API или другой backend-provided embedding endpoint.
 
 ---
 
-## 10. MVP limitations
+## 11. Ограничения MVP
 
-- `hybrid` uses Reciprocal Rank Fusion with `k=60`.
-- `sparse` uses PostgreSQL full-text ranking via `ts_rank_cd`; a dedicated BM25 engine is not implemented yet.
-- `context expansion` returns parent + direct children only.
-- Context deduplication is partial.
-- With `EMBEDDING_PROVIDER=stub`, dense search is technical only and may add non-semantic candidates to hybrid results.
-- RAG Search does not generate LLM answers.
-- RAG Search does not modify the index.
+- `hybrid` использует Reciprocal Rank Fusion с `k=60`.
+- `sparse` использует PostgreSQL full-text ranking через `ts_rank_cd`; отдельный BM25 engine пока не реализован.
+- `context expansion` возвращает только parent + direct children.
+- Context deduplication пока частичная.
+- При `EMBEDDING_PROVIDER=stub` dense search является техническим режимом и может добавлять в hybrid results несемантические candidates.
+- RAG Search не генерирует LLM-ответы.
+- RAG Search не изменяет индекс.
 
 ---
 
-## 11. Current test status
+## 12. Текущий статус тестов
 
 ```text
 18 passed, 1 warning
@@ -309,13 +335,13 @@ Given current server constraints, production search should not require a local G
 
 ---
 
-## 12. Separation from RAG Builder
+## 13. Разделение ответственности с RAG Builder
 
-RAG Builder remains responsible for:
+RAG Builder отвечает за:
 
-- document indexing;
+- индексацию документа;
 - chunking;
-- embeddings generation for chunks;
+- генерацию embeddings для chunks;
 - `document_sections`;
 - `chunks`;
 - `images`;
@@ -326,10 +352,10 @@ RAG Builder remains responsible for:
 - `path_ltree`;
 - citation metadata.
 
-RAG Search is responsible for:
+RAG Search отвечает за:
 
 - dense retrieval;
 - sparse retrieval;
 - hybrid retrieval;
 - context expansion;
-- returning source chunks with citation metadata.
+- возврат source chunks с citation metadata.
