@@ -900,7 +900,11 @@ const mapGatewayDraftRecordToUi = (payload: any, fallback?: Partial<DraftItem>):
     note: fallback?.note ?? payload?.message ?? '',
     gatewayTaskId: String(payload?.task_id ?? payload?.taskId ?? fallback?.gatewayTaskId ?? ''),
     gatewayVersionId: String(payload?.version_id ?? payload?.versionId ?? fallback?.gatewayVersionId ?? ''),
-    gatewayDraftId: String(payload?.draft_id ?? payload?.draftId ?? fallback?.gatewayDraftId ?? ''),
+    gatewayDraftId: (() => {
+      const raw = payload?.draft_id ?? payload?.draftId ?? fallback?.gatewayDraftId ?? '';
+      const str = String(raw);
+      return /^\d+$/.test(str) ? str : '';
+    })(),
     gatewayDocumentKey: String(payload?.document_key ?? payload?.documentKey ?? fallback?.gatewayDocumentKey ?? ''),
     gatewayFileHashSha256: String(payload?.file_hash_sha256 ?? payload?.fileHashSha256 ?? fallback?.gatewayFileHashSha256 ?? ''),
     gatewayTitleHashSha256: String(payload?.title_hash_sha256 ?? payload?.titleHashSha256 ?? fallback?.gatewayTitleHashSha256 ?? ''),
@@ -1115,7 +1119,7 @@ export const KnowledgeProcessing: React.FC = () => {
   const draftTasksQuery = useQuery({
     queryKey: ['gateway-draft-tasks', workMode, selectedGatewayDraftId],
     queryFn: () => tasksApi.forDraft(selectedGatewayDraftId),
-    enabled: workMode === 'prod' && activeTab === 'knowledgeProcessing' && Boolean(selectedDraft?.gatewayDraftId),
+    enabled: workMode === 'prod' && activeTab === 'knowledgeProcessing' && /^\d+$/.test(selectedDraft?.gatewayDraftId ?? ''),
     staleTime: 10_000,
     refetchInterval:
       workMode === 'prod' &&
@@ -1175,7 +1179,7 @@ export const KnowledgeProcessing: React.FC = () => {
   const refreshGatewayDraftDetails = async (draftId: string, fallbackDraft?: DraftItem | null) => {
     const draft = fallbackDraft ?? getSelectedDraft(draftId);
     const gatewayDraftId = getGatewayDraftId(draft);
-    if (!draft || !gatewayDraftId) return;
+    if (!draft || !gatewayDraftId || !/^\d+$/.test(gatewayDraftId)) return;
 
     try {
       let details = await draftsApi.get(gatewayDraftId);
