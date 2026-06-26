@@ -540,6 +540,7 @@ services:
     image: pkb/orchestrator:local
     container_name: pkb-celery-worker
     restart: unless-stopped
+    working_dir: /app
     command: celery -A app.celery_app worker --loglevel=info --concurrency=4
     environment:
       <<: [*env-db, *env-service-urls]
