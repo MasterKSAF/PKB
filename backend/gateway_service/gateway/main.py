@@ -314,16 +314,16 @@ def _normalize_permissions(raw_permissions: Any, roles: list[str]) -> Dict[str, 
     # aligned with the role comments below without overriding explicit booleans.
     role_set = set(roles)
     if "system_admin" in role_set:
-        normalized.setdefault("can_manage_users", True)
-        normalized.setdefault("can_upload_documents", True)
-        normalized.setdefault("can_manage_classifiers", True)
-        normalized.setdefault("can_manage_terminology", True)
-        normalized.setdefault("can_manage_registry", True)
+        normalized["can_manage_users"] = True
+        normalized["can_upload_documents"] = True
+        normalized["can_manage_classifiers"] = True
+        normalized["can_manage_terminology"] = True
+        normalized["can_manage_registry"] = True
     elif "knowledge_admin" in role_set:
-        normalized.setdefault("can_upload_documents", True)
-        normalized.setdefault("can_manage_classifiers", True)
-        normalized.setdefault("can_manage_terminology", True)
-        normalized.setdefault("can_manage_registry", True)
+        normalized["can_upload_documents"] = True
+        normalized["can_manage_classifiers"] = True
+        normalized["can_manage_terminology"] = True
+        normalized["can_manage_registry"] = True
 
     return normalized
 

@@ -68,11 +68,12 @@ EXTRA_VARS: dict[str, str] = {
     # Без /api/v1 — сервисы (Orchestrator и др.) сами добавляют путь
     # Внутри Docker — имена сервисов (docker-compose).
     # На хосте checker использует свои MODE_PORTS, не этот .env.
-    "REGISTRY_SERVICE_URL": "http://registry-service:8084",
-    "INTEGRATION_SERVICE_URL": "http://integration-service:8085",
-    "VALIDATE_SERVICE_URL": "http://converter-validator:8086",
-    "RAG_SERVICE_URL": "http://rag-search:8091",
+    "REGISTRY_SERVICE_URL": "http://127.0.0.1:8084",
+    "INTEGRATION_SERVICE_URL": "http://127.0.0.1:8085",
+    "VALIDATE_SERVICE_URL": "http://127.0.0.1:8086",
+    "RAG_SERVICE_URL": "http://127.0.0.1:8091",
     "DATABASE_URL": "postgresql+asyncpg://pkb:pkb@postgres:5432/pkb_neuro",
+    "RATE_LIMIT_ENABLED": "false",
     "APP_VERSION": "1.0.0",
 }
 

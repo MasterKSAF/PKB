@@ -90,11 +90,13 @@ class RouteEntry:
 # затем общие префиксы других сервисов.
 
 ROUTE_TABLE: List[RouteEntry] = [
-    # ── Registry: черновики (чтение) ──────────────────────────────────────
+    # ── Registry: черновики (только список) ────────────────────────────────
     RouteEntry(
-        {"GET"}, r"^/api/v1/drafts(?:/\d+(?:/preview)?)?$", "registry",
+        {"GET"}, r"^/api/v1/drafts$", "registry",
         transform=lambda p: p.replace("/api/v1/drafts", "/api/v1/registry/drafts", 1),
     ),
+    # ── Orchestrator: детали черновика ─────────────────────────────────────
+    RouteEntry({"GET"}, r"^/api/v1/drafts/\d+$", "orchestrator"),
 
     # ── Orchestrator: черновики (управление/пайплайн) ─────────────────────
     RouteEntry({"POST"}, r"^/api/v1/drafts$", "orchestrator"),

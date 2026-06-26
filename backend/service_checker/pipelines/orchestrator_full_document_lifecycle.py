@@ -189,13 +189,13 @@ class OrchestratorFullDocumentLifecyclePipeline(PipelineDef):
             skip_if=lambda ctx: not ctx.has("approved_doc_id"),
         ))
 
-        # ── Шаг 10: Индексация в RAG Builder (через Gateway) ──────────
+        # ── Шаг 10: Индексация в RAG Builder (напрямую) ────────────────
         steps.append(PipelineStep(
-            name="Индексация документа (через Gateway)",
-            service="gateway",
+            name="Индексация документа (RAG Builder)",
+            service="rag_builder",
             method="POST",
             path="/api/v1/rag/build",
-            port=8080,
+            port=8090,
             body={
                 "document_id": "{approved_doc_id}",
                 "sections": [{
@@ -215,13 +215,13 @@ class OrchestratorFullDocumentLifecyclePipeline(PipelineDef):
             skip_if=lambda ctx: not ctx.has("approved_doc_id"),
         ))
 
-        # ── Шаг 11: Поиск RAG Search (через Gateway) ──────────────────
+        # ── Шаг 11: Поиск RAG Search (напрямую) ────────────────────────
         steps.append(PipelineStep(
-            name="Поиск RAG Search (через Gateway)",
-            service="gateway",
+            name="Поиск RAG Search (RAG Search)",
+            service="rag_search",
             method="POST",
             path="/api/v1/rag/search",
-            port=8080,
+            port=8091,
             body={
                 "query": "тестовый документ",
                 "top_k": 3,

@@ -102,11 +102,11 @@ class FullDocumentLifecyclePipeline(PipelineDef):
 
         # ── Шаг 3: Первая индексация документа (через Gateway) ────────
         steps.append(PipelineStep(
-            name="Первая попытка построения индекса (через Gateway)",
-            service="gateway",
+            name="Первая попытка построения индекса (RAG Builder)",
+            service="rag_builder",
             method="POST",
             path="/api/v1/rag/build",
-            port=8080,
+            port=8090,
             body={
                 "document_id": "{doc_id}",
                 "sections": [{
@@ -141,11 +141,11 @@ class FullDocumentLifecyclePipeline(PipelineDef):
 
         # ── Шаг 5: Повторная индексация (через Gateway) ────────────────
         steps.append(PipelineStep(
-            name="Повторное построение индекса (через Gateway)",
-            service="gateway",
+            name="Повторное построение индекса (RAG Builder)",
+            service="rag_builder",
             method="POST",
             path="/api/v1/rag/build",
-            port=8080,
+            port=8090,
             body={
                 "document_id": "{doc_id}",
                 "sections": [{
@@ -166,11 +166,11 @@ class FullDocumentLifecyclePipeline(PipelineDef):
 
         # ── Шаг 6: Поиск по индексу (через Gateway) ────────────────────
         steps.append(PipelineStep(
-            name="Поиск по индексу RAG Search (через Gateway)",
-            service="gateway",
+            name="Поиск по индексу RAG Search (RAG Search)",
+            service="rag_search",
             method="POST",
             path="/api/v1/rag/search",
-            port=8080,
+            port=8091,
             body={
                 "query": "тестовый документ lifecycle",
                 "valid_at": "2026-06-19",
@@ -193,22 +193,22 @@ class FullDocumentLifecyclePipeline(PipelineDef):
 
         # ── Шаг 8: Удаление индекса RAG (через Gateway) ───────────────
         steps.append(PipelineStep(
-            name="Удаление индекса RAG (через Gateway)",
-            service="gateway",
+            name="Удаление индекса RAG (RAG Builder)",
+            service="rag_builder",
             method="DELETE",
             path="/api/v1/rag/build/{doc_id}",
-            port=8080,
+            port=8090,
             expected_status={200, 404},
             needs_auth=True,
         ))
 
         # ── Шаг 9: Поиск — проверить что результатов нет (через Gateway) ──
         steps.append(PipelineStep(
-            name="Поиск — проверка пустого результата (через Gateway)",
-            service="gateway",
+            name="Поиск — проверка пустого результата (RAG Search)",
+            service="rag_search",
             method="POST",
             path="/api/v1/rag/search",
-            port=8080,
+            port=8091,
             body={
                 "query": "тестовый документ lifecycle",
                 "valid_at": "2026-06-19",
@@ -242,11 +242,11 @@ class FullDocumentLifecyclePipeline(PipelineDef):
 
         # ── Шаг 11: Финальное построение индекса (через Gateway) ───────
         steps.append(PipelineStep(
-            name="Финальное построение индекса (через Gateway)",
-            service="gateway",
+            name="Финальное построение индекса (RAG Builder)",
+            service="rag_builder",
             method="POST",
             path="/api/v1/rag/build",
-            port=8080,
+            port=8090,
             body={
                 "document_id": "{doc_id_2}",
                 "sections": [{
@@ -268,11 +268,11 @@ class FullDocumentLifecyclePipeline(PipelineDef):
 
         # ── Шаг 12: Финальный поиск (через Gateway) ────────────────────
         steps.append(PipelineStep(
-            name="Финальный поиск по индексу (через Gateway)",
-            service="gateway",
+            name="Финальный поиск по индексу (RAG Search)",
+            service="rag_search",
             method="POST",
             path="/api/v1/rag/search",
-            port=8080,
+            port=8091,
             body={
                 "query": "тестовый документ lifecycle",
                 "valid_at": "2026-06-19",

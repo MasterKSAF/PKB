@@ -111,11 +111,11 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
 
         # ── Шаг 4: Запуск парсинга #1 (через Gateway) ─────────────────
         steps.append(PipelineStep(
-            name="Запуск парсинга #1 (через Gateway)",
-            service="gateway",
+            name="Запуск парсинга #1 (Parser)",
+            service="parser",
             method="POST",
             path="/api/v1/parser/process",
-            port=8080,
+            port=8087,
             body={
                 "task_id": TEST_TASK_ID_1,
                 "draft_id": 1,  # PS-3: обязательный draft_id
@@ -130,22 +130,22 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
 
         # ── Шаг 5: Статус парсинга #1 (через Gateway) ─────────────────
         steps.append(PipelineStep(
-            name="Статус парсинга #1 (longpoll, через Gateway)",
-            service="gateway",
+            name="Статус парсинга #1 (longpoll, Parser)",
+            service="parser",
             method="GET",
             path=f"/api/v1/parser/process/{TEST_TASK_ID_1}/status",
-            port=8080,
+            port=8087,
             expected_status=200,
             check=check_json_field("status", str),
         ))
 
         # ── Шаг 6: Результат парсинга #1 (через Gateway) ──────────────
         steps.append(PipelineStep(
-            name="Результат парсинга #1 (через Gateway)",
-            service="gateway",
+            name="Результат парсинга #1 (Parser)",
+            service="parser",
             method="GET",
             path=f"/api/v1/parser/process/{TEST_TASK_ID_1}/result",
-            port=8080,
+            port=8087,
             expected_status=200,
             retry_on={409},
             retry_delay=2.0,
@@ -155,11 +155,11 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
 
         # ── Шаг 7: Конвертация #1 (через Gateway) ──────────────────────
         steps.append(PipelineStep(
-            name="Конвертация JSON #1 (через Gateway)",
-            service="gateway",
+            name="Конвертация JSON #1 (Converter)",
+            service="converter_validator",
             method="POST",
             path="/api/v1/converter/convert",
-            port=8080,
+            port=8086,
             body={
                 "task_id": str(TEST_TASK_ID_1),
                 "version_id": "1",  # CV-9: version_id обязателен
@@ -237,11 +237,11 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
 
         # ── Шаг 11-13: Парсинг #2 (через Gateway) ─────────────────────
         steps.append(PipelineStep(
-            name="Запуск парсинга #2 (через Gateway)",
-            service="gateway",
+            name="Запуск парсинга #2 (Parser)",
+            service="parser",
             method="POST",
             path="/api/v1/parser/process",
-            port=8080,
+            port=8087,
             body={
                 "task_id": TEST_TASK_ID_2,
                 "draft_id": 1,  # PS-3: обязательный draft_id
@@ -255,21 +255,21 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
         ))
 
         steps.append(PipelineStep(
-            name="Статус парсинга #2 (longpoll, через Gateway)",
-            service="gateway",
+            name="Статус парсинга #2 (longpoll, Parser)",
+            service="parser",
             method="GET",
             path=f"/api/v1/parser/process/{TEST_TASK_ID_2}/status",
-            port=8080,
+            port=8087,
             expected_status=200,
             check=check_json_field("status", str),
         ))
 
         steps.append(PipelineStep(
-            name="Результат парсинга #2 (через Gateway)",
-            service="gateway",
+            name="Результат парсинга #2 (Parser)",
+            service="parser",
             method="GET",
             path=f"/api/v1/parser/process/{TEST_TASK_ID_2}/result",
-            port=8080,
+            port=8087,
             expected_status=200,
             retry_on={409},
             retry_delay=2.0,
@@ -279,11 +279,11 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
 
         # ── Шаг 14-16: Конвертация #2 + Registry #2 + Build #2 (через Gateway) ─
         steps.append(PipelineStep(
-            name="Конвертация JSON #2 (через Gateway)",
-            service="gateway",
+            name="Конвертация JSON #2 (Converter)",
+            service="converter_validator",
             method="POST",
             path="/api/v1/converter/convert",
-            port=8080,
+            port=8086,
             body={
                 "task_id": str(TEST_TASK_ID_2),
                 "version_id": "1",  # CV-9: version_id обязателен

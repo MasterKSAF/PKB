@@ -229,11 +229,11 @@ class DocumentApprovalPipeline(PipelineDef):
 
         # ── Шаг 13: FULL-фаза (полная обработка) ────────────────────
         steps.append(PipelineStep(
-            name="Индексация документа (через Gateway)",
-            service="gateway",
+            name="Индексация документа (RAG Builder)",
+            service="rag_builder",
             method="POST",
             path="/api/v1/rag/build",
-            port=8080,
+            port=8090,
             body={
                 "document_id": "{doc_id}",
                 "sections": [{

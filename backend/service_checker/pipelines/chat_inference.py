@@ -139,11 +139,11 @@ class ChatInferencePipeline(PipelineDef):
 
         # ── Шаг 5: Поиск RAG Search (через Gateway) ────────────────────
         steps.append(PipelineStep(
-            name="Поиск RAG Search (через Gateway)",
-            service="gateway",
+            name="Поиск RAG Search (напрямую)",
+            service="rag_search",
             method="POST",
             path="/api/v1/rag/search",
-            port=8080,
+            port=8091,
             body={
                 "query": "ледовый класс Arc4",
                 "valid_at": "2026-06-19",

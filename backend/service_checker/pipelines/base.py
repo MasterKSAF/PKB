@@ -593,6 +593,7 @@ class PipelineRunner:
                     "message_id": ["id", "messageId", "message_id"],
                     "task_id": ["task_id", "taskId"],
                     "task_id_2": ["task_id", "taskId"],
+                    "draft_id": ["id", "draft_id", "draftId"],
                     "draft_id_2": ["draft_id", "draftId", "id"],
                     "file_key": ["file_key", "fileKey", "key"],
                     "access_token": ["access_token"],
@@ -799,6 +800,34 @@ def check_json_fields(schema: Dict[str, type]) -> Callable:
         except json.JSONDecodeError as e:
             return False, f"Невалидный JSON: {e}"
 
+        _alt_map = {
+            "draft_id": ["id", "draft_id", "draftId"],
+            "document_id": ["id", "document_id", "docId"],
+            "version_id": ["id", "version_id", "versionId"],
+            "task_id": ["task_id", "taskId"],
+            "user_id": ["id", "userId", "user_id"],
+        }
+
+        def _deep_search(obj: Any, key: str) -> Optional[Any]:
+            if isinstance(obj, dict):
+                if key in obj:
+                    return obj[key]
+                # Проверка альтернативных имён
+                for alt in _alt_map.get(key, []):
+                    if alt in obj:
+                        return obj[alt]
+                # Рекурсивный поиск
+                for v in obj.values():
+                    result = _deep_search(v, key)
+                    if result is not None:
+                        return result
+            elif isinstance(obj, list):
+                for item in obj:
+                    result = _deep_search(item, key)
+                    if result is not None:
+                        return result
+            return None
+
         for field_path, expected_type in schema.items():
             parts = field_path.split(".")
             current = data
@@ -806,7 +835,11 @@ def check_json_fields(schema: Dict[str, type]) -> Callable:
                 if isinstance(current, dict) and part in current:
                     current = current[part]
                 else:
-                    return False, f"Поле '{field_path}' не найдено в ответе"
+                    # Fallback: рекурсивный поиск по всему дереву
+                    current = _deep_search(data, field_path)
+                    if current is None:
+                        return False, f"Поле '{field_path}' не найдено в ответе"
+                    break
 
             if not isinstance(current, expected_type):
                 actual = type(current).__name__
