@@ -1,14 +1,12 @@
 """
 PKB Neuroassistant — Pipeline: full_document_cycle
 
-Полный сквозной цикл документа: от загрузки PDF до поиска.
+Полный сквозной цикл документа через Orchestrator: от загрузки PDF до поиска.
 
 Покрывает:
 - Создание черновика с PDF (через Orchestrator/Gateway)
-- Ожидание завершения парсинга
-- Проверка результата парсинга (Parser API)
-- Предпросмотр и конвертация метаданных (Converter API)
-- Валидация документа (Converter API)
+- Ожидание завершения парсинга (статус задачи)
+- Preview-фаза (конвертация/валидация через Orchestrator)
 - Решение пользователя (approve)
 - Проверка документа в Registry
 - Индексация (RAG Builder)
@@ -18,10 +16,9 @@ PKB Neuroassistant — Pipeline: full_document_cycle
 from __future__ import annotations
 
 import json
-import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from .base import (
     PipelineContext,
@@ -30,7 +27,6 @@ from .base import (
     check_json_field,
     check_json_fields,
     check_rag_search_results,
-    save_parser_result_as,
 )
 
 TEST_CREDENTIALS = {
@@ -43,45 +39,23 @@ TEST_PDF_PATH = _HERE / "pdf" / "7bd97d737317a8a272bb18a405ab2d04.pdf"
 TEST_PDF_BYTES = TEST_PDF_PATH.read_bytes()
 
 
-
 def _on_draft_failed(body: Optional[str], ctx: PipelineContext) -> None:
     ctx.set("draft_failed", True)
-
-
-def _draft_ok(ctx: PipelineContext) -> bool:
-    return ctx.has("draft_id") and ctx.get("draft_failed", False) is False
 
 
 def _draft_failed(ctx: PipelineContext) -> bool:
     return ctx.get("draft_failed", False)
 
 
-def _draft_has_doc_id(ctx: PipelineContext) -> bool:
-    return ctx.has("approved_doc_id")
-
-
-_save_parser_result = save_parser_result_as("parser_result")
-
-
-def _has_parser_result(ctx: PipelineContext) -> bool:
-    """Пропустить шаг, если нет результата парсинга."""
-    return not ctx.has("parser_result")
-
-
-def _check_converter_skip(ctx: PipelineContext) -> bool:
-    """Пропустить конвертацию, если черновик не создан или нет данных парсинга."""
-    return _draft_failed(ctx) or not ctx.has("parser_result")
-
-
 class FullDocumentCyclePipeline(PipelineDef):
-    """Пайплайн: полный сквозной цикл документа от загрузки PDF до поиска."""
+    """Пайплайн: полный сквозной цикл документа через Orchestrator — от загрузки PDF до поиска."""
 
     name = "full_document_cycle"
     description = (
         "Полный сквозной цикл: загрузка PDF через черновик → парсинг → "
-        "конвертация → валидация → approve → Registry → индексация → поиск"
+        "preview → approve → Registry → индексация → поиск"
     )
-    services = ["gateway", "parser", "converter_validator", "registry", "rag_builder", "rag_search", "minio"]
+    services = ["gateway"]
 
     def build_steps(self, context: PipelineContext) -> List[PipelineStep]:
         steps: List[PipelineStep] = []
@@ -124,10 +98,10 @@ class FullDocumentCyclePipeline(PipelineDef):
             on_error=_on_draft_failed,
         ))
 
-        # ── Шаг 3: Статус задачи парсинга (через Gateway) ──────────────
-        # Ожидаем завершения парсинга, запущенного Orchestrator'ом
+        # ── Шаг 3: Статус задачи (через Gateway) ──────────────────────
+        # Парсинг выполняется асинхронно внутри Orchestrator
         steps.append(PipelineStep(
-            name="Статус задачи парсинга (через Gateway)",
+            name="Статус задачи (через Gateway)",
             service="gateway",
             method="GET",
             path="/api/v1/tasks/{task_id}/status",
@@ -138,25 +112,7 @@ class FullDocumentCyclePipeline(PipelineDef):
             skip_if=_draft_failed,
         ))
 
-        # ── Шаг 4: Проверка результата парсинга (Parser API, напрямую) ─
-        # Используем task_id из контекста (создан черновиком на шаге 2).
-        # Parser может не знать этот task_id (он создан внутри Orchestrator),
-        # поэтому 404 — допустим. Результат сохраняем только при 200.
-        steps.append(PipelineStep(
-            name="Результат парсинга (Parser API)",
-            service="parser",
-            method="GET",
-            path="/api/v1/parser/process/{task_id}/result",
-            port=18087,
-            expected_status={200, 404},
-            retry_on={409, 404},
-            retry_delay=2.0,
-            retry_max=5,
-            check=_save_parser_result,
-            skip_if=_draft_failed,
-        ))
-
-        # ── Шаг 5: Детали черновика (через Gateway) ───────────────────
+        # ── Шаг 4: Детали черновика (через Gateway) ───────────────────
         steps.append(PipelineStep(
             name="Детали черновика (через Gateway)",
             service="gateway",
@@ -174,50 +130,10 @@ class FullDocumentCyclePipeline(PipelineDef):
             skip_if=_draft_failed,
         ))
 
-        # ── Шаг 6: Предпросмотр метаданных (Converter API, напрямую) ───
+        # ── Шаг 5: Запуск превью (через Gateway) ──────────────────────
+        # Orchestrator запускает конвертацию/валидацию
         steps.append(PipelineStep(
-            name="Предпросмотр метаданных (Converter API)",
-            service="converter_validator",
-            method="POST",
-            path="/api/v1/converter/preview",
-            port=18086,
-            body={
-                "task_id": "{task_id}",
-                "version_id": "1",
-                "raw_json": "__INLINE__parser_result",
-            },
-            expected_status={200, 422, 400},
-            check=check_json_fields({
-                "doc_code": str,
-                "title": str,
-            }),
-            skip_if=_draft_failed,
-        ))
-
-        # ── Шаг 7: Валидация документа (Converter API, напрямую) ───────
-        steps.append(PipelineStep(
-            name="Валидация документа (Converter API)",
-            service="converter_validator",
-            method="POST",
-            path="/api/v1/validate/document",
-            port=18086,
-            body={
-                "task_id": "{task_id}",
-                "version_id": "1",
-                "raw_json": "__INLINE__parser_result",
-            },
-            expected_status={200, 422, 400},
-            check=check_json_fields({
-                "structure_valid": bool,
-                "status": str,
-            }),
-            skip_if=_draft_failed,
-        ))
-
-        # ── Шаг 8: Запуск превью черновика (через Gateway) ────────────
-        # Запускает конвертацию через Orchestrator
-        steps.append(PipelineStep(
-            name="Запуск превью черновика (через Gateway)",
+            name="Запуск превью (через Gateway)",
             service="gateway",
             method="POST",
             path="/api/v1/drafts/{draft_id}/preview",
@@ -228,7 +144,7 @@ class FullDocumentCyclePipeline(PipelineDef):
             skip_if=_draft_failed,
         ))
 
-        # ── Шаг 9: Статус превью (через Gateway) ──────────────────────
+        # ── Шаг 6: Статус превью (через Gateway) ──────────────────────
         steps.append(PipelineStep(
             name="Статус превью (через Gateway)",
             service="gateway",
@@ -241,7 +157,7 @@ class FullDocumentCyclePipeline(PipelineDef):
             skip_if=_draft_failed,
         ))
 
-        # ── Шаг 10: Approve черновика (через Gateway) ─────────────────
+        # ── Шаг 7: Approve (через Gateway) ────────────────────────────
         def _on_approved(body: Optional[str], ctx: PipelineContext) -> Tuple[bool, str]:
             """Извлечь document_id из ответа approve."""
             if not body:
@@ -272,7 +188,7 @@ class FullDocumentCyclePipeline(PipelineDef):
             skip_if=_draft_failed,
         ))
 
-        # ── Шаг 11: Проверка документа в Registry (через Gateway) ─────
+        # ── Шаг 8: Проверка документа в Registry (через Gateway) ─────
         steps.append(PipelineStep(
             name="Проверка документа в Registry (через Gateway)",
             service="gateway",
@@ -284,7 +200,7 @@ class FullDocumentCyclePipeline(PipelineDef):
             skip_if=lambda ctx: not ctx.has("approved_doc_id"),
         ))
 
-        # ── Шаг 12: Индексация в RAG Builder (напрямую) ───────────────
+        # ── Шаг 9: Индексация (RAG Builder, напрямую) ────────────────
         steps.append(PipelineStep(
             name="Индексация документа (RAG Builder)",
             service="rag_builder",
@@ -310,9 +226,9 @@ class FullDocumentCyclePipeline(PipelineDef):
             skip_if=lambda ctx: not ctx.has("approved_doc_id"),
         ))
 
-        # ── Шаг 13: Поиск по индексу RAG Search ───────────────────────
+        # ── Шаг 10: Поиск (RAG Search, напрямую) ──────────────────────
         steps.append(PipelineStep(
-            name="Поиск по индексу RAG Search",
+            name="Поиск по индексу (RAG Search)",
             service="rag_search",
             method="POST",
             path="/api/v1/rag/search",

@@ -48,11 +48,20 @@ EXTRA_VARS: dict[str, str] = {
     # ── Auth: Brute-force protection ──────────────────────────────────
     "MAX_FAILED_ATTEMPTS": "100",
     "LOCKOUT_DURATION_SECONDS": "0",
-    # ── Auth Mock ─────────────────────────────────────────────────────────
+    # ── Disable all mocks ───────────────────────────────────────────────
     "AUTH_SERVICE_MOCK": "false",
     "DEV_AUTH_MODE": "false",
     "MOCK_LLM_ENABLED": "false",
+    "MOCK_RAG_ENABLED": "false",
+    "MOCK_REGISTRY_ENABLED": "false",
     "REGISTRY_SERVICE_MOCK": "false",
+    "RAG_SERVICE_MOCK": "false",
+    "OCR_SERVICE_MOCK": "false",
+    "PARSER_SERVICE_MOCK": "false",
+    "CONVERTER_SERVICE_MOCK": "false",
+    "USE_MOCK_MINIO": "false",
+    "USE_MOCK_PARSER": "false",
+    "USE_MOCK_VALIDATOR": "false",
     "JWT_SECRET_KEY": "pkb-neuroassistant-jwt-secret-key-2026-dev",
     "JWT_ALGORITHM": "HS256",
     # ── Embedding (TEI) ──────────────────────────────────────────────────
