@@ -7,14 +7,27 @@ import asyncio
 from contextlib import asynccontextmanager
 
 # === НАСТРОЙКА OBSERVABILITY В ПЕРВУЮ ОЧЕРЕДЬ ===
-from app.core.telemetry import setup_observability, instrument_fastapi
-from app.config import settings
-
-# Настраиваем OpenTelemetry
-tracer_provider, _, logger = setup_observability(
-    service_name="parser_service",
-    otlp_endpoint=settings.otel_endpoint,
-)
+try:
+    from app.core.telemetry import setup_observability, instrument_fastapi as _instrument_fastapi
+    from app.config import settings
+ 
+    _tracer_provider, _, _logger = setup_observability(
+        service_name="parser_service",
+        otlp_endpoint=settings.otel_endpoint,
+    )
+    _otel_enabled = True
+except Exception:
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    _logger = logging.getLogger("parser_service")
+    _logger.warning("OpenTelemetry init failed — running without observability")
+    _tracer_provider = None
+    _otel_enabled = False
+ 
+    def _instrument_fastapi(app, tp):
+        pass
+ 
+logger = _logger
 
 # === ОСТАЛЬНЫЕ ИМПОРТЫ ===
 from fastapi import FastAPI, Request
@@ -97,7 +110,8 @@ app = FastAPI(
 )
 
 # Инструментирование FastAPI для сбора трейсов
-instrument_fastapi(app, tracer_provider)
+if _otel_enabled:
+    _instrument_fastapi(app, _tracer_provider)
 
 # Подключение роутера API
 app.include_router(v1_router, prefix=settings.api_prefix)
