@@ -174,10 +174,22 @@ def run_converter_preview_step(
         result = _run_async(_do_converter_preview())
 
         input_data = {"file_key": file_key, "mode": "preview", "draft_id": draft_id}
-        output_data = {
-            "validated": result.get("data", {}).get("validated", True),
-            "metadata": result.get("data", {}).get("metadata", {}),
-        }
+
+        # Converter returns flat PreviewMetadataResponse (doc_code, title, ...)
+        # Detect format and build metadata accordingly
+        if "doc_code" in result or "title" in result:
+            # New flat format from /api/v1/converter/preview
+            metadata = {k: v for k, v in result.items() if v is not None}
+            output_data = {
+                "validated": True,
+                "metadata": metadata,
+            }
+        else:
+            # Legacy format: {"data": {"validated": ..., "metadata": ...}}
+            output_data = {
+                "validated": result.get("data", {}).get("validated", True),
+                "metadata": result.get("data", {}).get("metadata", {}),
+            }
 
         _run_async(_notify_step_completed(task_id, "preview_converter", input_data, output_data))
 
