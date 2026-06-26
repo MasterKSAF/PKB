@@ -119,11 +119,16 @@ def run_parser_preview_step(
         result = _run_async(_do_parse())
 
         input_data = {"file_key": file_key, "mode": "preview", "max_pages": max_pages, "draft_id": draft_id}
+        # Передаём полный результат парсера для запуска конвертера
+        full_result = result.get("data", {})
+        if not full_result:
+            full_result = result  # fallback — весь ответ
         output_data = {
-            "preview_not_supported": result.get("data", {}).get("preview_not_supported", False),
-            "pages_processed": result.get("data", {}).get("pages_processed", 0),
-            "metadata": result.get("data", {}).get("metadata", {}),
-            "quality": result.get("data", {}).get("quality", {}),
+            "preview_not_supported": full_result.get("preview_not_supported", False),
+            "pages_processed": full_result.get("pages_processed", 0),
+            "metadata": full_result.get("metadata", {}),
+            "quality": full_result.get("quality", {}),
+            "full_result": full_result,  # для converter
         }
 
         # The orchestrator uses "preview_ocr" as the step name for both OCR and Parser
@@ -144,7 +149,7 @@ def run_parser_preview_step(
 )
 def run_converter_preview_step(
     self, task_id: int, draft_id: int, file_key: str,
-    trace_id: str = "",
+    trace_id: str = "", raw_json: Optional[dict] = None,
 ):
     """
     Preview Converter step — validate and transform preview data.
@@ -157,7 +162,12 @@ def run_converter_preview_step(
         async def _do_converter_preview():
             client = ConverterValidatorClient()
             try:
-                return await client.convert_preview({"file_key": file_key, "draft_id": draft_id})
+                body = {"file_key": file_key, "draft_id": draft_id}
+                if raw_json:
+                    body["raw_json"] = raw_json
+                    body["task_id"] = task_id
+                    body["version_id"] = 1
+                return await client.convert_preview(body)
             finally:
                 await client.close()
 

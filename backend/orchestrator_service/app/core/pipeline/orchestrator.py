@@ -142,7 +142,8 @@ class PipelineOrchestrator:
         else:
             run_parser_preview_step.delay(task_id, draft_id, file_key, max_pages=3, trace_id=current_trace_id)
 
-        run_converter_preview_step.delay(task_id, draft_id, file_key, trace_id=current_trace_id)
+        # Converter запускается ПОСЛЕ parser/ocr в on_step_completed
+        # с результатом парсинга как raw_json
 
         # Update progress
         await self.task_repo.update_task_status(
@@ -153,6 +154,20 @@ class PipelineOrchestrator:
         logger.info(
             "Pipeline preview started",
             extra={"draft_id": draft_id, "task_id": task_id},
+        )
+
+    async def _start_converter_preview(
+        self, task_id: int, draft_id: int, file_key: str,
+        trace_id: str, raw_json: dict,
+    ) -> None:
+        """Dispatch converter preview step after parser/OCR completes."""
+        from app.tasks.pipeline_formation import run_converter_preview_step
+        run_converter_preview_step.delay(
+            task_id, draft_id, file_key, trace_id=trace_id, raw_json=raw_json,
+        )
+        logger.info(
+            "Converter preview dispatched after parser",
+            extra={"task_id": task_id, "draft_id": draft_id},
         )
 
     async def on_step_completed(
@@ -227,6 +242,17 @@ class PipelineOrchestrator:
             task_id=task_id,
             progress_percent=progress,
         )
+
+        # After parser/OCR preview, dispatch converter with full_result
+        if step_name == "preview_ocr" and output_data:
+            full_result = output_data.get("full_result") or output_data
+            await self._start_converter_preview(
+                task_id=task_id,
+                draft_id=task.draft_id,
+                file_key=input_data.get("file_key", "") if input_data else "",
+                trace_id=task.trace_id or "",
+                raw_json=full_result,
+            )
 
         # Handle preview phase completion
         if step_name == "preview_converter":
