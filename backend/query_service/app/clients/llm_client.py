@@ -3,14 +3,18 @@ import httpx
 from ..config import get_settings
 
 
-async def complete(messages: list[dict], cache_key: str | None = None) -> str:
+async def complete(
+    messages: list[dict],
+    cache_key: str | None = None,
+    max_tokens: int | None = None,
+) -> str:
     settings = get_settings()
 
     payload = {
         "model": settings.LLM_MODEL,
         "messages": messages,
         "temperature": settings.LLM_TEMPERATURE,
-        "max_tokens": settings.LLM_MAX_TOKENS,
+        "max_tokens": max_tokens or settings.LLM_MAX_TOKENS,
         "top_p": settings.LLM_TOP_P,
         "stream": False,
     }

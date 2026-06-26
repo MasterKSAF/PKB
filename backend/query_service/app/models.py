@@ -34,6 +34,8 @@ class ChatSession(Base):
     title: Mapped[str | None] = mapped_column(String(256))
     document_ids: Mapped[list] = mapped_column(JSON, default=list)
     options: Mapped[dict] = mapped_column(JSON, default=dict)
+    summary: Mapped[str | None] = mapped_column(Text)
+    summarized_until_message_id: Mapped[int | None] = mapped_column(BigInteger)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

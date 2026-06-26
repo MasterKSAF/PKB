@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ..clients import registry_client, rag_client, llm_client
 from ..config import get_settings
-from ..models import ChatMessage, ChatSource
+from ..models import ChatMessage, ChatSession, ChatSource
 
 logger = logging.getLogger(__name__)
 
@@ -19,30 +19,108 @@ _SYSTEM_PROMPT = (
     "Указывай источник (наименование документа, пункт, страницу) для каждого утверждения."
 )
 
+_SUMMARY_PROMPT = (
+    "Сожми переписку инженера с ассистентом в краткое резюме на русском: "
+    "сохрани заданные вопросы, ключевые выводы, упомянутые документы и параметры. "
+    "Без воды, только факты, необходимые для продолжения диалога."
+)
 
-async def _load_history(
+_FINAL_ASSISTANT_STATUSES = ("answered", "not_found")
+_CITATION_RE = re.compile(r"\s*%\[[^\]]*\]%")
+
+
+def _estimate_tokens(text: str) -> int:
+    return max(1, len(text) // 4)
+
+
+def _clean_content(role: str, content: str) -> str:
+    if role == "assistant":
+        return _CITATION_RE.sub("", content)
+    return content
+
+
+async def _load_session_meta(
+    session_factory: async_sessionmaker, session_id: str
+) -> tuple[str | None, int | None]:
+    async with session_factory() as db:
+        session = await db.get(ChatSession, session_id)
+        if session is None:
+            return None, None
+        return session.summary, session.summarized_until_message_id
+
+
+async def _load_messages_after(
     session_factory: async_sessionmaker,
     session_id: str,
     exclude_message_id: str,
-    limit: int,
+    after_id: int | None,
 ) -> list[dict]:
     async with session_factory() as db:
-        rows = (await db.execute(
-            select(ChatMessage)
-            .where(
-                ChatMessage.session_id == session_id,
-                ChatMessage.message_id != exclude_message_id,
-                ChatMessage.content.is_not(None),
-                ChatMessage.role.in_(("user", "assistant")),
-            )
-            .order_by(ChatMessage.timestamp.desc())
-            .limit(limit)
-        )).scalars().all()
+        q = select(ChatMessage).where(
+            ChatMessage.session_id == session_id,
+            ChatMessage.message_id != exclude_message_id,
+            ChatMessage.content.is_not(None),
+            ChatMessage.role.in_(("user", "assistant")),
+            ChatMessage.status.in_(("pending",) + _FINAL_ASSISTANT_STATUSES),
+        )
+        if after_id is not None:
+            q = q.where(ChatMessage.message_id > after_id)
+        rows = (await db.execute(q.order_by(ChatMessage.message_id.asc()))).scalars().all()
 
-    return [{"role": m.role, "content": m.content} for m in reversed(rows)]
+    return [
+        {"id": m.message_id, "role": m.role, "content": _clean_content(m.role, m.content)}
+        for m in rows
+    ]
+
+
+async def _summarize(prev_summary: str | None, messages: list[dict], settings) -> str:
+    convo = "\n".join(f"{m['role']}: {m['content']}" for m in messages)
+    if settings.MOCK_LLM_ENABLED:
+        base = f"{prev_summary} | " if prev_summary else ""
+        return base + "; ".join(m["content"][:60] for m in messages)
+
+    base = f"Текущее резюме:\n{prev_summary}\n\n" if prev_summary else ""
+    prompt = [
+        {"role": "system", "content": _SUMMARY_PROMPT},
+        {"role": "user", "content": base + f"Добавь в резюме переписку:\n{convo}"},
+    ]
+    return await llm_client.complete(prompt, max_tokens=settings.LLM_SUMMARY_MAX_TOKENS)
+
+
+async def _prepare_context(
+    session_factory: async_sessionmaker,
+    session_id: str,
+    exclude_message_id: str,
+    settings,
+) -> tuple[str | None, list[dict]]:
+    summary, until = await _load_session_meta(session_factory, session_id)
+    history = await _load_messages_after(session_factory, session_id, exclude_message_id, until)
+
+    budget = settings.LLM_CONTEXT_TOKEN_BUDGET
+    keep = settings.LLM_RECENT_KEEP_MESSAGES
+
+    def total_tokens() -> int:
+        t = _estimate_tokens(summary) if summary else 0
+        return t + sum(_estimate_tokens(m["content"]) for m in history)
+
+    if total_tokens() > budget and len(history) > keep:
+        to_compress = history[:-keep]
+        summary = await _summarize(summary, to_compress, settings)
+        last_id = to_compress[-1]["id"]
+        async with session_factory() as db:
+            async with db.begin():
+                await db.execute(
+                    update(ChatSession)
+                    .where(ChatSession.session_id == session_id)
+                    .values(summary=summary, summarized_until_message_id=last_id)
+                )
+        history = history[-keep:]
+
+    return summary, [{"role": m["role"], "content": m["content"]} for m in history]
 
 
 def _build_messages(
+    summary: str | None,
     history: list[dict],
     chunks: list[rag_client.Chunk],
     user_query: str,
@@ -54,6 +132,8 @@ def _build_messages(
     context_block = "\n\n".join(context_parts)
 
     messages: list[dict] = [{"role": "system", "content": _SYSTEM_PROMPT}]
+    if summary:
+        messages.append({"role": "system", "content": f"Резюме предыдущего диалога:\n{summary}"})
     messages.extend(history)
     messages.append({
         "role": "user",
@@ -162,8 +242,8 @@ async def run_pipeline(
             return
 
         await _set_status(session_factory, message_id, "generating")
-        history = await _load_history(
-            session_factory, session_id, message_id, settings.LLM_HISTORY_LIMIT
+        summary, history = await _prepare_context(
+            session_factory, session_id, message_id, settings
         )
         llm_text: str | None = None
         for attempt in range(3):
@@ -172,7 +252,7 @@ async def run_pipeline(
                     await asyncio.sleep(0.3)
                     llm_text = _build_llm_mock(enriched_query, chunks)
                     break
-                messages = _build_messages(history, chunks, enriched_query)
+                messages = _build_messages(summary, history, chunks, enriched_query)
                 llm_text = await llm_client.complete(messages, cache_key=str(session_id))
                 break
             except Exception:
