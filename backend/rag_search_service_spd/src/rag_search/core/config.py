@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "stub"
     EMBEDDING_DIM: int = 312
     EMBEDDING_API_BASE_URL: str | None = None
+    EMBEDDING_BASE_URL: str | None = None
+    EMBEDDING_API_URL: str | None = None
     EMBEDDING_API_KEY: str | None = None
 
     model_config = SettingsConfigDict(
@@ -22,6 +24,23 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+
+    @property
+    def effective_embedding_api_base_url(self) -> str | None:
+        if self.EMBEDDING_API_BASE_URL:
+            return self.EMBEDDING_API_BASE_URL.rstrip("/")
+
+        if self.EMBEDDING_BASE_URL:
+            return self.EMBEDDING_BASE_URL.rstrip("/")
+
+        if self.EMBEDDING_API_URL:
+            value = self.EMBEDDING_API_URL.rstrip("/")
+            if value.endswith("/embeddings"):
+                return value[: -len("/embeddings")]
+            return value
+
+        return None
 
 
 settings = Settings()

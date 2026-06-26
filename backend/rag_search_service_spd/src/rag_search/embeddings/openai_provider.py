@@ -26,7 +26,7 @@ class OpenAICompatibleEmbeddingProvider:
             ),
         }
 
-        resolved_base_url = base_url or settings.EMBEDDING_API_BASE_URL
+        resolved_base_url = base_url or settings.effective_embedding_api_base_url
 
         if resolved_base_url:
             client_kwargs["base_url"] = resolved_base_url.rstrip("/")
@@ -37,6 +37,7 @@ class OpenAICompatibleEmbeddingProvider:
         response = self.client.embeddings.create(
             model=self.model,
             input=text,
+            dimensions=self.embedding_dim,
         )
 
         embedding = list(response.data[0].embedding)
