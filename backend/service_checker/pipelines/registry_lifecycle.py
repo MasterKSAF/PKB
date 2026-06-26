@@ -33,7 +33,7 @@ class RegistryLifecyclePipeline(PipelineDef):
 
     name = "registry_lifecycle"
     description = "CRUD + импорт классификаторов и терминов"
-    services = ["gateway"]
+    services = ["gateway", "registry"]
 
     def build_steps(self, context: PipelineContext) -> List[PipelineStep]:
         """Построить 12 шагов пайплайна registry_lifecycle."""

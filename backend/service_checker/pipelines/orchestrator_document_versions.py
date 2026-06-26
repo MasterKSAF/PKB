@@ -36,7 +36,7 @@ class OrchestratorDocumentVersionsPipeline(PipelineDef):
 
     name = "orchestrator_document_versions"
     description = "Версионирование документа Orchestrator (создание документа → новая версия)"
-    services = ["gateway"]
+    services = ["gateway", "orchestrator", "registry"]
 
     def build_steps(self, context: PipelineContext) -> List[PipelineStep]:
         steps: List[PipelineStep] = []

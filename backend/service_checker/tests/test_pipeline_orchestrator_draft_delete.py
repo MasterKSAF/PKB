@@ -13,7 +13,7 @@ class TestOrchestratorDraftDeletePipeline:
         assert p.name == "orchestrator_draft_delete"
         assert p.description
         assert "gateway" in p.services
-        assert len(p.services) == 1
+        assert len(p.services) == 2
 
     def test_build_steps_count(self):
         p = OrchestratorDraftDeletePipeline()
@@ -49,7 +49,7 @@ class TestOrchestratorDraftDeletePipeline:
         steps = p.build_steps(PipelineContext())
         draft = steps[1]
         assert draft.service == "gateway"
-        assert draft.expected_status == 202
+        assert draft.expected_status == {202, 409}
         assert draft.extract_keys == ["draft_id", "task_id"]
         assert draft.on_error is not None
 

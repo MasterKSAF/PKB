@@ -44,7 +44,7 @@ class OrchestratorMetadataUpdatePipeline(PipelineDef):
 
     name = "orchestrator_metadata_update"
     description = "Обновление метаданных черновика Orchestrator (PATCH /metadata)"
-    services = ["gateway"]
+    services = ["gateway", "orchestrator"]
 
     def build_steps(self, context: PipelineContext) -> List[PipelineStep]:
         steps: List[PipelineStep] = []
@@ -112,6 +112,7 @@ class OrchestratorMetadataUpdatePipeline(PipelineDef):
                 "document_id": (int, type(None)),
                 "version_id": (int, type(None)),
                 "is_new_document": bool,
+                "created_by": (str, type(None)),  # #18: проверка что черновик создан от реального пользователя, не u-mock-001
             }),
             needs_auth=True,
             skip_if=_draft_skipped,

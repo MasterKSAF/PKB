@@ -13,7 +13,7 @@ class TestFullDocumentLifecyclePipeline:
         assert p.name == "full_document_lifecycle"
         assert p.description
         assert "gateway" in p.services
-        assert len(p.services) == 1
+        assert len(p.services) == 4
 
     def test_build_steps_count(self):
         p = FullDocumentLifecyclePipeline()
@@ -26,16 +26,16 @@ class TestFullDocumentLifecyclePipeline:
         expected_names = [
             "Аутентификация (через Gateway)",
             "Создание документа в Registry (через Gateway)",
-            "Первая попытка построения индекса (через Gateway)",
+            "Первая попытка построения индекса (RAG Builder)",
             "Обновление метаданных документа (через Gateway)",
-            "Повторное построение индекса (через Gateway)",
-            "Поиск по индексу RAG Search (через Gateway)",
+            "Повторное построение индекса (RAG Builder)",
+            "Поиск по индексу RAG Search (RAG Search)",
             "Удаление документа из Registry (через Gateway)",
-            "Удаление индекса RAG (через Gateway)",
-            "Поиск — проверка пустого результата (через Gateway)",
+            "Удаление индекса RAG (RAG Builder)",
+            "Поиск — проверка пустого результата (RAG Search)",
             "Воссоздание документа в Registry (через Gateway)",
-            "Финальное построение индекса (через Gateway)",
-            "Финальный поиск по индексу (через Gateway)",
+            "Финальное построение индекса (RAG Builder)",
+            "Финальный поиск по индексу (RAG Search)",
         ]
         actual = [s.name for s in steps]
         assert actual == expected_names, f"Порядок шагов:\n{actual}"
@@ -68,11 +68,11 @@ class TestFullDocumentLifecyclePipeline:
 
 
     def test_step6_rag_search_no_on_error(self):
-        """Шаг 6 (RAG Search) больше не имеет on_error — костыль удалён."""
+        """Шаг 6 (RAG Search) больше не имеет on_error."""
         p = FullDocumentLifecyclePipeline()
         steps = p.build_steps(PipelineContext())
         step6 = steps[5]  # "Поиск по индексу RAG Search"
-        assert step6.service == "gateway"
+        assert step6.service == "rag_search"
         assert step6.on_error is None
 
     def test_build_on_error_sets_context(self):
@@ -98,7 +98,7 @@ class TestFullDocumentLifecyclePipeline:
         step5 = steps[4]
         assert step5.skip_if is None
         assert step5.on_error is None
-        assert step5.service == "gateway"
+        assert step5.service == "rag_builder"
         assert step5.method == "POST"
 
     def test_step2_extracts_doc_id(self):

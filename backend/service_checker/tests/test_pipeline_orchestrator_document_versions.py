@@ -13,7 +13,7 @@ class TestOrchestratorDocumentVersionsPipeline:
         assert p.name == "orchestrator_document_versions"
         assert p.description
         assert "gateway" in p.services
-        assert len(p.services) == 1
+        assert len(p.services) == 3
 
     def test_build_steps_count(self):
         p = OrchestratorDocumentVersionsPipeline()

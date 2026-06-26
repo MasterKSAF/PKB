@@ -55,7 +55,7 @@ class FullDocumentCyclePipeline(PipelineDef):
         "Полный сквозной цикл: загрузка PDF через черновик → парсинг → "
         "preview → approve → Registry → индексация → поиск"
     )
-    services = ["gateway"]
+    services = ["gateway", "orchestrator", "rag_builder", "rag_search"]
 
     def build_steps(self, context: PipelineContext) -> List[PipelineStep]:
         steps: List[PipelineStep] = []

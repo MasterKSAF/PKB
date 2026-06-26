@@ -13,7 +13,7 @@ class TestDocumentApprovalPipeline:
         assert p.name == "document_approval"
         assert p.description
         assert "gateway" in p.services
-        assert len(p.services) == 1
+        assert len(p.services) == 3
 
     def test_build_steps_count(self):
         p = DocumentApprovalPipeline()
@@ -33,7 +33,7 @@ class TestDocumentApprovalPipeline:
             "Решение по черновику (approve, через Gateway)",
             "Проверка document_id после approve (через Gateway)",
             "Создание документа в Registry (через Gateway)",
-            "Индексация документа (через Gateway)",
+            "Индексация документа (RAG Builder)",
         ]
         actual = [s.name for s in steps]
         assert actual == expected_names, f"Порядок шагов:\n{actual}"
@@ -58,7 +58,7 @@ class TestDocumentApprovalPipeline:
         assert draft.service == "gateway"
         assert draft.method == "POST"
         assert draft.path == "/api/v1/drafts"
-        assert draft.expected_status == 202
+        assert draft.expected_status == {202, 409}
         assert draft.extract_keys == ["draft_id", "task_id"]
         assert draft.needs_auth
         assert draft.on_error is not None
@@ -101,11 +101,11 @@ class TestDocumentApprovalPipeline:
         assert "doc_code" in reg.body
 
     def test_rag_build_step(self):
-        """Индексация в RAG Builder (через Gateway)."""
+        """Индексация в RAG Builder (напрямую)."""
         p = DocumentApprovalPipeline()
         steps = p.build_steps(PipelineContext())
         rag = steps[9]
-        assert rag.service == "gateway"
+        assert rag.service == "rag_builder"
         assert rag.method == "POST"
         assert rag.path == "/api/v1/rag/build"
         assert rag.expected_status == {200, 201, 202}

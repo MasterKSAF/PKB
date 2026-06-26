@@ -199,6 +199,8 @@ class TestPipelineContextChain:
                     "orchestrator_document_reprocess",
                     "orchestrator_document_versions",
                     "orchestrator_full_document_lifecycle",
+                    "full_document_cycle",
+                    "document_approval",
                 ):
                     extracted.add("approved_doc_id")
                     extracted.add("approved_version_id")

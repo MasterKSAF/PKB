@@ -55,7 +55,7 @@ class DocumentApprovalPipeline(PipelineDef):
         "Подтверждение документа: черновик → preview → решение пользователя "
         "→ full-фаза → индексация (документ только через черновик)"
     )
-    services = ["gateway"]
+    services = ["gateway", "orchestrator", "rag_builder"]
 
     def build_steps(self, context: PipelineContext) -> List[PipelineStep]:
         """Построить шаги пайплайна document_approval."""

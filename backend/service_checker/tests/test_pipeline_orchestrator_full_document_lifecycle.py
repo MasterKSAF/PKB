@@ -13,7 +13,7 @@ class TestOrchestratorFullDocumentLifecyclePipeline:
         assert p.name == "orchestrator_full_document_lifecycle"
         assert p.description
         assert "gateway" in p.services
-        assert len(p.services) == 1
+        assert len(p.services) == 5
 
     def test_build_steps_count(self):
         p = OrchestratorFullDocumentLifecyclePipeline()
@@ -32,8 +32,8 @@ class TestOrchestratorFullDocumentLifecyclePipeline:
             "Статус превью (через Gateway)",
             "Решение по черновику (approve, через Gateway)",
             "Проверка документа в Registry (через Gateway)",
-            "Индексация документа (через Gateway)",
-            "Поиск RAG Search (через Gateway)",
+            "Индексация документа (RAG Builder)",
+            "Поиск RAG Search (RAG Search)",
             "Удаление черновика (через Gateway)",
         ]
         actual = [s.name for s in steps]
@@ -54,7 +54,7 @@ class TestOrchestratorFullDocumentLifecyclePipeline:
         steps = p.build_steps(PipelineContext())
         draft = steps[1]
         assert draft.service == "gateway"
-        assert draft.expected_status == 202
+        assert draft.expected_status == {202, 409}
         assert draft.extract_keys == ["draft_id", "task_id"]
         assert draft.on_error is not None
 
@@ -95,11 +95,11 @@ class TestOrchestratorFullDocumentLifecyclePipeline:
         assert reg.expected_status == {200, 404}
 
     def test_rag_build_step(self):
-        """Индексация в RAG Builder (через Gateway)."""
+        """Индексация в RAG Builder (напрямую)."""
         p = OrchestratorFullDocumentLifecyclePipeline()
         steps = p.build_steps(PipelineContext())
         rag = steps[8]
-        assert rag.service == "gateway"
+        assert rag.service == "rag_builder"
         assert rag.method == "POST"
         assert rag.path == "/api/v1/rag/build"
         assert rag.expected_status == {200, 201, 202}
@@ -107,11 +107,11 @@ class TestOrchestratorFullDocumentLifecyclePipeline:
         assert rag.body["document_id"] == "{approved_doc_id}"
 
     def test_rag_search_step(self):
-        """Поиск RAG Search (через Gateway)."""
+        """Поиск RAG Search (напрямую)."""
         p = OrchestratorFullDocumentLifecyclePipeline()
         steps = p.build_steps(PipelineContext())
         search = steps[9]
-        assert search.service == "gateway"
+        assert search.service == "rag_search"
         assert search.method == "POST"
         assert search.path == "/api/v1/rag/search"
         assert search.expected_status == 200
