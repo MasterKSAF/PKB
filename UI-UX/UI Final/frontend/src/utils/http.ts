@@ -1781,6 +1781,7 @@ export const draftsApi = {
     const response = await gatewayRequest<any>(() =>
       apiClient.get(`/drafts/${draftId}/preview/status`, {
         params: { longpoll },
+        timeout: (longpoll + 5) * 1000,
       }),
     );
     return response.data;

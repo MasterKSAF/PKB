@@ -55,8 +55,7 @@ else:
     engine = create_async_engine(
         settings.DATABASE_URL,
         echo=settings.DEBUG,
-        pool_size=10,
-        max_overflow=20,
+        poolclass=NullPool,
         pool_pre_ping=True,
     )
 

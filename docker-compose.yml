@@ -39,7 +39,7 @@
 # Порты сервисов (внутри сети = снаружи):
 #   frontend :3300  gateway :8080   auth :8082        orchestrator :8081   query :8083
 #   registry :8084  converter-validator :8086  parser :8087
-#   rag-builder :8090  rag-search :8091   infinity :18080 (host)
+#   rag-builder :8090  rag-search :8091   infinity :18580 (host)
 # =============================================================================
 
 name: pkb
@@ -121,6 +121,10 @@ services:
     pull_policy: always
     container_name: pkb-postgres
     restart: unless-stopped
+    command:
+      - "postgres"
+      - "-c"
+      - "max_connections=200"
     environment:
       POSTGRES_USER: pkb
       POSTGRES_PASSWORD: pkb
@@ -199,7 +203,7 @@ services:
       - "--batch-size"
       - "1"
     ports:
-      - "${INFINITY_PORT:-18080}:7997"
+      - "${INFINITY_PORT:-18580}:7997"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:7997/health"]
       interval: 10s
@@ -541,7 +545,7 @@ services:
     container_name: pkb-celery-worker
     restart: unless-stopped
     working_dir: /app
-    command: celery -A app.celery_app worker --loglevel=info --concurrency=4 -Q celery,pipeline,saga
+    command: celery -A app.celery_app worker --loglevel=info --concurrency=4 --pool=threads -Q celery,pipeline,saga
     healthcheck:
       disable: true
     environment:

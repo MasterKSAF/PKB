@@ -165,6 +165,13 @@ SQLite не поддерживает JSONB нативно. Текущая реа
 из синхронных Celery-задач. Это временное решение — в production Celery-задачи
 должны быть полностью async (Celery 6+ поддерживает async задачи).
 
+**Проблема (26.06):** async engine с `pool_size=10` создаёт пул соединений asyncpg
+при загрузке модуля. При вызове `_run_async()` в новом event loop соединения из
+пула привязаны к старому loop → `RuntimeError: Future attached to a different loop`.
+
+**Фикс:** `poolclass=NullPool` — каждое подключение создаётся в текущем event loop.
+Дополнительно: `--pool=threads` в celery worker (все I/O bound, тредов достаточно).
+
 ### 3.5. Исправлен `UnboundLocalError` в `approve_draft`
 В `app/core/pipeline/orchestrator.py` метод `approve_draft`:
 - При `task.full_completed=True` переменная `file_key` была не инициализирована,
