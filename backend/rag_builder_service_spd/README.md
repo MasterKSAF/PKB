@@ -28,6 +28,7 @@ nsi.document_sections
 
 Поиск, retrieval, vector search, rerank и генерация ответов находятся вне зоны ответственности данного сервиса.
 RAG Builder только подготавливает данные для последующего сервиса RAG Search.
+
 ---
 
 ## 2. Требования
@@ -202,11 +203,11 @@ docker compose down
 
 ## 9. API
 
-### Current endpoint map
+### Карта endpoint-ов
 
-RAG Builder SPD exposes only indexing/build endpoints.
+RAG Builder SPD предоставляет только endpoint-ы индексации и управления индексом.
 
-Supported endpoints:
+Поддерживаемые endpoint-ы:
 
 ```text
 GET    /api/v1/health
@@ -224,7 +225,7 @@ DELETE /rag/build/{document_id}
 GET    /rag/build/{document_id}/status
 ```
 
-RAG Builder SPD does not expose Search API endpoints:
+RAG Builder SPD не предоставляет Search API:
 
 ```text
 GET  /health
@@ -233,7 +234,7 @@ POST /rag/search
 POST /api/v1/rag/search
 ```
 
-Search and retrieval endpoints live in `backend/rag_search_service_spd`.
+Endpoint-ы поиска находятся в отдельном сервисе `backend/rag_search_service_spd`.
 
 ---
 ### GET /api/v1/health
@@ -619,7 +620,7 @@ GET /api/v1/rag/build/420000/status?longpoll=15
 
 ---
 
-### Legacy/local compatibility endpoints
+### Legacy/local совместимые endpoint-ы
 
 Для обратной совместимости также поддерживаются:
 
@@ -684,15 +685,15 @@ sql/
 * `protected_spans` не разрываются между chunks
 * `protected_spans` фильтруются по `section_id`
 
-Supported chunk strategies:
+Поддерживаемые стратегии chunking:
 
-- `semantic_512` — approximately 512 tokens, sentence-aware split, 20% overlap.
-- `semantic_1024` — default strategy, approximately 1024 tokens, sentence-aware split, 20% overlap.
-- `semantic_2048` — approximately 2048 tokens, sentence-aware split, 20% overlap.
-- `fixed_256` — approximately 256 tokens, fixed-size split, 10% overlap.
-- `fixed_512` — approximately 512 tokens, fixed-size split, 10% overlap.
+- `semantic_512` — примерно 512 tokens, разбиение с учётом предложений, overlap 20%.
+- `semantic_1024` — стратегия по умолчанию, примерно 1024 tokens, разбиение с учётом предложений, overlap 20%.
+- `semantic_2048` — примерно 2048 tokens, разбиение с учётом предложений, overlap 20%.
+- `fixed_256` — примерно 256 tokens, разбиение фиксированного размера, overlap 10%.
+- `fixed_512` — примерно 512 tokens, разбиение фиксированного размера, overlap 10%.
 
-MVP uses character-based approximation until tokenizer-based chunking is added.
+В MVP используется приблизительная оценка по символам; tokenizer-based chunking будет добавлен позже.
 
 #### Embeddings
 
@@ -705,15 +706,15 @@ MVP uses character-based approximation until tokenizer-based chunking is added.
 * подсчёт суммарных tokens/cost по batch-результату
 
 
-Supported embedding providers:
+Поддерживаемые embedding providers:
 
-- `stub` — local zero-vector provider for tests and offline development.
-- `openai` — official OpenAI API, uses `OPENAI_API_KEY`.
-- `openai_compatible` — OpenAI-compatible embeddings endpoint, uses `EMBEDDING_API_BASE_URL` and `EMBEDDING_API_KEY`.
-- `infinity` — alias for OpenAI-compatible local Infinity embeddings service.
-- `external` — alias for external OpenAI-compatible embeddings API.
+- `stub` — локальный provider для тестов и offline-разработки.
+- `openai` — официальный OpenAI API, использует `OPENAI_API_KEY`.
+- `openai_compatible` — OpenAI-compatible endpoint для embeddings, использует `EMBEDDING_API_BASE_URL` и `EMBEDDING_API_KEY`.
+- `infinity` — alias для локального Infinity embeddings service с OpenAI-compatible API.
+- `external` — alias для внешнего OpenAI-compatible embeddings API.
 
-Example for local Infinity:
+Пример для локального Infinity:
 
 ```env
 EMBEDDING_PROVIDER=infinity
@@ -730,7 +731,7 @@ EMBEDDING_API_KEY=
 * path
 * path_ltree
 * GIST индекс для ltree
-* content_tsv + GIN index for sparse full-text search
+* `content_tsv` + GIN-индекс для sparse full-text search
 
 #### Хранение чанков
 
@@ -792,6 +793,30 @@ EMBEDDING_API_KEY=
 
 ---
 
+## ANN-индекс embedding для dense-поиска
+
+RAG Builder создаёт pgvector HNSW-индекс для быстрого dense-поиска по `nsi.chunks.embedding`:
+
+```sql
+CREATE INDEX IF NOT EXISTS idx_chunks_embedding_hnsw_halfvec
+ON nsi.chunks
+USING hnsw ((embedding::halfvec(EMBEDDING_DIM)) halfvec_cosine_ops)
+WHERE embedding IS NOT NULL;
+```
+
+Размерность индекса берётся из `EMBEDDING_DIM`.
+
+Локально в stub-режиме сейчас используется `EMBEDDING_DIM=312`.
+В боевом окружении при `EMBEDDING_DIM=2048` тот же код создаст индекс по `halfvec(2048)`.
+
+`ensure_schema()` проверяет существующий `idx_chunks_embedding_hnsw_halfvec`.
+Если индекс создан со старой размерностью, он удаляется и создаётся заново.
+
+Причина: pgvector HNSW по обычному `vector` ограничен 2000 измерениями.
+`halfvec` поддерживает индексирование до 4000 измерений, поэтому этот вариант безопасен для embedding-ов размерности 2048.
+
+---
+
 ## Database Writes
 
 На текущем этапе сервис записывает данные в следующие таблицы:
@@ -826,11 +851,11 @@ document_sections
 
 ---
 
-## MVP Status
+## Статус MVP
 
 Текущее состояние:
 
-- 60 тестов проходят, 1 skipped
+- 51 тест проходит, 1 warning
 - PostgreSQL persistence реализован
 - pgvector поддерживается
 - ltree поддерживается
@@ -882,7 +907,7 @@ document_sections
 * локальные embedding-модели
 * мониторинг стоимости эмбеддингов
 
-### Stage 7 - Integration with RAG Search Service
+### Stage 7 — интеграция с RAG Search Service
 
 * интеграция с отдельным RAG Search Service
 * Builder остаётся сервисом индексации и не содержит Search API
