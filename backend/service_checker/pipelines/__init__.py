@@ -31,6 +31,7 @@ from .orchestrator_draft_delete import OrchestratorDraftDeletePipeline
 from .orchestrator_document_reprocess import OrchestratorDocumentReprocessPipeline
 from .orchestrator_document_versions import OrchestratorDocumentVersionsPipeline
 from .orchestrator_full_document_lifecycle import OrchestratorFullDocumentLifecyclePipeline
+from .full_document_cycle import FullDocumentCyclePipeline
 
 # Реестр доступных пайплайнов: имя → класс
 PIPELINE_REGISTRY: dict[str, type[PipelineDef]] = {
@@ -49,6 +50,7 @@ PIPELINE_REGISTRY: dict[str, type[PipelineDef]] = {
     "orchestrator_document_reprocess": OrchestratorDocumentReprocessPipeline,
     "orchestrator_document_versions": OrchestratorDocumentVersionsPipeline,
     "orchestrator_full_document_lifecycle": OrchestratorFullDocumentLifecyclePipeline,
+    "full_document_cycle": FullDocumentCyclePipeline,
 }
 
 __all__ = [
@@ -72,5 +74,6 @@ __all__ = [
     "OrchestratorDocumentReprocessPipeline",
     "OrchestratorDocumentVersionsPipeline",
     "OrchestratorFullDocumentLifecyclePipeline",
+    "FullDocumentCyclePipeline",
     "PIPELINE_REGISTRY",
 ]

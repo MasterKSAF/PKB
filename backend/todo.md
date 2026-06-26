@@ -30,3 +30,18 @@
 - Gateway: mock/реальный несоответствия
 - OCR: dev-статус
 - parser_service: OTEL без try/except (требует доработки разработчиком)
+
+---
+
+## Текущая задача: разрешение git merge conflicts
+
+### Контекст
+- HEAD (наша ветка): port shift +10000, rate limit vars
+- MERGE_HEAD (вливаемая): старые порты без сдвига, без rate limit
+- Конфликты — только порты и rate limit vars
+
+### План
+- [ ] 1. `docker-compose.yml` — взять HEAD (сохранить rate limit vars)
+- [ ] 2. Все pipeline файлы — взять HEAD (порты +10000)
+- [ ] 3. `git add` разрешённых файлов
+- [ ] 4. Проверить, что тесты проходят
