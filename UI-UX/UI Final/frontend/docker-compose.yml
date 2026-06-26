@@ -7,3 +7,9 @@ services:
     container_name: pkb-rag-frontend
     ports:
       - "3300:80"
+    develop:
+      watch:
+        - path: ./src
+          action: rebuild
+        - path: ./package.json
+          action: rebuild
