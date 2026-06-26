@@ -32,6 +32,23 @@ class PostgresSearchRepository:
 
         return result == (1,)
 
+    def _embedding_halfvec_dim_sql(self) -> sql.SQL:
+        embedding_dim = int(settings.EMBEDDING_DIM)
+
+        if embedding_dim <= 0:
+            raise ValueError(
+                f"Invalid EMBEDDING_DIM={embedding_dim}. "
+                "EMBEDDING_DIM must be a positive integer."
+            )
+
+        if embedding_dim > 4000:
+            raise ValueError(
+                f"Invalid EMBEDDING_DIM={embedding_dim}. "
+                "HNSW halfvec search supports up to 4000 dimensions."
+            )
+
+        return sql.SQL(str(embedding_dim))
+
     def vector_search(
         self,
         query_embedding: list[float],
@@ -62,15 +79,16 @@ class PostgresSearchRepository:
                 chunk_index,
                 chunk_type,
                 content,
-                embedding <=> %s::vector AS distance
+                embedding::halfvec({embedding_dim}) <=> %s::halfvec({embedding_dim}) AS distance
             FROM {schema}.chunks
             WHERE {where_clause}
-            ORDER BY embedding <=> %s::vector
+            ORDER BY embedding::halfvec({embedding_dim}) <=> %s::halfvec({embedding_dim})
             LIMIT %s
             """
         ).format(
             schema=sql.Identifier(settings.POSTGRES_SCHEMA),
             where_clause=sql.SQL(" AND ").join(where_clauses),
+            embedding_dim=self._embedding_halfvec_dim_sql(),
         )
 
         with self._connect() as conn:

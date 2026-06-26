@@ -53,3 +53,15 @@ query_service.pipeline.run_pipeline()
 - Единственный источник диагностики без SSH — dmesg (через /host/proc) и health endpoints.
 - При добавлении нового сервиса с потенциально высоким потреблением памяти — обязательно указывать `mem_limit`.
 - При OOM одного сервиса валится вся цепочка downstream. Нужен Resilience: circuit breaker на rag_client.
+
+### G6. FastAPI трейлинг-слеш — 307 redirect ломает прокси через Gateway
+
+**Проблема:** Если роут FastAPI определён с `"/"` (слеш), а клиент шлёт запрос без слеша — FastAPI отвечает 307 с Location на внутренний Docker-hostname (напр. `http://orchestrator:8081/api/v1/drafts/`). Браузер не может резолвить Docker-имена и падает с `ERR_NAME_NOT_RESOLVED`.
+
+**Где проявилось:** `POST /api/v1/drafts` в оркестраторе — роут был `@router.post("/")`, нужно `@router.post("")`.
+
+**Фикс в Gateway (client.py):** перехват 3xx ответов и замена Location с внутреннего URL на Gateway (`proxy_request`).
+
+**Профилактика:**
+- Определять роуты без слеша — `@router.post("")`, а не `@router.post("/")`
+- При добавлении нового сервиса проверить, не утекают ли внутренние URL наружу

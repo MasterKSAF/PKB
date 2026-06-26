@@ -32,34 +32,34 @@ class RegistryQuarantinePipeline(PipelineDef):
 
     name = "registry_quarantine"
     description = "Карантин классификаторов: accept/reject + валидация"
-    services = ["auth", "registry"]
+    services = ["gateway"]
 
     def build_steps(self, context: PipelineContext) -> List[PipelineStep]:
         """Построить 10 шагов пайплайна registry_quarantine."""
         steps: List[PipelineStep] = []
         ts = datetime.now().strftime("%Y%m%d%H%M%S%f")
 
-        # ── Шаг 1: Аутентификация ────────────────────────────────────
+        # ── Шаг 1: Аутентификация (через Gateway) ─────────────────────
         steps.append(PipelineStep(
-            name="Аутентификация",
-            service="auth",
+            name="Аутентификация (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/auth/token",
-            port=8082,
+            port=8080,
             body=TEST_CREDENTIALS,
             expected_status=200,
             extract_keys=["access_token", "refresh_token"],
             check=check_json_field("access_token", str),
         ))
 
-        # ── Шаг 2: Создать классификатор ──────────────────────────────
+        # ── Шаг 2: Создать классификатор (через Gateway) ──────────────
         classifier_code = f"98.{ts[-6:]}"
         steps.append(PipelineStep(
-            name="Создать классификатор",
-            service="registry",
+            name="Создать классификатор (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/registry/classifiers",
-            port=8084,
+            port=8080,
             body={
                 "classifier_system": "MKS",
                 "code": classifier_code,
@@ -72,14 +72,14 @@ class RegistryQuarantinePipeline(PipelineDef):
             needs_auth=True,
         ))
 
-        # ── Шаг 3: Создать документ с неизвестным кодом → карантин ──
+        # ── Шаг 3: Создать документ с неизвестным кодом (через Gateway) ─
         unknown_code = f"97.{ts[-6:]}"
         steps.append(PipelineStep(
-            name="Создать документ с неизвестным кодом",
-            service="registry",
+            name="Создать документ с неизвестным кодом (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/registry/documents",
-            port=8084,
+            port=8080,
             body={
                 "title": f"Pipeline quarantine документ {ts}",
                 "doc_code": f"QUAR-TEST-{ts}",
@@ -96,13 +96,13 @@ class RegistryQuarantinePipeline(PipelineDef):
             needs_auth=True,
         ))
 
-        # ── Шаг 4: Список карантина — получить pending_id ─────────────
+        # ── Шаг 4: Список карантина — получить pending_id (через Gateway) ─
         steps.append(PipelineStep(
-            name="Список карантина (pending)",
-            service="registry",
+            name="Список карантина (pending, через Gateway)",
+            service="gateway",
             method="GET",
             path="/api/v1/registry/classifiers/pending",
-            port=8084,
+            port=8080,
             params={"page": 1, "page_size": 10},
             expected_status=200,
             extract_keys=["pending_id"],
@@ -110,13 +110,13 @@ class RegistryQuarantinePipeline(PipelineDef):
             needs_auth=True,
         ))
 
-        # ── Шаг 5: Принять из карантина ───────────────────────────────
+        # ── Шаг 5: Принять из карантина (accept, через Gateway) ───────
         steps.append(PipelineStep(
-            name="Принять из карантина (accept)",
-            service="registry",
+            name="Принять из карантина (accept, через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/registry/classifiers/pending/{pending_id}/accept",
-            port=8084,
+            port=8080,
             body={
                 "parent_code": classifier_code,
                 "full_name": f"Pipeline принятый классификатор {ts}",
@@ -126,13 +126,13 @@ class RegistryQuarantinePipeline(PipelineDef):
             needs_auth=True,
         ))
 
-        # ── Шаг 6: Валидация классификации после accept ───────────────
+        # ── Шаг 6: Валидация классификации после accept (через Gateway) ─
         steps.append(PipelineStep(
-            name="Валидация классификации (accept)",
-            service="registry",
+            name="Валидация классификации (accept, через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/registry/classifiers/validate",
-            port=8084,
+            port=8080,
             body={
                 "classification": {
                     "mks_oks_code": unknown_code,
@@ -146,14 +146,14 @@ class RegistryQuarantinePipeline(PipelineDef):
             needs_auth=True,
         ))
 
-        # ── Шаг 7: Создать второй документ с другим неизвестным кодом ──
+        # ── Шаг 7: Создать второй документ с другим неизвестным кодом (через Gateway) ─
         unknown_code2 = f"96.{ts[-6:]}"
         steps.append(PipelineStep(
-            name="Создать второй документ с неизвестным кодом",
-            service="registry",
+            name="Создать второй документ с неизвестным кодом (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/registry/documents",
-            port=8084,
+            port=8080,
             body={
                 "title": f"Pipeline quarantine документ 2 {ts}",
                 "doc_code": f"QUAR-TEST2-{ts}",
@@ -169,13 +169,13 @@ class RegistryQuarantinePipeline(PipelineDef):
             needs_auth=True,
         ))
 
-        # ── Шаг 8: Список карантина — получить второй pending_id ─────
+        # ── Шаг 8: Список карантина — получить второй pending_id (через Gateway) ─
         steps.append(PipelineStep(
-            name="Список карантина (второй pending)",
-            service="registry",
+            name="Список карантина (второй pending, через Gateway)",
+            service="gateway",
             method="GET",
             path="/api/v1/registry/classifiers/pending",
-            port=8084,
+            port=8080,
             params={"page": 1, "page_size": 10},
             expected_status=200,
             extract_keys=["pending_id2"],
@@ -183,13 +183,13 @@ class RegistryQuarantinePipeline(PipelineDef):
             needs_auth=True,
         ))
 
-        # ── Шаг 9: Отклонить из карантина ─────────────────────────────
+        # ── Шаг 9: Отклонить из карантина (reject, через Gateway) ─────
         steps.append(PipelineStep(
-            name="Отклонить из карантина (reject)",
-            service="registry",
+            name="Отклонить из карантина (reject, через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/registry/classifiers/pending/{pending_id2}/reject",
-            port=8084,
+            port=8080,
             body={
                 "admin_comment": "Отклонено pipeline тестом",
             },
@@ -198,13 +198,13 @@ class RegistryQuarantinePipeline(PipelineDef):
             needs_auth=True,
         ))
 
-        # ── Шаг 10: Валидация после reject ────────────────────────────
+        # ── Шаг 10: Валидация после reject (через Gateway) ────────────
         steps.append(PipelineStep(
-            name="Валидация классификации (reject)",
-            service="registry",
+            name="Валидация классификации (reject, через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/registry/classifiers/validate",
-            port=8084,
+            port=8080,
             body={
                 "classification": {
                     "mks_oks_code": unknown_code2,

@@ -12,7 +12,8 @@ class TestFullDocumentLifecyclePipeline:
         p = FullDocumentLifecyclePipeline()
         assert p.name == "full_document_lifecycle"
         assert p.description
-        assert len(p.services) >= 4
+        assert "gateway" in p.services
+        assert len(p.services) == 1
 
     def test_build_steps_count(self):
         p = FullDocumentLifecyclePipeline()
@@ -23,18 +24,18 @@ class TestFullDocumentLifecyclePipeline:
         p = FullDocumentLifecyclePipeline()
         steps = p.build_steps(PipelineContext())
         expected_names = [
-            "Аутентификация",
-            "Создание документа в Registry",
-            "Первая попытка построения индекса",
-            "Обновление метаданных документа",
-            "Повторное построение индекса",
-            "Поиск по индексу RAG Search",
-            "Удаление документа из Registry",
-            "Удаление индекса RAG",
-            "Поиск — проверка пустого результата",
-            "Воссоздание документа в Registry",
-            "Финальное построение индекса",
-            "Финальный поиск по индексу",
+            "Аутентификация (через Gateway)",
+            "Создание документа в Registry (через Gateway)",
+            "Первая попытка построения индекса (через Gateway)",
+            "Обновление метаданных документа (через Gateway)",
+            "Повторное построение индекса (через Gateway)",
+            "Поиск по индексу RAG Search (через Gateway)",
+            "Удаление документа из Registry (через Gateway)",
+            "Удаление индекса RAG (через Gateway)",
+            "Поиск — проверка пустого результата (через Gateway)",
+            "Воссоздание документа в Registry (через Gateway)",
+            "Финальное построение индекса (через Gateway)",
+            "Финальный поиск по индексу (через Gateway)",
         ]
         actual = [s.name for s in steps]
         assert actual == expected_names, f"Порядок шагов:\n{actual}"
@@ -47,10 +48,10 @@ class TestFullDocumentLifecyclePipeline:
             assert step.method in ("GET", "POST", "PUT", "PATCH", "DELETE")
 
     def test_build_steps_no_422(self):
-        """Шаги RAG Builder build (3, 5, 11) не содержат 422 в expected_status."""
+        """Шаги build не содержат 422 в expected_status."""
         p = FullDocumentLifecyclePipeline()
         steps = p.build_steps(PipelineContext())
-        build_steps = [s for s in steps if s.service == "rag_builder" and s.method == "POST"]
+        build_steps = [s for s in steps if s.path == "/api/v1/rag/build" and s.method == "POST"]
         for s in build_steps:
             assert 422 not in s.expected_status, (
                 f"Шаг '{s.name}' не должен содержать 422"
@@ -71,7 +72,7 @@ class TestFullDocumentLifecyclePipeline:
         p = FullDocumentLifecyclePipeline()
         steps = p.build_steps(PipelineContext())
         step6 = steps[5]  # "Поиск по индексу RAG Search"
-        assert step6.service == "rag_search"
+        assert step6.service == "gateway"
         assert step6.on_error is None
 
     def test_build_on_error_sets_context(self):
@@ -97,23 +98,23 @@ class TestFullDocumentLifecyclePipeline:
         step5 = steps[4]
         assert step5.skip_if is None
         assert step5.on_error is None
-        assert step5.service == "rag_builder"
+        assert step5.service == "gateway"
         assert step5.method == "POST"
 
     def test_step2_extracts_doc_id(self):
-        """Шаг 2 извлекает doc_id из Registry."""
+        """Шаг 2 извлекает doc_id из Registry (через Gateway)."""
         p = FullDocumentLifecyclePipeline()
         steps = p.build_steps(PipelineContext())
-        step2 = steps[1]  # "Создание документа в Registry"
-        assert step2.name == "Создание документа в Registry"
+        step2 = steps[1]  # "Создание документа в Registry (через Gateway)"
+        assert step2.name == "Создание документа в Registry (через Gateway)"
         assert step2.extract_keys == ["doc_id"]
 
     def test_step10_extracts_doc_id_2(self):
         """Шаг 10 извлекает doc_id_2 из Registry (для второго документа)."""
         p = FullDocumentLifecyclePipeline()
         steps = p.build_steps(PipelineContext())
-        step10 = steps[9]  # "Воссоздание документа в Registry"
-        assert step10.name == "Воссоздание документа в Registry"
+        step10 = steps[9]  # "Воссоздание документа в Registry (через Gateway)"
+        assert step10.name == "Воссоздание документа в Registry (через Gateway)"
         assert step10.extract_keys == ["doc_id_2"]
 
     def test_initial_status(self):

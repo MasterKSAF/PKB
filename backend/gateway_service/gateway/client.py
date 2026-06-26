@@ -15,8 +15,8 @@ from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Set, Tuple
 
 import httpx
-from fastapi import Request, Response
-from fastapi.responses import JSONResponse
+from fastapi import Request
+from fastapi.responses import JSONResponse, Response
 
 from gateway.config import config
 
@@ -410,6 +410,25 @@ async def proxy_request(request: Request, service_name: str, target_path: Option
     for key in list(response_headers.keys()):
         if key.lower() in hop_by_hop or key.lower() == "content-length":
             del response_headers[key]
+
+    # Если внутренний сервис вернул редирект (3xx) с Location на внутренний
+    # Docker-хост — переписываем на Gateway, чтобы браузер не ловил
+    # ERR_NAME_NOT_RESOLVED (P5-3 / GW-5)
+    if 300 <= resp.status_code < 400 and "location" in response_headers:
+        location = response_headers["location"]
+        # Определяем схему и хост Gateway из исходного запроса
+        gateway_host = request.url.netloc
+        gateway_scheme = request.url.scheme
+        for svc_name, svc_url in config.service_urls.items():
+            if location.startswith(svc_url):
+                # Меняем base_url сервиса на Gateway: host + port
+                rewritten = location.replace(svc_url, f"{gateway_scheme}://{gateway_host}", 1)
+                logger.debug(
+                    "Rewrite Location: %s → %s (service=%s)",
+                    location, rewritten, svc_name,
+                )
+                response_headers["location"] = rewritten
+                break
 
     return Response(
         content=resp.content,

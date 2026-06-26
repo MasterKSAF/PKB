@@ -54,35 +54,35 @@ class OrchestratorDraftLifecyclePipeline(PipelineDef):
     """Пайплайн: черновик Orchestrator — создание → превью → решение → 404."""
 
     name = "orchestrator_draft_lifecycle"
-    description = "Жизненный цикл черновика Orchestrator (создание → превью → решение → удаление)"
-    services = ["auth", "orchestrator", "registry"]
+    description = "Жизненный цикл черновика через Gateway (создание → превью → решение → удаление)"
+    services = ["gateway", "auth", "orchestrator", "registry"]
 
     def build_steps(self, context: PipelineContext) -> List[PipelineStep]:
         """Построить 8 шагов пайплайна orchestrator_draft_lifecycle."""
         steps: List[PipelineStep] = []
         ts = datetime.now().strftime("%Y%m%d%H%M%S%f")
 
-        # ── Шаг 1: Аутентификация ────────────────────────────────────
+        # ── Шаг 1: Аутентификация через Gateway ──────────────────────
         steps.append(PipelineStep(
-            name="Аутентификация",
-            service="auth",
+            name="Аутентификация (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/auth/token",
-            port=8082,
+            port=8080,
             body=TEST_CREDENTIALS,
             expected_status=200,
             extract_keys=["access_token", "refresh_token"],
             check=check_json_field("access_token", str),
         ))
 
-        # ── Шаг 2: Создание черновика ────────────────────────────────
+        # ── Шаг 2: Создание черновика через Gateway ──────────────────
         pdf_name = f"pipeline-draft-{ts}.pdf"
         steps.append(PipelineStep(
-            name="Создание черновика",
-            service="orchestrator",
+            name="Создание черновика (через Gateway)",
+            service="gateway",
             method="POST",
-            path="/api/v1/drafts/",
-            port=8081,
+            path="/api/v1/drafts",  # без слеша — проверка, что нет 307
+            port=8080,
             form_body={
                 "document_key": f"pipeline-draft-key-{ts}",
                 "title": f"Pipeline черновик {ts}",
@@ -97,25 +97,25 @@ class OrchestratorDraftLifecyclePipeline(PipelineDef):
             needs_auth=True,
         ))
 
-        # ── Шаг 3: Статус задачи ─────────────────────────────────────
+        # ── Шаг 3: Статус задачи через Gateway ───────────────────────
         steps.append(PipelineStep(
-            name="Статус задачи (longpoll)",
-            service="orchestrator",
+            name="Статус задачи (через Gateway)",
+            service="gateway",
             method="GET",
             path="/api/v1/tasks/{task_id}/status",
-            port=8081,
+            port=8080,
             expected_status=200,
             check=check_json_field("status", str),
             needs_auth=True,
         ))
 
-        # ── Шаг 4: Детали черновика (OR-7: document_id, version_id, is_new_document) ──
+        # ── Шаг 4: Детали черновика (OR-7) через Gateway ──────────────
         steps.append(PipelineStep(
-            name="Детали черновика",
-            service="orchestrator",
+            name="Детали черновика (через Gateway)",
+            service="gateway",
             method="GET",
             path="/api/v1/drafts/{draft_id}",
-            port=8081,
+            port=8080,
             expected_status=200,
             check=check_json_fields({
                 "draft_id": int,
@@ -126,38 +126,38 @@ class OrchestratorDraftLifecyclePipeline(PipelineDef):
             needs_auth=True,
         ))
 
-        # ── Шаг 5: Запуск превью ─────────────────────────────────────
+        # ── Шаг 5: Запуск превью через Gateway ───────────────────────
         steps.append(PipelineStep(
-            name="Запуск превью черновика",
-            service="orchestrator",
+            name="Запуск превью (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/drafts/{draft_id}/preview",
-            port=8081,
+            port=8080,
             body={},
             expected_status={200, 202, 404},
             needs_auth=True,
         ))
 
-        # ── Шаг 6: Статус превью ─────────────────────────────────────
+        # ── Шаг 6: Статус превью через Gateway ───────────────────────
         steps.append(PipelineStep(
-            name="Статус превью",
-            service="orchestrator",
+            name="Статус превью (через Gateway)",
+            service="gateway",
             method="GET",
             path="/api/v1/drafts/{draft_id}/preview/status",
-            port=8081,
+            port=8080,
             params={"longpoll": 1},
             expected_status={200, 404},
             check=check_json_field("status", str),
             needs_auth=True,
         ))
 
-        # ── Шаг 7: Принять решение по черновику (OR-12: action=approve) ──
+        # ── Шаг 7: Принять решение по черновику (OR-12) через Gateway ─
         steps.append(PipelineStep(
-            name="Решение по черновику (approve)",
-            service="orchestrator",
+            name="Решение approve (через Gateway)",
+            service="gateway",
             method="PATCH",
             path="/api/v1/drafts/{draft_id}/decide",
-            port=8081,
+            port=8080,
             body={
                 "action": "approve",
                 "comment": "Pipeline тест — approved",
@@ -192,11 +192,11 @@ class OrchestratorDraftLifecyclePipeline(PipelineDef):
             return (True, "документ создан (без id в ответе)")
 
         steps.append(PipelineStep(
-            name="Проверка document_id после approve",
-            service="orchestrator",
+            name="Проверка document_id (через Gateway)",
+            service="gateway",
             method="GET",
             path="/api/v1/drafts/{draft_id}",
-            port=8081,
+            port=8080,
             expected_status={200, 404},
             check=_check_doc_id,
             needs_auth=True,
@@ -209,11 +209,11 @@ class OrchestratorDraftLifecyclePipeline(PipelineDef):
             return (True, "документ существует в Registry")
 
         steps.append(PipelineStep(
-            name="Проверка документа в Registry",
-            service="registry",
+            name="Проверка документа в Registry (через Gateway)",
+            service="gateway",
             method="GET",
             path="/api/v1/registry/documents/{approved_doc_id}",
-            port=8084,
+            port=8080,
             expected_status={200, 404},
             check=_check_registry_doc,
             needs_auth=True,
@@ -222,11 +222,11 @@ class OrchestratorDraftLifecyclePipeline(PipelineDef):
 
         # ── Шаг 10 (OR-14): MIME-ветвление — создание черновика с image/png ──
         steps.append(PipelineStep(
-            name="Создание черновика (image/png для OR-14)",
-            service="orchestrator",
+            name="Создание черновика image/png (через Gateway)",
+            service="gateway",
             method="POST",
-            path="/api/v1/drafts/",
-            port=8081,
+            path="/api/v1/drafts",  # без слеша
+            port=8080,
             form_body={
                 "document_key": f"pipeline-img-{ts}",
                 "title": f"Pipeline image черновик {ts}",
@@ -243,11 +243,11 @@ class OrchestratorDraftLifecyclePipeline(PipelineDef):
 
         # ── Шаг 11 (OR-14): Статус задачи для image-черновика ────────────
         steps.append(PipelineStep(
-            name="Статус задачи image (OR-14)",
-            service="orchestrator",
+            name="Статус задачи image (через Gateway)",
+            service="gateway",
             method="GET",
             path="/api/v1/tasks/{task_id_2}/status",
-            port=8081,
+            port=8080,
             expected_status=200,
             check=check_json_field("status", str),
             needs_auth=True,

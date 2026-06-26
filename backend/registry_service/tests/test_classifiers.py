@@ -35,7 +35,7 @@ def test_create_classifier_validation_error(client):
         # Missing full_name
     }
     response = client.post("/api/v1/registry/classifiers", json=payload)
-    assert response.status_code == 422
+    assert response.status_code == 400
 
 def test_get_classifiers(client):
     # Create multiple classifiers
@@ -242,7 +242,7 @@ def test_delete_classifier_has_documents(client):
     # Delete should fail with HAS_DOCUMENTS
     response = client.delete("/api/v1/registry/classifiers/MKS_REF?classifier_system=MKS")
     assert response.status_code == 409
-    assert response.json()["detail"]["error"]["code"] == "HAS_DOCUMENTS"
+    assert response.json()["error"]["code"] == "HAS_DOCUMENTS"
 
 
 def test_pending_suggested_parent(client, db_session):
@@ -273,7 +273,7 @@ def test_delete_classifier_udc_has_documents(client):
     # Delete without force should fail
     response = client.delete("/api/v1/registry/classifiers/UDC_REF?classifier_system=UDC")
     assert response.status_code == 409
-    assert response.json()["detail"]["error"]["code"] == "HAS_DOCUMENTS"
+    assert response.json()["error"]["code"] == "HAS_DOCUMENTS"
 
     # Delete with force should succeed
     response = client.delete("/api/v1/registry/classifiers/UDC_REF?classifier_system=UDC&force=true")
@@ -292,7 +292,7 @@ def test_delete_classifier_external_has_documents(client):
     # Delete without force should fail
     response = client.delete("/api/v1/registry/classifiers/EXT_REF?classifier_system=EXTERNAL")
     assert response.status_code == 409
-    assert response.json()["detail"]["error"]["code"] == "HAS_DOCUMENTS"
+    assert response.json()["error"]["code"] == "HAS_DOCUMENTS"
 
     # Delete with force should succeed
     response = client.delete("/api/v1/registry/classifiers/EXT_REF?classifier_system=EXTERNAL&force=true")
@@ -347,7 +347,7 @@ def test_create_classifier_parent_not_found(client):
     }
     response = client.post("/api/v1/registry/classifiers", json=payload)
     assert response.status_code == 404
-    assert response.json()["detail"]["error"]["code"] == "PARENT_NOT_FOUND"
+    assert response.json()["error"]["code"] == "PARENT_NOT_FOUND"
 
 
 
@@ -392,5 +392,5 @@ def test_create_classifier_cross_system_parent(client):
     }
     response = client.post("/api/v1/registry/classifiers", json=payload)
     assert response.status_code == 409
-    assert response.json()["detail"]["error"]["code"] == "CROSS_SYSTEM_PARENT"
+    assert response.json()["error"]["code"] == "CROSS_SYSTEM_PARENT"
 

@@ -31,7 +31,7 @@ def test_create_document_with_classifier(client):
 def test_create_document_validation_error(client):
     payload = {"doc_code": "DOC-VAL"}
     response = client.post("/api/v1/registry/documents", json=payload)
-    assert response.status_code == 422
+    assert response.status_code == 400
 
 def test_get_documents(client):
     client.post("/api/v1/registry/documents", json={"title": "Doc 1", "classifier_system": "MKS"})
@@ -381,7 +381,7 @@ def test_patch_document_fixes(client, db_session):
     # 4. Patch immutable field should fail with 400 IMMUTABLE_FIELD
     bad_patch_res = client.patch(f"/api/v1/registry/documents/{doc_id}", json={"doc_code": "NEW-CODE-01"})
     assert bad_patch_res.status_code == 400
-    assert bad_patch_res.json()["detail"]["error"]["code"] == "IMMUTABLE_FIELD"
+    assert bad_patch_res.json()["error"]["code"] == "IMMUTABLE_FIELD"
 
     # 5. Create category and patch category_ids
     cat1_res = client.post("/api/v1/registry/categories", json={"name": "Cat For Patch 1"})

@@ -77,6 +77,76 @@ class PostgresChunkRepository(ChunkRepository):
 
         return sql.SQL(str(embedding_dim))
 
+    def _embedding_halfvec_dim_sql(self) -> sql.SQL:
+        embedding_dim = int(settings.EMBEDDING_DIM)
+
+        if embedding_dim <= 0:
+            raise ValueError(
+                f"Invalid EMBEDDING_DIM={embedding_dim}. "
+                "EMBEDDING_DIM must be a positive integer."
+            )
+
+        if embedding_dim > 4000:
+            raise ValueError(
+                f"Invalid EMBEDDING_DIM={embedding_dim}. "
+                "HNSW halfvec index supports up to 4000 dimensions."
+            )
+
+        return sql.SQL(str(embedding_dim))
+
+    def _ensure_chunks_embedding_hnsw_halfvec_index(self, cur) -> None:
+        embedding_dim = int(settings.EMBEDDING_DIM)
+        expected_halfvec = f"halfvec({embedding_dim})"
+        index_name = "idx_chunks_embedding_hnsw_halfvec"
+
+        cur.execute(
+            """
+            SELECT indexdef
+            FROM pg_indexes
+            WHERE schemaname = %s
+              AND tablename = 'chunks'
+              AND indexname = %s
+            """,
+            (settings.POSTGRES_SCHEMA, index_name),
+        )
+
+        row = cur.fetchone()
+        indexdef = row[0].lower() if row else ""
+
+        index_matches_current_dim = (
+            "using hnsw" in indexdef
+            and expected_halfvec in indexdef
+            and "halfvec_cosine_ops" in indexdef
+        )
+
+        if row is not None and not index_matches_current_dim:
+            logger.warning(
+                "Dropping stale chunks embedding HNSW halfvec index. "
+                "Expected %s in index definition, got: %s",
+                expected_halfvec,
+                row[0],
+            )
+            cur.execute(
+                sql.SQL("DROP INDEX IF EXISTS {schema}.{index_name}").format(
+                    schema=sql.Identifier(settings.POSTGRES_SCHEMA),
+                    index_name=sql.Identifier(index_name),
+                )
+            )
+
+        cur.execute(
+            sql.SQL(
+                """
+                CREATE INDEX IF NOT EXISTS idx_chunks_embedding_hnsw_halfvec
+                ON {schema}.chunks
+                USING hnsw ((embedding::halfvec({embedding_dim})) halfvec_cosine_ops)
+                WHERE embedding IS NOT NULL
+                """
+            ).format(
+                schema=sql.Identifier(settings.POSTGRES_SCHEMA),
+                embedding_dim=self._embedding_halfvec_dim_sql(),
+            )
+        )
+
 
     def create_indexing_job(
         self,
@@ -728,6 +798,9 @@ class PostgresChunkRepository(ChunkRepository):
                         sql.Identifier(settings.POSTGRES_SCHEMA)
                     )
                 )
+
+                logger.info("ensure_schema: before create index chunks_embedding_hnsw_halfvec")
+                self._ensure_chunks_embedding_hnsw_halfvec_index(cur)
 
                 logger.info("ensure_schema: before create table cross_references")
                 cur.execute(

@@ -55,20 +55,20 @@ class DocumentApprovalPipeline(PipelineDef):
         "Подтверждение документа: черновик → preview → решение пользователя "
         "→ full-фаза → индексация (документ только через черновик)"
     )
-    services = ["auth", "orchestrator", "registry", "rag_builder", "rag_search"]
+    services = ["gateway"]
 
     def build_steps(self, context: PipelineContext) -> List[PipelineStep]:
         """Построить шаги пайплайна document_approval."""
         steps: List[PipelineStep] = []
         ts = datetime.now().strftime("%Y%m%d%H%M%S%f")
 
-        # ── Шаг 1: Аутентификация ────────────────────────────────────
+        # ── Шаг 1: Аутентификация (через Gateway) ─────────────────────
         steps.append(PipelineStep(
-            name="Аутентификация",
-            service="auth",
+            name="Аутентификация (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/auth/token",
-            port=8082,
+            port=8080,
             body=TEST_CREDENTIALS,
             expected_status=200,
             extract_keys=["access_token", "refresh_token"],
@@ -83,11 +83,11 @@ class DocumentApprovalPipeline(PipelineDef):
 
         pdf_name = f"approval-draft-{ts}.pdf"
         steps.append(PipelineStep(
-            name="Создание черновика",
-            service="orchestrator",
+            name="Создание черновика (через Gateway)",
+            service="gateway",
             method="POST",
-            path="/api/v1/drafts/",
-            port=8081,
+            path="/api/v1/drafts",  # без слеша — проверка, что нет 307
+            port=8080,
             form_body={
                 "document_key": f"approval-key-{ts}",
                 "title": f"Approval тест {ts}",
@@ -104,11 +104,11 @@ class DocumentApprovalPipeline(PipelineDef):
         ))
 
         steps.append(PipelineStep(
-            name="Статус задачи (longpoll)",
-            service="orchestrator",
+            name="Статус задачи (через Gateway)",
+            service="gateway",
             method="GET",
             path="/api/v1/tasks/{task_id}/status",
-            port=8081,
+            port=8080,
             expected_status=200,
             check=check_json_field("status", str),
             needs_auth=True,
@@ -116,11 +116,11 @@ class DocumentApprovalPipeline(PipelineDef):
         ))
 
         steps.append(PipelineStep(
-            name="Детали черновика",
-            service="orchestrator",
+            name="Детали черновика (через Gateway)",
+            service="gateway",
             method="GET",
             path="/api/v1/drafts/{draft_id}",
-            port=8081,
+            port=8080,
             expected_status=200,
             check=check_json_fields({
                 "draft_id": int,
@@ -133,11 +133,11 @@ class DocumentApprovalPipeline(PipelineDef):
         ))
 
         steps.append(PipelineStep(
-            name="Запуск превью черновика",
-            service="orchestrator",
+            name="Запуск превью черновика (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/drafts/{draft_id}/preview",
-            port=8081,
+            port=8080,
             body={},
             expected_status={200, 202, 404},
             needs_auth=True,
@@ -145,11 +145,11 @@ class DocumentApprovalPipeline(PipelineDef):
         ))
 
         steps.append(PipelineStep(
-            name="Статус превью",
-            service="orchestrator",
+            name="Статус превью (через Gateway)",
+            service="gateway",
             method="GET",
             path="/api/v1/drafts/{draft_id}/preview/status",
-            port=8081,
+            port=8080,
             params={"longpoll": 1},
             expected_status={200, 404},
             needs_auth=True,
@@ -157,11 +157,11 @@ class DocumentApprovalPipeline(PipelineDef):
         ))
 
         steps.append(PipelineStep(
-            name="Решение по черновику (approve)",
-            service="orchestrator",
+            name="Решение по черновику (approve, через Gateway)",
+            service="gateway",
             method="PATCH",
             path="/api/v1/drafts/{draft_id}/decide",
-            port=8081,
+            port=8080,
             body={
                 "action": "approve",
                 "comment": "Pipeline тест — approved",
@@ -190,11 +190,11 @@ class DocumentApprovalPipeline(PipelineDef):
             return (True, "документ создан (без id в ответе)")
 
         steps.append(PipelineStep(
-            name="Проверка document_id после approve",
-            service="orchestrator",
+            name="Проверка document_id после approve (через Gateway)",
+            service="gateway",
             method="GET",
             path="/api/v1/drafts/{draft_id}",
-            port=8081,
+            port=8080,
             expected_status={200, 404},
             check=_check_doc_id,
             needs_auth=True,
@@ -207,11 +207,11 @@ class DocumentApprovalPipeline(PipelineDef):
         # ════════════════════════════════════════════════════════════════
 
         steps.append(PipelineStep(
-            name="Создание документа в Registry",
-            service="registry",
+            name="Создание документа в Registry (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/registry/documents",
-            port=8084,
+            port=8080,
             body={
                 "title": f"Approval тест {ts}",
                 "doc_code": f"APPROVAL-{ts}",
@@ -229,11 +229,11 @@ class DocumentApprovalPipeline(PipelineDef):
 
         # ── Шаг 13: FULL-фаза (полная обработка) ────────────────────
         steps.append(PipelineStep(
-            name="Индексация документа",
-            service="rag_builder",
+            name="Индексация документа (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/rag/build",
-            port=8090,
+            port=8080,
             body={
                 "document_id": "{doc_id}",
                 "sections": [{

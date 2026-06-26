@@ -33,32 +33,32 @@ class ChatInferencePipeline(PipelineDef):
 
     name = "chat_inference"
     description = "Чат-сессия с поиском по проиндексированным документам"
-    services = ["auth", "query", "rag_search"]
+    services = ["gateway"]
 
     def build_steps(self, context: PipelineContext) -> List[PipelineStep]:
         """Построить шаги пайплайна chat_inference."""
         steps: List[PipelineStep] = []
 
-        # ── Шаг 1: Аутентификация ────────────────────────────────────
+        # ── Шаг 1: Аутентификация (через Gateway) ─────────────────────
         steps.append(PipelineStep(
-            name="Аутентификация",
-            service="auth",
+            name="Аутентификация (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/auth/token",
-            port=8082,
+            port=8080,
             body=TEST_CREDENTIALS,
             expected_status=200,
             extract_keys=["access_token", "refresh_token"],
             check=check_json_field("access_token", str),
         ))
 
-        # ── Шаг 2: Создание чат-сессии ───────────────────────────────
+        # ── Шаг 2: Создание чат-сессии (через Gateway) ────────────────
         steps.append(PipelineStep(
-            name="Создание чат-сессии",
-            service="query",
+            name="Создание чат-сессии (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/chat/sessions",
-            port=8083,
+            port=8080,
             body={
                 "title": f"Pipeline тестовая сессия {datetime.now().isoformat()}",
                 "document_ids": [],  # QS-3: пустой список документов
@@ -70,13 +70,13 @@ class ChatInferencePipeline(PipelineDef):
             needs_auth=True,
         ))
 
-        # ── Шаг 3: Отправка сообщения ────────────────────────────────
+        # ── Шаг 3: Отправка сообщения (через Gateway) ─────────────────
         steps.append(PipelineStep(
-            name="Отправка сообщения",
-            service="query",
+            name="Отправка сообщения (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/chat/sessions/{session_id}/messages",
-            port=8083,
+            port=8080,
             body={
                 "text": "Какая толщина обшивки ледового пояса?",
                 "content": "Какая толщина обшивки ледового пояса?",
@@ -87,13 +87,13 @@ class ChatInferencePipeline(PipelineDef):
             needs_auth=True,
         ))
 
-        # ── Шаг 4: Текстовый поиск (QS-7: valid_at + category_ids, QS-8: enrichment_skipped) ──
+        # ── Шаг 4: Текстовый поиск (через Gateway) ────────────────────
         steps.append(PipelineStep(
-            name="Текстовый поиск",
-            service="query",
+            name="Текстовый поиск (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/text/search",
-            port=8083,
+            port=8080,
             body={
                 "text": "толщина обшивки ледового пояса",
                 "valid_at": "2026-06-19",
@@ -122,11 +122,11 @@ class ChatInferencePipeline(PipelineDef):
             return True, f"enrichment_skipped={val}"
 
         steps.append(PipelineStep(
-            name="Проверка enrichment_skipped",
-            service="query",
+            name="Проверка enrichment_skipped (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/text/search",
-            port=8083,
+            port=8080,
             body={
                 "text": "толщина обшивки",
                 "valid_at": "2026-06-19",
@@ -137,13 +137,13 @@ class ChatInferencePipeline(PipelineDef):
             needs_auth=True,
         ))
 
-        # ── Шаг 5: Поиск RAG Search (RS-6: без top_k, с valid_at + filters) ──
+        # ── Шаг 5: Поиск RAG Search (через Gateway) ────────────────────
         steps.append(PipelineStep(
-            name="Поиск RAG Search",
-            service="rag_search",
+            name="Поиск RAG Search (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/rag/search",
-            port=8091,
+            port=8080,
             body={
                 "query": "ледовый класс Arc4",
                 "valid_at": "2026-06-19",

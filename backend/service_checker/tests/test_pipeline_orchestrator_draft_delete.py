@@ -12,8 +12,8 @@ class TestOrchestratorDraftDeletePipeline:
         p = OrchestratorDraftDeletePipeline()
         assert p.name == "orchestrator_draft_delete"
         assert p.description
-        assert "orchestrator" in p.services
-        assert "auth" in p.services
+        assert "gateway" in p.services
+        assert len(p.services) == 1
 
     def test_build_steps_count(self):
         p = OrchestratorDraftDeletePipeline()
@@ -24,12 +24,12 @@ class TestOrchestratorDraftDeletePipeline:
         p = OrchestratorDraftDeletePipeline()
         steps = p.build_steps(PipelineContext())
         expected_names = [
-            "Аутентификация",
-            "Создание черновика",
-            "Статус задачи (longpoll)",
-            "Детали черновика",
-            "Удаление черновика",
-            "Проверка 404 после удаления",
+            "Аутентификация (через Gateway)",
+            "Создание черновика (через Gateway)",
+            "Статус задачи (через Gateway)",
+            "Детали черновика (через Gateway)",
+            "Удаление черновика (через Gateway)",
+            "Проверка 404 после удаления (через Gateway)",
         ]
         actual = [s.name for s in steps]
         assert actual == expected_names, f"Порядок шагов:\n{actual}"
@@ -38,7 +38,7 @@ class TestOrchestratorDraftDeletePipeline:
         p = OrchestratorDraftDeletePipeline()
         steps = p.build_steps(PipelineContext())
         auth = steps[0]
-        assert auth.service == "auth"
+        assert auth.service == "gateway"
         assert auth.method == "POST"
         assert auth.path == "/api/v1/auth/token"
         assert auth.expected_status == 200
@@ -48,7 +48,7 @@ class TestOrchestratorDraftDeletePipeline:
         p = OrchestratorDraftDeletePipeline()
         steps = p.build_steps(PipelineContext())
         draft = steps[1]
-        assert draft.service == "orchestrator"
+        assert draft.service == "gateway"
         assert draft.expected_status == 202
         assert draft.extract_keys == ["draft_id", "task_id"]
         assert draft.on_error is not None
@@ -58,7 +58,7 @@ class TestOrchestratorDraftDeletePipeline:
         p = OrchestratorDraftDeletePipeline()
         steps = p.build_steps(PipelineContext())
         delete = steps[4]
-        assert delete.service == "orchestrator"
+        assert delete.service == "gateway"
         assert delete.method == "DELETE"
         assert delete.path == "/api/v1/drafts/{draft_id}"
         assert delete.expected_status == {200, 204}
@@ -69,7 +69,7 @@ class TestOrchestratorDraftDeletePipeline:
         p = OrchestratorDraftDeletePipeline()
         steps = p.build_steps(PipelineContext())
         check = steps[5]
-        assert check.service == "orchestrator"
+        assert check.service == "gateway"
         assert check.method == "GET"
         assert check.path == "/api/v1/drafts/{draft_id}"
         assert check.expected_status == 404

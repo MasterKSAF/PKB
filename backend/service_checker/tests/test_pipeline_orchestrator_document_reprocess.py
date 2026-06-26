@@ -12,8 +12,8 @@ class TestOrchestratorDocumentReprocessPipeline:
         p = OrchestratorDocumentReprocessPipeline()
         assert p.name == "orchestrator_document_reprocess"
         assert p.description
-        assert "orchestrator" in p.services
-        assert "registry" in p.services
+        assert "gateway" in p.services
+        assert len(p.services) == 1
 
     def test_build_steps_count(self):
         p = OrchestratorDocumentReprocessPipeline()
@@ -24,12 +24,12 @@ class TestOrchestratorDocumentReprocessPipeline:
         p = OrchestratorDocumentReprocessPipeline()
         steps = p.build_steps(PipelineContext())
         expected_names = [
-            "Аутентификация",
-            "Создание документа в Registry",
-            "Создание черновика",
-            "Статус задачи (longpoll)",
-            "Переиндексация документа",
-            "Статус задачи переиндексации",
+            "Аутентификация (через Gateway)",
+            "Создание документа в Registry (через Gateway)",
+            "Создание черновика (через Gateway)",
+            "Статус задачи (через Gateway)",
+            "Переиндексация документа (через Gateway)",
+            "Статус задачи переиндексации (через Gateway)",
         ]
         actual = [s.name for s in steps]
         assert actual == expected_names, f"Порядок шагов:\n{actual}"
@@ -38,7 +38,7 @@ class TestOrchestratorDocumentReprocessPipeline:
         p = OrchestratorDocumentReprocessPipeline()
         steps = p.build_steps(PipelineContext())
         auth = steps[0]
-        assert auth.service == "auth"
+        assert auth.service == "gateway"
         assert auth.method == "POST"
         assert auth.path == "/api/v1/auth/token"
         assert auth.expected_status == 200
@@ -48,7 +48,7 @@ class TestOrchestratorDocumentReprocessPipeline:
         p = OrchestratorDocumentReprocessPipeline()
         steps = p.build_steps(PipelineContext())
         doc = steps[1]
-        assert doc.service == "registry"
+        assert doc.service == "gateway"
         assert doc.method == "POST"
         assert doc.path == "/api/v1/registry/documents"
         assert doc.expected_status == {201, 409}
@@ -58,7 +58,7 @@ class TestOrchestratorDocumentReprocessPipeline:
         p = OrchestratorDocumentReprocessPipeline()
         steps = p.build_steps(PipelineContext())
         draft = steps[2]
-        assert draft.service == "orchestrator"
+        assert draft.service == "gateway"
         assert draft.expected_status == 202
         assert draft.extract_keys == ["draft_id", "task_id"]
         assert draft.on_error is not None
@@ -68,7 +68,7 @@ class TestOrchestratorDocumentReprocessPipeline:
         p = OrchestratorDocumentReprocessPipeline()
         steps = p.build_steps(PipelineContext())
         repro = steps[4]
-        assert repro.service == "orchestrator"
+        assert repro.service == "gateway"
         assert repro.method == "POST"
         assert "reprocess" in repro.path
         assert repro.expected_status == {202, 409}
@@ -81,7 +81,7 @@ class TestOrchestratorDocumentReprocessPipeline:
         p = OrchestratorDocumentReprocessPipeline()
         steps = p.build_steps(PipelineContext())
         status = steps[5]
-        assert status.service == "orchestrator"
+        assert status.service == "gateway"
         assert status.method == "GET"
         assert "{reprocess_task_id}" in status.path
         assert status.expected_status == 200

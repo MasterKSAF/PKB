@@ -12,10 +12,8 @@ class TestDocumentApprovalPipeline:
         p = DocumentApprovalPipeline()
         assert p.name == "document_approval"
         assert p.description
-        assert "orchestrator" in p.services
-        assert "registry" in p.services
-        assert "rag_builder" in p.services
-        assert "rag_search" in p.services
+        assert "gateway" in p.services
+        assert len(p.services) == 1
 
     def test_build_steps_count(self):
         p = DocumentApprovalPipeline()
@@ -26,26 +24,26 @@ class TestDocumentApprovalPipeline:
         p = DocumentApprovalPipeline()
         steps = p.build_steps(PipelineContext())
         expected_names = [
-            "Аутентификация",
-            "Создание черновика",
-            "Статус задачи (longpoll)",
-            "Детали черновика",
-            "Запуск превью черновика",
-            "Статус превью",
-            "Решение по черновику (approve)",
-            "Проверка document_id после approve",
-            "Создание документа в Registry",
-            "Индексация документа",
+            "Аутентификация (через Gateway)",
+            "Создание черновика (через Gateway)",
+            "Статус задачи (через Gateway)",
+            "Детали черновика (через Gateway)",
+            "Запуск превью черновика (через Gateway)",
+            "Статус превью (через Gateway)",
+            "Решение по черновику (approve, через Gateway)",
+            "Проверка document_id после approve (через Gateway)",
+            "Создание документа в Registry (через Gateway)",
+            "Индексация документа (через Gateway)",
         ]
         actual = [s.name for s in steps]
         assert actual == expected_names, f"Порядок шагов:\n{actual}"
 
     def test_auth_step(self):
-        """Первый шаг — аутентификация."""
+        """Первый шаг — аутентификация (через Gateway)."""
         p = DocumentApprovalPipeline()
         steps = p.build_steps(PipelineContext())
         auth = steps[0]
-        assert auth.service == "auth"
+        assert auth.service == "gateway"
         assert auth.method == "POST"
         assert auth.path == "/api/v1/auth/token"
         assert auth.expected_status == 200
@@ -53,13 +51,13 @@ class TestDocumentApprovalPipeline:
         assert not auth.needs_auth
 
     def test_draft_creation_step(self):
-        """Создание черновика через Orchestrator."""
+        """Создание черновика через Gateway."""
         p = DocumentApprovalPipeline()
         steps = p.build_steps(PipelineContext())
         draft = steps[1]
-        assert draft.service == "orchestrator"
+        assert draft.service == "gateway"
         assert draft.method == "POST"
-        assert draft.path == "/api/v1/drafts/"
+        assert draft.path == "/api/v1/drafts"
         assert draft.expected_status == 202
         assert draft.extract_keys == ["draft_id", "task_id"]
         assert draft.needs_auth
@@ -80,18 +78,18 @@ class TestDocumentApprovalPipeline:
         steps = p.build_steps(PipelineContext())
         decide = steps[6]
         assert decide.expected_status == {200, 409}
-        assert decide.service == "orchestrator"
+        assert decide.service == "gateway"
         assert "approve" in decide.name.lower()
         # Тело должно содержать action, не decision
         assert decide.body["action"] == "approve"
         assert "decision" not in decide.body
 
     def test_registry_creation_step(self):
-        """Создание документа в Registry."""
+        """Создание документа в Registry (через Gateway)."""
         p = DocumentApprovalPipeline()
         steps = p.build_steps(PipelineContext())
         reg = steps[8]
-        assert reg.service == "registry"
+        assert reg.service == "gateway"
         assert reg.method == "POST"
         assert reg.path == "/api/v1/registry/documents"
         assert reg.expected_status == {201, 409}
@@ -103,11 +101,11 @@ class TestDocumentApprovalPipeline:
         assert "doc_code" in reg.body
 
     def test_rag_build_step(self):
-        """Индексация в RAG Builder."""
+        """Индексация в RAG Builder (через Gateway)."""
         p = DocumentApprovalPipeline()
         steps = p.build_steps(PipelineContext())
         rag = steps[9]
-        assert rag.service == "rag_builder"
+        assert rag.service == "gateway"
         assert rag.method == "POST"
         assert rag.path == "/api/v1/rag/build"
         assert rag.expected_status == {200, 201, 202}
@@ -161,7 +159,7 @@ class TestDocumentApprovalPipeline:
         p = DocumentApprovalPipeline()
         steps = p.build_steps(PipelineContext())
         detail = steps[3]
-        assert detail.service == "orchestrator"
+        assert detail.service == "gateway"
         assert detail.path == "/api/v1/drafts/{draft_id}"
         # Проверка, что check определён
         assert detail.check is not None
@@ -172,14 +170,14 @@ class TestDocumentApprovalPipeline:
         steps = p.build_steps(PipelineContext())
         # Запуск превью
         preview_start = steps[4]
-        assert preview_start.service == "orchestrator"
+        assert preview_start.service == "gateway"
         assert preview_start.method == "POST"
         assert preview_start.path == "/api/v1/drafts/{draft_id}/preview"
         assert preview_start.expected_status == {200, 202, 404}
         assert preview_start.body == {}
         # Статус превью
         preview_status = steps[5]
-        assert preview_status.service == "orchestrator"
+        assert preview_status.service == "gateway"
         assert preview_status.method == "GET"
         assert preview_status.path == "/api/v1/drafts/{draft_id}/preview/status"
         assert preview_status.expected_status == {200, 404}

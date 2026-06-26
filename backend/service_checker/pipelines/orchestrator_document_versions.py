@@ -36,19 +36,19 @@ class OrchestratorDocumentVersionsPipeline(PipelineDef):
 
     name = "orchestrator_document_versions"
     description = "Версионирование документа Orchestrator (создание документа → новая версия)"
-    services = ["auth", "orchestrator", "registry"]
+    services = ["gateway"]
 
     def build_steps(self, context: PipelineContext) -> List[PipelineStep]:
         steps: List[PipelineStep] = []
         ts = datetime.now().strftime("%Y%m%d%H%M%S%f")
 
-        # ── Шаг 1: Аутентификация ────────────────────────────────────
+        # ── Шаг 1: Аутентификация (через Gateway) ─────────────────────
         steps.append(PipelineStep(
-            name="Аутентификация",
-            service="auth",
+            name="Аутентификация (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/auth/token",
-            port=8082,
+            port=8080,
             body=TEST_CREDENTIALS,
             expected_status=200,
             extract_keys=["access_token", "refresh_token"],
@@ -71,11 +71,11 @@ class OrchestratorDocumentVersionsPipeline(PipelineDef):
             return True, "document_id not found"
 
         steps.append(PipelineStep(
-            name="Создание документа в Registry",
-            service="registry",
+            name="Создание документа в Registry (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/registry/documents",
-            port=8084,
+            port=8080,
             body={
                 "title": f"Version тест {ts}",
                 "doc_code": f"VERSION-{ts}",
@@ -88,14 +88,14 @@ class OrchestratorDocumentVersionsPipeline(PipelineDef):
             needs_auth=True,
         ))
 
-        # ── Шаг 3: Загрузка новой версии ──────────────────────────────
+        # ── Шаг 3: Загрузка новой версии (через Gateway) ──────────────
         v2_pdf_name = f"version-v2-{ts}.pdf"
         steps.append(PipelineStep(
-            name="Загрузка новой версии документа",
-            service="orchestrator",
+            name="Загрузка новой версии документа (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/documents/{approved_doc_id}/versions",
-            port=8081,
+            port=8080,
             form_files={
                 "file": (v2_pdf_name, TEST_PDF_BYTES, "application/pdf"),
             },
@@ -103,13 +103,13 @@ class OrchestratorDocumentVersionsPipeline(PipelineDef):
             needs_auth=True,
         ))
 
-        # ── Шаг 4: Проверка списка версий ────────────────────────────
+        # ── Шаг 4: Проверка списка версий (через Gateway) ─────────────
         steps.append(PipelineStep(
-            name="Проверка списка версий",
-            service="orchestrator",
+            name="Проверка списка версий (через Gateway)",
+            service="gateway",
             method="GET",
             path="/api/v1/documents/{approved_doc_id}/versions",
-            port=8081,
+            port=8080,
             expected_status={200, 404},
             needs_auth=True,
         ))

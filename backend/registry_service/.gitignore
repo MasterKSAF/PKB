@@ -7,3 +7,4 @@ __pycache__/
 .idea/
 service.log
 agents.md
+.rules

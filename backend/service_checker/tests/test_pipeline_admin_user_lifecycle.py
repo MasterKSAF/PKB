@@ -12,7 +12,8 @@ class TestAdminUserLifecyclePipeline:
         p = AdminUserLifecyclePipeline()
         assert p.name == "admin_user_lifecycle"
         assert p.description
-        assert len(p.services) == 2
+        assert "gateway" in p.services
+        assert len(p.services) == 1
 
     def test_build_steps_count(self):
         p = AdminUserLifecyclePipeline()
@@ -23,23 +24,23 @@ class TestAdminUserLifecyclePipeline:
         p = AdminUserLifecyclePipeline()
         steps = p.build_steps(PipelineContext())
         expected_names = [
-            "Аутентификация admin",
-            "Создание пользователя",
-            "Список пользователей",
-            "Аутентификация нового пользователя",
-            "Создание чат-сессии (новый пользователь)",
-            "Отправка сообщения (новый пользователь)",
-            "Получение истории чата",
+            "Аутентификация admin (через Gateway)",
+            "Создание пользователя (через Gateway)",
+            "Список пользователей (через Gateway)",
+            "Аутентификация нового пользователя (через Gateway)",
+            "Создание чат-сессии (новый пользователь, через Gateway)",
+            "Отправка сообщения (новый пользователь, через Gateway)",
+            "Получение истории чата (через Gateway)",
             # Brute-force (AU-3): 5 попыток
-            "Брутфорс попытка 1/5",
-            "Брутфорс попытка 2/5",
-            "Брутфорс попытка 3/5",
-            "Брутфорс попытка 4/5",
-            "Брутфорс попытка 5/5",
-            "Проверка блокировки после 5 неудач",
-            "Журнал аудита",
-            "Деактивация пользователя",
-            "Проверка 401 после деактивации",
+            "Брутфорс попытка 1/5 (через Gateway)",
+            "Брутфорс попытка 2/5 (через Gateway)",
+            "Брутфорс попытка 3/5 (через Gateway)",
+            "Брутфорс попытка 4/5 (через Gateway)",
+            "Брутфорс попытка 5/5 (через Gateway)",
+            "Проверка блокировки после 5 неудач (через Gateway)",
+            "Журнал аудита (через Gateway)",
+            "Деактивация пользователя (через Gateway)",
+            "Проверка 401 после деактивации (через Gateway)",
         ]
         actual = [s.name for s in steps]
         assert actual == expected_names, f"Порядок шагов:\n{actual}"
@@ -47,7 +48,7 @@ class TestAdminUserLifecyclePipeline:
     def test_auth_steps_first(self):
         p = AdminUserLifecyclePipeline()
         steps = p.build_steps(PipelineContext())
-        assert steps[0].service == "auth"
+        assert steps[0].service == "gateway"
 
     def test_last_step_expected_401(self):
         p = AdminUserLifecyclePipeline()

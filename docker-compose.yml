@@ -179,10 +179,10 @@ services:
     logging: *default-logging
 
   infinity:
-    image: michaelf34/infinity:latest
+    image: michaelf34/infinity:latest-cpu
     container_name: pkb-infinity
     restart: unless-stopped
-    mem_limit: 8g
+    mem_limit: 4g
     memswap_limit: 0
     volumes:
       - huggingface_cache:/app/.cache

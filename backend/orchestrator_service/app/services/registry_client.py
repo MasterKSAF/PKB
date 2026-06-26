@@ -101,19 +101,21 @@ class RegistryServiceClient(ServiceClient):
         # parts = ["", "registry", ...]
 
         # --- Drafts ---
-        if endpoint == "/registry/drafts":
+        if endpoint == "/api/v1/registry/drafts":
             if method == "POST":
                 return self._mock_create_draft(storage, kwargs.get("json", {}))
             return default_mock
 
         if (
-            len(parts) >= 4
-            and parts[1] == "registry"
-            and parts[2] == "drafts"
-            and parts[3].isdigit()
+            len(parts) >= 5
+            and parts[1] == "api"
+            and parts[2] == "v1"
+            and parts[3] == "registry"
+            and parts[4] == "drafts"
+            and parts[5].isdigit()
         ):
-            draft_id = int(parts[3])
-            sub = parts[4] if len(parts) > 4 else None
+            draft_id = int(parts[5])
+            sub = parts[6] if len(parts) > 6 else None
 
             if sub is None:
                 if method == "GET":
@@ -131,23 +133,24 @@ class RegistryServiceClient(ServiceClient):
                 )
 
         # --- Documents ---
-        # /registry/documents/check-uniqueness (must be before generic /documents/{id})
-        if endpoint == "/registry/documents/check-uniqueness" and method == "POST":
+        if endpoint == "/api/v1/registry/documents/check-uniqueness" and method == "POST":
             return self._mock_check_uniqueness(storage, kwargs.get("json", {}))
 
-        if endpoint == "/registry/documents":
+        if endpoint == "/api/v1/registry/documents":
             if method == "POST":
                 return self._mock_create_document(storage, kwargs.get("json", {}))
             return default_mock
 
         if (
-            len(parts) >= 4
-            and parts[1] == "registry"
-            and parts[2] == "documents"
-            and parts[3].isdigit()
+            len(parts) >= 5
+            and parts[1] == "api"
+            and parts[2] == "v1"
+            and parts[3] == "registry"
+            and parts[4] == "documents"
+            and parts[5].isdigit()
         ):
-            doc_id = int(parts[3])
-            sub = parts[4] if len(parts) > 4 else None
+            doc_id = int(parts[5])
+            sub = parts[6] if len(parts) > 6 else None
 
             # --- Document status (RG-1: internal, only Orchestrator) ---
             if sub == "status" and method == "PATCH":
@@ -421,7 +424,7 @@ class RegistryServiceClient(ServiceClient):
         doc_id = RegistryServiceClient._mock_doc_seq
         return await self.call(
             "POST",
-            "/registry/documents",
+            "/api/v1/registry/documents",
             mock_response={
                 "data": {
                     "document_id": doc_id,
@@ -451,7 +454,7 @@ class RegistryServiceClient(ServiceClient):
         )
         return await self.call(
             "PATCH",
-            f"/registry/documents/{document_id}/status",
+            f"/api/v1/registry/documents/{document_id}/status",
             request_model=UpdateDocumentStatusRequest,
             mock_response={
                 "data": {
@@ -467,19 +470,19 @@ class RegistryServiceClient(ServiceClient):
         """Delete a document from the registry."""
         return await self.call(
             "DELETE",
-            f"/registry/documents/{document_id}",
+            f"/api/v1/registry/documents/{document_id}",
             mock_response={"data": {"deleted": True, "document_id": document_id}},
         )
 
     async def get_document_sections(self, document_id: int) -> dict:
         """Get document with sections for RAG Builder.
 
-        GET /registry/documents/{doc_id}/sections
+        GET /api/v1/registry/documents/{doc_id}/sections
         Returns document metadata + sections[] + terminology + references.
         """
         return await self.call(
             "GET",
-            f"/registry/documents/{document_id}/sections",
+            f"/api/v1/registry/documents/{document_id}/sections",
             mock_response={
                 "data": {
                     "document": {
@@ -536,7 +539,7 @@ class RegistryServiceClient(ServiceClient):
         )
         return await self.call(
             "POST",
-            "/registry/drafts",
+            "/api/v1/registry/drafts",
             request_model=CreateDraftRequest,
             mock_response={
                 "data": {
@@ -555,7 +558,7 @@ class RegistryServiceClient(ServiceClient):
         """Get draft by ID."""
         return await self.call(
             "GET",
-            f"/registry/drafts/{draft_id}",
+            f"/api/v1/registry/drafts/{draft_id}",
             mock_response={
                 "data": {
                     "draft_id": draft_id,
@@ -573,7 +576,7 @@ class RegistryServiceClient(ServiceClient):
         """Get preview metadata for a draft."""
         return await self.call(
             "GET",
-            f"/registry/drafts/{draft_id}/preview",
+            f"/api/v1/registry/drafts/{draft_id}/preview",
             mock_response={
                 "data": {
                     "draft_id": draft_id,
@@ -602,7 +605,7 @@ class RegistryServiceClient(ServiceClient):
         )
         return await self.call(
             "PATCH",
-            f"/registry/drafts/{draft_id}/status",
+            f"/api/v1/registry/drafts/{draft_id}/status",
             request_model=UpdateDraftStatusRequest,
             mock_response={
                 "data": {
@@ -619,7 +622,7 @@ class RegistryServiceClient(ServiceClient):
         """Delete a draft."""
         return await self.call(
             "DELETE",
-            f"/registry/drafts/{draft_id}",
+            f"/api/v1/registry/drafts/{draft_id}",
             mock_response={
                 "data": {
                     "draft_id": draft_id,
@@ -630,7 +633,7 @@ class RegistryServiceClient(ServiceClient):
         )
 
     async def update_draft_metadata(self, draft_id: int, preview_metadata: dict, metadata_overrides: Optional[dict] = None, updated_by: str = "system") -> dict:
-        """Update draft metadata (PATCH /registry/drafts/{draft_id}/metadata)."""
+        """Update draft metadata (PATCH /api/v1/registry/drafts/{draft_id}/metadata)."""
         body = {
             "preview_metadata": preview_metadata,
             "metadata_overrides": metadata_overrides,
@@ -638,7 +641,7 @@ class RegistryServiceClient(ServiceClient):
         }
         return await self.call(
             "PATCH",
-            f"/registry/drafts/{draft_id}/metadata",
+            f"/api/v1/registry/drafts/{draft_id}/metadata",
             mock_response={
                 "data": {
                     "draft_id": draft_id,
@@ -668,7 +671,7 @@ class RegistryServiceClient(ServiceClient):
         )
         return await self.call(
             "POST",
-            "/registry/documents/check-uniqueness",
+            "/api/v1/registry/documents/check-uniqueness",
             request_model=CheckUniquenessRequest,
             mock_response={
                 "data": {
@@ -687,7 +690,7 @@ class RegistryServiceClient(ServiceClient):
         """
         return await self.call(
             "POST",
-            f"/registry/drafts/{draft_id}/snapshot",
+            f"/api/v1/registry/drafts/{draft_id}/snapshot",
             mock_response={
                 "data": {
                     "draft_id": draft_id,

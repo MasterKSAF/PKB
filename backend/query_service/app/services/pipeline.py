@@ -3,14 +3,63 @@ import logging
 import re
 from datetime import datetime, timezone
 
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from ..clients import registry_client, rag_client
+from ..clients import registry_client, rag_client, llm_client
 from ..config import get_settings
 from ..models import ChatMessage, ChatSource
 
 logger = logging.getLogger(__name__)
+
+_SYSTEM_PROMPT = (
+    "Ты — ассистент по инженерным нормативно-техническим документам ПКБ. "
+    "Отвечай строго на основе предоставленных фрагментов документов. "
+    "Если во фрагментах нет ответа — прямо сообщи об этом, не домысливай. "
+    "Указывай источник (наименование документа, пункт, страницу) для каждого утверждения."
+)
+
+
+async def _load_history(
+    session_factory: async_sessionmaker,
+    session_id: str,
+    exclude_message_id: str,
+    limit: int,
+) -> list[dict]:
+    async with session_factory() as db:
+        rows = (await db.execute(
+            select(ChatMessage)
+            .where(
+                ChatMessage.session_id == session_id,
+                ChatMessage.message_id != exclude_message_id,
+                ChatMessage.content.is_not(None),
+                ChatMessage.role.in_(("user", "assistant")),
+            )
+            .order_by(ChatMessage.timestamp.desc())
+            .limit(limit)
+        )).scalars().all()
+
+    return [{"role": m.role, "content": m.content} for m in reversed(rows)]
+
+
+def _build_messages(
+    history: list[dict],
+    chunks: list[rag_client.Chunk],
+    user_query: str,
+) -> list[dict]:
+    context_parts = [
+        f"[{i}] «{c.document_title}», {c.clause}, стр. {c.page}:\n{c.content}"
+        for i, c in enumerate(chunks, 1)
+    ]
+    context_block = "\n\n".join(context_parts)
+
+    messages: list[dict] = [{"role": "system", "content": _SYSTEM_PROMPT}]
+    messages.extend(history)
+    messages.append({
+        "role": "user",
+        "content": f"Фрагменты документов:\n{context_block}\n\nВопрос: {user_query}",
+    })
+    return messages
 
 
 def _utcnow() -> datetime:
@@ -113,6 +162,9 @@ async def run_pipeline(
             return
 
         await _set_status(session_factory, message_id, "generating")
+        history = await _load_history(
+            session_factory, session_id, message_id, settings.LLM_HISTORY_LIMIT
+        )
         llm_text: str | None = None
         for attempt in range(3):
             try:
@@ -120,15 +172,12 @@ async def run_pipeline(
                     await asyncio.sleep(0.3)
                     llm_text = _build_llm_mock(enriched_query, chunks)
                     break
-                # LLM: settings.LLM_API_URL, model=settings.LLM_MODEL,
-                #       temperature=settings.LLM_TEMPERATURE, max_tokens=settings.LLM_MAX_TOKENS,
-                #       top_p=settings.LLM_TOP_P
-                llm_text = _build_llm_mock(enriched_query, chunks)
+                messages = _build_messages(history, chunks, enriched_query)
+                llm_text = await llm_client.complete(messages, cache_key=str(session_id))
                 break
             except Exception:
                 if attempt < 2:
-                    context_chunks = chunks[: max(1, len(chunks) - attempt)]
-                    chunks = context_chunks
+                    chunks = chunks[: max(1, len(chunks) - attempt - 1)]
                     await asyncio.sleep(2 ** attempt * 2)
 
         if llm_text is None:

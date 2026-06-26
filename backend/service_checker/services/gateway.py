@@ -2,8 +2,12 @@
 PKB Neuroassistant — Gateway Service API Definitions.
 
 Основано на: GW-12 актуализация маршрутизации (19.06.2026).
-Убраны: /pages/*, /monitor/*
-Добавлены: /analyse/*, /health, /meridian/*, /files/*, /external/*, /registry/categories/*
+Убраны: /monitor/*
+Добавлены: /analyse/*, /health, /meridian/*, /files/*, /external/*, /registry/categories/*,
+          /drafts/{id}/tasks, /drafts/{id}/preview/status, /drafts/{id}/metadata,
+          /tasks/{id}/status, /tasks/{id}/steps,
+          /documents/* (трансформация Registry), /documents/{id}/file|pages|...|succession,
+          /documents/check-uniqueness, /documents/queue|status|errors|reprocess|versions|tasks
 Префиксы переименованы → /api/v1/registry/*
 """
 
@@ -270,6 +274,46 @@ def get_service_def(mode: Optional[str] = None) -> ServiceDef:
             "documents", "Импорт (file upload)",
             expected_status={400, 422}),
 
+        # ── Registry: Documents (via Gateway transform) ──
+        # Gateway трансформирует /api/v1/documents/* → /api/v1/registry/documents/*
+        EndpointDef("GET", f"{API_PREFIX}/documents/{{doc_id}}", "gateway-docs",
+            "Получить документ (через Gateway transform)",
+            response_schema={"data": dict}),
+        EndpointDef("PUT", f"{API_PREFIX}/documents/{{doc_id}}", "gateway-docs",
+            "Обновить документ (через Gateway transform)",
+            body={"title": "Обновлённый через Gateway"}),
+        EndpointDef("DELETE", f"{API_PREFIX}/documents/{{doc_id}}", "gateway-docs",
+            "Удалить документ (через Gateway transform)"),
+        EndpointDef("GET", f"{API_PREFIX}/documents/{{doc_id}}/file", "gateway-docs",
+            "Файл документа",
+            response_schema={"document_id": int, "file_url": str}),
+        EndpointDef("GET", f"{API_PREFIX}/documents/{{doc_id}}/pages", "gateway-docs",
+            "Список страниц",
+            params={"page": 1, "page_size": 10},
+            response_schema={"document_id": int, "pages": list, "pages_total": int}),
+        EndpointDef("GET", f"{API_PREFIX}/documents/{{doc_id}}/history", "gateway-docs",
+            "История документа",
+            response_schema={"document_id": int, "history": list}),
+        EndpointDef("GET", f"{API_PREFIX}/documents/{{doc_id}}/parameters", "gateway-docs",
+            "Параметры документа",
+            response_schema={"document_id": int, "parameters": dict}),
+        EndpointDef("GET", f"{API_PREFIX}/documents/{{doc_id}}/versions", "gateway-docs",
+            "Версии документа",
+            params={"page": 1, "page_size": 10},
+            response_schema={"document_id": int, "items": list}),
+        EndpointDef("GET", f"{API_PREFIX}/documents/{{doc_id}}/succession", "gateway-docs",
+            "Цепочка преемственности",
+            response_schema={"document_id": int, "predecessors": list}),
+        EndpointDef("GET", f"{API_PREFIX}/documents/export", "gateway-docs",
+            "Экспорт (CSV, через Gateway)"),
+        EndpointDef("POST", f"{API_PREFIX}/documents/import", "gateway-docs",
+            "Импорт (file upload, через Gateway)",
+            expected_status={400, 422}),
+        EndpointDef("POST", f"{API_PREFIX}/documents/check-uniqueness", "gateway-docs",
+            "Проверка уникальности (через Gateway)",
+            body={"title": "Уникальный тест", "file_size_bytes": 1024},
+            response_schema={"data": dict}),
+
         # ── Registry: Search (RG-8: BM25) ──
         EndpointDef("GET", f"{API_PREFIX}/registry/search", "search",
             "Поиск по реестру (BM25)",
@@ -307,11 +351,52 @@ def get_service_def(mode: Optional[str] = None) -> ServiceDef:
             expected_status={200, 202, 404, 409}),
         EndpointDef("GET", f"{API_PREFIX}/drafts/{{draft_id}}/preview", "drafts",
             "Превью черновика"),
+        EndpointDef("GET", f"{API_PREFIX}/drafts/{{draft_id}}/preview/status", "drafts",
+            "Статус превью (с longpoll)",
+            params={"longpoll": 5},
+            response_schema={"draft_id": int, "status": str, "preview": dict, "decision_required": bool}),
+        EndpointDef("PATCH", f"{API_PREFIX}/drafts/{{draft_id}}/metadata", "drafts",
+            "Обновить метаданные черновика",
+            body={"title": "Обновлённый заголовок", "doc_code": "UPD-001"}),
+        EndpointDef("GET", f"{API_PREFIX}/drafts/{{draft_id}}/tasks", "drafts",
+            "Список задач черновика",
+            response_schema={"draft_id": int, "tasks": list}),
+
+        # ── Orchestrator: Tasks ──
+        EndpointDef("GET", f"{API_PREFIX}/tasks/{{task_id}}/status", "tasks",
+            "Статус задачи",
+            response_schema={"task_id": int, "status": str, "pipeline_stage": str, "progress_percent": (int, float)}),
+        EndpointDef("GET", f"{API_PREFIX}/tasks/{{task_id}}/steps", "tasks",
+            "Шаги задачи",
+            response_schema={"task_id": int, "steps": list}),
 
         # ── Orchestrator: Documents ──
         EndpointDef("GET", f"{API_PREFIX}/documents/", "documents",
             "Список документов",
             response_schema={"items": list}),
+        EndpointDef("GET", f"{API_PREFIX}/documents/queue", "documents",
+            "Очередь документов",
+            response_schema={"queue": list, "meta": dict}),
+        EndpointDef("GET", f"{API_PREFIX}/documents/{{doc_id}}/status", "documents",
+            "Статус обработки документа",
+            params={"longpoll": 5},
+            response_schema={"document_id": int, "status": str}),
+        EndpointDef("GET", f"{API_PREFIX}/documents/{{doc_id}}/errors", "documents",
+            "Ошибки документа",
+            params={"page": 1, "page_size": 10},
+            response_schema={"errors": list, "meta": dict}),
+        EndpointDef("POST", f"{API_PREFIX}/documents/{{doc_id}}/reprocess", "documents",
+            "Перезапуск обработки",
+            body={},
+            expected_status=202,
+            extract_keys=["task_id"]),
+        EndpointDef("POST", f"{API_PREFIX}/documents/{{doc_id}}/versions", "documents",
+            "Создать версию",
+            body={"document_key": "new-version-key", "title": "Новая версия"},
+            expected_status=202),
+        EndpointDef("GET", f"{API_PREFIX}/documents/{{doc_id}}/tasks", "documents",
+            "Задачи документа",
+            response_schema={"tasks": list}),
 
         # ── Files (GW-12: добавлено) ──
         EndpointDef("GET", f"{API_PREFIX}/files/1", "files",

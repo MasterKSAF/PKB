@@ -36,7 +36,8 @@ def test_create_terminology_validation_error(client):
         "term_type": "term"
     }
     response = client.post("/api/v1/registry/terminology", json=payload)
-    assert response.status_code == 422
+    assert response.status_code == 400
+
 
 def test_get_terminology(client):
     client.post("/api/v1/registry/terminology", json={

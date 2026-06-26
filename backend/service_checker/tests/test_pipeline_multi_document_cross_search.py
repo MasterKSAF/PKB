@@ -12,7 +12,9 @@ class TestMultiDocumentCrossSearchPipeline:
         p = MultiDocumentCrossSearchPipeline()
         assert p.name == "multi_document_cross_search"
         assert p.description
-        assert len(p.services) >= 4
+        assert "gateway" in p.services
+        assert "minio" in p.services
+        assert len(p.services) == 2
 
     def test_build_steps_count(self):
         p = MultiDocumentCrossSearchPipeline()
@@ -23,7 +25,7 @@ class TestMultiDocumentCrossSearchPipeline:
         p = MultiDocumentCrossSearchPipeline()
         steps = p.build_steps(PipelineContext())
         names = [s.name for s in steps]
-        assert names[0] == "Аутентификация"
+        assert names[0] == "Аутентификация (через Gateway)"
         assert "Загрузка PDF #1" in names[2]
         assert "Загрузка PDF #2" in names[9]
         assert "Поиск по общему запросу" in names[16]
@@ -50,20 +52,20 @@ class TestMultiDocumentCrossSearchPipeline:
         steps = p.build_steps(PipelineContext())
         # Шаг 9 — построение индекса #1
         build_1 = steps[8]
-        assert build_1.service == "rag_builder"
+        assert build_1.service == "gateway"
         assert 422 not in build_1.expected_status
         # Шаг 16 — построение индекса #2
         build_2 = steps[15]
-        assert build_2.service == "rag_builder"
+        assert build_2.service == "gateway"
         assert 422 not in build_2.expected_status
 
     def test_rag_search_steps_no_on_error(self):
-        """Шаги RAG Search (17, 19) больше не имеют on_error — костыли удалены."""
+        """Шаги поиска (17, 19) больше не имеют on_error — костыли удалены."""
         p = MultiDocumentCrossSearchPipeline()
         steps = p.build_steps(PipelineContext())
         search_step_17 = steps[16]
-        assert search_step_17.service == "rag_search"
+        assert search_step_17.service == "gateway"
         assert search_step_17.on_error is None
         search_step_19 = steps[18]
-        assert search_step_19.service == "rag_search"
+        assert search_step_19.service == "gateway"
         assert search_step_19.on_error is None

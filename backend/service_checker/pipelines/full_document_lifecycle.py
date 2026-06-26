@@ -40,7 +40,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
 
     name = "full_document_lifecycle"
     description = "Полный жизненный цикл документа (создание → ошибка → восстановление → удаление → пересоздание)"
-    services = ["auth", "registry", "rag_builder", "rag_search"]
+    services = ["gateway"]
 
     @staticmethod
     def _on_build_error(body: Optional[str], ctx: PipelineContext) -> None:
@@ -66,26 +66,26 @@ class FullDocumentLifecyclePipeline(PipelineDef):
         steps: List[PipelineStep] = []
         ts = int(time.time())
 
-        # ── Шаг 1: Аутентификация ────────────────────────────────────
+        # ── Шаг 1: Аутентификация (через Gateway) ─────────────────────
         steps.append(PipelineStep(
-            name="Аутентификация",
-            service="auth",
+            name="Аутентификация (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/auth/token",
-            port=8082,
+            port=8080,
             body=TEST_CREDENTIALS,
             expected_status=200,
             extract_keys=["access_token", "refresh_token"],
             check=check_json_field("access_token", str),
         ))
 
-        # ── Шаг 2: Создание документа в Registry ──────────────────────
+        # ── Шаг 2: Создание документа в Registry (через Gateway) ──────
         steps.append(PipelineStep(
-            name="Создание документа в Registry",
-            service="registry",
+            name="Создание документа в Registry (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/registry/documents",
-            port=8084,
+            port=8080,
             body={
                 "title": f"Lifecycle тест {ts}",
                 "doc_code": f"LIFECYCLE-{ts}",
@@ -100,13 +100,13 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             extract_keys=["doc_id"],
         ))
 
-        # ── Шаг 3: Первая индексация документа ────────────────────────
+        # ── Шаг 3: Первая индексация документа (через Gateway) ────────
         steps.append(PipelineStep(
-            name="Первая попытка построения индекса",
-            service="rag_builder",
+            name="Первая попытка построения индекса (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/rag/build",
-            port=8090,
+            port=8080,
             body={
                 "document_id": "{doc_id}",
                 "sections": [{
@@ -125,13 +125,13 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             check=self._check_build_ok,
         ))
 
-        # -- Шаг 4: Обновление метаданных документа (имитация «починки») --
+        # -- Шаг 4: Обновление метаданных документа (через Gateway) -----
         steps.append(PipelineStep(
-            name="Обновление метаданных документа",
-            service="registry",
+            name="Обновление метаданных документа (через Gateway)",
+            service="gateway",
             method="PATCH",
             path="/api/v1/registry/documents/{doc_id}/status",
-            port=8084,
+            port=8080,
             extra_headers={"X-Service-Id": "orchestrator"},
             body={"status": "uploaded"},
             expected_status=200,
@@ -139,13 +139,13 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             check=check_json_field("data", dict),
         ))
 
-        # ── Шаг 5: Повторная индексация ────────────────────────────────
+        # ── Шаг 5: Повторная индексация (через Gateway) ────────────────
         steps.append(PipelineStep(
-            name="Повторное построение индекса",
-            service="rag_builder",
+            name="Повторное построение индекса (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/rag/build",
-            port=8090,
+            port=8080,
             body={
                 "document_id": "{doc_id}",
                 "sections": [{
@@ -164,13 +164,13 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             check=self._check_build_ok,
         ))
 
-        # ── Шаг 6: Поиск по индексу (RS-6: valid_at + filters) ─────────
+        # ── Шаг 6: Поиск по индексу (через Gateway) ────────────────────
         steps.append(PipelineStep(
-            name="Поиск по индексу RAG Search",
-            service="rag_search",
+            name="Поиск по индексу RAG Search (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/rag/search",
-            port=8091,
+            port=8080,
             body={
                 "query": "тестовый документ lifecycle",
                 "valid_at": "2026-06-19",
@@ -180,35 +180,35 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             check=check_rag_search_results(),
         ))
 
-        # ── Шаг 7: Удаление документа из Registry ────────────────────
+        # ── Шаг 7: Удаление документа из Registry (через Gateway) ─────
         steps.append(PipelineStep(
-            name="Удаление документа из Registry",
-            service="registry",
+            name="Удаление документа из Registry (через Gateway)",
+            service="gateway",
             method="DELETE",
             path="/api/v1/registry/documents/{doc_id}",
-            port=8084,
+            port=8080,
             expected_status=200,
             needs_auth=True,
         ))
 
-        # ── Шаг 8: Удаление индекса RAG Builder ──────────────────────
+        # ── Шаг 8: Удаление индекса RAG (через Gateway) ───────────────
         steps.append(PipelineStep(
-            name="Удаление индекса RAG",
-            service="rag_builder",
+            name="Удаление индекса RAG (через Gateway)",
+            service="gateway",
             method="DELETE",
             path="/api/v1/rag/build/{doc_id}",
-            port=8090,
+            port=8080,
             expected_status={200, 404},
             needs_auth=True,
         ))
 
-        # ── Шаг 9: Поиск — проверить что результатов нет (P3S-5: fallback) ──
+        # ── Шаг 9: Поиск — проверить что результатов нет (через Gateway) ──
         steps.append(PipelineStep(
-            name="Поиск — проверка пустого результата",
-            service="rag_search",
+            name="Поиск — проверка пустого результата (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/rag/search",
-            port=8091,
+            port=8080,
             body={
                 "query": "тестовый документ lifecycle",
                 "valid_at": "2026-06-19",
@@ -218,14 +218,14 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             check=check_rag_search_results(),
         ))
 
-        # ── Шаг 10: Воссоздание документа ─────────────────────────────
+        # ── Шаг 10: Воссоздание документа (через Gateway) ──────────────
         ts2 = int(time.time())
         steps.append(PipelineStep(
-            name="Воссоздание документа в Registry",
-            service="registry",
+            name="Воссоздание документа в Registry (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/registry/documents",
-            port=8084,
+            port=8080,
             body={
                 "title": f"Lifecycle тест восстановленный {ts2}",
                 "doc_code": f"LIFECYCLE-RECOVER-{ts2}",
@@ -240,13 +240,13 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             extract_keys=["doc_id_2"],
         ))
 
-        # ── Шаг 11: Финальное построение индекса ──────────────────────
+        # ── Шаг 11: Финальное построение индекса (через Gateway) ───────
         steps.append(PipelineStep(
-            name="Финальное построение индекса",
-            service="rag_builder",
+            name="Финальное построение индекса (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/rag/build",
-            port=8090,
+            port=8080,
             body={
                 "document_id": "{doc_id_2}",
                 "sections": [{
@@ -266,13 +266,13 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             on_error=self._on_build_error,
         ))
 
-        # ── Шаг 12: Финальный поиск (RS-6) ────────────────────────────
+        # ── Шаг 12: Финальный поиск (через Gateway) ────────────────────
         steps.append(PipelineStep(
-            name="Финальный поиск по индексу",
-            service="rag_search",
+            name="Финальный поиск по индексу (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/rag/search",
-            port=8091,
+            port=8080,
             body={
                 "query": "тестовый документ lifecycle",
                 "valid_at": "2026-06-19",

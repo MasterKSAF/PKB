@@ -43,7 +43,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
 
     name = "multi_document_cross_search"
     description = "Мульти-документный поиск: 2 документа → индексация → кросс-поиск → удаление → фильтрация"
-    services = ["auth", "minio", "parser", "converter_validator", "registry", "rag_builder", "rag_search"]
+    services = ["gateway", "minio"]
     TEST_PDF_KEY = TEST_PDF_KEY
     TEST_PDF_PATH = TEST_PDF_PATH
 
@@ -57,13 +57,13 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
         if pdf_path.exists():
             pdf_bytes = pdf_path.read_bytes()
 
-        # ── Шаг 1: Аутентификация ────────────────────────────────────
+        # ── Шаг 1: Аутентификация (через Gateway) ─────────────────────
         steps.append(PipelineStep(
-            name="Аутентификация",
-            service="auth",
+            name="Аутентификация (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/auth/token",
-            port=8082,
+            port=8080,
             body=TEST_CREDENTIALS,
             expected_status=200,
             extract_keys=["access_token", "refresh_token"],
@@ -109,13 +109,13 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             extra_headers=s3_headers_1,
         ))
 
-        # ── Шаг 4: Запуск парсинга #1 ─────────────────────────────────
+        # ── Шаг 4: Запуск парсинга #1 (через Gateway) ─────────────────
         steps.append(PipelineStep(
-            name="Запуск парсинга #1",
-            service="parser",
+            name="Запуск парсинга #1 (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/parser/process",
-            port=8087,
+            port=8080,
             body={
                 "task_id": TEST_TASK_ID_1,
                 "draft_id": 1,  # PS-3: обязательный draft_id
@@ -128,24 +128,24 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             check=check_json_field("task_id", int),
         ))
 
-        # ── Шаг 5: Статус парсинга #1 ─────────────────────────────────
+        # ── Шаг 5: Статус парсинга #1 (через Gateway) ─────────────────
         steps.append(PipelineStep(
-            name="Статус парсинга #1 (longpoll)",
-            service="parser",
+            name="Статус парсинга #1 (longpoll, через Gateway)",
+            service="gateway",
             method="GET",
             path=f"/api/v1/parser/process/{TEST_TASK_ID_1}/status",
-            port=8087,
+            port=8080,
             expected_status=200,
             check=check_json_field("status", str),
         ))
 
-        # ── Шаг 6: Результат парсинга #1 ──────────────────────────────
+        # ── Шаг 6: Результат парсинга #1 (через Gateway) ──────────────
         steps.append(PipelineStep(
-            name="Результат парсинга #1",
-            service="parser",
+            name="Результат парсинга #1 (через Gateway)",
+            service="gateway",
             method="GET",
             path=f"/api/v1/parser/process/{TEST_TASK_ID_1}/result",
-            port=8087,
+            port=8080,
             expected_status=200,
             retry_on={409},
             retry_delay=2.0,
@@ -153,13 +153,13 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             check=save_parser_result_as("parser_result_1"),
         ))
 
-        # ── Шаг 7: Конвертация #1 ─────────────────────────────────────
+        # ── Шаг 7: Конвертация #1 (через Gateway) ──────────────────────
         steps.append(PipelineStep(
-            name="Конвертация JSON #1",
-            service="converter_validator",
+            name="Конвертация JSON #1 (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/converter/convert",
-            port=8086,
+            port=8080,
             body={
                 "task_id": str(TEST_TASK_ID_1),
                 "version_id": "1",  # CV-9: version_id обязателен
@@ -168,13 +168,13 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             expected_status=200,
         ))
 
-        # ── Шаг 8: Сохранение документа #1 в Registry ─────────────────
+        # ── Шаг 8: Сохранение документа #1 в Registry (через Gateway) ──
         steps.append(PipelineStep(
-            name="Сохранение документа #1 в Registry",
-            service="registry",
+            name="Сохранение документа #1 в Registry (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/registry/documents",
-            port=8084,
+            port=8080,
             body={
                 "title": f"Multi-doc тест 1 {ts}",
                 "doc_code": f"MULTI1-{ts}",
@@ -189,13 +189,13 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             extract_keys=["doc_id_1"],
         ))
 
-        # ── Шаг 9: Построение индекса для документа #1 ────────────────
+        # ── Шаг 9: Построение индекса для документа #1 (через Gateway) ─
         steps.append(PipelineStep(
-            name="Построение индекса #1",
-            service="rag_builder",
+            name="Построение индекса #1 (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/rag/build",
-            port=8090,
+            port=8080,
             body={
                 "document_id": "{doc_id_1}",
                 "sections": [{
@@ -235,13 +235,13 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             extra_headers=s3_headers_2,
         ))
 
-        # ── Шаг 11-13: Парсинг #2 ─────────────────────────────────────
+        # ── Шаг 11-13: Парсинг #2 (через Gateway) ─────────────────────
         steps.append(PipelineStep(
-            name="Запуск парсинга #2",
-            service="parser",
+            name="Запуск парсинга #2 (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/parser/process",
-            port=8087,
+            port=8080,
             body={
                 "task_id": TEST_TASK_ID_2,
                 "draft_id": 1,  # PS-3: обязательный draft_id
@@ -255,21 +255,21 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
         ))
 
         steps.append(PipelineStep(
-            name="Статус парсинга #2 (longpoll)",
-            service="parser",
+            name="Статус парсинга #2 (longpoll, через Gateway)",
+            service="gateway",
             method="GET",
             path=f"/api/v1/parser/process/{TEST_TASK_ID_2}/status",
-            port=8087,
+            port=8080,
             expected_status=200,
             check=check_json_field("status", str),
         ))
 
         steps.append(PipelineStep(
-            name="Результат парсинга #2",
-            service="parser",
+            name="Результат парсинга #2 (через Gateway)",
+            service="gateway",
             method="GET",
             path=f"/api/v1/parser/process/{TEST_TASK_ID_2}/result",
-            port=8087,
+            port=8080,
             expected_status=200,
             retry_on={409},
             retry_delay=2.0,
@@ -277,13 +277,13 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             check=save_parser_result_as("parser_result_2"),
         ))
 
-        # ── Шаг 14-16: Конвертация #2 + Registry #2 + Build #2 ────────
+        # ── Шаг 14-16: Конвертация #2 + Registry #2 + Build #2 (через Gateway) ─
         steps.append(PipelineStep(
-            name="Конвертация JSON #2",
-            service="converter_validator",
+            name="Конвертация JSON #2 (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/converter/convert",
-            port=8086,
+            port=8080,
             body={
                 "task_id": str(TEST_TASK_ID_2),
                 "version_id": "1",  # CV-9: version_id обязателен
@@ -293,11 +293,11 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
         ))
 
         steps.append(PipelineStep(
-            name="Сохранение документа #2 в Registry",
-            service="registry",
+            name="Сохранение документа #2 в Registry (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/registry/documents",
-            port=8084,
+            port=8080,
             body={
                 "title": f"Multi-doc тест 2 {ts}",
                 "doc_code": f"MULTI2-{ts}",
@@ -312,13 +312,13 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             extract_keys=["doc_id_2"],
         ))
 
-        # ── Шаг 16: Построение индекса #2 ──────────────────────────────
+        # ── Шаг 16: Построение индекса #2 (через Gateway) ──────────────
         steps.append(PipelineStep(
-            name="Построение индекса #2",
-            service="rag_builder",
+            name="Построение индекса #2 (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/rag/build",
-            port=8090,
+            port=8080,
             body={
                 "document_id": "{doc_id_2}",
                 "sections": [{
@@ -337,13 +337,13 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             check=check_json_field("status", str),
         ))
 
-        # ── Шаг 17: Поиск (RS-6: без top_k) ──────────────────────────
+        # ── Шаг 17: Поиск (RS-6: без top_k, через Gateway) ────────────
         steps.append(PipelineStep(
-            name="Поиск по общему запросу",
-            service="rag_search",
+            name="Поиск по общему запросу (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/rag/search",
-            port=8091,
+            port=8080,
             body={
                 "query": "тестовый документ multi-doc",
                 "valid_at": "2026-06-19",
@@ -353,24 +353,24 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             check=check_rag_search_results(),
         ))
 
-        # ── Шаг 18: Удаление первого документа ────────────────────────
+        # ── Шаг 18: Удаление первого документа (через Gateway) ─────────
         steps.append(PipelineStep(
-            name="Удаление документа #1 из Registry",
-            service="registry",
+            name="Удаление документа #1 из Registry (через Gateway)",
+            service="gateway",
             method="DELETE",
             path="/api/v1/registry/documents/{doc_id_1}",
-            port=8084,
+            port=8080,
             expected_status=200,
             needs_auth=True,
         ))
 
-        # ── Шаг 19: Поиск после удаления (RS-6: без top_k) ────────────
+        # ── Шаг 19: Поиск после удаления (через Gateway) ──────────────
         steps.append(PipelineStep(
-            name="Поиск после удаления документа #1",
-            service="rag_search",
+            name="Поиск после удаления документа #1 (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/rag/search",
-            port=8091,
+            port=8080,
             body={
                 "query": "тестовый документ multi-doc",
                 "valid_at": "2026-06-19",
