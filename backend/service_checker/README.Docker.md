@@ -65,7 +65,7 @@ docker compose -f backend/service_checker/docker/docker-compose.yml up -d
 
 - Docker Desktop 4.30+ (или Docker Engine 27+ с docker compose plugin)
 - 4 CPU, 8 GB RAM (рекомендуется)
-- Порты 15432, 16379, 19000, 19001, 8000, 8080-8088, 8090-8091, 18092 должны быть свободны
+- Порты 15432, 16379, 19000, 19001, 8000, 18080-18088, 18090-18091, 18092 должны быть свободны
 
 ## Быстрый запуск
 
@@ -131,10 +131,10 @@ docker compose -f backend/service_checker/docker/docker-compose.yml exec -T redi
 curl http://localhost:19000/minio/health/live
 
 # Backend API (6 из 10 работают, 4 падают — см. специфичные проблемы ниже)
-curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/   # Orchestrator
-curl -s -o /dev/null -w "%{http_code}" http://localhost:8082/   # Auth
-curl -s -o /dev/null -w "%{http_code}" http://localhost:8086/health  # Converter-Validator
-curl -s -o /dev/null -w "%{http_code}" http://localhost:8087/health  # Parser
+curl -s -o /dev/null -w "%{http_code}" http://localhost:18081/   # Orchestrator
+curl -s -o /dev/null -w "%{http_code}" http://localhost:18082/   # Auth
+curl -s -o /dev/null -w "%{http_code}" http://localhost:18086/health  # Converter-Validator
+curl -s -o /dev/null -w "%{http_code}" http://localhost:18087/health  # Parser
 
 # Через service_checker (полный отчёт)
 python backend/service_checker/service_checker.py docker --action health
@@ -202,9 +202,9 @@ git config core.autocrlf input
 
 | Сервис | Порт | Ошибка |
 |--------|------|-------|
-| Auth Service | 8082 | `ImportError: email-validator is not installed` |
-| Gateway Mock | 8081 | `ImportError: cannot import name 'router'` |
-| Registry Service | 8084 | `ModuleNotFoundError: No module named 'env'` |
+| Auth Service | 18082 | `ImportError: email-validator is not installed` |
+| Gateway Mock | 18081 | `ImportError: cannot import name 'router'` |
+| Registry Service | 18084 | `ModuleNotFoundError: No module named 'env'` |
 | ~~Orchestrator~~ | ~~8000~~ | ✅ исправлено (`extra="ignore"`) |
 
 Подробное описание каждой ошибки и способа исправления — в

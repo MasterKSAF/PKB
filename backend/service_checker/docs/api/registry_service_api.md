@@ -1,4 +1,4 @@
-## API Registry Service / Registry (registry-service:8084)
+## API Registry Service / Registry (registry-service:18084)
 
 Базовый реестр НСИ (нормативно-справочной информации).  
 Хранит классификаторы, документы, терминологию и данные черновиков (drafts).  
@@ -8,7 +8,7 @@
 
 **Внутренний сервис**. API — через Gateway Service.
 
-**Базовый URL**: `http://127.0.0.1:8084/api/v1`
+**Базовый URL**: `http://127.0.0.1:18084/api/v1`
 
 ### Формат ответа
 

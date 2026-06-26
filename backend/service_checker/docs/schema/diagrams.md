@@ -386,26 +386,26 @@
 ```mermaid
 flowchart TD
     subgraph Pipeline1_Formation[Pipeline 1: Формирование документа]
-        OCR[OCR Service :8088]
-        Parser[Parser Service :8087]
-        CV[Converter-validator :8086]
-        Registry[Registry :8084]
+        OCR[OCR Service :18088]
+        Parser[Parser Service :18087]
+        CV[Converter-validator :18086]
+        Registry[Registry :18084]
         %% D57: RAG Builder перенесён в Pipeline 2 (устранён дубль)
     end
 
     subgraph Pipeline2_Indexation[Pipeline 2: Индексация]
-        RAGI[RAG Builder :8090]
+        RAGI[RAG Builder :18090]
     end
 
     subgraph Pipeline3_Search[Pipeline 3: Поиск]
-        RAGS[RAG Search :8091]
-        QS[Query Service :8083]
+        RAGS[RAG Search :18091]
+        QS[Query Service :18083]
     end
 
     subgraph Infra[Инфраструктура]
-        Orch[Orchestrator :8081]
-        Auth[Auth Service :8082]
-        Integ[Integration Service :8085]
+        Orch[Orchestrator :18081]
+        Auth[Auth Service :18082]
+        Integ[Integration Service :18085]
         Analyse[Analyse Service :8089]
     end
 

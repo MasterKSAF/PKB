@@ -25,7 +25,7 @@
 │                                                              │
 │  ┌────────────┐    ┌─────────────┐    ┌────────────┐       │
 │  │  Gateway   │───▶│ Orchestrator│───▶│ Auth       │       │
-│  │  :8080     │    │ :8081       │    │ :8082      │       │
+│  │  :18080     │    │ :18081       │    │ :18082      │       │
 │  └─────┬──────┘    └──────┬──────┘    └────────────┘       │
 │        │                  │                                  │
 │        │  ┌───────────────┼──────────────┐                  │
@@ -33,12 +33,12 @@
 │        ▼  ▼               ▼              ▼                  │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐    │
 │  │ Query    │  │ Registry │  │ RAG-Srch │  │ RAG-Bld  │    │
-│  │ :8083    │  │ :8084    │  │ :8091    │  │ :8090    │    │
+│  │ :18083    │  │ :18084    │  │ :18091    │  │ :18090    │    │
 │  └──────────┘  └──────────┘  └──────────┘  └──────────┘    │
 │                                                              │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐    │
 │  │ Parser   │  │ OCR      │  │ Converter│  │ Integ.   │    │
-│  │ :8087    │  │ :8088    │  │ :8086    │  │ :8085    │    │
+│  │ :18087    │  │ :18088    │  │ :18086    │  │ :18085    │    │
 │  └──────────┘  └──────────┘  └──────────┘  └──────────┘    │
 │                                                              │
 │  ┌──────────┐                                               │
@@ -52,7 +52,7 @@
 │  Docker-сеть `data` (БД + storage)                          │
 │  ┌──────────────┐  ┌─────────┐  ┌──────────┐  ┌────────┐  │
 │  │ PostgreSQL   │  │ MinIO   │  │ Redis    │  │ TEI    │  │
-│  │ :5432        │  │ :9000   │  │ :6379    │  │ :8080  │  │
+│  │ :5432        │  │ :9000   │  │ :6379    │  │ :80     │  │
 │  └──────────────┘  └─────────┘  └──────────┘  └────────┘  │
 └─────────────────────────────────────────────────────────────┘
             │
@@ -97,13 +97,13 @@ services:
   gateway:
     image: pkb/gateway:latest
     networks: [public, internal]
-    expose: ["8080"]   # НЕ публикуется в host
+    expose: ["18080"]   # НЕ публикуется в host
     environment:
-      - AUTH_SERVICE_URL=http://auth:8082
-      - ORCHESTRATOR_URL=http://orchestrator:8081
-      - REGISTRY_URL=http://registry:8084
-      - QUERY_URL=http://query:8083
-      - INTEGRATION_URL=http://integration:8085
+      - AUTH_SERVICE_URL=http://auth:18082
+      - ORCHESTRATOR_URL=http://orchestrator:18081
+      - REGISTRY_URL=http://registry:18084
+      - QUERY_URL=http://query:18083
+      - INTEGRATION_URL=http://integration:18085
       - ANALYSE_URL=http://analyse:8089
     depends_on: [orchestrator, auth, registry, query]
 
@@ -147,7 +147,7 @@ services:
   tei:
     image: ghcr.io/huggingface/text-embeddings-inference:latest
     networks: [data, internal]
-    command: --model-id BAAI/bge-reranker-v2-m3-int8 --port 8080
+    command: --model-id BAAI/bge-reranker-v2-m3-int8 --port 18080
 
   signoz-otel-collector:
     image: signoz/signoz-otel-collector:latest

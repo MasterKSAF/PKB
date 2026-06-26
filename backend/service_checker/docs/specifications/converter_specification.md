@@ -1,7 +1,7 @@
 # Спецификация конвертера-валидатора (Converter-validator)
 
 > **Версия**: 1.0 (18.06.2026)
-> **Сервис**: `converter-validator:8086`
+> **Сервис**: `converter-validator:18086`
 > **Пайплайн**: 1 (Формирование документа), этап 1.5
 > **Источники**: `converter_validator_service_api.md`, `pipeline1-formation_detail.md §3.2`, `normalizer_specification.md`, обсуждения 08.06, 16.06.
 

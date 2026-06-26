@@ -228,18 +228,18 @@ flowchart LR
 
 | Сервис | Порт | Пайплайн | Доступ к БД |
 |--------|------|----------|-------------|
-| Gateway | 8080 | 1, 2, 3 | Нет (только маршрутизация) |
-| Orchestrator | 8081 | 1, 2 | Свой журнал PostgreSQL    |
-| Auth | 8082 | — | Читает |
-| Query Service | 8083 | 3 | Читает/Пишет |
-| Registry | 8084 | 1 | Пишет |
-| Integration | 8085 | — | Читает/Пишет |
-| Converter-validator | 8086 | 1 | Читает |
-| Parser | 8087 | 1 | Нет |
-| OCR | 8088 | 1 | Нет |
+| Gateway | 18080 | 1, 2, 3 | Нет (только маршрутизация) |
+| Orchestrator | 18081 | 1, 2 | Свой журнал PostgreSQL    |
+| Auth | 18082 | — | Читает |
+| Query Service | 18083 | 3 | Читает/Пишет |
+| Registry | 18084 | 1 | Пишет |
+| Integration | 18085 | — | Читает/Пишет |
+| Converter-validator | 18086 | 1 | Читает |
+| Parser | 18087 | 1 | Нет |
+| OCR | 18088 | 1 | Нет |
 | Analyse | 8089 | — | Читает |
-| RAG Builder | 8090 | 2 | Пишет |
-| RAG Search | 8091 | 3 | Читает |
+| RAG Builder | 18090 | 2 | Пишет |
+| RAG Search | 18091 | 3 | Читает |
 
 ---
 
@@ -262,37 +262,37 @@ python docs/checks/scripts/check_consistency.py
 
 При ошибках (красный) — исправить перед коммитом. Предупреждения (жёлтый) — некритично.
 
-> **Примечание:** API — внутренний, доступен только через Gateway (:8080).
+> **Примечание:** API — внутренний, доступен только через Gateway (:18080).
 > Примеры ниже — для вызовов из Web UI (серверный код) по внутренней сети.
 
 ```bash
 # Получение токена
-curl -X POST http://127.0.0.1:8080/api/v1/auth/token \
+curl -X POST http://127.0.0.1:18080/api/v1/auth/token \
   -H "Content-Type: application/json" \
   -d '{"username": "user", "password": "pass"}'
 ```
 
 ```bash
 # Загрузка документа (асинхронно) — возвращает draft_id
-curl -X POST http://127.0.0.1:8080/api/v1/drafts \
+curl -X POST http://127.0.0.1:18080/api/v1/drafts \
   -H "Authorization: Bearer <token>" \
   -F "file=@document.pdf"
 # Ответ: { "draft_id": 420000, "task_id": 420000, "status": "uploaded", ... }
 
 # Статус preview черновика (longpoll)
-curl -X GET http://127.0.0.1:8080/api/v1/drafts/{draft_id}/preview/status
+curl -X GET http://127.0.0.1:18080/api/v1/drafts/{draft_id}/preview/status
 
 # Принять решение по черновику
-curl -X PATCH http://127.0.0.1:8080/api/v1/drafts/{draft_id}/decide \
+curl -X PATCH http://127.0.0.1:18080/api/v1/drafts/{draft_id}/decide \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{"action": "approve"}'
 
 # Статус документа после завершения черновика
-curl -X GET http://127.0.0.1:8080/api/v1/documents/{document_id}/status
+curl -X GET http://127.0.0.1:18080/api/v1/documents/{document_id}/status
 
 # Поиск
-curl -X POST http://127.0.0.1:8080/api/v1/text/search \
+curl -X POST http://127.0.0.1:18080/api/v1/text/search \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{"text": "толщина обшивки ледового пояса"}'
@@ -305,7 +305,7 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 ---
 
 ### Gateway Service (API Gateway)
-**Порт:** `8080`
+**Порт:** `18080`
 **Документация:** [`docs/api/gateway_service_api.md`](api/gateway_service_api.md)
 
 **Назначение:**
@@ -315,7 +315,7 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 
 **Схема подключения:**
 ```
-Внешняя сеть → Nginx → Web UI → Gateway (:8080) → Внутренние сервисы (:8081–8091)
+Внешняя сеть → Nginx → Web UI → Gateway (:18080) → Внутренние сервисы (:18081–18091)
 ```
 
 **Основные функции:**
@@ -332,7 +332,7 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 ---
 
 ### Оркестратор (Orchestrator Service)
-**Порт:** `8081`
+**Порт:** `18081`
 **Документация:** [`docs/api/orchestrator_service_api.md`](api/orchestrator_service_api.md)
 **Описание также в:** [`pipelines/overview.md`](pipelines/overview.md), [`pipelines/pipeline1-formation.md`](pipelines/pipeline1-formation.md), [`pipelines/pipeline1-formation_detail.md`](pipelines/pipeline1-formation_detail.md), [`pipelines/pipeline2-indexation.md`](pipelines/pipeline2-indexation.md)
 
@@ -355,7 +355,7 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 > **Оркестратор не вычисляет бизнес-ключ.** `title_hash_sha256` вычисляется только Converter-validator (см. [`guide.md`](guide.md#бизнес-ключ-вычисляет-только-converter-validator)).
 
 ### Сервис аутентификации (Auth Service)
-**Порт:** `8082`
+**Порт:** `18082`
 **Документация:** [`docs/api/auth_service_api.md`](api/auth_service_api.md)
 **Описание также в:** _(независимый сервис, не участвует в пайплайнах)_
 
@@ -373,7 +373,7 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 ---
 
 ### Сервис диалогов и поиска (Query Service)
-**Порт:** `8083`
+**Порт:** `18083`
 **Документация:** [`docs/api/query_service_api.md`](api/query_service_api.md)
 **Описание также в:** [`pipelines/pipeline3-search.md`](pipelines/pipeline3-search.md)
 
@@ -394,7 +394,7 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 ---
 
 ### Сервис реестра документов (Registry Service)
-**Порт:** `8084`
+**Порт:** `18084`
 **Документация:** [`docs/api/registry_service_api.md`](api/registry_service_api.md)
 **Описание также в:** [`pipelines/pipeline1-formation.md`](pipelines/pipeline1-formation.md), [`pipelines/pipeline1-formation_detail.md`](pipelines/pipeline1-formation_detail.md), [`database/db_diagrams.md`](database/db_diagrams.md)
 
@@ -415,7 +415,7 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 ---
 
 ### Сервис конвертации и валидации (Converter-validator Service)
-**Порт:** `8086`
+**Порт:** `18086`
 **Документация:** [`docs/api/converter_validator_service_api.md`](api/converter_validator_service_api.md)
 **Описание также в:** [`specifications/converter_specification.md`](specifications/converter_specification.md), [`pipelines/pipeline1-formation.md`](pipelines/pipeline1-formation.md), [`pipelines/pipeline1-formation_detail.md`](pipelines/pipeline1-formation_detail.md), [`schema/schema_converter_result.json`](schema/schema_converter_result.json), [`schema/schema_converter_preview.json`](schema/schema_converter_preview.json)
 
@@ -436,7 +436,7 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 ---
 
 ### Сервис парсинга (Parser Service)
-**Порт:** `8087`
+**Порт:** `18087`
 **Документация:** [`docs/api/parser_service_api.md`](api/parser_service_api.md)
 **Описание также в:** [`pipelines/pipeline1-formation.md`](pipelines/pipeline1-formation.md), [`pipelines/pipeline1-formation_detail.md`](pipelines/pipeline1-formation_detail.md), [`schema/schema_parser_result.json`](schema/schema_parser_result.json)
 
@@ -454,7 +454,7 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 ---
 
 ### Сервис OCR-распознавания (OCR Service)
-**Порт:** `8088`
+**Порт:** `18088`
 **Документация:** [`docs/api/ocr_service_api.md`](api/ocr_service_api.md)
 **Описание также в:** [`pipelines/pipeline1-formation.md`](pipelines/pipeline1-formation.md), [`pipelines/pipeline1-formation_detail.md`](pipelines/pipeline1-formation_detail.md)
 
@@ -492,7 +492,7 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 ---
 
 ### Сервис построения индекса (RAG Builder Service)
-**Порт:** `8090`
+**Порт:** `18090`
 **Документация:** [`docs/api/rag_builder_service_api.md`](api/rag_builder_service_api.md)
 **Описание также в:** [`pipelines/pipeline2-indexation.md`](pipelines/pipeline2-indexation.md), [`schema/schema_registry_for_rag.json`](schema/schema_registry_for_rag.json)
 
@@ -516,7 +516,7 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 ---
 
 ### Сервис поиска по индексу (RAG Search Service)
-**Порт:** `8091`
+**Порт:** `18091`
 **Документация:** [`docs/api/rag_search_service_api.md`](api/rag_search_service_api.md)
 **Описание также в:** [`pipelines/pipeline3-search.md`](pipelines/pipeline3-search.md)
 
@@ -539,7 +539,7 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 ---
 
 ### Сервис интеграции (Integration Service)
-**Порт:** `8085`
+**Порт:** `18085`
 **Документация:** [`docs/api/integration_service_api.md`](api/integration_service_api.md)
 **Описание также в:** _(вспомогательный сервис, не участвует в основных пайплайнах)_
 

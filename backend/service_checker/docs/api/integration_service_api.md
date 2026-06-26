@@ -1,11 +1,11 @@
-## API Integration Service (integration-service:8085)
+## API Integration Service (integration-service:18085)
 
 Сервис интеграции с внешними системами и управления файлами.
 
 *Внутренний сервис. API — через Gateway Service.*
 
-**Базовый URL (внутренний)**: `http://127.0.0.1:8085/api/v1`
-**Базовый URL (через Gateway)**: `http://127.0.0.1:8080/api/v1`
+**Базовый URL (внутренний)**: `http://127.0.0.1:18085/api/v1`
+**Базовый URL (через Gateway)**: `http://127.0.0.1:18080/api/v1`
 
 ### Формат ответа
 

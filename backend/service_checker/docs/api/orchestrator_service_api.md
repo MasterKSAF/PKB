@@ -1,4 +1,4 @@
-## API Orchestrator Service (orchestrator-service:8081)
+## API Orchestrator Service (orchestrator-service:18081)
 
 Координатор пайплайнов 1 и 2. Оркестрирует конвейер обработки документов: загрузка → task → вызов Registry для создания черновика → OCR/Parser → Converter-validator → Registry.
 
@@ -11,7 +11,7 @@ Orchestrator отвечает только за:
 - Связь данных Registry с задачами пайплайна (GET `/{drafts,documents}/{id}/tasks`)
 - Статус обработки (GET `/documents/{id}/status`, `/documents/queue`, `/documents/{id}/errors`)
 
-**Базовый URL (внутренний)**: `http://127.0.0.1:8081/api/v1`
+**Базовый URL (внутренний)**: `http://127.0.0.1:18081/api/v1`
 
 ### Формат ответа
 

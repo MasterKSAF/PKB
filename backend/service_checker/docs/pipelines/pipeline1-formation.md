@@ -226,10 +226,10 @@ sequenceDiagram
 
 | № | Сервис | Входной формат | Выходной формат | Примечание |
 |---|--------|---------------|----------------|------------|
-| 1.1 | OCR-сервис (`:8088`) / Parser-сервис (`:8087`) | `file_key` → бинарный файл из MinIO | `raw_ocr_v4` (JSON) — плоский массив блоков | Пропускается, если на preview получен полный JSON (`preview_not_supported: true`) |
-| 1.2 | Converter-validator (`:8086`) | `raw_ocr_v4` (JSON) | `validated_v3` (JSON) — иерархический типизированный | |
-| 1.3 | Registry (`:8084`) — `POST /check-uniqueness` | `file_hash_sha256`, `title_hash_sha256` | `{is_unique: bool, duplicate_of: bigint/null}` | |
-| 1.4 | Registry (`:8084`) — `POST /documents` | `validated_v3` + метаданные | `document_id` (bigint) | |
+| 1.1 | OCR-сервис (`:18088`) / Parser-сервис (`:18087`) | `file_key` → бинарный файл из MinIO | `raw_ocr_v4` (JSON) — плоский массив блоков | Пропускается, если на preview получен полный JSON (`preview_not_supported: true`) |
+| 1.2 | Converter-validator (`:18086`) | `raw_ocr_v4` (JSON) | `validated_v3` (JSON) — иерархический типизированный | |
+| 1.3 | Registry (`:18084`) — `POST /check-uniqueness` | `file_hash_sha256`, `title_hash_sha256` | `{is_unique: bool, duplicate_of: bigint/null}` | |
+| 1.4 | Registry (`:18084`) — `POST /documents` | `validated_v3` + метаданные | `document_id` (bigint) | |
 | 1.5 | Orchestrator → Scheduler (RAG Builder) | `document_id` | Статус `pending_index` → Pipeline 2 | |
 | 1.6 | Orchestrator (очистка preview-артефактов) | `draft_id` | Удаление preview-данных (preview_metadata, preview_blobs) | |
 

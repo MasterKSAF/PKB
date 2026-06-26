@@ -123,17 +123,17 @@ graph LR
 
 | Сервис                  | Документация                                                          | Базовый URL (внутренний) |
 | ----------------------- | --------------------------------------------------------------------- | ------------------------ |
-| Orchestrator            | [orchestrator_service_api.md](../api/orchestrator_service_api.md)     | `http://127.0.0.1:8081`  |
-| Auth                    | [auth_service_api.md](../api/auth_service_api.md)                     | `http://127.0.0.1:8082`  |
-| Query Service           | [query_service_api.md](../api/query_service_api.md)                   | `http://127.0.0.1:8083`  |
-| Registry                | [registry_service_api.md](../api/registry_service_api.md)             | `http://127.0.0.1:8084`  |
-| Integration             | [integration_service_api.md](../api/integration_service_api.md)       | `http://127.0.0.1:8085`  |
-| Converter-validator     | [converter_validator_service_api.md](../api/converter_validator_service_api.md) | `http://127.0.0.1:8086`  |
-| Parser                  | [parser_service_api.md](../api/parser_service_api.md)                 | `http://127.0.0.1:8087`  |
-| OCR                     | [ocr_service_api.md](../api/ocr_service_api.md)                       | `http://127.0.0.1:8088`  |
+| Orchestrator            | [orchestrator_service_api.md](../api/orchestrator_service_api.md)     | `http://127.0.0.1:18081`  |
+| Auth                    | [auth_service_api.md](../api/auth_service_api.md)                     | `http://127.0.0.1:18082`  |
+| Query Service           | [query_service_api.md](../api/query_service_api.md)                   | `http://127.0.0.1:18083`  |
+| Registry                | [registry_service_api.md](../api/registry_service_api.md)             | `http://127.0.0.1:18084`  |
+| Integration             | [integration_service_api.md](../api/integration_service_api.md)       | `http://127.0.0.1:18085`  |
+| Converter-validator     | [converter_validator_service_api.md](../api/converter_validator_service_api.md) | `http://127.0.0.1:18086`  |
+| Parser                  | [parser_service_api.md](../api/parser_service_api.md)                 | `http://127.0.0.1:18087`  |
+| OCR                     | [ocr_service_api.md](../api/ocr_service_api.md)                       | `http://127.0.0.1:18088`  |
 | Analyse                 | [analyse_service_api.md](../api/analyse_service_api.md)               | `http://127.0.0.1:8089`  |
-| RAG Builder             | [rag_builder_service_api.md](../api/rag_builder_service_api.md)       | `http://127.0.0.1:8090`  |
-| RAG Search              | [rag_search_service_api.md](../api/rag_search_service_api.md)         | `http://127.0.0.1:8091`  |
+| RAG Builder             | [rag_builder_service_api.md](../api/rag_builder_service_api.md)       | `http://127.0.0.1:18090`  |
+| RAG Search              | [rag_search_service_api.md](../api/rag_search_service_api.md)         | `http://127.0.0.1:18091`  |
 
 ---
 
@@ -427,32 +427,32 @@ graph TB
     end
 
     subgraph "Внутренняя сеть"
-        GW[Gateway Service<br/>:8080]
+        GW[Gateway Service<br/>:18080]
 
         subgraph "Оркестратор"
-            Orch[Orchestrator Service<br/>:8081]
+            Orch[Orchestrator Service<br/>:18081]
         end
 
         subgraph "Пайплайн 1: Формирование"
-            OCR[OCR-сервис<br/>:8088]
-            Pars[Parser-сервис<br/>:8087]
-            CV[Converter-validator<br/>:8086]
-            Reg[Registry<br/>:8084]
+            OCR[OCR-сервис<br/>:18088]
+            Pars[Parser-сервис<br/>:18087]
+            CV[Converter-validator<br/>:18086]
+            Reg[Registry<br/>:18084]
         end
 
         subgraph "Пайплайн 2: Индексация"
-            RAGb[RAG Builder<br/>:8090]
+            RAGb[RAG Builder<br/>:18090]
         end
 
         subgraph "Пайплайн 3: Поиск"
-            QS[Query Service<br/>:8083]
-            RAGs[RAG Search<br/>:8091]
+            QS[Query Service<br/>:18083]
+            RAGs[RAG Search<br/>:18091]
         end
 
         subgraph "Вспомогательные сервисы"
             AS[Analyse Service<br/>:8089]
-            IS[Integration Service<br/>:8085]
-            Auth[Auth Service<br/>:8082]
+            IS[Integration Service<br/>:18085]
+            Auth[Auth Service<br/>:18082]
         end
     end
 
@@ -521,17 +521,17 @@ OpenAI / Custom]
 
 | Сервис              | Порт | Пайплайн | Доступ к БД        | Зависимости                        |
 | ------------------- | ---- | -------- | ------------------ | ---------------------------------- |
-| Orchestrator        | 8081 | 1, 2     | Пишет (пре-стейдж) | OCR, Parser, Converter-validator, Registry, RAG Builder |
-| Auth                | 8082 | —        | Читает             | PostgreSQL                         |
-| Query Service       | 8083 | 3        | Читает/Пишет       | RAG Search, LLM, PostgreSQL        |
-| Registry            | 8084 | 1        | Пишет              | PostgreSQL                         |
-| Integration         | 8085 | —        | Читает/Пишет       | MinIO, Меридиан                    |
-| Converter-validator | 8086 | 1        | Читает             | Registry (справочники)             |
-| Parser              | 8087 | 1        | Нет                | MinIO                              |
-| OCR                 | 8088 | 1        | Нет                | MinIO                              |
+| Orchestrator        | 18081 | 1, 2     | Пишет (пре-стейдж) | OCR, Parser, Converter-validator, Registry, RAG Builder |
+| Auth                | 18082 | —        | Читает             | PostgreSQL                         |
+| Query Service       | 18083 | 3        | Читает/Пишет       | RAG Search, LLM, PostgreSQL        |
+| Registry            | 18084 | 1        | Пишет              | PostgreSQL                         |
+| Integration         | 18085 | —        | Читает/Пишет       | MinIO, Меридиан                    |
+| Converter-validator | 18086 | 1        | Читает             | Registry (справочники)             |
+| Parser              | 18087 | 1        | Нет                | MinIO                              |
+| OCR                 | 18088 | 1        | Нет                | MinIO                              |
 | Analyse             | 8089 | —        | Читает             | PostgreSQL                         |
-| RAG Builder         | 8090 | 2        | Пишет              | PostgreSQL (pgvector)              |
-| RAG Search          | 8091 | 3        | Читает             | PostgreSQL (pgvector)              |
+| RAG Builder         | 18090 | 2        | Пишет              | PostgreSQL (pgvector)              |
+| RAG Search          | 18091 | 3        | Читает             | PostgreSQL (pgvector)              |
 
 **Требования к окружению:**
 

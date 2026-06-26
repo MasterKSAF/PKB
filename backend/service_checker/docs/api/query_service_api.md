@@ -1,4 +1,4 @@
-## API Query Service (query-service:8083)
+## API Query Service (query-service:18083)
 
 Сервис диалоговых сессий, текстовой обработки, истории запросов и **точка входа для поиска**.
 
@@ -16,8 +16,8 @@ Query Service принимает запросы от UI, вызывает RAG Se
 9. Результат сохраняется в истории чата (статус `answered`)
 10. UI ожидает ответ через longpoll на конкретное сообщение: `GET /chat/sessions/{session_id}/messages/{message_id}?longpoll=15`
 
-**Базовый URL (внутренний)**: `http://127.0.0.1:8083/api/v1`
-**Базовый URL (через Gateway)**: `http://127.0.0.1:8080/api/v1`
+**Базовый URL (внутренний)**: `http://127.0.0.1:18083/api/v1`
+**Базовый URL (через Gateway)**: `http://127.0.0.1:18080/api/v1`
 
 ### Группы
 

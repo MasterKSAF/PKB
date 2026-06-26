@@ -5,7 +5,7 @@
 
 ## 1. Python-пакеты по сервисам
 
-### Gateway (gateway:8080)
+### Gateway (gateway:18080)
 ```
 fastapi==0.115.*
 uvicorn[standard]==0.32.*
@@ -27,7 +27,7 @@ python-json-logger==2.0.4
 setuptools<70
 ```
 
-### Orchestrator (orchestrator:8081)
+### Orchestrator (orchestrator:18081)
 ```
 fastapi, uvicorn, httpx
 celery[redis]==5.4.*
@@ -43,7 +43,7 @@ structlog
 opentelemetry-*
 ```
 
-### Auth (auth:8082)
+### Auth (auth:18082)
 ```
 fastapi, uvicorn, httpx
 sqlalchemy[asyncio], asyncpg, alembic
@@ -57,7 +57,7 @@ structlog
 opentelemetry-*
 ```
 
-### Query Service (query:8083)
+### Query Service (query:18083)
 ```
 fastapi, uvicorn, httpx
 sqlalchemy[asyncio], asyncpg
@@ -69,7 +69,7 @@ structlog
 opentelemetry-*
 ```
 
-### Registry (registry:8084)
+### Registry (registry:18084)
 ```
 fastapi, uvicorn
 sqlalchemy[asyncio], asyncpg, alembic
@@ -79,7 +79,7 @@ structlog
 opentelemetry-*
 ```
 
-### Integration (integration:8085)
+### Integration (integration:18085)
 ```
 fastapi, uvicorn
 sqlalchemy[asyncio], asyncpg
@@ -90,7 +90,7 @@ structlog
 opentelemetry-*
 ```
 
-### Converter-validator (converter-validator:8086)
+### Converter-validator (converter-validator:18086)
 ```
 fastapi, uvicorn
 openai==1.50.*           # LLM
@@ -101,7 +101,7 @@ structlog
 opentelemetry-*
 ```
 
-### Parser (parser:8087)
+### Parser (parser:18087)
 ```
 fastapi, uvicorn
 pypdf==5.*
@@ -115,7 +115,7 @@ structlog
 opentelemetry-*
 ```
 
-### OCR (ocr:8088)
+### OCR (ocr:18088)
 ```
 fastapi, uvicorn
 paddleocr==2.7.*
@@ -128,7 +128,7 @@ structlog
 opentelemetry-*
 ```
 
-### RAG Builder (rag-builder:8090)
+### RAG Builder (rag-builder:18090)
 ```
 fastapi, uvicorn
 sqlalchemy[asyncio], asyncpg
@@ -140,7 +140,7 @@ structlog
 opentelemetry-*
 ```
 
-### RAG Search (rag-search:8091)
+### RAG Search (rag-search:18091)
 ```
 fastapi, uvicorn
 sqlalchemy[asyncio], asyncpg
@@ -171,8 +171,8 @@ opentelemetry-*
 | **Redis 7** | `redis://redis:6379` | Gateway (idempotency), Orchestrator (Celery), Auth (sessions) | (без пароля в dev) |
 | **Qwen3-Embedding-4B API** (внешний) | `app_settings.rag.embedding_api.endpoint` | RAG Builder, RAG Search | API key в `app_settings` |
 | **deepseek 4 flash API** (внешний) | `app_settings.llm.api_url` | Query Service, Converter-validator | API key в `app_settings` |
-| **TEI** (text-embeddings-inference, локальный) | `http://tei:8080` | RAG Builder (embeddings), RAG Search (rerank) | (без auth, в internal-сети) |
-| **Infinity** (опционально, локальный) | `http://infinity:8080` | RAG Builder (вместо внешнего Qwen3) | (без auth, в internal-сети) |
+| **TEI** (text-embeddings-inference, локальный) | `http://tei:80` | RAG Builder (embeddings), RAG Search (rerank) | (без auth, в internal-сети) |
+| **Infinity** (опционально, локальный) | `http://infinity:80` | RAG Builder (вместо внешнего Qwen3) | (без auth, в internal-сети) |
 | **SigNoz OTLP** | `http://signoz-otel-collector:4317` | Все сервисы (мониторинг, логи) | (без auth, в internal-сети) |
 | **ClickHouse** | `http://clickhouse:8123` | SigNoz (storage) | (внутренний) |
 | **Nginx** (reverse proxy) | `https://example.com:443` | Web UI | TLS termination |
@@ -206,7 +206,7 @@ for prefix, module_name in MOCK_ROUTES.items():
     app.include_router(module.router, prefix=prefix)
 ```
 
-В **production** Gateway — отдельный сервис (`:8080`), который проксирует запросы к реальным сервисам. Mock-роутер используется только в `ENV=development` или в интеграционных тестах.
+В **production** Gateway — отдельный сервис (`:18080`), который проксирует запросы к реальным сервисам. Mock-роутер используется только в `ENV=development` или в интеграционных тестах.
 
 ## 4. Связанные документы
 

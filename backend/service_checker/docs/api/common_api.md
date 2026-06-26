@@ -2,7 +2,7 @@
 
 ### Общие положения
 
-- Базовый URL (через Gateway): `http://127.0.0.1:8080/api/v1`
+- Базовый URL (через Gateway): `http://127.0.0.1:18080/api/v1`
 
 - Базовый URL для внутренних запросов (напрямую к сервису): `http://127.0.0.1:{port}/api/v1`
 
@@ -30,18 +30,18 @@
 
 | Сервис | Порт |
 |--------|------|
-| **Gateway** | **`8080`** |
-| Orchestrator | `8081` |
-| Auth | `8082` |
-| Query | `8083` |
-| Registry | `8084` |
-| Integration | `8085` |
-| Converter-Validator | `8086` |
-| Parser | `8087` |
-| OCR | `8088` |
+| **Gateway** | **`18080`** |
+| Orchestrator | `18081` |
+| Auth | `18082` |
+| Query | `18083` |
+| Registry | `18084` |
+| Integration | `18085` |
+| Converter-Validator | `18086` |
+| Parser | `18087` |
+| OCR | `18088` |
 | Analyse | `8089` |
-| RAG Builder | `8090` |
-| RAG Search | `8091` |
+| RAG Builder | `18090` |
+| RAG Search | `18091` |
 
 ### Мониторинг (Health Check)
 
@@ -80,19 +80,19 @@
 
 | Сервис | Внутренний URL | URL через Gateway |
 |--------|----------------|-------------------|
-| Gateway | `http://127.0.0.1:8080/api/v1/system/health` | — (собственный) |
-| Gateway | `http://127.0.0.1:8080/api/v1/monitor/metrics` | — (собственный) |
-| Orchestrator | `http://127.0.0.1:8081/api/v1/health` | — (внутренний) |
-| Auth | `http://127.0.0.1:8082/api/v1/health` | — (внутренний) |
-| Query | `http://127.0.0.1:8083/api/v1/health` | — (внутренний) |
-| Registry | `http://127.0.0.1:8084/api/v1/health` | — (внутренний) |
-| Integration | `http://127.0.0.1:8085/api/v1/health` | — (внутренний) |
-| Converter-Validator | `http://127.0.0.1:8086/api/v1/health` | — (внутренний) |
-| Parser | `http://127.0.0.1:8087/api/v1/health` | — (внутренний) |
-| OCR | `http://127.0.0.1:8088/api/v1/health` | — (внутренний) |
+| Gateway | `http://127.0.0.1:18080/api/v1/system/health` | — (собственный) |
+| Gateway | `http://127.0.0.1:18080/api/v1/monitor/metrics` | — (собственный) |
+| Orchestrator | `http://127.0.0.1:18081/api/v1/health` | — (внутренний) |
+| Auth | `http://127.0.0.1:18082/api/v1/health` | — (внутренний) |
+| Query | `http://127.0.0.1:18083/api/v1/health` | — (внутренний) |
+| Registry | `http://127.0.0.1:18084/api/v1/health` | — (внутренний) |
+| Integration | `http://127.0.0.1:18085/api/v1/health` | — (внутренний) |
+| Converter-Validator | `http://127.0.0.1:18086/api/v1/health` | — (внутренний) |
+| Parser | `http://127.0.0.1:18087/api/v1/health` | — (внутренний) |
+| OCR | `http://127.0.0.1:18088/api/v1/health` | — (внутренний) |
 | Analyse | `http://127.0.0.1:8089/api/v1/health` | — (внутренний) |
-| RAG Builder | `http://127.0.0.1:8090/api/v1/health` | — (внутренний) |
-| RAG Search | `http://127.0.0.1:8091/api/v1/health` | — (внутренний) |
+| RAG Builder | `http://127.0.0.1:18090/api/v1/health` | — (внутренний) |
+| RAG Search | `http://127.0.0.1:18091/api/v1/health` | — (внутренний) |
 
 > **Примечание:** Эндпоинт `/health` Orchestrator'а агрегирует статусы внутренних сервисов,
 > обращаясь к их `/health` и возвращая сведённый результат. Для внутренних сервисов

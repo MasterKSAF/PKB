@@ -1,15 +1,15 @@
-## API Gateway Service (gateway:8080)
+## API Gateway Service (gateway:18080)
 
 Внутренний API Gateway, к которому обращается **Web UI** для выполнения **аутентификации (JWT)**, **проверки прав доступа (RBAC)**, обеспечения **иденпотентности** для критичных операций и **маршрутизации** вызовов к внутренним сервисам.
 
 **Архитектура подключения:**
 ```
-Внешняя сеть → Nginx → Web UI → Gateway (:8080) → Внутренние сервисы
+Внешняя сеть → Nginx → Web UI → Gateway (:18080) → Внутренние сервисы
 ```
 
 Gateway — **внутренний сервис**, не имеет внешнего порта. Наружу через Nginx доступен только **Web UI**. Gateway вызывается исключительно из Web UI (серверный код UI или BFF).
 
-**Базовый URL (внутренний)**: `http://127.0.0.1:8080/api/v1`
+**Базовый URL (внутренний)**: `http://127.0.0.1:18080/api/v1`
 
 ---
 
@@ -47,59 +47,59 @@ Gateway объединяет API всех внутренних сервисов 
 
 В production-среде:
 - **Nginx** (порт `:443`, HTTPS) раздаёт **Web UI** (статику/SSR) — единственная точка входа из внешней сети
-- **Web UI** (серверный код) обращается к внутреннему Gateway (`:8080`) по внутренней сети
-- **Gateway** (`:8080`) проверяет JWT и RBAC, затем перенаправляет запрос к соответствующему внутреннему сервису
+- **Web UI** (серверный код) обращается к внутреннему Gateway (`:18080`) по внутренней сети
+- **Gateway** (`:18080`) проверяет JWT и RBAC, затем перенаправляет запрос к соответствующему внутреннему сервису
 
 | Префикс пути | Внутренний сервис | Порт | Документация API |
 |-------------|-------------------|------|-----------------|
-| `/api/v1/auth/*` | Auth Service | `8082` | [auth_service_api.md](auth_service_api.md) |
-| `/api/v1/admin/*` | Auth Service | `8082` | [auth_service_api.md](auth_service_api.md) |
-| `/api/v1/documents` (`GET`, `PUT`, `PATCH`, `DELETE`) | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md#группа-documents) |
-| `/api/v1/documents/{id}/sections` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md#321-секции-документа-полный-объект-для-rag-builder) |
-| `/api/v1/documents/{id}/pages/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md#322-страницы-документа) |
-| `/api/v1/documents/{id}/file` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md#326-файл-документа) |
-| `/api/v1/documents/{id}/history` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md#327-история-статусов) |
-| `/api/v1/documents/{id}/parameters` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md#329-параметры-документа) |
-| `/api/v1/documents/{id}/versions` (`GET`) | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md#328-версии-документа) |
-| `/api/v1/documents/{id}/succession` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md#37-цепочка-преемственности) |
-| `/api/v1/documents/search` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md#31a-полнотекстовый-поиск-bm25) |
-| `/api/v1/documents/export` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md#311-экспорт) |
-| `/api/v1/documents/import` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md#312-массовый-импорт) |
-| `/api/v1/documents/check-uniqueness` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md#3210-проверить-уникальность-документа) |
-| `/api/v1/documents/{id}/status` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md#get-documentsdoc_idstatus) |
-| `/api/v1/documents/queue` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md#get-documentsqueue) |
-| `/api/v1/documents/{id}/errors` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md#get-documentsdoc_iderrors) |
-| `/api/v1/documents/{id}/versions` (`POST`) | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md#post-documentsdoc_idversions) |
-| `/api/v1/documents/{id}/reprocess` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md#post-documentsdoc_idreprocess) |
-| `/api/v1/documents/{id}/tasks` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md#get-documentsdoc_idtasks) |
-| `/api/v1/tasks/*` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md)² |
-| `/api/v1/drafts` (`GET`) | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md#группа-drafts) |
-| `/api/v1/drafts/{id}` (`GET`) | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md#43-get-registrydraftsdraft_id--полная-информация) |
-| `/api/v1/drafts/{id}/preview` (`GET`) | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md#44-get-registrydraftsdraft_idpreview--preview-метаданные) |
-| `/api/v1/drafts` (`POST`) | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md#post-drafts--загрузка-файла-создание-черновика) |
-| `/api/v1/drafts/{id}/preview` (`POST`) | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md#post-draftsdraft_idpreview) |
-| `/api/v1/drafts/{id}/preview/status` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md#get-draftsdraft_idpreviewstatus) |
-| `/api/v1/drafts/{id}/decide` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md#patch-draftsdraft_iddecide) |
-| `/api/v1/drafts/{id}/metadata` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md#patch-draftsdraft_idmetadata) |
-| `/api/v1/drafts/{id}` (`DELETE`) | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md#delete-draftsdraft_id) |
-| `/api/v1/drafts/{id}/tasks` | Orchestrator Service | `8081` | [orchestrator_service_api.md](orchestrator_service_api.md#get-draftsdraft_idtasks) |
-| `/api/v1/chat/*` | Query Service | `8083` | [query_service_api.md](query_service_api.md) |
-| `/api/v1/text/*` | Query Service | `8083` | [query_service_api.md](query_service_api.md) |
-| `/api/v1/registry/classifiers/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
-| `/api/v1/registry/terminology/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
-| `/api/v1/registry/common/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
-| `/api/v1/registry/documents/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
-| `/api/v1/registry/categories/*` | Registry Service | `8084` | [registry_service_api.md](registry_service_api.md) |
-| `/api/v1/system/health` | Gateway (собственный) | `8080` | — |
+| `/api/v1/auth/*` | Auth Service | `18082` | [auth_service_api.md](auth_service_api.md) |
+| `/api/v1/admin/*` | Auth Service | `18082` | [auth_service_api.md](auth_service_api.md) |
+| `/api/v1/documents` (`GET`, `PUT`, `PATCH`, `DELETE`) | Registry Service | `18084` | [registry_service_api.md](registry_service_api.md#группа-documents) |
+| `/api/v1/documents/{id}/sections` | Registry Service | `18084` | [registry_service_api.md](registry_service_api.md#321-секции-документа-полный-объект-для-rag-builder) |
+| `/api/v1/documents/{id}/pages/*` | Registry Service | `18084` | [registry_service_api.md](registry_service_api.md#322-страницы-документа) |
+| `/api/v1/documents/{id}/file` | Registry Service | `18084` | [registry_service_api.md](registry_service_api.md#326-файл-документа) |
+| `/api/v1/documents/{id}/history` | Registry Service | `18084` | [registry_service_api.md](registry_service_api.md#327-история-статусов) |
+| `/api/v1/documents/{id}/parameters` | Registry Service | `18084` | [registry_service_api.md](registry_service_api.md#329-параметры-документа) |
+| `/api/v1/documents/{id}/versions` (`GET`) | Registry Service | `18084` | [registry_service_api.md](registry_service_api.md#328-версии-документа) |
+| `/api/v1/documents/{id}/succession` | Registry Service | `18084` | [registry_service_api.md](registry_service_api.md#37-цепочка-преемственности) |
+| `/api/v1/documents/search` | Registry Service | `18084` | [registry_service_api.md](registry_service_api.md#31a-полнотекстовый-поиск-bm25) |
+| `/api/v1/documents/export` | Registry Service | `18084` | [registry_service_api.md](registry_service_api.md#311-экспорт) |
+| `/api/v1/documents/import` | Registry Service | `18084` | [registry_service_api.md](registry_service_api.md#312-массовый-импорт) |
+| `/api/v1/documents/check-uniqueness` | Registry Service | `18084` | [registry_service_api.md](registry_service_api.md#3210-проверить-уникальность-документа) |
+| `/api/v1/documents/{id}/status` | Orchestrator Service | `18081` | [orchestrator_service_api.md](orchestrator_service_api.md#get-documentsdoc_idstatus) |
+| `/api/v1/documents/queue` | Orchestrator Service | `18081` | [orchestrator_service_api.md](orchestrator_service_api.md#get-documentsqueue) |
+| `/api/v1/documents/{id}/errors` | Orchestrator Service | `18081` | [orchestrator_service_api.md](orchestrator_service_api.md#get-documentsdoc_iderrors) |
+| `/api/v1/documents/{id}/versions` (`POST`) | Orchestrator Service | `18081` | [orchestrator_service_api.md](orchestrator_service_api.md#post-documentsdoc_idversions) |
+| `/api/v1/documents/{id}/reprocess` | Orchestrator Service | `18081` | [orchestrator_service_api.md](orchestrator_service_api.md#post-documentsdoc_idreprocess) |
+| `/api/v1/documents/{id}/tasks` | Orchestrator Service | `18081` | [orchestrator_service_api.md](orchestrator_service_api.md#get-documentsdoc_idtasks) |
+| `/api/v1/tasks/*` | Orchestrator Service | `18081` | [orchestrator_service_api.md](orchestrator_service_api.md)² |
+| `/api/v1/drafts` (`GET`) | Registry Service | `18084` | [registry_service_api.md](registry_service_api.md#группа-drafts) |
+| `/api/v1/drafts/{id}` (`GET`) | Registry Service | `18084` | [registry_service_api.md](registry_service_api.md#43-get-registrydraftsdraft_id--полная-информация) |
+| `/api/v1/drafts/{id}/preview` (`GET`) | Registry Service | `18084` | [registry_service_api.md](registry_service_api.md#44-get-registrydraftsdraft_idpreview--preview-метаданные) |
+| `/api/v1/drafts` (`POST`) | Orchestrator Service | `18081` | [orchestrator_service_api.md](orchestrator_service_api.md#post-drafts--загрузка-файла-создание-черновика) |
+| `/api/v1/drafts/{id}/preview` (`POST`) | Orchestrator Service | `18081` | [orchestrator_service_api.md](orchestrator_service_api.md#post-draftsdraft_idpreview) |
+| `/api/v1/drafts/{id}/preview/status` | Orchestrator Service | `18081` | [orchestrator_service_api.md](orchestrator_service_api.md#get-draftsdraft_idpreviewstatus) |
+| `/api/v1/drafts/{id}/decide` | Orchestrator Service | `18081` | [orchestrator_service_api.md](orchestrator_service_api.md#patch-draftsdraft_iddecide) |
+| `/api/v1/drafts/{id}/metadata` | Orchestrator Service | `18081` | [orchestrator_service_api.md](orchestrator_service_api.md#patch-draftsdraft_idmetadata) |
+| `/api/v1/drafts/{id}` (`DELETE`) | Orchestrator Service | `18081` | [orchestrator_service_api.md](orchestrator_service_api.md#delete-draftsdraft_id) |
+| `/api/v1/drafts/{id}/tasks` | Orchestrator Service | `18081` | [orchestrator_service_api.md](orchestrator_service_api.md#get-draftsdraft_idtasks) |
+| `/api/v1/chat/*` | Query Service | `18083` | [query_service_api.md](query_service_api.md) |
+| `/api/v1/text/*` | Query Service | `18083` | [query_service_api.md](query_service_api.md) |
+| `/api/v1/registry/classifiers/*` | Registry Service | `18084` | [registry_service_api.md](registry_service_api.md) |
+| `/api/v1/registry/terminology/*` | Registry Service | `18084` | [registry_service_api.md](registry_service_api.md) |
+| `/api/v1/registry/common/*` | Registry Service | `18084` | [registry_service_api.md](registry_service_api.md) |
+| `/api/v1/registry/documents/*` | Registry Service | `18084` | [registry_service_api.md](registry_service_api.md) |
+| `/api/v1/registry/categories/*` | Registry Service | `18084` | [registry_service_api.md](registry_service_api.md) |
+| `/api/v1/system/health` | Gateway (собственный) | `18080` | — |
 | `/api/v1/analyse/*` | Analyse Service | `8089` | [analyse_service_api.md](analyse_service_api.md) |
-| `/api/v1/health` | Gateway (собственный) | `8080` | — |
-| `/api/v1/meridian/*` | Integration Service | `8085` | [integration_service_api.md](integration_service_api.md) |
-| `/api/v1/files/*` | Integration Service | `8085` | [integration_service_api.md](integration_service_api.md) |
-| `/api/v1/external/*` | Integration Service | `8085` | [integration_service_api.md](integration_service_api.md) |
+| `/api/v1/health` | Gateway (собственный) | `18080` | — |
+| `/api/v1/meridian/*` | Integration Service | `18085` | [integration_service_api.md](integration_service_api.md) |
+| `/api/v1/files/*` | Integration Service | `18085` | [integration_service_api.md](integration_service_api.md) |
+| `/api/v1/external/*` | Integration Service | `18085` | [integration_service_api.md](integration_service_api.md) |
 
 > **Разграничение документов и черновиков:** Чтение данных (GET) и редактирование (PUT, PATCH, DELETE) — Registry. Пайплайн и управление (POST для жизненного цикла, статус обработки, очередь, ошибки, связь с задачами) — Orchestrator. Подробнее — [Разграничение ответственности Orchestrator vs Registry](../guide.md#разграничение-ответственности-orchestrator-vs-registry).
 >
-> **URL-трансформация при маршрутизации в Registry:** Gateway преобразует пути при проксировании. Например, `GET /api/v1/documents/{id}` → `GET /api/v1/registry/documents/{id}` на Registry Service (порт `8084`). Аналогично для всех документов и черновиков, направляемых в Registry.
+> **URL-трансформация при маршрутизации в Registry:** Gateway преобразует пути при проксировании. Например, `GET /api/v1/documents/{id}` → `GET /api/v1/registry/documents/{id}` на Registry Service (порт `18084`). Аналогично для всех документов и черновиков, направляемых в Registry.
 >
 > **² Примечание:** Маршрут `/api/v1/tasks/*` — read-only для admin-ролей (`system_admin`, `knowledge_admin`).
 
@@ -175,8 +175,8 @@ Gateway объединяет API всех внутренних сервисов 
 ```mermaid
 sequenceDiagram
     participant UI as Web UI
-    participant GW as Gateway (:8080)
-    participant Orch as Orchestrator (:8081)
+    participant GW as Gateway (:18080)
+    participant Orch as Orchestrator (:18081)
 
     UI->>GW: POST /api/v1/drafts (JWT, file, Idempotency-Key)
     GW->>GW: CORS → RBAC (can_upload_documents) → Idempotency (cache miss)
@@ -371,7 +371,7 @@ sequenceDiagram
     participant User as Пользователь
     participant Nginx as Nginx (:443)
     participant UI as Web UI (BFF/SSR)
-    participant GW as Gateway (:8080)
+    participant GW as Gateway (:18080)
     participant Internal as Внутренний сервис
 
     User->>Nginx: GET / (открыть Web UI)
@@ -414,9 +414,9 @@ sequenceDiagram
 
 | Компонент | Назначение |
 |-----------|-----------|
-| Auth Service (:8082) | Валидация JWT-токенов, получение профиля пользователя и прав |
-| Orchestrator (:8081) | Маршрутизация запросов документов и мониторинга |
-| Query Service (:8083) | Маршрутизация чатов и текстового поиска |
-| Registry (:8084) | Маршрутизация справочников, терминологии и реестра |
+| Auth Service (:18082) | Валидация JWT-токенов, получение профиля пользователя и прав |
+| Orchestrator (:18081) | Маршрутизация запросов документов и мониторинга |
+| Query Service (:18083) | Маршрутизация чатов и текстового поиска |
+| Registry (:18084) | Маршрутизация справочников, терминологии и реестра |
 | PostgreSQL | Хранение данных пользователей (в production) |
 | Redis | Кеш иденпотентности (в production) |
