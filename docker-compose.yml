@@ -491,6 +491,7 @@ services:
       - "8081:8081"
     environment:
       <<: [*env-db, *env-minio, *env-auth, *env-service-urls]
+      DEBUG: "true"
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
@@ -545,6 +546,7 @@ services:
       - /proc:/host/proc:ro
     environment:
       <<: [*env-service-urls]
+      GATEWAY_LOG_LEVEL: "DEBUG"
       GATEWAY_MODE: real
       GATEWAY_HOST: 0.0.0.0
       GATEWAY_PORT: "8080"
