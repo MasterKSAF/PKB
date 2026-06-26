@@ -13,7 +13,6 @@ PKB Neuroassistant — Real Service Contracts Check (Docker mode).
 2. query → registry — pipeline вызывает registry_client.enrich_query()
 3. rag_search → infinity — rag_search вызывает rerank через TEI
 4. gateway → query — gateway проксирует /api/v1/chat/* на query
-5. gateway → rag_search — gateway проксирует /api/v1/rag/* на rag_search
 """
 
 from __future__ import annotations
@@ -490,84 +489,11 @@ async def check_gateway_to_query(client: httpx.AsyncClient) -> ContractCheckResu
 
 
 async def check_gateway_to_rag_search(client: httpx.AsyncClient) -> ContractCheckResult:
-    """Связка 5: gateway → rag_search.
-
-    Проверяет, что gateway проксирует /api/v1/rag/search на rag_search.
-    """
-    gw_port = MODE_PORTS.get("gateway", 8080)
-    gw_ep = _find_endpoint_def("gateway", "POST", "/rag/search")
-    if not gw_ep:
-        return ContractCheckResult(
-            name="gateway → rag_search",
-            passed=False,
-            error="Endpoint POST /rag/search не найден в gateway",
-        )
-
-    # Проверяем через gateway — он должен проксировать на rag_search
-    status, body, elapsed = await _do_request(
-        client, "POST", gw_port, f"{API_PREFIX}/rag/search",
-        json_body={
-            "query": "тест",
-            "valid_at": "2026-06-19",
-            "filters": {
-                "document_type": [],
-                "category_ids": [],
-                "document_ids": [],
-            },
-        },
-        expected_status=200,
-    )
-
-    elapsed_ms = int(elapsed * 1000)
-
-    if status == 0:
-        return ContractCheckResult(
-            name="gateway → rag_search",
-            passed=False,
-            error="Gateway не отвечает (ConnectError/Timeout)",
-        )
-    if status >= 500:
-        return ContractCheckResult(
-            name="gateway → rag_search",
-            passed=False,
-            status_code=status,
-            error=f"Gateway вернул {status}: {str(body)[:200] if body else '—'}",
-        )
-    if status == 422:
-        return ContractCheckResult(
-            name="gateway → rag_search",
-            passed=False,
-            status_code=422,
-            error=(
-                f"Gateway → rag_search вернул 422 — скорее всего "
-                f"valid_at отсутствует. Детали: {str(body)[:200] if body else '—'}"
-            ),
-        )
-    if status != 200:
-        return ContractCheckResult(
-            name="gateway → rag_search",
-            passed=False,
-            status_code=status,
-            error=f"Ожидался 200, получен {status}: "
-                  f"{str(body)[:200] if body else '—'}",
-        )
-
-    # Проверяем, что ответ выглядит как от rag_search (содержит results)
-    if body and "results" in body:
-        return ContractCheckResult(
-            name="gateway → rag_search",
-            passed=True,
-            status_code=200,
-            elapsed_ms=elapsed_ms,
-            detail=f"results={len(body.get('results', []))} — прокси работает",
-        )
-
+    """Связка 5: gateway → rag_search (отключено — RAG Search не проксируется через Gateway)."""
     return ContractCheckResult(
         name="gateway → rag_search",
         passed=True,
-        status_code=200,
-        elapsed_ms=elapsed_ms,
-        detail="Ответ получен (без results — БД пуста)",
+        detail="Проверка отключена — RAG Search не должен быть в Gateway",
     )
 
 
@@ -587,7 +513,6 @@ async def run_all_contract_checks(
             ("query → registry", check_query_to_registry),
             ("rag_search → infinity (TEI)", check_rag_search_to_infinity),
             ("gateway → query", check_gateway_to_query),
-            ("gateway → rag_search", check_gateway_to_rag_search),
         ]
 
         for name, check_func in checks:

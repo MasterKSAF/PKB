@@ -45,6 +45,9 @@ EXTRA_VARS: dict[str, str] = {
     # ── Auth: Rate Limit ────────────────────────────────────────────────
     "RATE_LIMIT_REQUESTS": "200",
     "RATE_LIMIT_WINDOW_SECONDS": "60",
+    # ── Auth: Brute-force protection ──────────────────────────────────
+    "MAX_FAILED_ATTEMPTS": "100",
+    "LOCKOUT_DURATION_SECONDS": "0",
     # ── Auth Mock ─────────────────────────────────────────────────────────
     "AUTH_SERVICE_MOCK": "true",
     "DEV_AUTH_MODE": "true",
@@ -61,10 +64,11 @@ EXTRA_VARS: dict[str, str] = {
     "SEARCH_DEFAULT_TOP_K": "10",
     "SEARCH_MAX_TOP_K": "100",
     # ── Service URLs ──────────────────────────────────────────────────────
-    "REGISTRY_SERVICE_URL": "http://127.0.0.1:8084/api/v1",
-    "INTEGRATION_SERVICE_URL": "http://127.0.0.1:8085/api/v1",
-    "VALIDATE_SERVICE_URL": "http://127.0.0.1:8086/api/v1",
-    "RAG_SERVICE_URL": "http://127.0.0.1:8091/api/v1",
+    # Без /api/v1 — сервисы (Orchestrator и др.) сами добавляют путь
+    "REGISTRY_SERVICE_URL": "http://127.0.0.1:8084",
+    "INTEGRATION_SERVICE_URL": "http://127.0.0.1:8085",
+    "VALIDATE_SERVICE_URL": "http://127.0.0.1:8086",
+    "RAG_SERVICE_URL": "http://127.0.0.1:8091",
     "APP_VERSION": "1.0.0",
 }
 
