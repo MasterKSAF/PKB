@@ -105,7 +105,7 @@ class Task(Base):
 
     # Trace ID for request tracing
     trace_id: Mapped[Optional[str]] = mapped_column(
-        String(36), nullable=True, index=True
+        String(64), nullable=True, index=True
     )
 
     # Created by (user who initiated the task)
