@@ -81,7 +81,7 @@ def _compute_sha256(content: bytes) -> str:
 
 
 @router.post(
-    "/",
+    "",
     response_model=DraftCreateResponse,
     status_code=status.HTTP_202_ACCEPTED,
     responses={

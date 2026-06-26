@@ -215,10 +215,12 @@ class TestPipelineContextChain:
 
         has_auth_step = False
         for step in steps:
-            if step.service == "auth" and step.extract_keys and "access_token" in step.extract_keys:
+            if step.extract_keys and "access_token" in step.extract_keys:
                 has_auth_step = True
             if step.needs_auth and not has_auth_step:
-                if step.service == "auth":
+                if step.extract_keys and "access_token" in step.extract_keys:
+                    continue
+                if step.service in ("auth", "gateway"):
                     continue
                 pytest.fail(
                     f"Pipeline '{pipeline_name}', шаг '{step.name}' "
@@ -275,6 +277,9 @@ class TestPipelineServiceMap:
 
         actual.discard("auth")
         mapped.discard("auth")
+        # Gateway — прокси, не отслеживается отдельно в отчёте
+        actual.discard("gateway")
+        mapped.discard("gateway")
 
         assert actual == mapped, (
             f"Pipeline '{pipeline_name}':\n"

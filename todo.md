@@ -1,31 +1,51 @@
-# Todo — ошибка 404 при загрузке документа
+# Todo — запуск системы + исправление ошибок загрузки черновиков
 
-## Диагноз
+## Исправлено
 
-**Симптом:** `GET /api/v1/drafts/draft-1782457434298-yfnxtlf943/tasks` → 404
+### 1. 307 redirect при POST /api/v1/drafts
+- **Причина:** роут `@router.post("/")` → FastAPI редиректил `/drafts` → `/drafts/`
+- **Файл:** `backend/orchestrator_service/app/api/v1/endpoints/drafts.py:83`
+- **Фикс:** `"/"` → `""`
+- **Тест:** `test_draft_creation_path_no_trailing_slash` — проверяет путь без слеша
 
-**Корень (UI — race condition):**
-1. `createLocalDraft()` → `createIdempotencyKey()` → `draft-{timestamp}-{random}` — локальный нечисловой ID
-2. Сразу выставляется `selectedDraftId = id`
-3. React ре-рендерит → `draftTasksQuery` видит `selectedGatewayDraftId = gatewayDraftId || id = '' || 'draft-xxx'` → запрос летит с нечисловым ID до того, как `uploadDraftFile` успел проставить `gatewayDraftId` от сервера
+### 2. Location с Docker-hostname утекал в браузер
+- **Причина:** Gateway проксировал 3xx ответы как есть
+- **Файл:** `backend/gateway_service/gateway/client.py:414-431`
+- **Фикс:** перезапись Location с внутреннего URL на Gateway
+- **Тест:** интеграционный `test_draft_upload_full_chain` — проверяет 202, не 307
 
-## Выполнено
+### 3. Неверные пути к Registry в оркестраторе
+- **Причина:** клиент Registry стучался `/registry/drafts` вместо `/api/v1/registry/drafts`
+- **Файл:** `backend/orchestrator_service/app/services/registry_client.py`
+- **Фикс:** все пути заменены на `/api/v1/registry/...`
+- **Тест:** интеграционный — проверяет 202 (не 404)
 
-### ✅ Gateway — валидация draft_id
-`backend/gateway_service/gateway/routers.py`:
-- Добавлена проверка `_INVALID_DRAFT_PATH_RE` в `gateway_catch_all`
-- Если путь матчит `/api/v1/drafts/{нечисловой_id}/...` → возвращается 400 `INVALID_DRAFT_ID` вместо 404 `NOT_FOUND`
-- Роуты (`client.py`) остались с `\d+` — без изменений
+### 4. trace_id varchar(32) не вмещал UUID (36 символов)
+- **Причина:** `String(32)` в модели Task
+- **Файл:** `backend/orchestrator_service/app/models/pipeline.py:103`
+- **Фикс:** `String(32)` → `String(36)` + ALTER TABLE
+- **Тест:** интеграционный — проверяет 202 (не 500)
 
-### ✅ Gateway — безопасность приведения к int
-`backend/gateway_service/gateway/main.py`:
-- В `CorrelationHeadersMiddleware` добавлен try/except вокруг `int(match.group(1))` для draft_id
+### 5. Пайплайн `orchestrator_draft_lifecycle` переведён на Gateway
+- **Файл:** `backend/service_checker/pipelines/orchestrator_draft_lifecycle.py`
+- Все 11 шагов через `service="gateway"`, `port=8080`
+- Пути создания черновиков без трейлинг-слеша
+- MinIO не трогали (не идёт через Gateway)
 
-### ✅ Service Checker — добавлены пропущенные эндпоинты
-`backend/service_checker/services/gateway.py`: +22 эндпоинта (draft tasks, preview/status, metadata, task status/steps, документы через Gateway transform, очередь/статус/ошибки документов)
+### 6. Тесты
+- `tests/test_integration_draft_upload.py` — 2 интеграционных теста
+- `tests/test_pipeline_orchestrator_draft_lifecycle.py` — 9 юнит-тестов
+- `tests/test_pipeline_service_consistency.py` — адаптированы под Gateway (2 фикса)
 
-## Осталось (UI — передано разработчику)
+### 7. Gateway — защита от будущих утечек Location
+- `backend/gateway_service/gateway/client.py` — перехват 3xx, замена Location
 
-### Задача. UI — убрать запрос тасков для локального draft_id
-- [ ] `KnowledgeProcessing.tsx` — в `draftTasksQuery.enabled` добавить `Boolean(selectedDraft?.gatewayDraftId)` — запрос только когда сервер проставил числовой ID
-- [ ] `KnowledgeProcessing.tsx` — `selectedGatewayDraftId` не должен fallback на локальный `id`
+### 8. Infinity — CPU-версия (экономия ~3.2 ГБ)
+- `docker-compose.yml` — `latest` → `latest-cpu`, `mem_limit: 8g` → `4g`
+
+### 9. start_web_real.bat
+- Новый батник для запуска production-стека из корневого docker-compose.yml
+
+## Осталось (передано в задачу агенту)
+- Перевести остальные 14 пайплайнов на Gateway
+- См. `backend/service_checker/tasks/translate_pipelines_to_gateway.md`
