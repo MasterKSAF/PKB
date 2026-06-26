@@ -56,14 +56,14 @@ docker compose up -d --build
 echo -e "  ${GREEN}All containers started.${NC}"
 echo ""
 
-# ── 3. Ожидание инициализации ───────────────────────────────────────────────
-echo -e "${YELLOW}[3/4] Waiting for services to initialize (30s)...${NC}"
-sleep 30
-echo ""
-
-# ── 4. Метка времени деплоя ────────────────────────────────────────────────────
+# ── 3. Метка времени деплоя ────────────────────────────────────────────────────
 date -u +"%Y-%m-%dT%H:%M:%SZ" > .deployed
 echo -e "  ${GREEN}Deploy timestamp saved.${NC}"
+echo ""
+
+# ── 4. Ожидание инициализации ───────────────────────────────────────────────
+echo -e "${YELLOW}[3/4] Waiting for services to initialize (10s)...${NC}"
+sleep 10
 echo ""
 
 # ── 5. Статус и health ──────────────────────────────────────────────────────
