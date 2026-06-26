@@ -21,7 +21,7 @@ from services import SERVICE_REGISTRY, MODE_PORTS
 
 
 # Внешние сервисы (не в SERVICE_REGISTRY, но используются пайплайнами)
-EXTERNAL_SERVICES = {"minio", "tei"}
+EXTERNAL_SERVICES = {"gateway", "minio", "tei"}
 ALL_KNOWN_SERVICES = set(SERVICE_REGISTRY.keys()) | EXTERNAL_SERVICES
 
 # Валидные HTTP-коды, используемые в expected_status

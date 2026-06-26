@@ -12,8 +12,8 @@ class TestOrchestratorDocumentVersionsPipeline:
         p = OrchestratorDocumentVersionsPipeline()
         assert p.name == "orchestrator_document_versions"
         assert p.description
-        assert "orchestrator" in p.services
-        assert "registry" in p.services
+        assert "gateway" in p.services
+        assert len(p.services) == 1
 
     def test_build_steps_count(self):
         p = OrchestratorDocumentVersionsPipeline()
@@ -24,10 +24,10 @@ class TestOrchestratorDocumentVersionsPipeline:
         p = OrchestratorDocumentVersionsPipeline()
         steps = p.build_steps(PipelineContext())
         expected_names = [
-            "Аутентификация",
-            "Создание документа в Registry",
-            "Загрузка новой версии документа",
-            "Проверка списка версий",
+            "Аутентификация (через Gateway)",
+            "Создание документа в Registry (через Gateway)",
+            "Загрузка новой версии документа (через Gateway)",
+            "Проверка списка версий (через Gateway)",
         ]
         actual = [s.name for s in steps]
         assert actual == expected_names, f"Порядок шагов:\n{actual}"
@@ -36,7 +36,7 @@ class TestOrchestratorDocumentVersionsPipeline:
         p = OrchestratorDocumentVersionsPipeline()
         steps = p.build_steps(PipelineContext())
         auth = steps[0]
-        assert auth.service == "auth"
+        assert auth.service == "gateway"
         assert auth.method == "POST"
         assert auth.path == "/api/v1/auth/token"
         assert auth.expected_status == 200
@@ -46,7 +46,7 @@ class TestOrchestratorDocumentVersionsPipeline:
         p = OrchestratorDocumentVersionsPipeline()
         steps = p.build_steps(PipelineContext())
         reg = steps[1]
-        assert reg.service == "registry"
+        assert reg.service == "gateway"
         assert reg.method == "POST"
         assert reg.path == "/api/v1/registry/documents"
         assert reg.expected_status == {201, 409}
@@ -57,7 +57,7 @@ class TestOrchestratorDocumentVersionsPipeline:
         p = OrchestratorDocumentVersionsPipeline()
         steps = p.build_steps(PipelineContext())
         ver = steps[2]
-        assert ver.service == "orchestrator"
+        assert ver.service == "gateway"
         assert ver.method == "POST"
         assert "versions" in ver.path
         assert ver.expected_status == {200, 201, 404}
@@ -70,7 +70,7 @@ class TestOrchestratorDocumentVersionsPipeline:
         p = OrchestratorDocumentVersionsPipeline()
         steps = p.build_steps(PipelineContext())
         lst = steps[3]
-        assert lst.service == "orchestrator"
+        assert lst.service == "gateway"
         assert lst.method == "GET"
         assert "versions" in lst.path
         assert lst.expected_status == {200, 404}

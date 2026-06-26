@@ -44,33 +44,33 @@ class OrchestratorDraftDeletePipeline(PipelineDef):
 
     name = "orchestrator_draft_delete"
     description = "Удаление черновика Orchestrator (создание → удаление → проверка 404)"
-    services = ["auth", "orchestrator"]
+    services = ["gateway"]
 
     def build_steps(self, context: PipelineContext) -> List[PipelineStep]:
         steps: List[PipelineStep] = []
         ts = datetime.now().strftime("%Y%m%d%H%M%S%f")
 
-        # ── Шаг 1: Аутентификация ────────────────────────────────────
+        # ── Шаг 1: Аутентификация (через Gateway) ─────────────────────
         steps.append(PipelineStep(
-            name="Аутентификация",
-            service="auth",
+            name="Аутентификация (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/auth/token",
-            port=8082,
+            port=8080,
             body=TEST_CREDENTIALS,
             expected_status=200,
             extract_keys=["access_token", "refresh_token"],
             check=check_json_field("access_token", str),
         ))
 
-        # ── Шаг 2: Создание черновика ────────────────────────────────
+        # ── Шаг 2: Создание черновика (через Gateway) ─────────────────
         pdf_name = f"delete-draft-{ts}.pdf"
         steps.append(PipelineStep(
-            name="Создание черновика",
-            service="orchestrator",
+            name="Создание черновика (через Gateway)",
+            service="gateway",
             method="POST",
-            path="/api/v1/drafts/",
-            port=8081,
+            path="/api/v1/drafts",  # без слеша — проверка, что нет 307
+            port=8080,
             form_body={
                 "document_key": f"delete-key-{ts}",
                 "title": f"Delete тест {ts}",
@@ -86,26 +86,26 @@ class OrchestratorDraftDeletePipeline(PipelineDef):
             on_error=_on_draft_failed,
         ))
 
-        # ── Шаг 3: Статус задачи ─────────────────────────────────────
+        # ── Шаг 3: Статус задачи (через Gateway) ──────────────────────
         steps.append(PipelineStep(
-            name="Статус задачи (longpoll)",
-            service="orchestrator",
+            name="Статус задачи (через Gateway)",
+            service="gateway",
             method="GET",
             path="/api/v1/tasks/{task_id}/status",
-            port=8081,
+            port=8080,
             expected_status=200,
             check=check_json_field("status", str),
             needs_auth=True,
             skip_if=_draft_skipped,
         ))
 
-        # ── Шаг 4: Детали черновика ──────────────────────────────────
+        # ── Шаг 4: Детали черновика (через Gateway) ───────────────────
         steps.append(PipelineStep(
-            name="Детали черновика",
-            service="orchestrator",
+            name="Детали черновика (через Gateway)",
+            service="gateway",
             method="GET",
             path="/api/v1/drafts/{draft_id}",
-            port=8081,
+            port=8080,
             expected_status=200,
             check=check_json_fields({
                 "draft_id": int,
@@ -117,25 +117,25 @@ class OrchestratorDraftDeletePipeline(PipelineDef):
             skip_if=_draft_skipped,
         ))
 
-        # ── Шаг 5: Удаление черновика ────────────────────────────────
+        # ── Шаг 5: Удаление черновика (через Gateway) ─────────────────
         steps.append(PipelineStep(
-            name="Удаление черновика",
-            service="orchestrator",
+            name="Удаление черновика (через Gateway)",
+            service="gateway",
             method="DELETE",
             path="/api/v1/drafts/{draft_id}",
-            port=8081,
+            port=8080,
             expected_status={200, 204},
             needs_auth=True,
             skip_if=_draft_skipped,
         ))
 
-        # ── Шаг 6: Проверка 404 после удаления ───────────────────────
+        # ── Шаг 6: Проверка 404 после удаления (через Gateway) ───────
         steps.append(PipelineStep(
-            name="Проверка 404 после удаления",
-            service="orchestrator",
+            name="Проверка 404 после удаления (через Gateway)",
+            service="gateway",
             method="GET",
             path="/api/v1/drafts/{draft_id}",
-            port=8081,
+            port=8080,
             expected_status=404,
             needs_auth=True,
             skip_if=_draft_skipped,

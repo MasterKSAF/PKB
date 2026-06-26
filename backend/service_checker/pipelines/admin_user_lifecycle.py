@@ -50,7 +50,7 @@ class AdminUserLifecyclePipeline(PipelineDef):
 
     name = "admin_user_lifecycle"
     description = "Admin управление пользователем (создание → работа → аудит → деактивация)"
-    services = ["auth", "query"]
+    services = ["gateway"]
 
     def build_steps(self, context: PipelineContext) -> List[PipelineStep]:
         """Построить 10 шагов пайплайна admin_user_lifecycle."""
@@ -59,26 +59,26 @@ class AdminUserLifecyclePipeline(PipelineDef):
         test_email = f"pipeline-user-{ts}@test.com"
         test_password = "Pipeline1234!"
 
-        # ── Шаг 1: Аутентификация admin ───────────────────────────────
+        # ── Шаг 1: Аутентификация admin (через Gateway) ────────────────
         steps.append(PipelineStep(
-            name="Аутентификация admin",
-            service="auth",
+            name="Аутентификация admin (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/auth/token",
-            port=8082,
+            port=8080,
             body=TEST_CREDENTIALS,
             expected_status=200,
             extract_keys=["access_token", "refresh_token"],
             check=check_json_field("access_token", str),
         ))
 
-        # ── Шаг 2: Создание нового пользователя ──────────────────────
+        # ── Шаг 2: Создание нового пользователя (через Gateway) ───────
         steps.append(PipelineStep(
-            name="Создание пользователя",
-            service="auth",
+            name="Создание пользователя (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/admin/users",
-            port=8082,
+            port=8080,
             body={
                 "email": test_email,
                 "full_name": "Pipeline Test User",
@@ -91,26 +91,26 @@ class AdminUserLifecyclePipeline(PipelineDef):
             check=check_json_field("user_id", str),
         ))
 
-        # ── Шаг 3: Список пользователей ──────────────────────────────
+        # ── Шаг 3: Список пользователей (через Gateway) ───────────────
         steps.append(PipelineStep(
-            name="Список пользователей",
-            service="auth",
+            name="Список пользователей (через Gateway)",
+            service="gateway",
             method="GET",
             path="/api/v1/admin/users",
-            port=8082,
+            port=8080,
             params={"page": 1, "page_size": 20},
             expected_status=200,
             needs_auth=True,
             check=check_json_field("users", list),
         ))
 
-        # ── Шаг 4: Аутентификация нового пользователя ─────────────────
+        # ── Шаг 4: Аутентификация нового пользователя (через Gateway) ──
         steps.append(PipelineStep(
-            name="Аутентификация нового пользователя",
-            service="auth",
+            name="Аутентификация нового пользователя (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/auth/token",
-            port=8082,
+            port=8080,
             body={
                 "username": test_email,
                 "password": test_password,
@@ -120,13 +120,13 @@ class AdminUserLifecyclePipeline(PipelineDef):
             check=check_json_field("access_token", str),
         ))
 
-        # ── Шаг 5: Создание чат-сессии новым пользователем ───────────
+        # ── Шаг 5: Создание чат-сессии новым пользователем (через Gateway) ─
         steps.append(PipelineStep(
-            name="Создание чат-сессии (новый пользователь)",
-            service="query",
+            name="Создание чат-сессии (новый пользователь, через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/chat/sessions",
-            port=8083,
+            port=8080,
             body={
                 "title": f"User pipeline сессия {ts}",
                 "document_ids": [],  # QS-3: пустой список документов
@@ -141,21 +141,13 @@ class AdminUserLifecyclePipeline(PipelineDef):
             needs_auth=True,
         ))
 
-        # ── Шаг 6: Отправка сообщения ────────────────────────────────
-        # Используем новый токен пользователя (user_access_token),
-        # поэтому needs_auth работает с auth_token из runner.
-        # runner сам подхватит access_token из ctx при первом needs_auth шаге.
-        # Но runner запоминает auth_token только после auth-шага.
-        # Шаг 4 вернул user_access_token в контекст, но runner его не подхватил.
-        # Нужно принудительно указать, что шаги 5-7 используют user_access_token.
-        # Пока нет механизма переключения токена — используем admin токен для query.
-        # Query service авторизует по JWT, admin тоже может отправлять сообщения.
+        # ── Шаг 6: Отправка сообщения (через Gateway) ─────────────────
         steps.append(PipelineStep(
-            name="Отправка сообщения (новый пользователь)",
-            service="query",
+            name="Отправка сообщения (новый пользователь, через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/chat/sessions/{session_id}/messages",
-            port=8083,
+            port=8080,
             body={
                 "text": "Тестовое сообщение от pipeline пользователя",
                 "content": "Тестовое сообщение от pipeline пользователя",
@@ -166,74 +158,74 @@ class AdminUserLifecyclePipeline(PipelineDef):
             needs_auth=True,
         ))
 
-        # ── Шаг 7: Получение истории чата ────────────────────────────
+        # ── Шаг 7: Получение истории чата (через Gateway) ─────────────
         steps.append(PipelineStep(
-            name="Получение истории чата",
-            service="query",
+            name="Получение истории чата (через Gateway)",
+            service="gateway",
             method="GET",
             path="/api/v1/chat/sessions/{session_id}/messages",
-            port=8083,
+            port=8080,
             expected_status=200,
             check=check_json_field("messages", list),
             needs_auth=True,
         ))
 
-        # ── Шаг 8: AU-3 Брутфорс-защита: 5 неудачных попыток ────────
+        # ── Шаг 8: AU-3 Брутфорс-защита: 5 неудачных попыток (через Gateway) ─
         _wrong_creds = {"username": test_email, "password": "WrongPass1!"}
         for attempt in range(5):
             steps.append(PipelineStep(
-                name=f"Брутфорс попытка {attempt + 1}/5",
-                service="auth",
+                name=f"Брутфорс попытка {attempt + 1}/5 (через Gateway)",
+                service="gateway",
                 method="POST",
                 path="/api/v1/auth/token",
-                port=8082,
+                port=8080,
                 body=_wrong_creds,
                 expected_status={401, 429, 423},  # 401=wrong, 429=rate, 423=locked
             ))
         # После 5 неудачных — проверяем что аккаунт заблокирован (423) или rate-limit (429)
         steps.append(PipelineStep(
-            name="Проверка блокировки после 5 неудач",
-            service="auth",
+            name="Проверка блокировки после 5 неудач (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/auth/token",
-            port=8082,
+            port=8080,
             body=_wrong_creds,
             expected_status={401, 429, 423},  # AU-3: 401 если защита не реализована
         ))
 
-        # ── Шаг 10: Аудит — список действий (admin) ──────────────────
+        # ── Шаг 10: Аудит — список действий (admin, через Gateway) ────
         steps.append(PipelineStep(
-            name="Журнал аудита",
-            service="auth",
+            name="Журнал аудита (через Gateway)",
+            service="gateway",
             method="GET",
             path="/api/v1/admin/audit",
-            port=8082,
+            port=8080,
             params={"page": 1, "page_size": 10},
             expected_status=200,
             needs_auth=True,
             check=check_json_field("events", list),
         ))
 
-        # ── Шаг 11: Деактивация пользователя (admin) ─────────────────
+        # ── Шаг 11: Деактивация пользователя (admin, через Gateway) ────
         steps.append(PipelineStep(
-            name="Деактивация пользователя",
-            service="auth",
+            name="Деактивация пользователя (через Gateway)",
+            service="gateway",
             method="DELETE",
             path="/api/v1/admin/users/{user_id}",
-            port=8082,
+            port=8080,
             expected_status={200, 307},
             needs_auth=True,
             check=check_json_field("is_active", bool),
         ))
 
-        # ── Шаг 12: Попытка аутентификации деактивированного пользователя ──
+        # ── Шаг 12: Попытка аутентификации деактивированного пользователя (через Gateway) ─
         # Ожидаем 401 — пользователь больше не может войти
         steps.append(PipelineStep(
-            name="Проверка 401 после деактивации",
-            service="auth",
+            name="Проверка 401 после деактивации (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/auth/token",
-            port=8082,
+            port=8080,
             body={
                 "username": test_email,
                 "password": test_password,

@@ -33,7 +33,7 @@ class RegistryLifecyclePipeline(PipelineDef):
 
     name = "registry_lifecycle"
     description = "CRUD + импорт классификаторов и терминов"
-    services = ["auth", "registry"]
+    services = ["gateway"]
 
     def build_steps(self, context: PipelineContext) -> List[PipelineStep]:
         """Построить 12 шагов пайплайна registry_lifecycle."""
@@ -42,26 +42,26 @@ class RegistryLifecyclePipeline(PipelineDef):
         # Уникальный timestamp для тестовых данных (предотвращает 409)
         ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
 
-        # ── Шаг 1: Аутентификация ────────────────────────────────────
+        # ── Шаг 1: Аутентификация (через Gateway) ─────────────────────
         steps.append(PipelineStep(
-            name="Аутентификация",
-            service="auth",
+            name="Аутентификация (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/auth/token",
-            port=8082,
+            port=8080,
             body=TEST_CREDENTIALS,
             expected_status=200,
             extract_keys=["access_token", "refresh_token"],
             check=check_json_field("access_token", str),
         ))
 
-        # ── Шаг 2: Профиль пользователя ──────────────────────────────
+        # ── Шаг 2: Профиль пользователя (через Gateway) ───────────────
         steps.append(PipelineStep(
-            name="Профиль пользователя",
-            service="auth",
+            name="Профиль пользователя (через Gateway)",
+            service="gateway",
             method="GET",
             path="/api/v1/auth/me",
-            port=8082,
+            port=8080,
             expected_status=200,
             check=check_json_fields({
                 "user_id": str,
@@ -71,13 +71,13 @@ class RegistryLifecyclePipeline(PipelineDef):
             needs_auth=True,
         ))
 
-        # ── Шаг 3: Создать классификатор ─────────────────────────────
+        # ── Шаг 3: Создать классификатор (через Gateway) ──────────────
         steps.append(PipelineStep(
-            name="Создать классификатор",
-            service="registry",
+            name="Создать классификатор (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/registry/classifiers",
-            port=8084,
+            port=8080,
             body={
                 "classifier_system": "MKS",
                 "code": f"99.{ts[-6:]}",
@@ -90,39 +90,39 @@ class RegistryLifecyclePipeline(PipelineDef):
             needs_auth=True,
         ))
 
-        # ── Шаг 4: Список классификаторов ────────────────────────────
+        # ── Шаг 4: Список классификаторов (через Gateway) ─────────────
         steps.append(PipelineStep(
-            name="Список классификаторов",
-            service="registry",
+            name="Список классификаторов (через Gateway)",
+            service="gateway",
             method="GET",
             path="/api/v1/registry/classifiers",
-            port=8084,
+            port=8080,
             params={"page": 1, "page_size": 10},
             expected_status=200,
             check=check_json_field("data", list),
             needs_auth=True,
         ))
 
-        # ── Шаг 5: Получить классификатор ────────────────────────────
+        # ── Шаг 5: Получить классификатор (через Gateway) ─────────────
         steps.append(PipelineStep(
-            name="Получить классификатор",
-            service="registry",
+            name="Получить классификатор (через Gateway)",
+            service="gateway",
             method="GET",
             path="/api/v1/registry/classifiers/{classifier_code}",
-            port=8084,
+            port=8080,
             params={"classifier_system": "MKS"},
             expected_status=200,
             check=check_json_field("data", dict),
             needs_auth=True,
         ))
 
-        # ── Шаг 6: Обновить классификатор ────────────────────────────
+        # ── Шаг 6: Обновить классификатор (через Gateway) ─────────────
         steps.append(PipelineStep(
-            name="Обновить классификатор",
-            service="registry",
+            name="Обновить классификатор (через Gateway)",
+            service="gateway",
             method="PUT",
             path="/api/v1/registry/classifiers/{classifier_code}",
-            port=8084,
+            port=8080,
             params={"classifier_system": "MKS"},
             body={"full_name": "Обновлённый pipeline классификатор"},
             expected_status=200,
@@ -130,13 +130,13 @@ class RegistryLifecyclePipeline(PipelineDef):
             needs_auth=True,
         ))
 
-        # ── Шаг 7: Частичное обновление классификатора ───────────────
+        # ── Шаг 7: Частичное обновление классификатора (через Gateway) ─
         steps.append(PipelineStep(
-            name="Частичное обновление классификатора",
-            service="registry",
+            name="Частичное обновление классификатора (через Gateway)",
+            service="gateway",
             method="PATCH",
             path="/api/v1/registry/classifiers/{classifier_code}",
-            port=8084,
+            port=8080,
             params={"classifier_system": "MKS"},
             body={"status": "inactive"},
             expected_status=200,
@@ -144,25 +144,25 @@ class RegistryLifecyclePipeline(PipelineDef):
             needs_auth=True,
         ))
 
-        # ── Шаг 8: Удалить классификатор ─────────────────────────────
+        # ── Шаг 8: Удалить классификатор (через Gateway) ──────────────
         steps.append(PipelineStep(
-            name="Удалить классификатор",
-            service="registry",
+            name="Удалить классификатор (через Gateway)",
+            service="gateway",
             method="DELETE",
             path="/api/v1/registry/classifiers/{classifier_code}",
-            port=8084,
+            port=8080,
             params={"classifier_system": "MKS"},
             expected_status=200,
             needs_auth=True,
         ))
 
-        # ── Шаг 9: Создать термин ──────────────────────────────────
+        # ── Шаг 9: Создать термин (через Gateway) ─────────────────────
         steps.append(PipelineStep(
-            name="Создать термин",
-            service="registry",
+            name="Создать термин (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/registry/terminology",
-            port=8084,
+            port=8080,
             body={
                 "raw_term": f"Pipeline тест {ts}",
                 "standard_term": f"Pipeline тест {ts}",
@@ -176,25 +176,25 @@ class RegistryLifecyclePipeline(PipelineDef):
             needs_auth=True,
         ))
 
-        # ── Шаг 10: Нормализация термина ───────────────────────────
+        # ── Шаг 10: Нормализация термина (через Gateway) ──────────────
         steps.append(PipelineStep(
-            name="Нормализация термина",
-            service="registry",
+            name="Нормализация термина (через Gateway)",
+            service="gateway",
             method="GET",
             path="/api/v1/registry/terminology/normalize",
-            port=8084,
+            port=8080,
             params={"term": "Pipeline тест"},
             expected_status=200,
             needs_auth=True,
         ))
 
-        # ── Шаг 11: Обновить термин ──────────────────────────────────
+        # ── Шаг 11: Обновить термин (через Gateway) ───────────────────
         steps.append(PipelineStep(
-            name="Обновить термин",
-            service="registry",
+            name="Обновить термин (через Gateway)",
+            service="gateway",
             method="PUT",
             path="/api/v1/registry/terminology/{term_id}",
-            port=8084,
+            port=8080,
             body={"definition": "Обновлённое определение из pipeline"},
             expected_status=200,
             check=check_json_field("data", dict),

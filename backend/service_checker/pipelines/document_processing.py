@@ -70,7 +70,7 @@ class DocumentProcessingPipeline(PipelineDef):
 
     name = "document_processing"
     description = "Полный цикл обработки документа"
-    services = ["auth", "minio", "parser", "converter_validator", "registry", "rag_builder", "rag_search"]
+    services = ["gateway", "minio"]
     TEST_PDF_KEY = TEST_PDF_KEY
     TEST_PDF_PATH = TEST_PDF_PATH
     TEST_TASK_ID = TEST_TASK_ID
@@ -82,13 +82,13 @@ class DocumentProcessingPipeline(PipelineDef):
         pdf_path = Path(self.TEST_PDF_PATH)
         pdf_bytes = pdf_path.read_bytes()
 
-        # -- Шаг 1: Аутентификация (получаем токен для Registry) --
+        # -- Шаг 1: Аутентификация (через Gateway) --
         steps.append(PipelineStep(
-            name="Аутентификация",
-            service="auth",
+            name="Аутентификация (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/auth/token",
-            port=8082,
+            port=8080,
             body=TEST_CREDENTIALS,
             expected_status=200,
             extract_keys=["access_token", "refresh_token"],
@@ -134,13 +134,13 @@ class DocumentProcessingPipeline(PipelineDef):
             check=_check_minio_upload,
         ))
 
-        # -- Шаг 3: Запуск парсинга (PS-5: mode=full) --
+        # -- Шаг 3: Запуск парсинга (через Gateway) --
         steps.append(PipelineStep(
-            name="Запуск парсинга",
-            service="parser",
+            name="Запуск парсинга (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/parser/process",
-            port=8087,
+            port=8080,
             body={
                 "task_id": self.TEST_TASK_ID,
                 "draft_id": 1,  # PS-3: обязательный draft_id
@@ -153,24 +153,24 @@ class DocumentProcessingPipeline(PipelineDef):
             check=check_json_field("task_id", int),
         ))
 
-        # -- Шаг 4: Статус парсинга (longpoll) --
+        # -- Шаг 4: Статус парсинга (longpoll, через Gateway) --
         steps.append(PipelineStep(
-            name="Статус парсинга (longpoll)",
-            service="parser",
+            name="Статус парсинга (longpoll, через Gateway)",
+            service="gateway",
             method="GET",
             path=f"/api/v1/parser/process/{self.TEST_TASK_ID}/status",
-            port=8087,
+            port=8080,
             expected_status=200,
             check=check_json_field("status", str),
         ))
 
-        # -- Шаг 5: Результат парсинга --
+        # -- Шаг 5: Результат парсинга (через Gateway) --
         steps.append(PipelineStep(
-            name="Результат парсинга",
-            service="parser",
+            name="Результат парсинга (через Gateway)",
+            service="gateway",
             method="GET",
             path=f"/api/v1/parser/process/{self.TEST_TASK_ID}/result",
-            port=8087,
+            port=8080,
             expected_status=200,
             retry_on={409},
             retry_delay=2.0,
@@ -178,13 +178,13 @@ class DocumentProcessingPipeline(PipelineDef):
             check=_save_parser_result,
         ))
 
-        # -- Шаг 5a: Предпросмотр метаданных (CV-3) --
+        # -- Шаг 5a: Предпросмотр метаданных (через Gateway) --
         steps.append(PipelineStep(
-            name="Предпросмотр метаданных",
-            service="converter_validator",
+            name="Предпросмотр метаданных (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/converter/preview",
-            port=8086,
+            port=8080,
             body={
                 "task_id": str(self.TEST_TASK_ID),
                 "version_id": "1",
@@ -197,14 +197,13 @@ class DocumentProcessingPipeline(PipelineDef):
             }),
         ))
 
-        # -- Шаг 5b (P1F-10): Валидация метаданных через /validate/metadata --
-        # Вычисление бизнес-ключа после извлечения метаданных
+        # -- Шаг 5b (P1F-10): Валидация метаданных (через Gateway) --
         steps.append(PipelineStep(
-            name="Валидация метаданных (бизнес-ключ)",
-            service="converter_validator",
+            name="Валидация метаданных (бизнес-ключ, через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/validate/metadata",
-            port=8086,
+            port=8080,
             body={
                 "title": "Тестовый документ",
                 "doc_code": "TEST-P1F-10",
@@ -219,13 +218,13 @@ class DocumentProcessingPipeline(PipelineDef):
             }),
         ))
 
-        # -- Шаг 5b (RG): Проверка уникальности документа в Registry --
+        # -- Шаг 5b (RG): Проверка уникальности документа (через Gateway) --
         steps.append(PipelineStep(
-            name="Проверка уникальности документа",
-            service="registry",
+            name="Проверка уникальности документа (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/registry/documents/import",
-            port=8084,
+            port=8080,
             body={
                 "title": "Тестовый документ",
                 "doc_code": "TEST-P1F-10",
@@ -236,13 +235,13 @@ class DocumentProcessingPipeline(PipelineDef):
             needs_auth=True,
         ))
 
-        # -- Шаг 6: Конвертация JSON (CV-9: с version_id) --
+        # -- Шаг 6: Конвертация JSON (через Gateway) --
         steps.append(PipelineStep(
-            name="Конвертация JSON",
-            service="converter_validator",
+            name="Конвертация JSON (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/converter/convert",
-            port=8086,
+            port=8080,
             body={
                 "task_id": str(self.TEST_TASK_ID),
                 "version_id": "1",  # CV-9: version_id обязателен
@@ -252,13 +251,13 @@ class DocumentProcessingPipeline(PipelineDef):
             check=_check_converter,
         ))
 
-        # -- Шаг 7: Валидация документа (CV-8) --
+        # -- Шаг 7: Валидация документа (через Gateway) --
         steps.append(PipelineStep(
-            name="Валидация документа",
-            service="converter_validator",
+            name="Валидация документа (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/validate/document",
-            port=8086,
+            port=8080,
             body={
                 "task_id": str(self.TEST_TASK_ID),
                 "version_id": "1",
@@ -271,13 +270,13 @@ class DocumentProcessingPipeline(PipelineDef):
             }),
         ))
 
-        # -- Шаг 8: Сохранение документа в Registry --
+        # -- Шаг 8: Сохранение документа в Registry (через Gateway) --
         steps.append(PipelineStep(
-            name="Сохранение документа в Registry",
-            service="registry",
+            name="Сохранение документа в Registry (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/registry/documents",
-            port=8084,
+            port=8080,
             body={
                 "title": f"Тестовый документ pipeline {int(time.time())}",
                 "doc_code": f"PIPELINE-TEST-{int(time.time())}",
@@ -292,25 +291,25 @@ class DocumentProcessingPipeline(PipelineDef):
             extract_keys=["doc_id"],
         ))
 
-        # -- Шаг 7a (P1F-4/RG-10): Проверка preview_snapshot в документе --
+        # -- Шаг 7a (P1F-4/RG-10): Проверка preview_snapshot (через Gateway) --
         steps.append(PipelineStep(
-            name="Проверка preview_snapshot в документе",
-            service="registry",
+            name="Проверка preview_snapshot в документе (через Gateway)",
+            service="gateway",
             method="GET",
             path="/api/v1/registry/documents/{doc_id}",
-            port=8084,
+            port=8080,
             expected_status=200,
             check=check_json_field("data.preview_snapshot", (dict, type(None)), optional=True),
             needs_auth=True,
         ))
 
-        # -- Шаг 8: Построение чанков + индексация RAG Builder --
+        # -- Шаг 8: Построение чанков + индексация (через Gateway) --
         steps.append(PipelineStep(
-            name="Построение чанков и индексация",
-            service="rag_builder",
+            name="Построение чанков и индексация (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/rag/build",
-            port=8090,
+            port=8080,
             body={
                 "document_id": TEST_DOC_ID,
                 "sections": [{
@@ -328,13 +327,13 @@ class DocumentProcessingPipeline(PipelineDef):
             needs_auth=True,  # RAG Builder требует JWT (не отражено в docs)
         ))
 
-        # -- Шаг 9: Поиск по индексу RAG Search (RS-6: без top_k, с valid_at) --
+        # -- Шаг 9: Поиск по индексу RAG Search (через Gateway) --
         steps.append(PipelineStep(
-            name="Поиск по индексу RAG Search",
-            service="rag_search",
+            name="Поиск по индексу RAG Search (через Gateway)",
+            service="gateway",
             method="POST",
             path="/api/v1/rag/search",
-            port=8091,
+            port=8080,
             body={
                 "query": "тестовый документ",
                 "valid_at": "2026-06-19",
