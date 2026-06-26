@@ -394,3 +394,38 @@ def test_create_classifier_cross_system_parent(client):
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "CROSS_SYSTEM_PARENT"
 
+
+def test_validate_classifiers_success(client):
+    # Create seed classifier
+    client.post("/api/v1/registry/classifiers", json={"classifier_system": "MKS", "code": "47.020", "full_name": "Hull Construction"})
+
+    payload = {
+        "classification": {
+            "mks_oks_code": "47.020",
+            "okstu_code": None,
+            "udk_code": "629.5.021"
+        }
+    }
+    response = client.post("/api/v1/registry/classifiers/validate", json=payload)
+    assert response.status_code == 200
+    res = response.json()["data"]
+    assert res["mks_status"] == "CONFIRMED"
+    assert res["mks_display_name"] == "Hull Construction"
+    assert res["okstu_status"] == "NOT_USED"
+    assert res["udk_valid"] is False
+    assert res["overall_status"] == "invalid"
+
+
+def test_validate_classifiers_validation_error(client):
+    # Test missing classification key
+    response = client.post("/api/v1/registry/classifiers/validate", json={})
+    assert response.status_code == 400
+    res = response.json()["error"]
+    assert res["code"] == "VALIDATION_ERROR"
+    assert "validation_errors" in res["details"]
+    errors = res["details"]["validation_errors"]
+    assert len(errors) == 1
+    assert errors[0]["field"] == "classification"
+    assert errors[0]["reason"] == "missing"
+
+

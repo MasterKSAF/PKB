@@ -9,7 +9,7 @@ from api.v1.dependencies.database import get_db
 from api.v1.crud import document as document_crud, classifier as classifier_crud, terminology as terminology_crud
 from api.v1.models import Classifier, ClassifierPending, Document, Terminology
 from api.v1.models.registry_service_enums import RegistryServiceEnums
-from api.v1.schemas import DocumentSchema, ClassifierSchema, TerminologySchema
+from api.v1.schemas import DocumentSchema, ClassifierSchema, TerminologySchema, ClassifierValidateRequest
 from api.v1.schemas.response import SingleResponse, ListResponse, PaginationMeta, ErrorResponse
 from services.logger import log_event, log_payload
 
@@ -1130,25 +1130,20 @@ def reject_classifier_pending(
 
 @routes.post('/registry/classifiers/validate')
 def validate_classifiers(
-    payload: dict,
+    payload: ClassifierValidateRequest,
     db: Session = Depends(get_db),
 ):
-    log_event('INFO', '/registry/classifiers/validate/', None, log_payload(payload))
+    log_event('INFO', '/registry/classifiers/validate/', None, log_payload(payload.model_dump()))
     """
     Docs: docs/api/registry_service_api.md §1.12 - Валидация классификации
     """
     try:
-        classification = payload.get('classification')
-        if not isinstance(classification, dict):
-            raise HTTPException(
-                status_code=422,
-                detail={'error': {'code': 'VALIDATION_ERROR', 'message': 'classification object is required'}},
-            )
+        classification = payload.classification.model_dump()
         return {'data': classifier_crud.validate_classification(db, classification)}
     except HTTPException:
         raise
     except Exception as e:
-        log_event('ERROR', '/registry/classifiers/validate/', None, log_payload(payload), str(e))
+        log_event('ERROR', '/registry/classifiers/validate/', None, log_payload(payload.model_dump()), str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
