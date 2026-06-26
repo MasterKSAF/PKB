@@ -137,6 +137,6 @@ def setup_logging() -> None:
     # Отключаем лишнее логирование от внешних библиотек
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
-    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    logging.getLogger("uvicorn.access").setLevel(logging.INFO)
 
     gw_logger.info("Structured JSON logging started", extra={"level": "INFO"})

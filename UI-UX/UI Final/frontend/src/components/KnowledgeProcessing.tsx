@@ -900,7 +900,11 @@ const mapGatewayDraftRecordToUi = (payload: any, fallback?: Partial<DraftItem>):
     note: fallback?.note ?? payload?.message ?? '',
     gatewayTaskId: String(payload?.task_id ?? payload?.taskId ?? fallback?.gatewayTaskId ?? ''),
     gatewayVersionId: String(payload?.version_id ?? payload?.versionId ?? fallback?.gatewayVersionId ?? ''),
-    gatewayDraftId: String(payload?.draft_id ?? payload?.draftId ?? fallback?.gatewayDraftId ?? ''),
+    gatewayDraftId: (() => {
+      const raw = payload?.draft_id ?? payload?.draftId ?? fallback?.gatewayDraftId ?? '';
+      const str = String(raw);
+      return /^\d+$/.test(str) ? str : '';
+    })(),
     gatewayDocumentKey: String(payload?.document_key ?? payload?.documentKey ?? fallback?.gatewayDocumentKey ?? ''),
     gatewayFileHashSha256: String(payload?.file_hash_sha256 ?? payload?.fileHashSha256 ?? fallback?.gatewayFileHashSha256 ?? ''),
     gatewayTitleHashSha256: String(payload?.title_hash_sha256 ?? payload?.titleHashSha256 ?? fallback?.gatewayTitleHashSha256 ?? ''),
@@ -1115,7 +1119,7 @@ export const KnowledgeProcessing: React.FC = () => {
   const draftTasksQuery = useQuery({
     queryKey: ['gateway-draft-tasks', workMode, selectedGatewayDraftId],
     queryFn: () => tasksApi.forDraft(selectedGatewayDraftId),
-    enabled: workMode === 'prod' && activeTab === 'knowledgeProcessing' && Boolean(selectedDraft?.gatewayDraftId),
+    enabled: workMode === 'prod' && activeTab === 'knowledgeProcessing' && /^\d+$/.test(selectedDraft?.gatewayDraftId ?? ''),
     staleTime: 10_000,
     refetchInterval:
       workMode === 'prod' &&
@@ -1175,7 +1179,7 @@ export const KnowledgeProcessing: React.FC = () => {
   const refreshGatewayDraftDetails = async (draftId: string, fallbackDraft?: DraftItem | null) => {
     const draft = fallbackDraft ?? getSelectedDraft(draftId);
     const gatewayDraftId = getGatewayDraftId(draft);
-    if (!draft || !gatewayDraftId) return;
+    if (!draft || !gatewayDraftId || !/^\d+$/.test(gatewayDraftId)) return;
 
     try {
       let details = await draftsApi.get(gatewayDraftId);
@@ -1362,11 +1366,12 @@ export const KnowledgeProcessing: React.FC = () => {
           handleRunDraftChecks(id, { ...draft, ...patch });
         } catch (error: any) {
           failedCount += 1;
+          console.error('[handleCreateDraftFromFiles] upload failed:', error);
           updateDraft(id, {
             status: 'failed',
             progress: 100,
             note: 'Сервер не принял файл. Черновик помечен как failed.',
-            gatewayErrorMessage: error?.message ?? 'Не удалось отправить файл на сервер.',
+            gatewayErrorMessage: error?.message ?? String(error) ?? 'Не удалось отправить файл на сервер.',
           });
           setNotice(`Черновик «${title}» не удалось отправить на сервер.`);
         }
@@ -2414,7 +2419,13 @@ export const KnowledgeProcessing: React.FC = () => {
                   </Box>
                 </Stack>
                 <Chip
-                  label={selectedDraft ? `draft_id ${workspaceDraft.gatewayDraftId || workspaceDraft.id}` : 'черновик не выбран'}
+                  label={
+                    selectedDraft
+                      ? workspaceDraft.gatewayDraftId
+                        ? `draft_id ${workspaceDraft.gatewayDraftId}`
+                        : 'draft_id не назначен'
+                      : 'черновик не выбран'
+                  }
                   size="small"
                   variant="outlined"
                   sx={{ flexShrink: 0 }}
@@ -2617,7 +2628,7 @@ export const KnowledgeProcessing: React.FC = () => {
                         }}
                       >
                         {[
-                          ['draft_id', workspaceDraft.gatewayDraftId || workspaceDraft.id],
+                          ['draft_id', workspaceDraft.gatewayDraftId || 'не назначен'],
                           ['task_id', workspaceDraft.gatewayTaskId],
                           ['version_id', workspaceDraft.gatewayVersionId],
                           ['document_key', workspaceDraft.gatewayDocumentKey],

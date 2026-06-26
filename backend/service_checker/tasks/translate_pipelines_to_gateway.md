@@ -57,8 +57,4 @@
 
 ## Проверка
 
-Запустить все тесты:
-```bash
-cd backend/service_checker
-python -m pytest tests/ -v
-```
+reckeck.bat проходит все проверки на докере

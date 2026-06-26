@@ -171,6 +171,29 @@ class HTTPClientConfig(BaseSettings):
     )
 
 
+class MinioConfig(BaseSettings):
+    """MinIO / S3-compatible storage configuration."""
+
+    MINIO_ENDPOINT: str = Field(
+        default="minio:9000", description="MinIO endpoint (host:port)"
+    )
+    MINIO_ACCESS_KEY: str = Field(
+        default="minioadmin", description="MinIO access key"
+    )
+    MINIO_SECRET_KEY: str = Field(
+        default="minioadmin", description="MinIO secret key"
+    )
+    MINIO_BUCKET: str = Field(
+        default="documents", description="MinIO bucket for document files"
+    )
+    MINIO_IMAGE_BUCKET: str = Field(
+        default="images", description="MinIO bucket for images"
+    )
+    MINIO_SECURE: bool = Field(
+        default=False, description="Use HTTPS for MinIO"
+    )
+
+
 class Settings(BaseSettings):
     """Main application settings."""
 
@@ -192,10 +215,12 @@ class Settings(BaseSettings):
     )
     JWT_ALGORITHM: str = "HS256"
 
-    # Database
+    # Database — обязательный параметр, задаётся в .env или переменной окружения.
+    # Для разработки: sqlite+aiosqlite:///./orchestrator.db
+    # Для production: postgresql+asyncpg://user:pass@host/db
     DATABASE_URL: str = Field(
-        default="sqlite+aiosqlite:///./orchestrator.db",
-        description="Async SQLAlchemy database URL",
+        ...,
+        description="Async SQLAlchemy database URL. Must be set explicitly.",
     )
 
     # Redis
@@ -221,6 +246,12 @@ class Settings(BaseSettings):
     pipeline: PipelineConfig = Field(
         default_factory=PipelineConfig,
         description="Pipeline execution parameters",
+    )
+
+    # MinIO Storage Configuration
+    minio: MinioConfig = Field(
+        default_factory=MinioConfig,
+        description="MinIO / S3-compatible storage configuration",
     )
 
     # HTTP Client Configuration

@@ -26,7 +26,7 @@ def test_build_messages_order_and_cache_friendly():
         {"role": "assistant", "content": "первый ответ"},
     ]
     chunks = [_chunk()]
-    messages = pipeline._build_messages(history, chunks, "новый вопрос")
+    messages = pipeline._build_messages(None, history, chunks, "новый вопрос")
 
     assert messages[0]["role"] == "system"
     assert messages[1] == history[0]
@@ -34,6 +34,22 @@ def test_build_messages_order_and_cache_friendly():
     assert messages[-1]["role"] == "user"
     assert "новый вопрос" in messages[-1]["content"]
     assert "ГОСТ 1" in messages[-1]["content"]
+
+
+def test_build_messages_inserts_summary_before_history():
+    history = [{"role": "user", "content": "вопрос"}]
+    messages = pipeline._build_messages("краткое резюме", history, [_chunk()], "новый")
+
+    assert messages[0]["role"] == "system"
+    assert messages[1]["role"] == "system"
+    assert "краткое резюме" in messages[1]["content"]
+    assert messages[2] == history[0]
+
+
+def test_clean_content_strips_citation_markers():
+    raw = "Толщина 12 мм %[document_id:1]% %[section_id:2]%."
+    assert pipeline._clean_content("assistant", raw) == "Толщина 12 мм."
+    assert pipeline._clean_content("user", raw) == raw
 
 
 @pytest.mark.asyncio
@@ -61,12 +77,13 @@ async def test_complete_sends_cache_key_and_params(monkeypatch):
     monkeypatch.setattr(s, "LLM_API_KEY", "test-key")
 
     msgs = [{"role": "user", "content": "вопрос"}]
-    result = await llm_client.complete(msgs, cache_key="42")
+    result = await llm_client.complete(msgs, cache_key="42", max_tokens=512)
 
     assert result == "ответ"
     assert captured["payload"]["user"] == "42"
     assert captured["payload"]["model"] == "deepseek-chat"
     assert captured["payload"]["messages"] == msgs
+    assert captured["payload"]["max_tokens"] == 512
     assert captured["auth"] == "Bearer test-key"
 
 

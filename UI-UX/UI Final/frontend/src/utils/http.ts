@@ -244,8 +244,18 @@ function appendFormValue(form: FormData, key: string, value: unknown) {
 }
 
 async function calculateFileSha256(file: File) {
-  const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
-  return Array.from(new Uint8Array(digest))
+  if (typeof crypto !== 'undefined' && crypto.subtle) {
+    const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+    return Array.from(new Uint8Array(digest))
+      .map((byte) => byte.toString(16).padStart(2, '0'))
+      .join('');
+  }
+  // crypto.subtle недоступен в небезопасном контексте (HTTP).
+  // Сервер сам вычисляет хеш файла, нам хеш нужен только для documentKey.
+  // Генерируем случайную строку как fallback.
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes)
     .map((byte) => byte.toString(16).padStart(2, '0'))
     .join('');
 }
@@ -1248,7 +1258,7 @@ function mapGatewayDraftRecord(payload: any) {
 
   return {
     ...data,
-    draft_id: data.draft_id ?? data.id,
+    draft_id: data.draft_id,
     task_id: data.task_id ?? data.taskId,
     version_id: data.version_id ?? data.versionId,
     file_key: data.file_key ?? data.fileKey,
@@ -1692,6 +1702,15 @@ export const searchApi = {
   },
 };
 
+const isNumericDraftId = (draftId: string): boolean => /^\d+$/.test(draftId);
+
+/** @internal Кидает ошибку, если draftId нечисловой */
+function requireNumericDraftId(draftId: string, method: string): asserts draftId is string {
+  if (!isNumericDraftId(draftId)) {
+    throw new Error(`draftsApi.${method}: draft_id «${draftId}» не является числом — запрос не отправлен.`);
+  }
+}
+
 export const draftsApi = {
   create: async (file: File, input: DraftCreateInput = {}) => {
     const form = new FormData();
@@ -1743,18 +1762,22 @@ export const draftsApi = {
     return items.map((item: any) => mapGatewayDraftRecord(item));
   },
   get: async (draftId: string) => {
+    requireNumericDraftId(draftId, 'get');
     const response = await gatewayRequest<any>(() => apiClient.get(`/drafts/${draftId}`));
     return mapGatewayDraftRecord(response.data);
   },
   getPreview: async (draftId: string) => {
+    requireNumericDraftId(draftId, 'getPreview');
     const response = await gatewayRequest<any>(() => apiClient.get(`/drafts/${draftId}/preview`));
     return mapGatewayDraftRecord(response.data);
   },
   startPreview: async (draftId: string) => {
+    requireNumericDraftId(draftId, 'startPreview');
     const response = await gatewayRequest<any>(() => apiClient.post(`/drafts/${draftId}/preview`));
     return response.data;
   },
   waitPreview: async (draftId: string, longpoll = 15) => {
+    requireNumericDraftId(draftId, 'waitPreview');
     const response = await gatewayRequest<any>(() =>
       apiClient.get(`/drafts/${draftId}/preview/status`, {
         params: { longpoll },
@@ -1763,10 +1786,12 @@ export const draftsApi = {
     return response.data;
   },
   updateMetadata: async (draftId: string, metadataOverrides: DraftMetadataOverrides) => {
+    requireNumericDraftId(draftId, 'updateMetadata');
     const response = await gatewayRequest<any>(() => apiClient.patch(`/drafts/${draftId}/metadata`, metadataOverrides));
     return mapGatewayDraftRecord(response.data);
   },
   decide: async (draftId: string, actionOrInput: DraftDecisionAction | DraftDecisionInput, comment?: string) => {
+    requireNumericDraftId(draftId, 'decide');
     const input: DraftDecisionInput =
       typeof actionOrInput === 'string'
         ? { action: actionOrInput, comment }
@@ -1782,6 +1807,7 @@ export const draftsApi = {
     return response.data;
   },
   delete: async (draftId: string) => {
+    requireNumericDraftId(draftId, 'delete');
     const response = await gatewayRequest<any>(() => apiClient.delete(`/drafts/${draftId}`));
     return response.data;
   },

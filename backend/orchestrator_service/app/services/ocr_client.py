@@ -24,7 +24,7 @@ class OCRServiceClient(ServiceClient):
         self, method: str, endpoint: str, default_mock: Dict[str, Any], **kwargs
     ) -> Dict[str, Any]:
         """Generate mock OCR responses."""
-        if endpoint == "/ocr/process" and method == "POST":
+        if endpoint == "/api/v1/ocr/process" and method == "POST":
             request_data = kwargs.get("json", {})
             file_key = request_data.get("file_key", "file-mock")
             mode = request_data.get("mode", "full")
@@ -69,7 +69,7 @@ class OCRServiceClient(ServiceClient):
                 }
             }
 
-        if endpoint == "/ocr/engines" and method == "GET":
+        if endpoint == "/api/v1/ocr/engines" and method == "GET":
             return {
                 "engines": [
                     {
@@ -94,10 +94,11 @@ class OCRServiceClient(ServiceClient):
         return default_mock
 
     async def process(
-        self, file_key: str, draft_id: int, mode: str = "full", max_pages: Optional[int] = None
+        self, task_id: int, file_key: str, draft_id: int, mode: str = "full", max_pages: Optional[int] = None
     ) -> Dict[str, Any]:
         """Process a file with OCR (mode=preview|full)."""
         body = OcrProcessRequest(
+            task_id=task_id,
             file_key=file_key,
             draft_id=draft_id,
             mode=mode,
@@ -105,7 +106,7 @@ class OCRServiceClient(ServiceClient):
         )
         return await self.call(
             "POST",
-            "/ocr/process",
+            "/api/v1/ocr/process",
             request_model=OcrProcessRequest,
             mock_response={"data": {}},
             json=body.model_dump(exclude_none=True),
@@ -113,4 +114,4 @@ class OCRServiceClient(ServiceClient):
 
     async def get_engines(self) -> Dict[str, Any]:
         """Get available OCR engines."""
-        return await self.call("GET", "/ocr/engines", mock_response={"engines": []})
+        return await self.call("GET", "/api/v1/ocr/engines", mock_response={"engines": []})

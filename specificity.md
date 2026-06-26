@@ -65,3 +65,27 @@ query_service.pipeline.run_pipeline()
 **Профилактика:**
 - Определять роуты без слеша — `@router.post("")`, а не `@router.post("/")`
 - При добавлении нового сервиса проверить, не утекают ли внутренние URL наружу
+
+### F4. Нечисловой draft_id в gatewayDraftId — 400 Bad Request
+
+**Симптом:** `GET /api/v1/drafts/draft-{timestamp}-{random}/tasks → 400 (INVALID_DRAFT_ID)`.
+
+**Причина:** `gatewayDraftId` получает нечисловое значение (локальный id `draft-{timestamp}-{random}`), когда сервер возвращает `draft_id` в нечисловом формате или через fallback-цепочку в `mapGatewayDraftRecordToUi`.
+
+**Фикс (четыре уровня защиты):**
+1. `mapGatewayDraftRecord` — `draft_id: data.draft_id ?? data.id` заменено на `draft_id: data.draft_id` (веб не подменяет id сервера)
+2. `mapGatewayDraftRecordToUi` — санитизация `gatewayDraftId`: если не число → `""`
+3. Все методы `draftsApi` (get, getPreview, startPreview, waitPreview, updateMetadata, decide, delete) — `requireNumericDraftId` бросает ошибку до отправки запроса
+4. `draftTasksQuery.enabled` и `refreshGatewayDraftDetails` — проверка `/^\\d+$/` вместо `Boolean()`
+
+**Вывод:** Любой новый метод API, принимающий `draftId`, должен валидировать числовой формат.
+
+### F5. crypto.subtle недоступен в HTTP — падает загрузка черновиков
+
+**Симптом:** `TypeError: Cannot read properties of undefined (reading 'digest')` при загрузке файла черновика на http://сервер:3300. В консоли нет ошибок API.
+
+**Причина:** `crypto.subtle.digest()` (Web Crypto API) доступен только в **secure contexts** (HTTPS, localhost). На продакшене по HTTP `crypto.subtle` — `undefined`.
+
+**Фикс:** `calculateFileSha256` в `http.ts` — проверка `crypto.subtle`; если его нет, хеш генерируется через `crypto.getRandomValues` (доступен всегда). Сервер сам вычисляет реальный хеш файла, локальный хеш нужен только для `documentKey`.
+
+**Профилактика:** Любое использование `crypto.subtle` должно иметь fallback для HTTP.

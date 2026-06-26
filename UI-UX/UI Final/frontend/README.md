@@ -28,8 +28,25 @@ http://127.0.0.1:3300
 
 Docker:
 
+> **Важно:** `docker compose up` (без `--build`) запускает существующий образ и **не компилирует** изменения в коде.
+> Новые правки применяются только после пересборки образа.
+
 ```powershell
+# Пересборка + запуск (рекомендуется при каждом изменении кода)
 docker compose up --build
+```
+
+```powershell
+# Или по шагам:
+docker compose down
+docker compose build --no-cache
+docker compose up -d
+```
+
+Автоматическая пересборка при изменении файлов (требует Docker Compose v2.22+):
+
+```powershell
+docker compose up --watch
 ```
 
 Проверка:

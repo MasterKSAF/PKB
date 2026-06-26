@@ -21,7 +21,7 @@ class ConverterValidatorClient(ServiceClient):
     async def _generate_mock(
         self, method: str, endpoint: str, default_mock: Dict[str, Any], **kwargs
     ) -> Dict[str, Any]:
-        if endpoint == "/convert/preview" and method == "POST":
+        if endpoint == "/api/v1/converter/preview" and method == "POST":
             return {
                 "data": {
                     "task_id": "c-mock-001",
@@ -34,7 +34,7 @@ class ConverterValidatorClient(ServiceClient):
                     },
                 }
             }
-        if endpoint == "/convert/process" and method == "POST":
+        if endpoint == "/api/v1/converter/convert" and method == "POST":
             return {
                 "data": {
                     "task_id": "c-mock-002",
@@ -43,10 +43,10 @@ class ConverterValidatorClient(ServiceClient):
                     "parameters": {"thickness": "12mm"},
                 }
             }
-        if endpoint.startswith("/convert/") and "status" in endpoint and method == "GET":
+        if endpoint.startswith("/api/v1/converter/") and "status" in endpoint and method == "GET":
             return {
                 "data": {
-                    "task_id": endpoint.split("/")[2],
+                    "task_id": endpoint.split("/")[4],
                     "status": "completed",
                     "progress": 100,
                 }
@@ -57,7 +57,7 @@ class ConverterValidatorClient(ServiceClient):
         """Start preview conversion."""
         return await self.call(
             "POST",
-            "/convert/preview",
+            "/api/v1/converter/preview",
             mock_response={"data": {}},
             json={**data, "max_pages": max_pages},
         )
@@ -66,7 +66,7 @@ class ConverterValidatorClient(ServiceClient):
         """Start full conversion."""
         return await self.call(
             "POST",
-            "/convert/process",
+            "/api/v1/converter/convert",
             mock_response={"data": {}},
             json=data,
         )
@@ -75,6 +75,6 @@ class ConverterValidatorClient(ServiceClient):
         """Get converter task status."""
         return await self.call(
             "GET",
-            f"/convert/{task_id}/status",
+            f"/api/v1/converter/{task_id}/status",
             mock_response={"data": {}},
         )

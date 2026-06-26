@@ -137,9 +137,9 @@ class ChatInferencePipeline(PipelineDef):
             needs_auth=True,
         ))
 
-        # ── Шаг 5: Поиск RAG Search (через Gateway) ────────────────────
+        # ── Шаг 5: Поиск RAG Search ──────────────────────────────────────
         steps.append(PipelineStep(
-            name="Поиск RAG Search (напрямую)",
+            name="Поиск RAG Search",
             service="rag_search",
             method="POST",
             path="/api/v1/rag/search",

@@ -33,15 +33,19 @@ async def lifespan(app: FastAPI):
         },
     )
     async with engine.begin() as conn:
-        # Ensure pipeline schema exists (for pipeline.tasks, pipeline.task_steps, pipeline.draft_notifications)
-        try:
-            await conn.execute(text("CREATE SCHEMA IF NOT EXISTS pipeline"))
-        except Exception:
+        # Ensure pipeline schema exists
+        if settings.DATABASE_URL.startswith("sqlite"):
             # SQLite: attach in-memory database as pipeline schema
             try:
                 await conn.execute(text("ATTACH DATABASE ':memory:' AS pipeline"))
             except Exception:
                 pass  # already attached
+        else:
+            # PostgreSQL: create schema if not exists
+            try:
+                await conn.execute(text("CREATE SCHEMA IF NOT EXISTS pipeline"))
+            except Exception:
+                pass  # non-fatal
         # Create all tables if they don't exist
         await conn.run_sync(Base.metadata.create_all)
     # Initialize OpenTelemetry

@@ -26,7 +26,17 @@
 Выбран вариант B (опрос БД) вместо Redis Pub/Sub для простоты.
 При появлении Redis в инфраструктуре можно перейти на Вариант A.
 
-### 1.5. Валидация данных на границе service client
+### 1.5. Все ID-колонки — BigInteger (64-bit)
+Первичные ключи (`id`) и внешние ключи (`task_id`, `draft_id`, `document_id`,
+`version_id`) во всех моделях (`Task`, `TaskStep`, `DraftNotification`) —
+`BigInteger`. В PostgreSQL это `BIGINT` (int8), в SQLite — `INTEGER` (64-bit).
+
+Для PK-колонок используется `_BIGINT_PK = BigInteger().with_variant(Integer, "sqlite")`,
+потому что SQLite требует ровно `INTEGER` для `AUTOINCREMENT` — `BIGINT` не подходит.
+FK-колонки (`task_id`, `draft_id`, `document_id`, `version_id`) — просто `BigInteger`,
+автоинкремент им не нужен.
+
+### 1.6. Валидация данных на границе service client
 Все запросы к внешним сервисам проходят через `ServiceClient.call()`.
 Там добавлены два уровня защиты:
 1. **Pydantic request_model** — валидация структуры, если схема передана
@@ -100,21 +110,17 @@ LLM-ответы проверяются на корректность форма
 **Статус:** Спецификация требует обновления, но это не блокирует разработку.
 Код соответствует `docs/database/db_diagrams.md` и `docs/pipelines/*`.
 
-### 2.2. `id` моделей — Integer, не BigInteger
-В SQLite `Integer` и `BigInteger` эквивалентны (оба — INTEGER).
-Для PostgreSQL в production нужно убедиться, что миграции создают BIGINT.
-
-### 2.3. `file_key` в `approve_draft` — исправлен `UnboundLocalError`
+### 2.2. `file_key` в `approve_draft` — исправлен `UnboundLocalError`
 При `full_completed=True` переменная `file_key` была не определена вне блока `if not task.full_completed:`,
 что вызывало `UnboundLocalError`. Исправлено: инициализация `file_key` вынесена до условного оператора.
 
-### 2.4. Код не синхронизирован с новыми API-контрактами RAG (20.06)
+### 2.3. Код не синхронизирован с новыми API-контрактами RAG (20.06)
 Документация (`docs/api/rag_builder_service_api.md`, `rag_search_service_api.md`) обновлена под RS-6/RS-7, но код оркестратора ещё использует старые контракты:
 - `requests.py`: `RagIndexRequest.chunks` вместо `sections`, `RagSearchRequest` содержит `top_k`/`search_type`.
 - `rag_client.py`: эндпоинт `/rag/index` вместо `/rag/build`, старая структура ответа.
 - `citation_validator.py`: проверяет `idx >= 1` (1-based), а спецификация требует 0-based `[0, len(sources))`.
 
-### 2.5. Прокси drafts в оркестраторе для совместимости (23.06, обновлено)
+### 2.4. Прокси drafts в оркестраторе для совместимости (23.06, обновлено)
 Оркестратор добавляет прокси GET /drafts/{id} и PATCH /drafts/{id}/metadata.
 
 **Причина:** чекер ожидает эти эндпоинты от оркестратора. Registry остаётся source of truth.
@@ -125,7 +131,7 @@ LLM-ответы проверяются на корректность форма
 - `GET /api/v1/drafts` (list) — не добавлен, остаётся в Registry.
 - `GET /api/v1/documents/{id}/tasks` — endpoint в orchestrator для связи документа с задачами пайплайна.
 
-### 2.6. GET /documents/* в оркестраторе — лишние эндпоинты (22.06)
+### 2.5. GET /documents/* в оркестраторе — лишние эндпоинты (22.06)
 В `app/api/v1/endpoints/documents.py` находилось ~700 LOC мок-эндпоинтов для чтения документов (list, get, status, file, history, errors, parameters, queue, pages/*, versions, approve, delete). Эти операции — зона `registry-service` (см. `docs/api/registry_service_api.md`, группа `documents`).
 
 **Причина появления:** исторически оркестратор проектировался как прокси, но позже был перепроектирован на draft-first с Registry как источником правды. GET-эндпоинты остались как неиспользуемый код.
@@ -143,29 +149,41 @@ LLM-ответы проверяются на корректность форма
 - `tests/integration/test_pipeline_formation.py` — 8 тестов (PipelineOrchestrator + DB + mocks)
 - `tests/integration/test_pipeline_preview.py` — 6 тестов (preview phase: API + orchestrator)
 
-### 3.2. Сериализация JSONB для SQLite
+### 3.2. DATABASE_URL — обязательный параметр (без default)
+`DATABASE_URL` не имеет значения по умолчанию. Запуск без него вызывает
+`RuntimeError` с инструкцией. SQLite допустим только при явном указании
+(локальная разработка / тесты). Production использует PostgreSQL.
+`aiosqlite` вынесен в тестовые зависимости (requirements.txt).
+
+### 3.3. Сериализация JSONB для SQLite
 SQLite не поддерживает JSONB нативно. Текущая реализация использует `sqlalchemy.JSON`,
 который корректно работает через SQLAlchemy. Для PostgreSQL заменить на
 `sqlalchemy.dialects.postgresql.JSONB`.
 
-### 3.3. Celery задачи используют `_run_async`
+### 3.4. Celery задачи используют `_run_async`
 В `app/tasks/pipeline_formation.py` используется `_run_async` для запуска async-кода
 из синхронных Celery-задач. Это временное решение — в production Celery-задачи
 должны быть полностью async (Celery 6+ поддерживает async задачи).
 
-### 3.4. Исправлен `UnboundLocalError` в `approve_draft`
+### 3.5. Исправлен `UnboundLocalError` в `approve_draft`
 В `app/core/pipeline/orchestrator.py` метод `approve_draft`:
 - При `task.full_completed=True` переменная `file_key` была не инициализирована,
   но использовалась при создании full_converter/registry_creation шагов.
 - **Исправление:** инициализация `file_key` вынесена до условного блока.
 
-### 3.5. Тесты test_tasks.py (2 теста) — detail wrapper FastAPI
+### 3.6. Тесты test_tasks.py (2 теста) — detail wrapper FastAPI
 `test_get_task_status_not_found` — проверяет `"error" in data`, но FastAPI
 оборачивает HTTPException.detail в `{"detail": ...}`.
 `test_get_task_status_without_auth` — в mock-режиме auth не блокирует, но
 эндпоинт возвращает 404, а не 200.
 
-### 3.6. Longpoll в тестах — дефолт 15с
+### 3.7. metadata_overrides вливается в doc_payload через update
+`approve_draft` получает `metadata_overrides` и делает
+`doc_payload.update(metadata_overrides)`, а не передаёт их как
+вложенный объект. Поля (`title`, `doc_code` и др.) становятся
+частью payload напрямую.
+
+### 3.8. Longpoll в тестах — дефолт 15с
 	В эндпоинте `GET /drafts/{id}/preview/status` параметр `longpoll` по
 	умолчанию равен 15 секундам. Тесты без явного `longpoll=0` ждут таймаута.
 	Исправлено в `test_drafts.py` через `params={"longpoll": 0}`.

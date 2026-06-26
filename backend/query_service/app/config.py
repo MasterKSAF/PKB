@@ -25,7 +25,9 @@ class Settings:
     LLM_TEMPERATURE: float = float(os.getenv("LLM_TEMPERATURE", "0.2"))
     LLM_MAX_TOKENS: int = int(os.getenv("LLM_MAX_TOKENS", "8196"))
     LLM_TOP_P: float = float(os.getenv("LLM_TOP_P", "0.95"))
-    LLM_HISTORY_LIMIT: int = int(os.getenv("LLM_HISTORY_LIMIT", "10"))
+    LLM_CONTEXT_TOKEN_BUDGET: int = int(os.getenv("LLM_CONTEXT_TOKEN_BUDGET", "6000"))
+    LLM_SUMMARY_MAX_TOKENS: int = int(os.getenv("LLM_SUMMARY_MAX_TOKENS", "1024"))
+    LLM_RECENT_KEEP_MESSAGES: int = int(os.getenv("LLM_RECENT_KEEP_MESSAGES", "4"))
 
     OTEL_EXPORTER_OTLP_ENDPOINT: str = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "signoz-otel-collector:4317")
 

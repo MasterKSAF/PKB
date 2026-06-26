@@ -30,6 +30,7 @@ from app.core.config import settings
 from app.core.pipeline.orchestrator import PipelineOrchestrator
 from app.core.trace import set_draft_id, set_document_id, set_version_id
 from app.db.base import get_db
+from app.storage import upload_file
 from app.schemas.drafts import (
     DecideRequest,
     DecideResponse,
@@ -228,8 +229,24 @@ async def create_draft(
     file_hash = _compute_sha256(content)
     title_hash = _compute_sha256(title.encode("utf-8")) if title else None
 
-    # --- Generate file key (no external storage) ---
+    # --- Upload to MinIO ---
     file_key = f"f-{file_hash[:12]}"
+    try:
+        await upload_file(
+            file_key=file_key,
+            content=content,
+            content_type=file.content_type or "application/octet-stream",
+        )
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": {
+                    "code": "STORAGE_ERROR",
+                    "message": f"Ошибка сохранения файла: {exc}",
+                }
+            },
+        )
 
     # --- Compute title_key (DB-28): конкатенация ключевых полей ---
     title_key_parts = []

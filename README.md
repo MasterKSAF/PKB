@@ -73,10 +73,20 @@ PKB_neuroassistant/
 # Общая сводка
 curl http://localhost:8080/api/v1/system/diagnostics
 
+# Полная диагностика (диски, порты, compose, volumes, git, ошибки)
+curl 'http://localhost:8080/api/v1/system/diagnostics?verbose=true'
+
 # Диагностика конкретного сервиса
 curl http://localhost:8080/api/v1/system/diagnostics/gateway
 curl http://localhost:8080/api/v1/system/diagnostics/orchestrator
 curl http://localhost:8080/api/v1/system/diagnostics/auth
+
+# Больше строк лога (по умолчанию 20)
+curl 'http://localhost:8080/api/v1/system/diagnostics/orchestrator?log_lines=100'
+curl 'http://localhost:8080/api/v1/system/diagnostics/registry?log_lines=200'
+
+# Логи ядра
+curl http://localhost:8080/api/v1/system/diagnostics/system
 ```
 
 Gateway проверяет собственный конфиг и health-check всех сервисов.

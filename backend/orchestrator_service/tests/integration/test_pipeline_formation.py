@@ -277,6 +277,8 @@ class TestOnStepCompletedPreviewConverterFullAutoApprove:
         }
 
         mock_registry = AsyncMock()
+        mock_registry.get_draft = AsyncMock(return_value={"data": {"title_key": "Test", "document_key": "TEST-001"}})
+        mock_registry.get_draft_preview = AsyncMock(return_value={"data": {"title": "Full Preview", "doc_code": "GOST 1234"}})
         mock_registry.create_document = AsyncMock(return_value={
             "data": {
                 "document_id": 42,
@@ -347,6 +349,8 @@ class TestApproveDraftPartial:
         )
 
         mock_registry = AsyncMock()
+        mock_registry.get_draft = AsyncMock(return_value={"data": {"title_key": "Test", "document_key": "TEST-001"}})
+        mock_registry.get_draft_preview = AsyncMock(return_value={"data": {}})
         mock_registry.create_document = AsyncMock(return_value={
             "data": {
                 "document_id": 100,
@@ -407,6 +411,8 @@ class TestApproveDraftFull:
         task = await _create_task(db_session, full_completed=True, total_steps=3)
 
         mock_registry = AsyncMock()
+        mock_registry.get_draft = AsyncMock(return_value={"data": {"title_key": "Test", "document_key": "TEST-001"}})
+        mock_registry.get_draft_preview = AsyncMock(return_value={"data": {"title": "Full Preview"}})
         mock_registry.create_document = AsyncMock(return_value={
             "data": {
                 "document_id": 100,
@@ -467,6 +473,8 @@ class TestApproveDraftVersionId:
         repo = TaskRepository(db_session)
 
         mock_registry = AsyncMock()
+        mock_registry.get_draft = AsyncMock(return_value={"data": {"title_key": "Test", "document_key": "TEST-001"}})
+        mock_registry.get_draft_preview = AsyncMock(return_value={"data": {"title": "Full Preview"}})
         mock_registry.create_document = AsyncMock(return_value={
             "data": {
                 "document_id": 200,
@@ -668,6 +676,8 @@ class TestApproveDraftMetadataOverrides:
             new_callable=MagicMock,
         ):
             mock_reg = mock_reg_cls.return_value
+            mock_reg.get_draft = AsyncMock(return_value={"data": {"title_key": "Test", "document_key": "TEST-001"}})
+            mock_reg.get_draft_preview = AsyncMock(return_value={"data": {"title": "Test"}})
             mock_reg.create_document = AsyncMock(return_value={
                 "data": {"document_id": 42, "version_id": 421},
             })
@@ -680,11 +690,10 @@ class TestApproveDraftMetadataOverrides:
                 metadata_overrides={"title": "Custom Title", "doc_code": "CUSTOM-001"},
             )
 
-        # Verify create_document was called with overrides
+        # Verify create_document received overrides merged into payload
         call_kwargs = mock_reg.create_document.call_args[0][0]
-        assert call_kwargs["metadata_overrides"] == {
-            "title": "Custom Title", "doc_code": "CUSTOM-001",
-        }
+        assert call_kwargs["title"] == "Custom Title"
+        assert call_kwargs["doc_code"] == "CUSTOM-001"
 
         # Verify response contains document_id
         assert result["document_id"] == 42
