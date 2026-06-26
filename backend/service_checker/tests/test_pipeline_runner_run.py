@@ -51,7 +51,7 @@ def make_step(name: str, service: str = "auth",
     """Создать минимальный шаг."""
     return PipelineStep(
         name=name, service=service, method="GET",
-        path="/api/v1/health", port=8082,
+        path="/api/v1/health", port=18082,
         expected_status=200, needs_auth=needs_auth,
     )
 

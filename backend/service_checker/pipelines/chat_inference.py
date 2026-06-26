@@ -45,7 +45,7 @@ class ChatInferencePipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/auth/token",
-            port=8080,
+            port=18080,
             body=TEST_CREDENTIALS,
             expected_status=200,
             extract_keys=["access_token", "refresh_token"],
@@ -58,7 +58,7 @@ class ChatInferencePipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/chat/sessions",
-            port=8080,
+            port=18080,
             body={
                 "title": f"Pipeline тестовая сессия {datetime.now().isoformat()}",
                 "document_ids": [],  # QS-3: пустой список документов
@@ -76,7 +76,7 @@ class ChatInferencePipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/chat/sessions/{session_id}/messages",
-            port=8080,
+            port=18080,
             body={
                 "text": "Какая толщина обшивки ледового пояса?",
                 "content": "Какая толщина обшивки ледового пояса?",
@@ -93,7 +93,7 @@ class ChatInferencePipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/text/search",
-            port=8080,
+            port=18080,
             body={
                 "text": "толщина обшивки ледового пояса",
                 "valid_at": "2026-06-19",
@@ -126,7 +126,7 @@ class ChatInferencePipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/text/search",
-            port=8080,
+            port=18080,
             body={
                 "text": "толщина обшивки",
                 "valid_at": "2026-06-19",
@@ -143,7 +143,7 @@ class ChatInferencePipeline(PipelineDef):
             service="rag_search",
             method="POST",
             path="/api/v1/rag/search",
-            port=8091,
+            port=18091,
             body={
                 "query": "ледовый класс Arc4",
                 "valid_at": "2026-06-19",

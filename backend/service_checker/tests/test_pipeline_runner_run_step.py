@@ -77,7 +77,7 @@ class TestRunStepSuccess:
         """GET-запрос с ожидаемым 200."""
         step = PipelineStep(
             name="health", service="auth", method="GET",
-            path="/api/v1/health", port=8082,
+            path="/api/v1/health", port=18082,
             expected_status=200,
         )
         runner.client.get = AsyncMock(return_value=_mock_response(200, {"status": "ok"}))
@@ -94,7 +94,7 @@ class TestRunStepSuccess:
         """Извлечение access_token из ответа."""
         step = PipelineStep(
             name="auth", service="auth", method="POST",
-            path="/api/v1/auth/token", port=8082,
+            path="/api/v1/auth/token", port=18082,
             body={"username": "admin", "password": "admin"},
             expected_status=200,
             extract_keys=["access_token", "refresh_token"],
@@ -115,7 +115,7 @@ class TestRunStepSuccess:
         """check-функция подтверждает поле в ответе."""
         step = PipelineStep(
             name="check_test", service="auth", method="GET",
-            path="/api/v1/health", port=8082,
+            path="/api/v1/health", port=18082,
             expected_status=200,
             check=check_json_field("status", str),
         )
@@ -131,7 +131,7 @@ class TestRunStepSuccess:
         """POST-запрос с JSON body."""
         step = PipelineStep(
             name="create", service="registry", method="POST",
-            path="/api/v1/registry/documents/", port=8084,
+            path="/api/v1/registry/documents/", port=18084,
             body={"title": "test", "doc_code": "T-001"},
             expected_status=201,
         )
@@ -152,7 +152,7 @@ class TestRunStepSuccess:
         ctx.set("access_token", "test-token")
         step = PipelineStep(
             name="auth_op", service="registry", method="GET",
-            path="/api/v1/registry/documents", port=8084,
+            path="/api/v1/registry/documents", port=18084,
             expected_status=200, needs_auth=True,
         )
         runner.client.get = AsyncMock(return_value=_mock_response(200, []))
@@ -177,7 +177,7 @@ class TestRunStepFailedStatus:
         """expected_status=200, получен 500."""
         step = PipelineStep(
             name="fail", service="auth", method="GET",
-            path="/api/v1/health", port=8082, expected_status=200,
+            path="/api/v1/health", port=18082, expected_status=200,
         )
         runner.client.get = AsyncMock(return_value=_mock_response(500, {"error": "internal"}))
 
@@ -191,7 +191,7 @@ class TestRunStepFailedStatus:
         """expected_status={200, 409} — 409 проходит."""
         step = PipelineStep(
             name="create", service="registry", method="POST",
-            path="/api/v1/registry/documents/", port=8084,
+            path="/api/v1/registry/documents/", port=18084,
             expected_status={200, 409},
         )
         runner.client.post = AsyncMock(return_value=_mock_response(409, {"detail": "conflict"}))
@@ -206,7 +206,7 @@ class TestRunStepFailedStatus:
         """expected_status={200, 409} — 422 не проходит."""
         step = PipelineStep(
             name="create", service="registry", method="POST",
-            path="/api/v1/registry/documents/", port=8084,
+            path="/api/v1/registry/documents/", port=18084,
             expected_status={200, 409},
         )
         runner.client.post = AsyncMock(return_value=_mock_response(422, {"detail": "validation"}))
@@ -228,7 +228,7 @@ class TestRunStepFailedStatus:
 
         step = PipelineStep(
             name="fail", service="rag_builder", method="POST",
-            path="/api/v1/rag/build", port=8090,
+            path="/api/v1/rag/build", port=18090,
             expected_status=200, on_error=_on_error,
         )
         runner.client.post = AsyncMock(return_value=_mock_response(500, {"status": "error"}))
@@ -253,7 +253,7 @@ class TestRunStepRetry:
         """После 2 неудач — успех на 3-й."""
         step = PipelineStep(
             name="retry", service="auth", method="GET",
-            path="/api/v1/health", port=8082,
+            path="/api/v1/health", port=18082,
             expected_status=200, retry_on={503}, retry_max=3, retry_delay=0.01,
         )
         responses = [
@@ -274,7 +274,7 @@ class TestRunStepRetry:
         """Все retry исчерпаны — шаг падает."""
         step = PipelineStep(
             name="retry", service="auth", method="GET",
-            path="/api/v1/health", port=8082,
+            path="/api/v1/health", port=18082,
             expected_status=200, retry_on={503}, retry_max=2, retry_delay=0.01,
         )
         runner.client.get = AsyncMock(return_value=_mock_response(503, {"error": "unavailable"}))
@@ -290,7 +290,7 @@ class TestRunStepRetry:
         """retry_on={503}, но сервер вернул 500 — без повторов."""
         step = PipelineStep(
             name="retry", service="auth", method="GET",
-            path="/api/v1/health", port=8082,
+            path="/api/v1/health", port=18082,
             expected_status=200, retry_on={503}, retry_max=3, retry_delay=0.01,
         )
         runner.client.get = AsyncMock(return_value=_mock_response(500, {"error": "internal"}))
@@ -314,7 +314,7 @@ class TestRunStepErrors:
         """ConnectError — шаг FAILED."""
         step = PipelineStep(
             name="conn", service="auth", method="GET",
-            path="/api/v1/health", port=8082, expected_status=200,
+            path="/api/v1/health", port=18082, expected_status=200,
         )
         runner.client.get = AsyncMock(side_effect=httpx.ConnectError("Connection refused"))
 
@@ -328,7 +328,7 @@ class TestRunStepErrors:
         """TimeoutException — шаг FAILED."""
         step = PipelineStep(
             name="timeout", service="auth", method="GET",
-            path="/api/v1/health", port=8082, expected_status=200,
+            path="/api/v1/health", port=18082, expected_status=200,
         )
         runner.client.get = AsyncMock(side_effect=httpx.TimeoutException("Timed out"))
 
@@ -342,7 +342,7 @@ class TestRunStepErrors:
         """Неизвестное исключение — шаг FAILED."""
         step = PipelineStep(
             name="crash", service="auth", method="GET",
-            path="/api/v1/health", port=8082, expected_status=200,
+            path="/api/v1/health", port=18082, expected_status=200,
         )
         runner.client.get = AsyncMock(side_effect=RuntimeError("Unexpected error"))
 
@@ -367,7 +367,7 @@ class TestRunStepCheckFails:
 
         step = PipelineStep(
             name="check_fail", service="auth", method="GET",
-            path="/api/v1/health", port=8082,
+            path="/api/v1/health", port=18082,
             expected_status=200, check=_check,
         )
         runner.client.get = AsyncMock(return_value=_mock_response(200, {}))
@@ -388,7 +388,7 @@ class TestRunStepCheckFails:
 
         step = PipelineStep(
             name="check_body", service="auth", method="GET",
-            path="/api/v1/health", port=8082,
+            path="/api/v1/health", port=18082,
             expected_status=200, check=_check,
         )
         runner.client.get = AsyncMock(
@@ -419,7 +419,7 @@ class TestRunStepSkipIf:
         """Шаг с skip_if не пропускается run_step (пропускает run)."""
         step = PipelineStep(
             name="skippable", service="auth", method="GET",
-            path="/api/v1/health", port=8082,
+            path="/api/v1/health", port=18082,
             expected_status=200,
             skip_if=lambda ctx: True,
         )
@@ -445,7 +445,7 @@ class TestRunStepBodyTypes:
         """form_body передаётся как data."""
         step = PipelineStep(
             name="form", service="gateway", method="POST",
-            path="/api/v1/documents", port=8080,
+            path="/api/v1/documents", port=18080,
             expected_status=200,
             form_body={"key": "value"},
             form_files={"file": ("test.pdf", b"%PDF", "application/pdf")},
@@ -465,7 +465,7 @@ class TestRunStepBodyTypes:
         """content передаётся как raw bytes."""
         step = PipelineStep(
             name="raw", service="parser", method="POST",
-            path="/api/v1/parser/process", port=8087,
+            path="/api/v1/parser/process", port=18087,
             expected_status=200,
             content=b"raw data",
         )
@@ -483,7 +483,7 @@ class TestRunStepBodyTypes:
         """Query-параметры передаются."""
         step = PipelineStep(
             name="params", service="registry", method="GET",
-            path="/api/v1/registry/classifiers/tree", port=8084,
+            path="/api/v1/registry/classifiers/tree", port=18084,
             expected_status=200, params={"classifier_system": "OKS"},
         )
         runner.client.get = AsyncMock(return_value=_mock_response(200, []))

@@ -15,16 +15,16 @@ INFRA_SERVICES = ["postgres", "redis", "minio", "tei"]
 
 # Python-сервисы под supervisord (порт, health-путь)
 PYTHON_SERVICES = {
-    "auth":        (8082, ["/health", "/api/v1/health", "/api/v1/system/health"]),
-    "registry":    (8084, ["/api/v1/", "/api/v1/health", "/health"]),
-    "converter":   (8086, ["/health", "/api/v1/health"]),
-    "parser":      (8087, ["/health", "/api/v1/health"]),
-    "orchestrator":(8081, ["/api/v1/system/health", "/health"]),
-    "query":       (8083, ["/api/v1/health", "/health"]),
-    "rag_builder": (8090, ["/api/v1/rag/", "/api/v1/health", "/health"]),
-    "rag_search":  (8091, ["/", "/api/v1/health", "/health"]),
-    "gateway":     (8080, ["/api/v1/system/health", "/api/v1/health", "/health"]),
-    "ocr":        (8088, ["/api/v1/health", "/health"]),
+    "auth":        (18082, ["/health", "/api/v1/health", "/api/v1/system/health"]),
+    "registry":    (18084, ["/api/v1/", "/api/v1/health", "/health"]),
+    "converter":   (18086, ["/health", "/api/v1/health"]),
+    "parser":      (18087, ["/health", "/api/v1/health"]),
+    "orchestrator":(18081, ["/api/v1/system/health", "/health"]),
+    "query":       (18083, ["/api/v1/health", "/health"]),
+    "rag_builder": (18090, ["/api/v1/rag/", "/api/v1/health", "/health"]),
+    "rag_search":  (18091, ["/", "/api/v1/health", "/health"]),
+    "gateway":     (18080, ["/api/v1/system/health", "/api/v1/health", "/health"]),
+    "ocr":        (18088, ["/api/v1/health", "/health"]),
 }
 
 POLL_INTERVAL = 1

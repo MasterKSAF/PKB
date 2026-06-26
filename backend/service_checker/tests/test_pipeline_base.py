@@ -46,7 +46,7 @@ class TestPipelineStep:
     """PipelineStep — определение одного шага."""
 
     def test_default_status_is_pending(self):
-        step = PipelineStep(name="test", service="auth", method="GET", path="/health", port=8082)
+        step = PipelineStep(name="test", service="auth", method="GET", path="/health", port=18082)
         assert step.status == StepStatus.PENDING
         assert step.actual_status == 0
         assert step.elapsed_ms == 0
@@ -57,7 +57,7 @@ class TestPipelineStep:
             service="auth",
             method="POST",
             path="/api/v1/auth/token",
-            port=8082,
+            port=18082,
             body={"username": "test", "password": "test"},
             params={"page": 1},
             expected_status=200,
@@ -65,7 +65,7 @@ class TestPipelineStep:
             needs_auth=False,
         )
         assert step.name == "Auth"
-        assert step.port == 8082
+        assert step.port == 18082
         assert step.expected_status == 200
 
 
@@ -111,9 +111,9 @@ class TestPipelineRunner:
 
     def test_get_service_port_known(self):
         runner = PipelineRunner()
-        assert runner._get_service_port("auth") == 8082
-        assert runner._get_service_port("parser") == 8087
-        assert runner._get_service_port("registry") == 8084
+        assert runner._get_service_port("auth") == 18082
+        assert runner._get_service_port("parser") == 18087
+        assert runner._get_service_port("registry") == 18084
 
     def test_get_service_port_unknown(self):
         runner = PipelineRunner()
@@ -336,13 +336,13 @@ class TestPipelineRunner:
 
     def test_skip_if_default_is_none(self):
         """По умолчанию skip_if = None (нет ветвления)."""
-        step = PipelineStep(name="test", service="auth", method="GET", path="/health", port=8082)
+        step = PipelineStep(name="test", service="auth", method="GET", path="/health", port=18082)
         assert step.skip_if is None
 
     def test_skip_if_skip_when_true(self):
         """Если skip_if(ctx) вернул True — шаг должен пропускаться."""
         step = PipelineStep(
-            name="Skippable", service="auth", method="GET", path="/health", port=8082,
+            name="Skippable", service="auth", method="GET", path="/health", port=18082,
             skip_if=lambda ctx: ctx.get("skip", False),
         )
         ctx = PipelineContext()
@@ -353,7 +353,7 @@ class TestPipelineRunner:
     def test_skip_if_run_when_false(self):
         """Если skip_if(ctx) вернул False — шаг выполняется."""
         step = PipelineStep(
-            name="Skippable", service="auth", method="GET", path="/health", port=8082,
+            name="Skippable", service="auth", method="GET", path="/health", port=18082,
             skip_if=lambda ctx: ctx.get("skip", False),
         )
         ctx = PipelineContext()
@@ -362,7 +362,7 @@ class TestPipelineRunner:
 
     def test_skip_if_not_set_still_runs(self):
         """Если skip_if=None — шаг всегда выполняется."""
-        step = PipelineStep(name="normal", service="auth", method="GET", path="/health", port=8082)
+        step = PipelineStep(name="normal", service="auth", method="GET", path="/health", port=18082)
         # Нет skip_if — выполняется всегда (не пропускается)
         assert step.skip_if is None
 

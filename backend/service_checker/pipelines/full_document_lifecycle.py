@@ -72,7 +72,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/auth/token",
-            port=8080,
+            port=18080,
             body=TEST_CREDENTIALS,
             expected_status=200,
             extract_keys=["access_token", "refresh_token"],
@@ -85,7 +85,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/registry/documents",
-            port=8080,
+            port=18080,
             body={
                 "title": f"Lifecycle тест {ts}",
                 "doc_code": f"LIFECYCLE-{ts}",
@@ -106,7 +106,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             service="rag_builder",
             method="POST",
             path="/api/v1/rag/build",
-            port=8090,
+            port=18090,
             body={
                 "document_id": "{doc_id}",
                 "sections": [{
@@ -131,7 +131,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             service="gateway",
             method="PATCH",
             path="/api/v1/registry/documents/{doc_id}/status",
-            port=8080,
+            port=18080,
             extra_headers={"X-Service-Id": "orchestrator"},
             body={"status": "uploaded"},
             expected_status=200,
@@ -145,7 +145,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             service="rag_builder",
             method="POST",
             path="/api/v1/rag/build",
-            port=8090,
+            port=18090,
             body={
                 "document_id": "{doc_id}",
                 "sections": [{
@@ -170,7 +170,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             service="rag_search",
             method="POST",
             path="/api/v1/rag/search",
-            port=8091,
+            port=18091,
             body={
                 "query": "тестовый документ lifecycle",
                 "valid_at": "2026-06-19",
@@ -186,7 +186,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             service="gateway",
             method="DELETE",
             path="/api/v1/registry/documents/{doc_id}",
-            port=8080,
+            port=18080,
             expected_status=200,
             needs_auth=True,
         ))
@@ -197,7 +197,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             service="rag_builder",
             method="DELETE",
             path="/api/v1/rag/build/{doc_id}",
-            port=8090,
+            port=18090,
             expected_status={200, 404},
             needs_auth=True,
         ))
@@ -208,7 +208,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             service="rag_search",
             method="POST",
             path="/api/v1/rag/search",
-            port=8091,
+            port=18091,
             body={
                 "query": "тестовый документ lifecycle",
                 "valid_at": "2026-06-19",
@@ -225,7 +225,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/registry/documents",
-            port=8080,
+            port=18080,
             body={
                 "title": f"Lifecycle тест восстановленный {ts2}",
                 "doc_code": f"LIFECYCLE-RECOVER-{ts2}",
@@ -246,7 +246,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             service="rag_builder",
             method="POST",
             path="/api/v1/rag/build",
-            port=8090,
+            port=18090,
             body={
                 "document_id": "{doc_id_2}",
                 "sections": [{
@@ -272,7 +272,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
             service="rag_search",
             method="POST",
             path="/api/v1/rag/search",
-            port=8091,
+            port=18091,
             body={
                 "query": "тестовый документ lifecycle",
                 "valid_at": "2026-06-19",

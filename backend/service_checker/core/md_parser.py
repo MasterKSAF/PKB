@@ -57,10 +57,10 @@ class MdEndpoint:
 @dataclass
 class MdService:
     """Распарсенный сервис из md-файла."""
-    title: str                        # "API Registry Service / Registry (registry-service:8084)"
+    title: str                        # "API Registry Service / Registry (registry-service:18084)"
     name: str                         # "Registry Service"
     key: str                          # "registry"
-    port: int                         # 8084
+    port: int                         # 18084
     base_path: str = "/api/v1"
     endpoints: List[MdEndpoint] = field(default_factory=list)
     errors: List[str] = field(default_factory=list)  # предупреждения парсера
@@ -395,7 +395,7 @@ class MdApiParser:
     def _parse_service_header(self) -> None:
         """Извлечь название сервиса и порт из первого заголовка."""
         for line in self.lines[:20]:
-            # "## API Registry Service / Registry (registry-service:8084)"
+            # "## API Registry Service / Registry (registry-service:18084)"
             m = re.match(r'^##\s+API\s+(.+?)\s*\([^:]*:(\d+)\)', line)
             if m:
                 self.service.title = m.group(1).strip()

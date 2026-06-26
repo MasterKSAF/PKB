@@ -56,7 +56,7 @@ class OrchestratorMetadataUpdatePipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/auth/token",
-            port=8080,
+            port=18080,
             body=TEST_CREDENTIALS,
             expected_status=200,
             extract_keys=["access_token", "refresh_token"],
@@ -70,7 +70,7 @@ class OrchestratorMetadataUpdatePipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/drafts",  # без слеша — проверка, что нет 307
-            port=8080,
+            port=18080,
             form_body={
                 "document_key": f"meta-key-{ts}",
                 "title": f"Metadata тест {ts}",
@@ -92,7 +92,7 @@ class OrchestratorMetadataUpdatePipeline(PipelineDef):
             service="gateway",
             method="GET",
             path="/api/v1/tasks/{task_id}/status",
-            port=8080,
+            port=18080,
             expected_status=200,
             check=check_json_field("status", str),
             needs_auth=True,
@@ -105,7 +105,7 @@ class OrchestratorMetadataUpdatePipeline(PipelineDef):
             service="gateway",
             method="GET",
             path="/api/v1/drafts/{draft_id}",
-            port=8080,
+            port=18080,
             expected_status=200,
             check=check_json_fields({
                 "draft_id": int,
@@ -123,7 +123,7 @@ class OrchestratorMetadataUpdatePipeline(PipelineDef):
             service="gateway",
             method="PATCH",
             path="/api/v1/drafts/{draft_id}/metadata",
-            port=8080,
+            port=18080,
             body={
                 "title": f"Обновлённый заголовок {ts}",
                 "doc_code": f"META-UPD-{ts}",
@@ -144,7 +144,7 @@ class OrchestratorMetadataUpdatePipeline(PipelineDef):
             service="gateway",
             method="GET",
             path="/api/v1/drafts/{draft_id}",
-            port=8080,
+            port=18080,
             expected_status=200,
             needs_auth=True,
             skip_if=_draft_skipped,

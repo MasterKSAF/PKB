@@ -59,7 +59,7 @@ class TestOpenApiLoaderResolveRefs:
             },
         }
 
-        loader = OpenApiLoader("http://test:8080")
+        loader = OpenApiLoader("http://test:18080")
         loader.spec = spec
         loader._resolve_refs()
 
@@ -109,7 +109,7 @@ class TestOpenApiLoaderResolveRefs:
             },
         }
 
-        loader = OpenApiLoader("http://test:8080")
+        loader = OpenApiLoader("http://test:18080")
         loader.spec = spec
         loader._resolve_refs()
 
@@ -139,7 +139,7 @@ class TestOpenApiLoaderFlatten:
                 "version": {"type": "string"},
             }
         }
-        loader = OpenApiLoader("http://test:8080")
+        loader = OpenApiLoader("http://test:18080")
         flat = loader._flatten_schema(schema)
         assert flat["status"]["type"] == "string"
         assert flat["status"]["required"] is True
@@ -168,7 +168,7 @@ class TestOpenApiLoaderFlatten:
                 },
             },
         }
-        loader = OpenApiLoader("http://test:8080")
+        loader = OpenApiLoader("http://test:18080")
         flat = loader._flatten_schema(schema)
         assert flat["data"]["type"] == "object"
         assert flat["data"]["required"] is True
@@ -182,7 +182,7 @@ class TestOpenApiLoaderMatchEndpoint:
     """Тесты match_endpoint."""
 
     def _make_loader_with_endpoints(self):
-        loader = OpenApiLoader("http://test:8080")
+        loader = OpenApiLoader("http://test:18080")
         loader.endpoints = {
             "/api/v1/items/{item_id}": {
                 "GET": OpenApiEndpoint(method="GET", path="/api/v1/items/{item_id}"),

@@ -19,7 +19,7 @@ from .base import (
 )
 
 SERVICE_KEY = "orchestrator"
-PORT = 8081
+PORT = 18081
 DISPLAY_NAME = "Orchestrator Service"
 
 _DOC = f"{API_PREFIX}/documents/{{doc_id}}"
@@ -27,7 +27,7 @@ _DRAFT = f"{API_PREFIX}/drafts/{{draft_id}}"
 _TASK = f"{API_PREFIX}/tasks/{{task_id}}"
 _PAGE = f"{_DOC}/pages/{{page_num}}"
 
-_AUTH_PORT = 8082
+_AUTH_PORT = 18082
 
 # Эндпоинты, описанные в документации, но не реализованные в текущей версии —
 # checker показывает ❌ Fail, чтобы разработчик знал о несоответствии.
@@ -46,7 +46,7 @@ def get_service_def() -> ServiceDef:
             expected_status=200,
             override_port=_AUTH_PORT),
         # 2. OR-11: POST /drafts — единая точка входа
-        EndpointDef("POST", f"{API_PREFIX}/drafts/", "drafts",
+        EndpointDef("POST", f"{API_PREFIX}/drafts", "drafts",
             "Создать черновик (prepare)",
             form_body={"document_key": "coverage-doc-key", "title": "Coverage черновик",
                       "source_type": "GOST"},
@@ -168,7 +168,7 @@ def get_service_def() -> ServiceDef:
 
         # OR-11: Draft-first — единая точка входа
         # OR-14: MIME-ветвление — image/* → OCR, application/pdf → Parser
-        EndpointDef("POST", f"{API_PREFIX}/drafts/", "drafts",
+        EndpointDef("POST", f"{API_PREFIX}/drafts", "drafts",
             "Создать черновик (единая точка входа, MIME-ветвление OCR/Parser)",
             form_body={"document_key": "test-doc-key", "title": "Тестовый черновик",
                       "source_type": "GOST"},

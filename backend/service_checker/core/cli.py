@@ -130,14 +130,14 @@ def parse_args() -> argparse.Namespace:
     p_emulate = subparsers.add_parser("emulate", help="Эмуляция веб-интерфейса")
     p_emulate.add_argument(
         "--gateway-url",
-        default="http://127.0.0.1:8080",
-        help="URL gateway (по умолч. http://127.0.0.1:8080)",
+        default="http://127.0.0.1:18080",
+        help="URL gateway (по умолч. http://127.0.0.1:18080)",
     )
     p_emulate.add_argument(
         "--mode",
         choices=["individual", "gateway"],
         default="individual",
-        help="Режим: individual (порты 8081-8084) или gateway (всё на одном)",
+        help="Режим: individual (порты 18081-18084) или gateway (всё на одном)",
     )
     p_emulate.add_argument(
         "-o", "--output",
@@ -196,7 +196,7 @@ def parse_args() -> argparse.Namespace:
     p_docker.add_argument(
         "--spd",
         action="store_true",
-        help="Режим SPD: подмена порта rag_search на 8090 (объединённый rag_builder + rag_search)",
+        help="Режим SPD: подмена порта rag_search на 18090 (объединённый rag_builder + rag_search)",
     )
 
     # check — observability / post-deploy проверка
@@ -423,10 +423,10 @@ async def cmd_docker(
         _flat.extend(x.strip() for x in p.split(",") if x.strip())
     pipelines = sorted(_flat)
 
-    # Режим SPD: подмена порта rag_search на 8090 (объединённый сервис)
+    # Режим SPD: подмена порта rag_search на 18090 (объединённый сервис)
     if spd:
         from service_checker.services import MODE_PORTS
-        MODE_PORTS["rag_search"] = 8090
+        MODE_PORTS["rag_search"] = 18090
 
     log_header("Развёртывание PKB Neuroassistant через Docker")
 
@@ -495,7 +495,7 @@ async def cmd_docker(
         log_header("📋 Полный отчёт: Coverage + Pipeline + Сводная таблица")
 
         if spd:
-            log_info("Режим SPD: rag_search=8090 (подмена в MODE_PORTS)")
+            log_info("Режим SPD: rag_search=18090 (подмена в MODE_PORTS)")
 
         check_result_dir = BACKEND_DIR / "check_result"
         check_result_dir.mkdir(parents=True, exist_ok=True)
@@ -715,7 +715,7 @@ async def cmd_all(
     # Эмуляция UI (через Orchestrator — единая точка входа)
     mode = "individual" if mocks == "individual" else "gateway"
     report = await cmd_emulate(
-        "http://127.0.0.1:8081",
+        "http://127.0.0.1:18081",
         mode=mode,
         report=report,
     )

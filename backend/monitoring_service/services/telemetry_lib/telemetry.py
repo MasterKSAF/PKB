@@ -35,19 +35,19 @@ def setup_observability(service_name: str, otlp_endpoint: str = None):
     # Tracing
     tracer_provider = TracerProvider(resource=resource)
     tracer_provider.add_span_processor(
-        BatchSpanProcessor(OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True))
+        BatchSpanProcessor(OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True, timeout=5))
     )
     trace.set_tracer_provider(tracer_provider)
 
     # Metrics
-    metric_exporter = OTLPMetricExporter(endpoint=otlp_endpoint, insecure=True)
+    metric_exporter = OTLPMetricExporter(endpoint=otlp_endpoint, insecure=True, timeout=5)
     metric_reader = PeriodicExportingMetricReader(metric_exporter)
     meter_provider = MeterProvider(resource=resource, metric_readers=[metric_reader])
     metrics.set_meter_provider(meter_provider)
 
     # Logs (OTLP)
     logger_provider = LoggerProvider(resource=resource)
-    log_exporter = OTLPLogExporter(endpoint=otlp_endpoint, insecure=True)
+    log_exporter = OTLPLogExporter(endpoint=otlp_endpoint, insecure=True, timeout=5)
     logger_provider.add_log_record_processor(BatchLogRecordProcessor(log_exporter))
 
     # OTLP Handler for standard logging

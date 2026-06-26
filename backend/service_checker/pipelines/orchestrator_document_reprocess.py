@@ -56,7 +56,7 @@ class OrchestratorDocumentReprocessPipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/auth/token",
-            port=8080,
+            port=18080,
             body=TEST_CREDENTIALS,
             expected_status=200,
             extract_keys=["access_token", "refresh_token"],
@@ -84,7 +84,7 @@ class OrchestratorDocumentReprocessPipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/registry/documents",
-            port=8080,
+            port=18080,
             body={
                 "title": f"Reprocess тест {ts}",
                 "doc_code": f"REPROC-{ts}",
@@ -104,7 +104,7 @@ class OrchestratorDocumentReprocessPipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/drafts",  # без слеша — проверка, что нет 307
-            port=8080,
+            port=18080,
             form_body={
                 "document_key": f"reprocess-key-{ts}",
                 "title": f"Reprocess тест {ts}",
@@ -126,7 +126,7 @@ class OrchestratorDocumentReprocessPipeline(PipelineDef):
             service="gateway",
             method="GET",
             path="/api/v1/tasks/{task_id}/status",
-            port=8080,
+            port=18080,
             expected_status=200,
             check=check_json_field("status", str),
             needs_auth=True,
@@ -139,7 +139,7 @@ class OrchestratorDocumentReprocessPipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/documents/{approved_doc_id}/reprocess",
-            port=8080,
+            port=18080,
             body={
                 "mode": "full",
                 "options": {
@@ -158,7 +158,7 @@ class OrchestratorDocumentReprocessPipeline(PipelineDef):
             service="gateway",
             method="GET",
             path="/api/v1/tasks/{reprocess_task_id}/status",
-            port=8080,
+            port=18080,
             expected_status=200,
             check=check_json_field("status", str),
             needs_auth=True,

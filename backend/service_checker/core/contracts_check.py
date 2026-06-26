@@ -90,6 +90,7 @@ async def _do_request(
     path: str,
     json_body: Optional[Dict] = None,
     expected_status: int = 200,
+    extra_headers: Optional[Dict[str, str]] = None,
 ) -> Tuple[int, Optional[Dict], float]:
     """Выполнить HTTP-запрос и вернуть (status, body_json, elapsed_sec)."""
     url = f"http://127.0.0.1:{port}{path}"
@@ -98,6 +99,8 @@ async def _do_request(
         kwargs: Dict[str, Any] = {}
         if json_body is not None:
             kwargs["json"] = json_body
+        if extra_headers:
+            kwargs["headers"] = extra_headers
         resp = await getattr(client, method.lower())(url, **kwargs)
         elapsed = time.monotonic() - start
         try:
@@ -148,7 +151,7 @@ async def check_query_to_rag_search(client: httpx.AsyncClient) -> ContractCheckR
 
     Отправляет POST /api/v1/rag/search на rag_search (прямой вызов).
     """
-    rag_port = MODE_PORTS.get("rag_search", 8091)
+    rag_port = MODE_PORTS.get("rag_search", 18091)
     rag_ep = _find_endpoint_def("rag_search", "POST", "/rag/search")
     if not rag_ep:
         return ContractCheckResult(
@@ -232,7 +235,7 @@ async def check_query_to_registry(client: httpx.AsyncClient) -> ContractCheckRes
 
     Проверяет, что registry отвечает на search с valid_at (используется query).
     """
-    reg_port = MODE_PORTS.get("registry", 8084)
+    reg_port = MODE_PORTS.get("registry", 18084)
     reg_ep = _find_endpoint_def("registry", "GET", "/registry/search")
     if not reg_ep:
         return ContractCheckResult(
@@ -377,8 +380,9 @@ async def check_gateway_to_query(client: httpx.AsyncClient) -> ContractCheckResu
     Проверяет, что gateway проксирует /api/v1/chat/sessions на query.
     Предварительно создаёт проект (как _ensure_project в пайплайнах).
     """
-    gw_port = MODE_PORTS.get("gateway", 8080)
-    query_port = MODE_PORTS.get("query", 8083)
+    gw_port = MODE_PORTS.get("gateway", 18080)
+    query_port = MODE_PORTS.get("query", 18083)
+    auth_port = MODE_PORTS.get("auth", 18082)
     gw_ep = _find_endpoint_def("gateway", "POST", "/chat/sessions")
     if not gw_ep:
         return ContractCheckResult(
@@ -386,6 +390,22 @@ async def check_gateway_to_query(client: httpx.AsyncClient) -> ContractCheckResu
             passed=False,
             error="Endpoint POST /chat/sessions не найден в gateway",
         )
+
+    # ── Получаем JWT токен (Query требует аутентификации) ──
+    auth_status, auth_body, _ = await _do_request(
+        client, "POST", auth_port, f"{API_PREFIX}/auth/token",
+        json_body={"username": "admin@example.com", "password": "Admin1234!"},
+        expected_status=200,
+    )
+    access_token = (auth_body or {}).get("access_token", "") if auth_status == 200 else ""
+    if not access_token:
+        return ContractCheckResult(
+            name="gateway → query",
+            passed=False,
+            error="Не удалось получить JWT токен для проверки прокси",
+        )
+
+    auth_headers = {"Authorization": f"Bearer {access_token}"}
 
     # ── Pre-create project (QS-3) ──
     project_id = None
@@ -398,6 +418,7 @@ async def check_gateway_to_query(client: httpx.AsyncClient) -> ContractCheckResu
             client, "POST", query_port, f"{API_PREFIX}/chat/projects",
             json_body={"code": project_code, "name": "Contract Check Project"},
             expected_status=201,
+            extra_headers=auth_headers,
         )
         if p_status == 201 and p_body:
             project_id = p_body.get("project_id") or (p_body.get("data") or {}).get("id")
@@ -407,7 +428,8 @@ async def check_gateway_to_query(client: httpx.AsyncClient) -> ContractCheckResu
             # Проект уже есть — ищем через GET
             try:
                 resp = await client.get(
-                    f"http://127.0.0.1:{query_port}{API_PREFIX}/chat/projects"
+                    f"http://127.0.0.1:{query_port}{API_PREFIX}/chat/projects",
+                    headers=auth_headers,
                 )
                 if resp.status_code == 200:
                     data = resp.json()
@@ -434,6 +456,7 @@ async def check_gateway_to_query(client: httpx.AsyncClient) -> ContractCheckResu
         json_body={"title": "Contract test session", "document_ids": [],
                    "project_id": project_id},
         expected_status=201,
+        extra_headers=auth_headers,
     )
 
     elapsed_ms = int(elapsed * 1000)

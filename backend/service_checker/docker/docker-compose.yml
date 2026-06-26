@@ -166,17 +166,17 @@ services:
     memswap_limit: 3G
     mem_reservation: 1G
     ports:
-      - "8081:8081"   # Orchestrator
-      - "8080:8080"   # Gateway
-      - "8082:8082"   # Auth
-      - "8083:8083"   # Query
-      - "8084:8084"   # Registry
-      - "8085:8085"   # Integration
-      - "8086:8086"   # Converter/Validator
-      - "8087:8087"   # Parser
-      - "8088:8088"   # OCR
-      - "8090:8090"   # RAG Builder
-      - "8091:8091"   # RAG Search
+      - "18081:8081"   # Orchestrator
+      - "18080:8080"   # Gateway
+      - "18082:8082"   # Auth
+      - "18083:8083"   # Query
+      - "18084:8084"   # Registry
+      - "18085:8085"   # Integration
+      - "18086:8086"   # Converter/Validator
+      - "18087:8087"   # Parser
+      - "18088:8088"   # OCR
+      - "18090:8090"   # RAG Builder
+      - "18091:8091"   # RAG Search
     env_file:
       - ./.env
     environment:

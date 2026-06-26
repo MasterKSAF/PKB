@@ -6,7 +6,7 @@
   - POST /api/v1/drafts — создание черновика (должен быть 202, не 307)
   - GET  /api/v1/drafts/{id} — черновик создан и виден
 
-Требует запущенных Docker-контейнеров с Gateway на :8080.
+Требует запущенных Docker-контейнеров с Gateway на :18080.
 Пометка: @pytest.mark.integration — запуск только с --test-mode=real или -m integration.
 """
 
@@ -17,7 +17,7 @@ import time
 import pytest
 import httpx
 
-GATEWAY_URL = "http://127.0.0.1:8080/api/v1"
+GATEWAY_URL = "http://127.0.0.1:18080/api/v1"
 ADMIN_LOGIN = "admin@example.com"
 ADMIN_PASSWORD = "Admin1234!"
 TEST_FILE_CONTENT = b"%PDF-1.4 fake pdf for integration test"

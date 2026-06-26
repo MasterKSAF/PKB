@@ -18,7 +18,7 @@ from .base import (
 )
 
 SERVICE_KEY = "ocr"
-PORT = 8088
+PORT = 18088
 DISPLAY_NAME = "OCR Service"
 
 

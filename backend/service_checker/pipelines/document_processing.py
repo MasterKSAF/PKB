@@ -88,7 +88,7 @@ class DocumentProcessingPipeline(PipelineDef):
             service="auth",
             method="POST",
             path="/api/v1/auth/token",
-            port=8082,
+            port=18082,
             body=TEST_CREDENTIALS,
             expected_status=200,
             extract_keys=["access_token", "refresh_token"],
@@ -140,7 +140,7 @@ class DocumentProcessingPipeline(PipelineDef):
             service="parser",
             method="POST",
             path="/api/v1/parser/process",
-            port=8087,
+            port=18087,
             body={
                 "task_id": self.TEST_TASK_ID,
                 "draft_id": 1,  # PS-3: обязательный draft_id
@@ -159,7 +159,7 @@ class DocumentProcessingPipeline(PipelineDef):
             service="parser",
             method="GET",
             path=f"/api/v1/parser/process/{self.TEST_TASK_ID}/status",
-            port=8087,
+            port=18087,
             expected_status=200,
             check=check_json_field("status", str),
         ))
@@ -170,7 +170,7 @@ class DocumentProcessingPipeline(PipelineDef):
             service="parser",
             method="GET",
             path=f"/api/v1/parser/process/{self.TEST_TASK_ID}/result",
-            port=8087,
+            port=18087,
             expected_status=200,
             retry_on={409},
             retry_delay=2.0,
@@ -184,7 +184,7 @@ class DocumentProcessingPipeline(PipelineDef):
             service="converter_validator",
             method="POST",
             path="/api/v1/converter/preview",
-            port=8086,
+            port=18086,
             body={
                 "task_id": str(self.TEST_TASK_ID),
                 "version_id": "1",
@@ -204,7 +204,7 @@ class DocumentProcessingPipeline(PipelineDef):
             service="converter_validator",
             method="POST",
             path="/api/v1/validate/metadata",
-            port=8086,
+            port=18086,
             body={
                 "title": "Тестовый документ",
                 "doc_code": "TEST-P1F-10",
@@ -225,7 +225,7 @@ class DocumentProcessingPipeline(PipelineDef):
             service="registry",
             method="POST",
             path="/api/v1/registry/documents/check-uniqueness",
-            port=8084,
+            port=18084,
             body={
                 "title": "Тестовый документ",
                 "doc_code": "TEST-P1F-10",
@@ -242,7 +242,7 @@ class DocumentProcessingPipeline(PipelineDef):
             service="converter_validator",
             method="POST",
             path="/api/v1/converter/convert",
-            port=8086,
+            port=18086,
             body={
                 "task_id": str(self.TEST_TASK_ID),
                 "version_id": "1",  # CV-9: version_id обязателен
@@ -258,7 +258,7 @@ class DocumentProcessingPipeline(PipelineDef):
             service="converter_validator",
             method="POST",
             path="/api/v1/validate/document",
-            port=8086,
+            port=18086,
             body={
                 "task_id": str(self.TEST_TASK_ID),
                 "version_id": "1",
@@ -277,7 +277,7 @@ class DocumentProcessingPipeline(PipelineDef):
             service="registry",
             method="POST",
             path="/api/v1/registry/documents",
-            port=8084,
+            port=18084,
             body={
                 "title": f"Тестовый документ pipeline {int(time.time())}",
                 "doc_code": f"PIPELINE-TEST-{int(time.time())}",
@@ -298,7 +298,7 @@ class DocumentProcessingPipeline(PipelineDef):
             service="registry",
             method="GET",
             path="/api/v1/registry/documents/{doc_id}",
-            port=8084,
+            port=18084,
             expected_status=200,
             check=check_json_field("data.preview_snapshot", (dict, type(None)), optional=True),
             needs_auth=True,
@@ -310,7 +310,7 @@ class DocumentProcessingPipeline(PipelineDef):
             service="rag_builder",
             method="POST",
             path="/api/v1/rag/build",
-            port=8090,
+            port=18090,
             body={
                 "document_id": TEST_DOC_ID,
                 "sections": [{
@@ -334,7 +334,7 @@ class DocumentProcessingPipeline(PipelineDef):
             service="rag_search",
             method="POST",
             path="/api/v1/rag/search",
-            port=8091,
+            port=18091,
             body={
                 "query": "тестовый документ",
                 "valid_at": "2026-06-19",

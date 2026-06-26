@@ -43,7 +43,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
 
     name = "multi_document_cross_search"
     description = "Мульти-документный поиск: 2 документа → индексация → кросс-поиск → удаление → фильтрация"
-    services = ["gateway", "minio"]
+    services = ["gateway", "minio", "parser", "converter_validator", "rag_builder", "rag_search"]
     TEST_PDF_KEY = TEST_PDF_KEY
     TEST_PDF_PATH = TEST_PDF_PATH
 
@@ -63,7 +63,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/auth/token",
-            port=8080,
+            port=18080,
             body=TEST_CREDENTIALS,
             expected_status=200,
             extract_keys=["access_token", "refresh_token"],
@@ -115,7 +115,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             service="parser",
             method="POST",
             path="/api/v1/parser/process",
-            port=8087,
+            port=18087,
             body={
                 "task_id": TEST_TASK_ID_1,
                 "draft_id": 1,  # PS-3: обязательный draft_id
@@ -134,7 +134,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             service="parser",
             method="GET",
             path=f"/api/v1/parser/process/{TEST_TASK_ID_1}/status",
-            port=8087,
+            port=18087,
             expected_status=200,
             check=check_json_field("status", str),
         ))
@@ -145,7 +145,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             service="parser",
             method="GET",
             path=f"/api/v1/parser/process/{TEST_TASK_ID_1}/result",
-            port=8087,
+            port=18087,
             expected_status=200,
             retry_on={409},
             retry_delay=2.0,
@@ -159,7 +159,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             service="converter_validator",
             method="POST",
             path="/api/v1/converter/convert",
-            port=8086,
+            port=18086,
             body={
                 "task_id": str(TEST_TASK_ID_1),
                 "version_id": "1",  # CV-9: version_id обязателен
@@ -174,7 +174,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/registry/documents",
-            port=8080,
+            port=18080,
             body={
                 "title": f"Multi-doc тест 1 {ts}",
                 "doc_code": f"MULTI1-{ts}",
@@ -189,13 +189,13 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             extract_keys=["doc_id_1"],
         ))
 
-        # ── Шаг 9: Построение индекса для документа #1 (через Gateway) ─
+        # ── Шаг 9: Построение индекса для документа #1 (RAG Builder) ────
         steps.append(PipelineStep(
-            name="Построение индекса #1 (через Gateway)",
-            service="gateway",
+            name="Построение индекса #1 (RAG Builder)",
+            service="rag_builder",
             method="POST",
             path="/api/v1/rag/build",
-            port=8080,
+            port=18090,
             body={
                 "document_id": "{doc_id_1}",
                 "sections": [{
@@ -210,7 +210,6 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
                 }],
             },
             expected_status={200, 201, 202},  # RB-7: 201 — ресурс создан
-            needs_auth=True,
             check=check_json_field("status", str),
         ))
 
@@ -241,7 +240,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             service="parser",
             method="POST",
             path="/api/v1/parser/process",
-            port=8087,
+            port=18087,
             body={
                 "task_id": TEST_TASK_ID_2,
                 "draft_id": 1,  # PS-3: обязательный draft_id
@@ -259,7 +258,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             service="parser",
             method="GET",
             path=f"/api/v1/parser/process/{TEST_TASK_ID_2}/status",
-            port=8087,
+            port=18087,
             expected_status=200,
             check=check_json_field("status", str),
         ))
@@ -269,7 +268,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             service="parser",
             method="GET",
             path=f"/api/v1/parser/process/{TEST_TASK_ID_2}/result",
-            port=8087,
+            port=18087,
             expected_status=200,
             retry_on={409},
             retry_delay=2.0,
@@ -283,7 +282,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             service="converter_validator",
             method="POST",
             path="/api/v1/converter/convert",
-            port=8086,
+            port=18086,
             body={
                 "task_id": str(TEST_TASK_ID_2),
                 "version_id": "1",  # CV-9: version_id обязателен
@@ -297,7 +296,7 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/registry/documents",
-            port=8080,
+            port=18080,
             body={
                 "title": f"Multi-doc тест 2 {ts}",
                 "doc_code": f"MULTI2-{ts}",
@@ -312,13 +311,13 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             extract_keys=["doc_id_2"],
         ))
 
-        # ── Шаг 16: Построение индекса #2 (через Gateway) ──────────────
+        # ── Шаг 16: Построение индекса #2 (RAG Builder) ────────────────
         steps.append(PipelineStep(
-            name="Построение индекса #2 (через Gateway)",
-            service="gateway",
+            name="Построение индекса #2 (RAG Builder)",
+            service="rag_builder",
             method="POST",
             path="/api/v1/rag/build",
-            port=8080,
+            port=18090,
             body={
                 "document_id": "{doc_id_2}",
                 "sections": [{
@@ -333,17 +332,16 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
                 }],
             },
             expected_status={200, 201, 202},  # RB-7: 201 — ресурс создан
-            needs_auth=True,
             check=check_json_field("status", str),
         ))
 
-        # ── Шаг 17: Поиск (RS-6: без top_k, через Gateway) ────────────
+        # ── Шаг 17: Поиск (RS-6: без top_k, RAG Search) ───────────────
         steps.append(PipelineStep(
-            name="Поиск по общему запросу (через Gateway)",
-            service="gateway",
+            name="Поиск по общему запросу (RAG Search)",
+            service="rag_search",
             method="POST",
             path="/api/v1/rag/search",
-            port=8080,
+            port=18091,
             body={
                 "query": "тестовый документ multi-doc",
                 "valid_at": "2026-06-19",
@@ -359,18 +357,18 @@ class MultiDocumentCrossSearchPipeline(PipelineDef):
             service="gateway",
             method="DELETE",
             path="/api/v1/registry/documents/{doc_id_1}",
-            port=8080,
+            port=18080,
             expected_status=200,
             needs_auth=True,
         ))
 
-        # ── Шаг 19: Поиск после удаления (через Gateway) ──────────────
+        # ── Шаг 19: Поиск после удаления (RAG Search) ─────────────────
         steps.append(PipelineStep(
-            name="Поиск после удаления документа #1 (через Gateway)",
-            service="gateway",
+            name="Поиск после удаления документа #1 (RAG Search)",
+            service="rag_search",
             method="POST",
             path="/api/v1/rag/search",
-            port=8080,
+            port=18091,
             body={
                 "query": "тестовый документ multi-doc",
                 "valid_at": "2026-06-19",

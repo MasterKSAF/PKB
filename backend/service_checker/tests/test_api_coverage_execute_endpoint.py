@@ -82,10 +82,10 @@ class TestExecuteAliveSuccess:
     async def test_basic_get(self, tester, make_endpoint):
         """GET с 200."""
         ep = make_endpoint("/api/v1/health", "health")
-        result = ServiceResult(name="test", port=8080)
+        result = ServiceResult(name="test", port=18080)
         tester.client.get = AsyncMock(return_value=_mock_response(200, {"status": "ok"}))
 
-        await tester._execute_endpoint("test", ep, 8080, result, alive=True)
+        await tester._execute_endpoint("test", ep, 18080, result, alive=True)
 
         assert len(result.results) == 1
         assert result.results[0].success is True
@@ -96,10 +96,10 @@ class TestExecuteAliveSuccess:
         """expected_status={201, 409}, 409 проходит."""
         ep = make_endpoint("/api/v1/registry/documents/", "documents",
                            method="POST", expected_status={201, 409})
-        result = ServiceResult(name="test", port=8080)
+        result = ServiceResult(name="test", port=18080)
         tester.client.post = AsyncMock(return_value=_mock_response(409, {"detail": "conflict"}))
 
-        await tester._execute_endpoint("test", ep, 8080, result, alive=True)
+        await tester._execute_endpoint("test", ep, 18080, result, alive=True)
 
         assert result.results[0].success is True
         assert result.results[0].status_code == 409
@@ -109,10 +109,10 @@ class TestExecuteAliveSuccess:
         """expected_status=201, получен 200 → fail."""
         ep = make_endpoint("/api/v1/registry/documents/", "documents",
                            method="POST", expected_status=201)
-        result = ServiceResult(name="test", port=8080)
+        result = ServiceResult(name="test", port=18080)
         tester.client.post = AsyncMock(return_value=_mock_response(200, {"id": 1}))
 
-        await tester._execute_endpoint("test", ep, 8080, result, alive=True)
+        await tester._execute_endpoint("test", ep, 18080, result, alive=True)
 
         assert result.results[0].success is False
         assert result.endpoints_failed == 1
@@ -121,15 +121,15 @@ class TestExecuteAliveSuccess:
     async def test_override_port(self, tester, make_endpoint):
         """override_port меняет целевой порт."""
         ep = make_endpoint("/api/v1/auth/token", "auth", method="POST",
-                           override_port=8082, body={"user": "admin", "pass": "admin"})
-        result = ServiceResult(name="test", port=8080)  # port=8080, но override=8082
+                           override_port=18082, body={"user": "admin", "pass": "admin"})
+        result = ServiceResult(name="test", port=18080)  # port=18080, но override=18082
         tester.client.post = AsyncMock(return_value=_mock_response(200, {"token": "jwt"}))
 
-        await tester._execute_endpoint("test", ep, 8080, result, alive=True)
+        await tester._execute_endpoint("test", ep, 18080, result, alive=True)
 
-        # Проверяем что вызов был на порт 8082 (override), не 8080
+        # Проверяем что вызов был на порт 18082 (override), не 18080
         call_url = tester.client.post.call_args[0][0]
-        assert ":8082" in call_url
+        assert ":18082" in call_url
 
 
 # ────────────────────────────────────────────────────────────────
@@ -144,9 +144,9 @@ class TestExecuteDeadService:
     async def test_dead_service_skips(self, tester, make_endpoint):
         """alive=False → все эндпоинты пропущены."""
         ep = make_endpoint("/api/v1/health", "health")
-        result = ServiceResult(name="test", port=8080)
+        result = ServiceResult(name="test", port=18080)
 
-        await tester._execute_endpoint("test", ep, 8080, result, alive=False)
+        await tester._execute_endpoint("test", ep, 18080, result, alive=False)
 
         assert result.results[0].skipped is True
         assert "не отвечает" in (result.results[0].skip_reason or "")
@@ -166,12 +166,12 @@ class Test404IsError:
         """404 → error."""
         ep = make_endpoint("/api/v1/health", "health", method="GET")
         ep.is_preparation = False
-        result = ServiceResult(name="auth", port=8082)
+        result = ServiceResult(name="auth", port=18082)
         tester.client.get = AsyncMock(
             return_value=_mock_response(404, {"error": "Not Found"})
         )
 
-        await tester._execute_endpoint("auth", ep, 8082, result, alive=True)
+        await tester._execute_endpoint("auth", ep, 18082, result, alive=True)
 
         assert result.results[0].success is False
         assert result.endpoints_failed == 1
@@ -191,7 +191,7 @@ class TestExecuteContextExtraction:
         ep = make_endpoint("/api/v1/auth/token", "auth", method="POST",
                            body={"user": "admin", "pass": "admin"},
                            extract_keys=["access_token", "refresh_token"])
-        result = ServiceResult(name="auth", port=8082)
+        result = ServiceResult(name="auth", port=18082)
         tester.client.post = AsyncMock(
             return_value=_mock_response(200, {
                 "access_token": "jwt123",
@@ -199,7 +199,7 @@ class TestExecuteContextExtraction:
             })
         )
 
-        await tester._execute_endpoint("auth", ep, 8082, result, alive=True)
+        await tester._execute_endpoint("auth", ep, 18082, result, alive=True)
 
         assert tester.context.get("access_token") == "jwt123"
         assert tester.context.get("refresh_token") == "ref456"
@@ -210,10 +210,10 @@ class TestExecuteContextExtraction:
         tester.context["doc_id"] = "42"
         ep = make_endpoint("/api/v1/registry/documents/{doc_id}", "documents",
                            method="GET")
-        result = ServiceResult(name="registry", port=8084)
+        result = ServiceResult(name="registry", port=18084)
         tester.client.get = AsyncMock(return_value=_mock_response(200, {"id": 42}))
 
-        await tester._execute_endpoint("registry", ep, 8084, result, alive=True)
+        await tester._execute_endpoint("registry", ep, 18084, result, alive=True)
 
         # Проверяем что URL содержит подставленный doc_id
         call_url = tester.client.get.call_args[0][0]
@@ -224,9 +224,9 @@ class TestExecuteContextExtraction:
         """Нет {doc_id} в контексте → skipped."""
         ep = make_endpoint("/api/v1/registry/documents/{doc_id}", "documents",
                            method="GET")
-        result = ServiceResult(name="registry", port=8084)
+        result = ServiceResult(name="registry", port=18084)
 
-        await tester._execute_endpoint("registry", ep, 8084, result, alive=True)
+        await tester._execute_endpoint("registry", ep, 18084, result, alive=True)
 
         assert result.results[0].skipped is True
         assert "Нет в контексте" in (result.results[0].skip_reason or "")
@@ -238,9 +238,9 @@ class TestExecuteContextExtraction:
         ep = make_endpoint("/api/v1/parser/process", "parser",
                            method="POST",
                            body={"task_id": "{task_id}", "draft_id": "{draft_id}"})
-        result = ServiceResult(name="parser", port=8087)
+        result = ServiceResult(name="parser", port=18087)
 
-        await tester._execute_endpoint("parser", ep, 8087, result, alive=True)
+        await tester._execute_endpoint("parser", ep, 18087, result, alive=True)
 
         assert result.results[0].skipped is True
         assert "переменные контекста" in (result.results[0].skip_reason or "")
@@ -254,10 +254,10 @@ class TestExecuteContextExtraction:
         ep = make_endpoint("/api/v1/parser/process", "parser",
                            method="POST",
                            body={"task_id": "{task_id}", "draft_id": "{draft_id}"})
-        result = ServiceResult(name="parser", port=8087)
+        result = ServiceResult(name="parser", port=18087)
         tester.client.post = AsyncMock(return_value=_mock_response(200, {"status": "ok"}))
 
-        await tester._execute_endpoint("parser", ep, 8087, result, alive=True)
+        await tester._execute_endpoint("parser", ep, 18087, result, alive=True)
 
         # Запрос выполнился (не скипнут)
         assert result.results[0].skipped is False
@@ -321,12 +321,12 @@ class TestExecuteSchemaValidation:
         ep = make_endpoint("/api/v1/health", "health", method="GET",
                            response_schema={"status": str})
         ep.is_preparation = False
-        result = ServiceResult(name="auth", port=8082)
+        result = ServiceResult(name="auth", port=18082)
         tester.client.get = AsyncMock(
             return_value=_mock_response(200, {"status": "ok"})
         )
 
-        await tester._execute_endpoint("auth", ep, 8082, result, alive=True)
+        await tester._execute_endpoint("auth", ep, 18082, result, alive=True)
 
         assert result.results[0].success is True
 
@@ -336,12 +336,12 @@ class TestExecuteSchemaValidation:
         ep = make_endpoint("/api/v1/health", "health", method="GET",
                            response_schema={"status": str, "data": dict})
         ep.is_preparation = False
-        result = ServiceResult(name="auth", port=8082)
+        result = ServiceResult(name="auth", port=18082)
         tester.client.get = AsyncMock(
             return_value=_mock_response(200, {"status": "ok"})  # нет "data"
         )
 
-        await tester._execute_endpoint("auth", ep, 8082, result, alive=True)
+        await tester._execute_endpoint("auth", ep, 18082, result, alive=True)
 
         assert result.results[0].success is False
         assert result.endpoints_failed == 1
@@ -359,10 +359,10 @@ class TestExecuteErrors:
     async def test_connect_error(self, tester, make_endpoint):
         """ConnectError → skipped."""
         ep = make_endpoint("/api/v1/health", "health")
-        result = ServiceResult(name="test", port=8080)
+        result = ServiceResult(name="test", port=18080)
         tester.client.get = AsyncMock(side_effect=httpx.ConnectError("Connection refused"))
 
-        await tester._execute_endpoint("test", ep, 8080, result, alive=True)
+        await tester._execute_endpoint("test", ep, 18080, result, alive=True)
 
         assert result.results[0].skipped is True
         assert result.results[0].status_code == 0
@@ -373,10 +373,10 @@ class TestExecuteErrors:
     async def test_timeout(self, tester, make_endpoint):
         """Timeout → skipped."""
         ep = make_endpoint("/api/v1/health", "health")
-        result = ServiceResult(name="test", port=8080)
+        result = ServiceResult(name="test", port=18080)
         tester.client.get = AsyncMock(side_effect=httpx.TimeoutException("Timed out"))
 
-        await tester._execute_endpoint("test", ep, 8080, result, alive=True)
+        await tester._execute_endpoint("test", ep, 18080, result, alive=True)
 
         assert result.results[0].skipped is True
         assert "Timeout" in (result.results[0].error or "")
@@ -386,10 +386,10 @@ class TestExecuteErrors:
     async def test_exception_during_request(self, tester, make_endpoint):
         """Общее исключение → failed."""
         ep = make_endpoint("/api/v1/health", "health")
-        result = ServiceResult(name="test", port=8080)
+        result = ServiceResult(name="test", port=18080)
         tester.client.get = AsyncMock(side_effect=RuntimeError("Unexpected"))
 
-        await tester._execute_endpoint("test", ep, 8080, result, alive=True)
+        await tester._execute_endpoint("test", ep, 18080, result, alive=True)
 
         # Общие исключения counted as failed, not skipped
         assert result.results[0].success is False
@@ -412,10 +412,10 @@ class TestExecuteCheck:
 
         ep = make_endpoint("/api/v1/health", "health", method="GET",
                            check=_check)
-        result = ServiceResult(name="auth", port=8082)
+        result = ServiceResult(name="auth", port=18082)
         tester.client.get = AsyncMock(return_value=_mock_response(200, {"status": "ok"}))
 
-        await tester._execute_endpoint("auth", ep, 8082, result, alive=True)
+        await tester._execute_endpoint("auth", ep, 18082, result, alive=True)
 
         assert result.results[0].success is True
 
@@ -427,10 +427,10 @@ class TestExecuteCheck:
 
         ep = make_endpoint("/api/v1/health", "health", method="GET",
                            check=_check)
-        result = ServiceResult(name="auth", port=8082)
+        result = ServiceResult(name="auth", port=18082)
         tester.client.get = AsyncMock(return_value=_mock_response(200, {"status": "ok"}))
 
-        await tester._execute_endpoint("auth", ep, 8082, result, alive=True)
+        await tester._execute_endpoint("auth", ep, 18082, result, alive=True)
 
         assert result.results[0].success is False
         assert result.endpoints_failed == 1

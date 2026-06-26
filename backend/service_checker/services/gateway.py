@@ -23,7 +23,7 @@ from .base import (
 )
 
 SERVICE_KEY = "gateway"
-PORT = 8080
+PORT = 18080
 DISPLAY_NAME = "Gateway Service"
 
 

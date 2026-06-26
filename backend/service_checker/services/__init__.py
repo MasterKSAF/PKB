@@ -46,16 +46,16 @@ SERVICE_KEYS = {
 
 # Порты сервисов (единый источник)
 MODE_PORTS: Dict[str, int] = {
-    "gateway": 8080,
-    "orchestrator": 8081,
-    "auth": 8082,
-    "query": 8083,
-    "registry": 8084,
-    "converter_validator": 8086,
-    "parser": 8087,
-    "ocr": 8088,
-    "rag_builder": 8090,
-    "rag_search": 8091,
+    "gateway": 18080,
+    "orchestrator": 18081,
+    "auth": 18082,
+    "query": 18083,
+    "registry": 18084,
+    "converter_validator": 18086,
+    "parser": 18087,
+    "ocr": 18088,
+    "rag_builder": 18090,
+    "rag_search": 18091,
     "tei": 18092,
     "minio": 19000,  # MinIO S3 API (для pipeline)
 }

@@ -47,26 +47,26 @@
 | `WebEmulator` | Эмуляция 9 сценариев UI (см. ниже) |
 
 **Режимы запуска моков:**
-- `individual` (по умолч.) — каждый сервис на своём порту (auth:8082, orchestrator:8000, query:8083, registry:8084)
-- `gateway` — всё через единый Gateway Mock (порт 8081)
+- `individual` (по умолч.) — каждый сервис на своём порту (auth:18082, orchestrator:8000, query:18083, registry:18084)
+- `gateway` — всё через единый Gateway Mock (порт 18081)
 - `none` — без моков
 
-> 🔹 **Особенность:** `registry_real` конфликтует по порту (8084) с mock registry, поэтому при `--with-real` он автоматически пропускается.
+> 🔹 **Особенность:** `registry_real` конфликтует по порту (18084) с mock registry, поэтому при `--with-real` он автоматически пропускается.
 
 **Определённые сервисы** (`SERVICE_DEFS`):
 
 | Ключ | Тип | Порт | Имя |
 |------|-----|------|-----|
-| gateway | mock | 8080 | Gateway (Mock All-in-One) |
-| auth | mock | 8082 | Auth Service |
-| orchestrator | mock | 8081 | Orchestrator Service |
-| query | mock | 8083 | Query Service |
-| registry | mock | 8084 | Registry Service |
-| integration | real | 8085 | Integration Service |
-| registry_real | real | 8084 | Registry Service (real) |
-| parser | real | 8087 | Parser Service |
-| rag_builder | real | 8090 | RAG Builder Service |
-| rag_search | real | 8091 | RAG Search Service |
+| gateway | mock | 18080 | Gateway (Mock All-in-One) |
+| auth | mock | 18082 | Auth Service |
+| orchestrator | mock | 18081 | Orchestrator Service |
+| query | mock | 18083 | Query Service |
+| registry | mock | 18084 | Registry Service |
+| integration | real | 18085 | Integration Service |
+| registry_real | real | 18084 | Registry Service (real) |
+| parser | real | 18087 | Parser Service |
+| rag_builder | real | 18090 | RAG Builder Service |
+| rag_search | real | 18091 | RAG Search Service |
 
 **Сценарии эмуляции UI** (`WebEmulator.run_all_scenarios`):
 
@@ -125,16 +125,16 @@ python service_checker.py report    # отчёт из сохранённых л�
 
 | Сервис | Порт | Кол-во эндпоинтов |
 |--------|------|-------------------|
-| auth | 8082 | 16 (health, auth, admin, internal) |
-| registry | 8084 | 28 (classifiers, terminology, documents, common) |
-| orchestrator | 8081 | 30 (health, monitor, tasks, documents, search, drafts) |
-| query | 8083 | 20 (health, chat, history, text) |
-| parser | 8087 | 5 |
-| ocr | 8088 | 5 (см. аномалию — сервис не существует) |
-| converter_validator | 8086 | 4 |
-| rag_builder | 8090 | 4 |
-| rag_search | 8091 | 2 |
-| gateway | 8080 | 120+ (агрегирует auth+orchestrator+query+registry) |
+| auth | 18082 | 16 (health, auth, admin, internal) |
+| registry | 18084 | 28 (classifiers, terminology, documents, common) |
+| orchestrator | 18081 | 30 (health, monitor, tasks, documents, search, drafts) |
+| query | 18083 | 20 (health, chat, history, text) |
+| parser | 18087 | 5 |
+| ocr | 18088 | 5 (см. аномалию — сервис не существует) |
+| converter_validator | 18086 | 4 |
+| rag_builder | 18090 | 4 |
+| rag_search | 18091 | 2 |
+| gateway | 18080 | 120+ (агрегирует auth+orchestrator+query+registry) |
 
 **Контекстные переменные:** между вызовами сохраняются ID (`doc_id`, `session_id`, `user_id`, `classifier_code`, `term_id`, `message_id`, `task_id`, `refresh_token`, `access_token`) для подстановки в шаблоны путей (`{doc_id}`, `{draft_id}`).
 
@@ -319,15 +319,15 @@ PDF-файл
 
 | Service | Port | Ping | ✅ Passed | Documents | Query | Status |
 |---------|:----:|:----:|:---------:|:---------:|:-----:|:------:|
-| Auth Service | 8082 | ✅ | 16/16 | — | ✅ | ✅ |
+| Auth Service | 18082 | ✅ | 16/16 | — | ✅ | ✅ |
 | Orchestrator | 8000 | ✅ | 27/27 | — | — | ✅ |
-| Gateway | 8081 | ✅ | 80/80 | — | — | ✅ |
-| Query Service | 8083 | ✅ | 20/20 | — | ✅ | ✅ |
-| Registry Service | 8084 | ✅ | 28/28 | ✅ | — | ✅ |
-| Parser Service | 8087 | ✅ | 5/5 | ✅ | — | ✅ |
-| Converter-Validator | 8086 | ✅ | 4/4 | ✅ | — | ✅ |
-| RAG Builder | 8090 | ✅ | 4/4 | ✅ | — | ✅ |
-| RAG Search | 8091 | ✅ | 2/2 | ✅ | ✅ | ✅ |
+| Gateway | 18081 | ✅ | 80/80 | — | — | ✅ |
+| Query Service | 18083 | ✅ | 20/20 | — | ✅ | ✅ |
+| Registry Service | 18084 | ✅ | 28/28 | ✅ | — | ✅ |
+| Parser Service | 18087 | ✅ | 5/5 | ✅ | — | ✅ |
+| Converter-Validator | 18086 | ✅ | 4/4 | ✅ | — | ✅ |
+| RAG Builder | 18090 | ✅ | 4/4 | ✅ | — | ✅ |
+| RAG Search | 18091 | ✅ | 2/2 | ✅ | ✅ | ✅ |
 
 > 🔹 **Особенность:** итоговая таблица объединяет API Coverage (✅ Passed) и Pipeline Testing (Documents, Query) в одном представлении. 
 
@@ -539,7 +539,7 @@ python -m service_checker check auth_service --source-dir /path/to/auth_service
 
 ## Аномалии (из `specificity.md`)
 
-- **OCR Service не существует** — в supervisord на порт 8088 запущен Parser Service (частично исправлено в checker)
+- **OCR Service не существует** — в supervisord на порт 18088 запущен Parser Service (частично исправлено в checker)
 - **Auth Service падал на /auth/refresh** — баг в `auth_service` (исправлено, добавлена проверка `expires_at is None`)
 
 > 🔹 **Особенность:** аномалии фиксируются в `specificity.md` и не исправляются автоматически — checker только адаптирует свою логику под них (например, all_404 оверрайд для OCR). Исправление самих сервисов — задача владельцев сервисов.

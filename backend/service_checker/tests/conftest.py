@@ -43,7 +43,7 @@ def tester(request):
     t.services_with_impl = set()
     t.client = MagicMock(spec=httpx.AsyncClient)
     # Добавляем тестовый сервис в MODE_PORTS чтобы избежать "Неизвестный порт"
-    MODE_PORTS["test"] = 8080
+    MODE_PORTS["test"] = 18080
     return t
 
 

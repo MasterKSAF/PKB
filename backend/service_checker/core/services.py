@@ -197,13 +197,13 @@ class WebEmulator:
     """
     Эмуляция работы веб-интерфейса.
     Делает те же вызовы, что и фронтенд.
-    Принимает URL базового сервиса (Orchestrator на порту 8081).
+    Принимает URL базового сервиса (Orchestrator на порту 18081).
     """
 
-    ORCHESTRATOR_URL: str = "http://127.0.0.1:8081"
-    AUTH_URL: str = "http://127.0.0.1:8082"
-    QUERY_URL: str = "http://127.0.0.1:8083"
-    REGISTRY_URL: str = "http://127.0.0.1:8084"
+    ORCHESTRATOR_URL: str = "http://127.0.0.1:18081"
+    AUTH_URL: str = "http://127.0.0.1:18082"
+    QUERY_URL: str = "http://127.0.0.1:18083"
+    REGISTRY_URL: str = "http://127.0.0.1:18084"
 
     def __init__(self, mode: str = "individual", report: Optional[Report] = None):
         self.mode = mode

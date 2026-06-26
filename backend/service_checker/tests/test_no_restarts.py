@@ -44,7 +44,7 @@ async def _try_get_refresh_token(client: httpx.AsyncClient) -> str | None:
         {"username": "admin@example.com", "password": "admin123"},
     ]:
         resp = await client.post(
-            "http://127.0.0.1:8082/api/v1/auth/token",
+            "http://127.0.0.1:18082/api/v1/auth/token",
             json=creds,
         )
         if resp.status_code == 200:
@@ -86,7 +86,7 @@ async def test_auth_refresh_does_not_crash_service():
 
         # Вызываем /auth/refresh — именно он раньше крашил сервис
         refresh_resp = await client.post(
-            "http://127.0.0.1:8082/api/v1/auth/refresh",
+            "http://127.0.0.1:18082/api/v1/auth/refresh",
             json={"refresh_token": refresh_token},
         )
 
@@ -124,7 +124,7 @@ async def test_auth_refresh_does_not_crash_service():
         else:
             # Лог недоступен — проверяем через health check
             health_resp = await client.get(
-                "http://127.0.0.1:8082/api/v1/health",
+                "http://127.0.0.1:18082/api/v1/health",
             )
             assert health_resp.status_code < 500, (
                 f"Auth Service упал после /auth/refresh ({token_source})! "

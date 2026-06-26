@@ -40,7 +40,7 @@ def make_mock_pipeline_result(
                     service=svc,
                     method="GET",
                     path="/health",
-                    port=8080,
+                    port=18080,
                     status=step_status,
                 ))
     return PipelineResult(
@@ -126,8 +126,8 @@ class TestGenerateFullReport:
         from service_checker.core.reports import _generate_full_report
 
         cov_results = {
-            "auth": MockCoverageResult("auth", 8082, ping_ok=True),
-            "registry": MockCoverageResult("registry", 8084, ping_ok=True),
+            "auth": MockCoverageResult("auth", 18082, ping_ok=True),
+            "registry": MockCoverageResult("registry", 18084, ping_ok=True),
         }
         pipe_results = {
             "document_processing": make_mock_pipeline_result(name="doc", passed=True),
@@ -143,7 +143,7 @@ class TestGenerateFullReport:
         from service_checker.core.reports import _generate_full_report
 
         cov_results = {
-            "auth": MockCoverageResult("auth", 8082, ping_ok=True),
+            "auth": MockCoverageResult("auth", 18082, ping_ok=True),
         }
         pipe_results = {
             "doc": make_mock_pipeline_result(name="doc", passed=True),
@@ -159,7 +159,7 @@ class TestGenerateFullReport:
         from service_checker.core.reports import _generate_full_report
 
         cov_results = {
-            "auth": MockCoverageResult("Auth Service", 8082, ping_ok=True),
+            "auth": MockCoverageResult("Auth Service", 18082, ping_ok=True),
         }
         pipe_results = {
             "document_processing": make_mock_pipeline_result(name="doc", passed=True),
@@ -177,7 +177,7 @@ class TestGenerateFullReport:
         from service_checker.core.reports import _generate_full_report
 
         cov_results = {
-            "auth": MockCoverageResult("Auth Service", 8082, ping_ok=False),
+            "auth": MockCoverageResult("Auth Service", 18082, ping_ok=False),
         }
         pipe_results = {
             "doc": make_mock_pipeline_result(name="doc", passed=True),
@@ -209,7 +209,7 @@ class TestGenerateFullReport:
 
         # Registry участвует в document_processing
         cov_results = {
-            "registry": MockCoverageResult("Registry", 8084, ping_ok=True),
+            "registry": MockCoverageResult("Registry", 18084, ping_ok=True),
         }
         pipe_ok = {
             "document_processing": make_mock_pipeline_result(name="doc", passed=True, services=["registry"]),
@@ -251,7 +251,7 @@ class TestGenerateFullReport:
         from service_checker.core.reports import _generate_full_report
 
         cov_results = {
-            "auth": MockCoverageResult("Auth", 8082, ping_ok=True),
+            "auth": MockCoverageResult("Auth", 18082, ping_ok=True),
         }
         pipe_ok = {
             "chat_inference": make_mock_pipeline_result(name="chat", passed=True, services=["auth"]),
@@ -285,7 +285,7 @@ class TestGenerateFullReport:
 
         # Gateway не участвует ни в document_processing, ни в chat_inference
         cov_results = {
-            "gateway": MockCoverageResult("Gateway", 8080, ping_ok=True),
+            "gateway": MockCoverageResult("Gateway", 18080, ping_ok=True),
         }
         # Используем pipeline имена из PIPELINE_SERVICE_COLUMNS для pipe_order
         pipe_results = {
@@ -296,7 +296,7 @@ class TestGenerateFullReport:
         lines = report.split("\n")
 
         # В сводной таблице: Pipelines колонка (index 6) должна быть "—" для Gateway
-        gw_line_main = [l for l in lines if "Gateway" in l and "| 8080 |" in l][0]
+        gw_line_main = [l for l in lines if "Gateway" in l and "| 18080 |" in l][0]
         parts_main = [p.strip() for p in gw_line_main.split("|")]
         # Столбцы сводной: Service(1) | Port(2) | Ping(3) | CheckDb(4) | API(5) | Pipelines(6) | Status(7)
         assert parts_main[6] == "—", f"Expected '—', got {parts_main[6]}"
@@ -314,7 +314,7 @@ class TestGenerateFullReport:
         from service_checker.core.reports import _generate_full_report
 
         cov_results = {
-            "auth": MockCoverageResult("Auth Service", 8082, ping_ok=True,
+            "auth": MockCoverageResult("Auth Service", 18082, ping_ok=True,
                                         endpoints_total=10, endpoints_passed=10,
                                         endpoints_failed=0, endpoints_skipped=0),
         }
@@ -336,8 +336,8 @@ class TestGenerateFullReport:
         from service_checker.core.reports import _generate_full_report
 
         cov_results = {
-            "auth": MockCoverageResult("Auth Service", 8082, ping_ok=True),
-            "orchestrator": MockCoverageResult("Orchestrator", 8081, ping_ok=True),
+            "auth": MockCoverageResult("Auth Service", 18082, ping_ok=True),
+            "orchestrator": MockCoverageResult("Orchestrator", 18081, ping_ok=True),
         }
         pipe_results = {
             "orchestrator_draft_lifecycle": make_mock_pipeline_result(

@@ -19,7 +19,7 @@ from .base import (
 )
 
 SERVICE_KEY = "query"
-PORT = 8083
+PORT = 18083
 DISPLAY_NAME = "Query Service"
 
 

@@ -65,7 +65,7 @@ class AdminUserLifecyclePipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/auth/token",
-            port=8080,
+            port=18080,
             body=TEST_CREDENTIALS,
             expected_status=200,
             extract_keys=["access_token", "refresh_token"],
@@ -78,7 +78,7 @@ class AdminUserLifecyclePipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/admin/users",
-            port=8080,
+            port=18080,
             body={
                 "email": test_email,
                 "full_name": "Pipeline Test User",
@@ -97,7 +97,7 @@ class AdminUserLifecyclePipeline(PipelineDef):
             service="gateway",
             method="GET",
             path="/api/v1/admin/users",
-            port=8080,
+            port=18080,
             params={"page": 1, "page_size": 20},
             expected_status=200,
             needs_auth=True,
@@ -110,7 +110,7 @@ class AdminUserLifecyclePipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/auth/token",
-            port=8080,
+            port=18080,
             body={
                 "username": test_email,
                 "password": test_password,
@@ -126,7 +126,7 @@ class AdminUserLifecyclePipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/chat/sessions",
-            port=8080,
+            port=18080,
             body={
                 "title": f"User pipeline сессия {ts}",
                 "document_ids": [],  # QS-3: пустой список документов
@@ -147,7 +147,7 @@ class AdminUserLifecyclePipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/chat/sessions/{session_id}/messages",
-            port=8080,
+            port=18080,
             body={
                 "text": "Тестовое сообщение от pipeline пользователя",
                 "content": "Тестовое сообщение от pipeline пользователя",
@@ -164,7 +164,7 @@ class AdminUserLifecyclePipeline(PipelineDef):
             service="gateway",
             method="GET",
             path="/api/v1/chat/sessions/{session_id}/messages",
-            port=8080,
+            port=18080,
             expected_status=200,
             check=check_json_field("messages", list),
             needs_auth=True,
@@ -178,7 +178,7 @@ class AdminUserLifecyclePipeline(PipelineDef):
                 service="gateway",
                 method="POST",
                 path="/api/v1/auth/token",
-                port=8080,
+                port=18080,
                 body=_wrong_creds,
                 expected_status={401, 429, 423},  # 401=wrong, 429=rate, 423=locked
             ))
@@ -188,7 +188,7 @@ class AdminUserLifecyclePipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/auth/token",
-            port=8080,
+            port=18080,
             body=_wrong_creds,
             expected_status={401, 429, 423},  # AU-3: 401 если защита не реализована
         ))
@@ -199,7 +199,7 @@ class AdminUserLifecyclePipeline(PipelineDef):
             service="gateway",
             method="GET",
             path="/api/v1/admin/audit",
-            port=8080,
+            port=18080,
             params={"page": 1, "page_size": 10},
             expected_status=200,
             needs_auth=True,
@@ -212,7 +212,7 @@ class AdminUserLifecyclePipeline(PipelineDef):
             service="gateway",
             method="DELETE",
             path="/api/v1/admin/users/{user_id}",
-            port=8080,
+            port=18080,
             expected_status={200, 307},
             needs_auth=True,
             check=check_json_field("is_active", bool),
@@ -225,7 +225,7 @@ class AdminUserLifecyclePipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/auth/token",
-            port=8080,
+            port=18080,
             body={
                 "username": test_email,
                 "password": test_password,

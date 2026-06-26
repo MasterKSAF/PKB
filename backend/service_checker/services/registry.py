@@ -23,7 +23,7 @@ from .base import (
 )
 
 SERVICE_KEY = "registry"
-PORT = 8084
+PORT = 18084
 DISPLAY_NAME = "Registry Service"
 
 _ts = str(int(time.time()))[-6:]

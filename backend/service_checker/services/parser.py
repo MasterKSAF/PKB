@@ -17,7 +17,7 @@ from .base import (
 )
 
 SERVICE_KEY = "parser"
-PORT = 8087
+PORT = 18087
 DISPLAY_NAME = "Parser Service"
 
 

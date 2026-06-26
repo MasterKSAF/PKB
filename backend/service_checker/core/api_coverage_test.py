@@ -651,7 +651,7 @@ class ApiCoverageTester:
             port = MODE_PORTS.get(service_key, 0)
             svc_name = service_key
             if port == 0:
-                port = 8080
+                port = 18080
         elif service_key in SERVICE_REGISTRY:
             # mode передаём только тем сервисам, у которых get_service_def() его принимает
             import inspect
@@ -692,7 +692,22 @@ class ApiCoverageTester:
             if service_key == "query":
                 import json as _json
                 auth_token = self.context.get("access_token", "")
-                create_url = f"http://{self.base_host}:8083/api/v1/chat/projects"
+                
+                # Если токен не сохранён в контексте — получаем отдельно
+                if not auth_token:
+                    try:
+                        auth_url = f"http://{self.base_host}:18082/api/v1/auth/token"
+                        auth_resp = await self.client.post(auth_url, json={"username": "admin@example.com", "password": "Admin1234!"})
+                        if auth_resp.status_code == 200:
+                            auth_data = auth_resp.json()
+                            auth_token = auth_data.get("access_token", "")
+                            if auth_token:
+                                self.context["access_token"] = auth_token
+                                self.context["refresh_token"] = auth_data.get("refresh_token", "")
+                    except Exception:
+                        pass
+
+                create_url = f"http://{self.base_host}:18083/api/v1/chat/projects"
                 create_headers = {"Content-Type": "application/json"}
                 if auth_token:
                     create_headers["Authorization"] = f"Bearer {auth_token}"
@@ -742,9 +757,9 @@ class ApiCoverageTester:
 
             # ── Pre-prepare: создание черновика через Orchestrator (task_id + draft_id) ──
             # Converter/Parser/OCR используют task_id и draft_id в телах запросов.
-            # Создаём черновик напрямую через Orchestrator (порт 8081).
+            # Создаём черновик напрямую через Orchestrator (порт 18081).
             if service_key in ("converter_validator", "parser", "ocr"):
-                orch_url = f"http://{self.base_host}:8081/api/v1/drafts/"
+                orch_url = f"http://{self.base_host}:18081/api/v1/drafts/"
                 auth_token = self.context.get("access_token", "")
                 orch_headers: Dict[str, str] = {}
                 if auth_token:

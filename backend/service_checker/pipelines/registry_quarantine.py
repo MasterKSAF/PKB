@@ -45,7 +45,7 @@ class RegistryQuarantinePipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/auth/token",
-            port=8080,
+            port=18080,
             body=TEST_CREDENTIALS,
             expected_status=200,
             extract_keys=["access_token", "refresh_token"],
@@ -59,7 +59,7 @@ class RegistryQuarantinePipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/registry/classifiers",
-            port=8080,
+            port=18080,
             body={
                 "classifier_system": "MKS",
                 "code": classifier_code,
@@ -79,7 +79,7 @@ class RegistryQuarantinePipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/registry/documents",
-            port=8080,
+            port=18080,
             body={
                 "title": f"Pipeline quarantine документ {ts}",
                 "doc_code": f"QUAR-TEST-{ts}",
@@ -102,7 +102,7 @@ class RegistryQuarantinePipeline(PipelineDef):
             service="gateway",
             method="GET",
             path="/api/v1/registry/classifiers/pending",
-            port=8080,
+            port=18080,
             params={"page": 1, "page_size": 10},
             expected_status=200,
             extract_keys=["pending_id"],
@@ -116,7 +116,7 @@ class RegistryQuarantinePipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/registry/classifiers/pending/{pending_id}/accept",
-            port=8080,
+            port=18080,
             body={
                 "parent_code": classifier_code,
                 "full_name": f"Pipeline принятый классификатор {ts}",
@@ -132,7 +132,7 @@ class RegistryQuarantinePipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/registry/classifiers/validate",
-            port=8080,
+            port=18080,
             body={
                 "classification": {
                     "mks_oks_code": unknown_code,
@@ -153,7 +153,7 @@ class RegistryQuarantinePipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/registry/documents",
-            port=8080,
+            port=18080,
             body={
                 "title": f"Pipeline quarantine документ 2 {ts}",
                 "doc_code": f"QUAR-TEST2-{ts}",
@@ -175,7 +175,7 @@ class RegistryQuarantinePipeline(PipelineDef):
             service="gateway",
             method="GET",
             path="/api/v1/registry/classifiers/pending",
-            port=8080,
+            port=18080,
             params={"page": 1, "page_size": 10},
             expected_status=200,
             extract_keys=["pending_id2"],
@@ -189,7 +189,7 @@ class RegistryQuarantinePipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/registry/classifiers/pending/{pending_id2}/reject",
-            port=8080,
+            port=18080,
             body={
                 "admin_comment": "Отклонено pipeline тестом",
             },
@@ -204,7 +204,7 @@ class RegistryQuarantinePipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/registry/classifiers/validate",
-            port=8080,
+            port=18080,
             body={
                 "classification": {
                     "mks_oks_code": unknown_code2,

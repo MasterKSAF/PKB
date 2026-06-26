@@ -18,7 +18,7 @@ from .base import (
 )
 
 SERVICE_KEY = "auth"
-PORT = 8082
+PORT = 18082
 DISPLAY_NAME = "Auth Service"
 
 _ts = str(int(time.time()))[-6:]

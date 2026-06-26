@@ -285,7 +285,7 @@ class PipelineRunner:
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
         if auth_token:
             headers["Authorization"] = f"Bearer {auth_token}"
-        base_url = f"http://{self.base_host}:8083/api/v1/chat/projects"
+        base_url = f"http://{self.base_host}:18083/api/v1/chat/projects"
 
         # 1. Пытаемся создать проект (retry 3 раза), code с timestamp чтобы избежать
         #    UniqueViolation при параллельных или последовательных прогонах

@@ -233,7 +233,7 @@ async def main():
     import sys
     if len(sys.argv) < 2:
         print("Использование: python -m service_checker.core.openapi_loader <base_url>")
-        print("Пример: python -m service_checker.core.openapi_loader http://127.0.0.1:8082")
+        print("Пример: python -m service_checker.core.openapi_loader http://127.0.0.1:18082")
         sys.exit(1)
 
     base_url = sys.argv[1]

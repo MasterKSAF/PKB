@@ -48,7 +48,7 @@ class OrchestratorDocumentVersionsPipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/auth/token",
-            port=8080,
+            port=18080,
             body=TEST_CREDENTIALS,
             expected_status=200,
             extract_keys=["access_token", "refresh_token"],
@@ -75,7 +75,7 @@ class OrchestratorDocumentVersionsPipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/registry/documents",
-            port=8080,
+            port=18080,
             body={
                 "title": f"Version тест {ts}",
                 "doc_code": f"VERSION-{ts}",
@@ -95,7 +95,7 @@ class OrchestratorDocumentVersionsPipeline(PipelineDef):
             service="gateway",
             method="POST",
             path="/api/v1/documents/{approved_doc_id}/versions",
-            port=8080,
+            port=18080,
             form_files={
                 "file": (v2_pdf_name, TEST_PDF_BYTES, "application/pdf"),
             },
@@ -109,7 +109,7 @@ class OrchestratorDocumentVersionsPipeline(PipelineDef):
             service="gateway",
             method="GET",
             path="/api/v1/documents/{approved_doc_id}/versions",
-            port=8080,
+            port=18080,
             expected_status={200, 404},
             needs_auth=True,
         ))

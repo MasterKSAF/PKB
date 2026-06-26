@@ -1,75 +1,37 @@
-# План исправления ошибок — статус
+# Смена портов: +10000 в тестах и docker-файлах
 
-## Сделано ✅
+**Маппинг:** 8080→18080, 8081→18081, 8082→18082, 8083→18083, 8084→18084,
+8085→18085, 8086→18086, 8087→18087, 8088→18088, 8090→18090, 8091→18091
 
-### 1. Pipeline document_processing — заменён эндпоинт
-`pipelines/document_processing.py`:
-- `/import` (file upload) → `/check-uniqueness` (JSON)
+**НЕ ТРОГАТЬ:** 19000, 19001, 15432, 16379, 18092, 5432, 6379, 80, 9000, 9001, 4317, 4318
 
-### 2. Pre-prepare POST /drafts — добавлен файл
-`core/api_coverage_test.py`:
-- Добавлен PDF в `files=`, иначе Orchestrator возвращал 422
+## Выполнено
 
-### 3. Orchestrator expected_status — 409 для POST /drafts
-`services/orchestrator.py` + 7 пайплайнов:
-- `expected_status=202` → `expected_status={202, 409}`
-- Registry seed data конфликтует при создании черновика, 409 — штатная ситуация
+### Тесты (все порты +10000)
+- [x] tests/conftest.py
+- [x] tests/test_api_coverage_execute_endpoint.py
+- [x] tests/test_api_coverage_test_service.py
+- [x] tests/test_full_report.py
+- [x] tests/test_integration_draft_upload.py
+- [x] tests/test_md_parser.py
+- [x] tests/test_no_restarts.py
+- [x] tests/test_openapi_comparator.py
+- [x] tests/test_pipeline_base.py
+- [x] tests/test_pipeline_multi_document_cross_search.py
+- [x] tests/test_pipeline_runner_run.py
+- [x] tests/test_pipeline_runner_run_step.py
+- [x] tests/test_service_contracts.py
 
-### 4. Orchestrator GET /documents/queue — schema
-`services/orchestrator.py`:
-- Убран `expected_status={404}` (эндпоинт реализован, отдаёт 200)
-- Убрана `response_schema` (поля не совпадают)
+### Docker (только внешние/хост-порты)
+- [x] docker/docker-compose.yml — порты `18081:8081` и т.д. + env URL
+- [x] docker/docker-compose-web.yml — порты `18081:8081` и т.д. + env URL
+- [x] docker/docker-compose.spd.yml — порты `18081:8081` и т.д.
+- [x] docker/create_env.py — SERVICE_URL с новыми портами
+- [x] docker/wait_for_services.py — кортежи портов
 
-### 5. Registry URL — исправлен на имя сервиса
-`docker-compose.yml` + `create_env.py`:
-- `REGISTRY_SERVICE_URL=http://127.0.0.1:8084` → `http://registry-service:8084`
-- Аналогично INTEGRATION, VALIDATE, RAG
+### Документация (для прохождения md_parser тестов)
+- [x] docs/api/*.md — заголовки сервисов, таблицы health, URL
+- [x] docs/README.md, docs/architecture/*.md, docs/pipelines/*.md и др.
 
-### 6. Mock-режимы — выключены
-`docker-compose.yml` + `create_env.py`:
-- `AUTH_SERVICE_MOCK=false`, `DEV_AUTH_MODE=false`
-- `MOCK_LLM_ENABLED=false`, `REGISTRY_SERVICE_MOCK=false`
-
-### 7. Contract gateway → rag_search
-`core/contracts_check.py` — уже отключён (не вызывается)
-
----
-
-## Результат прогона (Orchestrator)
-
-| Метрика | Было | Стало |
-|---------|------|-------|
-| API Coverage Orchestrator | 22/35 | **35/35** |
-| Registry API | 3 failed | **0 failed** |
-| document_processing pipeline | 1 failed | **0 failed** |
-| Gateway API (предыдущий замер, не перепрогонялся) | 29 failed | 15 failed |
-
----
-
-## Осталось 🔍
-
-### admin_user_lifecycle — Cannot create project
-Auth не в mock-режиме. Checker не может создать проект для чат-сессий.
-**Требуется:** проверить pre-prepare для Query (POST /chat/projects) — Auth в real mode требует JWT.
-
-### Контракты: 1/4 упало
-Нужно посмотреть какой контракт упал.
-
-### Gateway — 15 failed, 13 skipped
-После исправления Registry URL и mock-режимов, Gateway coverage не перезапускался.
-**Требуется:** полный прогон `recheck.bat` без фильтров.
-
----
-
-## Файлы изменены
-
-| Файл | Изменение |
-|------|-----------|
-| `core/api_coverage_test.py` | PDF в pre-prepare POST /drafts |
-| `pipelines/document_processing.py` | `/import` → `/check-uniqueness` |
-| `pipelines/*orchestrator*.py` (7 шт) | `expected_status={202, 409}` |
-| `pipelines/document_approval.py` | `expected_status={202, 409}` |
-| `services/orchestrator.py` | 409, /documents/queue, schema |
-| `docker/docker-compose.yml` | URL сервисов, mock=false |
-| `docker/create_env.py` | URL сервисов, mock=false |
-| `docker/recheck.bat` | Удаление orchestrator.db |
+### Валидация
+- [x] 238 тестов проходят, 3 integration падают из-за отсутствия Docker

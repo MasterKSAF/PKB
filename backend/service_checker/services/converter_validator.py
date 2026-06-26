@@ -18,7 +18,7 @@ from .base import (
 )
 
 SERVICE_KEY = "converter_validator"
-PORT = 8086
+PORT = 18086
 DISPLAY_NAME = "Converter-Validator Service"
 
 

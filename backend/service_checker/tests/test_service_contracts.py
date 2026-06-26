@@ -168,7 +168,7 @@ class TestQueryToRagSearchContract:
             service="rag_search",
             method="POST",
             path="/api/v1/rag/search",
-            port=MODE_PORTS.get("rag_search", 8091),
+            port=MODE_PORTS.get("rag_search", 18091),
             body={
                 "query": "тест",
                 # valid_at отсутствует — как в баге
@@ -256,7 +256,7 @@ class TestQueryToRagSearchContract:
             service="rag_search",
             method="POST",
             path="/api/v1/rag/search",
-            port=MODE_PORTS.get("rag_search", 8091),
+            port=MODE_PORTS.get("rag_search", 18091),
             body={
                 "query": "тест",
                 # valid_at полностью отсутствует
@@ -364,7 +364,7 @@ class TestQueryToRegistryContract:
             service="registry",
             method="GET",
             path="/api/v1/registry/search",
-            port=MODE_PORTS.get("registry", 8084),
+            port=MODE_PORTS.get("registry", 18084),
             params={"q": "тест", "valid_at": "2026-06-19"},
             expected_status=200,
             needs_auth=True,
@@ -549,7 +549,7 @@ class TestGatewayToQueryProxy:
             service="gateway",
             method="POST",
             path="/api/v1/chat/sessions/{session_id}/messages",
-            port=MODE_PORTS.get("gateway", 8080),
+            port=MODE_PORTS.get("gateway", 18080),
             body=msg_ep.body,
             expected_status=msg_ep.expected_status or 200,
             extract_keys=msg_ep.extract_keys,
@@ -677,7 +677,7 @@ class TestGatewayToRagSearchProxy:
             service="gateway",
             method="POST",
             path="/api/v1/rag/search",
-            port=MODE_PORTS.get("gateway", 8080),
+            port=MODE_PORTS.get("gateway", 18080),
             body=rag_ep.body,
             expected_status=200,
             needs_auth=True,

@@ -17,7 +17,7 @@ from .base import (
 )
 
 SERVICE_KEY = "rag_search"
-PORT = 8091
+PORT = 18091
 DISPLAY_NAME = "RAG Search Service"
 
 

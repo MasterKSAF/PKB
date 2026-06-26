@@ -254,19 +254,19 @@ class TestServicePrepare:
             tester.context.clear()
             svc_endpoints = tester._test_endpoints.get(service_key, [])
 
-            result = ServiceResult(name="test_svc", port=8080)
+            result = ServiceResult(name="test_svc", port=18080)
             result.endpoints_total = len([prepare_ep] + svc_endpoints)
 
-            alive = await tester.ping_service(8080)
+            alive = await tester.ping_service(18080)
             result.ping_ok = alive
 
             # Prepare
             if alive:
-                await tester._execute_endpoint(service_key, prepare_ep, 8080, result, alive)
+                await tester._execute_endpoint(service_key, prepare_ep, 18080, result, alive)
 
             # Main endpoints
             for ep in svc_endpoints:
-                await tester._execute_endpoint(service_key, ep, 8080, result, alive)
+                await tester._execute_endpoint(service_key, ep, 18080, result, alive)
 
             return result
 

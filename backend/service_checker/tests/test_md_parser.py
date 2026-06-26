@@ -177,7 +177,7 @@ def registry_parser():
 
 class TestAuthServiceParsing:
     def test_service_info(self, auth_parser):
-        assert auth_parser.port == 8082
+        assert auth_parser.port == 18082
         assert auth_parser.key == "auth"
         assert len(auth_parser.errors) == 0
 
@@ -215,7 +215,7 @@ class TestAuthServiceParsing:
 
 class TestRegistryServiceParsing:
     def test_service_info(self, registry_parser):
-        assert registry_parser.port == 8084
+        assert registry_parser.port == 18084
         assert registry_parser.key == "registry"
         # 1 ошибка: "7.6. Ошибки групп categories (справочно)" — не эндпоинт
         assert len(registry_parser.errors) <= 1
