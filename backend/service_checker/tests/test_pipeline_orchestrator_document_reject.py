@@ -12,8 +12,8 @@ class TestOrchestratorDocumentRejectPipeline:
         p = OrchestratorDocumentRejectPipeline()
         assert p.name == "orchestrator_document_reject"
         assert p.description
-        assert "orchestrator" in p.services
-        assert "auth" in p.services
+        assert "gateway" in p.services
+        assert len(p.services) == 1
 
     def test_build_steps_count(self):
         p = OrchestratorDocumentRejectPipeline()
@@ -24,12 +24,12 @@ class TestOrchestratorDocumentRejectPipeline:
         p = OrchestratorDocumentRejectPipeline()
         steps = p.build_steps(PipelineContext())
         expected_names = [
-            "Аутентификация",
-            "Создание черновика",
-            "Статус задачи (longpoll)",
-            "Детали черновика",
-            "Решение по черновику (reject)",
-            "Проверка статуса после reject",
+            "Аутентификация (через Gateway)",
+            "Создание черновика (через Gateway)",
+            "Статус задачи (через Gateway)",
+            "Детали черновика (через Gateway)",
+            "Решение по черновику (reject, через Gateway)",
+            "Проверка статуса после reject (через Gateway)",
         ]
         actual = [s.name for s in steps]
         assert actual == expected_names, f"Порядок шагов:\n{actual}"
@@ -38,7 +38,7 @@ class TestOrchestratorDocumentRejectPipeline:
         p = OrchestratorDocumentRejectPipeline()
         steps = p.build_steps(PipelineContext())
         auth = steps[0]
-        assert auth.service == "auth"
+        assert auth.service == "gateway"
         assert auth.method == "POST"
         assert auth.path == "/api/v1/auth/token"
         assert auth.expected_status == 200
@@ -49,9 +49,9 @@ class TestOrchestratorDocumentRejectPipeline:
         p = OrchestratorDocumentRejectPipeline()
         steps = p.build_steps(PipelineContext())
         draft = steps[1]
-        assert draft.service == "orchestrator"
+        assert draft.service == "gateway"
         assert draft.method == "POST"
-        assert draft.path == "/api/v1/drafts/"
+        assert draft.path == "/api/v1/drafts"
         assert draft.expected_status == 202
         assert draft.extract_keys == ["draft_id", "task_id"]
         assert draft.needs_auth
@@ -66,7 +66,7 @@ class TestOrchestratorDocumentRejectPipeline:
         steps = p.build_steps(PipelineContext())
         reject = steps[4]
         assert reject.expected_status == {200, 409}
-        assert reject.service == "orchestrator"
+        assert reject.service == "gateway"
         assert "reject" in reject.name.lower()
         assert reject.body["action"] == "reject"
         assert "approve" not in reject.body["action"]
@@ -76,7 +76,7 @@ class TestOrchestratorDocumentRejectPipeline:
         p = OrchestratorDocumentRejectPipeline()
         steps = p.build_steps(PipelineContext())
         final = steps[5]
-        assert final.service == "orchestrator"
+        assert final.service == "gateway"
         assert final.method == "GET"
         assert "/drafts/{draft_id}" in final.path
         assert final.expected_status == {200, 404}
@@ -104,6 +104,6 @@ class TestOrchestratorDocumentRejectPipeline:
         p = OrchestratorDocumentRejectPipeline()
         steps = p.build_steps(PipelineContext())
         detail = steps[3]
-        assert detail.service == "orchestrator"
+        assert detail.service == "gateway"
         assert detail.path == "/api/v1/drafts/{draft_id}"
         assert detail.check is not None

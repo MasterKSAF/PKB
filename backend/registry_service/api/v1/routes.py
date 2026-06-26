@@ -95,14 +95,36 @@ def list_documents(
                 from datetime import datetime
                 dt_from = datetime.fromisoformat(date_from)
             except ValueError:
-                pass
+                raise HTTPException(
+                    status_code=400,
+                    detail={'error': {'code': 'INVALID_DATE_RANGE', 'message': 'Некорректный формат даты date_from'}}
+                )
         dt_to = None
         if date_to:
             try:
                 from datetime import datetime
                 dt_to = datetime.fromisoformat(date_to)
             except ValueError:
-                pass
+                raise HTTPException(
+                    status_code=400,
+                    detail={'error': {'code': 'INVALID_DATE_RANGE', 'message': 'Некорректный формат даты date_to'}}
+                )
+
+        if dt_from and dt_to:
+            if dt_from > dt_to:
+                raise HTTPException(
+                    status_code=400,
+                    detail={'error': {'code': 'INVALID_DATE_RANGE', 'message': 'date_from позже date_to'}}
+                )
+            
+            from settings import MAX_DATE_RANGE_YEARS
+            days_diff = (dt_to - dt_from).days
+            if days_diff > MAX_DATE_RANGE_YEARS * 365.25:
+                raise HTTPException(
+                    status_code=400,
+                    detail={'error': {'code': 'INVALID_DATE_RANGE', 'message': f'Превышен максимальный диапазон дат ({MAX_DATE_RANGE_YEARS} лет)'}}
+                )
+
 
         dt_valid_at = None
         if valid_at:
@@ -142,6 +164,8 @@ def list_documents(
                 'page_size': page_size,
             }
         }
+    except HTTPException:
+        raise
     except Exception as e:
         log_event('ERROR', '/registry/documents/', None, None, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
@@ -1689,13 +1713,35 @@ def get_stats(db: Session = Depends(get_db)):
 
 
 @routes.get('/health')
-def health_check():
+def health_check(db: Session = Depends(get_db)):
     """Health check endpoint.
 
     Docs: docs/api/registry_service_api.md — GET /health/ (Health check)
     """
-    log_event('INFO', '/health/', None, None)
-    return {'status': 'ok'}
+    from settings import SERVICE_NAME, SERVICE_VERSION
+    from sqlalchemy import text
+    
+    status = 'ok'
+    try:
+        db.execute(text('SELECT 1'))
+    except Exception as e:
+        log_event('ERROR', '/health', None, None, f'Health check database connection failed: {str(e)}')
+        status = 'error'
+        return JSONResponse(
+            status_code=500,
+            content={
+                'status': status,
+                'service': SERVICE_NAME,
+                'version': SERVICE_VERSION
+            }
+        )
+
+    return {
+        'status': status,
+        'service': SERVICE_NAME,
+        'version': SERVICE_VERSION
+    }
+
 
 
 # ============================================================================

@@ -12,7 +12,8 @@ class TestRegistryQuarantinePipeline:
         p = RegistryQuarantinePipeline()
         assert p.name == "registry_quarantine"
         assert p.description
-        assert len(p.services) == 2
+        assert "gateway" in p.services
+        assert len(p.services) == 1
 
     def test_build_steps_count(self):
         p = RegistryQuarantinePipeline()
@@ -23,16 +24,16 @@ class TestRegistryQuarantinePipeline:
         p = RegistryQuarantinePipeline()
         steps = p.build_steps(PipelineContext())
         expected_names = [
-            "Аутентификация",
-            "Создать классификатор",
-            "Создать документ с неизвестным кодом",
-            "Список карантина (pending)",
-            "Принять из карантина (accept)",
-            "Валидация классификации (accept)",
-            "Создать второй документ с неизвестным кодом",
-            "Список карантина (второй pending)",
-            "Отклонить из карантина (reject)",
-            "Валидация классификации (reject)",
+            "Аутентификация (через Gateway)",
+            "Создать классификатор (через Gateway)",
+            "Создать документ с неизвестным кодом (через Gateway)",
+            "Список карантина (pending, через Gateway)",
+            "Принять из карантина (accept, через Gateway)",
+            "Валидация классификации (accept, через Gateway)",
+            "Создать второй документ с неизвестным кодом (через Gateway)",
+            "Список карантина (второй pending, через Gateway)",
+            "Отклонить из карантина (reject, через Gateway)",
+            "Валидация классификации (reject, через Gateway)",
         ]
         actual = [s.name for s in steps]
         assert actual == expected_names, f"Порядок шагов:\n{actual}"

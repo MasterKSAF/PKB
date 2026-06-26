@@ -12,8 +12,8 @@ class TestOrchestratorMetadataUpdatePipeline:
         p = OrchestratorMetadataUpdatePipeline()
         assert p.name == "orchestrator_metadata_update"
         assert p.description
-        assert "orchestrator" in p.services
-        assert "auth" in p.services
+        assert "gateway" in p.services
+        assert len(p.services) == 1
 
     def test_build_steps_count(self):
         p = OrchestratorMetadataUpdatePipeline()
@@ -24,12 +24,12 @@ class TestOrchestratorMetadataUpdatePipeline:
         p = OrchestratorMetadataUpdatePipeline()
         steps = p.build_steps(PipelineContext())
         expected_names = [
-            "Аутентификация",
-            "Создание черновика",
-            "Статус задачи (longpoll)",
-            "Детали черновика",
-            "Обновление метаданных",
-            "Проверка обновлённых метаданных",
+            "Аутентификация (через Gateway)",
+            "Создание черновика (через Gateway)",
+            "Статус задачи (через Gateway)",
+            "Детали черновика (через Gateway)",
+            "Обновление метаданных (через Gateway)",
+            "Проверка обновлённых метаданных (через Gateway)",
         ]
         actual = [s.name for s in steps]
         assert actual == expected_names, f"Порядок шагов:\n{actual}"
@@ -38,7 +38,7 @@ class TestOrchestratorMetadataUpdatePipeline:
         p = OrchestratorMetadataUpdatePipeline()
         steps = p.build_steps(PipelineContext())
         auth = steps[0]
-        assert auth.service == "auth"
+        assert auth.service == "gateway"
         assert auth.method == "POST"
         assert auth.path == "/api/v1/auth/token"
         assert auth.expected_status == 200
@@ -48,7 +48,7 @@ class TestOrchestratorMetadataUpdatePipeline:
         p = OrchestratorMetadataUpdatePipeline()
         steps = p.build_steps(PipelineContext())
         draft = steps[1]
-        assert draft.service == "orchestrator"
+        assert draft.service == "gateway"
         assert draft.expected_status == 202
         assert draft.extract_keys == ["draft_id", "task_id"]
         assert draft.on_error is not None
@@ -58,7 +58,7 @@ class TestOrchestratorMetadataUpdatePipeline:
         p = OrchestratorMetadataUpdatePipeline()
         steps = p.build_steps(PipelineContext())
         meta = steps[4]
-        assert meta.service == "orchestrator"
+        assert meta.service == "gateway"
         assert meta.method == "PATCH"
         assert meta.path == "/api/v1/drafts/{draft_id}/metadata"
         assert meta.expected_status == 200
@@ -74,7 +74,7 @@ class TestOrchestratorMetadataUpdatePipeline:
         p = OrchestratorMetadataUpdatePipeline()
         steps = p.build_steps(PipelineContext())
         verify = steps[5]
-        assert verify.service == "orchestrator"
+        assert verify.service == "gateway"
         assert verify.method == "GET"
         assert verify.path == "/api/v1/drafts/{draft_id}"
         assert verify.expected_status == 200

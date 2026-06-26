@@ -11,6 +11,7 @@ Catch-all router for the Gateway reverse-proxy.
 """
 
 import logging
+import re
 
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
@@ -25,6 +26,12 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 proxy_router = APIRouter()
+
+
+# Паттерн для нечислового draft_id в draft-путях
+_INVALID_DRAFT_PATH_RE = re.compile(
+    r"^/api/v1/drafts/(?!\d+)([^/]+)(?:/tasks|/preview(?:/status)?|/decide|/metadata)?$"
+)
 
 
 def _error(code: str, message: str) -> dict:
@@ -59,6 +66,15 @@ async def gateway_catch_all(request: Request, path: str) -> Response:
     result = resolve_service(request.method, full_path)
 
     if not result:
+        # Проверка на нечисловой draft_id — даём внятную ошибку вместо 404
+        if _INVALID_DRAFT_PATH_RE.search(full_path):
+            return JSONResponse(
+                status_code=400,
+                content=_error(
+                    "INVALID_DRAFT_ID",
+                    f"draft_id должен быть числовым: {request.method} {full_path}",
+                ),
+            )
         return JSONResponse(
             status_code=404,
             content=_error(

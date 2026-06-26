@@ -23,7 +23,10 @@ services:
       DEV_AUTH_MODE: "true"
       MOCK_RAG_ENABLED: "true"
       MOCK_REGISTRY_ENABLED: "true"
-      MOCK_LLM_ENABLED: "true"
+      MOCK_LLM_ENABLED: "false"
+      LLM_API_URL: ${LLM_API_URL:-https://routerai.ru/api/v1}
+      LLM_API_KEY: ${ROUTERAI_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-deepseek-chat}
       OTEL_EXPORTER_OTLP_ENDPOINT: "signoz-otel-collector:4317"
       OTEL_EXPORTER_OTLP_INSECURE: "true"
     depends_on:

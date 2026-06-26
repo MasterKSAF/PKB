@@ -17,6 +17,7 @@ async def app():
     os.environ["DATABASE_URL"] = TEST_DATABASE_URL
     os.environ["DEV_AUTH_MODE"] = "true"
     os.environ["MOCK_RAG_ENABLED"] = "true"
+    os.environ["MOCK_LLM_ENABLED"] = "true"
 
     # patch lru_cache
     from app.config import get_settings

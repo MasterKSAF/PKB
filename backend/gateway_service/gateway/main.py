@@ -175,7 +175,10 @@ class CorrelationHeadersMiddleware(BaseHTTPMiddleware):
         # X-Draft-ID — из пути или заголовка (с защитой от невалидных значений)
         draft_id = None
         if match := _DRAFT_PATH_RE.search(path):
-            draft_id = int(match.group(1))
+            try:
+                draft_id = int(match.group(1))
+            except (ValueError, TypeError):
+                draft_id = None
         elif raw := request.headers.get("X-Draft-ID"):
             try:
                 draft_id = int(raw)

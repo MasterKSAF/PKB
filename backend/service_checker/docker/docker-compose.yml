@@ -33,11 +33,10 @@ x-env-common: &env-common
   JWT_ALGORITHM: HS256
   DEFAULT_ADMIN_EMAIL: admin@example.com
   DEFAULT_ADMIN_PASSWORD: Admin1234!
-  # Внутри Docker — имена сервисов. .env может переопределить.
-  REGISTRY_SERVICE_URL: http://registry-service:8084
-  INTEGRATION_SERVICE_URL: http://integration-service:8085
-  VALIDATE_SERVICE_URL: http://converter-validator:8086
-  RAG_SERVICE_URL: http://rag-search:8091
+  REGISTRY_SERVICE_URL: http://127.0.0.1:8084
+  INTEGRATION_SERVICE_URL: http://127.0.0.1:8085
+  VALIDATE_SERVICE_URL: http://127.0.0.1:8086
+  RAG_SERVICE_URL: http://127.0.0.1:8091
   EMBEDDING_PROVIDER: tei
   EMBEDDING_BASE_URL: http://tei:80
   EMBEDDING_MODEL: Vuy/rubert-tiny2-onnx

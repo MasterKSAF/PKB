@@ -90,7 +90,8 @@ Gateway проверяет собственный конфиг и health-check �
 
 | Файл | Назначение | Детали |
 |------|-----------|--------|
-| [`start_web.bat`](start_web.bat) | Полный запуск backend + Web UI | Проверка Docker → создание .env → сборка base-образа → загрузка TEI-модели → `docker compose up -d --build` → ожидание supervisord → открытие UI и health |
+| [`start_web.bat`](start_web.bat) | Полный запуск backend + Web UI | Проверка Docker → создание .env → сборка base-образа → загрузка TEI-модели → `docker compose -f docker-compose-web.yml up -d --build` → ожидание supervisord → открытие UI и health |
+| [`start_web_real.bat`](start_web_real.bat) | Запуск production-стека (корневой compose) | Проверка Docker → `docker compose up -d --build` → ожидание Gateway → статус. Frontend запускается отдельно |
 | [`reset_web.bat`](reset_web.bat) | Сброс данных + перезапуск | Дропает БД, сбрасывает Redis, пересоздаёт контейнеры app и frontend без пересборки образов |
 
 ### Вспомогательные (backend)

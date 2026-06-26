@@ -12,10 +12,8 @@ class TestOrchestratorFullDocumentLifecyclePipeline:
         p = OrchestratorFullDocumentLifecyclePipeline()
         assert p.name == "orchestrator_full_document_lifecycle"
         assert p.description
-        assert "orchestrator" in p.services
-        assert "registry" in p.services
-        assert "rag_builder" in p.services
-        assert "rag_search" in p.services
+        assert "gateway" in p.services
+        assert len(p.services) == 1
 
     def test_build_steps_count(self):
         p = OrchestratorFullDocumentLifecyclePipeline()
@@ -26,17 +24,17 @@ class TestOrchestratorFullDocumentLifecyclePipeline:
         p = OrchestratorFullDocumentLifecyclePipeline()
         steps = p.build_steps(PipelineContext())
         expected_names = [
-            "Аутентификация",
-            "Создание черновика",
-            "Статус задачи (longpoll)",
-            "Детали черновика",
-            "Запуск превью черновика",
-            "Статус превью",
-            "Решение по черновику (approve)",
-            "Проверка документа в Registry",
-            "Индексация документа",
-            "Поиск RAG Search",
-            "Удаление черновика",
+            "Аутентификация (через Gateway)",
+            "Создание черновика (через Gateway)",
+            "Статус задачи (через Gateway)",
+            "Детали черновика (через Gateway)",
+            "Запуск превью черновика (через Gateway)",
+            "Статус превью (через Gateway)",
+            "Решение по черновику (approve, через Gateway)",
+            "Проверка документа в Registry (через Gateway)",
+            "Индексация документа (через Gateway)",
+            "Поиск RAG Search (через Gateway)",
+            "Удаление черновика (через Gateway)",
         ]
         actual = [s.name for s in steps]
         assert actual == expected_names, f"Порядок шагов:\n{actual}"
@@ -45,7 +43,7 @@ class TestOrchestratorFullDocumentLifecyclePipeline:
         p = OrchestratorFullDocumentLifecyclePipeline()
         steps = p.build_steps(PipelineContext())
         auth = steps[0]
-        assert auth.service == "auth"
+        assert auth.service == "gateway"
         assert auth.method == "POST"
         assert auth.path == "/api/v1/auth/token"
         assert auth.expected_status == 200
@@ -55,7 +53,7 @@ class TestOrchestratorFullDocumentLifecyclePipeline:
         p = OrchestratorFullDocumentLifecyclePipeline()
         steps = p.build_steps(PipelineContext())
         draft = steps[1]
-        assert draft.service == "orchestrator"
+        assert draft.service == "gateway"
         assert draft.expected_status == 202
         assert draft.extract_keys == ["draft_id", "task_id"]
         assert draft.on_error is not None
@@ -66,13 +64,13 @@ class TestOrchestratorFullDocumentLifecyclePipeline:
         steps = p.build_steps(PipelineContext())
         # Запуск превью
         preview_start = steps[4]
-        assert preview_start.service == "orchestrator"
+        assert preview_start.service == "gateway"
         assert preview_start.method == "POST"
         assert preview_start.path == "/api/v1/drafts/{draft_id}/preview"
         assert preview_start.expected_status == {200, 202, 404}
         # Статус превью
         preview_status = steps[5]
-        assert preview_status.service == "orchestrator"
+        assert preview_status.service == "gateway"
         assert preview_status.method == "GET"
         assert preview_status.path == "/api/v1/drafts/{draft_id}/preview/status"
         assert preview_status.expected_status == {200, 404}
@@ -92,16 +90,16 @@ class TestOrchestratorFullDocumentLifecyclePipeline:
         p = OrchestratorFullDocumentLifecyclePipeline()
         steps = p.build_steps(PipelineContext())
         reg = steps[7]
-        assert reg.service == "registry"
+        assert reg.service == "gateway"
         assert reg.path == "/api/v1/registry/documents/{approved_doc_id}"
         assert reg.expected_status == {200, 404}
 
     def test_rag_build_step(self):
-        """Индексация в RAG Builder."""
+        """Индексация в RAG Builder (через Gateway)."""
         p = OrchestratorFullDocumentLifecyclePipeline()
         steps = p.build_steps(PipelineContext())
         rag = steps[8]
-        assert rag.service == "rag_builder"
+        assert rag.service == "gateway"
         assert rag.method == "POST"
         assert rag.path == "/api/v1/rag/build"
         assert rag.expected_status == {200, 201, 202}
@@ -109,11 +107,11 @@ class TestOrchestratorFullDocumentLifecyclePipeline:
         assert rag.body["document_id"] == "{approved_doc_id}"
 
     def test_rag_search_step(self):
-        """Поиск RAG Search."""
+        """Поиск RAG Search (через Gateway)."""
         p = OrchestratorFullDocumentLifecyclePipeline()
         steps = p.build_steps(PipelineContext())
         search = steps[9]
-        assert search.service == "rag_search"
+        assert search.service == "gateway"
         assert search.method == "POST"
         assert search.path == "/api/v1/rag/search"
         assert search.expected_status == 200
@@ -125,7 +123,7 @@ class TestOrchestratorFullDocumentLifecyclePipeline:
         p = OrchestratorFullDocumentLifecyclePipeline()
         steps = p.build_steps(PipelineContext())
         delete = steps[10]
-        assert delete.service == "orchestrator"
+        assert delete.service == "gateway"
         assert delete.method == "DELETE"
         assert delete.path == "/api/v1/drafts/{draft_id}"
         assert delete.expected_status == {200, 204}
