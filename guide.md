@@ -6,8 +6,9 @@
 
 1. **Gateway diagnostics** (публичный, не требует auth):
    - `GET /api/v1/system/diagnostics` — быстрая сводка
-   - `GET /api/v1/system/diagnostics?verbose=true` — полная (dmesg, порты, диски)
+   - `GET /api/v1/system/diagnostics?verbose=true` — полная (dmesg, порты, диски, compose, volumes, git, ошибки)
    - `GET /api/v1/system/diagnostics/{service}` — по конкретному сервису
+   - `GET /api/v1/system/diagnostics/{service}?log_lines=100` — больше строк лога (по умолчанию 20)
    - `GET /api/v1/system/diagnostics/system` — логи ядра
 
 2. **Health endpoints:**
