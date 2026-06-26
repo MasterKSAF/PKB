@@ -132,6 +132,11 @@ class RegistryServiceClient(ServiceClient):
                     storage, draft_id, kwargs.get("json", {})
                 )
 
+            if sub == "metadata" and method == "PATCH":
+                return self._mock_update_draft_metadata(
+                    storage, draft_id, kwargs.get("json", {})
+                )
+
         # --- Documents ---
         if endpoint == "/api/v1/registry/documents/check-uniqueness" and method == "POST":
             return self._mock_check_uniqueness(storage, kwargs.get("json", {}))
@@ -207,21 +212,27 @@ class RegistryServiceClient(ServiceClient):
 
     @classmethod
     def _mock_get_draft_preview(cls, storage: dict, draft_id: int) -> dict:
-        if cls._get_draft(storage, draft_id) is None:
+        draft = cls._get_draft(storage, draft_id)
+        if draft is None:
             return {"error": {"code": "NOT_FOUND", "message": f"Draft {draft_id} not found"}}
-        return {
-            "data": {
-                "draft_id": draft_id,
-                "doc_code": "ГОСТ 20868-81",
-                "title": "Стойки установочные крепежные",
-                "document_type": "normative",
-                "year": "1981",
-                "revision": None,
-                "preview_not_supported": False,
-                "total_pages": 3,
-                "processed_pages": 3,
-            }
+        # Use stored metadata_fields if available, otherwise fall back to hardcoded seed.
+        # All metadata_fields keys are passed through so arbitrary JSON metadata
+        # (e.g. udk_code) is preserved in the response.
+        meta = draft.get("metadata_fields") or {}
+        data = {
+            "draft_id": draft_id,
+            "doc_code": "ГОСТ 20868-81",
+            "title": "Стойки установочные крепежные",
+            "document_type": "normative",
+            "year": "1981",
+            "revision": None,
+            "preview_not_supported": False,
+            "total_pages": 3,
+            "processed_pages": 3,
         }
+        # Override with stored metadata_fields — preserves ALL keys (known + custom)
+        data.update(meta)
+        return {"data": data}
 
 
 
@@ -251,6 +262,43 @@ class RegistryServiceClient(ServiceClient):
                 "draft_id": draft_id,
                 "status": status,
                 "document_id": body.get("document_id"),
+                "updated_at": draft["updated_at"],
+            }
+        }
+
+    @classmethod
+    def _mock_update_draft_metadata(cls, storage: dict, draft_id: int, body: dict) -> dict:
+        """Update draft metadata (PATCH /drafts/{id}/metadata)."""
+        draft = storage["drafts"].get(draft_id)
+        if draft is None:
+            seed = cls._SEED_DRAFTS.get(draft_id)
+            if seed is None:
+                return {
+                    "error": {
+                        "code": "NOT_FOUND",
+                        "message": f"Draft {draft_id} not found",
+                    }
+                }
+            draft = dict(seed)
+            storage["drafts"][draft_id] = draft
+
+        preview_metadata = body.get("preview_metadata", {})
+        metadata_overrides = body.get("metadata_overrides")
+
+        # Merge preview_metadata into metadata_fields
+        existing_meta = draft.get("metadata_fields") or {}
+        existing_meta.update(preview_metadata)
+        draft["metadata_fields"] = existing_meta
+
+        if metadata_overrides is not None:
+            draft["metadata_overrides"] = metadata_overrides
+
+        draft["updated_at"] = "2026-06-08T10:00:00Z"
+        return {
+            "data": {
+                "draft_id": draft_id,
+                "status": draft.get("status", "uploaded"),
+                "preview_metadata": preview_metadata,
                 "updated_at": draft["updated_at"],
             }
         }

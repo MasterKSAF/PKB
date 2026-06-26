@@ -1,17 +1,14 @@
-# План исправления Orchestrator API — ЗАВЕРШЕНО
+# Todo: тест сохранения и извлечения метаданных
 
-## Статус (2026-06-23, финал)
+## Статус: ✅ ВЫПОЛНЕНО
 
-**Pipeline**: 15 пайплайнов — ✅ **15 пройдено**, ❌ **0 падают**
-**Unit-тесты**: 320 passed
-
-## Что сделано
-
-| Пункт | Проблема | Исправление |
-|---|---|---|
-| P0.1 | `GET /tasks/{task_id}/status` → 404 | Алиас в `tasks.py` |
-| P0.2 | `GET /drafts/{draft_id}` → 405 | Прокси в Registry + трансформация ответа |
-| P0.3 | `PATCH /drafts/{draft_id}/decide` → 409/500 | Разрешены стадии upload/preview; сбор метаданных; парсинг version_id |
-| P0.4 | `PATCH /drafts/{draft_id}/metadata` → 404 | Метод в client + прокси |
-| OR-14 | `{task_id_2}` не подставлялся | alt_map в чекере |
-| preview_snapshot | Поле не найдено | check сделан optional |
+- [x] Исправлен `_mock_get_draft_preview` — использует `metadata_fields` из хранилища
+- [x] Добавлена маршрутизация `PATCH /{id}/metadata` в `_generate_mock`
+- [x] Добавлен метод `_mock_update_draft_metadata`, сохраняющий данные в storage
+- [x] Написаны 5 тестов в `TestMetadataRoundTrip`:
+  - `test_create_and_retrieve_all_metadata_fields` — round-trip всех полей
+  - `test_create_without_metadata_returns_fallback` — fallback без метаданных
+  - `test_create_with_json_metadata_field` — JSON `metadata` → merge → preview
+  - `test_patch_metadata_then_retrieve` — PATCH → preview → verify
+  - `test_patch_metadata_not_found` — 404 для несуществующего черновика
+- [x] Полный прогон: **363 passed**

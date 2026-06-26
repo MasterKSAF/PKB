@@ -658,3 +658,191 @@ class TestDraftTasks:
         data = response.json()
         assert data["draft_id"] == 99999
         assert data["tasks"] == []
+
+
+# ---------------------------------------------------------------------------
+#  Metadata round-trip tests: create → retrieve → update → verify
+# ---------------------------------------------------------------------------
+
+
+class TestMetadataRoundTrip:
+    """
+    Tests for metadata persistence round-trip.
+
+    Verifies that metadata sent during POST /drafts is properly stored
+    and can be retrieved via GET /drafts/{id}/preview and
+    PATCH /drafts/{id}/metadata.
+    """
+
+    CREATE_URL = "/api/v1/drafts/"
+    PREVIEW_URL = "/api/v1/drafts/{draft_id}/preview"
+    METADATA_URL = "/api/v1/drafts/{draft_id}/metadata"
+
+    def test_create_and_retrieve_all_metadata_fields(self, client: TestClient, auth_header: dict):
+        """
+        Round-trip: create draft with ALL metadata fields →
+        GET preview → every field matches what was sent.
+        """
+        # --- Create draft with full metadata ---
+        create_resp = client.post(
+            self.CREATE_URL,
+            headers=auth_header,
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF-1.4 mock "), "application/pdf")},
+            data={
+                "document_key": "doc-meta-roundtrip",
+                "source_type": "GOST",
+                "title": "Тестовый документ",
+                "doc_code": "ГОСТ 1234-2024",
+                "era": "RF",
+                "jurisdiction": "RU",
+                "mks_oks_code": "01.040.01",
+                "okstu_code": "OKP 1234",
+                "issuing_body": "Росстандарт",
+            },
+        )
+        assert create_resp.status_code == 202
+        draft_id = create_resp.json()["draft_id"]
+
+        # --- Retrieve preview metadata ---
+        preview_resp = client.get(
+            self.PREVIEW_URL.format(draft_id=draft_id),
+            headers=auth_header,
+        )
+        assert preview_resp.status_code == 200
+        data = preview_resp.json()
+        preview = data["preview"]
+
+        # --- Verify each field matches exactly ---
+        assert preview["source_type"] == "GOST"
+        assert preview["title"] == "Тестовый документ"
+        assert preview["doc_code"] == "ГОСТ 1234-2024"
+        assert preview["era"] == "RF"
+        assert preview["jurisdiction"] == "RU"
+        assert preview["mks_oks_code"] == "01.040.01"
+        assert preview["okstu_code"] == "OKP 1234"
+        assert preview["issuing_body"] == "Росстандарт"
+
+    def test_create_without_metadata_returns_fallback(self, client: TestClient, auth_header: dict):
+        """
+        Create draft without metadata → GET preview returns hardcoded fallback
+        (not empty). This protects existing behaviour for draft_id=1 seed data.
+        """
+        # Create with only required source_type
+        create_resp = client.post(
+            self.CREATE_URL,
+            headers=auth_header,
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock"), "application/pdf")},
+            data={"document_key": "doc-no-meta", "source_type": "GOST"},
+        )
+        assert create_resp.status_code == 202
+        draft_id = create_resp.json()["draft_id"]
+
+        preview_resp = client.get(
+            self.PREVIEW_URL.format(draft_id=draft_id),
+            headers=auth_header,
+        )
+        assert preview_resp.status_code == 200
+        preview = preview_resp.json()["preview"]
+
+        # Fallback defaults should still be present for fields NOT in metadata_fields
+        assert preview["doc_code"] == "ГОСТ 20868-81"
+        assert preview["title"] == "Стойки установочные крепежные"
+        assert preview["document_type"] == "normative"
+        # source_type is required and always stored, so it's present
+        assert preview["source_type"] == "GOST"
+        # Fields not provided remain at fallback defaults or None
+        assert preview["era"] is None
+        assert preview["jurisdiction"] is None
+
+    def test_create_with_json_metadata_field(self, client: TestClient, auth_header: dict):
+        """
+        Create draft with JSON `metadata` field → merged into metadata_fields →
+        retrievable via preview.
+        """
+        import json
+        extra_meta = json.dumps({"udk_code": "УДК 123.456", "custom_field": "custom_value"})
+
+        create_resp = client.post(
+            self.CREATE_URL,
+            headers=auth_header,
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock"), "application/pdf")},
+            data={
+                "document_key": "doc-json-meta",
+                "source_type": "GOST",
+                "title": "JSON Meta Test",
+                "metadata": extra_meta,
+            },
+        )
+        assert create_resp.status_code == 202
+        draft_id = create_resp.json()["draft_id"]
+
+        preview_resp = client.get(
+            self.PREVIEW_URL.format(draft_id=draft_id),
+            headers=auth_header,
+        )
+        assert preview_resp.status_code == 200
+        preview = preview_resp.json()["preview"]
+
+        # Form fields should be set
+        assert preview["source_type"] == "GOST"
+        assert preview["title"] == "JSON Meta Test"
+        # JSON metadata fields merged in — udk_code is a PreviewMetadata field
+        assert preview["udk_code"] == "УДК 123.456"
+        # custom_field is not in PreviewMetadata schema, so it won't appear in response
+
+    def test_patch_metadata_then_retrieve(self, client: TestClient, auth_header: dict):
+        """
+        Create draft → PATCH metadata → GET preview → verify updated values.
+        """
+        # Create draft without extra metadata
+        create_resp = client.post(
+            self.CREATE_URL,
+            headers=auth_header,
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock"), "application/pdf")},
+            data={"document_key": "doc-patch-meta", "source_type": "GOST"},
+        )
+        assert create_resp.status_code == 202
+        draft_id = create_resp.json()["draft_id"]
+
+        # --- PATCH metadata ---
+        patch_payload = {
+            "preview_metadata": {
+                "doc_code": "ПATCH-001",
+                "title": "Patched Title",
+                "era": "CURRENT",
+            },
+            "updated_by": "test-user",
+        }
+        patch_resp = client.patch(
+            self.METADATA_URL.format(draft_id=draft_id),
+            headers=auth_header,
+            json=patch_payload,
+        )
+        assert patch_resp.status_code == 200
+        patch_data = patch_resp.json()
+        assert patch_data["draft_id"] == draft_id
+        assert patch_data["preview_metadata"]["doc_code"] == "ПATCH-001"
+
+        # --- Retrieve preview and verify updated values ---
+        preview_resp = client.get(
+            self.PREVIEW_URL.format(draft_id=draft_id),
+            headers=auth_header,
+        )
+        assert preview_resp.status_code == 200
+        preview = preview_resp.json()["preview"]
+        assert preview["doc_code"] == "ПATCH-001"
+        assert preview["title"] == "Patched Title"
+        assert preview["era"] == "CURRENT"
+        # source_type was set at creation and should still be present
+        assert preview["source_type"] == "GOST"
+
+    def test_patch_metadata_not_found(self, client: TestClient, auth_header: dict):
+        """PATCH metadata on non-existent draft returns 404."""
+        patch_resp = client.patch(
+            self.METADATA_URL.format(draft_id=99999),
+            headers=auth_header,
+            json={"preview_metadata": {"title": "Nope"}},
+        )
+        assert patch_resp.status_code == 404
+        detail = patch_resp.json().get("detail", patch_resp.json())
+        assert "error" in detail
