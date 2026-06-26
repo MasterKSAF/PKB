@@ -2419,7 +2419,13 @@ export const KnowledgeProcessing: React.FC = () => {
                   </Box>
                 </Stack>
                 <Chip
-                  label={selectedDraft ? `draft_id ${workspaceDraft.gatewayDraftId || workspaceDraft.id}` : 'черновик не выбран'}
+                  label={
+                    selectedDraft
+                      ? workspaceDraft.gatewayDraftId
+                        ? `draft_id ${workspaceDraft.gatewayDraftId}`
+                        : 'draft_id не назначен'
+                      : 'черновик не выбран'
+                  }
                   size="small"
                   variant="outlined"
                   sx={{ flexShrink: 0 }}
@@ -2622,7 +2628,7 @@ export const KnowledgeProcessing: React.FC = () => {
                         }}
                       >
                         {[
-                          ['draft_id', workspaceDraft.gatewayDraftId || workspaceDraft.id],
+                          ['draft_id', workspaceDraft.gatewayDraftId || 'не назначен'],
                           ['task_id', workspaceDraft.gatewayTaskId],
                           ['version_id', workspaceDraft.gatewayVersionId],
                           ['document_key', workspaceDraft.gatewayDocumentKey],

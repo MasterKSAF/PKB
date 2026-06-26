@@ -7,8 +7,13 @@ Tracks execution of pipeline tasks and their steps.
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, func
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, func
+from sqlalchemy.dialects import sqlite
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+# PK-колонки: BigInteger для PostgreSQL (BIGINT), Integer для SQLite (INTEGER + AUTOINCREMENT)
+# SQLite требует ровно INTEGER для автоинкремента, BIGINT не подходит.
+_BIGINT_PK = BigInteger().with_variant(Integer, "sqlite")
 
 from app.db.base import Base
 
@@ -20,13 +25,13 @@ class DraftNotification(Base):
     __table_args__ = {"schema": "pipeline"}
 
     id: Mapped[int] = mapped_column(
-        Integer, primary_key=True, autoincrement=True
+        _BIGINT_PK, primary_key=True, autoincrement=True
     )
     task_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("pipeline.tasks.id", ondelete="CASCADE"), nullable=False, index=True
+        BigInteger, ForeignKey("pipeline.tasks.id", ondelete="CASCADE"), nullable=False, index=True
     )
     draft_id: Mapped[int] = mapped_column(
-        Integer, nullable=False, index=True
+        BigInteger, nullable=False, index=True
     )
     service: Mapped[str] = mapped_column(
         String(32), nullable=False
@@ -66,16 +71,16 @@ class Task(Base):
     )
 
     id: Mapped[int] = mapped_column(
-        Integer, primary_key=True, autoincrement=True
+        _BIGINT_PK, primary_key=True, autoincrement=True
     )
     draft_id: Mapped[int] = mapped_column(
-        Integer, nullable=False, index=True
+        BigInteger, nullable=False, index=True
     )
     document_id: Mapped[Optional[int]] = mapped_column(
-        Integer, nullable=True, index=True
+        BigInteger, nullable=True, index=True
     )
     version_id: Mapped[Optional[int]] = mapped_column(
-        Integer, nullable=True
+        BigInteger, nullable=True
     )
     pipeline_type: Mapped[str] = mapped_column(
         String(16), nullable=False, index=True
@@ -162,9 +167,9 @@ class TaskStep(Base):
     __tablename__ = "task_steps"
     __table_args__ = {"schema": "pipeline"}
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(_BIGINT_PK, primary_key=True, autoincrement=True)
     task_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("pipeline.tasks.id", ondelete="CASCADE"), nullable=False, index=True
+        BigInteger, ForeignKey("pipeline.tasks.id", ondelete="CASCADE"), nullable=False, index=True
     )
     step_name: Mapped[str] = mapped_column(
         String(64), nullable=False
