@@ -33,9 +33,11 @@
 #   [6] orchestrator  (→ postgres + redis + minio + parser + converter + registry + rag-*)
 #         │
 #   [7] gateway  (→ auth + backend-сервисы, без integration)
+#         │
+#   [8] frontend  (→ gateway)
 #
 # Порты сервисов (внутри сети = снаружи):
-#   gateway :8080   auth :8082        orchestrator :8081   query :8083
+#   frontend :3300  gateway :8080   auth :8082        orchestrator :8081   query :8083
 #   registry :8084  converter-validator :8086  parser :8087
 #   rag-builder :8090  rag-search :8091   infinity :18080 (host)
 # =============================================================================
@@ -574,6 +576,37 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+    networks:
+      - pkb-net
+    logging: *default-logging
+
+  # ===========================================================================
+  # frontend — React SPA (nginx)
+  # ===========================================================================
+
+  frontend:
+    build:
+      context: ./UI-UX/UI Final/frontend
+      dockerfile: Dockerfile
+    image: pkb-rag-frontend:latest
+    container_name: pkb-frontend
+    restart: unless-stopped
+    ports:
+      - "3300:80"
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080/api/v1}
+      VITE_GATEWAY_AUTO_LOGIN: ${VITE_GATEWAY_AUTO_LOGIN:-false}
+      VITE_GATEWAY_USERNAME: ${VITE_GATEWAY_USERNAME:-}
+      VITE_GATEWAY_PASSWORD: ${VITE_GATEWAY_PASSWORD:-}
+    develop:
+      watch:
+        - path: ./UI-UX/UI Final/frontend/src
+          action: rebuild
+        - path: ./UI-UX/UI Final/frontend/package.json
+          action: rebuild
+    depends_on:
+      gateway:
+        condition: service_healthy
     networks:
       - pkb-net
     logging: *default-logging
