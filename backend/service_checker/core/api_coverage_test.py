@@ -750,10 +750,24 @@ class ApiCoverageTester:
                 if auth_token:
                     orch_headers["Authorization"] = f"Bearer {auth_token}"
 
+                # Orchestrator POST /drafts требует file (multipart)
+                _pdf_path = Path(__file__).resolve().parent.parent / "pdf" / "7bd97d737317a8a272bb18a405ab2d04.pdf"
+                if _pdf_path.exists():
+                    _pdf_bytes = _pdf_path.read_bytes()
+                else:
+                    _pdf_bytes = (b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
+                                 b"2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n"
+                                 b"3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 50]"
+                                 b"/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>>endobj\n"
+                                 b"4 0 obj<</Length 44>>stream\nBT /F1 12 Tf 10 20 Td(test)Tj ET\nendstream\nendobj\n"
+                                 b"5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj\n"
+                                 b"xref\n0 6\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \n0000000266 00000 n \n0000000355 00000 n \n"
+                                 b"trailer<</Size 6/Root 1 0 R>>\nstartxref\n424\n%%EOF")
+
                 for attempt in range(3):
                     try:
                         orch_data = {"document_key": "test-key", "title": "Coverage draft", "source_type": "GOST"}
-                        resp = await self.client.post(orch_url, data=orch_data, headers=orch_headers)
+                        resp = await self.client.post(orch_url, data=orch_data, files={"file": ("test.pdf", _pdf_bytes, "application/pdf")}, headers=orch_headers)
                         if resp.status_code == 202:
                             data = resp.json()
                             task_id = data.get("task_id")

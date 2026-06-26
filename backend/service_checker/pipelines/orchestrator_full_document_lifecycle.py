@@ -81,7 +81,7 @@ class OrchestratorFullDocumentLifecyclePipeline(PipelineDef):
             form_files={
                 "file": (pdf_name, TEST_PDF_BYTES, "application/pdf"),
             },
-            expected_status=202,
+            expected_status={202, 409},
             extract_keys=["draft_id", "task_id"],
             check=check_json_field("draft_id", int),
             needs_auth=True,

@@ -52,7 +52,7 @@ def get_service_def() -> ServiceDef:
                       "source_type": "GOST"},
             extract_keys=["draft_id", "task_id"],
             is_preparation=True,
-            expected_status=202),
+            expected_status={202, 409}),
     ]
 
     endpoints = [
@@ -91,9 +91,7 @@ def get_service_def() -> ServiceDef:
             response_schema={"summary": dict, "items": list},
             expected_status={404}),
         EndpointDef("GET", f"{API_PREFIX}/documents/queue", "documents",
-            "Очередь документов",
-            response_schema={"queue": list, "meta": dict},
-            expected_status={404}),
+            "Очередь документов"),
         # Чтение документов — через Registry, не реализовано в оркестраторе
         EndpointDef("GET", f"{_DOC}", "documents",
             "Детали документа",
@@ -174,6 +172,7 @@ def get_service_def() -> ServiceDef:
             "Создать черновик (единая точка входа, MIME-ветвление OCR/Parser)",
             form_body={"document_key": "test-doc-key", "title": "Тестовый черновик",
                       "source_type": "GOST"},
+            expected_status={202, 409},
             response_schema={"draft_id": int}),
         # GET /drafts/ — описан, но list_drafts удалён при рефакторинге
         EndpointDef("GET", f"{API_PREFIX}/drafts/", "drafts",

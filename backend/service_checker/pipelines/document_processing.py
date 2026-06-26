@@ -224,7 +224,7 @@ class DocumentProcessingPipeline(PipelineDef):
             name="Проверка уникальности документа",
             service="registry",
             method="POST",
-            path="/api/v1/registry/documents/import",
+            path="/api/v1/registry/documents/check-uniqueness",
             port=8084,
             body={
                 "title": "Тестовый документ",
@@ -232,7 +232,7 @@ class DocumentProcessingPipeline(PipelineDef):
                 "source_type": "GOST",
                 "era": "RF",
             },
-            expected_status={200, 422},  # 200=ok, 422=уже существует
+            expected_status={200},  # 200=ok, is_duplicate в ответе
             needs_auth=True,
         ))
 
