@@ -586,7 +586,7 @@ services:
 
   frontend:
     build:
-      context: ./UI-UX/UI Final/frontend
+      context: "./UI-UX/UI Final/frontend"
       dockerfile: Dockerfile
     image: pkb-rag-frontend:latest
     container_name: pkb-frontend
@@ -600,9 +600,9 @@ services:
       VITE_GATEWAY_PASSWORD: ${VITE_GATEWAY_PASSWORD:-}
     develop:
       watch:
-        - path: ./UI-UX/UI Final/frontend/src
+        - path: "./UI-UX/UI Final/frontend/src"
           action: rebuild
-        - path: ./UI-UX/UI Final/frontend/package.json
+        - path: "./UI-UX/UI Final/frontend/package.json"
           action: rebuild
     depends_on:
       gateway:
