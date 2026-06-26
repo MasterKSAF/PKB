@@ -530,6 +530,33 @@ services:
       - pkb-net
     logging: *default-logging
 
+  # ===========================================================================
+  # celery-worker — Celery worker для пайплайна оркестратора
+  # ===========================================================================
+  celery-worker:
+    build:
+      context: ./backend/orchestrator_service
+      dockerfile: Dockerfile
+    image: pkb/orchestrator:local
+    container_name: pkb-celery-worker
+    restart: unless-stopped
+    command: celery -A app.celery_app worker --loglevel=info --concurrency=4
+    environment:
+      <<: [*env-db, *env-service-urls]
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      REGISTRY_SERVICE_URL: http://registry:8084
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      registry:
+        condition: service_healthy
+    networks:
+      - pkb-net
+    logging: *default-logging
+
   gateway:
     build:
       context: ./backend/gateway_service
