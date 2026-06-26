@@ -530,8 +530,8 @@ class TestDecideDraft:
         assert response.status_code == 409
 
     async def test_decide_wrong_stage(self, created_draft: int, client: TestClient, auth_header: dict, db_session):
-        """Decide on upload stage returns 409."""
-        # Revert task to upload stage
+        """Decide on invalid stage returns 409."""
+        # Set task to a non-decision stage (upload/preview/decision are valid)
         from sqlalchemy import select
         from app.models.pipeline import Task
         result = await db_session.execute(
@@ -539,7 +539,7 @@ class TestDecideDraft:
         )
         task = result.scalar_one_or_none()
         if task:
-            task.pipeline_stage = "upload"
+            task.pipeline_stage = "full"
             await db_session.flush()
             await db_session.commit()
 

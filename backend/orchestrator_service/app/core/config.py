@@ -192,10 +192,12 @@ class Settings(BaseSettings):
     )
     JWT_ALGORITHM: str = "HS256"
 
-    # Database
+    # Database — обязательный параметр, задаётся в .env или переменной окружения.
+    # Для разработки: sqlite+aiosqlite:///./orchestrator.db
+    # Для production: postgresql+asyncpg://user:pass@host/db
     DATABASE_URL: str = Field(
-        default="sqlite+aiosqlite:///./orchestrator.db",
-        description="Async SQLAlchemy database URL",
+        ...,
+        description="Async SQLAlchemy database URL. Must be set explicitly.",
     )
 
     # Redis

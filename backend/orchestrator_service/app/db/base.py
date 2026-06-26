@@ -13,6 +13,13 @@ from sqlalchemy.pool import NullPool
 from app.core.config import settings
 
 # Build async engine
+if not settings.DATABASE_URL:
+    raise RuntimeError(
+        "DATABASE_URL is not set. For production use PostgreSQL "
+        "(postgresql+asyncpg://...). For local dev / tests use SQLite "
+        "(sqlite+aiosqlite:///./orchestrator.db)."
+    )
+
 _is_sqlite = settings.DATABASE_URL.startswith("sqlite")
 _is_memory_sqlite = _is_sqlite and (
     ":memory:" in settings.DATABASE_URL

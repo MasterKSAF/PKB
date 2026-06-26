@@ -143,29 +143,41 @@ LLM-ответы проверяются на корректность форма
 - `tests/integration/test_pipeline_formation.py` — 8 тестов (PipelineOrchestrator + DB + mocks)
 - `tests/integration/test_pipeline_preview.py` — 6 тестов (preview phase: API + orchestrator)
 
-### 3.2. Сериализация JSONB для SQLite
+### 3.2. DATABASE_URL — обязательный параметр (без default)
+`DATABASE_URL` не имеет значения по умолчанию. Запуск без него вызывает
+`RuntimeError` с инструкцией. SQLite допустим только при явном указании
+(локальная разработка / тесты). Production использует PostgreSQL.
+`aiosqlite` вынесен в тестовые зависимости (requirements.txt).
+
+### 3.3. Сериализация JSONB для SQLite
 SQLite не поддерживает JSONB нативно. Текущая реализация использует `sqlalchemy.JSON`,
 который корректно работает через SQLAlchemy. Для PostgreSQL заменить на
 `sqlalchemy.dialects.postgresql.JSONB`.
 
-### 3.3. Celery задачи используют `_run_async`
+### 3.4. Celery задачи используют `_run_async`
 В `app/tasks/pipeline_formation.py` используется `_run_async` для запуска async-кода
 из синхронных Celery-задач. Это временное решение — в production Celery-задачи
 должны быть полностью async (Celery 6+ поддерживает async задачи).
 
-### 3.4. Исправлен `UnboundLocalError` в `approve_draft`
+### 3.5. Исправлен `UnboundLocalError` в `approve_draft`
 В `app/core/pipeline/orchestrator.py` метод `approve_draft`:
 - При `task.full_completed=True` переменная `file_key` была не инициализирована,
   но использовалась при создании full_converter/registry_creation шагов.
 - **Исправление:** инициализация `file_key` вынесена до условного блока.
 
-### 3.5. Тесты test_tasks.py (2 теста) — detail wrapper FastAPI
+### 3.6. Тесты test_tasks.py (2 теста) — detail wrapper FastAPI
 `test_get_task_status_not_found` — проверяет `"error" in data`, но FastAPI
 оборачивает HTTPException.detail в `{"detail": ...}`.
 `test_get_task_status_without_auth` — в mock-режиме auth не блокирует, но
 эндпоинт возвращает 404, а не 200.
 
-### 3.6. Longpoll в тестах — дефолт 15с
+### 3.7. metadata_overrides вливается в doc_payload через update
+`approve_draft` получает `metadata_overrides` и делает
+`doc_payload.update(metadata_overrides)`, а не передаёт их как
+вложенный объект. Поля (`title`, `doc_code` и др.) становятся
+частью payload напрямую.
+
+### 3.8. Longpoll в тестах — дефолт 15с
 	В эндпоинте `GET /drafts/{id}/preview/status` параметр `longpoll` по
 	умолчанию равен 15 секундам. Тесты без явного `longpoll=0` ждут таймаута.
 	Исправлено в `test_drafts.py` через `params={"longpoll": 0}`.
