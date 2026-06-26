@@ -1366,11 +1366,12 @@ export const KnowledgeProcessing: React.FC = () => {
           handleRunDraftChecks(id, { ...draft, ...patch });
         } catch (error: any) {
           failedCount += 1;
+          console.error('[handleCreateDraftFromFiles] upload failed:', error);
           updateDraft(id, {
             status: 'failed',
             progress: 100,
             note: 'Сервер не принял файл. Черновик помечен как failed.',
-            gatewayErrorMessage: error?.message ?? 'Не удалось отправить файл на сервер.',
+            gatewayErrorMessage: error?.message ?? String(error) ?? 'Не удалось отправить файл на сервер.',
           });
           setNotice(`Черновик «${title}» не удалось отправить на сервер.`);
         }
