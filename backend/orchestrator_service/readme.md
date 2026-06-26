@@ -54,7 +54,7 @@ Orchestrator Service реализует API, описанный в `docs/api/orc
 ## Технический стек
 
 - **FastAPI** — веб-фреймворк
-- **SQLAlchemy (asyncio)** — ORM (SQLite / PostgreSQL)
+- **SQLAlchemy (asyncio)** — ORM (PostgreSQL — production, SQLite — только для локальной разработки/тестов)
 - **Celery + Redis** — асинхронная очередь задач
 - **Pydantic v2** — валидация схем и настроек
 - **httpx** — HTTP-клиент для внешних сервисов
@@ -90,7 +90,6 @@ CONVERTER_SERVICE_URL=http://localhost:8086
 RAG_BUILDER_SERVICE_URL=http://localhost:8090
 RAG_SEARCH_SERVICE_URL=http://localhost:8091
 ```
-
 ### Для mock-режима (локальная разработка без Docker):
 
 ```env
@@ -99,6 +98,7 @@ OCR_SERVICE_MOCK=true
 PARSER_SERVICE_MOCK=true
 CONVERTER_SERVICE_MOCK=true
 RAG_SERVICE_MOCK=true
+DATABASE_URL=sqlite+aiosqlite:///./orchestrator.db
 ```
 
 Основные параметры:
@@ -106,7 +106,7 @@ RAG_SERVICE_MOCK=true
 - `DEBUG` — режим отладки
 - `HOST` — хост (по умолчанию `0.0.0.0`)
 - `PORT` — порт (по умолчанию `8081`)
-- `DATABASE_URL` — URL БД (по умолчанию `sqlite+aiosqlite:///./orchestrator.db`)
+- `DATABASE_URL` — **обязательный** URL БД. Для production: `postgresql+asyncpg://user:pass@host/db`, для локальной разработки: `sqlite+aiosqlite:///./orchestrator.db`
 - `CELERY_BROKER_URL` — Redis для Celery (по умолчанию `redis://localhost:6379/1`)
 - `JWT_SECRET_KEY` — секретный ключ для JWT
 
