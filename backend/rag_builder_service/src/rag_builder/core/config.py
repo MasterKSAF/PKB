@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     embedding_model: str = "text-embedding-3-small"
     embedding_timeout: int = 30
     embedding_batch_size: int = 32
-    embedding_provider: str = "mock"  # mock | openai_compatible | infinity
+    embedding_provider: str = "mock"  # mock | openai_compatible | infinity | tei
     embedding_api_key: str = ""
     embedding_retries: int = 2
 

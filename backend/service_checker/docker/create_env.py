@@ -64,9 +64,10 @@ EXTRA_VARS: dict[str, str] = {
     "USE_MOCK_VALIDATOR": "false",
     "JWT_SECRET_KEY": "pkb-neuroassistant-jwt-secret-key-2026-dev",
     "JWT_ALGORITHM": "HS256",
-    # ── Embedding (TEI) ──────────────────────────────────────────────────
+    # ── Embedding (TEI via infinity) ─────────────────────────────────────
     "EMBEDDING_PROVIDER": "tei",
     "EMBEDDING_BASE_URL": "http://tei:80",
+    "EMBEDDING_API_URL": "http://tei:80/v1/embeddings",
     "EMBEDDING_MODEL": "Vuy/rubert-tiny2-onnx",
     "EMBEDDING_DIM": "312",
     "EMBEDDING_API_KEY": "sk-noop",

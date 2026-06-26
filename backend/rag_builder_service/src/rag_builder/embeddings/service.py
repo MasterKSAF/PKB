@@ -26,7 +26,7 @@ class EmbeddingService:
             self.dim,
             settings.embedding_provider,
         )
-        if settings.embedding_provider in ("openai_compatible", "infinity"):
+        if settings.embedding_provider in ("openai_compatible", "infinity", "tei"):
             vectors = await self._embed_openai_compatible(texts)
         else:
             vectors = [self._deterministic_embedding(t) for t in texts]
