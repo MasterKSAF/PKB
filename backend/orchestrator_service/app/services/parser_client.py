@@ -23,7 +23,7 @@ class ParserServiceClient(ServiceClient):
     async def _generate_mock(
         self, method: str, endpoint: str, default_mock: Dict[str, Any], **kwargs
     ) -> Dict[str, Any]:
-        if endpoint == "/parser/process" and method == "POST":
+        if endpoint == "/api/v1/parser/process" and method == "POST":
             request_data = kwargs.get("json", {})
             mode = request_data.get("mode", "full")
             if mode == "preview":
@@ -67,10 +67,10 @@ class ParserServiceClient(ServiceClient):
                     "sections": [{"type": "text", "content": "Parsed section"}],
                 }
             }
-        if endpoint.startswith("/parser/") and "status" in endpoint and method == "GET":
+        if endpoint.startswith("/api/v1/parser/") and "status" in endpoint and method == "GET":
             return {
                 "data": {
-                    "task_id": endpoint.split("/")[2],
+                    "task_id": endpoint.split("/")[4],
                     "status": "completed",
                     "progress": 100,
                 }
@@ -78,10 +78,11 @@ class ParserServiceClient(ServiceClient):
         return default_mock
 
     async def process(
-        self, file_key: str, draft_id: int, mode: str = "full", max_pages: Optional[int] = None
+        self, task_id: int, file_key: str, draft_id: int, mode: str = "full", max_pages: Optional[int] = None
     ) -> Dict[str, Any]:
         """Process a file with Parser (mode=preview|full)."""
         body = ParserProcessRequest(
+            task_id=task_id,
             file_key=file_key,
             draft_id=draft_id,
             mode=mode,
@@ -89,7 +90,7 @@ class ParserServiceClient(ServiceClient):
         )
         return await self.call(
             "POST",
-            "/parser/process",
+            "/api/v1/parser/process",
             request_model=ParserProcessRequest,
             mock_response={"data": {}},
             json=body.model_dump(exclude_none=True),
@@ -99,6 +100,6 @@ class ParserServiceClient(ServiceClient):
         """Get parser task status."""
         return await self.call(
             "GET",
-            f"/parser/{task_id}/status",
+            f"/api/v1/parser/{task_id}/status",
             mock_response={"data": {}},
         )

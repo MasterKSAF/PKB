@@ -32,6 +32,7 @@ logger = logging.getLogger("tasks.pipeline_1")
 def _run_async(coro):
     """Run an async coroutine synchronously from a Celery task."""
     loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     try:
         return loop.run_until_complete(coro)
     finally:
@@ -59,12 +60,16 @@ def run_ocr_preview_step(
     try:
         logger.info(f"OCR preview started: task={task_id} draft={draft_id}")
 
-        # Call OCR service with draft_id (mode=preview)
-        client = OCRServiceClient()
-        result = _run_async(client.process(
-            file_key=file_key, draft_id=draft_id, mode="preview", max_pages=max_pages
-        ))
-        _run_async(client.close())
+        async def _do_ocr_preview():
+            client = OCRServiceClient()
+            try:
+                return await client.process(
+                    task_id=task_id, file_key=file_key, draft_id=draft_id, mode="preview", max_pages=max_pages
+                )
+            finally:
+                await client.close()
+
+        result = _run_async(_do_ocr_preview())
 
         input_data = {"file_key": file_key, "mode": "preview", "max_pages": max_pages, "draft_id": draft_id}
         output_data = {
@@ -101,11 +106,17 @@ def run_parser_preview_step(
     try:
         logger.info(f"Parser preview started: task={task_id} draft={draft_id}")
 
-        client = ParserServiceClient()
-        result = _run_async(client.process(
-            file_key=file_key, draft_id=draft_id, mode="preview", max_pages=max_pages
-        ))
-        _run_async(client.close())
+        async def _do_parse():
+            client = ParserServiceClient()
+            try:
+                result = await client.process(
+                    task_id=task_id, file_key=file_key, draft_id=draft_id, mode="preview", max_pages=max_pages
+                )
+            finally:
+                await client.close()
+            return result
+
+        result = _run_async(_do_parse())
 
         input_data = {"file_key": file_key, "mode": "preview", "max_pages": max_pages, "draft_id": draft_id}
         output_data = {
@@ -143,9 +154,14 @@ def run_converter_preview_step(
     try:
         logger.info(f"Converter preview started: task={task_id} draft={draft_id}")
 
-        client = ConverterValidatorClient()
-        result = _run_async(client.convert_preview({"file_key": file_key, "draft_id": draft_id}))
-        _run_async(client.close())
+        async def _do_converter_preview():
+            client = ConverterValidatorClient()
+            try:
+                return await client.convert_preview({"file_key": file_key, "draft_id": draft_id})
+            finally:
+                await client.close()
+
+        result = _run_async(_do_converter_preview())
 
         input_data = {"file_key": file_key, "mode": "preview", "draft_id": draft_id}
         output_data = {
@@ -183,9 +199,14 @@ def run_ocr_full_step(
     try:
         logger.info(f"OCR full started: task={task_id} draft={draft_id}")
 
-        client = OCRServiceClient()
-        result = _run_async(client.process(file_key=file_key, draft_id=draft_id, mode="full"))
-        _run_async(client.close())
+        async def _do_ocr_full():
+            client = OCRServiceClient()
+            try:
+                return await client.process(task_id=task_id, file_key=file_key, draft_id=draft_id, mode="full")
+            finally:
+                await client.close()
+
+        result = _run_async(_do_ocr_full())
 
         input_data = {"file_key": file_key, "mode": "full", "draft_id": draft_id}
         output_data = {
@@ -217,9 +238,14 @@ def run_parser_full_step(
     try:
         logger.info(f"Parser full started: task={task_id} draft={draft_id}")
 
-        client = ParserServiceClient()
-        result = _run_async(client.process(file_key=file_key, draft_id=draft_id, mode="full"))
-        _run_async(client.close())
+        async def _do_parser_full():
+            client = ParserServiceClient()
+            try:
+                return await client.process(task_id=task_id, file_key=file_key, draft_id=draft_id, mode="full")
+            finally:
+                await client.close()
+
+        result = _run_async(_do_parser_full())
 
         input_data = {"file_key": file_key, "mode": "full", "draft_id": draft_id}
         output_data = {
@@ -252,9 +278,14 @@ def run_converter_full_step(
     try:
         logger.info(f"Converter full started: task={task_id} draft={draft_id}")
 
-        client = ConverterValidatorClient()
-        result = _run_async(client.convert_full({"file_key": file_key, "draft_id": draft_id}))
-        _run_async(client.close())
+        async def _do_converter_full():
+            client = ConverterValidatorClient()
+            try:
+                return await client.convert_full({"file_key": file_key, "draft_id": draft_id})
+            finally:
+                await client.close()
+
+        result = _run_async(_do_converter_full())
 
         input_data = {"file_key": file_key, "mode": "full", "draft_id": draft_id}
         output_data = {
@@ -286,14 +317,16 @@ def run_registry_step(
     try:
         logger.info(f"Registry step started: task={task_id} draft={draft_id} document={document_id}")
 
-        client = RegistryServiceClient()
-        # Document already created in approve_draft — confirm status + attach version
-        _run_async(client.update_draft_status(
-            draft_id=draft_id,
-            status="approved",
-            document_id=document_id,
-        ))
-        _run_async(client.close())
+        async def _do_registry():
+            client = RegistryServiceClient()
+            try:
+                return await client.update_draft_status(
+                    draft_id=draft_id, status="approved", document_id=document_id,
+                )
+            finally:
+                await client.close()
+
+        result = _run_async(_do_registry())
 
         input_data = {"draft_id": draft_id, "document_id": document_id}
         output_data = {

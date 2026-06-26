@@ -65,6 +65,7 @@ class CheckUniquenessRequest(BaseModel):
 class OcrProcessRequest(BaseModel):
     """Request body for POST /ocr/process."""
 
+    task_id: int = Field(..., description="ID задачи оркестратора")
     file_key: str = Field(..., description="Ключ файла")
     draft_id: int = Field(..., description="ID черновика для привязки")
     mode: str = Field("full", description="Режим: preview | full")
@@ -79,6 +80,7 @@ class OcrProcessRequest(BaseModel):
 class ParserProcessRequest(BaseModel):
     """Request body for POST /parser/process (mode=preview|full)."""
 
+    task_id: int = Field(..., description="ID задачи оркестратора")
     file_key: str = Field(..., description="Ключ файла")
     draft_id: int = Field(..., description="ID черновика для привязки")
     mode: str = Field("full", description="Режим: preview | full")
