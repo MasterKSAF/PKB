@@ -90,3 +90,72 @@ class TestBuildCorrelationHeaders:
         assert "X-Draft-ID" in headers
         assert "X-User-ID" not in headers
         assert "X-Document-ID" not in headers
+
+
+class TestTraceIdGeneration:
+    """Unit tests for trace_id generation and DB compatibility (bug #16)."""
+
+    def setup_method(self):
+        reset_trace_id()
+
+    def test_generate_trace_id_is_16_hex_chars(self):
+        """generate_trace_id() returns 16 lowercase hex characters."""
+        from app.core.trace import generate_trace_id
+        tid = generate_trace_id()
+        assert len(tid) == 16
+        assert all(c in "0123456789abcdef" for c in tid), f"Not hex: {tid}"
+
+    def test_generate_trace_id_is_unique(self):
+        """Consecutive calls produce different trace IDs."""
+        from app.core.trace import generate_trace_id
+        ids = {generate_trace_id() for _ in range(100)}
+        assert len(ids) == 100, f"Collision: got {len(ids)} unique from 100"
+
+    def test_trace_id_fits_in_db_column(self):
+        """
+        Task.trace_id column is String(64).
+        Both 16-char hex and 36-char UUID fit without truncation.
+        """
+        from app.core.trace import generate_trace_id
+        tid = generate_trace_id()
+        assert len(tid) <= 64, f"16-char trace_id exceeds String(64): {len(tid)}"
+
+        # A full UUID with dashes is 36 chars — also fits
+        full_uuid = "550e8400-e29b-41d4-a716-446655440000"
+        assert len(full_uuid) == 36
+        assert len(full_uuid) <= 64, f"36-char UUID exceeds String(64)"
+
+    def test_trace_id_stored_in_task_model(self):
+        """
+        Task model accepts both 16-char hex and 36-char UUID trace_id.
+        Uses the actual model constructor (not DB insert) to verify
+        no validation rejects the length.
+        """
+        from app.models.pipeline import Task
+        # 16-char trace_id (current generate_trace_id output)
+        task_short = Task(trace_id="aabbccddeeff0011")
+        assert task_short.trace_id == "aabbccddeeff0011"
+
+        # 36-char UUID (external caller, e.g. Gateway)
+        task_long = Task(trace_id="550e8400-e29b-41d4-a716-446655440000")
+        assert task_long.trace_id == "550e8400-e29b-41d4-a716-446655440000"
+
+        # 64-char edge case
+        task_edge = Task(trace_id="x" * 64)
+        assert task_edge.trace_id == "x" * 64
+
+    def test_set_trace_id_accepts_uuid_length(self):
+        """set_trace_id() accepts and returns a 36-char UUID."""
+        from app.core.trace import set_trace_id, get_trace_id
+        full_uuid = "550e8400-e29b-41d4-a716-446655440000"
+        result = set_trace_id(full_uuid)
+        assert result == full_uuid
+        assert get_trace_id() == full_uuid
+
+    def test_build_headers_with_uuid_length_trace(self):
+        """build_correlation_headers handles 36-char trace_id."""
+        full_uuid = "550e8400-e29b-41d4-a716-446655440000"
+        set_trace_id(full_uuid)
+        headers = build_correlation_headers()
+        assert headers["X-Trace-ID"] == full_uuid
+        assert headers["X-Request-ID"] == full_uuid
