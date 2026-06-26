@@ -9,6 +9,8 @@ services:
 
     environment:
       POSTGRES_HOST: host.docker.internal
+      EMBEDDING_API_BASE_URL: ${EMBEDDING_BASE_URL:-https://routerai.ru/api/v1}
+      EMBEDDING_API_KEY: ${ROUTERAI_API_KEY:-}
 
     ports:
       - "8001:8000"

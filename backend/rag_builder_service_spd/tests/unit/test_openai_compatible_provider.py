@@ -31,11 +31,17 @@ class FakeEmbeddingsClient:
         self.embedding_dim = embedding_dim
         self.calls = []
 
-    def create(self, model: str, input):
+    def create(
+        self,
+        model: str,
+        input,
+        dimensions: int | None = None,
+    ):
         self.calls.append(
             {
                 "model": model,
                 "input": input,
+                "dimensions": dimensions,
             }
         )
 
@@ -68,6 +74,7 @@ def test_openai_compatible_single_embedding():
     )
 
     assert client.embeddings.calls[0]["model"] == settings.EMBEDDING_MODEL
+    assert client.embeddings.calls[0]["dimensions"] == settings.EMBEDDING_DIM
     assert client.embeddings.calls[0]["input"] == "ГОСТ 20868-81"
 
 
@@ -110,6 +117,8 @@ def test_openai_compatible_empty_batch():
 
 def test_openai_compatible_requires_base_url_without_client(monkeypatch):
     monkeypatch.setattr(settings, "EMBEDDING_API_BASE_URL", None)
+    monkeypatch.setattr(settings, "EMBEDDING_BASE_URL", None)
+    monkeypatch.setattr(settings, "EMBEDDING_API_URL", None)
 
     with pytest.raises(ValueError, match="EMBEDDING_API_BASE_URL"):
         OpenAICompatibleEmbeddingProvider()
