@@ -1,3 +1,9 @@
+import os
+
+os.environ.setdefault("MOCK_RAG_ENABLED", "true")
+os.environ.setdefault("MOCK_REGISTRY_ENABLED", "true")
+os.environ.setdefault("MOCK_LLM_ENABLED", "true")
+
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
@@ -17,6 +23,7 @@ async def app():
     os.environ["DATABASE_URL"] = TEST_DATABASE_URL
     os.environ["DEV_AUTH_MODE"] = "true"
     os.environ["MOCK_RAG_ENABLED"] = "true"
+    os.environ["MOCK_REGISTRY_ENABLED"] = "true"
     os.environ["MOCK_LLM_ENABLED"] = "true"
 
     # patch lru_cache
