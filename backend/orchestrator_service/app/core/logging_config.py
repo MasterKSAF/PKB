@@ -80,7 +80,7 @@ def setup_logging(debug: bool = False, log_file: Optional[str] = None) -> None:
                 "httpx": {"level": "WARNING", "propagate": True},
                 "httpcore": {"level": "WARNING", "propagate": True},
                 "sqlalchemy.engine": {
-                    "level": "WARNING" if not debug else "INFO",
+                    "level": "WARNING" if not debug else "DEBUG",
                     "propagate": True,
                 },
                 "celery": {"level": "WARNING", "propagate": True},
