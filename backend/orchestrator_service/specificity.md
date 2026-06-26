@@ -225,6 +225,17 @@ Docker перезапускает контейнер (`restart: unless-stopped`)
 
 ### 3.9. Функции Document API документированы в `docs/api/orchestrator_service_api.md`
 
+### 3.10. MinIO upload — требуется mock в conftest (26.06)
+Тесты API (`test_drafts.py`) используют `TestClient`, который вызывает `upload_file`
+из `app.storage`. Поскольку MinIO нет в тестовом окружении, требуется
+`patch("app.api.v1.endpoints.drafts.upload_file", new=AsyncMock())` в conftest.
+Без патча тест ждёт ~40с таймаута соединения.
+
+### 3.11. pipeline_indexation — отсутствовал import settings (26.06, ИСПРАВЛЕНО)
+В `app/tasks/pipeline_indexation.py` не было `from app.core.config import settings`,
+хотя использовался `settings.REDIS_URL`. Баг найден при написании unit-тестов.
+Все тесты Celery-задач вызывают `.run()` напрямую, что и выявило ошибку.
+
 ## 4. Проблемы при запуске (ошибки в Python-сервисах)
 
 При `docker compose up -d` контейнер `pkb-neuro` запускает 10 Python-процессов под supervisord.

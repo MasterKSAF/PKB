@@ -12,6 +12,7 @@ import asyncio
 import logging
 
 from app.celery_app import celery_app
+from app.core.config import settings
 from app.core.fsm import TaskStatus
 from app.core.pipeline.orchestrator import PipelineOrchestrator
 from app.db.session import get_db_context

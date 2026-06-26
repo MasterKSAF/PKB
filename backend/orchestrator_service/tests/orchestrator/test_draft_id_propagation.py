@@ -27,24 +27,27 @@ class TestParserProcessRequestDraftId:
             ParserProcessRequest(file_key="f-abc", mode="preview")
 
     def test_parser_request_with_draft_id_succeeds(self):
-        """Valid request with draft_id."""
+        """Valid request with draft_id and task_id."""
         req = ParserProcessRequest(
+            task_id=1,
             file_key="f-abc",
             draft_id=DRAFT_ID,
             mode="preview",
             max_pages=3,
         )
         assert req.draft_id == DRAFT_ID
+        assert req.task_id == 1
         assert req.file_key == "f-abc"
         assert req.mode == "preview"
 
     def test_parser_request_serializes_draft_id(self):
-        """draft_id is included in serialized output."""
+        """draft_id and task_id are included in serialized output."""
         req = ParserProcessRequest(
-            file_key="f-abc", draft_id=DRAFT_ID, mode="full"
+            task_id=1, file_key="f-abc", draft_id=DRAFT_ID, mode="full"
         )
         data = req.model_dump(exclude_none=True)
         assert data["draft_id"] == DRAFT_ID
+        assert data["task_id"] == 1
 
 
 class TestOcrProcessRequestDraftId:
@@ -56,22 +59,25 @@ class TestOcrProcessRequestDraftId:
             OcrProcessRequest(file_key="f-abc", mode="preview")
 
     def test_ocr_request_with_draft_id_succeeds(self):
-        """Valid request with draft_id."""
+        """Valid request with draft_id and task_id."""
         req = OcrProcessRequest(
+            task_id=1,
             file_key="f-abc",
             draft_id=DRAFT_ID,
             mode="preview",
             max_pages=3,
         )
         assert req.draft_id == DRAFT_ID
+        assert req.task_id == 1
 
     def test_ocr_request_serializes_draft_id(self):
-        """draft_id is included in serialized output."""
+        """draft_id and task_id are included in serialized output."""
         req = OcrProcessRequest(
-            file_key="f-abc", draft_id=DRAFT_ID, mode="full"
+            task_id=1, file_key="f-abc", draft_id=DRAFT_ID, mode="full"
         )
         data = req.model_dump(exclude_none=True)
         assert data["draft_id"] == DRAFT_ID
+        assert data["task_id"] == 1
 
 
 class TestDraftIdInApiResponse:
@@ -111,6 +117,7 @@ class TestParserClientDraftId:
         client = ParserServiceClient()
         # In mock mode, _generate_mock will be called — we just check no crash
         result = await client.process(
+            task_id=1,
             file_key="f-test",
             draft_id=DRAFT_ID,
             mode="preview",
@@ -126,6 +133,7 @@ class TestParserClientDraftId:
 
         client = ParserServiceClient()
         result = await client.process(
+            task_id=1,
             file_key="f-test",
             draft_id=DRAFT_ID,
             mode="full",
@@ -143,6 +151,7 @@ class TestOcrClientDraftId:
 
         client = OCRServiceClient()
         result = await client.process(
+            task_id=1,
             file_key="f-test",
             draft_id=DRAFT_ID,
             mode="preview",
@@ -158,6 +167,7 @@ class TestOcrClientDraftId:
 
         client = OCRServiceClient()
         result = await client.process(
+            task_id=1,
             file_key="f-test",
             draft_id=DRAFT_ID,
             mode="full",

@@ -72,7 +72,7 @@ class TestRunOcrPreviewStep:
 
         # Verify service client was called correctly with new unified method
         mock_client.process.assert_awaited_once_with(
-            file_key="drafts/10/file.pdf", draft_id=DRAFT_ID, mode="preview", max_pages=3
+            task_id=1, file_key="drafts/10/file.pdf", draft_id=DRAFT_ID, mode="preview", max_pages=3
         )
 
         # Verify notify was called with correct args
@@ -276,7 +276,7 @@ class TestRunOcrFullStep:
 
         # Verify service call with new unified method
         mock_client.process.assert_awaited_once_with(
-            file_key="drafts/10/file.pdf", draft_id=DRAFT_ID, mode="full"
+            task_id=4, file_key="drafts/10/file.pdf", draft_id=DRAFT_ID, mode="full"
         )
 
         # Verify notify

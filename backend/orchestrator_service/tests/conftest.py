@@ -39,7 +39,7 @@ from app.main import create_application
 #    Tests that test the orchestrator (test_pipeline_formation)
 #    mock .delay() themselves with specific assertions.
 #
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from app.celery_app import celery_app
 celery_app.conf.update(
@@ -50,6 +50,12 @@ celery_app.conf.update(
 # Patch .delay() globally to be a no-op (prevents hanging on Redis)
 _delay_patcher = patch("celery.app.task.Task.delay", autospec=True, return_value=None)
 _delay_patcher.start()
+
+# Patch MinIO upload globally (no MinIO in tests; would hang otherwise)
+# Note: drafts.py does `from app.storage import upload_file`, creating a local
+# reference, so we must patch the local name in the consuming module.
+_upload_patcher = patch("app.api.v1.endpoints.drafts.upload_file", new=AsyncMock())
+_upload_patcher.start()
 
 # --- Block all real HTTP requests (prevent network timeouts in tests) ---
 # When mock_mode=False, tests like test_real_mode_* try to connect to

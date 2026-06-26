@@ -24,6 +24,7 @@ class BaseOpenAIEmbeddingProvider:
         response = self.client.embeddings.create(
             model=settings.EMBEDDING_MODEL,
             input=text,
+            dimensions=settings.EMBEDDING_DIM,
         )
 
         usage = getattr(response, "usage", None)
@@ -53,6 +54,7 @@ class BaseOpenAIEmbeddingProvider:
         response = self.client.embeddings.create(
             model=settings.EMBEDDING_MODEL,
             input=texts,
+            dimensions=settings.EMBEDDING_DIM,
         )
 
         response_data = list(response.data)
@@ -131,7 +133,7 @@ class OpenAICompatibleEmbeddingProvider(BaseOpenAIEmbeddingProvider):
             base_url: str | None = None,
             api_key: str | None = None,
     ) -> None:
-        self.base_url = base_url or settings.EMBEDDING_API_BASE_URL
+        self.base_url = base_url or settings.effective_embedding_api_base_url
         self.api_key = (
             api_key
             if api_key is not None
@@ -140,7 +142,7 @@ class OpenAICompatibleEmbeddingProvider(BaseOpenAIEmbeddingProvider):
 
         if client is None and not self.base_url:
             raise ValueError(
-                "EMBEDDING_API_BASE_URL is required for "
+                "EMBEDDING_API_BASE_URL or EMBEDDING_BASE_URL is required for "
                 "OpenAI-compatible embeddings"
             )
 
