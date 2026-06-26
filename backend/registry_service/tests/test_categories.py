@@ -23,7 +23,7 @@ def test_create_category(client, db_session):
     # 2. POST duplicate name -> 409 DUPLICATE_CATEGORY_NAME
     response_dup = client.post("/api/v1/registry/categories", json=payload)
     assert response_dup.status_code == 409
-    assert response_dup.json()["detail"]["error"]["code"] == "DUPLICATE_CATEGORY_NAME"
+    assert response_dup.json()["error"]["code"] == "DUPLICATE_CATEGORY_NAME"
 
 def test_list_categories(client, db_session):
     # Seed categories
@@ -71,7 +71,7 @@ def test_get_category(client, db_session):
     # 404 GET
     response_404 = client.get("/api/v1/registry/categories/9999")
     assert response_404.status_code == 404
-    assert response_404.json()["detail"]["error"]["code"] == "CATEGORY_NOT_FOUND"
+    assert response_404.json()["error"]["code"] == "CATEGORY_NOT_FOUND"
 
 def test_update_category(client, db_session):
     cat1 = Category(
@@ -109,12 +109,12 @@ def test_update_category(client, db_session):
     }
     response_dup = client.put(f"/api/v1/registry/categories/{cat1.id}", json=payload_dup)
     assert response_dup.status_code == 409
-    assert response_dup.json()["detail"]["error"]["code"] == "DUPLICATE_CATEGORY_NAME"
+    assert response_dup.json()["error"]["code"] == "DUPLICATE_CATEGORY_NAME"
 
     # 3. Update non-existing -> 404
     response_404 = client.put("/api/v1/registry/categories/9999", json=payload)
     assert response_404.status_code == 404
-    assert response_404.json()["detail"]["error"]["code"] == "CATEGORY_NOT_FOUND"
+    assert response_404.json()["error"]["code"] == "CATEGORY_NOT_FOUND"
 
 def test_delete_category(client, db_session):
     cat = Category(
@@ -130,7 +130,7 @@ def test_delete_category(client, db_session):
     # 1. DELETE non-existing -> 404
     response_404 = client.delete("/api/v1/registry/categories/9999")
     assert response_404.status_code == 404
-    assert response_404.json()["detail"]["error"]["code"] == "CATEGORY_NOT_FOUND"
+    assert response_404.json()["error"]["code"] == "CATEGORY_NOT_FOUND"
 
     # 2. DELETE linked category -> 409 CATEGORY_HAS_DOCUMENTS
     doc = Document(
@@ -149,7 +149,7 @@ def test_delete_category(client, db_session):
 
     response_linked = client.delete(f"/api/v1/registry/categories/{cat.id}")
     assert response_linked.status_code == 409
-    assert response_linked.json()["detail"]["error"]["code"] == "CATEGORY_HAS_DOCUMENTS"
+    assert response_linked.json()["error"]["code"] == "CATEGORY_HAS_DOCUMENTS"
 
     # 3. DELETE success (after removing link)
     db_session.delete(link)
