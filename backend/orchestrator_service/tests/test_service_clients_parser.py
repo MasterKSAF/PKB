@@ -28,7 +28,7 @@ class TestParserProcessPreview:
     async def test_preview_returns_data(self, parser_client):
         """Preview returns a dict with data."""
         result = await parser_client.process(
-            file_key="f-abc123", draft_id=DRAFT_ID, mode="preview", max_pages=3
+            task_id=1, file_key="f-abc123", draft_id=DRAFT_ID, mode="preview", max_pages=3
         )
         assert "data" in result
         data = result["data"]
@@ -41,7 +41,7 @@ class TestParserProcessPreview:
     async def test_preview_has_metadata(self, parser_client):
         """Preview metadata contains document fields."""
         result = await parser_client.process(
-            file_key="f-test-key", draft_id=DRAFT_ID, mode="preview", max_pages=5
+            task_id=1, file_key="f-test-key", draft_id=DRAFT_ID, mode="preview", max_pages=5
         )
         data = result.get("data", {})
         metadata = data.get("metadata", {})
@@ -55,7 +55,7 @@ class TestParserProcessPreview:
     async def test_preview_default_max_pages(self, parser_client):
         """Default max_pages is not sent but mock works."""
         result = await parser_client.process(
-            file_key="f-abc", draft_id=DRAFT_ID, mode="preview"
+            task_id=1, file_key="f-abc", draft_id=DRAFT_ID, mode="preview"
         )
         assert result.get("data", {}).get("preview_not_supported") is not None
 
@@ -63,7 +63,7 @@ class TestParserProcessPreview:
     async def test_preview_passes_draft_id(self, parser_client):
         """Draft ID is passed in the request body."""
         result = await parser_client.process(
-            file_key="f-key", draft_id=999, mode="preview"
+            task_id=1, file_key="f-key", draft_id=999, mode="preview"
         )
         assert result is not None
 
@@ -75,7 +75,7 @@ class TestParserProcessFull:
     async def test_full_returns_data(self, parser_client):
         """Full process returns a dict with data."""
         result = await parser_client.process(
-            file_key="f-abc123", draft_id=DRAFT_ID, mode="full"
+            task_id=1, file_key="f-abc123", draft_id=DRAFT_ID, mode="full"
         )
         assert "data" in result
         data = result["data"]
@@ -86,7 +86,7 @@ class TestParserProcessFull:
     async def test_full_contains_sections(self, parser_client):
         """Full process response contains parsed sections."""
         result = await parser_client.process(
-            file_key="f-full-test", draft_id=DRAFT_ID, mode="full"
+            task_id=1, file_key="f-full-test", draft_id=DRAFT_ID, mode="full"
         )
         data = result.get("data", {})
         assert "pages_processed" in data or "sections" in data

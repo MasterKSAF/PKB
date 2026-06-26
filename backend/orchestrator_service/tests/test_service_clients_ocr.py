@@ -28,7 +28,7 @@ class TestOCRProcessPreview:
     async def test_preview_returns_data(self, ocr_client):
         """Preview returns a dict with data wrapper."""
         result = await ocr_client.process(
-            file_key="file-test-001", draft_id=DRAFT_ID, mode="preview"
+            task_id=1, file_key="file-test-001", draft_id=DRAFT_ID, mode="preview"
         )
         assert "data" in result
         data = result["data"]
@@ -41,7 +41,7 @@ class TestOCRProcessPreview:
     async def test_preview_has_full_metadata(self, ocr_client):
         """Preview metadata contains all required fields."""
         result = await ocr_client.process(
-            file_key="file-test-001", draft_id=DRAFT_ID, mode="preview"
+            task_id=1, file_key="file-test-001", draft_id=DRAFT_ID, mode="preview"
         )
         metadata = result["data"]["metadata"]
         expected_fields = [
@@ -56,7 +56,7 @@ class TestOCRProcessPreview:
     async def test_preview_passes_draft_id(self, ocr_client):
         """Draft ID is passed in the request body."""
         result = await ocr_client.process(
-            file_key="file-key", draft_id=999, mode="preview"
+            task_id=1, file_key="file-key", draft_id=999, mode="preview"
         )
         assert result["data"]["task_id"] is not None
 
@@ -68,7 +68,7 @@ class TestOCRProcessFull:
     async def test_full_returns_data(self, ocr_client):
         """Full process returns a dict with data wrapper."""
         result = await ocr_client.process(
-            file_key="file-test-001", draft_id=DRAFT_ID, mode="full"
+            task_id=1, file_key="file-test-001", draft_id=DRAFT_ID, mode="full"
         )
         assert "data" in result
         data = result["data"]
@@ -79,7 +79,7 @@ class TestOCRProcessFull:
     async def test_full_contains_pages_processed(self, ocr_client):
         """Full process response contains pages info."""
         result = await ocr_client.process(
-            file_key="file-full-test", draft_id=DRAFT_ID, mode="full"
+            task_id=1, file_key="file-full-test", draft_id=DRAFT_ID, mode="full"
         )
         data = result.get("data", {})
         assert "pages_processed" in data

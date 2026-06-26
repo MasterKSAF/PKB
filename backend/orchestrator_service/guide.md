@@ -74,6 +74,24 @@
 
 ---
 
+## Coverage тестов (26.06)
+
+### Celery-задачи (unit, `tests/unit/test_celery_tasks_all.py`):
+- Все 10 pipeline-задач + 2 scheduler + 2 compensation — happy & failure paths
+- `run_rag_index_step`: также lock_held, invalid_document_id, integrity_check_fail, build_failed
+
+### API статусов и результатов (integration, `tests/integration/test_tasks_api_extended.py`):
+- `GET /tasks/{id}/status` — полная структура, step_data, alias, not_found
+- `GET /tasks/{id}/steps` — output_data (результаты), running/converter/empty
+- `GET /documents/{doc_id}/tasks` — formation+indexation, empty
+- `GET /tasks/{id}` — document_id, version_id, notifications, error_info
+- End-to-end: draft → celery → status/results через API
+
+### Инфраструктура
+- MinIO `upload_file` замокан в conftest (timeout 40с → 0.2с)
+- Все внешние сервисы замоканы (Registry, RAG, OCR, Parser, Converter)
+- Celery `.delay()` — no-op, задачи тестируются через `.run()`
+
 ## Naming conventions
 
 | Было | Стало | Где |
