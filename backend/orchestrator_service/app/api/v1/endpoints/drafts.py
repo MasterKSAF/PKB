@@ -501,6 +501,9 @@ async def get_draft(
             "status": data.get("status"),
             "document_key": data.get("document_key"),
             "file_key": data.get("file_key"),
+            "preview_metadata": data.get("preview_metadata") or {},
+            "created_at": data.get("created_at"),
+            "updated_at": data.get("updated_at"),
         }
     except HTTPException:
         raise

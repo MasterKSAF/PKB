@@ -378,6 +378,28 @@ class PipelineOrchestrator:
                 progress_percent=50,
             )
 
+        # --- Save preview_metadata from converter (P1F-4) ---
+        preview_metadata = {}
+        if converter_step and converter_step.output_data:
+            preview_metadata = converter_step.output_data.get("metadata", {}) or {}
+        if not preview_metadata and preview_step and preview_step.output_data:
+            preview_metadata = preview_step.output_data.get("metadata", {}) or {}
+
+        # Update draft metadata via Registry
+        if preview_metadata:
+            try:
+                registry_meta = RegistryServiceClient()
+                await registry_meta.update_draft_metadata(
+                    draft_id=task.draft_id,
+                    preview_metadata=preview_metadata,
+                )
+                await registry_meta.close()
+            except Exception as e:
+                logger.warning(
+                    f"Failed to save preview_metadata: {e}",
+                    extra={"draft_id": task.draft_id},
+                )
+
         # Update draft status to ready_for_approve via Registry
         try:
             registry = RegistryServiceClient()
