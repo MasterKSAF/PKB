@@ -1111,11 +1111,11 @@ export const KnowledgeProcessing: React.FC = () => {
 
   const sortedDrafts = useMemo(() => sortDrafts(drafts, draftSort), [drafts, draftSort]);
   const selectedDraft = drafts.find((draft) => draft.id === selectedDraftId) ?? null;
-  const selectedGatewayDraftId = workMode === 'prod' ? selectedDraft?.gatewayDraftId || selectedDraft?.id || '' : '';
+  const selectedGatewayDraftId = workMode === 'prod' ? (selectedDraft?.gatewayDraftId || '') : '';
   const draftTasksQuery = useQuery({
     queryKey: ['gateway-draft-tasks', workMode, selectedGatewayDraftId],
     queryFn: () => tasksApi.forDraft(selectedGatewayDraftId),
-    enabled: workMode === 'prod' && activeTab === 'knowledgeProcessing' && Boolean(selectedGatewayDraftId),
+    enabled: workMode === 'prod' && activeTab === 'knowledgeProcessing' && Boolean(selectedDraft?.gatewayDraftId),
     staleTime: 10_000,
     refetchInterval:
       workMode === 'prod' &&
@@ -1170,7 +1170,7 @@ export const KnowledgeProcessing: React.FC = () => {
   };
 
   const getGatewayDraftId = (draft: DraftItem | null) =>
-    workMode === 'prod' ? draft?.gatewayDraftId || draft?.id || '' : '';
+    workMode === 'prod' ? (draft?.gatewayDraftId || '') : '';
 
   const refreshGatewayDraftDetails = async (draftId: string, fallbackDraft?: DraftItem | null) => {
     const draft = fallbackDraft ?? getSelectedDraft(draftId);

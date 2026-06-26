@@ -1793,6 +1793,8 @@ export const tasksApi = {
     return mapGatewayTaskStatusResponse(response.data);
   },
   forDraft: async (draftId: string) => {
+    // Только числовой draft_id имеет смысл — локальные id (draft-{timestamp}-{random}) не шлём
+    if (!/^\d+$/.test(draftId)) return [];
     const response = await gatewayRequest<any>(() => apiClient.get(`/drafts/${draftId}/tasks`));
     const tasks = Array.isArray(response.data?.tasks)
       ? response.data.tasks
