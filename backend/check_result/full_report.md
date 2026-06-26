@@ -1,6 +1,6 @@
 # Full Report — API Coverage + Pipeline Testing
 
-**Generated:** 2026-06-26 16:47:50 UTC
+**Generated:** 2026-06-26 17:15:39 UTC
 
 ---
 
@@ -8,19 +8,19 @@
 
 | Service | Port | Ping | CheckDb | API | Pipelines | Status |
 |---------|:----:|:----:|:-------:|:---:|:--------:|:------:|
-| Auth Service | 18082 | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Converter-Validator | 18086 | ✅ | — | ✅ | ✅ | ✅ |
-| Gateway | 18080 | ✅ | — | ❌ | ✅ | ❌ |
+| Auth Service | 18082 | — | ✅ | — | ✅ | ✅ |
+| Converter-Validator | 18086 | — | — | — | ✅ | ✅ |
+| Gateway | 18080 | — | — | — | ✅ | ✅ |
 | MinIO | 19000 | — | — | — | ✅ | ✅ |
 | OCR Service | 18088 | — | — | — | — | 🟡 dev |
-| Orchestrator | 18081 | ✅ | ✅ | ✅ | — | ✅ |
-| Parser Service | 18087 | ✅ | — | ✅ | ✅ | ✅ |
-| Query Service | 18083 | ✅ | ✅ | ✅ | — | ✅ |
-| RAG Builder | 18090 | ✅ | ✅ | ✅ | ✅ | ✅ |
-| RAG Search | 18091 | ✅ | — | ✅ | ✅ | ✅ |
-| Registry Service | 18084 | ✅ | ✅ | ❌ | ✅ | ❌ |
-| TEI | 18092 | ✅ | — | ✅ | — | ✅ |
-| **Total** | | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Orchestrator | 18081 | — | ✅ | — | — | 🟡 dev |
+| Parser Service | 18087 | — | — | — | ✅ | ✅ |
+| Query Service | 18083 | — | ✅ | — | — | 🟡 dev |
+| RAG Builder | 18090 | — | ✅ | — | ✅ | ✅ |
+| RAG Search | 18091 | — | — | — | ✅ | ✅ |
+| Registry Service | 18084 | — | ✅ | — | ✅ | ✅ |
+| TEI | 18092 | — | — | — | — | 🟡 dev |
+| **Total** | | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ### 📋 Pipeline статусы по сервисам
 
@@ -38,13 +38,11 @@
 | RAG Search | ✅ | ✅ | — | ✅ | — | — | — | ✅ | — | — | — | — | — | ✅ | ✅ |
 | Registry Service | ✅ | — | — | — | — | — | — | — | — | — | — | — | — | — | ✅ |
 | TEI | — | — | — | — | — | — | — | — | — | — | — | — | — | — | 🟡 dev |
-| **Total** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| **Total** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 #### 🔍 Пояснения к результатам
 
-- **Gateway**: API: 34 эндпоинт(ов) упало; ⏭️ 24 эндпоинтов пропущено — нет контекста (prepare не создал данные)
-
-- **Registry Service**: API: 3 эндпоинт(ов) упало
+_Нет замечаний_
 
 
 ---
@@ -53,29 +51,11 @@
 
 | Service | Port | Ping | CheckDb | Endpoints | ✅ Passed | ❌ Failed | ⏭️ Skipped | Status |
 |---------|:----:|:----:|:-------:|:---------:|:---------:|:---------:|:----------:|:------:|
-| Auth Service | 18082 | ✅ | ✅ | 19 | 19 | 0 | 0 | ✅ |
-| Converter-Validator | 18086 | ✅ | — | 5 | 5 | 0 | 0 | ✅ |
-| Gateway | 18080 | ✅ | — | 100 | 42 | **34** | **24** | ❌ |
-| Orchestrator | 18081 | ✅ | ✅ | 35 | 35 | 0 | 0 | ✅ |
-| Parser Service | 18087 | ✅ | — | 5 | 5 | 0 | 0 | ✅ |
-| Query Service | 18083 | ✅ | ✅ | 27 | 27 | 0 | 0 | ✅ |
-| RAG Builder | 18090 | ✅ | ✅ | 7 | 7 | 0 | 0 | ✅ |
-| RAG Search | 18091 | ✅ | — | 2 | 2 | 0 | 0 | ✅ |
-| Registry Service | 18084 | ✅ | ✅ | 50 | 47 | **3** | 0 | ❌ |
-| TEI | 18092 | ✅ | — | 2 | 2 | 0 | 0 | ✅ |
-| **Total** | | **10/10** | ✅ | **252** | **191** | **37** | **24** | ❌ |
+| **Total** | | **0/0** | ✅ | **0** | **0** | **0** | **0** | ✅ |
 
 ### ⚠️ Workaround-предупреждения по сервисам
 
-- **Auth Service**: PATCH /admin/users/{id}: docs ожидает audit_log_id, но сервис его не возвращает
-
-- **Query Service**: ⚠️ POST /chat/feedback: rating:int + rating_status:string (QS-10). Ранее был rating:string без rating_status.
-
-- **Registry Service**: ⚠️ Registry не поддерживает trailing slash — эндпоинты /classifiers, /documents, /terminology без / в конце.
-
-- **Registry Service**: ⚠️ PATCH /documents/{id}/status — internal API (только Orchestrator), checker ожидает 403.
-
-- **Registry Service**: ⚠️ PATCH /drafts/{id}/metadata — internal API (только Orchestrator), checker ожидает 404.
+_Нет предупреждений_
 
 
 ---
@@ -88,7 +68,7 @@
 | `chat_inference` | Чат-сессия с поиском по проиндексированным документам | ✅ | 6 | 6 | 0 | ✅ |
 | `document_approval` | Подтверждение документа: черновик → preview → решение пользователя → full-фаза → индексация (документ только через черновик) | ✅ | 10 | 10 | 0 | ✅ |
 | `document_processing` | Полный цикл обработки документа | ✅ | 15 | 15 | 0 | ✅ |
-| `full_document_cycle` | Полный сквозной цикл: загрузка PDF через черновик → парсинг → конвертация → валидация → approve → Registry → индексация → поиск | ✅ | 13 | 11 | 2 | ❌ |
+| `full_document_cycle` | Полный сквозной цикл: загрузка PDF через черновик → парсинг → preview → approve → Registry → индексация → поиск | ✅ | 10 | 10 | 0 | ✅ |
 | `full_document_lifecycle` | Полный жизненный цикл документа (создание → ошибка → восстановление → удаление → пересоздание) | ✅ | 12 | 12 | 0 | ✅ |
 | `multi_document_cross_search` | Мульти-документный поиск: 2 документа → индексация → кросс-поиск → удаление → фильтрация | ✅ | 19 | 19 | 0 | ✅ |
 | `orchestrator_document_reject` | Reject черновика Orchestrator (создание → reject → проверка статуса) | ✅ | 6 | 6 | 0 | ✅ |
@@ -144,10 +124,10 @@
 
 | Contract | Status | Code | Time | Детали |
 |----------|:------:|:----:|:----:|--------|
-| query → rag_search | ✅ | 200 | 3328ms | results=5, processing_time_ms=3323, total_found=7 |
-| query → registry | ✅ | 200 | 8ms | data=[] — валидный ответ (БД пуста, но эндпоинт работает) |
-| rag_search → infinity (TEI) | ✅ | 200 | 14ms | embedding_dim=312 — эмбеддинги работают |
-| gateway → query | ✅ | 201 | 25ms | session_id=5 — прокси работает |
+| query → rag_search | ✅ | 200 | 3360ms | results=7, processing_time_ms=3352, total_found=22 |
+| query → registry | ✅ | 200 | 18ms | data=[] — валидный ответ (БД пуста, но эндпоинт работает) |
+| rag_search → infinity (TEI) | ✅ | 200 | 13ms | embedding_dim=312 — эмбеддинги работают |
+| gateway → query | ✅ | 201 | 26ms | session_id=14 — прокси работает |
 | **Total** | ✅ | | | 4/4 passed, 0 failed |
 
 
@@ -166,22 +146,22 @@
 
 | # | Step | Service | Status | Code | Time | Проверка |
 |---|------|---------|:------:|:----:|:----:|----------|
-| 1 | Аутентификация admin (через Gateway) | gateway | ✅ | 200 | 240ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LWZhZmY4N2YxN2FmZCIsInJvbGVzIjp |
-| 2 | Создание пользователя (через Gateway) | gateway | ✅ | 201 | 254ms | user_id = u-48cc8b88fe8e |
-| 3 | Список пользователей (через Gateway) | gateway | ✅ | 200 | 22ms | users = [{'user_id': 'u-48cc8b88fe8e', 'email': 'pipeline-user-20260626214654350914@test |
-| 4 | Аутентификация нового пользователя (через Gateway) | gateway | ✅ | 200 | 240ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LTQ4Y2M4Yjg4ZmU4ZSIsInJvbGVzIjp |
-| 5 | Создание чат-сессии (новый пользователь, через Gateway) | gateway | ✅ | 201 | 22ms | session_id = 3 |
-| 6 | Отправка сообщения (новый пользователь, через Gateway) | gateway | ✅ | 202 | 25ms | message_id = 6 |
-| 7 | Получение истории чата (через Gateway) | gateway | ✅ | 200 | 22ms | messages = [{'message_id': 5, 'role': 'user', 'content': 'Тестовое сообщение от pipeline по |
-| 8 | Брутфорс попытка 1/5 (через Gateway) | gateway | ✅ | 401 | 229ms | {"error":{"code":"INVALID_CREDENTIALS","message":"Неверные учётные данные","details":{}}} |
-| 9 | Брутфорс попытка 2/5 (через Gateway) | gateway | ✅ | 401 | 232ms | {"error":{"code":"INVALID_CREDENTIALS","message":"Неверные учётные данные","details":{}}} |
-| 10 | Брутфорс попытка 3/5 (через Gateway) | gateway | ✅ | 401 | 230ms | {"error":{"code":"INVALID_CREDENTIALS","message":"Неверные учётные данные","details":{}}} |
-| 11 | Брутфорс попытка 4/5 (через Gateway) | gateway | ✅ | 401 | 227ms | {"error":{"code":"INVALID_CREDENTIALS","message":"Неверные учётные данные","details":{}}} |
-| 12 | Брутфорс попытка 5/5 (через Gateway) | gateway | ✅ | 401 | 229ms | {"error":{"code":"INVALID_CREDENTIALS","message":"Неверные учётные данные","details":{}}} |
-| 13 | Проверка блокировки после 5 неудач (через Gateway) | gateway | ✅ | 401 | 230ms | {"error":{"code":"INVALID_CREDENTIALS","message":"Неверные учётные данные","details":{}}} |
-| 14 | Журнал аудита (через Gateway) | gateway | ✅ | 200 | 21ms | events = [{'event_id': 'evt-f8fc6839a83c', 'user_id': 'u-48cc8b88fe8e', 'action': 'auth.l |
-| 15 | Деактивация пользователя (через Gateway) | gateway | ✅ | 200 | 33ms | is_active = False |
-| 16 | Проверка 401 после деактивации (через Gateway) | gateway | ✅ | 401 | 13ms | ответ: пустой detail |
+| 1 | Аутентификация admin (через Gateway) | gateway | ✅ | 200 | 332ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LWZhZmY4N2YxN2FmZCIsInJvbGVzIjp |
+| 2 | Создание пользователя (через Gateway) | gateway | ✅ | 201 | 269ms | user_id = u-1cfda0dab63d |
+| 3 | Список пользователей (через Gateway) | gateway | ✅ | 200 | 35ms | users = [{'user_id': 'u-1cfda0dab63d', 'email': 'pipeline-user-20260626221424773811@test |
+| 4 | Аутентификация нового пользователя (через Gateway) | gateway | ✅ | 200 | 251ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LTFjZmRhMGRhYjYzZCIsInJvbGVzIjp |
+| 5 | Создание чат-сессии (новый пользователь, через Gateway) | gateway | ✅ | 201 | 34ms | session_id = 12 |
+| 6 | Отправка сообщения (новый пользователь, через Gateway) | gateway | ✅ | 202 | 42ms | message_id = 14 |
+| 7 | Получение истории чата (через Gateway) | gateway | ✅ | 200 | 35ms | messages = [{'message_id': 13, 'role': 'user', 'content': 'Тестовое сообщение от pipeline п |
+| 8 | Брутфорс попытка 1/5 (через Gateway) | gateway | ✅ | 401 | 249ms | {"error":{"code":"INVALID_CREDENTIALS","message":"Неверные учётные данные","details":{}}} |
+| 9 | Брутфорс попытка 2/5 (через Gateway) | gateway | ✅ | 401 | 245ms | {"error":{"code":"INVALID_CREDENTIALS","message":"Неверные учётные данные","details":{}}} |
+| 10 | Брутфорс попытка 3/5 (через Gateway) | gateway | ✅ | 401 | 254ms | {"error":{"code":"INVALID_CREDENTIALS","message":"Неверные учётные данные","details":{}}} |
+| 11 | Брутфорс попытка 4/5 (через Gateway) | gateway | ✅ | 401 | 242ms | {"error":{"code":"INVALID_CREDENTIALS","message":"Неверные учётные данные","details":{}}} |
+| 12 | Брутфорс попытка 5/5 (через Gateway) | gateway | ✅ | 401 | 251ms | {"error":{"code":"INVALID_CREDENTIALS","message":"Неверные учётные данные","details":{}}} |
+| 13 | Проверка блокировки после 5 неудач (через Gateway) | gateway | ✅ | 401 | 236ms | {"error":{"code":"INVALID_CREDENTIALS","message":"Неверные учётные данные","details":{}}} |
+| 14 | Журнал аудита (через Gateway) | gateway | ✅ | 200 | 33ms | events = [{'event_id': 'evt-d12a80fe874d', 'user_id': 'u-1cfda0dab63d', 'action': 'auth.l |
+| 15 | Деактивация пользователя (через Gateway) | gateway | ✅ | 200 | 46ms | is_active = False |
+| 16 | Проверка 401 после деактивации (через Gateway) | gateway | ✅ | 401 | 14ms | ответ: пустой detail |
 
 **Итог:** ✅ Пройден | Ping: ✅ | Steps: 16/16
 
@@ -196,12 +176,12 @@
 
 | # | Step | Service | Status | Code | Time | Проверка |
 |---|------|---------|:------:|:----:|:----:|----------|
-| 1 | Аутентификация (через Gateway) | gateway | ✅ | 200 | 237ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LWZhZmY4N2YxN2FmZCIsInJvbGVzIjp |
-| 2 | Создание чат-сессии (через Gateway) | gateway | ✅ | 201 | 22ms | session_id = 4 |
-| 3 | Отправка сообщения (через Gateway) | gateway | ✅ | 202 | 29ms | message_id = 8 |
-| 4 | Текстовый поиск (через Gateway) | gateway | ✅ | 200 | 17ms | results = [{'section_id': 420042, 'document_id': 1, 'document_title': 'Правила РС, часть I |
-| 5 | Проверка enrichment_skipped (через Gateway) | gateway | ✅ | 200 | 45ms | enrichment_skipped=False |
-| 6 | Поиск RAG Search | rag_search | ✅ | 200 | 10ms | results=[] (нет результатов, валидация по source не требуется) |
+| 1 | Аутентификация (через Gateway) | gateway | ✅ | 200 | 248ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LWZhZmY4N2YxN2FmZCIsInJvbGVzIjp |
+| 2 | Создание чат-сессии (через Gateway) | gateway | ✅ | 201 | 26ms | session_id = 13 |
+| 3 | Отправка сообщения (через Gateway) | gateway | ✅ | 202 | 27ms | message_id = 16 |
+| 4 | Текстовый поиск (через Gateway) | gateway | ✅ | 200 | 22ms | results = [{'section_id': 420042, 'document_id': 1, 'document_title': 'Правила РС, часть I |
+| 5 | Проверка enrichment_skipped (через Gateway) | gateway | ✅ | 200 | 37ms | enrichment_skipped=False |
+| 6 | Поиск RAG Search | rag_search | ✅ | 200 | 3370ms | results[7/7]: валидация по source-индексам (document_id+section_id) пройдена |
 
 **Итог:** ✅ Пройден | Ping: ✅ | Steps: 6/6
 
@@ -216,16 +196,16 @@
 
 | # | Step | Service | Status | Code | Time | Проверка |
 |---|------|---------|:------:|:----:|:----:|----------|
-| 1 | Аутентификация (через Gateway) | gateway | ✅ | 200 | 239ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LWZhZmY4N2YxN2FmZCIsInJvbGVzIjp |
-| 2 | Создание черновика (через Gateway) | gateway | ✅ | 202 | 226ms | draft_id = 6 |
-| 3 | Статус задачи (через Gateway) | gateway | ✅ | 200 | 18ms | status = active |
-| 4 | Детали черновика (через Gateway) | gateway | ✅ | 200 | 49ms | Все поля валидны |
-| 5 | Запуск превью черновика (через Gateway) | gateway | ✅ | 202 | 82ms | {"draft_id":6,"task_id":7,"status":"previewing","message":"Preview phase started"} |
-| 6 | Статус превью (через Gateway) | gateway | ✅ | 200 | 1059ms | {"draft_id":6,"task_id":7,"status":"processing","progress_percent":10,"preview":null,"decision_required":false} |
-| 7 | Решение по черновику (approve, через Gateway) | gateway | ✅ | 200 | 132ms | {"draft_id":6,"task_id":7,"document_id":5,"version_id":1,"is_new_document":true,"status":"proceeding","action":"approve","message":"Запущена полная обработка документа"} |
-| 8 | Проверка document_id после approve (через Gateway) | gateway | ✅ | 200 | 51ms | документ создан (без id в ответе) |
-| 9 | Создание документа в Registry (через Gateway) | gateway | ✅ | 201 | 51ms | {"data":{"id":6,"doc_code":"APPROVAL-20260626214657071001","title":"Approval тест 20260626214657071001","source_type":"GOST","mks_oks_code":"47.020","total_versions":0,"era":"RF","validity_status":"active","valid_from":"1970-01-01","valid_until":"2999-12-31","title_hash_sha256":"35f66d2f184da1c8b849 |
-| 10 | Индексация документа (RAG Builder) | rag_builder | ✅ | 202 | 18ms | status = indexed |
+| 1 | Аутентификация (через Gateway) | gateway | ✅ | 200 | 250ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LWZhZmY4N2YxN2FmZCIsInJvbGVzIjp |
+| 2 | Создание черновика (через Gateway) | gateway | ✅ | 202 | 2409ms | draft_id = 32 |
+| 3 | Статус задачи (через Gateway) | gateway | ✅ | 200 | 42ms | status = active |
+| 4 | Детали черновика (через Gateway) | gateway | ✅ | 200 | 104ms | Все поля валидны |
+| 5 | Запуск превью черновика (через Gateway) | gateway | ✅ | 202 | 128ms | {"draft_id":32,"task_id":35,"status":"previewing","message":"Preview phase started"} |
+| 6 | Статус превью (через Gateway) | gateway | ✅ | 200 | 1336ms | {"draft_id":32,"task_id":35,"status":"processing","progress_percent":10,"preview":null,"decision_required":false} |
+| 7 | Решение по черновику (approve, через Gateway) | gateway | ✅ | 200 | 223ms | {"draft_id":32,"task_id":35,"document_id":36,"version_id":1,"is_new_document":true,"status":"proceeding","action":"approve","message":"Запущена полная обработка документа"} |
+| 8 | Проверка document_id после approve (через Gateway) | gateway | ✅ | 200 | 140ms | документ создан (без id в ответе) |
+| 9 | Создание документа в Registry (через Gateway) | gateway | ✅ | 201 | 114ms | {"data":{"id":37,"doc_code":"APPROVAL-20260626221431091741","title":"Approval тест 20260626221431091741","source_type":"GOST","mks_oks_code":"47.020","mks_name":"Pipeline принятый классификатор 20260626220226282656","total_versions":0,"era":"RF","validity_status":"active","valid_from":"1970-01-01"," |
+| 10 | Индексация документа (RAG Builder) | rag_builder | ✅ | 202 | 34ms | status = indexed |
 
 **Итог:** ✅ Пройден | Ping: ✅ | Steps: 10/10
 
@@ -240,51 +220,48 @@
 
 | # | Step | Service | Status | Code | Time | Проверка |
 |---|------|---------|:------:|:----:|:----:|----------|
-| 1 | Аутентификация | auth | ✅ | 200 | 238ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LWZhZmY4N2YxN2FmZCIsInJvbGVzIjp |
-| 2 | Создание bucket documents | minio | ✅ | 409 | 3ms | <?xml version="1.0" encoding="UTF-8"?>
-<Error><Code>BucketAlreadyOwnedByYou</Code><Message>Your previous request to create the named bucket succeeded and you already own it.</Message><BucketName>documents</BucketName><Resource>/documents</Resource><RequestId>18BCAF695718D199</RequestId><HostId>dd902 |
-| 3 | Загрузка PDF в MinIO | minio | ✅ | 200 | 19ms | file_key = test-document.pdf |
-| 4 | Запуск парсинга | parser | ✅ | 202 | 4ms | task_id = 12345 |
-| 5 | Статус парсинга (longpoll) | parser | ✅ | 200 | 35ms | status = accepted |
-| 6 | Результат парсинга | parser | ✅ | 200 | 2019ms | результат сохранён как parser_result |
-| 7 | Предпросмотр метаданных | converter_validator | ✅ | 200 | 5ms | Все поля валидны |
-| 8 | Валидация метаданных (бизнес-ключ) | converter_validator | ✅ | 200 | 2ms | Все поля валидны |
-| 9 | Проверка уникальности документа | registry | ✅ | 200 | 9ms | {"data":{"is_duplicate":false,"is_duplicate_file":false,"candidates":[],"file_hash_sha256":null,"title_hash_sha256":"561484bc91ca985c567323ff7e7a7d09b870b6a40fe2eedc0ba707d764de558e","file_size_bytes":null,"checked_at":"2026-06-26T16:47:01.623354+00:00"}} |
-| 10 | Конвертация JSON | converter_validator | ✅ | 200 | 37ms | task_id = 12345 |
-| 11 | Валидация документа | converter_validator | ✅ | 200 | 37ms | Все поля валидны |
-| 12 | Сохранение документа в Registry | registry | ✅ | 201 | 17ms | {"data":{"id":7,"doc_code":"PIPELINE-TEST-1782492419","title":"Тестовый документ pipeline 1782492419","source_type":"GOST","mks_oks_code":"47.020","total_versions":0,"era":"RF","validity_status":"active","valid_from":"1970-01-01","valid_until":"2999-12-31","title_hash_sha256":"901ab4bdae2986cce08f7f |
-| 13 | Проверка preview_snapshot в документе | registry | ✅ | 200 | 9ms | Поле 'data.preview_snapshot' не найдено (пропущено) |
-| 14 | Построение чанков и индексация | rag_builder | ✅ | 202 | 13ms | {"document_id":1,"status":"indexed","indexed_at":"2026-06-26T19:47:01.743637+03:00","chunks_count":1,"index_stats":{"sections":1,"chunks":1,"embeddings":1},"errors":[],"warnings":[]} |
-| 15 | Поиск по индексу RAG Search | rag_search | ✅ | 200 | 3322ms | results[1/1]: валидация по source-индексам (document_id+section_id) пройдена |
+| 1 | Аутентификация | auth | ✅ | 200 | 365ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LWZhZmY4N2YxN2FmZCIsInJvbGVzIjp |
+| 2 | Создание bucket documents | minio | ✅ | 409 | 2ms | <?xml version="1.0" encoding="UTF-8"?>
+<Error><Code>BucketAlreadyOwnedByYou</Code><Message>Your previous request to create the named bucket succeeded and you already own it.</Message><BucketName>documents</BucketName><Resource>/documents</Resource><RequestId>18BCB0EB2D154147</RequestId><HostId>dd902 |
+| 3 | Загрузка PDF в MinIO | minio | ✅ | 200 | 26ms | file_key = test-document.pdf |
+| 4 | Запуск парсинга | parser | ✅ | 202 | 6ms | task_id = 12345 |
+| 5 | Статус парсинга (longpoll) | parser | ✅ | 200 | 51ms | status = accepted |
+| 6 | Результат парсинга | parser | ✅ | 200 | 4042ms | результат сохранён как parser_result |
+| 7 | Предпросмотр метаданных | converter_validator | ✅ | 200 | 7ms | Все поля валидны |
+| 8 | Валидация метаданных (бизнес-ключ) | converter_validator | ✅ | 200 | 4ms | Все поля валидны |
+| 9 | Проверка уникальности документа | registry | ✅ | 200 | 13ms | {"data":{"is_duplicate":false,"is_duplicate_file":false,"candidates":[],"file_hash_sha256":null,"title_hash_sha256":"561484bc91ca985c567323ff7e7a7d09b870b6a40fe2eedc0ba707d764de558e","file_size_bytes":null,"checked_at":"2026-06-26T17:14:40.801423+00:00"}} |
+| 10 | Конвертация JSON | converter_validator | ✅ | 200 | 59ms | task_id = 12345 |
+| 11 | Валидация документа | converter_validator | ✅ | 200 | 59ms | Все поля валидны |
+| 12 | Сохранение документа в Registry | registry | ✅ | 201 | 30ms | {"data":{"id":38,"doc_code":"PIPELINE-TEST-1782494076","title":"Тестовый документ pipeline 1782494076","source_type":"GOST","mks_oks_code":"47.020","mks_name":"Pipeline принятый классификатор 20260626220226282656","total_versions":0,"era":"RF","validity_status":"active","valid_from":"1970-01-01","va |
+| 13 | Проверка preview_snapshot в документе | registry | ✅ | 200 | 17ms | Поле 'data.preview_snapshot' не найдено (пропущено) |
+| 14 | Построение чанков и индексация | rag_builder | ✅ | 202 | 23ms | {"document_id":1,"status":"indexed","indexed_at":"2026-06-26T20:14:40.997262+03:00","chunks_count":1,"index_stats":{"sections":1,"chunks":1,"embeddings":1},"errors":[],"warnings":[]} |
+| 15 | Поиск по индексу RAG Search | rag_search | ✅ | 200 | 3329ms | results[8/8]: валидация по source-индексам (document_id+section_id) пройдена |
 
 **Итог:** ✅ Пройден | Ping: ✅ | Steps: 15/15
 
 ### Pipeline: `full_document_cycle`
 
-**Полный сквозной цикл: загрузка PDF через черновик → парсинг → конвертация → валидация → approve → Registry → индексация → поиск**
+**Полный сквозной цикл: загрузка PDF через черновик → парсинг → preview → approve → Registry → индексация → поиск**
 
 - Ping: ✅
-- Passed: 11/13
-- Failed: 2
+- Passed: 10/10
+- Failed: 0
 - Skipped: 0
 
 | # | Step | Service | Status | Code | Time | Проверка |
 |---|------|---------|:------:|:----:|:----:|----------|
-| 1 | Аутентификация (через Gateway) | gateway | ✅ | 200 | 246ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LWZhZmY4N2YxN2FmZCIsInJvbGVzIjp |
-| 2 | Создание черновика с PDF (через Gateway) | gateway | ✅ | 202 | 241ms | draft_id = 7 |
-| 3 | Статус задачи парсинга (через Gateway) | gateway | ✅ | 200 | 16ms | status = active |
-| 4 | Результат парсинга (Parser API) | parser | ✅ | 404 | 10ms | результат сохранён как parser_result |
-| 5 | Детали черновика (через Gateway) | gateway | ✅ | 200 | 53ms | Все поля валидны |
-| 6 | Предпросмотр метаданных (Converter API) | converter_validator | ❌ | 422 | 4ms | Expected HTTP 200, got 422 | body: {"error":{"code":"METADATA_EXTRACTION_FAILED","message":"Failed to extract required metadata: doc_code and title","details":null}} | body: {"error":{"code":"METADATA_EXTRACTION_FAILED","message":"Failed to extract required metadata: doc_code and title","details":null}} |
-| 7 | Валидация документа (Converter API) | converter_validator | ❌ | 400 | 2ms | Expected HTTP 200, got 400 | body: {"error":{"code":"VALIDATION_ERROR","message":"doc_code is required","details":null}} | body: {"error":{"code":"VALIDATION_ERROR","message":"doc_code is required","details":null}} |
-| 8 | Запуск превью черновика (через Gateway) | gateway | ✅ | 202 | 72ms | {"draft_id":7,"task_id":8,"status":"previewing","message":"Preview phase started"} |
-| 9 | Статус превью (через Gateway) | gateway | ✅ | 200 | 1070ms | {"draft_id":7,"task_id":8,"status":"processing","progress_percent":10,"preview":null,"decision_required":false} |
-| 10 | Решение по черновику (approve, через Gateway) | gateway | ✅ | 200 | 120ms | approved_doc_id=8 |
-| 11 | Проверка документа в Registry (через Gateway) | gateway | ✅ | 200 | 21ms | {"data":{"id":8,"doc_code":"full-cycle-key-20260626214705281459","title":"Draft 7","status":"uploaded","total_versions":0,"valid_from":"1970-01-01","valid_until":"2999-12-31","title_hash_sha256":"a5673c9389266a3baf6dedf8e862905baefc9d84a1275395914ec0372ef506b3","draft_id":7,"classification_status":{ |
-| 12 | Индексация документа (RAG Builder) | rag_builder | ✅ | 202 | 11ms | status = indexed |
-| 13 | Поиск по индексу RAG Search | rag_search | ✅ | 200 | 3338ms | results[2/2]: валидация по source-индексам (document_id+section_id) пройдена |
+| 1 | Аутентификация (через Gateway) | gateway | ✅ | 200 | 281ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LWZhZmY4N2YxN2FmZCIsInJvbGVzIjp |
+| 2 | Создание черновика с PDF (через Gateway) | gateway | ✅ | 202 | 488ms | draft_id = 33 |
+| 3 | Статус задачи (через Gateway) | gateway | ✅ | 200 | 47ms | status = active |
+| 4 | Детали черновика (через Gateway) | gateway | ✅ | 200 | 155ms | Все поля валидны |
+| 5 | Запуск превью (через Gateway) | gateway | ✅ | 202 | 212ms | {"draft_id":33,"task_id":36,"status":"previewing","message":"Preview phase started"} |
+| 6 | Статус превью (через Gateway) | gateway | ✅ | 200 | 1173ms | {"draft_id":33,"task_id":36,"status":"processing","progress_percent":10,"preview":null,"decision_required":false} |
+| 7 | Решение по черновику (approve, через Gateway) | gateway | ✅ | 200 | 400ms | approved_doc_id=39 |
+| 8 | Проверка документа в Registry (через Gateway) | gateway | ✅ | 200 | 53ms | {"data":{"id":39,"doc_code":"full-cycle-key-20260626221444337294","title":"Draft 33","status":"uploaded","total_versions":0,"valid_from":"1970-01-01","valid_until":"2999-12-31","title_hash_sha256":"5cc9380c210f06965ad765acdba8da990ace1a3ffb9d2b29f2a2c6d27925ea87","draft_id":33,"classification_status |
+| 9 | Индексация документа (RAG Builder) | rag_builder | ✅ | 202 | 35ms | status = indexed |
+| 10 | Поиск по индексу (RAG Search) | rag_search | ✅ | 200 | 3373ms | results[7/7]: валидация по source-индексам (document_id+section_id) пройдена |
 
-**Итог:** ❌ Сбой | Ping: ✅ | Steps: 11/13
+**Итог:** ✅ Пройден | Ping: ✅ | Steps: 10/10
 
 ### Pipeline: `full_document_lifecycle`
 
@@ -297,18 +274,18 @@
 
 | # | Step | Service | Status | Code | Time | Проверка |
 |---|------|---------|:------:|:----:|:----:|----------|
-| 1 | Аутентификация (через Gateway) | gateway | ✅ | 200 | 238ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LWZhZmY4N2YxN2FmZCIsInJvbGVzIjp |
-| 2 | Создание документа в Registry (через Gateway) | gateway | ✅ | 201 | 30ms | {"data":{"id":9,"doc_code":"LIFECYCLE-1782492430","title":"Lifecycle тест 1782492430","source_type":"GOST","mks_oks_code":"47.020","total_versions":0,"era":"RF","validity_status":"active","valid_from":"1970-01-01","valid_until":"2999-12-31","title_hash_sha256":"d71e70c40eb76a0bf5bbb3abeb252d26d9eb4f |
-| 3 | Первая попытка построения индекса (RAG Builder) | rag_builder | ✅ | 202 | 11ms | status = indexed |
-| 4 | Обновление метаданных документа (через Gateway) | gateway | ✅ | 200 | 35ms | data = {'id': '9', 'status': 'uploaded', 'previous_status': None, 'history_id': '1', 'u |
-| 5 | Повторное построение индекса (RAG Builder) | rag_builder | ✅ | 202 | 12ms | status = indexed |
-| 6 | Поиск по индексу RAG Search (RAG Search) | rag_search | ✅ | 200 | 3321ms | results[3/3]: валидация по source-индексам (document_id+section_id) пройдена |
-| 7 | Удаление документа из Registry (через Gateway) | gateway | ✅ | 200 | 27ms | {"data":{"message":"Document deleted"}} |
-| 8 | Удаление индекса RAG (RAG Builder) | rag_builder | ✅ | 200 | 8ms | {"document_id":9,"deleted_count":1,"status":"completed"} |
-| 9 | Поиск — проверка пустого результата (RAG Search) | rag_search | ✅ | 200 | 3312ms | results[2/2]: валидация по source-индексам (document_id+section_id) пройдена |
-| 10 | Воссоздание документа в Registry (через Gateway) | gateway | ✅ | 201 | 29ms | {"data":{"id":10,"doc_code":"LIFECYCLE-RECOVER-1782492430","title":"Lifecycle тест восстановленный 1782492430","source_type":"GOST","mks_oks_code":"47.020","total_versions":0,"era":"RF","validity_status":"active","valid_from":"1970-01-01","valid_until":"2999-12-31","title_hash_sha256":"0bc36ab2fd0ab |
-| 11 | Финальное построение индекса (RAG Builder) | rag_builder | ✅ | 202 | 11ms | status = indexed |
-| 12 | Финальный поиск по индексу (RAG Search) | rag_search | ✅ | 200 | 3326ms | results[3/3]: валидация по source-индексам (document_id+section_id) пройдена |
+| 1 | Аутентификация (через Gateway) | gateway | ✅ | 200 | 281ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LWZhZmY4N2YxN2FmZCIsInJvbGVzIjp |
+| 2 | Создание документа в Registry (через Gateway) | gateway | ✅ | 201 | 66ms | {"data":{"id":40,"doc_code":"LIFECYCLE-1782494090","title":"Lifecycle тест 1782494090","source_type":"GOST","mks_oks_code":"47.020","mks_name":"Pipeline принятый классификатор 20260626220226282656","total_versions":0,"era":"RF","validity_status":"active","valid_from":"1970-01-01","valid_until":"2999 |
+| 3 | Первая попытка построения индекса (RAG Builder) | rag_builder | ✅ | 202 | 27ms | status = indexed |
+| 4 | Обновление метаданных документа (через Gateway) | gateway | ✅ | 200 | 75ms | data = {'id': '40', 'status': 'uploaded', 'previous_status': None, 'history_id': '3', ' |
+| 5 | Повторное построение индекса (RAG Builder) | rag_builder | ✅ | 202 | 23ms | status = indexed |
+| 6 | Поиск по индексу RAG Search (RAG Search) | rag_search | ✅ | 200 | 3316ms | results[8/8]: валидация по source-индексам (document_id+section_id) пройдена |
+| 7 | Удаление документа из Registry (через Gateway) | gateway | ✅ | 200 | 69ms | {"data":{"message":"Document deleted"}} |
+| 8 | Удаление индекса RAG (RAG Builder) | rag_builder | ✅ | 200 | 23ms | {"document_id":40,"deleted_count":1,"status":"completed"} |
+| 9 | Поиск — проверка пустого результата (RAG Search) | rag_search | ✅ | 200 | 3352ms | results[8/8]: валидация по source-индексам (document_id+section_id) пройдена |
+| 10 | Воссоздание документа в Registry (через Gateway) | gateway | ✅ | 201 | 47ms | {"data":{"id":41,"doc_code":"LIFECYCLE-RECOVER-1782494090","title":"Lifecycle тест восстановленный 1782494090","source_type":"GOST","mks_oks_code":"47.020","mks_name":"Pipeline принятый классификатор 20260626220226282656","total_versions":0,"era":"RF","validity_status":"active","valid_from":"1970-01 |
+| 11 | Финальное построение индекса (RAG Builder) | rag_builder | ✅ | 202 | 18ms | status = indexed |
+| 12 | Финальный поиск по индексу (RAG Search) | rag_search | ✅ | 200 | 3330ms | results[8/8]: валидация по source-индексам (document_id+section_id) пройдена |
 
 **Итог:** ✅ Пройден | Ping: ✅ | Steps: 12/12
 
@@ -323,26 +300,26 @@
 
 | # | Step | Service | Status | Code | Time | Проверка |
 |---|------|---------|:------:|:----:|:----:|----------|
-| 1 | Аутентификация (через Gateway) | gateway | ✅ | 200 | 236ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LWZhZmY4N2YxN2FmZCIsInJvbGVzIjp |
-| 2 | Создание bucket documents | minio | ✅ | 409 | 3ms | <?xml version="1.0" encoding="UTF-8"?>
-<Error><Code>BucketAlreadyOwnedByYou</Code><Message>Your previous request to create the named bucket succeeded and you already own it.</Message><BucketName>documents</BucketName><Resource>/documents</Resource><RequestId>18BCAF6E6E910859</RequestId><HostId>dd902 |
-| 3 | Загрузка PDF #1 в MinIO | minio | ✅ | 200 | 14ms |  |
+| 1 | Аутентификация (через Gateway) | gateway | ✅ | 200 | 259ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LWZhZmY4N2YxN2FmZCIsInJvbGVzIjp |
+| 2 | Создание bucket documents | minio | ✅ | 409 | 4ms | <?xml version="1.0" encoding="UTF-8"?>
+<Error><Code>BucketAlreadyOwnedByYou</Code><Message>Your previous request to create the named bucket succeeded and you already own it.</Message><BucketName>documents</BucketName><Resource>/documents</Resource><RequestId>18BCB0F0FFF699DB</RequestId><HostId>dd902 |
+| 3 | Загрузка PDF #1 в MinIO | minio | ✅ | 200 | 15ms |  |
 | 4 | Запуск парсинга #1 (Parser) | parser | ✅ | 202 | 4ms | task_id = 20001 |
-| 5 | Статус парсинга #1 (longpoll, Parser) | parser | ✅ | 200 | 34ms | status = accepted |
-| 6 | Результат парсинга #1 (Parser) | parser | ✅ | 200 | 2022ms | результат сохранён как parser_result_1 |
-| 7 | Конвертация JSON #1 (Converter) | converter_validator | ✅ | 200 | 37ms | {"task_id":20001,"version_id":1,"document_id":null,"metadata":{"schema":"validated_v3","task_id":20001,"created_at":"2026-06-26T16:47:23.509436Z","parser":{"name":"unknown","version":"1.0","ocr_engine":null,"ocr_fallback":false}},"document":{"source":{"file_name":"multi-doc-1-1782492441.pdf","file_h |
-| 8 | Сохранение документа #1 в Registry (через Gateway) | gateway | ✅ | 201 | 34ms | {"data":{"id":11,"doc_code":"MULTI1-1782492441","title":"Multi-doc тест 1 1782492441","source_type":"GOST","mks_oks_code":"47.020","total_versions":0,"era":"RF","validity_status":"active","valid_from":"1970-01-01","valid_until":"2999-12-31","title_hash_sha256":"62694652017650c4e61c3a05a20196041eae31 |
-| 9 | Построение индекса #1 (RAG Builder) | rag_builder | ✅ | 202 | 13ms | status = indexed |
+| 5 | Статус парсинга #1 (longpoll, Parser) | parser | ✅ | 200 | 46ms | status = accepted |
+| 6 | Результат парсинга #1 (Parser) | parser | ✅ | 200 | 4042ms | результат сохранён как parser_result_1 |
+| 7 | Конвертация JSON #1 (Converter) | converter_validator | ✅ | 200 | 53ms | {"task_id":20001,"version_id":1,"document_id":null,"metadata":{"schema":"validated_v3","task_id":20001,"created_at":"2026-06-26T17:15:05.827428Z","parser":{"name":"unknown","version":"1.0","ocr_engine":null,"ocr_fallback":false}},"document":{"source":{"file_name":"multi-doc-1-1782494101.pdf","file_h |
+| 8 | Сохранение документа #1 в Registry (через Gateway) | gateway | ✅ | 201 | 59ms | {"data":{"id":42,"doc_code":"MULTI1-1782494101","title":"Multi-doc тест 1 1782494101","source_type":"GOST","mks_oks_code":"47.020","mks_name":"Pipeline принятый классификатор 20260626220226282656","total_versions":0,"era":"RF","validity_status":"active","valid_from":"1970-01-01","valid_until":"2999- |
+| 9 | Построение индекса #1 (RAG Builder) | rag_builder | ✅ | 202 | 18ms | status = indexed |
 | 10 | Загрузка PDF #2 в MinIO | minio | ✅ | 200 | 17ms |  |
-| 11 | Запуск парсинга #2 (Parser) | parser | ✅ | 202 | 4ms | task_id = 20002 |
-| 12 | Статус парсинга #2 (longpoll, Parser) | parser | ✅ | 200 | 16ms | status = accepted |
-| 13 | Результат парсинга #2 (Parser) | parser | ✅ | 200 | 4051ms | результат сохранён как parser_result_2 |
-| 14 | Конвертация JSON #2 (Converter) | converter_validator | ✅ | 200 | 40ms | {"task_id":20002,"version_id":1,"document_id":null,"metadata":{"schema":"validated_v3","task_id":20002,"created_at":"2026-06-26T16:47:27.729740Z","parser":{"name":"unknown","version":"1.0","ocr_engine":null,"ocr_fallback":false}},"document":{"source":{"file_name":"multi-doc-2-1782492441.pdf","file_h |
-| 15 | Сохранение документа #2 в Registry (через Gateway) | gateway | ✅ | 201 | 33ms | {"data":{"id":12,"doc_code":"MULTI2-1782492441","title":"Multi-doc тест 2 1782492441","source_type":"GOST","mks_oks_code":"47.020","total_versions":0,"era":"RF","validity_status":"active","valid_from":"1970-01-01","valid_until":"2999-12-31","title_hash_sha256":"5108374c7eeffdcb48a8f6e61fab42e9613cf1 |
-| 16 | Построение индекса #2 (RAG Builder) | rag_builder | ✅ | 202 | 14ms | status = indexed |
-| 17 | Поиск по общему запросу (RAG Search) | rag_search | ✅ | 200 | 3298ms | results[5/5]: валидация по source-индексам (document_id+section_id) пройдена |
-| 18 | Удаление документа #1 из Registry (через Gateway) | gateway | ✅ | 200 | 27ms | {"data":{"message":"Document deleted"}} |
-| 19 | Поиск после удаления документа #1 (RAG Search) | rag_search | ✅ | 200 | 3303ms | results[4/4]: валидация по source-индексам (document_id+section_id) пройдена |
+| 11 | Запуск парсинга #2 (Parser) | parser | ✅ | 202 | 8ms | task_id = 20002 |
+| 12 | Статус парсинга #2 (longpoll, Parser) | parser | ✅ | 200 | 43ms | status = accepted |
+| 13 | Результат парсинга #2 (Parser) | parser | ✅ | 200 | 4049ms | результат сохранён как parser_result_2 |
+| 14 | Конвертация JSON #2 (Converter) | converter_validator | ✅ | 200 | 46ms | {"task_id":20002,"version_id":1,"document_id":null,"metadata":{"schema":"validated_v3","task_id":20002,"created_at":"2026-06-26T17:15:10.073181Z","parser":{"name":"unknown","version":"1.0","ocr_engine":null,"ocr_fallback":false}},"document":{"source":{"file_name":"multi-doc-2-1782494101.pdf","file_h |
+| 15 | Сохранение документа #2 в Registry (через Gateway) | gateway | ✅ | 201 | 45ms | {"data":{"id":43,"doc_code":"MULTI2-1782494101","title":"Multi-doc тест 2 1782494101","source_type":"GOST","mks_oks_code":"47.020","mks_name":"Pipeline принятый классификатор 20260626220226282656","total_versions":0,"era":"RF","validity_status":"active","valid_from":"1970-01-01","valid_until":"2999- |
+| 16 | Построение индекса #2 (RAG Builder) | rag_builder | ✅ | 202 | 22ms | status = indexed |
+| 17 | Поиск по общему запросу (RAG Search) | rag_search | ✅ | 200 | 3327ms | results[7/7]: валидация по source-индексам (document_id+section_id) пройдена |
+| 18 | Удаление документа #1 из Registry (через Gateway) | gateway | ✅ | 200 | 50ms | {"data":{"message":"Document deleted"}} |
+| 19 | Поиск после удаления документа #1 (RAG Search) | rag_search | ✅ | 200 | 3323ms | results[7/7]: валидация по source-индексам (document_id+section_id) пройдена |
 
 **Итог:** ✅ Пройден | Ping: ✅ | Steps: 19/19
 
@@ -357,12 +334,12 @@
 
 | # | Step | Service | Status | Code | Time | Проверка |
 |---|------|---------|:------:|:----:|:----:|----------|
-| 1 | Аутентификация (через Gateway) | gateway | ✅ | 200 | 239ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LWZhZmY4N2YxN2FmZCIsInJvbGVzIjp |
-| 2 | Создание черновика (через Gateway) | gateway | ✅ | 202 | 279ms | draft_id = 8 |
-| 3 | Статус задачи (через Gateway) | gateway | ✅ | 200 | 16ms | status = active |
-| 4 | Детали черновика (через Gateway) | gateway | ✅ | 200 | 53ms | Все поля валидны |
-| 5 | Решение по черновику (reject, через Gateway) | gateway | ✅ | 200 | 70ms | status = discarded |
-| 6 | Проверка статуса после reject (через Gateway) | gateway | ✅ | 200 | 61ms | {"draft_id":8,"document_id":null,"version_id":null,"is_new_document":true,"status":"discarded","document_key":"reject-key-20260626214734438751","file_key":"f-6c149ba59fef"} |
+| 1 | Аутентификация (через Gateway) | gateway | ✅ | 200 | 262ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LWZhZmY4N2YxN2FmZCIsInJvbGVzIjp |
+| 2 | Создание черновика (через Gateway) | gateway | ✅ | 202 | 343ms | draft_id = 34 |
+| 3 | Статус задачи (через Gateway) | gateway | ✅ | 200 | 30ms | status = active |
+| 4 | Детали черновика (через Gateway) | gateway | ✅ | 200 | 65ms | Все поля валидны |
+| 5 | Решение по черновику (reject, через Gateway) | gateway | ✅ | 200 | 132ms | status = discarded |
+| 6 | Проверка статуса после reject (через Gateway) | gateway | ✅ | 200 | 109ms | {"draft_id":34,"document_id":null,"version_id":null,"is_new_document":true,"status":"discarded","document_key":"reject-key-20260626221516848998","file_key":"f-6c149ba59fef"} |
 
 **Итог:** ✅ Пройден | Ping: ✅ | Steps: 6/6
 
@@ -377,11 +354,11 @@
 
 | # | Step | Service | Status | Code | Time | Проверка |
 |---|------|---------|:------:|:----:|:----:|----------|
-| 1 | Аутентификация (через Gateway) | gateway | ✅ | 200 | 241ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LWZhZmY4N2YxN2FmZCIsInJvbGVzIjp |
-| 2 | Создание документа в Registry (через Gateway) | gateway | ✅ | 201 | 27ms | approved_doc_id=13 |
-| 3 | Создание черновика (через Gateway) | gateway | ✅ | 202 | 262ms | draft_id = 9 |
-| 4 | Статус задачи (через Gateway) | gateway | ✅ | 200 | 17ms | status = active |
-| 5 | Переиндексация документа (через Gateway) | gateway | ✅ | 409 | 20ms | {"detail":{"error":{"code":"TASK_ALREADY_EXISTS","message":"Reprocess task for document 13 already exists"}}} |
+| 1 | Аутентификация (через Gateway) | gateway | ✅ | 200 | 284ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LWZhZmY4N2YxN2FmZCIsInJvbGVzIjp |
+| 2 | Создание документа в Registry (через Gateway) | gateway | ✅ | 201 | 72ms | approved_doc_id=44 |
+| 3 | Создание черновика (через Gateway) | gateway | ✅ | 202 | 744ms | draft_id = 35 |
+| 4 | Статус задачи (через Gateway) | gateway | ✅ | 200 | 39ms | status = active |
+| 5 | Переиндексация документа (через Gateway) | gateway | ✅ | 409 | 38ms | {"detail":{"error":{"code":"TASK_ALREADY_EXISTS","message":"Reprocess task for document 44 already exists"}}} |
 | 6 | Статус задачи переиндексации (через Gateway) | gateway | ⏭️ | 0 | 0ms | Шаг пропущен по условию skip_if |
 
 **Итог:** ✅ Пройден | Ping: ✅ | Steps: 5/6
@@ -397,10 +374,10 @@
 
 | # | Step | Service | Status | Code | Time | Проверка |
 |---|------|---------|:------:|:----:|:----:|----------|
-| 1 | Аутентификация (через Gateway) | gateway | ✅ | 200 | 242ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LWZhZmY4N2YxN2FmZCIsInJvbGVzIjp |
-| 2 | Создание документа в Registry (через Gateway) | gateway | ✅ | 201 | 30ms | approved_doc_id=14 |
-| 3 | Загрузка новой версии документа (через Gateway) | gateway | ✅ | 404 | 15ms | {"detail":"Not Found"} |
-| 4 | Проверка списка версий (через Gateway) | gateway | ✅ | 200 | 20ms | {"data":[]} |
+| 1 | Аутентификация (через Gateway) | gateway | ✅ | 200 | 346ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LWZhZmY4N2YxN2FmZCIsInJvbGVzIjp |
+| 2 | Создание документа в Registry (через Gateway) | gateway | ✅ | 201 | 65ms | approved_doc_id=45 |
+| 3 | Загрузка новой версии документа (через Gateway) | gateway | ✅ | 404 | 40ms | {"detail":"Not Found"} |
+| 4 | Проверка списка версий (через Gateway) | gateway | ✅ | 200 | 77ms | {"data":[]} |
 
 **Итог:** ✅ Пройден | Ping: ✅ | Steps: 4/4
 
@@ -415,12 +392,12 @@
 
 | # | Step | Service | Status | Code | Time | Проверка |
 |---|------|---------|:------:|:----:|:----:|----------|
-| 1 | Аутентификация (через Gateway) | gateway | ✅ | 200 | 245ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LWZhZmY4N2YxN2FmZCIsInJvbGVzIjp |
-| 2 | Создание черновика (через Gateway) | gateway | ✅ | 202 | 231ms | draft_id = 10 |
-| 3 | Статус задачи (через Gateway) | gateway | ✅ | 200 | 17ms | status = active |
-| 4 | Детали черновика (через Gateway) | gateway | ✅ | 200 | 52ms | Все поля валидны |
-| 5 | Удаление черновика (через Gateway) | gateway | ✅ | 204 | 71ms |  |
-| 6 | Проверка 404 после удаления (через Gateway) | gateway | ✅ | 404 | 60ms | {"detail":{"error":{"code":"NOT_FOUND","message":"Черновик 10 не найден","details":{"original_error":"Client error '404 Not Found' for url 'http://127.0.0.1:8084/api/v1/registry/drafts/10'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404"}}}} |
+| 1 | Аутентификация (через Gateway) | gateway | ✅ | 200 | 364ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LWZhZmY4N2YxN2FmZCIsInJvbGVzIjp |
+| 2 | Создание черновика (через Gateway) | gateway | ✅ | 202 | 675ms | draft_id = 36 |
+| 3 | Статус задачи (через Gateway) | gateway | ✅ | 200 | 51ms | status = active |
+| 4 | Детали черновика (через Gateway) | gateway | ✅ | 200 | 124ms | Все поля валидны |
+| 5 | Удаление черновика (через Gateway) | gateway | ✅ | 204 | 159ms |  |
+| 6 | Проверка 404 после удаления (через Gateway) | gateway | ✅ | 404 | 162ms | {"detail":{"error":{"code":"NOT_FOUND","message":"Черновик 36 не найден","details":{"original_error":"Client error '404 Not Found' for url 'http://127.0.0.1:8084/api/v1/registry/drafts/36'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404"}}}} |
 
 **Итог:** ✅ Пройден | Ping: ✅ | Steps: 6/6
 
@@ -435,17 +412,17 @@
 
 | # | Step | Service | Status | Code | Time | Проверка |
 |---|------|---------|:------:|:----:|:----:|----------|
-| 1 | Аутентификация (через Gateway) | gateway | ✅ | 200 | 246ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LWZhZmY4N2YxN2FmZCIsInJvbGVzIjp |
-| 2 | Создание черновика (через Gateway) | gateway | ✅ | 202 | 287ms | draft_id = 11 |
-| 3 | Статус задачи (через Gateway) | gateway | ✅ | 200 | 17ms | status = active |
-| 4 | Детали черновика (через Gateway) | gateway | ✅ | 200 | 50ms | Все поля валидны |
-| 5 | Запуск превью (через Gateway) | gateway | ✅ | 202 | 79ms | {"draft_id":11,"task_id":13,"status":"previewing","message":"Preview phase started"} |
-| 6 | Статус превью (через Gateway) | gateway | ✅ | 200 | 1080ms | status = processing |
-| 7 | Решение approve (через Gateway) | gateway | ✅ | 200 | 122ms | status = proceeding |
-| 8 | Проверка document_id (через Gateway) | gateway | ✅ | 200 | 48ms | is_new_document=True |
+| 1 | Аутентификация (через Gateway) | gateway | ✅ | 200 | 386ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LWZhZmY4N2YxN2FmZCIsInJvbGVzIjp |
+| 2 | Создание черновика (через Gateway) | gateway | ✅ | 202 | 679ms | draft_id = 37 |
+| 3 | Статус задачи (через Gateway) | gateway | ✅ | 200 | 149ms | status = active |
+| 4 | Детали черновика (через Gateway) | gateway | ✅ | 200 | 142ms | Все поля валидны |
+| 5 | Запуск превью (через Gateway) | gateway | ✅ | 202 | 192ms | {"draft_id":37,"task_id":41,"status":"previewing","message":"Preview phase started"} |
+| 6 | Статус превью (через Gateway) | gateway | ✅ | 200 | 1206ms | status = processing |
+| 7 | Решение approve (через Gateway) | gateway | ✅ | 200 | 379ms | status = proceeding |
+| 8 | Проверка document_id (через Gateway) | gateway | ✅ | 200 | 109ms | is_new_document=True |
 | 9 | Проверка документа в Registry (через Gateway) | gateway | ⏭️ | 0 | 0ms | Шаг пропущен по условию skip_if |
-| 10 | Создание черновика image/png (через Gateway) | gateway | ✅ | 202 | 276ms | draft_id = 12 |
-| 11 | Статус задачи image (через Gateway) | gateway | ✅ | 200 | 15ms | status = active |
+| 10 | Создание черновика image/png (через Gateway) | gateway | ✅ | 202 | 791ms | draft_id = 38 |
+| 11 | Статус задачи image (через Gateway) | gateway | ✅ | 200 | 47ms | status = active |
 
 **Итог:** ✅ Пройден | Ping: ✅ | Steps: 10/11
 
@@ -460,17 +437,17 @@
 
 | # | Step | Service | Status | Code | Time | Проверка |
 |---|------|---------|:------:|:----:|:----:|----------|
-| 1 | Аутентификация (через Gateway) | gateway | ✅ | 200 | 243ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LWZhZmY4N2YxN2FmZCIsInJvbGVzIjp |
-| 2 | Создание черновика (через Gateway) | gateway | ✅ | 202 | 261ms | draft_id = 13 |
-| 3 | Статус задачи (через Gateway) | gateway | ✅ | 200 | 16ms | status = active |
-| 4 | Детали черновика (через Gateway) | gateway | ✅ | 200 | 55ms | Все поля валидны |
-| 5 | Запуск превью черновика (через Gateway) | gateway | ✅ | 202 | 75ms | {"draft_id":13,"task_id":15,"status":"previewing","message":"Preview phase started"} |
-| 6 | Статус превью (через Gateway) | gateway | ✅ | 200 | 1068ms | {"draft_id":13,"task_id":15,"status":"processing","progress_percent":10,"preview":null,"decision_required":false} |
-| 7 | Решение по черновику (approve, через Gateway) | gateway | ✅ | 200 | 115ms | approved_doc_id=16 |
-| 8 | Проверка документа в Registry (через Gateway) | gateway | ✅ | 200 | 19ms | {"data":{"id":16,"doc_code":"fullcycle-key-20260626214739332911","title":"Draft 13","status":"uploaded","total_versions":0,"valid_from":"1970-01-01","valid_until":"2999-12-31","title_hash_sha256":"1a0fd9266f05e95d54b962dc85843f805fc873373ff37a2f9a58ea58407042ec","draft_id":13,"classification_status" |
-| 9 | Индексация документа (RAG Builder) | rag_builder | ✅ | 202 | 12ms | status = indexed |
-| 10 | Поиск RAG Search (RAG Search) | rag_search | ✅ | 200 | 3318ms | {"query":"тестовый документ","results":[{"source":{"document_id":6,"section_id":1,"clause":null,"path":null,"page":1,"bbox":null,"section_title":null,"content":"Содержимое тестового документа approval"},"retrieval":{"chunk_id":3,"score":1.0,"mode":"dense_rerank"},"context":[]},{"source":{"document_i |
-| 11 | Удаление черновика (через Gateway) | gateway | ✅ | 204 | 52ms |  |
+| 1 | Аутентификация (через Gateway) | gateway | ✅ | 200 | 320ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LWZhZmY4N2YxN2FmZCIsInJvbGVzIjp |
+| 2 | Создание черновика (через Gateway) | gateway | ✅ | 202 | 508ms | draft_id = 39 |
+| 3 | Статус задачи (через Gateway) | gateway | ✅ | 200 | 36ms | status = active |
+| 4 | Детали черновика (через Gateway) | gateway | ✅ | 200 | 114ms | Все поля валидны |
+| 5 | Запуск превью черновика (через Gateway) | gateway | ✅ | 202 | 214ms | {"draft_id":39,"task_id":43,"status":"previewing","message":"Preview phase started"} |
+| 6 | Статус превью (через Gateway) | gateway | ✅ | 200 | 1197ms | {"draft_id":39,"task_id":43,"status":"processing","progress_percent":10,"preview":null,"decision_required":false} |
+| 7 | Решение по черновику (approve, через Gateway) | gateway | ✅ | 200 | 267ms | approved_doc_id=47 |
+| 8 | Проверка документа в Registry (через Gateway) | gateway | ✅ | 200 | 48ms | {"data":{"id":47,"doc_code":"fullcycle-key-20260626221525241653","title":"Draft 39","status":"uploaded","total_versions":0,"valid_from":"1970-01-01","valid_until":"2999-12-31","title_hash_sha256":"89fa4c1a7f145dade83dbfb57a504eba997ba533409110315d4f9a3dc28cc636","draft_id":39,"classification_status" |
+| 9 | Индексация документа (RAG Builder) | rag_builder | ✅ | 202 | 26ms | status = indexed |
+| 10 | Поиск RAG Search (RAG Search) | rag_search | ✅ | 200 | 3379ms | {"query":"тестовый документ","results":[{"source":{"document_id":43,"section_id":1,"clause":null,"path":null,"page":1,"bbox":null,"section_title":null,"content":"Содержимое документа 2 1782494101"},"retrieval":{"chunk_id":31,"score":1.0,"mode":"dense_rerank"},"context":[]},{"source":{"document_id":2 |
+| 11 | Удаление черновика (через Gateway) | gateway | ✅ | 204 | 98ms |  |
 
 **Итог:** ✅ Пройден | Ping: ✅ | Steps: 11/11
 
@@ -485,12 +462,12 @@
 
 | # | Step | Service | Status | Code | Time | Проверка |
 |---|------|---------|:------:|:----:|:----:|----------|
-| 1 | Аутентификация (через Gateway) | gateway | ✅ | 200 | 242ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LWZhZmY4N2YxN2FmZCIsInJvbGVzIjp |
-| 2 | Создание черновика (через Gateway) | gateway | ✅ | 202 | 258ms | draft_id = 14 |
-| 3 | Статус задачи (через Gateway) | gateway | ✅ | 200 | 17ms | status = active |
-| 4 | Детали черновика (через Gateway) | gateway | ✅ | 200 | 52ms | Все поля валидны |
-| 5 | Обновление метаданных (через Gateway) | gateway | ✅ | 200 | 78ms | Все поля валидны |
-| 6 | Проверка обновлённых метаданных (через Gateway) | gateway | ✅ | 200 | 70ms | {"draft_id":14,"document_id":null,"version_id":null,"is_new_document":true,"status":"uploaded","document_key":"meta-key-20260626214744604893","file_key":"f-6c149ba59fef"} |
+| 1 | Аутентификация (через Gateway) | gateway | ✅ | 200 | 348ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LWZhZmY4N2YxN2FmZCIsInJvbGVzIjp |
+| 2 | Создание черновика (через Gateway) | gateway | ✅ | 202 | 1054ms | draft_id = 40 |
+| 3 | Статус задачи (через Gateway) | gateway | ✅ | 200 | 69ms | status = active |
+| 4 | Детали черновика (через Gateway) | gateway | ✅ | 200 | 176ms | Все поля валидны |
+| 5 | Обновление метаданных (через Gateway) | gateway | ✅ | 200 | 192ms | Все поля валидны |
+| 6 | Проверка обновлённых метаданных (через Gateway) | gateway | ✅ | 200 | 143ms | {"draft_id":40,"document_id":null,"version_id":null,"is_new_document":true,"status":"uploaded","document_key":"meta-key-20260626221531461546","file_key":"f-6c149ba59fef"} |
 
 **Итог:** ✅ Пройден | Ping: ✅ | Steps: 6/6
 
@@ -505,17 +482,17 @@
 
 | # | Step | Service | Status | Code | Time | Проверка |
 |---|------|---------|:------:|:----:|:----:|----------|
-| 1 | Аутентификация (через Gateway) | gateway | ✅ | 200 | 242ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LWZhZmY4N2YxN2FmZCIsInJvbGVzIjp |
-| 2 | Профиль пользователя (через Gateway) | gateway | ✅ | 200 | 17ms | Все поля валидны |
-| 3 | Создать классификатор (через Gateway) | gateway | ✅ | 201 | 26ms | {"data":{"classifier_system":"MKS","code":"99.424324","full_name":"Pipeline тестовый классификатор 20260626164745424324","status":"active"}} |
-| 4 | Список классификаторов (через Gateway) | gateway | ✅ | 200 | 21ms | data = [{'classifier_system': 'MKS', 'code': '98.492395', 'full_name': 'Принятый термин |
-| 5 | Получить классификатор (через Gateway) | gateway | ✅ | 200 | 21ms | data = {'classifier_system': 'MKS', 'code': '99.424324', 'full_name': 'Pipeline тестовы |
-| 6 | Обновить классификатор (через Gateway) | gateway | ✅ | 200 | 27ms | data = {'classifier_system': 'MKS', 'code': '99.424324', 'full_name': 'Обновлённый pipe |
-| 7 | Частичное обновление классификатора (через Gateway) | gateway | ✅ | 200 | 25ms | data = {'classifier_system': 'MKS', 'code': '99.424324', 'full_name': 'Обновлённый pipe |
-| 8 | Удалить классификатор (через Gateway) | gateway | ✅ | 200 | 30ms | {"data":{"message":"Classifier deleted"}} |
-| 9 | Создать термин (через Gateway) | gateway | ✅ | 201 | 27ms | {"data":{"id":2,"raw_term":"Pipeline тест 20260626164745424324","standard_term":"Pipeline тест 20260626164745424324","normalized_value":"pipeline тест 20260626164745424324","term_type":"abbreviation","is_blocked":false,"is_case_sensitive":false,"definition":"Тестовый термин из pipeline","synonyms":[ |
-| 10 | Нормализация термина (через Gateway) | gateway | ✅ | 200 | 27ms | {"data":{"raw_term":"Pipeline тест","standard_term":"Pipeline тест","normalized_value":"pipeline тест","term_type":"unknown"}} |
-| 11 | Обновить термин (через Gateway) | gateway | ✅ | 200 | 36ms | data = {'id': 2, 'raw_term': 'Pipeline тест 20260626164745424324', 'standard_term': 'Pi |
+| 1 | Аутентификация (через Gateway) | gateway | ✅ | 200 | 392ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LWZhZmY4N2YxN2FmZCIsInJvbGVzIjp |
+| 2 | Профиль пользователя (через Gateway) | gateway | ✅ | 200 | 80ms | Все поля валидны |
+| 3 | Создать классификатор (через Gateway) | gateway | ✅ | 201 | 74ms | {"data":{"classifier_system":"MKS","code":"99.453805","full_name":"Pipeline тестовый классификатор 20260626171533453805","status":"active"}} |
+| 4 | Список классификаторов (через Gateway) | gateway | ✅ | 200 | 79ms | data = [{'classifier_system': 'MKS', 'code': '98.492395', 'full_name': 'Принятый термин |
+| 5 | Получить классификатор (через Gateway) | gateway | ✅ | 200 | 63ms | data = {'classifier_system': 'MKS', 'code': '99.453805', 'full_name': 'Pipeline тестовы |
+| 6 | Обновить классификатор (через Gateway) | gateway | ✅ | 200 | 92ms | data = {'classifier_system': 'MKS', 'code': '99.453805', 'full_name': 'Обновлённый pipe |
+| 7 | Частичное обновление классификатора (через Gateway) | gateway | ✅ | 200 | 47ms | data = {'classifier_system': 'MKS', 'code': '99.453805', 'full_name': 'Обновлённый pipe |
+| 8 | Удалить классификатор (через Gateway) | gateway | ✅ | 200 | 65ms | {"data":{"message":"Classifier deleted"}} |
+| 9 | Создать термин (через Gateway) | gateway | ✅ | 201 | 111ms | {"data":{"id":4,"raw_term":"Pipeline тест 20260626171533453805","standard_term":"Pipeline тест 20260626171533453805","normalized_value":"pipeline тест 20260626171533453805","term_type":"abbreviation","is_blocked":false,"is_case_sensitive":false,"definition":"Тестовый термин из pipeline","synonyms":[ |
+| 10 | Нормализация термина (через Gateway) | gateway | ✅ | 200 | 46ms | {"data":{"raw_term":"Pipeline тест","standard_term":"Pipeline тест","normalized_value":"pipeline тест","term_type":"unknown"}} |
+| 11 | Обновить термин (через Gateway) | gateway | ✅ | 200 | 64ms | data = {'id': 4, 'raw_term': 'Pipeline тест 20260626171533453805', 'standard_term': 'Pi |
 
 **Итог:** ✅ Пройден | Ping: ✅ | Steps: 11/11
 
@@ -530,20 +507,20 @@
 
 | # | Step | Service | Status | Code | Time | Проверка |
 |---|------|---------|:------:|:----:|:----:|----------|
-| 1 | Аутентификация (через Gateway) | gateway | ✅ | 200 | 238ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LWZhZmY4N2YxN2FmZCIsInJvbGVzIjp |
-| 2 | Создать классификатор (через Gateway) | gateway | ✅ | 201 | 31ms | {"data":{"classifier_system":"MKS","code":"98.039730","full_name":"Pipeline quarantine классификатор 20260626214746039730","status":"active"}} |
-| 3 | Создать документ с неизвестным кодом (через Gateway) | gateway | ✅ | 201 | 40ms | data = {'id': 17, 'doc_code': 'QUAR-TEST-20260626214746039730', 'title': 'Pipeline quar |
-| 4 | Список карантина (pending, через Gateway) | gateway | ✅ | 200 | 38ms | data = [{'id': '1', 'system': 'MKS', 'code': '98.492395', 'found_in_document_id': '1',  |
-| 5 | Принять из карантина (accept, через Gateway) | gateway | ✅ | 200 | 29ms | data = {'pending_id': '1', 'classifier_system': 'MKS', 'code': '98.492395', 'status': ' |
-| 6 | Валидация классификации (accept, через Gateway) | gateway | ✅ | 200 | 22ms | data.mks_status = NOT_FOUND |
-| 7 | Создать второй документ с неизвестным кодом (через Gateway) | gateway | ✅ | 201 | 45ms | data = {'id': 18, 'doc_code': 'QUAR-TEST2-20260626214746039730', 'title': 'Pipeline qua |
-| 8 | Список карантина (второй pending, через Gateway) | gateway | ✅ | 200 | 38ms | data = [{'id': '2', 'system': 'OKSTU', 'code': '88.492395', 'found_in_document_id': '1' |
-| 9 | Отклонить из карантина (reject, через Gateway) | gateway | ✅ | 200 | 36ms | data = {'pending_id': '2', 'status': 'rejected'} |
-| 10 | Валидация классификации (reject, через Gateway) | gateway | ✅ | 200 | 21ms | data.mks_status = NOT_FOUND |
+| 1 | Аутентификация (через Gateway) | gateway | ✅ | 200 | 306ms | access_token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1LWZhZmY4N2YxN2FmZCIsInJvbGVzIjp |
+| 2 | Создать классификатор (через Gateway) | gateway | ✅ | 201 | 56ms | {"data":{"classifier_system":"MKS","code":"98.586141","full_name":"Pipeline quarantine классификатор 20260626221534586141","status":"active"}} |
+| 3 | Создать документ с неизвестным кодом (через Gateway) | gateway | ✅ | 201 | 59ms | data = {'id': 48, 'doc_code': 'QUAR-TEST-20260626221534586141', 'title': 'Pipeline quar |
+| 4 | Список карантина (pending, через Gateway) | gateway | ✅ | 200 | 80ms | data = [{'id': '1', 'system': 'MKS', 'code': '98.492395', 'found_in_document_id': '1',  |
+| 5 | Принять из карантина (accept, через Gateway) | gateway | ✅ | 200 | 40ms | data = {'pending_id': '1', 'classifier_system': 'MKS', 'code': '98.492395', 'status': ' |
+| 6 | Валидация классификации (accept, через Gateway) | gateway | ✅ | 200 | 34ms | data.mks_status = NOT_FOUND |
+| 7 | Создать второй документ с неизвестным кодом (через Gateway) | gateway | ✅ | 201 | 63ms | data = {'id': 49, 'doc_code': 'QUAR-TEST2-20260626221534586141', 'title': 'Pipeline qua |
+| 8 | Список карантина (второй pending, через Gateway) | gateway | ✅ | 200 | 94ms | data = [{'id': '1', 'system': 'MKS', 'code': '98.492395', 'found_in_document_id': '1',  |
+| 9 | Отклонить из карантина (reject, через Gateway) | gateway | ✅ | 200 | 44ms | data = {'pending_id': '1', 'status': 'rejected'} |
+| 10 | Валидация классификации (reject, через Gateway) | gateway | ✅ | 200 | 46ms | data.mks_status = NOT_FOUND |
 
 **Итог:** ✅ Пройден | Ping: ✅ | Steps: 10/10
 
 
 ---
 
-_Report generated by `service_checker.py` at 2026-06-26 16:47:50 UTC_
+_Report generated by `service_checker.py` at 2026-06-26 17:15:39 UTC_
