@@ -244,8 +244,18 @@ function appendFormValue(form: FormData, key: string, value: unknown) {
 }
 
 async function calculateFileSha256(file: File) {
-  const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
-  return Array.from(new Uint8Array(digest))
+  if (typeof crypto !== 'undefined' && crypto.subtle) {
+    const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+    return Array.from(new Uint8Array(digest))
+      .map((byte) => byte.toString(16).padStart(2, '0'))
+      .join('');
+  }
+  // crypto.subtle недоступен в небезопасном контексте (HTTP).
+  // Сервер сам вычисляет хеш файла, нам хеш нужен только для documentKey.
+  // Генерируем случайную строку как fallback.
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes)
     .map((byte) => byte.toString(16).padStart(2, '0'))
     .join('');
 }

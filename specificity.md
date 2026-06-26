@@ -79,3 +79,13 @@ query_service.pipeline.run_pipeline()
 4. `draftTasksQuery.enabled` и `refreshGatewayDraftDetails` — проверка `/^\\d+$/` вместо `Boolean()`
 
 **Вывод:** Любой новый метод API, принимающий `draftId`, должен валидировать числовой формат.
+
+### F5. crypto.subtle недоступен в HTTP — падает загрузка черновиков
+
+**Симптом:** `TypeError: Cannot read properties of undefined (reading 'digest')` при загрузке файла черновика на http://сервер:3300. В консоли нет ошибок API.
+
+**Причина:** `crypto.subtle.digest()` (Web Crypto API) доступен только в **secure contexts** (HTTPS, localhost). На продакшене по HTTP `crypto.subtle` — `undefined`.
+
+**Фикс:** `calculateFileSha256` в `http.ts` — проверка `crypto.subtle`; если его нет, хеш генерируется через `crypto.getRandomValues` (доступен всегда). Сервер сам вычисляет реальный хеш файла, локальный хеш нужен только для `documentKey`.
+
+**Профилактика:** Любое использование `crypto.subtle` должно иметь fallback для HTTP.
