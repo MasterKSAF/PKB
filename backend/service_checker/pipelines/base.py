@@ -528,7 +528,11 @@ class PipelineRunner:
 
             # Пользовательская проверка
             if step.check:
-                check_ok, check_msg = step.check(step.response_body, ctx)
+                try:
+                    check_ok, check_msg = step.check(step.response_body, ctx, actual_status=step.actual_status)
+                except TypeError:
+                    # Обратная совместимость: check без параметра status
+                    check_ok, check_msg = step.check(step.response_body, ctx)
                 step.message = check_msg or ""  # Сохраняем сообщение даже при успехе
                 if not check_ok:
                     step.error = check_msg

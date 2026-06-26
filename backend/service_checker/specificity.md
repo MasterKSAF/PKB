@@ -1889,3 +1889,29 @@ Gateway Coverage: **4/76 → 53/76** passed.
 ### Статус
 ✅ **Исправлено на уровне схемы БД** (RAG Builder). Checker адаптирован для старых БД.
 
+---
+
+## 61. ИСПРАВЛЕНО: orchestrator_draft_lifecycle — check падает при 409 (duplicate)
+
+**Статус**: ✅ **Исправлено**
+
+**Что было**: `check_json_field("draft_id", int)` в шаге 2 выполнялся даже при 409. 
+Если ответ 409 не содержал `draft_id`, шаг FAILED.
+
+**Фикс**: Заменён на `_check_draft_response` — толерантная функция, которая при 
+отсутствии `draft_id` устанавливает `draft_failed=True` и возвращает (True, ...).
+
+**Дополнительно**:
+- Шаги 3-8, 11 получили `skip_if=_draft_skipped` — при 409 весь lifecycle 
+  пропускается (как в `orchestrator_draft_delete`)
+- Шаг 10 (image-draft) НЕ имеет skip_if — создаёт новый черновик с другим ключом,
+  независимо от первого
+- `expected_status` для task-status шагов (3, 11) расширен до `{200, 404}` — 
+  404 допустим при race condition с Celery
+
+**Тесты**:
+- `test_draft_creation_check_tolerant_to_409` — check проходит при 409 (passed)
+- `test_draft_409_sets_skip_flag` — все зависимые шаги пропускаются (passed)
+- `test_task_status_allows_404` — task-status разрешает 404 (passed)
+- `test_draft_creation_has_on_error_and_skip_if` — on_error и skip_if есть (passed)
+

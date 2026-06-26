@@ -520,21 +520,24 @@ class ApiCoverageTester:
                 # multipart/form-data — убираем JSON content-type
                 headers.pop("Content-Type", None)
                 kwargs["data"] = self._resolve_body(ep.form_body)
-                # Реальный PDF из pdf/, если доступен
-                _pdf_path = Path(__file__).resolve().parent.parent / "pdf" / "7bd97d737317a8a272bb18a405ab2d04.pdf"
-                if _pdf_path.exists():
-                    _pdf_bytes = _pdf_path.read_bytes()
+                # Файлы из ep.form_files (для POST /drafts и т.п.)
+                if ep.form_files is not None:
+                    kwargs["files"] = ep.form_files
                 else:
-                    # Минимальный валидный PDF (заголовок + 1 страница)
-                    _pdf_bytes = (b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
-                                 b"2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n"
-                                 b"3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 50]"
-                                 b"/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>>endobj\n"
-                                 b"4 0 obj<</Length 44>>stream\nBT /F1 12 Tf 10 20 Td(test)Tj ET\nendstream\nendobj\n"
-                                 b"5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj\n"
-                                 b"xref\n0 6\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \n0000000266 00000 n \n0000000355 00000 n \n"
-                                 b"trailer<</Size 6/Root 1 0 R>>\nstartxref\n424\n%%EOF")
-                kwargs["files"] = {"file": ("test.pdf", _pdf_bytes, "application/pdf")}
+                    # fallback: загружаем PDF из pdf/ для prepare-шага без form_files
+                    _pdf_path = Path(__file__).resolve().parent.parent / "pdf" / "7bd97d737317a8a272bb18a405ab2d04.pdf"
+                    if _pdf_path.exists():
+                        _pdf_bytes = _pdf_path.read_bytes()
+                    else:
+                        _pdf_bytes = (b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
+                                     b"2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n"
+                                     b"3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 50]"
+                                     b"/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>>endobj\n"
+                                     b"4 0 obj<</Length 44>>stream\nBT /F1 12 Tf 10 20 Td(test)Tj ET\nendstream\nendobj\n"
+                                     b"5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj\n"
+                                     b"xref\n0 6\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \n0000000266 00000 n \n0000000355 00000 n \n"
+                                     b"trailer<</Size 6/Root 1 0 R>>\nstartxref\n424\n%%EOF")
+                    kwargs["files"] = {"file": ("test.pdf", _pdf_bytes, "application/pdf")}
             elif body is not None:
                 kwargs["json"] = body
             if ep.params:

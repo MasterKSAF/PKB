@@ -54,7 +54,7 @@ class TestOrchestratorDraftLifecyclePipeline:
         create = steps[1]
         assert create.path == "/api/v1/drafts"
         assert create.method == "POST"
-        assert create.expected_status == 202
+        assert create.expected_status == {202, 409}
 
     def test_extract_keys(self):
         p = OrchestratorDraftLifecyclePipeline()
@@ -78,7 +78,7 @@ class TestOrchestratorDraftLifecyclePipeline:
         steps = p.build_steps(PipelineContext())
         img_draft = steps[9]
         assert "image/png" in str(img_draft.form_files.get("file", ()))
-        assert img_draft.expected_status == 202
+        assert img_draft.expected_status == {202, 409}
         assert img_draft.extract_keys == ["draft_id_2", "task_id_2"]
         assert img_draft.path == "/api/v1/drafts"  # без слеша
         img_status = steps[10]

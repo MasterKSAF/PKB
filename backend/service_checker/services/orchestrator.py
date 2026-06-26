@@ -11,6 +11,8 @@ PKB Neuroassistant — Orchestrator Service API Definitions.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from .base import (
     EndpointDef,
     ServiceDef,
@@ -28,6 +30,11 @@ _TASK = f"{API_PREFIX}/tasks/{{task_id}}"
 _PAGE = f"{_DOC}/pages/{{page_num}}"
 
 _AUTH_PORT = 18082
+
+# Тестовый PDF для prepare-шагов
+_HERE = Path(__file__).resolve().parent.parent
+_TEST_PDF_PATH = _HERE / "pdf" / "7bd97d737317a8a272bb18a405ab2d04.pdf"
+_PREPARE_PDF_BYTES = _TEST_PDF_PATH.read_bytes() if _TEST_PDF_PATH.exists() else b"%PDF-1.4 fake"
 
 # Эндпоинты, описанные в документации, но не реализованные в текущей версии —
 # checker показывает ❌ Fail, чтобы разработчик знал о несоответствии.
@@ -50,6 +57,7 @@ def get_service_def() -> ServiceDef:
             "Создать черновик (prepare)",
             form_body={"document_key": "coverage-doc-key", "title": "Coverage черновик",
                       "source_type": "GOST"},
+            form_files={"file": ("coverage.pdf", _PREPARE_PDF_BYTES, "application/pdf")},
             extract_keys=["draft_id", "task_id"],
             is_preparation=True,
             expected_status={202, 409}),

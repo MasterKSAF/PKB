@@ -22,6 +22,7 @@ class EndpointDef:
         description: краткое описание
         body: тело запроса JSON (для POST/PUT/PATCH)
         form_body: multipart/form-data (вместо body)
+        form_files: файлы для multipart/form-data (вместе с form_body)
         params: query-параметры
         extract_keys: какие ключи из ответа сохранять в контекст
         response_schema: схема ответа для валидации {поле: тип}
@@ -37,6 +38,7 @@ class EndpointDef:
     description: str  # краткое описание
     body: Optional[Dict[str, Any]] = None  # тело запроса JSON (для POST/PUT/PATCH)
     form_body: Optional[Dict[str, Any]] = None  # multipart/form-data (вместо body)
+    form_files: Optional[Dict[str, tuple[str, bytes, str]]] = None  # файлы для multipart: {field: (filename, content, content_type)}
     params: Optional[Dict[str, Any]] = None  # query-параметры
     check: Optional[Any] = None  # пост-обработка ответа: (body, ctx) -> (ok, msg)
     # Если эндпоинт требует ID из предыдущего ответа — шаблон подстановки
