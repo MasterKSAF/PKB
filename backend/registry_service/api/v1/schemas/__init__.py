@@ -1,4 +1,4 @@
-from .classifier import ClassifierSchema
+from .classifier import ClassifierSchema, ClassifierValidateRequest, ClassificationInput
 from .document import DocumentSchema
 from .document_section import DocumentSectionSchema
 from .document_reference import DocumentReferenceSchema
@@ -15,6 +15,8 @@ from .document_terminology import DocumentTerminologySchema
 
 __all__ = [
     'ClassifierSchema',
+    'ClassifierValidateRequest',
+    'ClassificationInput',
     'DocumentSchema',
     'DocumentSectionSchema',
     'DocumentReferenceSchema',

@@ -49,6 +49,15 @@ async def lifespan(app: FastAPI):
             try:
                 Base.metadata.create_all(bind=engine)
                 log_event("INFO", "startup", data={"message": "All database schemas and models created successfully"})
+                
+                # Load initial data straight after database modifications
+                try:
+                    from install.load_data import load_data
+                    log_event("INFO", "startup", data={"message": "Running initial data load..."})
+                    load_data()
+                    log_event("INFO", "startup", data={"message": "Initial data load completed successfully"})
+                except Exception as load_err:
+                    log_event("WARNING", "startup", error=f"Initial data load failed: {str(load_err)}")
             except Exception as create_all_err:
                 log_event("WARNING", "startup", error=f"Database table creation failed (might already exist or lack permissions): {str(create_all_err)}")
         except Exception as e:
