@@ -79,7 +79,7 @@ class RAGBuilderClient(ServiceClient):
 
     async def index_document(
         self,
-        document_id: str,
+        document_id: int,
         sections: Optional[List[Dict[str, Any]]] = None,
         protected_spans: Optional[List[Dict[str, Any]]] = None,
         options: Optional[Dict[str, Any]] = None,
@@ -97,7 +97,7 @@ class RAGBuilderClient(ServiceClient):
             options=options,
         )
         mock = RagBuildResponse(
-            document_id=document_id,
+            document_id=str(document_id),
             task_id="task-mock-001",
             indexing_txn_id="txn-mock-001",
             status="indexing",

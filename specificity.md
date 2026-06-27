@@ -89,3 +89,31 @@ query_service.pipeline.run_pipeline()
 **Фикс:** `calculateFileSha256` в `http.ts` — проверка `crypto.subtle`; если его нет, хеш генерируется через `crypto.getRandomValues` (доступен всегда). Сервер сам вычисляет реальный хеш файла, локальный хеш нужен только для `documentKey`.
 
 **Профилактика:** Любое использование `crypto.subtle` должно иметь fallback для HTTP.
+
+### G7. Pipeline: preview status не приходит в completed (дублирующиеся шаги)
+
+**Симптом:** `GET /drafts/{id}/preview/status` возвращает `"status":"processing"` даже когда preview выполнен.
+
+**Причина:** `on_step_completed` вызывается дважды для `preview_converter` (из-за дублирующихся задач Celery). 
+Создаются два шага с `step_name="preview_converter"` — один completed, второй pending. 
+`_build_preview_status` проверяет `all(s.status == "completed" for s in preview_steps)` → всегда False.
+
+**Где:** `backend/orchestrator_service/app/api/v1/endpoints/drafts.py`, функция `_build_preview_status`.
+
+**Статус:** не исправлено.
+
+### G8. Pipeline: RAG-индексация не завершается после registry_creation
+
+**Симптом:** шаг `rag_index` висит `pending`, pipeline падает в `failed`.
+
+**Причина:** дублирующиеся шаги при создании в `approve_draft` (вызов дважды) или при retry/fallback в `on_step_failed`.
+
+**Фикс (27.06):**
+- `approve_draft` — проверка `existing_step_names` перед созданием шагов (не создавать если уже есть)
+- `on_step_failed` — guard: не создавать pending шаг если уже есть pending с тем же step_name
+- `_run_ocr_fallback` — guard: не создавать preview_ocr если уже есть pending
+- `_build_preview_status` — группировка шагов по step_name, взятие лучшего статуса
+
+**Где:** `backend/orchestrator_service/app/core/pipeline/orchestrator.py`, `backend/orchestrator_service/app/api/v1/endpoints/drafts.py`.
+
+**Статус:** исправлено.

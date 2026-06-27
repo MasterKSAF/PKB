@@ -189,7 +189,6 @@ ROUTE_TABLE: List[RouteEntry] = [
     RouteEntry({ALL_METHODS}, r"^/api/v1/analyse(?:/.*)?$", "analyse"),
     RouteEntry(
         {ALL_METHODS}, r"^/api/v1/rag(?:/.*)?$", "rag_search",
-        
     ),
 ]
 
@@ -346,6 +345,7 @@ async def proxy_request(request: Request, service_name: str, target_path: Option
     }
     # Content-Length, Host — httpx управляет ими самостоятельно
 
+    # Хост, Content-Length — httpx управляет ими самостоятельно
     headers = dict(request.headers.items())
     # Удаляем hop-by-hop заголовки
     for key in list(headers.keys()):
@@ -353,6 +353,8 @@ async def proxy_request(request: Request, service_name: str, target_path: Option
             del headers[key]
     # Удаляем host — httpx установит правильный
     headers.pop("host", None)
+    # Сохраняем content-type для отладки
+    ct = headers.get("content-type")
 
     # Проброс корреляционных заголовков (P11-2 / CM-5)
     for hdr in ("X-Request-ID", "X-Trace-ID"):
