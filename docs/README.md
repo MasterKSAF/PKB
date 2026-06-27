@@ -132,6 +132,12 @@ graph LR
 | **2** | **Индексация** | Фоновый Scheduler (каждые 15 мин) запускает RAG Builder для документов со статусом `created`. Чанкинг → embeddings → pgvector. |
 | **3** | **Поиск** | Независимый: сообщение пользователя → обогащение терминами → RAG Search (гибридный dense+sparse) → LLM-генерация → цитирование. |
 
+**Детальные сценарии поведения** (нормальные, аномальные, пограничные):
+
+- [Пайплайн 1: сценарии Оркестратора](pipelines/details/pipeline1-orchestrator_details.md) — race conditions, идемпотентность, таймауты, висящие состояния, версии, reprocess
+- [Пайплайн 2: сценарии Оркестратора](pipelines/details/pipeline2-orchestrator_details.md) — Scheduler-триггер, integrity check, partial indexation, reprocess, компенсация
+- [Пайплайн 3: сценарии Query Service](pipelines/details/pipeline3-orchestrator_details.md) — per-state таймауты, retry с truncation, валидация цитирований, fallback'и
+
 ### Ключевые решения
 
 - **Оркестратор** управляет пайплайнами 1 и 2, ведёт собственный журнал (preview-артефакты, история шагов). Статусы документов обновляет через Registry API.
@@ -335,6 +341,7 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 **Порт:** `8081`
 **Документация:** [`docs/api/orchestrator_service_api.md`](api/orchestrator_service_api.md)
 **Описание также в:** [`pipelines/overview.md`](pipelines/overview.md), [`pipelines/pipeline1-formation.md`](pipelines/pipeline1-formation.md), [`pipelines/pipeline1-formation_detail.md`](pipelines/pipeline1-formation_detail.md), [`pipelines/pipeline2-indexation.md`](pipelines/pipeline2-indexation.md)
+**Сценарии поведения (детально):** [`pipelines/details/pipeline1-orchestrator_details.md`](pipelines/details/pipeline1-orchestrator_details.md), [`pipelines/details/pipeline2-orchestrator_details.md`](pipelines/details/pipeline2-orchestrator_details.md)
 
 **Назначение:**
 Координатор пайплайнов 1 и 2. **Отвечает только за пайплайн и управление** — статус обработки, очередь, ошибки, версии, переобработка. Чтение данных документов и черновиков — через Registry (прямой доступ через Gateway). Ведение этапов задачи с промежуточными данными сервисов, вызов Registry internal API для операций с черновиками.
@@ -558,6 +565,8 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 | Раздел | Где искать |
 |--------|-----------|
 | **Общая документация** | |
+| Обзорная презентация (для руководства и инженеров) | [`docs/presentation_pkb.md`](presentation_pkb.md) |
+| Техническая презентация системы | [`docs/presentation.md`](presentation.md) |
 | API-спецификации (все эндпоинты) | [`docs/api/`](api/) |
 | Gateway Service (JWT, RBAC, маршрутизация) | [`docs/api/gateway_service_api.md`](api/gateway_service_api.md) |
 | Формат ошибок, rate limits, health check, edge cases | [`docs/api/common_api.md`](api/common_api.md) |
