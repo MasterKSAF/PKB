@@ -399,9 +399,21 @@ def run_registry_step(
         async def _do_registry():
             client = RegistryServiceClient()
             try:
-                return await client.update_draft_status(
+                # approve_draft already updated status to "approved";
+                # this call is idempotent — 409 means already done, treat as success
+                result = await client.update_draft_status(
                     draft_id=draft_id, status="approved", document_id=document_id,
                 )
+                return result
+            except Exception as exc:
+                # 409 Conflict = draft already in approved state (idempotent)
+                if "409" in str(exc) or "DRAFT_ALREADY_DECIDED" in str(exc):
+                    logger.info(
+                        f"Draft {draft_id} already approved, treating registry step as completed (idempotent)",
+                        extra={"task_id": task_id, "draft_id": draft_id},
+                    )
+                    return {"status": "already_approved", "draft_id": draft_id}
+                raise
             finally:
                 await client.close()
 

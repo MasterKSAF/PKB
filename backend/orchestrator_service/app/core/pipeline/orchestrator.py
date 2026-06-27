@@ -47,7 +47,7 @@ class PipelineOrchestrator:
         the pipeline falls back to OCR.
 
         1. Validates task exists
-        2. Creates TaskSteps for preview phase
+        2. Creates TaskSteps for preview phase (idempotent — skips existing)
         3. Enqueues preview Celery tasks
 
         Args:
@@ -105,36 +105,45 @@ class PipelineOrchestrator:
         task.current_step_name = preview_service
         await self.db.flush()
 
-        # Create TaskSteps
+        # ── Idempotent step creation: check existing steps ──────────────
+        existing_steps = await self.task_repo.get_task_steps(task_id)
+        existing_step_names = {s.step_name for s in existing_steps}
+
+        # Create TaskSteps (skip if already exist)
         # Step 0: upload
-        upload_input = {"file_key": file_key, "draft_id": draft_id}
-        if metadata_fields:
-            upload_input["metadata_fields"] = metadata_fields
-        upload_step = await self.task_repo.create_task_step(
-            task_id=task_id,
-            step_name="upload",
-            step_index=0,
-            service_name="Orchestrator",
-            input_data=upload_input,
-        )
+        if "upload" not in existing_step_names:
+            upload_input = {"file_key": file_key, "draft_id": draft_id}
+            if metadata_fields:
+                upload_input["metadata_fields"] = metadata_fields
+            upload_step = await self.task_repo.create_task_step(
+                task_id=task_id,
+                step_name="upload",
+                step_index=0,
+                service_name="Orchestrator",
+                input_data=upload_input,
+            )
+        else:
+            upload_step = next((s for s in existing_steps if s.step_name == "upload"), None)
 
         # Step 1: preview Parser/OCR
-        preview_step = await self.task_repo.create_task_step(
-            task_id=task_id,
-            step_name="preview_ocr",  # unified step name
-            step_index=1,
-            service_name=preview_service,
-            input_data={"file_key": file_key, "mode": "preview", "max_pages": 3, "draft_id": draft_id},
-        )
+        if "preview_ocr" not in existing_step_names:
+            preview_step = await self.task_repo.create_task_step(
+                task_id=task_id,
+                step_name="preview_ocr",  # unified step name
+                step_index=1,
+                service_name=preview_service,
+                input_data={"file_key": file_key, "mode": "preview", "max_pages": 3, "draft_id": draft_id},
+            )
 
         # Step 2: preview Converter-validator
-        converter_step = await self.task_repo.create_task_step(
-            task_id=task_id,
-            step_name="preview_converter",
-            step_index=2,
-            service_name="Converter-validator",
-            input_data={"file_key": file_key, "mode": "preview", "draft_id": draft_id},
-        )
+        if "preview_converter" not in existing_step_names:
+            converter_step = await self.task_repo.create_task_step(
+                task_id=task_id,
+                step_name="preview_converter",
+                step_index=2,
+                service_name="Converter-validator",
+                input_data={"file_key": file_key, "mode": "preview", "draft_id": draft_id},
+            )
 
         # Start the first step (upload) and enqueue it
         await self.task_repo.start_task_step(upload_step.id)
@@ -265,15 +274,32 @@ class PipelineOrchestrator:
                 break
 
         if current_step is None:
-            # Maybe the step was already completed (upload step)
+            # Step not running — find the best candidate:
+            # 1. Prefer "pending" (needs completion) over "completed" (already done)
+            # 2. Skip if already completed (idempotent callback)
+            best_pending = None
             for step in steps:
                 if step.step_name == step_name:
-                    current_step = step
-                    break
+                    if step.status == "pending":
+                        best_pending = step
+                        break  # pending is the best candidate
+                    elif step.status == "completed":
+                        # Already completed — skip (idempotent callback from Celery retry)
+                        logger.debug(
+                            f"Step {step_name} already completed, skipping",
+                            extra={"task_id": task_id, "step": step_name},
+                        )
+                        current_step = step
+                        # Don't break — keep looking for a pending candidate
+                    elif current_step is None:
+                        current_step = step  # fallback
 
-        if current_step:
+            if best_pending:
+                current_step = best_pending
+
+        if current_step and current_step.status != "completed":
             logger.debug(
-                f"Completing step {step_name} (id={current_step.id})",
+                f"Completing step {step_name} (id={current_step.id}, status={current_step.status})",
                 extra={"task_id": task_id, "step": step_name},
             )
             await self.task_repo.complete_task_step(
@@ -284,6 +310,11 @@ class PipelineOrchestrator:
             if input_data and current_step.input_data is None:
                 current_step.input_data = input_data
                 await self.db.flush()
+        elif current_step and current_step.status == "completed":
+            logger.debug(
+                f"Step {step_name} already completed, skipping completion",
+                extra={"task_id": task_id, "step": step_name},
+            )
 
         # Calculate progress
         total_steps = task.total_steps or 3
@@ -358,6 +389,24 @@ class PipelineOrchestrator:
             extra={"task_id": task.id, "draft_id": task.draft_id},
         )
 
+    @staticmethod
+    def _find_best_step(steps, step_name: str):
+        """Find the best step by name, preferring completed > running > pending.
+
+        Handles duplicate steps (same name, different statuses) by picking
+        the one with the most useful status for reading output_data.
+        """
+        best = None
+        for s in steps:
+            if s.step_name == step_name:
+                if s.status == "completed":
+                    return s  # completed is the best — has output_data
+                if s.status == "running" and (best is None or best.status == "pending"):
+                    best = s
+                if best is None:
+                    best = s
+        return best
+
     async def _on_preview_completed(
         self, task, steps, converter_output: Optional[dict]
     ) -> None:
@@ -376,12 +425,8 @@ class PipelineOrchestrator:
             "Preview phase completed",
             extra={"task_id": task.id, "draft_id": task.draft_id},
         )
-        # Find the OCR/Parser step output
-        preview_step = None
-        for step in steps:
-            if step.step_name == "preview_ocr":
-                preview_step = step
-                break
+        # Find best OCR/Parser step output (prefer completed > running > pending)
+        preview_step = self._find_best_step(steps, "preview_ocr")
 
         preview_not_supported = False
         quality_data = {}
@@ -414,9 +459,7 @@ class PipelineOrchestrator:
             )
 
         # --- Check converter validation status (P1F-2) ---
-        converter_step = next(
-            (s for s in steps if s.step_name == "preview_converter"), None
-        )
+        converter_step = self._find_best_step(steps, "preview_converter")
         is_validated = True
         if converter_step and converter_step.output_data:
             is_validated = converter_step.output_data.get("validated", True)
@@ -549,15 +592,10 @@ class PipelineOrchestrator:
         - metadata is valid (doc_code and title present)
         - no duplicates detected
         """
-        # Try to get metadata from converter step first (validated metadata)
-        # then fallback to OCR/Parser step
-        converter_step = None
-        preview_step = None
-        for step in steps:
-            if step.step_name == "preview_converter":
-                converter_step = step
-            elif step.step_name == "preview_ocr":
-                preview_step = step
+        # Try to get metadata from best converter step (validated metadata)
+        # then fallback to best OCR/Parser step
+        converter_step = self._find_best_step(steps, "preview_converter")
+        preview_step = self._find_best_step(steps, "preview_ocr")
 
         metadata = {}
         if converter_step and converter_step.output_data:

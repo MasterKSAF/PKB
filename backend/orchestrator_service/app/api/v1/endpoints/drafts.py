@@ -760,14 +760,26 @@ async def _wait_for_preview(
             await asyncio.sleep(poll_interval)
             continue
 
-        statuses = {s.step_name: s.status for s in steps}
-        all_completed = all(s == "completed" for s in statuses.values())
-        any_failed = any(s == "failed" for s in statuses.values())
+        # Deduplicate by step_name: keep best status per name
+        # Status priority: failed > completed > running > pending
+        best_status = {}
+        for s in steps:
+            cur = best_status.get(s.step_name)
+            if s.status == "failed":
+                best_status[s.step_name] = "failed"
+            elif s.status == "completed" and cur != "failed":
+                best_status[s.step_name] = "completed"
+            elif s.status == "running" and cur not in ("failed", "completed"):
+                best_status[s.step_name] = "running"
+            elif cur is None:
+                best_status[s.step_name] = s.status
+        all_completed = all(v == "completed" for v in best_status.values())
+        any_failed = any(v == "failed" for v in best_status.values())
 
         if all_completed:
-            return {"status": "completed", "steps": statuses}
+            return {"status": "completed", "steps": best_status}
         if any_failed:
-            return {"status": "failed", "steps": statuses}
+            return {"status": "failed", "steps": best_status}
 
         await asyncio.sleep(poll_interval)
 
