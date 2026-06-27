@@ -204,25 +204,55 @@ if %ERRORLEVEL% neq 0 (
 
 
 REM ── 7. Gateway Integration Tests ─────────────────────────────────────
-echo [7/7] Running Gateway Integration Tests...
+echo %CLI_ARGS% | findstr /C:"--skip-gateway-tests" >nul 2>&1
+if %ERRORLEVEL% equ 0 (
+    echo [7/7] Gateway Integration Tests — пропущено (--skip-gateway-tests)
+) else (
+    echo [7/7] Running Gateway Integration Tests...
+    echo.
+    REM Запускаем pytest напрямую (не через service_checker)
+    REM Текущая директория: backend\ (cd /d "%~dp0..\.." выше)
+    python -m pytest gateway_service\tests\ -v --tb=short --no-header -p no:warnings > "check_result\gateway_tests.md" 2>&1
+    set GATEWAY_EXIT=%ERRORLEVEL%
+
+    REM Выводим краткую статистику
+    findstr /R ".*passed.*failed.*" "check_result\gateway_tests.md" >nul 2>&1
+    if %ERRORLEVEL% equ 0 (
+        echo.
+        findstr /R ".*passed.*failed.*" "check_result\gateway_tests.md"
+    )
+
+    if %GATEWAY_EXIT% equ 0 (
+        echo     Gateway tests: ALL PASSED ^(see check_result\gateway_tests.md^)
+    ) else (
+        echo     Gateway tests: SOME FAILED ^(exit=%GATEWAY_EXIT%^) ^(see check_result\gateway_tests.md^)
+    )
+)
 echo.
 
-REM Запускаем pytest напрямую (не через service_checker)
-REM Текущая директория: backend\ (cd /d "%~dp0..\.." выше)
-python -m pytest gateway_service\tests\ -v --tb=short --no-header -p no:warnings > "check_result\gateway_tests.md" 2>&1
-set GATEWAY_EXIT=%ERRORLEVEL%
+REM ── 8. Integration Service Live Tests ────────────────────────────────
+echo [8/8] Running Integration Service Live Tests...
+echo.
+cd /d "%~dp0..\.."
+if not "%LIVE_SERVER_URL%"=="" (
+    set "LIVE_INTEGRATION_URL=%LIVE_SERVER_URL%"
+) else (
+    set "LIVE_INTEGRATION_URL=http://localhost:18085"
+)
+set "LIVE_SERVER_URL=%LIVE_INTEGRATION_URL%"
+python -m pytest integration_service\tests\live_server_check.py -v --tb=short --no-header -p no:warnings > "check_result\integration_live_tests.md" 2>&1
+set INTEGRATION_LIVE_EXIT=%ERRORLEVEL%
 
-REM Выводим краткую статистику
-findstr /R ".*passed.*failed.*" "check_result\gateway_tests.md" >nul 2>&1
+findstr /R ".*passed.*failed.*" "check_result\integration_live_tests.md" >nul 2>&1
 if %ERRORLEVEL% equ 0 (
     echo.
-    findstr /R ".*passed.*failed.*" "check_result\gateway_tests.md"
+    findstr /R ".*passed.*failed.*" "check_result\integration_live_tests.md"
 )
 
-if %GATEWAY_EXIT% equ 0 (
-    echo     Gateway tests: ALL PASSED ^(see check_result\gateway_tests.md^)
+if %INTEGRATION_LIVE_EXIT% equ 0 (
+    echo     Integration Live tests: ALL PASSED ^(see check_result\integration_live_tests.md^)
 ) else (
-    echo     Gateway tests: SOME FAILED ^(exit=%GATEWAY_EXIT%^) ^(see check_result\gateway_tests.md^)
+    echo     Integration Live tests: SOME FAILED ^(exit=%INTEGRATION_LIVE_EXIT%^) ^(see check_result\integration_live_tests.md^)
 )
 echo.
 
