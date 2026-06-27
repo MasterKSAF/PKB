@@ -462,16 +462,28 @@ def _docker_health_check(services: List[str]) -> bool:
     # ── Celery worker health check (#2) ──
     log_header("Docker Health Check: celery-worker")
     try:
-        # Проверяем процесс напрямую (без broadcast ping — не конфликтует с production)
+        # Копируем celery_app_check.py в контейнер (уникальное имя, не конфликтует с production)
+        _checker_dir = Path(__file__).resolve().parent
+        _src = _checker_dir / "celery_app_check.py"
+        if _src.exists():
+            subprocess.run(
+                ["docker", "cp", str(_src), "pkb-celery-worker:/app/app/celery_app_check.py"],
+                capture_output=True, timeout=10,
+            )
+        # Проверяем, что модуль app.celery_app_check с уникальным именем загружается
         celery_cmd = ["docker", "exec", "pkb-celery-worker",
-                      "sh", "-c", "grep -q celery /proc/1/cmdline"]
+                      "python", "-c",
+                      "import app.celery_app_check; "
+                      "print(f'celery_app={app.celery_app_check.celery_app.main}')"]
         celery_result = subprocess.run(
             celery_cmd, capture_output=True, text=True, timeout=10,
         )
-        if celery_result.returncode == 0:
-            log_ok("celery-worker запущен (PID 1)")
+        if celery_result.returncode == 0 and "orchestrator_pipeline_check" in celery_result.stdout:
+            log_ok(f"celery-worker: {celery_result.stdout.strip()}")
         else:
-            log_warn("celery-worker: процесс celery не найден")
+            log_warn("celery-worker: модуль app.celery_app_check не загружается")
+            if celery_result.stderr.strip():
+                print(f"  {celery_result.stderr.strip()[:200]}")
             all_ok = False
     except FileNotFoundError:
         log_info("celery-worker health check пропущен (Docker не найден)")

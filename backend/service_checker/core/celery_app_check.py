@@ -1,7 +1,10 @@
 """
 PKB Neuroassistant — Celery app для health check (уникальное имя).
 
-Импортирует реальное приложение оркестратора, но с уникальным именем,
-чтобы не конфликтовать с production. Использует тот же брокер.
+Не импортирует реальный celery_app оркестратора, чтобы не пересекаться
+с production. Используется только для проверки доступности Redis-брокера
+внутри Docker-окружения.
 """
-from app.celery_app import celery_app
+from celery import Celery
+
+celery_app = Celery("orchestrator_pipeline_check")

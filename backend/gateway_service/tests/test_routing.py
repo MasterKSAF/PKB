@@ -197,14 +197,14 @@ class TestDirectServicePrefixes:
             )
 
     def test_rag_prefix(self):
-        """#44 /api/v1/rag/* → rag_search c path transform."""
+        """#44 /api/v1/rag/* → rag_search (путь как есть, без transform)."""
         svc, target = _resolve("GET", "/api/v1/rag/search")
         assert svc == "rag_search"
-        assert target == "/api/v1/search"
+        assert target == "/api/v1/rag/search"
 
         svc, target = _resolve("POST", "/api/v1/rag/query")
         assert svc == "rag_search"
-        assert target == "/api/v1/query"
+        assert target == "/api/v1/rag/query"
 
 
 class TestDeprecatedIntegrationRoutes:
