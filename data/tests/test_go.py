@@ -2,8 +2,11 @@
 import requests, time, uuid, hashlib, sys
 from pathlib import Path
 
-GW = "http://localhost:8080/api/v1"
+from config import get_api_url
+
+GW = get_api_url()
 PDF = Path("data/pdf/7bd97d737317a8a272bb18a405ab2d04.pdf")
+print(f"Target: {GW}")
 
 # Auth
 r = requests.post(f"{GW}/auth/token", json={"username":"admin@example.com","password":"Admin1234!"})

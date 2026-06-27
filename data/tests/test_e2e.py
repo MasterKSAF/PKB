@@ -14,8 +14,11 @@ from pathlib import Path
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
-GW = "http://localhost:8080/api/v1"
+from config import get_api_url, get_direct_rag_url
+
+GW = get_api_url()
 PDF = Path("data/pdf/7bd97d737317a8a272bb18a405ab2d04.pdf")
+print(f"Target: {GW}")
 EXPECTED_TEXTS = ["шкурка шлифовальная", "зеленого карбида кремния", "ГОСТ 10054"]
 SEMANTIC_QUERIES = ["из какого карбида кремния"]
 
@@ -104,11 +107,13 @@ for query in EXPECTED_TEXTS + SEMANTIC_QUERIES:
             print(f"    [{i+1}] score={score:.3f} content={content}")
     elif total > 0:
         print(f"    ⚠ total_found={total} but results=[] — check rag-search response")
-        # Direct query to rag-search bypassing gateway
-        rs = requests.post(f"http://localhost:8091/api/v1/rag/search",
-            json={"query":query,"valid_at":"2025-01-01"},
-            headers={"Content-Type":"application/json; charset=utf-8"})
-        print(f"    Direct rag-search: {rs.status_code} {rs.json() if rs.status_code==200 else rs.text[:200]}")
+        # Direct query to rag-search bypassing gateway (local only)
+        direct_url = get_direct_rag_url()
+        if direct_url:
+            rs = requests.post(direct_url,
+                json={"query":query,"valid_at":"2025-01-01"},
+                headers={"Content-Type":"application/json; charset=utf-8"})
+            print(f"    Direct rag-search: {rs.status_code} {rs.json() if rs.status_code==200 else rs.text[:200]}")
     # Check: substring match for exact phrases, semantic (total_found > 0) for free-form queries
     if query in SEMANTIC_QUERIES:
         found = total > 0
