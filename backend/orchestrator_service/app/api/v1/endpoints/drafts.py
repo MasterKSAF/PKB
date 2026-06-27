@@ -572,7 +572,7 @@ async def get_draft(
         return {
             "draft_id": data.get("id") if data.get("id") is not None else data.get("draft_id"),
             "document_id": doc_id,
-            "version_id": data.get("current_version_id") if doc_id else None,
+            "version_id": data.get("current_version_id") if doc_id is not None else None,
             "is_new_document": doc_id is None,
             "status": data.get("status"),
             "document_key": data.get("document_key"),
