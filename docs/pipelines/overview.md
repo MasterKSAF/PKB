@@ -63,6 +63,12 @@ graph LR
 - [Пайплайн 2: Индексация документа](pipeline2-indexation.md)
 - [Пайплайн 3: Поиск документа](pipeline3-search.md)
 
+**Детальные сценарии поведения (Оркестратор / Query Service):**
+
+- [Пайплайн 1: сценарии поведения Оркестратора](details/pipeline1-orchestrator_details.md) — нормальные, аномальные и пограничные сценарии (race conditions, идемпотентность, таймауты, висящие состояния, версии, reprocess)
+- [Пайплайн 2: сценарии поведения Оркестратора](details/pipeline2-orchestrator_details.md) — триггер Scheduler, integrity check, partial indexation, reprocess, компенсация
+- [Пайплайн 3: сценарии поведения (Query Service)](details/pipeline3-orchestrator_details.md) — per-state таймауты, retry с truncation, валидация цитирований, fallback'и
+
 ---
 
 ### 3. Сводная таблица доступа к БД
