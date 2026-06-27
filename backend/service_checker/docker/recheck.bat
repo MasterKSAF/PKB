@@ -10,6 +10,7 @@ REM   3. Проверяет наличие модели TEI — если нет,
 REM   4. Проверяет, запущен ли контейнер TEI — если нет, запускает
 REM   5. Дропает схемы БД, сбрасывает Redis, перезапускает app
 REM   6. Запускает отчёт (health + coverage + pipeline)
+REM   7. Gateway Integration Tests (pytest)
 REM
 REM Параметры:
 REM   --api service1,service2    Только указанные сервисы (через запятую)
@@ -215,7 +216,30 @@ if %ERRORLEVEL% neq 0 (
     echo WARNING: Some checks failed, check the report above.
 )
 
+
+REM ── 7. Gateway Integration Tests ─────────────────────────────────────
+echo [7/7] Running Gateway Integration Tests...
 echo.
+
+REM Запускаем pytest напрямую (не через service_checker)
+REM Текущая директория: backend\ (cd /d "%~dp0..\.." выше)
+python -m pytest gateway_service\tests\ -v --tb=short --no-header -p no:warnings > "check_result\gateway_tests.md" 2>&1
+set GATEWAY_EXIT=%ERRORLEVEL%
+
+REM Выводим краткую статистику
+findstr /R ".*passed.*failed.*" "check_result\gateway_tests.md" >nul 2>&1
+if %ERRORLEVEL% equ 0 (
+    echo.
+    findstr /R ".*passed.*failed.*" "check_result\gateway_tests.md"
+)
+
+if %GATEWAY_EXIT% equ 0 (
+    echo     Gateway tests: ALL PASSED ^(see check_result\gateway_tests.md^)
+) else (
+    echo     Gateway tests: SOME FAILED ^(exit=%GATEWAY_EXIT%^) ^(see check_result\gateway_tests.md^)
+)
+echo.
+
 echo === Done ===
 echo Reports: check_result/
 echo.

@@ -20,6 +20,7 @@ import httpx
 from service_checker.core.config import (
     PROJECT_ROOT,
     BACKEND_DIR,
+    GATEWAY_DIR,
     DOCKER_DIR,
     DOCKER_COMPOSE_FILE,
     DOCKER_SERVICE_NAMES,
@@ -665,11 +666,11 @@ async def _docker_run_coverage() -> bool:
         return False
 
 
-async def _docker_run_gateway_tests() -> bool:
+async def _docker_run_gateway_tests() -> Dict[str, Any]:
     """Запустить Gateway Integration Tests (pytest) для Docker-окружения.
 
-    Запускает тесты из gateway_service/tests/ через pytest.
-    Возвращает True, если все тесты пройдены или нет критических ошибок.
+    Запускает тесты из gateway_service/tests/ через pytest (все тесты, включая Docker).
+    Возвращает Dict со статистикой: success, passed, failed, total, output_path.
     """
     log_header("Docker: Gateway Integration Tests (pytest)")
 
@@ -680,12 +681,13 @@ async def _docker_run_gateway_tests() -> bool:
     gateway_tests_dir = GATEWAY_DIR / "tests"
     if not gateway_tests_dir.exists():
         log_warn(f"Директория тестов не найдена: {gateway_tests_dir}")
-        return False
+        return {"success": False, "passed": 0, "failed": 0, "total": 0,
+                "output_path": str(output_path), "error": "dir_not_found"}
 
     log_info(f"Запуск pytest в {gateway_tests_dir}...")
 
-    # Параметры: -x (остановка при первой ошибке), -v (подробно),
-    # -m "not docker" — только unit-тесты, без Docker,
+    # Параметры:
+    # -m "not docker" — исключаем тесты, требующие Docker (они выполняются в recheck.bat)
     # --tb=short — краткий traceback
     cmd = [
         sys.executable, "-m", "pytest",
@@ -694,7 +696,7 @@ async def _docker_run_gateway_tests() -> bool:
         "--tb=short",
         "--no-header",
         "-p", "no:warnings",
-        "-m", "not docker",  # только unit-тесты (без Docker)
+        "-m", "not docker",  # Docker-тесты выполняются только через recheck.bat
     ]
 
     try:
@@ -706,6 +708,21 @@ async def _docker_run_gateway_tests() -> bool:
             cwd=str(GATEWAY_DIR),
         )
 
+        stdout = result.stdout
+
+        # Парсим статистику из последней строки pytest: "X passed, Y failed in Z.s"
+        passed = 0
+        failed = 0
+        total = 0
+        for line in stdout.split("\n"):
+            m = re.search(r"(\d+) passed", line)
+            if m:
+                passed = int(m.group(1))
+            m = re.search(r"(\d+) failed", line)
+            if m:
+                failed = int(m.group(1))
+        total = passed + failed
+
         # Сохраняем результат
         report_lines = [
             "# Gateway Integration Tests Report",
@@ -713,9 +730,16 @@ async def _docker_run_gateway_tests() -> bool:
             f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
             f"Exit code: {result.returncode}",
             "",
+            "## Summary",
+            "",
+            f"- **Total:** {total}",
+            f"- **Passed:** {passed}",
+            f"- **Failed:** {failed}",
+            f"- **Status:** {'✅ All passed' if result.returncode == 0 else '❌ Some failed'}",
+            "",
             "## Output",
             "```",
-            result.stdout[-3000:] if len(result.stdout) > 3000 else result.stdout,
+            stdout[-3000:] if len(stdout) > 3000 else stdout,
             "```",
         ]
         if result.stderr:
@@ -723,25 +747,35 @@ async def _docker_run_gateway_tests() -> bool:
 
         output_path.write_text("\n".join(report_lines), encoding="utf-8")
 
-        if result.returncode == 0:
-            log_ok(f"Gateway тесты пройдены. Отчёт: {output_path}")
-            return True
+        success = result.returncode == 0
+        if success:
+            log_ok(f"Gateway тесты пройдены: {passed}/{total}. Отчёт: {output_path}")
         else:
-            log_warn(f"Gateway тесты: часть упала (exit={result.returncode}). Отчёт: {output_path}")
+            log_warn(f"Gateway тесты: {failed} упало (exit={result.returncode}). Отчёт: {output_path}")
             # Показываем последние строки вывода
-            for line in result.stdout.split("\n")[-20:]:
+            for line in stdout.split("\n")[-20:]:
                 if "FAILED" in line or "ERROR" in line or "PASSED" in line:
                     print(f"  {line}")
-            return False
+
+        return {
+            "success": success,
+            "passed": passed,
+            "failed": failed,
+            "total": total,
+            "output_path": str(output_path),
+        }
     except subprocess.TimeoutExpired:
         log_err(f"Gateway тесты превысили таймаут (120с)")
-        return False
+        return {"success": False, "passed": 0, "failed": 0, "total": 0,
+                "output_path": str(output_path), "error": "timeout"}
     except FileNotFoundError:
         log_err(f"pytest не найден. Установите: pip install pytest pytest-asyncio")
-        return False
+        return {"success": False, "passed": 0, "failed": 0, "total": 0,
+                "output_path": str(output_path), "error": "pytest_not_found"}
     except Exception as e:
         log_err(f"Ошибка запуска gateway тестов: {e}")
-        return False
+        return {"success": False, "passed": 0, "failed": 0, "total": 0,
+                "output_path": str(output_path), "error": str(e)}
 
 
 async def _docker_run_pipeline() -> Dict[str, Any]:

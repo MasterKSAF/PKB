@@ -201,7 +201,8 @@ cd docker && recheck_spd.bat
 3. Ждёт supervisorctl (все процессы RUNNING)
 4. Проверяет supervisor .err логи (пусты — нет ошибок)
 5. Запускает health check (контейнеры → HTTP → supervisorctl → .err)
-6. Запускает coverage + pipeline + полный отчёт
+6. Запускает coverage + pipeline + gateway tests + полный отчёт
+7. Gateway Integration Tests (pytest) — отдельный прогон с сохранением в `check_result/gateway_tests.md`
 
 Ошибки валидации:
 - **Обычный recheck падает** → проблема в normal-режиме (rag-builder + rag-search)
