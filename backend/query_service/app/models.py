@@ -61,6 +61,7 @@ class ChatMessage(Base):
     model_used: Mapped[str | None] = mapped_column(String(64))
     processing_time_ms: Mapped[int | None] = mapped_column(Integer)
     enrichment_skipped: Mapped[bool] = mapped_column(Boolean, default=False)
+    warnings: Mapped[list | None] = mapped_column(JSON)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     session: Mapped["ChatSession"] = relationship(back_populates="messages")

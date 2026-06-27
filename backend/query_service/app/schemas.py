@@ -159,6 +159,7 @@ class MessageResponse(BaseModel):
     sources: list[SourceResponse] = Field(default_factory=list)
     model_used: str | None = None
     processing_time_ms: int | None = None
+    warnings: list[str] = Field(default_factory=list)
     timestamp: datetime
 
 

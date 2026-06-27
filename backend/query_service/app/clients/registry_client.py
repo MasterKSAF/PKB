@@ -1,6 +1,9 @@
 import asyncio
+import logging
 import httpx
 from ..config import get_settings
+
+logger = logging.getLogger(__name__)
 
 _MOCK_TERMS: dict[str, str] = {
     "обшивка": "обшивка корпуса",
@@ -35,7 +38,8 @@ async def normalize_term(term: str) -> str:
             resp.raise_for_status()
             data = resp.json()
             return data.get("standard_term", term)
-    except Exception:
+    except Exception as exc:
+        logger.warning("normalize_term failed for %r: %s", term, exc, exc_info=True)
         return term
 
 
