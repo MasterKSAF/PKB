@@ -194,6 +194,16 @@ def parse_args() -> argparse.Namespace:
         help="Запустить только PostgreSQL",
     )
     p_docker.add_argument(
+        "--skip-gateway-tests",
+        action="store_true",
+        help="Пропустить Gateway Integration Tests",
+    )
+    p_docker.add_argument(
+        "--gateway-tests",
+        action="store_true",
+        help="Запустить Gateway Integration Tests (pytest) даже при пропуске coverage",
+    )
+    p_docker.add_argument(
         "--spd",
         action="store_true",
         help="Режим SPD: подмена порта rag_search на 18090 (объединённый rag_builder + rag_search)",
@@ -406,6 +416,8 @@ async def cmd_docker(
     pipelines: Optional[List[str]] = None,
     skip_coverage: bool = False,
     skip_pipelines: bool = False,
+    skip_gateway_tests: bool = False,
+    gateway_tests: bool = False,
     db_only: bool = False,
     spd: bool = False,
 ):
@@ -592,6 +604,30 @@ async def cmd_docker(
         else:
             log_info("Pipeline тесты пропущены (--skip-pipelines)")
 
+        # 3a. Gateway Integration Tests (pytest, все тесты, включая Docker)
+        gateway_tests_result: Optional[Dict[str, Any]] = None
+        if not skip_gateway_tests or gateway_tests:
+            try:
+                from service_checker.core.docker import _docker_run_gateway_tests
+
+                if gateway_tests:
+                    log_info("Запуск Gateway Integration Tests (--gateway-tests)...")
+                else:
+                    log_info("Запуск Gateway Integration Tests...")
+                gateway_tests_result = await _docker_run_gateway_tests()
+                gt = gateway_tests_result
+                if gt.get("success"):
+                    log_ok(f"Gateway тесты пройдены: {gt.get('passed', 0)}/{gt.get('total', 0)}")
+                else:
+                    log_warn(f"Gateway тесты: {gt.get('failed', 0)} упало из {gt.get('total', 0)}")
+            except Exception as e:
+                log_err(f"Ошибка gateway тестов: {e}")
+                gateway_tests_result = {"success": False, "passed": 0, "failed": 0, "total": 0,
+                                        "output_path": "", "error": str(e)}
+        else:
+            log_info("Gateway тесты пропущены (--skip-gateway-tests)")
+            gateway_tests_result = None
+
         # 3b. Service Contracts Check (реальное взаимодействие сервисов)
         contract_report: Optional[str] = None
         try:
@@ -615,6 +651,7 @@ async def cmd_docker(
             full_report = _generate_full_report(
                 cov_results, pipe_results, timestamp,
                 db_result=db_result, contract_report=contract_report,
+                gateway_tests_result=gateway_tests_result,
             )
             full_path = check_result_dir / f"full_report{report_suffix}.md"
             full_path.write_text(full_report, encoding="utf-8")
@@ -918,6 +955,8 @@ async def main():
             pipelines=args.pipelines,
             skip_coverage=args.skip_coverage,
             skip_pipelines=args.skip_pipelines,
+            skip_gateway_tests=args.skip_gateway_tests,
+            gateway_tests=args.gateway_tests,
             db_only=args.db_only,
             spd=args.spd,
         )
