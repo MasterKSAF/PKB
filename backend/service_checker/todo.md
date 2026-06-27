@@ -1,34 +1,34 @@
-# Todo: Docker-тесты в recheck.bat + отчёты
+# TODO — DONE
 
-- [x] Прочитать все файлы
+## 1. ✅ Переименовать БД pkb_neuro → pkb_neuro_check
+- [x] Все файлы checker + develop
 
-## 1. `docker.py` — _docker_run_gateway_tests()
-- [x] Убрать `-m "not docker"` — запускать все тесты (в Docker-окружении)
-- [x] Парсить вывод pytest (passed/failed/total) 
-- [x] Изменить возврат с `bool` на `Dict` со статистикой
+## 2. ✅ LLM — добавлен LLM_API_URL
+- [x] docker-compose.yml (checker + develop)
 
-## 2. `reports.py` — _generate_full_report()
-- [x] Добавить параметр `gateway_tests_result: Optional[Dict]`
-- [x] Добавить секцию "🌐 Gateway Integration Tests"
-- [x] Передать gateway_tests_result в общий статус
+## 3. ✅ converter-validator — путь /api/v1/registry/classifiers/validate
+- [x] converter_validator_service/app/services/registry_client.py
 
-## 3. `cli.py` — cmd_docker()
-- [x] Передать gateway_tests_result в _generate_full_report()
+## 4. ✅ Gateway credentials — real mode
+- [x] service_checker/services/gateway.py — get_credentials_for_mode
 
-## 4. `recheck.bat` — шаг 7
-- [x] Добавить шаг 7 после full-report
-- [x] Запустить pytest, сохранить отчёт, вывести статистику
+## 5. ✅ Gateway schema — по документации
+- [x] /documents/ → data + meta
+- [x] /documents/{id}/versions → data.document_id + data.versions
+- [x] /documents/queue — orchestrator возвращает правильный формат
 
-## 5. Тесты
-- [x] Добавить тесты gateway-секции в отчёте
-- [x] 17 тестов прошли (0 failures)
+## 6. ✅ Gateway prepare — создание документа
+- [x] POST /drafts (multipart с PDF) + PATCH /decide + ожидание появления документа
+- [x] max_retries/retry_delay в EndpointDef
+- [x] retry loop в _execute_endpoint
 
-## 6. Проверка
-- [x] Финальный перепросмотр — все изменения согласованы
-- [x] Запуск тестов — 17 passed
-- [x] guide.md обновлён (шаг 7 Gateway)
-- [x] readme.md актуален (изменений не требуется)
-- [x] `_docker_run_gateway_tests()` — 168 passed, 0 failed ✅
-- [x] Отчёт gateway_tests.md — Summary корректный ✅
-- [x] Секция Gateway в full_report — ✅ статус, статистика, ссылка
-- [x] Исправлен отсутствующий импорт `GATEWAY_DIR` в `docker.py`
+## 7. ✅ Orchestrator /documents/queue — правильный формат
+- [x] orchestrator_service/app/api/v1/endpoints/documents.py
+
+## 8. ✅ Gateway /rag/search — убран transform
+- [x] gateway_service/gateway/client.py
+
+## 9. 🔴 Осталось
+- Pipeline: _ensure_project до токена (нужен рефакторинг API)
+- Gateway: 404 на /documents/* (retry ещё не отработал в прогоне)
+- Rag/search body (valid_at) — checker уже передаёт, но RAG Search валидирует строже

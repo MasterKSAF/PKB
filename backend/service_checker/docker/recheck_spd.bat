@@ -111,9 +111,9 @@ REM ── 5. Очистка данных + перезапуск app ───�
 echo [5/7] Dropping data + restarting app...
 
 echo     Recreating database...
-docker exec pkb-postgres psql -U pkb -d postgres -c "SELECT pg_terminate_backend(pg_stat_activity.pid) FROM pg_stat_activity WHERE datname = 'pkb_neuro' AND pid <> pg_backend_pid();" 2>nul
-docker exec pkb-postgres psql -U pkb -d postgres -c "DROP DATABASE IF EXISTS pkb_neuro;" 2>nul
-docker exec pkb-postgres psql -U pkb -d postgres -c "CREATE DATABASE pkb_neuro;" 2>nul
+docker exec pkb-postgres psql -U pkb -d postgres -c "SELECT pg_terminate_backend(pg_stat_activity.pid) FROM pg_stat_activity WHERE datname = 'pkb_neuro_check' AND pid <> pg_backend_pid();" 2>nul
+docker exec pkb-postgres psql -U pkb -d postgres -c "DROP DATABASE IF EXISTS pkb_neuro_check;" 2>nul
+docker exec pkb-postgres psql -U pkb -d postgres -c "CREATE DATABASE pkb_neuro_check;" 2>nul
 
 echo     Flushing Redis...
 docker exec pkb-redis redis-cli FLUSHALL 2>nul

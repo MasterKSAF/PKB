@@ -28,8 +28,8 @@ EXTRA_VARS: dict[str, str] = {
     "DB_PORT": "5432",
     "DB_USERNAME": "pkb",
     "DB_PASSWORD": "pkb",
-    "DB_DATABASE": "pkb_neuro",
-    "DATABASE_URL": "postgresql+asyncpg://pkb:pkb@postgres:5432/pkb_neuro",
+    "DB_DATABASE": "pkb_neuro_check",
+    "DATABASE_URL": "postgresql+asyncpg://pkb:pkb@postgres:5432/pkb_neuro_check",
     "DB_SUPERUSER": "postgres",
     # ── Redis ─────────────────────────────────────────────────────────────
     "REDIS_URL": "redis://redis:6379/0",
@@ -82,7 +82,7 @@ EXTRA_VARS: dict[str, str] = {
     "INTEGRATION_SERVICE_URL": "http://127.0.0.1:8085",
     "VALIDATE_SERVICE_URL": "http://127.0.0.1:8086",
     "RAG_SERVICE_URL": "http://127.0.0.1:8091",
-    "DATABASE_URL": "postgresql+asyncpg://pkb:pkb@postgres:5432/pkb_neuro",
+    "DATABASE_URL": "postgresql+asyncpg://pkb:pkb@postgres:5432/pkb_neuro_check",
     "RATE_LIMIT_ENABLED": "false",
     "APP_VERSION": "1.0.0",
 }

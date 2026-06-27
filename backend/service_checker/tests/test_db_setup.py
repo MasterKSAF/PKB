@@ -48,7 +48,7 @@ def setup_db_module():
     )
     mod = importlib.util.module_from_spec(spec)
     # Замокаем константы для тестов
-    mod.DB_NAME = "pkb_neuro"
+    mod.DB_NAME = "pkb_neuro_check"
     mod.DB_HOST = "127.0.0.1"
     mod.DB_PORT = 15432
     mod.DB_SUPERUSER = "postgres"

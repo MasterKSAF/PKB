@@ -189,7 +189,6 @@ ROUTE_TABLE: List[RouteEntry] = [
     RouteEntry({ALL_METHODS}, r"^/api/v1/analyse(?:/.*)?$", "analyse"),
     RouteEntry(
         {ALL_METHODS}, r"^/api/v1/rag(?:/.*)?$", "rag_search",
-        transform=lambda p: p.replace("/api/v1/rag", "/api/v1", 1),
     ),
 ]
 

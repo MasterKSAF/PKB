@@ -28,7 +28,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 #  Config (from env with fallback to hardcoded defaults)
 # ──────────────────────────────────────────────────────────────────────
 
-DB_NAME = os.getenv("DB_DATABASE", "pkb_neuro")
+DB_NAME = os.getenv("DB_DATABASE", "pkb_neuro_check")
 DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
 DB_PORT = int(os.getenv("DB_PORT", "15432"))
 DB_SUPERUSER = os.getenv("DB_SUPERUSER", "postgres")
