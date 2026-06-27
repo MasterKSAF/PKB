@@ -360,7 +360,7 @@ services:
     environment:
       OPENAI_API_KEY: ${ROUTERAI_API_KEY:-}
       OPENAI_BASE_URL: ${LLM_API_BASE_URL:-https://routerai.ru/api/v1}
-      DEFAULT_LLM_MODEL: deepseek/deepseek-v4-flash
+      DEFAULT_LLM_MODEL: ${DEFAULT_LLM_MODEL:-deepseek/deepseek-v4-flash}
       DEFAULT_LLM_MAX_TOKENS: "4096"
       DEFAULT_LLM_TIMEOUT: "60"
       CONFIDENCE_THRESHOLD: "0.55"
@@ -463,7 +463,7 @@ services:
       MOCK_LLM_ENABLED: ${MOCK_LLM_ENABLED:-false}
       LLM_API_URL: ${LLM_API_BASE_URL:-https://routerai.ru/api/v1}
       LLM_API_KEY: ${ROUTERAI_API_KEY:-}
-      LLM_MODEL: deepseek/deepseek-v4-flash
+      LLM_MODEL: ${LLM_MODEL:-deepseek/deepseek-v4-flash}
       LLM_TEMPERATURE: "0.2"
       LLM_MAX_TOKENS: "8196"
       LLM_TOP_P: "0.95"

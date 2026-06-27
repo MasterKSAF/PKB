@@ -1915,3 +1915,4 @@ Gateway Coverage: **4/76 → 53/76** passed.
 - `test_task_status_allows_404` — task-status разрешает 404 (passed)
 - `test_draft_creation_has_on_error_and_skip_if` — on_error и skip_if есть (passed)
 
+

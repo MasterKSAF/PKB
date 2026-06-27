@@ -13,8 +13,8 @@ x-env-common: &env-common
   DB_USERNAME: pkb
   DB_PASSWORD: pkb
   DB_SUPERUSER: pkb
-  DB_DATABASE: pkb_neuro
-  DATABASE_URL: postgresql+asyncpg://pkb:pkb@postgres:5432/pkb_neuro
+  DB_DATABASE: pkb_neuro_check
+  DATABASE_URL: postgresql+asyncpg://pkb:pkb@postgres:5432/pkb_neuro_check
   REDIS_URL: redis://redis:6379/0
   CELERY_BROKER_URL: redis://redis:6379/1
   CELERY_RESULT_BACKEND: redis://redis:6379/2
@@ -61,7 +61,10 @@ x-env-common: &env-common
   EMBEDDING_API_KEY: sk-noop
   SEARCH_DEFAULT_TOP_K: 10
   SEARCH_MAX_TOP_K: 100
-  # LLM (converter-validator)
+  # LLM (query + converter-validator)
+  LLM_API_URL: ${LLM_API_URL:-https://routerai.ru/api/v1}
+  LLM_API_KEY: ${ROUTERAI_API_KEY:-}
+  LLM_MODEL: ${LLM_MODEL:-deepseek-chat}
   OPENAI_API_KEY: ${ROUTERAI_API_KEY:-}
   OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://routerai.ru/api/v1}
 
@@ -76,13 +79,13 @@ services:
     environment:
       POSTGRES_USER: pkb
       POSTGRES_PASSWORD: pkb
-      POSTGRES_DB: pkb_neuro
+      POSTGRES_DB: pkb_neuro_check
     ports:
       - "15432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U pkb -d pkb_neuro"]
+      test: ["CMD-SHELL", "pg_isready -U pkb -d pkb_neuro_check"]
       interval: 5s
       retries: 10
     networks:

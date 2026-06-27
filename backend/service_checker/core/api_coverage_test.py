@@ -516,6 +516,7 @@ class ApiCoverageTester:
         start = time.time()
         try:
             kwargs: Dict[str, Any] = {"headers": headers}
+            kwargs = {"headers": headers}
             if ep.form_body is not None:
                 # multipart/form-data — убираем JSON content-type
                 headers.pop("Content-Type", None)
@@ -543,19 +544,33 @@ class ApiCoverageTester:
             if ep.params:
                 kwargs["params"] = ep.params
 
-            resp = await getattr(self.client, ep.method.lower())(url, **kwargs)
-            elapsed = int((time.time() - start) * 1000)
+            # Retry-loop для prepare-шагов (ожидание асинхронных данных)
+            max_retries = ep.max_retries
+            for attempt in range(max_retries):
+                resp = await getattr(self.client, ep.method.lower())(url, **kwargs)
+                elapsed = int((time.time() - start) * 1000)
 
-            resp_body = resp.text if resp.content else None
+                resp_body = resp.text if resp.content else None
 
-            # Success по expected_status (если указан), иначе 2xx/3xx
-            if ep.expected_status is not None:
-                if isinstance(ep.expected_status, set):
-                    success = resp.status_code in ep.expected_status
+                # Success по expected_status (если указан), иначе 2xx/3xx
+                if ep.expected_status is not None:
+                    if isinstance(ep.expected_status, set):
+                        success = resp.status_code in ep.expected_status
+                    else:
+                        success = resp.status_code == ep.expected_status
                 else:
-                    success = resp.status_code == ep.expected_status
+                    success = resp.status_code < 400
+
+                # Если успех — выходим из retry-цикла
+                if success:
+                    break
+
+                # Если не последняя попытка — ждём и повторяем
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(ep.retry_delay)
             else:
-                success = resp.status_code < 400
+                # Цикл завершился без break — success остался False
+                pass
 
             # Извлекаем контекст из ответа
             if success and ep.extract_keys:
@@ -681,7 +696,7 @@ class ApiCoverageTester:
                 try:
                     import subprocess
                     r = subprocess.run(
-                        ["docker", "exec", "pkb-postgres", "psql", "-U", "pkb", "-d", "pkb_neuro", "-c",
+                        ["docker", "exec", "pkb-postgres", "psql", "-U", "pkb", "-d", "pkb_neuro_check", "-c",
                          "ALTER TABLE IF EXISTS rag.document_chunks DROP CONSTRAINT IF EXISTS fk_rag_document_chunks_section_id;"],
                         capture_output=True, timeout=10,
                     )
