@@ -1,6 +1,6 @@
 # Supervisor Logs
 
-**Generated:** 2026-06-27T13:18:06.416258+00:00
+**Generated:** 2026-06-27T15:35:55.092566+00:00
 
 
 ---
@@ -49,56 +49,56 @@ _17 файл(ов) без ошибок (пропущены): auth.err, converter
 
 ```
 
-{"timestamp": "2026-06-27 16:17:28,753", "severity": "INFO", "name": "app.services.user_service", "message": "User created: test@test.com"}
-{"timestamp": "2026-06-27 16:17:28,798", "severity": "INFO", "name": "app.services.user_service", "message": "User updated: u-704e7b333bea"}
-{"timestamp": "2026-06-27 16:17:28,827", "severity": "INFO", "name": "app.services.user_service", "message": "User updated: u-704e7b333bea"}
-{"timestamp": "2026-06-27 16:17:28,855", "severity": "INFO", "name": "app.services.user_service", "message": "User updated: u-704e7b333bea"}
-{"timestamp": "2026-06-27 16:17:28,892", "severity": "INFO", "name": "app.services.user_service", "message": "Role created: viewer"}
-{"timestamp": "2026-06-27 16:17:31,110", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for traces exporter due to UNAVAILABLE error"}
-{"timestamp": "2026-06-27 16:17:31,111", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting traces to signoz-otel-collector:4317, retrying in 0.85s."}
-{"timestamp": "2026-06-27 16:17:31,703", "severity": "INFO", "name": "app.services.auth_service", "message": "User logged in: admin@example.com"}
-{"timestamp": "2026-06-27 16:17:32,521", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
-{"timestamp": "2026-06-27 16:17:33,526", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for logs exporter due to UNAVAILABLE error"}
-{"timestamp": "2026-06-27 16:17:33,526", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 0.85s."}
-{"timestamp": "2026-06-27 16:17:34,974", "severity": "INFO", "name": "app.services.auth_service", "message": "User logged in: admin@example.com"}
-{"timestamp": "2026-06-27 16:17:35,823", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export traces to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
-{"timestamp": "2026-06-27 16:17:36,161", "severity": "INFO", "name": "app.services.auth_service", "message": "User logged in: admin@example.com"}
-{"timestamp": "2026-06-27 16:17:36,229", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 1.78s."}
-{"timestamp": "2026-06-27 16:17:36,762", "severity": "INFO", "name": "app.services.auth_service", "message": "User logged in: admin@example.com"}
-{"timestamp": "2026-06-27 16:17:37,020", "severity": "INFO", "name": "app.services.user_service", "message": "User created: gateway-prepare@test.com"}
-{"timestamp": "2026-06-27 16:17:37,981", "severity": "INFO", "name": "app.services.auth_service", "message": "User logged in: admin@example.com"}
-{"timestamp": "2026-06-27 16:17:38,015", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
-{"timestamp": "2026-06-27 16:17:38,099", "severity": "INFO", "name": "app.services.auth_service", "message": "Refresh token revoked for user: u-c63101514b42"}
-{"timestamp": "2026-06-27 16:17:38,166", "severity": "WARNING", "name": "app.services.user_service", "message": "Attempt to create duplicate user: test@test.com"}
-{"timestamp": "2026-06-27 16:17:38,228", "severity": "INFO", "name": "app.services.user_service", "message": "User updated: u-1e406c763960"}
-{"timestamp": "2026-06-27 16:17:38,270", "severity": "INFO", "name": "app.services.user_service", "message": "User updated: u-1e406c763960"}
-{"timestamp": "2026-06-27 16:17:38,328", "severity": "WARNING", "name": "app.services.user_service", "message": "Attempt to create duplicate role: viewer"}
-{"timestamp": "2026-06-27 16:17:39,017", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for logs exporter due to UNAVAILABLE error"}
-{"timestamp": "2026-06-27 16:17:39,018", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 0.87s."}
-{"timestamp": "2026-06-27 16:17:40,841", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for traces exporter due to UNAVAILABLE error"}
-{"timestamp": "2026-06-27 16:17:40,842", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting traces to signoz-otel-collector:4317, retrying in 1.02s."}
-{"timestamp": "2026-06-27 16:17:41,775", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
-{"timestamp": "2026-06-27 16:17:42,776", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for logs exporter due to UNAVAILABLE error"}
-{"timestamp": "2026-06-27 16:17:42,777", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 1.02s."}
-{"timestamp": "2026-06-27 16:17:43,741", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export traces to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
-{"timestamp": "2026-06-27 16:17:45,656", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 1.94s."}
-{"timestamp": "2026-06-27 16:17:47,593", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
-{"timestamp": "2026-06-27 16:17:48,594", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for logs exporter due to UNAVAILABLE error"}
-{"timestamp": "2026-06-27 16:17:48,594", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 0.94s."}
-{"timestamp": "2026-06-27 16:17:48,746", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for traces exporter due to UNAVAILABLE error"}
-{"timestamp": "2026-06-27 16:17:48,747", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting traces to signoz-otel-collector:4317, retrying in 0.91s."}
-{"timestamp": "2026-06-27 16:17:53,198", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
-{"timestamp": "2026-06-27 16:17:54,198", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for logs exporter due to UNAVAILABLE error"}
-{"timestamp": "2026-06-27 16:17:54,199", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 1.12s."}
-{"timestamp": "2026-06-27 16:17:57,189", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
-{"timestamp": "2026-06-27 16:17:58,190", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for logs exporter due to UNAVAILABLE error"}
-{"timestamp": "2026-06-27 16:17:58,190", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 0.91s."}
-{"timestamp": "2026-06-27 16:18:00,942", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 1.67s."}
-{"timestamp": "2026-06-27 16:18:02,614", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
-{"timestamp": "2026-06-27 16:18:03,615", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for logs exporter due to UNAVAILABLE error"}
-{"timestamp": "2026-06-27 16:18:03,615", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 1.13s."}
-{"timestamp": "2026-06-27 16:18:06,360", "severity": "INFO", "name": "app.services.auth_service", "message": "User logged in: admin@example.com"}
-{"timestamp": "2026-06-27 16:18:06,610", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:13,147", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for traces exporter due to UNAVAILABLE error"}
+{"timestamp": "2026-06-27 18:35:13,148", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting traces to signoz-otel-collector:4317, retrying in 0.90s."}
+{"timestamp": "2026-06-27 18:35:15,461", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for metrics exporter due to UNAVAILABLE error"}
+{"timestamp": "2026-06-27 18:35:15,462", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to signoz-otel-collector:4317, retrying in 0.83s."}
+{"timestamp": "2026-06-27 18:35:16,934", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:17,935", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for logs exporter due to UNAVAILABLE error"}
+{"timestamp": "2026-06-27 18:35:17,935", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 1.19s."}
+{"timestamp": "2026-06-27 18:35:18,167", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export metrics to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:19,089", "severity": "INFO", "name": "app.services.auth_service", "message": "User logged in: admin@example.com"}
+{"timestamp": "2026-06-27 18:35:20,957", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:21,958", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for logs exporter due to UNAVAILABLE error"}
+{"timestamp": "2026-06-27 18:35:21,958", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 0.96s."}
+{"timestamp": "2026-06-27 18:35:22,833", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for traces exporter due to UNAVAILABLE error"}
+{"timestamp": "2026-06-27 18:35:22,834", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting traces to signoz-otel-collector:4317, retrying in 1.01s."}
+{"timestamp": "2026-06-27 18:35:26,750", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:27,751", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for logs exporter due to UNAVAILABLE error"}
+{"timestamp": "2026-06-27 18:35:27,752", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 0.88s."}
+{"timestamp": "2026-06-27 18:35:32,415", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:32,682", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for traces exporter due to UNAVAILABLE error"}
+{"timestamp": "2026-06-27 18:35:32,683", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting traces to signoz-otel-collector:4317, retrying in 1.01s."}
+{"timestamp": "2026-06-27 18:35:33,416", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for logs exporter due to UNAVAILABLE error"}
+{"timestamp": "2026-06-27 18:35:33,416", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 0.93s."}
+{"timestamp": "2026-06-27 18:35:34,857", "severity": "INFO", "name": "app.services.auth_service", "message": "User logged in: admin@example.com"}
+{"timestamp": "2026-06-27 18:35:35,539", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export traces to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:35,960", "severity": "INFO", "name": "app.services.auth_service", "message": "User logged in: admin@example.com"}
+{"timestamp": "2026-06-27 18:35:36,206", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 1.84s."}
+{"timestamp": "2026-06-27 18:35:37,246", "severity": "INFO", "name": "app.services.auth_service", "message": "User logged in: admin@example.com"}
+{"timestamp": "2026-06-27 18:35:37,721", "severity": "INFO", "name": "app.services.auth_service", "message": "User logged in: admin@example.com"}
+{"timestamp": "2026-06-27 18:35:38,044", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:39,045", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for logs exporter due to UNAVAILABLE error"}
+{"timestamp": "2026-06-27 18:35:39,045", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 1.01s."}
+{"timestamp": "2026-06-27 18:35:39,098", "severity": "INFO", "name": "app.services.auth_service", "message": "User logged in: admin@example.com"}
+{"timestamp": "2026-06-27 18:35:40,552", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for traces exporter due to UNAVAILABLE error"}
+{"timestamp": "2026-06-27 18:35:40,553", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting traces to signoz-otel-collector:4317, retrying in 1.09s."}
+{"timestamp": "2026-06-27 18:35:43,065", "severity": "INFO", "name": "app.services.auth_service", "message": "User logged in: admin@example.com"}
+{"timestamp": "2026-06-27 18:35:43,511", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export traces to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:44,725", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for logs exporter due to UNAVAILABLE error"}
+{"timestamp": "2026-06-27 18:35:44,725", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 1.16s."}
+{"timestamp": "2026-06-27 18:35:48,515", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for traces exporter due to UNAVAILABLE error"}
+{"timestamp": "2026-06-27 18:35:48,515", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting traces to signoz-otel-collector:4317, retrying in 0.81s."}
+{"timestamp": "2026-06-27 18:35:48,890", "severity": "INFO", "name": "app.services.auth_service", "message": "User logged in: admin@example.com"}
+{"timestamp": "2026-06-27 18:35:49,465", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:49,759", "severity": "INFO", "name": "app.services.auth_service", "message": "User logged in: admin@example.com"}
+{"timestamp": "2026-06-27 18:35:50,443", "severity": "INFO", "name": "app.services.auth_service", "message": "User logged in: admin@example.com"}
+{"timestamp": "2026-06-27 18:35:50,466", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for logs exporter due to UNAVAILABLE error"}
+{"timestamp": "2026-06-27 18:35:50,467", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 1.13s."}
+{"timestamp": "2026-06-27 18:35:53,377", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export traces to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:53,487", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 1.71s."}
+{"timestamp": "2026-06-27 18:35:55,024", "severity": "INFO", "name": "app.services.auth_service", "message": "User logged in: admin@example.com"}
+{"timestamp": "2026-06-27 18:35:55,194", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
 
 ```
 
@@ -110,25 +110,56 @@ _17 файл(ов) без ошибок (пропущены): auth.err, converter
 
 ```
 
-{"timestamp": "2026-06-27 16:17:28,161", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 1.09s."}
-{"timestamp": "2026-06-27 16:17:31,374", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
-{"timestamp": "2026-06-27 16:17:32,376", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 0.90s."}
-{"timestamp": "2026-06-27 16:17:35,341", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
-{"timestamp": "2026-06-27 16:17:36,342", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 0.95s."}
-{"timestamp": "2026-06-27 16:17:39,405", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
-{"timestamp": "2026-06-27 16:17:40,407", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 1.11s."}
-{"timestamp": "2026-06-27 16:17:43,820", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
-{"timestamp": "2026-06-27 16:17:44,821", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 0.95s."}
-{"timestamp": "2026-06-27 16:17:45,824", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export traces to localhost:4317, error code: StatusCode.UNAVAILABLE"}
-{"timestamp": "2026-06-27 16:17:48,867", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 0.95s."}
-{"timestamp": "2026-06-27 16:17:52,002", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
-{"timestamp": "2026-06-27 16:17:53,004", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 1.19s."}
-{"timestamp": "2026-06-27 16:17:56,161", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
-{"timestamp": "2026-06-27 16:17:57,162", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 0.92s."}
-{"timestamp": "2026-06-27 16:18:00,009", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
-{"timestamp": "2026-06-27 16:18:01,010", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 1.19s."}
-{"timestamp": "2026-06-27 16:18:03,968", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
-{"timestamp": "2026-06-27 16:18:04,969", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 0.82s."}
+{"timestamp": "2026-06-27 18:34:26,601", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 0.95s."}
+{"timestamp": "2026-06-27 18:34:29,575", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:34:30,580", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 1.02s."}
+{"timestamp": "2026-06-27 18:34:33,685", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:34:34,687", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 1.07s."}
+{"timestamp": "2026-06-27 18:34:37,536", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:34:38,537", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 0.93s."}
+{"timestamp": "2026-06-27 18:34:40,706", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting traces to localhost:4317, retrying in 2.39s."}
+{"timestamp": "2026-06-27 18:34:41,463", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:34:42,464", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 0.91s."}
+{"timestamp": "2026-06-27 18:34:43,098", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export traces to localhost:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:34:43,373", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 1.78s."}
+{"timestamp": "2026-06-27 18:34:45,153", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:34:46,155", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 1.13s."}
+{"timestamp": "2026-06-27 18:34:48,932", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:34:49,933", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 0.89s."}
+{"timestamp": "2026-06-27 18:34:52,664", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:34:53,668", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 1.07s."}
+{"timestamp": "2026-06-27 18:34:56,566", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:34:57,567", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 0.98s."}
+{"timestamp": "2026-06-27 18:35:00,838", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:01,839", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 1.09s."}
+{"timestamp": "2026-06-27 18:35:05,082", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:06,083", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 0.87s."}
+{"timestamp": "2026-06-27 18:35:08,999", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:09,999", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 0.92s."}
+{"timestamp": "2026-06-27 18:35:13,035", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:14,036", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 1.01s."}
+{"timestamp": "2026-06-27 18:35:14,729", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export metrics to localhost:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:15,046", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 2.23s."}
+{"timestamp": "2026-06-27 18:35:17,277", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:18,279", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 1.00s."}
+{"timestamp": "2026-06-27 18:35:21,666", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:22,668", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 1.06s."}
+{"timestamp": "2026-06-27 18:35:25,927", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:26,928", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 0.85s."}
+{"timestamp": "2026-06-27 18:35:29,985", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:30,984", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 0.91s."}
+{"timestamp": "2026-06-27 18:35:33,957", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:34,959", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 0.90s."}
+{"timestamp": "2026-06-27 18:35:37,716", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:38,719", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 0.96s."}
+{"timestamp": "2026-06-27 18:35:41,566", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:42,568", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 1.14s."}
+{"timestamp": "2026-06-27 18:35:45,792", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:46,793", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 1.16s."}
+{"timestamp": "2026-06-27 18:35:50,115", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:51,117", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 0.88s."}
+{"timestamp": "2026-06-27 18:35:54,370", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:55,371", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 1.17s."}
 
 ```
 
@@ -140,56 +171,56 @@ _17 файл(ов) без ошибок (пропущены): auth.err, converter
 
 ```
 
-2026-06-27 16:17:37 | c416677b-3ffe-4dde-a7ad-37d741e9f667 | services.base_client         | INFO     | HTTP client initialized with retry + circuit breaker
-2026-06-27 16:17:37 | c416677b-3ffe-4dde-a7ad-37d741e9f667 | services.base_client         | INFO     | HTTP POST /api/v1/registry/documents/check-uniqueness -> 200 (0.012s)
-2026-06-27 16:17:37 | c416677b-3ffe-4dde-a7ad-37d741e9f667 | services.base_client         | INFO     | HTTP client initialized with retry + circuit breaker
-2026-06-27 16:17:37 | c416677b-3ffe-4dde-a7ad-37d741e9f667 | services.base_client         | INFO     | HTTP POST /api/v1/registry/drafts -> 201 (0.014s)
-2026-06-27 16:17:37 | c416677b-3ffe-4dde-a7ad-37d741e9f667 | orchestrator.pipeline        | INFO     | Pipeline preview started
-2026-06-27 16:17:37 | -                | uvicorn.access               | INFO     | 127.0.0.1:47292 - "POST /api/v1/drafts HTTP/1.1" 202
-2026-06-27 16:17:37 | c416677b-3ffe-4dde-a7ad-37d741e9f667 | orchestrator.pipeline        | INFO     | Approving draft
-2026-06-27 16:17:37 | c416677b-3ffe-4dde-a7ad-37d741e9f667 | services.base_client         | INFO     | HTTP client initialized with retry + circuit breaker
-2026-06-27 16:17:37 | c416677b-3ffe-4dde-a7ad-37d741e9f667 | services.base_client         | INFO     | HTTP GET /api/v1/registry/drafts/6 -> 200 (0.008s)
-2026-06-27 16:17:37 | c416677b-3ffe-4dde-a7ad-37d741e9f667 | services.base_client         | INFO     | HTTP GET /api/v1/registry/drafts/6/preview -> 200 (0.012s)
-2026-06-27 16:17:37 | c416677b-3ffe-4dde-a7ad-37d741e9f667 | services.base_client         | INFO     | HTTP POST /api/v1/registry/documents -> 201 (0.017s)
-2026-06-27 16:17:37 | c416677b-3ffe-4dde-a7ad-37d741e9f667 | services.base_client         | INFO     | HTTP client initialized with retry + circuit breaker
-2026-06-27 16:17:37 | c416677b-3ffe-4dde-a7ad-37d741e9f667 | services.base_client         | ERROR    | HTTP error: POST /api/v1/registry/drafts/6/snapshot -> 404 (0.005s, retries exhausted)
-2026-06-27 16:17:37 | c416677b-3ffe-4dde-a7ad-37d741e9f667 | orchestrator.pipeline        | WARNING  | Failed to save preview snapshot: Client error '404 Not Found' for url 'http://127.0.0.1:8084/api/v1/registry/drafts/6/snapshot'
+2026-06-27 18:35:43 | -                | uvicorn.access               | INFO     | 127.0.0.1:32944 - "POST /api/v1/drafts HTTP/1.1" 202
+2026-06-27 18:35:43 | -                | uvicorn.access               | INFO     | 127.0.0.1:32944 - "GET /api/v1/tasks/16/status HTTP/1.1" 200
+2026-06-27 18:35:43 | 6e41a81b-282b-4045-ab3a-5a11b712cfd5 | services.base_client         | INFO     | HTTP client initialized with retry + circuit breaker
+2026-06-27 18:35:43 | 6e41a81b-282b-4045-ab3a-5a11b712cfd5 | services.base_client         | INFO     | HTTP GET /api/v1/registry/drafts/14 -> 200 (0.012s)
+2026-06-27 18:35:43 | -                | uvicorn.access               | INFO     | 127.0.0.1:32944 - "GET /api/v1/drafts/14 HTTP/1.1" 200
+2026-06-27 18:35:43 | 11848afa-472f-496b-a803-03e2bb53212f | services.base_client         | INFO     | HTTP client initialized with retry + circuit breaker
+2026-06-27 18:35:43 | 11848afa-472f-496b-a803-03e2bb53212f | services.base_client         | INFO     | HTTP GET /api/v1/registry/drafts/14 -> 200 (0.013s)
+2026-06-27 18:35:43 | 11848afa-472f-496b-a803-03e2bb53212f | orchestrator.pipeline        | INFO     | Parser-first: enqueuing parser preview
+2026-06-27 18:35:43 | 11848afa-472f-496b-a803-03e2bb53212f | orchestrator.pipeline        | INFO     | Pipeline preview started
+2026-06-27 18:35:43 | -                | uvicorn.access               | INFO     | 127.0.0.1:32944 - "POST /api/v1/drafts/14/preview HTTP/1.1" 202
+2026-06-27 18:35:43 | 2720ef5f-3be1-4b33-8513-fcc2691a6d05 | services.base_client         | INFO     | HTTP client initialized with retry + circuit breaker
+2026-06-27 18:35:43 | 2720ef5f-3be1-4b33-8513-fcc2691a6d05 | services.base_client         | INFO     | HTTP GET /api/v1/registry/drafts/14 -> 200 (0.014s)
+2026-06-27 18:35:44 | -                | uvicorn.access               | INFO     | 127.0.0.1:32944 - "GET /api/v1/drafts/14/preview/status?longpoll=1 HTTP/1.1" 200
+2026-06-27 18:35:44 | 77d62074-ae89-4d0f-8666-95cfe34d51d1 | orchestrator.pipeline        | INFO     | Approving draft
+2026-06-27 18:35:44 | 77d62074-ae89-4d0f-8666-95cfe34d51d1 | services.base_client         | INFO     | HTTP client initialized with retry + circuit breaker
+2026-06-27 18:35:44 | 77d62074-ae89-4d0f-8666-95cfe34d51d1 | services.base_client         | INFO     | HTTP GET /api/v1/registry/drafts/14 -> 200 (0.008s)
+2026-06-27 18:35:44 | 77d62074-ae89-4d0f-8666-95cfe34d51d1 | services.base_client         | INFO     | HTTP GET /api/v1/registry/drafts/14/preview -> 200 (0.008s)
+2026-06-27 18:35:45 | 77d62074-ae89-4d0f-8666-95cfe34d51d1 | services.base_client         | INFO     | HTTP POST /api/v1/registry/documents -> 201 (0.026s)
+2026-06-27 18:35:45 | 77d62074-ae89-4d0f-8666-95cfe34d51d1 | services.base_client         | INFO     | HTTP client initialized with retry + circuit breaker
+2026-06-27 18:35:45 | 77d62074-ae89-4d0f-8666-95cfe34d51d1 | services.base_client         | ERROR    | HTTP error: POST /api/v1/registry/drafts/14/snapshot -> 404 (0.006s, retries exhausted)
+2026-06-27 18:35:45 | 77d62074-ae89-4d0f-8666-95cfe34d51d1 | orchestrator.pipeline        | WARNING  | Failed to save preview snapshot: Client error '404 Not Found' for url 'http://127.0.0.1:8084/api/v1/registry/drafts/14/snapshot'
 For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404
-2026-06-27 16:17:37 | c416677b-3ffe-4dde-a7ad-37d741e9f667 | orchestrator.pipeline        | INFO     | Enqueued full OCR step
-2026-06-27 16:17:37 | -                | uvicorn.access               | INFO     | 127.0.0.1:47292 - "PATCH /api/v1/drafts/6/decide HTTP/1.1" 200
-2026-06-27 16:17:37 | -                | uvicorn.access               | INFO     | 127.0.0.1:47292 - "GET /api/v1/system/health HTTP/1.1" 200
-2026-06-27 16:17:39 | d945d373-ace6-4c1f-b20a-db2a3d1697ef | services.base_client         | INFO     | HTTP client initialized with retry + circuit breaker
-2026-06-27 16:17:39 | d945d373-ace6-4c1f-b20a-db2a3d1697ef | services.base_client         | INFO     | HTTP GET /api/v1/registry/drafts/6 -> 200 (0.012s)
-2026-06-27 16:17:39 | -                | uvicorn.access               | INFO     | 127.0.0.1:47292 - "GET /api/v1/drafts/6 HTTP/1.1" 200
-2026-06-27 16:17:39 | de88b922-fcc4-49da-8dcb-078773185862 | services.base_client         | INFO     | HTTP client initialized with retry + circuit breaker
-2026-06-27 16:17:39 | de88b922-fcc4-49da-8dcb-078773185862 | services.base_client         | INFO     | HTTP DELETE /api/v1/registry/drafts/6 -> 200 (0.016s)
-2026-06-27 16:17:39 | -                | uvicorn.access               | INFO     | 127.0.0.1:47292 - "DELETE /api/v1/drafts/6 HTTP/1.1" 204
-2026-06-27 16:17:39 | 5e4bd37e-c59d-4423-9e60-f54caedd1d6b | services.base_client         | INFO     | HTTP client initialized with retry + circuit breaker
-2026-06-27 16:17:39 | 5e4bd37e-c59d-4423-9e60-f54caedd1d6b | services.base_client         | ERROR    | HTTP error: GET /api/v1/registry/drafts/6 -> 404 (0.012s, retries exhausted)
-2026-06-27 16:17:39 | -                | uvicorn.access               | INFO     | 127.0.0.1:47292 - "POST /api/v1/drafts/6/preview HTTP/1.1" 404
-2026-06-27 16:17:39 | b6772886-9b98-447d-8964-5d1f09bc5fb6 | services.base_client         | INFO     | HTTP client initialized with retry + circuit breaker
-2026-06-27 16:17:39 | b6772886-9b98-447d-8964-5d1f09bc5fb6 | services.base_client         | ERROR    | HTTP error: GET /api/v1/registry/drafts/6 -> 404 (0.010s, retries exhausted)
-2026-06-27 16:17:39 | b6772886-9b98-447d-8964-5d1f09bc5fb6 | app.api.v1.endpoints.drafts  | WARNING  | Registry check failed for draft 6: Client error '404 Not Found' for url 'http://127.0.0.1:8084/api/v1/registry/drafts/6'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404
-2026-06-27 16:17:41 | -                | opentelemetry.exporter.otlp.proto.http.trace_exporter | ERROR    | Failed to export span batch due to timeout, max retries or shutdown.
-2026-06-27 16:17:44 | -                | uvicorn.access               | INFO     | 127.0.0.1:47292 - "GET /api/v1/drafts/6/preview/status?longpoll=5 HTTP/1.1" 200
-2026-06-27 16:17:44 | 70322ccd-e5e0-49d8-aa08-de0155f8392e | services.base_client         | INFO     | HTTP client initialized with retry + circuit breaker
-2026-06-27 16:17:45 | 70322ccd-e5e0-49d8-aa08-de0155f8392e | services.base_client         | ERROR    | HTTP error: PATCH /api/v1/registry/drafts/6/metadata -> 404 (0.012s, retries exhausted)
-2026-06-27 16:17:45 | 70322ccd-e5e0-49d8-aa08-de0155f8392e | app.api.v1.endpoints.drafts  | WARNING  | Registry 404 on metadata update for draft 6 (expected)
-2026-06-27 16:17:45 | -                | uvicorn.access               | INFO     | 127.0.0.1:47292 - "PATCH /api/v1/drafts/6/metadata HTTP/1.1" 404
-2026-06-27 16:17:45 | -                | uvicorn.access               | INFO     | 127.0.0.1:47292 - "GET /api/v1/drafts/6/tasks HTTP/1.1" 200
-2026-06-27 16:17:45 | -                | uvicorn.access               | INFO     | 127.0.0.1:47292 - "GET /api/v1/tasks/6/status HTTP/1.1" 200
-2026-06-27 16:17:45 | -                | uvicorn.access               | INFO     | 127.0.0.1:47292 - "GET /api/v1/tasks/6/steps HTTP/1.1" 200
-2026-06-27 16:17:45 | -                | uvicorn.access               | INFO     | 127.0.0.1:47292 - "GET /api/v1/documents/queue HTTP/1.1" 200
-2026-06-27 16:17:45 | -                | uvicorn.access               | INFO     | 127.0.0.1:47292 - "GET /api/v1/documents/5/status?longpoll=5 HTTP/1.1" 404
-2026-06-27 16:17:45 | -                | uvicorn.access               | INFO     | 127.0.0.1:47292 - "GET /api/v1/documents/5/errors?page=1&page_size=10 HTTP/1.1" 404
-2026-06-27 16:17:45 | -                | uvicorn.access               | INFO     | 127.0.0.1:47292 - "POST /api/v1/documents/5/reprocess HTTP/1.1" 409
-2026-06-27 16:17:45 | -                | uvicorn.access               | INFO     | 127.0.0.1:47292 - "POST /api/v1/documents/5/versions HTTP/1.1" 404
-2026-06-27 16:17:45 | -                | uvicorn.access               | INFO     | 127.0.0.1:47292 - "GET /api/v1/documents/5/tasks HTTP/1.1" 200
-2026-06-27 16:17:46 | -                | opentelemetry.exporter.otlp.proto.http.trace_exporter | WARNING  | Transient error HTTPConnectionPool(host='localhost', port=4318): Max retries exceeded with url: /v1/traces (Caused by NewConnectionError("HTTPConnection(host='localhost', port=4318): Failed to establish a new connection: [Errno 111] Connection refused")) encountered while exporting span batch, retrying in 1.10s.
-2026-06-27 16:17:47 | -                | opentelemetry.exporter.otlp.proto.http.trace_exporter | WARNING  | Transient error HTTPConnectionPool(host='localhost', port=4318): Max retries exceeded with url: /v1/traces (Caused by NewConnectionError("HTTPConnection(host='localhost', port=4318): Failed to establish a new connection: [Errno 111] Connection refused")) encountered while exporting span batch, retrying in 2.33s.
-2026-06-27 16:17:49 | -                | opentelemetry.exporter.otlp.proto.http.trace_exporter | WARNING  | Transient error HTTPConnectionPool(host='localhost', port=4318): Max retries exceeded with url: /v1/traces (Caused by NewConnectionError("HTTPConnection(host='localhost', port=4318): Failed to establish a new connection: [Errno 111] Connection refused")) encountered while exporting span batch, retrying in 4.10s.
-2026-06-27 16:17:53 | -                | opentelemetry.exporter.otlp.proto.http.trace_exporter | ERROR    | Failed to export span batch due to timeout, max retries or shutdown.
+2026-06-27 18:35:45 | 77d62074-ae89-4d0f-8666-95cfe34d51d1 | orchestrator.pipeline        | INFO     | Enqueued full Parser step (Parser-first)
+2026-06-27 18:35:45 | -                | uvicorn.access               | INFO     | 127.0.0.1:32944 - "PATCH /api/v1/drafts/14/decide HTTP/1.1" 200
+2026-06-27 18:35:46 | -                | opentelemetry.exporter.otlp.proto.http.trace_exporter | ERROR    | Failed to export span batch due to timeout, max retries or shutdown.
+2026-06-27 18:35:48 | 9588e5c0-6270-477b-acf4-a8a255ed7e68 | services.base_client         | INFO     | HTTP client initialized with retry + circuit breaker
+2026-06-27 18:35:48 | 9588e5c0-6270-477b-acf4-a8a255ed7e68 | services.base_client         | INFO     | HTTP DELETE /api/v1/registry/drafts/14 -> 200 (0.016s)
+2026-06-27 18:35:48 | -                | uvicorn.access               | INFO     | 127.0.0.1:32944 - "DELETE /api/v1/drafts/14 HTTP/1.1" 204
+2026-06-27 18:35:48 | -                | uvicorn.access               | INFO     | 172.18.0.1:35512 - "GET /health HTTP/1.1" 404
+2026-06-27 18:35:49 | ea3daeeb-da07-46c8-9ec2-4ebe6b94300d | app.storage                  | INFO     | Uploaded to MinIO: bucket=documents key=f-6c149ba59fef size=123616
+2026-06-27 18:35:49 | ea3daeeb-da07-46c8-9ec2-4ebe6b94300d | services.base_client         | INFO     | HTTP client initialized with retry + circuit breaker
+2026-06-27 18:35:49 | ea3daeeb-da07-46c8-9ec2-4ebe6b94300d | services.base_client         | INFO     | HTTP POST /api/v1/registry/documents/check-uniqueness -> 200 (0.015s)
+2026-06-27 18:35:49 | ea3daeeb-da07-46c8-9ec2-4ebe6b94300d | services.base_client         | INFO     | HTTP client initialized with retry + circuit breaker
+2026-06-27 18:35:49 | ea3daeeb-da07-46c8-9ec2-4ebe6b94300d | services.base_client         | INFO     | HTTP POST /api/v1/registry/drafts -> 201 (0.018s)
+2026-06-27 18:35:49 | ea3daeeb-da07-46c8-9ec2-4ebe6b94300d | orchestrator.pipeline        | INFO     | Parser-first: enqueuing parser preview
+2026-06-27 18:35:49 | ea3daeeb-da07-46c8-9ec2-4ebe6b94300d | orchestrator.pipeline        | INFO     | Pipeline preview started
+2026-06-27 18:35:49 | -                | uvicorn.access               | INFO     | 127.0.0.1:32944 - "POST /api/v1/drafts HTTP/1.1" 202
+2026-06-27 18:35:49 | -                | uvicorn.access               | INFO     | 127.0.0.1:32944 - "GET /api/v1/tasks/17/status HTTP/1.1" 200
+2026-06-27 18:35:49 | dc5542d8-c57b-4e78-8dcf-88864e60d76d | services.base_client         | INFO     | HTTP client initialized with retry + circuit breaker
+2026-06-27 18:35:49 | dc5542d8-c57b-4e78-8dcf-88864e60d76d | services.base_client         | INFO     | HTTP GET /api/v1/registry/drafts/15 -> 200 (0.013s)
+2026-06-27 18:35:49 | -                | uvicorn.access               | INFO     | 127.0.0.1:32944 - "GET /api/v1/drafts/15 HTTP/1.1" 200
+2026-06-27 18:35:49 | e034da06-62da-481a-a2d2-8e0400f7d957 | services.base_client         | INFO     | HTTP client initialized with retry + circuit breaker
+2026-06-27 18:35:49 | e034da06-62da-481a-a2d2-8e0400f7d957 | services.base_client         | INFO     | HTTP PATCH /api/v1/registry/drafts/15/metadata -> 200 (0.022s)
+2026-06-27 18:35:49 | -                | uvicorn.access               | INFO     | 127.0.0.1:32944 - "PATCH /api/v1/drafts/15/metadata HTTP/1.1" 200
+2026-06-27 18:35:49 | a84fd035-2765-4076-8b6f-66903269fd6b | services.base_client         | INFO     | HTTP client initialized with retry + circuit breaker
+2026-06-27 18:35:49 | a84fd035-2765-4076-8b6f-66903269fd6b | services.base_client         | INFO     | HTTP GET /api/v1/registry/drafts/15 -> 200 (0.012s)
+2026-06-27 18:35:49 | -                | uvicorn.access               | INFO     | 127.0.0.1:32944 - "GET /api/v1/drafts/15 HTTP/1.1" 200
+2026-06-27 18:35:51 | -                | opentelemetry.exporter.otlp.proto.http.trace_exporter | WARNING  | Transient error HTTPConnectionPool(host='localhost', port=4318): Max retries exceeded with url: /v1/traces (Caused by NewConnectionError("HTTPConnection(host='localhost', port=4318): Failed to establish a new connection: [Errno 111] Connection refused")) encountered while exporting span batch, retrying in 0.85s.
+2026-06-27 18:35:52 | -                | opentelemetry.exporter.otlp.proto.http.trace_exporter | WARNING  | Transient error HTTPConnectionPool(host='localhost', port=4318): Max retries exceeded with url: /v1/traces (Caused by NewConnectionError("HTTPConnection(host='localhost', port=4318): Failed to establish a new connection: [Errno 111] Connection refused")) encountered while exporting span batch, retrying in 2.16s.
+2026-06-27 18:35:54 | -                | opentelemetry.exporter.otlp.proto.http.trace_exporter | WARNING  | Transient error HTTPConnectionPool(host='localhost', port=4318): Max retries exceeded with url: /v1/traces (Caused by NewConnectionError("HTTPConnection(host='localhost', port=4318): Failed to establish a new connection: [Errno 111] Connection refused")) encountered while exporting span batch, retrying in 3.28s.
 
 ```
 
@@ -201,56 +232,56 @@ For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/St
 
 ```
 
-Jun 27, 2026 4:17:32 PM org.verapdf.pd.font.type1.Type1PrivateParser decodeCharString
-WARNING: Error in parsing private data in Type 1 font: incorrect amount of charstrings specified(offset = 11320 in stream 71 0 obj)
-Jun 27, 2026 4:17:32 PM org.opendataloader.pdf.processors.DocumentProcessor calculateDocumentInfo
-INFO: Number of pages: 5
-Jun 27, 2026 4:17:32 PM org.opendataloader.pdf.processors.DocumentProcessor calculateDocumentInfo
+Jun 27, 2026 6:35:24 PM org.opendataloader.pdf.processors.DocumentProcessor calculateDocumentInfo
 INFO: Author: null
-Jun 27, 2026 4:17:32 PM org.opendataloader.pdf.processors.DocumentProcessor calculateDocumentInfo
+Jun 27, 2026 6:35:24 PM org.opendataloader.pdf.processors.DocumentProcessor calculateDocumentInfo
 INFO: Title: null
-Jun 27, 2026 4:17:32 PM org.opendataloader.pdf.processors.DocumentProcessor calculateDocumentInfo
+Jun 27, 2026 6:35:24 PM org.opendataloader.pdf.processors.DocumentProcessor calculateDocumentInfo
 INFO: Creation date: D:20081002124836+00'00'
-Jun 27, 2026 4:17:32 PM org.opendataloader.pdf.processors.DocumentProcessor calculateDocumentInfo
+Jun 27, 2026 6:35:24 PM org.opendataloader.pdf.processors.DocumentProcessor calculateDocumentInfo
 INFO: Modification date: D:20081002124836+00'00'
-Jun 27, 2026 4:17:32 PM org.opendataloader.pdf.processors.DocumentProcessor processDocument
+Jun 27, 2026 6:35:24 PM org.opendataloader.pdf.processors.DocumentProcessor processDocument
 INFO: Processing 5 pages with 1 threads
-{"timestamp": "2026-06-27 16:17:33,076", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 1.06s."}
-Jun 27, 2026 4:17:34 PM org.opendataloader.pdf.json.JsonWriter writeToJson
-INFO: Created /tmp/tmp88zrzirx/tmpqvdmswbk.json
-Jun 27, 2026 4:17:34 PM org.opendataloader.pdf.markdown.MarkdownGenerator writeToMarkdown
-INFO: Created /tmp/tmp88zrzirx/tmpqvdmswbk.md
-Jun 27, 2026 4:17:34 PM org.opendataloader.pdf.html.HtmlGenerator writeToHtml
-INFO: Created /tmp/tmp88zrzirx/tmpqvdmswbk.html
-{"timestamp": "2026-06-27 16:17:34,622", "severity": "INFO", "name": "app.services.parsers.pdf_parser", "message": "opendataloader_pdf conversion completed for task 12345"}
-{"timestamp": "2026-06-27 16:17:34,623", "severity": "INFO", "name": "app.services.parsers.pdf_parser", "message": "Found 6 image references in JSON"}
-{"timestamp": "2026-06-27 16:17:35,288", "severity": "INFO", "name": "app.core.minio_client", "message": "Image uploaded to images/46814c0b7a59510eaddc21ba5f749f42f81a2603730068e8108cd1b207b854f8.png, size=5144 bytes"}
-{"timestamp": "2026-06-27 16:17:35,296", "severity": "INFO", "name": "app.core.minio_client", "message": "Image uploaded to images/de39a0affa0713ab8d18367374324214f1bf7b9d9ea2d58164c72b118afb4efb.png, size=11303 bytes"}
-{"timestamp": "2026-06-27 16:17:35,297", "severity": "INFO", "name": "app.core.minio_client", "message": "Image uploaded to images/17f38761247931153c70de28a0b4b0aba9b08ffccf47e25b4e442f390e0b5f65.png, size=4605 bytes"}
-{"timestamp": "2026-06-27 16:17:35,298", "severity": "INFO", "name": "app.core.minio_client", "message": "Image uploaded to images/6c668fedf8e98f48578fca8eae07288dc817f6e5d7a53ecbff9c3db9a9b28820.png, size=9275 bytes"}
-{"timestamp": "2026-06-27 16:17:35,299", "severity": "INFO", "name": "app.core.minio_client", "message": "Image uploaded to images/2167cff7974960b765abacd8fc3f330d46d8c77e35c61d90ce3783c4b8af0f12.png, size=7705 bytes"}
-{"timestamp": "2026-06-27 16:17:35,300", "severity": "INFO", "name": "app.core.minio_client", "message": "Image uploaded to images/88cdbe040537d46d827ead0ddb36dde1a488c294864329a488ed24de7d3ebfaa.png, size=3890 bytes"}
-{"timestamp": "2026-06-27 16:17:35,300", "severity": "INFO", "name": "app.services.pipeline.steps", "message": "Uploaded 6/6 images for task 12345 (errors: 0)"}
-{"timestamp": "2026-06-27 16:17:35,305", "severity": "INFO", "name": "app.services.result_builder", "message": "Result built for task 12345, mode=full"}
-{"timestamp": "2026-06-27 16:17:35,307", "severity": "INFO", "name": "app.services.pipeline.steps", "message": "Result stored for task 12345"}
-{"timestamp": "2026-06-27 16:17:35,307", "severity": "INFO", "name": "app.services.pipeline.pipeline", "message": "Pipeline completed successfully for task 12345"}
-{"timestamp": "2026-06-27 16:17:35,307", "severity": "INFO", "name": "app.services.pipeline_service", "message": "Full pipeline completed for task 12345"}
-{"timestamp": "2026-06-27 16:17:36,063", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export traces to localhost:4317, error code: StatusCode.UNAVAILABLE"}
-{"timestamp": "2026-06-27 16:17:37,488", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 0.84s."}
-{"timestamp": "2026-06-27 16:17:40,579", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
-{"timestamp": "2026-06-27 16:17:41,064", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting traces to localhost:4317, retrying in 1.08s."}
-{"timestamp": "2026-06-27 16:17:44,081", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export traces to localhost:4317, error code: StatusCode.UNAVAILABLE"}
-{"timestamp": "2026-06-27 16:17:45,746", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 1.10s."}
-{"timestamp": "2026-06-27 16:17:48,956", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
-{"timestamp": "2026-06-27 16:17:49,957", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 0.91s."}
-{"timestamp": "2026-06-27 16:17:52,482", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
-{"timestamp": "2026-06-27 16:17:53,483", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 1.19s."}
-{"timestamp": "2026-06-27 16:17:56,605", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
-{"timestamp": "2026-06-27 16:17:57,605", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 0.96s."}
-{"timestamp": "2026-06-27 16:18:00,893", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
-{"timestamp": "2026-06-27 16:18:01,894", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 0.98s."}
-{"timestamp": "2026-06-27 16:18:04,817", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
-{"timestamp": "2026-06-27 16:18:05,818", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 0.89s."}
+{"timestamp": "2026-06-27 18:35:24,269", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 0.86s."}
+{"timestamp": "2026-06-27 18:35:25,018", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export traces to localhost:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:25,148", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 1.79s."}
+Jun 27, 2026 6:35:25 PM org.opendataloader.pdf.json.JsonWriter writeToJson
+INFO: Created /tmp/tmpvddbjo47/tmpptwqlkxc.json
+Jun 27, 2026 6:35:25 PM org.opendataloader.pdf.markdown.MarkdownGenerator writeToMarkdown
+INFO: Created /tmp/tmpvddbjo47/tmpptwqlkxc.md
+Jun 27, 2026 6:35:25 PM org.opendataloader.pdf.html.HtmlGenerator writeToHtml
+INFO: Created /tmp/tmpvddbjo47/tmpptwqlkxc.html
+{"timestamp": "2026-06-27 18:35:25,462", "severity": "INFO", "name": "app.services.parsers.pdf_parser", "message": "opendataloader_pdf conversion completed for task 20002"}
+{"timestamp": "2026-06-27 18:35:25,464", "severity": "INFO", "name": "app.services.parsers.pdf_parser", "message": "Found 6 image references in JSON"}
+{"timestamp": "2026-06-27 18:35:25,771", "severity": "INFO", "name": "app.api.v1.endpoints.result", "message": "Task 20002 not completed yet, returning 409"}
+{"timestamp": "2026-06-27 18:35:26,092", "severity": "INFO", "name": "app.core.minio_client", "message": "Image uploaded to images/46814c0b7a59510eaddc21ba5f749f42f81a2603730068e8108cd1b207b854f8.png, size=5144 bytes"}
+{"timestamp": "2026-06-27 18:35:26,095", "severity": "INFO", "name": "app.core.minio_client", "message": "Image uploaded to images/de39a0affa0713ab8d18367374324214f1bf7b9d9ea2d58164c72b118afb4efb.png, size=11303 bytes"}
+{"timestamp": "2026-06-27 18:35:26,097", "severity": "INFO", "name": "app.core.minio_client", "message": "Image uploaded to images/6c668fedf8e98f48578fca8eae07288dc817f6e5d7a53ecbff9c3db9a9b28820.png, size=9275 bytes"}
+{"timestamp": "2026-06-27 18:35:26,100", "severity": "INFO", "name": "app.core.minio_client", "message": "Image uploaded to images/17f38761247931153c70de28a0b4b0aba9b08ffccf47e25b4e442f390e0b5f65.png, size=4605 bytes"}
+{"timestamp": "2026-06-27 18:35:26,102", "severity": "INFO", "name": "app.core.minio_client", "message": "Image uploaded to images/2167cff7974960b765abacd8fc3f330d46d8c77e35c61d90ce3783c4b8af0f12.png, size=7705 bytes"}
+{"timestamp": "2026-06-27 18:35:26,105", "severity": "INFO", "name": "app.core.minio_client", "message": "Image uploaded to images/88cdbe040537d46d827ead0ddb36dde1a488c294864329a488ed24de7d3ebfaa.png, size=3890 bytes"}
+{"timestamp": "2026-06-27 18:35:26,107", "severity": "INFO", "name": "app.services.pipeline.steps", "message": "Uploaded 6/6 images for task 20002 (errors: 0)"}
+{"timestamp": "2026-06-27 18:35:26,116", "severity": "INFO", "name": "app.services.result_builder", "message": "Result built for task 20002, mode=full"}
+{"timestamp": "2026-06-27 18:35:26,118", "severity": "INFO", "name": "app.services.pipeline.steps", "message": "Result stored for task 20002"}
+{"timestamp": "2026-06-27 18:35:26,118", "severity": "INFO", "name": "app.services.pipeline.pipeline", "message": "Pipeline completed successfully for task 20002"}
+{"timestamp": "2026-06-27 18:35:26,119", "severity": "INFO", "name": "app.services.pipeline_service", "message": "Full pipeline completed for task 20002"}
+{"timestamp": "2026-06-27 18:35:26,942", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:27,810", "severity": "INFO", "name": "app.api.v1.endpoints.result", "message": "Result for task 20002 returned successfully"}
+{"timestamp": "2026-06-27 18:35:27,945", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 0.87s."}
+{"timestamp": "2026-06-27 18:35:30,733", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:31,022", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting traces to localhost:4317, retrying in 2.04s."}
+{"timestamp": "2026-06-27 18:35:33,066", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export traces to localhost:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:35,674", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 1.09s."}
+{"timestamp": "2026-06-27 18:35:39,105", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:40,107", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 0.93s."}
+{"timestamp": "2026-06-27 18:35:42,657", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:43,659", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 1.15s."}
+{"timestamp": "2026-06-27 18:35:47,000", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:48,001", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 0.80s."}
+{"timestamp": "2026-06-27 18:35:51,118", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:52,120", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 1.13s."}
+{"timestamp": "2026-06-27 18:35:54,958", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to localhost:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:55,959", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to localhost:4317, retrying in 1.14s."}
 
 ```
 
@@ -262,55 +293,55 @@ INFO: Created /tmp/tmp88zrzirx/tmpqvdmswbk.html
 
 ```
 
-{"timestamp": "2026-06-27 16:17:45,557", "severity": "DEBUG", "name": "httpcore.http11", "message": "response_closed.started"}
-{"timestamp": "2026-06-27 16:17:45,557", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting traces to signoz-otel-collector:4317, retrying in 1.07s."}
-{"timestamp": "2026-06-27 16:17:45,558", "severity": "DEBUG", "name": "httpcore.http11", "message": "response_closed.complete"}
-{"timestamp": "2026-06-27 16:17:45,558", "severity": "DEBUG", "name": "httpcore.connection", "message": "close.started"}
-{"timestamp": "2026-06-27 16:17:45,559", "severity": "DEBUG", "name": "httpcore.connection", "message": "close.complete"}
-{"timestamp": "2026-06-27 16:17:45,560", "severity": "INFO", "name": "query_service", "message": "{\"request_id\": \"05faf48f-134e-4a06-87a0-61260c534d81\", \"user_id\": \"u-c63101514b42\", \"draft_id\": null, \"method\": \"POST\", \"path\": \"/api/v1/chat/sessions/4/messages/search\", \"status\": 200, \"duration_ms\": 14}"}
-{"timestamp": "2026-06-27 16:17:45,591", "severity": "DEBUG", "name": "httpcore.connection", "message": "connect_tcp.started host='127.0.0.1' port=8091 local_address=None timeout=30.0 socket_options=None"}
-{"timestamp": "2026-06-27 16:17:45,594", "severity": "DEBUG", "name": "httpcore.connection", "message": "connect_tcp.complete return_value=<httpcore._backends.anyio.AnyIOStream object at 0x7fe8740e7200>"}
-{"timestamp": "2026-06-27 16:17:45,594", "severity": "DEBUG", "name": "httpcore.http11", "message": "send_request_headers.started request=<Request [b'POST']>"}
-{"timestamp": "2026-06-27 16:17:45,595", "severity": "DEBUG", "name": "httpcore.http11", "message": "send_request_headers.complete"}
-{"timestamp": "2026-06-27 16:17:45,595", "severity": "DEBUG", "name": "httpcore.http11", "message": "send_request_body.started request=<Request [b'POST']>"}
-{"timestamp": "2026-06-27 16:17:45,595", "severity": "DEBUG", "name": "httpcore.http11", "message": "send_request_body.complete"}
-{"timestamp": "2026-06-27 16:17:45,595", "severity": "DEBUG", "name": "httpcore.http11", "message": "receive_response_headers.started request=<Request [b'POST']>"}
-{"timestamp": "2026-06-27 16:17:45,616", "severity": "INFO", "name": "query_service", "message": "{\"request_id\": \"395f96f0-bd9c-4470-a2eb-aa5d7ff721c8\", \"user_id\": \"u-c63101514b42\", \"draft_id\": null, \"method\": \"GET\", \"path\": \"/api/v1/chat/history\", \"status\": 200, \"duration_ms\": 23}"}
-{"timestamp": "2026-06-27 16:17:45,617", "severity": "DEBUG", "name": "httpcore.http11", "message": "receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'date', b'Sat, 27 Jun 2026 13:17:45 GMT'), (b'server', b'uvicorn'), (b'content-length', b'100'), (b'content-type', b'application/json')])"}
-{"timestamp": "2026-06-27 16:17:45,618", "severity": "INFO", "name": "httpx", "message": "HTTP Request: POST http://127.0.0.1:8091/api/v1/rag/search \"HTTP/1.1 200 OK\""}
-{"timestamp": "2026-06-27 16:17:45,618", "severity": "DEBUG", "name": "httpcore.http11", "message": "receive_response_body.started request=<Request [b'POST']>"}
-{"timestamp": "2026-06-27 16:17:45,618", "severity": "DEBUG", "name": "httpcore.http11", "message": "receive_response_body.complete"}
-{"timestamp": "2026-06-27 16:17:45,618", "severity": "DEBUG", "name": "httpcore.http11", "message": "response_closed.started"}
-{"timestamp": "2026-06-27 16:17:45,618", "severity": "DEBUG", "name": "httpcore.http11", "message": "response_closed.complete"}
-{"timestamp": "2026-06-27 16:17:45,618", "severity": "DEBUG", "name": "httpcore.connection", "message": "close.started"}
-{"timestamp": "2026-06-27 16:17:45,619", "severity": "DEBUG", "name": "httpcore.connection", "message": "close.complete"}
-{"timestamp": "2026-06-27 16:17:45,619", "severity": "INFO", "name": "app.services.pipeline", "message": "no chunks found", "message_id": 6}
-{"timestamp": "2026-06-27 16:17:45,631", "severity": "INFO", "name": "query_service", "message": "{\"request_id\": \"eaebf306-db78-4636-b439-8a2b367b82eb\", \"user_id\": \"u-c63101514b42\", \"draft_id\": null, \"method\": \"GET\", \"path\": \"/api/v1/chat/history/export\", \"status\": 200, \"duration_ms\": 0}"}
-{"timestamp": "2026-06-27 16:17:45,650", "severity": "INFO", "name": "query_service", "message": "{\"request_id\": \"a44487bb-8dd1-4f91-a9ef-3eb7d94e93e9\", \"user_id\": \"u-c63101514b42\", \"draft_id\": null, \"method\": \"POST\", \"path\": \"/api/v1/text/search\", \"status\": 200, \"duration_ms\": 0}"}
-{"timestamp": "2026-06-27 16:17:46,081", "severity": "INFO", "name": "query_service", "message": "{\"request_id\": \"8b67a687-ac3a-40a6-8f95-66ff5db33fbe\", \"user_id\": null, \"draft_id\": null, \"method\": \"GET\", \"path\": \"/health\", \"status\": 200, \"duration_ms\": 1}"}
-{"timestamp": "2026-06-27 16:17:46,085", "severity": "INFO", "name": "query_service", "message": "{\"request_id\": \"88195818-289e-49c4-be0f-a44528620e0b\", \"user_id\": null, \"draft_id\": null, \"method\": \"POST\", \"path\": \"/api/v1/chat/projects\", \"status\": 401, \"duration_ms\": 0}"}
-{"timestamp": "2026-06-27 16:17:46,089", "severity": "INFO", "name": "query_service", "message": "{\"request_id\": \"59ce028b-8f54-483b-bf93-d08c0bd92ca0\", \"user_id\": null, \"draft_id\": null, \"method\": \"POST\", \"path\": \"/api/v1/chat/projects\", \"status\": 401, \"duration_ms\": 0}"}
-{"timestamp": "2026-06-27 16:17:46,092", "severity": "INFO", "name": "query_service", "message": "{\"request_id\": \"b242bcb1-2d5e-414d-8417-547a6dde6e4c\", \"user_id\": null, \"draft_id\": null, \"method\": \"POST\", \"path\": \"/api/v1/chat/projects\", \"status\": 401, \"duration_ms\": 0}"}
-{"timestamp": "2026-06-27 16:17:46,095", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for logs exporter due to UNAVAILABLE error"}
-{"timestamp": "2026-06-27 16:17:46,096", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 1.01s."}
-{"timestamp": "2026-06-27 16:17:46,096", "severity": "INFO", "name": "query_service", "message": "{\"request_id\": \"de729c8a-53b3-41cb-bddf-d783a38ec945\", \"user_id\": null, \"draft_id\": null, \"method\": \"GET\", \"path\": \"/api/v1/chat/projects\", \"status\": 401, \"duration_ms\": 1}"}
-{"timestamp": "2026-06-27 16:17:46,099", "severity": "INFO", "name": "query_service", "message": "{\"request_id\": \"cdf616a3-6508-46e5-98e1-7e8320941dc0\", \"user_id\": null, \"draft_id\": null, \"method\": \"GET\", \"path\": \"/api/v1/chat/projects\", \"status\": 401, \"duration_ms\": 0}"}
-{"timestamp": "2026-06-27 16:17:46,101", "severity": "INFO", "name": "query_service", "message": "{\"request_id\": \"42cafe26-d79e-40dd-be06-22fb3354e6e4\", \"user_id\": null, \"draft_id\": null, \"method\": \"GET\", \"path\": \"/api/v1/chat/projects\", \"status\": 401, \"duration_ms\": 0}"}
-{"timestamp": "2026-06-27 16:17:50,135", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export traces to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
-{"timestamp": "2026-06-27 16:17:51,677", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for logs exporter due to UNAVAILABLE error"}
-{"timestamp": "2026-06-27 16:17:51,677", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 1.18s."}
-{"timestamp": "2026-06-27 16:17:54,697", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
-{"timestamp": "2026-06-27 16:17:55,139", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for traces exporter due to UNAVAILABLE error"}
-{"timestamp": "2026-06-27 16:17:55,139", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting traces to signoz-otel-collector:4317, retrying in 0.94s."}
-{"timestamp": "2026-06-27 16:17:55,697", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for logs exporter due to UNAVAILABLE error"}
-{"timestamp": "2026-06-27 16:17:55,698", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 0.86s."}
-{"timestamp": "2026-06-27 16:18:00,008", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export traces to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
-{"timestamp": "2026-06-27 16:18:01,429", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for logs exporter due to UNAVAILABLE error"}
-{"timestamp": "2026-06-27 16:18:01,429", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 0.84s."}
-{"timestamp": "2026-06-27 16:18:05,869", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
-{"timestamp": "2026-06-27 16:18:06,387", "severity": "INFO", "name": "query_service", "message": "{\"request_id\": \"7d97c5fa-11cd-4c96-bf72-6143f85d6966\", \"user_id\": null, \"draft_id\": null, \"method\": \"POST\", \"path\": \"/api/v1/chat/projects\", \"status\": 201, \"duration_ms\": 8}"}
-{"timestamp": "2026-06-27 16:18:06,410", "severity": "INFO", "name": "query_service", "message": "{\"request_id\": \"0adef3a9-dbc8-426b-b511-02a02c511ea8\", \"user_id\": \"u-c63101514b42\", \"draft_id\": null, \"method\": \"POST\", \"path\": \"/api/v1/chat/sessions\", \"status\": 201, \"duration_ms\": 5}"}
-{"timestamp": "2026-06-27 16:18:06,870", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for logs exporter due to UNAVAILABLE error"}
-{"timestamp": "2026-06-27 16:18:06,871", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 1.18s."}
+{"timestamp": "2026-06-27 18:34:51,316", "severity": "INFO", "name": "app.services.pipeline", "message": "no chunks found", "message_id": 10}
+{"timestamp": "2026-06-27 18:34:52,361", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:34:53,363", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for logs exporter due to UNAVAILABLE error"}
+{"timestamp": "2026-06-27 18:34:53,363", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 0.96s."}
+{"timestamp": "2026-06-27 18:34:58,183", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:34:58,189", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for traces exporter due to UNAVAILABLE error"}
+{"timestamp": "2026-06-27 18:34:58,190", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting traces to signoz-otel-collector:4317, retrying in 1.16s."}
+{"timestamp": "2026-06-27 18:34:59,184", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for logs exporter due to UNAVAILABLE error"}
+{"timestamp": "2026-06-27 18:34:59,184", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 1.18s."}
+{"timestamp": "2026-06-27 18:35:01,207", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting traces to signoz-otel-collector:4317, retrying in 1.64s."}
+{"timestamp": "2026-06-27 18:35:02,208", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:03,209", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for logs exporter due to UNAVAILABLE error"}
+{"timestamp": "2026-06-27 18:35:03,210", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 0.97s."}
+{"timestamp": "2026-06-27 18:35:06,038", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:07,039", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for logs exporter due to UNAVAILABLE error"}
+{"timestamp": "2026-06-27 18:35:07,039", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 1.01s."}
+{"timestamp": "2026-06-27 18:35:09,900", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:10,901", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for logs exporter due to UNAVAILABLE error"}
+{"timestamp": "2026-06-27 18:35:10,902", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 1.07s."}
+{"timestamp": "2026-06-27 18:35:15,861", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:15,933", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for metrics exporter due to UNAVAILABLE error"}
+{"timestamp": "2026-06-27 18:35:15,933", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to signoz-otel-collector:4317, retrying in 1.04s."}
+{"timestamp": "2026-06-27 18:35:16,863", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for logs exporter due to UNAVAILABLE error"}
+{"timestamp": "2026-06-27 18:35:16,863", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 0.93s."}
+{"timestamp": "2026-06-27 18:35:18,825", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export metrics to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:19,656", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 2.06s."}
+{"timestamp": "2026-06-27 18:35:21,714", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:22,716", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for logs exporter due to UNAVAILABLE error"}
+{"timestamp": "2026-06-27 18:35:22,717", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 0.82s."}
+{"timestamp": "2026-06-27 18:35:27,201", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:28,202", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for logs exporter due to UNAVAILABLE error"}
+{"timestamp": "2026-06-27 18:35:28,202", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 0.95s."}
+{"timestamp": "2026-06-27 18:35:31,015", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:32,015", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for logs exporter due to UNAVAILABLE error"}
+{"timestamp": "2026-06-27 18:35:32,016", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 1.09s."}
+{"timestamp": "2026-06-27 18:35:36,872", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:37,874", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for logs exporter due to UNAVAILABLE error"}
+{"timestamp": "2026-06-27 18:35:37,876", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 0.99s."}
+{"timestamp": "2026-06-27 18:35:40,727", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 1.96s."}
+{"timestamp": "2026-06-27 18:35:42,686", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:43,687", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for logs exporter due to UNAVAILABLE error"}
+{"timestamp": "2026-06-27 18:35:43,688", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 1.17s."}
+{"timestamp": "2026-06-27 18:35:48,406", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:49,407", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for logs exporter due to UNAVAILABLE error"}
+{"timestamp": "2026-06-27 18:35:49,407", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 1.18s."}
+{"timestamp": "2026-06-27 18:35:52,469", "severity": "ERROR", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Failed to export logs to signoz-otel-collector:4317, error code: StatusCode.UNAVAILABLE"}
+{"timestamp": "2026-06-27 18:35:53,471", "severity": "DEBUG", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Reinitializing gRPC channel for logs exporter due to UNAVAILABLE error"}
+{"timestamp": "2026-06-27 18:35:53,471", "severity": "WARNING", "name": "opentelemetry.exporter.otlp.proto.grpc.exporter", "message": "Transient error StatusCode.UNAVAILABLE encountered while exporting logs to signoz-otel-collector:4317, retrying in 1.11s."}
+{"timestamp": "2026-06-27 18:35:55,060", "severity": "INFO", "name": "query_service", "message": "{\"request_id\": \"bc4c3e34-8a29-49e0-ab13-eedf9d79e45d\", \"user_id\": null, \"draft_id\": null, \"method\": \"POST\", \"path\": \"/api/v1/chat/projects\", \"status\": 201, \"duration_ms\": 14}"}
+{"timestamp": "2026-06-27 18:35:55,084", "severity": "INFO", "name": "query_service", "message": "{\"request_id\": \"03d51736-f4bb-43f6-92db-eaf83b150f00\", \"user_id\": \"u-911e4f171954\", \"draft_id\": null, \"method\": \"POST\", \"path\": \"/api/v1/chat/sessions\", \"status\": 201, \"duration_ms\": 7}"}
 
 ```

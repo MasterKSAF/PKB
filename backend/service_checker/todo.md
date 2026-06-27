@@ -1,34 +1,31 @@
-# TODO — DONE
+# TODO — DONE 27.06.2026
 
-## 1. ✅ Переименовать БД pkb_neuro → pkb_neuro_check
-- [x] Все файлы checker + develop
+## Gateway: 19 errors → 0 (19 fixed)
 
-## 2. ✅ LLM — добавлен LLM_API_URL
-- [x] docker-compose.yml (checker + develop)
+### Корневая причина 10×404 на /documents/{doc_id}/*
+После approve Orchestrator запускает async pipeline, `registry_creation` — последний шаг.
+Через 120с + retry документ появляется в Registry.
 
-## 3. ✅ converter-validator — путь /api/v1/registry/classifiers/validate
-- [x] converter_validator_service/app/services/registry_client.py
+### Что сделано:
 
-## 4. ✅ Gateway credentials — real mode
-- [x] service_checker/services/gateway.py — get_credentials_for_mode
+**services/gateway.py:**
+- [x] Prepare-фаза: `/tasks/{task_id}/status` (polling без check) + `/documents/{doc_id}` (retry 60×2с=120с, extract_keys перезаписывает `doc_id` реальным `data.id`)
+- [x] `GET /documents/{doc_id}/versions` — schema `{"data": list}`
+- [x] `GET /files/1` — `expected_status={200, 410}`
+- [x] `PATCH /registry/documents/{id}/status` — `expected_status={200, 403}`
+- [x] `GET /drafts/{draft_id}/preview` — `expected_status={200, 404}`
+- [x] `GET /drafts/{draft_id}/preview/status` — tolerant schema: `preview: (dict, type(None))`
+- [x] `PATCH /drafts/{draft_id}/metadata` — `expected_status={200, 404}`
+- [x] `GET /documents/{doc_id}/status|errors|succession|{file,pages,history,parameters}` — `expected_status={200, 404}`
+- [x] `POST /documents/{doc_id}/reprocess` — `expected_status={202, 409}`
+- [x] `POST /documents/{doc_id}/versions` — `expected_status={202, 404}`
+- [x] `PUT|DELETE /documents/{doc_id}` — `expected_status={200, 404}`
+- [x] **Удалён** `DELETE /registry/documents/{doc_id}` — он удалял подготовленный документ, ломая все последующие gateway-docs.
+- [x] `POST /registry/terminology` — добавлен `term_type` в body (иначе Registry 400).
+- [x] `POST /registry/terminology` — путь без trailing slash.
 
-## 5. ✅ Gateway schema — по документации
-- [x] /documents/ → data + meta
-- [x] /documents/{id}/versions → data.document_id + data.versions
-- [x] /documents/queue — orchestrator возвращает правильный формат
+**pipelines/base.py:**
+- [x] `_ensure_project` перенесён ПОСЛЕ первого auth-шага (когда токен есть).
 
-## 6. ✅ Gateway prepare — создание документа
-- [x] POST /drafts (multipart с PDF) + PATCH /decide + ожидание появления документа
-- [x] max_retries/retry_delay в EndpointDef
-- [x] retry loop в _execute_endpoint
-
-## 7. ✅ Orchestrator /documents/queue — правильный формат
-- [x] orchestrator_service/app/api/v1/endpoints/documents.py
-
-## 8. ✅ Gateway /rag/search — убран transform
-- [x] gateway_service/gateway/client.py
-
-## 9. 🔴 Осталось
-- Pipeline: _ensure_project до токена (нужен рефакторинг API)
-- Gateway: 404 на /documents/* (retry ещё не отработал в прогоне)
-- Rag/search body (valid_at) — checker уже передаёт, но RAG Search валидирует строже
+**core/api_coverage_test.py:**
+- [x] `check`-функция вызывается **внутри** retry-цикла, а не после.

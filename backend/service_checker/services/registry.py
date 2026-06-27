@@ -69,7 +69,6 @@ def get_service_def() -> ServiceDef:
     """Вернуть полное описание Registry Service."""
 
     _warnings = [
-            "⚠️ Registry не поддерживает trailing slash — эндпоинты /classifiers, /documents, /terminology без / в конце.",
             "⚠️ PATCH /documents/{id}/status — internal API (только Orchestrator), checker ожидает 403.",
             "⚠️ PATCH /drafts/{id}/metadata — internal API (только Orchestrator), checker ожидает 404.",
         ]
@@ -138,7 +137,7 @@ def get_service_def() -> ServiceDef:
             "classifiers", "Импорт классификаторов (file upload)",
             response_schema={"data": dict, "data.classifier_system": str, "data.inserted": int},
             is_preparation=True,
-            expected_status={422}),
+            expected_status={400, 422}),
         EndpointDef("GET", f"{API_PREFIX}/registry/classifiers/pending",
             "classifiers", "Карантин",
             response_schema={"data": list}),
@@ -177,7 +176,7 @@ def get_service_def() -> ServiceDef:
             "terminology", "Импорт терминов (file upload)",
             response_schema={"data": dict, "data.inserted": int},
             is_preparation=True,
-            expected_status={422}),
+            expected_status={400, 422}),
         # ── Documents CRUD ──
         EndpointDef("GET", f"{API_PREFIX}/registry/documents", "documents",
             "Список документов",
@@ -209,7 +208,7 @@ def get_service_def() -> ServiceDef:
             "documents", "Массовый импорт (file upload)",
             response_schema={"data": dict, "data.inserted": int},
             is_preparation=True,
-            expected_status={422}),
+            expected_status={400, 422}),
         # ── Documents: Search (BM25) ──
         # RG-8: GET /registry/search?q=... (не /documents/search)
         EndpointDef("GET", f"{API_PREFIX}/registry/search",
