@@ -3,6 +3,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     SERVICE_NAME: str = "rag_search_service_spd"
+    OBSERVABILITY_ENABLED: bool = False
+    OTEL_EXPORTER_OTLP_ENDPOINT: str = "localhost:4317"
+    LOG_LEVEL: str = "INFO"
 
     POSTGRES_HOST: str = "127.0.0.1"
     POSTGRES_PORT: int = 5432
