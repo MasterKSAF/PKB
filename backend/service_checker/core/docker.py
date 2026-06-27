@@ -463,7 +463,7 @@ def _docker_health_check(services: List[str]) -> bool:
     log_header("Docker Health Check: celery-worker")
     try:
         celery_cmd = ["docker", "exec", "pkb-celery-worker",
-                      "celery", "-A", "tasks", "inspect", "ping", "-t", "5"]
+                      "celery", "-A", "app.celery_app", "inspect", "ping", "-t", "5"]
         celery_result = subprocess.run(
             celery_cmd, capture_output=True, text=True, timeout=10,
         )
