@@ -1,43 +1,32 @@
-# Todo: комплексные тесты — State Machine, Consistency, Saga, Boundary
+# Todo: Fix 2 xfail bugs
 
-## Статус: ✅ ВЫПОЛНЕНО
+## Статус: 🚧 НАЧАТО
 
-### 1. State Machine Violations — матрица [действие × stage]
-  - `tests/orchestrator/test_drafts_state_machine.py`
-  - 30 комбинаций + 10 terminal-статусов = **40 тестов**
+## Баг 1: approve_draft не синхронизирует document_id с Registry
 
-### 2. Mock-real gap — draft_id=0, ключи id/draft_id
-  - `tests/test_service_clients_registry.py::TestRegistryMockRealGap` — **3 теста**
-  - `tests/orchestrator/test_drafts_consistency.py::TestMockRealGap` — **3 теста** (1 xfail)
-  - Найден баг: `data.get("id") or data.get("draft_id")` — 0 is falsy
+**Где:** `app/core/pipeline/orchestrator.py` → `approve_draft()`
 
-### 3. Data consistency — после approve
-  - `tests/orchestrator/test_drafts_consistency.py::TestApproveConsistency` — **2 теста** (1 xfail)
-  - Найден баг: approve_draft не вызывает `registry.update_draft_status(document_id=...)`
+**Проблема:** `approve_draft` создаёт документ через `Registry.create_document()`,
+но НЕ вызывает `registry.update_draft_status(document_id=document_id)`, чтобы
+проставить `document_id` обратно в черновик Registry.
 
-### 4. Boundary conditions
-  - `tests/orchestrator/test_drafts_consistency.py::TestBoundaryConditions` — **6 тестов**
-  - file_size boundary, metadata=null, title="", page_size=0
+**Исправление:** после `create_document()` → вызвать `update_draft_status(draft_id, status="approved", document_id=document_id)`
 
-### 5. Saga compensation
-  - `tests/unit/test_saga_compensation.py` — **8 тестов**
-  - Компенсация registry_creation, stateless шаги, reverse order, on_step_failed → Saga
+**Файлы:**
+- `app/core/pipeline/orchestrator.py` — добавить вызов update_draft_status в approve_draft
+- `tests/orchestrator/test_drafts_consistency.py` — снять `pytest.xfail()`, тест должен проходить
 
-### 6. Idempotency
-  - `tests/orchestrator/test_drafts_consistency.py::TestIdempotency` — **3 теста**
-  - Двойной POST /drafts с одним Idempotency-Key → 200 + тот же draft_id (**РЕАЛИЗОВАНО**)
-  - Разные ключи → разные draft_id
-  - Двойной POST /preview → 409 PREVIEW_ALREADY_RUNNING
+---
 
-### Production-фикс
-- **Idempotency-Key** для POST /drafts — добавлен in-memory кэш с TTL 1ч
-- Файл: `app/api/v1/endpoints/drafts.py`
+## Баг 2: `data.get("id") or data.get("draft_id")` — 0 is falsy
 
-### Итог
-- **+62 новых теста** (40 + 12 + 8 + 3)
-- **+1 production фикс** (Idempotency-Key)
-- **2 xfail** — документированные баги
-- **466 passed, 2 xfailed**
-- **Найдено 2 бага:**
-  1. `data.get("id") or data.get("draft_id")` — 0 is falsy
-  2. `approve_draft` не синхронизирует document_id с Registry
+**Где:** эндпоинты, которые проксируют ответ Registry и используют `data.get("id") or data.get("draft_id")`
+
+**Проблема:** если `id=0` (реальное значение), то `0 or ...` вернёт `...`, а не 0.
+В mock-тестах `id` проставляется в 0, `draft_id` отсутствует → результат None.
+
+**Исправление:** заменить `data.get("id") or data.get("draft_id")` на `data.get("id") if data.get("id") is not None else data.get("draft_id")`
+
+**Файлы:**
+- `app/...` — найти все вхождения паттерна `data.get("id") or data.get("draft_id")` и исправить
+- `tests/orchestrator/test_drafts_consistency.py` — снять `pytest.xfail()`, тест должен проходить

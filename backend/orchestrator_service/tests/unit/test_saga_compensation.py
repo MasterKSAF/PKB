@@ -33,13 +33,14 @@ def mock_task_repo(mock_db):
 class MockStep:
     """Simulate a TaskStep for testing compensation."""
 
-    def __init__(self, step_name, step_index, status="completed", output_data=None):
+    def __init__(self, step_name, step_index, status="completed", output_data=None, service_name=""):
         self.id = step_index * 100
         self.task_id = 1
         self.step_name = step_name
         self.step_index = step_index
         self.status = status
         self.output_data = output_data or {}
+        self.service_name = service_name or step_name
 
 
 class MockTask:

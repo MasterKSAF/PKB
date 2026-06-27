@@ -33,10 +33,12 @@
 - `/system/health`, `/health/live`, `/health/ready` — health-check
 
 ### 3. Двухфазный pipeline
-- **Preview фаза:** быстрая обработка первых страниц (OCR/Parser → Converter-validator) → решение пользователя.
-- **Full фаза:** полная обработка (OCR/Parser → Converter-validator → Registry → RAG Builder).
-- Ветвление по MIME-типу: image/* → OCR, application/pdf → Parser.
-- Preview_not_supported → пропуск full-фазы.
+- **Preview фаза:** быстрая обработка первых страниц (Parser → OCR fallback → Converter-validator) → решение пользователя.
+- **Full фаза:** полная обработка (Parser → OCR fallback → Converter-validator → Registry → RAG Builder).
+- **Parser-first стратегия:** Parser пробуется первым для всех типов файлов (даже image/*).
+- **OCR fallback:** при недоступности Parser или `preview_not_supported=true` — автоматический переход на OCR (если `PARSER_FALLBACK_TO_OCR=true` и `OCR_ENABLED=true`).
+- `PARSER_ENABLED` / `OCR_ENABLED` — опции полного отключения сервисов.
+- Preview_not_supported → fallback на OCR или пропуск full-фазы.
 
 ### 4. Task как агрегатор шагов
 - Один Task = одна pipeline-задача (formation/indexation).

@@ -14,11 +14,19 @@
 заменен на корректную обработку ошибок с ретраем через tenacity.
 
 ### 1.3. Двухфазный pipeline
-- **Preview-фаза:** Upload → OCR/Parser (3 страницы) → Converter-validator
+- **Preview-фаза:** Upload → Parser (3 страницы) → [OCR fallback] → Converter-validator
 - **Decision:** auto-approve (если preview полный) или ожидание решения пользователя
-- **Full-фаза:** OCR/Parser → Converter-validator → Registry
+- **Full-фаза:** Parser → [OCR fallback] → Converter-validator → Registry
 
-### 1.3. TaskStep.input_data / output_data — JSONB
+### 1.3a. Parser-first стратегия (27.06)
+- **Parser** пробуется первым для ВСЕХ типов файлов (включая image/*).
+- **OCR fallback** при:
+  1. `ConnectError` / ошибке Parser (через `on_step_failed`)
+  2. `preview_not_supported` от Parser (через `_on_preview_completed`)
+- Опции: `PARSER_ENABLED`, `OCR_ENABLED`, `PARSER_FALLBACK_TO_OCR`.
+- Если оба disabled — `ValueError` при старте пайплайна.
+
+### 1.3b. TaskStep.input_data / output_data — JSONB
 Вместо `input_ref` / `output_ref` (строковые ссылки) используются JSON-контейнеры.
 В SQLite хранятся как JSON, в PostgreSQL — как JSONB.
 

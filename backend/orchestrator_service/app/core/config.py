@@ -49,6 +49,9 @@ class ServiceConfig(BaseSettings):
     OCR_SERVICE_MOCK: bool = Field(
         default=False, description="Use mock mode for OCR service"
     )
+    OCR_ENABLED: bool = Field(
+        default=True, description="Enable OCR service"
+    )
 
     # Parser Service (port 8089)
     PARSER_SERVICE_URL: Optional[str] = Field(
@@ -56,6 +59,12 @@ class ServiceConfig(BaseSettings):
     )
     PARSER_SERVICE_MOCK: bool = Field(
         default=False, description="Use mock mode for parser service"
+    )
+    PARSER_ENABLED: bool = Field(
+        default=True, description="Enable parser service"
+    )
+    PARSER_FALLBACK_TO_OCR: bool = Field(
+        default=True, description="Fallback from parser to OCR if parser unavailable or preview_not_supported"
     )
 
     # Converter-Validator Service (port 8090)
@@ -122,9 +131,9 @@ class PipelineConfig(BaseSettings):
     )
 
     # Full phase mode (P1F-9): auto | partial | full
-    # auto  — full_completed (preview_not_supported) → skip OCR, else full OCR
-    # partial — always run full OCR/Parser even if full preview is available
-    # full   — skip full OCR/Parser entirely (full_completed must be True)
+    # auto  — full_completed (preview_not_supported) → skip processing, else full Parser/OCR
+    # partial — always run full Parser/OCR even if full preview is available
+    # full   — skip full Parser/OCR entirely (full_completed must be True)
     FULL_PHASE_MODE: str = Field(
         default="auto",
         description="Full phase strategy: auto | partial | full",
