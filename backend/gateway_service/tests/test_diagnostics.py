@@ -39,8 +39,8 @@ class TestKnownServices:
             assert svc in KNOWN_SERVICES, f"Missing infra: {svc}"
 
     def test_known_services_rag_and_converter(self):
-        """KNOWN_SERVICES включает rag и converter."""
-        for svc in ("rag_builder", "rag_search", "converter_validator"):
+        """KNOWN_SERVICES включает rag и converter (c дефисами)."""
+        for svc in ("rag-builder", "rag-search", "converter-validator"):
             assert svc in KNOWN_SERVICES, f"Missing: {svc}"
 
 
