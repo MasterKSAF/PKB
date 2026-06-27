@@ -32,7 +32,7 @@ async def normalize_term(term: str) -> str:
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.get(
-                f"{settings.REGISTRY_SERVICE_URL}/registry/terminology/normalize",
+                f"{settings.REGISTRY_SERVICE_URL}/api/v1/registry/terminology/normalize",
                 params={"term": term},
             )
             resp.raise_for_status()

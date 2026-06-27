@@ -102,7 +102,7 @@ x-env-service-urls: &env-service-urls
   AUTH_SERVICE_URL: http://auth:8082
   ORCHESTRATOR_SERVICE_URL: http://orchestrator:8081
   QUERY_SERVICE_URL: http://query:8083
-  REGISTRY_SERVICE_URL: http://registry:8084/api/v1
+  REGISTRY_SERVICE_URL: http://registry:8084
   CONVERTER_VALIDATOR_SERVICE_URL: http://converter-validator:8086
   CONVERTER_SERVICE_URL: http://converter-validator:8086
   VALIDATE_SERVICE_URL: http://converter-validator:8086
