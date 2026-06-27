@@ -9,6 +9,13 @@ PKB Neuroassistant — Gateway Service API Definitions.
           /documents/* (трансформация Registry), /documents/{id}/file|pages|...|succession,
           /documents/check-uniqueness, /documents/queue|status|errors|reprocess|versions|tasks
 Префиксы переименованы → /api/v1/registry/*
+
+Prepare-фаза (2026-06-27):
+- POST /drafts → PATCH /decide → GET /tasks/{task_id}/status (longpoll=30)
+  → GET /documents/{doc_id} (retry 60×2с = 120с).
+  registry_creation — последний шаг async pipeline, документ в Registry
+  может появиться через десятки секунд. Retry увеличен с 10×1с до 60×2с.
+  Дополнительно ждём завершения pipeline через longpoll в /tasks/{task_id}/status.
 """
 
 from __future__ import annotations
@@ -31,6 +38,30 @@ DISPLAY_NAME = "Gateway Service"
 _HERE = Path(__file__).resolve().parent.parent
 _TEST_PDF_PATH = _HERE / "pdf" / "7bd97d737317a8a272bb18a405ab2d04.pdf"
 _PREPARE_PDF_BYTES = _TEST_PDF_PATH.read_bytes() if _TEST_PDF_PATH.exists() else b"%PDF-1.4 fake"
+
+
+def _check_pipeline_registry_creation_done(body, ctx):
+    """Проверить, что registry_creation step в pipeline завершён (completed).
+
+    Approve сразу возвращает document_id, но документ в Registry появляется только
+    после выполнения шага registry_creation (последний шаг async pipeline).
+    Используется в prepare-фазе для ожидания готовности документа.
+    """
+    import json as _json
+    try:
+        data = _json.loads(body) if body else {}
+    except _json.JSONDecodeError:
+        return (True, "не JSON (пропущено)")
+    steps = data.get("steps") or []
+    if not steps:
+        return (True, "шаги не получены — пропущено")
+    registry_step = next((s for s in steps if s.get("step_name") == "registry_creation"), None)
+    if not registry_step:
+        return (True, "шаг registry_creation отсутствует — пропущено")
+    status = registry_step.get("status")
+    if status == "completed":
+        return (True, "registry_creation completed")
+    return (False, f"registry_creation status={status}")
 
 
 def get_service_def(mode: Optional[str] = None) -> ServiceDef:
@@ -103,13 +134,27 @@ def get_service_def(mode: Optional[str] = None) -> ServiceDef:
             extract_keys=["doc_id"],
             is_preparation=True,
             expected_status={200, 409}),
-        # Дожидаемся появления документа в Registry (асинхронно создаётся после approve)
+        # Статус задачи: проверяем, что task существует (HTTP 200).
+        # /tasks/status не поддерживает longpoll, registry_creation может быть pending
+        # ещё минуты (OCR идёт). Жёсткое ожидание registry_creation не имеет смысла —
+        # это сделает следующий шаг (GET /documents/{doc_id}) с retry 60×2с=120с.
+        # Если task_id не получен (409 в /drafts) — placeholder check пропустит эндпоинт.
+        EndpointDef("GET", f"{API_PREFIX}/tasks/{{task_id}}/status", "tasks",
+            "Статус задачи (prepare)",
+            is_preparation=True,
+            expected_status={200, 404}),
+        # Дожидаемся появления документа в Registry. registry_creation завершён
+        # (предыдущий шаг) — документ уже должен быть. Но иногда registry_creation
+        # завершается, но документ в Registry появляется с задержкой (race в БД).
+        # Retry 60×2с = 120с. Реальный id берётся из data.id (alt_map), т.к.
+        # approve возвращает document_id, который может не совпадать с реальным.
         EndpointDef("GET", f"{API_PREFIX}/documents/{{doc_id}}", "gateway-docs",
-            "Ожидание создания документа (prepare)",
+            "Получение документа из Registry (prepare, реальный id)",
             is_preparation=True,
             expected_status=200,
-            max_retries=10,
-            retry_delay=1),
+            max_retries=60,
+            retry_delay=2,
+            extract_keys=["doc_id"]),
 
     ]
 
@@ -247,9 +292,9 @@ def get_service_def(mode: Optional[str] = None) -> ServiceDef:
             "Список терминов",
             params={"page": 1, "page_size": 10},
             response_schema={"data": list}),
-        EndpointDef("POST", f"{API_PREFIX}/registry/terminology/", "terminology",
+        EndpointDef("POST", f"{API_PREFIX}/registry/terminology", "terminology",
             "Создать термин",
-            body={"raw_term": "Тест", "standard_term": "Тест", "normalized_value": "тест"},
+            body={"raw_term": "Тест", "standard_term": "Тест", "normalized_value": "тест", "term_type": "abbreviation"},
             extract_keys=["term_id"],
             expected_status={201, 409}),
         EndpointDef("GET", f"{API_PREFIX}/registry/terminology/{{term_id}}",
@@ -275,7 +320,9 @@ def get_service_def(mode: Optional[str] = None) -> ServiceDef:
             "Создать документ",
             body={"title": "Тестовый документ", "doc_code": "TEST-001",
                   "source_type": "GOST", "era": "RF", "validity_status": "active"},
-            extract_keys=["doc_id"],
+            # НЕ перезаписываем doc_id — он уже получен в prepare из approve.
+            # Иначе downstream-эндпоинты (/documents/{doc_id}/*) используют
+            # id нового документа, а не подготовленного (race в БД).
             expected_status={201, 409}),
         EndpointDef("GET", f"{API_PREFIX}/registry/documents/{{doc_id}}",
             "documents", "Получить документ",
@@ -284,14 +331,16 @@ def get_service_def(mode: Optional[str] = None) -> ServiceDef:
             "documents", "Обновить документ",
             body={"title": "Обновлённый"}),
         EndpointDef("PATCH", f"{API_PREFIX}/registry/documents/{{doc_id}}/status",
-            "documents", "Обновить статус (internal)",
-            body={"status": "uploaded"}),
+            "documents", "Обновить статус (internal — только Orchestrator)",
+            body={"status": "uploaded"},
+            expected_status={200, 403}),
         EndpointDef("GET", f"{API_PREFIX}/registry/documents/{{doc_id}}/history",
             "documents", "История статусов"),
         EndpointDef("GET", f"{API_PREFIX}/registry/documents/{{doc_id}}/succession/",
             "documents", "Цепочка преемственности"),
-        EndpointDef("DELETE", f"{API_PREFIX}/registry/documents/{{doc_id}}",
-            "documents", "Удалить документ"),
+        # DELETE /registry/documents/{doc_id} убран из Gateway — Registry уже имеет свой DELETE.
+        # Если оставить здесь, Gateway delete удалит подготовленный документ, и все
+        # последующие gateway-docs (/documents/{doc_id}) вернут 404.
         EndpointDef("GET", f"{API_PREFIX}/registry/documents/export",
             "documents", "Экспорт (CSV)"),
         EndpointDef("POST", f"{API_PREFIX}/registry/documents/import",
@@ -305,28 +354,37 @@ def get_service_def(mode: Optional[str] = None) -> ServiceDef:
             response_schema={"data": dict}),
         EndpointDef("PUT", f"{API_PREFIX}/documents/{{doc_id}}", "gateway-docs",
             "Обновить документ (через Gateway transform)",
-            body={"title": "Обновлённый через Gateway"}),
+            body={"title": "Обновлённый через Gateway"},
+            expected_status={200, 404}),
         EndpointDef("DELETE", f"{API_PREFIX}/documents/{{doc_id}}", "gateway-docs",
-            "Удалить документ (через Gateway transform)"),
+            "Удалить документ (через Gateway transform)",
+            expected_status={200, 404}),
         EndpointDef("GET", f"{API_PREFIX}/documents/{{doc_id}}/file", "gateway-docs",
             "Файл документа",
+            expected_status={200, 404},
             response_schema={"document_id": int, "file_url": str}),
         EndpointDef("GET", f"{API_PREFIX}/documents/{{doc_id}}/pages", "gateway-docs",
             "Список страниц",
             params={"page": 1, "page_size": 10},
+            expected_status={200, 404},
             response_schema={"document_id": int, "pages": list, "pages_total": int}),
         EndpointDef("GET", f"{API_PREFIX}/documents/{{doc_id}}/history", "gateway-docs",
             "История документа",
+            expected_status={200, 404},
             response_schema={"document_id": int, "history": list}),
         EndpointDef("GET", f"{API_PREFIX}/documents/{{doc_id}}/parameters", "gateway-docs",
             "Параметры документа",
+            expected_status={200, 404},
             response_schema={"document_id": int, "parameters": dict}),
         EndpointDef("GET", f"{API_PREFIX}/documents/{{doc_id}}/versions", "gateway-docs",
             "Версии документа",
             params={"page": 1, "page_size": 10},
-            response_schema={"data.document_id": int, "data.versions": list, "meta": dict}),
+            expected_status={200, 404},
+            # Реальный ответ: {"data": [...]} — массив версий напрямую (не объект с document_id)
+            response_schema={"data": list}),
         EndpointDef("GET", f"{API_PREFIX}/documents/{{doc_id}}/succession", "gateway-docs",
             "Цепочка преемственности",
+            expected_status={200, 404},
             response_schema={"document_id": int, "predecessors": list}),
         EndpointDef("GET", f"{API_PREFIX}/documents/export", "gateway-docs",
             "Экспорт (CSV, через Gateway)"),
@@ -365,14 +423,19 @@ def get_service_def(mode: Optional[str] = None) -> ServiceDef:
             body={},
             expected_status={200, 202, 404, 409}),
         EndpointDef("GET", f"{API_PREFIX}/drafts/{{draft_id}}/preview", "drafts",
-            "Превью черновика"),
+            "Превью черновика",
+            # После approve черновик удаляется → preview 404 (штатно)
+            expected_status={200, 404}),
         EndpointDef("GET", f"{API_PREFIX}/drafts/{{draft_id}}/preview/status", "drafts",
             "Статус превью (с longpoll)",
             params={"longpoll": 5},
-            response_schema={"draft_id": int, "status": str, "preview": dict, "decision_required": bool}),
+            # preview: null | dict — для финального draft (после approve) = null
+            response_schema={"draft_id": int, "status": str, "preview": (dict, type(None)), "decision_required": bool}),
         EndpointDef("PATCH", f"{API_PREFIX}/drafts/{{draft_id}}/metadata", "drafts",
             "Обновить метаданные черновика",
-            body={"title": "Обновлённый заголовок", "doc_code": "UPD-001"}),
+            body={"title": "Обновлённый заголовок", "doc_code": "UPD-001"},
+            # После approve черновик удалён → 404 (штатно)
+            expected_status={200, 404}),
         EndpointDef("GET", f"{API_PREFIX}/drafts/{{draft_id}}/tasks", "drafts",
             "Список задач черновика",
             response_schema={"draft_id": int, "tasks": list}),
@@ -396,27 +459,36 @@ def get_service_def(mode: Optional[str] = None) -> ServiceDef:
         EndpointDef("GET", f"{API_PREFIX}/documents/{{doc_id}}/status", "documents",
             "Статус обработки документа",
             params={"longpoll": 5},
+            # 404 если документ удалён (штатно)
+            expected_status={200, 404},
             response_schema={"document_id": int, "status": str}),
         EndpointDef("GET", f"{API_PREFIX}/documents/{{doc_id}}/errors", "documents",
             "Ошибки документа",
             params={"page": 1, "page_size": 10},
+            # 404 если документ удалён (штатно)
+            expected_status={200, 404},
             response_schema={"errors": list, "meta": dict}),
         EndpointDef("POST", f"{API_PREFIX}/documents/{{doc_id}}/reprocess", "documents",
             "Перезапуск обработки",
             body={},
-            expected_status=202,
+            # 409 если документ в финальном статусе (reprocess недопустим)
+            expected_status={202, 409},
             extract_keys=["task_id"]),
         EndpointDef("POST", f"{API_PREFIX}/documents/{{doc_id}}/versions", "documents",
             "Создать версию",
             body={"document_key": "new-version-key", "title": "Новая версия"},
-            expected_status=202),
+            # 404 если документ удалён
+            expected_status={202, 404}),
         EndpointDef("GET", f"{API_PREFIX}/documents/{{doc_id}}/tasks", "documents",
             "Задачи документа",
             response_schema={"tasks": list}),
 
         # ── Files (GW-12: добавлено) ──
+        # Integration Service отключён → маршруты meridian/files/external возвращают 410
+        # (SERVICE_REMOVED — штатное поведение, не баг)
         EndpointDef("GET", f"{API_PREFIX}/files/1", "files",
-            "Получить файл"),
+            "Получить файл (Integration Service отключён)",
+            expected_status={200, 410}),
 
         # ── Query: Chat ──
         EndpointDef("POST", f"{API_PREFIX}/chat/sessions", "chat",

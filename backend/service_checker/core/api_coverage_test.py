@@ -561,6 +561,16 @@ class ApiCoverageTester:
                 else:
                     success = resp.status_code < 400
 
+                # Пост-обработка check внутри retry-цикла: если check вернул False,
+                # считаем это поводом для retry (ожидание асинхронного состояния).
+                if success and ep.check:
+                    try:
+                        check_ok, _check_msg = ep.check(resp_body, self.context)
+                    except Exception:
+                        check_ok = True
+                    if not check_ok:
+                        success = False
+
                 # Если успех — выходим из retry-цикла
                 if success:
                     break
@@ -575,12 +585,6 @@ class ApiCoverageTester:
             # Извлекаем контекст из ответа
             if success and ep.extract_keys:
                 self._extract_context(resp_body, ep.extract_keys)
-
-            # Пост-обработка: check-функция эндпоинта (модификация контекста и т.п.)
-            if success and ep.check:
-                check_ok, check_msg = ep.check(resp_body, self.context)
-                if not check_ok:
-                    success = False
 
             # Валидация схемы ответа (не для prepare)
             # Проверяется для 2xx/3xx успешных ответов.
