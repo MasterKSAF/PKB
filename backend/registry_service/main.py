@@ -67,6 +67,19 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+
+# ── Trailing slash redirect middleware ──────────────────────────────
+@app.middleware("http")
+async def remove_trailing_slash(request: Request, call_next):
+    """Редирект 307 с trailing slash на URL без слеша (кроме корня)."""
+    path = request.url.path
+    if len(path) > 1 and path.endswith("/"):
+        new_path = path.rstrip("/")
+        from starlette.responses import RedirectResponse
+        return RedirectResponse(url=str(request.url.replace(path=new_path)), status_code=307)
+    return await call_next(request)
+
+
 import time
 import uuid
 import traceback
@@ -317,4 +330,4 @@ app.include_router(v1_routes.routes, prefix="/api/v1", tags=["/api/v1"])
 
 @app.get("/")
 def root():
-    return {"message": "A list of endpoints is in the API docs directory"}
+    return {"message": "A list of endpoints is in the API docs directory"}

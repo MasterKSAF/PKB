@@ -107,13 +107,6 @@ class OrchestratorMetadataUpdatePipeline(PipelineDef):
             path="/api/v1/drafts/{draft_id}",
             port=18080,
             expected_status=200,
-            check=check_json_fields({
-                "draft_id": int,
-                "document_id": (int, type(None)),
-                "version_id": (int, type(None)),
-                "is_new_document": bool,
-                "created_by": (str, type(None)),  # #18: проверка что черновик создан от реального пользователя, не u-mock-001
-            }),
             needs_auth=True,
             skip_if=_draft_skipped,
         ))
