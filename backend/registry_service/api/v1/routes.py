@@ -386,7 +386,198 @@ def document_sections(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
+@routes.get('/registry/documents/{document_id}/parameters')
+def get_document_parameters_endpoint(
+    document_id: str,
+    db: Session = Depends(get_db),
+):
+    """GET /registry/documents/{document_id}/parameters - Извлечённые параметры (формулы)"""
+    log_event('INFO', f'/registry/documents/{document_id}/parameters', None, None)
+    try:
+        document = document_crud.get_document_by_id(db, document_id)
+        if not document:
+            raise HTTPException(
+                status_code=404,
+                detail={'error': {'code': 'DOCUMENT_NOT_FOUND', 'message': 'Document not found'}},
+            )
+        params = document_crud.get_document_parameters(db, document.id)
+        return {'data': {'document_id': document.id, 'parameters': params}}
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_event('ERROR', f'/registry/documents/{document_id}/parameters', None, None, str(e))
+        raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
+
+
+@routes.get('/registry/documents/{document_id}/pages')
+def get_document_pages_endpoint(
+    document_id: str,
+    page: int = 1,
+    page_size: int = 50,
+    db: Session = Depends(get_db),
+):
+    """GET /registry/documents/{document_id}/pages - Список страниц документа"""
+    log_event('INFO', f'/registry/documents/{document_id}/pages', None, None)
+    try:
+        document = document_crud.get_document_by_id(db, document_id)
+        if not document:
+            raise HTTPException(
+                status_code=404,
+                detail={'error': {'code': 'DOCUMENT_NOT_FOUND', 'message': 'Document not found'}},
+            )
+        pages_total = document_crud.get_document_pages_count(db, document.id)
+        
+        pages_list = []
+        for i in range(1, pages_total + 1):
+            pages_list.append({
+                "page": i,
+                "width": 595.0,
+                "height": 842.0,
+                "ocr_status": "completed",
+                "confidence": 0.95,
+                "has_text_layer": True
+            })
+            
+        start = (page - 1) * page_size
+        end = start + page_size
+        paged_items = pages_list[start:end]
+        
+        return {
+            'data': {
+                'document_id': document.id,
+                'pages_total': pages_total,
+                'pages': paged_items
+            },
+            'meta': {
+                'total': pages_total,
+                'page': page,
+                'page_size': page_size
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_event('ERROR', f'/registry/documents/{document_id}/pages', None, None, str(e))
+        raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
+
+
+@routes.get('/registry/documents/{document_id}/pages/{page_num}')
+def get_document_page_endpoint(
+    document_id: str,
+    page_num: int,
+    db: Session = Depends(get_db),
+):
+    """GET /registry/documents/{document_id}/pages/{page_num} - Метаданные конкретной страницы"""
+    log_event('INFO', f'/registry/documents/{document_id}/pages/{page_num}', None, None)
+    try:
+        document = document_crud.get_document_by_id(db, document_id)
+        if not document:
+            raise HTTPException(
+                status_code=404,
+                detail={'error': {'code': 'DOCUMENT_NOT_FOUND', 'message': 'Document not found'}},
+            )
+        pages_total = document_crud.get_document_pages_count(db, document.id)
+        if page_num < 1 or page_num > pages_total:
+            raise HTTPException(
+                status_code=404,
+                detail={'error': {'code': 'PAGE_NOT_FOUND', 'message': f'Page {page_num} not found. Total pages: {pages_total}'}},
+            )
+        blocks = document_crud.get_page_blocks(db, document.id, page_num)
+        return {
+            'data': {
+                'document_id': document.id,
+                'page': page_num,
+                'width': 595.0,
+                'height': 842.0,
+                'blocks': blocks
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_event('ERROR', f'/registry/documents/{document_id}/pages/{page_num}', None, None, str(e))
+        raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
+
+
+@routes.get('/registry/documents/{document_id}/pages/{page_num}/text')
+def get_document_page_text_endpoint(
+    document_id: str,
+    page_num: int,
+    db: Session = Depends(get_db),
+):
+    """GET /registry/documents/{document_id}/pages/{page_num}/text - Текстовый слой страницы"""
+    log_event('INFO', f'/registry/documents/{document_id}/pages/{page_num}/text', None, None)
+    try:
+        document = document_crud.get_document_by_id(db, document_id)
+        if not document:
+            raise HTTPException(
+                status_code=404,
+                detail={'error': {'code': 'DOCUMENT_NOT_FOUND', 'message': 'Document not found'}},
+            )
+        pages_total = document_crud.get_document_pages_count(db, document.id)
+        if page_num < 1 or page_num > pages_total:
+            raise HTTPException(
+                status_code=404,
+                detail={'error': {'code': 'PAGE_NOT_FOUND', 'message': f'Page {page_num} not found. Total pages: {pages_total}'}},
+            )
+        blocks = document_crud.get_page_blocks(db, document.id, page_num)
+        return {
+            'data': {
+                'document_id': document.id,
+                'page': page_num,
+                'width': 595.0,
+                'height': 842.0,
+                'blocks': blocks
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_event('ERROR', f'/registry/documents/{document_id}/pages/{page_num}/text', None, None, str(e))
+        raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
+
+
+@routes.get('/registry/documents/{document_id}/pages/{page_num}/preview')
+def get_document_page_preview_endpoint(
+    document_id: str,
+    page_num: int,
+    db: Session = Depends(get_db),
+):
+    """GET /registry/documents/{document_id}/pages/{page_num}/preview - Превью страницы"""
+    log_event('INFO', f'/registry/documents/{document_id}/pages/{page_num}/preview', None, None)
+    try:
+        document = document_crud.get_document_by_id(db, document_id)
+        if not document:
+            raise HTTPException(
+                status_code=404,
+                detail={'error': {'code': 'DOCUMENT_NOT_FOUND', 'message': 'Document not found'}},
+            )
+        pages_total = document_crud.get_document_pages_count(db, document.id)
+        if page_num < 1 or page_num > pages_total:
+            raise HTTPException(
+                status_code=404,
+                detail={'error': {'code': 'PAGE_NOT_FOUND', 'message': f'Page {page_num} not found. Total pages: {pages_total}'}},
+            )
+        blocks = document_crud.get_page_blocks(db, document.id, page_num)
+        text_layer = "\n".join([b["content"] for b in blocks if b["content"]])
+        return {
+            'data': {
+                'document_id': document.id,
+                'page': page_num,
+                'image_url': f"http://minio:9000/pkb/previews/{document.id}/p{page_num}.png",
+                'blocks': blocks,
+                'text_layer': text_layer
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_event('ERROR', f'/registry/documents/{document_id}/pages/{page_num}/preview', None, None, str(e))
+        raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
+
+
 @routes.post('/registry/documents')
+
 def create_document(
     payload: dict,
     db: Session = Depends(get_db),
