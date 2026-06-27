@@ -155,3 +155,101 @@ class TestRegistryDrafts:
             document_id=1, status="indexed"
         )
         assert result2["data"]["status"] == "indexed"
+
+
+# ===========================================================================
+# Mock-real gap: id=0 falsy and key divergence
+# ===========================================================================
+
+
+class TestRegistryMockRealGap:
+    """Тесты на расхождение mock-логики с реальностью."""
+
+    @pytest.mark.asyncio
+    async def test_get_draft_id_zero_not_falsy(self, reg_client):
+        """После фикса: data["id"]=0 **не** falsy.
+
+        Эндпоинт теперь использует:
+        data.get("id") if data.get("id") is not None else data.get("draft_id")
+        0 is not None → возвращается 0 (не draft_id).
+        """
+        storage = reg_client._storage
+        draft = {
+            "id": 0,
+            "draft_id": 42,
+            "file_key": "test",
+            "status": "uploaded",
+            "created_by": "test",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+        }
+        storage["drafts"][42] = draft
+
+        result = await reg_client.get_draft(draft_id=42)
+        assert "data" in result
+        data = result["data"]
+
+        # После фикса: id=0 возвращается корректно
+        resolved_id = data.get("id") if data.get("id") is not None else data.get("draft_id")
+        assert resolved_id == 0, (
+            f"Expected resolved_id=0 (id is not None), "
+            f"got {resolved_id}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_draft_id_zero_no_draft_id_after_fix(self, reg_client):
+        """После фикса: data["id"]=0, нет "draft_id" → resolve = 0.
+
+        Новый код: data.get("id") if data.get("id") is not None else data.get("draft_id")
+        0 is not None → 0 (раньше был None из-за falsy).
+        """
+        storage = reg_client._storage
+        draft = {
+            "id": 0,
+            # НЕТ "draft_id"
+            "file_key": "test",
+            "status": "uploaded",
+            "created_by": "test",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+        }
+        storage["drafts"][99] = draft
+
+        result = await reg_client.get_draft(draft_id=99)
+        assert "data" in result
+        data = result["data"]
+
+        # После фикса: id=0 возвращается корректно (не None)
+        resolved_id = data.get("id") if data.get("id") is not None else data.get("draft_id")
+        assert resolved_id == 0, (
+            f"After fix: expected resolved_id=0 (id is 0, not None), "
+            f"got {resolved_id}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_draft_returns_id_key_not_draft_id(self, reg_client):
+        """_mock_get_draft возвращает 'id', а статический mock_response — 'draft_id'.
+
+        Эндпоинт использует: data.get("id") if id is not None else data.get("draft_id").
+        Оба ключа есть → возвращается id (не draft_id).
+        """
+        storage = reg_client._storage
+        draft = {
+            "id": 100,
+            "draft_id": 999,
+            "file_key": "test",
+            "status": "uploaded",
+            "created_by": "test",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+        }
+        storage["drafts"][100] = draft
+
+        result = await reg_client.get_draft(draft_id=100)
+        data = result["data"]
+
+        assert "id" in data, "_mock_get_draft should return 'id' key"
+
+        # После фикса: id is not None → возвращается id (100), не draft_id fallback
+        draft_id = data.get("id") if data.get("id") is not None else data.get("draft_id")
+        assert draft_id == 100, f"Failed to resolve draft_id from data: {data}"

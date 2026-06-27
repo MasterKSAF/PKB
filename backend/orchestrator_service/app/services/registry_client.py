@@ -167,6 +167,10 @@ class RegistryServiceClient(ServiceClient):
             if sub == "sections" and method == "GET":
                 return self._mock_get_document_sections(storage, doc_id)
 
+            # --- Document versions (internal: Orchestrator creates) ---
+            if sub == "versions" and method == "POST":
+                return self._mock_create_version(storage, doc_id, kwargs.get("json", {}))
+
             if sub is None:
                 if method == "DELETE":
                     return self._mock_delete_document(storage, doc_id)
@@ -440,6 +444,44 @@ class RegistryServiceClient(ServiceClient):
         }
 
     @classmethod
+    def _mock_create_version(cls, storage: dict, doc_id: int, body: dict) -> dict:
+        """Mock for POST /registry/documents/{id}/versions."""
+        from datetime import datetime, timezone
+
+        storage["doc_seq"] = storage.get("doc_seq", 1000) + 1
+        version_id = storage["doc_seq"]
+
+        # Determine next version number
+        existing_versions = [
+            v for v in storage.get("versions", {}).values()
+            if v.get("document_id") == doc_id
+        ]
+        version_number = max((v.get("version_number", 0) for v in existing_versions), default=0) + 1
+
+        if "versions" not in storage:
+            storage["versions"] = {}
+        version = {
+            "version_id": version_id,
+            "document_id": doc_id,
+            "version_number": version_number,
+            "file_hash_sha256": body.get("file_hash_sha256", ""),
+            "file_key": body.get("file_key", ""),
+            "size_bytes": body.get("size_bytes", 0),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        storage["versions"][version_id] = version
+        return {
+            "data": {
+                "document_id": doc_id,
+                "version_id": version_id,
+                "version_number": version_number,
+                "file_hash_sha256": version["file_hash_sha256"],
+                "is_duplicate_file": False,
+                "created_at": version["created_at"],
+            }
+        }
+
+    @classmethod
     def _mock_check_uniqueness(cls, storage: dict, body: dict) -> dict:
         title = body.get("title", "")
         is_duplicate = False
@@ -482,6 +524,28 @@ class RegistryServiceClient(ServiceClient):
                 }
             },
             json=document_data,
+        )
+
+    async def create_version(self, doc_id: int, version_data: dict) -> dict:
+        """Create a new version of a document in the registry.
+
+        Internal endpoint — only Orchestrator can call
+        POST /registry/documents/{id}/versions.
+        Returns document_id, version_id, version_number, is_duplicate_file.
+        """
+        return await self.call(
+            "POST",
+            f"/api/v1/registry/documents/{doc_id}/versions",
+            mock_response={
+                "data": {
+                    "document_id": doc_id,
+                    "version_id": doc_id * 100 + 1,
+                    "version_number": 2,
+                    "is_duplicate_file": False,
+                    **version_data,
+                }
+            },
+            json=version_data,
         )
 
     async def update_document_status(

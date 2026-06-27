@@ -67,9 +67,9 @@ echo ""
 echo "[4/6] Dropping data + restarting app..."
 
 echo "    Recreating database..."
-docker exec pkb-postgres psql -U pkb -d postgres -c "SELECT pg_terminate_backend(pg_stat_activity.pid) FROM pg_stat_activity WHERE datname = 'pkb_neuro' AND pid <> pg_backend_pid();" 2>/dev/null || true
-docker exec pkb-postgres psql -U pkb -d postgres -c "DROP DATABASE IF EXISTS pkb_neuro;" 2>/dev/null || true
-docker exec pkb-postgres psql -U pkb -d postgres -c "CREATE DATABASE pkb_neuro;" 2>/dev/null || true
+docker exec pkb-postgres psql -U pkb -d postgres -c "SELECT pg_terminate_backend(pg_stat_activity.pid) FROM pg_stat_activity WHERE datname = 'pkb_neuro_check' AND pid <> pg_backend_pid();" 2>/dev/null || true
+docker exec pkb-postgres psql -U pkb -d postgres -c "DROP DATABASE IF EXISTS pkb_neuro_check;" 2>/dev/null || true
+docker exec pkb-postgres psql -U pkb -d postgres -c "CREATE DATABASE pkb_neuro_check;" 2>/dev/null || true
 
 echo "    Flushing Redis..."
 docker exec pkb-redis redis-cli FLUSHALL 2>/dev/null || echo "    (Redis not reachable, skipping)"

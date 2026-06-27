@@ -88,7 +88,7 @@ class TestDraftIdInApiResponse:
         response = client.post(
             "/api/v1/drafts/",
             headers=auth_header,
-            files={"file": ("test.pdf", b"%PDF-1.4 mock " * 50, "application/pdf")},
+            files={"file": ("test.pdf", b"%PDF-1.4 mock " * 150, "application/pdf")},
             data={"document_key": "doc-draft-id-test", "source_type": "GOST"},
         )
         assert response.status_code == 202

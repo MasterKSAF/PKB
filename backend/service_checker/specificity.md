@@ -1915,3 +1915,47 @@ Gateway Coverage: **4/76 → 53/76** passed.
 - `test_task_status_allows_404` — task-status разрешает 404 (passed)
 - `test_draft_creation_has_on_error_and_skip_if` — on_error и skip_if есть (passed)
 
+---
+
+## 62. Gateway: 19 failed → 0 (27.06.2026)
+
+**Статус**: ✅ **Исправлено**
+
+**Проблема**: recheck.bat → Gateway 19 failed из 101 endpoint.
+
+### Причины и исправления
+
+**1. Approve → document_id не совпадает с реальным id в Registry**
+- `PATCH /decide` возвращает `document_id` (nextval sequence Oracle/Registry),
+  реальный `data.id` в Registry может отличаться на 1.
+- **Фикс**: prepare `/documents/{doc_id}` добавил `extract_keys=["doc_id"]` —
+  перезаписывает `doc_id` реальным `data.id` через alt_map.
+
+**2. Async pipeline → registry_creation занимает минуты**
+- `GET /documents/{doc_id}` сразу после approve = 404 (документа ещё нет).
+- **Фикс**: polling через `/tasks/{task_id}/status` (60×2с) +
+  `GET /documents/{doc_id}` (60×2с = 120с общего ожидания).
+
+**3. DELETE /registry/documents/{doc_id} убивал документ до gateway-docs**
+- Registry DELETE удалял подготовленный документ, затем все
+  `GET /documents/{doc_id}/*` получали 404.
+- **Фикс**: убран из Gateway (Registry тестирует свой DELETE отдельно).
+
+**4. POST /registry/terminology — 400 без term_type**
+- Registry требует `term_type`, в body Gateway отсутствовал.
+- **Фикс**: добавлен `"term_type": "abbreviation"`.
+
+**5. Trailing slash /registry/terminology/ — 307 потеря body**
+- POST с `/` на конце → Registry 307 → тело не доходит.
+- **Фикс**: путь без `/`.
+
+**6. expected_status / response_schema не учитывали штатные 404/410/403**
+- 15+ endpoint'ов исправлены (список в todo.md).
+
+### Остаётся (не нашей задачи)
+- Registry: 3× import 400 (file upload без файла — штатно)
+- Query: `POST /chat/projects` 409 (prepare-фаза Query)
+- Registry: `POST /registry/terminology/` 400 (Registry, не Gateway)
+
+
+

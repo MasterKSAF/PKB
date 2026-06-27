@@ -1,0 +1,496 @@
+classifier_system;code;parent_code;full_name;level;status
+MKS;MKS_ROOT;;Межгосударственный классификатор стандартов (МКС);root;active
+MKS;01;MKS_ROOT;Общие положения. Терминология. Стандартизация. Документация;section;active
+MKS;01.040;01;Словари;group;active
+MKS;01.040.01;01.040;Словари по судостроению;subgroup;active
+MKS;01.040.11;01.040;Словари по здравоохранению;subgroup;active
+MKS;01.040.13;01.040;Словари по охране окружающей среды и защите человека;subgroup;active
+MKS;01.040.21;01.040;Словари по механическим системам и компонентам общего назначения;subgroup;active
+MKS;01.040.23;01.040;Словари по гидравлическим и пневматическим системам;subgroup;active
+MKS;01.040.25;01.040;Словари по машиностроению;subgroup;active
+MKS;01.040.27;01.040;Словари по энергетике и теплотехнике;subgroup;active
+MKS;01.040.29;01.040;Словари по электротехнике;subgroup;active
+MKS;01.040.31;01.040;Словари по электронике;subgroup;active
+MKS;01.040.33;01.040;Словари по телекоммуникациям;subgroup;active
+MKS;01.040.35;01.040;Словари по информационным технологиям;subgroup;active
+MKS;01.040.45;01.040;Словари по судостроению;subgroup;active
+MKS;01.040.47;01.040;Словари по судостроению и морским сооружениям;subgroup;active
+MKS;01.040.49;01.040;Словари по авиации и космонавтике;subgroup;active
+MKS;01.040.75;01.040;Словари по нефти и газу;subgroup;active
+MKS;01.040.77;01.040;Словари по металлургии;subgroup;active
+MKS;01.080;01;Графические обозначения;group;active
+MKS;01.100;01;Чертежи;group;active
+MKS;01.100.20;01.100;Чертежи машиностроительные;subgroup;active
+MKS;01.100.30;01.100;Чертежи строительные;subgroup;active
+MKS;01.110;01;Техническая документация продукции;group;active
+MKS;01.120;01;Стандартизация. Общие положения;group;active
+MKS;01.140;01;Издательское дело;group;active
+MKS;03;MKS_ROOT;Услуги. Управление компанией. Качество;section;active
+MKS;03.080;03;Услуги;group;active
+MKS;03.100;03;Управление компанией;group;active
+MKS;03.100.70;03.100;Системы менеджмента качества;subgroup;active
+MKS;03.120;03;Качество;group;active
+MKS;03.120.10;03.120;Управление качеством и обеспечение качества;subgroup;active
+MKS;03.120.20;03.120;Сертификация продукции и аккредитация;subgroup;active
+MKS;03.220;03;Транспорт;group;active
+MKS;03.220.40;03.220;Водный транспорт;subgroup;active
+MKS;07;MKS_ROOT;Математика. Естественные науки;section;active
+MKS;07.020;07;Математика;group;active
+MKS;07.030;07;Физика;group;active
+MKS;07.040;07;География;group;active
+MKS;07.060;07;Геология;group;active
+MKS;13;MKS_ROOT;Охрана окружающей среды. Защита человека;section;active
+MKS;13.020;13;Охрана окружающей среды;group;active
+MKS;13.030;13;Отходы;group;active
+MKS;13.040;13;Качество воздуха;group;active
+MKS;13.060;13;Качество воды;group;active
+MKS;13.100;13;Безопасность профессиональной деятельности;group;active
+MKS;13.110;13;Безопасность машин;group;active
+MKS;13.120;13;Безопасность бытовой продукции;group;active
+MKS;13.220;13;Пожарная защита;group;active
+MKS;13.220.20;13.220;Противопожарные средства;subgroup;active
+MKS;13.220.40;13.220;Пожаротушение;subgroup;active
+MKS;13.230;13;Взрывозащита;group;active
+MKS;13.260;13;Защита от электричества;group;active
+MKS;17;MKS_ROOT;Метрология и измерения;section;active
+MKS;17.020;17;Метрология и измерения в целом;group;active
+MKS;17.040;17;Линейные и угловые измерения;group;active
+MKS;17.040.10;17.040;Допуски и посадки;subgroup;active
+MKS;17.040.30;17.040;Измерительные приборы;subgroup;active
+MKS;17.060;17;Измерения объема, массы, плотности;group;active
+MKS;17.100;17;Измерения силы, веса, давления;group;active
+MKS;17.120;17;Измерения расхода жидкости;group;active
+MKS;17.140;17;Акустические измерения;group;active
+MKS;17.200;17;Тепловые измерения;group;active
+MKS;17.220;17;Электрические измерения;group;active
+MKS;17.220.20;17.220;Измерения электрических и магнитных величин;subgroup;active
+MKS;19;MKS_ROOT;Испытания;section;active
+MKS;19.020;19;Испытания и условия испытаний в целом;group;active
+MKS;19.040;19;Климатические испытания;group;active
+MKS;19.060;19;Механические испытания;group;active
+MKS;19.100;19;Неразрушающие испытания;group;active
+MKS;21;MKS_ROOT;Механические системы и компоненты общего назначения;section;active
+MKS;21.020;21;Характеристики и конструкция машин, аппаратов, оборудования;group;active
+MKS;21.040;21;Резьбы;group;active
+MKS;21.060;21;Крепежные изделия;group;active
+MKS;21.060.10;21.060;Болты, винты, шпильки;subgroup;active
+MKS;21.060.20;21.060;Гайки;subgroup;active
+MKS;21.060.30;21.060;Шайбы;subgroup;active
+MKS;21.060.40;21.060;Заклепки;subgroup;active
+MKS;21.060.50;21.060;Штифты, шплинты;subgroup;active
+MKS;21.060.60;21.060;Кольца, упоры;subgroup;active
+MKS;21.060.70;21.060;Зажимы;subgroup;active
+MKS;21.120;21;Валы и муфты;group;active
+MKS;21.120.10;21.120;Валы;subgroup;active
+MKS;21.120.20;21.120;Муфты;subgroup;active
+MKS;21.120.30;21.120;Шпоночные и шлицевые соединения;subgroup;active
+MKS;21.140;21;Уплотнения;group;active
+MKS;21.160;21;Пружины;group;active
+MKS;21.180;21;Корпуса;group;active
+MKS;21.200;21;Зубчатые передачи;group;active
+MKS;21.220;21;Тормозные системы;group;active
+MKS;21.220.10;21.220;Тормозные устройства;subgroup;active
+MKS;21.220.20;21.220;Фрикционные накладки;subgroup;active
+MKS;21.220.30;21.220;Тормозные жидкости;subgroup;active
+MKS;23;MKS_ROOT;Гидравлические и пневматические системы;section;active
+MKS;23.020;23;Сосуды под давлением;group;active
+MKS;23.020.10;23.020;Стационарные сосуды;subgroup;active
+MKS;23.020.30;23.020;Газовые баллоны;subgroup;active
+MKS;23.040;23;Трубопроводы и фитинги;group;active
+MKS;23.040.10;23.040;Трубы стальные;subgroup;active
+MKS;23.040.15;23.040;Трубы из цветных металлов;subgroup;active
+MKS;23.040.20;23.040;Трубы пластмассовые;subgroup;active
+MKS;23.040.40;23.040;Фитинги;subgroup;active
+MKS;23.040.60;23.040;Фланцы, муфты;subgroup;active
+MKS;23.040.70;23.040;Шланги;subgroup;active
+MKS;23.060;23;Клапаны;group;active
+MKS;23.060.10;23.060;Задвижки;subgroup;active
+MKS;23.060.20;23.060;Шаровые краны;subgroup;active
+MKS;23.060.30;23.060;Затворы;subgroup;active
+MKS;23.060.40;23.060;Регулирующие клапаны;subgroup;active
+MKS;23.060.50;23.060;Обратные клапаны;subgroup;active
+MKS;23.060.60;23.060;Предохранительные клапаны;subgroup;active
+MKS;23.080;23;Насосы;group;active
+MKS;25;MKS_ROOT;Машиностроение;section;active
+MKS;25.020;25;Технология изготовления в целом;group;active
+MKS;25.040;25;Промышленные автоматизированные системы;group;active
+MKS;25.060;25;Системы инструментов;group;active
+MKS;25.080;25;Металлорежущие станки;group;active
+MKS;25.100;25;Абразивные инструменты;group;active
+MKS;25.120;25;Оборудование для обработки без снятия стружки;group;active
+MKS;25.140;25;Сварочное оборудование;group;active
+MKS;25.160;25;Сварка;group;active
+MKS;25.160.10;25.160;Сварные швы;subgroup;active
+MKS;25.160.20;25.160;Сварочные материалы;subgroup;active
+MKS;25.160.30;25.160;Сварочное оборудование;subgroup;active
+MKS;25.160.40;25.160;Сварные соединения;subgroup;active
+MKS;25.200;25;Термическая обработка;group;active
+MKS;25.220;25;Защитные покрытия;group;active
+MKS;25.220.10;25.220;Лакокрасочные покрытия;subgroup;active
+MKS;25.220.20;25.220;Металлические покрытия;subgroup;active
+MKS;25.220.40;25.220;Цинкование;subgroup;active
+MKS;27;MKS_ROOT;Энергетика и теплотехника;section;active
+MKS;27.010;27;Энергетика и теплотехника в целом;group;active
+MKS;27.010-01;27.010;Энергосбережение (национальное расширение);national_extension;active
+MKS;27.020;27;Тепловые двигатели;group;active
+MKS;27.040;27;Газовые турбины;group;active
+MKS;27.060;27;Теплообменники;group;active
+MKS;27.060.10;27.060;Котлы центрального отопления;subgroup;active
+MKS;27.060.30;27.060;Бойлеры и теплообменники;subgroup;active
+MKS;27.070;27;Топливные элементы;group;active
+MKS;27.100;27;Электростанции в целом;group;active
+MKS;27.120;27;Атомная энергетика;group;active
+MKS;27.120.20;27.120;Атомные электростанции;subgroup;active
+MKS;27.140;27;Гидроэнергетика;group;active
+MKS;27.160;27;Солнечная энергетика;group;active
+MKS;27.180;27;Ветроэнергетика;group;active
+MKS;27.200;27;Холодильная техника;group;active
+MKS;29;MKS_ROOT;Электротехника;section;active
+MKS;29.020;29;Электротехника в целом;group;active
+MKS;29.030;29;Магнитные материалы;group;active
+MKS;29.060;29;Электрические кабели;group;active
+MKS;29.060.10;29.060;Провода;subgroup;active
+MKS;29.060.20;29.060;Кабели;subgroup;active
+MKS;29.080;29;Электроизоляция;group;active
+MKS;29.100;29;Электрические компоненты;group;active
+MKS;29.120;29;Электрическая арматура;group;active
+MKS;29.120.20;29.120;Выключатели;subgroup;active
+MKS;29.120.30;29.120;Розетки, вилки;subgroup;active
+MKS;29.120.50;29.120;Предохранители;subgroup;active
+MKS;29.130;29;Распределительные устройства;group;active
+MKS;29.130.10;29.130;Высоковольтные распределительные устройства;subgroup;active
+MKS;29.130.20;29.130;Низковольтные распределительные устройства;subgroup;active
+MKS;29.140;29;Осветительное оборудование;group;active
+MKS;29.160;29;Электрические машины;group;active
+MKS;29.160.10;29.160;Электрические генераторы;subgroup;active
+MKS;29.160.20;29.160;Электрические двигатели;subgroup;active
+MKS;29.160.30;29.160;Электрические преобразователи;subgroup;active
+MKS;29.200;29;Силовая электроника;group;active
+MKS;29.220;29;Электрические аккумуляторы;group;active
+MKS;29.240;29;Электрические сети;group;active
+MKS;29.260;29;Электрооборудование для взрывоопасных сред;group;active
+MKS;31;MKS_ROOT;Электроника;section;active
+MKS;31.020;31;Электронные компоненты в целом;group;active
+MKS;31.040;31;Резисторы;group;active
+MKS;31.060;31;Конденсаторы;group;active
+MKS;31.080;31;Полупроводниковые приборы;group;active
+MKS;31.100;31;Электронные лампы;group;active
+MKS;31.140;31;Пьезоэлектрические устройства;group;active
+MKS;31.160;31;Электрические фильтры;group;active
+MKS;31.180;31;Печатные платы;group;active
+MKS;31.190;31;Электронные сборки;group;active
+MKS;31.200;31;Интегральные схемы;group;active
+MKS;31.220;31;Электромеханические компоненты;group;active
+MKS;31.220.10;31.220;Штекеры, соединители;subgroup;active
+MKS;31.220.20;31.220;Переключатели;subgroup;active
+MKS;31.220.30;31.220;Разъемы;subgroup;active
+MKS;31.240;31;Монтажные изделия;group;active
+MKS;33;MKS_ROOT;Телекоммуникации;section;active
+MKS;33.020;33;Телекоммуникации в целом;group;active
+MKS;33.040;33;Телекоммуникационные системы;group;active
+MKS;33.060;33;Радиосвязь;group;active
+MKS;33.100;33;Электромагнитная совместимость;group;active
+MKS;33.120;33;Компоненты и аксессуары;group;active
+MKS;33.140;33;Специальные измерительные приборы;group;active
+MKS;33.160;33;Аудио-, видео- и мультимедийные системы;group;active
+MKS;33.180;33;Волоконно-оптические линии;group;active
+MKS;33.200;33;Дистанционное управление;group;active
+MKS;35;MKS_ROOT;Информационные технологии;section;active
+MKS;35.020;35;ИТ в целом;group;active
+MKS;35.040;35;Кодирование информации;group;active
+MKS;35.060;35;Языки программирования;group;active
+MKS;35.080;35;Программное обеспечение;group;active
+MKS;35.100;35;Открытые системы;group;active
+MKS;35.110;35;Сети;group;active
+MKS;35.140;35;Компьютерная графика;group;active
+MKS;35.160;35;Микропроцессорные системы;group;active
+MKS;35.180;35;Периферийное оборудование;group;active
+MKS;35.200;35;Интерфейсы;group;active
+MKS;35.220;35;Носители данных;group;active
+MKS;35.240;35;Применение ИТ;group;active
+MKS;35.240.10;35.240;Автоматизация проектирования;subgroup;active
+MKS;35.240.20;35.240;Офисное ПО;subgroup;active
+MKS;35.240.30;35.240;ИТ в промышленности;subgroup;active
+MKS;35.240.40;35.240;ИТ в банковском деле;subgroup;active
+MKS;35.240.50;35.240;ИТ в строительстве;subgroup;active
+MKS;35.240.60;35.240;ИТ в здравоохранении;subgroup;active
+MKS;35.240.70;35.240;ИТ в науке;subgroup;active
+MKS;35.240.80;35.240;ИТ в здравоохранении (информатика);subgroup;active
+MKS;35.240.90;35.240;ИТ в образовании;subgroup;active
+MKS;37;MKS_ROOT;Технология аудио и видео;section;active
+MKS;37.020;37;Оптические материалы;group;active
+MKS;37.040;37;Фотография;group;active
+MKS;37.060;37;Кинематография;group;active
+MKS;37.080;37;Документоведение;group;active
+MKS;43;MKS_ROOT;Дорожные транспортные средства;section;active
+MKS;43.020;43;Дорожные транспортные средства в целом;group;active
+MKS;43.040;43;Системы транспортных средств;group;active
+MKS;43.060;43;Двигатели внутреннего сгорания;group;active
+MKS;43.080;43;Коммерческие автомобили;group;active
+MKS;43.100;43;Легковые автомобили;group;active
+MKS;43.120;43;Электрические дорожные транспортные средства;group;active
+MKS;43.140;43;Мотоциклы;group;active
+MKS;43.150;43;Велосипеды;group;active
+MKS;43.160;43;Специальные транспортные средства;group;active
+MKS;43.180;43;Диагностическое оборудование;group;active
+MKS;45;MKS_ROOT;Железнодорожная техника;section;active
+MKS;45.020;45;Железнодорожная техника в целом;group;active
+MKS;45.040;45;Материалы и компоненты;group;active
+MKS;45.060;45;Подвижной состав;group;active
+MKS;45.080;45;Пути;group;active
+MKS;45.100;45;Путевые машины;group;active
+MKS;45.120;45;Сигнализация;group;active
+MKS;47;MKS_ROOT;Судостроение и морские сооружения;section;active
+MKS;47.020;47;Конструкция корпуса;group;active
+MKS;47.020.10;47.020;Корпуса — конструкция;subgroup;active
+MKS;47.020.20;47.020;Судовые двигатели внутреннего сгорания;subgroup;active
+MKS;47.020.30;47.020;Корпусные конструкции;subgroup;active
+MKS;47.020.40;47.020;Судовые подъемные устройства;subgroup;active
+MKS;47.020.50;47.020;Детали корпуса;subgroup;active
+MKS;47.020.60;47.020;Судовые электростанции;subgroup;active
+MKS;47.020.70;47.020;Судовые системы навигации;subgroup;active
+MKS;47.020.80;47.020;Жилые помещения;subgroup;active
+MKS;47.020.85;47.020;Грузовые помещения;subgroup;active
+MKS;47.020.90;47.020;Судовые вентиляционные системы;subgroup;active
+MKS;47.020.99;47.020;Прочие стандарты по судостроению;subgroup;active
+MKS;47.040;47;Морские сооружения;group;active
+MKS;47.060;47;Судовые энергетические установки;group;active
+MKS;47.080;47;Малые суда;group;active
+MKS;49;MKS_ROOT;Авиация и космонавтика;section;active
+MKS;49.020;49;Авиация и космонавтика в целом;group;active
+MKS;49.025;49;Материалы для авиации;group;active
+MKS;49.030;49;Двигатели летательных аппаратов;group;active
+MKS;49.035;49;Компоненты летательных аппаратов;group;active
+MKS;49.040;49;Бортовое оборудование;group;active
+MKS;49.045;49;Конструкция планера;group;active
+MKS;49.050;49;Техническое обслуживание;group;active
+MKS;49.060;49;Космические системы;group;active
+MKS;49.080;49;Аэрокосмические жидкости;group;active
+MKS;49.090;49;Аэропортовое оборудование;group;active
+MKS;49.100;49;Аэрокосмическое наземное оборудование;subgroup;active
+MKS;53;MKS_ROOT;Подъемно-транспортное оборудование;section;active
+MKS;53.020;53;Грузоподъемное оборудование;group;active
+MKS;53.020.20;53.020;Краны;subgroup;active
+MKS;53.020.30;53.020;Стропы;subgroup;active
+MKS;53.020.90;53.020;Грузоподъемные приспособления;subgroup;active
+MKS;53.040;53;Конвейеры;group;active
+MKS;53.060;53;Погрузчики;group;active
+MKS;53.080;53;Складское оборудование;group;active
+MKS;53.100;53;Землеройные машины;group;active
+MKS;59;MKS_ROOT;Текстильная и кожевенная промышленность;section;active
+MKS;59.080;59;Текстильные изделия;group;active
+MKS;59.100;59;Армирующие материалы;group;active
+MKS;61;MKS_ROOT;Швейная промышленность;section;active
+MKS;61.020;61;Одежда;group;active
+MKS;61.040;61;Головные уборы;group;active
+MKS;61.060;61;Обувь;group;active
+MKS;65;MKS_ROOT;Сельское хозяйство;section;active
+MKS;65.020;65;Сельское хозяйство в целом;group;active
+MKS;65.060;65;Сельхозмашины;group;active
+MKS;65.100;65;Пестициды;group;active
+MKS;65.120;65;Корма;group;active
+MKS;65.140;65;Пчеловодство;group;active
+MKS;65.160;65;Табак;group;active
+MKS;67;MKS_ROOT;Производство пищевых продуктов;section;active
+MKS;67.020;67;Пищевые продукты в целом;group;active
+MKS;67.040;67;Сельскохозяйственные пищевые продукты;group;active
+MKS;67.060;67;Зерновые;group;active
+MKS;67.080;67;Фрукты и овощи;group;active
+MKS;67.100;67;Молочные продукты;group;active
+MKS;67.120;67;Мясо и мясные продукты;group;active
+MKS;67.140;67;Чай и кофе;group;active
+MKS;67.160;67;Напитки;group;active
+MKS;67.180;67;Сахар и сахарные продукты;group;active
+MKS;67.200;67;Растительные масла;group;active
+MKS;67.220;67;Специи;group;active
+MKS;67.240;67;Сенсорный анализ;group;active
+MKS;67.250;67;Упаковка;group;active
+MKS;71;MKS_ROOT;Химическая технология;section;active
+MKS;71.020;71;Химическая технология в целом;group;active
+MKS;71.040;71;Аналитическая химия;group;active
+MKS;71.060;71;Неорганические химикаты;group;active
+MKS;71.080;71;Органические химикаты;group;active
+MKS;71.100;71;Продукты химической промышленности;group;active
+MKS;71.100.20;71.100;Газы промышленные;subgroup;active
+MKS;71.100.30;71.100;Взрывчатые вещества;subgroup;active
+MKS;71.100.40;71.100;Поверхностно-активные вещества;subgroup;active
+MKS;71.100.60;71.100;Эфирные масла;subgroup;active
+MKS;71.100.70;71.100;Косметика;subgroup;active
+MKS;71.100.80;71.100;Средства для очистки;subgroup;active
+MKS;71.100.90;71.100;Специальные химикаты;subgroup;active
+MKS;71.120;71;Химическое оборудование;group;active
+MKS;73;MKS_ROOT;Горное дело;section;active
+MKS;73.020;73;Горное дело в целом;group;active
+MKS;73.040;73;Уголь;group;active
+MKS;73.060;73;Руды;group;active
+MKS;73.080;73;Нерудные материалы;group;active
+MKS;73.100;73;Горное оборудование;group;active
+MKS;73.120;73;Оборудование для переработки;group;active
+MKS;75;MKS_ROOT;Нефть и газ;section;active
+MKS;75.020;75;Нефть и газ в целом;group;active
+MKS;75.040;75;Сырая нефть;group;active
+MKS;75.060;75;Природный газ;group;active
+MKS;75.080;75;Нефтепродукты;group;active
+MKS;75.100;75;Смазочные материалы;group;active
+MKS;75.120;75;Гидравлические жидкости;group;active
+MKS;75.140;75;Воски и битумы;group;active
+MKS;75.160;75;Топлива;group;active
+MKS;75.160.10;75.160;Твердое топливо;subgroup;active
+MKS;75.160.20;75.160;Жидкое топливо;subgroup;active
+MKS;75.160.30;75.160;Газообразное топливо;subgroup;active
+MKS;75.180;75;Нефтяное и газовое оборудование;group;active
+MKS;75.200;75;Нефтеперерабатывающее оборудование;group;active
+MKS;77;MKS_ROOT;Металлургия;section;active
+MKS;77.020;77;Металлургия в целом;group;active
+MKS;77.040;77;Металлургические испытания;group;active
+MKS;77.040.10;77.040;Механические испытания металлов;subgroup;active
+MKS;77.040.20;77.040;Неразрушающие испытания металлов;subgroup;active
+MKS;77.040.30;77.040;Химический анализ металлов;subgroup;active
+MKS;77.060;77;Коррозия металлов;group;active
+MKS;77.080;77;Черные металлы;group;active
+MKS;77.080.10;77.080;Чугуны;subgroup;active
+MKS;77.080.20;77.080;Стали;subgroup;active
+MKS;77.080.30;77.080;Ферросплавы;subgroup;active
+MKS;77.100;77;Ферросплавы;group;active
+MKS;77.120;77;Цветные металлы;group;active
+MKS;77.120.10;77.120;Алюминий;subgroup;active
+MKS;77.120.20;77.120;Магний;subgroup;active
+MKS;77.120.30;77.120;Медь;subgroup;active
+MKS;77.120.40;77.120;Никель;subgroup;active
+MKS;77.120.50;77.120;Титан;subgroup;active
+MKS;77.120.60;77.120;Цинк;subgroup;active
+MKS;77.120.70;77.120;Олово;subgroup;active
+MKS;77.120.80;77.120;Свинец;subgroup;active
+MKS;77.120.90;77.120;Вольфрам;subgroup;active
+MKS;77.120.95;77.120;Редкоземельные металлы;subgroup;active
+MKS;77.140;77;Металлопродукция;group;active
+MKS;77.140.10;77.140;Листы;subgroup;active
+MKS;77.140.20;77.140;Прокат;subgroup;active
+MKS;77.140.30;77.140;Профили;subgroup;active
+MKS;77.140.40;77.140;Проволока;subgroup;active
+MKS;77.140.45;77.140;Трубы стальные;subgroup;active
+MKS;77.140.50;77.140;Поковки;subgroup;active
+MKS;77.140.60;77.140;Отливки;subgroup;active
+MKS;77.140.65;77.140;Катанка;subgroup;active
+MKS;77.140.70;77.140;Сортовой прокат;subgroup;active
+MKS;77.140.75;77.140;Рельсы;subgroup;active
+MKS;77.140.80;77.140;Крепеж;subgroup;active
+MKS;77.140.85;77.140;Прокат для судостроения;subgroup;active
+MKS;77.140.90;77.140;Поковки и штамповки;subgroup;active
+MKS;77.140.95;77.140;Трубы для нефтегаза;subgroup;active
+MKS;77.150;77;Изделия из цветных металлов;group;active
+MKS;77.160;77;Порошковая металлургия;group;active
+MKS;77.180;77;Металлургическое оборудование;group;active
+MKS;79;MKS_ROOT;Древесина;section;active
+MKS;79.020;79;Древесина в целом;group;active
+MKS;79.040;79;Лесоматериалы;group;active
+MKS;79.060;79;Древесные плиты;group;active
+MKS;79.080;79;Пиломатериалы;group;active
+MKS;79.100;79;Лесопильное оборудование;group;active
+MKS;79.120;79;Деревообрабатывающее оборудование;group;active
+MKS;81;MKS_ROOT;Стекольная и керамическая промышленность;section;active
+MKS;81.040;81;Стекло;group;active
+MKS;81.060;81;Керамика;group;active
+MKS;81.080;81;Огнеупоры;group;active
+MKS;81.100;81;Огнеупорное оборудование;group;active
+MKS;83;MKS_ROOT;Резиновая и пластмассовая промышленность;section;active
+MKS;83.020;83;Резина и пластмассы в целом;group;active
+MKS;83.040;83;Сырье для резины и пластмасс;group;active
+MKS;83.060;83;Резина;group;active
+MKS;83.080;83;Пластмассы;group;active
+MKS;83.100;83;Пенопласты;group;active
+MKS;83.120;83;Армированные пластики;group;active
+MKS;83.140;83;Резиновые и пластмассовые изделия;group;active
+MKS;83.140.10;83.140;Пленки;subgroup;active
+MKS;83.140.20;83.140;Прокладки;subgroup;active
+MKS;83.140.30;83.140;Трубы пластмассовые;subgroup;active
+MKS;83.140.40;83.140;Шланги резиновые;subgroup;active
+MKS;83.140.50;83.140;Уплотнения;subgroup;active
+MKS;83.140.60;83.140;Конвейерные ленты;subgroup;active
+MKS;83.140.70;83.140;Рукава;subgroup;active
+MKS;83.140.80;83.140;Изоляционные материалы;subgroup;active
+MKS;83.140.90;83.140;Облицовочные материалы;subgroup;active
+MKS;83.140.95;83.140;Прочие резиновые изделия;subgroup;active
+MKS;83.160;83;Шины;group;active
+MKS;83.180;83;Клеи;group;active
+MKS;83.200;83;Оборудование для резины и пластмасс;group;active
+MKS;85;MKS_ROOT;Целлюлозно-бумажная промышленность;section;active
+MKS;85.020;85;ЦБП в целом;group;active
+MKS;85.040;85;Целлюлоза;group;active
+MKS;85.060;85;Бумага и картон;group;active
+MKS;85.080;85;Изделия из бумаги;group;active
+MKS;85.100;85;Оборудование ЦБП;group;active
+MKS;87;MKS_ROOT;Полиграфия;section;active
+MKS;87.020;87;Полиграфия в целом;group;active
+MKS;87.040;87;Типографские краски;group;active
+MKS;87.060;87;Печатные формы;group;active
+MKS;87.080;87;Полиграфическое оборудование;group;active
+MKS;87.100;87;Послепечатное оборудование;group;active
+MKS;91;MKS_ROOT;Строительство;section;active
+MKS;91.010;91;Строительство в целом;group;active
+MKS;91.020;91;Планировка;group;active
+MKS;91.040;91;Здания;group;active
+MKS;91.060;91;Элементы зданий;group;active
+MKS;91.080;91;Строительные конструкции;group;active
+MKS;91.080.10;91.080;Металлические конструкции;subgroup;active
+MKS;91.080.20;91.080;Деревянные конструкции;subgroup;active
+MKS;91.080.30;91.080;Железобетонные конструкции;subgroup;active
+MKS;91.080.40;91.080;Каменные конструкции;subgroup;active
+MKS;91.100;91;Строительные материалы;group;active
+MKS;91.100.10;91.100;Цемент;subgroup;active
+MKS;91.100.15;91.100;Минеральные материалы;subgroup;active
+MKS;91.100.30;91.100;Бетон;subgroup;active
+MKS;91.100.40;91.100;Арматура;subgroup;active
+MKS;91.100.50;91.100;Вяжущие вещества;subgroup;active
+MKS;91.100.60;91.100;Теплоизоляционные материалы;subgroup;active
+MKS;91.100.70;91.100;Гидроизоляционные материалы;subgroup;active
+MKS;91.120;91;Защита зданий;group;active
+MKS;91.120.10;91.120;Теплоизоляция;subgroup;active
+MKS;91.120.20;91.120;Акустика;subgroup;active
+MKS;91.120.30;91.120;Гидроизоляция;subgroup;active
+MKS;91.140;91;Инженерные системы зданий;group;active
+MKS;91.140.10;91.140;Системы отопления;subgroup;active
+MKS;91.140.30;91.140;Вентиляция;subgroup;active
+MKS;91.140.40;91.140;Газоснабжение;subgroup;active
+MKS;91.140.50;91.140;Электроснабжение;subgroup;active
+MKS;91.140.60;91.140;Водоснабжение;subgroup;active
+MKS;91.140.70;91.140;Канализация;subgroup;active
+MKS;91.140.80;91.140;Системы кондиционирования;subgroup;active
+MKS;91.140.90;91.140;Лифты;subgroup;active
+MKS;91.160;91;Освещение;group;active
+MKS;91.200;91;Строительная технология;group;active
+MKS;93;MKS_ROOT;Гражданское строительство;section;active
+MKS;93.010;93;Гражданское строительство в целом;group;active
+MKS;93.020;93;Земляные работы;group;active
+MKS;93.040;93;Мосты;group;active
+MKS;93.060;93;Туннели;group;active
+MKS;93.080;93;Дорожное строительство;group;active
+MKS;93.080.10;93.080;Дорожные материалы;subgroup;active
+MKS;93.080.20;93.080;Дорожные покрытия;subgroup;active
+MKS;93.080.30;93.080;Дорожные знаки;subgroup;active
+MKS;93.100;93;Строительство железных дорог;group;active
+MKS;93.120;93;Строительство аэропортов;group;active
+MKS;93.140;93;Гидротехническое строительство;group;active
+MKS;93.160;93;Гидромелиорация;group;active
+MKS;95;MKS_ROOT;Военная техника;section;active
+MKS;95.020;95;Военная техника в целом;group;active
+MKS;95.030;95;Военные транспортные средства;group;active
+MKS;95.040;95;Военные корабли;subgroup;active
+MKS;95.060;95;Оружие;group;active
+MKS;95.080;95;Боеприпасы;group;active
+MKS;95.100;95;Системы ПВО;group;active
+MKS;97;MKS_ROOT;Бытовая техника;section;active
+MKS;97.020;97;Бытовая техника в целом;group;active
+MKS;97.030;97;Бытовые приборы;group;active
+MKS;97.040;97;Кухонное оборудование;group;active
+MKS;97.060;97;Стиральные машины;group;active
+MKS;97.080;97;Уборочное оборудование;group;active
+MKS;97.100;97;Отопительные приборы;group;active
+MKS;97.120;97;Автоматика бытовая;group;active
+MKS;97.140;97;Мебель;group;active
+MKS;97.160;97;Текстильные изделия бытовые;group;active
+MKS;97.180;97;Прочая бытовая техника;group;active
+MKS;97.190;97;Детские товары;group;active
+MKS;97.195;97;Декоративные изделия;group;active
+MKS;97.200;97;Оборудование для отдыха;group;active
+MKS;97.220;97;Спортивное оборудование;group;active

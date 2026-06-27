@@ -56,6 +56,10 @@ class EndpointDef:
     # Если указан — эндпоинт выполняется на этом порту вместо порта сервиса
     # (нужно для prepare-шагов, обращающихся к другим сервисам, например auth)
     override_port: Optional[int] = None
+    # Количество повторов при несовпадении expected_status (для prepare-шагов, ожидающих асинхронных данных)
+    max_retries: int = 1
+    # Задержка между повторами в секундах
+    retry_delay: int = 1
 
 
 @dataclass

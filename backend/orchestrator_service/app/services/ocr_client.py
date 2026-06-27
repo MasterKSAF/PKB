@@ -1,6 +1,10 @@
 """
 OCR Service Client with mock mode support.
-Unified endpoint: POST /ocr/process?mode=preview|full
+
+NOTE: Отдельный OCR-сервис не реализован — его роль выполняет Parser-сервис.
+Оба клиента (ocr_client + parser_client) ходят на один Parser-сервис
+по единому эндпоинту POST /api/v1/parser/process.
+Различие только в семантике: OCR-клиент используется как fallback.
 """
 
 from typing import Any, Dict, Optional
@@ -11,7 +15,7 @@ from app.services.base_client import ServiceClient
 
 
 class OCRServiceClient(ServiceClient):
-    """Client for OCR Service."""
+    """Client for OCR capabilities (served by Parser service)."""
 
     def __init__(self):
         super().__init__(
@@ -24,7 +28,7 @@ class OCRServiceClient(ServiceClient):
         self, method: str, endpoint: str, default_mock: Dict[str, Any], **kwargs
     ) -> Dict[str, Any]:
         """Generate mock OCR responses."""
-        if endpoint == "/api/v1/ocr/process" and method == "POST":
+        if endpoint == "/api/v1/parser/process" and method == "POST":
             request_data = kwargs.get("json", {})
             file_key = request_data.get("file_key", "file-mock")
             mode = request_data.get("mode", "full")
@@ -69,34 +73,16 @@ class OCRServiceClient(ServiceClient):
                 }
             }
 
-        if endpoint == "/api/v1/ocr/engines" and method == "GET":
-            return {
-                "engines": [
-                    {
-                        "engine_id": "paddleocr",
-                        "name": "PaddleOCR",
-                        "status": "available",
-                        "supported_languages": ["ru", "en"],
-                        "average_processing_time_ms": 1500,
-                        "default_for_types": ["normative", "specification"],
-                    },
-                    {
-                        "engine_id": "tesseract",
-                        "name": "Tesseract 5",
-                        "status": "available",
-                        "supported_languages": ["ru", "en"],
-                        "average_processing_time_ms": 2500,
-                        "default_for_types": ["archival_scan"],
-                    },
-                ]
-            }
-
         return default_mock
 
     async def process(
         self, task_id: int, file_key: str, draft_id: int, mode: str = "full", max_pages: Optional[int] = None
     ) -> Dict[str, Any]:
-        """Process a file with OCR (mode=preview|full)."""
+        """Process a file with OCR (mode=preview|full).
+
+        NOTE: ходит на единый эндпоинт Parser-сервиса /api/v1/parser/process.
+        Отдельного OCR-сервиса нет — Parser обслуживает оба режима.
+        """
         body = OcrProcessRequest(
             task_id=task_id,
             file_key=file_key,
@@ -106,12 +92,8 @@ class OCRServiceClient(ServiceClient):
         )
         return await self.call(
             "POST",
-            "/api/v1/ocr/process",
+            "/api/v1/parser/process",
             request_model=OcrProcessRequest,
             mock_response={"data": {}},
             json=body.model_dump(exclude_none=True),
         )
-
-    async def get_engines(self) -> Dict[str, Any]:
-        """Get available OCR engines."""
-        return await self.call("GET", "/api/v1/ocr/engines", mock_response={"engines": []})

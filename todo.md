@@ -1,42 +1,25 @@
-# Диагностика и исправление проблем загрузки документов
+# Задача: починить пайплайн загрузки → поиск ✅
 
-## Выполнено ✅
+## Статус: ВСЁ ИСПРАВЛЕНО И ПРОВЕРЕНО
 
-- [x] Диагностика docker compose ps, логов gateway, orchestrator, celery-worker, parser
-- [x] Проверка API вызовов через curl (все эндпоинты отвечают)
-- [x] Создание настоящего PDF и тестовая загрузка
-- [x] Выявлены и устранены все проблемы pipeline
+### Что было починено
 
-## Исправлено
+| № | Проблема | Корень | Фикс |
+|---|----------|--------|------|
+| 1 | Preview stuck `processing` | Дублирующиеся шаги в `_build_preview_status` | Уникализация по step_name + взятие лучшего статуса |
+| 2 | `rag_index` оставался `pending` | `RAG_SERVICE_URL=http://rag-search:8091` перезаписывал `RAG_BUILDER_SERVICE_URL` | Убрал deprecated `RAG_SERVICE_URL` из `docker-compose.yml` |
+| 3 | `run_rag_index_step()` падал с `unexpected keyword argument 'sections'` | Две Celery задачи с одинаковым именем `tasks.pipeline.run_rag_index_step` | Переименовал задачу в `pipeline_indexation.py` |
+| 4 | Parser возвращал 0 sections для RAG | `full_parser_result.get("sections", [])` — парсер отдаёт `document.block[]`, а не `sections` | Трансформация block[] → Section[] для RAG Builder |
+| 5 | RAG Builder 422 на sections | `section.document_id` = draft_id, а запрос шёл с registry document_id | Фикс document_id в секциях перед отправкой в RAG |
+| 6 | RAG Builder 422 на document_id | `RagBuildRequest.document_id: str`, а RAG Builder ожидает int | Поменял тип на `int` |
 
-### 1. Баг в converter-validator (500 Internal Server Error)
-- **Файл**: `backend/converter_validator_service/app/core/exceptions.py`
-- **Проблема**: 3 класса ошибок использовали `status.HTTP_422_UNPROCESSABLE_CONTENT` (не существует)
-- **Исправление**: заменил на `status.HTTP_422_UNPROCESSABLE_ENTITY`
+### Результат теста
 
-### 2. Несоответствие формата ответа converter
-- **Файл**: `backend/orchestrator_service/app/tasks/pipeline_formation.py`
-- **Проблема**: orchestrator ожидал `{"data": {"metadata": {...}}}` от converter, но converter возвращает плоский PreviewMetadataResponse
-- **Исправление**: добавлено определение формата ответа и корректное извлечение metadata
+```bash
+python data/tests/test_e2e.py
 
-### 3. Orchestrator не сохранял preview_metadata в Registry
-- **Файл**: `backend/orchestrator_service/app/core/pipeline/orchestrator.py`
-- **Проблема**: после успешного preview converter'а metadata не записывались в Registry
-- **Исправление**: добавлен вызов `registry.update_draft_metadata()` перед обновлением статуса
+[PASS] ALL CHECKS PASSED
+```
 
-### 4. Orchestrator не передавал preview_metadata фронтенду
-- **Файл**: `backend/orchestrator_service/app/api/v1/endpoints/drafts.py`
-- **Проблема**: GET /drafts/{id} не включал preview_metadata в ответ
-- **Исправление**: добавлены поля `preview_metadata`, `created_at`, `updated_at` в ответ
-
-### 5. Смена URL LLM API
-- **Файл**: `docker-compose.yml`
-- **Изменение**: `routerai.ru/api/v1` → `opencode.ai/zen/go/v1` для OPENAI_BASE_URL и LLM_API_URL
-
-### 6. Очищены все невалидные черновики
-- Удалены черновики 1-55 (созданные с test_draft.pdf или без metadata)
-
-## Результат
-- **Pipeline работает**: Parser preview → Converter preview → сохранение metadata в Registry
-- **Реальный PDF** (123KB) успешно обработан: извлечены doc_code="10054-82", title, era, year и др.
-- **Фронтенд получит корректные названия** черновиков через preview_metadata
+- Pipeline: ~15 сек
+- Search: 150 total_found, тексты из PDF находятся

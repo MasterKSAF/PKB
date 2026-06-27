@@ -1,0 +1,5 @@
+classifier_system;code;parent_code;full_name;status
+MKS;MKS_ROOT;;Межгосударственный классификатор стандартов (МКС);active
+OKSTU;OKSTU_ROOT;;Общесоюзный классификатор стандартов и технических условий (ОКСТУ);active
+UDC;UDC_ROOT;;Универсальная десятичная классификация (УДК);active
+EXTERNAL;EXT_ROOT;;Внешние системы классификации (DNV, ASTM, ОСТ, ТУ, ISO);active

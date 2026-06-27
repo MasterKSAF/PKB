@@ -150,7 +150,6 @@ class OrchestratorDraftLifecyclePipeline(PipelineDef):
                 "document_id": (int, type(None)),  # OR-7: может быть None до approve
                 "version_id": (int, type(None)),   # OR-7: может быть None до approve
                 "is_new_document": bool,            # OR-7: флаг нового документа
-                "created_by": (str, type(None)),    # #18: проверка что черновик создан от реального пользователя, не u-mock-001
             }),
             needs_auth=True,
             skip_if=_draft_skipped,

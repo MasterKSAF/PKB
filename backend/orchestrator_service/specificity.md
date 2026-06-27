@@ -14,11 +14,19 @@
 заменен на корректную обработку ошибок с ретраем через tenacity.
 
 ### 1.3. Двухфазный pipeline
-- **Preview-фаза:** Upload → OCR/Parser (3 страницы) → Converter-validator
+- **Preview-фаза:** Upload → Parser (3 страницы) → [OCR fallback] → Converter-validator
 - **Decision:** auto-approve (если preview полный) или ожидание решения пользователя
-- **Full-фаза:** OCR/Parser → Converter-validator → Registry
+- **Full-фаза:** Parser → [OCR fallback] → Converter-validator → Registry
 
-### 1.3. TaskStep.input_data / output_data — JSONB
+### 1.3a. Parser-first стратегия (27.06)
+- **Parser** пробуется первым для ВСЕХ типов файлов (включая image/*).
+- **OCR fallback** при:
+  1. `ConnectError` / ошибке Parser (через `on_step_failed`)
+  2. `preview_not_supported` от Parser (через `_on_preview_completed`)
+- Опции: `PARSER_ENABLED`, `OCR_ENABLED`, `PARSER_FALLBACK_TO_OCR`.
+- Если оба disabled — `ValueError` при старте пайплайна.
+
+### 1.3b. TaskStep.input_data / output_data — JSONB
 Вместо `input_ref` / `output_ref` (строковые ссылки) используются JSON-контейнеры.
 В SQLite хранятся как JSON, в PostgreSQL — как JSONB.
 
@@ -114,13 +122,7 @@ LLM-ответы проверяются на корректность форма
 При `full_completed=True` переменная `file_key` была не определена вне блока `if not task.full_completed:`,
 что вызывало `UnboundLocalError`. Исправлено: инициализация `file_key` вынесена до условного оператора.
 
-### 2.3. Код не синхронизирован с новыми API-контрактами RAG (20.06)
-Документация (`docs/api/rag_builder_service_api.md`, `rag_search_service_api.md`) обновлена под RS-6/RS-7, но код оркестратора ещё использует старые контракты:
-- `requests.py`: `RagIndexRequest.chunks` вместо `sections`, `RagSearchRequest` содержит `top_k`/`search_type`.
-- `rag_client.py`: эндпоинт `/rag/index` вместо `/rag/build`, старая структура ответа.
-- `citation_validator.py`: проверяет `idx >= 1` (1-based), а спецификация требует 0-based `[0, len(sources))`.
-
-### 2.4. Прокси drafts в оркестраторе для совместимости (23.06, обновлено)
+### 2.3. Прокси drafts в оркестраторе для совместимости (23.06, обновлено)
 Оркестратор добавляет прокси GET /drafts/{id} и PATCH /drafts/{id}/metadata.
 
 **Причина:** чекер ожидает эти эндпоинты от оркестратора. Registry остаётся source of truth.
@@ -131,20 +133,9 @@ LLM-ответы проверяются на корректность форма
 - `GET /api/v1/drafts` (list) — не добавлен, остаётся в Registry.
 - `GET /api/v1/documents/{id}/tasks` — endpoint в orchestrator для связи документа с задачами пайплайна.
 
-### 2.5. GET /documents/* в оркестраторе — лишние эндпоинты (22.06)
-В `app/api/v1/endpoints/documents.py` находилось ~700 LOC мок-эндпоинтов для чтения документов (list, get, status, file, history, errors, parameters, queue, pages/*, versions, approve, delete). Эти операции — зона `registry-service` (см. `docs/api/registry_service_api.md`, группа `documents`).
-
-**Причина появления:** исторически оркестратор проектировался как прокси, но позже был перепроектирован на draft-first с Registry как источником правды. GET-эндпоинты остались как неиспользуемый код.
-
-**Решение (22.06):**
-- Все GET /documents/*, POST /documents/* полностью удалены из orchestrator.
-- Исключение: `POST /documents/{doc_id}/reprocess` (P2I-9) **восстановлен** (22.06) — операция переиндексации, требующая управления Celery-задачей, остаётся в оркестраторе.
-- `app/schemas/documents.py` пересоздан — только ReprocessMode/ReprocessRequest/ReprocessResponse.
-- Тесты `tests/test_documents_api.py` удалены (reprocess покрывается интеграционными тестами пайплайнов).
-
 ## 3. Технические долги
 
-### 3.1. Integration tests (✅ переписаны)
+### 3.1. Integration tests
 - `tests/integration/test_celery_tasks.py` — 5 тестов (Celery task functions with mocks)
 - `tests/integration/test_pipeline_formation.py` — 8 тестов (PipelineOrchestrator + DB + mocks)
 - `tests/integration/test_pipeline_preview.py` — 6 тестов (preview phase: API + orchestrator)
@@ -172,69 +163,59 @@ SQLite не поддерживает JSONB нативно. Текущая реа
 **Фикс:** `poolclass=NullPool` — каждое подключение создаётся в текущем event loop.
 Дополнительно: `--pool=threads` в celery worker (все I/O bound, тредов достаточно).
 
-### 3.5. Исправлен `UnboundLocalError` в `approve_draft`
-В `app/core/pipeline/orchestrator.py` метод `approve_draft`:
-- При `task.full_completed=True` переменная `file_key` была не инициализирована,
-  но использовалась при создании full_converter/registry_creation шагов.
-- **Исправление:** инициализация `file_key` вынесена до условного блока.
-
-### 3.6. Тесты test_tasks.py (2 теста) — detail wrapper FastAPI
+### 3.5. Тесты test_tasks.py (2 теста) — detail wrapper FastAPI
 `test_get_task_status_not_found` — проверяет `"error" in data`, но FastAPI
 оборачивает HTTPException.detail в `{"detail": ...}`.
 `test_get_task_status_without_auth` — в mock-режиме auth не блокирует, но
 эндпоинт возвращает 404, а не 200.
 
-### 3.7. metadata_overrides вливается в doc_payload через update
-`approve_draft` получает `metadata_overrides` и делает
-`doc_payload.update(metadata_overrides)`, а не передаёт их как
-вложенный объект. Поля (`title`, `doc_code` и др.) становятся
-частью payload напрямую.
-
-### 3.8. Longpoll в тестах — дефолт 15с
+### 3.6. Longpoll в тестах — дефолт 15с
 	В эндпоинте `GET /drafts/{id}/preview/status` параметр `longpoll` по
 	умолчанию равен 15 секундам. Тесты без явного `longpoll=0` ждут таймаута.
 	Исправлено в `test_drafts.py` через `params={"longpoll": 0}`.
 
-### 3.7. nested BaseSettings не читали flat env vars
-
-При использовании `env_nested_delimiter="__"` плоские env-переменные
-(например `REGISTRY_SERVICE_URL`) не маппятся на вложенную модель и вызывали
-`ValidationError: extra_forbidden` в Docker-окружении.
-
-**Исправлено:**
-- `services` и `pipeline` используют `default_factory=` вместо прямого вызова
-  конструктора, чтобы дочерний `BaseSettings` перечитывал env-переменные
-  при каждом создании `Settings()`
-- В `Settings.model_config` добавлено `extra='ignore'`, чтобы плоские env-переменные
-  не вызывали ошибок валидации (они игнорируются на уровне `Settings`,
-  но читаются вложенным `ServiceConfig`)
-- `AUTH_SERVICE_URL` / `AUTH_SERVICE_MOCK` не добавлены в `ServiceConfig` —
-  оркестратор не взаимодействует с Auth Service напрямую
-  (всегда mock-режим в `app/api/deps/__init__.py`)
-
-### 3.8. entrypoint.sh с CRLF вызывает restart loop контейнера
-
-**Проблема:** после `git clone` на Windows файл
-`backend/service_checker/docker/entrypoint.sh` получает CRLF-окончания.
-Контейнер не может выполнить `#!/bin/bash\r` — ядро Linux ищет
-интерпретатор `/bin/bash\r` и выдаёт `no such file or directory`.
-Docker перезапускает контейнер (`restart: unless-stopped`), возникает restart loop.
-
-**Исправление:** `sed -i 's/\r$//' backend/service_checker/docker/entrypoint.sh`
-или `git config core.autocrlf input` перед клонированием.
-
-### 3.9. Функции Document API документированы в `docs/api/orchestrator_service_api.md`
-
-### 3.10. MinIO upload — требуется mock в conftest (26.06)
+### 3.7. MinIO upload — требуется mock в conftest (26.06)
 Тесты API (`test_drafts.py`) используют `TestClient`, который вызывает `upload_file`
 из `app.storage`. Поскольку MinIO нет в тестовом окружении, требуется
 `patch("app.api.v1.endpoints.drafts.upload_file", new=AsyncMock())` в conftest.
 Без патча тест ждёт ~40с таймаута соединения.
 
-### 3.11. pipeline_indexation — отсутствовал import settings (26.06, ИСПРАВЛЕНО)
-В `app/tasks/pipeline_indexation.py` не было `from app.core.config import settings`,
-хотя использовался `settings.REDIS_URL`. Баг найден при написании unit-тестов.
-Все тесты Celery-задач вызывают `.run()` напрямую, что и выявило ошибку.
+### 3.8. Empty file validation в POST /drafts (27.06)
+Ранее пустой файл (0 байт) проходил все проверки и создавал черновик.
+Добавлена явная проверка `file_size == 0 → 422 EMPTY_FILE`.
+Найдено тестом `test_create_draft_with_empty_file_returns_422`.
+
+### 3.9. `data.get("id") or data.get("draft_id")` — 0 is falsy (27.06, ИСПРАВЛЕНО)
+В `get_draft` эндпоинте (drafts.py) было:
+```python
+"draft_id": data.get("id") or data.get("draft_id")
+```
+Проблема: 0 числовой falsy в Python. Если id=0 — ответ draft_id=None.
+**Исправление:** заменено на `data.get("id") if data.get("id") is not None else data.get("draft_id")`.
+Аналогичный фикс для `doc_id` (registry_document_id) и `document_id` в `orchestrator.py:662`.
+
+### 3.10. POST /drafts Idempotency-Key (27.06)
+Добавлена обработка Idempotency-Key для POST /drafts.
+In-memory кэш `_IDEMPOTENCY_CACHE` с TTL 1ч.
+Повторный запрос с тем же ключом → 200 + существующий draft_id.
+В production требуется замена на Redis.
+
+### 3.11. Расхождения docs vs code (27.06, тесты выявили)
+- `FILE_TOO_SMALL` (< 1КБ) описан в pipeline1-orchestrator_details.md, но НЕ реализован в production коде (есть только `EMPTY_FILE` для 0 байт).
+- `UNSUPPORTED_FILE_TYPE` (422) описан, в коде возвращается `400 BAD_REQUEST` для неподдерживаемых MIME.
+- `PREVIEW_IN_PROGRESS` (409) описан, в коде возвращается `PREVIEW_ALREADY_RUNNING`.
+- `DRAFT_ALREADY_DECIDED` (409) описан, в коде возвращается `TASK_ALREADY_TERMINAL`.
+- `DUPLICATE_FILE` (409) при check-uniqueness не блокирует создание черновика (только флаг `is_duplicate_file` в ответе).
+- `DUPLICATE_FILE_AFTER_APPROVE` с `superseded_by_document_id` не реализован.
+- `BUSINESS_KEY_DRIFT` не реализован.
+- confirm action описан в документации, но не реализован в коде.
+- Idempotency-Key для preview описан в P1-19, но не реализован.
+- Пороги качества (avg_confidence, max_critical) описаны, но не реализованы в production коде.
+
+### 3.12. PATCH /metadata — прокси без валидации (27.06)
+PATCH /drafts/{id}/metadata — прокси в Registry. Оркестратор не валидирует source_type,
+era, jurisdiction и другие поля. Валидация происходит на стороне Registry.
+Это означает, что невалидные source_type проходят через оркестратор.
 
 ## 4. Проблемы при запуске (ошибки в Python-сервисах)
 
@@ -248,23 +229,7 @@ Docker перезапускает контейнер (`restart: unless-stopped`)
 
 ---
 
-### 4.1. Auth Service (8082) — `email-validator` (ИСПРАВЛЕНО)
-
-**Ошибка:**
-```
-ImportError: email-validator is not installed
-```
-
-**Причина:** `email-validator` был только в `auth_service/requirements.txt`, но Docker
-устанавливает общий `service_checker/docker/requirements.txt`, где его не было.
-
-**Исправление:** добавлен `email-validator>=2.0.0` в `service_checker/docker/requirements.txt`.
-
-**Статус: ✅ ИСПРАВЛЕНО.** После исправления выявилась следующая ошибка, см. 4.1a.
-
----
-
-### 4.1a. Auth Service (8082) — `MissingGreenlet` при подключении к БД
+### 4.1. Auth Service (8082) — `MissingGreenlet` при подключении к БД
 
 **Ошибка:** сервер стартует, но падает на этапе lifespan:
 ```
@@ -296,77 +261,43 @@ from mocks.auth_service.main import router as auth_router
 **Исправление:** добавить `router` в `mocks/auth_service/main.py`
 или исправить импорт в `gateway.py`.
 
----
-
-### 4.3. Registry Service (8084) — нет модуля `env` (ИСПРАВЛЕНО)
-
-**Ошибка:**
-```
-ModuleNotFoundError: No module named 'env'
-```
-
-**Причина:** `registry_service/main.py:17`:
-```python
-import env
-```
-Файл `env.py` отсутствовал в `registry_service/`.
-
-**Исправление:** разработчик создал `registry_service/env.py`.
-
-**Статус: ✅ ИСПРАВЛЕНО**
+**Статус: 🔴 открыто.**
 
 ---
 
-### 4.4. CRLF в entrypoint.sh — restart loop контейнера (ИСПРАВЛЕНО)
+### 4.3. CRLF в entrypoint.sh — restart loop контейнера
 
-**Ошибка:** `exec entrypoint.sh: no such file or directory` — контейнер в restart loop.
+**Симптом:** `exec entrypoint.sh: no such file or directory` — контейнер в restart loop.
 
 **Причина:** на Windows `entrypoint.sh` получает CRLF, `#!/bin/bash\r` не находится.
 
-**Исправление:** `sed -i 's/\r$//' backend/service_checker/docker/entrypoint.sh`
-или `git config core.autocrlf input`.
-
-**Статус: ✅ ИСПРАВЛЕНО**
+**Решение при появлении:** `sed -i 's/\r$//' backend/service_checker/docker/entrypoint.sh`
+или `git config core.autocrlf input` перед клонированием.
 
 ---
 
-### 4.5. Orchestrator (8000) — `extra_forbidden` в Settings (ИСПРАВЛЕНО)
-
-**Ошибка:** pydantic `extra_forbidden` для `auth_service_url`, `auth_service_mock` и др.
-
-**Причина:** pydantic-settings 2.x по умолчанию `extra="forbid"`, а плоские ENV-переменные
-из `docker-compose.yml` не описаны в `Settings`.
-
-**Исправление:** в `app/core/config.py` добавлено `extra="ignore"` в `model_config`.
-
-**Статус: ✅ ИСПРАВЛЕНО**
-
----
-
-### 4.6. `autorestart=true` — бесконечные перезапуски упавших сервисов (ИСПРАВЛЕНО)
+### 4.4. `autorestart=true` — бесконечные перезапуски упавших сервисов
 
 **Проблема:** supervisor настроен с `autorestart=true` и `startretries=5`.
 Падающие сервисы (auth, gateway, registry) перезапускаются бесконечно,
 лог `.err` раздувается до 13+ МБ за несколько минут.
 
-**Исправление:** в `service_checker/docker/supervisord.conf` выставлено:
+**Актуальная конфигурация** (`service_checker/docker/supervisord.conf`):
 ```
 autorestart=false
 startretries=0
 ```
 — одна попытка запуска, упал — значит упал, логи не плодятся.
 
-**Статус: ✅ ИСПРАВЛЕНО**
-
 ---
 
-### 4.7. Stale volume `app_logs` — логи с прошлых запусков не очищаются (ИСПРАВЛЕНО)
+### 4.5. Stale volume `app_logs` — логи с прошлых запусков не очищаются
 
 **Проблема:** при `docker compose rm -f app` volume `app_logs` **не удаляется**.
 Новый контейнер монтирует старый volume с логами за 18 МБ.
 Отчёт errors_*.md весит 17-18 МБ вместо 26 КБ.
 
-**Исправление:** перед чистым запуском удалять volume:
+**Актуальные команды для чистого запуска:**
 ```bash
 docker compose -f service_checker/docker/docker-compose.yml down -v
 ```
@@ -377,11 +308,9 @@ docker compose -f service_checker/docker/docker-compose.yml rm -f app
 docker volume rm docker_app_logs
 ```
 
-**Статус: ✅ ИСПРАВЛЕНО**
-
 ---
 
-### 4.8. Ожидание инициализации — достаточно 10 секунд
+### 4.6. Ожидание инициализации — достаточно 10 секунд
 
 После старта контейнера все 10 Python-процессов запускаются за ~10 с.
 Проверка health раньше — connection refused.
@@ -393,7 +322,7 @@ python backend/service_checker/service_checker.py docker --action health
 
 ---
 
-### 4.9. Автоматизация: entrypoint сам доустанавливает зависимости
+### 4.7. Автоматизация: entrypoint сам доустанавливает зависимости
 
 В `entrypoint.sh` добавлен шаг 3:
 ```bash
@@ -415,191 +344,6 @@ python backend/service_checker/service_checker.py docker --action health
 ```
 
 ---
-
-## 5. Функции Document API документированы в `docs/api/orchestrator_service_api.md`
-			Эндпоинты групп **documents** и **pages** (`/api/v1/documents/...`) описаны
-		в `docs/api/orchestrator_service_api.md` и являются частью актуального API.
-		Они не имеют аналогов в Draft/Task API, т.к. относятся к разным группам.
-
-		| Функция | Эндпоинт(ы) | Группа в спецификации |
-		|---------|------------|----------------------|
-		| **Pages** | `GET /documents/{id}/pages`, `.../pages/{num}`, `.../text`, `.../preview` | pages |
-		| **File** | `GET /documents/{id}/file` | documents |
-		| **Errors** | `GET /documents/{id}/errors` | documents |
-		| **Parameters** | `GET /documents/{id}/parameters` | pages |
-		| **Queue** | `GET /documents/queue` | documents |
-		| **Versions** | `POST/GET /documents/{id}/versions` | documents |
-		| **History** | `GET /documents/{id}/history` | documents |
-
-		### 3.9. `created_by` в `create_draft` получал объект `CurrentUser` вместо строки
-
-		В эндпоинте `POST /api/v1/drafts/` параметр `created_by` ожидает строку,
-		но в коде передавался `current_user or MOCK_USER_ID`, где `current_user` —
-		объект `CurrentUser` (из `app/api/deps/__init__.py`).
-		Pydantic валидация падала с ошибкой типа.
-
-		**Исправлено:** `created_by=current_user.user_id if current_user else MOCK_USER_ID`.
-
-		### 3.10. Чекер шлёт JSON на multipart-эндпоинт POST /drafts
-
-		Внешняя тестовая система (чекер) отправляет `POST /api/v1/drafts/`
-		с JSON-телом `{"title": "...", "content": "..."}`, в то время как
-		эндпоинт по спецификации и реализации принимает `multipart/form-data`
-		с полями `file`, `document_key` и опциональным `title`.
-
-		**Причина:** чекер использует собственную (устаревшую) спецификацию,
-		не совпадающую с актуальным API оркестратора.
-
-		**Статус:** не наша сторона. Если требуется прохождение чекера —
-		нужно добавлять поддержку JSON-тела как альтернативного формата.
-
-		---
-
-		## 6. Аномалии, обнаруженные при анализе task assignment (19.06.2026)
-
-		### 6.1. POST /drafts не передаёт mime_type в start_pipeline
-
-		**Файл:** `app/api/v1/endpoints/drafts.py`
-
-		В `create_draft()` есть `file.content_type`, но он не передаётся в `start_pipeline()`.
-		`start_pipeline()` вызывается без mime_type (строки 233-238), что приводит к тому,
-		что `start_pipeline()` определяет `is_scanned` без контекста — используется дефолт.
-
-		**Нужно:** передавать `mime_type=file.content_type` в `start_pipeline()`.
-
-		### 6.2. start_preview использует hardcoded "application/pdf"
-
-		**Файл:** `app/api/v1/endpoints/drafts.py`, строка 482
-
-		В `start_preview()` при вызове `start_pipeline()` всегда передаётся
-		`mime_type="application/pdf"`. Если файл — изображение (PNG/JPEG/TIFF),
-		это приведёт к неверному ветвлению OCR vs Parser.
-
-		**Нужно:** хранить mime_type в Task или получать из Registry.
-
-		### 6.3. _check_auto_approve всегда возвращает True
-
-		**Файл:** `app/core/pipeline/orchestrator.py`, строки 288-293
-
-		Метод `_check_auto_approve` всегда возвращает True, что означает auto-approve
-		после каждого preview. Это может быть нежелательно для production, где
-		требуется ручное подтверждение от пользователя.
-
-		**Нужно:** реализовать реальную проверку (наличие дубликатов, качество метаданных).
-
-		### 6.4. approve_draft не вызывает Registry.create_document()
-
-		**Файл:** `app/core/pipeline/orchestrator.py`, метод `approve_draft()`
-
-		При approve создаются TaskSteps и запускается full_phase, но document_id
-		не запрашивается из Registry до registry_creation шага. По заданию (OR-13),
-		document_id должен назначаться Registry при approve, а не Converter-validator.
-
-		**Нужно:** при approve вызывать `Registry.create_document()` и
-		возвращать document_id в ответе DecideResponse.
-
-		### 6.5. Ветвление OCR vs Parser некорректно для PDF
-
-		**Файл:** `app/core/pipeline/orchestrator.py`, строки 71-73
-
-		Логика `is_scanned`:
-		```python
-		is_scanned = mime_type in ("image/png", "image/jpeg", "image/tiff") or (
-		    mime_type == "application/pdf"  # would need deeper check
-		)
-		```
-
-		Все PDF считаются scanned → идут в OCR Service. Но digital PDF (с текстовым слоем)
-		должны идти в Parser Service. Нужна более глубокая проверка или явное указание
-		типа документа при загрузке.
-
-		**Нужно:** добавить параметр `document_type` (digital/scanned) в POST /drafts,
-		либо выполнять MIME-детекцию по содержимому (magic bytes).
-
-		### 6.6. Нет разделения внешних и внутренних действий в decide
-
-		**Файл:** `app/api/v1/endpoints/drafts.py`, `decide_draft()`
-
-		Сейчас поддерживаются только `approve` и `reject`. По заданию (OR-12):
-		- Внешние (UI): approve, reject
-		- Внутренние: proceed, stop_duplicate, force_new_version
-
-		**Нужно:** добавить внутренние экшены с проверкой RBAC.
-
-		### 6.7. Нет проверки идемпотентности preview
-
-		**Файл:** `app/api/v1/endpoints/drafts.py`, `start_preview()`
-
-		При повторном вызове `POST /drafts/{draft_id}/preview` не возвращается 409.
-		Запускается новый pipeline, создаётся дублирующая задача.
-
-		**Нужно:** проверять статус draft/task и возвращать 409 если preview уже запущен.
-
-		### 6.8. PreviewMetadata содержит только 5 полей из требуемых 8+
-
-		**Файл:** `app/schemas/drafts.py`, класс `PreviewMetadata`
-
-		Сейчас:
-		- doc_code
-		- title
-		- document_type
-		- year
-		- revision
-
-		По заданию (OR-9) требуется минимум 8 полей:
-		- source_type, era, jurisdiction, mks_oks_code, okstu_code, issuing_body, udk_code
-
-		### 6.9. Нет OTEL SDK
-
-		**Файл:** `app/main.py`
-
-		OpenTelemetry SDK не подключён. Нет инициализации tracer, meter, exporter.
-		По заданию (OR-8, CM-6) требуется OTEL интеграция с SigNoz.
-
-		### 6.10. Нет модели DraftNotification
-
-		По заданию (OR-6) требуется таблица `pipeline.draft_notifications`
-		для хранения quality.notifications[] от Parser/OCR.
-		Сейчас качество не отслеживается.
-
-	### 6.11. Двойное создание document_id (ИСПРАВЛЕНО)
-
-	**Проблема:** approve_draft вызывал Registry.create_document(), и затем
-	run_registry_step (Celery задача) снова вызывал create_document().
-	Документ создавался дважды.
-
-	**Исправлено:** run_registry_step теперь вызывает update_draft_status()
-	вместо create_document(), так как документ уже создан в approve_draft.
-
-	### 6.12. approve_draft не проверял ответ Registry (ИСПРАВЛЕНО)
-
-	**Проблема:** при ошибке Registry.create_document() без исключения,
-	document_id = doc_data.get("document_id", draft_id) давал fallback = draft_id,
-	и pipeline продолжался с некорректным ID.
-
-	**Исправлено:** добавлена явная проверка `if not document_id: raise ValueError`.
-
-	### 6.13. full_completed не запускал full_converter (ИСПРАВЛЕНО)
-
-	**Файл:** `app/core/pipeline/orchestrator.py`, approve_draft()
-
-	**Проблема:** при full_completed=True (preview вернул полный документ),
-	создавались full_converter и registry_creation шаги, но full_converter
-	не стартовался (не было start_task_step). Pipeline зависал.
-
-	**Исправлено:** добавлен запуск full_converter step при full_completed=True.
-
-	### 6.14. PDF всегда шёл в OCR (ИСПРАВЛЕНО)
-
-	**Файл:** `app/core/pipeline/orchestrator.py`, строки 71-73
-
-	**Проблема:** `is_scanned = ... or (mime_type == "application/pdf")` —
-	все PDF считались сканами и шли в OCR Service. Digital PDF должны
-	обрабатываться Parser Service.
-
-	**Исправлено:** логика разделена: image/* + scanned_pdf -> OCR,
-	application/pdf (digital) -> Parser.
-
 
 ## Типичные ошибки при разработке
 
@@ -678,3 +422,31 @@ python backend/service_checker/service_checker.py docker --action health
 Перед `read_file` проверь, загружен ли файл в кэш текущей сессии.
 Повторное чтение уже загруженных файлов — потеря токенов.
 Исключение: если файл гарантированно изменился между сессиями.
+
+### 11. TortoiseGit + sparse-checkout = скрытые конфликты
+
+**Симптом:** `git pull` показал "All conflicts fixed", TortoiseGit
+  не даёт закоммитить, после принудительного коммита в HEAD лежат
+  маркеры `<<<<<<<` в файлах вне sparse-кассы.
+**Причина:** TortoiseGit не показывает конфликты в файлах, исключённых
+  sparse-checkout'ом. Git считает merge завершённым "по индексу",
+  но реальные конфликты вне рабочей копии не разрешены.
+**Правило:** При merge с sparse-checkout — временно расширяй кассу
+  на `/*`, делай pull, разрешай **все** конфликты, коммить,
+  потом сужай обратно. Проверять: `git grep -nE '^(<<<<<<<|=======|>>>>>>>)'`.
+
+### 12. ИСПРАВЛЕНО (27.06): duplicate steps + registry 409
+
+**Проблема**: Полный pipeline зависал на preview_ocr (pending) и registry_creation (pending).
+- preview_ocr: дублирующийся шаг (один completed, второй pending) блокировал проверку `all()`
+- start_pipeline создавал шаги без проверки существующих
+- registry_creation: run_registry_step падал с 409 Conflict, т.к. approve_draft уже обновил статус draft
+
+**Что исправлено**:
+- `start_pipeline`: идемпотентное создание (skip if exists)
+- `on_step_completed`: приоритет pending > completed при выборе шага
+- `_wait_for_preview`: дедупликация с приоритетом статуса (failed > completed > running > pending)
+- Добавлен `_find_best_step`: предпочитает completed для чтения output_data
+- `run_registry_step`: 409 Conflict = idempotent success
+
+**Проверено**: pipeline за ~15с, RAG Search 150 результатов.

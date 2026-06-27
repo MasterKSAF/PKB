@@ -384,3 +384,26 @@ Docker healthcheck может слать `/api/v1/system/health/` — слеш �
 - **test_extended.py test_62**: Ассерт исправлен на `data.pending_created` + проверка `pending_ids`.
 ### Статус тестов
 - Все 551 тест проходят
+
+## 2026-06-27: Gateway unit-тесты — 281→287 тестов (fix: ALLOW_ANONYMOUS + event loop)
+### Изменения
+- Создана `tests/` — 16 файлов, 287 тестов для самого Gateway (не моков)
+- Добавлен `pytest-asyncio` в requirements.txt, создан pytest.ini
+- `conftest.py`: ALLOW_ANONYMOUS=True, RATE_LIMIT_ENABLED=0, лог на CRITICAL
+
+### Аномалии
+- `GatewayConfig` использует `float(os.getenv(...))` (flat default).
+  Env-override через monkeypatch НЕ работает для request_timeout, health_timeout, idempotency_ttl.
+  service_urls использует `field(default_factory=lambda: ...)` — работает.
+- `check_rate_limit()` и `close_client()` — async, тесты должны использовать await.
+- ALLOW_ANONYMOUS=True пропускает middleware-проверку RBAC для неаутентифицированных.
+- `KNOWN_SERVICES` не включает "analyse" (но сервис analyse есть в конфигурации).
+
+### 2026-06-27: Исправление 4 групп ошибок
+- **ALLOW_ANONYMOUS**: conftest.py принудительно устанавливает env-переменные
+  (вместо `setdefault`), чтобы тесты работали в Docker-окружении.
+- **Event loop**: `test_client.py` конвертирован в async-тесты с
+  `@pytest.mark.asyncio` (был RuntimeError('Event loop is closed')).
+- **PII**: Middleware корректно блокирует все 12 PII-параметров.
+  `file_key` и `q` не блокируются (разрешены тестами).
+- **Proxy/routing**: все 51 сценарий resolve_service() проходят.

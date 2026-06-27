@@ -97,9 +97,17 @@ class ParserServiceClient(ServiceClient):
         )
 
     async def get_status(self, task_id: str) -> Dict[str, Any]:
-        """Get parser task status."""
+        """Get parser task status (polls /parser/process/{task_id}/status)."""
         return await self.call(
             "GET",
-            f"/api/v1/parser/{task_id}/status",
+            f"/api/v1/parser/process/{task_id}/status",
+            mock_response={"data": {}},
+        )
+
+    async def get_result(self, task_id: str) -> Dict[str, Any]:
+        """Get parser task result (/parser/process/{task_id}/result)."""
+        return await self.call(
+            "GET",
+            f"/api/v1/parser/process/{task_id}/result",
             mock_response={"data": {}},
         )

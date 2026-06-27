@@ -420,7 +420,7 @@ stateDiagram-v2
         pending_index --> failed : Scheduler timeout (1 час)
     }
     indexed --> [*] : готов к поиску
-    failed --> uploaded : reprocess (Registry)
+    failed --> uploaded : reprocess (Orchestrator)
 ```
 
 **Описание состояний:**
@@ -443,7 +443,7 @@ stateDiagram-v2
 **Триггер перехода `review_required → validation` (P1-20):**
 
 1. На стадии `previewing` Parser/OCR возвращает raw-метрики качества (`avg_confidence`, `pages_failed`, `per_page[].status`). Оркестратор применяет пороги из `app_settings.parser.quality_thresholds`:
-   - `avg_confidence < reprocess_avg_confidence_below` → Orchestrator направляет документ в Registry на переобработку.
+   - `avg_confidence < reprocess_avg_confidence_below` → Orchestrator направляет документ на переобработку.
    - `avg_confidence < operator_avg_confidence_below` ИЛИ `pages_failed > 0` ИЛИ `lama_fallback_used == true` → черновик переходит в `review_required` (а не `ready_for_approve`).
 2. Если качество в норме — черновик переходит в `ready_for_approve`. Далее Оркестратор проверяет условия **авто-апрува**:
    - Параметр `app_settings.parser.auto_approve.enabled` (по умолчанию `false`)

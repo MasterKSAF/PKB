@@ -660,7 +660,7 @@ class PipelineRunner:
             try:
                 import subprocess
                 r = subprocess.run(
-                    ["docker", "exec", "pkb-postgres", "psql", "-U", "pkb", "-d", "pkb_neuro", "-c",
+                    ["docker", "exec", "pkb-postgres", "psql", "-U", "pkb", "-d", "pkb_neuro_check", "-c",
                      "ALTER TABLE IF EXISTS rag.document_chunks DROP CONSTRAINT IF EXISTS fk_rag_document_chunks_section_id;"],
                     capture_output=True, timeout=10,
                 )
@@ -669,11 +669,10 @@ class PipelineRunner:
             except Exception:
                 pass
 
-        # 3. Pre-prepare: создаём проект для чат-сессий (QS-3)
-        if "query" in pipeline.services:
-            # Пробуем взять токен из контекста, если auth уже был
-            pre_token = str(ctx.get("access_token")) if ctx.has("access_token") else None
-            await self._ensure_project(ctx, pre_token)
+        # 3. (удалён блок pre-prepare _ensure_project)
+        # _ensure_project теперь вызывается ПОСЛЕ первого auth-шага,
+        # когда токен точно есть в контексте. Это устраняет 401 на
+        # POST /chat/projects при первом прогоне pipeline.
 
         # 4. Построение шагов
         try:
@@ -685,6 +684,10 @@ class PipelineRunner:
 
         result.steps = steps
         result.total_steps = len(steps)
+
+        # Нужен ли проект для query (если есть query в services и project_id ещё не получен)
+        needs_project = "query" in pipeline.services and not ctx.has("project_id")
+        project_ensured = False
 
         # 4. Выполнение шагов
         auth_token: Optional[str] = None
@@ -702,6 +705,18 @@ class PipelineRunner:
                 result.skipped_steps += 1
                 print(f"     ⏭️ [{i+1}/{len(steps)}] {step.name} — пропущен (skip_if)")
                 continue
+
+            # Lazy _ensure_project: после первого auth-шага, когда токен есть.
+            # Делаем это перед первым шагом, который может потребовать project_id.
+            if needs_project and not project_ensured and auth_token:
+                try:
+                    await self._ensure_project(ctx, auth_token)
+                    project_ensured = True
+                except RuntimeError as e:
+                    # Не валим pipeline — оставляем project_id=None,
+                    # downstream-шаги, требующие его, сами решат через skip_if или упадут честно.
+                    print(f"     ⚠ Не удалось создать/получить проект: {e}")
+                    project_ensured = True  # Чтобы не повторять
 
             step = await self.run_step(step, ctx, auth_token)
 

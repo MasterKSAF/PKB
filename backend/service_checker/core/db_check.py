@@ -7,7 +7,7 @@ PKB Neuroassistant — Database Health Check.
 Создание таблиц — зона ответственности самих сервисов (create_all в startup).
 
 Проверяет:
-- База данных pkb_neuro существует
+- База данных pkb_neuro_check существует
 - Расширения (uuid-ossp, pgcrypto, ltree, pg_trgm, vector) установлены
 - Схемы (public, registry, rag) созданы
 - Таблицы Registry и RAG существуют
@@ -30,7 +30,7 @@ from typing import Dict, List, Set, Tuple
 #  Константы
 # ────────────────────────────────────────────────────────────────
 
-DB_NAME = "pkb_neuro"
+DB_NAME = "pkb_neuro_check"
 DB_USER = "pkb"
 POSTGRES_CONTAINER = "pkb-postgres"
 
@@ -289,10 +289,10 @@ def run_db_check() -> DbCheckResult:
 
     # ── 1. База данных ──────────────────────────────────────────
     dbs = _query_single_column(
-        "SELECT datname FROM pg_database WHERE datname = 'pkb_neuro'",
+        "SELECT datname FROM pg_database WHERE datname = 'pkb_neuro_check'",
         db="postgres",
     )
-    result.db_exists = "pkb_neuro" in dbs
+    result.db_exists = "pkb_neuro_check" in dbs
 
     rc, stdout, _ = _docker_exec("SELECT current_database()")
     result.db_accessible = rc == 0 and DB_NAME in stdout

@@ -5,9 +5,13 @@ Configured to use Redis as both broker and result backend.
 Task routes separate heavy and light tasks into different queues.
 """
 
+import logging
+
 from celery import Celery
 
 from app.core.config import settings
+
+logger = logging.getLogger("orchestrator.celery")
 
 celery_app = Celery(
     "orchestrator_pipeline",
@@ -26,6 +30,27 @@ celery_app.conf.task_routes = {
     "tasks.pipeline.*": {"queue": "pipeline"},
     "tasks.compensation.*": {"queue": "saga"},
 }
+
+logger.info(
+    "Celery initialized",
+    extra={
+        "celery_app": celery_app.main,
+        "broker": settings.CELERY_BROKER_URL,
+        "backend": settings.CELERY_RESULT_BACKEND,
+        "queues": ["celery", "pipeline", "saga"],
+        "tasks": [
+            "tasks.pipeline.run_ocr_preview_step",
+            "tasks.pipeline.run_parser_preview_step",
+            "tasks.pipeline.run_converter_preview_step",
+            "tasks.pipeline.run_converter_full_step",
+            "tasks.pipeline.run_registry_step",
+            "tasks.pipeline.indexation.run_rag_index_step",
+            "tasks.pipeline.indexation.run_reprocess_step",
+            "tasks.compensation.delete_registry_document",
+            "app.tasks.scheduler.cleanup_stale_jobs",
+        ],
+    },
+)
 
 # Task serialization
 celery_app.conf.task_serializer = "json"

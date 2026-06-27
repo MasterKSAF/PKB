@@ -2,11 +2,12 @@
 Unit tests for ParserServiceClient.
 
 Tests mock generation for:
-  - POST /parser/process (mode=preview|full)
-  - GET /parser/{task_id}/status
+  - POST /api/v1/parser/process (mode=preview|full)
+  - GET /api/v1/parser/{task_id}/status
 """
 
 import pytest
+from unittest.mock import patch
 
 from app.services.parser_client import ParserServiceClient
 
@@ -19,6 +20,38 @@ def parser_client():
 
 
 DRAFT_ID = 420001
+
+
+class TestParserEndpoint:
+    """Tests that parser client uses correct endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_process_uses_parser_endpoint(self):
+        """Parser client calls POST /api/v1/parser/process."""
+        client = ParserServiceClient()
+        client.mock_mode = False
+
+        with patch.object(client, "call") as mock_call:
+            mock_call.return_value = {"data": {}}
+            await client.process(task_id=1, file_key="f-test", draft_id=42, mode="preview")
+
+        endpoint = mock_call.call_args[0][1]
+        assert endpoint == "/api/v1/parser/process"
+
+    @pytest.mark.asyncio
+    async def test_status_uses_parser_endpoint(self):
+        """Parser client calls GET /api/v1/parser/{task_id}/status."""
+        client = ParserServiceClient()
+        client.mock_mode = False
+
+        with patch.object(client, "call") as mock_call:
+            mock_call.return_value = {"data": {}}
+            await client.get_status(task_id="task-42")
+
+        endpoint = mock_call.call_args[0][1]
+        assert "/api/v1/parser/" in endpoint
+        assert "task-42" in endpoint
+        assert "/status" in endpoint
 
 
 class TestParserProcessPreview:

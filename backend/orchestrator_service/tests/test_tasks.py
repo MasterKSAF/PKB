@@ -22,7 +22,7 @@ class TestTaskStatus:
         response = client.post(
             "/api/v1/drafts/",
             headers=auth_header,
-            files={"file": ("test.pdf", b"%PDF-1.4 mock content", "application/pdf")},
+            files={"file": ("test.pdf", b"%PDF-1.4 mock content " * 100, "application/pdf")},
             data={"document_key": key, "source_type": "GOST"},
         )
         assert response.status_code == 202
@@ -237,7 +237,7 @@ class TestTaskSteps:
         response = client.post(
             "/api/v1/drafts/",
             headers=auth_header,
-            files={"file": ("test.pdf", b"%PDF-1.4 mock content", "application/pdf")},
+            files={"file": ("test.pdf", b"%PDF-1.4 mock content " * 100, "application/pdf")},
             data={"document_key": key, "source_type": "GOST"},
         )
         assert response.status_code == 202
@@ -409,7 +409,7 @@ class TestTaskWithoutAuth:
         response = client.post(
             "/api/v1/drafts/",
             headers=auth_header,
-            files={"file": ("test.pdf", b"%PDF mock", "application/pdf")},
+            files={"file": ("test.pdf", b"%PDF mock " * 200, "application/pdf")},
             data={"document_key": "doc-task-no-auth", "title": "Test", "source_type": "GOST"},
         )
         assert response.status_code == 202

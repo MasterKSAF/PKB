@@ -33,10 +33,12 @@
 - `/system/health`, `/health/live`, `/health/ready` — health-check
 
 ### 3. Двухфазный pipeline
-- **Preview фаза:** быстрая обработка первых страниц (OCR/Parser → Converter-validator) → решение пользователя.
-- **Full фаза:** полная обработка (OCR/Parser → Converter-validator → Registry → RAG Builder).
-- Ветвление по MIME-типу: image/* → OCR, application/pdf → Parser.
-- Preview_not_supported → пропуск full-фазы.
+- **Preview фаза:** быстрая обработка первых страниц (Parser → OCR fallback → Converter-validator) → решение пользователя.
+- **Full фаза:** полная обработка (Parser → OCR fallback → Converter-validator → Registry → RAG Builder).
+- **Parser-first стратегия:** Parser пробуется первым для всех типов файлов (даже image/*).
+- **OCR fallback:** при недоступности Parser или `preview_not_supported=true` — автоматический переход на OCR (если `PARSER_FALLBACK_TO_OCR=true` и `OCR_ENABLED=true`).
+- `PARSER_ENABLED` / `OCR_ENABLED` — опции полного отключения сервисов.
+- Preview_not_supported → fallback на OCR или пропуск full-фазы.
 
 ### 4. Task как агрегатор шагов
 - Один Task = одна pipeline-задача (formation/indexation).
@@ -65,7 +67,7 @@
 - Task creation — UNIQUE(draft_id, pipeline_type).
 
 ### 9. Actions разделены
-- **Внешние (UI):** approve, reject.
+- **Внешние (UI):** approve, reject, confirm (для review_required).
 - **Внутренние:** proceed (продолжить), stop_duplicate (дубликат), force_new_version (новая версия).
 
 ### 10. Компенсация через Saga
@@ -74,7 +76,7 @@
 
 ---
 
-## Coverage тестов (26.06)
+## Coverage тестов (27.06)
 
 ### Celery-задачи (unit, `tests/unit/test_celery_tasks_all.py`):
 - Все 10 pipeline-задач + 2 scheduler + 2 compensation — happy & failure paths
@@ -87,10 +89,75 @@
 - `GET /tasks/{id}` — document_id, version_id, notifications, error_info
 - End-to-end: draft → celery → status/results через API
 
+### CRUD черновиков (`tests/orchestrator/test_drafts_crud.py`):
+- POST /drafts с пустым файлом → 422
+- POST /drafts с некорректным JSON metadata → 422
+- GET /drafts/{id} — существующий (seed + created) → 200
+- GET /drafts/{id} — несуществующий → 404
+- GET /drafts/abc — нечисловой id → 422
+
+### Preview и decision (`tests/orchestrator/test_drafts_preview.py`):
+- GET /preview/status — pending (шаги созданы, не завершены)
+- GET /preview/status — completed с preview_metadata
+- GET /preview/status — failed
+- PATCH /decide — reject без comment
+- PATCH /decide — невалидный action → 400
+
+### Задачи черновиков (`tests/orchestrator/test_drafts_tasks.py`):
+- GET /drafts/{id}/tasks — структура ответа
+- GET /tasks/{id} — completed (100%), active (50%), failed
+- GET /tasks/{id} — несуществующая → 404
+
+### Pipeline документов (`tests/orchestrator/test_documents_pipeline.py`):
+- POST /documents/{id}/reprocess — full mode response structure
+- POST /documents/{id}/reprocess — partial (ocr_only)
+- POST /documents/{id}/reprocess — несуществующий документ
+- GET /documents/{id}/tasks — существующий, несуществующий, структура
+
+### Статусы задач как proxy статусов документов (`tests/orchestrator/test_documents_status.py`):
+- GET /tasks/{id} — completed, active (processing), failed — статусы
+- GET /tasks/{id} — несуществующий → 404
+
+### Интеграционный тест (`tests/integration/test_draft_to_document_flow.py`):
+- Полный цикл: draft → preview → approve → document_id
+- Reject flow: upload → reject → discarded
+
+### State Machine Violations (`tests/orchestrator/test_drafts_state_machine.py`, NEW):
+- Матрица 5 actions × 6 stages = 30 комбинаций (200 vs 409 INVALID_STAGE)
+- 5 actions × 2 terminal статуса = 10 комбинаций (409 TASK_ALREADY_TERMINAL)
+
+### Data consistency + Boundary + Idempotency (`tests/orchestrator/test_drafts_consistency.py`, NEW):
+- Approve consistency: document_id, version_id, is_new_document
+- Mock-real gap: draft_id=0, ключи id vs draft_id (xfail — найден баг)
+- Boundary: file_size=MAX, metadata=null, title=""
+- Idempotency: double POST /drafts (не реализована), double POST /preview (409)
+
+### Saga compensation (`tests/unit/test_saga_compensation.py`, NEW):
+- `SagaCoordinator.compensate` — registry_creation → delete_document
+- Stateless steps not compensated, reverse order, retry before saga
+- `_mock_delete_document` — runtime vs seed
+
+### Mock-real gap (`tests/test_service_clients_registry.py::TestRegistryMockRealGap`, NEW):
+- `data["id"]=0` is falsy → fallback на `draft_id`
+- Расхождение ключей `id` vs `draft_id` в mock vs static response
+
+### Pipeline Orchestrator Details (27.06, 9 файлов, 51 тест)
+- `tests/orchestrator/test_drafts_boundaries.py` — MIME, empty, duplicate flags
+- `tests/orchestrator/test_preview_state_validation.py` — state validation preview
+- `tests/orchestrator/test_quality_auto_approve.py` — quality, auto-approve, review_required
+- `tests/orchestrator/test_decide_edge_cases.py` — decide edge cases (terminal, stop_duplicate, proceed, force_new_version)
+- `tests/orchestrator/test_race_conditions.py` — stop_duplicate flow, Registry errors
+- `tests/orchestrator/test_metadata_patch.py` — PATCH /metadata
+- `tests/orchestrator/test_delete_draft.py` — DELETE /drafts with various statuses
+- `tests/orchestrator/test_full_phase_errors.py` — on_step_failed retry, OCR fallback
+- `tests/orchestrator/test_pipeline2_orchestrator.py` — rag_index completion, reprocess modes, indexation tasks
+
 ### Инфраструктура
 - MinIO `upload_file` замокан в conftest (timeout 40с → 0.2с)
 - Все внешние сервисы замоканы (Registry, RAG, OCR, Parser, Converter)
 - Celery `.delay()` — no-op, задачи тестируются через `.run()`
+- **Итог: 543 passed, 3 failed (+51 новых, 0 сломанных)**
+  - 3 failed — предсуществующая проблема в test_service_clients_rag.py (document_id=str vs int)
 
 ## Naming conventions
 
@@ -106,10 +173,18 @@
 
 | HTTP | code | Когда |
 |------|------|-------|
+| 400 | FILE_TOO_SMALL | Размер файла менее 1 КБ |
+| 400 | EMPTY_DOCUMENT | 0 страниц при approve |
+| 400 | INVALID_ACTION_FOR_STATUS | Несовместимое действие для статуса |
 | 408 | DECISION_TIMEOUT | Истекло время на принятие решения |
 | 408 | PREVIEW_TRIGGER_TIMEOUT | Таймаут preview |
 | 409 | TASK_ALREADY_EXISTS | Задача уже существует для draft |
-| 409 | PREVIEW_ALREADY_RUNNING | Preview уже запущен |
+| 409 | PREVIEW_IN_PROGRESS | Preview уже запущен |
+| 409 | DUPLICATE_FILE | Дубль по SHA-256 при создании черновика |
+| 409 | DRAFT_ALREADY_DECIDED | decide для терминального черновика |
+| 409 | DUPLICATE_FILE_AFTER_APPROVE | Race condition на full-фазе |
+| 409 | BUSINESS_KEY_DRIFT | Бизнес-ключ изменился между preview и approve |
+| 422 | UNSUPPORTED_FILE_TYPE | Неподдерживаемый MIME |
 | 422 | VALIDATION_ERROR | Некорректные поля запроса |
 | — | INTEGRITY_CHECK_FAILED | (шаг rag_index) — проверка целостности индекса не пройдена (P2I-2) |
 | — | PENDING_TIMEOUT | Шаг завис в pending (P3S-1) |

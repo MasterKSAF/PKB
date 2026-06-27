@@ -76,15 +76,17 @@ x-env-auth: &env-auth
   DEFAULT_ADMIN_EMAIL: ${DEFAULT_ADMIN_EMAIL:-admin@example.com}
   DEFAULT_ADMIN_PASSWORD: ${DEFAULT_ADMIN_PASSWORD:-Admin1234!}
 
-# --- Embeddings (внешний routerai.ru) ---
+# --- Embeddings ---
+# Единая переменная: EMBEDDING_BASE_URL. Если не задана — routerai.ru.
+# EMBEDDING_API_KEY — опционально, fallback на ROUTERAI_API_KEY.
 x-env-embeddings: &env-embeddings
-  EMBEDDING_PROVIDER: openai_compatible
-  EMBEDDING_BASE_URL: ${LLM_API_BASE_URL:-https://routerai.ru/api/v1}
-  EMBEDDING_API_URL: ${LLM_API_BASE_URL:-https://routerai.ru/api/v1}/embeddings
-  EMBEDDING_MODEL: qwen/qwen3-embedding-8b
-  EMBEDDING_DIM: "2048"
-  VECTOR_DIMENSION: "2048"
-  EMBEDDING_API_KEY: ${ROUTERAI_API_KEY:-}
+  EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-openai_compatible}
+  EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-https://routerai.ru/api/v1}
+  EMBEDDING_API_URL: ${EMBEDDING_API_URL:-https://routerai.ru/api/v1/embeddings}
+  EMBEDDING_MODEL: ${EMBEDDING_MODEL:-qwen/qwen3-embedding-8b}
+  EMBEDDING_DIM: "${EMBEDDING_DIM:-2048}"
+  VECTOR_DIMENSION: "${VECTOR_DIMENSION:-${EMBEDDING_DIM:-2048}}"
+  EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-${ROUTERAI_API_KEY:-}}
   EMBEDDING_TIMEOUT: "60"
   EMBEDDING_INSTRUCTION: ""
 
@@ -100,7 +102,7 @@ x-env-service-urls: &env-service-urls
   AUTH_SERVICE_URL: http://auth:8082
   ORCHESTRATOR_SERVICE_URL: http://orchestrator:8081
   QUERY_SERVICE_URL: http://query:8083
-  REGISTRY_SERVICE_URL: http://registry:8084
+  REGISTRY_SERVICE_URL: http://registry:8084/api/v1
   CONVERTER_VALIDATOR_SERVICE_URL: http://converter-validator:8086
   CONVERTER_SERVICE_URL: http://converter-validator:8086
   VALIDATE_SERVICE_URL: http://converter-validator:8086
@@ -108,7 +110,6 @@ x-env-service-urls: &env-service-urls
   OCR_SERVICE_URL: http://parser:8087
   RAG_BUILDER_SERVICE_URL: http://rag-builder:8090
   RAG_SEARCH_SERVICE_URL: http://rag-search:8091
-  RAG_SERVICE_URL: http://rag-search:8091
 
 services:
 
@@ -276,6 +277,7 @@ services:
       - "8082:8082"
     environment:
       <<: [*env-db, *env-auth]
+      LOG_LEVEL: DEBUG
       DATABASE_URL: postgresql+asyncpg://pkb:pkb@postgres:5432/pkb_neuro
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8082"]
     depends_on:
@@ -304,6 +306,7 @@ services:
       - "8084:8084"
     environment:
       <<: [*env-db]
+      LOG_LEVEL: DEBUG
       DATABASE_URL: postgresql+asyncpg://pkb:pkb@postgres:5432/pkb_neuro
     depends_on:
       postgres:
@@ -331,6 +334,7 @@ services:
       - "8087:8087"
     environment:
       <<: [*env-minio]
+      LOG_LEVEL: DEBUG
     depends_on:
       minio:
         condition: service_healthy
@@ -356,9 +360,10 @@ services:
     ports:
       - "8086:8086"
     environment:
+      LOG_LEVEL: DEBUG
       OPENAI_API_KEY: ${ROUTERAI_API_KEY:-}
       OPENAI_BASE_URL: ${LLM_API_BASE_URL:-https://routerai.ru/api/v1}
-      DEFAULT_LLM_MODEL: deepseek/deepseek-v4-flash
+      DEFAULT_LLM_MODEL: ${DEFAULT_LLM_MODEL:-deepseek/deepseek-v4-flash}
       DEFAULT_LLM_MAX_TOKENS: "4096"
       DEFAULT_LLM_TIMEOUT: "60"
       CONFIDENCE_THRESHOLD: "0.55"
@@ -387,6 +392,7 @@ services:
       - "8090:8090"
     environment:
       <<: [*env-db, *env-embeddings, *env-rerank]
+      LOG_LEVEL: DEBUG
       APP_PORT: "8090"
       CHUNK_SIZE: "1024"
       EMBEDDING_BATCH_SIZE: "256"
@@ -419,6 +425,7 @@ services:
       - "8091:8091"
     environment:
       <<: [*env-db, *env-embeddings, *env-rerank]
+      LOG_LEVEL: DEBUG
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
       POSTGRES_USER: pkb
@@ -455,13 +462,15 @@ services:
       - "8083:8083"
     environment:
       <<: [*env-db, *env-service-urls]
+      LOG_LEVEL: DEBUG
       DEV_AUTH_MODE: ${DEV_AUTH_MODE:-true}
+      RAG_SERVICE_URL: http://rag-search:8091
       MOCK_RAG_ENABLED: ${MOCK_RAG_ENABLED:-false}
       MOCK_REGISTRY_ENABLED: ${MOCK_REGISTRY_ENABLED:-false}
       MOCK_LLM_ENABLED: ${MOCK_LLM_ENABLED:-false}
       LLM_API_URL: ${LLM_API_BASE_URL:-https://routerai.ru/api/v1}
       LLM_API_KEY: ${ROUTERAI_API_KEY:-}
-      LLM_MODEL: deepseek/deepseek-v4-flash
+      LLM_MODEL: ${LLM_MODEL:-deepseek/deepseek-v4-flash}
       LLM_TEMPERATURE: "0.2"
       LLM_MAX_TOKENS: "8196"
       LLM_TOP_P: "0.95"
@@ -496,6 +505,7 @@ services:
     environment:
       <<: [*env-db, *env-minio, *env-auth, *env-service-urls]
       DEBUG: "true"
+      LOG_LEVEL: DEBUG
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
@@ -545,11 +555,12 @@ services:
     container_name: pkb-celery-worker
     restart: unless-stopped
     working_dir: /app
-    command: celery -A app.celery_app worker --loglevel=info --concurrency=4 --pool=threads -Q celery,pipeline,saga
+    command: celery -A app.celery_app worker --loglevel=debug --concurrency=4 --pool=threads -Q celery,pipeline,saga
     healthcheck:
       disable: true
     environment:
       <<: [*env-db, *env-service-urls]
+      LOG_LEVEL: DEBUG
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
       REGISTRY_SERVICE_URL: http://registry:8084

@@ -78,6 +78,7 @@ def _msg_dict(m: ChatMessage) -> dict:
         base["sources"] = [_source_dict(src) for src in m.sources]
         base["processing_time_ms"] = m.processing_time_ms
         base["enrichment_skipped"] = m.enrichment_skipped
+        base["warnings"] = m.warnings or []
     return base
 
 

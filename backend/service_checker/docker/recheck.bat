@@ -10,12 +10,14 @@ REM   3. Проверяет наличие модели TEI — если нет,
 REM   4. Проверяет, запущен ли контейнер TEI — если нет, запускает
 REM   5. Дропает схемы БД, сбрасывает Redis, перезапускает app
 REM   6. Запускает отчёт (health + coverage + pipeline)
+REM   7. Gateway Integration Tests (pytest)
 REM
 REM Параметры:
 REM   --api service1,service2    Только указанные сервисы (через запятую)
 REM   --pipeline name1,name2     Только указанные пайплайны
 REM   --skip-coverage            Пропустить API Coverage
 REM   --skip-pipelines           Пропустить Pipeline тесты
+REM   --skip-gateway-tests       Пропустить Gateway Integration Tests (pytest)
 REM
 REM Примеры:
 REM   recheck.bat                                Полный прогон
@@ -50,6 +52,11 @@ if /i "%1"=="--skip-coverage" (
 )
 if /i "%1"=="--skip-pipelines" (
     set "CLI_ARGS=%CLI_ARGS% --skip-pipelines"
+    shift
+    goto parse_args
+)
+if /i "%1"=="--skip-gateway-tests" (
+    set "CLI_ARGS=%CLI_ARGS% --skip-gateway-tests"
     shift
     goto parse_args
 )
@@ -131,29 +138,15 @@ REM ── 5. Очистка данных + перезапуск app ───�
 echo [5/7] Dropping data + restarting app...
 
 echo     Recreating database...
-docker exec pkb-postgres psql -U pkb -d postgres -c "SELECT pg_terminate_backend(pg_stat_activity.pid) FROM pg_stat_activity WHERE datname = 'pkb_neuro' AND pid <> pg_backend_pid();" 2>nul
-docker exec pkb-postgres psql -U pkb -d postgres -c "DROP DATABASE IF EXISTS pkb_neuro;" 2>nul
-docker exec pkb-postgres psql -U pkb -d postgres -c "CREATE DATABASE pkb_neuro;" 2>nul
+docker exec pkb-postgres psql -U pkb -d postgres -c "SELECT pg_terminate_backend(pg_stat_activity.pid) FROM pg_stat_activity WHERE datname = 'pkb_neuro_check' AND pid <> pg_backend_pid();" 2>nul
+docker exec pkb-postgres psql -U pkb -d postgres -c "DROP DATABASE IF EXISTS pkb_neuro_check;" 2>nul
+docker exec pkb-postgres psql -U pkb -d postgres -c "CREATE DATABASE pkb_neuro_check;" 2>nul
 
 echo     Flushing Redis...
 docker exec pkb-redis redis-cli FLUSHALL 2>nul
 
 docker compose --progress quiet kill app 2>&1
 docker compose --progress quiet rm -f -v app 2>&1
-
-echo     Removing Orchestrator SQLite db...
-set "ORCHESTRATOR_DB=..\..\..\..\PKB_neuroassistant_develop\backend\orchestrator_service\orchestrator.db"
-if exist "%ORCHESTRATOR_DB%" (
-    del /f /q "%ORCHESTRATOR_DB%" 2>nul
-    echo     Deleted %ORCHESTRATOR_DB%
-) else (
-    echo     Orchestrator SQLite db not found at %ORCHESTRATOR_DB%, trying inside volume...
-    rem Fallback: ищем внутри смонтированного backend
-    if exist "..\..\orchestrator_service\orchestrator.db" (
-        del /f /q "..\..\orchestrator_service\orchestrator.db" 2>nul
-        echo     Deleted via fallback path
-    )
-)
 echo.
 
 REM ── 6. Запуск app + отчёт ─────────────────────────────────────────────
@@ -209,7 +202,60 @@ if %ERRORLEVEL% neq 0 (
     echo WARNING: Some checks failed, check the report above.
 )
 
+
+REM ── 7. Gateway Integration Tests ─────────────────────────────────────
+echo %CLI_ARGS% | findstr /C:"--skip-gateway-tests" >nul 2>&1
+if %ERRORLEVEL% equ 0 (
+    echo [7/7] Gateway Integration Tests — пропущено (--skip-gateway-tests)
+) else (
+    echo [7/7] Running Gateway Integration Tests...
+    echo.
+    REM Запускаем pytest напрямую (не через service_checker)
+    REM Текущая директория: backend\ (cd /d "%~dp0..\.." выше)
+    python -m pytest gateway_service\tests\ -v --tb=short --no-header -p no:warnings > "check_result\gateway_tests.md" 2>&1
+    set GATEWAY_EXIT=%ERRORLEVEL%
+
+    REM Выводим краткую статистику
+    findstr /R ".*passed.*failed.*" "check_result\gateway_tests.md" >nul 2>&1
+    if %ERRORLEVEL% equ 0 (
+        echo.
+        findstr /R ".*passed.*failed.*" "check_result\gateway_tests.md"
+    )
+
+    if %GATEWAY_EXIT% equ 0 (
+        echo     Gateway tests: ALL PASSED ^(see check_result\gateway_tests.md^)
+    ) else (
+        echo     Gateway tests: SOME FAILED ^(exit=%GATEWAY_EXIT%^) ^(see check_result\gateway_tests.md^)
+    )
+)
 echo.
+
+REM ── 8. Integration Service Live Tests ────────────────────────────────
+echo [8/8] Running Integration Service Live Tests...
+echo.
+cd /d "%~dp0..\.."
+if not "%LIVE_SERVER_URL%"=="" (
+    set "LIVE_INTEGRATION_URL=%LIVE_SERVER_URL%"
+) else (
+    set "LIVE_INTEGRATION_URL=http://localhost:18085"
+)
+set "LIVE_SERVER_URL=%LIVE_INTEGRATION_URL%"
+python -m pytest integration_service\tests\live_server_check.py -v --tb=short --no-header -p no:warnings > "check_result\integration_live_tests.md" 2>&1
+set INTEGRATION_LIVE_EXIT=%ERRORLEVEL%
+
+findstr /R ".*passed.*failed.*" "check_result\integration_live_tests.md" >nul 2>&1
+if %ERRORLEVEL% equ 0 (
+    echo.
+    findstr /R ".*passed.*failed.*" "check_result\integration_live_tests.md"
+)
+
+if %INTEGRATION_LIVE_EXIT% equ 0 (
+    echo     Integration Live tests: ALL PASSED ^(see check_result\integration_live_tests.md^)
+) else (
+    echo     Integration Live tests: SOME FAILED ^(exit=%INTEGRATION_LIVE_EXIT%^) ^(see check_result\integration_live_tests.md^)
+)
+echo.
+
 echo === Done ===
 echo Reports: check_result/
 echo.

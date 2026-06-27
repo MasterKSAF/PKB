@@ -52,10 +52,13 @@ _delay_patcher = patch("celery.app.task.Task.delay", autospec=True, return_value
 _delay_patcher.start()
 
 # Patch MinIO upload globally (no MinIO in tests; would hang otherwise)
-# Note: drafts.py does `from app.storage import upload_file`, creating a local
-# reference, so we must patch the local name in the consuming module.
+# Note: drafts.py does `from app.storage import upload_file` at module level,
+# creating a local reference. documents.py imports inside function body.
+# We patch the source (app.storage.upload_file) to cover both cases.
 _upload_patcher = patch("app.api.v1.endpoints.drafts.upload_file", new=AsyncMock())
 _upload_patcher.start()
+_storage_patcher = patch("app.storage.upload_file", new=AsyncMock())
+_storage_patcher.start()
 
 # --- Block all real HTTP requests (prevent network timeouts in tests) ---
 # When mock_mode=False, tests like test_real_mode_* try to connect to
@@ -162,6 +165,10 @@ async def clean_db(db_engine):
     reg_storage["documents"].clear()
     reg_storage["draft_seq"] = 1
     reg_storage["doc_seq"] = 1
+
+    # Reset Idempotency cache
+    from app.api.v1.endpoints.drafts import _IDEMPOTENCY_CACHE
+    _IDEMPOTENCY_CACHE.clear()
 
     yield
 

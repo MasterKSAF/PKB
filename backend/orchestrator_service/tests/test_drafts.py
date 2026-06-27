@@ -54,14 +54,14 @@ class TestCreateDraft:
         assert "created_at" in data
 
     def test_create_draft_invalid_mime(self, client: TestClient, auth_header: dict):
-        """Upload with unsupported MIME returns 400."""
+        """Upload with unsupported MIME returns 422."""
         response = client.post(
             self.URL,
             headers=auth_header,
             files={"file": ("test.txt", io.BytesIO(b"plain text"), "text/plain")},
             data={"document_key": "doc-001", "source_type": "GOST"},
         )
-        assert response.status_code == 400
+        assert response.status_code == 422
         data = response.json()
         # FastAPI wraps HTTPException.detail in {"detail": ...}
         assert "error" in data.get("detail", data)
@@ -73,7 +73,7 @@ class TestCreateDraft:
         the size check — avoids loading 100+ MB into memory during tests.
         """
         from unittest.mock import patch
-        small_content = b"x" * 100  # 100 bytes — tiny
+        small_content = b"x" * 2000  # 2000 bytes (>= 1024) — tiny
         with patch(
             "app.api.v1.endpoints.drafts.MAX_FILE_SIZE_BYTES", 50  # mock limit: 50 bytes
         ):
@@ -91,7 +91,7 @@ class TestCreateDraft:
         """Request without auth still works in mock mode."""
         response = client.post(
             self.URL,
-            files={"file": ("test.pdf", io.BytesIO(b"pdf content"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"pdf content " * 100), "application/pdf")},
             data={"document_key": "doc-001", "source_type": "GOST"},
         )
         # Mock mode returns mock user, so 202
@@ -113,7 +113,7 @@ class TestCreateDraft:
         response = client.post(
             self.URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 200), "application/pdf")},
             data={"document_key": "doc-no-source"},
         )
         assert response.status_code == 422
@@ -123,7 +123,7 @@ class TestCreateDraft:
         response = client.post(
             self.URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 200), "application/pdf")},
             data={"document_key": "doc-bad-source", "source_type": "INVALID"},
         )
         assert response.status_code == 422
@@ -137,7 +137,7 @@ class TestCreateDraft:
         response = client.post(
             self.URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 200), "application/pdf")},
             data={"document_key": "doc-bad-era", "source_type": "GOST", "era": "ANCIENT"},
         )
         assert response.status_code == 422
@@ -147,7 +147,7 @@ class TestCreateDraft:
         response = client.post(
             self.URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 200), "application/pdf")},
             data={"document_key": "doc-bad-jur", "source_type": "GOST", "jurisdiction": "MOON"},
         )
         assert response.status_code == 422
@@ -157,7 +157,7 @@ class TestCreateDraft:
         response = client.post(
             self.URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 200), "application/pdf")},
             data={
                 "document_key": "doc-title-key",
                 "source_type": "GOST",
@@ -180,7 +180,7 @@ class TestCreateDraft:
         response = client.post(
             self.URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 200), "application/pdf")},
             data={"document_key": "doc-key-none", "source_type": "GOST"},
         )
         assert response.status_code == 202
@@ -233,7 +233,7 @@ class TestStartPreview:
         response = client.post(
             "/api/v1/drafts/",
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock content"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock content " * 100), "application/pdf")},
             data={"document_key": "doc-start-preview", "title": "Test", "source_type": "GOST"},
         )
         assert response.status_code == 202
@@ -263,7 +263,7 @@ class TestStartPreview:
         # Create a draft without auth first
         response = client.post(
             "/api/v1/drafts/",
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF content"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF content " * 200), "application/pdf")},
             data={"document_key": "doc-no-auth-preview", "source_type": "GOST"},
         )
         assert response.status_code == 202
@@ -295,7 +295,7 @@ class TestPreviewStatus:
         response = client.post(
             "/api/v1/drafts/",
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 200), "application/pdf")},
             data={"document_key": "doc-preview-status", "title": "Test", "source_type": "GOST"},
         )
         assert response.status_code == 202
@@ -376,7 +376,7 @@ class TestPreviewStatus:
         # Create a draft without auth first
         response = client.post(
             "/api/v1/drafts/",
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF content"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF content " * 200), "application/pdf")},
             data={"document_key": "doc-no-auth-status", "source_type": "GOST"},
         )
         assert response.status_code == 202
@@ -418,7 +418,7 @@ class TestDecideDraft:
         response = client.post(
             "/api/v1/drafts/",
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 200), "application/pdf")},
             data={"document_key": "doc-decide", "title": "Test", "source_type": "GOST"},
         )
         assert response.status_code == 202
@@ -555,7 +555,7 @@ class TestDecideDraft:
         # Create a draft without auth first
         response = client.post(
             "/api/v1/drafts/",
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF content"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF content " * 200), "application/pdf")},
             data={"document_key": "doc-no-auth-decide", "source_type": "GOST"},
         )
         assert response.status_code == 202
@@ -633,7 +633,7 @@ class TestDraftTasks:
         create_resp = client.post(
             "/api/v1/drafts/",
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF content"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF content " * 200), "application/pdf")},
             data={"document_key": "doc-tasks-test", "source_type": "GOST"},
         )
         assert create_resp.status_code == 202
@@ -687,7 +687,7 @@ class TestMetadataRoundTrip:
         create_resp = client.post(
             self.CREATE_URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF-1.4 mock "), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF-1.4 mock " * 200), "application/pdf")},
             data={
                 "document_key": "doc-meta-roundtrip",
                 "source_type": "GOST",
@@ -731,7 +731,7 @@ class TestMetadataRoundTrip:
         create_resp = client.post(
             self.CREATE_URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 200), "application/pdf")},
             data={"document_key": "doc-no-meta", "source_type": "GOST"},
         )
         assert create_resp.status_code == 202
@@ -765,7 +765,7 @@ class TestMetadataRoundTrip:
         create_resp = client.post(
             self.CREATE_URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 200), "application/pdf")},
             data={
                 "document_key": "doc-json-meta",
                 "source_type": "GOST",
@@ -798,7 +798,7 @@ class TestMetadataRoundTrip:
         create_resp = client.post(
             self.CREATE_URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 200), "application/pdf")},
             data={"document_key": "doc-patch-meta", "source_type": "GOST"},
         )
         assert create_resp.status_code == 202
@@ -869,7 +869,7 @@ class TestCreatedByUser:
         """Without override, created_by is MOCK_USER_ID (u-mock-001)."""
         response = client.post(
             self.CREATE_URL,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 200), "application/pdf")},
             data={"document_key": "doc-default-user", "source_type": "GOST"},
         )
         assert response.status_code == 202
@@ -896,7 +896,7 @@ class TestCreatedByUser:
         try:
             response = client.post(
                 self.CREATE_URL,
-                files={"file": ("test.pdf", io.BytesIO(b"%PDF mock"), "application/pdf")},
+                files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 200), "application/pdf")},
                 data={"document_key": "doc-custom-user", "source_type": "GOST"},
             )
             assert response.status_code == 202
@@ -924,7 +924,7 @@ class TestCreatedByUser:
         try:
             response = client.post(
                 self.CREATE_URL,
-                files={"file": ("test.pdf", io.BytesIO(b"%PDF mock"), "application/pdf")},
+                files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 200), "application/pdf")},
                 data={"document_key": "doc-str-user", "source_type": "GOST"},
             )
             assert response.status_code == 202
@@ -977,7 +977,7 @@ class TestUploadPartialFailure:
             response = client.post(
                 self.CREATE_URL,
                 headers=auth_header,
-                files={"file": ("test.pdf", io.BytesIO(b"%PDF mock"), "application/pdf")},
+                files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 200), "application/pdf")},
                 data={"document_key": "doc-orphan", "source_type": "GOST"},
             )
 

@@ -192,16 +192,18 @@ async def run_pipeline(
     logger.info("pipeline started", extra={"message_id": message_id, "session_id": session_id})
 
     try:
+        warnings: list[str] = []
         await _set_status(session_factory, message_id, "enriching")
         enrichment_skipped = False
         try:
             enriched_query, _synonyms = await asyncio.wait_for(
                 registry_client.enrich_query(user_query), timeout=30.0
             )
-        except Exception:
+        except Exception as exc:
             enriched_query = user_query
             enrichment_skipped = True
-            logger.warning("query enrichment skipped", extra={"message_id": message_id})
+            warnings.append("Обогащение терминов недоступно. Поиск выполнен без нормализации.")
+            logger.warning("query enrichment skipped", extra={"message_id": message_id}, exc_info=True)
 
         await _set_status(session_factory, message_id, "searching")
         try:
@@ -271,7 +273,9 @@ async def run_pipeline(
                 asyncio.to_thread(_enrich_citations, llm_text, chunks),
                 timeout=30.0,
             )
-        except Exception:
+        except Exception as exc:
+            warnings.append("Обогащение цитат недоступно.")
+            logger.warning("citation enrichment skipped", extra={"message_id": message_id}, exc_info=True)
             final_text = llm_text
 
         async with session_factory() as db:
@@ -284,6 +288,7 @@ async def run_pipeline(
                         status="answered",
                         processing_time_ms=0,
                         enrichment_skipped=enrichment_skipped,
+                        warnings=warnings or None,
                     )
                 )
                 if result.rowcount == 0:

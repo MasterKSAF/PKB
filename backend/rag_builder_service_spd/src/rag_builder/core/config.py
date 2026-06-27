@@ -22,6 +22,11 @@ class Settings(BaseSettings):
 
     POSTGRES_SCHEMA: str = "nsi"
 
+    SERVICE_NAME: str = "rag_builder_service_spd"
+    OBSERVABILITY_ENABLED: bool = False
+    OTEL_EXPORTER_OTLP_ENDPOINT: str = "localhost:4317"
+    LOG_LEVEL: str = "INFO"
+
     EMBEDDING_PROVIDER: str = "stub"
     EMBEDDING_MODEL: str = "qwen3-embedding-4b"
     EMBEDDING_PRICE_PER_1M_TOKENS_USD: float = 0.0

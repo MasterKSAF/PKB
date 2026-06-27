@@ -25,6 +25,7 @@ def get_session_factory() -> async_sessionmaker:
 _PG_MIGRATIONS = (
     "ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS summary TEXT",
     "ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS summarized_until_message_id BIGINT",
+    "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS warnings JSON",
 )
 
 
