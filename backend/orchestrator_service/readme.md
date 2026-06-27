@@ -132,7 +132,7 @@ ReDoc: `http://localhost:8081/redoc`
 
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
-| POST | `/drafts` | Загрузка файла и создание черновика (multipart/form-data) |
+| POST | `/drafts` | Загрузка файла и создание черновика (multipart/form-data). Поддерживает Idempotency-Key (TTL 1ч) — повторный запрос с тем же ключом возвращает 200 + draft_id |
 | GET | `/drafts/{draft_id}/preview` | Метаданные preview |
 | POST | `/drafts/{draft_id}/preview` | Запуск preview-фазы |
 | GET | `/drafts/{draft_id}/preview/status` | Статус preview (с longpoll) |
@@ -234,13 +234,14 @@ orchestrator_service/
 │   ├── __init__.py
 │   ├── conftest.py                    # Фикстуры (TestClient, mock-режим)
 │   ├── test_drafts.py                 # Тесты черновиков
-	│   ├── test_tasks.py                  # Тесты задач
-	│   ├── test_health.py                 # Тесты health endpoint'ов
-	│   ├── test_monitor.py                # Тесты метрик
-	│   ├── test_search.py                 # Тесты поиска
-	│   ├── test_service_clients_*.py      # Тесты сервис-клиентов
-│   ├── unit/
-│   └── integration/
+│   ├── test_tasks.py                  # Тесты задач
+│   ├── test_health.py                 # Тесты health endpoint'ов
+│   ├── test_monitor.py                # Тесты метрик
+│   ├── test_search.py                 # Тесты поиска
+│   ├── test_service_clients_*.py      # Тесты сервис-клиентов
+│   ├── orchestrator/                  # Комплексные тесты drafts (state machine, consistency, preview, pipeline, status)
+│   ├── unit/                          # Unit-тесты (saga, celery tasks)
+│   └── integration/                   # Интеграционные тесты
 │       ├── test_celery_tasks.py       # Интеграционные тесты Celery
 │       └── test_pipeline_formation.py # Интеграционные тесты pipeline
 ├── main.py                            # Entry point
@@ -297,8 +298,12 @@ pytest tests/test_drafts.py::TestCreateDraft::test_create_draft_success -v
 - Все тесты запускаются в mock-режиме (устанавливается в `conftest.py`)
 - Тесты используют `TestClient` из FastAPI
 - Для аутентифицированных запросов используется фикстура `auth_header`
-- **345 тестов** проходят (актуально на 19.06.2026)
-- Основные группы: `test_drafts.py` (26), `test_tasks.py` (10), `test_search.py` (25), `test_health.py` (12), `tests/integration/` (27), `tests/unit/` (18)
+- **466 тестов** проходят, 2 xfailed (актуально на 27.06.2026)
+- Основные группы:
+  - `tests/orchestrator/` — state machine (40), consistency (14), CRUD, preview, tasks, pipeline, status
+  - `tests/unit/` — saga compensation (8), celery tasks (10+)
+  - `tests/integration/` — celery tasks, pipeline, draft-to-document flow
+  - `tests/test_service_clients_*.py` — mock-real gap, registry, rag, ocr, parser, converter
 
 
 ---

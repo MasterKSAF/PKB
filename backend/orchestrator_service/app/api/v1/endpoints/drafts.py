@@ -15,8 +15,10 @@ from fastapi import (
     Depends,
     File,
     Form,
+    Header,
     HTTPException,
     Query,
+    Response,
     UploadFile,
     status,
 )
@@ -49,6 +51,13 @@ router = APIRouter()
 
 MOCK_USER_ID = "u-mock-001"
 MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024  # 100 MB
+
+# Idempotency cache for POST /drafts
+# Idempotency-Key → {draft_id, task_id, created_at}
+# In production, this would be Redis with TTL.
+# TTL: 1 hour as documented in guide.md
+_IDEMPOTENCY_CACHE: dict[str, dict] = {}
+IDEMPOTENCY_TTL_SECONDS = 3600  # 1 hour
 
 ALLOWED_SOURCE_TYPES = {
     "GOST", "GOST_R", "OST", "RD", "TU", "ISO", "DNV", "ASTM", "RMRS", "OTHER",
@@ -104,13 +113,56 @@ async def create_draft(
     jurisdiction: Optional[str] = Form(None, description="Юрисдикция: RU, EU, US, NO, INTL"),
     issuing_body: Optional[str] = Form(None, description="Организация-издатель"),
     metadata: Optional[str] = Form(None, description="JSON-строка с доп. данными"),
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key", description="Ключ идемпотентности (TTL 1ч)"),
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> DraftCreateResponse:
     """Upload a file and create a draft for processing.
 
     Единая точка входа для загрузки документов (draft-first).
+    Поддерживает Idempotency-Key: повторный запрос с тем же ключом
+    возвращает 200 с существующим draft_id (вместо 202).
+    TTL ключа: 1 час.
     """
+    # --- Idempotency check ---
+    if idempotency_key:
+        cached = _IDEMPOTENCY_CACHE.get(idempotency_key)
+        if cached:
+            age = (datetime.now(timezone.utc) - cached["created_at"]).total_seconds()
+            if age < IDEMPOTENCY_TTL_SECONDS:
+                logger.info(
+                    f"Idempotency hit for key={idempotency_key}, draft_id={cached['draft_id']}",
+                )
+                # Return 200 with existing draft data
+                # Need to re-read task_id for the existing draft
+                from sqlalchemy import select
+                from app.models.pipeline import Task
+                task_result = await db.execute(
+                    select(Task).where(
+                        Task.draft_id == cached["draft_id"],
+                        Task.pipeline_type == "formation",
+                    ).order_by(Task.created_at.desc())
+                )
+                existing_task = task_result.scalar_one_or_none()
+                task_id = existing_task.id if existing_task else cached["task_id"]
+
+                # Return 200 (not 202) to signal idempotent hit
+                return Response(
+                    status_code=status.HTTP_200_OK,
+                    content=json.dumps({
+                        "draft_id": cached["draft_id"],
+                        "task_id": task_id,
+                        "status": "uploaded",
+                        "message": "Черновик уже создан (idempotent)",
+                    }),
+                    media_type="application/json",
+                )
+            else:
+                # TTL expired — remove from cache and proceed normally
+                logger.info(
+                    f"Idempotency key expired for key={idempotency_key}",
+                )
+                _IDEMPOTENCY_CACHE.pop(idempotency_key, None)
     # --- Validate file type ---
     if file.content_type not in ALLOWED_MIME:
         raise HTTPException(
@@ -346,6 +398,14 @@ async def create_draft(
     # Store draft_id in context for downstream correlation (CM-5)
     set_draft_id(str(draft_id))
 
+    # --- Idempotency: store in cache for repeat requests ---
+    if idempotency_key:
+        _IDEMPOTENCY_CACHE[idempotency_key] = {
+            "draft_id": draft_id,
+            "task_id": None,  # Will be filled after task creation
+            "created_at": datetime.now(timezone.utc),
+        }
+
     # --- Check: Task for this draft_id already exists? ---
     from sqlalchemy import select
     from app.models.pipeline import Task
@@ -397,6 +457,10 @@ async def create_draft(
         mime_type=mime_type,
         metadata_fields=metadata_fields if metadata_fields else None,
     )
+
+    # --- Idempotency: update cache with task_id ---
+    if idempotency_key and idempotency_key in _IDEMPOTENCY_CACHE:
+        _IDEMPOTENCY_CACHE[idempotency_key]["task_id"] = task.id
 
     return DraftCreateResponse(
         draft_id=draft_id,
