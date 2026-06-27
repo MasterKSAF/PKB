@@ -141,11 +141,23 @@
 - `data["id"]=0` is falsy → fallback на `draft_id`
 - Расхождение ключей `id` vs `draft_id` в mock vs static response
 
+### Pipeline Orchestrator Details (27.06, 9 файлов, 51 тест)
+- `tests/orchestrator/test_drafts_boundaries.py` — MIME, empty, duplicate flags
+- `tests/orchestrator/test_preview_state_validation.py` — state validation preview
+- `tests/orchestrator/test_quality_auto_approve.py` — quality, auto-approve, review_required
+- `tests/orchestrator/test_decide_edge_cases.py` — decide edge cases (terminal, stop_duplicate, proceed, force_new_version)
+- `tests/orchestrator/test_race_conditions.py` — stop_duplicate flow, Registry errors
+- `tests/orchestrator/test_metadata_patch.py` — PATCH /metadata
+- `tests/orchestrator/test_delete_draft.py` — DELETE /drafts with various statuses
+- `tests/orchestrator/test_full_phase_errors.py` — on_step_failed retry, OCR fallback
+- `tests/orchestrator/test_pipeline2_orchestrator.py` — rag_index completion, reprocess modes, indexation tasks
+
 ### Инфраструктура
 - MinIO `upload_file` замокан в conftest (timeout 40с → 0.2с)
 - Все внешние сервисы замоканы (Registry, RAG, OCR, Parser, Converter)
 - Celery `.delay()` — no-op, задачи тестируются через `.run()`
-- **Итог: 466 passed, 2 xfailed (+63 новых, 0 сломанных)**
+- **Итог: 543 passed, 3 failed (+51 новых, 0 сломанных)**
+  - 3 failed — предсуществующая проблема в test_service_clients_rag.py (document_id=str vs int)
 
 ## Naming conventions
 
