@@ -659,7 +659,7 @@ class PipelineOrchestrator:
         try:
             doc_result = await registry.create_document(doc_payload)
             doc_data = doc_result.get("data", {})
-            document_id: Optional[int] = doc_data.get("document_id") or doc_data.get("id")
+            document_id: Optional[int] = doc_data.get("document_id") if doc_data.get("document_id") is not None else doc_data.get("id")
             if not document_id:
                 raise ValueError(
                     f"Registry create_document returned no document_id. "
