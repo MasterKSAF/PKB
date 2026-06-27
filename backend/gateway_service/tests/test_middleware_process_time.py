@@ -1,39 +1,31 @@
 """
-Tests for ProcessTimeMiddleware.
+Тесты ProcessTimeMiddleware — X-Process-Time header.
 
-Проверяет:
-  - Ответ содержит X-Process-Time
-  - Значение — число с плавающей точкой (float)
-  - Время больше 0
+Unit-тесты, не требуют Docker.
 """
 
-import sys
+from __future__ import annotations
+
 import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import sys
 
 import pytest
+
+_GATEWAY_DIR = os.path.join(os.path.dirname(__file__), "..")
+if _GATEWAY_DIR not in sys.path:
+    sys.path.insert(0, _GATEWAY_DIR)
 
 
 class TestProcessTime:
     """X-Process-Time заголовок."""
 
-    def test_response_has_process_time(self, client):
+    def test_process_time_header_present(self, client):
         """Ответ содержит X-Process-Time."""
-        resp = client.get("/api/v1/system/health")
+        resp = client.get("/api/v1/health")
         assert "X-Process-Time" in resp.headers
 
     def test_process_time_is_float(self, client):
         """X-Process-Time — число с плавающей точкой."""
-        resp = client.get("/api/v1/system/health")
-        val = resp.headers["X-Process-Time"]
-        try:
-            float_val = float(val)
-            assert isinstance(float_val, float)
-        except ValueError:
-            pytest.fail(f"X-Process-Time is not a float: {val!r}")
-
-    def test_process_time_positive(self, client):
-        """X-Process-Time > 0."""
-        resp = client.get("/api/v1/system/health")
+        resp = client.get("/api/v1/health")
         val = float(resp.headers["X-Process-Time"])
-        assert val > 0, f"X-Process-Time should be positive, got {val}"
+        assert val > 0

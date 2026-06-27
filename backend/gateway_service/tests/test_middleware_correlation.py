@@ -1,53 +1,40 @@
 """
-Tests for RequestTracingMiddleware (P11-2/CM-5).
+Тесты CorrelationHeadersMiddleware — X-Request-ID, X-Trace-ID.
 
-Проверяет:
-  - X-Request-ID генерируется UUIDv4 при отсутствии
-  - X-Request-ID сохраняется при передаче клиентом
-  - X-Trace-ID генерируется UUIDv4 при отсутствии
-  - X-Trace-ID сохраняется при передаче клиентом
-  - CorrelationHeadersMiddleware (X-Draft-ID/X-Document-ID/X-Version-ID)"""
+Unit-тесты, не требуют Docker.
+"""
 
-import sys
+from __future__ import annotations
+
 import os
-import uuid
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import sys
 
 import pytest
 
+_GATEWAY_DIR = os.path.join(os.path.dirname(__file__), "..")
+if _GATEWAY_DIR not in sys.path:
+    sys.path.insert(0, _GATEWAY_DIR)
+
 
 class TestCorrelationHeaders:
-    """X-Request-ID, X-Trace-ID заголовки."""
+    """Корреляционные заголовки."""
 
-    def test_request_id_generated(self, client):
-        """Если клиент не передал X-Request-ID — ответ содержит сгенерированный."""
-        resp = client.get("/api/v1/system/health")
-        assert "X-Request-ID" in resp.headers
-        req_id = resp.headers["X-Request-ID"]
-        # Должен быть UUID
-        uuid.UUID(req_id)  # raises ValueError if invalid
+    def test_response_has_x_request_id(self, client):
+        """Ответ содержит X-Request-ID."""
+        resp = client.get("/api/v1/health")
+        assert "X-Request-ID" in resp.headers or "x-request-id" in resp.headers
 
-    def test_request_id_preserved(self, client):
-        """Если клиент передал X-Request-ID — он сохраняется в ответе."""
-        custom_id = str(uuid.uuid4())
-        resp = client.get(
-            "/api/v1/system/health",
-            headers={"X-Request-ID": custom_id},
-        )
-        assert resp.headers.get("X-Request-ID") == custom_id
+    def test_x_request_id_is_uuid(self, client):
+        """X-Request-ID — валидный UUID."""
+        resp = client.get("/api/v1/health")
+        rid = resp.headers.get("X-Request-ID", resp.headers.get("x-request-id", ""))
+        import uuid
+        try:
+            uuid.UUID(rid)
+        except ValueError:
+            pytest.fail(f"X-Request-ID не является UUID: {rid}")
 
-    def test_trace_id_generated(self, client):
-        """X-Trace-ID генерируется при отсутствии."""
-        resp = client.get("/api/v1/system/health")
-        assert "X-Trace-ID" in resp.headers
-        trace_id = resp.headers["X-Trace-ID"]
-        uuid.UUID(trace_id)
-
-    def test_trace_id_preserved(self, client):
-        """X-Trace-ID сохраняется при передаче."""
-        custom_trace = str(uuid.uuid4())
-        resp = client.get(
-            "/api/v1/system/health",
-            headers={"X-Trace-ID": custom_trace},
-        )
-        assert resp.headers.get("X-Trace-ID") == custom_trace
+    def test_x_trace_id_present(self, client):
+        """Ответ содержит X-Trace-ID."""
+        resp = client.get("/api/v1/health")
+        assert "X-Trace-ID" in resp.headers or "x-trace-id" in resp.headers

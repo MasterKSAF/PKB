@@ -74,7 +74,7 @@
 
 ---
 
-## Coverage тестов (26.06)
+## Coverage тестов (27.06)
 
 ### Celery-задачи (unit, `tests/unit/test_celery_tasks_all.py`):
 - Все 10 pipeline-задач + 2 scheduler + 2 compensation — happy & failure paths
@@ -87,10 +87,44 @@
 - `GET /tasks/{id}` — document_id, version_id, notifications, error_info
 - End-to-end: draft → celery → status/results через API
 
+### CRUD черновиков (`tests/orchestrator/test_drafts_crud.py`):
+- POST /drafts с пустым файлом → 422
+- POST /drafts с некорректным JSON metadata → 422
+- GET /drafts/{id} — существующий (seed + created) → 200
+- GET /drafts/{id} — несуществующий → 404
+- GET /drafts/abc — нечисловой id → 422
+
+### Preview и decision (`tests/orchestrator/test_drafts_preview.py`):
+- GET /preview/status — pending (шаги созданы, не завершены)
+- GET /preview/status — completed с preview_metadata
+- GET /preview/status — failed
+- PATCH /decide — reject без comment
+- PATCH /decide — невалидный action → 400
+
+### Задачи черновиков (`tests/orchestrator/test_drafts_tasks.py`):
+- GET /drafts/{id}/tasks — структура ответа
+- GET /tasks/{id} — completed (100%), active (50%), failed
+- GET /tasks/{id} — несуществующая → 404
+
+### Pipeline документов (`tests/orchestrator/test_documents_pipeline.py`):
+- POST /documents/{id}/reprocess — full mode response structure
+- POST /documents/{id}/reprocess — partial (ocr_only)
+- POST /documents/{id}/reprocess — несуществующий документ
+- GET /documents/{id}/tasks — существующий, несуществующий, структура
+
+### Статусы задач как proxy статусов документов (`tests/orchestrator/test_documents_status.py`):
+- GET /tasks/{id} — completed, active (processing), failed — статусы
+- GET /tasks/{id} — несуществующий → 404
+
+### Интеграционный тест (`tests/integration/test_draft_to_document_flow.py`):
+- Полный цикл: draft → preview → approve → document_id
+- Reject flow: upload → reject → discarded
+
 ### Инфраструктура
 - MinIO `upload_file` замокан в conftest (timeout 40с → 0.2с)
 - Все внешние сервисы замоканы (Registry, RAG, OCR, Parser, Converter)
 - Celery `.delay()` — no-op, задачи тестируются через `.run()`
+- **Итог: 403 passed, 0 failed**
 
 ## Naming conventions
 

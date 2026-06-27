@@ -1,37 +1,26 @@
 """
-Tests for proxy_request() — проксирование к сервисам.
+Тесты proxy_request() — проксирование к сервисам.
 
-Сценарии (требуют мока httpx-клиента):
-  - Успешное проксирование GET → 200
-  - Успешное проксирование POST с JSON телом
-  - Прокси с target_path — path transform
-  - Сервис не настроен (нет в service_urls) → 502
-  - Сервис недоступен (ConnectError) → 502
-  - Таймаут сервиса (TimeoutException) → 504
-  - Hop-by-hop заголовки отфильтрованы
-  - X-User-ID пробрасывается
-  - X-Draft-ID, X-Document-ID, X-Version-ID пробрасываются
-  - Location rewrite для 3xx с Docker-хостом
-  - Query string передаётся
-  - Content-Type сохранён
-  - Status code проксируется
-  - Body передаётся
+Все внешние вызовы мокаются через mock_httpx_client.
+
+Unit-тесты, не требуют Docker.
 """
 
-import sys
-import os
+from __future__ import annotations
+
 import json
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import os
+import sys
 
 import httpx
 import pytest
 from unittest.mock import AsyncMock, patch
 from fastapi import Request
 
+_GATEWAY_DIR = os.path.join(os.path.dirname(__file__), "..")
+if _GATEWAY_DIR not in sys.path:
+    sys.path.insert(0, _GATEWAY_DIR)
 
-# ===========================================================================
-# Helper: создать минимальный fastapi.Request
-# ===========================================================================
 
 def _make_request(
     path: str,
@@ -60,11 +49,6 @@ def _make_request(
     }, receive=_receive)
 
 
-# ===========================================================================
-# Helper: mock client with captured kwargs
-# ===========================================================================
-
-
 def _make_mock_client(monkeypatch):
     """Создаёт mock httpx.AsyncClient с захватом kwargs."""
     mock_client = AsyncMock(spec=httpx.AsyncClient)
@@ -83,10 +67,6 @@ def _make_mock_client(monkeypatch):
     monkeypatch.setattr("gateway.client.get_client", lambda: mock_client)
     return mock_client, captured_kwargs
 
-
-# ===========================================================================
-# Successful proxying
-# ===========================================================================
 
 class TestProxySuccess:
     """Успешное проксирование."""
@@ -136,10 +116,6 @@ class TestProxySuccess:
         assert response.status_code == 200
 
 
-# ===========================================================================
-# Error cases
-# ===========================================================================
-
 class TestProxyErrors:
     """Ошибки проксирования."""
 
@@ -148,7 +124,6 @@ class TestProxyErrors:
         """Сервис не настроен → 502."""
         from gateway.client import proxy_request, config
 
-        # Подменяем service_urls
         monkeypatch.setattr(config, "service_urls", {})
 
         request = _make_request("/api/v1/unknown")
@@ -215,32 +190,15 @@ class TestProxyErrors:
         assert response.status_code == 204
 
 
-# ===========================================================================
-# Header filtering and forwarding
-# ===========================================================================
-
 class TestProxyHeaders:
     """Заголовки при проксировании."""
 
     @pytest.mark.asyncio
     async def test_hop_by_hop_filtered(self, monkeypatch):
-        """Hop-by-hop заголовки не передаются в downstream (connection, keep-alive и др.)."""
-        from gateway.client import proxy_request, get_client
+        """Hop-by-hop заголовки не передаются в downstream."""
+        from gateway.client import proxy_request
 
-        mock_client = AsyncMock(spec=httpx.AsyncClient)
-        mock_response = AsyncMock(spec=httpx.Response)
-        mock_response.status_code = 200
-        mock_response.headers = {"content-type": "application/json"}
-        mock_response.content = b"ok"
-
-        captured_kwargs = {}
-
-        async def mock_request(method, url, **kwargs):
-            captured_kwargs.update(kwargs)
-            return mock_response
-
-        mock_client.request = mock_request
-        monkeypatch.setattr("gateway.client.get_client", lambda: mock_client)
+        mock_client, captured_kwargs = _make_mock_client(monkeypatch)
 
         request = _make_request(
             "/api/v1/auth/me",
@@ -257,18 +215,15 @@ class TestProxyHeaders:
         await proxy_request(request, "auth", "/api/v1/auth/me")
 
         sent_headers = captured_kwargs.get("headers", {})
-        # connection и keep-alive должны быть удалены
         assert "connection" not in {k.lower() for k in sent_headers}
         assert "keep-alive" not in {k.lower() for k in sent_headers}
-        # host удаляется httpx
-        # Пользовательские заголовки остаются
         header_keys = {k.lower(): v for k, v in sent_headers.items()}
         assert "x-custom" in header_keys
 
     @pytest.mark.asyncio
     async def test_x_user_id_forwarded(self, monkeypatch):
         """X-User-ID пробрасывается из request.state."""
-        from gateway.client import proxy_request, get_client
+        from gateway.client import proxy_request
 
         mock_client, captured_kwargs = _make_mock_client(monkeypatch)
 
@@ -359,10 +314,6 @@ class TestProxyHeaders:
 
         assert "?q=test&page=1" in captured_url[0]
 
-
-# ===========================================================================
-# Status code proxying
-# ===========================================================================
 
 class TestProxyStatusCode:
     """Статус код проксируется."""

@@ -1,23 +1,34 @@
-# Celery-тесты для service_checker
+# Todo: Docker-тесты в recheck.bat + отчёты
 
-## Задача
-Создать качественные тесты для проверки фоновых задач (Celery) при обработке черновиков: статусы, результаты, шаги задач.
+- [x] Прочитать все файлы
 
-## Выполнено
+## 1. `docker.py` — _docker_run_gateway_tests()
+- [x] Убрать `-m "not docker"` — запускать все тесты (в Docker-окружении)
+- [x] Парсить вывод pytest (passed/failed/total) 
+- [x] Изменить возврат с `bool` на `Dict` со статистикой
 
-### Создан test_celery_tasks.py — 75 тестов (74 passed + 1 xfail)
-12 разделов, 0 регрессий. Тесты НЕ требуют Docker — mock-based.
+## 2. `reports.py` — _generate_full_report()
+- [x] Добавить параметр `gateway_tests_result: Optional[Dict]`
+- [x] Добавить секцию "🌐 Gateway Integration Tests"
+- [x] Передать gateway_tests_result в общий статус
 
-### Найдено и исправлено 5 багов
+## 3. `cli.py` — cmd_docker()
+- [x] Передать gateway_tests_result в _generate_full_report()
 
-| # | Баг | Исправление | Файл |
-|---|---|---|---|
-| 61 | check падает при 409 (нет draft_id) | Кастомная `_check_draft_response` — задаёт `draft_failed=True`, не падает | pipelines/orchestrator_draft_lifecycle.py |
-| 62 | task_id не извлекается при 409 | `skip_if=_draft_skipped` на всех зависимых шагах (3-8, 11) | pipelines/orchestrator_draft_lifecycle.py |
-| 63 | expected_status=200 для task status | `{200, 404}` — race condition с Celery | pipelines/orchestrator_draft_lifecycle.py |
-| 64 | Prepare POST /drafts без файла | **xfail** — EndpointDef не поддерживает form_files, требуется доработка API Coverage | services/orchestrator.py |
-| 65 | Нет on_error для 409 | Добавлен `_on_draft_conflict` + `skip_if` (как в orchestrator_draft_delete) | pipelines/orchestrator_draft_lifecycle.py |
+## 4. `recheck.bat` — шаг 7
+- [x] Добавить шаг 7 после full-report
+- [x] Запустить pytest, сохранить отчёт, вывести статистику
 
-### Заодно исправлены 2 упавших теста
-- `test_draft_creation_path_no_trailing_slash` — ожидал `expected_status == 202`, теперь `{202, 409}`
-- `test_or14_mime_branching` — то же самое
+## 5. Тесты
+- [x] Добавить тесты gateway-секции в отчёте
+- [x] 17 тестов прошли (0 failures)
+
+## 6. Проверка
+- [x] Финальный перепросмотр — все изменения согласованы
+- [x] Запуск тестов — 17 passed
+- [x] guide.md обновлён (шаг 7 Gateway)
+- [x] readme.md актуален (изменений не требуется)
+- [x] `_docker_run_gateway_tests()` — 168 passed, 0 failed ✅
+- [x] Отчёт gateway_tests.md — Summary корректный ✅
+- [x] Секция Gateway в full_report — ✅ статус, статистика, ссылка
+- [x] Исправлен отсутствующий импорт `GATEWAY_DIR` в `docker.py`

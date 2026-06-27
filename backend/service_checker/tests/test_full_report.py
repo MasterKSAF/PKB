@@ -350,5 +350,108 @@ class TestGenerateFullReport:
         assert "### 📋 Pipeline статусы по сервисам" in report
 
 
+class TestGatewayTestsInFullReport:
+    """Тестируем секцию Gateway Integration Tests в _generate_full_report()."""
+
+    def test_gateway_section_not_present_when_no_result(self):
+        """Без gateway_tests_result секция не добавляется."""
+        from service_checker.core.reports import _generate_full_report
+
+        cov_results = {
+            "auth": MockCoverageResult("auth", 18082, ping_ok=True),
+        }
+        pipe_results = {}
+        report = _generate_full_report(cov_results, pipe_results, "t")
+        assert "Gateway Integration Tests" not in report
+
+    def test_gateway_section_all_passed(self):
+        """Gateway тесты пройдены — показываем ✅ и статистику."""
+        from service_checker.core.reports import _generate_full_report
+
+        cov_results = {
+            "auth": MockCoverageResult("auth", 18082, ping_ok=True),
+        }
+        pipe_results = {}
+        gw_result = {
+            "success": True,
+            "passed": 15,
+            "failed": 0,
+            "total": 15,
+            "output_path": "/tmp/gateway_tests.md",
+        }
+        report = _generate_full_report(cov_results, pipe_results, "t",
+                                        gateway_tests_result=gw_result)
+        assert "🌐 Gateway Integration Tests" in report
+        assert "✅" in report.split("Gateway Integration Tests")[1]
+        assert "15" in report  # total=15, passed=15
+        assert "gateway_tests.md" in report
+
+    def test_gateway_section_some_failed(self):
+        """Gateway тесты с ошибками — показываем ❌ и кол-во упавших."""
+        from service_checker.core.reports import _generate_full_report
+
+        cov_results = {
+            "auth": MockCoverageResult("auth", 18082, ping_ok=True),
+        }
+        pipe_results = {}
+        gw_result = {
+            "success": False,
+            "passed": 12,
+            "failed": 3,
+            "total": 15,
+            "output_path": "/tmp/gateway_tests.md",
+        }
+        report = _generate_full_report(cov_results, pipe_results, "t",
+                                        gateway_tests_result=gw_result)
+        assert "🌐 Gateway Integration Tests" in report
+        # Проверяем, что в секции есть ❌ и число упавших жирным
+        gw_section = report.split("Gateway Integration Tests")[1]
+        assert "❌" in gw_section
+        assert "**3**" in gw_section  # failed жирным
+
+    def test_gateway_affects_overall_status(self):
+        """Если gateway тесты упали — общий статус ❌ даже при зелёных остальных."""
+        from service_checker.core.reports import _generate_full_report
+
+        cov_results = {
+            "auth": MockCoverageResult("auth", 18082, ping_ok=True),
+        }
+        pipe_results = {
+            "document_processing": make_mock_pipeline_result(name="doc", passed=True),
+        }
+        gw_result = {
+            "success": False,
+            "passed": 10,
+            "failed": 5,
+            "total": 15,
+            "output_path": "/tmp/gateway_tests.md",
+        }
+        report = _generate_full_report(cov_results, pipe_results, "t",
+                                        gateway_tests_result=gw_result)
+        # Проверяем итоговую строку — должен быть ❌
+        lines = report.split("\n")
+        total_line = [l for l in lines if "**Total**" in l][0]
+        assert "❌" in total_line, f"Overall status should be ❌ when gateway fails, got: {total_line}"
+
+    def test_gateway_section_with_error(self):
+        """Gateway тесты с ошибкой выполнения — показываем error."""
+        from service_checker.core.reports import _generate_full_report
+
+        cov_results = {
+            "auth": MockCoverageResult("auth", 18082, ping_ok=True),
+        }
+        pipe_results = {}
+        gw_result = {
+            "success": False,
+            "passed": 0,
+            "failed": 0,
+            "total": 0,
+            "output_path": "/tmp/gateway_tests.md",
+            "error": "pytest_not_found",
+        }
+        report = _generate_full_report(cov_results, pipe_results, "t",
+                                        gateway_tests_result=gw_result)
+        assert "pytest_not_found" in report
+        assert "❌" in report.split("Gateway Integration Tests")[1]
 
 

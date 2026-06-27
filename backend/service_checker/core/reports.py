@@ -86,11 +86,12 @@ def _generate_full_report(
     timestamp: str,
     db_result: Any = None,
     contract_report: Optional[str] = None,
+    gateway_tests_result: Optional[Dict[str, Any]] = None,
 ) -> str:
-    """Сформировать итоговый отчёт: сводная таблица + детали coverage + детали pipeline + БД + контракты."""
+    """Сформировать итоговый отчёт: сводная таблица + детали coverage + детали pipeline + БД + контракты + Gateway-тесты."""
     lines: List[str] = []
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    lines.append("# Full Report — API Coverage + Pipeline Testing\n")
+    lines.append("# Full Report — API Coverage + Pipeline Testing + Gateway Tests\n")
     lines.append(f"**Generated:** {now}\n")
     lines.append("---\n")
 
@@ -195,7 +196,8 @@ def _generate_full_report(
 
     all_cov_ok = cov_ok_count == total_services if total_services > 0 else True
     all_pipe_ok = all(pipeline_passed.values()) if pipeline_passed else True
-    overall_status = "✅" if (all_cov_ok and all_pipe_ok) else "❌"
+    all_gateway_ok = gateway_tests_result.get("success", True) if gateway_tests_result else True
+    overall_status = "✅" if (all_cov_ok and all_pipe_ok and all_gateway_ok) else "❌"
     pipe_total_icon = "✅" if all_pipe_ok else "❌"
 
     ping_total_icon = "✅" if cov_alive == total_services else "❌"
@@ -364,6 +366,32 @@ def _generate_full_report(
     if not has_warnings:
         lines.append("_Нет предупреждений_\n")
     lines.append("")
+
+    # ── 2b. Gateway Integration Tests ────────────────────────────────────
+    if gateway_tests_result:
+        lines.append("---\n")
+        lines.append("## 🌐 Gateway Integration Tests\n")
+        gw_success = gateway_tests_result.get("success", False)
+        gw_passed = gateway_tests_result.get("passed", 0)
+        gw_failed = gateway_tests_result.get("failed", 0)
+        gw_total = gateway_tests_result.get("total", 0)
+        gw_output = gateway_tests_result.get("output_path", "")
+        gw_error = gateway_tests_result.get("error", None)
+
+        status_icon = "✅" if gw_success else "❌"
+        lines.append(f"| Metric | Value |")
+        lines.append(f"|--------|-------|")
+        lines.append(f"| **Status** | {status_icon} |")
+        lines.append(f"| **Total tests** | {gw_total} |")
+        lines.append(f"| **Passed** | {gw_passed} |")
+        lines.append(f"| **Failed** | **{gw_failed}** |")
+        if gw_output:
+            # Относительный путь от backend/
+            rel_path = gw_output.replace("\\\\", "/").split("backend/")[-1] if "backend" in gw_output else gw_output
+            lines.append(f"| **Detail report** | [{rel_path}]({gw_output}) |")
+        if gw_error:
+            lines.append(f"| **Error** | {gw_error} |")
+        lines.append("")
 
     # ── 3. Детали Pipeline Testing ─────────────────────────────────
     lines.append("---\n")

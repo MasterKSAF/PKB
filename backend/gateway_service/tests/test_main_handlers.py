@@ -1,26 +1,23 @@
 """
-Tests for Gateway's own handlers.
+Тесты собственных эндпоинтов Gateway.
 
-Сценарии:
-  - GET /api/v1/health без аутентификации → {"status": "ok"}
-  - GET /api/v1/health c system_admin → полный ответ со статусами сервисов
-  - GET /api/v1/system/health/live → {"status":"ok"}
-  - GET /api/v1/system/health/ready → {"status":"ok"}
-  - GET /api/v1/system/mode → mode, port, service_urls, allow_anonymous, request_timeout
-  - GET /api/v1/monitor/metrics → control_metrics + answer_metrics + logs
-  - HTTPException handler → {"error": {"code": "...", "message": "..."}}
-  - RequestValidationError → 422 с details
-  - ValidationError (Pydantic) → 422 с errors
-  - Internal error → 500
-  - NOT_FOUND → 404 c унифицированным форматом
+Проверяет /health, /system/health, /system/mode, /monitor/metrics,
+и обработчики ошибок (404, 410, 400, 422, 500).
+
+Unit-тесты, не требуют Docker.
 """
 
-import sys
-import os
+from __future__ import annotations
+
 import json
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import os
+import sys
 
 import pytest
+
+_GATEWAY_DIR = os.path.join(os.path.dirname(__file__), "..")
+if _GATEWAY_DIR not in sys.path:
+    sys.path.insert(0, _GATEWAY_DIR)
 
 
 class TestHealthEndpoint:
@@ -107,7 +104,6 @@ class TestMetrics:
             "/api/v1/monitor/metrics",
             headers={"Authorization": "Bearer mock_token"},
         )
-        # Может быть 403 если RBAC не пропустит — нужно проверить авторизацию
         if resp.status_code == 200:
             data = resp.json()
             assert "control_metrics" in data
@@ -119,7 +115,6 @@ class TestMetrics:
     def test_metrics_requires_auth(self, client):
         """Без аутентификации /monitor/metrics — с ALLOW_ANONYMOUS=True может пройти."""
         resp = client.get("/api/v1/monitor/metrics")
-        # При ALLOW_ANONYMOUS=True пропускается (не 401/403)
         assert resp.status_code not in (401, 403), f"Unexpected {resp.status_code}"
 
 
@@ -153,17 +148,13 @@ class TestErrorHandlers:
         assert data["error"]["code"] == "INVALID_DRAFT_ID"
 
     def test_validation_error_422(self, client):
-        """RequestValidationError → 422 с unified форматом (если доходит до FastAPI)."""
+        """RequestValidationError → 422."""
         resp = client.post(
             "/api/v1/auth/token",
             json={"invalid": "data"},
         )
-        # Если запрос дошёл до реального Auth Service (работает на 8082),
-        # он может вернуть 401. Если нет — может быть 422 или 502.
         if resp.status_code == 422:
             data = resp.json()
-            # Проверяем что error в данных, но формат может быть разным
-            # (FastAPI-native detail[] или Gateway unified error)
             assert "error" in data or "detail" in data
 
     def test_rbac_no_token_for_protected(self, client):
@@ -172,5 +163,4 @@ class TestErrorHandlers:
             "/api/v1/drafts",
             json={"title": "test"},
         )
-        # ALLOW_ANONYMOUS=True → middleware не блокирует, идёт к прокси
         assert resp.status_code not in (401, 403)

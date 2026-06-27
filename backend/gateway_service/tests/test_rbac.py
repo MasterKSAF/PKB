@@ -1,31 +1,21 @@
 """
-Tests for RBACMiddleware — безопасность (CM-1).
-
-Сценарии:
-  - Без Authorization header → 401
-  - Bearer token не найден → 401
-  - GET /api/v1/admin/* для system_admin → 200
-  - GET /api/v1/admin/* для engineer → 403
-  - POST /api/v1/admin/* для engineer → 403
-  - POST /api/v1/drafts c can_upload_documents=true → 200
-  - POST /api/v1/drafts c can_upload_documents=false → 403
-  - POST/PUT/DELETE /registry/classifiers c правом → 200/403
-  - POST/PUT/DELETE /registry/terminology c правом → 200/403
-  - POST/PUT/PATCH/DELETE /registry/documents c правом → 200/403
-  - DELETE /api/v1/documents/1 c правом/без → 200/403
-  - DELETE /api/v1/drafts/1 c правом/без → 200/403
-  - GET /api/v1/monitor/metrics для system_admin → 200
-  - GET /api/v1/health без токена → 200 (публичный)
-  - POST /api/v1/auth/token без токена → 200 (публичный)
+Тесты RBACMiddleware — безопасность (CM-1).
 
 Все тесты используют mock_auth_validate для изоляции от реального Auth Service.
+
+Unit-тесты, не требуют Docker.
 """
 
-import sys
+from __future__ import annotations
+
 import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import sys
 
 import pytest
+
+_GATEWAY_DIR = os.path.join(os.path.dirname(__file__), "..")
+if _GATEWAY_DIR not in sys.path:
+    sys.path.insert(0, _GATEWAY_DIR)
 
 
 BASE = "/api/v1"
@@ -37,7 +27,6 @@ class TestRBACNoAuth:
     def test_no_auth_passes_through_middleware(self, client):
         """Без Authorization header — запрос проходит middleware (не 401/403)."""
         resp = client.post(f"{BASE}/drafts", json={"title": "test"})
-        # С ALLOW_ANONYMOUS=True middleware пропускает, дальше прокси или 422
         assert resp.status_code not in (401, 403), f"Unexpected {resp.status_code}"
 
     def test_health_public(self, client):
@@ -51,7 +40,6 @@ class TestRBACNoAuth:
             f"{BASE}/auth/token",
             json={"username": "admin", "password": "admin123"},
         )
-        # Middleware пропускает (ALLOW_ANONYMOUS=True), бэкенд может вернуть 401
         assert resp.status_code not in (403,), f"Unexpected {resp.status_code}"
 
 
@@ -59,14 +47,12 @@ class TestRBACAdminAccess:
     """Доступ к /api/v1/admin/*."""
 
     def test_admin_get_system_admin_allowed(self, client, mock_auth_validate, system_admin_user):
-        """GET /api/v1/admin/* для system_admin — middleware не блокирует (пропускает, не 403)."""
+        """GET /api/v1/admin/* для system_admin — middleware не блокирует."""
         mock_auth_validate(system_admin_user)
         resp = client.get(
             f"{BASE}/admin/users",
             headers={"Authorization": "Bearer mock_token"},
         )
-        # Middleware пропускает (role=system_admin). 401 может быть от бэкенда.
-        # Проверяем только что не 403 (FORBIDDEN от RBAC) и не 401 от middleware.
         assert resp.status_code != 403, f"RBAC blocked admin access: {resp.status_code}"
 
     def test_admin_get_engineer_forbidden(self, client, mock_auth_validate, engineer_user):
@@ -100,7 +86,6 @@ class TestRBACDraftPermissions:
             json={"title": "test"},
             headers={"Authorization": "Bearer mock_token"},
         )
-        # Может быть 502 если бэкенд не отвечает — это ок, главное не 401/403
         assert resp.status_code not in (401, 403)
 
     def test_post_draft_without_permission_forbidden(self, client, mock_auth_validate, engineer_user):
@@ -119,7 +104,7 @@ class TestRBACClassifiers:
 
     @pytest.mark.parametrize("method", ["POST", "PUT", "DELETE"])
     def test_classifiers_with_permission_allowed(self, method, client, mock_auth_validate, system_admin_user):
-        """POST/PUT/DELETE /api/v1/registry/classifiers c can_manage_classifiers=true → не 403."""
+        """POST/PUT/DELETE /api/v1/registry/classifiers c правом → не 403."""
         mock_auth_validate(system_admin_user)
         resp = client.request(
             method,
@@ -274,7 +259,7 @@ class TestRBACMetrics:
             f"{BASE}/monitor/metrics",
             headers={"Authorization": "Bearer mock_token"},
         )
-        assert resp.status_code in (200, 502)  # 502 если бэкенды недоступны
+        assert resp.status_code in (200, 502)
 
     def test_metrics_engineer_forbidden(self, client, mock_auth_validate, engineer_user):
         """GET /api/v1/monitor/metrics для engineer → 403."""

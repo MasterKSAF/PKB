@@ -1,22 +1,22 @@
 """
-Tests for PIIQueryValidatorMiddleware (GW-7).
+Тесты PIIQueryValidatorMiddleware (GW-7).
 
-Проверяет запрещённые query-параметры, которые не должны передаваться
-через URL (password, email, access_token, и другие PII-поля).
+Проверяет, что query-параметры с PII-данными блокируются (400),
+а безопасные параметры пропускаются.
 
-Должны вернуть 400:
-  - password, email, access_token, refresh_token, api_key, apikey, secret_key
-  - phone, passport, inn, snils, ogrn
-
-Должны пройти:
-  - document_key, file_key, search, q, page
+Unit-тесты через TestClient к реальному Gateway (не требуют Docker).
 """
 
-import sys
+from __future__ import annotations
+
 import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import sys
 
 import pytest
+
+_GATEWAY_DIR = os.path.join(os.path.dirname(__file__), "..")
+if _GATEWAY_DIR not in sys.path:
+    sys.path.insert(0, _GATEWAY_DIR)
 
 
 class TestPIIQueryValidatorBlocked:

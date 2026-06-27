@@ -1,18 +1,24 @@
 """
-Tests for client utilities: get_client(), close_client(), is_deprecated_integration_route().
+Тесты get_client() / close_client() / is_deprecated_integration_route().
 
 Проверяет:
   - get_client(): lazy initialization, timeout, follow_redirects
   - close_client(): клиент закрыт, _client = None
   - is_deprecated_integration_route(): meridian, files, external
+
+Unit-тесты, не требуют Docker.
 """
 
-import sys
+from __future__ import annotations
+
 import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import sys
 
 import pytest
-from unittest.mock import patch
+
+_GATEWAY_DIR = os.path.join(os.path.dirname(__file__), "..")
+if _GATEWAY_DIR not in sys.path:
+    sys.path.insert(0, _GATEWAY_DIR)
 
 from gateway.client import get_client, close_client, is_deprecated_integration_route
 
@@ -55,7 +61,6 @@ class TestGetClient:
     async def test_get_client_follow_redirects_false(self):
         """follow_redirects=False."""
         client = get_client()
-        # httpx.AsyncClient хранит follow_redirects
         assert not client.follow_redirects
 
 
@@ -65,7 +70,7 @@ class TestCloseClient:
     @pytest.mark.asyncio
     async def test_close_client_resets_to_none(self):
         """После close_client() _client = None."""
-        get_client()  # инициализируем
+        get_client()
         await close_client()
         from gateway.client import _client as cl
         assert cl is None

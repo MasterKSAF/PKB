@@ -1,25 +1,24 @@
 """
-Tests for health-check functions.
+Тесты check_service_health(), check_all_services_health().
 
-Проверяет:
-  - check_service_health("auth"): сервис отвечает 200 → "ok"
-  - check_service_health("auth"): сервис отвечает 503 → "degraded"
-  - check_service_health("auth"): ConnectError → "unavailable"
-  - check_service_health("auth"): Timeout → "unavailable"
-  - check_service_health("unknown"): нет в service_urls → "unavailable"
-  - check_all_services_health(): все ok → {"gateway":"ok", ...}
-  - check_all_services_health(): один не отвечает → "unavailable" в результатах
-  - check_all_services_health(): параллельный запуск (asyncio.gather)
+Все вызовы мокаются через monkeypatch.
+
+Unit-тесты, не требуют Docker.
 """
 
-import sys
-import os
+from __future__ import annotations
+
 import json
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import os
+import sys
 
 import httpx
 import pytest
 from unittest.mock import AsyncMock, patch
+
+_GATEWAY_DIR = os.path.join(os.path.dirname(__file__), "..")
+if _GATEWAY_DIR not in sys.path:
+    sys.path.insert(0, _GATEWAY_DIR)
 
 
 class TestCheckServiceHealth:
@@ -111,7 +110,6 @@ class TestCheckAllServicesHealth:
         """Все сервисы отвечают → {"gateway":"ok", "auth":"ok", ...}."""
         from gateway.client import check_all_services_health
 
-        # Мокаем check_service_health
         async def mock_check(name):
             return "ok"
 
@@ -160,8 +158,8 @@ class TestCheckAllServicesHealth:
 
     @pytest.mark.asyncio
     async def test_all_services_covered(self, monkeypatch):
-        """Проверяем, что все 10 сервисов + gateway в результатах."""
-        from gateway.client import check_all_services_health, config
+        """Проверяем, что все сервисы + gateway в результатах."""
+        from gateway.client import check_all_services_health
 
         async def mock_check(name):
             return "ok"
@@ -172,6 +170,5 @@ class TestCheckAllServicesHealth:
         )
 
         results = await check_all_services_health()
-        # gateway + 10 сервисов
         assert len(results) >= 11
         assert "gateway" in results
