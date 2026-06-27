@@ -95,6 +95,15 @@ async def reprocess_document(
         )
 
     # Trigger reprocess Celery task
+    logger.info(
+        "Enqueuing reprocess task",
+        extra={
+            "celery_task": "tasks.pipeline.indexation.run_reprocess_step",
+            "queue": "pipeline",
+            "params": {"task_id": task.id, "doc_id": doc_id},
+            "task_id": task.id, "doc_id": doc_id,
+        },
+    )
     run_reprocess_step.delay(task.id, doc_id)
 
     return ReprocessResponse(

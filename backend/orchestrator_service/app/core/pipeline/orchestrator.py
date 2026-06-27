@@ -152,18 +152,40 @@ class PipelineOrchestrator:
         )
 
         current_trace_id = get_trace_id() or ""
+
+        task_names = {
+            run_parser_preview_step: "tasks.pipeline.run_parser_preview_step",
+            run_ocr_preview_step: "tasks.pipeline.run_ocr_preview_step",
+        }
+
         if use_parser:
+            _task = run_parser_preview_step
+            _params = {"task_id": task_id, "draft_id": draft_id,
+                       "file_key": file_key, "max_pages": 3, "trace_id": current_trace_id}
             logger.info(
-                "Parser-first: enqueuing parser preview",
-                extra={"draft_id": draft_id, "task_id": task_id},
+                "Parser-first: enqueuing celery task",
+                extra={
+                    "celery_task": task_names[_task],
+                    "queue": "pipeline",
+                    "params": _params,
+                    "draft_id": draft_id, "task_id": task_id,
+                },
             )
-            run_parser_preview_step.delay(task_id, draft_id, file_key, max_pages=3, trace_id=current_trace_id)
+            _task.delay(**_params)
         else:
+            _task = run_ocr_preview_step
+            _params = {"task_id": task_id, "draft_id": draft_id,
+                       "file_key": file_key, "max_pages": 3, "trace_id": current_trace_id}
             logger.info(
-                "Parser disabled (or fallback): enqueuing OCR preview directly",
-                extra={"draft_id": draft_id, "task_id": task_id},
+                "OCR: enqueuing celery task",
+                extra={
+                    "celery_task": task_names[_task],
+                    "queue": "pipeline",
+                    "params": _params,
+                    "draft_id": draft_id, "task_id": task_id,
+                },
             )
-            run_ocr_preview_step.delay(task_id, draft_id, file_key, max_pages=3, trace_id=current_trace_id)
+            _task.delay(**_params)
 
         # Converter запускается ПОСЛЕ parser/ocr в on_step_completed
         # с результатом парсинга как raw_json
@@ -185,13 +207,20 @@ class PipelineOrchestrator:
     ) -> None:
         """Dispatch converter preview step after parser/OCR completes."""
         from app.tasks.pipeline_formation import run_converter_preview_step
-        run_converter_preview_step.delay(
-            task_id, draft_id, file_key, trace_id=trace_id, raw_json=raw_json,
-        )
+        _params = {
+            "task_id": task_id, "draft_id": draft_id,
+            "file_key": file_key, "trace_id": trace_id, "raw_json": raw_json,
+        }
         logger.info(
-            "Converter preview dispatched after parser",
-            extra={"task_id": task_id, "draft_id": draft_id},
+            "Enqueuing converter preview",
+            extra={
+                "celery_task": "tasks.pipeline.run_converter_preview_step",
+                "queue": "pipeline",
+                "params": _params,
+                "task_id": task_id, "draft_id": draft_id,
+            },
         )
+        run_converter_preview_step.delay(**_params)
 
     async def on_step_completed(
         self,
@@ -575,6 +604,15 @@ class PipelineOrchestrator:
                 f"Starting full converter: task={task.id} draft={task.draft_id} file_key={file_key} has_raw_json={full_result is not None}",
                 extra={"task_id": task.id, "draft_id": task.draft_id, "file_key": file_key},
             )
+            logger.info(
+                "Enqueuing converter full step",
+                extra={
+                    "celery_task": "tasks.pipeline.run_converter_full_step",
+                    "queue": "pipeline",
+                    "params": {"task_id": task.id, "draft_id": task.draft_id,
+                               "file_key": file_key, "version_id": version_id},
+                },
+            )
             run_converter_full_step.delay(
                 task.id, task.draft_id, file_key, trace_id=trace_id,
                 raw_json=full_result, version_id=version_id,
@@ -589,6 +627,15 @@ class PipelineOrchestrator:
             from app.tasks.pipeline_formation import run_registry_step
             # Pass document_id and version_id to registry step
             document_id = getattr(task, 'document_id', None) or task.draft_id
+            logger.info(
+                "Enqueuing registry creation step",
+                extra={
+                    "celery_task": "tasks.pipeline.run_registry_step",
+                    "queue": "pipeline",
+                    "params": {"task_id": task.id, "draft_id": task.draft_id,
+                               "document_id": document_id, "version_id": version_id},
+                },
+            )
             run_registry_step.delay(task.id, task.draft_id, document_id, version_id, trace_id=trace_id)
 
         elif step_name == "registry_creation":
@@ -611,6 +658,15 @@ class PipelineOrchestrator:
             if sections:
                 for s in sections:
                     s['document_id'] = document_id
+            logger.info(
+                "Enqueuing RAG index step",
+                extra={
+                    "celery_task": "tasks.pipeline.run_rag_index_step",
+                    "queue": "pipeline",
+                    "params": {"task_id": task.id, "draft_id": task.draft_id,
+                               "document_id": document_id},
+                },
+            )
             run_rag_index_step.delay(
                 task.id, task.draft_id, document_id,
                 sections=sections, trace_id=trace_id,
