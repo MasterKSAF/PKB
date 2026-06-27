@@ -462,8 +462,17 @@ def _docker_health_check(services: List[str]) -> bool:
     # ── Celery worker health check (#2) ──
     log_header("Docker Health Check: celery-worker")
     try:
+        # Копируем celery_app_check.py в контейнер (уникальное имя, не конфликтует с production)
+        _checker_dir = Path(__file__).resolve().parent
+        _src = _checker_dir / "celery_app_check.py"
+        if _src.exists():
+            subprocess.run(
+                ["docker", "exec", "-i", "pkb-celery-worker",
+                 "sh", "-c", "cat > /app/app/celery_app_check.py"],
+                input=_src.read_bytes(), timeout=10,
+            )
         celery_cmd = ["docker", "exec", "pkb-celery-worker",
-                      "celery", "-A", "app.celery_app", "inspect", "ping", "-t", "5"]
+                      "celery", "-A", "app.celery_app_check", "inspect", "ping", "-t", "5"]
         celery_result = subprocess.run(
             celery_cmd, capture_output=True, text=True, timeout=10,
         )
@@ -474,8 +483,6 @@ def _docker_health_check(services: List[str]) -> bool:
             if celery_result.stderr.strip():
                 print(f"  {celery_result.stderr.strip()[:200]}")
             all_ok = False
-    except subprocess.TimeoutExpired:
-        log_warn("celery-worker ping timeout")
     except FileNotFoundError:
         log_info("celery-worker health check пропущен (Docker не найден)")
     except Exception as e:
