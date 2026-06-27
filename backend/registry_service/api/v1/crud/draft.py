@@ -78,6 +78,16 @@ def update_draft_metadata(db: Session, draft_id: int, preview_metadata: dict, me
     db.refresh(draft)
     return draft
 
+def save_draft_snapshot(db: Session, draft_id: int, preview_metadata: dict) -> Optional[Draft]:
+    draft = get_draft_by_id(db, draft_id)
+    if not draft:
+        return None
+    draft.preview_metadata = preview_metadata
+    draft.updated_at = func.now()
+    db.commit()
+    db.refresh(draft)
+    return draft
+
 def delete_draft(db: Session, draft_id: int) -> bool:
     draft = get_draft_by_id(db, draft_id)
     if not draft:
@@ -85,3 +95,4 @@ def delete_draft(db: Session, draft_id: int) -> bool:
     db.delete(draft)
     db.commit()
     return True
+

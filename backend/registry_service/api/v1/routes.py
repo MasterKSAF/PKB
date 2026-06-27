@@ -1744,7 +1744,7 @@ def health_check(db: Session = Depends(get_db)):
 # ============================================================================
 
 from api.v1.crud import draft as draft_crud
-from api.v1.schemas.draft import DraftSchema, DraftCreate, DraftUpdateStatus, DraftUpdateMetadata
+from api.v1.schemas.draft import DraftSchema, DraftCreate, DraftUpdateStatus, DraftUpdateMetadata, DraftSnapshotCreate
 
 @routes.post('/registry/drafts')
 def create_draft(
@@ -1902,6 +1902,23 @@ def delete_draft_endpoint(draft_id: int, db: Session = Depends(get_db)):
     except Exception as e:
         log_event('ERROR', f'/registry/drafts/{draft_id}', None, None, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
+
+
+@routes.post('/registry/drafts/{draft_id}/snapshot')
+def save_draft_snapshot_endpoint(draft_id: int, payload: DraftSnapshotCreate, db: Session = Depends(get_db)):
+    """POST /registry/drafts/{draft_id}/snapshot - Сохранить preview-слепок"""
+    log_event('INFO', f'/registry/drafts/{draft_id}/snapshot', None, payload.model_dump())
+    try:
+        draft = draft_crud.save_draft_snapshot(db, draft_id, payload.preview_metadata)
+        if not draft:
+            raise HTTPException(status_code=404, detail={'error': {'code': 'DRAFT_NOT_FOUND', 'message': 'Draft not found'}})
+        return {'data': {'draft_id': draft_id, 'snapshot_saved': True}}
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_event('ERROR', f'/registry/drafts/{draft_id}/snapshot', None, payload.model_dump(), str(e))
+        raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
+
 
 
 
