@@ -185,20 +185,14 @@ SQLite не поддерживает JSONB нативно. Текущая реа
 Добавлена явная проверка `file_size == 0 → 422 EMPTY_FILE`.
 Найдено тестом `test_create_draft_with_empty_file_returns_422`.
 
-### 3.9. `data.get("id") or data.get("draft_id")` — 0 is falsy (27.06, НАЙДЕНО, не исправлен)
-В `get_draft` эндпоинте (drafts.py, строки 573, 1174) используется:
+### 3.9. `data.get("id") or data.get("draft_id")` — 0 is falsy (27.06, ИСПРАВЛЕНО)
+В `get_draft` эндпоинте (drafts.py) было:
 ```python
-doc_id = data.get("id") or data.get("draft_id")
-# и
-draft_id = data.get("id") or data.get("draft_id")
+"draft_id": data.get("id") or data.get("draft_id")
 ```
-Проблема: если `"id"` = 0 (число), Python считает его falsy и падает
-на `"draft_id"`. Если `"draft_id"` тоже нет (Registry ответил без поля) —
-в ответе будет `None`.
-
-**Fix:** `data.get("id") if data.get("id") is not None else data.get("draft_id")`
-или `data.get("id", data.get("draft_id"))`.
-Тест `test_get_draft_with_id_zero_in_storage` документирует баг (xfail).
+Проблема: 0 числовой falsy в Python. Если id=0 — ответ draft_id=None.
+**Исправление:** заменено на `data.get("id") if data.get("id") is not None else data.get("draft_id")`.
+Аналогичный фикс для `doc_id` (registry_document_id) и `document_id` в `orchestrator.py:662`.
 
 ### 3.10. POST /drafts Idempotency-Key (27.06)
 Добавлена обработка Idempotency-Key для POST /drafts.

@@ -568,11 +568,11 @@ async def get_draft(
             )
         # Transform Registry response to checker-expected format
         data = result.get("data", {})
-        doc_id = data.get("registry_document_id") or data.get("document_id")
+        doc_id = data.get("registry_document_id") if data.get("registry_document_id") is not None else data.get("document_id")
         return {
-            "draft_id": data.get("id") or data.get("draft_id"),
+            "draft_id": data.get("id") if data.get("id") is not None else data.get("draft_id"),
             "document_id": doc_id,
-            "version_id": data.get("current_version_id") if doc_id else None,
+            "version_id": data.get("current_version_id") if doc_id is not None else None,
             "is_new_document": doc_id is None,
             "status": data.get("status"),
             "document_key": data.get("document_key"),
@@ -1171,7 +1171,7 @@ async def patch_draft_metadata(
         # Transform Registry response to checker-expected format
         data = result.get("data", {})
         return {
-            "draft_id": data.get("id") or data.get("draft_id"),
+            "draft_id": data.get("id") if data.get("id") is not None else data.get("draft_id"),
             "title": payload.get("title"),
             "status": data.get("status"),
             "preview_metadata": data.get("preview_metadata"),

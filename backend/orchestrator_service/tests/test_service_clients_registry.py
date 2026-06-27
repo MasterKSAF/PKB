@@ -166,19 +166,17 @@ class TestRegistryMockRealGap:
     """Тесты на расхождение mock-логики с реальностью."""
 
     @pytest.mark.asyncio
-    async def test_get_draft_id_zero_falsy(self, reg_client):
-        """data["id"] = 0 is falsy → fallback на data["draft_id"].
+    async def test_get_draft_id_zero_not_falsy(self, reg_client):
+        """После фикса: data["id"]=0 **не** falsy.
 
-        _mock_get_draft возвращает data с "id"=0.
-        В decide endpoint: data.get("id") or data.get("draft_id") →
-        0 is falsy, падает на draft_id.
-        Если draft_id тоже нет → None.
+        Эндпоинт теперь использует:
+        data.get("id") if data.get("id") is not None else data.get("draft_id")
+        0 is not None → возвращается 0 (не draft_id).
         """
         storage = reg_client._storage
-        # Создаём draft с id=0 и без draft_id
         draft = {
             "id": 0,
-            "draft_id": 42,  # есть как fallback
+            "draft_id": 42,
             "file_key": "test",
             "status": "uploaded",
             "created_by": "test",
@@ -191,25 +189,24 @@ class TestRegistryMockRealGap:
         assert "data" in result
         data = result["data"]
 
-        # Симулируем логику endpoint: data.get("id") or data.get("draft_id")
-        resolved_id = data.get("id") or data.get("draft_id")
-        assert resolved_id == 42, (
-            f"data.get('id') = {data.get('id')} (falsy), "
-            f"data.get('draft_id') = {data.get('draft_id')}, "
-            f"resolved = {resolved_id}"
+        # После фикса: id=0 возвращается корректно
+        resolved_id = data.get("id") if data.get("id") is not None else data.get("draft_id")
+        assert resolved_id == 0, (
+            f"Expected resolved_id=0 (id is not None), "
+            f"got {resolved_id}"
         )
 
     @pytest.mark.asyncio
-    async def test_get_draft_id_zero_no_draft_id_fallback(self, reg_client):
-        """data["id"]=0 и нет "draft_id" → resolve = None (баг!).
+    async def test_get_draft_id_zero_no_draft_id_after_fix(self, reg_client):
+        """После фикса: data["id"]=0, нет "draft_id" → resolve = 0.
 
-        Эндпоинт делает: data.get("id") or data.get("draft_id").
-        Если "id"=0 (falsy) и "draft_id" отсутствует → результат None.
+        Новый код: data.get("id") if data.get("id") is not None else data.get("draft_id")
+        0 is not None → 0 (раньше был None из-за falsy).
         """
         storage = reg_client._storage
         draft = {
             "id": 0,
-            # НЕТ "draft_id" — симуляция ответа Registry без draft_id
+            # НЕТ "draft_id"
             "file_key": "test",
             "status": "uploaded",
             "created_by": "test",
@@ -222,24 +219,24 @@ class TestRegistryMockRealGap:
         assert "data" in result
         data = result["data"]
 
-        # Симулируем логику endpoint
-        resolved_id = data.get("id") or data.get("draft_id")
-        assert resolved_id is None, (
-            f"BUG: data.get('id')=0 (falsy), data.get('draft_id') is None, "
-            f"but resolved to {resolved_id}"
+        # После фикса: id=0 возвращается корректно (не None)
+        resolved_id = data.get("id") if data.get("id") is not None else data.get("draft_id")
+        assert resolved_id == 0, (
+            f"After fix: expected resolved_id=0 (id is 0, not None), "
+            f"got {resolved_id}"
         )
 
     @pytest.mark.asyncio
     async def test_get_draft_returns_id_key_not_draft_id(self, reg_client):
         """_mock_get_draft возвращает 'id', а статический mock_response — 'draft_id'.
 
-        Это расхождение: реальный ответ может иметь один ключ,
-        а статический mock — другой. Эндпоинт использует fallback через or.
+        Эндпоинт использует: data.get("id") if id is not None else data.get("draft_id").
+        Оба ключа есть → возвращается id (не draft_id).
         """
         storage = reg_client._storage
         draft = {
             "id": 100,
-            "draft_id": 100,
+            "draft_id": 999,
             "file_key": "test",
             "status": "uploaded",
             "created_by": "test",
@@ -251,11 +248,8 @@ class TestRegistryMockRealGap:
         result = await reg_client.get_draft(draft_id=100)
         data = result["data"]
 
-        # _mock_get_draft returns dict(draft) which has "id" key
         assert "id" in data, "_mock_get_draft should return 'id' key"
 
-        # Но статический mock_response в get_draft() возвращает "draft_id"
-        static_mock = reg_client.get_draft.__wrapped__ if hasattr(reg_client.get_draft, "__wrapped__") else None
-        # Проверяем, что эндпоинты корректно обрабатывают оба ключа
-        draft_id = data.get("id") or data.get("draft_id")
+        # После фикса: id is not None → возвращается id (100), не draft_id fallback
+        draft_id = data.get("id") if data.get("id") is not None else data.get("draft_id")
         assert draft_id == 100, f"Failed to resolve draft_id from data: {data}"
