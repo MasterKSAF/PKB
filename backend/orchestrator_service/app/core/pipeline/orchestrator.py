@@ -280,7 +280,7 @@ class PipelineOrchestrator:
         # Handle preview phase completion
         if step_name == "preview_converter":
             await self._on_preview_completed(task, steps, output_data)
-        elif step_name in ("full_ocr", "full_converter", "registry_creation"):
+        elif step_name in ("full_ocr", "full_converter", "registry_creation", "rag_index"):
             await self._on_full_step_completed(task, step_name, steps)
 
     async def _run_ocr_fallback(self, task, file_key: str) -> None:
@@ -290,19 +290,26 @@ class PipelineOrchestrator:
             extra={"task_id": task.id, "draft_id": task.draft_id},
         )
 
-        # Create a new preview step for OCR
-        await self.task_repo.create_task_step(
-            task_id=task.id,
-            step_name="preview_ocr",
-            step_index=1,
-            service_name="OCR Service",
-            input_data={
-                "file_key": file_key,
-                "mode": "preview",
-                "max_pages": 3,
-                "draft_id": task.draft_id,
-            },
+        # Guard against duplicate OCR fallback steps
+        steps = await self.task_repo.get_task_steps(task.id)
+        has_pending_ocr = any(
+            s.step_name == "preview_ocr" and s.status == "pending"
+            for s in steps
         )
+        if not has_pending_ocr:
+            # Create a new preview step for OCR
+            await self.task_repo.create_task_step(
+                task_id=task.id,
+                step_name="preview_ocr",
+                step_index=1,
+                service_name="OCR Service",
+                input_data={
+                    "file_key": file_key,
+                    "mode": "preview",
+                    "max_pages": 3,
+                    "draft_id": task.draft_id,
+                },
+            )
 
         # Reset retry count for the fallback attempt
         task.retry_count = 0
@@ -541,6 +548,7 @@ class PipelineOrchestrator:
     ) -> None:
         """Handle completion of a full processing step."""
         trace_id = task.trace_id or ""
+        version_id = getattr(task, 'version_id', None)
 
         if step_name == "full_ocr":
             await self.task_repo.update_task_status(
@@ -550,7 +558,27 @@ class PipelineOrchestrator:
             # Converter should already be enqueued or will run next
 
             from app.tasks.pipeline_formation import run_converter_full_step
-            run_converter_full_step.delay(task.id, task.draft_id, trace_id=trace_id)
+            # Extract full parser result from the full_ocr step output
+            full_result = None
+            file_key = None
+            for s in steps:
+                if s.step_name == "upload" and s.output_data:
+                    file_key = s.output_data.get("file_key")
+                if s.step_name == "full_ocr" and s.output_data:
+                    full_result = s.output_data.get("full_result")
+            if not file_key:
+                for s in steps:
+                    if s.input_data and s.input_data.get("file_key"):
+                        file_key = s.input_data["file_key"]
+                        break
+            logger.info(
+                f"Starting full converter: task={task.id} draft={task.draft_id} file_key={file_key} has_raw_json={full_result is not None}",
+                extra={"task_id": task.id, "draft_id": task.draft_id, "file_key": file_key},
+            )
+            run_converter_full_step.delay(
+                task.id, task.draft_id, file_key, trace_id=trace_id,
+                raw_json=full_result, version_id=version_id,
+            )
 
         elif step_name == "full_converter":
             await self.task_repo.update_task_status(
@@ -561,11 +589,35 @@ class PipelineOrchestrator:
             from app.tasks.pipeline_formation import run_registry_step
             # Pass document_id and version_id to registry step
             document_id = getattr(task, 'document_id', None) or task.draft_id
-            version_id = getattr(task, 'version_id', None)
             run_registry_step.delay(task.id, task.draft_id, document_id, version_id, trace_id=trace_id)
 
         elif step_name == "registry_creation":
-            # Full pipeline complete
+            # Registry done — now dispatch RAG indexing
+            await self.task_repo.update_task_status(
+                task_id=task.id,
+                progress_percent=90,
+            )
+
+            from app.tasks.pipeline_formation import run_rag_index_step
+            # Extract sections from full_ocr step output for RAG Builder
+            sections = None
+            for s in steps:
+                if s.step_name == "full_ocr" and s.output_data:
+                    sections = s.output_data.get("sections")
+                    break
+            document_id = getattr(task, 'document_id', None) or task.draft_id
+            # Fix document_id in sections to match registry document_id (P1F-10)
+            # Sections were built with draft_id, but registry may assign a different id
+            if sections:
+                for s in sections:
+                    s['document_id'] = document_id
+            run_rag_index_step.delay(
+                task.id, task.draft_id, document_id,
+                sections=sections, trace_id=trace_id,
+            )
+
+        elif step_name == "rag_index":
+            # RAG indexing complete — mark pipeline as completed
             await self.task_repo.update_task_status(
                 task_id=task.id,
                 status=TaskStatus.COMPLETED.value,
@@ -588,7 +640,7 @@ class PipelineOrchestrator:
                 )
 
             logger.info(
-                f"Pipeline completed for draft {task.draft_id}",
+                f"Pipeline fully completed for draft {task.draft_id}",
                 extra={"task_id": task.id},
             )
 
@@ -755,6 +807,7 @@ class PipelineOrchestrator:
 
         # Resolve file_key from upload step output
         steps = await self.task_repo.get_task_steps(task_id)
+        existing_step_names = {s.step_name for s in steps}
         upload_step = next((s for s in steps if s.step_name == "upload"), None)
         file_key = None
         if upload_step and upload_step.output_data:
@@ -779,7 +832,8 @@ class PipelineOrchestrator:
         use_parser_for_full = bool(parser_enabled)
         full_service_name = "Parser Service" if use_parser_for_full else "OCR Service"
 
-        if need_full_processing:
+        # Guard: skip creating steps that already exist (prevent duplicates on re-approve)
+        if need_full_processing and "full_ocr" not in existing_step_names:
             await self.task_repo.create_task_step(
                 task_id=task_id,
                 step_name="full_ocr",
@@ -788,25 +842,37 @@ class PipelineOrchestrator:
                 input_data={"file_key": file_key, "mode": "full", "draft_id": draft_id},
             )
 
-        # Create full_converter step (always)
-        await self.task_repo.create_task_step(
-            task_id=task_id,
-            step_name="full_converter",
-            step_index=4,
-            service_name="Converter-validator",
-            input_data={"file_key": file_key, "mode": "full", "draft_id": draft_id},
-        )
+        # Create full_converter step (always, if not exists)
+        if "full_converter" not in existing_step_names:
+            await self.task_repo.create_task_step(
+                task_id=task_id,
+                step_name="full_converter",
+                step_index=4,
+                service_name="Converter-validator",
+                input_data={"file_key": file_key, "mode": "full", "draft_id": draft_id},
+            )
 
-        # Create registry_creation step (now with document_id)
-        await self.task_repo.create_task_step(
-            task_id=task_id,
-            step_name="registry_creation",
-            step_index=5,
-            service_name="Registry",
-            input_data={"draft_id": draft_id, "document_id": document_id},
-        )
+        # Create registry_creation step (if not exists)
+        if "registry_creation" not in existing_step_names:
+            await self.task_repo.create_task_step(
+                task_id=task_id,
+                step_name="registry_creation",
+                step_index=5,
+                service_name="Registry",
+                input_data={"draft_id": draft_id, "document_id": document_id},
+            )
 
-        # Start the first step
+        # Create rag_index step (if not exists)
+        if "rag_index" not in existing_step_names:
+            await self.task_repo.create_task_step(
+                task_id=task_id,
+                step_name="rag_index",
+                step_index=6,
+                service_name="RAG Builder",
+                input_data={"draft_id": draft_id, "document_id": document_id},
+            )
+
+        # Refresh steps after potential creation
         steps = await self.task_repo.get_task_steps(task_id)
         if need_full_processing:
             full_step = next(
@@ -1026,7 +1092,7 @@ class PipelineOrchestrator:
             use_ocr_fallback = True
 
         if use_ocr_fallback:
-            # Fall back to OCR — create new OCR step and enqueue
+            # Fall back to OCR — create new OCR step (if not already pending) and enqueue
             file_key = ""
             if failed_step and failed_step.input_data:
                 file_key = failed_step.input_data.get("file_key", "")
@@ -1034,17 +1100,23 @@ class PipelineOrchestrator:
             mode = "preview" if "preview" in step_name else "full"
             max_pages = 3 if mode == "preview" else None
 
-            await self.task_repo.create_task_step(
-                task_id=task_id,
-                step_name=step_name,
-                step_index=task.current_step_index,
-                service_name="OCR Service",
-                input_data={
-                    "file_key": file_key,
-                    "mode": mode,
-                    "draft_id": task.draft_id,
-                },
+            # Guard: don't create duplicate step if one is already pending
+            existing_pending = any(
+                s.step_name == step_name and s.status == "pending"
+                for s in steps
             )
+            if not existing_pending:
+                await self.task_repo.create_task_step(
+                    task_id=task_id,
+                    step_name=step_name,
+                    step_index=task.current_step_index,
+                    service_name="OCR Service",
+                    input_data={
+                        "file_key": file_key,
+                        "mode": mode,
+                        "draft_id": task.draft_id,
+                    },
+                )
 
             task.retry_count = 0
             task.current_step_name = "OCR Service"
@@ -1080,13 +1152,19 @@ class PipelineOrchestrator:
             # Retry with exponential backoff
             backoff_delay = settings.pipeline.RETRY_BASE_DELAY * (2 ** task.retry_count)
 
-            # Re-create step as pending for retry
-            await self.task_repo.create_task_step(
-                task_id=task_id,
-                step_name=step_name,
-                step_index=task.current_step_index,
-                service_name=task.current_step_name or step_name,
+            # Guard: don't create duplicate step if one is already pending
+            existing_pending = any(
+                s.step_name == step_name and s.status == "pending"
+                for s in steps
             )
+            if not existing_pending:
+                # Re-create step as pending for retry
+                await self.task_repo.create_task_step(
+                    task_id=task_id,
+                    step_name=step_name,
+                    step_index=task.current_step_index,
+                    service_name=task.current_step_name or step_name,
+                )
 
             await self.task_repo.update_task_status(
                 task_id=task_id,

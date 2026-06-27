@@ -784,9 +784,23 @@ async def _build_preview_status(
     """Build DraftPreviewStatusResponse from current task/steps state."""
     from app.models.pipeline import TaskStep
 
+    # Deduplicate steps by step_name — take best status per name
+    # Prevents duplicate steps (from Celery retry/fallback) from blocking completion
     preview_steps = [s for s in steps if s.step_name in ("preview_ocr", "preview_converter")]
-    all_completed = all(s.status == "completed" for s in preview_steps)
-    any_failed = any(s.status == "failed" for s in preview_steps)
+    best_status = {}  # step_name -> best status
+    for s in preview_steps:
+        cur = best_status.get(s.step_name)
+        # Status priority: failed > completed > running > pending
+        if s.status == "failed":
+            best_status[s.step_name] = "failed"
+        elif s.status == "completed" and cur != "failed":
+            best_status[s.step_name] = "completed"
+        elif s.status == "running" and cur not in ("failed", "completed"):
+            best_status[s.step_name] = "running"
+        elif cur is None:
+            best_status[s.step_name] = s.status
+    all_completed = all(v == "completed" for v in best_status.values())
+    any_failed = any(v == "failed" for v in best_status.values())
 
     if all_completed:
         status_str = "completed"
@@ -796,18 +810,18 @@ async def _build_preview_status(
                 meta = s.output_data.get("metadata", {})
                 if meta:
                     preview_meta = PreviewMetadata(
-                        doc_code=meta.get("doc_code"),
-                        title=meta.get("title"),
-                        document_type=meta.get("document_type"),
-                        source_type=meta.get("source_type"),
-                        year=meta.get("year"),
-                        revision=meta.get("revision"),
-                        era=meta.get("era"),
-                        jurisdiction=meta.get("jurisdiction"),
-                        mks_oks_code=meta.get("mks_oks_code"),
-                        okstu_code=meta.get("okstu_code"),
-                        issuing_body=meta.get("issuing_body"),
-                        udk_code=meta.get("udk_code"),
+                        doc_code=str(meta.get("doc_code")) if meta.get("doc_code") is not None else None,
+                        title=str(meta.get("title")) if meta.get("title") is not None else None,
+                        document_type=str(meta.get("document_type")) if meta.get("document_type") is not None else None,
+                        source_type=str(meta.get("source_type")) if meta.get("source_type") is not None else None,
+                        year=str(meta.get("year")) if meta.get("year") is not None else None,
+                        revision=str(meta.get("revision")) if meta.get("revision") is not None else None,
+                        era=str(meta.get("era")) if meta.get("era") is not None else None,
+                        jurisdiction=str(meta.get("jurisdiction")) if meta.get("jurisdiction") is not None else None,
+                        mks_oks_code=str(meta.get("mks_oks_code")) if meta.get("mks_oks_code") is not None else None,
+                        okstu_code=str(meta.get("okstu_code")) if meta.get("okstu_code") is not None else None,
+                        issuing_body=str(meta.get("issuing_body")) if meta.get("issuing_body") is not None else None,
+                        udk_code=str(meta.get("udk_code")) if meta.get("udk_code") is not None else None,
                     )
                     break
         decision_required = task.pipeline_stage == "decision"

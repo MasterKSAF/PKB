@@ -110,7 +110,6 @@ x-env-service-urls: &env-service-urls
   OCR_SERVICE_URL: http://parser:8087
   RAG_BUILDER_SERVICE_URL: http://rag-builder:8090
   RAG_SEARCH_SERVICE_URL: http://rag-search:8091
-  RAG_SERVICE_URL: http://rag-search:8091
 
 services:
 
@@ -278,6 +277,7 @@ services:
       - "8082:8082"
     environment:
       <<: [*env-db, *env-auth]
+      LOG_LEVEL: DEBUG
       DATABASE_URL: postgresql+asyncpg://pkb:pkb@postgres:5432/pkb_neuro
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8082"]
     depends_on:
@@ -306,6 +306,7 @@ services:
       - "8084:8084"
     environment:
       <<: [*env-db]
+      LOG_LEVEL: DEBUG
       DATABASE_URL: postgresql+asyncpg://pkb:pkb@postgres:5432/pkb_neuro
     depends_on:
       postgres:
@@ -333,6 +334,7 @@ services:
       - "8087:8087"
     environment:
       <<: [*env-minio]
+      LOG_LEVEL: DEBUG
     depends_on:
       minio:
         condition: service_healthy
@@ -358,6 +360,7 @@ services:
     ports:
       - "8086:8086"
     environment:
+      LOG_LEVEL: DEBUG
       OPENAI_API_KEY: ${ROUTERAI_API_KEY:-}
       OPENAI_BASE_URL: ${LLM_API_BASE_URL:-https://routerai.ru/api/v1}
       DEFAULT_LLM_MODEL: ${DEFAULT_LLM_MODEL:-deepseek/deepseek-v4-flash}
@@ -389,6 +392,7 @@ services:
       - "8090:8090"
     environment:
       <<: [*env-db, *env-embeddings, *env-rerank]
+      LOG_LEVEL: DEBUG
       APP_PORT: "8090"
       CHUNK_SIZE: "1024"
       EMBEDDING_BATCH_SIZE: "256"
@@ -421,6 +425,7 @@ services:
       - "8091:8091"
     environment:
       <<: [*env-db, *env-embeddings, *env-rerank]
+      LOG_LEVEL: DEBUG
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
       POSTGRES_USER: pkb
@@ -457,6 +462,7 @@ services:
       - "8083:8083"
     environment:
       <<: [*env-db, *env-service-urls]
+      LOG_LEVEL: DEBUG
       DEV_AUTH_MODE: ${DEV_AUTH_MODE:-true}
       MOCK_RAG_ENABLED: ${MOCK_RAG_ENABLED:-false}
       MOCK_REGISTRY_ENABLED: ${MOCK_REGISTRY_ENABLED:-false}
@@ -498,6 +504,7 @@ services:
     environment:
       <<: [*env-db, *env-minio, *env-auth, *env-service-urls]
       DEBUG: "true"
+      LOG_LEVEL: DEBUG
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
@@ -547,11 +554,12 @@ services:
     container_name: pkb-celery-worker
     restart: unless-stopped
     working_dir: /app
-    command: celery -A app.celery_app worker --loglevel=info --concurrency=4 --pool=threads -Q celery,pipeline,saga
+    command: celery -A app.celery_app worker --loglevel=debug --concurrency=4 --pool=threads -Q celery,pipeline,saga
     healthcheck:
       disable: true
     environment:
       <<: [*env-db, *env-service-urls]
+      LOG_LEVEL: DEBUG
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
       REGISTRY_SERVICE_URL: http://registry:8084

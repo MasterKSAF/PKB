@@ -28,7 +28,7 @@ def _run_async(coro):
         loop.close()
 
 
-@celery_app.task(bind=True, max_retries=3, default_retry_delay=120, name="tasks.pipeline.run_rag_index_step")
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=120, name="tasks.pipeline.indexation.run_rag_index_step")
 def run_rag_index_step(self, job_id: str, document_id: str):
     """
     Step 1: RAG Index — chunk document and store embeddings.

@@ -100,7 +100,7 @@ class RagBuildRequest(BaseModel):
     - chunk_id — технический retrieval ID, не用于 цитирования
     """
 
-    document_id: str = Field(..., description="ID документа в Registry")
+    document_id: int = Field(..., description="ID документа в Registry")
     sections: List[Dict[str, Any]] = Field(
         default_factory=list,
         description="Секции документа для индексации: section_id, parent_id, clause, title, level, path, page (1-based), bbox (0..1), type, content",
