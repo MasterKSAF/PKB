@@ -24,3 +24,23 @@ class ClassifierSchema(BaseModel):
         'populate_by_name': True,
         'from_attributes': True,
     }
+
+
+class ClassificationInput(BaseModel):
+    mks_oks_code: Optional[str] = None
+    okstu_code: Optional[str] = None
+    udk_code: Optional[str] = None
+
+    model_config = {
+        'extra': 'ignore',
+        'from_attributes': True,
+    }
+
+
+class ClassifierValidateRequest(BaseModel):
+    classification: ClassificationInput
+
+    model_config = {
+        'extra': 'ignore',
+        'from_attributes': True,
+    }

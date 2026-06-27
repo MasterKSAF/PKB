@@ -251,13 +251,13 @@ class TestGenerateFullReport:
         from service_checker.core.reports import _generate_full_report
 
         cov_results = {
-            "auth": MockCoverageResult("Auth", 18082, ping_ok=True),
+            "rag_search": MockCoverageResult("RAG Search", 18091, ping_ok=True),
         }
         pipe_ok = {
-            "chat_inference": make_mock_pipeline_result(name="chat", passed=True, services=["auth"]),
+            "chat_inference": make_mock_pipeline_result(name="chat", passed=True, services=["rag_search"]),
         }
         pipe_fail = {
-            "chat_inference": make_mock_pipeline_result(name="chat", passed=False, services=["auth"]),
+            "chat_inference": make_mock_pipeline_result(name="chat", passed=False, services=["rag_search"]),
         }
 
         report_ok = _generate_full_report(cov_results, pipe_ok, "t")
@@ -266,18 +266,18 @@ class TestGenerateFullReport:
         lines_ok = report_ok.split("\n")
         lines_fail = report_fail.split("\n")
 
-        # Ищем строку Auth в pipeline-таблице (где есть колонка Chat)
+        # Ищем строку RAG Search в pipeline-таблице (где есть колонка Chat)
         pipe_tbl_ok = self._get_pipe_table_lines(lines_ok)
         pipe_tbl_fail = self._get_pipe_table_lines(lines_fail)
-        auth_ok = [l for l in pipe_tbl_ok if "Auth" in l][0]
-        auth_fail = [l for l in pipe_tbl_fail if "Auth" in l][0]
+        svc_ok = [l for l in pipe_tbl_ok if "RAG Search" in l][0]
+        svc_fail = [l for l in pipe_tbl_fail if "RAG Search" in l][0]
 
         # Столбцы pipeline-таблицы (только chat_inference): Service(1) | Chat(2) | Status(3)
-        parts_ok = [p.strip() for p in auth_ok.split("|")]
-        parts_fail = [p.strip() for p in auth_fail.split("|")]
+        parts_ok = [p.strip() for p in svc_ok.split("|")]
+        parts_fail = [p.strip() for p in svc_fail.split("|")]
 
-        assert parts_ok[2] == "✅", f"Expected ✅, got {parts_ok[2]}"
-        assert parts_fail[2] == "❌", f"Expected ❌, got {parts_fail[2]}"
+        assert parts_ok[2] == "\u2705", f"Expected \u2705, got {parts_ok[2]}"
+        assert parts_fail[2] == "\u274c", f"Expected \u274c, got {parts_fail[2]}"
 
     def test_full_report_non_participating_service(self):
         """Сервис не участвующий в пайплайне получает '—'."""

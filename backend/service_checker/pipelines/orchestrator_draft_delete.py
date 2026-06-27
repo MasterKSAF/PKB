@@ -44,7 +44,7 @@ class OrchestratorDraftDeletePipeline(PipelineDef):
 
     name = "orchestrator_draft_delete"
     description = "Удаление черновика Orchestrator (создание → удаление → проверка 404)"
-    services = ["gateway"]
+    services = ["gateway", "orchestrator"]
 
     def build_steps(self, context: PipelineContext) -> List[PipelineStep]:
         steps: List[PipelineStep] = []

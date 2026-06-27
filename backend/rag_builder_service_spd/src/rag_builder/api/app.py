@@ -11,6 +11,7 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, status
 
 from rag_builder.core.logger import logger
 from rag_builder.core.config import settings
+from rag_builder.core.telemetry import instrument_fastapi, setup_observability
 from rag_builder.models.contracts import BuildRequest
 from rag_builder.models.responses import (
     DeleteIndexResponse,
@@ -47,9 +48,9 @@ async def lifespan(app: FastAPI):
     logger.info("Starting RAG Builder service")
 
     repository = PostgresChunkRepository()
-    repository.ensure_schema()
+    repository.assert_schema_ready()
 
-    logger.info("Database schema ensured")
+    logger.info("Database schema is ready")
     _mark_stale_indexing_jobs_failed(repository)
 
     yield
@@ -62,6 +63,14 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+tracer_provider, meter_provider, _observability_logger = setup_observability(
+    service_name=settings.SERVICE_NAME,
+    otlp_endpoint=settings.OTEL_EXPORTER_OTLP_ENDPOINT,
+    enabled=settings.OBSERVABILITY_ENABLED,
+    log_level=settings.LOG_LEVEL,
+)
+instrument_fastapi(app, tracer_provider=tracer_provider)
 
 
 IndexingJobStatus = Literal[

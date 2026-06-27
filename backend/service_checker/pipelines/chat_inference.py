@@ -33,7 +33,7 @@ class ChatInferencePipeline(PipelineDef):
 
     name = "chat_inference"
     description = "Чат-сессия с поиском по проиндексированным документам"
-    services = ["gateway"]
+    services = ["gateway", "rag_search"]
 
     def build_steps(self, context: PipelineContext) -> List[PipelineStep]:
         """Построить шаги пайплайна chat_inference."""

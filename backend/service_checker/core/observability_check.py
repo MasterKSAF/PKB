@@ -269,6 +269,14 @@ async def _check_request_id_header(
             if xtid:
                 result.checks["x_trace_id_generated"] = True
                 result.details["x_trace_id"] = xtid
+                # #16: trace_id должен быть 32 hex-символа (без дефисов UUID)
+                # UUID с дефисами (36 символов) может не влезть в varchar(32) в БД
+                clean = xtid.replace('-', '')
+                if len(clean) != 32 or not all(c in '0123456789abcdef' for c in clean.lower()):
+                    result.warnings.append(
+                        f"X-Trace-ID имеет некорректный формат: '{xtid}' (длина {len(xtid)}). "
+                        f"Ожидается 32 hex-символа без дефисов для varchar(32)."
+                    )
 
         except Exception:
             result.checks["x_request_id_generated"] = False

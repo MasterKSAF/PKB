@@ -22,10 +22,20 @@ def get_session_factory() -> async_sessionmaker:
     return AsyncSessionLocal
 
 
+_PG_MIGRATIONS = (
+    "ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS summary TEXT",
+    "ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS summarized_until_message_id BIGINT",
+)
+
+
 async def init_db() -> None:
+    from sqlalchemy import text
     from . import models  # noqa: F401
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        if conn.dialect.name == "postgresql":
+            for stmt in _PG_MIGRATIONS:
+                await conn.execute(text(stmt))
 
 
 async def wait_for_db(retries: int = 10, delay: float = 2.0) -> None:

@@ -458,6 +458,28 @@ def _docker_health_check(services: List[str]) -> bool:
     except Exception:
         pass
 
+    # ── Celery worker health check (#2) ──
+    log_header("Docker Health Check: celery-worker")
+    try:
+        celery_cmd = ["docker", "exec", "pkb-celery-worker",
+                      "celery", "-A", "tasks", "inspect", "ping", "-t", "5"]
+        celery_result = subprocess.run(
+            celery_cmd, capture_output=True, text=True, timeout=10,
+        )
+        if celery_result.returncode == 0 and "pong" in celery_result.stdout:
+            log_ok("celery-worker отвечает (pong)")
+        else:
+            log_warn("celery-worker не отвечает на ping")
+            if celery_result.stderr.strip():
+                print(f"  {celery_result.stderr.strip()[:200]}")
+            all_ok = False
+    except subprocess.TimeoutExpired:
+        log_warn("celery-worker ping timeout")
+    except FileNotFoundError:
+        log_info("celery-worker health check пропущен (Docker не найден)")
+    except Exception as e:
+        log_info(f"celery-worker health check пропущен: {e}")
+
     print()
     if all_ok:
         log_ok("Все Python-сервисы работают!")

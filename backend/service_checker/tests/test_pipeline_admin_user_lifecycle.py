@@ -13,7 +13,7 @@ class TestAdminUserLifecyclePipeline:
         assert p.name == "admin_user_lifecycle"
         assert p.description
         assert "gateway" in p.services
-        assert len(p.services) == 1
+        assert len(p.services) == 2
 
     def test_build_steps_count(self):
         p = AdminUserLifecyclePipeline()

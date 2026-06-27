@@ -1,11 +1,17 @@
+import logging
+
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 
 from rag_search.core.config import settings
+from rag_search.core.telemetry import instrument_fastapi, setup_observability
 from rag_search.models.search import SearchRequest, SearchResponse
+from rag_search.repositories.postgres_search_repository import PostgresSearchRepository
 from rag_search.services.search_service import SearchService
 
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 
 def get_search_service() -> SearchService:
@@ -20,14 +26,52 @@ async def health() -> dict[str, str]:
     }
 
 
+@router.get("/api/v1/ready")
+@router.get("/ready")
+async def ready() -> dict[str, str]:
+    repository = PostgresSearchRepository()
+
+    try:
+        repository.assert_read_model_ready()
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=str(exc),
+        ) from exc
+
+    return {
+        "status": "ready",
+        "service": settings.SERVICE_NAME,
+    }
+
+
 @router.post("/search", response_model=SearchResponse)
 async def search_legacy(
     request: SearchRequest,
     service: SearchService = Depends(get_search_service),
 ) -> SearchResponse:
     try:
-        return await service.search(request)
+        response = await service.search(request)
+        logger.info(
+            "Search request completed",
+            extra={
+                "endpoint": "/search",
+                "search_type": response.search_type_used,
+                "top_k": request.top_k,
+                "total_found": response.total_found,
+                "context_expanded": response.context_expanded,
+            },
+        )
+        return response
     except ValueError as exc:
+        logger.warning(
+            "Search request rejected",
+            extra={
+                "endpoint": "/search",
+                "search_type": request.search_type,
+                "top_k": request.top_k,
+            },
+        )
         raise HTTPException(
             status_code=422,
             detail=str(exc),
@@ -41,8 +85,27 @@ async def search_compatible(
     service: SearchService = Depends(get_search_service),
 ) -> SearchResponse:
     try:
-        return await service.search(request)
+        response = await service.search(request)
+        logger.info(
+            "Search request completed",
+            extra={
+                "endpoint": "/api/v1/rag/search",
+                "search_type": response.search_type_used,
+                "top_k": request.top_k,
+                "total_found": response.total_found,
+                "context_expanded": response.context_expanded,
+            },
+        )
+        return response
     except ValueError as exc:
+        logger.warning(
+            "Search request rejected",
+            extra={
+                "endpoint": "/api/v1/rag/search",
+                "search_type": request.search_type,
+                "top_k": request.top_k,
+            },
+        )
         raise HTTPException(
             status_code=422,
             detail=str(exc),
@@ -56,6 +119,15 @@ def create_app() -> FastAPI:
         description="SPD RAG Search service for retrieval over indexed chunks.",
     )
     app.include_router(router)
+
+    tracer_provider, meter_provider, _observability_logger = setup_observability(
+        service_name=settings.SERVICE_NAME,
+        otlp_endpoint=settings.OTEL_EXPORTER_OTLP_ENDPOINT,
+        enabled=settings.OBSERVABILITY_ENABLED,
+        log_level=settings.LOG_LEVEL,
+    )
+    instrument_fastapi(app, tracer_provider=tracer_provider)
+
     return app
 
 

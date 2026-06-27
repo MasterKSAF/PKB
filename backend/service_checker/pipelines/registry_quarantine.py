@@ -32,7 +32,7 @@ class RegistryQuarantinePipeline(PipelineDef):
 
     name = "registry_quarantine"
     description = "Карантин классификаторов: accept/reject + валидация"
-    services = ["gateway"]
+    services = ["gateway", "registry"]
 
     def build_steps(self, context: PipelineContext) -> List[PipelineStep]:
         """Построить 10 шагов пайплайна registry_quarantine."""

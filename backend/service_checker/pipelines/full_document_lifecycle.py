@@ -40,7 +40,7 @@ class FullDocumentLifecyclePipeline(PipelineDef):
 
     name = "full_document_lifecycle"
     description = "Полный жизненный цикл документа (создание → ошибка → восстановление → удаление → пересоздание)"
-    services = ["gateway"]
+    services = ["gateway", "registry", "rag_builder", "rag_search"]
 
     @staticmethod
     def _on_build_error(body: Optional[str], ctx: PipelineContext) -> None:

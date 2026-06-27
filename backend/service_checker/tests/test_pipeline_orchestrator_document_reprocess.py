@@ -13,7 +13,7 @@ class TestOrchestratorDocumentReprocessPipeline:
         assert p.name == "orchestrator_document_reprocess"
         assert p.description
         assert "gateway" in p.services
-        assert len(p.services) == 1
+        assert len(p.services) == 3
 
     def test_build_steps_count(self):
         p = OrchestratorDocumentReprocessPipeline()
@@ -59,7 +59,7 @@ class TestOrchestratorDocumentReprocessPipeline:
         steps = p.build_steps(PipelineContext())
         draft = steps[2]
         assert draft.service == "gateway"
-        assert draft.expected_status == 202
+        assert draft.expected_status == {202, 409}
         assert draft.extract_keys == ["draft_id", "task_id"]
         assert draft.on_error is not None
 

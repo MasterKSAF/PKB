@@ -46,7 +46,7 @@ class OrchestratorFullDocumentLifecyclePipeline(PipelineDef):
 
     name = "orchestrator_full_document_lifecycle"
     description = "Полный сквозной цикл документа через Orchestrator (создание → preview → approve → Registry → индексация → удаление)"
-    services = ["gateway"]
+    services = ["gateway", "orchestrator", "registry", "rag_builder", "rag_search"]
 
     def build_steps(self, context: PipelineContext) -> List[PipelineStep]:
         steps: List[PipelineStep] = []

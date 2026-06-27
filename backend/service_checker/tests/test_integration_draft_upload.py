@@ -132,3 +132,72 @@ async def test_draft_upload_rejects_unsupported_format(ts):
             f"Expected 400 for unsupported format, got {resp.status_code}: "
             f"{resp.text[:300]}"
         )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_draft_500_does_not_create_inconsistent_state(ts):
+    """
+    #15: Проверка, что при 500 ошибке черновик НЕ создаётся.
+
+    Если POST /drafts вернул ошибку (не 202/409), но в ответе есть draft_id —
+    это баг: черновик создан, но клиент получил ошибку.
+    """
+    async with httpx.AsyncClient(timeout=15) as client:
+
+        # Авторизация
+        auth_resp = await client.post(
+            f"{GATEWAY_URL}/auth/token",
+            json={"username": ADMIN_LOGIN, "password": ADMIN_PASSWORD},
+        )
+        assert auth_resp.status_code == 200
+        token = auth_resp.json().get("access_token")
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # Отправляем заведомо некорректный черновик (без файла)
+        doc_key = f"int-test-500-{ts}"
+        data = {"source_type": "OTHER", "document_key": doc_key}
+
+        resp = await client.post(
+            f"{GATEWAY_URL}/drafts",
+            headers=headers,
+            data=data,
+            # без файла — может вызвать 500 если сервис не проверяет наличие файла
+        )
+
+        # Проверка: если статус ошибка (>=400), но draft_id есть — это баг #15
+        if resp.status_code >= 400:
+            try:
+                body = resp.json()
+                draft_id = body.get("draft_id")
+            except Exception:
+                draft_id = None
+
+            if draft_id is not None:
+                # Баг #15: черновик создан, хотя сервис вернул ошибку
+                # Проверяем что он действительно НЕ должен существовать
+                get_resp = await client.get(
+                    f"{GATEWAY_URL}/drafts/{draft_id}",
+                    headers=headers,
+                )
+                assert get_resp.status_code >= 400, (
+                    f"#15 BUG: POST /drafts вернул {resp.status_code}, "
+                    f"но черновик {draft_id} создан (GET {get_resp.status_code}). "
+                    f"Сервис создал черновик, хотя вернул ошибку клиенту."
+                )
+        else:
+            # Если 200/202/409 — проверяем что черновик действительно создан
+            try:
+                body = resp.json()
+                draft_id = body.get("draft_id")
+            except Exception:
+                draft_id = None
+            if draft_id is not None:
+                get_resp = await client.get(
+                    f"{GATEWAY_URL}/drafts/{draft_id}",
+                    headers=headers,
+                )
+                assert get_resp.status_code == 200, (
+                    f"Draft {draft_id} created (HTTP {resp.status_code}) but "
+                    f"GET returns {get_resp.status_code}"
+                )

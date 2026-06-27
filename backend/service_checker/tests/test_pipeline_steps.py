@@ -21,9 +21,9 @@ class TestDocumentProcessingPipeline:
         p = DocumentProcessingPipeline()
         assert p.name == "document_processing"
         assert p.description == "Полный цикл обработки документа"
-        assert "gateway" in p.services
+        assert "auth" in p.services
         assert "minio" in p.services
-        assert len(p.services) == 2
+        assert len(p.services) == 7
 
     def test_build_steps_count(self):
         p = DocumentProcessingPipeline()
@@ -37,21 +37,21 @@ class TestDocumentProcessingPipeline:
         p = DocumentProcessingPipeline()
         steps = p.build_steps(PipelineContext())
         expected_names = [
-            "Аутентификация (через Gateway)",
+            "Аутентификация",
             "Создание bucket documents",
             "Загрузка PDF в MinIO",
-            "Запуск парсинга (через Gateway)",
-            "Статус парсинга (longpoll, через Gateway)",
-            "Результат парсинга (через Gateway)",
-            "Предпросмотр метаданных (через Gateway)",  # CV-3
-            "Валидация метаданных (бизнес-ключ, через Gateway)",  # P1F-10
-            "Проверка уникальности документа (через Gateway)",  # check-uniqueness
-            "Конвертация JSON (через Gateway)",
-            "Валидация документа (через Gateway)",  # CV-8
-            "Сохранение документа в Registry (через Gateway)",
-            "Проверка preview_snapshot в документе (через Gateway)",  # P1F-4/RG-10
-            "Построение чанков и индексация (через Gateway)",
-            "Поиск по индексу RAG Search (через Gateway)",
+            "Запуск парсинга",
+            "Статус парсинга (longpoll)",
+            "Результат парсинга",
+            "Предпросмотр метаданных",
+            "Валидация метаданных (бизнес-ключ)",
+            "Проверка уникальности документа",
+            "Конвертация JSON",
+            "Валидация документа",
+            "Сохранение документа в Registry",
+            "Проверка preview_snapshot в документе",
+            "Построение чанков и индексация",
+            "Поиск по индексу RAG Search",
         ]
         actual_names = [s.name for s in steps]
         assert actual_names == expected_names, f"Порядок шагов не совпадает:\nОжидалось: {expected_names}\nПолучено: {actual_names}"
@@ -60,7 +60,7 @@ class TestDocumentProcessingPipeline:
         p = DocumentProcessingPipeline()
         steps = p.build_steps(PipelineContext())
         services = [s.service for s in steps]
-        assert "gateway" in services
+        assert "auth" in services  # вместо gateway
         assert "minio" in services
 
     def test_step_ports(self):
@@ -76,7 +76,7 @@ class TestDocumentProcessingPipeline:
         steps = p.build_steps(PipelineContext())
         # Проверка статусов: шаги через gateway имеют те же ожидаемые статусы
         actual = [s.expected_status for s in steps]
-        expected = [200, {200, 409}, 200, 202, 200, 200, 200, 200, {200, 422}, 200, 200, {201, 409}, 200, {200, 201, 202}, 200]
+        expected = [200, {200, 409}, 200, 202, 200, 200, 200, 200, {200}, 200, 200, {201, 409}, 200, {200, 201, 202}, 200]
         assert actual == expected, f"Ожидаемые статусы не совпадают:\n{actual}\n"
 
     def test_steps_initial_status(self):
@@ -95,7 +95,7 @@ class TestChatInferencePipeline:
         assert p.name == "chat_inference"
         assert p.description == "Чат-сессия с поиском по проиндексированным документам"
         assert "gateway" in p.services
-        assert len(p.services) == 1
+        assert len(p.services) == 2
 
     def test_build_steps_count(self):
         p = ChatInferencePipeline()
@@ -113,8 +113,8 @@ class TestChatInferencePipeline:
             "Создание чат-сессии (через Gateway)",
             "Отправка сообщения (через Gateway)",
             "Текстовый поиск (через Gateway)",
-            "Проверка enrichment_skipped (через Gateway)",  # QS-8: новый шаг
-            "Поиск RAG Search (через Gateway)",
+            "Проверка enrichment_skipped (через Gateway)",
+            "Поиск RAG Search",
         ]
         actual_names = [s.name for s in steps]
         assert actual_names == expected_names, f"Порядок шагов не совпадает:\n{actual_names}"
@@ -146,7 +146,7 @@ class TestRegistryLifecyclePipeline:
         assert p.name == "registry_lifecycle"
         assert p.description == "CRUD + импорт классификаторов и терминов"
         assert "gateway" in p.services
-        assert len(p.services) == 1
+        assert len(p.services) == 2
 
     def test_build_steps_count(self):
         p = RegistryLifecyclePipeline()
@@ -223,7 +223,7 @@ class TestPipelineRegistry:
         assert "orchestrator_document_reprocess" in PIPELINE_REGISTRY
         assert "orchestrator_document_versions" in PIPELINE_REGISTRY
         assert "orchestrator_full_document_lifecycle" in PIPELINE_REGISTRY
-        assert len(PIPELINE_REGISTRY) == 15
+        assert len(PIPELINE_REGISTRY) == 16
 
     def test_registry_classes(self):
         from pipelines import PIPELINE_REGISTRY

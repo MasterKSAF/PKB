@@ -846,3 +846,153 @@ class TestMetadataRoundTrip:
         assert patch_resp.status_code == 404
         detail = patch_resp.json().get("detail", patch_resp.json())
         assert "error" in detail
+
+
+# ---------------------------------------------------------------------------
+#  Bug #18 — Drafts создаются от u-mock-001 вместо реального пользователя
+# ---------------------------------------------------------------------------
+
+
+class TestCreatedByUser:
+    """
+    Verifies that created_by uses the real user_id from auth (bug #18).
+
+    In mock mode the auth dependency returns MOCK_USER (u-mock-001).
+    This test overrides the dependency with a custom user and checks
+    that created_by in Registry storage matches the custom user_id.
+    """
+
+    CREATE_URL = "/api/v1/drafts/"
+    GET_URL = "/api/v1/drafts/{draft_id}"
+
+    def test_created_by_uses_mock_user_by_default(self, client: TestClient):
+        """Without override, created_by is MOCK_USER_ID (u-mock-001)."""
+        response = client.post(
+            self.CREATE_URL,
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock"), "application/pdf")},
+            data={"document_key": "doc-default-user", "source_type": "GOST"},
+        )
+        assert response.status_code == 202
+        draft_id = response.json()["draft_id"]
+
+        # Check Registry storage directly
+        from app.services.registry_client import RegistryServiceClient
+        draft = RegistryServiceClient._storage["drafts"][draft_id]
+        assert draft["created_by"] == "u-mock-001"
+
+    def test_created_by_uses_custom_user_id(self, client: TestClient):
+        """Auth override → created_by matches custom user_id."""
+        from app.api.deps import get_current_user, CurrentUser
+
+        custom_user = CurrentUser(
+            user_id="real-user-42",
+            email="real@test.com",
+            full_name="Real User",
+            roles=["engineer"],
+            permissions=["documents:write"],
+        )
+
+        client.app.dependency_overrides[get_current_user] = lambda: custom_user
+        try:
+            response = client.post(
+                self.CREATE_URL,
+                files={"file": ("test.pdf", io.BytesIO(b"%PDF mock"), "application/pdf")},
+                data={"document_key": "doc-custom-user", "source_type": "GOST"},
+            )
+            assert response.status_code == 202
+            draft_id = response.json()["draft_id"]
+
+            from app.services.registry_client import RegistryServiceClient
+            draft = RegistryServiceClient._storage["drafts"][draft_id]
+            assert draft["created_by"] == "real-user-42"
+        finally:
+            client.app.dependency_overrides.pop(get_current_user, None)
+
+    def test_created_by_not_fallback_object(self, client: TestClient):
+        """created_by is a string, not a CurrentUser object (regression for old bug)."""
+        from app.api.deps import get_current_user, CurrentUser
+
+        custom_user = CurrentUser(
+            user_id="str-user-99",
+            email="str@test.com",
+            full_name="String Test",
+            roles=[],
+            permissions=[],
+        )
+
+        client.app.dependency_overrides[get_current_user] = lambda: custom_user
+        try:
+            response = client.post(
+                self.CREATE_URL,
+                files={"file": ("test.pdf", io.BytesIO(b"%PDF mock"), "application/pdf")},
+                data={"document_key": "doc-str-user", "source_type": "GOST"},
+            )
+            assert response.status_code == 202
+            draft_id = response.json()["draft_id"]
+
+            from app.services.registry_client import RegistryServiceClient
+            draft = RegistryServiceClient._storage["drafts"][draft_id]
+            created_by = draft["created_by"]
+            # Must be a plain string, not a serialized object
+            assert isinstance(created_by, str), f"Expected str, got {type(created_by)}"
+            assert created_by == "str-user-99"
+        finally:
+            client.app.dependency_overrides.pop(get_current_user, None)
+
+
+# ---------------------------------------------------------------------------
+#  Bug #15 — Upload draft: 500 ошибка, но draft появляется в списке
+# ---------------------------------------------------------------------------
+
+
+class TestUploadPartialFailure:
+    """
+    If pipeline start fails after Registry draft creation, the endpoint
+    returns 500 but the draft/task already exist (bug #15).
+    """
+
+    CREATE_URL = "/api/v1/drafts/"
+
+    async def test_pipeline_failure_orphans_draft_in_registry(
+        self, client: TestClient, auth_header: dict,
+    ):
+        """start_pipeline fails → 500. Draft persists in Registry (bug #15).
+
+        Bug #15: Registry draft is created BEFORE the local DB task.
+        If pipeline start fails, the DB transaction rolls back (so task
+        disappears), but the Registry draft remains orphaned.
+        """
+        from unittest.mock import patch, AsyncMock
+        from app.core.pipeline.orchestrator import PipelineOrchestrator
+        from fastapi import HTTPException
+
+        with patch.object(
+            PipelineOrchestrator,
+            "start_pipeline",
+            new=AsyncMock(side_effect=HTTPException(
+                status_code=500,
+                detail={"error": {"code": "PIPELINE_FAILED", "message": "pipeline crashed"}},
+            )),
+        ):
+            response = client.post(
+                self.CREATE_URL,
+                headers=auth_header,
+                files={"file": ("test.pdf", io.BytesIO(b"%PDF mock"), "application/pdf")},
+                data={"document_key": "doc-orphan", "source_type": "GOST"},
+            )
+
+        # FastAPI catches HTTPException and returns proper 500
+        assert response.status_code == 500
+        detail = response.json().get("detail", response.json())
+        assert detail["error"]["code"] == "PIPELINE_FAILED"
+
+        # --- Verify draft EXISTS in Registry (orphaned) ---
+        from app.services.registry_client import RegistryServiceClient
+        draft = None
+        for did, d in RegistryServiceClient._storage["drafts"].items():
+            if d.get("document_key") == "doc-orphan":
+                draft = d
+                break
+        assert draft is not None, "Draft should exist in Registry despite 500"
+        assert draft.get("status") == "uploaded", \
+            f"Expected uploaded, got {draft.get('status')}"

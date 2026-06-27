@@ -44,7 +44,7 @@ class OrchestratorDocumentReprocessPipeline(PipelineDef):
 
     name = "orchestrator_document_reprocess"
     description = "Переиндексация документа Orchestrator (создание документа → reprocess)"
-    services = ["gateway"]
+    services = ["gateway", "orchestrator", "registry"]
 
     def build_steps(self, context: PipelineContext) -> List[PipelineStep]:
         steps: List[PipelineStep] = []

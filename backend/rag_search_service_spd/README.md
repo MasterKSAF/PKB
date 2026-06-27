@@ -78,12 +78,14 @@ content
 
 ### Карта endpoint-ов
 
-RAG Search SPD предоставляет только endpoint-ы поиска и чтения индекса.
+RAG Search SPD предоставляет endpoint-ы проверки состояния сервиса и поиска по готовому индексу.
 
 Поддерживаемые endpoint-ы:
 
 ```text
 GET  /api/v1/health
+GET  /api/v1/ready
+GET  /ready
 
 POST /api/v1/rag/search
 POST /rag/search
@@ -101,7 +103,36 @@ RAG Search не изменяет индекс.
 
 ### GET /api/v1/health
 
-Проверка работоспособности сервиса.
+Проверка работоспособности HTTP-сервиса.
+
+`/health` не обязан проверять БД. Для проверки готовности read model используется `/ready`.
+
+### GET /api/v1/ready
+
+Readiness endpoint.
+
+Проверяет, что RAG Builder-managed read model доступна для поиска:
+
+```text
+nsi.chunks
+nsi.document_sections
+PostgreSQL extensions: vector, ltree
+```
+
+Если read model готова, возвращает:
+
+```json
+{
+  "status": "ready",
+  "service": "rag_search_service_spd"
+}
+```
+
+Если схема не готова, возвращает `503` с описанием отсутствующей таблицы, колонки или extension.
+
+### GET /ready
+
+Локальный alias для readiness check.
 
 ### POST /api/v1/rag/search
 
@@ -165,8 +196,8 @@ idx_chunks_embedding_hnsw_halfvec
 
 Размерность берётся из `EMBEDDING_DIM`.
 
-Локально сейчас Builder и Search используют `EMBEDDING_DIM=312`.
-В боевом окружении при `EMBEDDING_DIM=2048` оба сервиса должны быть запущены с одинаковым значением.
+Builder и Search должны быть запущены с одинаковым значением `EMBEDDING_DIM`.
+В текущем локальном стенде проверялось `EMBEDDING_DIM=2048`; фактическое значение нужно смотреть в `.env` конкретного сервиса.
 
 Причина использования `halfvec`: pgvector HNSW по обычному `vector` ограничен 2000 измерениями.
 `halfvec` поддерживает индексирование до 4000 измерений, поэтому подходит для embedding-ов размерности 2048.
@@ -191,18 +222,21 @@ Dense search:
 
 Production embeddings должны идти через внешний OpenAI-compatible API или другой согласованный embedding endpoint.
 
+Если сервис запущен с `EMBEDDING_PROVIDER=stub`, dense search не является полноценным семантическим поиском.
+Для production/smoke dense нужен реальный embedding provider.
+
 ### sparse
 
 Sparse search использует PostgreSQL full-text search:
 
 ```sql
-to_tsquery('russian', ...)
+content_tsv @@ websearch_to_tsquery('russian', query)
 ```
 
 и ранжирование:
 
 ```sql
-ts_rank_cd(content_tsv, query)
+ts_rank_cd(content_tsv, websearch_to_tsquery('russian', query))
 ```
 
 ### hybrid
@@ -294,6 +328,8 @@ USING GIN (content_tsv)
 to_tsvector('russian'::regconfig, content)
 ```
 
+RAG Search только читает это поле и не пересобирает `content_tsv`.
+
 ---
 
 ## 10. Embeddings
@@ -327,15 +363,114 @@ Dense query embeddings должны приходить через внешний
 
 ---
 
-## 12. Текущий статус тестов
+## 12. Local smoke test
+
+Перед локальным smoke-тестом нужно убедиться, что применены Alembic migrations RAG Builder,
+потому что RAG Search сам не создаёт и не изменяет схему.
+
+### Запуск сервиса
+
+```powershell
+cd D:\ISZF\UAI\Internships\PKB\PKB_develop\backend\rag_search_service_spd
+
+.\venv\Scripts\Activate.ps1
+
+$env:POSTGRES_HOST="127.0.0.1"
+$env:POSTGRES_PORT="15432"
+$env:POSTGRES_DB="pkb_neuro"
+$env:POSTGRES_USER="pkb"
+
+$env:NO_PROXY="127.0.0.1,localhost"
+$env:no_proxy="127.0.0.1,localhost"
+
+python -m uvicorn rag_search.api.app:app --reload
+```
+
+### Health / readiness
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/api/v1/health
+Invoke-RestMethod http://127.0.0.1:8000/api/v1/ready
+```
+
+Ожидаемый результат:
 
 ```text
-18 passed, 1 warning
+status  service
+------  -------
+ok      rag_search_service_spd
+ready   rag_search_service_spd
+```
+
+### Sparse search smoke
+
+Для локальных Python smoke-скриптов нужно использовать `trust_env=False`,
+чтобы `httpx` не отправлял запросы к `127.0.0.1` через proxy-env.
+
+```powershell
+@'
+import httpx
+
+queries = [
+    "допуск соосности",
+    "стойки",
+    "ГОСТ 20862",
+    "отверстия",
+    "крепежные установочные стойки",
+]
+
+with httpx.Client(trust_env=False, timeout=10) as client:
+    for query in queries:
+        payload = {
+            "query": query,
+            "top_k": 5,
+            "search_type": "sparse",
+            "expand_context": False,
+        }
+
+        response = client.post(
+            "http://127.0.0.1:8000/api/v1/rag/search",
+            json=payload,
+        )
+
+        print("=" * 80)
+        print("query:", query)
+        print("status:", response.status_code)
+
+        data = response.json()
+        print("total_found:", data.get("total_found"))
+        for item in data.get("results", []):
+            print("chunk_id:", item.get("chunk_id"))
+            print("score:", item.get("score"))
+            print("content:", item.get("content"))
+            print()
+'@ | python
+```
+
+Пример подтверждённого локального результата на тестовом индексе:
+
+```text
+допуск соосности -> chunk 168
+стойки -> chunks 166, 167
+ГОСТ 20862 -> chunk 167
+отверстия -> chunk 168
+крепежные установочные стойки -> chunks 166, 167
+```
+
+Если `httpx` возвращает пустой `503` без `content-type`, а Uvicorn не показывает входящий запрос,
+почти всегда причина в proxy-env. Использовать `trust_env=False` или `NO_PROXY=127.0.0.1,localhost`.
+
+---
+
+## 13. Текущий статус тестов
+
+```text
+20 passed, 1 warning
 ```
 
 ---
 
-## 13. Разделение ответственности с RAG Builder
+## 14. Разделение ответственности с RAG Builder
 
 RAG Builder отвечает за:
 
@@ -350,12 +485,16 @@ RAG Builder отвечает за:
 - `cross_references`;
 - `content_tsv`;
 - `path_ltree`;
-- citation metadata.
+- citation metadata;
+- Alembic migrations для Builder-managed read model.
 
 RAG Search отвечает за:
 
+- readiness check готовой read model;
 - dense retrieval;
 - sparse retrieval;
 - hybrid retrieval;
 - context expansion;
 - возврат source chunks с citation metadata.
+
+RAG Search не владеет DDL индекса и не содержит собственных Alembic migrations для таблиц индекса.

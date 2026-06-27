@@ -44,7 +44,7 @@ class OrchestratorDocumentRejectPipeline(PipelineDef):
 
     name = "orchestrator_document_reject"
     description = "Reject черновика Orchestrator (создание → reject → проверка статуса)"
-    services = ["gateway"]
+    services = ["gateway", "orchestrator"]
 
     def build_steps(self, context: PipelineContext) -> List[PipelineStep]:
         steps: List[PipelineStep] = []

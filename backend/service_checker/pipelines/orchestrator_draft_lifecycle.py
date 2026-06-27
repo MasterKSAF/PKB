@@ -55,7 +55,7 @@ class OrchestratorDraftLifecyclePipeline(PipelineDef):
 
     name = "orchestrator_draft_lifecycle"
     description = "Жизненный цикл черновика через Gateway (создание → превью → решение → удаление)"
-    services = ["gateway", "auth", "orchestrator", "registry"]
+    services = ["gateway", "orchestrator", "registry"]
 
     def build_steps(self, context: PipelineContext) -> List[PipelineStep]:
         """Построить 11 шагов пайплайна orchestrator_draft_lifecycle."""
@@ -150,6 +150,7 @@ class OrchestratorDraftLifecyclePipeline(PipelineDef):
                 "document_id": (int, type(None)),  # OR-7: может быть None до approve
                 "version_id": (int, type(None)),   # OR-7: может быть None до approve
                 "is_new_document": bool,            # OR-7: флаг нового документа
+                "created_by": (str, type(None)),    # #18: проверка что черновик создан от реального пользователя, не u-mock-001
             }),
             needs_auth=True,
             skip_if=_draft_skipped,

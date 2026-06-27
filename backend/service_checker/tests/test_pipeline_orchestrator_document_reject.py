@@ -13,7 +13,7 @@ class TestOrchestratorDocumentRejectPipeline:
         assert p.name == "orchestrator_document_reject"
         assert p.description
         assert "gateway" in p.services
-        assert len(p.services) == 1
+        assert len(p.services) == 2
 
     def test_build_steps_count(self):
         p = OrchestratorDocumentRejectPipeline()
@@ -52,7 +52,7 @@ class TestOrchestratorDocumentRejectPipeline:
         assert draft.service == "gateway"
         assert draft.method == "POST"
         assert draft.path == "/api/v1/drafts"
-        assert draft.expected_status == 202
+        assert draft.expected_status == {202, 409}
         assert draft.extract_keys == ["draft_id", "task_id"]
         assert draft.needs_auth
         assert draft.on_error is not None

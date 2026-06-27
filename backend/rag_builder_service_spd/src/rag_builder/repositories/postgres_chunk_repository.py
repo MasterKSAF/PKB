@@ -16,6 +16,26 @@ class PostgresChunkRepository(ChunkRepository):
     Репозиторий для сохранения чанков в PostgreSQL.
     """
 
+    def _embedding_dim_sql(self) -> sql.SQL:
+        """
+        Returns EMBEDDING_DIM as a safe SQL fragment for pgvector type DDL.
+
+        This method validates configuration only. Runtime schema creation is
+        managed by Alembic and must not be performed by repository startup code.
+        """
+        embedding_dim = settings.EMBEDDING_DIM
+
+        if embedding_dim <= 0:
+            raise ValueError("EMBEDDING_DIM must be a positive integer")
+
+        if embedding_dim > 4000:
+            raise ValueError(
+                "EMBEDDING_DIM must be less than or equal to 4000 "
+                "because HNSW halfvec index supports up to 4000 dimensions"
+            )
+
+        return sql.SQL(str(embedding_dim))
+
     def _connect(self):
         logger.info(
             "PostgreSQL connect host=%s port=%s db=%s user=%s",
@@ -42,41 +62,6 @@ class PostgresChunkRepository(ChunkRepository):
 
         return result == (1,)
 
-    # def _embedding_dim_sql(self) -> sql.SQL:
-    #     embedding_dim = int(settings.EMBEDDING_DIM)
-    #
-    #     supported_dims = {
-    #         1536,
-    #         2048,
-    #         2560,
-    #         4096,
-    #     }
-    #
-    #     if embedding_dim not in supported_dims:
-    #         raise ValueError(
-    #             f"Unsupported EMBEDDING_DIM={embedding_dim}. "
-    #             f"Supported values: {sorted(supported_dims)}"
-    #         )
-    #
-    #     return sql.SQL(str(embedding_dim))
-
-    def _embedding_dim_sql(self) -> sql.SQL:
-        embedding_dim = int(settings.EMBEDDING_DIM)
-
-        if embedding_dim <= 0:
-            raise ValueError(
-                f"Invalid EMBEDDING_DIM={embedding_dim}. "
-                "EMBEDDING_DIM must be a positive integer."
-            )
-
-        if embedding_dim > 16000:
-            raise ValueError(
-                f"Invalid EMBEDDING_DIM={embedding_dim}. "
-                "EMBEDDING_DIM is too large for pgvector VECTOR."
-            )
-
-        return sql.SQL(str(embedding_dim))
-
     def _embedding_halfvec_dim_sql(self) -> sql.SQL:
         embedding_dim = int(settings.EMBEDDING_DIM)
 
@@ -94,58 +79,6 @@ class PostgresChunkRepository(ChunkRepository):
 
         return sql.SQL(str(embedding_dim))
 
-    def _ensure_chunks_embedding_hnsw_halfvec_index(self, cur) -> None:
-        embedding_dim = int(settings.EMBEDDING_DIM)
-        expected_halfvec = f"halfvec({embedding_dim})"
-        index_name = "idx_chunks_embedding_hnsw_halfvec"
-
-        cur.execute(
-            """
-            SELECT indexdef
-            FROM pg_indexes
-            WHERE schemaname = %s
-              AND tablename = 'chunks'
-              AND indexname = %s
-            """,
-            (settings.POSTGRES_SCHEMA, index_name),
-        )
-
-        row = cur.fetchone()
-        indexdef = row[0].lower() if row else ""
-
-        index_matches_current_dim = (
-            "using hnsw" in indexdef
-            and expected_halfvec in indexdef
-            and "halfvec_cosine_ops" in indexdef
-        )
-
-        if row is not None and not index_matches_current_dim:
-            logger.warning(
-                "Dropping stale chunks embedding HNSW halfvec index. "
-                "Expected %s in index definition, got: %s",
-                expected_halfvec,
-                row[0],
-            )
-            cur.execute(
-                sql.SQL("DROP INDEX IF EXISTS {schema}.{index_name}").format(
-                    schema=sql.Identifier(settings.POSTGRES_SCHEMA),
-                    index_name=sql.Identifier(index_name),
-                )
-            )
-
-        cur.execute(
-            sql.SQL(
-                """
-                CREATE INDEX IF NOT EXISTS idx_chunks_embedding_hnsw_halfvec
-                ON {schema}.chunks
-                USING hnsw ((embedding::halfvec({embedding_dim})) halfvec_cosine_ops)
-                WHERE embedding IS NOT NULL
-                """
-            ).format(
-                schema=sql.Identifier(settings.POSTGRES_SCHEMA),
-                embedding_dim=self._embedding_halfvec_dim_sql(),
-            )
-        )
 
 
     def create_indexing_job(
@@ -474,60 +407,6 @@ class PostgresChunkRepository(ChunkRepository):
 
 # Создание схемы базы данных и таблиц
 
-    def _ensure_chunks_embedding_dim(self, cur) -> None:
-        embedding_dim = int(settings.EMBEDDING_DIM)
-
-        cur.execute(
-            """
-            SELECT atttypmod
-            FROM pg_attribute
-            WHERE attrelid = %s::regclass
-              AND attname = 'embedding'
-              AND NOT attisdropped
-            """,
-            (f"{settings.POSTGRES_SCHEMA}.chunks",),
-        )
-
-        row = cur.fetchone()
-
-        if row is None:
-            return
-
-        current_dim = row[0]
-
-        if current_dim == embedding_dim:
-            return
-
-        logger.warning(
-            "Changing chunks.embedding dimension from %s to %s. "
-            "Existing embeddings will be cleared; documents must be reindexed.",
-            current_dim,
-            embedding_dim,
-        )
-
-        cur.execute(
-            sql.SQL(
-                """
-                UPDATE {schema}.chunks
-                SET embedding = NULL
-                WHERE embedding IS NOT NULL
-                """
-            ).format(
-                schema=sql.Identifier(settings.POSTGRES_SCHEMA),
-            )
-        )
-
-        cur.execute(
-            sql.SQL(
-                """
-                ALTER TABLE {schema}.chunks
-                ALTER COLUMN embedding TYPE VECTOR({embedding_dim})
-                """
-            ).format(
-                schema=sql.Identifier(settings.POSTGRES_SCHEMA),
-                embedding_dim=self._embedding_dim_sql(),
-            )
-        )
 
     def list_indexing_jobs(
         self,
@@ -617,394 +496,88 @@ class PostgresChunkRepository(ChunkRepository):
         return items, total
 
 
-    def ensure_schema(self) -> None:
+    def assert_schema_ready(self) -> None:
         """
-        Создаёт расширение vector, схему и таблицы  chunks,
-        если они ещё не существуют.
+        Checks that the database schema has already been initialized by Alembic.
+
+        RAG Builder runtime must not create or mutate schema objects. Run:
+        python -m alembic -c alembic.ini upgrade head
+        before starting the service.
         """
-        logger.info("ensure_schema: start")
-        logger.info("ensure_schema: before connect")
+        required_tables = (
+            "indexing_jobs",
+            "document_sections",
+            "chunks",
+            "cross_references",
+            "images",
+            "extracted_tables",
+            "formulas",
+            "formula_parameters",
+        )
+        required_extensions = (
+            "vector",
+            "ltree",
+        )
+
+        logger.info("assert_schema_ready: start")
 
         with self._connect() as conn:
-            logger.info("ensure_schema: after connect")
-
             with conn.cursor() as cur:
-                logger.info("ensure_schema: before create extensions")
-                cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
-                cur.execute("CREATE EXTENSION IF NOT EXISTS ltree")
-
-                logger.info("ensure_schema: before create schema")
                 cur.execute(
-                    sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(
-                        sql.Identifier(settings.POSTGRES_SCHEMA)
+                    """
+                    SELECT table_name
+                    FROM information_schema.tables
+                    WHERE table_schema = %s
+                      AND table_name = ANY(%s)
+                    """,
+                    (settings.POSTGRES_SCHEMA, list(required_tables)),
+                )
+                existing_tables = {row[0] for row in cur.fetchall()}
+                missing_tables = sorted(set(required_tables) - existing_tables)
+
+                if missing_tables:
+                    raise RuntimeError(
+                        "Database schema is not initialized or incomplete. "
+                        f"Missing tables in schema {settings.POSTGRES_SCHEMA!r}: "
+                        f"{', '.join(missing_tables)}. "
+                        "Run: python -m alembic -c alembic.ini upgrade head"
                     )
-                )
-
-                logger.info("ensure_schema: before create table indexing_jobs")
-                cur.execute(
-                    sql.SQL(
-                        """
-                        CREATE TABLE IF NOT EXISTS {}.indexing_jobs (
-                            id BIGINT GENERATED ALWAYS AS IDENTITY UNIQUE,
-
-                            indexing_txn_id UUID PRIMARY KEY,
-                            document_id BIGINT NOT NULL,
-
-                            status TEXT NOT NULL,
-                            chunks_count INTEGER NOT NULL DEFAULT 0,
-                            has_embeddings BOOLEAN NOT NULL DEFAULT false,
-                            indexed_at TIMESTAMPTZ,
-
-                            index_stats JSONB NOT NULL DEFAULT jsonb_build_object(),
-                            warnings JSONB NOT NULL DEFAULT jsonb_build_array(),
-                            errors JSONB NOT NULL DEFAULT jsonb_build_array(),
-
-                            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                            updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-                            CONSTRAINT chk_indexing_jobs_status
-                                CHECK (status IN (
-                                    'pending_index',
-                                    'indexing',
-                                    'indexed',
-                                    'failed'
-                                ))
-                        )
-                        """
-                    ).format(sql.Identifier(settings.POSTGRES_SCHEMA))
-                )
 
                 cur.execute(
-                    sql.SQL(
-                        """
-                        CREATE INDEX IF NOT EXISTS idx_indexing_jobs_document_id
-                        ON {}.indexing_jobs(document_id)
-                        """
-                    ).format(sql.Identifier(settings.POSTGRES_SCHEMA))
+                    """
+                    SELECT extname
+                    FROM pg_extension
+                    WHERE extname = ANY(%s)
+                    """,
+                    (list(required_extensions),),
+                )
+                existing_extensions = {row[0] for row in cur.fetchall()}
+                missing_extensions = sorted(
+                    set(required_extensions) - existing_extensions
                 )
 
-                cur.execute(
-                    sql.SQL(
-                        """
-                        CREATE INDEX IF NOT EXISTS idx_indexing_jobs_status
-                        ON {}.indexing_jobs(status)
-                        """
-                    ).format(sql.Identifier(settings.POSTGRES_SCHEMA))
-                )
-
-                logger.info("ensure_schema: before create table document_sections")
-                cur.execute(
-                    sql.SQL(
-                        """
-                        CREATE TABLE IF NOT EXISTS {}.document_sections(
-                            id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-                            document_id BIGINT NOT NULL,
-                            section_id BIGINT NOT NULL,
-                            parent_id BIGINT,              
-                            clause TEXT,
-                            title TEXT,
-                            level INTEGER NOT NULL,
-                            path TEXT NOT NULL,
-                            path_ltree LTREE,               
-                            page INTEGER,
-                            bbox JSONB,
-                            section_type TEXT NOT NULL,
-                            metadata JSONB,
-                            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                            UNIQUE(document_id, section_id)
-                        )
-                        """
-                    ).format(sql.Identifier(settings.POSTGRES_SCHEMA))
-                )
-
-                logger.info("ensure_schema: before create index document_sections_ltree")
-                cur.execute(
-                    sql.SQL(
-                        """
-                        CREATE INDEX IF NOT EXISTS idx_document_sections_ltree
-                        ON {}.document_sections
-                        USING GIST(path_ltree)
-                        """
-                    ).format(
-                        sql.Identifier(settings.POSTGRES_SCHEMA)
+                if missing_extensions:
+                    raise RuntimeError(
+                        "Database schema dependencies are not initialized. "
+                        f"Missing PostgreSQL extensions: "
+                        f"{', '.join(missing_extensions)}. "
+                        "Run: python -m alembic -c alembic.ini upgrade head"
                     )
-                )
 
-                logger.info("ensure_schema: before create table chunks")
-                cur.execute(
-                    sql.SQL(
-                        """
-                        CREATE TABLE IF NOT EXISTS {schema}.chunks (
-                            id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-                            document_id BIGINT NOT NULL,
-                            indexing_txn_id UUID,
-                            document_section_id BIGINT NOT NULL,
-                            section_id BIGINT NOT NULL,
-                            parent_id BIGINT,
-                            clause TEXT,
-                            path TEXT,
-                            page INTEGER,
-                            bbox JSONB,
-                            chunk_index INTEGER NOT NULL,
-                            chunk_type TEXT NOT NULL,
-                            content TEXT NOT NULL,
-                            content_tsv TSVECTOR,
-                            metadata JSONB,
-                            embedding VECTOR({embedding_dim}),
-                            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        logger.info("assert_schema_ready: done")
 
-                            CONSTRAINT fk_chunks_document_section
-                                FOREIGN KEY (document_section_id)
-                                REFERENCES {schema}.document_sections(id)
-                                ON DELETE CASCADE
-                        )
-                        """
-                    ).format(
-                        schema=sql.Identifier(settings.POSTGRES_SCHEMA),
-                        embedding_dim=self._embedding_dim_sql(),
-                    )
-                )
+    def ensure_schema(self) -> None:
+        """
+        Backward-compatible wrapper.
 
-                logger.info("ensure_schema: before alter chunks add indexing_txn_id")
-                cur.execute(
-                    sql.SQL(
-                        """
-                        ALTER TABLE {}.chunks
-                        ADD COLUMN IF NOT EXISTS indexing_txn_id UUID
-                        """
-                    ).format(sql.Identifier(settings.POSTGRES_SCHEMA))
-                )
-
-                self._ensure_chunks_embedding_dim(cur)
-
-                cur.execute(
-                    sql.SQL(
-                        """
-                        CREATE INDEX IF NOT EXISTS idx_chunks_indexing_txn_id
-                        ON {}.chunks(indexing_txn_id)
-                        """
-                    ).format(sql.Identifier(settings.POSTGRES_SCHEMA))
-                )
-
-                logger.info("ensure_schema: before create index chunks_content_tsv")
-                cur.execute(
-                    sql.SQL(
-                        """
-                        CREATE INDEX IF NOT EXISTS idx_chunks_content_tsv
-                        ON {}.chunks
-                        USING GIN (content_tsv)
-                        """
-                    ).format(
-                        sql.Identifier(settings.POSTGRES_SCHEMA)
-                    )
-                )
-
-                logger.info("ensure_schema: before create index chunks_embedding_hnsw_halfvec")
-                self._ensure_chunks_embedding_hnsw_halfvec_index(cur)
-
-                logger.info("ensure_schema: before create table cross_references")
-                cur.execute(
-                    sql.SQL(
-                        """
-                        CREATE TABLE IF NOT EXISTS {}.cross_references (
-                            id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-
-                            document_id BIGINT NOT NULL,
-                            document_section_id BIGINT NOT NULL,
-
-                            source_section_id BIGINT NOT NULL,
-                            source_clause TEXT,
-                            source_path TEXT,
-
-                            target_document_id BIGINT,
-                            target_doc_code TEXT NOT NULL,
-
-                            reference_type TEXT NOT NULL,
-                            context TEXT,
-                            note TEXT,
-
-                            metadata JSONB,
-                            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-                            CONSTRAINT fk_cross_references_document_section
-                                FOREIGN KEY (document_section_id)
-                                REFERENCES {}.document_sections(id)
-                                ON DELETE CASCADE
-                        )
-                        """
-                    ).format(
-                        sql.Identifier(settings.POSTGRES_SCHEMA),
-                        sql.Identifier(settings.POSTGRES_SCHEMA),
-                    )
-                )
-
-                logger.info("ensure_schema: before create index cross_references")
-                cur.execute(
-                    sql.SQL(
-                        """
-                        CREATE INDEX IF NOT EXISTS idx_cross_references_doc
-                        ON {}.cross_references(document_id)
-                        """
-                    ).format(
-                        sql.Identifier(settings.POSTGRES_SCHEMA)
-                    )
-                )
-
-                cur.execute(
-                    sql.SQL(
-                        """
-                        CREATE INDEX IF NOT EXISTS idx_cross_references_target
-                        ON {}.cross_references(target_doc_code)
-                        """
-                    ).format(
-                        sql.Identifier(settings.POSTGRES_SCHEMA)
-                    )
-                )
-
-                logger.info("ensure_schema: before create table images")
-                cur.execute(
-                    sql.SQL(
-                        """
-                        CREATE TABLE IF NOT EXISTS {}.images (
-                            id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    
-                            document_id BIGINT NOT NULL,
-                            document_section_id BIGINT NOT NULL,
-    
-                            source_section_id BIGINT NOT NULL,
-                            clause TEXT,
-                            path TEXT,
-                            page INTEGER,
-                            bbox JSONB,
-    
-                            title TEXT,
-                            caption TEXT,
-                            description TEXT,
-                            image_key TEXT,
-    
-                            metadata JSONB,
-                            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    
-                            CONSTRAINT fk_images_document_section
-                                FOREIGN KEY (document_section_id)
-                                REFERENCES {}.document_sections(id)
-                                ON DELETE CASCADE
-                        )
-                        """
-                    ).format(
-                        sql.Identifier(settings.POSTGRES_SCHEMA),
-                        sql.Identifier(settings.POSTGRES_SCHEMA),
-                    )
-                )
-
-                logger.info("ensure_schema: before create table extracted_tables")
-                cur.execute(
-                    sql.SQL(
-                        """
-                        CREATE TABLE IF NOT EXISTS {}.extracted_tables (
-                            id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    
-                            document_id BIGINT NOT NULL,
-                            document_section_id BIGINT NOT NULL,
-    
-                            source_section_id BIGINT NOT NULL,
-                            clause TEXT,
-                            path TEXT,
-                            page INTEGER,
-                            bbox JSONB,
-    
-                            title TEXT,
-                            caption TEXT,
-    
-                            table_markdown TEXT,
-                            table_json JSONB,
-    
-                            metadata JSONB,
-                            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    
-                            CONSTRAINT fk_extracted_tables_document_section
-                                FOREIGN KEY (document_section_id)
-                                REFERENCES {}.document_sections(id)
-                                ON DELETE CASCADE
-                        )
-                        """
-                    ).format(
-                        sql.Identifier(settings.POSTGRES_SCHEMA),
-                        sql.Identifier(settings.POSTGRES_SCHEMA),
-                    )
-                )
-
-                logger.info("ensure_schema: before create table formulas")
-                cur.execute(
-                    sql.SQL(
-                        """
-                        CREATE TABLE IF NOT EXISTS {}.formulas (
-                            id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    
-                            document_id BIGINT NOT NULL,
-                            document_section_id BIGINT NOT NULL,
-    
-                            source_section_id BIGINT NOT NULL,
-                            clause TEXT,
-                            path TEXT,
-                            page INTEGER,
-                            bbox JSONB,
-    
-                            title TEXT,
-                            formula_text TEXT,
-                            formula_latex TEXT,
-                            formula_type TEXT,
-    
-                            metadata JSONB,
-                            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    
-                            CONSTRAINT fk_formulas_document_section
-                                FOREIGN KEY (document_section_id)
-                                REFERENCES {}.document_sections(id)
-                                ON DELETE CASCADE
-                        )
-                        """
-                    ).format(
-                        sql.Identifier(settings.POSTGRES_SCHEMA),
-                        sql.Identifier(settings.POSTGRES_SCHEMA),
-                    )
-                )
-
-                logger.info("ensure_schema: before create table formula_parameters")
-                cur.execute(
-                    sql.SQL(
-                        """
-                        CREATE TABLE IF NOT EXISTS {}.formula_parameters (
-                            id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    
-                            formula_id BIGINT NOT NULL,
-    
-                            symbol TEXT NOT NULL,
-                            name TEXT,
-                            unit TEXT,
-                            description TEXT,
-    
-                            metadata JSONB,
-                            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    
-                            CONSTRAINT fk_formula_parameters_formula
-                                FOREIGN KEY (formula_id)
-                                REFERENCES {}.formulas(id)
-                                ON DELETE CASCADE
-                        )
-                        """
-                    ).format(
-                        sql.Identifier(settings.POSTGRES_SCHEMA),
-                        sql.Identifier(settings.POSTGRES_SCHEMA),
-                    )
-                )
-
-
-            conn.commit()
-
-        logger.info("ensure_schema: done")
-
-# Конец создания схемы базы данных и таблиц
+        The schema is managed by Alembic migrations. This method intentionally
+        does not run DDL anymore.
+        """
+        logger.warning(
+            "ensure_schema() is deprecated and no longer runs DDL; "
+            "use assert_schema_ready()"
+        )
+        self.assert_schema_ready()
 
     def cleanup_document_index(
             self,

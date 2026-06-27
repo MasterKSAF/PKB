@@ -50,7 +50,7 @@ class AdminUserLifecyclePipeline(PipelineDef):
 
     name = "admin_user_lifecycle"
     description = "Admin управление пользователем (создание → работа → аудит → деактивация)"
-    services = ["gateway"]
+    services = ["gateway", "query"]
 
     def build_steps(self, context: PipelineContext) -> List[PipelineStep]:
         """Построить 10 шагов пайплайна admin_user_lifecycle."""
