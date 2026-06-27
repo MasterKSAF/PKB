@@ -660,7 +660,7 @@ class PipelineRunner:
             try:
                 import subprocess
                 r = subprocess.run(
-                    ["docker", "exec", "pkb-postgres", "psql", "-U", "pkb", "-d", "pkb_neuro", "-c",
+                    ["docker", "exec", "pkb-postgres", "psql", "-U", "pkb", "-d", "pkb_neuro_check", "-c",
                      "ALTER TABLE IF EXISTS rag.document_chunks DROP CONSTRAINT IF EXISTS fk_rag_document_chunks_section_id;"],
                     capture_output=True, timeout=10,
                 )
