@@ -101,7 +101,13 @@ DB_DATABASE=<database_name>
 | GET    | /registry/documents/{document_id}/succession | Цепочка преемственности документа       | Реализовано |                      |
 | POST   | /registry/documents/check-uniqueness        | Проверить уникальность документа         | Реализовано |                      |
 | GET    | /registry/documents/{document_id}/sections  | Секции документа (для RAG Builder)       | Реализовано |                      |
+| GET    | /registry/documents/{document_id}/pages     | Список страниц документа                 | Реализовано |                      |
+| GET    | /registry/documents/{document_id}/pages/{page_num} | Конкретная страница (блоки)             | Реализовано |                      |
+| GET    | /registry/documents/{document_id}/pages/{page_num}/text | Текст конкретной страницы              | Реализовано |                      |
+| GET    | /registry/documents/{document_id}/pages/{page_num}/preview | Превью конкретной страницы             | Реализовано |                      |
+| GET    | /registry/documents/{document_id}/parameters | Извлечённые параметры документа          | Реализовано |                      |
 | GET    | /registry/search                            | Полнотекстовый поиск (BM25)              | Реализовано |                      |
+
 
 ## 4. Черновики (Drafts)
 | METHOD | EndPoint                                    | Описание                                 | Статус      | Комментарии          |
