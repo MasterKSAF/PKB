@@ -35,7 +35,7 @@ class TestDeleteDraft:
         response = client.post(
             self.CREATE_URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF delete test " * 50), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF delete test " * 150), "application/pdf")},
             data={"document_key": "doc-delete-test", "source_type": "GOST"},
         )
         assert response.status_code == 202
@@ -130,7 +130,7 @@ class TestDeleteDraftInVariousStatuses:
         response = client.post(
             self.CREATE_URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF-del"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF-del " * 200), "application/pdf")},
             data={"document_key": f"doc-del-{status}", "source_type": "GOST"},
         )
         assert response.status_code == 202

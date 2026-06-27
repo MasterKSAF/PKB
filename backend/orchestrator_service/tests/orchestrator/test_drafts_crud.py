@@ -43,7 +43,7 @@ class TestCreateDraftEdgeCases:
         response = client.post(
             self.URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF-1.4"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF-1.4 " * 200), "application/pdf")},
             data={
                 "document_key": "doc-bad-json",
                 "source_type": "GOST",
@@ -81,7 +81,7 @@ class TestGetDraft:
         create_resp = client.post(
             "/api/v1/drafts/",
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 50), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 150), "application/pdf")},
             data={"document_key": "doc-get-test", "source_type": "GOST"},
         )
         assert create_resp.status_code == 202

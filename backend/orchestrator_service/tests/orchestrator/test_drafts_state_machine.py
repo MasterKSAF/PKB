@@ -54,7 +54,7 @@ class TestDecideActionStageMatrix:
         response = client.post(
             "/api/v1/drafts/",
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF-matrix"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF-matrix " * 100), "application/pdf")},
             data={"document_key": "doc-matrix", "title": "Matrix Test", "source_type": "GOST"},
         )
         assert response.status_code == 202
@@ -121,7 +121,7 @@ class TestDecideTerminalTaskAllActions:
         response = client.post(
             "/api/v1/drafts/",
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF-term"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF-term " * 200), "application/pdf")},
             data={"document_key": "doc-terminal", "title": "Terminal Test", "source_type": "GOST"},
         )
         assert response.status_code == 202
@@ -138,7 +138,7 @@ class TestDecideTerminalTaskAllActions:
         auth_header: dict,
         db_session: AsyncSession,
     ):
-        """Любое действие на completed/failed задаче → 409 TASK_ALREADY_TERMINAL."""
+        """Любое действие на completed/failed задаче → 409 DRAFT_ALREADY_DECIDED."""
         from sqlalchemy import select
         from app.models.pipeline import Task
 
@@ -164,4 +164,4 @@ class TestDecideTerminalTaskAllActions:
         )
         data = response.json()
         detail = data.get("detail", data)
-        assert detail["error"]["code"] == "TASK_ALREADY_TERMINAL"
+        assert detail["error"]["code"] == "DRAFT_ALREADY_DECIDED"

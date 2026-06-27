@@ -161,19 +161,19 @@ class TestErrorResponseSchema:
 class TestEndpointErrorResponses:
     """Tests that API endpoints return correct error formats."""
 
-    def test_draft_unsupported_mime_type_returns_400(self, client: TestClient, auth_header: dict):
-        """Draft upload with unsupported MIME type returns 400."""
+    def test_draft_unsupported_mime_type_returns_422(self, client: TestClient, auth_header: dict):
+        """Draft upload with unsupported MIME type returns 422."""
         response = client.post(
             "/api/v1/drafts",
             files={"file": ("test.txt", b"test content", "text/plain")},
             data={"document_key": "test-key", "source_type": "GOST"},
             headers=auth_header,
         )
-        assert response.status_code == 400
+        assert response.status_code == 422
         data = response.json()
         detail = data.get("detail", data)
         error = detail.get("error", detail)
-        assert error["code"] == "BAD_REQUEST"
+        assert error["code"] == "UNSUPPORTED_FILE_TYPE"
         assert "message" in error
         assert "details" in error
 

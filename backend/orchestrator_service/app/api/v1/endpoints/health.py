@@ -50,6 +50,19 @@ async def health_check():
     )
 
 
+@router.get("/health")
+async def health_check_simple():
+    """Simple health check — per internal service health contract.
+
+    Returns minimal status, service name and version.
+    """
+    return {
+        "status": "ok",
+        "service": "orchestrator",
+        "version": settings.APP_VERSION,
+    }
+
+
 @router.get("/health/live")
 async def health_live():
     """Liveness check — process is alive and responding."""

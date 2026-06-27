@@ -40,7 +40,7 @@ class TestStopDuplicateFlow:
         response = client.post(
             self.CREATE_URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF-race"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF-race " * 150), "application/pdf")},
             data={"document_key": "doc-race", "source_type": "GOST"},
         )
         assert response.status_code == 202
@@ -115,7 +115,7 @@ class TestDuplicateDetectionInCreateDraft:
             response = client.post(
                 self.CREATE_URL,
                 headers=auth_header,
-                files={"file": ("test.pdf", io.BytesIO(b"%PDF dup"), "application/pdf")},
+                files={"file": ("test.pdf", io.BytesIO(b"%PDF dup " * 200), "application/pdf")},
                 data={"document_key": "doc-dup-flag", "source_type": "GOST"},
             )
 

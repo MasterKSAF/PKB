@@ -35,7 +35,7 @@ class TestPatchMetadataNormal:
         response = client.post(
             self.CREATE_URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 50), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 150), "application/pdf")},
             data={"document_key": "doc-meta-test", "source_type": "GOST"},
         )
         assert response.status_code == 202
@@ -96,7 +96,7 @@ class TestPatchMetadataValidation:
         response = client.post(
             self.CREATE_URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 50), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 150), "application/pdf")},
             data={"document_key": "doc-meta-val", "source_type": "GOST"},
         )
         assert response.status_code == 202
@@ -144,7 +144,7 @@ class TestPatchMetadataStateValidation:
         response = client.post(
             self.CREATE_URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 50), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 150), "application/pdf")},
             data={"document_key": f"doc-meta-{request.param}", "source_type": "GOST"},
         )
         assert response.status_code == 202

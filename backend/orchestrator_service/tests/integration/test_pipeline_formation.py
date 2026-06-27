@@ -261,6 +261,8 @@ class TestOnStepCompletedPreviewConverterFullAutoApprove:
         self, db_session: AsyncSession
     ):
         """Full preview: auto-approve triggers full phase steps."""
+        from app.core.config import settings
+        settings.pipeline.AUTO_APPROVE_ENABLED = True
         task = await _create_task(db_session, total_steps=3)
         steps = await _create_preview_steps(
             db_session, task.id, ocr_status="completed", converter_status="running",

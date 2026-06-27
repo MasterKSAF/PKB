@@ -52,11 +52,12 @@ router = APIRouter()
 MOCK_USER_ID = "u-mock-001"
 MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024  # 100 MB
 
-# Idempotency cache for POST /drafts
+# Idempotency cache for POST /drafts and POST /preview
 # Idempotency-Key → {draft_id, task_id, created_at}
 # In production, this would be Redis with TTL.
 # TTL: 1 hour as documented in guide.md
 _IDEMPOTENCY_CACHE: dict[str, dict] = {}
+_PREVIEW_IDEMPOTENCY_CACHE: dict[str, dict] = {}
 IDEMPOTENCY_TTL_SECONDS = 3600  # 1 hour
 
 ALLOWED_SOURCE_TYPES = {
@@ -75,7 +76,7 @@ ALLOWED_MIME = {
 }
 
 # Actions that can be performed on a draft
-EXTERNAL_ACTIONS = {"approve", "reject"}
+EXTERNAL_ACTIONS = {"approve", "reject", "confirm"}
 INTERNAL_ACTIONS = {"proceed", "stop_duplicate", "force_new_version"}
 ALL_ACTIONS = EXTERNAL_ACTIONS | INTERNAL_ACTIONS
 
@@ -166,10 +167,10 @@ async def create_draft(
     # --- Validate file type ---
     if file.content_type not in ALLOWED_MIME:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={
                 "error": {
-                    "code": "BAD_REQUEST",
+                    "code": "UNSUPPORTED_FILE_TYPE",
                     "message": "Неподдерживаемый формат файла",
                     "details": {"allowed_types": list(ALLOWED_MIME)},
                 }
@@ -274,6 +275,22 @@ async def create_draft(
             },
         )
 
+    # Validate minimum file size (FILE_TOO_SMALL, doc: §0)
+    if file_size < 1024:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": {
+                    "code": "FILE_TOO_SMALL",
+                    "message": "Размер файла менее 1 КБ",
+                    "details": {
+                        "min_size_bytes": 1024,
+                        "actual_size_bytes": file_size,
+                    },
+                }
+            },
+        )
+
     # Validate file size after reading
     if file_size > MAX_FILE_SIZE_BYTES:
         raise HTTPException(
@@ -367,6 +384,23 @@ async def create_draft(
         logger.warning(f"Uniqueness check failed: {exc}")
     finally:
         await registry.close()
+
+    # --- DUPLICATE_FILE: блокировка, если файл уже в активной обработке ---
+    # MinIO-объект не удаляется (CAS TTL 30 дней) — см. спецификацию.
+    if is_duplicate_file:
+        # Файл с таким hash уже существует и активен — отклоняем.
+        # Фактическая проверка статуса существующего черновика выполняется
+        # Registry'ом в check_uniqueness.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": {
+                    "code": "DUPLICATE_FILE",
+                    "message": "Файл с таким hash уже в активной обработке",
+                    "details": {"file_hash_sha256": file_hash},
+                }
+            },
+        )
 
     # --- Create draft in Registry ---
     registry = RegistryServiceClient()
@@ -615,11 +649,37 @@ async def start_preview(
     draft_id: int,
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key", description="Ключ идемпотентности (TTL 1ч)"),
 ) -> dict:
     """Start preview phase for a draft.
 
     Idempotency: returns 409 if preview already running or completed.
+    Поддерживает Idempotency-Key: повторный запрос с тем же ключом
+    возвращает кэшированный 202.
     """
+    # --- Idempotency check ---
+    if idempotency_key:
+        cached = _PREVIEW_IDEMPOTENCY_CACHE.get(idempotency_key)
+        if cached:
+            age = (datetime.now(timezone.utc) - cached["created_at"]).total_seconds()
+            if age < IDEMPOTENCY_TTL_SECONDS:
+                logger.info(
+                    f"Idempotency hit for preview key={idempotency_key}, draft_id={cached['draft_id']}",
+                )
+                # Return cached 202 response
+                return {
+                    "draft_id": cached["draft_id"],
+                    "task_id": cached["task_id"],
+                    "status": "previewing",
+                    "message": "Preview уже запущен (idempotent)",
+                }
+            else:
+                # TTL expired — remove from cache and proceed normally
+                logger.info(
+                    f"Idempotency key expired for preview key={idempotency_key}",
+                )
+                _PREVIEW_IDEMPOTENCY_CACHE.pop(idempotency_key, None)
+
     # Get draft info from Registry
     registry = RegistryServiceClient()
     try:
@@ -689,7 +749,7 @@ async def start_preview(
                     status_code=status.HTTP_409_CONFLICT,
                     detail={
                         "error": {
-                            "code": "PREVIEW_ALREADY_RUNNING",
+                            "code": "PREVIEW_IN_PROGRESS",
                             "message": f"Preview для черновика {draft_id} уже запущен или завершён",
                         }
                     },
@@ -714,6 +774,14 @@ async def start_preview(
         file_key=file_key or "",
         mime_type=mime_type,
     )
+
+    # Cache for idempotency
+    if idempotency_key:
+        _PREVIEW_IDEMPOTENCY_CACHE[idempotency_key] = {
+            "draft_id": draft_id,
+            "task_id": task.id,
+            "created_at": datetime.now(timezone.utc),
+        }
 
     return {
         "draft_id": draft_id,
@@ -1021,7 +1089,7 @@ async def decide_draft(
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "error": {
-                    "code": "TASK_ALREADY_TERMINAL",
+                    "code": "DRAFT_ALREADY_DECIDED",
                     "message": (
                         f"Задача {task.id} уже в терминальном статусе "
                         f"({task.status}). Действие {request.action} невозможно."
@@ -1039,6 +1107,21 @@ async def decide_draft(
                         "code": "INVALID_STAGE",
                         "message": (
                             f"Действие {request.action} требует этапа 'decision', 'upload' или 'preview', "
+                            f"текущий этап: {task.pipeline_stage}"
+                        ),
+                    }
+                },
+            )
+
+    if request.action == "confirm":
+        if task.pipeline_stage not in ("decision",):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": {
+                        "code": "INVALID_STAGE",
+                        "message": (
+                            f"Действие confirm требует этапа 'decision', "
                             f"текущий этап: {task.pipeline_stage}"
                         ),
                     }
@@ -1083,6 +1166,19 @@ async def decide_draft(
             status="proceeding",
             action="approve",
             message="Запущена полная обработка документа",
+        )
+
+    elif request.action == "confirm":
+        result_data = await orchestrator.confirm_draft(
+            draft_id, task.id,
+            metadata_overrides=request.metadata_overrides,
+        )
+        return DecideResponse(
+            draft_id=draft_id,
+            task_id=task.id,
+            status="validation",
+            action="confirm",
+            message="Запущена повторная валидация с overrides",
         )
 
     elif request.action == "reject":

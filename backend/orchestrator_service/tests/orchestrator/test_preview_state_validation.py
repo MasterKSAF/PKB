@@ -2,7 +2,7 @@
 Тесты state validation для POST /drafts/{draft_id}/preview.
 
 Покрывает сценарии §1 Preview-фаза: запуск (pipeline1-orchestrator_details.md):
-  - Статус previewing без Idempotency-Key → 409 PREVIEW_ALREADY_RUNNING
+  - Статус previewing без Idempotency-Key → 409 PREVIEW_IN_PROGRESS
   - Статус ready_for_approve → 409 CONFLICT
   - Статус discarded → 409 CONFLICT
   - Статус approved → 409 CONFLICT
@@ -34,7 +34,7 @@ class TestPreviewStateValidation:
         response = client.post(
             self.CREATE_URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 50), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 150), "application/pdf")},
             data={"document_key": "doc-preview-state", "source_type": "GOST"},
         )
         assert response.status_code == 202
@@ -44,7 +44,7 @@ class TestPreviewStateValidation:
         self, created_draft: int, client: TestClient, auth_header: dict,
         db_session: AsyncSession,
     ):
-        """Повторный preview → 409 PREVIEW_ALREADY_RUNNING, если есть running steps.
+        """Повторный preview → 409 PREVIEW_IN_PROGRESS, если есть running steps.
 
         После первого preview steps создаются со статусом 'pending'.
         Меняем статус step на 'running' через DB, чтобы симулировать
@@ -84,7 +84,7 @@ class TestPreviewStateValidation:
         data = resp2.json()
         detail = data.get("detail", data)
         assert "error" in detail
-        assert detail["error"]["code"] == "PREVIEW_ALREADY_RUNNING"
+        assert detail["error"]["code"] == "PREVIEW_IN_PROGRESS"
 
     def test_preview_not_found_returns_404(
         self, client: TestClient, auth_header: dict
@@ -135,7 +135,7 @@ class TestPreviewWithRegistryStatus:
         response = client.post(
             self.CREATE_URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 50), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 150), "application/pdf")},
             data={"document_key": "doc-status-test", "source_type": "GOST"},
         )
         assert response.status_code == 202
@@ -169,7 +169,7 @@ class TestPreviewWithRegistryStatus:
         create_resp = client.post(
             self.CREATE_URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 50), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 150), "application/pdf")},
             data={"document_key": f"doc-status-{status}", "source_type": "GOST"},
         )
         assert create_resp.status_code == 202

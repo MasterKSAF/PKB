@@ -97,6 +97,9 @@ class TestAutoApproveEnabled:
         self, db_session: AsyncSession,
     ):
         """Авто-апрув: preview_not_supported=True + валидные метаданные → approve."""
+        from app.core.config import settings
+        settings.pipeline.AUTO_APPROVE_ENABLED = True
+
         repo = TaskRepository(db_session)
         task = await repo.create_task(
             draft_id=101, pipeline_type="formation", total_steps=3,
@@ -164,6 +167,9 @@ class TestAutoApproveEnabled:
             await orchestrator._on_preview_completed(
                 task, await repo.get_task_steps(task.id), {}
             )
+
+        # Reset setting to default
+        settings.pipeline.AUTO_APPROVE_ENABLED = False
 
         # Verify auto-approve was triggered
         updated_task = await repo.get_task(task.id)
