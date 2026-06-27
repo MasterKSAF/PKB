@@ -1,5 +1,3 @@
-import logging
-
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 
 from rag_search.core.config import settings
@@ -10,8 +8,6 @@ from rag_search.services.search_service import SearchService
 
 
 router = APIRouter()
-
-logger = logging.getLogger(__name__)
 
 
 def get_search_service() -> SearchService:
@@ -51,27 +47,8 @@ async def search_legacy(
     service: SearchService = Depends(get_search_service),
 ) -> SearchResponse:
     try:
-        response = await service.search(request)
-        logger.info(
-            "Search request completed",
-            extra={
-                "endpoint": "/search",
-                "search_type": response.search_type_used,
-                "top_k": request.top_k,
-                "total_found": response.total_found,
-                "context_expanded": response.context_expanded,
-            },
-        )
-        return response
+        return await service.search(request)
     except ValueError as exc:
-        logger.warning(
-            "Search request rejected",
-            extra={
-                "endpoint": "/search",
-                "search_type": request.search_type,
-                "top_k": request.top_k,
-            },
-        )
         raise HTTPException(
             status_code=422,
             detail=str(exc),
@@ -85,27 +62,8 @@ async def search_compatible(
     service: SearchService = Depends(get_search_service),
 ) -> SearchResponse:
     try:
-        response = await service.search(request)
-        logger.info(
-            "Search request completed",
-            extra={
-                "endpoint": "/api/v1/rag/search",
-                "search_type": response.search_type_used,
-                "top_k": request.top_k,
-                "total_found": response.total_found,
-                "context_expanded": response.context_expanded,
-            },
-        )
-        return response
+        return await service.search(request)
     except ValueError as exc:
-        logger.warning(
-            "Search request rejected",
-            extra={
-                "endpoint": "/api/v1/rag/search",
-                "search_type": request.search_type,
-                "top_k": request.top_k,
-            },
-        )
         raise HTTPException(
             status_code=422,
             detail=str(exc),

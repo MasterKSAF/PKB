@@ -9,6 +9,9 @@ from typing import Literal
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, status
 
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
+
 from rag_builder.core.logger import logger
 from rag_builder.core.config import settings
 from rag_builder.core.telemetry import instrument_fastapi, setup_observability
@@ -72,6 +75,8 @@ tracer_provider, meter_provider, _observability_logger = setup_observability(
 )
 instrument_fastapi(app, tracer_provider=tracer_provider)
 
+tracer = trace.get_tracer(__name__)
+
 
 IndexingJobStatus = Literal[
     "pending_index",
@@ -115,59 +120,150 @@ def _run_indexing_job(
     repository = PostgresChunkRepository()
     service = IndexingService(repository=repository)
 
-    try:
-        repository.mark_indexing_job_indexing(indexing_txn_id)
+    document_id = request.metadata.document_id
+    sections_count = len(request.sections)
+    started_at = time.perf_counter()
 
-        result = service.index_document(
-            request,
-            indexing_txn_id=indexing_txn_id,
-        )
+    with tracer.start_as_current_span("rag_builder.index_document") as span:
+        span.set_attribute("document_id", document_id)
+        span.set_attribute("indexing_txn_id", indexing_txn_id)
+        span.set_attribute("sections_count", sections_count)
+        span.set_attribute("embedding_provider", settings.EMBEDDING_PROVIDER)
+        span.set_attribute("embedding_model", settings.EMBEDDING_MODEL)
+        span.set_attribute("embedding_dim", settings.EMBEDDING_DIM)
+        span.set_attribute("chunk_strategy", settings.CHUNK_STRATEGY)
 
-        chunks_count = len(result.chunks)
-
-        repository.mark_indexing_job_indexed(
-            indexing_txn_id=indexing_txn_id,
-            chunks_count=chunks_count,
-            index_stats={
-                "sections": len(request.sections),
-                "chunks": chunks_count,
-                "embeddings": chunks_count,
+        span.add_event(
+            "job_started",
+            {
+                "document_id": document_id,
+                "indexing_txn_id": indexing_txn_id,
+                "sections_count": sections_count,
             },
-            warnings=[
-                asdict(issue)
-                for issue in result.warnings
-            ],
-            errors=[
-                asdict(issue)
-                for issue in result.errors
-            ],
         )
 
-        logger.info(
-            "Indexing job %s indexed %s chunks for document_id=%s",
-            indexing_txn_id,
-            chunks_count,
-            request.metadata.document_id,
-        )
-
-    except Exception as exc:
-        logger.exception(
-            "Indexing job %s failed for document_id=%s",
-            indexing_txn_id,
-            request.metadata.document_id,
-        )
-
-        repository.mark_indexing_job_failed(
-            indexing_txn_id=indexing_txn_id,
-            errors=[
+        try:
+            repository.mark_indexing_job_indexing(indexing_txn_id)
+            span.add_event(
+                "job_status_changed",
                 {
-                    "code": "BUILD_FAILED",
-                    "message": str(exc),
-                    "section_id": None,
-                }
-            ],
-            warnings=[],
-        )
+                    "status": "indexing",
+                    "indexing_txn_id": indexing_txn_id,
+                },
+            )
+
+            result = service.index_document(
+                request,
+                indexing_txn_id=indexing_txn_id,
+            )
+
+            chunks_count = len(result.chunks)
+            warnings_count = len(result.warnings)
+            errors_count = len(result.errors)
+
+            repository.mark_indexing_job_indexed(
+                indexing_txn_id=indexing_txn_id,
+                chunks_count=chunks_count,
+                index_stats={
+                    "sections": sections_count,
+                    "chunks": chunks_count,
+                    "embeddings": chunks_count,
+                },
+                warnings=[
+                    asdict(issue)
+                    for issue in result.warnings
+                ],
+                errors=[
+                    asdict(issue)
+                    for issue in result.errors
+                ],
+            )
+
+            duration_ms = int((time.perf_counter() - started_at) * 1000)
+
+            span.set_attribute("indexing.status", "indexed")
+            span.set_attribute("duration_ms", duration_ms)
+            span.set_attribute("chunks_count", chunks_count)
+            span.set_attribute("warnings_count", warnings_count)
+            span.set_attribute("errors_count", errors_count)
+
+            span.add_event(
+                "job_indexed",
+                {
+                    "document_id": document_id,
+                    "indexing_txn_id": indexing_txn_id,
+                    "duration_ms": duration_ms,
+                    "chunks_count": chunks_count,
+                    "embeddings_count": chunks_count,
+                },
+            )
+
+            logger.info(
+                "Indexing job indexed",
+                extra={
+                    "document_id": document_id,
+                    "indexing_txn_id": indexing_txn_id,
+                    "status": "indexed",
+                    "duration_ms": duration_ms,
+                    "sections_count": sections_count,
+                    "chunks_count": chunks_count,
+                    "embeddings_count": chunks_count,
+                    "warnings_count": warnings_count,
+                    "errors_count": errors_count,
+                    "embedding_provider": settings.EMBEDDING_PROVIDER,
+                    "embedding_model": settings.EMBEDDING_MODEL,
+                    "embedding_dim": settings.EMBEDDING_DIM,
+                    "chunk_strategy": settings.CHUNK_STRATEGY,
+                },
+            )
+
+        except Exception as exc:
+            duration_ms = int((time.perf_counter() - started_at) * 1000)
+
+            span.record_exception(exc)
+            span.set_status(Status(StatusCode.ERROR, str(exc)))
+            span.set_attribute("indexing.status", "failed")
+            span.set_attribute("duration_ms", duration_ms)
+            span.set_attribute("error_type", type(exc).__name__)
+
+            span.add_event(
+                "job_failed",
+                {
+                    "document_id": document_id,
+                    "indexing_txn_id": indexing_txn_id,
+                    "duration_ms": duration_ms,
+                    "error_type": type(exc).__name__,
+                },
+            )
+
+            logger.exception(
+                "Indexing job failed",
+                extra={
+                    "document_id": document_id,
+                    "indexing_txn_id": indexing_txn_id,
+                    "status": "failed",
+                    "stage": "index_document",
+                    "duration_ms": duration_ms,
+                    "error_code": "BUILD_FAILED",
+                    "error_type": type(exc).__name__,
+                    "embedding_provider": settings.EMBEDDING_PROVIDER,
+                    "embedding_model": settings.EMBEDDING_MODEL,
+                    "embedding_dim": settings.EMBEDDING_DIM,
+                    "chunk_strategy": settings.CHUNK_STRATEGY,
+                },
+            )
+
+            repository.mark_indexing_job_failed(
+                indexing_txn_id=indexing_txn_id,
+                errors=[
+                    {
+                        "code": "BUILD_FAILED",
+                        "message": str(exc),
+                        "section_id": None,
+                    }
+                ],
+                warnings=[],
+            )
 
 
 @app.post(
