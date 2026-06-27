@@ -84,24 +84,22 @@ python backend/gateway_service/mocks/start_service.py
 
 ## 🧪 Запуск тестов
 
-```bash
-# Все 530+ тестов
-python -m pytest backend/gateway_service/mocks/tests/ -v
+### Mock-тесты (530+ тестов, порт 8099)
 
-# По файлам
-python -m pytest backend/gateway_service/mocks/tests/test_api.py               -v  # API-тесты
-python -m pytest backend/gateway_service/mocks/tests/test_extended.py          -v  # расширенные
-python -m pytest backend/gateway_service/mocks/tests/test_tz_coverage.py        -v  # покрытие ТЗ
-python -m pytest backend/gateway_service/mocks/tests/test_checker_coverage.py   -v  # checker coverage
-python -m pytest backend/gateway_service/mocks/tests/test_gateway_fails.py      -v  # gateway fails
-python -m pytest backend/gateway_service/mocks/tests/test_rate_limiting.py      -v  # rate limiting (22 теста)
-python -m pytest backend/gateway_service/mocks/tests/test_health_endpoints.py   -v  # health endpoints
-python -m pytest backend/gateway_service/mocks/tests/test_gateway_routing.py    -v  # routing
-python -m pytest backend/gateway_service/mocks/tests/test_correlation_headers.py -v  # корреляция
-python -m pytest backend/gateway_service/mocks/tests/test_otel.py               -v  # OpenTelemetry
-python -m pytest backend/gateway_service/mocks/tests/test_service_checker.py    -v  # service checker
-python -m pytest backend/gateway_service/mocks/tests/test_integration_gateway.py -v  # интеграция
+```bash
+python -m pytest backend/gateway_service/mocks/tests/ -v
 ```
+
+### Gateway unit-тесты (281 тест, без внешних сервисов)
+
+```bash
+cd backend/gateway_service
+python -m pytest tests/ -v
+```
+
+Эти тесты проверяют сам Gateway: resolve_service(), middleware, proxy_request,
+RBAC, rate limiting, конфигурацию, health-check, логирование.
+Не требуют запущенных сервисов — все внешние вызовы мокаются.
 
 ---
 
@@ -168,6 +166,25 @@ backend/gateway_service/
 │   ├── routers.py                  # Catch-all router
 │   ├── logging_config.py           # Структурированное JSON-логирование (P11)
 │   └── rate_limiter.py             # Rate limiting + IDOR protection (CM-2, CM-3, GW-4, GW-6)
+├── tests/                          # Unit/интеграционные тесты Gateway (281 тест)
+│   ├── __init__.py
+│   ├── conftest.py                 # Фикстуры: TestClient, моки, seed-данные
+│   ├── pytest.ini                  # asyncio_mode = auto
+│   ├── test_routing.py             # resolve_service — 51+ сценарий
+│   ├── test_config.py              # GatewayConfig — валидация
+│   ├── test_rate_limiter.py        # InMemoryRateLimiter, IDOR
+│   ├── test_middleware_pii.py      # PIIQueryValidatorMiddleware
+│   ├── test_middleware_correlation.py  # X-Request-ID, X-Trace-ID
+│   ├── test_middleware_strip_slash.py  # StripTrailingSlashMiddleware
+│   ├── test_middleware_process_time.py # X-Process-Time
+│   ├── test_rbac.py                # RBACMiddleware (mock auth)
+│   ├── test_idempotency.py         # IdempotencyMiddleware
+│   ├── test_proxy.py               # proxy_request (mock httpx)
+│   ├── test_health.py              # check_service_health
+│   ├── test_client.py              # get_client/close_client
+│   ├── test_logging.py             # JSONLogFormatter, PII mask
+│   ├── test_main_handlers.py       # /health, /mode, /metrics
+│   └── test_diagnostics.py         # KNOWN_SERVICES, build_summary
 ├── mocks/                          # Mock-сервер для тестирования/разработки
 │   ├── __init__.py
 │   ├── common.py                   # Seed-данные, in-memory хранилища, модели

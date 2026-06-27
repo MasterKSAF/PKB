@@ -44,3 +44,13 @@
 - **Ошибки** сначала фиксируются воспроизводящим тестом, затем исправляются.
 - **Документация**: readme.md — точка входа, specificity.md — аномалии, guide.md — архитектурные решения.
 - **Checker**: обнаружив проблему на своей стороне (согласно документации) — исправляет сразу, не спрашивая.
+
+## Структура тестирования Gateway
+
+- `tests/` — unit-тесты самого Gateway (281 тест). Запускаются без внешних сервисов.
+- `mocks/tests/` — интеграционные тесты через mock-сервер (550+ тестов, порт 8099).
+- Все `check_rate_limit`, `close_client`, `proxy_request` — async, помечены `@pytest.mark.asyncio`.
+- Для RBAC-тестов используется mock `_validate_token_remotely` (монки-патч).
+- Для proxy-тестов используется mock `get_client()` с возвратом AsyncMock.
+- `conftest.py` включает фикстуры: mock_auth_validate, mock_httpx_client, seed-данные пользователей.
+- `ALLOW_ANONYMOUS=True` по умолчанию — RBAC middleware не блокирует неаутентифицированных.

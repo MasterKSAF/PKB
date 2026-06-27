@@ -12,3 +12,4 @@ opentelemetry-instrumentation-fastapi==0.48b0
 
 # tests (не нужны в runtime, но оставлены для локальной разработки)
 pytest>=7.0
+pytest-asyncio>=0.21.0

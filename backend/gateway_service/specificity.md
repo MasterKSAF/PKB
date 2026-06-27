@@ -384,3 +384,17 @@ Docker healthcheck может слать `/api/v1/system/health/` — слеш �
 - **test_extended.py test_62**: Ассерт исправлен на `data.pending_created` + проверка `pending_ids`.
 ### Статус тестов
 - Все 551 тест проходят
+
+## 2026-06-27: Gateway unit-тесты — 281 тест (новая директория tests/)
+### Изменения
+- Создана `tests/` — 16 файлов, 281 тест для самого Gateway (не моков)
+- Добавлен `pytest-asyncio` в requirements.txt, создан pytest.ini
+- `conftest.py`: ALLOW_ANONYMOUS=True, RATE_LIMIT_ENABLED=0, лог на CRITICAL
+
+### Аномалии
+- `GatewayConfig` использует `float(os.getenv(...))` (flat default).
+  Env-override через monkeypatch НЕ работает для request_timeout, health_timeout, idempotency_ttl.
+  service_urls использует `field(default_factory=lambda: ...)` — работает.
+- `check_rate_limit()` и `close_client()` — async, тесты должны использовать await.
+- ALLOW_ANONYMOUS=True пропускает middleware-проверку RBAC для неаутентифицированных.
+- `KNOWN_SERVICES` не включает "analyse" (но сервис analyse есть в конфигурации).
