@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-# Auth_service
-=======
 # Auth Service
 
 Сервис аутентификации, управления пользователями, ролями, правами доступа и аудитом действий.
@@ -114,4 +111,3 @@ pytest
 | POST | /api/v1/roles |
 | GET | /api/v1/audit |
 | POST | /internal/auth/validate |
->>>>>>> f103543 (init auth service)

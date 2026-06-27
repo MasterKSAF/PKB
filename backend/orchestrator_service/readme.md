@@ -101,6 +101,16 @@ RAG_SERVICE_MOCK=true
 DATABASE_URL=sqlite+aiosqlite:///./orchestrator.db
 ```
 
+### Параметры Parser-first стратегии
+- `PARSER_ENABLED=true` — включить Parser-сервис. При `false` Parser не вызывается, сразу OCR.
+- `OCR_ENABLED=true` — включить OCR-сервис. При `false` OCR не вызывается (Parser без fallback).
+- `PARSER_FALLBACK_TO_OCR=true` — при недоступности Parser или `preview_not_supported` — fallback на OCR.
+- `PARSER_SERVICE_MOCK=true/false` — mock-режим Parser.
+- `OCR_SERVICE_MOCK=true/false` — mock-режим OCR.
+
+### Параметры full-фазы
+- `FULL_PHASE_MODE=auto|partial|full` — стратегия: `auto` (пропустить full, если preview полный), `partial` (всегда гонять full), `full` (всегда пропускать).
+
 Основные параметры:
 - `APP_VERSION` — версия приложения (по умолчанию `1.0.0`)
 - `DEBUG` — режим отладки

@@ -115,7 +115,7 @@ class TestStartPipeline:
         updated = await repo.get_task(task_id)
         assert updated is not None
         assert updated.pipeline_stage == TaskStage.PREVIEW.value
-        assert updated.current_step_name == "upload"
+        assert updated.current_step_name == "Parser Service"
         assert updated.current_step_index == 0
         assert updated.progress_percent == 10
 
@@ -573,10 +573,10 @@ class TestStartPipelineErrors:
                 mime_type="application/pdf",
             )
 
-    async def test_start_pipeline_with_image_triggers_ocr_branch(
+    async def test_start_pipeline_with_image_triggers_parser_first(
         self, db_session: AsyncSession
     ):
-        """Image mime_type routes to OCR Service branch."""
+        """Image mime_type routes to Parser first (Parser-first strategy)."""
         task = await _create_task(db_session, draft_id=300, total_steps=3)
         orchestrator = PipelineOrchestrator(db_session)
 
@@ -596,9 +596,9 @@ class TestStartPipelineErrors:
                 mime_type="image/png",
             )
 
-        # Verify OCR branch was taken (parser should NOT be called)
-        mock_ocr.assert_called_once()
-        mock_parser.assert_not_called()
+        # Parser-first: Parser is called even for images
+        mock_parser.assert_called_once()
+        mock_ocr.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

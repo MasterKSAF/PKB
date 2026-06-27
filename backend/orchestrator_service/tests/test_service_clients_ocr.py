@@ -1,12 +1,12 @@
 """
 Unit tests for OCRServiceClient.
 
-Tests mock generation for:
-  - POST /ocr/process (mode=preview|full)
-  - GET /ocr/engines
+NOTE: Отдельного OCR-сервиса нет — OCR-клиент ходит на единый эндпоинт
+Parser-сервиса POST /api/v1/parser/process (не /api/v1/ocr/process).
 """
 
 import pytest
+from unittest.mock import AsyncMock, patch
 
 from app.services.ocr_client import OCRServiceClient
 
@@ -19,6 +19,64 @@ def ocr_client():
 
 
 DRAFT_ID = 420001
+
+
+class TestOCREndpoint:
+    """Tests that OCR client uses correct Parser endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_process_uses_parser_endpoint(self):
+        """OCR client calls POST /api/v1/parser/process (not /api/v1/ocr/process)."""
+        client = OCRServiceClient()
+        client.mock_mode = False  # real mode to spy on call
+
+        with patch.object(client, "call") as mock_call:
+            mock_call.return_value = {"data": {}}
+            await client.process(task_id=1, file_key="f-test", draft_id=42, mode="preview")
+
+        mock_call.assert_called_once()
+        args = mock_call.call_args
+        assert args[0][0] == "POST"  # method
+        assert args[0][1] == "/api/v1/parser/process"  # endpoint
+
+    @pytest.mark.asyncio
+    async def test_does_not_use_ocr_endpoint(self):
+        """OCR client does NOT call /api/v1/ocr/process (no separate OCR service)."""
+        client = OCRServiceClient()
+        client.mock_mode = False
+
+        with patch.object(client, "call") as mock_call:
+            mock_call.return_value = {"data": {}}
+            await client.process(task_id=1, file_key="f-test", draft_id=42, mode="full")
+
+        endpoint = mock_call.call_args[0][1]
+        assert "/api/v1/ocr/" not in endpoint
+        assert endpoint == "/api/v1/parser/process"
+
+    @pytest.mark.asyncio
+    async def test_get_engines_not_available(self):
+        """get_engines method was removed (no /api/v1/ocr/engines on Parser)."""
+        client = OCRServiceClient()
+        assert not hasattr(client, "get_engines"), "get_engines should have been removed"
+
+    @pytest.mark.asyncio
+    async def test_mock_handler_accepts_parser_endpoint(self, ocr_client):
+        """Mock handler matches /api/v1/parser/process (not /api/v1/ocr/process)."""
+        result = await ocr_client.process(
+            task_id=1, file_key="f-mock", draft_id=42, mode="preview"
+        )
+        assert "data" in result
+
+        # Verify _generate_mock was called with /api/v1/parser/process
+        with patch.object(
+            ocr_client, "_generate_mock", wraps=ocr_client._generate_mock
+        ) as spy:
+            await ocr_client.process(task_id=1, file_key="f-mock", draft_id=42, mode="preview")
+            call_args = spy.call_args
+            # _generate_mock(method, endpoint, default_mock, **kwargs)
+            # endpoint is 2nd positional arg → call_args[0][1]
+            actual_endpoint = call_args[0][1]
+            assert actual_endpoint == "/api/v1/parser/process"
 
 
 class TestOCRProcessPreview:
@@ -83,40 +141,3 @@ class TestOCRProcessFull:
         )
         data = result.get("data", {})
         assert "pages_processed" in data
-
-
-class TestOCREngines:
-    """Tests for OCR engine listing."""
-
-    @pytest.mark.asyncio
-    async def test_get_engines(self, ocr_client):
-        result = await ocr_client.get_engines()
-        assert "engines" in result
-        assert len(result["engines"]) > 0
-
-    @pytest.mark.asyncio
-    async def test_engine_structure(self, ocr_client):
-        result = await ocr_client.get_engines()
-        engine = result["engines"][0]
-        for field in ("engine_id", "name", "status", "supported_languages",
-                      "average_processing_time_ms", "default_for_types"):
-            assert field in engine, f"Missing field: {field}"
-
-    @pytest.mark.asyncio
-    async def test_engine_status_values(self, ocr_client):
-        result = await ocr_client.get_engines()
-        for engine in result["engines"]:
-            assert engine["status"] in ("available", "unavailable", "error")
-
-    @pytest.mark.asyncio
-    async def test_engine_supported_languages(self, ocr_client):
-        result = await ocr_client.get_engines()
-        for engine in result["engines"]:
-            assert len(engine["supported_languages"]) > 0
-            assert "ru" in engine["supported_languages"]
-
-    @pytest.mark.asyncio
-    async def test_engine_processing_time_positive(self, ocr_client):
-        result = await ocr_client.get_engines()
-        for engine in result["engines"]:
-            assert engine["average_processing_time_ms"] > 0

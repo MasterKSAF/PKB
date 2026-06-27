@@ -42,6 +42,10 @@ class PipelineOrchestrator:
     ) -> None:
         """Start the pipeline for a draft (preview phase).
 
+        Parser-first strategy: if Parser is enabled, it is always tried first.
+        If Parser fails or returns preview_not_supported and fallback is enabled,
+        the pipeline falls back to OCR.
+
         1. Validates task exists
         2. Creates TaskSteps for preview phase
         3. Enqueues preview Celery tasks
@@ -71,24 +75,35 @@ class PipelineOrchestrator:
             step_index=0,
         )
 
-        # Determine which service handles the preview based on mime_type
-        # image/* → OCR Service; application/pdf with text layer → Parser Service
-        # For now: image/* → OCR, PDF → Parser (digital PDF detection via mime sub-type)
-        is_image = mime_type in ("image/png", "image/jpeg", "image/tiff")
-        is_digital_pdf = mime_type == "application/pdf"
-        is_scanned_pdf = mime_type in (
-            "application/pdf+scanned", "application/x-pdf-scanned"
-        )
+        # --- Parser-first strategy (P1F-8 updated) ---
+        # Try Parser first if enabled, fall back to OCR if:
+        #   - Parser is disabled
+        #   - Parser fails and PARSER_FALLBACK_TO_OCR is enabled
+        #   - Parser returns preview_not_supported and PARSER_FALLBACK_TO_OCR is enabled
+        parser_enabled = settings.services.PARSER_ENABLED
+        ocr_enabled = settings.services.OCR_ENABLED
+        fallback_to_ocr = settings.services.PARSER_FALLBACK_TO_OCR
 
-        if is_image or is_scanned_pdf:
-            preview_service = "OCR Service"
-            use_ocr = True
-        else:
-            # Digital PDF or unknown → Parser Service
+        if not parser_enabled and not ocr_enabled:
+            raise ValueError(
+                f"Cannot start pipeline: both Parser and OCR are disabled "
+                f"(draft_id={draft_id}, task_id={task_id})"
+            )
+
+        if parser_enabled:
             preview_service = "Parser Service"
-            use_ocr = False
+            use_parser = True
+        elif ocr_enabled:
+            preview_service = "OCR Service"
+            use_parser = False
+        else:
+            # Should not reach here due to check above
+            preview_service = "Parser Service"
+            use_parser = True
 
-        preview_step = "preview_ocr"  # both use same step name
+        # Store service selection on the task for fallback tracking
+        task.current_step_name = preview_service
+        await self.db.flush()
 
         # Create TaskSteps
         # Step 0: upload
@@ -103,10 +118,10 @@ class PipelineOrchestrator:
             input_data=upload_input,
         )
 
-        # Step 1: preview OCR/Parser
-        ocr_step = await self.task_repo.create_task_step(
+        # Step 1: preview Parser/OCR
+        preview_step = await self.task_repo.create_task_step(
             task_id=task_id,
-            step_name=preview_step,
+            step_name="preview_ocr",  # unified step name
             step_index=1,
             service_name=preview_service,
             input_data={"file_key": file_key, "mode": "preview", "max_pages": 3, "draft_id": draft_id},
@@ -137,10 +152,18 @@ class PipelineOrchestrator:
         )
 
         current_trace_id = get_trace_id() or ""
-        if use_ocr:
-            run_ocr_preview_step.delay(task_id, draft_id, file_key, max_pages=3, trace_id=current_trace_id)
-        else:
+        if use_parser:
+            logger.info(
+                "Parser-first: enqueuing parser preview",
+                extra={"draft_id": draft_id, "task_id": task_id},
+            )
             run_parser_preview_step.delay(task_id, draft_id, file_key, max_pages=3, trace_id=current_trace_id)
+        else:
+            logger.info(
+                "Parser disabled (or fallback): enqueuing OCR preview directly",
+                extra={"draft_id": draft_id, "task_id": task_id},
+            )
+            run_ocr_preview_step.delay(task_id, draft_id, file_key, max_pages=3, trace_id=current_trace_id)
 
         # Converter запускается ПОСЛЕ parser/ocr в on_step_completed
         # с результатом парсинга как raw_json
@@ -260,10 +283,59 @@ class PipelineOrchestrator:
         elif step_name in ("full_ocr", "full_converter", "registry_creation"):
             await self._on_full_step_completed(task, step_name, steps)
 
+    async def _run_ocr_fallback(self, task, file_key: str) -> None:
+        """Run OCR preview as fallback after Parser failed or returned preview_not_supported."""
+        logger.info(
+            "Running OCR fallback",
+            extra={"task_id": task.id, "draft_id": task.draft_id},
+        )
+
+        # Create a new preview step for OCR
+        await self.task_repo.create_task_step(
+            task_id=task.id,
+            step_name="preview_ocr",
+            step_index=1,
+            service_name="OCR Service",
+            input_data={
+                "file_key": file_key,
+                "mode": "preview",
+                "max_pages": 3,
+                "draft_id": task.draft_id,
+            },
+        )
+
+        # Reset retry count for the fallback attempt
+        task.retry_count = 0
+        task.current_step_name = "OCR Service"
+        await self.db.flush()
+
+        from app.tasks.pipeline_formation import run_ocr_preview_step
+
+        current_trace_id = task.trace_id or ""
+        run_ocr_preview_step.delay(
+            task.id, task.draft_id, file_key,
+            max_pages=3, trace_id=current_trace_id,
+        )
+
+        logger.info(
+            "OCR fallback enqueued",
+            extra={"task_id": task.id, "draft_id": task.draft_id},
+        )
+
     async def _on_preview_completed(
         self, task, steps, converter_output: Optional[dict]
     ) -> None:
-        """Handle completion of the preview phase."""
+        """Handle completion of the preview phase.
+
+        Flow:
+        1. Parser → Converter — всегда
+        2. Если Converter.validation = True → preview готов
+        3. Если Converter.validation = False и использовался Parser
+           и OCR доступен → OCR fallback → Converter повторно
+        4. Если Converter.validation = False после OCR → review_required
+        5. preview_not_supported → только full_completed (пропуск full-фазы),
+           не триггерит OCR fallback
+        """
         logger.info(
             "Preview phase completed",
             extra={"task_id": task.id, "draft_id": task.draft_id},
@@ -277,11 +349,14 @@ class PipelineOrchestrator:
 
         preview_not_supported = False
         quality_data = {}
+        file_key = ""
         if preview_step and preview_step.output_data:
             preview_not_supported = preview_step.output_data.get(
                 "preview_not_supported", False
             )
             quality_data = preview_step.output_data.get("quality", {})
+        if preview_step and preview_step.input_data:
+            file_key = preview_step.input_data.get("file_key", "")
 
         # --- Save quality notifications from Parser/OCR (OR-6) ---
         notifications = quality_data.get("notifications", [])
@@ -309,6 +384,22 @@ class PipelineOrchestrator:
         is_validated = True
         if converter_step and converter_step.output_data:
             is_validated = converter_step.output_data.get("validated", True)
+
+        # --- OCR fallback by converter result (not by preview_not_supported) ---
+        used_parser = (
+            preview_step is not None
+            and preview_step.service_name == "Parser Service"
+        )
+        ocr_enabled = settings.services.OCR_ENABLED
+        fallback_to_ocr = settings.services.PARSER_FALLBACK_TO_OCR
+
+        if not is_validated and used_parser and fallback_to_ocr and ocr_enabled:
+            logger.info(
+                "Converter validation failed after Parser — falling back to OCR",
+                extra={"task_id": task.id, "draft_id": task.draft_id},
+            )
+            await self._run_ocr_fallback(task, file_key=file_key)
+            return
 
         if not is_validated:
             logger.info(
@@ -340,7 +431,7 @@ class PipelineOrchestrator:
         if preview_not_supported:
             logger.info(
                 "Preview returned full document (preview_not_supported=True), "
-                "skipping full OCR/Parser phase",
+                "skipping full Parser/OCR phase",
                 extra={"task_id": task.id, "draft_id": task.draft_id},
             )
             # Engine returned full document — mark as full_completed
@@ -673,24 +764,29 @@ class PipelineOrchestrator:
 
         # Determine full phase mode (P1F-9)
         full_mode = settings.pipeline.FULL_PHASE_MODE
-        need_full_ocr = False
+        need_full_processing = False
         if full_mode == "partial":
-            need_full_ocr = True
+            need_full_processing = True
         elif full_mode == "full":
-            need_full_ocr = False
+            need_full_processing = False
         else:  # "auto" — use full_completed flag
-            need_full_ocr = not task.full_completed
+            need_full_processing = not task.full_completed
 
-        if need_full_ocr:
-            # Partial preview or forced — need full OCR/Parser
+        # Choose service for full phase: Parser-first, fallback to OCR (P1F-8)
+        parser_enabled = settings.services.PARSER_ENABLED
+        ocr_enabled = settings.services.OCR_ENABLED
+
+        use_parser_for_full = bool(parser_enabled)
+        full_service_name = "Parser Service" if use_parser_for_full else "OCR Service"
+
+        if need_full_processing:
             await self.task_repo.create_task_step(
                 task_id=task_id,
                 step_name="full_ocr",
                 step_index=3,
-                service_name="OCR Service",
+                service_name=full_service_name,
                 input_data={"file_key": file_key, "mode": "full", "draft_id": draft_id},
             )
-            run_ocr_full_step.delay(task_id, draft_id, file_key, trace_id=current_trace_id)
 
         # Create full_converter step (always)
         await self.task_repo.create_task_step(
@@ -712,8 +808,8 @@ class PipelineOrchestrator:
 
         # Start the first step
         steps = await self.task_repo.get_task_steps(task_id)
-        if need_full_ocr:
-            full_ocr = next(
+        if need_full_processing:
+            full_step = next(
                 (
                     s
                     for s in steps
@@ -721,12 +817,20 @@ class PipelineOrchestrator:
                 ),
                 None,
             )
-            if full_ocr:
-                await self.task_repo.start_task_step(full_ocr.id)
-                logger.info(
-                    "Enqueued full OCR step",
-                    extra={"task_id": task_id, "draft_id": draft_id},
-                )
+            if full_step:
+                await self.task_repo.start_task_step(full_step.id)
+                if use_parser_for_full:
+                    run_parser_full_step.delay(task_id, draft_id, file_key, trace_id=current_trace_id)
+                    logger.info(
+                        "Enqueued full Parser step (Parser-first)",
+                        extra={"task_id": task_id, "draft_id": draft_id},
+                    )
+                else:
+                    run_ocr_full_step.delay(task_id, draft_id, file_key, trace_id=current_trace_id)
+                    logger.info(
+                        "Enqueued full OCR step",
+                        extra={"task_id": task_id, "draft_id": draft_id},
+                    )
             else:
                 logger.warning(
                     "No pending full_ocr step found after approve",
@@ -745,7 +849,7 @@ class PipelineOrchestrator:
             if full_converter:
                 await self.task_repo.start_task_step(full_converter.id)
                 logger.info(
-                    "Enqueued full Converter step (full preview, no OCR)",
+                    "Enqueued full Converter step (full preview, no Parser/OCR)",
                     extra={"task_id": task_id, "draft_id": draft_id},
                 )
 
@@ -890,6 +994,7 @@ class PipelineOrchestrator:
 
         # Mark the running step as failed
         steps = await self.task_repo.get_task_steps(task_id)
+        failed_step = None
         for step in steps:
             if step.step_name == step_name and step.status == "running":
                 await self.task_repo.fail_task_step(
@@ -897,14 +1002,81 @@ class PipelineOrchestrator:
                     error_code=error_code,
                     error_message=error_message,
                 )
+                failed_step = step
                 break
 
         # Update task error info
         await self.task_repo.set_task_error(task_id, error_code, error_message)
 
-        max_retries = settings.pipeline.MAX_STEP_RETRIES
+        # --- Parser-first: fallback from Parser to OCR on failure ---
+        # Applies to both preview_ocr (preview) and full_ocr (full phase)
+        use_ocr_fallback = False
+        if (
+            step_name in ("preview_ocr", "full_ocr")
+            and failed_step is not None
+            and failed_step.service_name == "Parser Service"
+            and settings.services.PARSER_FALLBACK_TO_OCR
+            and settings.services.OCR_ENABLED
+        ):
+            logger.info(
+                f"Parser {step_name} failed ({error_code}) — falling back to OCR "
+                f"instead of retry",
+                extra={"task_id": task_id, "draft_id": task.draft_id},
+            )
+            use_ocr_fallback = True
 
-        if task.retry_count < max_retries:
+        if use_ocr_fallback:
+            # Fall back to OCR — create new OCR step and enqueue
+            file_key = ""
+            if failed_step and failed_step.input_data:
+                file_key = failed_step.input_data.get("file_key", "")
+
+            mode = "preview" if "preview" in step_name else "full"
+            max_pages = 3 if mode == "preview" else None
+
+            await self.task_repo.create_task_step(
+                task_id=task_id,
+                step_name=step_name,
+                step_index=task.current_step_index,
+                service_name="OCR Service",
+                input_data={
+                    "file_key": file_key,
+                    "mode": mode,
+                    "draft_id": task.draft_id,
+                },
+            )
+
+            task.retry_count = 0
+            task.current_step_name = "OCR Service"
+            await self.db.flush()
+
+            await self.task_repo.update_task_status(
+                task_id=task_id,
+                status=TaskStatus.ACTIVE.value,
+            )
+
+            from app.tasks.pipeline_formation import (
+                run_ocr_preview_step,
+                run_ocr_full_step,
+            )
+
+            trace = task.trace_id or ""
+            if mode == "preview":
+                run_ocr_preview_step.delay(
+                    task_id, task.draft_id, file_key,
+                    max_pages=max_pages, trace_id=trace,
+                )
+            else:
+                run_ocr_full_step.delay(
+                    task_id, task.draft_id, file_key, trace_id=trace,
+                )
+
+            logger.info(
+                f"OCR fallback enqueued after parser {step_name} failure",
+                extra={"task_id": task_id, "draft_id": task.draft_id},
+            )
+
+        elif task.retry_count < settings.pipeline.MAX_STEP_RETRIES:
             # Retry with exponential backoff
             backoff_delay = settings.pipeline.RETRY_BASE_DELAY * (2 ** task.retry_count)
 
@@ -924,7 +1096,7 @@ class PipelineOrchestrator:
             )
 
             logger.info(
-                f"Step {step_name} failed, retry {task.retry_count}/{max_retries} "
+                f"Step {step_name} failed, retry {task.retry_count}/{settings.pipeline.MAX_STEP_RETRIES} "
                 f"in {backoff_delay}s",
                 extra={"task_id": task_id, "draft_id": task.draft_id},
             )
