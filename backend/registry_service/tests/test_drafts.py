@@ -128,3 +128,38 @@ def test_delete_draft(client):
     # Ensure it's deleted
     get_res = client.get(f"/api/v1/registry/drafts/{draft_id}")
     assert get_res.status_code == 404
+
+def test_save_draft_snapshot(client):
+    payload = {
+        "file_key": "f-snap",
+        "document_key": "doc-snap",
+        "status": "uploaded",
+        "created_by": "orchestrator"
+    }
+    res = client.post("/api/v1/registry/drafts", json=payload).json()["data"]
+    draft_id = res["id"]
+
+    snapshot_payload = {
+        "preview_metadata": {"title": "Snapshot Title", "pages": 12}
+    }
+    response = client.post(f"/api/v1/registry/drafts/{draft_id}/snapshot", json=snapshot_payload)
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["draft_id"] == draft_id
+    assert data["snapshot_saved"] is True
+
+    # Retrieve and check preview_metadata
+    get_res = client.get(f"/api/v1/registry/drafts/{draft_id}")
+    assert get_res.status_code == 200
+    draft_data = get_res.json()["data"]
+    assert draft_data["preview_metadata"] == {"title": "Snapshot Title", "pages": 12}
+
+def test_save_draft_snapshot_not_found(client):
+    snapshot_payload = {
+        "preview_metadata": {"title": "Snapshot Title"}
+    }
+    response = client.post("/api/v1/registry/drafts/999999/snapshot", json=snapshot_payload)
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "DRAFT_NOT_FOUND"
+
+

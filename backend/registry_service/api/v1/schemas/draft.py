@@ -44,3 +44,7 @@ class DraftUpdateMetadata(BaseModel):
     preview_metadata: dict
     metadata_overrides: Optional[dict] = None
     updated_by: str
+
+class DraftSnapshotCreate(BaseModel):
+    preview_metadata: dict
+
