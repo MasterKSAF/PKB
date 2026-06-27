@@ -200,6 +200,23 @@ In-memory кэш `_IDEMPOTENCY_CACHE` с TTL 1ч.
 Повторный запрос с тем же ключом → 200 + существующий draft_id.
 В production требуется замена на Redis.
 
+### 3.11. Расхождения docs vs code (27.06, тесты выявили)
+- `FILE_TOO_SMALL` (< 1КБ) описан в pipeline1-orchestrator_details.md, но НЕ реализован в production коде (есть только `EMPTY_FILE` для 0 байт).
+- `UNSUPPORTED_FILE_TYPE` (422) описан, в коде возвращается `400 BAD_REQUEST` для неподдерживаемых MIME.
+- `PREVIEW_IN_PROGRESS` (409) описан, в коде возвращается `PREVIEW_ALREADY_RUNNING`.
+- `DRAFT_ALREADY_DECIDED` (409) описан, в коде возвращается `TASK_ALREADY_TERMINAL`.
+- `DUPLICATE_FILE` (409) при check-uniqueness не блокирует создание черновика (только флаг `is_duplicate_file` в ответе).
+- `DUPLICATE_FILE_AFTER_APPROVE` с `superseded_by_document_id` не реализован.
+- `BUSINESS_KEY_DRIFT` не реализован.
+- confirm action описан в документации, но не реализован в коде.
+- Idempotency-Key для preview описан в P1-19, но не реализован.
+- Пороги качества (avg_confidence, max_critical) описаны, но не реализованы в production коде.
+
+### 3.12. PATCH /metadata — прокси без валидации (27.06)
+PATCH /drafts/{id}/metadata — прокси в Registry. Оркестратор не валидирует source_type,
+era, jurisdiction и другие поля. Валидация происходит на стороне Registry.
+Это означает, что невалидные source_type проходят через оркестратор.
+
 ## 4. Проблемы при запуске (ошибки в Python-сервисах)
 
 При `docker compose up -d` контейнер `pkb-neuro` запускает 10 Python-процессов под supervisord.
