@@ -35,24 +35,24 @@ class TestRAGBuild:
             {"section_id": 2, "type": "text", "content": {"text": "More content"}, "page": 2},
         ]
         result = await rag_builder_client.index_document(
-            document_id="doc-test-001",
+            document_id=1001,
             sections=sections,
         )
-        assert result["document_id"] == "doc-test-001"
+        assert result["document_id"] == 1001
         assert result["indexing_txn_id"] == "txn-mock-001"
         assert result["status"] == "indexing"
 
     @pytest.mark.asyncio
     async def test_index_empty_sections(self, rag_builder_client):
         """Should handle empty sections gracefully."""
-        result = await rag_builder_client.index_document(document_id="doc-empty", sections=[])
-        assert result["document_id"] == "doc-empty"
+        result = await rag_builder_client.index_document(document_id=9999, sections=[])
+        assert result["document_id"] == 9999
         assert result["status"] == "indexing"
 
     @pytest.mark.asyncio
     async def test_index_no_sections_defaults_to_empty(self, rag_builder_client):
         """sections defaults to [] when not provided."""
-        result = await rag_builder_client.index_document(document_id="doc-default")
+        result = await rag_builder_client.index_document(document_id=1002)
         assert result["status"] == "indexing"
 
     @pytest.mark.asyncio

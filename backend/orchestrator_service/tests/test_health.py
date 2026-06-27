@@ -86,6 +86,24 @@ class TestHealthEndpoint:
         assert cors_origin is not None
 
 
+class TestHealthSimple:
+    """Tests for GET /api/v1/health (simple internal health check)."""
+
+    def test_health_simple_returns_ok(self, client: TestClient):
+        """Returns status ok with service name and version."""
+        response = client.get("/api/v1/health")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert data["service"] == "orchestrator"
+        assert "version" in data
+
+    def test_health_simple_public_no_auth(self, client: TestClient):
+        """Simple health is public."""
+        response = client.get("/api/v1/health", headers={})
+        assert response.status_code == 200
+
+
 class TestHealthLivenessReadiness:
     """Tests for /health/live and /health/ready (T-12)."""
 
