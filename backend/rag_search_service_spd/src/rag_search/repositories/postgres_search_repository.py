@@ -49,6 +49,124 @@ class PostgresSearchRepository:
 
         return sql.SQL(str(embedding_dim))
 
+    def assert_read_model_ready(self) -> None:
+        """
+        Checks that RAG Builder-managed read model is available for search.
+
+        RAG Search is a read-only service and must not create or mutate schema.
+        Apply RAG Builder Alembic migrations before starting search.
+        """
+        required_tables = {
+            "chunks": {
+                "id",
+                "document_id",
+                "document_section_id",
+                "section_id",
+                "clause",
+                "path",
+                "page",
+                "bbox",
+                "chunk_index",
+                "chunk_type",
+                "content",
+                "content_tsv",
+                "embedding",
+            },
+            "document_sections": {
+                "id",
+                "document_id",
+                "section_id",
+                "parent_id",
+                "clause",
+                "title",
+                "path",
+                "path_ltree",
+                "page",
+                "section_type",
+                "metadata",
+            },
+        }
+        required_extensions = {
+            "vector",
+            "ltree",
+        }
+
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT table_name, column_name
+                    FROM information_schema.columns
+                    WHERE table_schema = %s
+                      AND table_name = ANY(%s)
+                    """,
+                    (
+                        settings.POSTGRES_SCHEMA,
+                        list(required_tables),
+                    ),
+                )
+
+                existing_columns_by_table: dict[str, set[str]] = {
+                    table_name: set()
+                    for table_name in required_tables
+                }
+
+                for table_name, column_name in cur.fetchall():
+                    existing_columns_by_table.setdefault(
+                        table_name,
+                        set(),
+                    ).add(column_name)
+
+                missing_tables = sorted(
+                    table_name
+                    for table_name, columns in existing_columns_by_table.items()
+                    if not columns
+                )
+
+                if missing_tables:
+                    raise RuntimeError(
+                        "RAG Search read model is not initialized. "
+                        f"Missing tables in schema {settings.POSTGRES_SCHEMA!r}: "
+                        f"{', '.join(missing_tables)}. "
+                        "Run RAG Builder Alembic migrations first: "
+                        "python -m alembic -c alembic.ini upgrade head"
+                    )
+
+                missing_columns: list[str] = []
+                for table_name, required_columns in required_tables.items():
+                    existing_columns = existing_columns_by_table[table_name]
+                    for column_name in sorted(required_columns - existing_columns):
+                        missing_columns.append(f"{table_name}.{column_name}")
+
+                if missing_columns:
+                    raise RuntimeError(
+                        "RAG Search read model is incomplete. "
+                        f"Missing columns in schema {settings.POSTGRES_SCHEMA!r}: "
+                        f"{', '.join(missing_columns)}. "
+                        "Run RAG Builder Alembic migrations first."
+                    )
+
+                cur.execute(
+                    """
+                    SELECT extname
+                    FROM pg_extension
+                    WHERE extname = ANY(%s)
+                    """,
+                    (list(required_extensions),),
+                )
+                existing_extensions = {row[0] for row in cur.fetchall()}
+                missing_extensions = sorted(
+                    required_extensions - existing_extensions
+                )
+
+                if missing_extensions:
+                    raise RuntimeError(
+                        "RAG Search database dependencies are not initialized. "
+                        f"Missing PostgreSQL extensions: "
+                        f"{', '.join(missing_extensions)}. "
+                        "Run RAG Builder Alembic migrations first."
+                    )
+
     def vector_search(
         self,
         query_embedding: list[float],

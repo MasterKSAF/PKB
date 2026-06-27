@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException
 
 from rag_search.core.config import settings
 from rag_search.models.search import SearchRequest, SearchResponse
+from rag_search.repositories.postgres_search_repository import PostgresSearchRepository
 from rag_search.services.search_service import SearchService
 
 
@@ -16,6 +17,25 @@ def get_search_service() -> SearchService:
 async def health() -> dict[str, str]:
     return {
         "status": "ok",
+        "service": settings.SERVICE_NAME,
+    }
+
+
+@router.get("/api/v1/ready")
+@router.get("/ready")
+async def ready() -> dict[str, str]:
+    repository = PostgresSearchRepository()
+
+    try:
+        repository.assert_read_model_ready()
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=str(exc),
+        ) from exc
+
+    return {
+        "status": "ready",
         "service": settings.SERVICE_NAME,
     }
 
