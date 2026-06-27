@@ -417,3 +417,19 @@ python backend/service_checker/service_checker.py docker --action health
 **Правило:** При merge с sparse-checkout — временно расширяй кассу
   на `/*`, делай pull, разрешай **все** конфликты, коммить,
   потом сужай обратно. Проверять: `git grep -nE '^(<<<<<<<|=======|>>>>>>>)'`.
+
+### 12. ИСПРАВЛЕНО (27.06): duplicate steps + registry 409
+
+**Проблема**: Полный pipeline зависал на preview_ocr (pending) и registry_creation (pending).
+- preview_ocr: дублирующийся шаг (один completed, второй pending) блокировал проверку `all()`
+- start_pipeline создавал шаги без проверки существующих
+- registry_creation: run_registry_step падал с 409 Conflict, т.к. approve_draft уже обновил статус draft
+
+**Что исправлено**:
+- `start_pipeline`: идемпотентное создание (skip if exists)
+- `on_step_completed`: приоритет pending > completed при выборе шага
+- `_wait_for_preview`: дедупликация с приоритетом статуса (failed > completed > running > pending)
+- Добавлен `_find_best_step`: предпочитает completed для чтения output_data
+- `run_registry_step`: 409 Conflict = idempotent success
+
+**Проверено**: pipeline за ~15с, RAG Search 150 результатов.
