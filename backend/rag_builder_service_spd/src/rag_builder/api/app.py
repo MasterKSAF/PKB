@@ -47,9 +47,9 @@ async def lifespan(app: FastAPI):
     logger.info("Starting RAG Builder service")
 
     repository = PostgresChunkRepository()
-    repository.ensure_schema()
+    repository.assert_schema_ready()
 
-    logger.info("Database schema ensured")
+    logger.info("Database schema is ready")
     _mark_stale_indexing_jobs_failed(repository)
 
     yield
