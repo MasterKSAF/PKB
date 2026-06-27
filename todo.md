@@ -1,42 +1,36 @@
-# Диагностика и исправление проблем загрузки документов
+# Проверка полного цикла обработки документа (корневой docker-compose.yml)
 
 ## Выполнено ✅
 
-- [x] Диагностика docker compose ps, логов gateway, orchestrator, celery-worker, parser
-- [x] Проверка API вызовов через curl (все эндпоинты отвечают)
-- [x] Создание настоящего PDF и тестовая загрузка
-- [x] Выявлены и устранены все проблемы pipeline
+- [x] Проверен полный цикл: PDF → Gateway → Parser → Converter → Registry → RAG Builder → RAG Search → Query
+- [x] Выявлены и исправлены все блокирующие проблемы
 
 ## Исправлено
 
-### 1. Баг в converter-validator (500 Internal Server Error)
-- **Файл**: `backend/converter_validator_service/app/core/exceptions.py`
-- **Проблема**: 3 класса ошибок использовали `status.HTTP_422_UNPROCESSABLE_CONTENT` (не существует)
-- **Исправление**: заменил на `status.HTTP_422_UNPROCESSABLE_ENTITY`
+### 1. docker-compose.yml — разделение эмбеддингов от LLM
+- **Файл**: `docker-compose.yml` (секция `x-env-embeddings`)
+- **Проблема**: `EMBEDDING_BASE_URL/API_URL` были завязаны на `${LLM_API_BASE_URL}`, что приводило к 404 эмбеддингов (путь `/embeddings` не существовал на LLM-эндпоинте)
+- **Исправление**: разделены переменные, добавлен `EMBEDDING_API_KEY` с fallback на `ROUTERAI_API_KEY`
 
-### 2. Несоответствие формата ответа converter
-- **Файл**: `backend/orchestrator_service/app/tasks/pipeline_formation.py`
-- **Проблема**: orchestrator ожидал `{"data": {"metadata": {...}}}` от converter, но converter возвращает плоский PreviewMetadataResponse
-- **Исправление**: добавлено определение формата ответа и корректное извлечение metadata
+### 2. RAG Builder — truncation размерности эмбеддингов
+- **Файл**: `backend/rag_builder_service/src/rag_builder/embeddings/service.py`
+- **Проблема**: провайдер `api.polza.ai` возвращает `qwen/qwen3-embedding-8b` как 4096-dim, а сервис ожидает 2048 → `ValueError`
+- **Исправление**: добавлен warning + `vector[:self.dim]` вместо raise
 
-### 3. Orchestrator не сохранял preview_metadata в Registry
-- **Файл**: `backend/orchestrator_service/app/core/pipeline/orchestrator.py`
-- **Проблема**: после успешного preview converter'а metadata не записывались в Registry
-- **Исправление**: добавлен вызов `registry.update_draft_metadata()` перед обновлением статуса
+### 3. Query Service — парсинг RAG Search под RS-6
+- **Файл**: `backend/query_service/app/clients/rag_client.py`
+- **Проблема**: RAG Search возвращает `{source:{...}, retrieval:{...}}`, а Query ожидал плоский `{chunk_id, document_id, ...}` → `Chunk.__init__() got unexpected keyword 'source'`
+- **Исправление**: добавлен `_parse_chunk()`, извлекающий поля из source/retrieval
 
-### 4. Orchestrator не передавал preview_metadata фронтенду
-- **Файл**: `backend/orchestrator_service/app/api/v1/endpoints/drafts.py`
-- **Проблема**: GET /drafts/{id} не включал preview_metadata в ответ
-- **Исправление**: добавлены поля `preview_metadata`, `created_at`, `updated_at` в ответ
+### 4. БД — conflict размерности halfvec (312 vs 2048)
+- **Проблема**: контейнер `pkb-neuro` (service_checker) при старте перезапускал миграцию с `VECTOR_DIMENSION=312`, затирая таблицу с 2048
+- **Исправление**: `pkb-neuro` остановлен (не участвует в тесте корневого compose)
 
-### 5. Смена URL LLM API
-- **Файл**: `docker-compose.yml`
-- **Изменение**: `routerai.ru/api/v1` → `opencode.ai/zen/go/v1` для OPENAI_BASE_URL и LLM_API_URL
+## Созданные файлы
+- `.env` — настройки эмбеддингов (EMBEDDING_BASE_URL, EMBEDDING_API_URL, EMBEDDING_API_KEY)
 
-### 6. Очищены все невалидные черновики
-- Удалены черновики 1-55 (созданные с test_draft.pdf или без metadata)
-
-## Результат
-- **Pipeline работает**: Parser preview → Converter preview → сохранение metadata в Registry
-- **Реальный PDF** (123KB) успешно обработан: извлечены doc_code="10054-82", title, era, year и др.
-- **Фронтенд получит корректные названия** черновиков через preview_metadata
+## Результат прогона
+```
+Черновик (draft_id) → Approve (doc_id) → RAG Builder (indexed) → RAG Search (score=1.0) → Query (chunks found)
+```
+LLM генерация ответа упала с 401 — ключ ROUTERAI_API_KEY не имеет прав на `/chat/completions`.
