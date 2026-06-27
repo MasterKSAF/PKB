@@ -10,8 +10,11 @@ import sys
 import hashlib
 from pathlib import Path
 
-GATEWAY_URL = "http://localhost:8080/api/v1"
+from config import get_api_url, get_direct_rag_url
+
+GATEWAY_URL = get_api_url()
 PDF_PATH = Path("data/pdf/7bd97d737317a8a272bb18a405ab2d04.pdf")
+print(f"Target: {GATEWAY_URL}")
 AUTH_EMAIL = "admin@example.com"
 AUTH_PASSWORD = "Admin1234!"
 
@@ -271,16 +274,18 @@ for query in EXPECTED_TEXT_FRAGMENTS:
             print(f"    (empty results)")
     elif resp.status_code == 404:
         print(f"  RAG search endpoint not available at gateway")
-        # Try direct to rag-search
-        resp2 = requests.post(
-            f"http://localhost:8091/api/v1/rag/search",
-            json={"query": query, "valid_at": "2025-01-01"},
-            headers={"Content-Type": "application/json; charset=utf-8"},
-        )
-        if resp2.status_code == 200:
-            rdata = resp2.json()
-            results = rdata.get("results", [])
-            print(f"  Direct rag-search: {len(results)} results")
+        # Try direct to rag-search (local only)
+        direct_url = get_direct_rag_url()
+        if direct_url:
+            resp2 = requests.post(
+                direct_url,
+                json={"query": query, "valid_at": "2025-01-01"},
+                headers={"Content-Type": "application/json; charset=utf-8"},
+            )
+            if resp2.status_code == 200:
+                rdata = resp2.json()
+                results = rdata.get("results", [])
+                print(f"  Direct rag-search: {len(results)} results")
     else:
         print(f"  HTTP {resp.status_code}: {resp.text[:200]}")
 
