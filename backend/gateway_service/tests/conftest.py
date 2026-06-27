@@ -29,11 +29,12 @@ sys.path.insert(0, PROJECT_ROOT)
 # Force test configuration before importing gateway modules
 # ---------------------------------------------------------------------------
 
-os.environ.setdefault("ALLOW_ANONYMOUS", "true")
-os.environ.setdefault("GATEWAY_MODE", "real")
-os.environ.setdefault("ENV", "development")
-os.environ.setdefault("RATE_LIMIT_ENABLED", "0")  # отключаем rate limiting
-os.environ.setdefault("GATEWAY_LOG_LEVEL", "CRITICAL")
+# Принудительно — тесты должны работать независимо от Docker/окружения
+os.environ["ALLOW_ANONYMOUS"] = "true"
+os.environ["GATEWAY_MODE"] = "real"
+os.environ["ENV"] = "development"
+os.environ["RATE_LIMIT_ENABLED"] = "0"  # отключаем rate limiting
+os.environ["GATEWAY_LOG_LEVEL"] = "CRITICAL"
 
 
 # ---------------------------------------------------------------------------

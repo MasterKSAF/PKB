@@ -21,36 +21,38 @@ class TestGetClient:
     """get_client() — lazy initialization."""
 
     @pytest.fixture(autouse=True)
-    def _cleanup_client(self):
+    async def _cleanup_client(self):
         """Закрываем клиент после каждого теста, чтобы сбросить состояние."""
         yield
-        import asyncio
         try:
-            asyncio.get_event_loop().run_until_complete(close_client())
+            await close_client()
         except Exception:
             pass
 
-    def test_get_client_returns_async_client(self):
+    @pytest.mark.asyncio
+    async def test_get_client_returns_async_client(self):
         """get_client() возвращает httpx.AsyncClient."""
         client = get_client()
         import httpx
         assert isinstance(client, httpx.AsyncClient)
 
-    def test_get_client_lazy_init(self):
+    @pytest.mark.asyncio
+    async def test_get_client_lazy_init(self):
         """Первый вызов создаёт клиент, второй возвращает тот же."""
-        import asyncio
-        asyncio.get_event_loop().run_until_complete(close_client())
+        await close_client()
         c1 = get_client()
         c2 = get_client()
         assert c1 is c2  # тот же экземпляр
 
-    def test_get_client_timeout(self):
+    @pytest.mark.asyncio
+    async def test_get_client_timeout(self):
         """Таймаут клиента равен config.request_timeout."""
         from gateway.config import config
         client = get_client()
         assert client.timeout is not None
 
-    def test_get_client_follow_redirects_false(self):
+    @pytest.mark.asyncio
+    async def test_get_client_follow_redirects_false(self):
         """follow_redirects=False."""
         client = get_client()
         # httpx.AsyncClient хранит follow_redirects
@@ -60,19 +62,19 @@ class TestGetClient:
 class TestCloseClient:
     """close_client() — очистка состояния."""
 
-    def test_close_client_resets_to_none(self):
+    @pytest.mark.asyncio
+    async def test_close_client_resets_to_none(self):
         """После close_client() _client = None."""
-        import asyncio
         get_client()  # инициализируем
-        asyncio.get_event_loop().run_until_complete(close_client())
+        await close_client()
         from gateway.client import _client as cl
         assert cl is None
 
-    def test_close_client_twice_no_error(self):
+    @pytest.mark.asyncio
+    async def test_close_client_twice_no_error(self):
         """Двойной close_client() не вызывает ошибку."""
-        import asyncio
-        asyncio.get_event_loop().run_until_complete(close_client())
-        asyncio.get_event_loop().run_until_complete(close_client())
+        await close_client()
+        await close_client()
 
 
 class TestIsDeprecatedIntegrationRoute:

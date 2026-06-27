@@ -47,10 +47,13 @@
 
 ## Структура тестирования Gateway
 
-- `tests/` — unit-тесты самого Gateway (281 тест). Запускаются без внешних сервисов.
+- `tests/` — unit-тесты самого Gateway (287 тестов). Запускаются без внешних сервисов.
 - `mocks/tests/` — интеграционные тесты через mock-сервер (550+ тестов, порт 8099).
 - Все `check_rate_limit`, `close_client`, `proxy_request` — async, помечены `@pytest.mark.asyncio`.
 - Для RBAC-тестов используется mock `_validate_token_remotely` (монки-патч).
 - Для proxy-тестов используется mock `get_client()` с возвратом AsyncMock.
 - `conftest.py` включает фикстуры: mock_auth_validate, mock_httpx_client, seed-данные пользователей.
-- `ALLOW_ANONYMOUS=True` по умолчанию — RBAC middleware не блокирует неаутентифицированных.
+- `ALLOW_ANONYMOUS=True` принудительно (прямое присвоение, не `setdefault`)
+  — RBAC middleware не блокирует неаутентифицированных.
+- Все async-фикстуры и тесты используют `@pytest.mark.asyncio`,
+  ручное `asyncio.get_event_loop()` не используется (предотвращает `Event loop is closed`).

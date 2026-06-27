@@ -90,7 +90,7 @@ python backend/gateway_service/mocks/start_service.py
 python -m pytest backend/gateway_service/mocks/tests/ -v
 ```
 
-### Gateway unit-тесты (281 тест, без внешних сервисов)
+### Gateway unit-тесты (287 тестов, без внешних сервисов)
 
 ```bash
 cd backend/gateway_service
