@@ -210,6 +210,18 @@ async def create_draft(
     content = await file.read()
     file_size = len(content)
 
+    # Validate empty file
+    if file_size == 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error": {
+                    "code": "EMPTY_FILE",
+                    "message": "Загружен пустой файл",
+                }
+            },
+        )
+
     # Validate file size after reading
     if file_size > MAX_FILE_SIZE_BYTES:
         raise HTTPException(

@@ -236,6 +236,11 @@ Docker перезапускает контейнер (`restart: unless-stopped`)
 хотя использовался `settings.REDIS_URL`. Баг найден при написании unit-тестов.
 Все тесты Celery-задач вызывают `.run()` напрямую, что и выявило ошибку.
 
+### 3.12. Empty file validation в POST /drafts (27.06, ДОБАВЛЕНО)
+Ранее пустой файл (0 байт) проходил все проверки и создавал черновик.
+Добавлена явная проверка `file_size == 0 → 422 EMPTY_FILE`.
+Найдено тестом `test_create_draft_with_empty_file_returns_422`.
+
 ## 4. Проблемы при запуске (ошибки в Python-сервисах)
 
 При `docker compose up -d` контейнер `pkb-neuro` запускает 10 Python-процессов под supervisord.
