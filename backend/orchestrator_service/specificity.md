@@ -241,6 +241,40 @@ Docker перезапускает контейнер (`restart: unless-stopped`)
 Добавлена явная проверка `file_size == 0 → 422 EMPTY_FILE`.
 Найдено тестом `test_create_draft_with_empty_file_returns_422`.
 
+### 3.13. `data.get("id") or data.get("draft_id")` — 0 is falsy (27.06, НАЙДЕНО)
+В `get_draft` эндпоинте (drafts.py, ~строка 509) используется:
+```python
+doc_id = data.get("id") or data.get("draft_id")
+# и
+draft_id = data.get("id") or data.get("draft_id")
+```
+Проблема: если `"id"` = 0 (число), Python считает его falsy и падает
+на `"draft_id"`. Если `"draft_id"` тоже нет (Registry ответил без поля) —
+в ответе будет `None`.
+
+**Fix:** `data.get("id") if data.get("id") is not None else data.get("draft_id")`
+или `data.get("id", data.get("draft_id"))`.
+Тест `test_get_draft_with_id_zero_in_storage` документирует баг (xfail).
+
+### 3.14. approve_draft не синхронизирует document_id с Registry (27.06, НАЙДЕНО)
+`approve_draft` (orchestrator.py, ~строка 568-594) создаёт документ через
+`registry.create_document`, но **никогда не вызывает**
+`registry.update_draft_status(document_id=...)`. В результате:
+- `GET /drafts/{id}` после approve возвращает `document_id=None`
+- `is_new_document` остаётся `True` (хотя документ уже создан)
+
+**Fix:** после `create_document` вызвать:
+```python
+await registry.update_draft_status(draft_id=draft_id, document_id=document_id)
+```
+Тест `test_approve_sets_document_id_in_registry` документирует баг (xfail).
+
+### 3.15. POST /drafts Idempotency-Key (27.06, РЕАЛИЗОВАНО)
+Добавлена обработка Idempotency-Key для POST /drafts.
+In-memory кэш `_IDEMPOTENCY_CACHE` с TTL 1ч.
+Повторный запрос с тем же ключом → 200 + существующий draft_id.
+В production требуется замена на Redis.
+
 ## 4. Проблемы при запуске (ошибки в Python-сервисах)
 
 При `docker compose up -d` контейнер `pkb-neuro` запускает 10 Python-процессов под supervisord.

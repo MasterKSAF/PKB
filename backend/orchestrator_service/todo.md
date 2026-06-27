@@ -1,24 +1,43 @@
-# Todo: тесты для 3 багов в unit-формате
+# Todo: комплексные тесты — State Machine, Consistency, Saga, Boundary
 
 ## Статус: ✅ ВЫПОЛНЕНО
 
-### #18 — Drafts создаются от u-mock-001 вместо реального пользователя
-- [x] `test_created_by_uses_mock_user_by_default` — по умолчанию u-mock-001
-- [x] `test_created_by_uses_custom_user_id` — dependency override → real-user-42
-- [x] `test_created_by_not_fallback_object` — created_by строка, не объект
+### 1. State Machine Violations — матрица [действие × stage]
+  - `tests/orchestrator/test_drafts_state_machine.py`
+  - 30 комбинаций + 10 terminal-статусов = **40 тестов**
 
-### #16 — Pipeline task: ошибка длины trace_id
-- [x] `test_generate_trace_id_is_16_hex_chars` — формат 16 hex
-- [x] `test_generate_trace_id_is_unique` — 100 вызовов без коллизий
-- [x] `test_trace_id_fits_in_db_column` — 16 и 36 символов влезают в String(64)
-- [x] `test_trace_id_stored_in_task_model` — конструктор Task принимает любую длину
-- [x] `test_set_trace_id_accepts_uuid_length` — set_trace_id с 36-символьным UUID
-- [x] `test_build_headers_with_uuid_length_trace` — build_correlation_headers c UUID
+### 2. Mock-real gap — draft_id=0, ключи id/draft_id
+  - `tests/test_service_clients_registry.py::TestRegistryMockRealGap` — **3 теста**
+  - `tests/orchestrator/test_drafts_consistency.py::TestMockRealGap` — **3 теста** (1 xfail)
+  - Найден баг: `data.get("id") or data.get("draft_id")` — 0 is falsy
 
-### #15 — Upload draft: 500 ошибка, но draft появляется в списке
-- [x] `test_pipeline_failure_orphans_draft_in_registry` — start_pipeline падает → 500 → draft в Registry есть
+### 3. Data consistency — после approve
+  - `tests/orchestrator/test_drafts_consistency.py::TestApproveConsistency` — **2 теста** (1 xfail)
+  - Найден баг: approve_draft не вызывает `registry.update_draft_status(document_id=...)`
 
-### #2 — celery-worker unhealthy — ❌ не unit-тест (требует production-кода healthcheck'а Celery)
-### #19 — нет e2e документа — ❌ не unit-тест (требует cross-service инфраструктуры)
+### 4. Boundary conditions
+  - `tests/orchestrator/test_drafts_consistency.py::TestBoundaryConditions` — **6 тестов**
+  - file_size boundary, metadata=null, title="", page_size=0
 
-**Итог: 373 passed (+10 новых, 0 сломанных)**
+### 5. Saga compensation
+  - `tests/unit/test_saga_compensation.py` — **8 тестов**
+  - Компенсация registry_creation, stateless шаги, reverse order, on_step_failed → Saga
+
+### 6. Idempotency
+  - `tests/orchestrator/test_drafts_consistency.py::TestIdempotency` — **3 теста**
+  - Двойной POST /drafts с одним Idempotency-Key → 200 + тот же draft_id (**РЕАЛИЗОВАНО**)
+  - Разные ключи → разные draft_id
+  - Двойной POST /preview → 409 PREVIEW_ALREADY_RUNNING
+
+### Production-фикс
+- **Idempotency-Key** для POST /drafts — добавлен in-memory кэш с TTL 1ч
+- Файл: `app/api/v1/endpoints/drafts.py`
+
+### Итог
+- **+62 новых теста** (40 + 12 + 8 + 3)
+- **+1 production фикс** (Idempotency-Key)
+- **2 xfail** — документированные баги
+- **466 passed, 2 xfailed**
+- **Найдено 2 бага:**
+  1. `data.get("id") or data.get("draft_id")` — 0 is falsy
+  2. `approve_draft` не синхронизирует document_id с Registry

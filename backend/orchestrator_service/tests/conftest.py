@@ -163,6 +163,10 @@ async def clean_db(db_engine):
     reg_storage["draft_seq"] = 1
     reg_storage["doc_seq"] = 1
 
+    # Reset Idempotency cache
+    from app.api.v1.endpoints.drafts import _IDEMPOTENCY_CACHE
+    _IDEMPOTENCY_CACHE.clear()
+
     yield
 
 

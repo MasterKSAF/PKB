@@ -120,11 +120,30 @@
 - Полный цикл: draft → preview → approve → document_id
 - Reject flow: upload → reject → discarded
 
+### State Machine Violations (`tests/orchestrator/test_drafts_state_machine.py`, NEW):
+- Матрица 5 actions × 6 stages = 30 комбинаций (200 vs 409 INVALID_STAGE)
+- 5 actions × 2 terminal статуса = 10 комбинаций (409 TASK_ALREADY_TERMINAL)
+
+### Data consistency + Boundary + Idempotency (`tests/orchestrator/test_drafts_consistency.py`, NEW):
+- Approve consistency: document_id, version_id, is_new_document
+- Mock-real gap: draft_id=0, ключи id vs draft_id (xfail — найден баг)
+- Boundary: file_size=MAX, metadata=null, title=""
+- Idempotency: double POST /drafts (не реализована), double POST /preview (409)
+
+### Saga compensation (`tests/unit/test_saga_compensation.py`, NEW):
+- `SagaCoordinator.compensate` — registry_creation → delete_document
+- Stateless steps not compensated, reverse order, retry before saga
+- `_mock_delete_document` — runtime vs seed
+
+### Mock-real gap (`tests/test_service_clients_registry.py::TestRegistryMockRealGap`, NEW):
+- `data["id"]=0` is falsy → fallback на `draft_id`
+- Расхождение ключей `id` vs `draft_id` в mock vs static response
+
 ### Инфраструктура
 - MinIO `upload_file` замокан в conftest (timeout 40с → 0.2с)
 - Все внешние сервисы замоканы (Registry, RAG, OCR, Parser, Converter)
 - Celery `.delay()` — no-op, задачи тестируются через `.run()`
-- **Итог: 403 passed, 0 failed**
+- **Итог: 466 passed, 2 xfailed (+63 новых, 0 сломанных)**
 
 ## Naming conventions
 

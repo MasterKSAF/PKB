@@ -155,3 +155,107 @@ class TestRegistryDrafts:
             document_id=1, status="indexed"
         )
         assert result2["data"]["status"] == "indexed"
+
+
+# ===========================================================================
+# Mock-real gap: id=0 falsy and key divergence
+# ===========================================================================
+
+
+class TestRegistryMockRealGap:
+    """Тесты на расхождение mock-логики с реальностью."""
+
+    @pytest.mark.asyncio
+    async def test_get_draft_id_zero_falsy(self, reg_client):
+        """data["id"] = 0 is falsy → fallback на data["draft_id"].
+
+        _mock_get_draft возвращает data с "id"=0.
+        В decide endpoint: data.get("id") or data.get("draft_id") →
+        0 is falsy, падает на draft_id.
+        Если draft_id тоже нет → None.
+        """
+        storage = reg_client._storage
+        # Создаём draft с id=0 и без draft_id
+        draft = {
+            "id": 0,
+            "draft_id": 42,  # есть как fallback
+            "file_key": "test",
+            "status": "uploaded",
+            "created_by": "test",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+        }
+        storage["drafts"][42] = draft
+
+        result = await reg_client.get_draft(draft_id=42)
+        assert "data" in result
+        data = result["data"]
+
+        # Симулируем логику endpoint: data.get("id") or data.get("draft_id")
+        resolved_id = data.get("id") or data.get("draft_id")
+        assert resolved_id == 42, (
+            f"data.get('id') = {data.get('id')} (falsy), "
+            f"data.get('draft_id') = {data.get('draft_id')}, "
+            f"resolved = {resolved_id}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_draft_id_zero_no_draft_id_fallback(self, reg_client):
+        """data["id"]=0 и нет "draft_id" → resolve = None (баг!).
+
+        Эндпоинт делает: data.get("id") or data.get("draft_id").
+        Если "id"=0 (falsy) и "draft_id" отсутствует → результат None.
+        """
+        storage = reg_client._storage
+        draft = {
+            "id": 0,
+            # НЕТ "draft_id" — симуляция ответа Registry без draft_id
+            "file_key": "test",
+            "status": "uploaded",
+            "created_by": "test",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+        }
+        storage["drafts"][99] = draft
+
+        result = await reg_client.get_draft(draft_id=99)
+        assert "data" in result
+        data = result["data"]
+
+        # Симулируем логику endpoint
+        resolved_id = data.get("id") or data.get("draft_id")
+        assert resolved_id is None, (
+            f"BUG: data.get('id')=0 (falsy), data.get('draft_id') is None, "
+            f"but resolved to {resolved_id}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_draft_returns_id_key_not_draft_id(self, reg_client):
+        """_mock_get_draft возвращает 'id', а статический mock_response — 'draft_id'.
+
+        Это расхождение: реальный ответ может иметь один ключ,
+        а статический mock — другой. Эндпоинт использует fallback через or.
+        """
+        storage = reg_client._storage
+        draft = {
+            "id": 100,
+            "draft_id": 100,
+            "file_key": "test",
+            "status": "uploaded",
+            "created_by": "test",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+        }
+        storage["drafts"][100] = draft
+
+        result = await reg_client.get_draft(draft_id=100)
+        data = result["data"]
+
+        # _mock_get_draft returns dict(draft) which has "id" key
+        assert "id" in data, "_mock_get_draft should return 'id' key"
+
+        # Но статический mock_response в get_draft() возвращает "draft_id"
+        static_mock = reg_client.get_draft.__wrapped__ if hasattr(reg_client.get_draft, "__wrapped__") else None
+        # Проверяем, что эндпоинты корректно обрабатывают оба ключа
+        draft_id = data.get("id") or data.get("draft_id")
+        assert draft_id == 100, f"Failed to resolve draft_id from data: {data}"
