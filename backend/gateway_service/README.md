@@ -135,6 +135,7 @@ backend/gateway_service/
 │   ├── handlers/                   # Хендлеры мок-сервисов
 │   ├── start_service.py            # Утилита запуска
 │   └── tests/                      # 530+ тестов моков
+├── pytest.ini                      # asyncio_mode=auto, markers
 ├── requirements.txt
 ├── guide.md                        # Архитектурные решения
 ├── specificity.md                  # Аномалии
