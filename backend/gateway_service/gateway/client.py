@@ -100,7 +100,7 @@ ROUTE_TABLE: List[RouteEntry] = [
 
     # ── Orchestrator: черновики (управление/пайплайн) ─────────────────────
     RouteEntry({"POST"}, r"^/api/v1/drafts$", "orchestrator"),
-    RouteEntry({"POST"}, r"^/api/v1/drafts/\d+/preview$", "orchestrator"),
+    RouteEntry({"GET", "POST"}, r"^/api/v1/drafts/\d+/preview$", "orchestrator"),
     RouteEntry({"GET"}, r"^/api/v1/drafts/\d+/preview/status$", "orchestrator"),
     RouteEntry({"PATCH"}, r"^/api/v1/drafts/\d+/decide$", "orchestrator"),
     RouteEntry({"PATCH"}, r"^/api/v1/drafts/\d+/metadata$", "orchestrator"),

@@ -22,70 +22,72 @@ session = requests.Session()
 # ─── Эндпоинты для проверки ──────────────────────────────────────────────
 # Формат: (method, path_pattern, описание)
 # {id} заменяется на 1, {doc_id} на 1, {draft_id} на 1, {task_id} на 1
+
+
+# Эндпоинты, извлечённые из фронтенда (UI-UX/UI Final/frontend/src/utils/http.ts)
+# GET-запросы, которые реально вызывает web-интерфейс
 ENDPOINTS = [
-    # ── Registry: черновики (список) ──
-    ("GET", "/drafts", "Список черновиков"),
+    # ── Auth ──
+    ("GET", "/auth/me", "Текущий пользователь"),
 
-    # ── Orchestrator: черновики ──
-    ("GET", "/drafts/{id}", "Детали черновика"),
-    ("GET", "/drafts/{id}/preview/status", "Статус preview"),
-    ("GET", "/drafts/{id}/tasks", "Задачи черновика"),
+    # ── System ──
+    ("GET", "/system/health", "Health API"),
 
-    # ── Registry: документы ──
+    # ── Registry: документы (через gateway) ──
     ("GET", "/documents", "Список документов"),
     ("GET", "/documents/{id}", "Детали документа"),
-    ("GET", "/documents/{id}/sections", "Секции документа"),
     ("GET", "/documents/{id}/pages", "Страницы документа"),
-    ("GET", "/documents/{id}/pages/1", "Страница документа"),
-    ("GET", "/documents/{id}/pages/1/text", "Текст страницы"),
-    ("GET", "/documents/{id}/pages/1/preview", "Превью страницы"),
+    ("GET", "/documents/{id}/pages/{id}/preview", "Превью страницы"),
+    ("GET", "/documents/{id}/pages/{id}/text", "Текст страницы"),
     ("GET", "/documents/{id}/file", "Файл документа"),
     ("GET", "/documents/{id}/history", "История документа"),
     ("GET", "/documents/{id}/parameters", "Параметры"),
     ("GET", "/documents/{id}/versions", "Версии"),
-    ("GET", "/documents/{id}/succession", "Преемственность"),
-    ("GET", "/documents/search", "Поиск документов (без query)"),
-    ("GET", "/documents/export", "Экспорт документов"),
-
-    # ── Orchestrator: документы ──
     ("GET", "/documents/{id}/status", "Статус обработки"),
-    ("GET", "/documents/queue", "Очередь обработки"),
     ("GET", "/documents/{id}/errors", "Ошибки документа"),
-    ("GET", "/documents/{id}/tasks", "Pipeline-задачи"),
+    ("GET", "/documents/queue", "Очередь обработки"),
+
+    # ── Registry: черновики ──
+    ("GET", "/drafts", "Список черновиков"),
+    ("GET", "/drafts/{id}", "Детали черновика"),
+    ("GET", "/drafts/{id}/preview", "Превью черновика"),
+    ("GET", "/drafts/{id}/preview/status", "Статус preview"),
+    ("GET", "/drafts/{id}/tasks", "Задачи черновика"),
 
     # ── Registry: прямой доступ ──
-    ("GET", "/registry/documents", "Список (прямой)"),
-    ("GET", "/registry/documents/1", "Документ (прямой)"),
-    ("GET", "/registry/drafts", "Черновики (прямой)"),
-    ("GET", "/registry/drafts/1", "Черновик (прямой)"),
     ("GET", "/registry/classifiers", "Классификаторы"),
     ("GET", "/registry/classifiers/tree", "Дерево классификаторов"),
+    ("GET", "/registry/classifiers/pending", "Pending классификаторы"),
+    ("GET", "/registry/classifiers/{id}", "Классификатор"),
+    ("GET", "/registry/documents", "Список (прямой)"),
+    ("GET", "/registry/documents/{id}", "Документ (прямой)"),
+    ("GET", "/registry/documents/{id}/sections", "Секции (прямой)"),
     ("GET", "/registry/terminology", "Терминология"),
-    ("GET", "/registry/categories", "Категории"),
+    ("GET", "/registry/terminology/{id}", "Термин"),
+    ("GET", "/registry/terminology/normalize", "Нормализация термина"),
     ("GET", "/registry/stats", "Статистика"),
     ("GET", "/registry/enums", "Перечисления"),
 
     # ── Orchestrator: задачи ──
-    ("GET", "/tasks/1/status", "Статус задачи"),
+    ("GET", "/tasks/{id}/status", "Статус задачи"),
 
-    # ── Auth ──
-    ("GET", "/auth/me", "Текущий пользователь"),
-    # ("GET", "/auth/users", "Список пользователей"),
-
-    # ── Query (chat) ──
+    # ── Query (chat + text) ──
     ("GET", "/chat/sessions", "Сессии чата"),
-    ("GET", "/chat/sessions/1", "Сессия чата"),
+    ("GET", "/chat/sessions/{id}", "Сессия чата"),
+    ("GET", "/chat/sessions/{id}/messages/{id}", "Сообщение чата"),
+    ("GET", "/chat/history", "История чата"),
+    ("GET", "/chat/history/export", "Экспорт истории"),
+    ("GET", "/chat/projects", "Проекты чата"),
 
-    # ── Query (text) ──
-    ("GET", "/text/search", "Поиск текста (без body)"),
+    # ── Monitor ──
+    ("GET", "/monitor/metrics", "Метрики"),
 
-    # ── System ──
-    ("GET", "/health", "Health"),
-    ("GET", "/system/health", "System health"),
-    ("GET", "/system/mode", "Режим gateway"),
-    ("GET", "/system/health/live", "Liveness"),
-    ("GET", "/system/health/ready", "Readiness"),
+    # ── Admin ──
+    ("GET", "/admin/roles", "Роли"),
+    ("GET", "/admin/users", "Пользователи"),
+    ("GET", "/admin/audit", "Аудит"),
 ]
+
 
 def resolve(path: str) -> str:
     """Заменить {id}, {doc_id}, {draft_id}, {task_id} на 1"""
