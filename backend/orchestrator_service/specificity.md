@@ -192,7 +192,7 @@ SQLite не поддерживает JSONB нативно. Текущая реа
 ```
 Проблема: 0 числовой falsy в Python. Если id=0 — ответ draft_id=None.
 **Исправление:** заменено на `data.get("id") if data.get("id") is not None else data.get("draft_id")`.
-Аналогичный фикс для `doc_id` (registry_document_id).
+Аналогичный фикс для `doc_id` (registry_document_id) и `document_id` в `orchestrator.py:662`.
 
 ### 3.10. POST /drafts Idempotency-Key (27.06)
 Добавлена обработка Idempotency-Key для POST /drafts.
