@@ -722,4 +722,64 @@ def check_and_quarantine_classifiers(db: Session, document: Document):
                 create_classifier_pending(db, system='UDC', code=document.udk_code, found_in_document_id=str(document.id))
 
 
+def get_document_parameters(db: Session, document_id: int) -> List[Dict[str, Any]]:
+    """Retrieve all parameters (formulas) extracted from document sections."""
+    sections = (
+        db.query(DocumentSection)
+        .filter(DocumentSection.document_id == document_id, DocumentSection.type_ == 'formula')
+        .order_by(DocumentSection.id.asc())
+        .all()
+    )
+    parameters = []
+    for sec in sections:
+        if isinstance(sec.content, dict) and 'parameters' in sec.content:
+            sec_params = sec.content['parameters']
+            if isinstance(sec_params, list):
+                for p in sec_params:
+                    if isinstance(p, dict):
+                        param_copy = dict(p)
+                        param_copy['source_clause'] = sec.clause
+                        param_copy['source_page'] = sec.page
+                        parameters.append(param_copy)
+    return parameters
+
+
+def get_document_pages_count(db: Session, document_id: int) -> int:
+    """Retrieve total count of pages in a document."""
+    from sqlalchemy import func
+    from api.v1.models import DocumentVersion
+
+    max_page = db.query(func.max(DocumentSection.page)).filter(DocumentSection.document_id == document_id).scalar() or 0
+    version = db.query(DocumentVersion).filter(DocumentVersion.document_id == document_id).order_by(DocumentVersion.version_number.desc()).first()
+    pages_total = max(max_page, version.file_size_bytes if (version and version.file_size_bytes) else 0)
+    return max(pages_total, 1)
+
+
+def get_page_blocks(db: Session, document_id: int, page_num: int) -> List[Dict[str, Any]]:
+    """Retrieve and map document sections on a specific page as blocks."""
+    sections = (
+        db.query(DocumentSection)
+        .filter(DocumentSection.document_id == document_id, DocumentSection.page == page_num)
+        .order_by(DocumentSection.id.asc())
+        .all()
+    )
+    blocks = []
+    for idx, sec in enumerate(sections, 1):
+        text_content = ""
+        if isinstance(sec.content, dict):
+            text_content = sec.content.get("text") or sec.content.get("latex") or sec.content.get("markdown") or ""
+        else:
+            text_content = str(sec.content or "")
+
+        blocks.append({
+            "number": idx,
+            "type": sec.type_,
+            "bbox": sec.bbox,
+            "content": text_content,
+            "confidence": 0.95
+        })
+    return blocks
+
+
+
 
