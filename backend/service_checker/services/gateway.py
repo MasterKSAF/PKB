@@ -13,28 +13,29 @@ PKB Neuroassistant — Gateway Service API Definitions.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Optional
 
 from .base import (
     EndpointDef,
-    GATEWAY_CREDENTIALS,
     ServiceDef,
     API_PREFIX,
+    get_credentials_for_mode,
 )
 
 SERVICE_KEY = "gateway"
 PORT = 18080
 DISPLAY_NAME = "Gateway Service"
 
+# Prepare: тестовый PDF для создания черновика
+_HERE = Path(__file__).resolve().parent.parent
+_TEST_PDF_PATH = _HERE / "pdf" / "7bd97d737317a8a272bb18a405ab2d04.pdf"
+_PREPARE_PDF_BYTES = _TEST_PDF_PATH.read_bytes() if _TEST_PDF_PATH.exists() else b"%PDF-1.4 fake"
+
 
 def get_service_def(mode: Optional[str] = None) -> ServiceDef:
-    """Вернуть полное описание Gateway Service (агрегирующий прокси).
-
-    В Docker (supervisord.conf) запускается Mock Gateway (mocks.gateway:app)
-    с seed-паролем admin123, поэтому ВСЕГДА используем GATEWAY_CREDENTIALS.
-    Реальный Gateway (gateway.main:app) в production будет иметь свои credentials.
-    """
-    credentials = dict(GATEWAY_CREDENTIALS)
+    """Вернуть полное описание Gateway Service (агрегирующий прокси)."""
+    credentials = get_credentials_for_mode(mode)
 
     prepare_endpoints = [
         # Получаем JWT токен через Gateway.
@@ -86,6 +87,29 @@ def get_service_def(mode: Optional[str] = None) -> ServiceDef:
             params={"page": 1, "page_size": 10},
             extract_keys=["pending_id"],
             is_preparation=True),
+
+        # ── Prepare: создать черновик и approve → получить document_id ──
+        EndpointDef("POST", f"{API_PREFIX}/drafts", "drafts",
+            "Создать черновик (prepare)",
+            form_body={"document_key": "gw-test-doc", "title": "Gateway Test Doc",
+                      "source_type": "GOST"},
+            form_files={"file": ("test.pdf", _PREPARE_PDF_BYTES, "application/pdf")},
+            extract_keys=["draft_id", "task_id"],
+            is_preparation=True,
+            expected_status={202, 409}),
+        EndpointDef("PATCH", f"{API_PREFIX}/drafts/{{draft_id}}/decide", "drafts",
+            "Approve черновик (prepare) → получить document_id",
+            body={"action": "approve", "comment": "OK"},
+            extract_keys=["doc_id"],
+            is_preparation=True,
+            expected_status={200, 409}),
+        # Дожидаемся появления документа в Registry (асинхронно создаётся после approve)
+        EndpointDef("GET", f"{API_PREFIX}/documents/{{doc_id}}", "gateway-docs",
+            "Ожидание создания документа (prepare)",
+            is_preparation=True,
+            expected_status=200,
+            max_retries=10,
+            retry_delay=1),
 
     ]
 
@@ -300,7 +324,7 @@ def get_service_def(mode: Optional[str] = None) -> ServiceDef:
         EndpointDef("GET", f"{API_PREFIX}/documents/{{doc_id}}/versions", "gateway-docs",
             "Версии документа",
             params={"page": 1, "page_size": 10},
-            response_schema={"document_id": int, "items": list}),
+            response_schema={"data.document_id": int, "data.versions": list, "meta": dict}),
         EndpointDef("GET", f"{API_PREFIX}/documents/{{doc_id}}/succession", "gateway-docs",
             "Цепочка преемственности",
             response_schema={"document_id": int, "predecessors": list}),
@@ -329,11 +353,6 @@ def get_service_def(mode: Optional[str] = None) -> ServiceDef:
             response_schema={"data": dict}),
 
         # ── Orchestrator: Drafts ──
-        EndpointDef("POST", f"{API_PREFIX}/drafts/", "drafts",
-            "Создать черновик",
-            body={"document_key": "test-key", "title": "Тестовый черновик"},
-            extract_keys=["draft_id", "task_id"],
-            expected_status=202),
         EndpointDef("GET", f"{API_PREFIX}/drafts/", "drafts",
             "Список черновиков"),
         EndpointDef("GET", f"{API_PREFIX}/drafts/{{draft_id}}", "drafts",
@@ -341,10 +360,6 @@ def get_service_def(mode: Optional[str] = None) -> ServiceDef:
             response_schema={"draft_id": int}),
         EndpointDef("DELETE", f"{API_PREFIX}/drafts/{{draft_id}}", "drafts",
             "Удалить черновик"),
-        EndpointDef("PATCH", f"{API_PREFIX}/drafts/{{draft_id}}/decide", "drafts",
-            "Решение по черновику",
-            body={"action": "approve", "comment": "OK"},
-            expected_status={200, 409}),
         EndpointDef("POST", f"{API_PREFIX}/drafts/{{draft_id}}/preview", "drafts",
             "Запустить превью",
             body={},
@@ -373,7 +388,8 @@ def get_service_def(mode: Optional[str] = None) -> ServiceDef:
         # ── Orchestrator: Documents ──
         EndpointDef("GET", f"{API_PREFIX}/documents/", "documents",
             "Список документов",
-            response_schema={"items": list}),
+            params={"page": 1, "page_size": 10},
+            response_schema={"data": list, "meta": dict}),
         EndpointDef("GET", f"{API_PREFIX}/documents/queue", "documents",
             "Очередь документов",
             response_schema={"queue": list, "meta": dict}),

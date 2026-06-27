@@ -132,6 +132,10 @@ class EmbeddingService:
                 raise ValueError("Invalid embeddings payload: missing 'embedding'")
             vector = [float(x) for x in embedding]
             if len(vector) != self.dim:
-                raise ValueError(f"Invalid vector dimension {len(vector)}, expected {self.dim}")
+                logger.warning(
+                    "Embedding dimension mismatch: got {}, expected {} — truncating",
+                    len(vector), self.dim,
+                )
+                vector = vector[:self.dim]
             vectors.append(vector)
         return vectors

@@ -76,15 +76,17 @@ x-env-auth: &env-auth
   DEFAULT_ADMIN_EMAIL: ${DEFAULT_ADMIN_EMAIL:-admin@example.com}
   DEFAULT_ADMIN_PASSWORD: ${DEFAULT_ADMIN_PASSWORD:-Admin1234!}
 
-# --- Embeddings (внешний routerai.ru) ---
+# --- Embeddings ---
+# Единая переменная: EMBEDDING_BASE_URL. Если не задана — routerai.ru.
+# EMBEDDING_API_KEY — опционально, fallback на ROUTERAI_API_KEY.
 x-env-embeddings: &env-embeddings
-  EMBEDDING_PROVIDER: openai_compatible
-  EMBEDDING_BASE_URL: ${LLM_API_BASE_URL:-https://routerai.ru/api/v1}
-  EMBEDDING_API_URL: ${LLM_API_BASE_URL:-https://routerai.ru/api/v1}/embeddings
-  EMBEDDING_MODEL: qwen/qwen3-embedding-8b
-  EMBEDDING_DIM: "2048"
-  VECTOR_DIMENSION: "2048"
-  EMBEDDING_API_KEY: ${ROUTERAI_API_KEY:-}
+  EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-openai_compatible}
+  EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-https://routerai.ru/api/v1}
+  EMBEDDING_API_URL: ${EMBEDDING_API_URL:-https://routerai.ru/api/v1/embeddings}
+  EMBEDDING_MODEL: ${EMBEDDING_MODEL:-qwen/qwen3-embedding-8b}
+  EMBEDDING_DIM: "${EMBEDDING_DIM:-2048}"
+  VECTOR_DIMENSION: "${VECTOR_DIMENSION:-${EMBEDDING_DIM:-2048}}"
+  EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-${ROUTERAI_API_KEY:-}}
   EMBEDDING_TIMEOUT: "60"
   EMBEDDING_INSTRUCTION: ""
 
@@ -358,7 +360,7 @@ services:
     environment:
       OPENAI_API_KEY: ${ROUTERAI_API_KEY:-}
       OPENAI_BASE_URL: ${LLM_API_BASE_URL:-https://routerai.ru/api/v1}
-      DEFAULT_LLM_MODEL: deepseek/deepseek-v4-flash
+      DEFAULT_LLM_MODEL: ${DEFAULT_LLM_MODEL:-deepseek/deepseek-v4-flash}
       DEFAULT_LLM_MAX_TOKENS: "4096"
       DEFAULT_LLM_TIMEOUT: "60"
       CONFIDENCE_THRESHOLD: "0.55"
@@ -461,7 +463,7 @@ services:
       MOCK_LLM_ENABLED: ${MOCK_LLM_ENABLED:-false}
       LLM_API_URL: ${LLM_API_BASE_URL:-https://routerai.ru/api/v1}
       LLM_API_KEY: ${ROUTERAI_API_KEY:-}
-      LLM_MODEL: deepseek/deepseek-v4-flash
+      LLM_MODEL: ${LLM_MODEL:-deepseek/deepseek-v4-flash}
       LLM_TEMPERATURE: "0.2"
       LLM_MAX_TOKENS: "8196"
       LLM_TOP_P: "0.95"

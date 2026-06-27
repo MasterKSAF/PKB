@@ -138,29 +138,15 @@ REM ── 5. Очистка данных + перезапуск app ───�
 echo [5/7] Dropping data + restarting app...
 
 echo     Recreating database...
-docker exec pkb-postgres psql -U pkb -d postgres -c "SELECT pg_terminate_backend(pg_stat_activity.pid) FROM pg_stat_activity WHERE datname = 'pkb_neuro' AND pid <> pg_backend_pid();" 2>nul
-docker exec pkb-postgres psql -U pkb -d postgres -c "DROP DATABASE IF EXISTS pkb_neuro;" 2>nul
-docker exec pkb-postgres psql -U pkb -d postgres -c "CREATE DATABASE pkb_neuro;" 2>nul
+docker exec pkb-postgres psql -U pkb -d postgres -c "SELECT pg_terminate_backend(pg_stat_activity.pid) FROM pg_stat_activity WHERE datname = 'pkb_neuro_check' AND pid <> pg_backend_pid();" 2>nul
+docker exec pkb-postgres psql -U pkb -d postgres -c "DROP DATABASE IF EXISTS pkb_neuro_check;" 2>nul
+docker exec pkb-postgres psql -U pkb -d postgres -c "CREATE DATABASE pkb_neuro_check;" 2>nul
 
 echo     Flushing Redis...
 docker exec pkb-redis redis-cli FLUSHALL 2>nul
 
 docker compose --progress quiet kill app 2>&1
 docker compose --progress quiet rm -f -v app 2>&1
-
-echo     Removing Orchestrator SQLite db...
-set "ORCHESTRATOR_DB=..\..\..\..\PKB_neuroassistant_develop\backend\orchestrator_service\orchestrator.db"
-if exist "%ORCHESTRATOR_DB%" (
-    del /f /q "%ORCHESTRATOR_DB%" 2>nul
-    echo     Deleted %ORCHESTRATOR_DB%
-) else (
-    echo     Orchestrator SQLite db not found at %ORCHESTRATOR_DB%, trying inside volume...
-    rem Fallback: ищем внутри смонтированного backend
-    if exist "..\..\orchestrator_service\orchestrator.db" (
-        del /f /q "..\..\orchestrator_service\orchestrator.db" 2>nul
-        echo     Deleted via fallback path
-    )
-)
 echo.
 
 REM ── 6. Запуск app + отчёт ─────────────────────────────────────────────

@@ -54,6 +54,33 @@ class Chunk:
     confidence: float = 0.0
 
 
+def _parse_chunk(item: dict) -> Chunk:
+    """Парсинг результата RAG Search по спецификации RS-6.
+
+    Формат:
+    {
+      "source": {"document_id": ..., "section_id": ..., "content": ..., ...},
+      "retrieval": {"chunk_id": ..., "score": ...},
+      "context": [...]
+    }
+    """
+    source = item.get("source", {})
+    retrieval = item.get("retrieval", {})
+    return Chunk(
+        chunk_id=retrieval.get("chunk_id", 0),
+        document_id=source.get("document_id", 0),
+        document_title=source.get("document_title", ""),
+        section_id=source.get("section_id", 0),
+        page=source.get("page", 0),
+        content=source.get("content", ""),
+        excerpt=source.get("content", ""),
+        score=retrieval.get("score", 0.0),
+        clause=source.get("clause", ""),
+        section_title=source.get("section_title", ""),
+        confidence=retrieval.get("score", 0.0),
+    )
+
+
 async def search(
     query: str,
     top_k: int = 10,
@@ -79,13 +106,11 @@ async def search(
                         "top_k": top_k,
                         "valid_at": valid_at,
                         "filters": filters or {},
-                        "search_type": search_type,
-                        "rerank": rerank,
                     },
                 )
                 resp.raise_for_status()
                 data = resp.json()
-                return [Chunk(**r) for r in data.get("results", [])]
+                return [_parse_chunk(r) for r in data.get("results", [])]
         except Exception as exc:
             last_exc = exc
             if attempt < 2:

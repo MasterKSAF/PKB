@@ -38,12 +38,11 @@ router = APIRouter()
 
 @router.get(
     "/queue",
-    response_model=list,
-    responses={"200": {"description": "Список задач в очереди обработки"}},
+    responses={"200": {"description": "Очередь обработки документов"}},
 )
 async def document_queue():
-    """Return processing queue (mock — пока заглушка)."""
-    return []
+    """Return processing queue."""
+    return {"queue": [], "meta": {"total": 0, "page": 1, "page_size": 50}}
 
 
 # ---------------------------------------------------------------------------
