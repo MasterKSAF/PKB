@@ -67,7 +67,7 @@
 - Task creation — UNIQUE(draft_id, pipeline_type).
 
 ### 9. Actions разделены
-- **Внешние (UI):** approve, reject.
+- **Внешние (UI):** approve, reject, confirm (для review_required).
 - **Внутренние:** proceed (продолжить), stop_duplicate (дубликат), force_new_version (новая версия).
 
 ### 10. Компенсация через Saga
@@ -173,10 +173,18 @@
 
 | HTTP | code | Когда |
 |------|------|-------|
+| 400 | FILE_TOO_SMALL | Размер файла менее 1 КБ |
+| 400 | EMPTY_DOCUMENT | 0 страниц при approve |
+| 400 | INVALID_ACTION_FOR_STATUS | Несовместимое действие для статуса |
 | 408 | DECISION_TIMEOUT | Истекло время на принятие решения |
 | 408 | PREVIEW_TRIGGER_TIMEOUT | Таймаут preview |
 | 409 | TASK_ALREADY_EXISTS | Задача уже существует для draft |
-| 409 | PREVIEW_ALREADY_RUNNING | Preview уже запущен |
+| 409 | PREVIEW_IN_PROGRESS | Preview уже запущен |
+| 409 | DUPLICATE_FILE | Дубль по SHA-256 при создании черновика |
+| 409 | DRAFT_ALREADY_DECIDED | decide для терминального черновика |
+| 409 | DUPLICATE_FILE_AFTER_APPROVE | Race condition на full-фазе |
+| 409 | BUSINESS_KEY_DRIFT | Бизнес-ключ изменился между preview и approve |
+| 422 | UNSUPPORTED_FILE_TYPE | Неподдерживаемый MIME |
 | 422 | VALIDATION_ERROR | Некорректные поля запроса |
 | — | INTEGRITY_CHECK_FAILED | (шаг rag_index) — проверка целостности индекса не пройдена (P2I-2) |
 | — | PENDING_TIMEOUT | Шаг завис в pending (P3S-1) |

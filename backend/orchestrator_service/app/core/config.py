@@ -139,6 +139,32 @@ class PipelineConfig(BaseSettings):
         description="Full phase strategy: auto | partial | full",
     )
 
+    # Auto-approve thresholds (§3 Quality-решения и авто-апрув)
+    AUTO_APPROVE_ENABLED: bool = Field(
+        default=False,
+        description="Enable auto-approve when quality conditions are met",
+    )
+    AUTO_APPROVE_MAX_CRITICAL: int = Field(
+        default=0,
+        description="Max critical notifications allowed for auto-approve",
+    )
+    AUTO_APPROVE_MAX_WARNING: int = Field(
+        default=2,
+        description="Max warning notifications allowed for auto-approve",
+    )
+
+    # Quality confidence thresholds (§3)
+    # operator_avg_confidence_below — порог ручной проверки (review_required)
+    # reprocess_avg_confidence_below — порог отбраковки (discarded)
+    QUALITY_OPERATOR_CONFIDENCE_BELOW: float = Field(
+        default=0.8,
+        description="Confidence below this → review_required (manual check)",
+    )
+    QUALITY_REPROCESS_CONFIDENCE_BELOW: float = Field(
+        default=0.5,
+        description="Confidence below this → discarded (unreadable)",
+    )
+
 
 class HTTPClientConfig(BaseSettings):
     """HTTP client settings for external service calls."""

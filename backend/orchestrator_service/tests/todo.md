@@ -1,42 +1,23 @@
-# План: новые тесты Orchestrator API — ВЫПОЛНЕНО
+# Обновление тестовых ассертов после изменений в production-коде
 
-## Оценка возможности локального запуска
+## Изменения:
 
-**Все тесты можно запустить локально** — в проекте настроен mock-режим для всех внешних сервисов
-(Registry, OCR, Parser, Converter, RAG). MinIO upload замокан, Celery .delay() — no-op.
+1. **TASK_ALREADY_TERMINAL → DRAFT_ALREADY_DECIDED** (decide_draft)
+2. **PREVIEW_ALREADY_RUNNING → PREVIEW_IN_PROGRESS** (start_preview)
+3. **BAD_REQUEST (400) → UNSUPPORTED_FILE_TYPE (422)** (create_draft, unsupported MIME)
 
-### Корректировка плана с учётом актуальной архитектуры
+## Файлы:
 
-Некоторые сценарии из запроса **невозможны в Orchestrator** (функциональность унесена в Registry):
+- [x] `tests/orchestrator/test_decide_edge_cases.py` — TASK_ALREADY_TERMINAL → DRAFT_ALREADY_DECIDED
+- [x] `tests/orchestrator/test_preview_state_validation.py` — PREVIEW_ALREADY_RUNNING → PREVIEW_IN_PROGRESS
+- [x] `tests/orchestrator/test_drafts_boundaries.py` — BAD_REQUEST(400) → UNSUPPORTED_FILE_TYPE(422)
+- [x] `tests/orchestrator/test_drafts_state_machine.py` — TASK_ALREADY_TERMINAL → DRAFT_ALREADY_DECIDED
+- [x] `tests/orchestrator/test_drafts_consistency.py` — PREVIEW_ALREADY_RUNNING → PREVIEW_IN_PROGRESS
+- [x] `tests/test_drafts.py` — 400 → 422 for unsupported MIME
+- [x] `tests/test_error_handling.py` — BAD_REQUEST(400) → UNSUPPORTED_FILE_TYPE(422)
 
-| Сценарий | Статус | Причина |
-|----------|--------|---------|
-| GET /drafts — список, фильтры, пагинация | ❌ | Чтение списка черновиков — Registry, оркестратор не имеет GET /drafts |
-| POST /documents/{id}/versions | ❌ | Управление версиями — Registry |
-| GET /documents/{id}/versions | ❌ | Список версий — Registry |
-| GET /documents/{id}/status | ❌ | Статус документа — Registry |
-| POST /documents (deprecated) | ❌ | Эндпоинт удалён, 410 не реализован |
-| task logs audit (time/event/stage) | ❌ | Нет модели audit_logs |
-| retry_status поле | ❌ | В Task есть retry_count, нет retry_status |
-| chunk_summary | ❌ | Это поле в Registry, не в оркестраторе |
+- [x] Финальная проверка: перепросмотр всех правок, оценка целостности
 
 ## Результат
 
-### Созданные файлы
-
-| Файл | Тестов | Описание |
-|------|--------|----------|
-| `tests/orchestrator/test_drafts_crud.py` | 6 | CRUD: empty file, invalid metadata JSON, GET /drafts/{id} |
-| `tests/orchestrator/test_drafts_preview.py` | 5 | Preview status pending/completed/failed, reject без comment |
-| `tests/orchestrator/test_drafts_tasks.py` | 7 | Draft tasks структура, task статусы completed/active/failed |
-| `tests/orchestrator/test_documents_pipeline.py` | 6 | Reprocess full/partial, document tasks |
-| `tests/orchestrator/test_documents_status.py` | 5 | Task status как proxy статуса документа |
-| `tests/integration/test_draft_to_document_flow.py` | 4 | Интеграционный цикл draft→approve→document |
-
-### Production-фикс
-- Добавлена валидация пустого файла в `POST /drafts` (EMPTY_FILE → 422)
-
-### Итог
-- **45 новых тестов** (6+5+7+6+5+4 + 12 из пересчёта)
-- **1 production фикс** (empty file validation)
-- **403 passed, 0 failed** (было 358)
+Все изменения выполнены. Оставшиеся `BAD_REQUEST` в `test_error_handling.py` (test_get_status_all_codes, test_api_exception_default_message, test_error_response_with_details) — это тесты общей схемы ошибок APIException, не endpoint-specific, их изменения не требуется.

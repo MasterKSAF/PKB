@@ -32,7 +32,7 @@ class TestDraftTasksExtended:
         response = client.post(
             "/api/v1/drafts/",
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 50), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 150), "application/pdf")},
             data={"document_key": "doc-tasks-struct", "source_type": "GOST"},
         )
         assert response.status_code == 202

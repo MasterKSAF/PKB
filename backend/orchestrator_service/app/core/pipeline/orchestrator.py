@@ -11,6 +11,7 @@ Responsibilities:
 7. Detect and handle stale/running tasks
 """
 
+import hashlib
 import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -522,21 +523,64 @@ class PipelineOrchestrator:
             task.full_completed = True
             await self.db.flush()
 
-            # Check auto-approve conditions (skip if critical notifications)
-            if not has_critical:
-                can_auto_approve = self._check_auto_approve(task, steps)
-                if can_auto_approve:
-                    logger.info(
-                        "Auto-approving draft after full preview",
-                        extra={"draft_id": task.draft_id, "task_id": task.id},
-                    )
-                    await self.approve_draft(task.draft_id, task.id)
-                    return
-            else:
+            # Evaluate quality and auto-approve conditions
+            quality_action = self._check_auto_approve(task, steps)
+            if quality_action == "auto_approve":
                 logger.info(
-                    "Auto-approve blocked: critical quality notifications",
+                    "Auto-approving draft after full preview",
                     extra={"draft_id": task.draft_id, "task_id": task.id},
                 )
+                await self.approve_draft(task.draft_id, task.id)
+                return
+            elif quality_action == "discarded":
+                logger.warning(
+                    "Discarding draft due to low quality",
+                    extra={"draft_id": task.draft_id, "task_id": task.id},
+                )
+                try:
+                    registry = RegistryServiceClient()
+                    await registry.update_draft_status(
+                        draft_id=task.draft_id,
+                        status="discarded",
+                        error_code="QUALITY_TOO_LOW",
+                    )
+                    await registry.close()
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to set draft status to discarded: {e}",
+                        extra={"draft_id": task.draft_id},
+                    )
+                await self.task_repo.update_task_status(
+                    task_id=task.id,
+                    stage=TaskStage.DECISION.value,
+                    progress_percent=100,
+                    status=TaskStatus.FAILED.value,
+                )
+                return
+            elif quality_action == "review_required":
+                logger.info(
+                    "Review required due to quality thresholds",
+                    extra={"draft_id": task.draft_id, "task_id": task.id},
+                )
+                try:
+                    registry = RegistryServiceClient()
+                    await registry.update_draft_status(
+                        draft_id=task.draft_id,
+                        status="review_required",
+                    )
+                    await registry.close()
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to set draft status to review_required: {e}",
+                        extra={"draft_id": task.draft_id},
+                    )
+                await self.task_repo.update_task_status(
+                    task_id=task.id,
+                    stage=TaskStage.DECISION.value,
+                    progress_percent=50,
+                )
+                return
+            # else: ready_for_approve — continue to normal flow
 
         else:
             # Partial preview — always wait for decision
@@ -584,31 +628,88 @@ class PipelineOrchestrator:
                 extra={"draft_id": task.draft_id},
             )
 
-    def _check_auto_approve(self, task, steps) -> bool:
-        """Check if conditions for auto-approve are met.
+    def _check_auto_approve(self, task, steps) -> str:
+        """Evaluate quality thresholds and return recommended action.
 
-        Auto-approve if:
-        - preview was full (preview_not_supported=True)
-        - metadata is valid (doc_code and title present)
-        - no duplicates detected
+        Returns one of:
+          "auto_approve"  — all conditions met, approve automatically
+          "ready_for_approve" — wait for user decision
+          "review_required" — manual check needed (low confidence)
+          "discarded" — quality too low, discard
+
+        Doc: §3 Quality-решения и авто-апрув (pipeline1-orchestrator_details.md)
         """
-        # Try to get metadata from best converter step (validated metadata)
-        # then fallback to best OCR/Parser step
+        # Try to get quality_data from best converter step, then OCR/Parser
         converter_step = self._find_best_step(steps, "preview_converter")
         preview_step = self._find_best_step(steps, "preview_ocr")
 
+        quality_data = {}
         metadata = {}
         if converter_step and converter_step.output_data:
-            metadata = converter_step.output_data.get("metadata", {})
+            conv_quality = converter_step.output_data.get("quality", {}) or {}
+            conv_metadata = converter_step.output_data.get("metadata", {}) or {}
+            if conv_quality or conv_metadata:
+                quality_data = conv_quality
+                metadata = conv_metadata
         if not metadata and preview_step and preview_step.output_data:
-            metadata = preview_step.output_data.get("metadata", {})
+            quality_data = preview_step.output_data.get("quality", {}) or {}
+            metadata = preview_step.output_data.get("metadata", {}) or {}
 
+        avg_confidence = quality_data.get("avg_confidence", 1.0)
+        notifications = quality_data.get("notifications", [])
+        critical_count = sum(
+            1 for n in notifications if n.get("severity") == "critical"
+        )
+        warning_count = sum(
+            1 for n in notifications if n.get("severity") == "warning"
+        )
+        pages_failed = quality_data.get("pages_failed", 0)
+        lama_fallback_used = quality_data.get("lama_fallback_used", False)
+
+        cfg = settings.pipeline
+
+        # --- Check catastrophic quality → discarded ---
+        if avg_confidence < cfg.QUALITY_REPROCESS_CONFIDENCE_BELOW:
+            logger.warning(
+                f"Quality too low ({avg_confidence:.2f} < {cfg.QUALITY_REPROCESS_CONFIDENCE_BELOW}), "
+                f"discarding draft {task.draft_id}"
+            )
+            return "discarded"
+
+        # --- Check low quality → review_required ---
+        if (
+            avg_confidence < cfg.QUALITY_OPERATOR_CONFIDENCE_BELOW
+            or pages_failed > 0
+            or lama_fallback_used
+        ):
+            logger.info(
+                f"Quality below threshold: avg_confidence={avg_confidence:.2f}, "
+                f"pages_failed={pages_failed}, lama_fallback={lama_fallback_used} "
+                f"→ review_required for draft {task.draft_id}"
+            )
+            return "review_required"
+
+        # --- Check auto-approve conditions ---
         has_valid_metadata = bool(metadata.get("doc_code") and metadata.get("title"))
-
-        # Check uniqueness — if no title_hash, it may be a new document
         has_no_duplicates = not task.error_code or task.error_code != "DUPLICATE_DETECTED"
 
-        return bool(has_valid_metadata and has_no_duplicates and task.full_completed)
+        if cfg.AUTO_APPROVE_ENABLED and has_valid_metadata and has_no_duplicates:
+            # Check notification thresholds
+            if critical_count <= cfg.AUTO_APPROVE_MAX_CRITICAL \
+               and warning_count <= cfg.AUTO_APPROVE_MAX_WARNING:
+                logger.info(
+                    f"Auto-approve conditions met for draft {task.draft_id}"
+                )
+                return "auto_approve"
+            else:
+                logger.info(
+                    f"Auto-approve blocked: critical={critical_count} "
+                    f"(max={cfg.AUTO_APPROVE_MAX_CRITICAL}), "
+                    f"warning={warning_count} (max={cfg.AUTO_APPROVE_MAX_WARNING})"
+                )
+
+        # Default: wait for user decision
+        return "ready_for_approve"
 
     async def _on_full_step_completed(
         self, task, step_name: str, steps
@@ -783,6 +884,31 @@ class PipelineOrchestrator:
             draft_data = {}
             preview_data = {}
 
+        # --- Check BUSINESS_KEY_DRIFT (§5): compare preview metadata with current ---
+        preview_title_hash = preview_data.get("title_hash_sha256")
+        # Compute expected title_hash from current preview fields
+        expected_title = (
+            metadata_overrides.get("title")
+            if metadata_overrides and metadata_overrides.get("title")
+            else preview_data.get("title")
+            or draft_data.get("title_key", f"Draft {draft_id}")
+        )
+        # We compare the business key fields rather than the hash directly
+        # since Converter-validator may have recomputed the hash.
+        # If the metadata changed significantly, we flag it.
+        if preview_title_hash and metadata_overrides:
+            expected_hash = hashlib.sha256(expected_title.encode("utf-8")).hexdigest()
+            if expected_hash != preview_title_hash:
+                logger.warning(
+                    f"BUSINESS_KEY_DRIFT for draft {draft_id}: "
+                    f"title_hash changed from {preview_title_hash} to {expected_hash}",
+                    extra={"draft_id": draft_id, "task_id": task_id},
+                )
+                raise ValueError(
+                    f"BUSINESS_KEY_DRIFT: business key changed between preview and approve. "
+                    f"conflict: title_hash_sha256"
+                )
+
         # Build document payload from draft + preview + overrides
         doc_payload = {
             "title": preview_data.get("title") or draft_data.get("title_key", f"Draft {draft_id}"),
@@ -802,15 +928,22 @@ class PipelineOrchestrator:
             doc_payload.update(metadata_overrides)
 
         # --- Step 1: Create document in Registry (OR-13) ---
+        conflict_document_id = None
         try:
             doc_result = await registry.create_document(doc_payload)
             doc_data = doc_result.get("data", {})
             document_id: Optional[int] = doc_data.get("document_id") if doc_data.get("document_id") is not None else doc_data.get("id")
             if not document_id:
-                raise ValueError(
-                    f"Registry create_document returned no document_id. "
-                    f"Response: {doc_result}"
-                )
+                # Check if error indicates DUPLICATE_FILE conflict
+                error_info = doc_result.get("error", {})
+                if error_info.get("code") == "DUPLICATE_FILE":
+                    conflict_document_id = error_info.get("details", {}).get("conflict_document_id")
+                    # Handle below
+                else:
+                    raise ValueError(
+                        f"Registry create_document returned no document_id. "
+                        f"Response: {doc_result}"
+                    )
             # version_id может быть 'v1-75' (строка) или числом
             raw_vid = doc_data.get("version_id")
             if raw_vid is not None:
@@ -829,6 +962,38 @@ class PipelineOrchestrator:
             raise ValueError(f"Registry create_document failed: {exc}")
         finally:
             await registry.close()
+
+        # Handle DUPLICATE_FILE conflict (race condition, doc §5)
+        if conflict_document_id is not None:
+            # Compensation: mark draft as discarded
+            logger.warning(
+                f"DUPLICATE_FILE conflict for draft {draft_id}, "
+                f"conflict_document_id={conflict_document_id}",
+                extra={"draft_id": draft_id, "task_id": task_id},
+            )
+            try:
+                reg_comp = RegistryServiceClient()
+                await reg_comp.update_draft_status(
+                    draft_id=draft_id,
+                    status=DraftState.DISCARDED.value,
+                    error_code="DUPLICATE_FILE_AFTER_APPROVE",
+                )
+                await reg_comp.close()
+            except Exception as comp_err:
+                logger.warning(
+                    f"Failed to compensate draft {draft_id}: {comp_err}",
+                    extra={"draft_id": draft_id, "task_id": task_id},
+                )
+
+            # Record superseded_by_document_id on task
+            task.superseded_by_document_id = conflict_document_id
+            await self.db.flush()
+
+            # Signal back to endpoint (which will convert to HTTPException)
+            raise ValueError(
+                f"DUPLICATE_FILE_AFTER_APPROVE: document already exists. "
+                f"conflict_document_id={conflict_document_id}"
+            )
 
         # Store document_id and version_id on task for later steps
         task.document_id = document_id
@@ -1088,6 +1253,170 @@ class PipelineOrchestrator:
         result["action"] = "force_new_version"
         result["message"] = "Принудительное создание новой версии"
         return result
+
+    async def confirm_draft(
+        self, draft_id: int, task_id: int,
+        metadata_overrides: Optional[dict] = None,
+    ) -> dict:
+        """Handle user confirm decision for review_required drafts.
+
+        Сохраняет metadata_overrides, переводит черновик в validation,
+        запускает полный цикл OCR/Parser + Converter-validator с overrides.
+
+        Doc: §4 (pipeline1-orchestrator_details.md) — action: confirm
+        """
+        task = await self.task_repo.get_task(task_id)
+        if not task:
+            logger.error(
+                "confirm_draft: task not found",
+                extra={"task_id": task_id, "draft_id": draft_id},
+            )
+            raise ValueError(f"Task not found: {task_id}")
+
+        if task.trace_id:
+            set_trace_id(task.trace_id)
+
+        logger.info(
+            "Confirming draft (review_required → validation)",
+            extra={"draft_id": draft_id, "task_id": task_id, "overrides": metadata_overrides},
+        )
+
+        # Guard: prevent double-confirm
+        if task.status in (TaskStatus.COMPLETED.value, TaskStatus.FAILED.value):
+            raise ValueError(
+                f"Cannot confirm task {task_id}: already in terminal state {task.status}"
+            )
+
+        # --- Verify draft is in review_required status ---
+        try:
+            reg_check = RegistryServiceClient()
+            draft_check = await reg_check.get_draft(draft_id)
+            await reg_check.close()
+            draft_status = draft_check.get("data", {}).get("status", "")
+            if draft_status != "review_required":
+                raise ValueError(
+                    f"Confirm requires draft status 'review_required', "
+                    f"current status: {draft_status}"
+                )
+        except ValueError:
+            raise
+        except Exception as e:
+            logger.warning(
+                f"Failed to verify draft status for confirm: {e}",
+                extra={"draft_id": draft_id, "task_id": task_id},
+            )
+
+        # --- Save metadata_overrides to Registry if provided ---
+        if metadata_overrides:
+            try:
+                registry_meta = RegistryServiceClient()
+                await registry_meta.update_draft_metadata(
+                    draft_id=draft_id,
+                    preview_metadata=metadata_overrides,
+                )
+                await registry_meta.close()
+            except Exception as e:
+                logger.warning(
+                    f"Failed to save metadata_overrides: {e}",
+                    extra={"draft_id": draft_id, "task_id": task_id},
+                )
+
+        # --- Update draft status to validation ---
+        try:
+            registry = RegistryServiceClient()
+            await registry.update_draft_status(
+                draft_id=draft_id,
+                status="validation",
+            )
+            await registry.close()
+        except Exception as e:
+            logger.error(
+                f"Failed to set draft status to validation: {e}",
+                extra={"draft_id": draft_id, "task_id": task_id},
+            )
+            raise ValueError(f"Failed to set validation status: {e}")
+
+        # --- Trigger full OCR/Parser + Converter cycle ---
+        from app.tasks.pipeline_formation import (
+            run_ocr_full_step,
+            run_parser_full_step,
+            run_converter_full_step,
+        )
+
+        # Resolve file_key from upload step
+        steps = await self.task_repo.get_task_steps(task_id)
+        upload_step = next((s for s in steps if s.step_name == "upload"), None)
+        file_key = None
+        if upload_step and upload_step.output_data:
+            file_key = upload_step.output_data.get("file_key")
+
+        current_trace_id = task.trace_id or ""
+
+        # Choose service: Parser-first, fallback to OCR (P1F-8)
+        parser_enabled = settings.services.PARSER_ENABLED
+        use_parser = bool(parser_enabled)
+        service_name = "Parser Service" if use_parser else "OCR Service"
+
+        # Create full_ocr step for validation run (skip if already exists)
+        steps = await self.task_repo.get_task_steps(task_id)
+        existing_step_names = {s.step_name for s in steps}
+        if "full_ocr" not in existing_step_names:
+            await self.task_repo.create_task_step(
+                task_id=task_id,
+                step_name="full_ocr",
+                step_index=3,
+                service_name=service_name,
+                input_data={
+                    "file_key": file_key,
+                    "mode": "full",
+                    "draft_id": draft_id,
+                    "metadata_overrides": metadata_overrides,
+                },
+            )
+
+        # Create full_converter step (skip if already exists)
+        if "full_converter" not in existing_step_names:
+            await self.task_repo.create_task_step(
+                task_id=task_id,
+                step_name="full_converter",
+                step_index=4,
+                service_name="Converter-validator",
+                input_data={
+                    "file_key": file_key,
+                    "mode": "full",
+                    "draft_id": draft_id,
+                    "metadata_overrides": metadata_overrides,
+                },
+            )
+
+        # Start full_ocr step
+        steps = await self.task_repo.get_task_steps(task_id)
+        full_step = next(
+            (s for s in steps if s.step_name == "full_ocr" and s.status == "pending"),
+            None,
+        )
+        if full_step:
+            await self.task_repo.start_task_step(full_step.id)
+            if use_parser:
+                run_parser_full_step.delay(
+                    task_id, draft_id, file_key, trace_id=current_trace_id
+                )
+            else:
+                run_ocr_full_step.delay(
+                    task_id, draft_id, file_key, trace_id=current_trace_id
+                )
+
+        await self.task_repo.update_task_status(
+            task_id=task_id,
+            stage=TaskStage.FULL.value,
+            progress_percent=10,
+        )
+
+        return {
+            "status": "validation",
+            "task_id": task_id,
+            "draft_id": draft_id,
+        }
 
     async def reject_draft(self, draft_id: int, task_id: int) -> None:
         """Handle user reject decision."""

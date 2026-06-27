@@ -33,7 +33,7 @@ class TestPreviewStatusExtended:
         response = client.post(
             self.CREATE_URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 50), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 150), "application/pdf")},
             data={"document_key": "doc-preview-ext", "source_type": "GOST"},
         )
         assert response.status_code == 202
@@ -199,7 +199,7 @@ class TestDecideDraftExtended:
         response = client.post(
             self.CREATE_URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 50), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 150), "application/pdf")},
             data={"document_key": "doc-decide-ext", "source_type": "GOST"},
         )
         assert response.status_code == 202

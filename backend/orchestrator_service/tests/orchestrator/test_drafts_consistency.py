@@ -32,7 +32,7 @@ class TestApproveConsistency:
         resp = client.post(
             self.CREATE_URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF-consistency"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF-consistency " * 100), "application/pdf")},
             data={"document_key": "doc-consistency", "title": "Consistency", "source_type": "GOST"},
         )
         assert resp.status_code == 202
@@ -161,7 +161,7 @@ class TestMockRealGap:
         create_resp = client.post(
             "/api/v1/drafts/",
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock-id-zero"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock-id-zero " * 100), "application/pdf")},
             data={"document_key": "doc-id-zero", "source_type": "GOST"},
         )
         assert create_resp.status_code == 202
@@ -329,7 +329,7 @@ class TestBoundaryConditions:
         response = client.post(
             self.URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF meta-null"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF meta-null " * 100), "application/pdf")},
             data={
                 "document_key": "doc-meta-null",
                 "source_type": "GOST",
@@ -347,7 +347,7 @@ class TestBoundaryConditions:
         response = client.post(
             self.URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF meta-arr"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF meta-arr " * 100), "application/pdf")},
             data={
                 "document_key": "doc-meta-arr",
                 "source_type": "GOST",
@@ -370,7 +370,7 @@ class TestBoundaryConditions:
         response = client.post(
             self.URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF empty-title"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF empty-title " * 100), "application/pdf")},
             data={"document_key": "doc-empty-title", "title": "", "source_type": "GOST"},
         )
         assert response.status_code == 202, (
@@ -425,7 +425,7 @@ class TestIdempotency:
         resp1 = client.post(
             self.CREATE_URL,
             headers=headers,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF idem1"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF idem1 " * 200), "application/pdf")},
             data={"document_key": "doc-idem", "source_type": "GOST"},
         )
         assert resp1.status_code == 202, f"First POST: {resp1.status_code}, {resp1.text}"
@@ -437,7 +437,7 @@ class TestIdempotency:
         resp2 = client.post(
             self.CREATE_URL,
             headers=headers,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF idem2"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF idem2 " * 200), "application/pdf")},
             data={"document_key": "doc-idem", "source_type": "GOST"},
         )
         assert resp2.status_code == 200, (
@@ -458,7 +458,7 @@ class TestIdempotency:
         resp1 = client.post(
             self.CREATE_URL,
             headers={**auth_header, "Idempotency-Key": "key-1"},
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF diff1"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF diff1 " * 200), "application/pdf")},
             data={"document_key": "doc-diff-key", "source_type": "GOST"},
         )
         assert resp1.status_code == 202
@@ -467,7 +467,7 @@ class TestIdempotency:
         resp2 = client.post(
             self.CREATE_URL,
             headers={**auth_header, "Idempotency-Key": "key-2"},
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF diff2"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF diff2 " * 200), "application/pdf")},
             data={"document_key": "doc-diff-key", "source_type": "GOST"},
         )
         assert resp2.status_code == 202
@@ -481,7 +481,7 @@ class TestIdempotency:
         auth_header: dict,
         db_session: AsyncSession,
     ):
-        """Повторный POST /drafts/{id}/preview → 409 PREVIEW_ALREADY_RUNNING.
+        """Повторный POST /drafts/{id}/preview → 409 PREVIEW_IN_PROGRESS.
 
         ВАЖНО: старт preview НЕ обновляет статус черновика в Registry
         (см. orchestrator.start_pipeline — нет вызова update_draft_status).
@@ -494,7 +494,7 @@ class TestIdempotency:
         create_resp = client.post(
             self.CREATE_URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF idem-preview"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF idem-preview " * 100), "application/pdf")},
             data={"document_key": "doc-idem-preview", "source_type": "GOST"},
         )
         assert create_resp.status_code == 202
@@ -547,6 +547,6 @@ class TestIdempotency:
         data = resp2.json()
         detail = data.get("detail", data)
         assert "error" in detail
-        assert detail["error"]["code"] == "PREVIEW_ALREADY_RUNNING", (
-            f"Expected PREVIEW_ALREADY_RUNNING, got {detail['error']['code']}"
+        assert detail["error"]["code"] == "PREVIEW_IN_PROGRESS", (
+            f"Expected PREVIEW_IN_PROGRESS, got {detail['error']['code']}"
         )

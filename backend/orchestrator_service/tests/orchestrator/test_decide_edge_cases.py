@@ -34,7 +34,7 @@ class TestDecideTerminalEdgeCases:
         response = client.post(
             self.CREATE_URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF-terminal"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF-terminal " * 100), "application/pdf")},
             data={"document_key": "doc-terminal-edge", "source_type": "GOST"},
         )
         assert response.status_code == 202
@@ -50,7 +50,7 @@ class TestDecideTerminalEdgeCases:
         auth_header: dict,
         db_session: AsyncSession,
     ):
-        """reject на терминальной задаче → 409 TASK_ALREADY_TERMINAL."""
+        """reject на терминальной задаче → 409 DRAFT_ALREADY_DECIDED."""
         draft_id = draft_with_terminal_task
         from sqlalchemy import select
         from app.models.pipeline import Task
@@ -73,7 +73,7 @@ class TestDecideTerminalEdgeCases:
         assert response.status_code == 409
         data = response.json()
         detail = data.get("detail", data)
-        assert detail["error"]["code"] == "TASK_ALREADY_TERMINAL"
+        assert detail["error"]["code"] == "DRAFT_ALREADY_DECIDED"
 
     @pytest.mark.parametrize("terminal_status", ["completed", "failed"])
     async def test_stop_duplicate_on_terminal_task_returns_409(
@@ -84,7 +84,7 @@ class TestDecideTerminalEdgeCases:
         auth_header: dict,
         db_session: AsyncSession,
     ):
-        """stop_duplicate на терминальной задаче → 409 TASK_ALREADY_TERMINAL."""
+        """stop_duplicate на терминальной задаче → 409 DRAFT_ALREADY_DECIDED."""
         draft_id = draft_with_terminal_task
         from sqlalchemy import select
         from app.models.pipeline import Task
@@ -107,7 +107,7 @@ class TestDecideTerminalEdgeCases:
         assert response.status_code == 409
         data = response.json()
         detail = data.get("detail", data)
-        assert detail["error"]["code"] == "TASK_ALREADY_TERMINAL"
+        assert detail["error"]["code"] == "DRAFT_ALREADY_DECIDED"
 
 
 class TestDecideStopDuplicateStageValidation:
@@ -123,7 +123,7 @@ class TestDecideStopDuplicateStageValidation:
         response = client.post(
             self.CREATE_URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF-stopdup"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF-stopdup " * 100), "application/pdf")},
             data={"document_key": "doc-stopdup", "source_type": "GOST"},
         )
         assert response.status_code == 202
@@ -217,7 +217,7 @@ class TestDecideWithMetadataOverrides:
         response = client.post(
             self.CREATE_URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF-override"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF-override " * 100), "application/pdf")},
             data={"document_key": "doc-override", "source_type": "GOST"},
         )
         assert response.status_code == 202
@@ -302,7 +302,7 @@ class TestDecideProceedAction:
         response = client.post(
             self.CREATE_URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF-proceed"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF-proceed " * 100), "application/pdf")},
             data={"document_key": "doc-proceed", "source_type": "GOST"},
         )
         assert response.status_code == 202
@@ -349,7 +349,7 @@ class TestDecideForceNewVersion:
         response = client.post(
             self.CREATE_URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF-force"), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF-force " * 100), "application/pdf")},
             data={"document_key": "doc-force", "source_type": "GOST"},
         )
         assert response.status_code == 202

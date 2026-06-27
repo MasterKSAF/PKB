@@ -2,12 +2,11 @@
 Тесты граничных сценариев POST /drafts.
 
 Покрывает сценарии §0 Точка входа (pipeline1-orchestrator_details.md):
-  - Неподдерживаемый MIME → 400 BAD_REQUEST
+  - Неподдерживаемый MIME → 422 UNSUPPORTED_FILE_TYPE
   - Дубликат file_hash_sha256 → проверка is_duplicate_file
 
 Внимание:
-  - FILE_TOO_SMALL (< 1 КБ) не реализован в production-коде
-    (есть только EMPTY_FILE для 0 байт)
+  - FILE_TOO_SMALL (< 1 КБ) → 400 FILE_TOO_SMALL
   - FILE_TOO_LARGE (> 100 МБ) покрыт в test_drafts_consistency.py
   - MinIO недоступен — замокан в conftest
 """
@@ -19,36 +18,36 @@ from fastapi.testclient import TestClient
 
 
 class TestUnsupportedMimeType:
-    """POST /drafts с неподдерживаемым MIME → 400 BAD_REQUEST."""
+    """POST /drafts с неподдерживаемым MIME → 422 UNSUPPORTED_FILE_TYPE."""
 
     CREATE_URL = "/api/v1/drafts/"
 
-    def test_unsupported_mime_returns_400(self, client: TestClient, auth_header: dict):
-        """'application/octet-stream' → 400 BAD_REQUEST."""
+    def test_unsupported_mime_returns_422(self, client: TestClient, auth_header: dict):
+        """'application/octet-stream' → 422 UNSUPPORTED_FILE_TYPE."""
         response = client.post(
             self.CREATE_URL,
             headers=auth_header,
             files={"file": ("test.bin", io.BytesIO(b"not a pdf"), "application/octet-stream")},
             data={"document_key": "doc-bad-mime", "source_type": "GOST"},
         )
-        assert response.status_code == 400
+        assert response.status_code == 422
         data = response.json()
         detail = data.get("detail", data)
         assert "error" in detail
-        assert "BAD_REQUEST" in detail["error"]["code"]
+        assert "UNSUPPORTED_FILE_TYPE" in detail["error"]["code"]
         assert "allowed_types" in detail["error"]["details"]
 
-    def test_unsupported_mime_text_returns_400(
+    def test_unsupported_mime_text_returns_422(
         self, client: TestClient, auth_header: dict
     ):
-        """'text/plain' → 400 BAD_REQUEST."""
+        """'text/plain' → 422 UNSUPPORTED_FILE_TYPE."""
         response = client.post(
             self.CREATE_URL,
             headers=auth_header,
             files={"file": ("test.txt", io.BytesIO(b"plain text"), "text/plain")},
             data={"document_key": "doc-txt", "source_type": "GOST"},
         )
-        assert response.status_code == 400
+        assert response.status_code == 422
 
     def test_supported_mime_pdf_returns_202(
         self, client: TestClient, auth_header: dict
@@ -57,7 +56,7 @@ class TestUnsupportedMimeType:
         response = client.post(
             self.CREATE_URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 50), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 150), "application/pdf")},
             data={"document_key": "doc-pdf-ok", "source_type": "GOST"},
         )
         assert response.status_code == 202
@@ -69,7 +68,7 @@ class TestUnsupportedMimeType:
         response = client.post(
             self.CREATE_URL,
             headers=auth_header,
-            files={"file": ("test.png", io.BytesIO(b"\x89PNG mock " * 10), "image/png")},
+            files={"file": ("test.png", io.BytesIO(b"\x89PNG mock " * 150), "image/png")},
             data={"document_key": "doc-png-ok", "source_type": "GOST"},
         )
         assert response.status_code == 202
@@ -94,15 +93,19 @@ class TestEmptyFileEdgeCases:
         assert "error" in detail
         assert detail["error"]["code"] == "EMPTY_FILE"
 
-    def test_very_small_file_returns_202(self, client: TestClient, auth_header: dict):
-        """Очень маленький файл (10 байт, >0) → 202."""
+    def test_very_small_file_returns_400(self, client: TestClient, auth_header: dict):
+        """Очень маленький файл (10 байт, >0) → 400 FILE_TOO_SMALL."""
         response = client.post(
             self.CREATE_URL,
             headers=auth_header,
             files={"file": ("tiny.pdf", io.BytesIO(b"%PDF-1.4\n"), "application/pdf")},
             data={"document_key": "doc-tiny", "source_type": "GOST"},
         )
-        assert response.status_code == 202
+        assert response.status_code == 400
+        data = response.json()
+        detail = data.get("detail", data)
+        assert "error" in detail
+        assert detail["error"]["code"] == "FILE_TOO_SMALL"
 
 
 class TestDuplicateDetection:
@@ -121,7 +124,7 @@ class TestDuplicateDetection:
         response = client.post(
             self.CREATE_URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 50), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 150), "application/pdf")},
             data={"document_key": "doc-dup-check", "source_type": "GOST"},
         )
         assert response.status_code == 202
@@ -141,7 +144,7 @@ class TestDuplicateDetection:
         response = client.post(
             self.CREATE_URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 50), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 150), "application/pdf")},
             data={
                 "document_key": "doc-title-hash",
                 "source_type": "GOST",
@@ -171,7 +174,7 @@ class TestDuplicateDetection:
         response = client.post(
             self.CREATE_URL,
             headers=auth_header,
-            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 50), "application/pdf")},
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF mock " * 150), "application/pdf")},
             data={"document_key": "doc-no-title", "source_type": "GOST"},
         )
         assert response.status_code == 202
