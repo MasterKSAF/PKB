@@ -462,26 +462,16 @@ def _docker_health_check(services: List[str]) -> bool:
     # ── Celery worker health check (#2) ──
     log_header("Docker Health Check: celery-worker")
     try:
-        # Копируем celery_app_check.py в контейнер (уникальное имя, не конфликтует с production)
-        _checker_dir = Path(__file__).resolve().parent
-        _src = _checker_dir / "celery_app_check.py"
-        if _src.exists():
-            subprocess.run(
-                ["docker", "exec", "-i", "pkb-celery-worker",
-                 "sh", "-c", "cat > /app/app/celery_app_check.py"],
-                input=_src.read_bytes(), timeout=10,
-            )
+        # Проверяем процесс напрямую (без broadcast ping — не конфликтует с production)
         celery_cmd = ["docker", "exec", "pkb-celery-worker",
-                      "celery", "-A", "app.celery_app_check", "inspect", "ping", "-t", "5"]
+                      "sh", "-c", "grep -q celery /proc/1/cmdline"]
         celery_result = subprocess.run(
             celery_cmd, capture_output=True, text=True, timeout=10,
         )
-        if celery_result.returncode == 0 and "pong" in celery_result.stdout:
-            log_ok("celery-worker отвечает (pong)")
+        if celery_result.returncode == 0:
+            log_ok("celery-worker запущен (PID 1)")
         else:
-            log_warn("celery-worker не отвечает на ping")
-            if celery_result.stderr.strip():
-                print(f"  {celery_result.stderr.strip()[:200]}")
+            log_warn("celery-worker: процесс celery не найден")
             all_ok = False
     except FileNotFoundError:
         log_info("celery-worker health check пропущен (Docker не найден)")
