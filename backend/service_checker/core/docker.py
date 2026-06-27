@@ -665,6 +665,85 @@ async def _docker_run_coverage() -> bool:
         return False
 
 
+async def _docker_run_gateway_tests() -> bool:
+    """Запустить Gateway Integration Tests (pytest) для Docker-окружения.
+
+    Запускает тесты из gateway_service/tests/ через pytest.
+    Возвращает True, если все тесты пройдены или нет критических ошибок.
+    """
+    log_header("Docker: Gateway Integration Tests (pytest)")
+
+    check_result_dir = BACKEND_DIR / "check_result"
+    check_result_dir.mkdir(parents=True, exist_ok=True)
+    output_path = check_result_dir / "gateway_tests.md"
+
+    gateway_tests_dir = GATEWAY_DIR / "tests"
+    if not gateway_tests_dir.exists():
+        log_warn(f"Директория тестов не найдена: {gateway_tests_dir}")
+        return False
+
+    log_info(f"Запуск pytest в {gateway_tests_dir}...")
+
+    # Параметры: -x (остановка при первой ошибке), -v (подробно),
+    # -m "not docker" — только unit-тесты, без Docker,
+    # --tb=short — краткий traceback
+    cmd = [
+        sys.executable, "-m", "pytest",
+        str(gateway_tests_dir),
+        "-v",
+        "--tb=short",
+        "--no-header",
+        "-p", "no:warnings",
+        "-m", "not docker",  # только unit-тесты (без Docker)
+    ]
+
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            cwd=str(GATEWAY_DIR),
+        )
+
+        # Сохраняем результат
+        report_lines = [
+            "# Gateway Integration Tests Report",
+            "",
+            f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            f"Exit code: {result.returncode}",
+            "",
+            "## Output",
+            "```",
+            result.stdout[-3000:] if len(result.stdout) > 3000 else result.stdout,
+            "```",
+        ]
+        if result.stderr:
+            report_lines.extend(["", "## Stderr", "```", result.stderr[-2000:] if len(result.stderr) > 2000 else result.stderr, "```"])
+
+        output_path.write_text("\n".join(report_lines), encoding="utf-8")
+
+        if result.returncode == 0:
+            log_ok(f"Gateway тесты пройдены. Отчёт: {output_path}")
+            return True
+        else:
+            log_warn(f"Gateway тесты: часть упала (exit={result.returncode}). Отчёт: {output_path}")
+            # Показываем последние строки вывода
+            for line in result.stdout.split("\n")[-20:]:
+                if "FAILED" in line or "ERROR" in line or "PASSED" in line:
+                    print(f"  {line}")
+            return False
+    except subprocess.TimeoutExpired:
+        log_err(f"Gateway тесты превысили таймаут (120с)")
+        return False
+    except FileNotFoundError:
+        log_err(f"pytest не найден. Установите: pip install pytest pytest-asyncio")
+        return False
+    except Exception as e:
+        log_err(f"Ошибка запуска gateway тестов: {e}")
+        return False
+
+
 async def _docker_run_pipeline() -> Dict[str, Any]:
     """Запустить Pipeline Testing для Docker-окружения. Возвращает результаты пайплайнов."""
     log_header("Docker: Pipeline Testing")

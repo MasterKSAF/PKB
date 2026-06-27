@@ -16,6 +16,7 @@ REM   --api service1,service2    Только указанные сервисы 
 REM   --pipeline name1,name2     Только указанные пайплайны
 REM   --skip-coverage            Пропустить API Coverage
 REM   --skip-pipelines           Пропустить Pipeline тесты
+REM   --skip-gateway-tests       Пропустить Gateway Integration Tests (pytest)
 REM
 REM Примеры:
 REM   recheck.bat                                Полный прогон
@@ -50,6 +51,11 @@ if /i "%1"=="--skip-coverage" (
 )
 if /i "%1"=="--skip-pipelines" (
     set "CLI_ARGS=%CLI_ARGS% --skip-pipelines"
+    shift
+    goto parse_args
+)
+if /i "%1"=="--skip-gateway-tests" (
+    set "CLI_ARGS=%CLI_ARGS% --skip-gateway-tests"
     shift
     goto parse_args
 )
