@@ -149,17 +149,12 @@ docker compose --progress quiet kill app 2>&1
 docker compose --progress quiet rm -f -v app 2>&1
 
 echo     Removing Orchestrator SQLite db...
-set "ORCHESTRATOR_DB=..\..\..\..\PKB_neuroassistant_develop\backend\orchestrator_service\orchestrator.db"
+set "ORCHESTRATOR_DB=..\..\orchestrator_service\orchestrator.db"
 if exist "%ORCHESTRATOR_DB%" (
     del /f /q "%ORCHESTRATOR_DB%" 2>nul
     echo     Deleted %ORCHESTRATOR_DB%
 ) else (
-    echo     Orchestrator SQLite db not found at %ORCHESTRATOR_DB%, trying inside volume...
-    rem Fallback: ищем внутри смонтированного backend
-    if exist "..\..\orchestrator_service\orchestrator.db" (
-        del /f /q "..\..\orchestrator_service\orchestrator.db" 2>nul
-        echo     Deleted via fallback path
-    )
+    echo     Orchestrator SQLite db not found at %ORCHESTRATOR_DB%
 )
 echo.
 
