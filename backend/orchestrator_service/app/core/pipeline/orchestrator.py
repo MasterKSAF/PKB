@@ -689,6 +689,21 @@ class PipelineOrchestrator:
         task.version_id = version_id
         await self.db.flush()
 
+        # --- Step 1a: Sync document_id back to Registry draft ---
+        try:
+            registry_sync = RegistryServiceClient()
+            await registry_sync.update_draft_status(
+                draft_id=draft_id,
+                status=DraftState.APPROVED.value,
+                document_id=document_id,
+            )
+            await registry_sync.close()
+        except Exception as sync_err:
+            logger.warning(
+                f"Failed to sync document_id={document_id} to Registry draft {draft_id}: {sync_err}",
+                extra={"draft_id": draft_id, "document_id": document_id},
+            )
+
         # --- Save preview snapshot to Registry (P1F-4 / CV-5) ---
         try:
             # Collect preview metadata from steps

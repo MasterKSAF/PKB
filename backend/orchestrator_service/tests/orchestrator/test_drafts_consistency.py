@@ -84,21 +84,8 @@ class TestApproveConsistency:
         get_data = get_resp.json()
 
         # Registry должен знать о document_id
-        # NOTE: это тест на баг — approve_draft НЕ вызывает
-        # registry.update_draft_status(document_id=...), поэтому document_id
-        # в Registry может быть None. Тест документирует текущее поведение.
-        # Если баг будет исправлен — тест упадёт, это ок.
         reg_doc_id = get_data.get("document_id")
         is_new = get_data.get("is_new_document")
-
-        if reg_doc_id is None or is_new is True:
-            # Это известный баг: approve_draft не синхронизирует
-            # document_id с Registry
-            pytest.xfail(
-                "Known bug: approve_draft creates document via Registry.create_document() "
-                "but never calls registry.update_draft_status(document_id=...). "
-                "Registry draft.document_id remains None, is_new_document stays True."
-            )
 
         assert reg_doc_id == doc_id, (
             f"Registry draft.document_id ({reg_doc_id}) != created document_id ({doc_id})"
@@ -166,20 +153,9 @@ class TestMockRealGap:
     ):
         """Созданный черновик, id принудительно установлен в 0.
 
-        БАГ: _mock_get_draft возвращает data["id"]=0,
-        а эндпоинт делает data.get("id") or data.get("draft_id") —
-        0 is falsy, падает на draft_id, которого нет → None в ответе.
-
-        Ожидаемый результат: draft_id в ответе корректный.
-        Реальность: draft_id=None из-за falsy 0.
+        Проверяет, что data.get("id")=0 корректно возвращается,
+        а не фолбечится на data.get("draft_id") из-за falsy 0.
         """
-        import pytest
-        pytest.xfail(
-            "Known bug: data.get('id') returns 0 (falsy), "
-            "data.get('draft_id') returns None (mock использует ключ 'id', не 'draft_id'). "
-            "Нужно заменить data.get('id') or data.get('draft_id') на "
-            "data.get('id') if data.get('id') is not None else data.get('draft_id')"
-        )
 
         # Create draft
         create_resp = client.post(
@@ -238,13 +214,49 @@ class TestMockRealGap:
             headers=auth_header,
         )
 
-        # Endpoint does: data.get("id") or data.get("draft_id")
-        # data.get("id") = 0 → falsy → falls to data.get("draft_id") = 999
+        # Endpoint now uses: data.get("id") if data.get("id") is not None else data.get("draft_id")
+        # data.get("id") = 0 → not None → returns 0 (correct, был баг: 0 falsy → 999)
         assert response.status_code == 200
         data = response.json()
-        assert data["draft_id"] == 999, (
-            f"Expected draft_id=999 when id=0, got {data.get('draft_id')}. "
+        # After fix: id=0 is returned properly, not as 999 fallback
+        assert data["draft_id"] == 0, (
+            f"Expected draft_id=0 (correct id after fix), got {data.get('draft_id')}. "
             f"Id in response: {data.get('id')}"
+        )
+
+    def test_draft_id_zero_without_draft_id_in_storage(
+        self, client: TestClient, auth_header: dict
+    ):
+        """Registry storage с id=0 и без draft_id — фикс 0 is falsy.
+
+        После фикса: data.get("id")=0 возвращается корректно (0),
+        а не None из-за falsy 0.
+        """
+        from app.services.registry_client import RegistryServiceClient
+        storage = RegistryServiceClient._storage
+
+        # draft with id=0, NO draft_id key at all
+        draft = {
+            "id": 0,
+            "file_key": "test-key-no-draft-id",
+            "status": "uploaded",
+            "created_by": "test",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+        }
+        storage["drafts"][998] = draft
+
+        response = client.get(
+            "/api/v1/drafts/998",
+            headers=auth_header,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        # After fix: id=0 is NOT falsy → draft_id=0 (not None)
+        assert data["draft_id"] == 0, (
+            f"Expected draft_id=0 (fix: id=0 should not be falsy), "
+            f"got {data.get('draft_id')}. Full response: {data}"
         )
 
 
