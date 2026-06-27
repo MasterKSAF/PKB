@@ -223,6 +223,7 @@ export const AdminPanel: React.FC = () => {
   const [adminNotice, setAdminNotice] = useState('');
   const [adminUsersError, setAdminUsersError] = useState('');
   const [adminAuditError, setAdminAuditError] = useState('');
+  const [adminSaving, setAdminSaving] = useState(false);
   const [gatewayProcessingLogs, setGatewayProcessingLogs] = useState<typeof MOCK_PROCESSING_LOGS>([]);
   const processingLogs =
     workMode === 'demo'
@@ -360,16 +361,34 @@ export const AdminPanel: React.FC = () => {
     setDraftAccess(inferAccessKeys(selectedUser));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!selectedUser || !canManagePermissions) return;
 
     const nextAccess = makeAccessText(draftAccess);
-    updateAdminUser(selectedUser.id, {
+    const nextPatch = {
       role: editingOwnSystemRole ? selectedUser.role : draftRole,
       access: nextAccess,
       status: selectedUser.status === 'Ожидает настройки' ? 'Активен' : selectedUser.status,
-    });
+    } as const;
 
+    if (workMode === 'prod') {
+      setAdminSaving(true);
+      setAdminNotice('');
+      try {
+        await adminApi.updateUser(selectedUser.id, {
+          role: GATEWAY_ROLE_BY_LABEL[editingOwnSystemRole ? selectedUser.role : draftRole],
+        });
+        updateAdminUser(selectedUser.id, nextPatch);
+        setAdminNotice(`Права пользователя «${selectedUser.name}» сохранены на сервере.`);
+      } catch {
+        setAdminNotice('Серверная часть не приняла изменение прав. Локальные данные не изменены.');
+      } finally {
+        setAdminSaving(false);
+      }
+      return;
+    }
+
+    updateAdminUser(selectedUser.id, nextPatch);
     addAdminAuditLogItem({
       id: `audit-${Date.now()}`,
       time: new Date().toLocaleString('ru-RU', {
@@ -379,20 +398,11 @@ export const AdminPanel: React.FC = () => {
         hour: '2-digit',
         minute: '2-digit',
       }),
-      actor: currentUser.name,
+      actor: currentUser?.name ?? 'Текущий пользователь',
       target: selectedUser.name,
       action: 'Изменены роль и права',
       details: `Роль: ${editingOwnSystemRole ? selectedUser.role : draftRole}. Доступ: ${nextAccess}.`,
     });
-
-    if (workMode === 'prod') {
-      void adminApi
-        .updateUser(selectedUser.id, {
-          role: GATEWAY_ROLE_BY_LABEL[editingOwnSystemRole ? selectedUser.role : draftRole],
-        })
-        .then(() => setAdminNotice(`Права пользователя «${selectedUser.name}» отправлены в серверную часть`))
-        .catch(() => setAdminNotice('Серверная часть не приняла изменение прав. Локально правка отображена в интерфейсе'));
-    }
   };
 
   return (
@@ -445,11 +455,13 @@ export const AdminPanel: React.FC = () => {
                 Управление доступом
               </Typography>
               <Typography sx={{ mt: 0.3, color: 'rgba(233, 237, 243, 0.92)', fontSize: '1.05rem', fontWeight: 520 }}>
-                {currentUser.name} · {currentUser.position}
+                {currentUser ? `${currentUser.name} · ${currentUser.position}` : 'Профиль пользователя не получен'}
               </Typography>
               <Typography variant="body2" sx={{ mt: 0.6, color: 'rgba(171, 183, 201, 0.78)' }}>
-                Текущая роль: {ROLE_LABELS[currentRole]}. В демонстрационном режиме изменения сохраняются в интерфейсе
-                и попадают в административный журнал. В рабочем режиме права передаются в контур заказчика.
+                Текущая роль: {ROLE_LABELS[currentRole]}.{' '}
+                {workMode === 'demo'
+                  ? 'Изменения сохраняются только в демонстрационном интерфейсе и его журнале.'
+                  : 'Изменения применяются только после подтверждения серверной частью.'}
               </Typography>
             </Box>
             <Chip
@@ -627,7 +639,7 @@ export const AdminPanel: React.FC = () => {
 
               {editingOwnSystemRole && (
                 <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
-                  Роль текущего системного администратора защищена от случайного понижения в демонстрационном режиме.
+                  Роль текущего системного администратора защищена от случайного понижения.
                 </Alert>
               )}
 
@@ -688,11 +700,11 @@ export const AdminPanel: React.FC = () => {
                   variant="contained"
                   className="app-action-button"
                   startIcon={<Save size={16} />}
-                  onClick={handleSave}
-                  disabled={!canManagePermissions || !hasChanges}
+                  onClick={() => void handleSave()}
+                  disabled={!canManagePermissions || !hasChanges || adminSaving}
                   disableElevation
                 >
-                  Сохранить изменения
+                  {adminSaving ? 'Сохранение...' : 'Сохранить изменения'}
                 </Button>
               </Stack>
             </Stack>

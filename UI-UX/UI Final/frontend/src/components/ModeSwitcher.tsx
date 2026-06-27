@@ -38,9 +38,9 @@ import {
   X,
 } from 'lucide-react';
 import { useUIStore, AppTab, type KnowledgeProcessingSection } from '../store/uiStore';
-import { ROLE_TAB_ACCESS } from '../utils/access';
+import { getAccessibleTabs } from '../utils/access';
 import { MOCK_CHAT_THREADS } from '../utils/mockData';
-import { chatApi, clearGatewayTokens, projectsApi, type GatewayChatProject } from '../utils/http';
+import { chatApi, projectsApi, type GatewayChatProject } from '../utils/http';
 
 const NAV_ITEMS: Array<{ value: AppTab; label: string; icon: React.ReactNode }> = [
   { value: 'chat', label: 'Чат', icon: <MessageSquare size={18} /> },
@@ -90,7 +90,9 @@ export const ModeSwitcher: React.FC = () => {
     activeProjectId,
     activeKnowledgeProcessingSection,
     activeTab,
+    adminUsers,
     currentRole,
+    currentUserId,
     themeMode,
     setActiveProjectId,
     setActiveKnowledgeProcessingSection,
@@ -104,7 +106,11 @@ export const ModeSwitcher: React.FC = () => {
   } = useUIStore();
   const isLight = themeMode === 'light';
   const lightShipBlue = '#0284c7';
-  const availableTabs = ROLE_TAB_ACCESS[currentRole];
+  const currentUser = adminUsers.find((user) => user.id === currentUserId) ?? null;
+  const availableTabs = React.useMemo(
+    () => getAccessibleTabs(currentRole, currentUser?.availableTabs, workMode),
+    [currentRole, currentUser?.availableTabs, workMode],
+  );
   const visibleNavItems = NAV_ITEMS.filter((item) => availableTabs.includes(item.value));
   const [chatTreeOpen, setChatTreeOpen] = React.useState(false);
   const [knowledgeProcessingTreeOpen, setKnowledgeProcessingTreeOpen] = React.useState(false);
@@ -131,7 +137,6 @@ export const ModeSwitcher: React.FC = () => {
   );
   React.useEffect(() => {
     if (workMode !== 'prod') {
-      clearGatewayTokens();
       setChatProjects(CHAT_PROJECTS);
       setActiveThreadId('chat-hull');
       setChatMessages(MOCK_CHAT_THREADS['chat-hull'] ?? []);
@@ -217,7 +222,7 @@ export const ModeSwitcher: React.FC = () => {
 
     if (tab === 'knowledgeProcessing') {
       setActiveTab('knowledgeProcessing');
-      setKnowledgeProcessingTreeOpen((open) => !open);
+      setKnowledgeProcessingTreeOpen(true);
       setChatTreeOpen(false);
       return;
     }

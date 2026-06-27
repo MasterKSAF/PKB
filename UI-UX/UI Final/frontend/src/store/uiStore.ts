@@ -60,6 +60,8 @@ interface UIState {
   setAdminUsers: (users: AdminUser[]) => void;
   upsertAdminUser: (user: AdminUser) => void;
   updateAdminUser: (userId: string, patch: Partial<AdminUser>) => void;
+  prodAdminUsersSnapshot: AdminUser[];
+  prodCurrentUserIdSnapshot: string;
   adminAuditLog: AdminAuditLogItem[];
   addAdminAuditLogItem: (item: AdminAuditLogItem) => void;
   chatMessages: ChatMessage[];
@@ -90,10 +92,31 @@ export const useUIStore = create<UIState>((set) => ({
         currentRole,
         currentPermissions: user.permissions ?? {},
         activeTab: getFallbackTab(currentRole),
+        ...(state.workMode === 'prod'
+          ? {
+              prodAdminUsersSnapshot: state.adminUsers,
+              prodCurrentUserIdSnapshot: user.id,
+            }
+          : {}),
       };
     }),
   logout: () =>
-    set({ isAuthenticated: false, activeTab: 'chat', focusMode: false, currentGatewaySessionId: null, currentPermissions: {} }),
+    set((state) => ({
+      isAuthenticated: false,
+      activeTab: 'chat',
+      focusMode: false,
+      currentUserId: '',
+      currentRole: 'user',
+      currentPermissions: {},
+      currentGatewaySessionId: null,
+      chatMessages: [],
+      ...(state.workMode === 'prod'
+        ? {
+            prodAdminUsersSnapshot: [],
+            prodCurrentUserIdSnapshot: '',
+          }
+        : {}),
+    })),
   activeTab: 'chat',
   setActiveTab: (activeTab) => set({ activeTab }),
   activeKnowledgeProcessingSection: 'upload',
@@ -112,22 +135,54 @@ export const useUIStore = create<UIState>((set) => ({
   setThemeMode: (themeMode) => set({ themeMode }),
   workMode: 'prod',
   setWorkMode: (workMode) =>
-    set({
-      workMode,
-      apiStatus: workMode === 'demo' ? 'demo' : 'offline',
-      currentGatewaySessionId: null,
-      adminUsers: workMode === 'demo' ? MOCK_ADMIN_USERS : [],
-      chatMessages: workMode === 'demo' ? MOCK_CHATS : [],
-    }),
-  toggleWorkMode: () =>
     set((state) => {
-      const workMode = state.workMode === 'demo' ? 'prod' : 'demo';
+      if (workMode === state.workMode) return state;
+
+      const prodUsers = state.workMode === 'prod' ? state.adminUsers : state.prodAdminUsersSnapshot;
+      const prodUserId = state.workMode === 'prod' ? state.currentUserId : state.prodCurrentUserIdSnapshot;
+      const targetUsers = workMode === 'demo' ? MOCK_ADMIN_USERS : prodUsers;
+      const targetUserId = workMode === 'demo' ? MOCK_ADMIN_USERS[0]?.id ?? '' : prodUserId;
+      const targetUser = targetUsers.find((user) => user.id === targetUserId);
+      const currentRole = USER_ROLE_BY_LABEL[targetUser?.role ?? ''] ?? 'user';
+
       return {
         workMode,
         apiStatus: workMode === 'demo' ? 'demo' : 'offline',
         currentGatewaySessionId: null,
-        adminUsers: workMode === 'demo' ? MOCK_ADMIN_USERS : [],
+        adminUsers: targetUsers,
+        currentUserId: targetUserId,
+        currentRole,
+        currentPermissions: targetUser?.permissions ?? {},
+        activeTab: getFallbackTab(currentRole),
         chatMessages: workMode === 'demo' ? MOCK_CHATS : [],
+        isAuthenticated: workMode === 'demo' ? state.isAuthenticated : Boolean(prodUserId && prodUsers.length),
+        prodAdminUsersSnapshot: prodUsers,
+        prodCurrentUserIdSnapshot: prodUserId,
+      };
+    }),
+  toggleWorkMode: () =>
+    set((state) => {
+      const workMode = state.workMode === 'demo' ? 'prod' : 'demo';
+      const prodUsers = state.workMode === 'prod' ? state.adminUsers : state.prodAdminUsersSnapshot;
+      const prodUserId = state.workMode === 'prod' ? state.currentUserId : state.prodCurrentUserIdSnapshot;
+      const targetUsers = workMode === 'demo' ? MOCK_ADMIN_USERS : prodUsers;
+      const targetUserId = workMode === 'demo' ? MOCK_ADMIN_USERS[0]?.id ?? '' : prodUserId;
+      const targetUser = targetUsers.find((user) => user.id === targetUserId);
+      const currentRole = USER_ROLE_BY_LABEL[targetUser?.role ?? ''] ?? 'user';
+
+      return {
+        workMode,
+        apiStatus: workMode === 'demo' ? 'demo' : 'offline',
+        currentGatewaySessionId: null,
+        adminUsers: targetUsers,
+        currentUserId: targetUserId,
+        currentRole,
+        currentPermissions: targetUser?.permissions ?? {},
+        activeTab: getFallbackTab(currentRole),
+        chatMessages: workMode === 'demo' ? MOCK_CHATS : [],
+        isAuthenticated: workMode === 'demo' ? state.isAuthenticated : Boolean(prodUserId && prodUsers.length),
+        prodAdminUsersSnapshot: prodUsers,
+        prodCurrentUserIdSnapshot: prodUserId,
       };
     }),
   focusMode: false,
@@ -138,21 +193,33 @@ export const useUIStore = create<UIState>((set) => ({
   apiStatus: 'offline',
   setApiStatus: (apiStatus) => set({ apiStatus }),
   adminUsers: [],
-  setAdminUsers: (adminUsers) => set({ adminUsers }),
+  setAdminUsers: (adminUsers) =>
+    set((state) => ({
+      adminUsers,
+      ...(state.workMode === 'prod' ? { prodAdminUsersSnapshot: adminUsers } : {}),
+    })),
+  prodAdminUsersSnapshot: [],
+  prodCurrentUserIdSnapshot: '',
   upsertAdminUser: (user) =>
     set((state) => {
       const exists = state.adminUsers.some((item) => item.id === user.id);
+      const adminUsers = exists
+        ? state.adminUsers.map((item) => (item.id === user.id ? { ...item, ...user } : item))
+        : [user, ...state.adminUsers];
 
       return {
-        adminUsers: exists
-          ? state.adminUsers.map((item) => (item.id === user.id ? { ...item, ...user } : item))
-          : [user, ...state.adminUsers],
+        adminUsers,
+        ...(state.workMode === 'prod' ? { prodAdminUsersSnapshot: adminUsers } : {}),
       };
     }),
   updateAdminUser: (userId, patch) =>
-    set((state) => ({
-      adminUsers: state.adminUsers.map((user) => (user.id === userId ? { ...user, ...patch } : user)),
-    })),
+    set((state) => {
+      const adminUsers = state.adminUsers.map((user) => (user.id === userId ? { ...user, ...patch } : user));
+      return {
+        adminUsers,
+        ...(state.workMode === 'prod' ? { prodAdminUsersSnapshot: adminUsers } : {}),
+      };
+    }),
   adminAuditLog: [],
   addAdminAuditLogItem: (item) =>
     set((state) => ({

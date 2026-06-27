@@ -46,6 +46,8 @@ type DocumentVersionSummary = {
 type DocumentPreviewPage = {
   title: string;
   lines: string[];
+  pageNumber: number;
+  imageUrl?: string;
 };
 
 const PANEL_SX = {
@@ -81,7 +83,17 @@ const normalizeValidUntil = (value: unknown) => {
 const resolveGatewayAssetUrl = (url: unknown) => {
   const text = normalizeText(url);
   if (!text) return '';
-  if (/^https?:\/\//i.test(text)) return text;
+  if (/^https?:\/\//i.test(text)) {
+    try {
+      const parsed = new URL(text);
+      if (['minio', 'registry', 'orchestrator', 'gateway'].includes(parsed.hostname.toLowerCase())) {
+        return '';
+      }
+    } catch {
+      return '';
+    }
+    return text;
+  }
 
   const apiBase = GATEWAY_API_BASE_URL.replace(/\/+$/, '');
   const originBase = apiBase.replace(/\/api\/v\d+$/i, '');
@@ -141,13 +153,27 @@ const extractPageEntries = (payload: any): DocumentPreviewPage[] => {
   return source.map((item: any, index: number) => {
     const title = normalizeText(item?.title ?? item?.page_title ?? item?.name ?? item?.clause ?? `Страница ${index + 1}`);
     const number = normalizeText(item?.page_number ?? item?.pageNumber ?? item?.number ?? item?.page ?? index + 1);
+    const pageNumber = Number(number || index + 1);
     const body = normalizeText(item?.text ?? item?.content ?? item?.body ?? item?.preview ?? item?.excerpt);
 
     return {
       title: `${title}${number ? ` · стр. ${number}` : ''}`,
-      lines: body ? body.split(/\r?\n/).filter(Boolean) : ['Текст страницы не передан.'],
+      pageNumber: Number.isFinite(pageNumber) ? pageNumber : index + 1,
+      lines: body ? body.split(/\r?\n/).filter(Boolean) : [],
+      imageUrl: resolveGatewayAssetUrl(item?.image_url ?? item?.preview_url),
     };
   });
+};
+
+const extractPageText = (payload: any) => {
+  const direct = normalizeText(payload?.full_text ?? payload?.text ?? payload?.content);
+  if (direct) return direct;
+
+  const blocks = Array.isArray(payload?.blocks) ? payload.blocks : [];
+  return blocks
+    .map((block: any) => normalizeText(block?.text ?? block?.content ?? block?.value))
+    .filter(Boolean)
+    .join('\n');
 };
 
 const buildDemoDetail = (document: Document | null) => {
@@ -256,6 +282,7 @@ const buildDemoPages = (document: Document | null, detail: any): DocumentPreview
   return [
     {
       title: 'Краткий срез',
+      pageNumber: 1,
       lines: [
         document.name,
         `ID: ${document.id}`,
@@ -268,6 +295,7 @@ const buildDemoPages = (document: Document | null, detail: any): DocumentPreview
     },
     {
       title: 'Метаданные',
+      pageNumber: 2,
       lines: [
         `Код: ${detail?.doc_code ?? 'не указан'}`,
         `Юрисдикция: ${detail?.jurisdiction ?? 'не указана'}`,
@@ -277,6 +305,7 @@ const buildDemoPages = (document: Document | null, detail: any): DocumentPreview
     },
     {
       title: 'История и версии',
+      pageNumber: 3,
       lines: [
         `Версий: ${detail?.total_versions ?? 0}`,
         `История: ${document.updatedAt}`,
@@ -538,6 +567,32 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
     enabled: workMode === 'prod' && Boolean(selectedDocument),
     staleTime: 30_000,
   });
+  const gatewayPages = useMemo(() => extractPageEntries(pagesQuery.data), [pagesQuery.data]);
+  const selectedGatewayPage = gatewayPages[Math.min(previewPageIndex, Math.max(gatewayPages.length - 1, 0))] ?? null;
+  const pageContentQuery = useQuery({
+    queryKey: ['document-registry-page-content', workMode, selectedDocument?.id, selectedGatewayPage?.pageNumber],
+    queryFn: async () => {
+      const [previewResult, textResult] = await Promise.allSettled([
+        documentsApi.pagePreview(selectedDocument!.id, selectedGatewayPage!.pageNumber),
+        documentsApi.pageText(selectedDocument!.id, selectedGatewayPage!.pageNumber),
+      ]);
+
+      if (previewResult.status === 'rejected' && textResult.status === 'rejected') {
+        throw new Error('Сервер не вернул предпросмотр страницы.');
+      }
+
+      return {
+        preview: previewResult.status === 'fulfilled' ? previewResult.value : null,
+        text: textResult.status === 'fulfilled' ? textResult.value : null,
+      };
+    },
+    enabled:
+      workMode === 'prod' &&
+      Boolean(selectedDocument) &&
+      Boolean(selectedGatewayPage) &&
+      Number.isFinite(selectedGatewayPage?.pageNumber),
+    staleTime: 30_000,
+  });
 
   const detail = workMode === 'prod' ? detailQuery.data : buildDemoDetail(selectedDocument);
   const detailRecord = (detail ?? {}) as Record<string, any>;
@@ -549,10 +604,27 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
     () => {
       if (workMode !== 'prod') return buildDemoPages(selectedDocument, detail);
 
-      const pages = extractPageEntries(pagesQuery.data);
-      return pages;
+      if (!selectedGatewayPage || !pageContentQuery.data) return gatewayPages;
+
+      const pageText =
+        extractPageText(pageContentQuery.data.text) ||
+        extractPageText(pageContentQuery.data.preview);
+      const imageUrl = resolveGatewayAssetUrl(
+        pageContentQuery.data.preview?.image_url ??
+          pageContentQuery.data.preview?.preview_url,
+      );
+
+      return gatewayPages.map((page) =>
+        page.pageNumber === selectedGatewayPage.pageNumber
+          ? {
+              ...page,
+              lines: pageText ? pageText.split(/\r?\n/).filter(Boolean) : page.lines,
+              imageUrl: imageUrl || page.imageUrl,
+            }
+          : page,
+      );
     },
-    [detail, pagesQuery.data, selectedDocument, workMode],
+    [detail, gatewayPages, pageContentQuery.data, selectedDocument, selectedGatewayPage, workMode],
   );
   const selectedPreviewPage = previewPages[Math.min(previewPageIndex, Math.max(previewPages.length - 1, 0))] ?? null;
   const previewText = buildPreviewText(selectedDocument, detail, versions, history, errors, parameters);
@@ -989,12 +1061,28 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
                       >
                         {selectedPreviewPage ? (
                           <Stack spacing={1}>
-                            <Typography component="pre" sx={{ m: 0, whiteSpace: 'pre-wrap', lineHeight: 1.7, fontFamily: 'inherit' }}>
-                              {renderHighlightedText(currentPreviewText, previewSearch.trim(), isLight)}
-                            </Typography>
+                            {selectedPreviewPage.imageUrl && (
+                              <Box
+                                component="img"
+                                src={selectedPreviewPage.imageUrl}
+                                alt={`${selectedDocument.name}, страница ${selectedPreviewPage.pageNumber}`}
+                                sx={{ width: '100%', height: 'auto', display: 'block' }}
+                              />
+                            )}
+                            {currentPreviewText ? (
+                              <Typography component="pre" sx={{ m: 0, whiteSpace: 'pre-wrap', lineHeight: 1.7, fontFamily: 'inherit' }}>
+                                {renderHighlightedText(currentPreviewText, previewSearch.trim(), isLight)}
+                              </Typography>
+                            ) : (
+                              <Typography color="text.secondary">
+                                Страница существует, но сервер не передал доступное изображение или текстовый слой.
+                              </Typography>
+                            )}
                           </Stack>
                         ) : (
-                          <Typography color="text.secondary">Текст предпросмотра не получен.</Typography>
+                          <Typography color="text.secondary">
+                            Сервер не передал список страниц документа.
+                          </Typography>
                         )}
                       </Paper>
                       <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
@@ -1339,12 +1427,26 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
                       {selectedDocument?.name}
                     </Typography>
                   </Box>
-                  <Typography component="pre" sx={{ m: 0, whiteSpace: 'pre-wrap', lineHeight: 1.75, fontFamily: 'inherit' }}>
-                    {renderHighlightedText(currentPreviewText, previewSearch.trim(), isLight)}
-                  </Typography>
+                  {selectedPreviewPage.imageUrl && (
+                    <Box
+                      component="img"
+                      src={selectedPreviewPage.imageUrl}
+                      alt={`${selectedDocument?.name ?? 'Документ'}, страница ${selectedPreviewPage.pageNumber}`}
+                      sx={{ width: '100%', height: 'auto', display: 'block' }}
+                    />
+                  )}
+                  {currentPreviewText ? (
+                    <Typography component="pre" sx={{ m: 0, whiteSpace: 'pre-wrap', lineHeight: 1.75, fontFamily: 'inherit' }}>
+                      {renderHighlightedText(currentPreviewText, previewSearch.trim(), isLight)}
+                    </Typography>
+                  ) : (
+                    <Typography color="text.secondary">
+                      Страница существует, но сервер не передал доступное изображение или текстовый слой.
+                    </Typography>
+                  )}
                 </Stack>
               ) : (
-                <Typography color="text.secondary">Текст предпросмотра не получен.</Typography>
+                <Typography color="text.secondary">Сервер не передал список страниц документа.</Typography>
               )}
             </Paper>
 

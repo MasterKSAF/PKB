@@ -492,7 +492,11 @@ function shouldShowOutOfScopeResult(query: string) {
   return markers.some((marker) => normalized.includes(marker));
 }
 
-function mapGatewayStatus(status?: string, scenario?: string): ChatMessage['status'] {
+function mapGatewayStatus(
+  status?: string,
+  scenario?: string,
+  fallback: NonNullable<ChatMessage['status']> = 'answered',
+): ChatMessage['status'] {
   const normalized = String(status ?? '').toLowerCase();
 
   if (normalized === 'pending') return 'pending';
@@ -503,7 +507,7 @@ function mapGatewayStatus(status?: string, scenario?: string): ChatMessage['stat
   if (normalized === 'completed' || normalized === 'answered') return 'answered';
   if (scenario === 'failed' || normalized === 'failed' || normalized === 'error') return 'failed';
 
-  return 'answered';
+  return fallback;
 }
 
 function mapGatewayDocumentOcrStatus(status?: string): Document['ocrStatus'] {
@@ -748,7 +752,8 @@ function mapGatewayDocumentDetailResponse(payload: any): GatewayDocumentDetail {
 }
 
 function mapGatewayHistoryResponse(payload: any): QueryHistoryItem[] {
-  const items = Array.isArray(payload) ? payload : payload.items ?? payload.history ?? payload.data ?? [];
+  const root = payload?.data ?? payload;
+  const items = Array.isArray(root) ? root : root?.items ?? root?.history ?? [];
 
   return items.map((item: any, index: number) => {
     const query = item.question ?? item.query ?? '';
@@ -799,7 +804,7 @@ function mapGatewaySessionsResponse(payload: any): QueryHistoryItem[] {
       query: userMessage?.content ?? session.last_question ?? session.last_message_preview ?? '',
       answer: assistantMessage?.content ?? session.last_answer ?? session.last_message_preview ?? '',
       sources: Number(session.source_count ?? sourceCount),
-      status: mapGatewayStatus(session.status),
+      status: assistantMessage?.status ?? mapGatewayStatus(session.status, session.scenario, messages.length ? 'answered' : 'pending'),
       createdAt: session.created_at ?? session.updated_at ?? '',
       messages,
     };
@@ -1736,7 +1741,6 @@ export const draftsApi = {
     const response = await gatewayRequest<any>(() =>
       apiClient.post('/drafts', form, {
         headers: {
-          'Content-Type': 'multipart/form-data',
           ...(input.idempotencyKey ? { 'Idempotency-Key': input.idempotencyKey } : {}),
         },
       }),
@@ -1781,7 +1785,6 @@ export const draftsApi = {
     const response = await gatewayRequest<any>(() =>
       apiClient.get(`/drafts/${draftId}/preview/status`, {
         params: { longpoll },
-        timeout: (longpoll + 5) * 1000,
       }),
     );
     return response.data;
@@ -1865,29 +1868,34 @@ export const documentsApi = {
   },
   history: async (documentId: string) => {
     const response = await gatewayRequest<any>(() => apiClient.get(`/documents/${documentId}/history`));
-    return Array.isArray(response.data?.history) ? response.data.history : [];
+    const payload = response.data?.data ?? response.data;
+    return Array.isArray(payload) ? payload : Array.isArray(payload?.history) ? payload.history : [];
   },
   errors: async (documentId: string) => {
     const response = await gatewayRequest<any>(() => apiClient.get(`/documents/${documentId}/errors`));
-    const payload = response.data as GatewayDocumentErrors;
+    const payload = (response.data?.data ?? response.data) as GatewayDocumentErrors;
     return Array.isArray(payload?.errors) ? payload.errors : [];
   },
   parameters: async (documentId: string) => {
     const response = await gatewayRequest<any>(() => apiClient.get(`/documents/${documentId}/parameters`));
-    return response.data as GatewayDocumentParameters;
+    return (response.data?.data ?? response.data) as GatewayDocumentParameters;
   },
   pages: async (documentId: string) => {
     const response = await gatewayRequest<any>(() => apiClient.get(`/documents/${documentId}/pages`));
-    const payload = response.data as GatewayDocumentPages;
+    const payload = (response.data?.data ?? response.data) as GatewayDocumentPages;
     return Array.isArray(payload?.pages) ? payload.pages : [];
   },
   pagePreview: async (documentId: string, pageNumber: number) => {
     const response = await gatewayRequest<any>(() => apiClient.get(`/documents/${documentId}/pages/${pageNumber}/preview`));
-    return response.data;
+    return response.data?.data ?? response.data;
+  },
+  pageText: async (documentId: string, pageNumber: number) => {
+    const response = await gatewayRequest<any>(() => apiClient.get(`/documents/${documentId}/pages/${pageNumber}/text`));
+    return response.data?.data ?? response.data;
   },
   file: async (documentId: string) => {
     const response = await gatewayRequest<any>(() => apiClient.get(`/documents/${documentId}/file`));
-    return response.data;
+    return response.data?.data ?? response.data;
   },
   updateValidity: async (documentId: string, payload: { valid_from?: string; valid_until?: string | null }) => {
     const response = await gatewayRequest<any>(() => apiClient.patch(`/registry/documents/${documentId}`, payload));
@@ -1921,7 +1929,8 @@ export const documentsApi = {
   },
   versions: async (documentId: string) => {
     const response = await gatewayRequest<any>(() => apiClient.get(`/documents/${documentId}/versions`));
-    return Array.isArray(response.data?.versions) ? response.data.versions : [];
+    const payload = response.data?.data ?? response.data;
+    return Array.isArray(payload) ? payload : Array.isArray(payload?.versions) ? payload.versions : [];
   },
   archive: async (documentId: string) => {
     const response = await gatewayRequest<any>(() => apiClient.delete(`/documents/${documentId}`));
@@ -2025,9 +2034,7 @@ export const registryApi = {
       form.append('mapping', typeof mapping === 'string' ? mapping : JSON.stringify(mapping));
 
       const response = await gatewayRequest<any>(() =>
-        apiClient.post('/registry/classifiers/import', form, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        }),
+        apiClient.post('/registry/classifiers/import', form),
       );
       return response.data;
     },
@@ -2165,9 +2172,7 @@ export const registryApi = {
       form.append('mapping', typeof mapping === 'string' ? mapping : JSON.stringify(mapping));
 
       const response = await gatewayRequest<any>(() =>
-        apiClient.post('/registry/terminology/import', form, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        }),
+        apiClient.post('/registry/terminology/import', form),
       );
       return response.data;
     },
@@ -2224,25 +2229,24 @@ export const historyApi = {
     if (isDemoMode()) return MOCK_HISTORY;
 
     try {
-      const sessionsResponse = await gatewayRequest<any>(() => apiClient.get('/chat/sessions'));
-      const sessions = mapGatewaySessionsResponse(sessionsResponse.data);
-
-      const hydrated = await Promise.all(
-        sessions.map(async (session) => {
-          try {
-            return await chatApi.getSession(session.id);
-          } catch {
-            return session;
-          }
-        }),
-      );
+      const response = await gatewayRequest<any>(() => apiClient.get('/chat/history'));
       useUIStore.getState().setApiStatus('online');
-      return hydrated;
+      return mapGatewayHistoryResponse(response.data);
     } catch {
       try {
-        const response = await gatewayRequest<any>(() => apiClient.get('/chat/history'));
+        const sessionsResponse = await gatewayRequest<any>(() => apiClient.get('/chat/sessions'));
+        const sessions = mapGatewaySessionsResponse(sessionsResponse.data);
+        const hydrated = await Promise.all(
+          sessions.map(async (session) => {
+            try {
+              return await chatApi.getSession(session.id);
+            } catch {
+              return session;
+            }
+          }),
+        );
         useUIStore.getState().setApiStatus('online');
-        return mapGatewayHistoryResponse(response.data);
+        return hydrated;
       } catch {
         useUIStore.getState().setApiStatus('offline');
         return [];

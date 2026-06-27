@@ -850,6 +850,11 @@ const mapGatewayNotifications = (payload: any): DraftNotification[] => {
 
 const pickMetadataSource = (payload: any) => payload?.metadata_overrides ?? payload?.metadataOverrides ?? {};
 
+const firstNonEmptyText = (...values: unknown[]) => {
+  const value = values.find((item) => String(item ?? '').trim().length > 0);
+  return value === undefined ? '' : String(value).trim();
+};
+
 const buildMetadataOverridesFromForm = (form: DraftForm): DraftMetadataOverrides => ({
   title: form.title.trim() || null,
   source_type: form.sourceType || null,
@@ -864,7 +869,7 @@ const buildMetadataOverridesFromForm = (form: DraftForm): DraftMetadataOverrides
   valid_until: form.validUntil.trim() || null,
 });
 
-const mapGatewayDraftRecordToUi = (payload: any, fallback?: Partial<DraftItem>): DraftItem => {
+export const mapGatewayDraftRecordToUi = (payload: any, fallback?: Partial<DraftItem>): DraftItem => {
   const status = normalizeDraftStatusFromGateway(payload?.status ?? fallback?.status);
   const preview = mapGatewayPreviewMetadata(payload) ?? fallback?.preview ?? null;
   const duplicates = mapGatewayDuplicates(payload);
@@ -874,11 +879,33 @@ const mapGatewayDraftRecordToUi = (payload: any, fallback?: Partial<DraftItem>):
   const confidence = payload?.confidence ?? fallback?.confidence ?? 0;
   const createdAt = payload?.created_at ?? payload?.createdAt ?? fallback?.createdAt ?? nextClock();
   const updatedAt = payload?.updated_at ?? payload?.updatedAt ?? fallback?.updatedAt ?? createdAt;
+  const draftId = String(fallback?.id ?? payload?.draft_id ?? payload?.id ?? `draft-${Date.now()}`);
+  const documentKey = firstNonEmptyText(payload?.document_key, payload?.documentKey, fallback?.gatewayDocumentKey);
+  const fileKey = firstNonEmptyText(payload?.file_key, payload?.fileKey);
+  const fallbackLabel = documentKey || fileKey || `Черновик #${draftId}`;
+  const fileName = firstNonEmptyText(
+    payload?.filename,
+    payload?.file_name,
+    fallback?.fileName,
+    payload?.title,
+    fallbackLabel,
+  );
+  const title = firstNonEmptyText(
+    payload?.title,
+    metadataOverrides.title,
+    payload?.preview_metadata?.title,
+    fallback?.title,
+    payload?.filename,
+    payload?.file_name,
+    documentKey,
+    fileKey,
+    fallbackLabel,
+  );
 
   return {
-    id: String(fallback?.id ?? payload?.draft_id ?? payload?.id ?? `draft-${Date.now()}`),
-    fileName: payload?.filename ?? payload?.file_name ?? fallback?.fileName ?? payload?.title ?? 'Документ',
-    title: payload?.title ?? metadataOverrides.title ?? payload?.preview_metadata?.title ?? fallback?.title ?? payload?.filename ?? 'Документ',
+    id: draftId,
+    fileName,
+    title,
     sourceType: payload?.source_type ?? metadataOverrides.source_type ?? payload?.preview_metadata?.source_type ?? fallback?.sourceType ?? 'OTHER',
     docCode: payload?.doc_code ?? metadataOverrides.doc_code ?? payload?.preview_metadata?.doc_code ?? fallback?.docCode ?? '',
     year: payload?.year ?? metadataOverrides.year ?? payload?.preview_metadata?.year ?? preview?.year ?? fallback?.year ?? '',
@@ -901,11 +928,11 @@ const mapGatewayDraftRecordToUi = (payload: any, fallback?: Partial<DraftItem>):
     gatewayTaskId: String(payload?.task_id ?? payload?.taskId ?? fallback?.gatewayTaskId ?? ''),
     gatewayVersionId: String(payload?.version_id ?? payload?.versionId ?? fallback?.gatewayVersionId ?? ''),
     gatewayDraftId: (() => {
-      const raw = payload?.draft_id ?? payload?.draftId ?? fallback?.gatewayDraftId ?? '';
+      const raw = payload?.draft_id ?? payload?.draftId ?? payload?.id ?? fallback?.gatewayDraftId ?? '';
       const str = String(raw);
       return /^\d+$/.test(str) ? str : '';
     })(),
-    gatewayDocumentKey: String(payload?.document_key ?? payload?.documentKey ?? fallback?.gatewayDocumentKey ?? ''),
+    gatewayDocumentKey: documentKey,
     gatewayFileHashSha256: String(payload?.file_hash_sha256 ?? payload?.fileHashSha256 ?? fallback?.gatewayFileHashSha256 ?? ''),
     gatewayTitleHashSha256: String(payload?.title_hash_sha256 ?? payload?.titleHashSha256 ?? fallback?.gatewayTitleHashSha256 ?? ''),
     gatewayTitleKey: String(payload?.title_key ?? payload?.titleKey ?? fallback?.gatewayTitleKey ?? ''),

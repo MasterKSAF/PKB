@@ -53,6 +53,7 @@ docker compose up --watch
 
 ```powershell
 npm run lint
+npm run test:run
 npm run build
 ```
 
@@ -67,6 +68,8 @@ npm run build
 3. После обновления страницы UI восстанавливает сессию по сохраненным access/refresh token и не требует повторного логина, если сессия еще валидна.
 4. При `401 Unauthorized` общий HTTP-слой вызывает `POST /auth/refresh`, обновляет access token и повторяет исходный запрос один раз.
 5. Если refresh token истек или невалиден, UI очищает локальную сессию и возвращает пользователя на экран входа.
+6. В продуктивном режиме видимые вкладки определяются полем `available_tabs`; локальная карта ролей используется только в demo-режиме.
+7. Временное переключение prod → demo → prod не отзывает токены и возвращает исходную продуктивную сессию.
 
 Актуальная dev/server-сборка обычно использует:
 
@@ -154,7 +157,7 @@ Demo-режим использует локальные профили:
 | `src/components/RegistryEditors.tsx` | Классификаторы, терминология, неизвестные коды. |
 | `src/components/SourcePreviewDialog.tsx` | Предпросмотр источников и документов. |
 | `src/components/Feedback.tsx` | Оценка ответа ассистента. |
-| `src/components/VideoGuideDialog.tsx` | Видеоинструкция. |
+| `src/components/VideoGuideDialog.tsx` | Полноэкранный видеоплеер или явное состояние отсутствующего видеофайла. |
 
 ## Конфигурация
 
@@ -174,9 +177,11 @@ VITE_API_BASE_URL=http://127.0.0.1:8080/api/v1
 VITE_GATEWAY_AUTO_LOGIN=false
 VITE_GATEWAY_USERNAME=admin@example.com
 VITE_GATEWAY_PASSWORD=Admin1234!
+VITE_VIDEO_GUIDE_URL=/video/ai-assistant-pkb.mp4
 ```
 
 `VITE_GATEWAY_AUTO_LOGIN=true` допустим только для локальной отладки. В продуктивной сборке вход должен выполняться пользователем через экран авторизации.
+`VITE_VIDEO_GUIDE_URL` должен указывать на доступный браузеру видеофайл; без него UI показывает, что видеоинструкция пока не опубликована.
 
 ## Документация рядом
 
@@ -196,4 +201,4 @@ VITE_GATEWAY_PASSWORD=Admin1234!
 4. Обработка базы знаний разделена на загрузку, черновики, реестр и журналы.
 5. Авторизация в продуктивном режиме поддерживает refresh token и восстановление после F5/reload.
 6. Открытые backend-блокеры зафиксированы отдельно.
-7. Проверки: `npm run lint`, `npm run build`.
+7. Проверки: `npm run lint`, `npm run test:run`, `npm run build`.

@@ -23,7 +23,13 @@ import { History } from './components/History';
 import { AdminPanel } from './components/AdminPanel';
 import { VideoGuideDialog } from './components/VideoGuideDialog';
 import { LoginScreen } from './components/LoginScreen';
-import { canAccessTab, getFallbackTab, TAB_DESCRIPTIONS, TAB_TITLES, USER_ROLE_BY_LABEL } from './utils/access';
+import {
+  getAccessibleFallbackTab,
+  getAccessibleTabs,
+  TAB_DESCRIPTIONS,
+  TAB_TITLES,
+  USER_ROLE_BY_LABEL,
+} from './utils/access';
 import { authApi } from './utils/http';
 
 const queryClient = new QueryClient({
@@ -50,6 +56,7 @@ export default function App() {
     isAuthenticated,
     login,
     logout: storeLogout,
+    prodCurrentUserIdSnapshot,
     themeMode,
     workMode,
     setActiveTab,
@@ -67,6 +74,10 @@ export default function App() {
       : currentUser.position === currentUser.role
       ? currentUser.role
       : `${currentUser.position} · ${currentUser.role}`;
+  const accessibleTabs = useMemo(
+    () => getAccessibleTabs(currentRole, currentUser?.availableTabs, workMode),
+    [currentRole, currentUser?.availableTabs, workMode],
+  );
   const activeNavHeaderBackground = themeMode === 'dark' ? '#242829' : '#e0f2fe';
   const activeNavHeaderBorder = themeMode === 'dark' ? 'rgba(198, 216, 240, 0.38)' : '#7dd3fc';
 
@@ -78,6 +89,13 @@ export default function App() {
     let cancelled = false;
 
     if (workMode === 'demo') {
+      setAuthChecked(true);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (isAuthenticated && prodCurrentUserIdSnapshot) {
       setAuthChecked(true);
       return () => {
         cancelled = true;
@@ -104,7 +122,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [login, setApiStatus, workMode]);
+  }, [isAuthenticated, login, prodCurrentUserIdSnapshot, setApiStatus, workMode]);
 
   useEffect(() => {
     if (!isAuthenticated || workMode === 'demo') return;
@@ -135,13 +153,13 @@ export default function App() {
   }, [currentRole, currentUser, setCurrentRole]);
 
   useEffect(() => {
-    if (!canAccessTab(currentRole, activeTab)) {
-      setActiveTab(getFallbackTab(currentRole));
+    if (!accessibleTabs.includes(activeTab)) {
+      setActiveTab(getAccessibleFallbackTab(accessibleTabs));
     }
-  }, [activeTab, currentRole, setActiveTab]);
+  }, [accessibleTabs, activeTab, setActiveTab]);
 
   const renderContent = () => {
-    if (!canAccessTab(currentRole, activeTab)) {
+    if (!accessibleTabs.includes(activeTab)) {
       return <Chat />;
     }
 
@@ -166,6 +184,12 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    if (workMode === 'demo') {
+      queryClient.clear();
+      storeLogout();
+      return;
+    }
+
     void authApi.logout().finally(() => {
       queryClient.clear();
       storeLogout();

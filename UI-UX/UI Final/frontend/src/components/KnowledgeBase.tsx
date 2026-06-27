@@ -686,6 +686,17 @@ export const KnowledgeBase: React.FC = () => {
           </Alert>
         )}
 
+        {!documentsQuery.isLoading &&
+          !knowledgeSectionsQuery.isLoading &&
+          !documentsQuery.isError &&
+          !knowledgeSectionsQuery.isError &&
+          rawDocuments.length === 0 &&
+          knowledgeSections.length === 0 && (
+            <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
+              База знаний пока пуста.
+            </Alert>
+          )}
+
         {!selectedSection && (
         <Paper
           variant="outlined"

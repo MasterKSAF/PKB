@@ -46,6 +46,19 @@ export const ROLE_TAB_ACCESS: Record<UserRole, AppTab[]> = {
   systemAdmin: ['chat', 'documents', 'knowledgeProcessing', 'history', 'qa', 'admin'],
 };
 
+const GATEWAY_TAB_ACCESS: Record<string, AppTab[]> = {
+  chat: ['chat'],
+  search: ['documents'],
+  knowledge_base: ['documents'],
+  documents: ['knowledgeProcessing'],
+  registry: ['knowledgeProcessing'],
+  knowledge_processing: ['knowledgeProcessing'],
+  history: ['history'],
+  monitor: ['qa'],
+  qa: ['qa'],
+  admin: ['admin'],
+};
+
 export const ADMIN_SECTIONS_ACCESS: Record<UserRole, string[]> = {
   user: [],
   knowledgeAdmin: ['processingLogs'],
@@ -58,4 +71,23 @@ export function canAccessTab(role: UserRole, tab: AppTab) {
 
 export function getFallbackTab(role: UserRole): AppTab {
   return ROLE_TAB_ACCESS[role][0] ?? 'chat';
+}
+
+export function getAccessibleTabs(
+  role: UserRole,
+  availableTabs: string[] | undefined,
+  workMode: 'demo' | 'prod',
+): AppTab[] {
+  if (workMode === 'demo') return ROLE_TAB_ACCESS[role];
+
+  if (!Array.isArray(availableTabs)) {
+    return ['chat'];
+  }
+
+  const mapped = availableTabs.flatMap((tab) => GATEWAY_TAB_ACCESS[String(tab).trim().toLowerCase()] ?? []);
+  return Array.from(new Set(mapped));
+}
+
+export function getAccessibleFallbackTab(tabs: AppTab[]): AppTab {
+  return tabs[0] ?? 'chat';
 }
