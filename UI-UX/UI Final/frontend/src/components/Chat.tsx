@@ -43,6 +43,11 @@ import { ChatMessage, Citation } from '../utils/mockData';
 import { Feedback } from './Feedback';
 import { useUIStore } from '../store/uiStore';
 import { downloadPreviewFile } from '../utils/downloadPreview';
+import {
+  getCitationDisplayIndex,
+  parseInlineCitationMarkers,
+  resolveCitationMarker,
+} from '../utils/citations';
 
 type ChatStatus = NonNullable<ChatMessage['status']>;
 
@@ -89,21 +94,8 @@ function stripLegacyCitationMarkers(text: string) {
   return text.replace(/\s*%\[[^\]]*\]%/g, '');
 }
 
-function buildCitationIndex(citations: Citation[] = [], useSequentialNumbers = false) {
-  const index = new Map<number, Citation>();
-
-  citations.forEach((citation, sourcePosition) => {
-    const citationIndex = Number(citation.index ?? (useSequentialNumbers ? sourcePosition + 1 : undefined));
-    if (Number.isFinite(citationIndex)) {
-      index.set(citationIndex, citation);
-    }
-  });
-
-  return index;
-}
-
 function hasInlineCitationMarkers(content: string, citations: Citation[] = []) {
-  return citations.length > 0 && /\[(\d+)\]/.test(content);
+  return citations.length > 0 && parseInlineCitationMarkers(content).length > 0;
 }
 
 function mapCitationsToPoints(points: string[], citations: Citation[] = []) {
@@ -223,29 +215,27 @@ function renderInlineCitationText(
   isLight: boolean,
   useSequentialNumbers = false,
 ) {
-  const citationIndex = buildCitationIndex(citations, useSequentialNumbers);
   const cleanContent = stripLegacyCitationMarkers(content);
-  const markerPattern = /\[(\d+)\]/g;
+  const markers = parseInlineCitationMarkers(cleanContent);
   const nodes: React.ReactNode[] = [];
   let cursor = 0;
-  let match: RegExpExecArray | null;
 
-  while ((match = markerPattern.exec(cleanContent)) !== null) {
-    const markerStart = match.index;
-    const markerEnd = markerPattern.lastIndex;
+  markers.forEach((marker) => {
+    const markerStart = marker.start;
+    const markerEnd = marker.end;
     const before = cleanContent.slice(cursor, markerStart);
 
     if (before) {
       nodes.push(...React.Children.toArray(highlightText(before, query, isLight)));
     }
 
-    const sourceIndex = Number(match[1]);
-    const citation = citationIndex.get(sourceIndex);
+    const citation = resolveCitationMarker(marker, citations, useSequentialNumbers);
 
     if (citation) {
+      const displayIndex = getCitationDisplayIndex(citation, citations);
       nodes.push(
         <Button
-          key={`inline-source-${sourceIndex}-${markerStart}`}
+          key={`inline-source-${displayIndex}-${markerStart}`}
           size="small"
           variant="text"
           className="source-link-button"
@@ -262,15 +252,15 @@ function renderInlineCitationText(
           }}
           onClick={() => openCitation(citation, 'source')}
         >
-          [{sourceIndex}]
+          [{displayIndex}]
         </Button>,
       );
     } else {
-      nodes.push(match[0]);
+      nodes.push(marker.raw);
     }
 
     cursor = markerEnd;
-  }
+  });
 
   if (cursor < cleanContent.length) {
     nodes.push(...React.Children.toArray(highlightText(cleanContent.slice(cursor), query, isLight)));

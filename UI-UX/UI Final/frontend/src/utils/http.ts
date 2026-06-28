@@ -538,6 +538,7 @@ function mapGatewaySource(source: any, index = 0): Citation {
     ),
     index: Number.isFinite(citationIndex) ? citationIndex : undefined,
     documentId: toGatewayStringId(source.document_id ?? source.doc_id),
+    sectionId: toGatewayStringId(source.section_id ?? source.chunk_id),
     document: source.document_title ?? source.document ?? source.document_id ?? 'Документ базы знаний',
     section: source.clause ?? source.section ?? source.section_id ?? 'Фрагмент источника',
     page: Number(source.page ?? source.page_num ?? 1),

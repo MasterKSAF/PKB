@@ -32,6 +32,11 @@ import { apiClient, historyApi, sourceApi } from '../utils/http';
 import type { AnswerStatus, Citation, QueryHistoryItem } from '../utils/mockData';
 import { useUIStore } from '../store/uiStore';
 import { downloadPreviewFile } from '../utils/downloadPreview';
+import {
+  getCitationDisplayIndex,
+  parseInlineCitationMarkers,
+  resolveCitationMarker,
+} from '../utils/citations';
 
 type HistoryPreview = Citation & {
   previewKind: 'source' | 'document';
@@ -161,19 +166,6 @@ function stripLegacyCitationMarkers(text: string) {
   return text.replace(/\s*%\[[^\]]*\]%/g, '');
 }
 
-function buildCitationIndex(citations: Citation[] = [], useSequentialNumbers = false) {
-  const index = new Map<number, Citation>();
-
-  citations.forEach((citation, sourcePosition) => {
-    const citationIndex = Number(citation.index ?? (useSequentialNumbers ? sourcePosition + 1 : undefined));
-    if (Number.isFinite(citationIndex)) {
-      index.set(citationIndex, citation);
-    }
-  });
-
-  return index;
-}
-
 function renderHistoryMessageContent(
   content: string,
   citations: Citation[] = [],
@@ -182,28 +174,26 @@ function renderHistoryMessageContent(
   useSequentialNumbers = false,
 ) {
   const cleanContent = stripLegacyCitationMarkers(content);
-  const citationIndex = buildCitationIndex(citations, useSequentialNumbers);
-  const markerPattern = /\[(\d+)\]/g;
+  const markers = parseInlineCitationMarkers(cleanContent);
   const nodes: React.ReactNode[] = [];
   let cursor = 0;
-  let match: RegExpExecArray | null;
 
-  while ((match = markerPattern.exec(cleanContent)) !== null) {
-    const markerStart = match.index;
-    const markerEnd = markerPattern.lastIndex;
+  markers.forEach((marker) => {
+    const markerStart = marker.start;
+    const markerEnd = marker.end;
     const before = cleanContent.slice(cursor, markerStart);
 
     if (before) {
       nodes.push(before);
     }
 
-    const sourceIndex = Number(match[1]);
-    const citation = citationIndex.get(sourceIndex);
+    const citation = resolveCitationMarker(marker, citations, useSequentialNumbers);
 
     if (citation) {
+      const displayIndex = getCitationDisplayIndex(citation, citations);
       nodes.push(
         <Button
-          key={`history-inline-source-${sourceIndex}-${markerStart}`}
+          key={`history-inline-source-${displayIndex}-${markerStart}`}
           size="small"
           variant="text"
           className="source-link-button"
@@ -219,15 +209,15 @@ function renderHistoryMessageContent(
           }}
           onClick={() => openPreview(citation, 'source')}
         >
-          [{sourceIndex}]
+          [{displayIndex}]
         </Button>,
       );
     } else {
-      nodes.push(match[0]);
+      nodes.push(marker.raw);
     }
 
     cursor = markerEnd;
-  }
+  });
 
   if (cursor < cleanContent.length) {
     nodes.push(cleanContent.slice(cursor));
