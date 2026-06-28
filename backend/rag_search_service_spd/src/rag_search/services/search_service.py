@@ -5,6 +5,13 @@ from opentelemetry.trace import Status, StatusCode
 
 from rag_search.core.config import settings
 from rag_search.core.logger import logger
+from rag_search.core.metrics import (
+    SEARCH_DURATION_MS,
+    SEARCH_EMBEDDING_TOKENS_TOTAL,
+    SEARCH_REQUESTS_FAILED_TOTAL,
+    SEARCH_REQUESTS_TOTAL,
+    SEARCH_RESULTS_COUNT,
+)
 from rag_search.models.search import SearchRequest, SearchResponse
 from rag_search.repositories.postgres_search_repository import (
     PostgresSearchRepository,
@@ -52,6 +59,15 @@ class SearchService:
 
             embedding_tokens = 0
             embedding_cost_usd = 0.0
+
+            request_metric_attributes = {
+                "search_type": request.search_type,
+                "embedding_provider": settings.EMBEDDING_PROVIDER,
+                "embedding_model": settings.EMBEDDING_MODEL,
+                "embedding_dim": settings.EMBEDDING_DIM,
+                "expand_context": request.expand_context,
+            }
+            SEARCH_REQUESTS_TOTAL.add(1, request_metric_attributes)
 
             try:
                 if request.search_type == "dense":
@@ -237,6 +253,24 @@ class SearchService:
                     (perf_counter() - started_at) * 1000
                 )
 
+                success_metric_attributes = {
+                    **request_metric_attributes,
+                    "status": "ok",
+                }
+                SEARCH_DURATION_MS.record(
+                    processing_time_ms,
+                    success_metric_attributes,
+                )
+                SEARCH_RESULTS_COUNT.record(
+                    len(results),
+                    success_metric_attributes,
+                )
+                if embedding_tokens:
+                    SEARCH_EMBEDDING_TOKENS_TOTAL.add(
+                        embedding_tokens,
+                        success_metric_attributes,
+                    )
+
                 span.set_attribute("processing_time_ms", processing_time_ms)
                 span.set_attribute("total_found", len(results))
                 span.set_attribute("embedding_tokens", embedding_tokens)
@@ -284,6 +318,20 @@ class SearchService:
             except Exception as exc:
                 processing_time_ms = int(
                     (perf_counter() - started_at) * 1000
+                )
+
+                failure_metric_attributes = {
+                    **request_metric_attributes,
+                    "status": "failed",
+                    "error_type": type(exc).__name__,
+                }
+                SEARCH_REQUESTS_FAILED_TOTAL.add(
+                    1,
+                    failure_metric_attributes,
+                )
+                SEARCH_DURATION_MS.record(
+                    processing_time_ms,
+                    failure_metric_attributes,
                 )
 
                 span.record_exception(exc)
