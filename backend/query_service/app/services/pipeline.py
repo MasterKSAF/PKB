@@ -16,8 +16,9 @@ _SYSTEM_PROMPT = (
     "Ты — ассистент по инженерным нормативно-техническим документам ПКБ. "
     "Отвечай строго на основе предоставленных фрагментов документов. "
     "Если во фрагментах нет ответа — прямо сообщи об этом, не домысливай. "
-    "Ссылайся на использованные фрагменты прямо в тексте в формате [N], "
-    "где N — номер фрагмента (например: [1], [3]). Не пиши идентификаторы документов в тексте."
+    "После каждого утверждения, основанного на фрагменте, ставь ссылку в формате [source:N], "
+    "где N — индекс фрагмента начиная с 0 (например: [source:0], [source:2]). "
+    "Не пиши идентификаторы документов в тексте — только [source:N]."
 )
 
 _SUMMARY_PROMPT = (
@@ -27,7 +28,8 @@ _SUMMARY_PROMPT = (
 )
 
 _FINAL_ASSISTANT_STATUSES = ("answered", "not_found")
-_CITATION_RE = re.compile(r"\s*%\[[^\]]*\]%")
+_SOURCE_REF_RE = re.compile(r"\[source:(\d+)\]")
+_OLD_MARKER_RE = re.compile(r"\s*%\[[^\]]*\]%")
 
 
 def _estimate_tokens(text: str) -> int:
@@ -36,8 +38,32 @@ def _estimate_tokens(text: str) -> int:
 
 def _clean_content(role: str, content: str) -> str:
     if role == "assistant":
-        return _CITATION_RE.sub("", content)
+        content = _SOURCE_REF_RE.sub("", content)
+        content = _OLD_MARKER_RE.sub("", content)
     return content
+
+
+def _enrich_citations(
+    llm_text: str, chunks: list[rag_client.Chunk]
+) -> tuple[str, list[int]]:
+    used_indices: list[int] = []
+    seen: set[int] = set()
+
+    def replace(m: re.Match) -> str:
+        n = int(m.group(1))
+        if n < 0 or n >= len(chunks):
+            return ""
+        chunk = chunks[n]
+        if n not in seen:
+            seen.add(n)
+            used_indices.append(n)
+        title = chunk.document_title or ""
+        clause = f" §{chunk.clause}" if chunk.clause else ""
+        page = f", стр. {chunk.page}" if chunk.page else ""
+        return f"[document_id:{chunk.document_id}, section_id:{chunk.section_id}{clause}{page}]"
+
+    enriched = _SOURCE_REF_RE.sub(replace, llm_text)
+    return enriched, used_indices
 
 
 async def _load_session_meta(
@@ -128,7 +154,7 @@ def _build_messages(
 ) -> list[dict]:
     context_parts = [
         f"[{i}] «{c.document_title}», {c.clause}, стр. {c.page}:\n{c.content}"
-        for i, c in enumerate(chunks, 1)
+        for i, c in enumerate(chunks)
     ]
     context_block = "\n\n".join(context_parts)
 
@@ -166,8 +192,8 @@ def _build_llm_mock(query: str, chunks: list[rag_client.Chunk]) -> str:
         return "По данному запросу релевантные фрагменты в базе знаний не найдены."
 
     parts = []
-    for i, chunk in enumerate(chunks[:3], 1):
-        parts.append(f"{chunk.excerpt} [{i}]")
+    for i, chunk in enumerate(chunks[:3]):
+        parts.append(f"{chunk.excerpt} [source:{i}]")
     return " ".join(parts)
 
 
@@ -257,15 +283,18 @@ async def run_pipeline(
             return
 
         await _set_status(session_factory, message_id, "enriching_citations")
+        used_indices: list[int] = list(range(len(chunks)))
         try:
-            final_text = await asyncio.wait_for(
+            final_text, used_indices = await asyncio.wait_for(
                 asyncio.to_thread(_enrich_citations, llm_text, chunks),
                 timeout=30.0,
             )
-        except Exception as exc:
+        except Exception:
             warnings.append("Обогащение цитат недоступно.")
             logger.warning("citation enrichment skipped", extra={"message_id": message_id}, exc_info=True)
             final_text = llm_text
+
+        used_chunks = [chunks[i] for i in used_indices if i < len(chunks)] or chunks
 
         async with session_factory() as db:
             async with db.begin():
@@ -273,7 +302,7 @@ async def run_pipeline(
                     update(ChatMessage)
                     .where(ChatMessage.message_id == message_id)
                     .values(
-                        content=llm_text,
+                        content=final_text,
                         status="answered",
                         processing_time_ms=0,
                         enrichment_skipped=enrichment_skipped,
@@ -283,10 +312,10 @@ async def run_pipeline(
                 if result.rowcount == 0:
                     logger.warning("pipeline: message deleted before finish, skipping sources", extra={"message_id": message_id})
                     return
-                for idx, chunk in enumerate(chunks, 1):
+                for pos, chunk in enumerate(used_chunks, 1):
                     db.add(ChatSource(
                         message_id=message_id,
-                        citation_index=idx,
+                        citation_index=pos,
                         chunk_id=chunk.chunk_id,
                         document_id=chunk.document_id,
                         document_title=chunk.document_title,

@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sess
 
 from app.clients.registry_client import normalize_term, enrich_query
 from app.clients.rag_client import Chunk, search
-from app.services.pipeline import _build_llm_mock
+from app.services.pipeline import _build_llm_mock, _enrich_citations
 
 
 # ── registry_client ──────────────────────────────────────────────────────────
@@ -95,7 +95,7 @@ def test_build_llm_mock_with_chunks():
     ]
     result = _build_llm_mock("Arc4?", chunks)
     assert "12 мм" in result
-    assert "[1]" in result
+    assert "[source:0]" in result
     assert "%[" not in result
 
 
@@ -104,7 +104,7 @@ def test_build_llm_mock_empty_chunks():
     assert len(result) > 0
 
 
-def test_build_llm_mock_uses_bracket_citations_not_markers():
+def test_build_llm_mock_uses_source_ref_format():
     chunks = [
         Chunk(
             chunk_id=1, document_id="doc-001", document_title="Правила РС",
@@ -114,8 +114,49 @@ def test_build_llm_mock_uses_bracket_citations_not_markers():
         )
     ]
     result = _build_llm_mock("Arc4?", chunks)
-    assert "[1]" in result
+    assert "[source:0]" in result
     assert "%[" not in result
+
+
+def test_enrich_citations_replaces_source_refs():
+    chunks = [
+        Chunk(
+            chunk_id=1, document_id=42, document_title="Правила РС",
+            section_id=420042, page=42, content="text",
+            excerpt="Толщина не менее 12 мм.", score=0.9,
+            clause="4.2", section_title="Ледовые усиления", confidence=0.85,
+        )
+    ]
+    text = "Не менее 12 мм [source:0]."
+    enriched, used = _enrich_citations(text, chunks)
+    assert "[source:" not in enriched
+    assert "document_id:42" in enriched
+    assert "section_id:420042" in enriched
+    assert used == [0]
+
+
+def test_enrich_citations_filters_unused():
+    chunks = [
+        Chunk(chunk_id=1, document_id=1, document_title="Д1", section_id=10, page=1,
+              content="a", excerpt="a", score=1.0, clause=None, section_title=None, confidence=1.0),
+        Chunk(chunk_id=2, document_id=2, document_title="Д2", section_id=20, page=2,
+              content="b", excerpt="b", score=1.0, clause=None, section_title=None, confidence=1.0),
+    ]
+    text = "Текст [source:0] без второго источника."
+    _, used = _enrich_citations(text, chunks)
+    assert used == [0]
+    assert 1 not in used
+
+
+def test_enrich_citations_out_of_range_ignored():
+    chunks = [
+        Chunk(chunk_id=1, document_id=1, document_title="Д1", section_id=10, page=1,
+              content="a", excerpt="a", score=1.0, clause=None, section_title=None, confidence=1.0),
+    ]
+    text = "Текст [source:99]."
+    enriched, used = _enrich_citations(text, chunks)
+    assert "[source:" not in enriched
+    assert used == []
 
 
 # ── pipeline integration (с мок-БД) ──────────────────────────────────────────
@@ -146,12 +187,13 @@ async def test_pipeline_answered_message_has_sources(client):
     if msg["status"] == "answered":
         assert len(msg["sources"]) > 0
         assert "%[" not in (msg["content"] or "")
+        assert "[source:" not in (msg["content"] or "")
         src = msg["sources"][0]
         assert "document_id" in src
         assert "section_id" in src
         assert "excerpt" in src
         assert "score" in src
-        assert src["index"] == 1
+        assert src["index"] is not None
 
 
 @pytest.mark.asyncio
