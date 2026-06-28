@@ -72,7 +72,8 @@ type ChatPreview = Citation & {
 };
 
 function getAnswerPoints(content: string) {
-  const lines = content
+  const normalizedContent = stripLegacyCitationMarkers(content);
+  const lines = normalizedContent
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean);
@@ -81,7 +82,28 @@ function getAnswerPoints(content: string) {
     .filter((line) => /^\d+[.)]\s+/.test(line))
     .map((line) => line.replace(/^\d+[.)]\s+/, ''));
 
-  return numbered.length > 0 ? numbered : [content];
+  return numbered.length > 0 ? numbered : [normalizedContent];
+}
+
+function stripLegacyCitationMarkers(text: string) {
+  return text.replace(/\s*%\[[^\]]*\]%/g, '');
+}
+
+function buildCitationIndex(citations: Citation[] = [], useSequentialNumbers = false) {
+  const index = new Map<number, Citation>();
+
+  citations.forEach((citation, sourcePosition) => {
+    const citationIndex = Number(citation.index ?? (useSequentialNumbers ? sourcePosition + 1 : undefined));
+    if (Number.isFinite(citationIndex)) {
+      index.set(citationIndex, citation);
+    }
+  });
+
+  return index;
+}
+
+function hasInlineCitationMarkers(content: string, citations: Citation[] = []) {
+  return citations.length > 0 && /\[(\d+)\]/.test(content);
 }
 
 function mapCitationsToPoints(points: string[], citations: Citation[] = []) {
@@ -91,7 +113,11 @@ function mapCitationsToPoints(points: string[], citations: Citation[] = []) {
   });
 }
 
-function buildAnsweredView(content: string, citations: Citation[] = []) {
+function buildAnsweredView(content: string, citations: Citation[] = [], useSequentialMapping = false) {
+  if (citations.length === 0 || hasInlineCitationMarkers(content, citations) || !useSequentialMapping) {
+    return null;
+  }
+
   const points = getAnswerPoints(content);
   const supportedCount = Math.min(points.length, citations.length);
   const supported = points.slice(0, supportedCount).map((text, index) => ({
@@ -189,8 +215,72 @@ function highlightText(text: string, query: string, isLight: boolean, activeOccu
   return parts;
 }
 
+function renderInlineCitationText(
+  content: string,
+  citations: Citation[] = [],
+  openCitation: (citation: Citation, previewKind: ChatPreview['previewKind']) => void,
+  query: string,
+  isLight: boolean,
+  useSequentialNumbers = false,
+) {
+  const citationIndex = buildCitationIndex(citations, useSequentialNumbers);
+  const cleanContent = stripLegacyCitationMarkers(content);
+  const markerPattern = /\[(\d+)\]/g;
+  const nodes: React.ReactNode[] = [];
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = markerPattern.exec(cleanContent)) !== null) {
+    const markerStart = match.index;
+    const markerEnd = markerPattern.lastIndex;
+    const before = cleanContent.slice(cursor, markerStart);
+
+    if (before) {
+      nodes.push(...React.Children.toArray(highlightText(before, query, isLight)));
+    }
+
+    const sourceIndex = Number(match[1]);
+    const citation = citationIndex.get(sourceIndex);
+
+    if (citation) {
+      nodes.push(
+        <Button
+          key={`inline-source-${sourceIndex}-${markerStart}`}
+          size="small"
+          variant="text"
+          className="source-link-button"
+          title={`${citation.document} · ${citation.section}`}
+          sx={{
+            ...sourceButtonSx(isLight, '0.72rem'),
+            display: 'inline-flex',
+            mx: 0.25,
+            px: 0.7,
+            py: 0.08,
+            minHeight: 0,
+            height: 21,
+            verticalAlign: 'baseline',
+          }}
+          onClick={() => openCitation(citation, 'source')}
+        >
+          [{sourceIndex}]
+        </Button>,
+      );
+    } else {
+      nodes.push(match[0]);
+    }
+
+    cursor = markerEnd;
+  }
+
+  if (cursor < cleanContent.length) {
+    nodes.push(...React.Children.toArray(highlightText(cleanContent.slice(cursor), query, isLight)));
+  }
+
+  return nodes.length ? nodes : highlightText(cleanContent, query, isLight);
+}
+
 export const Chat: React.FC = () => {
-  const { appendChatMessages, chatMessages, currentGatewaySessionId, themeMode } = useUIStore();
+  const { appendChatMessages, chatMessages, currentGatewaySessionId, themeMode, workMode } = useUIStore();
   const isLight = themeMode === 'light';
   const assistantAccent = isLight ? '#0284c7' : '#98d9d8';
   const messages = chatMessages;
@@ -365,10 +455,13 @@ export const Chat: React.FC = () => {
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.2 }}>
               {messages.map((msg) => {
                 const isAssistant = msg.role === 'assistant';
+                const useDemoCitationMapping = workMode === 'demo';
                 const answerPoints = isAssistant && msg.status === 'answered' ? getAnswerPoints(msg.content) : [];
+                const hasInlineCitations =
+                  isAssistant && msg.status === 'answered' && hasInlineCitationMarkers(msg.content, msg.citations);
                 const answeredView =
                   isAssistant && msg.status === 'answered'
-                    ? buildAnsweredView(msg.content, msg.citations)
+                    ? buildAnsweredView(msg.content, msg.citations, useDemoCitationMapping)
                     : null;
 
                 return (
@@ -494,7 +587,30 @@ export const Chat: React.FC = () => {
                           )}
                         </Box>
 
-                        {answeredView ? (
+                        {hasInlineCitations ? (
+                          <Typography
+                            component="div"
+                            variant="body1"
+                            sx={{
+                              lineHeight: 1.75,
+                              whiteSpace: 'pre-wrap',
+                              fontWeight: 400,
+                              color: 'text.primary',
+                              fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
+                              fontSize: '0.95rem',
+                              mt: 0.85,
+                            }}
+                          >
+                            {renderInlineCitationText(
+                              msg.content,
+                              msg.citations,
+                              openPreview,
+                              normalizedChatSearch,
+                              isLight,
+                              useDemoCitationMapping,
+                            )}
+                          </Typography>
+                        ) : answeredView ? (
                           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.45, mt: 0.85 }}>
                             {answeredView.supported.map((item, index) => (
                               <Box key={`${msg.id}-supported-${index}`} sx={{ display: 'flex', gap: 1.1, alignItems: 'flex-start' }}>

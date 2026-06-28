@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { AppTab, UserRole } from '../utils/access';
-import { USER_ROLE_BY_LABEL, getFallbackTab } from '../utils/access';
+import { USER_ROLE_BY_LABEL, getDemoStartTab, getProdStartTab } from '../utils/access';
 import { MOCK_ADMIN_USERS, MOCK_CHATS } from '../utils/mockData';
 import type { AdminUser } from '../utils/mockData';
 import type { ChatMessage } from '../utils/mockData';
@@ -85,13 +85,15 @@ export const useUIStore = create<UIState>((set) => ({
       }
 
       const currentRole = USER_ROLE_BY_LABEL[user.role] ?? 'user';
+      const activeTab =
+        state.workMode === 'demo' ? getDemoStartTab(currentRole) : getProdStartTab(user.availableTabs) ?? state.activeTab;
 
       return {
         isAuthenticated: true,
         currentUserId: user.id,
         currentRole,
         currentPermissions: user.permissions ?? {},
-        activeTab: getFallbackTab(currentRole),
+        activeTab,
         ...(state.workMode === 'prod'
           ? {
               prodAdminUsersSnapshot: state.adminUsers,
@@ -144,6 +146,8 @@ export const useUIStore = create<UIState>((set) => ({
       const targetUserId = workMode === 'demo' ? MOCK_ADMIN_USERS[0]?.id ?? '' : prodUserId;
       const targetUser = targetUsers.find((user) => user.id === targetUserId);
       const currentRole = USER_ROLE_BY_LABEL[targetUser?.role ?? ''] ?? 'user';
+      const activeTab =
+        workMode === 'demo' ? getDemoStartTab(currentRole) : getProdStartTab(targetUser?.availableTabs) ?? state.activeTab;
 
       return {
         workMode,
@@ -153,7 +157,7 @@ export const useUIStore = create<UIState>((set) => ({
         currentUserId: targetUserId,
         currentRole,
         currentPermissions: targetUser?.permissions ?? {},
-        activeTab: getFallbackTab(currentRole),
+        activeTab,
         chatMessages: workMode === 'demo' ? MOCK_CHATS : [],
         isAuthenticated: workMode === 'demo' ? state.isAuthenticated : Boolean(prodUserId && prodUsers.length),
         prodAdminUsersSnapshot: prodUsers,
@@ -169,6 +173,8 @@ export const useUIStore = create<UIState>((set) => ({
       const targetUserId = workMode === 'demo' ? MOCK_ADMIN_USERS[0]?.id ?? '' : prodUserId;
       const targetUser = targetUsers.find((user) => user.id === targetUserId);
       const currentRole = USER_ROLE_BY_LABEL[targetUser?.role ?? ''] ?? 'user';
+      const activeTab =
+        workMode === 'demo' ? getDemoStartTab(currentRole) : getProdStartTab(targetUser?.availableTabs) ?? state.activeTab;
 
       return {
         workMode,
@@ -178,7 +184,7 @@ export const useUIStore = create<UIState>((set) => ({
         currentUserId: targetUserId,
         currentRole,
         currentPermissions: targetUser?.permissions ?? {},
-        activeTab: getFallbackTab(currentRole),
+        activeTab,
         chatMessages: workMode === 'demo' ? MOCK_CHATS : [],
         isAuthenticated: workMode === 'demo' ? state.isAuthenticated : Boolean(prodUserId && prodUsers.length),
         prodAdminUsersSnapshot: prodUsers,

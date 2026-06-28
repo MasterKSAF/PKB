@@ -495,7 +495,6 @@ function shouldShowOutOfScopeResult(query: string) {
 function mapGatewayStatus(
   status?: string,
   scenario?: string,
-  fallback: NonNullable<ChatMessage['status']> = 'answered',
 ): ChatMessage['status'] {
   const normalized = String(status ?? '').toLowerCase();
 
@@ -507,7 +506,7 @@ function mapGatewayStatus(
   if (normalized === 'completed' || normalized === 'answered') return 'answered';
   if (scenario === 'failed' || normalized === 'failed' || normalized === 'error') return 'failed';
 
-  return fallback;
+  return 'failed';
 }
 
 function mapGatewayDocumentOcrStatus(status?: string): Document['ocrStatus'] {
@@ -529,8 +528,15 @@ function mapGatewayDocumentIndexStatus(status?: string): Document['indexStatus']
 }
 
 function mapGatewaySource(source: any, index = 0): Citation {
+  const rawCitationIndex = source.index ?? source.citation_index;
+  const citationIndex = rawCitationIndex === undefined || rawCitationIndex === null ? undefined : Number(rawCitationIndex);
+
   return {
-    id: toGatewayStringId(source.section_id ?? source.source_id ?? source.document_id, `gateway-source-${index}`),
+    id: toGatewayStringId(
+      source.source_id ?? source.id ?? `${source.document_id ?? 'doc'}-${source.section_id ?? 'section'}-${index}`,
+      `gateway-source-${index}`,
+    ),
+    index: Number.isFinite(citationIndex) ? citationIndex : undefined,
     documentId: toGatewayStringId(source.document_id ?? source.doc_id),
     document: source.document_title ?? source.document ?? source.document_id ?? 'Документ базы знаний',
     section: source.clause ?? source.section ?? source.section_id ?? 'Фрагмент источника',
@@ -578,13 +584,14 @@ function mapGatewayChatResponse(payload: any, query: string): ChatMessage {
   const content =
     answerItems.length > 0
       ? answerItems.map((item: any, index: number) => `${item.number ?? index + 1}. ${item.text ?? ''}`.trim()).join('\n')
-      : messagePayload.content ?? messagePayload.answer ?? messagePayload.message ?? `Система приняла запрос: ${query}`;
+      : messagePayload.content ?? messagePayload.answer ?? messagePayload.message ?? '';
+  const status = content ? mapGatewayStatus(messagePayload.status, messagePayload.scenario) : 'failed';
 
   return {
     id: messagePayload.message_id ?? messagePayload.answer_id ?? Math.random().toString(36).slice(2),
     role: 'assistant',
     content,
-    status: mapGatewayStatus(messagePayload.status, messagePayload.scenario),
+    status,
     citations: citations.length ? citations : undefined,
     timestamp: toUiTimestamp(messagePayload.timestamp),
   };
@@ -804,7 +811,7 @@ function mapGatewaySessionsResponse(payload: any): QueryHistoryItem[] {
       query: userMessage?.content ?? session.last_question ?? session.last_message_preview ?? '',
       answer: assistantMessage?.content ?? session.last_answer ?? session.last_message_preview ?? '',
       sources: Number(session.source_count ?? sourceCount),
-      status: assistantMessage?.status ?? mapGatewayStatus(session.status, session.scenario, messages.length ? 'answered' : 'pending'),
+      status: assistantMessage?.status ?? mapGatewayStatus(session.status, session.scenario),
       createdAt: session.created_at ?? session.updated_at ?? '',
       messages,
     };

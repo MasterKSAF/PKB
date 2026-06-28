@@ -20,6 +20,10 @@ describe('getAccessibleTabs', () => {
     ]);
   });
 
+  it('does not grant any tabs in prod when backend omits available_tabs', () => {
+    expect(getAccessibleTabs('systemAdmin', undefined, 'prod')).toEqual([]);
+  });
+
   it('keeps the complete role scenario in demo mode', () => {
     expect(getAccessibleTabs('knowledgeAdmin', undefined, 'demo')).toContain('knowledgeProcessing');
   });

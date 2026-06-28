@@ -69,7 +69,7 @@ export function canAccessTab(role: UserRole, tab: AppTab) {
   return ROLE_TAB_ACCESS[role].includes(tab);
 }
 
-export function getFallbackTab(role: UserRole): AppTab {
+export function getDemoStartTab(role: UserRole): AppTab {
   return ROLE_TAB_ACCESS[role][0] ?? 'chat';
 }
 
@@ -81,13 +81,13 @@ export function getAccessibleTabs(
   if (workMode === 'demo') return ROLE_TAB_ACCESS[role];
 
   if (!Array.isArray(availableTabs)) {
-    return ['chat'];
+    return [];
   }
 
   const mapped = availableTabs.flatMap((tab) => GATEWAY_TAB_ACCESS[String(tab).trim().toLowerCase()] ?? []);
   return Array.from(new Set(mapped));
 }
 
-export function getAccessibleFallbackTab(tabs: AppTab[]): AppTab {
-  return tabs[0] ?? 'chat';
+export function getProdStartTab(availableTabs: string[] | undefined): AppTab | undefined {
+  return getAccessibleTabs('user', availableTabs, 'prod')[0];
 }

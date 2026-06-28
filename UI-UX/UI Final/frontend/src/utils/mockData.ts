@@ -1,5 +1,6 @@
 export interface Citation {
   id: string;
+  index?: number;
   documentId?: string;
   document: string;
   section: string;

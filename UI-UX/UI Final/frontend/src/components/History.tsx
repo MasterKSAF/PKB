@@ -157,6 +157,85 @@ function citationButtonSx(themeMode: 'dark' | 'light') {
   } as const;
 }
 
+function stripLegacyCitationMarkers(text: string) {
+  return text.replace(/\s*%\[[^\]]*\]%/g, '');
+}
+
+function buildCitationIndex(citations: Citation[] = [], useSequentialNumbers = false) {
+  const index = new Map<number, Citation>();
+
+  citations.forEach((citation, sourcePosition) => {
+    const citationIndex = Number(citation.index ?? (useSequentialNumbers ? sourcePosition + 1 : undefined));
+    if (Number.isFinite(citationIndex)) {
+      index.set(citationIndex, citation);
+    }
+  });
+
+  return index;
+}
+
+function renderHistoryMessageContent(
+  content: string,
+  citations: Citation[] = [],
+  openPreview: (citation: Citation, previewKind: HistoryPreview['previewKind']) => void,
+  themeMode: 'dark' | 'light',
+  useSequentialNumbers = false,
+) {
+  const cleanContent = stripLegacyCitationMarkers(content);
+  const citationIndex = buildCitationIndex(citations, useSequentialNumbers);
+  const markerPattern = /\[(\d+)\]/g;
+  const nodes: React.ReactNode[] = [];
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = markerPattern.exec(cleanContent)) !== null) {
+    const markerStart = match.index;
+    const markerEnd = markerPattern.lastIndex;
+    const before = cleanContent.slice(cursor, markerStart);
+
+    if (before) {
+      nodes.push(before);
+    }
+
+    const sourceIndex = Number(match[1]);
+    const citation = citationIndex.get(sourceIndex);
+
+    if (citation) {
+      nodes.push(
+        <Button
+          key={`history-inline-source-${sourceIndex}-${markerStart}`}
+          size="small"
+          variant="text"
+          className="source-link-button"
+          title={`${citation.document} · ${citation.section}`}
+          sx={{
+            ...citationButtonSx(themeMode),
+            display: 'inline-flex',
+            mx: 0.25,
+            px: 0.7,
+            py: 0.08,
+            height: 21,
+            verticalAlign: 'baseline',
+          }}
+          onClick={() => openPreview(citation, 'source')}
+        >
+          [{sourceIndex}]
+        </Button>,
+      );
+    } else {
+      nodes.push(match[0]);
+    }
+
+    cursor = markerEnd;
+  }
+
+  if (cursor < cleanContent.length) {
+    nodes.push(cleanContent.slice(cursor));
+  }
+
+  return nodes.length ? nodes : cleanContent;
+}
+
 export const History: React.FC = () => {
   const { adminUsers, currentRole, currentUserId, setActiveTab, setChatMessages, themeMode, workMode } = useUIStore();
   const isLight = themeMode === 'light';
@@ -586,7 +665,13 @@ export const History: React.FC = () => {
                                               </Typography>
                                             </Stack>
                                             <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.65 }}>
-                                              {message.content}
+                                              {renderHistoryMessageContent(
+                                                message.content,
+                                                message.citations ?? [],
+                                                handleOpenPreview,
+                                                themeMode,
+                                                workMode === 'demo',
+                                              )}
                                             </Typography>
 
                                             {message.citations && message.citations.length > 0 && (
