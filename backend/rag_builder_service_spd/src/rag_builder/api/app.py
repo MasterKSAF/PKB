@@ -14,6 +14,14 @@ from opentelemetry.trace import Status, StatusCode
 
 from rag_builder.core.logger import logger
 from rag_builder.core.config import settings
+from rag_builder.core.metrics import (
+    CHUNKS_CREATED_TOTAL,
+    EMBEDDINGS_CREATED_TOTAL,
+    INDEXING_DURATION_MS,
+    INDEXING_JOBS_COMPLETED_TOTAL,
+    INDEXING_JOBS_FAILED_TOTAL,
+    INDEXING_JOBS_STARTED_TOTAL,
+)
 from rag_builder.core.telemetry import instrument_fastapi, setup_observability
 from rag_builder.models.contracts import BuildRequest
 from rag_builder.models.responses import (
@@ -76,6 +84,16 @@ tracer_provider, meter_provider, _observability_logger = setup_observability(
 instrument_fastapi(app, tracer_provider=tracer_provider)
 
 tracer = trace.get_tracer(__name__)
+
+
+def _indexing_metric_attributes(status_value: str) -> dict[str, str | int]:
+    return {
+        "status": status_value,
+        "embedding_provider": settings.EMBEDDING_PROVIDER,
+        "embedding_model": settings.EMBEDDING_MODEL,
+        "embedding_dim": settings.EMBEDDING_DIM,
+        "chunk_strategy": settings.CHUNK_STRATEGY,
+    }
 
 
 IndexingJobStatus = Literal[
@@ -181,6 +199,13 @@ def _run_indexing_job(
 
             duration_ms = int((time.perf_counter() - started_at) * 1000)
 
+            metric_attributes = _indexing_metric_attributes("indexed")
+            INDEXING_JOBS_COMPLETED_TOTAL.add(1, metric_attributes)
+            INDEXING_DURATION_MS.record(duration_ms, metric_attributes)
+            if chunks_count:
+                CHUNKS_CREATED_TOTAL.add(chunks_count, metric_attributes)
+                EMBEDDINGS_CREATED_TOTAL.add(chunks_count, metric_attributes)
+
             span.set_attribute("indexing.status", "indexed")
             span.set_attribute("duration_ms", duration_ms)
             span.set_attribute("chunks_count", chunks_count)
@@ -219,6 +244,13 @@ def _run_indexing_job(
 
         except Exception as exc:
             duration_ms = int((time.perf_counter() - started_at) * 1000)
+
+            metric_attributes = {
+                **_indexing_metric_attributes("failed"),
+                "error_type": type(exc).__name__,
+            }
+            INDEXING_JOBS_FAILED_TOTAL.add(1, metric_attributes)
+            INDEXING_DURATION_MS.record(duration_ms, metric_attributes)
 
             span.record_exception(exc)
             span.set_status(Status(StatusCode.ERROR, str(exc)))
@@ -351,6 +383,11 @@ def index_document(
         document_id=request.metadata.document_id,
         indexing_txn_id=indexing_txn_id,
         status="indexing",
+    )
+
+    INDEXING_JOBS_STARTED_TOTAL.add(
+        1,
+        _indexing_metric_attributes("indexing"),
     )
 
     background_tasks.add_task(
