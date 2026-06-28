@@ -3,7 +3,7 @@ PKB Neuroassistant — Converter-Validator Service API Definitions.
 
 Основано на: docs/api/converter_validator_service_api.md
 Обновления (19.06.2026):
-- CV-3: POST /converter/preview/metadata → POST /converter/preview (без бизнес-ключа)
+- CV-3: POST /converter/preview ?????????? preview metadata ??? ??????-?????
 - CV-3a: POST /validate/metadata — единая точка вычисления бизнес-ключа
 - CV-8: Убрать document_id из ответов convert/validate
 - CV-9: Убрать version_id из ответа convert
@@ -30,7 +30,7 @@ def get_service_def() -> ServiceDef:
     endpoints = [
         EndpointDef("GET", f"{API_PREFIX}/health", "health", "Health check сервиса",
             response_schema={"status": str}),
-        # CV-3: POST /converter/preview (вместо /converter/preview/metadata)
+        # CV-3: POST /converter/preview
         # Без title_hash_sha256/title_key в ответе (14 полей, без бизнес-ключа)
         # CV-4: проверка 8+ полей preview_metadata
         EndpointDef("POST", f"{API_PREFIX}/converter/preview", "converter",

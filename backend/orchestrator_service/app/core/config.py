@@ -67,9 +67,9 @@ class ServiceConfig(BaseSettings):
         default=True, description="Fallback from parser to OCR if parser unavailable or preview_not_supported"
     )
 
-    # Converter-Validator Service (port 8090)
+    # Converter-Validator Service (port 8086)
     CONVERTER_SERVICE_URL: Optional[str] = Field(
-        default="http://converter-service:8090", description="URL for converter-validator service"
+        default="http://converter-validator:8086", description="URL for converter-validator service"
     )
     CONVERTER_SERVICE_MOCK: bool = Field(
         default=False, description="Use mock mode for converter-validator service"

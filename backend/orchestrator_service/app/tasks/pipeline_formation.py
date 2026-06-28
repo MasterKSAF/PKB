@@ -367,9 +367,16 @@ def run_converter_full_step(
         result = _run_async(_do_converter_full())
 
         input_data = {"file_key": file_key, "mode": "full", "draft_id": draft_id}
+        converter_data = result.get("data", result) if isinstance(result, dict) else {}
+        validation = converter_data.get("validation") or {}
         output_data = {
-            "validated": result.get("data", {}).get("validated", True),
-            "parameters": result.get("data", {}).get("parameters", {}),
+            "validated": validation.get("structure_valid", True),
+            "metadata": converter_data.get("metadata", {}),
+            "document": converter_data.get("document", {}),
+            "validation": validation,
+            "document_id": converter_data.get("document_id"),
+            "version_id": converter_data.get("version_id"),
+            "status": validation.get("status", "completed"),
         }
 
         _run_async(_notify_step_completed(task_id, "full_converter", input_data, output_data))

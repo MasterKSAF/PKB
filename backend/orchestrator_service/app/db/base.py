@@ -43,12 +43,12 @@ if _is_memory_sqlite:
         poolclass=NullPool,
     )
 elif _is_sqlite:
+    # File-based SQLite/aiosqlite uses NullPool by default and does not
+    # accept pool_size/max_overflow.
     engine = create_async_engine(
         settings.DATABASE_URL,
         echo=settings.DEBUG,
         connect_args=_connect_args,
-        pool_size=5,
-        max_overflow=10,
         pool_pre_ping=False,
     )
 else:

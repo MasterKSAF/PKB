@@ -1,13 +1,17 @@
 """
 Unit tests for ConverterValidatorClient.
 
-Tests mock generation for all converter-validator endpoints:
-  - POST /convert/preview — start preview conversion
-  - POST /convert/process — start full conversion
-  - GET /convert/{task_id}/status — check task status
+Contract endpoints:
+- POST /converter/preview
+- POST /converter/convert
+- POST /validate/metadata
+- POST /validate/document
 """
 
 import pytest
+
+
+pytestmark = pytest.mark.no_db
 
 from app.services.converter_client import ConverterValidatorClient
 
@@ -20,69 +24,76 @@ def converter_client():
 
 
 class TestConverterPreview:
-    """Tests for ConverterValidatorClient.convert_preview."""
-
     @pytest.mark.asyncio
-    async def test_convert_preview_returns_data(self, converter_client):
-        """convert_preview returns a dict with data."""
-        result = await converter_client.convert_preview({"file_key": "f-abc123"}, max_pages=3)
-        assert "data" in result
-        data = result["data"]
-        assert "task_id" in data
-        assert "status" in data
+    async def test_convert_preview_returns_flat_metadata(self, converter_client):
+        result = await converter_client.convert_preview(
+            {
+                "task_id": 420000,
+                "version_id": 420001,
+                "raw_json": {
+                    "metadata": {
+                        "doc_code": "20868-81",
+                        "title": "?????? ???????????? ?????????",
+                    }
+                },
+            },
+            max_pages=3,
+        )
 
+        assert "data" not in result
+        assert result["doc_code"] == "20868-81"
+        assert result["title"]
+
+
+class TestConverterFull:
     @pytest.mark.asyncio
-    async def test_convert_preview_with_metadata(self, converter_client):
-        """Preview response contains validation info."""
-        result = await converter_client.convert_preview({"file_key": "f-test-key"}, max_pages=5)
-        data = result.get("data", {})
-        # Mock includes validated flag
-        assert data.get("validated") is not None
+    async def test_convert_full_returns_validated_v3_contract(self, converter_client):
+        result = await converter_client.convert_full(
+            {
+                "task_id": 420000,
+                "version_id": 420001,
+                "raw_json": {"metadata": {"doc_code": "20868-81"}},
+            }
+        )
 
+        assert "data" not in result
+        assert result["task_id"] == 420000
+        assert result["version_id"] == 420001
+        assert result["metadata"]["schema"] == "validated_v3"
+        assert result["document"]["content"]
+        assert result["validation"]["status"] == "completed"
+
+
+class TestValidateMetadata:
     @pytest.mark.asyncio
-    async def test_convert_preview_default_max_pages(self, converter_client):
-        """Default max_pages is 3."""
-        result = await converter_client.convert_preview({"file_key": "f-abc"})
-        data = result.get("data", {})
-        assert data.get("validated") is not None
+    async def test_validate_metadata_returns_business_key(self, converter_client):
+        result = await converter_client.validate_metadata(
+            {
+                "era": "USSR",
+                "source_type": "GOST",
+                "mks_oks_code": "47.020",
+                "okstu_code": None,
+                "doc_code": "20868-81",
+                "title": "?????? ???????????? ?????????",
+            }
+        )
+
+        assert result["title_hash_sha256"]
+        assert result["title_key"]
+        assert result["normalized_title"] == "?????? ???????????? ?????????"
 
 
-class TestConverterProcess:
-    """Tests for ConverterValidatorClient.convert_full."""
-
+class TestValidateDocument:
     @pytest.mark.asyncio
-    async def test_convert_full_returns_data(self, converter_client):
-        """convert_full returns a dict with data."""
-        result = await converter_client.convert_full({"file_key": "f-abc123"})
-        assert "data" in result
-        data = result["data"]
-        assert "task_id" in data
-        assert "status" in data
+    async def test_validate_document_returns_validation_contract(self, converter_client):
+        result = await converter_client.validate_document(
+            {
+                "task_id": 420000,
+                "version_id": 420001,
+                "raw_json": {"document": {"content": []}},
+            }
+        )
 
-    @pytest.mark.asyncio
-    async def test_convert_full_with_parameters(self, converter_client):
-        """Full conversion response contains parameters."""
-        result = await converter_client.convert_full({"file_key": "f-full-test"})
-        data = result.get("data", {})
-        # Mock includes validated and parameters
-        assert "validated" in data or "parameters" in data
-
-
-class TestConverterStatus:
-    """Tests for ConverterValidatorClient.get_status."""
-
-    @pytest.mark.asyncio
-    async def test_get_status_returns_data(self, converter_client):
-        """get_status returns a dict with status info."""
-        result = await converter_client.get_status(task_id="c-mock-001")
-        assert "data" in result
-        data = result["data"]
-        assert "task_id" in data or "status" in data
-
-    @pytest.mark.asyncio
-    async def test_get_status_progress(self, converter_client):
-        """Status response contains progress info."""
-        result = await converter_client.get_status(task_id="c-custom-42")
-        data = result.get("data", {})
-        # Mock returns progress info
-        assert data is not None
+        assert "data" not in result
+        assert result["validation_id"]
+        assert result["status"] == "completed"

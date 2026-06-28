@@ -137,13 +137,18 @@ def db_engine():
 
 
 @pytest.fixture(autouse=True)
-async def clean_db(db_engine):
+async def clean_db(request):
     """Clean all tables between tests.
 
     Fast path: checks if any rows exist before iterating all tables.
     Also resets RegistryServiceClient in-memory storage to keep
     tests isolated (class-level _storage persists across tests).
     """
+    if request.node.get_closest_marker("no_db"):
+        yield
+        return
+
+    db_engine = request.getfixturevalue("db_engine")
     from app.db.base import Base
     from app.services.registry_client import RegistryServiceClient
 

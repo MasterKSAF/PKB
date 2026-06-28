@@ -46,7 +46,7 @@ def test_preview(client, raw_gost_sample):
     assert data["issuing_body"]
 
 
-def test_preview_legacy_path(client, raw_gost_sample):
+def test_preview_legacy_path_removed(client, raw_gost_sample):
     response = client.post(
         "/api/v1/converter/preview/metadata",
         json={
@@ -55,8 +55,7 @@ def test_preview_legacy_path(client, raw_gost_sample):
             "raw_json": raw_gost_sample,
         },
     )
-    assert response.status_code == 200
-    assert response.json()["doc_code"] == "20868-81"
+    assert response.status_code == 404
 
 
 def test_preview_empty_raw(client):
