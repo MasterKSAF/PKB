@@ -36,6 +36,21 @@ async def test_me_format(auth_client):
     assert isinstance(data["available_tabs"], list)
 
 
+async def test_me_system_admin_available_tabs(auth_client):
+    r = await auth_client.get("/api/v1/auth/me")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["role"] == "system_admin"
+    tabs = data["available_tabs"]
+    assert "chat" in tabs
+    assert "search" in tabs
+    assert "history" in tabs
+    assert "registry" in tabs
+    assert "documents" in tabs
+    assert "admin" in tabs
+    assert "monitor" in tabs
+
+
 async def test_me_unauthorized(client):
     r = await client.get("/api/v1/auth/me")
     assert r.status_code == 401

@@ -25,8 +25,8 @@ _ROLE_TITLES = {
 
 _ROLE_TABS = {
     "engineer": ["chat", "search", "history"],
-    "knowledge_admin": ["chat", "search", "history"],
-    "system_admin": ["chat", "search", "history"],
+    "knowledge_admin": ["chat", "search", "history", "registry", "documents"],
+    "system_admin": ["chat", "search", "history", "registry", "documents", "admin", "monitor"],
 }
 
 
