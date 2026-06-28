@@ -74,6 +74,7 @@ class ChatSource(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     message_id: Mapped[int] = mapped_column(ForeignKey("chat_messages.message_id", ondelete="CASCADE"))
+    citation_index: Mapped[int | None] = mapped_column(Integer)
     chunk_id: Mapped[int | None] = mapped_column(BigInteger)
     fragment_id: Mapped[str | None] = mapped_column(String(64))
     document_id: Mapped[int] = mapped_column(BigInteger)

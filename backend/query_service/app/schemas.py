@@ -122,6 +122,7 @@ class SendMessageRequest(BaseModel):
 
 
 class SourceResponse(BaseModel):
+    index: int | None = None
     document_id: int
     document_title: str | None = None
     section_id: int | None = None

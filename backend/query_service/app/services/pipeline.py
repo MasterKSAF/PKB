@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import logging
 import re
 from datetime import datetime, timezone
@@ -16,7 +16,8 @@ _SYSTEM_PROMPT = (
     "Ты — ассистент по инженерным нормативно-техническим документам ПКБ. "
     "Отвечай строго на основе предоставленных фрагментов документов. "
     "Если во фрагментах нет ответа — прямо сообщи об этом, не домысливай. "
-    "Указывай источник (наименование документа, пункт, страницу) для каждого утверждения."
+    "Ссылайся на использованные фрагменты прямо в тексте в формате [N], "
+    "где N — номер фрагмента (например: [1], [3]). Не пиши идентификаторы документов в тексте."
 )
 
 _SUMMARY_PROMPT = (
@@ -166,20 +167,8 @@ def _build_llm_mock(query: str, chunks: list[rag_client.Chunk]) -> str:
 
     parts = []
     for i, chunk in enumerate(chunks[:3], 1):
-        ref = f"(источник: «{chunk.document_title}», {chunk.clause}, стр. {chunk.page})"
-        parts.append(f"{i}. {chunk.excerpt} {ref}")
-    return "\n".join(parts)
-
-
-def _enrich_citations(text: str, chunks: list[rag_client.Chunk]) -> str:
-    for chunk in chunks:
-        pattern = re.escape(chunk.document_title)
-        replacement = (
-            f"{chunk.document_title} %[document_id:{chunk.document_id}]%"
-            f" %[section_id:{chunk.section_id}]%"
-        )
-        text = re.sub(pattern, replacement, text, count=1)
-    return text
+        parts.append(f"{chunk.excerpt} [{i}]")
+    return " ".join(parts)
 
 
 async def run_pipeline(
@@ -284,7 +273,7 @@ async def run_pipeline(
                     update(ChatMessage)
                     .where(ChatMessage.message_id == message_id)
                     .values(
-                        content=final_text,
+                        content=llm_text,
                         status="answered",
                         processing_time_ms=0,
                         enrichment_skipped=enrichment_skipped,
@@ -294,9 +283,10 @@ async def run_pipeline(
                 if result.rowcount == 0:
                     logger.warning("pipeline: message deleted before finish, skipping sources", extra={"message_id": message_id})
                     return
-                for chunk in chunks:
+                for idx, chunk in enumerate(chunks, 1):
                     db.add(ChatSource(
                         message_id=message_id,
+                        citation_index=idx,
                         chunk_id=chunk.chunk_id,
                         document_id=chunk.document_id,
                         document_title=chunk.document_title,

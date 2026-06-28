@@ -49,6 +49,7 @@ def _session_to_response(s: ChatSession) -> SessionResponse:
 
 def _source_dict(src: ChatSource) -> dict:
     return {
+        "index": src.citation_index,
         "document_id": src.document_id,
         "document_title": src.document_title,
         "section_id": src.section_id,

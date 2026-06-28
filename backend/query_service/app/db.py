@@ -26,6 +26,7 @@ _PG_MIGRATIONS = (
     "ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS summary TEXT",
     "ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS summarized_until_message_id BIGINT",
     "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS warnings JSON",
+    "ALTER TABLE chat_sources ADD COLUMN IF NOT EXISTS citation_index INTEGER",
 )
 
 

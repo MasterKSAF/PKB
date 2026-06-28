@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sess
 
 from app.clients.registry_client import normalize_term, enrich_query
 from app.clients.rag_client import Chunk, search
-from app.services.pipeline import _enrich_citations, _build_llm_mock
+from app.services.pipeline import _build_llm_mock
 
 
 # ── registry_client ──────────────────────────────────────────────────────────
@@ -95,43 +95,27 @@ def test_build_llm_mock_with_chunks():
     ]
     result = _build_llm_mock("Arc4?", chunks)
     assert "12 мм" in result
-    assert "Правила РС" in result
-    assert "стр. 42" in result
+    assert "[1]" in result
+    assert "%[" not in result
 
 
 def test_build_llm_mock_empty_chunks():
     result = _build_llm_mock("Arc4?", [])
     assert len(result) > 0
-    assert "Arc4" not in result or result  # при пустых чанках нет ссылок на источники
 
 
-def test_enrich_citations_injects_document_id():
+def test_build_llm_mock_uses_bracket_citations_not_markers():
     chunks = [
         Chunk(
-            chunk_id=1, document_id="doc-norm-001", document_title="Правила РС",
-            section_id=420042, page=42, content="text",
-            excerpt="excerpt", score=0.9,
+            chunk_id=1, document_id="doc-001", document_title="Правила РС",
+            section_id=42, page=42, content="text",
+            excerpt="фрагмент про толщину", score=0.9,
             clause="4.2", section_title="раздел", confidence=0.85,
         )
     ]
-    text = "Ответ (источник: «Правила РС», раздел 4.2, стр. 42)."
-    result = _enrich_citations(text, chunks)
-    assert "%[document_id:doc-norm-001]%" in result
-    assert "%[section_id:420042]%" in result
-
-
-def test_enrich_citations_no_match_returns_original():
-    chunks = [
-        Chunk(
-            chunk_id=1, document_id="doc-001", document_title="Неизвестный документ",
-            section_id=1, page=1, content="text",
-            excerpt="excerpt", score=0.9,
-            clause="", section_title="", confidence=0.0,
-        )
-    ]
-    text = "Ответ без упоминания документа."
-    result = _enrich_citations(text, chunks)
-    assert result == text
+    result = _build_llm_mock("Arc4?", chunks)
+    assert "[1]" in result
+    assert "%[" not in result
 
 
 # ── pipeline integration (с мок-БД) ──────────────────────────────────────────
@@ -161,11 +145,13 @@ async def test_pipeline_answered_message_has_sources(client):
     msg = r.json()["message"]
     if msg["status"] == "answered":
         assert len(msg["sources"]) > 0
+        assert "%[" not in (msg["content"] or "")
         src = msg["sources"][0]
         assert "document_id" in src
         assert "section_id" in src
         assert "excerpt" in src
         assert "score" in src
+        assert src["index"] == 1
 
 
 @pytest.mark.asyncio
