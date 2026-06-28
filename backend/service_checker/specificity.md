@@ -1241,7 +1241,7 @@ python -m service_checker check <service> --source-dir /path
 - PATCH /drafts/{id}/decide: `action` вместо `decision` (OR-12)
 
 ### Converter-Validator (CV-3/3a/8/9)
-- POST /converter/preview — вместо /converter/preview/metadata (CV-3)
+- POST /converter/preview ? preview metadata ??? ??????-????? (CV-3)
 - POST /validate/metadata — единая точка вычисления бизнес-ключа (CV-3a)
 - Убраны `document_id`, `version_id` из ответов (CV-8/9)
 
@@ -1956,6 +1956,3 @@ Gateway Coverage: **4/76 → 53/76** passed.
 - Registry: 3× import 400 (file upload без файла — штатно)
 - Query: `POST /chat/projects` 409 (prepare-фаза Query)
 - Registry: `POST /registry/terminology/` 400 (Registry, не Gateway)
-
-
-
