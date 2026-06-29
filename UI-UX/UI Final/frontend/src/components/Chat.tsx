@@ -76,6 +76,14 @@ type ChatPreview = Citation & {
   previewKind: 'source' | 'document';
 };
 
+function getGatewayErrorMessage(error: unknown) {
+  const payload = (error as any)?.response?.data;
+  const message = payload?.detail ?? payload?.message ?? payload?.error ?? (error as any)?.message;
+
+  if (typeof message === 'string') return message;
+  return JSON.stringify(message ?? payload ?? 'Неизвестная ошибка Gateway');
+}
+
 function getAnswerPoints(content: string) {
   const normalizedContent = stripLegacyCitationMarkers(content);
   const lines = normalizedContent
@@ -355,6 +363,8 @@ export const Chat: React.FC = () => {
 
   const handleSend = () => {
     if (!input.trim() || chatMutation.isPending) return;
+
+    chatMutation.reset();
 
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -816,6 +826,11 @@ export const Chat: React.FC = () => {
                     </Typography>
                   </Box>
                 </Box>
+              )}
+              {chatMutation.isError && (
+                <Alert severity="error" variant="outlined" sx={{ borderRadius: 2.2 }}>
+                  {getGatewayErrorMessage(chatMutation.error)}
+                </Alert>
               )}
               <div ref={messagesEndRef} />
             </Box>

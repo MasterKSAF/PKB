@@ -14,6 +14,7 @@ import {
   DialogActions,
   Menu,
   MenuItem,
+  Alert,
 } from '@mui/material';
 import {
   Ship,
@@ -40,7 +41,7 @@ import {
 import { useUIStore, AppTab, type KnowledgeProcessingSection } from '../store/uiStore';
 import { getAccessibleTabs } from '../utils/access';
 import { MOCK_CHAT_THREADS } from '../utils/mockData';
-import { chatApi, projectsApi, type GatewayChatProject } from '../utils/http';
+import { chatApi, clearGatewayTokens, projectsApi, type GatewayChatProject } from '../utils/http';
 
 const NAV_ITEMS: Array<{ value: AppTab; label: string; icon: React.ReactNode }> = [
   { value: 'chat', label: 'Чат', icon: <MessageSquare size={18} /> },
@@ -59,7 +60,7 @@ const KNOWLEDGE_PROCESSING_SECTIONS: Array<{ value: KnowledgeProcessingSection; 
   { value: 'journal', label: 'Журналы', description: 'pipeline и мониторинг' },
 ];
 
-const CHAT_PROJECTS = [
+const DEMO_CHAT_PROJECTS = [
   {
     id: 'project-223m',
     name: 'Проект 223-М',
@@ -84,6 +85,13 @@ const CHAT_PROJECTS = [
     ],
   },
 ];
+
+const getGatewayErrorMessage = (error: unknown) => {
+  const payload = (error as any)?.response?.data;
+  const message = payload?.detail ?? payload?.message ?? payload?.error ?? (error as any)?.message;
+
+  return typeof message === 'string' ? message : JSON.stringify(message ?? payload ?? error);
+};
 
 export const ModeSwitcher: React.FC = () => {
   const {
@@ -115,8 +123,10 @@ export const ModeSwitcher: React.FC = () => {
   const [chatTreeOpen, setChatTreeOpen] = React.useState(false);
   const [knowledgeProcessingTreeOpen, setKnowledgeProcessingTreeOpen] = React.useState(false);
   const [expandedProjects, setExpandedProjects] = React.useState<Record<string, boolean>>({});
-  const [chatProjects, setChatProjects] = React.useState<GatewayChatProject[]>(CHAT_PROJECTS);
-  const [activeThreadId, setActiveThreadId] = React.useState('chat-hull');
+  const [chatProjects, setChatProjects] = React.useState<GatewayChatProject[]>(() =>
+    workMode === 'prod' ? [] : DEMO_CHAT_PROJECTS,
+  );
+  const [activeThreadId, setActiveThreadId] = React.useState(() => (workMode === 'prod' ? '' : 'chat-hull'));
   const [editingThreadId, setEditingThreadId] = React.useState<string | null>(null);
   const [draftTitle, setDraftTitle] = React.useState('');
   const [deleteCandidate, setDeleteCandidate] = React.useState<{ projectId: string; chatId: string; title: string } | null>(null);
@@ -135,9 +145,12 @@ export const ModeSwitcher: React.FC = () => {
   const [chatMenuTarget, setChatMenuTarget] = React.useState<{ projectId: string; chatId: string; title: string } | null>(
     null,
   );
+  const [gatewayNavigationError, setGatewayNavigationError] = React.useState('');
   React.useEffect(() => {
     if (workMode !== 'prod') {
-      setChatProjects(CHAT_PROJECTS);
+      clearGatewayTokens();
+      setGatewayNavigationError('');
+      setChatProjects(DEMO_CHAT_PROJECTS);
       setActiveThreadId('chat-hull');
       setChatMessages(MOCK_CHAT_THREADS['chat-hull'] ?? []);
       return;
@@ -156,14 +169,16 @@ export const ModeSwitcher: React.FC = () => {
         if (!isMounted) return;
         const nextProjects = projects.length ? projects : [];
         setChatProjects(nextProjects);
+        setGatewayNavigationError('');
 
         if (!nextProjects.some((project) => project.id === activeProjectIdSnapshot) && nextProjects[0]?.id) {
           setActiveProjectId(nextProjects[0].id);
         }
       })
-      .catch(() => {
+      .catch((error) => {
         if (!isMounted) return;
         setChatProjects([]);
+        setGatewayNavigationError(`Не удалось загрузить проекты из Gateway: ${getGatewayErrorMessage(error)}`);
       });
 
     return () => {
@@ -180,36 +195,36 @@ export const ModeSwitcher: React.FC = () => {
     const projectId = `project-${Date.now()}`;
     const name = `Новый проект ${newProjectNumber}`;
 
+    setGatewayNavigationError('');
+    setChatTreeOpen(true);
+    setActiveTab('chat');
+
+    if (workMode === 'prod') {
+      try {
+        const createdProject = await projectsApi.create(name);
+
+        setChatProjects((projects) => [{ ...createdProject, chats: [] }, ...projects]);
+        setExpandedProjects((state) => ({ ...state, [createdProject.id]: true }));
+        setActiveProjectId(createdProject.id);
+        setActiveThreadId('');
+        setCurrentGatewaySessionId(null);
+        setChatMessages([]);
+        setEditingProjectId(createdProject.id);
+        setProjectDraftName(createdProject.name);
+      } catch (error) {
+        setGatewayNavigationError(`Не удалось создать проект: ${getGatewayErrorMessage(error)}`);
+      }
+      return;
+    }
+
     setChatProjects((projects) => [{ id: projectId, name, chats: [] }, ...projects]);
     setExpandedProjects((state) => ({ ...state, [projectId]: true }));
-    setChatTreeOpen(true);
     setActiveProjectId(projectId);
     setActiveThreadId('');
     setCurrentGatewaySessionId(null);
     setChatMessages([]);
     setEditingProjectId(projectId);
     setProjectDraftName(name);
-    setActiveTab('chat');
-
-    if (workMode !== 'prod') return;
-
-    try {
-      const createdProject = await projectsApi.create(name);
-
-      setChatProjects((projects) =>
-        projects.map((project) => (project.id === projectId ? { ...createdProject, chats: project.chats } : project)),
-      );
-      setExpandedProjects((state) => {
-        const nextState = { ...state };
-        delete nextState[projectId];
-        nextState[createdProject.id] = true;
-        return nextState;
-      });
-      setActiveProjectId(createdProject.id);
-      setEditingProjectId(createdProject.id);
-    } catch {
-      // Проект остается локально видимым; online/offline-индикатор покажет проблему Gateway.
-    }
   };
 
   const handleNavClick = (tab: AppTab) => {
@@ -250,10 +265,12 @@ export const ModeSwitcher: React.FC = () => {
         const session = await chatApi.getSession(chatId);
         setCurrentGatewaySessionId(chatId);
         setChatMessages(session.messages);
-      } catch {
+        setGatewayNavigationError('');
+      } catch (error) {
         setCurrentGatewaySessionId(null);
         setActiveThreadId('');
         setChatMessages([]);
+        setGatewayNavigationError(`Не удалось загрузить чат: ${getGatewayErrorMessage(error)}`);
       }
       return;
     }
@@ -268,6 +285,40 @@ export const ModeSwitcher: React.FC = () => {
     const chatId = `chat-${projectId}-${Date.now()}`;
     const title = `Новый чат ${newThreadNumber}`;
 
+    setGatewayNavigationError('');
+    setExpandedProjects((state) => ({ ...state, [projectId]: true }));
+    setActiveProjectId(projectId);
+    setActiveTab('chat');
+
+    if (workMode === 'prod') {
+      try {
+        const created = await chatApi.createSession(title, projectId);
+        const gatewayChatId = created.session_id ?? created.id ?? created.session?.session_id;
+        const gatewayTitle = created.title ?? title;
+
+        if (!gatewayChatId) throw new Error('Gateway did not return session_id for created chat.');
+
+        setChatProjects((projects) =>
+          projects.map((item) =>
+            item.id === projectId
+              ? {
+                  ...item,
+                  chats: [{ id: gatewayChatId, title: gatewayTitle }, ...item.chats],
+                }
+              : item,
+          ),
+        );
+        setActiveThreadId(gatewayChatId);
+        setCurrentGatewaySessionId(gatewayChatId);
+        setChatMessages([]);
+        setEditingThreadId(gatewayChatId);
+        setDraftTitle(gatewayTitle);
+      } catch (error) {
+        setGatewayNavigationError(`Не удалось создать чат: ${getGatewayErrorMessage(error)}`);
+      }
+      return;
+    }
+
     setChatProjects((projects) =>
       projects.map((item) =>
         item.id === projectId
@@ -276,41 +327,13 @@ export const ModeSwitcher: React.FC = () => {
               chats: [{ id: chatId, title }, ...item.chats],
             }
           : item,
-      ),
+        ),
     );
-    setExpandedProjects((state) => ({ ...state, [projectId]: true }));
-    setActiveProjectId(projectId);
     setActiveThreadId(chatId);
-    setCurrentGatewaySessionId(workMode === 'prod' ? null : chatId);
+    setCurrentGatewaySessionId(chatId);
     setChatMessages([]);
     setEditingThreadId(chatId);
     setDraftTitle(title);
-    setActiveTab('chat');
-
-    if (workMode !== 'prod') return;
-
-    try {
-      const created = await chatApi.createSession(title, projectId);
-      const gatewayChatId = created.session_id ?? created.id ?? created.session?.session_id ?? chatId;
-      const gatewayTitle = created.title ?? title;
-
-      setChatProjects((projects) =>
-        projects.map((item) =>
-          item.id === projectId
-            ? {
-                ...item,
-                chats: item.chats.map((chat) => (chat.id === chatId ? { ...chat, id: gatewayChatId, title: gatewayTitle } : chat)),
-              }
-            : item,
-        ),
-      );
-      setActiveThreadId(gatewayChatId);
-      setCurrentGatewaySessionId(gatewayChatId);
-      setEditingThreadId(gatewayChatId);
-      setDraftTitle(gatewayTitle);
-    } catch {
-      setCurrentGatewaySessionId(null);
-    }
   };
 
   const startRename = (chatId: string, title: string) => {
@@ -332,20 +355,32 @@ export const ModeSwitcher: React.FC = () => {
     const projectId = editingProjectId;
     const name = projectDraftName.trim();
 
+    setGatewayNavigationError('');
+
+    if (workMode === 'prod') {
+      try {
+        const updatedProject = await projectsApi.update(projectId, { name });
+
+        setChatProjects((projects) =>
+          projects.map((project) =>
+            project.id === projectId
+              ? { ...project, ...updatedProject, chats: project.chats, name: updatedProject.name ?? name }
+              : project,
+          ),
+        );
+        setEditingProjectId(null);
+      } catch (error) {
+        setGatewayNavigationError(`Не удалось переименовать проект: ${getGatewayErrorMessage(error)}`);
+      }
+      return;
+    }
+
     setChatProjects((projects) =>
       projects.map((project) =>
         project.id === projectId ? { ...project, name } : project,
       ),
     );
     setEditingProjectId(null);
-
-    if (workMode === 'prod') {
-      try {
-        await projectsApi.update(projectId, { name });
-      } catch {
-        // Локальное имя остается; проблему синхронизации покажет общий статус Gateway.
-      }
-    }
   };
 
   const saveRename = async () => {
@@ -357,6 +392,27 @@ export const ModeSwitcher: React.FC = () => {
     const sessionId = editingThreadId;
     const title = draftTitle.trim();
 
+    setGatewayNavigationError('');
+
+    if (workMode === 'prod') {
+      try {
+        await chatApi.updateSession(sessionId, { title });
+
+        setChatProjects((projects) =>
+          projects.map((project) => ({
+            ...project,
+            chats: project.chats.map((chat) =>
+              chat.id === sessionId ? { ...chat, title } : chat,
+            ),
+          })),
+        );
+        setEditingThreadId(null);
+      } catch (error) {
+        setGatewayNavigationError(`Не удалось переименовать чат: ${getGatewayErrorMessage(error)}`);
+      }
+      return;
+    }
+
     setChatProjects((projects) =>
       projects.map((project) => ({
         ...project,
@@ -366,14 +422,6 @@ export const ModeSwitcher: React.FC = () => {
       })),
     );
     setEditingThreadId(null);
-
-    if (workMode === 'prod') {
-      try {
-        await chatApi.updateSession(sessionId, { title });
-      } catch {
-        // Local title stays visible; Gateway sync is covered by the online/offline indicator.
-      }
-    }
   };
 
   const requestDeleteThread = (projectId: string, chatId: string, title: string) => {
@@ -439,6 +487,17 @@ export const ModeSwitcher: React.FC = () => {
     if (!deleteCandidate) return;
     const candidate = deleteCandidate;
 
+    setGatewayNavigationError('');
+
+    if (workMode === 'prod') {
+      try {
+        await chatApi.deleteSession(candidate.chatId);
+      } catch (error) {
+        setGatewayNavigationError(`Не удалось удалить чат: ${getGatewayErrorMessage(error)}`);
+        return;
+      }
+    }
+
     setChatProjects((projects) =>
       projects.map((project) =>
         project.id === candidate.projectId
@@ -457,14 +516,6 @@ export const ModeSwitcher: React.FC = () => {
     }
 
     setDeleteCandidate(null);
-
-    if (workMode === 'prod') {
-      try {
-        await chatApi.deleteSession(candidate.chatId);
-      } catch {
-        // Deletion is optimistic in the UI; Gateway errors are documented in the integration matrix.
-      }
-    }
   };
 
   const confirmDeleteProject = async () => {
@@ -474,6 +525,17 @@ export const ModeSwitcher: React.FC = () => {
     const remainingProjects = chatProjects.filter((project) => project.id !== candidate.projectId);
     const deletedProject = chatProjects.find((project) => project.id === candidate.projectId);
     const shouldResetThread = deletedProject?.chats.some((chat) => chat.id === activeThreadId);
+
+    setGatewayNavigationError('');
+
+    if (workMode === 'prod') {
+      try {
+        await projectsApi.delete(candidate.projectId);
+      } catch (error) {
+        setGatewayNavigationError(`Не удалось удалить проект: ${getGatewayErrorMessage(error)}`);
+        return;
+      }
+    }
 
     setChatProjects(remainingProjects);
     setExpandedProjects((state) => {
@@ -493,14 +555,6 @@ export const ModeSwitcher: React.FC = () => {
     }
 
     setDeleteProjectCandidate(null);
-
-    if (workMode === 'prod') {
-      try {
-        await projectsApi.delete(candidate.projectId);
-      } catch {
-        // Удаление оптимистичное; при ошибке Gateway дерево обновится при следующей загрузке.
-      }
-    }
   };
 
   return (
@@ -670,6 +724,12 @@ export const ModeSwitcher: React.FC = () => {
           </Box>
         </Stack>
       </Box>
+
+      {gatewayNavigationError && workMode === 'prod' && (
+        <Alert severity="error" variant="outlined" onClose={() => setGatewayNavigationError('')}>
+          {gatewayNavigationError}
+        </Alert>
+      )}
 
       <Stack spacing={0.8}>
         <Typography
