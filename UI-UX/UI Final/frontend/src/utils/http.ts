@@ -36,7 +36,12 @@ let refreshGatewayTokenPromise: Promise<string | null> | null = null;
 
 export const apiClient = axios.create({
   baseURL: BASE_URL,
-  timeout: 6500,
+  timeout: 30_000,
+});
+
+export const pipelineClient = axios.create({
+  baseURL: BASE_URL,
+  timeout: 120_000,
 });
 
 const FILE_UPLOAD_TIMEOUT_MS = 120_000;
@@ -1699,13 +1704,13 @@ export const draftsApi = {
   },
   startPreview: async (draftId: string) => {
     requireNumericDraftId(draftId, 'startPreview');
-    const response = await gatewayRequest<any>(() => apiClient.post(`/drafts/${draftId}/preview`));
+    const response = await gatewayRequest<any>(() => pipelineClient.post(`/drafts/${draftId}/preview`));
     return response.data;
   },
   waitPreview: async (draftId: string, longpoll = 15) => {
     requireNumericDraftId(draftId, 'waitPreview');
     const response = await gatewayRequest<any>(() =>
-      apiClient.get(`/drafts/${draftId}/preview/status`, {
+      pipelineClient.get(`/drafts/${draftId}/preview/status`, {
         params: { longpoll },
       }),
     );

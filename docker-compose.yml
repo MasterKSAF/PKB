@@ -95,7 +95,7 @@ x-env-rerank: &env-rerank
   RERANKER_BASE_URL: http://infinity:7997
   RERANKER_MODEL: onnx-community/bge-reranker-v2-m3-ONNX
   RERANKER_TIMEOUT: "15"
-  RERANK_TOP_N: "15"
+  RERANK_TOP_N: "10"
 
 # --- Межсервисные URL (Docker DNS) ---
 x-env-service-urls: &env-service-urls
@@ -202,7 +202,7 @@ services:
       - "--device"
       - "cpu"
       - "--batch-size"
-      - "1"
+      - "5"
     ports:
       - "${INFINITY_PORT:-18580}:7997"
     healthcheck:
