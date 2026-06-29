@@ -46,4 +46,40 @@ describe('uiStore work mode', () => {
     expect(useUIStore.getState().prodCurrentUserIdSnapshot).toBe('');
     expect(useUIStore.getState().prodAdminUsersSnapshot).toEqual([]);
   });
+
+  it('preserves the current session access when the admin user list omits it', () => {
+    const store = useUIStore.getState();
+    store.setAdminUsers([productionUser]);
+    store.login(productionUser.id);
+
+    useUIStore.getState().setAdminUsers([
+      {
+        ...productionUser,
+        position: 'Должность не указана',
+        availableTabs: undefined,
+        permissions: {},
+      },
+    ]);
+
+    const currentUser = useUIStore.getState().adminUsers.find((user) => user.id === productionUser.id);
+    expect(currentUser?.availableTabs).toEqual(productionUser.availableTabs);
+    expect(currentUser?.permissions).toEqual(productionUser.permissions);
+    expect(useUIStore.getState().isAuthenticated).toBe(true);
+  });
+
+  it('keeps the current session profile when it is outside the admin list page', () => {
+    const store = useUIStore.getState();
+    store.setAdminUsers([productionUser]);
+    store.login(productionUser.id);
+
+    useUIStore.getState().setAdminUsers([
+      {
+        ...productionUser,
+        id: '84',
+        login: 'other@example.com',
+      },
+    ]);
+
+    expect(useUIStore.getState().adminUsers.some((user) => user.id === productionUser.id)).toBe(true);
+  });
 });

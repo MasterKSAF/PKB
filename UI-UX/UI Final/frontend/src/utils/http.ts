@@ -39,6 +39,8 @@ export const apiClient = axios.create({
   timeout: 6500,
 });
 
+const FILE_UPLOAD_TIMEOUT_MS = 120_000;
+
 export type MonitorLogRow = {
   time: string;
   text: string;
@@ -1748,6 +1750,7 @@ export const draftsApi = {
 
     const response = await gatewayRequest<any>(() =>
       apiClient.post('/drafts', form, {
+        timeout: FILE_UPLOAD_TIMEOUT_MS,
         headers: {
           ...(input.idempotencyKey ? { 'Idempotency-Key': input.idempotencyKey } : {}),
         },

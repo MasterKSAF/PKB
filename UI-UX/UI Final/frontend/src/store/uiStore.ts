@@ -200,10 +200,31 @@ export const useUIStore = create<UIState>((set) => ({
   setApiStatus: (apiStatus) => set({ apiStatus }),
   adminUsers: [],
   setAdminUsers: (adminUsers) =>
-    set((state) => ({
-      adminUsers,
-      ...(state.workMode === 'prod' ? { prodAdminUsersSnapshot: adminUsers } : {}),
-    })),
+    set((state) => {
+      const currentSessionUser = state.adminUsers.find((user) => user.id === state.currentUserId);
+      const mergedUsers = adminUsers.map((user) => {
+        if (!currentSessionUser || user.id !== currentSessionUser.id) return user;
+
+        return {
+          ...currentSessionUser,
+          ...user,
+          availableTabs: user.availableTabs ?? currentSessionUser.availableTabs,
+          permissions:
+            user.permissions && Object.keys(user.permissions).length > 0
+              ? user.permissions
+              : currentSessionUser.permissions,
+        };
+      });
+      const usersWithCurrentSession =
+        currentSessionUser && !mergedUsers.some((user) => user.id === currentSessionUser.id)
+          ? [currentSessionUser, ...mergedUsers]
+          : mergedUsers;
+
+      return {
+        adminUsers: usersWithCurrentSession,
+        ...(state.workMode === 'prod' ? { prodAdminUsersSnapshot: usersWithCurrentSession } : {}),
+      };
+    }),
   prodAdminUsersSnapshot: [],
   prodCurrentUserIdSnapshot: '',
   upsertAdminUser: (user) =>

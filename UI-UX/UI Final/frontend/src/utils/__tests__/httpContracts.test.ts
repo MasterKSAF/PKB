@@ -71,5 +71,6 @@ describe('live Gateway response contracts', () => {
     expect(form).toBeInstanceOf(FormData);
     expect((form as FormData).get('file')).toBeInstanceOf(File);
     expect(config?.headers).not.toHaveProperty('Content-Type');
+    expect(config?.timeout).toBe(120_000);
   });
 });
