@@ -929,7 +929,7 @@ export const mapGatewayDraftRecordToUi = (payload: any, fallback?: Partial<Draft
     notifications: notifications.length ? notifications : fallback?.notifications ?? [],
     createdAt,
     updatedAt,
-    note: fallback?.note ?? payload?.message ?? '',
+    note: firstNonEmptyText(payload?.message, payload?.error_message, payload?.comment, fallback?.note),
     gatewayTaskId: String(payload?.task_id ?? payload?.taskId ?? fallback?.gatewayTaskId ?? ''),
     gatewayVersionId: String(payload?.version_id ?? payload?.versionId ?? fallback?.gatewayVersionId ?? ''),
     gatewayDraftId: (() => {

@@ -1172,14 +1172,26 @@ function formatAuditEvent(action?: unknown, ipAddress?: unknown) {
   return ip ? `${label}. IP: ${ip}` : label;
 }
 
-function formatTaskEvent(taskId: string, stage?: unknown, status?: unknown, progress?: unknown) {
-  return `Задача ${taskId}: ${mapGatewayTaskStage(stage)}; статус: ${mapGatewayTaskStatusLabel(status)}; прогресс: ${Number(progress ?? 0)}%.`;
+function formatTaskErrorDetails(errorCode?: unknown, errorMessage?: unknown) {
+  const code = String(errorCode ?? '').trim();
+  const message = String(errorMessage ?? '').trim();
+
+  if (code && message) return ` Код ошибки: ${code}. Причина: ${message}`;
+  if (message) return ` Причина: ${message}`;
+  if (code) return ` Код ошибки: ${code}.`;
+  return '';
+}
+
+function formatTaskEvent(taskId: string, stage?: unknown, status?: unknown, progress?: unknown, errorCode?: unknown, errorMessage?: unknown) {
+  return `Задача ${taskId}: ${mapGatewayTaskStage(stage)}; статус: ${mapGatewayTaskStatusLabel(status)}; прогресс: ${Number(
+    progress ?? 0,
+  )}%.${formatTaskErrorDetails(errorCode, errorMessage)}`;
 }
 
 function formatTaskStepEvent(step: any, index: number) {
   return `${mapGatewayServiceLabel(step?.service_name)}: ${mapGatewayTaskStage(step?.step_name, step?.service_name)}; статус: ${mapGatewayTaskStatusLabel(
     step?.status,
-  )}; шаг ${index + 1}.`;
+  )}; шаг ${index + 1}.${formatTaskErrorDetails(step?.error_code, step?.error_message)}`;
 }
 
 function mapGatewayTaskRetryStatus(status?: string): ProcessingLogItem['retryStatus'] {
@@ -1200,7 +1212,7 @@ function mapGatewayTaskStatusResponse(payload: any): ProcessingLogItem[] {
       time: toUiTimestamp(data.updated_at ?? data.created_at),
       document: draftLabel,
       stage: mapGatewayTaskStage(data.pipeline_stage),
-      event: formatTaskEvent(taskId, data.pipeline_stage, data.status, data.progress_percent),
+      event: formatTaskEvent(taskId, data.pipeline_stage, data.status, data.progress_percent, data.error_code, data.error_message),
       retryStatus: mapGatewayTaskRetryStatus(data.status),
       visibility: 'Администратор',
     },
