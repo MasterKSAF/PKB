@@ -333,6 +333,7 @@ export const AdminPanel: React.FC = () => {
   const hasChanges = Boolean(selectedUser) && (draftRole !== selectedUser.role || !sameAccess(draftAccess, savedAccess));
   const enabledUsersCount = adminUsers.filter((user) => user.status === 'Активен').length;
   const editingOwnSystemRole = currentRole === 'systemAdmin' && selectedUser?.id === currentUserId;
+  const canEditSelectedUserAccess = canManagePermissions && !editingOwnSystemRole;
   const adminSectionHeaderSx = {
     display: 'flex',
     alignItems: 'center',
@@ -343,13 +344,15 @@ export const AdminPanel: React.FC = () => {
   };
 
   const handleRoleChange = (role: RoleLabel) => {
-    if (editingOwnSystemRole) return;
+    if (!canEditSelectedUserAccess) return;
 
     setDraftRole(role);
     setDraftAccess(DEFAULT_ACCESS_BY_ROLE[role]);
   };
 
   const handleAccessToggle = (key: AccessKey) => {
+    if (!canEditSelectedUserAccess) return;
+
     setDraftAccess((current) =>
       current.includes(key) ? current.filter((item) => item !== key) : [...current, key],
     );
@@ -362,11 +365,11 @@ export const AdminPanel: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!selectedUser || !canManagePermissions) return;
+    if (!selectedUser || !canEditSelectedUserAccess) return;
 
     const nextAccess = makeAccessText(draftAccess);
     const nextPatch = {
-      role: editingOwnSystemRole ? selectedUser.role : draftRole,
+      role: draftRole,
       access: nextAccess,
       status: selectedUser.status === 'Ожидает настройки' ? 'Активен' : selectedUser.status,
     } as const;
@@ -376,7 +379,7 @@ export const AdminPanel: React.FC = () => {
       setAdminNotice('');
       try {
         await adminApi.updateUser(selectedUser.id, {
-          role: GATEWAY_ROLE_BY_LABEL[editingOwnSystemRole ? selectedUser.role : draftRole],
+          role: GATEWAY_ROLE_BY_LABEL[draftRole],
         });
         updateAdminUser(selectedUser.id, nextPatch);
         setAdminNotice(`Права пользователя «${selectedUser.name}» сохранены на сервере.`);
@@ -401,7 +404,7 @@ export const AdminPanel: React.FC = () => {
       actor: currentUser?.name ?? 'Текущий пользователь',
       target: selectedUser.name,
       action: 'Изменены роль и права',
-      details: `Роль: ${editingOwnSystemRole ? selectedUser.role : draftRole}. Доступ: ${nextAccess}.`,
+      details: `Роль: ${draftRole}. Доступ: ${nextAccess}.`,
     });
   };
 
@@ -639,11 +642,11 @@ export const AdminPanel: React.FC = () => {
 
               {editingOwnSystemRole && (
                 <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
-                  Роль текущего системного администратора защищена от случайного понижения.
+                  Роль и права доступа текущего системного администратора защищены от случайного изменения.
                 </Alert>
               )}
 
-              <FormControl size="small" fullWidth disabled={!canManagePermissions || editingOwnSystemRole}>
+              <FormControl size="small" fullWidth disabled={!canEditSelectedUserAccess}>
                 <InputLabel>Роль</InputLabel>
                 <Select
                   value={draftRole}
@@ -668,7 +671,7 @@ export const AdminPanel: React.FC = () => {
                       <Checkbox
                         checked={draftAccess.includes(option.key)}
                         onChange={() => handleAccessToggle(option.key)}
-                        disabled={!canManagePermissions}
+                        disabled={!canEditSelectedUserAccess}
                         sx={{ color: 'rgba(152,217,216,0.66)' }}
                       />
                     }
@@ -701,7 +704,7 @@ export const AdminPanel: React.FC = () => {
                   className="app-action-button"
                   startIcon={<Save size={16} />}
                   onClick={() => void handleSave()}
-                  disabled={!canManagePermissions || !hasChanges || adminSaving}
+                  disabled={!canEditSelectedUserAccess || !hasChanges || adminSaving}
                   disableElevation
                 >
                   {adminSaving ? 'Сохранение...' : 'Сохранить изменения'}

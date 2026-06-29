@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
-import { apiClient, documentsApi, draftsApi, historyApi } from '../http';
+import { apiClient, chatApi, documentsApi, draftsApi, historyApi, tasksApi } from '../http';
 import { useUIStore } from '../../store/uiStore';
 
 const apiBase = 'http://127.0.0.1:8080/api/v1';
@@ -9,7 +9,10 @@ const apiBase = 'http://127.0.0.1:8080/api/v1';
 const server = setupServer();
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
-afterEach(() => server.resetHandlers());
+afterEach(() => {
+  vi.restoreAllMocks();
+  server.resetHandlers();
+});
 afterAll(() => server.close());
 
 beforeEach(() => {
@@ -86,5 +89,49 @@ describe('live Gateway response contracts', () => {
     expect((form as FormData).get('file')).toBeInstanceOf(File);
     expect(config?.headers).not.toHaveProperty('Content-Type');
     expect(config?.timeout).toBe(120_000);
+  });
+
+  it('omits nonnumeric project ids when creating chat sessions', async () => {
+    const post = vi.spyOn(apiClient, 'post').mockResolvedValue({
+      data: { session_id: 7, title: 'Новый чат' },
+    });
+
+    await chatApi.createSession('Новый чат', 'Рабочие диалоги');
+
+    expect(post).toHaveBeenCalledWith('/chat/sessions', {
+      title: 'Новый чат',
+      document_ids: [],
+    });
+  });
+
+  it('rejects local chat ids before updating Gateway sessions', async () => {
+    const put = vi.spyOn(apiClient, 'put');
+
+    await expect(chatApi.updateSession('chat-Рабочие диалоги-1782752390714', { title: 'Тест' })).rejects.toThrow(
+      'Gateway session id is missing or not numeric.',
+    );
+
+    expect(put).not.toHaveBeenCalled();
+  });
+
+  it('keeps task converter errors visible in processing logs', async () => {
+    server.use(
+      http.get(`${apiBase}/tasks/27/status`, () =>
+        HttpResponse.json({
+          task_id: 27,
+          draft_id: 11,
+          status: 'failed',
+          pipeline_stage: 'converter',
+          progress_percent: 72,
+          error_code: 'CONVERTER_ERROR',
+          error_message: "Client error '422 Unprocessable Content' for url 'http://converter-validator:8086/api/v1/converter/convert'",
+        }),
+      ),
+    );
+
+    const logs = await tasksApi.status('27');
+
+    expect(logs[0].event).toContain('CONVERTER_ERROR');
+    expect(logs[0].event).toContain('422 Unprocessable Content');
   });
 });
