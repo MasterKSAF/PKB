@@ -172,3 +172,19 @@ OCR fallback существовал только для падения Parser, �
 **Где:**
 - `backend/converter_validator_service/app/api/v1/endpoints/converter.py`
 - `backend/orchestrator_service/app/tasks/pipeline_formation.py`
+
+### G13. Не-ГОСТ документы без doc_code падают в full_converter
+
+**Симптом:** Циркулярное письмо (например `0A83D092-1D22-47AD-A6EF-0F06A8F11A6B_001.pdf`) —
+full_converter возвращает 400 `VALIDATION_ERROR: doc_code is required`.
+
+**Причина:** `compute_business_key` требует непустой doc_code. Для циркулярных писем
+`extract_preview_metadata` не находит doc_code (нет ГОСТ-шаблона) → `""` → ошибка.
+Preview-этап работает (там `MetadataExtractionFailedError` перехвачен), но
+`validate_document` в full-конвертации вызывает `_compute_fingerprint` → `compute_business_key` → падает.
+
+**Фикс (29.06):** `_compute_fingerprint` в `document_validator.py` — try-except `MetadataValidationError`
+вокруг `compute_business_key`. При отсутствии doc_code/title создаётся fallback fingerprint
+из task_id:version_id.
+
+**Где:** `backend/converter_validator_service/app/services/document_validator.py`

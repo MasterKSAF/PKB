@@ -4,11 +4,13 @@ from typing import Any
 
 from app.services.metadata_extractor import extract_preview_metadata
 from app.services.normalizer import (
+    BusinessKeyResult,
     compute_business_key,
     infer_era,
     infer_source_type,
 )
 from app.services.registry_client import validate_classifiers
+from app.core.exceptions import MetadataValidationError
 
 
 def _sha256_hex(value: str) -> str:
@@ -81,20 +83,32 @@ def _compute_fingerprint(
         title,
         source.get("title"),
     )
-    key_result = compute_business_key(
-        era=era,
-        source_type=source_type,
-        doc_code=doc_code,
-        title=title,
-        mks_oks_code=meta.get("mks_oks_code"),
-        okstu_code=meta.get("okstu_code"),
-    )
+    try:
+        key_result = compute_business_key(
+            era=era,
+            source_type=source_type,
+            doc_code=doc_code,
+            title=title,
+            mks_oks_code=meta.get("mks_oks_code"),
+            okstu_code=meta.get("okstu_code"),
+        )
+        title_hash = key_result.title_hash_sha256
+        title_key = key_result.title_key
+    except MetadataValidationError:
+        # doc_code/title могут отсутствовать (циркулярные письма, не-ГОСТы).
+        # Создаём fallback fingerprint из task_id.
+        fallback_raw = f"{task_id}:{version_id}:no_doc_code"
+        title_hash = _sha256_hex(fallback_raw)
+        title_key = f"fallback:{fallback_raw}"
 
     file_hash = source.get("file_hash_sha256") or ""
+    if not file_hash:
+        file_hash = _sha256_hex(f"{task_id}:{version_id}")
+
     return {
-        "file_hash_sha256": file_hash or _sha256_hex(f"{task_id}:{version_id}"),
-        "title_hash_sha256": key_result.title_hash_sha256,
-        "title_key": key_result.title_key,
+        "file_hash_sha256": file_hash,
+        "title_hash_sha256": title_hash,
+        "title_key": title_key,
     }
 
 
