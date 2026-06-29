@@ -18,6 +18,55 @@ from typing import Any, Dict, List, Optional, TypeVar
 
 MOCK_PORT = 8099  # Порт mock-gateway (единая точка для всех скриптов)
 
+# ---------------------------------------------------------------------------
+# Permission → tab mapping (mirrors auth_service logic)
+# ---------------------------------------------------------------------------
+
+_ROLE_PERMISSIONS: dict[str, list[str]] = {
+    "engineer":        ["documents:read", "search", "history:read"],
+    "knowledge_admin": ["documents:read", "documents:write", "search", "history:read"],
+    "system_admin":    ["documents:read", "documents:write", "search", "history:read",
+                        "users:manage", "roles:manage", "audit:read"],
+}
+
+_PERMISSION_TO_TABS: dict[str, list[str]] = {
+    "documents:read": ["chat"],
+    "search":         ["search"],
+    "history:read":   ["history"],
+    "documents:write":["registry", "documents"],
+    "users:manage":   ["admin"],
+    "roles:manage":   ["admin"],
+    "audit:read":     ["monitor"],
+}
+
+_TAB_ORDER = ["chat", "search", "history", "registry", "documents", "admin", "monitor"]
+
+
+def compute_available_tabs(role_names_list: list) -> list:
+    perms: set = set()
+    for role_name in role_names_list:
+        perms.update(_ROLE_PERMISSIONS.get(role_name, []))
+    tabs: set = set()
+    for perm, tab_list in _PERMISSION_TO_TABS.items():
+        if perm in perms:
+            tabs.update(tab_list)
+    return [t for t in _TAB_ORDER if t in tabs]
+
+
+def compute_permissions(role_names_list: list) -> dict:
+    perms: set = set()
+    for role_name in role_names_list:
+        perms.update(_ROLE_PERMISSIONS.get(role_name, []))
+    return {
+        "can_upload_documents":   "documents:write" in perms,
+        "can_run_ocr":            False,
+        "can_manage_users":       "users:manage" in perms,
+        "can_manage_classifiers": "roles:manage" in perms,
+        "can_manage_terminology": False,
+        "can_manage_registry":    "documents:write" in perms,
+    }
+
+
 T = TypeVar("T")
 _id_counter = 10
 

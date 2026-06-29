@@ -1,12 +1,8 @@
-# Фикс: пропадает раздел загрузки документов у администратора
+# Fix: converter-validator contract alignment — tests
 
-**Проблема:** При входе администратора на сервере (195.70.195.203) исчезает раздел
-загрузки документов (knowledgeProcessing), а также администрирование и QA.
-
-## План
-
-- [x] 1. Анализ причины
-- [x] 2. Исправить `_ROLE_TABS` в auth.py
-- [x] 3. Добавить тест на `available_tabs` для system_admin
-- [x] 4. Проверить тесты — 19 passed
-- [x] 5. Завершение правок
+1. [x] Диагностика: найти причину падения тестов после мержа PR #75
+2. [x] conftest.py — вернуть db_engine в сигнатуру clean_db (фикстура создаётся до async контекста)
+3. [x] test_celery_tasks_all.py — обновить mock и проверки под v3-контракт (parameters → metadata/validation)
+4. [x] test_celery_tasks.py — обновить mock preview под плоский PreviewMetadataResponse
+5. [x] test_celery_tasks_async.py — обновить mock preview под плоский формат
+6. [x] Проверка: 558 passed в orchestrator_service, все E2E в docker проходят

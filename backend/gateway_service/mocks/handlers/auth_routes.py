@@ -16,6 +16,7 @@ from mocks.common import (
     _users, _roles, _audit, _tokens, _tokens_meta,
     _access_token_map, _blacklist, _password_hashes, _rate_limits,
     new_id, utcnow, error_response, paginate,
+    compute_available_tabs, compute_permissions,
 )
 
 logger = logging.getLogger("auth_service")
@@ -223,14 +224,15 @@ async def revoke(req: RevokeRequest):
 @router.get("/api/v1/auth/me")
 async def get_me(current_user: dict = Depends(get_current_user)):
     user = current_user
+    roles = user.get("roles", [])
     return {
         "user_id": user["user_id"],
         "full_name": user["full_name"],
         "position": user.get("position", ""),
-        "role": user.get("role", user["roles"][0] if user["roles"] else "engineer"),
-        "role_title": user.get("role_title", user["roles"][0] if user["roles"] else "Инженер"),
-        "available_tabs": user.get("available_tabs", []),
-        "permissions": user.get("permissions", {}),
+        "role": user.get("role", roles[0] if roles else "engineer"),
+        "role_title": user.get("role_title", roles[0] if roles else "Инженер"),
+        "available_tabs": compute_available_tabs(roles),
+        "permissions": compute_permissions(roles),
         "last_login_at": user.get("last_login_at", ""),
         "created_at": user.get("created_at", ""),
     }
@@ -274,12 +276,9 @@ async def create_user(req: CreateUserRequest, current_user: dict = Depends(requi
         "user_id": user_id, "id": user_id, "email": req.email, "full_name": req.full_name, "position": "",
         "roles": req.roles, "role": req.roles[0] if req.roles else "engineer",
         "role_title": req.roles[0] if req.roles else "Инженер",
-        "is_active": True, "available_tabs": ["chat", "search", "registry", "history"],
+        "is_active": True, "available_tabs": compute_available_tabs(req.roles),
         "failed_attempts": 0, "locked_until": None,  # AU-3
-        "permissions": {
-            "can_upload_documents": False, "can_run_ocr": False, "can_manage_users": False,
-            "can_manage_classifiers": False, "can_manage_terminology": False, "can_manage_registry": False,
-        },
+        "permissions": compute_permissions(req.roles),
         "last_login_at": "", "created_at": now, "updated_at": now,
     }
     _users[user_id] = new_user

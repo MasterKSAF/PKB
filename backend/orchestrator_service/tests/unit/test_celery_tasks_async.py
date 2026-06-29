@@ -32,7 +32,10 @@ class TestRunConverterPreviewStep:
         """После успешной конвертации вызывается _notify_step_completed."""
         mock_client = AsyncMock()
         mock_client.convert_preview.return_value = {
-            "data": {"validated": True, "metadata": {"title": "test"}}
+            "doc_code": "test-code",
+            "title": "test",
+            "document_type": "normative",
+            "era": "USSR",
         }
         mock_client.close = AsyncMock()
 

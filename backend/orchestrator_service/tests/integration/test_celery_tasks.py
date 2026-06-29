@@ -147,10 +147,13 @@ class TestRunConverterPreviewStep:
     """Tests for run_converter_preview_step Celery task."""
 
     HAPPY_CONVERTER_RESPONSE = {
-        "data": {
-            "validated": True,
-            "metadata": {"doc_code": "&#1043;&#1054;&#1057;&#1058; 1234-56", "title": "Test doc"},
-        }
+        "doc_code": "&#1043;&#1054;&#1057;&#1058; 1234-56",
+        "title": "Test doc",
+        "document_type": "normative",
+        "era": "USSR",
+        "validity_status": "active",
+        "source_type": "GOST",
+        "language": "ru",
     }
 
     def test_happy_path(self):
@@ -187,7 +190,15 @@ class TestRunConverterPreviewStep:
         assert args[2] == {"file_key": "drafts/10/file.pdf", "mode": "preview", "draft_id": DRAFT_ID}
         assert args[3] == {
             "validated": True,
-            "metadata": {"doc_code": "&#1043;&#1054;&#1057;&#1058; 1234-56", "title": "Test doc"},
+            "metadata": {
+                "doc_code": "&#1043;&#1054;&#1057;&#1058; 1234-56",
+                "title": "Test doc",
+                "document_type": "normative",
+                "era": "USSR",
+                "validity_status": "active",
+                "source_type": "GOST",
+                "language": "ru",
+            },
         }
 
         assert result == {
