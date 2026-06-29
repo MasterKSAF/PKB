@@ -1,26 +1,12 @@
-# Тест загрузки + детальный вывод шагов + анализ багов
+# Тест загрузки + фикс B1 + механизм stale running + тесты
 
 - [x] 1. Изучить проект, Docker, существующие тесты
 - [x] 2. Создать `data/tests/test_universal_pdf_loader.py`
-- [x] 3. Добавить детальный вывод шагов в тест:
-  - группировка по step_name со статусами
-  - подсветка pending/failed/duplicate
-  - документ_id в поиске для понимания какой документ найден
-- [x] 4. Запустить тест с НД №2 (249 стр. PDF)
-- [ ] 5. Полный E2E прогон — **требует фикса багов в orchestrator**
-
-## Найденные баги (описаны в specificity.md)
-
-### B1. Циклический OCR fallback — preview_ocr дублируется
-- `_run_ocr_fallback` проверяет только `pending`, не проверяет `completed` OCR-шаги
-- Цикл: Parser → Converter fail → OCR → Converter fail → OCR → ...
-- Фикс: guard должен проверять completed OCR Service
-
-### B2. full_ocr (Parser) не завершается на больших PDF
-- full_ocr висит `running` >300с на 249 страницах
-- Все downstream шаги (converter, registry, rag) заблокированы
-
-### B3. RAG-индексация не стартует
-- rag_index стартуется только через цепочку full_ocr → converter → registry → rag
-- Если full_ocr висит — rag_index никогда не стартует
-- При этом RAG Builder находит данные (поиск работает) — pipeline не синхронизирован
+- [x] 3. Добавить детальный вывод шагов + doc_id в поиске
+- [x] 4. Запустить тест, проанализировать баги
+- [x] 5. **B1**: `_run_ocr_fallback` — guard `has_existing_ocr` (+ `return`)
+- [x] 6. **B2**: `RUNNING_STEP_TIMEOUT=600`, `get_stale_running_steps`, `_check_service_health`, `cleanup_stale_tasks` — stale running + health check
+- [x] 7. **Config**: `PENDING_STATE_TIMEOUT=30→180`
+- [x] 8. **Тесты**: 9 новых тестов (566 passed, 3 предсуществующих failed)
+- [x] 9. **Пересобрать контейнеры** — `orchestrator` + `celery-worker`
+- [x] 10. **E2E тест** — **PASSED**: pipeline completed, 8/8 фрагментов найдены

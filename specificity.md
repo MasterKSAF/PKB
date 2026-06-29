@@ -208,19 +208,11 @@ Preview-этап работает (там `MetadataExtractionFailedError` пер
 
 **Где:** `PipelineOrchestrator._run_ocr_fallback()` (orchestrator.py:347–391).
 
-**Фикс:** проверять не только `pending`, но и `completed` для OCR Service:
-```python
-has_existing_ocr = any(
-    s.step_name == "preview_ocr" and s.service_name == "OCR Service" and s.status == "completed"
-    for s in steps
-)
-if not has_pending_ocr and not has_existing_ocr:
-    # create step
-```
+**Фикс (30.06):** guard теперь проверяет `has_existing_ocr` — completed шаги OCR Service.
 
 ### B2. Pipeline full_phase: full_ocr (Parser) не завершается на больших PDF
 
-**Симптом:** `full_ocr` висит `running` на PDF 249 страниц более 300с. 
+**Симптом:** `full_ocr` висит `running` на PDF 249 страниц более 300с.
 `full_converter`, `registry_creation`, `rag_index` — все `pending`, ждут full_ocr.
 
 **Причина:** Parser full не может обработать большой PDF (таймаут/зависание).
@@ -229,7 +221,12 @@ if not has_pending_ocr and not has_existing_ocr:
 
 **Где:** `PipelineOrchestrator._on_full_step_completed()` (orchestrator.py:714–842).
 
-**Статус:** не исправлено.
+**Фикс (30.06):**
+- добавлен `RUNNING_STEP_TIMEOUT = 600с` (10 мин) в `PipelineConfig`
+- `get_stale_running_steps()` в TaskRepository — ищет шаги running > N секунд
+- `_check_service_health()` — HTTP health check сервиса (Parser, OCR, Converter, Registry, RAG)
+- `cleanup_stale_tasks` проверяет stale running шаги: если сервис жив → warning (медленная обработка),
+  если сервис мёртв → fail шага (SERVICE_DEAD)
 
 ### B3. RAG-индексация не стартует даже при доступных данных
 

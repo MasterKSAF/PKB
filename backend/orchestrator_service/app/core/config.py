@@ -120,8 +120,14 @@ class PipelineConfig(BaseSettings):
 
     # Per-state timeout: max time a step can stay in 'pending' before being marked stale
     PENDING_STATE_TIMEOUT: int = Field(
-        default=30,
+        default=180,
         description="Max seconds a step can stay in pending state (P3S-1)",
+    )
+
+    # Running step timeout: max time a step can stay in 'running' before being checked
+    RUNNING_STEP_TIMEOUT: int = Field(
+        default=600,
+        description="Max seconds a step can stay in running before health check (B2)",
     )
 
     # Absolute task timeout: max total time for any pipeline task
