@@ -450,3 +450,13 @@ python backend/service_checker/service_checker.py docker --action health
 - `run_registry_step`: 409 Conflict = idempotent success
 
 **Проверено**: pipeline за ~15с, RAG Search 150 результатов.
+
+### 2.4. `_run_ocr_fallback` — step lifecycle (исправлено 30.06)
+**Проблема**: Новый OCR-шаг создавался со статусом `pending`, но не стартовался (`start_task_step`). Когда OCR-задача завершалась, `on_step_completed` завершала шаг сразу из `pending` → `completed` (минуя `running`). Это нарушало жизненный цикл шага.
+
+**Исправление**: После создания шага вызывается `start_task_step` → статус `running`.
+
+### 2.5. `approve_draft` — пропущенный dispatch full_converter (исправлено 30.06)
+**Проблема**: При `need_full_processing=False` (full preview, mode=full), `full_converter` шаг стартовался, но `run_converter_full_step.delay()` не вызывался. Шаг навсегда оставался в `running`, пайплайн зависал.
+
+**Исправление**: Добавлен `run_converter_full_step.delay(...)` в else-ветку после старта full_converter.

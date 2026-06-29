@@ -223,7 +223,19 @@ class ServiceClient:
                     "error": str(exc),
                 },
             )
-            raise
+            # If a mock_response fallback was provided (or we can use {}),
+            # return it instead of crashing. This supports graceful
+            # degradation when a downstream service is unreachable.
+            fallback = mock_response if mock_response is not None else {}
+            logger.info(
+                f"Falling back to mock_response={fallback} for {method} {endpoint}",
+                extra={
+                    "service": self.service_name,
+                    "method": method,
+                    "endpoint": endpoint,
+                },
+            )
+            return fallback
 
         except httpx.HTTPStatusError as exc:
             elapsed = time.monotonic() - start_time

@@ -374,8 +374,8 @@ class PipelineOrchestrator:
             return
 
         if not has_pending_ocr:
-            # Create a new preview step for OCR
-            await self.task_repo.create_task_step(
+            # Create a new preview step for OCR and start it immediately
+            ocr_step = await self.task_repo.create_task_step(
                 task_id=task.id,
                 step_name="preview_ocr",
                 step_index=1,
@@ -387,6 +387,16 @@ class PipelineOrchestrator:
                     "draft_id": task.draft_id,
                 },
             )
+            # Start the step so its lifecycle is consistent: pending → running → completed
+            await self.task_repo.start_task_step(ocr_step.id)
+        else:
+            # Existing pending step from a previous call — start it too
+            pending_step = next(
+                (s for s in steps if s.step_name == "preview_ocr" and s.status == "pending"),
+                None,
+            )
+            if pending_step:
+                await self.task_repo.start_task_step(pending_step.id)
 
         # Reset retry count for the fallback attempt
         task.retry_count = 0
@@ -1206,9 +1216,13 @@ class PipelineOrchestrator:
             )
             if full_converter:
                 await self.task_repo.start_task_step(full_converter.id)
+                # Must dispatch converter task — otherwise step stays running forever
                 logger.info(
-                    "Enqueued full Converter step (full preview, no Parser/OCR)",
+                    "Enqueuing full Converter step (full preview, no Parser/OCR)",
                     extra={"task_id": task_id, "draft_id": draft_id},
+                )
+                run_converter_full_step.delay(
+                    task_id, draft_id, file_key, trace_id=current_trace_id,
                 )
 
         return {

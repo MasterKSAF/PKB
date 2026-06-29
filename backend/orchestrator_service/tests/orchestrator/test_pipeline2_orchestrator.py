@@ -71,10 +71,10 @@ class TestRagIndexCompletion:
         assert updated.pipeline_stage == TaskStage.REGISTRY.value
         assert updated.progress_percent == 100
 
-        # Registry draft status should be updated to approved
-        mock_registry.update_draft_status.assert_called_with(
-            draft_id=400,
-            status="approved",
+        # Registry document status should be updated to validating
+        mock_registry.update_document_status.assert_called_with(
+            document_id=100500,
+            status="validating",
         )
 
 

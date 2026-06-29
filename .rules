@@ -10,6 +10,8 @@
 графовых инструментов (get_architecture, query_graph, trace_path, 
 get_code_snippet, detect_changes) и предотвратит ошибки 
 "not indexed". Пользуйся ими, запомни project_id на сессию.
+2.8 Если нужно тело конкретной функции, и её имя известно — get_code_snippet без  read_file
+2.9 Если исследуешь цепочку вызовов длиннее 2 шагов — сначала trace_path потом get_code_snippet
 
 
 3. **Внесение правок**
@@ -57,13 +59,16 @@ get_code_snippet, detect_changes) и предотвратит ошибки
 **Приоритет инструментов поиска по коду и файлам**
 Порядок применения:
 1. search_graph — поиск символов (функций, классов, роутов)
-2. search_code — текстовый поиск (grep + граф)
-3. trace_path — трассировка вызовов/зависимостей
-4. get_code_snippet — чтение функции по qualified_name
-5. get_architecture — обзор архитектуры (если надо)
-6. query_graph — Cypher для сложных паттернов
-9. get_section — секция из .md (абсолютный путь)
-10. read_file — полный файл
-11. terminal — только для external-команд (билды, тесты, git, docker)
+2. query_graph — Cypher для сложных паттернов
+3. search_code — текстовый поиск (grep + граф)
+5. trace_path — трассировка вызовов/зависимостей
+6. get_code_snippet — чтение функции по qualified_name
+7. get_architecture — обзор архитектуры (если надо)
+7. get_section — секция из .md (абсолютный путь)
+8. read_file — полный файл
+9. terminal — только для external-команд (билды, тесты, git, docker)
+Исключения:  
+1. Кириллица/не-ASCII — без графа (не поддерживается)
+2. Динамические маршруты — без графа (trace_path не показывает caller)
 
 **Контрольный вопрос перед `terminal` & read_file:** команда для чтения кода (grep/find/dir/ls/head/tail/cat)? → остановись, нужный tool — среди инструментов 1–7 или md tools.

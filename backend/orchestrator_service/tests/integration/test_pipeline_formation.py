@@ -443,7 +443,7 @@ class TestApproveDraftFull:
             return_value=mock_registry,
         ), patch(
             "app.tasks.pipeline_formation.run_converter_full_step.delay",
-        ), patch(
+        ) as mock_converter_delay, patch(
             "app.tasks.pipeline_formation.run_registry_step.delay",
         ):
             orchestrator = PipelineOrchestrator(db_session)
@@ -465,6 +465,9 @@ class TestApproveDraftFull:
         assert "full_ocr" not in step_names
         assert "full_converter" in step_names
         assert "registry_creation" in step_names
+
+        # Verify converter task WAS dispatched (fix for full_preview missing dispatch)
+        mock_converter_delay.assert_called_once()
 
 
 class TestApproveDraftVersionId:
@@ -836,15 +839,62 @@ class TestRunOcrFallback:
         # Verify delay was called
         mock_delay.assert_called_once()
 
-        # Verify new OCR step was created
+        # Verify new OCR step was created AND started (running, not just pending)
         steps = await repo.get_task_steps(task.id)
-        ocr_pending = [
+        ocr_running = [
             s for s in steps
             if s.step_name == "preview_ocr"
             and s.service_name == "OCR Service"
-            and s.status == "pending"
+            and s.status == "running"
         ]
-        assert len(ocr_pending) == 1
+        assert len(ocr_running) == 1, \
+            f"Expected 1 running OCR step, got {len(ocr_running)}. Steps: {[(s.step_name, s.service_name, s.status) for s in steps]}"
+
+    async def test_starts_existing_pending_step(self, db_session: AsyncSession):
+        """_run_ocr_fallback starts existing pending OCR step instead of creating duplicate."""
+        task = await _create_task(db_session, draft_id=100, total_steps=3)
+        repo = TaskRepository(db_session)
+        # Create Parser step (completed)
+        parser_step = await repo.create_task_step(
+            task_id=task.id, step_name="preview_ocr", step_index=1,
+            service_name="Parser Service",
+            input_data={"file_key": "test.pdf", "mode": "preview"},
+        )
+        await repo.start_task_step(parser_step.id)
+        await repo.complete_task_step(parser_step.id, output_data={"pages": 3})
+
+        # Create an existing OCR step left in "pending" (from a previous fallback attempt)
+        existing_ocr = await repo.create_task_step(
+            task_id=task.id, step_name="preview_ocr", step_index=1,
+            service_name="OCR Service",
+            input_data={"file_key": "test.pdf", "mode": "preview", "max_pages": 3, "draft_id": 100},
+        )
+        # Step stays pending — not started
+
+        with patch(
+            "app.core.pipeline.orchestrator.RegistryServiceClient",
+        ), patch(
+            "app.tasks.pipeline_formation.run_ocr_preview_step.delay",
+        ) as mock_delay:
+            orchestrator = PipelineOrchestrator(db_session)
+            await orchestrator._run_ocr_fallback(task, file_key="test.pdf")
+
+        # Verify delay was called
+        mock_delay.assert_called_once()
+
+        # Verify NO new step was created (existing pending step was reused)
+        steps = await repo.get_task_steps(task.id)
+        ocr_steps = [
+            s for s in steps
+            if s.step_name == "preview_ocr"
+            and s.service_name == "OCR Service"
+        ]
+        assert len(ocr_steps) == 1, \
+            f"Expected 1 OCR step, got {len(ocr_steps)}"
+
+        # Verify existing step is now RUNNING (was started, not left pending)
+        assert ocr_steps[0].status == "running", \
+            f"Expected step to be running, got {ocr_steps[0].status}"
 
 
 # ---------------------------------------------------------------------------

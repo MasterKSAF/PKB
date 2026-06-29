@@ -1,12 +1,18 @@
-# Тест загрузки + фикс B1 + механизм stale running + тесты
+# Fix dispatching full_ocr / OCR fallback in orchestrator
 
-- [x] 1. Изучить проект, Docker, существующие тесты
-- [x] 2. Создать `data/tests/test_universal_pdf_loader.py`
-- [x] 3. Добавить детальный вывод шагов + doc_id в поиске
-- [x] 4. Запустить тест, проанализировать баги
-- [x] 5. **B1**: `_run_ocr_fallback` — guard `has_existing_ocr` (+ `return`)
-- [x] 6. **B2**: `RUNNING_STEP_TIMEOUT=600`, `get_stale_running_steps`, `_check_service_health`, `cleanup_stale_tasks` — stale running + health check
-- [x] 7. **Config**: `PENDING_STATE_TIMEOUT=30→180`
-- [x] 8. **Тесты**: 9 новых тестов (566 passed, 3 предсуществующих failed)
-- [x] 9. **Пересобрать контейнеры** — `orchestrator` + `celery-worker`
-- [x] 10. **E2E тест** — **PASSED**: pipeline completed, 8/8 фрагментов найдены
+## Analysis findings
+
+### Bugs identified:
+
+1. **`_run_ocr_fallback` (line 349):** New OCR preview step is created with `status="pending"` but never started via `start_task_step`. When OCR task completes, `on_step_completed` finds a "pending" step and completes it directly (skipping "running" state). This breaks step lifecycle.
+
+2. **`approve_draft` else branch (line 1197):** When `need_full_processing=False` (full preview mode or `full_completed=True`), the `full_converter` step is started but `run_converter_full_step.delay()` is NEVER called. The step stays `running` forever — no Celery task is dispatched to process it.
+
+3. **`_run_ocr_fallback` missing import guard:** After creating the step, `.delay()` is called but if the local import or dispatch fails, there's no error handling.
+
+### Plan:
+
+- [x] Fix 1: `_run_ocr_fallback` — start the new OCR step after creation
+- [x] Fix 2: `approve_draft` else branch — dispatch `run_converter_full_step.delay()` when skipping Parser/OCR
+- [x] Review all dispatch sites for consistency
+- [x] Run tests
