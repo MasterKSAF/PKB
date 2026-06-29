@@ -1,15 +1,26 @@
-# Fix: timeout 6500ms для проверки черновика ✅
+# Тест загрузки + детальный вывод шагов + анализ багов
 
-## Причина
-Глобальный таймаут axios (6500ms) в `UI-UX/UI Final/frontend/src/utils/http.ts` обрывал longpoll-запрос
-`GET /drafts/{id}/preview/status?longpoll=15` раньше, чем сервер успевал ответить.
+- [x] 1. Изучить проект, Docker, существующие тесты
+- [x] 2. Создать `data/tests/test_universal_pdf_loader.py`
+- [x] 3. Добавить детальный вывод шагов в тест:
+  - группировка по step_name со статусами
+  - подсветка pending/failed/duplicate
+  - документ_id в поиске для понимания какой документ найден
+- [x] 4. Запустить тест с НД №2 (249 стр. PDF)
+- [ ] 5. Полный E2E прогон — **требует фикса багов в orchestrator**
 
-Серверный longpoll (orchestrator) ожидает до 15с завершения preview pipeline, 
-но axios на клиенте прерывал запрос через 6.5с → timeout → ошибка.
+## Найденные баги (описаны в specificity.md)
 
-## Что сделано
-- [x] 1. Проанализировать проблему (таймаут 6500 в axios, longpoll 15с на сервере)
-- [x] 2. Увеличить глобальный таймаут `apiClient` с 6500ms → 30000ms (30с)
-- [x] 3. Создать `pipelineClient` с таймаутом 120000ms (2 мин) для pipeline-операций
-- [x] 4. Переключить `startPreview` и `waitPreview` на `pipelineClient`
-- [x] 5. Проверить целостность (импорты, тесты, другие использования `apiClient`)
+### B1. Циклический OCR fallback — preview_ocr дублируется
+- `_run_ocr_fallback` проверяет только `pending`, не проверяет `completed` OCR-шаги
+- Цикл: Parser → Converter fail → OCR → Converter fail → OCR → ...
+- Фикс: guard должен проверять completed OCR Service
+
+### B2. full_ocr (Parser) не завершается на больших PDF
+- full_ocr висит `running` >300с на 249 страницах
+- Все downstream шаги (converter, registry, rag) заблокированы
+
+### B3. RAG-индексация не стартует
+- rag_index стартуется только через цепочку full_ocr → converter → registry → rag
+- Если full_ocr висит — rag_index никогда не стартует
+- При этом RAG Builder находит данные (поиск работает) — pipeline не синхронизирован

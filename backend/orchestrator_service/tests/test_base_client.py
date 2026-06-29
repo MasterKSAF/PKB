@@ -197,6 +197,27 @@ class TestServiceClientDataValidation:
             )
 
 
+class TestServiceClientCustomReadTimeout:
+    """Tests for custom read_timeout parameter."""
+
+    @pytest.mark.asyncio
+    async def test_custom_read_timeout_creates_http_client(self):
+        """Custom read_timeout creates httpx client (not None)."""
+        client = SimpleTestClient(
+            service_url="http://localhost:9999",
+            mock_mode=False,
+        )
+        assert client._http_client is not None
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_mock_mode_no_http_client(self):
+        """Mock mode does NOT create HTTP client."""
+        client = SimpleTestClient(mock_mode=True)
+        assert client._http_client is None
+        await client.close()
+
+
 class TestServiceClientClose:
     """Tests for close() method."""
 

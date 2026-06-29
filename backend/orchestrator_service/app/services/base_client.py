@@ -46,20 +46,23 @@ class ServiceClient:
         service_name: str,
         service_url: Optional[str],
         mock_mode: bool = False,
+        read_timeout: Optional[int] = None,
     ):
         self.service_name = service_name
         self.service_url = service_url.rstrip("/") if service_url else None
         self.mock_mode = mock_mode
         self._http_client: Optional[httpx.AsyncClient] = None
         self._circuit_breaker: Optional[CircuitBreaker] = None
+        self._read_timeout = read_timeout
 
         if not mock_mode and self.service_url:
             # Initialize real HTTP client with timeouts from config
             http_cfg = settings.http_client
+            rt = read_timeout if read_timeout is not None else http_cfg.READ_TIMEOUT
             timeout = httpx.Timeout(
                 connect=http_cfg.CONNECT_TIMEOUT,
-                read=http_cfg.READ_TIMEOUT,
-                write=http_cfg.READ_TIMEOUT,
+                read=rt,
+                write=rt,
                 pool=http_cfg.POOL_TIMEOUT,
             )
             limits = httpx.Limits(
@@ -85,7 +88,7 @@ class ServiceClient:
                 extra={
                     "service": service_name,
                     "url": service_url,
-                    "timeout": http_cfg.READ_TIMEOUT,
+                    "timeout": rt,
                     "max_retries": http_cfg.MAX_RETRIES,
                     "cb_threshold": pipeline_cfg.CIRCUIT_FAILURE_THRESHOLD,
                     "cb_timeout": pipeline_cfg.CIRCUIT_RECOVERY_TIMEOUT,

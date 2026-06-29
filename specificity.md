@@ -193,3 +193,72 @@ Preview-этап работает (там `MetadataExtractionFailedError` пер
 **Где:**
 - `backend/converter_validator_service/app/services/metadata_extractor.py`
 - `backend/converter_validator_service/app/services/document_validator.py`
+
+### B1. Циклический OCR fallback в preview — дублирование preview_ocr шагов
+
+**Симптом:** `preview_ocr` шаги множатся (completed=5, pending=1), новые создаются каждый цикл.
+
+**Механизм:**
+1. Parser preview_ocr → completed
+2. Converter preview (`_on_preview_completed`) → `validated=False` (НД без doc_code)
+3. `_run_ocr_fallback` → создаёт `preview_ocr` (OCR), диспатчит
+4. OCR preview_ocr → completed → снова Converter → validated=False → снова `_run_ocr_fallback`
+5. **Бесконечный цикл:** guard в `_run_ocr_fallback` проверяет только `pending` шаги (`has_pending_ocr`),
+   но НЕ проверяет `completed` OCR-шаги. Каждый раз после завершения OCR Converter падает → новый OCR.
+
+**Где:** `PipelineOrchestrator._run_ocr_fallback()` (orchestrator.py:347–391).
+
+**Фикс:** проверять не только `pending`, но и `completed` для OCR Service:
+```python
+has_existing_ocr = any(
+    s.step_name == "preview_ocr" and s.service_name == "OCR Service" and s.status == "completed"
+    for s in steps
+)
+if not has_pending_ocr and not has_existing_ocr:
+    # create step
+```
+
+### B2. Pipeline full_phase: full_ocr (Parser) не завершается на больших PDF
+
+**Симптом:** `full_ocr` висит `running` на PDF 249 страниц более 300с. 
+`full_converter`, `registry_creation`, `rag_index` — все `pending`, ждут full_ocr.
+
+**Причина:** Parser full не может обработать большой PDF (таймаут/зависание).
+Шаги стартуются последовательно: full_ocr → full_converter → registry → rag_index.
+Если full_ocr не completed — цепочка не движется.
+
+**Где:** `PipelineOrchestrator._on_full_step_completed()` (orchestrator.py:714–842).
+
+**Статус:** не исправлено.
+
+### B3. RAG-индексация не стартует даже при доступных данных
+
+**Симптом:** Данные в RAG Search уже есть (поиск находит doc_id=59), 
+но pipeline висит на 99%, `rag_index` всегда `pending`.
+
+**Причина:** rag_index стартуется только через цепочку:
+`full_ocr completed → _on_full_step_completed → enqueue full_converter → 
+full_converter completed → enqueue registry_creation → 
+registry_creation completed → enqueue rag_index`
+
+Если любой шаг в цепочке не завершён (B2: full_ocr running) — rag_index никогда не стартует.
+При этом RAG Builder может получить данные другим путём (через auto-индексацию или 
+параллельный процесс), поэтому данные в поиске есть, но pipeline не в курсе.
+
+**Где:** `PipelineOrchestrator._on_full_step_completed()` (orchestrator.py:714–842).
+
+### UTL. Универсальный тест загрузки PDF — data/tests/test_universal_pdf_loader.py
+
+**Назначение:** Единый скрипт для загрузки любого PDF через Gateway, извлечения текстовых фрагментов из самого PDF и верификации их через RAG Search.
+
+**Особенности:**
+- Не использует service_checker — только корневой docker-compose (порт 8080)
+- Аргумент — путь к PDF (по умолчанию `НД_№2_09_006_кн_6_переиздан_как_2_039901_005,_2018.pdf`)
+- Фрагменты извлекаются через PyPDF2: фильтрация стоп-строк, сортировка по длине + буквенному соотношению
+- Настройка через переменные окружения: `EXTRACT_FRAGMENTS` (сколько фрагментов), `DOC_SOURCE_TYPE`, `DOC_TITLE`, `DOC_CODE`, `TEST_API_URL`
+- Выходной код: 0 (успех), 1 (ошибка), 2 (низкий процент верификации)
+
+**Пример:**
+```bash
+set EXTRACT_FRAGMENTS=10 && python data/tests/test_universal_pdf_loader.py data/pdf/ОСТ5_2067_73_Имущество_АСИ_ППИ_и_ЗИП_Крепление_на_судах.pdf
+```

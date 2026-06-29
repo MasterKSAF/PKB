@@ -184,6 +184,13 @@ class HTTPClientConfig(BaseSettings):
         default=30, description="HTTP read/response timeout"
     )
 
+    # Converter-validator specific read timeout (seconds) — full conversion
+    # can be slow on large documents (hierarchy build, LLM enrich, validation).
+    # Default: 180s, overridable via CONVERTER_READ_TIMEOUT env var.
+    CONVERTER_READ_TIMEOUT: int = Field(
+        default=180, description="HTTP read timeout for Converter-Validator requests"
+    )
+
     # Pool timeout (seconds) — max time to wait for a connection from pool
     POOL_TIMEOUT: int = Field(
         default=5, description="Connection pool timeout"
