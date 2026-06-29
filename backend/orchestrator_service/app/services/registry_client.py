@@ -568,6 +568,7 @@ class RegistryServiceClient(ServiceClient):
             "PATCH",
             f"/api/v1/registry/documents/{document_id}/status",
             request_model=UpdateDocumentStatusRequest,
+            headers={"X-Service-ID": "orchestrator"},
             mock_response={
                 "data": {
                     "document_id": document_id,

@@ -79,14 +79,18 @@ class EmbeddingService:
             with attempt:
                 attempt_no = int(attempt.retry_state.attempt_number)
                 payload = {"model": settings.embedding_model, "input": batch}
+                # Явно указываем размерность, чтобы API вернул векторы нужной длины
+                # (поддерживается Qwen3-Embedding, OpenAI и совместимыми)
+                payload["dimensions"] = self.dim
                 logger.info(
-                    "Embedding batch request start batch={}/{} size={} attempt={} url={} model={}",
+                    "Embedding batch request start batch={}/{} size={} attempt={} url={} model={} dim={}",
                     batch_idx,
                     total_batches,
                     len(batch),
                     attempt_no,
                     settings.embedding_api_url,
                     settings.embedding_model,
+                    self.dim,
                 )
                 started = time.perf_counter()
                 response = await client.post(settings.embedding_api_url, headers=headers, json=payload)

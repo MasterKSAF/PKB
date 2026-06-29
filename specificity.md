@@ -117,3 +117,36 @@ query_service.pipeline.run_pipeline()
 **Где:** `backend/orchestrator_service/app/core/pipeline/orchestrator.py`, `backend/orchestrator_service/app/api/v1/endpoints/drafts.py`.
 
 **Статус:** исправлено.
+
+### G9. base_client.py — mock fallback при ConnectError удалён
+
+**Проблема:** При `ConnectError` (сервис недоступен) `ServiceClient.call()` возвращал пустой `mock_response` вместо retry.
+Celery-задача получала `{}` → конвертер падал с `MetadataExtractionFailedError`.
+
+**Фикс (29.06):**
+- ConnectError теперь retryable (tenacity)
+- После исчерпания retry — исключение пробрасывается в Celery-задачу
+- Аналогично для CircuitBreakerError
+
+**Где:** `backend/orchestrator_service/app/services/base_client.py`.
+
+### G10. Rag-builder: dimensions parameter для эмбеддингов
+
+**Проблема:** Qwen3-Embedding-8B возвращает 4096-мерные векторы. Rag-builder не передавал `dimensions`, обрезал 4096→2048.
+Rag-search передавал `dimensions=2048` и получал 2048 — несоответствие.
+
+**Фикс (29.06):** Rag-builder также передаёт `dimensions=self.dim` в API.
+
+**Где:** `backend/rag_builder_service/src/rag_builder/embeddings/service.py`.
+
+### G11. Registry: заголовок X-Service-ID для обновления статуса документа
+
+**Проблема:** Эндпоинт `PATCH /registry/documents/{id}/status` требует заголовок `X-Service-ID: orchestrator`.
+`RegistryServiceClient.update_document_status` не передавал его → 403 Forbidden.
++ Статус `"active"` не входит в валидные переходы из `"uploaded"`.
+
+**Фикс (29.06):**
+- Добавлен заголовок `X-Service-ID: orchestrator` в `update_document_status`
+- После rag_index статус меняется на `"validating"` (валидный переход `uploaded → validating`)
+
+**Где:** `backend/orchestrator_service/app/services/registry_client.py`, `backend/orchestrator_service/app/core/pipeline/orchestrator.py`.
