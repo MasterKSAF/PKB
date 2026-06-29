@@ -91,6 +91,51 @@ def test_infer_era_and_source_type():
     assert infer_source_type("РОССИЙСКИЙ МОРСКОЙ РЕГИСТР") == "RMRS"
 
 
+def test_infer_source_type_ost():
+    assert infer_source_type("ОСТ 5.2067-73") == "OST"
+    assert infer_source_type("ОСТ5.2067-73") == "OST"
+
+
+def test_infer_source_type_rd():
+    assert infer_source_type("РД 5.1234-95") == "RD"
+    assert infer_source_type("РД5.1234") == "RD"
+
+
+def test_infer_source_type_tu():
+    assert infer_source_type("ТУ 1234-567") == "TU"
+
+
+def test_infer_source_type_pkps():
+    assert infer_source_type("ПКПС-VIII-2018") == "RD"
+    assert infer_source_type("ПКПС VIII") == "RD"
+    assert infer_source_type("ПКПС_Часть_VIII.pdf") == "RD"
+
+
+def test_infer_source_type_iso():
+    assert infer_source_type("ISO 9001:2015") == "ISO"
+    assert infer_source_type("ISO 14001") == "ISO"
+
+
+def test_infer_source_type_dnv():
+    assert infer_source_type("DNV-CG-0150") == "DNV"
+    assert infer_source_type("DNV-OS-E101") == "DNV"
+
+
+def test_infer_source_type_astm():
+    assert infer_source_type("ASTM A36") == "ASTM"
+    assert infer_source_type("ASTM F1153") == "ASTM"
+
+
+def test_infer_source_type_snip():
+    assert infer_source_type("СНиП 2.04.01-85") == "OTHER"
+    assert infer_source_type("СП 20.13330.2016") == "OTHER"
+
+
+def test_infer_source_type_gost_r():
+    assert infer_source_type("ГОСТ Р 2.105-95") == "GOST_R"
+    assert infer_source_type("ГОСТ Р 51740") == "GOST_R"
+
+
 def test_era_from_year():
     assert era_from_year(1981, "документ") == "USSR"
     assert era_from_year(1995, "документ") == "CIS"

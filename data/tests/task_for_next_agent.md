@@ -1,54 +1,99 @@
-# Задача следующему агенту: починить пайплайн загрузки → поиск
+# Задача: починить диспетчеризацию full_ocr / OCR fallback в оркестраторе
 
-## Суть
+## Симптом
 
-Полный цикл (Upload → Preview → Approve → Full pipeline → Search) не проходит.
-Нужно: загрузить PDF из `data/pdf/`, дождаться обработки, найти строку из документа через `POST /rag/search`.
-
-## Два блокера
-
-### 1. Preview status не приходит в completed
-
-`_build_preview_status` в `backend/orchestrator_service/app/api/v1/endpoints/drafts.py`
-— из-за дублирующихся шагов `preview_converter` (один completed, второй pending).
-Фикс: уникализировать шаги или проверять `any` вместо `all`.
-
-### 2. RAG-индексация висит
-
-После `registry_creation` шаг `rag_index` остаётся `pending`.
-Нужно разобраться с дублированием шагов в `approve_draft`
-(`backend/orchestrator_service/app/core/pipeline/orchestrator.py`)
-и убедиться что `run_rag_index_step.delay()` диспатчится при `registry_creation` completed.
+Полный цикл (Upload → Preview → Approve → Full pipeline → Search) зависает.
+Статус пайплайна: `full_ocr: running` — никогда не переходит в `completed`.
+Celery-воркер не получает задачу, хотя шаг в БД помечен как `running`.
 
 ## Что уже починено (не трогать)
 
-| Файл | Что сделано |
-|------|------------|
-| `gateway/client.py` | Убран transform у rag route (обрезал `/rag/`) |
-| `orchestrator/.../drafts.py` | `year` обёрнут в `str()` |
-| `orchestrator/.../orchestrator.py` | `version_id` вынесен до if/elif; добавлен шаг rag_index; новый elif для rag_index |
-| `orchestrator/.../pipeline_formation.py` | parser_full ждёт результат; converter_full передаёт raw_json; добавлен `run_rag_index_step` |
-| `orchestrator/.../parser_client.py` | get_status URL исправлен; добавлен get_result |
+### Converter-validator — извлечение метаданных
 
-## Тесты
+**Файлы:**
+- `backend/converter_validator_service/app/services/metadata_extractor.py`
+- `backend/converter_validator_service/app/services/normalizer.py`
 
-В `data/tests/` лежат:
-- `test_full_pipeline.py` — полный цикл (много выводов, недоделан)
-- `test_quick.py` — сокращённый 
-- `test_go.py` — минимальный (сейчас не проходит из-за блокеров)
+Добавлены regex-паттерны для всех типов документов: ГОСТ Р, ПКПС, ОСТ, РД, ТУ, НД, ISO, DNV, ASTM, СНиП/СП, чертежи.
+`_find_doc_code` и `infer_source_type` теперь покрывают всё из `SOURCE_TYPE_TO_KEY`.
+Добавлен fallback `_find_title` из имени файла.
 
-После фиксов нужно создать `data/tests/test_e2e.py` с коротким чистым тестом:
-1. Загрузить PDF
-2. Preview (без ожидания completed)
-3. Approve
-4. Ждать full pipeline (≤30 сек)
-5. Искать строку из документа
-6. Проверить что результат содержит искомое
+**Тесты:** 64 шт, все проходят:
+```bash
+cd backend/converter_validator_service && python -m pytest tests/
+```
 
-## Проверка
+---
+
+## Что надо чинить: оркестратор — dispatch celery-задач
+
+### Два места с багом
+
+#### 1. OCR fallback после неудачного preview (`_run_ocr_fallback`)
+
+**Файл:** `backend/orchestrator_service/app/core/pipeline/orchestrator.py`
+**Функция:** `_run_ocr_fallback` (строка ~349)
+
+Когда parser не смог извлечь текст из PDF (сканированный документ):
+1. Converter preview возвращает `validated=False`
+2. `_on_preview_completed` вызывает `_run_ocr_fallback`
+3. Функция создаёт второй `preview_ocr` шаг (service="OCR Service") и вызывает `run_ocr_preview_step.delay(...)`
+4. **Но celery-воркер не получает эту задачу** — в логах нет `Task tasks.pipeline.run_ocr_preview_step[...] received`
+
+Проверить:
+- Broker: `CELERY_BROKER_URL=redis://redis:6379/1` — достигает ли задача Redis?
+- Queue: задача уходит в "pipeline"? Воркер слушает `-Q celery,pipeline,saga`
+- Не падает ли `.delay()` с исключением (silent catch)?
+
+#### 2. Full pipeline dispatch после approve (`approve_draft`)
+
+**Файл:** `backend/orchestrator_service/app/core/pipeline/orchestrator.py`
+**Функция:** `approve_draft` (строка ~844)
+
+После одобрения черновика:
+1. Создаётся шаг `full_ocr` (status=pending)
+2. Стартует шаг (status=running): `start_task_step(full_step.id)`
+3. Вызывается `run_parser_full_step.delay(...)` или `run_ocr_full_step.delay(...)`
+4. **Но задача не доходит до celery** — нет `run_ocr_full_step[...] received` или `run_parser_full_step[...] received`
+
+Проверить:
+- `need_full_processing` — не `False` ли из-за `task.full_completed`?
+- `full_step` — не `None` ли из-за несовпадения статуса?
+- `.delay()` — не выбрасывает ли exception?
+
+### Параллельная загрузка НД-документа
+
+В логах видна параллельная загрузка документа `НД_№2_09_006...` (draft=4, task=4).
+Его пайплайн **успешно прошёл** — значит dispatch РАБОТАЕТ для task 4.
+Надо понять, чем task 3 отличается: возможно race condition, другая очередь,
+или ошибка в логике `need_full_processing` / `use_parser_for_full`.
+
+### Как воспроизвести
 
 ```bash
-docker compose up -d --build orchestrator celery-worker
-python data/tests/test_go.py
-# Должно: Search → результаты с искомым текстом
+docker compose up -d --build converter-validator orchestrator celery-worker
+python data/tests/test_load_pkps_pdf.py
+# Ждать ~5 мин — пайплайн зависнет на full_ocr: running
+```
+
+Смотреть логи:
+```bash
+docker compose logs celery-worker | grep "task.*3"
+docker compose logs orchestrator | grep -E "full_ocr|Enqueued.*3|Approving draft.*3"
+```
+
+### Ожидаемое поведение
+
+- `run_ocr_preview_step.delay(3, 3, "f-d25314815ba8", ...)` достигает celery-worker
+- OCR обрабатывает PDF, конвертер извлекает метаданные
+- `run_parser_full_step.delay(3, 3, "f-d25314815ba8", ...)` достигает celery-worker
+- Полный пайплайн завершается за ~2-3 мин
+
+---
+
+## Тесты после фикса
+
+```bash
+cd backend/converter_validator_service && python -m pytest tests/  # 64 шт
+python data/tests/test_load_pkps_pdf.py  # полный E2E
 ```

@@ -7,9 +7,52 @@ _GOST_CODE_RE = re.compile(
     r"(?:ГОСТ|GOST)\s*(\d[\d.]*(?:-\d{2,4})?)",
     re.IGNORECASE,
 )
+_GOST_R_CODE_RE = re.compile(
+    r"(?:ГОСТ\s+Р|GOST\s+R)\s*(\d[\d.]*(?:-\d{2,4})?)",
+    re.IGNORECASE,
+)
 _CIRCULAR_RE = re.compile(
     r"ЦИРКУЛЯРНОЕ\s+ПИСЬМО\s*[№N#]\s*(\S+)",
     re.IGNORECASE,
+)
+_PKPS_CODE_RE = re.compile(
+    r"ПКПС[-_ ]?([A-Z0-9]+(?:[-_ ][A-Z0-9]+)*)",
+    re.IGNORECASE,
+)
+_OST_CODE_RE = re.compile(
+    r"(?:ОСТ\s|ОСТ5\s|OST\s)(\d[\d]*(?:[._]\d+)*(?:-\d{2,4})?)",
+    re.IGNORECASE,
+)
+_RD_CODE_RE = re.compile(
+    r"(?:РД|РД5|RD)\s*(\d[\d./-]*\d)",
+    re.IGNORECASE,
+)
+_TU_CODE_RE = re.compile(
+    r"(?:ТУ|TU)\s*(\d[\d./-]*)",
+    re.IGNORECASE,
+)
+_ND_CODE_RE = re.compile(
+    r"(?:НД|НД5|ND)\s*[№N#]?\s*(\d[\d./ -]*\d)",
+    re.IGNORECASE,
+)
+_ISO_CODE_RE = re.compile(
+    r"ISO\s*(\d[\d]*(?::\d{4})?(?:-\d{2,4})?)",
+    re.IGNORECASE,
+)
+_DNV_CODE_RE = re.compile(
+    r"DNV[-_\s]*(?:[A-Z]+[-_])?([\w][\w.-]*)",
+    re.IGNORECASE,
+)
+_ASTM_CODE_RE = re.compile(
+    r"ASTM\s*([A-Z]?\d[\w.-]*)",
+    re.IGNORECASE,
+)
+_SNIP_CODE_RE = re.compile(
+    r"(?:СНиП|СП|СанПиН)\s*([\d.]+(?:-\d{2,4})?)",
+    re.IGNORECASE,
+)
+_DRAWING_CODE_RE = re.compile(
+    r"\b([А-ЯA-Z]{2,6}\.\d{3}\.\d{3})\b",
 )
 _YEAR_IN_CODE_RE = re.compile(r"-(\d{2,4})\s*$")
 _MKS_OKS_RE = re.compile(
@@ -55,10 +98,57 @@ def _iter_text_blocks(raw_json: dict[str, Any]) -> list[str]:
 
 def _find_doc_code(texts: list[str]) -> str | None:
     for text in texts:
+        # ГОСТ
         match = _GOST_CODE_RE.search(text)
         if match:
             return match.group(1)
+        # ГОСТ Р
+        match = _GOST_R_CODE_RE.search(text)
+        if match:
+            return match.group(1)
+        # Циркуляр
         match = _CIRCULAR_RE.search(text)
+        if match:
+            return match.group(1)
+        # ПКПС
+        match = _PKPS_CODE_RE.search(text)
+        if match:
+            raw = match.group(1).replace("_", "-").replace(" ", "-")
+            return f"ПКПС-{raw}"
+        # ОСТ
+        match = _OST_CODE_RE.search(text)
+        if match:
+            return match.group(1).replace("_", "-")
+        # РД
+        match = _RD_CODE_RE.search(text)
+        if match:
+            return match.group(1).replace(" ", "").replace("_", "-")
+        # ТУ
+        match = _TU_CODE_RE.search(text)
+        if match:
+            return match.group(1).replace(" ", "").replace("_", "-")
+        # НД
+        match = _ND_CODE_RE.search(text)
+        if match:
+            return match.group(1).strip().replace(" ", "").replace("_", "-")
+        # ISO
+        match = _ISO_CODE_RE.search(text)
+        if match:
+            return match.group(1)
+        # DNV
+        match = _DNV_CODE_RE.search(text)
+        if match:
+            return f"DNV-{match.group(1)}"
+        # ASTM
+        match = _ASTM_CODE_RE.search(text)
+        if match:
+            return match.group(1)
+        # СНиП / СП / СанПиН
+        match = _SNIP_CODE_RE.search(text)
+        if match:
+            return match.group(1)
+        # Чертежи (формат XXX.XXX.XXX)
+        match = _DRAWING_CODE_RE.search(text)
         if match:
             return match.group(1)
     return None
@@ -84,6 +174,14 @@ def _find_title(texts: list[str], doc_code: str | None) -> str | None:
             candidates.append(text)
     if candidates:
         return max(candidates, key=len)
+    # Fallback: извлечь читаемый заголовок из имени файла
+    for text in texts:
+        if _is_file_name(text):
+            name = text.rsplit(".", 1)[0]
+            name = name.replace("_", " ").replace("-", " ").replace(",", "")
+            name = name.strip()
+            if len(name) > 10:
+                return name
     for text in texts:
         if not _is_file_name(text) and len(text) > 10:
             return text
