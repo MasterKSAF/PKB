@@ -10,7 +10,7 @@ from app.models.models import Role, RolePermission, User
 DEFAULT_ROLES = {
     "engineer": ["documents:read", "search", "history:read"],
     "knowledge_admin": ["documents:read", "documents:write", "search", "history:read"],
-    "system_admin": ["users:manage", "roles:manage", "audit:read", "documents:read", "documents:write", "search"],
+    "system_admin": ["users:manage", "roles:manage", "audit:read", "documents:read", "documents:write", "search", "history:read"],
 }
 
 

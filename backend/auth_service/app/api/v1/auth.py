@@ -23,11 +23,27 @@ _ROLE_TITLES = {
     "system_admin": "Системный администратор",
 }
 
-_ROLE_TABS = {
-    "engineer": ["chat", "search", "history"],
-    "knowledge_admin": ["chat", "search", "history", "registry", "documents"],
-    "system_admin": ["chat", "search", "history", "registry", "documents", "admin", "monitor"],
+# Tab visibility is driven by permissions, not role name.
+# This ensures consistent behaviour when roles are renamed or new roles are added.
+_PERMISSION_TO_TABS: dict[str, list[str]] = {
+    "documents:read": ["chat"],
+    "search": ["search"],
+    "history:read": ["history"],
+    "documents:write": ["registry", "documents"],
+    "users:manage": ["admin"],
+    "roles:manage": ["admin"],
+    "audit:read": ["monitor"],
 }
+
+_TAB_ORDER = ["chat", "search", "history", "registry", "documents", "admin", "monitor"]
+
+
+def _get_available_tabs(perms: set[str]) -> list[str]:
+    tabs: set[str] = set()
+    for perm, tab_list in _PERMISSION_TO_TABS.items():
+        if perm in perms:
+            tabs.update(tab_list)
+    return [t for t in _TAB_ORDER if t in tabs]
 
 
 def _check_rate_limit(client_ip: str) -> tuple[bool, int]:
@@ -49,9 +65,9 @@ def _to_bool_permissions(string_permissions: list[str]) -> UserPermissions:
         can_upload_documents="documents:write" in perms,
         can_run_ocr=False,
         can_manage_users="users:manage" in perms,
-        can_manage_classifiers=False,
+        can_manage_classifiers="roles:manage" in perms,
         can_manage_terminology=False,
-        can_manage_registry=False,
+        can_manage_registry="documents:write" in perms,
     )
 
 
@@ -59,12 +75,13 @@ def _to_bool_permissions(string_permissions: list[str]) -> UserPermissions:
 async def me(current_user=Depends(get_current_user)):
     role = role_names(current_user)[0] if current_user.roles else ""
     string_permissions = get_permissions(current_user)
+    perms_set = set(string_permissions)
     return UserMeResponse(
         user_id=current_user.user_id,
         full_name=current_user.full_name,
         role=role,
         role_title=_ROLE_TITLES.get(role, role),
-        available_tabs=_ROLE_TABS.get(role, []),
+        available_tabs=_get_available_tabs(perms_set),
         permissions=_to_bool_permissions(string_permissions),
         last_login_at=None,
         created_at=current_user.created_at,
