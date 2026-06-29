@@ -840,9 +840,21 @@ function mapGatewayProjectsResponse(payload: any): GatewayChatProject[] {
   return items.map((project: any, index: number) => mapGatewayProject(project, index));
 }
 
+function normalizeGatewayNumericId(value?: string | number | null) {
+  const normalized = String(value ?? '').trim();
+  return /^\d+$/.test(normalized) ? normalized : undefined;
+}
+
 function normalizeGatewayProjectId(projectId?: string) {
-  if (!projectId || projectId === 'gateway-dialogs') return undefined;
-  return projectId;
+  return normalizeGatewayNumericId(projectId);
+}
+
+function requireGatewaySessionId(sessionId: string) {
+  const normalized = normalizeGatewayNumericId(sessionId);
+  if (!normalized) {
+    throw new Error('Gateway session id is missing or not numeric.');
+  }
+  return normalized;
 }
 
 function createGatewayProjectCode(name: string) {
@@ -1456,23 +1468,26 @@ export const chatApi = {
     return mapGatewaySessionsToProjects(response.data);
   },
   getSession: async (sessionId: string): Promise<QueryHistoryItem> => {
-    const response = await gatewayRequest<any>(() => apiClient.get(`/chat/sessions/${sessionId}`));
+    const gatewaySessionId = requireGatewaySessionId(sessionId);
+    const response = await gatewayRequest<any>(() => apiClient.get(`/chat/sessions/${gatewaySessionId}`));
     const [session] = mapGatewaySessionsResponse({ sessions: [response.data] });
     return session;
   },
   createSession: async (title: string, projectId?: string) => {
+    const gatewayProjectId = normalizeGatewayProjectId(projectId);
     const response = await gatewayRequest<any>(() =>
       apiClient.post('/chat/sessions', {
         title,
-        project_id: normalizeGatewayProjectId(projectId),
+        ...(gatewayProjectId ? { project_id: gatewayProjectId } : {}),
         document_ids: [],
       }),
     );
     return response.data;
   },
   updateSession: async (sessionId: string, patch: { title?: string; documentIds?: string[] }) => {
+    const gatewaySessionId = requireGatewaySessionId(sessionId);
     const response = await gatewayRequest<any>(() =>
-      apiClient.put(`/chat/sessions/${sessionId}`, {
+      apiClient.put(`/chat/sessions/${gatewaySessionId}`, {
         title: patch.title,
         document_ids: patch.documentIds,
       }),
@@ -1480,11 +1495,13 @@ export const chatApi = {
     return response.data;
   },
   deleteSession: async (sessionId: string) => {
-    const response = await gatewayRequest<any>(() => apiClient.delete(`/chat/sessions/${sessionId}`));
+    const gatewaySessionId = requireGatewaySessionId(sessionId);
+    const response = await gatewayRequest<any>(() => apiClient.delete(`/chat/sessions/${gatewaySessionId}`));
     return response.data;
   },
   exportSession: async (sessionId: string, format = 'pdf') => {
-    const response = await gatewayRequest<any>(() => apiClient.post(`/chat/sessions/${sessionId}/export`, { format }));
+    const gatewaySessionId = requireGatewaySessionId(sessionId);
+    const response = await gatewayRequest<any>(() => apiClient.post(`/chat/sessions/${gatewaySessionId}/export`, { format }));
     return response.data;
   },
   send: async (query: string): Promise<ChatMessage> => {
