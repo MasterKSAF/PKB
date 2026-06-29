@@ -122,10 +122,12 @@ class TestRunConverterFullStep:
     """Tests for run_converter_full_step Celery task."""
 
     HAPPY_CONVERTER_FULL = {
-        "data": {
-            "validated": True,
-            "parameters": {"doc_code": "ГОСТ 1234-56", "title": "Full doc"},
-        }
+        "task_id": 3,
+        "version_id": 420001,
+        "metadata": {"schema": "validated_v3"},
+        "document": {"content": [{"section_id": 1, "type": "text", "content": {"text": "doc"}}]},
+        "validation": {"structure_valid": True, "status": "completed"},
+        "document_id": 1,
     }
 
     def test_happy_path(self):
@@ -158,7 +160,9 @@ class TestRunConverterFullStep:
         assert args[0] == 3
         assert args[1] == "full_converter"
         assert args[3]["validated"] is True
-        assert args[3]["parameters"]["doc_code"] == "ГОСТ 1234-56"
+        assert args[3]["metadata"]["schema"] == "validated_v3"
+        assert args[3]["validation"]["structure_valid"] is True
+        assert args[3]["status"] == "completed"
 
         assert result == {"status": "completed", "step": "full_converter", "task_id": 3}
 
