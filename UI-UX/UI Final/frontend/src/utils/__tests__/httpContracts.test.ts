@@ -19,21 +19,35 @@ beforeEach(() => {
 
 describe('live Gateway response contracts', () => {
   it('keeps failed chat history records failed', async () => {
+    const failedSession = {
+      session_id: 5,
+      title: 'Рабочий чат',
+      status: 'failed',
+      messages: [
+        {
+          message_id: 80,
+          role: 'user',
+          content: 'Проверь наличие документов по сварке',
+          created_at: '2026-06-29T10:00:00Z',
+        },
+        {
+          message_id: 81,
+          role: 'assistant',
+          content: 'Поиск временно недоступен.',
+          status: 'failed',
+          created_at: '2026-06-29T10:00:01Z',
+          sources: [],
+        },
+      ],
+    };
+
     server.use(
-      http.get(`${apiBase}/chat/history`, () =>
+      http.get(`${apiBase}/chat/sessions`, () =>
         HttpResponse.json({
-          items: [
-            {
-              history_id: 8,
-              session_id: 5,
-              question: 'Проверь наличие документов по сварке',
-              answer_preview: 'Поиск временно недоступен.',
-              status: 'failed',
-              source_count: 0,
-            },
-          ],
+          sessions: [failedSession],
         }),
       ),
+      http.get(`${apiBase}/chat/sessions/5`, () => HttpResponse.json(failedSession)),
     );
 
     const history = await historyApi.get();

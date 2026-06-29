@@ -131,7 +131,7 @@ export const useUIStore = create<UIState>((set) => ({
   setCurrentPermissions: (currentPermissions) => set({ currentPermissions }),
   currentGatewaySessionId: null,
   setCurrentGatewaySessionId: (currentGatewaySessionId) => set({ currentGatewaySessionId }),
-  activeProjectId: 'project-223m',
+  activeProjectId: '',
   setActiveProjectId: (activeProjectId) => set({ activeProjectId }),
   themeMode: getInitialThemeMode(),
   setThemeMode: (themeMode) => set({ themeMode }),

@@ -42,6 +42,14 @@ type HistoryPreview = Citation & {
   previewKind: 'source' | 'document';
 };
 
+function getGatewayErrorMessage(error: unknown) {
+  const payload = (error as any)?.response?.data;
+  const message = payload?.detail ?? payload?.message ?? payload?.error ?? (error as any)?.message;
+
+  if (typeof message === 'string') return message;
+  return JSON.stringify(message ?? payload ?? 'Неизвестная ошибка Gateway');
+}
+
 const statusLabel: Record<AnswerStatus, string> = {
   pending: 'ожидание',
   enriching: 'обогащение запроса',
@@ -240,7 +248,7 @@ export const History: React.FC = () => {
   const [exportLoading, setExportLoading] = useState(false);
   const [exportError, setExportError] = useState('');
 
-  const { data = [] } = useQuery<QueryHistoryItem[]>({
+  const { data = [], error: historyError, isError: historyIsError } = useQuery<QueryHistoryItem[]>({
     queryKey: ['history'],
     queryFn: historyApi.get,
   });
@@ -400,6 +408,12 @@ export const History: React.FC = () => {
                 </Paper>
               ))}
             </Box>
+
+            {historyIsError && (
+              <Alert severity="error" variant="outlined" sx={{ borderRadius: 2 }}>
+                {getGatewayErrorMessage(historyError)}
+              </Alert>
+            )}
 
             <Paper
               variant="outlined"
