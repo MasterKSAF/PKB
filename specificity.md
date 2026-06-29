@@ -150,3 +150,25 @@ Rag-search передавал `dimensions=2048` и получал 2048 — не�
 - После rag_index статус меняется на `"validating"` (валидный переход `uploaded → validating`)
 
 **Где:** `backend/orchestrator_service/app/services/registry_client.py`, `backend/orchestrator_service/app/core/pipeline/orchestrator.py`.
+
+### G12. Сканированные PDF: 422 вместо OCR fallback
+
+**Симптом:** Загрузка сканированного PDF (например `gost_22786-77.pdf`) → черновик DISCARDED
+с ошибкой «Проверку черновика завершить не удалось».
+
+**Причина:** Converter-validator не может извлечь doc_code/title из сканированного PDF
+(нет текстового слоя) → `MetadataExtractionFailedError` → HTTP 422.
+Оркестратор делает retry, затем retry exhausted → задача FAILED.
+OCR fallback существовал только для падения Parser, не для Converter.
+
+**Фикс (29.06):**
+1. `converter.py` (endpoint `/preview`): перехват `MetadataExtractionFailedError`,
+   возврат 200 OK с пустыми полями вместо 422.
+2. `pipeline_formation.py` (`run_converter_preview_step`): если в ответе конвертера
+   нет doc_code и title → `validated=False`.
+3. `_on_preview_completed` видит `validated=False` + `used_parser=True` +
+   `fallback_to_ocr=True` → запускает OCR fallback.
+
+**Где:**
+- `backend/converter_validator_service/app/api/v1/endpoints/converter.py`
+- `backend/orchestrator_service/app/tasks/pipeline_formation.py`

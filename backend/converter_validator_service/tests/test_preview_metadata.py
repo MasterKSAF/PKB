@@ -59,6 +59,12 @@ def test_preview_legacy_path_removed(client, raw_gost_sample):
 
 
 def test_preview_empty_raw(client):
+    """Пустой raw_json (сканированный PDF без текста) → 200 с пустыми полями.
+
+    Раньше возвращал 422 METADATA_EXTRACTION_FAILED.
+    Теперь возвращает 200 с validated: false, чтобы оркестратор мог
+    выполнить OCR fallback вместо жёсткой ошибки.
+    """
     response = client.post(
         "/api/v1/converter/preview",
         json={
@@ -67,5 +73,13 @@ def test_preview_empty_raw(client):
             "raw_json": {},
         },
     )
-    assert response.status_code == 422
-    assert response.json()["error"]["code"] == "METADATA_EXTRACTION_FAILED"
+    assert response.status_code == 200
+    data = response.json()
+    for field in PREVIEW_METADATA_FIELDS:
+        assert field in data
+    # Все поля None при пустом raw_json
+    assert data["doc_code"] is None
+    assert data["title"] is None
+    assert data["year"] is None
+    assert data["document_type"] is None
+    assert data["language"] is None  # defaults не применяются — исключение перехвачено раньше

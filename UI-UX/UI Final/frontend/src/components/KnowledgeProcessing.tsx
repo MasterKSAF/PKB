@@ -1611,13 +1611,15 @@ export const KnowledgeProcessing: React.FC = () => {
         });
         setNotice(`Проверка черновика «${draftAfterPreview.title}» завершена.`);
       } catch (error: any) {
+        const backendMsg = error?.response?.data?.error?.message || error?.response?.data?.message || error?.message;
+        const errorMsg = backendMsg ?? 'Не удалось получить статус проверки черновика.';
         updateDraft(draftId, {
           status: 'failed',
           progress: 100,
           note: 'Сервер не завершил проверку черновика.',
-          gatewayErrorMessage: error?.message ?? 'Не удалось получить статус проверки черновика.',
+          gatewayErrorMessage: errorMsg,
         });
-        setNotice(`Проверку черновика «${draft.title}» завершить не удалось.`);
+        setNotice(`Проверку черновика «${draft.title}» завершить не удалось. ${errorMsg}`);
       }
     })();
   };

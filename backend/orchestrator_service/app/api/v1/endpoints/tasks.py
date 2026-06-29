@@ -70,6 +70,7 @@ async def list_tasks(
             pipeline_stage=t.pipeline_stage,
             progress_percent=t.progress_percent,
             error_code=t.error_code,
+            error_message=t.error_message,
             created_at=t.created_at,
             updated_at=t.updated_at,
         )
@@ -215,6 +216,8 @@ async def get_task_by_id(
         progress_percent=task.progress_percent,
         has_notifications=has_notifications,
         critical_count=critical_count,
+        error_code=task.error_code,
+        error_message=task.error_message,
         steps=step_items,
         created_at=task.created_at,
         updated_at=task.updated_at,
