@@ -214,7 +214,16 @@ def test_create_document_links_file_and_version(client, db_session):
                     "file_name": "draft_source.pdf",
                     "file_size_bytes": 12345,
                     "file_hash_sha256": "draft_hash_123"
-                }
+                },
+                "block": [
+                    {
+                        "number": 1,
+                        "type": "text",
+                        "page": 1,
+                        "bbox": [10.0, 10.0, 100.0, 20.0],
+                        "content": "ГОСТ 20868-81"
+                    }
+                ]
             }
         },
         created_at=datetime.now(timezone.utc).replace(tzinfo=None)
@@ -250,4 +259,12 @@ def test_create_document_links_file_and_version(client, db_session):
     assert len(versions_data) == 1
     assert versions_data[0]["file_key"] == "f-draft-123"
     assert versions_data[0]["file_hash_sha256"] == "draft_hash_123"
+
+    # 5. Check that page preview returns the block (Issue 2.2)
+    response_prev = client.get(f"/api/v1/registry/documents/{doc_id}/pages/1/preview")
+    assert response_prev.status_code == 200
+    prev_data = response_prev.json()["data"]
+    assert len(prev_data["blocks"]) == 1
+    assert prev_data["blocks"][0]["content"] == "ГОСТ 20868-81"
+    assert prev_data["text_layer"] == "ГОСТ 20868-81"
 

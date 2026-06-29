@@ -233,6 +233,29 @@ def create_document(db: Session, doc_code: str, title: str, **kwargs) -> Documen
                     created_at=datetime.now(timezone.utc)
                 )
                 db.add(db_ver)
+
+            # Create DocumentSection records for OCR flat blocks (Issue 2.2)
+            if draft.raw_data and isinstance(draft.raw_data, dict):
+                blocks = draft.raw_data.get('document', {}).get('block', [])
+                if blocks:
+                    from api.v1.models import DocumentSection
+                    # Only insert flat blocks if no sections currently exist to avoid duplication
+                    existing_sec = db.query(DocumentSection).filter(DocumentSection.document_id == document.id).first()
+                    if not existing_sec:
+                        for block in blocks:
+                            db_sec = DocumentSection(
+                                document_id=document.id,
+                                clause=None,
+                                title=None,
+                                level=None,
+                                path=None,
+                                page=block.get('page'),
+                                bbox=block.get('bbox'),
+                                type_=block.get('type'),
+                                content={"text": block.get('content') or ""},
+                                created_at=datetime.now(timezone.utc)
+                            )
+                            db.add(db_sec)
             
             db.commit()
             db.refresh(document)
