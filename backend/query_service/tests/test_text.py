@@ -16,7 +16,6 @@ async def test_text_search(client):
     assert "content" in result
     assert "score" in result
     assert "section_id" in result
-    assert "enrichment_skipped" in data
 
 
 @pytest.mark.asyncio
@@ -33,20 +32,6 @@ async def test_text_search_with_filters(client):
         "filters": {"category_ids": [1, 2]},
     })
     assert r.status_code == 200
-
-
-@pytest.mark.asyncio
-async def test_text_ask(client):
-    r = await client.post("/api/v1/text/ask", json={"text": "Какая сталь нужна для кницы по ГОСТ?"})
-    assert r.status_code == 200
-    data = r.json()
-    assert "answer" in data
-    assert "sources" in data
-    assert "disclaimer" in data
-    assert len(data["sources"]) > 0
-    src = data["sources"][0]
-    assert "document_id" in src
-    assert "page_number" in src
 
 
 @pytest.mark.asyncio

@@ -1,7 +1,11 @@
 import asyncio
+import time
 from dataclasses import dataclass, field
 import httpx
 from ..config import get_settings
+
+_circuit_open_until: float = 0.0
+_CIRCUIT_COOLDOWN = 60.0
 
 _MOCK_CHUNKS = [
     {
@@ -91,8 +95,13 @@ async def search(
 ) -> list[Chunk]:
     settings = get_settings()
 
+    global _circuit_open_until
+
     if settings.MOCK_RAG_ENABLED:
         return [Chunk(**c) for c in _MOCK_CHUNKS[:top_k]]
+
+    if time.monotonic() < _circuit_open_until:
+        raise RuntimeError("RAG search circuit open — downstream unavailable")
 
     backoff = 0.5
     last_exc: Exception | None = None
@@ -110,6 +119,7 @@ async def search(
                 )
                 resp.raise_for_status()
                 data = resp.json()
+                _circuit_open_until = 0.0
                 return [_parse_chunk(r) for r in data.get("results", [])]
         except Exception as exc:
             last_exc = exc
@@ -117,4 +127,5 @@ async def search(
                 await asyncio.sleep(backoff)
                 backoff *= 2
 
+    _circuit_open_until = time.monotonic() + _CIRCUIT_COOLDOWN
     raise RuntimeError(f"RAG search failed after 3 attempts: {last_exc}")

@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends
+import time
+from fastapi import APIRouter, Depends, HTTPException
 from ..schemas import (
     TextSearchRequest, TextSearchResponse, TextSearchAnalysis, TextSearchResult,
-    TextAskRequest, TextAskResponse, TextAskSource,
 )
+from ..clients import rag_client
 from ..services.auth import get_current_user
-from ..mocks.rag_responses import SEARCH_RESULTS, ASK_RESPONSE
 
 router = APIRouter(prefix="/text", tags=["text"])
 
@@ -17,42 +17,42 @@ async def text_search(
     filters = dict(body.filters)
     if body.document_ids:
         filters["document_ids"] = body.document_ids
-    filters["valid_at"] = body.valid_at
-    # category_ids принимается как top-level поле или внутри filters
-    category_ids = body.category_ids or (filters.get("category_ids") if isinstance(filters.get("category_ids"), list) else None)
-    if category_ids:
-        filters["category_ids"] = category_ids
+    if body.category_ids:
+        filters["category_ids"] = body.category_ids
 
-    top_k = min(body.top_k, len(SEARCH_RESULTS))
+    t0 = time.monotonic()
+    try:
+        chunks = await rag_client.search(
+            query=body.text,
+            top_k=body.top_k,
+            filters=filters,
+            valid_at=body.valid_at,
+        )
+    except Exception:
+        raise HTTPException(status_code=502, detail="RAG search unavailable")
+
+    elapsed = int((time.monotonic() - t0) * 1000)
     results = [
-        TextSearchResult(**{**r, "matched_subquery": body.text[:40]})
-        for r in SEARCH_RESULTS[:top_k]
+        TextSearchResult(
+            section_id=c.section_id,
+            document_id=c.document_id,
+            document_title=c.document_title,
+            page=c.page,
+            content=c.content,
+            score=c.score,
+            document_type="",
+            matched_subquery=body.text[:40],
+        )
+        for c in chunks
     ]
     return TextSearchResponse(
         original_text=body.text,
         analysis=TextSearchAnalysis(
-            normalized_query=body.text[:80],
-            entities=[{"type": "query", "value": body.text[:40]}],
-            subqueries=[body.text[:60]],
+            normalized_query=body.text,
+            entities=[],
+            subqueries=[body.text],
         ),
         results=results,
-        total_found=len(SEARCH_RESULTS),
-        processing_time_ms=850,
-    )
-
-
-@router.post("/ask", response_model=TextAskResponse)
-async def text_ask(
-    body: TextAskRequest,
-    user_id: str = Depends(get_current_user),
-):
-    r = ASK_RESPONSE
-    return TextAskResponse(
-        original_text=body.text,
-        normalized_question=r["normalized_question"],
-        answer=r["answer"],
-        sources=[TextAskSource(**s) for s in r["sources"]],
-        disclaimer=r["disclaimer"],
-        processing_time_ms=r["processing_time_ms"],
-        model_used=r["model_used"],
+        total_found=len(results),
+        processing_time_ms=elapsed,
     )
