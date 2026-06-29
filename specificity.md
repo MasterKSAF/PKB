@@ -183,8 +183,13 @@ full_converter возвращает 400 `VALIDATION_ERROR: doc_code is required`
 Preview-этап работает (там `MetadataExtractionFailedError` перехвачен), но
 `validate_document` в full-конвертации вызывает `_compute_fingerprint` → `compute_business_key` → падает.
 
-**Фикс (29.06):** `_compute_fingerprint` в `document_validator.py` — try-except `MetadataValidationError`
-вокруг `compute_business_key`. При отсутствии doc_code/title создаётся fallback fingerprint
-из task_id:version_id.
+**Фикс (29.06):**
+1. `metadata_extractor.py` — добавлен `_CIRCULAR_RE` для распознавания
+   `ЦИРКУЛЯРНОЕ ПИСЬМО № 311-05-1950ц`
+2. `document_validator.py` — `_compute_fingerprint`: try-except `MetadataValidationError`
+   вокруг `compute_business_key`. При отсутствии doc_code/title создаётся fallback fingerprint
+   из task_id:version_id.
 
-**Где:** `backend/converter_validator_service/app/services/document_validator.py`
+**Где:**
+- `backend/converter_validator_service/app/services/metadata_extractor.py`
+- `backend/converter_validator_service/app/services/document_validator.py`

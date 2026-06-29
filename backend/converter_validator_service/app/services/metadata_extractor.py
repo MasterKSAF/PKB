@@ -7,6 +7,10 @@ _GOST_CODE_RE = re.compile(
     r"(?:ГОСТ|GOST)\s*(\d[\d.]*(?:-\d{2,4})?)",
     re.IGNORECASE,
 )
+_CIRCULAR_RE = re.compile(
+    r"ЦИРКУЛЯРНОЕ\s+ПИСЬМО\s*[№N#]\s*(\S+)",
+    re.IGNORECASE,
+)
 _YEAR_IN_CODE_RE = re.compile(r"-(\d{2,4})\s*$")
 _MKS_OKS_RE = re.compile(
     r"(?:МКС|ОКС|ICS)\s*[:\s]*?(\d{2}(?:\.\d{3}(?:\.\d{2})?)?(?:-\d{2})?)",
@@ -52,6 +56,9 @@ def _iter_text_blocks(raw_json: dict[str, Any]) -> list[str]:
 def _find_doc_code(texts: list[str]) -> str | None:
     for text in texts:
         match = _GOST_CODE_RE.search(text)
+        if match:
+            return match.group(1)
+        match = _CIRCULAR_RE.search(text)
         if match:
             return match.group(1)
     return None

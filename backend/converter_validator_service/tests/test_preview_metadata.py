@@ -58,6 +58,31 @@ def test_preview_legacy_path_removed(client, raw_gost_sample):
     assert response.status_code == 404
 
 
+def test_preview_circular_letter(client, raw_circular_sample):
+    """Циркулярное письмо: doc_code распознаётся как номер после «ЦИРКУЛЯРНОЕ ПИСЬМО №»"""
+    response = client.post(
+        "/api/v1/converter/preview",
+        json={
+            "task_id": 1,
+            "version_id": 1,
+            "raw_json": raw_circular_sample,
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    for field in PREVIEW_METADATA_FIELDS:
+        assert field in data
+    assert data["doc_code"] == "311-05-1950ц"
+    assert data["document_type"] == "normative"
+    assert data["year"] == 2023
+    assert data["source_type"] == "RMRS"
+    assert data["jurisdiction"] == "RU"
+    assert data["language"] == "ru"
+    assert data["issuing_body"] == "Российский морской регистр судоходства"
+    assert len(data["title"]) > 10
+    assert "циркулярное письмо" in data["title"].lower()
+
+
 def test_preview_empty_raw(client):
     """Пустой raw_json (сканированный PDF без текста) → 200 с пустыми полями.
 
