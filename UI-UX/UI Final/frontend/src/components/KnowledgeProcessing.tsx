@@ -1582,7 +1582,14 @@ export const KnowledgeProcessing: React.FC = () => {
     void (async () => {
       try {
         await draftsApi.startPreview(gatewayDraftId);
-        const previewResponse = await draftsApi.waitPreview(gatewayDraftId, 15);
+
+        // Longpoll: повторяем waitPreview пока не получим терминальный статус
+        let previewResponse = await draftsApi.waitPreview(gatewayDraftId, 15);
+        for (let attempt = 0; attempt < 6 && previewResponse?.status === 'processing'; attempt++) {
+          await new Promise(r => setTimeout(r, 1000));
+          previewResponse = await draftsApi.waitPreview(gatewayDraftId, 15);
+        }
+
         const draftAfterPreview = getSelectedDraft(draftId);
         if (!draftAfterPreview) return;
 
@@ -1595,10 +1602,11 @@ export const KnowledgeProcessing: React.FC = () => {
           : [];
 
         const nextStatus = normalizeDraftStatusFromGateway(previewResponse?.status);
+        const isProcessing = previewResponse?.status === 'processing';
         updateDraft(draftId, {
           ...draftPatchFromGateway(previewResponse, draftAfterPreview),
           status: nextStatus === 'uploaded' ? 'ready_for_approve' : nextStatus,
-          progress: nextStatus === 'previewing' ? 38 : draftProgressByStatus[nextStatus] ?? 72,
+          progress: isProcessing ? 38 : draftProgressByStatus[nextStatus] ?? 72,
           confidence: Number(previewResponse?.confidence ?? draftAfterPreview.confidence ?? 0),
           preview:
             mapGatewayPreviewMetadata(previewResponse) ??
@@ -1610,11 +1618,15 @@ export const KnowledgeProcessing: React.FC = () => {
               revision: draftAfterPreview.sourceType === 'GOST' ? '1' : null,
             },
           duplicates,
-          note: nextStatus === 'review_required' || previewResponse?.decision_required
-            ? 'Проверка готова. Требуется решение.'
-            : 'Проверка готова. Можно принимать документ.',
+          note: isProcessing
+            ? 'Проверка ещё выполняется. Пожалуйста, подождите.'
+            : nextStatus === 'review_required' || previewResponse?.decision_required
+              ? 'Проверка готова. Требуется решение.'
+              : 'Проверка готова. Можно принимать документ.',
         });
-        setNotice(`Проверка черновика «${draftAfterPreview.title}» завершена.`);
+        if (!isProcessing) {
+          setNotice(`Проверка черновика «${draftAfterPreview.title}» завершена.`);
+        }
       } catch (error: any) {
         const backendMsg = error?.response?.data?.error?.message || error?.response?.data?.message || error?.message;
         const errorMsg = backendMsg ?? 'Не удалось получить статус проверки черновика.';
