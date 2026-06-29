@@ -855,6 +855,11 @@ const firstNonEmptyText = (...values: unknown[]) => {
   return value === undefined ? '' : String(value).trim();
 };
 
+const firstDefinedText = (...values: unknown[]) => {
+  const value = values.find((item) => item !== null && item !== undefined);
+  return value === undefined ? '' : String(value);
+};
+
 const buildMetadataOverridesFromForm = (form: DraftForm): DraftMetadataOverrides => ({
   title: form.title.trim() || null,
   source_type: form.sourceType || null,
@@ -906,16 +911,16 @@ export const mapGatewayDraftRecordToUi = (payload: any, fallback?: Partial<Draft
     id: draftId,
     fileName,
     title,
-    sourceType: payload?.source_type ?? metadataOverrides.source_type ?? payload?.preview_metadata?.source_type ?? fallback?.sourceType ?? 'OTHER',
-    docCode: payload?.doc_code ?? metadataOverrides.doc_code ?? payload?.preview_metadata?.doc_code ?? fallback?.docCode ?? '',
-    year: payload?.year ?? metadataOverrides.year ?? payload?.preview_metadata?.year ?? preview?.year ?? fallback?.year ?? '',
-    mksOksCode: payload?.mks_oks_code ?? metadataOverrides.mks_oks_code ?? payload?.preview_metadata?.mks_oks_code ?? fallback?.mksOksCode ?? '',
-    okstuCode: payload?.okstu_code ?? metadataOverrides.okstu_code ?? payload?.preview_metadata?.okstu_code ?? fallback?.okstuCode ?? '',
-    era: payload?.era ?? metadataOverrides.era ?? payload?.preview_metadata?.era ?? fallback?.era ?? 'CURRENT',
-    jurisdiction: payload?.jurisdiction ?? metadataOverrides.jurisdiction ?? payload?.preview_metadata?.jurisdiction ?? fallback?.jurisdiction ?? 'RU',
-    issuingBody: payload?.issuing_body ?? metadataOverrides.issuing_body ?? payload?.preview_metadata?.issuing_body ?? fallback?.issuingBody ?? '',
-    validFrom: payload?.valid_from ?? metadataOverrides.valid_from ?? payload?.preview_metadata?.valid_from ?? fallback?.validFrom ?? '',
-    validUntil: payload?.valid_until ?? metadataOverrides.valid_until ?? payload?.preview_metadata?.valid_until ?? fallback?.validUntil ?? '',
+    sourceType: firstDefinedText(payload?.source_type, metadataOverrides.source_type, payload?.preview_metadata?.source_type, fallback?.sourceType, 'OTHER'),
+    docCode: firstDefinedText(payload?.doc_code, metadataOverrides.doc_code, payload?.preview_metadata?.doc_code, fallback?.docCode),
+    year: firstDefinedText(payload?.year, metadataOverrides.year, payload?.preview_metadata?.year, preview?.year, fallback?.year),
+    mksOksCode: firstDefinedText(payload?.mks_oks_code, metadataOverrides.mks_oks_code, payload?.preview_metadata?.mks_oks_code, fallback?.mksOksCode),
+    okstuCode: firstDefinedText(payload?.okstu_code, metadataOverrides.okstu_code, payload?.preview_metadata?.okstu_code, fallback?.okstuCode),
+    era: firstDefinedText(payload?.era, metadataOverrides.era, payload?.preview_metadata?.era, fallback?.era, 'CURRENT'),
+    jurisdiction: firstDefinedText(payload?.jurisdiction, metadataOverrides.jurisdiction, payload?.preview_metadata?.jurisdiction, fallback?.jurisdiction, 'RU'),
+    issuingBody: firstDefinedText(payload?.issuing_body, metadataOverrides.issuing_body, payload?.preview_metadata?.issuing_body, fallback?.issuingBody),
+    validFrom: firstDefinedText(payload?.valid_from, metadataOverrides.valid_from, payload?.preview_metadata?.valid_from, fallback?.validFrom),
+    validUntil: firstDefinedText(payload?.valid_until, metadataOverrides.valid_until, payload?.preview_metadata?.valid_until, fallback?.validUntil),
     status,
     progress,
     confidence: Number(confidence ?? 0),
