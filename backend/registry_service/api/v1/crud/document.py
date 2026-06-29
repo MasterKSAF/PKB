@@ -180,6 +180,63 @@ def create_document(db: Session, doc_code: str, title: str, **kwargs) -> Documen
     db.add(document)
     db.commit()
     db.refresh(document)
+
+    # Issue 2.3: Link document with file and create document version if draft_id is set
+    if document.draft_id:
+        from api.v1.models import Draft, File, DocumentVersion
+        draft = db.query(Draft).filter(Draft.draft_id == document.draft_id).first()
+        if draft and draft.file_key:
+            filename = None
+            file_size = 0
+            file_hash = None
+            
+            if draft.raw_data and isinstance(draft.raw_data, dict):
+                source = draft.raw_data.get('document', {}).get('source', {})
+                filename = source.get('file_name')
+                file_size = source.get('file_size_bytes') or source.get('page_count') or 0
+                file_hash = source.get('file_hash_sha256')
+                
+            if not filename:
+                filename = draft.file_key or f"doc_{document.id}.pdf"
+                
+            # Create or update File record
+            file_rec = db.query(File).filter(File.file_id == draft.file_key).first()
+            if file_rec:
+                file_rec.related_document_id = str(document.id)
+            else:
+                file_rec = File(
+                    file_id=draft.file_key,
+                    filename=filename,
+                    size=file_size,
+                    mime_type="application/pdf",
+                    url=f"/files/{draft.file_key}",
+                    uploaded_at=draft.created_at or datetime.now(timezone.utc),
+                    storage_path=draft.file_key,
+                    related_document_id=str(document.id)
+                )
+                db.add(file_rec)
+                
+            # Create DocumentVersion if it doesn't exist
+            existing_ver = db.query(DocumentVersion).filter(
+                DocumentVersion.document_id == document.id,
+                DocumentVersion.version_number == 1
+            ).first()
+            if not existing_ver:
+                db_ver = DocumentVersion(
+                    document_id=document.id,
+                    version_number=1,
+                    file_hash_sha256=file_hash,
+                    file_size_bytes=file_size,
+                    file_key=draft.file_key,
+                    source_filename=filename,
+                    file_path=draft.file_key,
+                    created_at=datetime.now(timezone.utc)
+                )
+                db.add(db_ver)
+            
+            db.commit()
+            db.refresh(document)
+
     populate_document_extra_fields(db, [document])
     check_and_quarantine_classifiers(db, document)
     return document
@@ -503,6 +560,7 @@ def create_pipeline_document(db: Session, payload: Dict[str, Any]) -> Dict[str, 
         'source_type': metadata.get('source_type'),
         'group_': metadata.get('group'),
         'mks_oks_code': metadata.get('mks_oks_code'),
+        'draft_id': payload.get('draft_id') or payload.get('source_draft_id') or metadata.get('draft_id') or doc_data.get('draft_id'),
         'okstu_code': metadata.get('okstu_code'),
         'udk_code': metadata.get('udc'),
         'era': metadata.get('era'),
@@ -522,16 +580,21 @@ def create_pipeline_document(db: Session, payload: Dict[str, Any]) -> Dict[str, 
     source_data = doc_data.get('source', {})
     if source_data:
         from api.v1.models import DocumentVersion
-        db_ver = DocumentVersion(
-            document_id=doc.id,
-            version_number=1,
-            file_hash_sha256=source_data.get('file_hash_sha256'),
-            file_size_bytes=source_data.get('page_count') or 0,
-            file_key=source_data.get('file_name'),
-            created_at=datetime.now(timezone.utc)
-        )
-        db.add(db_ver)
-        db.flush()
+        existing_ver = db.query(DocumentVersion).filter(
+            DocumentVersion.document_id == doc.id,
+            DocumentVersion.version_number == 1
+        ).first()
+        if not existing_ver:
+            db_ver = DocumentVersion(
+                document_id=doc.id,
+                version_number=1,
+                file_hash_sha256=source_data.get('file_hash_sha256'),
+                file_size_bytes=source_data.get('page_count') or 0,
+                file_key=source_data.get('file_name'),
+                created_at=datetime.now(timezone.utc)
+            )
+            db.add(db_ver)
+            db.flush()
     
     # Save content sections
     content_list = doc_data.get('content', [])

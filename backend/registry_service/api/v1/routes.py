@@ -564,7 +564,7 @@ def get_document_page_preview_endpoint(
             'data': {
                 'document_id': document.id,
                 'page': page_num,
-                'image_url': f"http://minio:9000/pkb/previews/{document.id}/p{page_num}.png",
+                'key': f"previews/{document.id}/p{page_num}.png",
                 'blocks': blocks,
                 'text_layer': text_layer
             }
@@ -2135,6 +2135,81 @@ def get_file_metadata(file_id: str, db: Session = Depends(get_db)):
         raise
     except Exception as e:
         log_event('ERROR', f'/registry/files/{file_id}', None, None, str(e))
+        raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
+
+
+@routes.get('/registry/documents/{document_id}/file')
+def get_document_file(
+    document_id: int,
+    version_id: Optional[int] = Query(None),
+    format: str = Query("json"),
+    db: Session = Depends(get_db)
+):
+    """GET /registry/documents/{document_id}/file — получить файл документа"""
+    log_event('INFO', f'/registry/documents/{document_id}/file', None, None)
+    try:
+        from fastapi.responses import RedirectResponse
+        from api.v1.models import DocumentVersion
+        from datetime import datetime
+
+        # 1. Fetch version
+        if version_id:
+            version = db.query(DocumentVersion).filter(
+                DocumentVersion.document_id == document_id,
+                DocumentVersion.id == version_id
+            ).first()
+        else:
+            version = db.query(DocumentVersion).filter(
+                DocumentVersion.document_id == document_id
+            ).order_by(DocumentVersion.version_number.desc()).first()
+
+        file_key = None
+        file_size = 0
+        filename = None
+        content_type = "application/pdf"
+
+        if version:
+            file_key = version.file_key or version.file_path
+            file_size = version.file_size_bytes or 0
+            filename = version.source_filename
+
+        # 2. Fall back to files table if no version found
+        if not file_key:
+            files = file_crud.get_files_by_document_id(db, document_id)
+            if files:
+                # Use the latest file
+                files_sorted = sorted(files, key=lambda f: f.uploaded_at or datetime.min, reverse=True)
+                file_rec = files_sorted[0]
+                file_key = file_rec.storage_path or file_rec.file_id
+                file_size = file_rec.size or 0
+                filename = file_rec.filename
+                content_type = file_rec.mime_type or "application/pdf"
+
+        if not file_key:
+            raise HTTPException(
+                status_code=404,
+                detail={'error': {'code': 'FILE_NOT_FOUND', 'message': 'File not found for the document'}}
+            )
+
+        # 3. Handle format
+        if format == "binary":
+            # Redirect to integration service file endpoint
+            return RedirectResponse(url=f"/api/v1/files/{file_key}")
+        else:
+            # format == "json"
+            # Return JSON metadata with pre-signed/direct MinIO download URL
+            file_url = f"http://minio:9000/pkb/documents/{file_key}"
+            return {
+                "data": {
+                    "file_url": file_url,
+                    "file_size": file_size,
+                    "content_type": content_type
+                }
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_event('ERROR', f'/registry/documents/{document_id}/file', None, None, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 

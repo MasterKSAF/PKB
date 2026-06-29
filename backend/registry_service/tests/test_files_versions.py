@@ -156,3 +156,98 @@ def test_get_document_version(client, db_session):
     res_404 = client.get("/api/v1/registry/versions/999")
     assert res_404.status_code == 404
     assert res_404.json()["error"]["code"] == "VERSION_NOT_FOUND"
+
+
+def test_get_document_file_endpoint(client, db_session):
+    # 1. Setup Document and version
+    from api.v1.models import Document
+    doc = Document(
+        doc_code="DOC-FILE-TEST-1",
+        title="Doc File Test",
+        era="RF",
+        status="uploaded"
+    )
+    db_session.add(doc)
+    db_session.commit()
+    db_session.refresh(doc)
+
+    v = DocumentVersion(
+        document_id=doc.id,
+        version_number=1,
+        file_hash_sha256="abcdef",
+        file_size_bytes=9999,
+        format_code="pdf",
+        format_label="PDF",
+        file_key="key_test_file",
+        source_filename="test_file.pdf",
+        file_path="key_test_file",
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None)
+    )
+    db_session.add(v)
+    db_session.commit()
+
+    # Test GET /registry/documents/{id}/file JSON format
+    response = client.get(f"/api/v1/registry/documents/{doc.id}/file")
+    assert response.status_code == 200
+    res_data = response.json()["data"]
+    assert "key_test_file" in res_data["file_url"]
+    assert res_data["file_size"] == 9999
+    assert res_data["content_type"] == "application/pdf"
+
+    # Test GET /registry/documents/{id}/file binary format (redirect)
+    response_bin = client.get(f"/api/v1/registry/documents/{doc.id}/file?format=binary", follow_redirects=False)
+    assert response_bin.status_code == 307
+    assert response_bin.headers["location"] == "/api/v1/files/key_test_file"
+
+
+def test_create_document_links_file_and_version(client, db_session):
+    # 1. Create a draft first
+    from api.v1.models import Draft
+    draft = Draft(
+        file_key="f-draft-123",
+        document_key="doc-draft-123",
+        status="ready_for_approve",
+        confidence=0.9,
+        raw_data={
+            "document": {
+                "source": {
+                    "file_name": "draft_source.pdf",
+                    "file_size_bytes": 12345,
+                    "file_hash_sha256": "draft_hash_123"
+                }
+            }
+        },
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None)
+    )
+    db_session.add(draft)
+    db_session.commit()
+    db_session.refresh(draft)
+
+    # 2. Create document via API passing draft_id
+    payload = {
+        "title": "Document from Draft",
+        "doc_code": "DOC-DRAFT-01",
+        "status": "approved",
+        "source_draft_id": draft.draft_id
+    }
+    response = client.post("/api/v1/registry/documents", json=payload)
+    assert response.status_code == 201
+    doc_id = response.json()["data"]["id"]
+
+    # 3. Check that File record was created
+    response_files = client.get(f"/api/v1/registry/documents/{doc_id}/files")
+    assert response_files.status_code == 200
+    files_data = response_files.json()["data"]
+    assert len(files_data) == 1
+    assert files_data[0]["file_id"] == "f-draft-123"
+    assert files_data[0]["filename"] == "draft_source.pdf"
+    assert files_data[0]["size"] == 12345
+
+    # 4. Check that DocumentVersion was created
+    response_versions = client.get(f"/api/v1/registry/documents/{doc_id}/versions")
+    assert response_versions.status_code == 200
+    versions_data = response_versions.json()["data"]
+    assert len(versions_data) == 1
+    assert versions_data[0]["file_key"] == "f-draft-123"
+    assert versions_data[0]["file_hash_sha256"] == "draft_hash_123"
+
