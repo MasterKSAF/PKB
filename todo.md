@@ -1,8 +1,28 @@
-# Fix: converter-validator contract alignment — tests
+# Fix: обработка документов — завершено ✅
 
-1. [x] Диагностика: найти причину падения тестов после мержа PR #75
-2. [x] conftest.py — вернуть db_engine в сигнатуру clean_db (фикстура создаётся до async контекста)
-3. [x] test_celery_tasks_all.py — обновить mock и проверки под v3-контракт (parameters → metadata/validation)
-4. [x] test_celery_tasks.py — обновить mock preview под плоский PreviewMetadataResponse
-5. [x] test_celery_tasks_async.py — обновить mock preview под плоский формат
-6. [x] Проверка: 558 passed в orchestrator_service, все E2E в docker проходят
+## Проблемы и исправления
+
+### 1. ✅ Mock fallback при ConnectError
+**Файл:** `backend/orchestrator_service/app/services/base_client.py`
+- Убрал `return mock_response or {}` при ConnectError и CircuitBreakerError — теперь пробрасывает исключение
+- Добавил ConnectError в список retryable ошибок (было исключено)
+- После исчерпания retry — Celery-задача получает исключение и корректно обрабатывает (retry задачи через `on_step_failed`)
+
+### 2. ✅ Embedding dimension mismatch
+**Файл:** `backend/rag_builder_service/src/rag_builder/embeddings/service.py`
+- Rag-builder теперь передаёт `dimensions=self.dim` в API запрос (как rag-search уже делал)
+- Раньше dimensions не передавался → модель возвращала 4096, а сервис обрезал до 2048
+- Теперь оба сервиса запрашивают 2048-мерные векторы напрямую
+
+### 3. ✅ Registry 409 Conflict и статус документа
+**Файлы:** 
+- `backend/orchestrator_service/app/services/registry_client.py` — добавлен заголовок `X-Service-ID: orchestrator`
+- `backend/orchestrator_service/app/core/pipeline/orchestrator.py` — после rag_index обновляется статус документа (`uploaded → validating`), а не статус черновика
+
+### Результат E2E теста
+- Pipeline: ✅ completed
+- Search: ✅ 150 total_found, контент найден
+- Registry: ✅ статус обновлён до "validating"
+
+### Известное
+- Тест `'ГОСТ 10054' NOT found` — ложное срабатывание: в тексте `ГОСТ\n10054-82` с переносом строки, ожидание `ГОСТ 10054` с пробелом (не зависит от кода)

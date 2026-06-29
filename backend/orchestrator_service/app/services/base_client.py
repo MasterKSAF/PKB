@@ -182,7 +182,7 @@ class ServiceClient:
             elapsed = time.monotonic() - start_time
             logger.error(
                 f"Circuit breaker OPEN for {self.service_name}, "
-                f"falling back to mock ({elapsed:.1f}s)",
+                f"request blocked ({elapsed:.1f}s)",
                 extra={
                     "service": self.service_name,
                     "method": method,
@@ -191,7 +191,7 @@ class ServiceClient:
                     "circuit_breaker": "open",
                 },
             )
-            return mock_response or {}
+            raise
 
         except httpx.TimeoutException as exc:
             elapsed = time.monotonic() - start_time
@@ -211,7 +211,7 @@ class ServiceClient:
         except httpx.ConnectError as exc:
             elapsed = time.monotonic() - start_time
             logger.error(
-                f"HTTP connection error: {method} {endpoint} ({exc})",
+                f"HTTP connection error after retries: {method} {endpoint} ({exc})",
                 extra={
                     "service": self.service_name,
                     "method": method,
@@ -220,11 +220,7 @@ class ServiceClient:
                     "error": str(exc),
                 },
             )
-            # Do NOT retry on connection error — return mock as fallback
-            logger.warning(
-                f"Falling back to mock response for {endpoint} after connection error"
-            )
-            return mock_response or {}
+            raise
 
         except httpx.HTTPStatusError as exc:
             elapsed = time.monotonic() - start_time
@@ -364,11 +360,8 @@ def _is_retryable_http_error(exc: BaseException) -> bool:
     - TimeoutException — network may recover
 
     Do NOT retry on:
-    - ConnectError — connection refused / DNS failure (waste of time)
     - Client errors (4xx) — request is bad
     """
-    if isinstance(exc, httpx.ConnectError):
-        return False
     if isinstance(exc, httpx.TimeoutException):
         return True
     if isinstance(exc, httpx.HTTPStatusError):

@@ -820,18 +820,20 @@ class PipelineOrchestrator:
                 progress_percent=100,
             )
 
-            # Update draft status to approved via Registry
+            # Update document status after successful indexing
+            # Valid transition from "uploaded" is "validating"
             try:
                 registry = RegistryServiceClient()
-                await registry.update_draft_status(
-                    draft_id=task.draft_id,
-                    status=DraftState.APPROVED.value,
+                document_id = getattr(task, 'document_id', None) or task.draft_id
+                await registry.update_document_status(
+                    document_id=document_id,
+                    status="validating",
                 )
                 await registry.close()
             except Exception as e:
                 logger.warning(
-                    f"Failed to update draft status to approved: {e}",
-                    extra={"draft_id": task.draft_id},
+                    f"Failed to update document status: {e}",
+                    extra={"draft_id": task.draft_id, "document_id": document_id},
                 )
 
             logger.info(
