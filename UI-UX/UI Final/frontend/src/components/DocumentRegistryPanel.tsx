@@ -73,6 +73,42 @@ const displayValue = (value: unknown) => {
   return text || 'не передано';
 };
 
+const REGISTRY_STATUS_LABELS: Record<string, string> = {
+  active: 'действует',
+  pending: 'ожидает',
+  expired: 'истек срок',
+  uploaded: 'загружен',
+  created: 'создан',
+  completed: 'завершен',
+  failed: 'ошибка',
+  processing: 'в обработке',
+  published: 'опубликован',
+  validating: 'проверяется',
+  pending_index: 'ожидает индексации',
+  indexing: 'индексируется',
+  indexed: 'индексирован',
+  approved: 'подтвержден',
+  discarded: 'отклонен',
+  current: 'текущая',
+  archive: 'архив',
+};
+
+const REGISTRY_STATUS_FILTER_OPTIONS = [
+  { value: 'active', label: 'Действует' },
+  { value: 'pending', label: 'Ожидает' },
+  { value: 'expired', label: 'Истек срок' },
+  { value: 'uploaded', label: 'Загружен' },
+  { value: 'created', label: 'Создан' },
+  { value: 'completed', label: 'Завершен' },
+  { value: 'failed', label: 'Ошибка' },
+] as const;
+
+const formatRegistryStatus = (value: unknown) => {
+  const text = normalizeText(value);
+  if (!text) return 'не передано';
+  return REGISTRY_STATUS_LABELS[text.toLowerCase()] ?? text;
+};
+
 const normalizeValidUntil = (value: unknown) => {
   const text = normalizeText(value);
   if (!text) return '';
@@ -134,7 +170,7 @@ const normalizeDocumentVersion = (item: any, index: number): DocumentVersionSumm
     createdAt: createdAt || 'не указано',
     author: author || 'не указан',
     size: size || 'н/д',
-    status: status || 'не указан',
+    status: status ? formatRegistryStatus(status) : 'не указан',
     note: note || 'без комментария',
     raw,
   };
@@ -341,7 +377,7 @@ const buildPreviewText = (
     detail?.valid_from ? `Действует с: ${detail.valid_from}` : '',
     detail?.valid_until ? `Действует до: ${normalizeValidUntil(detail.valid_until)}` : '',
     detail?.jurisdiction ? `Юрисдикция: ${detail.jurisdiction}` : '',
-    detail?.validity_status ? `Статус действия: ${detail.validity_status}` : '',
+    detail?.validity_status ? `Статус действия: ${formatRegistryStatus(detail.validity_status)}` : '',
     detail?.issuing_body ? `Издатель: ${detail.issuing_body}` : '',
     detail?.latest_version?.version ? `Последняя версия: ${detail.latest_version.version}` : '',
     versions.length ? `Версии: ${versions.map((item) => item.label).join(', ')}` : '',
@@ -504,11 +540,18 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
           document.sectionId,
           document.group,
           document.validityStatus,
+          document.status,
+          document.indexStatus,
         ]
         .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(normalized));
       const matchesSource = sourceFilter === 'all' || document.sourceType === sourceFilter || document.type === sourceFilter;
-      const matchesValidity = validityFilter === 'all' || document.validityStatus === validityFilter || document.status === validityFilter;
+      const normalizedStatusFilter = validityFilter.toLowerCase();
+      const matchesValidity =
+        validityFilter === 'all' ||
+        [document.validityStatus, document.status, document.indexStatus]
+          .filter(Boolean)
+          .some((status) => String(status).toLowerCase() === normalizedStatusFilter);
       const matchesValidAt =
         !validAt ||
         ((!document.validFrom || document.validFrom <= validAt) &&
@@ -693,8 +736,8 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
   const validityRows: Array<[string, unknown]> = [
     ['valid_from', detailRecord.valid_from ?? selectedDocument?.validFrom],
     ['valid_until', normalizeValidUntil(detailRecord.valid_until ?? selectedDocument?.validUntil)],
-    ['validity_status', detailRecord.validity_status ?? selectedDocument?.validityStatus],
-    ['status', detailRecord.status ?? selectedDocument?.status],
+    ['validity_status', formatRegistryStatus(detailRecord.validity_status ?? selectedDocument?.validityStatus)],
+    ['status', formatRegistryStatus(detailRecord.status ?? selectedDocument?.status)],
   ];
   const handleDownloadOriginal = async () => {
     if (!selectedDocument) return;
@@ -811,17 +854,16 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
             <TextField
               size="small"
               select
-              label="Статус действия"
+              label="Статус"
               value={validityFilter}
               onChange={(event) => setValidityFilter(event.target.value)}
             >
               <MenuItem value="all">Все статусы</MenuItem>
-              <MenuItem value="active">active</MenuItem>
-              <MenuItem value="pending">pending</MenuItem>
-              <MenuItem value="expired">expired</MenuItem>
-              <MenuItem value="created">created</MenuItem>
-              <MenuItem value="completed">completed</MenuItem>
-              <MenuItem value="failed">failed</MenuItem>
+              {REGISTRY_STATUS_FILTER_OPTIONS.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
             </TextField>
             <TextField
               size="small"
@@ -976,7 +1018,7 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
                               <Chip
                                 size="small"
                                 variant="outlined"
-                                label={document.validityStatus || document.status || document.indexStatus}
+                                label={formatRegistryStatus(document.validityStatus || document.status || document.indexStatus)}
                                 sx={{
                                   maxWidth: 78,
                                   '& .MuiChip-label': { px: 0.7, overflow: 'hidden', textOverflow: 'ellipsis' },
@@ -1166,8 +1208,8 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
                           }}
                         >
                           {[
-                            ['Статус', detailRecord.status ?? selectedDocument.status],
-                            ['Действие', detailRecord.validity_status ?? selectedDocument.validityStatus],
+                            ['Статус', formatRegistryStatus(detailRecord.status ?? selectedDocument.status)],
+                            ['Действие', formatRegistryStatus(detailRecord.validity_status ?? selectedDocument.validityStatus)],
                             ['Обновлен', formatCompactDateTime(selectedDocument.updatedAt)],
                           ].map(([label, value]) => (
                             <React.Fragment key={label}>
