@@ -414,6 +414,7 @@ def run_converter_full_step(
 def run_registry_step(
     self, task_id: int, draft_id: int, document_id: int, version_id: Optional[int] = None,
     document_data: Optional[dict] = None,
+    metadata: Optional[dict] = None,
     trace_id: str = "",
 ):
     """Registry step — persist document in the registry.
@@ -422,6 +423,8 @@ def run_registry_step(
         document_data: Converter output document (with content/sections).
                        If provided, saves full document to Registry via create_document
                        and reads back sections with assigned section_ids.
+        metadata: Document metadata (doc_code, title, era, ...).
+                  Nested inside document payload before sending if document_data is present.
     """
     if trace_id:
         set_trace_id(trace_id)
@@ -440,7 +443,9 @@ def run_registry_step(
                         extra={"task_id": task_id, "draft_id": draft_id},
                     )
                     # Build payload in Registry format (section 3.3 API spec)
-                    # Converter's document already has content[] in the right format
+                    # Nest metadata inside document if provided separately
+                    if metadata:
+                        document_data["metadata"] = metadata
                     doc_payload = {
                         "draft_id": draft_id,
                         "document": document_data,

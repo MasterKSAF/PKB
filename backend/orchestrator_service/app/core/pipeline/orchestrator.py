@@ -792,9 +792,11 @@ class PipelineOrchestrator:
             from app.tasks.pipeline_formation import run_registry_step
             # Extract document data from converter step output for Registry save
             document_data = None
+            metadata = None
             for s in steps:
                 if s.step_name == "full_converter" and s.output_data:
                     document_data = s.output_data.get("document")
+                    metadata = s.output_data.get("metadata")
                     break
             document_id = getattr(task, 'document_id', None) or task.draft_id
             logger.info(
@@ -804,12 +806,13 @@ class PipelineOrchestrator:
                     "queue": "pipeline",
                     "params": {"task_id": task.id, "draft_id": task.draft_id,
                                "document_id": document_id, "version_id": version_id,
-                               "has_document_data": document_data is not None},
+                               "has_document_data": document_data is not None,
+                               "has_metadata": metadata is not None},
                 },
             )
             run_registry_step.delay(
                 task.id, task.draft_id, document_id, version_id,
-                document_data=document_data, trace_id=trace_id,
+                document_data=document_data, metadata=metadata, trace_id=trace_id,
             )
 
         elif step_name == "registry_creation":

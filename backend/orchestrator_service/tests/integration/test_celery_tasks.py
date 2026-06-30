@@ -289,7 +289,6 @@ class TestRunRegistryStep:
         notify_completed = AsyncMock()
 
         document_data = {
-            "metadata": {"doc_code": "ГОСТ 1234-56"},
             "content": [
                 {"clause": "1", "type": "text", "path": "1", "page": 1,
                  "content": {"text": "Section 1"}},
@@ -297,6 +296,7 @@ class TestRunRegistryStep:
                  "content": {"text": "Section 2"}},
             ],
         }
+        metadata = {"doc_code": "ГОСТ 1234-56"}
 
         with patch(
             "app.tasks.pipeline_formation.RegistryServiceClient",
@@ -309,7 +309,7 @@ class TestRunRegistryStep:
 
             result = run_registry_step.run(
                 task_id=3, draft_id=DRAFT_ID, document_id=42, version_id=421,
-                document_data=document_data,
+                document_data=document_data, metadata=metadata,
             )
 
         # Verify: create_document called with full payload
@@ -317,7 +317,9 @@ class TestRunRegistryStep:
         payload = mock_client.create_document.await_args[0][0]
         assert payload.get("draft_id") == DRAFT_ID
         assert "document" in payload
-        assert payload["document"] == document_data
+        # Verify metadata was nested inside document
+        assert payload["document"]["metadata"] == metadata
+        assert payload["document"]["content"] == document_data["content"]
 
         # Verify: get_document_sections called to read sections with IDs
         mock_client.get_document_sections.assert_awaited_once_with(42)
