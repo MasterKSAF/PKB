@@ -390,6 +390,7 @@ async def create_draft(
             era=era,
             source_type=source_type,
             file_size_bytes=file_size,
+            file_hash_sha256=file_hash,
         )
         data = uniqueness.get("data", {})
         is_duplicate_file = data.get("is_duplicate_file", False)

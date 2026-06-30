@@ -558,17 +558,33 @@ class RegistryServiceClient(ServiceClient):
     @classmethod
     def _mock_check_uniqueness(cls, storage: dict, body: dict) -> dict:
         title = body.get("title", "")
+        file_hash = body.get("file_hash_sha256")
         is_duplicate = False
-        if title:
-            for d in cls._all_drafts(storage) + cls._all_documents(storage):
-                if d.get("document_key") == title or d.get("file_key", "").find(title[:8]) >= 0:
-                    is_duplicate = True
-                    break
+        is_duplicate_file = False
+        candidates = []
+
+        all_entries = cls._all_drafts(storage) + cls._all_documents(storage)
+
+        for d in all_entries:
+            # Title-based duplicate
+            if title and (
+                d.get("document_key") == title
+                or d.get("file_key", "").find(title[:8]) >= 0
+            ):
+                is_duplicate = True
+                candidates.append(d)
+
+            # File-hash based duplicate
+            if file_hash and d.get("file_hash_sha256") == file_hash:
+                is_duplicate_file = True
+                if d not in candidates:
+                    candidates.append(d)
+
         return {
             "data": {
                 "is_duplicate": is_duplicate,
-                "is_duplicate_file": False,
-                "candidates": [],
+                "is_duplicate_file": is_duplicate_file,
+                "candidates": candidates,
             }
         }
 
@@ -851,6 +867,7 @@ class RegistryServiceClient(ServiceClient):
         era: Optional[str] = None,
         source_type: Optional[str] = None,
         file_size_bytes: Optional[int] = None,
+        file_hash_sha256: Optional[str] = None,
     ) -> dict:
         """Check document uniqueness (duplicate detection)."""
         body = CheckUniquenessRequest(
@@ -859,6 +876,7 @@ class RegistryServiceClient(ServiceClient):
             era=era,
             source_type=source_type,
             file_size_bytes=file_size_bytes,
+            file_hash_sha256=file_hash_sha256,
         )
         return await self.call(
             "POST",

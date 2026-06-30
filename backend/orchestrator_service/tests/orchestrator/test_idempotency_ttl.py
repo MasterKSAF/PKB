@@ -98,12 +98,14 @@ class TestIdempotencyCacheTtl:
             files={"file": ("a.pdf", file_bytes, "application/pdf")},
             data={"document_key": "doc-ttl-2", "source_type": "GOST"},
         )
-        # TTL истёк → новый запрос создаёт новый draft
-        assert r2.status_code == 202, (
-            "TTL истёк — должен быть создан новый draft (202), а не 200 hit"
+        # TTL истёк, но файл уже существует в Draft — детекция дублей (D1)
+        # блокирует повторную загрузку как DUPLICATE_FILE
+        assert r2.status_code == 409, (
+            "TTL истёк, но файл уже загружен — детекция дублей должна "
+            "вернуть 409 DUPLICATE_FILE. Статус: %s" % r2.status_code
         )
-        draft_id_2 = r2.json()["draft_id"]
-        assert draft_id_2 != draft_id_1
+        detail = r2.json()
+        assert detail.get("detail", {}).get("error", {}).get("code") == "DUPLICATE_FILE"
 
     def test_cache_hit_just_under_ttl(
         self, client: TestClient, auth_header: dict

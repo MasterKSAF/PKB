@@ -83,22 +83,21 @@ class TestIdempotencyCachePersistence:
         _IDEMPOTENCY_CACHE.clear()
 
         # Третий запрос — после «рестарта» кэш пуст
+        # С включённой детекцией дублей (D1) тот же файл детектится как дубликат
         r3 = client.post(
             self.URL,
             headers={**auth_header, "Idempotency-Key": key},
             files={"file": ("a.pdf", file_bytes, "application/pdf")},
             data={"document_key": "doc-persist-2", "source_type": "GOST"},
         )
-        # НЕ 200 — это новый draft
-        assert r3.status_code == 202, (
-            "После рестарта кэш пуст — тот же Idempotency-Key "
-            "НЕ должен возвращать 200. Получен %s." % r3.status_code
+        # Тот же файл уже существует в Draft — метод детекции дублей (D1)
+        # блокирует повторную загрузку как DUPLICATE_FILE
+        assert r3.status_code == 409, (
+            "После рестарта кэш пуст. Тот же файл детектится как дубликат. "
+            "Статус: %s (ожидался 409)." % r3.status_code
         )
-        draft_id_3 = r3.json()["draft_id"]
-        assert draft_id_3 != draft_id_1, (
-            "После рестарта создан новый draft — idempotency "
-            "НЕ работает между сессиями процесса. Это документированный дефект."
-        )
+        detail = r3.json()
+        assert detail.get("detail", {}).get("error", {}).get("code") == "DUPLICATE_FILE"
 
     def test_cache_is_module_level_dict(self):
         """_IDEMPOTENCY_CACHE — module-level dict (НЕ Redis)."""

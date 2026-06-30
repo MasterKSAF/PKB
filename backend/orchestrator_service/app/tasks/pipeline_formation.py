@@ -301,6 +301,21 @@ def run_parser_full_step(
         # Transform parser blocks into sections format for RAG Builder
         # Parser returns {document: {block: [{number, type, page, content, ...}, ...]}}
         # RAG Builder expects [{section_id, document_id, level, path, page, type, content: {text}},...]
+        def _normalize_bbox(bbox_val):
+            """Normalize bbox to list[float, float, float, float] or None."""
+            if bbox_val is None:
+                return None
+            if isinstance(bbox_val, (list, tuple)):
+                return [float(v) for v in bbox_val]
+            if isinstance(bbox_val, str):
+                try:
+                    parts = [float(x.strip()) for x in bbox_val.replace(";", ",").split(",")]
+                    return parts if len(parts) == 4 else None
+                except (ValueError, TypeError):
+                    logger.warning(f"Cannot parse bbox string: {bbox_val!r}")
+                    return None
+            return None
+
         sections = full_parser_result.get("sections", [])
         if not sections:
             raw_blocks = full_parser_result.get("document", {}).get("block", [])
@@ -313,7 +328,7 @@ def run_parser_full_step(
                     "page": b.get("page", 1),
                     "type": "text",
                     "content": {"text": b.get("content", "")},
-                    "bbox": b.get("bbox"),
+                    "bbox": _normalize_bbox(b.get("bbox")),
                 }
                 for i, b in enumerate(raw_blocks)
                 if b.get("content", "").strip()
@@ -441,12 +456,20 @@ def run_registry_step(
                         )
                         current_doc_id = new_doc_id
 
-                    # --- Step 2: Read sections with assigned IDs from Registry ---
+                # --- Step 2: Read sections with assigned IDs from Registry ---
+                # Always try to read sections, even if document_data was empty
+                # (document already exists from approve step)
+                try:
                     sections_result = await client.get_document_sections(current_doc_id)
                     sections_data = sections_result.get("data", {})
                     saved_sections = sections_data.get("sections", [])
                     logger.info(
-                        f"Document saved to Registry: doc={current_doc_id} sections={len(saved_sections)}",
+                        f"Document sections read from Registry: doc={current_doc_id} sections={len(saved_sections)}",
+                        extra={"task_id": task_id, "draft_id": draft_id},
+                    )
+                except Exception as sec_exc:
+                    logger.warning(
+                        f"Failed to read sections from Registry: {sec_exc}",
                         extra={"task_id": task_id, "draft_id": draft_id},
                     )
 
@@ -466,6 +489,14 @@ def run_registry_step(
                         f"Draft {draft_id} already approved, treating registry step as completed (idempotent)",
                         extra={"task_id": task_id, "draft_id": draft_id},
                     )
+                    # Try to read sections anyway — document may already exist with data
+                    if not saved_sections:
+                        try:
+                            sec_result = await client.get_document_sections(current_doc_id)
+                            sec_data = sec_result.get("data", {})
+                            saved_sections = sec_data.get("sections", [])
+                        except Exception:
+                            pass
                     return {
                         "status": "already_approved",
                         "draft_id": draft_id,

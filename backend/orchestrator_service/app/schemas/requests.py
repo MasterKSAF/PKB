@@ -57,6 +57,7 @@ class CheckUniquenessRequest(BaseModel):
     era: Optional[str] = Field(None, description="Эпоха: USSR, CIS, RF, CURRENT")
     source_type: Optional[str] = Field(None, description="Тип источника: GOST, GOST_R, OST, RD, TU, ISO, DNV, ASTM, OTHER")
     file_size_bytes: Optional[int] = Field(None, description="Размер файла в байтах")
+    file_hash_sha256: Optional[str] = Field(None, description="SHA-256 хеш файла для детекции дубликатов по содержимому")
 
 
 # ---------------------------------------------------------------------------

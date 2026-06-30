@@ -3,7 +3,7 @@
 
 Покрывает сценарии §0 Точка входа (pipeline1-orchestrator_details.md):
   - Неподдерживаемый MIME → 422 UNSUPPORTED_FILE_TYPE
-  - Дубликат file_hash_sha256 → проверка is_duplicate_file
+  - Дубликат file_hash_sha256 → проверка is_duplicate_file + 409 DUPLICATE_FILE
 
 Внимание:
   - FILE_TOO_SMALL (< 1 КБ) → 400 FILE_TOO_SMALL
@@ -163,6 +163,40 @@ class TestDuplicateDetection:
         assert "CURRENT" in data["title_key"]
         assert "GOST" in data["title_key"]
         assert "ГОСТ 1234-2024" in data["title_key"]
+
+    def test_duplicate_file_returns_409(
+        self, client: TestClient, auth_header: dict
+    ):
+        """Дважды загрузить один и тот же файл → второй раз 409 DUPLICATE_FILE.
+
+        E2E-тест детекции дублей по file_hash_sha256 (D1).
+        Загружаем одинаковый контент с разными document_key (имитация
+        независимых загрузок одного PDF разными пользователями).
+        """
+        file_bytes = b"%PDF-1.4 duplicate test content " * 100
+
+        # Первая загрузка — успех
+        r1 = client.post(
+            self.CREATE_URL,
+            headers=auth_header,
+            files={"file": ("original.pdf", file_bytes, "application/pdf")},
+            data={"document_key": "doc-dup-e2e-a", "source_type": "GOST"},
+        )
+        assert r1.status_code == 202
+
+        # Вторая загрузка — тот же файл, другой document_key → 409
+        r2 = client.post(
+            self.CREATE_URL,
+            headers=auth_header,
+            files={"file": ("copy.pdf", file_bytes, "application/pdf")},
+            data={"document_key": "doc-dup-e2e-b", "source_type": "GOST"},
+        )
+        assert r2.status_code == 409, (
+            f"Ожидался 409 DUPLICATE_FILE при повторной загрузке того же файла, "
+            f"получен {r2.status_code}"
+        )
+        detail = r2.json()
+        assert detail.get("detail", {}).get("error", {}).get("code") == "DUPLICATE_FILE"
 
     def test_response_title_hash_null_when_no_title(
         self, client: TestClient, auth_header: dict
