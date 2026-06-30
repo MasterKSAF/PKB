@@ -325,7 +325,8 @@ def service_diagnostics(name: str, log_lines=20) -> list:
         lines.append("  (no errors)")
 
     lines.append(f"\n[Logs] (last {log_lines})")
-    recent = run(['docker', 'logs', container, '--tail', str(log_lines)]).split("\n")
+    # docker logs пишет в stderr — используем shell перенаправление
+    recent = run(['sh', '-c', f'docker logs {container} --tail {log_lines} 2>&1']).split("\n")
     for r in recent:
         lines.append(f"  {r}")
 
