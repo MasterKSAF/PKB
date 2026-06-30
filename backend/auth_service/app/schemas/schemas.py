@@ -130,6 +130,7 @@ class UserPermissions(BaseModel):
 class UserMeResponse(BaseModel):
     user_id: str
     full_name: str
+    position: str
     role: str
     role_title: str
     available_tabs: list[str]

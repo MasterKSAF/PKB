@@ -9,7 +9,7 @@ from app.models.models import Role, RolePermission, User
 
 DEFAULT_ROLES = {
     "engineer": ["documents:read", "search", "history:read"],
-    "knowledge_admin": ["documents:read", "documents:write", "search", "history:read"],
+    "knowledge_admin": ["documents:read", "documents:write", "search", "history:read", "audit:read"],
     "system_admin": ["users:manage", "roles:manage", "audit:read", "documents:read", "documents:write", "search", "history:read"],
 }
 
@@ -17,12 +17,14 @@ DEFAULT_USERS = [
     {
         "email": "knowledge@example.com",
         "full_name": "Knowledge Administrator",
+        "position": "Администратор НСИ",
         "password": "Knowledge1234!",
         "role": "knowledge_admin",
     },
     {
         "email": "engineer@example.com",
         "full_name": "Engineer",
+        "position": "Инженер-конструктор",
         "password": "Engineer1234!",
         "role": "engineer",
     },
@@ -41,6 +43,12 @@ async def init_db(db: AsyncSession) -> None:
             role = Role(name=name)
             role.permissions = [RolePermission(permission=p) for p in permissions]
             db.add(role)
+        else:
+            # update permissions for existing roles so DEFAULT_ROLES changes take effect
+            existing = {p.permission for p in role.permissions}
+            desired = set(permissions)
+            if existing != desired:
+                role.permissions = [RolePermission(permission=p) for p in permissions]
 
     await db.commit()
 
@@ -52,6 +60,7 @@ async def init_db(db: AsyncSession) -> None:
         admin = User(
             email=settings.default_admin_email,
             full_name="System Administrator",
+            position="Системный администратор",
             password_hash=hash_password(settings.default_admin_password),
             roles=[admin_role],
         )
@@ -70,6 +79,7 @@ async def init_db(db: AsyncSession) -> None:
             User(
                 email=user_spec["email"],
                 full_name=user_spec["full_name"],
+                position=user_spec.get("position", ""),
                 password_hash=hash_password(user_spec["password"]),
                 roles=[role],
             )
