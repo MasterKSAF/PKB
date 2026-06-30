@@ -22,6 +22,7 @@ KNOWN_SERVICES = {
     "gateway", "orchestrator", "parser", "converter-validator",
     "rag-builder", "rag-search", "registry", "auth", "query",
     "postgres", "redis", "minio", "infinity",
+    "celery-worker",
 }
 START_TIME = time.time()
 
