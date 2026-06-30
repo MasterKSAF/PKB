@@ -1,14 +1,24 @@
-# TODO (выполнено)
+# todo: /auth/me контракт — выполнено
 
-## 1. Изолировать docker-зависимые тесты ✅
-- [x] `test_live_api.py` → `live_server_check.py` (не собирается pytest по умолчанию)
-- [x] Убран `pytest.skip` — тесты падают с ConnectError при недоступности сервера
+## Диагностика
+- [x] Проверить текущий код auth_service `/auth/me`
+- [x] Проверить gateway mock
+- [x] Проверить DEFAULT_ROLES, _PERMISSION_TO_TABS
+- [x] Проверить init_db
+- [x] Проверить тесты
+- [x] Проверить документацию контракта
 
-## 2. Добавить запуск в recheck.bat ✅
-- [x] Секция 8 в `service_checker/docker/recheck.bat` — запуск live тестов
-- [x] LIVE_SERVER_URL по умолчанию `http://localhost:18085` (порт integration в Docker)
-- [x] Можно переопределить через внешнюю `LIVE_SERVER_URL`
+## Выполненные правки
+1. **init_db — обновление permissions существующих ролей**
+   - `auth_service/app/db/init_db.py`: добавлено обновление permissions у уже созданных ролей, если они отличаются от DEFAULT_ROLES
+   - `auth_service/tests/conftest.py`: синхронизирован DEFAULT_ROLES
 
-## 3. Обновить документацию ✅
-- [x] `integration_service/readme.md` — уточнено про live_server_check.py и recheck.bat
-- [x] `backend/guide.md` — зафиксировано решение об изоляции через переименование
+2. **knowledge_admin + audit:read**
+   - `auth_service/app/db/init_db.py` (DEFAULT_ROLES): добавлен `"audit:read"` для knowledge_admin
+   - `auth_service/tests/conftest.py` (DEFAULT_ROLES): добавлен `"audit:read"` для knowledge_admin
+   - `gateway_service/mocks/common.py` (_ROLE_PERMISSIONS): добавлен `"audit:read"` для knowledge_admin
+   - `auth_service/readme.md`: обновлена таблица ролей
+
+3. **Поле `position`** — не добавлялось (нет в модели User, требует миграции БД)
+
+4. **Тесты**: все 31 тест auth_service + 163 теста gateway mock проходят

@@ -33,6 +33,7 @@ class User(Base):
     user_id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("u"))
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     full_name: Mapped[str] = mapped_column(String(255))
+    position: Mapped[str] = mapped_column(String(255), nullable=False, server_default="", default="")
     password_hash: Mapped[str] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     failed_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
